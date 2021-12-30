@@ -4,8 +4,7 @@
 
 **D**ata - **I**mport - **I**nvestigate - **V**isualize - **E**xport
 
-`DIIVE` is a GUI-based Python application that aims to facilitate
-working with time series data. 
+`diive` is a Python library for time series post-processing. 
 
 The app is still in alpha phase, which means that new features
 are added (and sometimes removed) frequently (as needed) and bugs can be expected.
