@@ -1,0 +1,130 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="CssInvalidPseudoSelector" enabled="false" level="ERROR" enabled_by_default="false" />
+    <inspection_tool class="CssUnknownProperty" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="myCustomPropertiesEnabled" value="true" />
+      <option name="myIgnoreVendorSpecificProperties" value="false" />
+      <option name="myCustomPropertiesList">
+        <value>
+          <list size="7">
+            <item index="0" class="java.lang.String" itemvalue="alternate-background-color" />
+            <item index="1" class="java.lang.String" itemvalue="qproperty-alignment" />
+            <item index="2" class="java.lang.String" itemvalue="selection-background-color" />
+            <item index="3" class="java.lang.String" itemvalue="selection-color" />
+            <item index="4" class="java.lang.String" itemvalue="subcontrol-position" />
+            <item index="5" class="java.lang.String" itemvalue="subcontrol-origin" />
+            <item index="6" class="java.lang.String" itemvalue="image" />
+          </list>
+        </value>
+      </option>
+    </inspection_tool>
+    <inspection_tool class="Eslint" enabled="true" level="WARNING" enabled_by_default="true" />
+    <inspection_tool class="HtmlUnknownTag" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="myValues">
+        <value>
+          <list size="34">
+            <item index="0" class="java.lang.String" itemvalue="nobr" />
+            <item index="1" class="java.lang.String" itemvalue="noembed" />
+            <item index="2" class="java.lang.String" itemvalue="comment" />
+            <item index="3" class="java.lang.String" itemvalue="noscript" />
+            <item index="4" class="java.lang.String" itemvalue="embed" />
+            <item index="5" class="java.lang.String" itemvalue="script" />
+            <item index="6" class="java.lang.String" itemvalue="qframe" />
+            <item index="7" class="java.lang.String" itemvalue="qsplitter" />
+            <item index="8" class="java.lang.String" itemvalue="qwidget" />
+            <item index="9" class="java.lang.String" itemvalue="qlistwidget" />
+            <item index="10" class="java.lang.String" itemvalue="qlabel" />
+            <item index="11" class="java.lang.String" itemvalue="qcombobox" />
+            <item index="12" class="java.lang.String" itemvalue="qpushbutton" />
+            <item index="13" class="java.lang.String" itemvalue="qlabel" />
+            <item index="14" class="java.lang.String" itemvalue="qtabwidget" />
+            <item index="15" class="java.lang.String" itemvalue="qtabbar" />
+            <item index="16" class="java.lang.String" itemvalue="qlistview" />
+            <item index="17" class="java.lang.String" itemvalue="qplaintextedit" />
+            <item index="18" class="java.lang.String" itemvalue="selected" />
+            <item index="19" class="java.lang.String" itemvalue="qmenubar" />
+            <item index="20" class="java.lang.String" itemvalue="qwidgetaction" />
+            <item index="21" class="java.lang.String" itemvalue="qtoolbar" />
+            <item index="22" class="java.lang.String" itemvalue="qtextedit" />
+            <item index="23" class="java.lang.String" itemvalue="qlineedit" />
+            <item index="24" class="java.lang.String" itemvalue="qabstractitemview" />
+            <item index="25" class="java.lang.String" itemvalue="qscrollbar" />
+            <item index="26" class="java.lang.String" itemvalue="qtableview" />
+            <item index="27" class="java.lang.String" itemvalue="qheaderview" />
+            <item index="28" class="java.lang.String" itemvalue="qdialog" />
+            <item index="29" class="java.lang.String" itemvalue="qcheckbox" />
+            <item index="30" class="java.lang.String" itemvalue="qradiobutton" />
+            <item index="31" class="java.lang.String" itemvalue="qdateedit" />
+            <item index="32" class="java.lang.String" itemvalue="qdatetimeedit" />
+            <item index="33" class="java.lang.String" itemvalue="qtooltip" />
+          </list>
+        </value>
+      </option>
+      <option name="myCustomValuesEnabled" value="true" />
+    </inspection_tool>
+    <inspection_tool class="PyPackageRequirementsInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <value>
+          <list size="41">
+            <item index="0" class="java.lang.String" itemvalue="joblib" />
+            <item index="1" class="java.lang.String" itemvalue="scikit-learn" />
+            <item index="2" class="java.lang.String" itemvalue="python-dateutil" />
+            <item index="3" class="java.lang.String" itemvalue="numpy" />
+            <item index="4" class="java.lang.String" itemvalue="importlib-metadata" />
+            <item index="5" class="java.lang.String" itemvalue="Jinja2" />
+            <item index="6" class="java.lang.String" itemvalue="pyrsistent" />
+            <item index="7" class="java.lang.String" itemvalue="mkl-fft" />
+            <item index="8" class="java.lang.String" itemvalue="seaborn" />
+            <item index="9" class="java.lang.String" itemvalue="zipp" />
+            <item index="10" class="java.lang.String" itemvalue="certifi" />
+            <item index="11" class="java.lang.String" itemvalue="pyparsing" />
+            <item index="12" class="java.lang.String" itemvalue="jsonschema" />
+            <item index="13" class="java.lang.String" itemvalue="scipy" />
+            <item index="14" class="java.lang.String" itemvalue="six" />
+            <item index="15" class="java.lang.String" itemvalue="tornado" />
+            <item index="16" class="java.lang.String" itemvalue="altair" />
+            <item index="17" class="java.lang.String" itemvalue="attrs" />
+            <item index="18" class="java.lang.String" itemvalue="pandas" />
+            <item index="19" class="java.lang.String" itemvalue="toolz" />
+            <item index="20" class="java.lang.String" itemvalue="vega-datasets" />
+            <item index="21" class="java.lang.String" itemvalue="future" />
+            <item index="22" class="java.lang.String" itemvalue="matplotlib" />
+            <item index="23" class="java.lang.String" itemvalue="statsmodels" />
+            <item index="24" class="java.lang.String" itemvalue="pytz" />
+            <item index="25" class="java.lang.String" itemvalue="kiwisolver" />
+            <item index="26" class="java.lang.String" itemvalue="mkl-random" />
+            <item index="27" class="java.lang.String" itemvalue="mkl-service" />
+            <item index="28" class="java.lang.String" itemvalue="plotly" />
+            <item index="29" class="java.lang.String" itemvalue="altgraph" />
+            <item index="30" class="java.lang.String" itemvalue="pydot" />
+            <item index="31" class="java.lang.String" itemvalue="PyInstaller" />
+            <item index="32" class="java.lang.String" itemvalue="threadpoolctl" />
+            <item index="33" class="java.lang.String" itemvalue="PyQt5-sip" />
+            <item index="34" class="java.lang.String" itemvalue="pefile" />
+            <item index="35" class="java.lang.String" itemvalue="patsy" />
+            <item index="36" class="java.lang.String" itemvalue="fbs" />
+            <item index="37" class="java.lang.String" itemvalue="macholib" />
+            <item index="38" class="java.lang.String" itemvalue="PyQt5" />
+            <item index="39" class="java.lang.String" itemvalue="retrying" />
+            <item index="40" class="java.lang.String" itemvalue="pywin32-ctypes" />
+          </list>
+        </value>
+      </option>
+    </inspection_tool>
+    <inspection_tool class="PyPep8Inspection" enabled="true" level="WEAK WARNING" enabled_by_default="true">
+      <option name="ignoredErrors">
+        <list>
+          <option value="E501" />
+        </list>
+      </option>
+    </inspection_tool>
+    <inspection_tool class="PyUnresolvedReferencesInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredIdentifiers">
+        <list>
+          <option value="tuple.imshow" />
+        </list>
+      </option>
+    </inspection_tool>
+  </profile>
+</component>
