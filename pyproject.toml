@@ -12,6 +12,8 @@ PyYAML = "^6.0"
 matplotlib = "^3.5.1"
 uncertainties = "^3.1.6"
 statsmodels = "^0.13.1"
+Sphinx = "^4.3.2"
+sphinx-rtd-theme = "^1.0.0"
 
 [tool.poetry.dev-dependencies]
 

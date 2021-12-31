@@ -150,13 +150,14 @@ class BinFitterCP:
             x = self.x
             y = self.y
             len_y = len(y)
+            numvals_per_bin = len_y
         else:
             _df = self._bin_data(df=df, num_bins=self.usebins)
             x = _df['BIN_START']
             y = _df[self.y_col][self.bins_y_agg]
             len_y = len(self.y)
-        numvals_per_bin = \
-            _df[self.y_col]['count'].describe()[['min', 'max']].to_dict()
+            numvals_per_bin = \
+                _df[self.y_col]['count'].describe()[['min', 'max']].to_dict()
         return _df, x, y, len_y, numvals_per_bin
 
     def _fit(self, df):

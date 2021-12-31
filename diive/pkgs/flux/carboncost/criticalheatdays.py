@@ -51,42 +51,73 @@ class CriticalHeatDays:
         self.predict_min_x = self.df[x_col].min()
         self.predict_max_x = self.df[x_col].max()
 
-        self.df_daytime, \
-        self.df_nighttime, \
-        self.grp_daynight_col, \
-        self.date_col, \
-        self.flag_daynight_col = \
-            self._get_daytime_data()
-
-        self._results = {}  # Collects results for each bootstrap run
+        self._chd_bts_results = {}  # Collects results for each bootstrap run
+        self._nee_bts_results = {}
 
     @property
-    def results(self) -> dict:
+    def chd_results(self) -> dict:
         """Return bootstrap results"""
-        if not self._results:
+        if not self._chd_bts_results:
+            raise Exception('Results for CHD threshold detection are empty')
+        return self._chd_bts_results
+
+    @property
+    def nee_results(self) -> dict:
+        """Return bootstrap results for daily NEE"""
+        if not self._nee_bts_results:
             raise Exception('Results are empty')
-        return self._results
+        return self._nee_bts_results
 
     def analyze_nee(self):
+        """Analyze NEE"""
+
+        # NEE subset
         nee_df = self.df[[self.x_col, self.nee_col]].copy()
+
+        # Daily maxima and sums
         nee_aggs_df = nee_df.groupby(nee_df.index.date).agg(['max', 'sum'])
 
-        # TODO hier weiter: NEE needs daily cumulative carbon flux vs daily VPD max, NO BINS
+        # Fit to bootstrapped data
+        # Stored as bootstrap runs > 0 (bts>0)
+        nee_bts_results = self._bootstrap_fits(df=nee_aggs_df, x_agg='max', y_agg='sum', fit_to_bins=0)
+
+        # Collect results
+        self._nee_bts_results['bts_results'] = nee_bts_results
+
+
+
+
+
+
+
+    def _prepare_daytime_dataset(self):
+
+        # Get daytime data from dataset
+        df_daytime, \
+        df_nighttime, \
+        grp_daynight_col, \
+        date_col, \
+        flag_daynight_col = \
+            self._get_daytime_data()
+
+        # Aggregate daytime dataset
+        df_daytime_aggs = \
+            self._aggregate(df=df_daytime,
+                            groupby_col=grp_daynight_col,
+                            date_col=date_col,
+                            min_vals=11,
+                            aggs=['median', 'count', 'max'])
+        return df_daytime_aggs
 
 
     def detect_chd_threshold(self):
 
-        # Aggregate daytime dataset
-        df_daytime_aggs = \
-            self._aggregate(df=self.df_daytime,
-                            groupby_col=self.grp_daynight_col,
-                            date_col=self.date_col,
-                            min_vals=11,
-                            aggs=['median', 'count', 'max'])
+        # Prepare dataset with daytime data only
+        df_daytime_aggs = self._prepare_daytime_dataset()
 
         # Fit to bootstrapped data
         # Stored as bootstrap runs > 0 (bts>0)
-        bts_results = self._bootstrap_fits(df=df_daytime_aggs)
+        bts_results = self._bootstrap_fits(df=df_daytime_aggs, x_agg='max', y_agg='median', fit_to_bins=self.usebins)
 
         # Get flux equilibrium points (RECO = GPP) from bootstrap runs
         bts_linecrossings_df = self._bts_linecrossings_collect(bts_results=bts_results)
@@ -105,15 +136,18 @@ class CriticalHeatDays:
         num_chds = len(df_daytime_aggs_chds)
 
         # Collect results
-        self._results['bts_results'] = bts_results
-        self._results['bts_linecrossings_df'] = bts_linecrossings_df
-        self._results['bts_linecrossings_aggs'] = bts_linecrossings_aggs
-        self._results['thres_chd'] = thres_chd
-        self._results['df_daytime_aggs_chds'] = df_daytime_aggs_chds
-        self._results['num_chds'] = num_chds
+        self._chd_bts_results['bts_results'] = bts_results
+        self._chd_bts_results['bts_linecrossings_df'] = bts_linecrossings_df
+        self._chd_bts_results['bts_linecrossings_aggs'] = bts_linecrossings_aggs
+        self._chd_bts_results['thres_chd'] = thres_chd
+        self._chd_bts_results['df_daytime_aggs_chds'] = df_daytime_aggs_chds
+        self._chd_bts_results['num_chds'] = num_chds
 
     def plot_chd_detection(self, ax):
-        figures.plot_gpp_reco_vs_vpd(ax=ax, results=self.results)
+        figures.plot_gpp_reco_vs_vpd(ax=ax, results=self.chd_results)
+
+    def plot_nee(self, ax):
+        figures.plot_nee_vs_vpd(ax=ax, results=self.nee_results)
 
     def _get_daytime_data(self):
         """Get daytime data from dataset"""
@@ -154,7 +188,7 @@ class CriticalHeatDays:
                 bts_linecrossings_df = bts_linecrossings_df.append(_series)
         return bts_linecrossings_df
 
-    def _bootstrap_fits(self, df) -> dict:
+    def _bootstrap_fits(self, df, x_agg:str, y_agg:str, fit_to_bins:int) -> dict:
         """Bootstrap data and make fit for all fluxes"""
         bts_results = {}
         bts = 0
@@ -168,7 +202,7 @@ class CriticalHeatDays:
                 bts_df = df.copy()
 
             try:
-                bts_results[bts] = self._fits(bts=bts, df=bts_df)
+                bts_results[bts] = self._fits(df=bts_df, x_agg=x_agg, y_agg=y_agg, fit_to_bins=fit_to_bins)
                 bts += 1
             except ValueError:
                 print(f"(!) WARNING Bootstrap run #{bts} was not successful")
@@ -184,41 +218,51 @@ class CriticalHeatDays:
         #         print(f"(!) Repeating bootstrap run #{bts}")
         #         bts -= 1
 
-    def _fits(self, bts, df, plot: bool = False):
-        """Make fits for GPP, RECO and NEE vs x"""
+    def _fits(self, df, x_agg:str, y_agg:str, fit_to_bins:int):
+        """Make fit to GPP, RECO and NEE vs x"""
+
+        # Check what is available
+        gpp = True if self.gpp_col in df else False
+        reco = True if self.reco_col in df else False
+        nee = True if self.nee_col in df else False
+        gpp_fit_results = None
+        reco_fit_results = None
+        nee_fit_results = None
+        linecrossing_vals = None
 
         # GPP sums (class mean) vs classes of x (max)
-        print(f"    Fitting {self.gpp_col}")
-        gpp_fit_results = \
-            self._calc_fit(df=df, x_col=self.x_col, x_agg='max',
-                           y_col=self.gpp_col, y_agg='median')
+        if gpp:
+            print(f"    Fitting {self.gpp_col}")
+            gpp_fit_results = \
+                self._calc_fit(df=df, x_col=self.x_col, x_agg=x_agg,
+                               y_col=self.gpp_col, y_agg=y_agg, fit_to_bins=fit_to_bins)
+            # fitplot(x=gpp_fit_results['x'], y=gpp_fit_results['y'], fit_df=gpp_fit_results['fit_df'])
 
         # RECO sums (class mean) vs classes of x (max)
-        print(f"    Fitting {self.reco_col}")
-        reco_fit_results = \
-            self._calc_fit(df=df, x_col=self.x_col, x_agg='max',
-                           y_col=self.reco_col, y_agg='median')
+        if reco:
+            print(f"    Fitting {self.reco_col}")
+            reco_fit_results = \
+                self._calc_fit(df=df, x_col=self.x_col, x_agg=x_agg,
+                               y_col=self.reco_col, y_agg=y_agg, fit_to_bins=fit_to_bins)
+            # fitplot(x=reco_fit_results['x'], y=reco_fit_results['y'], fit_df=reco_fit_results['fit_df'])
 
         # NEE sums (class mean) vs classes of x (max)
-        print(f"    Fitting {self.nee_col}")
-        nee_fit_results = \
-            self._calc_fit(df=df, x_col=self.x_col, x_agg='max',
-                           y_col=self.nee_col, y_agg='median')
-
-        # # Plots
-        # if plot:
-        #     fitplot(x=gpp_fit_results['x'], y=gpp_fit_results['y'], fit_df=gpp_fit_results['fit_df'])
-        #     fitplot(x=reco_fit_results['x'], y=reco_fit_results['y'], fit_df=reco_fit_results['fit_df'])
-        #     fitplot(x=nee_fit_results['x'], y=nee_fit_results['y'], fit_df=nee_fit_results['fit_df'])
+        if nee:
+            print(f"    Fitting {self.nee_col}")
+            nee_fit_results = \
+                self._calc_fit(df=df, x_col=self.x_col, x_agg=x_agg,
+                               y_col=self.nee_col, y_agg=y_agg, fit_to_bins=fit_to_bins)
+            # fitplot(x=nee_fit_results['x'], y=nee_fit_results['y'], fit_df=nee_fit_results['fit_df'])
 
         # Line crossings
-        linecrossing_vals = \
-            self._detect_linecrossing(gpp_fit_results=gpp_fit_results, reco_fit_results=reco_fit_results)
-
-        if isinstance(linecrossing_vals, pd.Series):
-            pass
-        else:
-            raise ValueError
+        if gpp and reco:
+            linecrossing_vals = \
+                self._detect_linecrossing(gpp_fit_results=gpp_fit_results,
+                                          reco_fit_results=reco_fit_results)
+            if isinstance(linecrossing_vals, pd.Series):
+                pass
+            else:
+                raise ValueError
 
         # Store bootstrap results in dict
         bts_results = {'gpp': gpp_fit_results,
@@ -260,7 +304,7 @@ class CriticalHeatDays:
             # If there is more than one line crossing, reject result
             return None
 
-    def _calc_fit(self, df, x_col, x_agg, y_col, y_agg):
+    def _calc_fit(self, df, x_col, x_agg, y_col, y_agg, fit_to_bins):
         """Call BinFitterCP and fit to x and y"""
 
         # Names of x and y cols in aggregated df
@@ -273,7 +317,7 @@ class CriticalHeatDays:
                              num_predictions=1000,
                              predict_min_x=self.predict_min_x,
                              predict_max_x=self.predict_max_x,
-                             bins_x_num=self.usebins,
+                             bins_x_num=fit_to_bins,
                              bins_y_agg='median',
                              fit_type='quadratic')
         fitter.run()
@@ -367,18 +411,27 @@ if __name__ == '__main__':
 
     chd.detect_chd_threshold()
 
+    # # Prepare figure
+    # import matplotlib.gridspec as gridspec
+    # import matplotlib.pyplot as plt
+    # fig = plt.figure(figsize=(9, 9))
+    # gs = gridspec.GridSpec(1, 1)  # rows, cols
+    # # gs.update(wspace=.2, hspace=0, left=.1, right=.9, top=.9, bottom=.1)
+    # ax = fig.add_subplot(gs[0, 0])
+    # chd.plot_chd_detection(ax=ax)
+    # fig.show()
+
+    chd.analyze_nee()
+
     # Prepare figure
     import matplotlib.gridspec as gridspec
     import matplotlib.pyplot as plt
-
     fig = plt.figure(figsize=(9, 9))
     gs = gridspec.GridSpec(1, 1)  # rows, cols
     # gs.update(wspace=.2, hspace=0, left=.1, right=.9, top=.9, bottom=.1)
     ax = fig.add_subplot(gs[0, 0])
-    chd.plot_chd_detection(ax=ax)
+    chd.plot_nee(ax=ax)
     fig.show()
-
-    # chd.analyze_nee()
 
     print("END")
 
