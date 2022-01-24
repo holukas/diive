@@ -14,16 +14,16 @@ Recent releases: [Releases](https://gitlab.ethz.ch/holukas/diive/-/releases)
 
 ## Current Features
 
+### Analyses
+- Optimum range (#anOPR)
+
 ### Flux
-XXX
+- Critical heat days (#fxCHD)
 
 ### Plots
 XXX
 
 ### Outlier Detection
-XXX
-
-### Analyses
 XXX
 
 ### Gap-filling

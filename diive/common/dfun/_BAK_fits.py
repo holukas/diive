@@ -33,7 +33,7 @@ import uncertainties.unumpy as unp
 from scipy import stats
 from scipy.optimize import curve_fit
 
-from pkgs.dfun.stats import q25, q75
+from diive.pkgs.dfun.stats import q25, q75
 
 pd.set_option('display.width', 1500)
 pd.set_option('display.max_columns', 30)

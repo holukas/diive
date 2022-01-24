@@ -1,9 +1,22 @@
 import datetime as dt
 import logging
+import time
 
 import pandas as pd
 
-from logger import log
+from diive.logger import log
+
+
+def get_current_unixtime():
+    """
+    Get current time as an integer number of nanoseconds since the epoch
+
+    Returns
+    -------
+    int
+    """
+    current_time_unix = time.time_ns()
+    return current_time_unix
 
 
 def make_timestamp_suffix():
@@ -22,9 +35,9 @@ def make_timestamp_microsec_suffix():
     return run_id
 
 
-def get_current_time():
+def get_current_time(str_format: str = '%Y-%m-%d %H:%M:%S'):
     now_time_dt = dt.datetime.now()
-    now_time_str = now_time_dt.strftime("%Y-%m-%d %H:%M:%S")
+    now_time_str = now_time_dt.strftime(str_format)
     logging.info(f'{now_time_dt} / {now_time_str}')
     log(name=get_current_time.__name__, dict={'current time': [now_time_dt, now_time_str]}, highlight=False)
     return now_time_dt, now_time_str

@@ -7,6 +7,7 @@ Subpackages
 .. toctree::
    :maxdepth: 4
 
+   diive.pkgs.analyses
    diive.pkgs.flux
 
 Module contents

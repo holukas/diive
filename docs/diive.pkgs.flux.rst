@@ -1,13 +1,24 @@
 diive.pkgs.flux package
 =======================
 
-Subpackages
------------
+Submodules
+----------
 
-.. toctree::
-   :maxdepth: 4
+diive.pkgs.flux.carboncost module
+---------------------------------
 
-   diive.pkgs.flux.carboncost
+.. automodule:: diive.pkgs.flux.carboncost
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+diive.pkgs.flux.criticalheatdays module
+---------------------------------------
+
+.. automodule:: diive.pkgs.flux.criticalheatdays
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
 Module contents
 ---------------

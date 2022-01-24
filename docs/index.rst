@@ -6,11 +6,15 @@
 Welcome to diive's documentation!
 =================================
 
+.. note::
+
+   This project is under active development.
+
 .. toctree::
    :maxdepth: 5
    :caption: Contents:
 
-   modules
+   common
 
 Indices and tables
 ==================

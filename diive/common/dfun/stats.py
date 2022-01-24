@@ -1,4 +1,4 @@
-# import pkgs.dfun
+# import diive.pkgs.dfun
 # from stats.boxes import insert_statsboxes_txt
 
 import pandas as pd

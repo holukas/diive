@@ -1,4 +1,4 @@
-from common.utils.config import validate_filetype_config
+from diive.common.utils.config import validate_filetype_config
 from pkgs.filereader.filereader import ConfigFileReader
 
 

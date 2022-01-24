@@ -32,7 +32,7 @@ from scipy import stats
 from scipy.optimize import curve_fit
 
 # from gui import plotfuncs
-from common.dfun.stats import q25, q75
+from diive.common.dfun.stats import q25, q75
 
 pd.set_option('display.width', 1500)
 pd.set_option('display.max_columns', 30)
@@ -145,12 +145,14 @@ class BinFitterCP:
 
     def _set_fit_data(self, df):
         # Bin data
+        numvals_per_bin = {}
         if self.usebins == 0:
             _df = df.copy()
             x = self.x
             y = self.y
             len_y = len(y)
-            numvals_per_bin = len_y
+            numvals_per_bin['min'] = len_y
+            numvals_per_bin['max'] = len_y
         else:
             _df = self._bin_data(df=df, num_bins=self.usebins)
             x = _df['BIN_START']

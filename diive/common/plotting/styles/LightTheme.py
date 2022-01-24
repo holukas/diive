@@ -9,7 +9,7 @@ LIGHT THEME
 
 """
 
-from common.plots.styles._material_design_colors import *
+from diive.common.plotting.styles._material_design_colors import *
 
 # DEFAULT LINE PLOT
 # COLOR_LINE_DEFAULT = '#026DA3'  # Line in time series plot
@@ -22,8 +22,8 @@ SIZE_MARKER_LARGE = 30
 TYPE_MARKER_DEFAULT = 'o'
 
 # GENERAL DEFAULTS FOR ALL PLOT TYPES
-WIDTH_LINE_SPINES = 0.5  # Lines framing the plot
-WIDTH_LINE_ZERO = 0.5
+LINEWIDTH_SPINES = 1  # Lines framing the plot
+LINEWIDTH_ZERO = 1
 
 # SCATTER PLOT
 COLOR_SCATTER_DEFAULT = bluegray(400)
@@ -53,9 +53,16 @@ FONTSIZE_HEADER_AXIS = 8
 FONTSIZE_HEADER_AXIS_SMALL = 6
 FONTCOLOR_HEADER_AXIS = black()
 
-FONTSIZE_LABELS_AXIS = 6
-FONTSIZE_LABELS_AXIS_7 = 7
-FONTCOLOR_LABELS_AXIS = black()
+# Axis labels
+AXLABELS_FONTSIZE = 20
+AXLABELS_FONTCOLOR = black()
+AXLABELS_FONTWEIGHT = 'normal'
+
+# Ticks
+TICKS_WIDTH = 1
+TICKS_LENGTH = 4
+TICKS_DIRECTION = 'in'
+TICKS_LABELSIZE = 20
 
 FONTSIZE_LEGEND = 5
 
@@ -81,6 +88,7 @@ def colorwheel_36():
 
     return picked_colors_dict
 
+
 def colorwheel_36_wider():
     """Create dictionary with a total of 36 colors."""
     picked_colors_dict = {}
@@ -95,9 +103,11 @@ def colorwheel_36_wider():
 
     return picked_colors_dict
 
+
 def colors_4_season(shade):
     list_4colors = [lightgreen(shade), red(shade), brown(shade), lightblue(shade)]
     return list_4colors
+
 
 def colors_12(shade):
     """Create list of 12 colors with specific shade."""

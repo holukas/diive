@@ -1,13 +1,17 @@
 import time
+from pathlib import Path
 
+import matplotlib.gridspec as gridspec
+import pandas as pd
 from matplotlib import pyplot as plt, _pylab_helpers, dates as mdates
 from matplotlib.text import Text
+from pandas import DataFrame, Series
 
 # from modboxes.plots.styles.LightTheme import *
 # from modboxes.plots.styles.LightTheme import FONTSIZE_LABELS_AXIS, COLOR_TXT_LEGEND
-import common.plots.styles.LightTheme as theme
+import diive.common.plotting.styles.LightTheme as theme
 # from modboxes.plots.styles.LightTheme import *
-from common.plots.styles.LightTheme import *
+from diive.common.plotting.styles.LightTheme import *
 
 
 def remove_prev_lines(ax):
@@ -57,21 +61,39 @@ def remove_prev_lines(ax):
 #             pass
 #     return twin_ax
 
-def default_format(ax, fontsize=theme.FONTSIZE_LABELS_AXIS, label_color=theme.FONTCOLOR_LABELS_AXIS,
-                   txt_xlabel=False, txt_ylabel=False, txt_ylabel_units=False, FONTWEIGHT_LABELS='normal',
-                   width=0.5, length=3, direction='in', colors='black', facecolor='white'):
-    """ Apply default format to plot. """
+def default_format(ax,
+                   axlabels_fontsize: int = theme.AXLABELS_FONTSIZE,
+                   axlabels_fontcolor: str = theme.AXLABELS_FONTCOLOR,
+                   axlabels_fontweight=theme.AXLABELS_FONTWEIGHT,
+                   txt_xlabel=False, txt_ylabel=False, txt_ylabel_units=False,
+                   ticks_width=theme.TICKS_WIDTH,
+                   ticks_length=theme.TICKS_LENGTH,
+                   ticks_direction=theme.TICKS_DIRECTION,
+                   ticks_labelsize=theme.TICKS_LABELSIZE,
+                   color='black',
+                   facecolor='white'):
+    """Apply default format to ax"""
     ax.set_facecolor(facecolor)
-    ax.tick_params(axis='x', width=width, length=length, direction=direction, colors=colors, labelsize=fontsize)
-    ax.tick_params(axis='y', width=width, length=length, direction=direction, colors=colors, labelsize=fontsize)
-    format_spines(ax=ax, color=colors, lw=theme.WIDTH_LINE_SPINES)
+    format_ticks(ax=ax, width=ticks_width, length=ticks_length,
+                 direction=ticks_direction, color=color, labelsize=ticks_labelsize)
+    format_spines(ax=ax, color=color, lw=theme.LINEWIDTH_SPINES)
+
     if txt_xlabel:
-        ax.set_xlabel(txt_xlabel, color=label_color, fontsize=fontsize, fontweight=FONTWEIGHT_LABELS)
+        ax.set_xlabel(txt_xlabel, color=axlabels_fontcolor, fontsize=axlabels_fontsize, fontweight=axlabels_fontweight)
     if txt_ylabel and txt_ylabel_units:
-        ax.set_ylabel(f'{txt_ylabel}  {txt_ylabel_units}', color=label_color, fontsize=fontsize, fontweight=FONTWEIGHT_LABELS)
+        ax.set_ylabel(f'{txt_ylabel}  {txt_ylabel_units}', color=axlabels_fontcolor, fontsize=axlabels_fontsize,
+                      fontweight=axlabels_fontweight)
     if txt_ylabel and not txt_ylabel_units:
-        ax.set_ylabel(f'{txt_ylabel}', color=label_color, fontsize=fontsize, fontweight=FONTWEIGHT_LABELS)
+        ax.set_ylabel(f'{txt_ylabel}', color=axlabels_fontcolor, fontsize=axlabels_fontsize,
+                      fontweight=axlabels_fontweight)
     return None
+
+
+def format_ticks(ax, width, length, direction, color, labelsize):
+    ax.tick_params(axis='x', width=width, length=length, direction=direction,
+                   colors=color, labelsize=labelsize)
+    ax.tick_params(axis='y', width=width, length=length, direction=direction,
+                   colors=color, labelsize=labelsize)
 
 
 def format_spines(ax, color, lw):
@@ -192,7 +214,7 @@ def nice_date_ticks(ax, minticks, maxticks, which):
 def show_txt_in_ax_bad_values(fig, ax, df, sum_for_col):
     """ Show number of bad values / marked values as text """
     ax.text(0.02, 0.98, '{} bad values'.format(df[sum_for_col].sum()),
-            size=theme.FONTSIZE_LABELS_AXIS, color='#eab839', backgroundcolor='none', transform=ax.transAxes,
+            size=theme.AXLABELS_FONTSIZE, color='#eab839', backgroundcolor='none', transform=ax.transAxes,
             alpha=0.8, horizontalalignment='left', verticalalignment='top')
     fig.canvas.draw()
     fig.canvas.flush_events()
@@ -258,7 +280,7 @@ def default_legend(ax, loc='upper right', facecolor='None', edgecolor='None',
 
 
 def default_grid(ax):
-    ax.grid(True, ls='--', color=theme.COLOR_LINE_GRID, lw=theme.WIDTH_LINE_SPINES, zorder=0)
+    ax.grid(True, ls='--', color=theme.COLOR_LINE_GRID, lw=theme.LINEWIDTH_SPINES, zorder=0)
 
 
 def wheel_markers_7():
@@ -276,7 +298,7 @@ def add_ax_title_inside(txt, ax):
 
 def _add_zeroline_y(series, ax):
     if (series.min() < 0) & (series.max() > 0):
-        ax.axhline(0, lw=WIDTH_LINE_ZERO, color=COLOR_LINE_ZERO)
+        ax.axhline(0, lw=LINEWIDTH_ZERO, color=COLOR_LINE_ZERO)
 
 
 def _remove_line(line):
@@ -341,3 +363,38 @@ def update_plotdate_main(series, ax, prevline, plot_title_ref):
     _add_zeroline_y(series=series, ax=ax)
     _set_xylim(ax=ax, series=series)
     return plot_title_ref
+
+
+def quickplot_df(data: DataFrame or Series, hline: None or float = None, subplots: bool = True,
+                 title: str = None, saveplot: str or Path = None, showplot: bool = False) -> None:
+    if isinstance(data, Series):
+        data = pd.DataFrame(data)
+    elif isinstance(data, list):
+        data_cols = {}
+        for series in data:
+            data_cols[series.name] = series
+        data = pd.concat(data_cols, axis=1)
+
+    fig = plt.figure(figsize=(20, 9))
+    gs = gridspec.GridSpec(1, 1)  # rows, cols
+    # gs.update(wspace=.2, hspace=0, left=.1, right=.9, top=.9, bottom=.1)
+    ax = fig.add_subplot(gs[0, 0])
+    data.plot(subplots=subplots, ax=ax, title=title)
+
+    if hline:
+        ax.axhline(hline, label=f"value: {hline}", ls='--')
+
+    # if title:
+    #     ax.set_title(title)
+
+    if saveplot:
+        from diive.common.dfun.times import get_current_time
+        _, cur_time = get_current_time(str_format='%Y%m%d-%H%M%S-%f')
+        outfilepath = Path(saveplot) / f"{cur_time}_output.png"
+        fig.savefig(outfilepath)
+        print(f"Saved plot {outfilepath}")
+
+    if showplot:
+        pass
+        # fig.show()
+    plt.close(fig)

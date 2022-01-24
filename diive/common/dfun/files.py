@@ -1,18 +1,14 @@
 import datetime as dt
-import fnmatch
-import os
-import pathlib
 import zipfile as zf
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 # from PyQt5 import QtWidgets as qw
-
-from common import filereader as filereader
-from common.utils.config import validate_filetype_config
-from common.dfun.frames import add_second_header_row
-from common.dfun.times import make_timestamp_microsec_suffix
+from common.io.dirs import verify_dir
+from diive.common.utils.config import validate_filetype_config
+from diive.common.dfun.frames import add_second_header_row
+from diive.common.dfun.times import make_timestamp_microsec_suffix
 
 
 def parse_events_file(filepath, settings_dict):
@@ -226,7 +222,7 @@ def read_selected_data_file(filepath: Path, filetype_config: dict):
     else:
         filepath, dir_temp_unzipped = unzip_file(filepath=filepath)
 
-    datafilereader = filereader.DataFileReader(
+    datafilereader = io.DataFileReader(
         filepath=filepath,
         data_skiprows=filetype_config['DATA']['SKIP_ROWS'],
         data_headerrows=filetype_config['DATA']['HEADER_ROWS'],
@@ -334,12 +330,6 @@ def unzip_file(filepath):
     return filepath, dir_temp_unzipped
 
 
-def verify_dir(dir):
-    """ Create dir if it does not exist. """
-    pathlib.Path(dir).mkdir(parents=True, exist_ok=True)
-    return None
-
-
 def select_source_files(start_dir, text="Open File"):
     """
     Load data from file(s), multiple files can be selected,
@@ -373,15 +363,15 @@ def select_output_dir(start_dir, rundir_name):
     return outdir
 
 
-def search_files(src_dir, ext: str):
-    """ Search files and store their filename and the path to the file in dictionary. """
-    found_files_dict = {}
-    for root, dirs, files in os.walk(src_dir):
-        for idx, settings_file_name in enumerate(files):
-            if fnmatch.fnmatch(settings_file_name, ext):
-                filepath = Path(root) / settings_file_name
-                found_files_dict[settings_file_name] = filepath
-    return found_files_dict
+# def search_files(src_dir, ext: str):
+#     """ Search files and store their filename and the path to the file in dictionary. """
+#     found_files_dict = {}
+#     for root, dirs, files in os.walk(src_dir):
+#         for idx, settings_file_name in enumerate(files):
+#             if fnmatch.fnmatch(settings_file_name, ext):
+#                 filepath = Path(root) / settings_file_name
+#                 found_files_dict[settings_file_name] = filepath
+#     return found_files_dict
 
 
 def parse_settingsfile_todict(filepath):

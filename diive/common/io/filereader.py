@@ -3,18 +3,34 @@ FILEREADER
 ==========
 This package is part of DIIVE.
 
-    DataFileReader: Read data files to pandas DataFrame
-    ConfigFileReader: Read YAML file to dictionary
-
 """
-
+import datetime
+import fnmatch
+import os
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pandas.errors
 import yaml
 
 from diive.common import dfun
+from diive.common.dfun.frames import flatten_multiindex_all_df_cols, continuous_timestamp_freq
+from diive.configs.filetypes import get_filetypes
+
+
+def search_files(searchdir, pattern: str) -> list:
+    """ Search files and store their filename and the path to the file in dictionary. """
+    # found_files_dict = {}
+    foundfiles = []
+    for root, dirs, files in os.walk(searchdir):
+        for idx, settings_file_name in enumerate(files):
+            if fnmatch.fnmatch(settings_file_name, pattern):
+                filepath = Path(root) / settings_file_name
+                # found_files_dict[settings_file_name] = filepath
+                foundfiles.append(filepath)
+    # return found_files_dict
+    return foundfiles
 
 
 class ConfigFileReader:
@@ -37,55 +53,82 @@ class ConfigFileReader:
 
 
 class MultiDataFileReader:
-    """Read and merge multiple datafiles with same config"""
+    """Read and merge multiple datafiles of the same filetype"""
 
-    def __init__(self, filetype_config, filepaths: list):
+    def __init__(self, filepaths: list, filetype: str):
+
+        # Getting configs for filetype
+        configfilepath = get_filetypes()[filetype]
+        self.filetypeconfig = ConfigFileReader(configfilepath=configfilepath).read()
         self.filepaths = filepaths
 
-        self.data_skiprows = filetype_config['DATA']['SKIP_ROWS']
-        self.data_headerrows = filetype_config['DATA']['HEADER_ROWS']
-        self.data_headersection_rows = filetype_config['DATA']['HEADER_SECTION_ROWS']
-        self.data_na_vals = filetype_config['DATA']['NA_VALUES']
-        self.data_delimiter = filetype_config['DATA']['DELIMITER']
-        self.data_freq = filetype_config['DATA']['FREQUENCY']
-        self.timestamp_idx_col = filetype_config['TIMESTAMP']['INDEX_COLUMN']
-        self.timestamp_datetime_format = filetype_config['TIMESTAMP']['DATETIME_FORMAT']
-        self.timestamp_start_middle_end = filetype_config['TIMESTAMP']['SHOWS_START_MIDDLE_OR_END_OF_RECORD']
+        # Collect data from all files listed in filepaths
+        self._data = self._get_incoming_data()
 
-        self.filesdata_df = pd.DataFrame()  # Data from all files in filepaths
+        self._data['df'] = continuous_timestamp_freq(df=self._data['df'], freq=self.filetypeconfig['DATA']['FREQUENCY'])
 
-    def get_incoming_data(self):
+    @property
+    def data(self):
+        """Get dataframe of merged files data"""
+        if not isinstance(self._data, dict):
+            raise Exception('data is empty')
+        return self._data
+
+    def _get_incoming_data(self) -> dict:
+        """Merge data across all files"""
+        data = None
         for filepath in self.filepaths:
-            incoming_filedata_df = self._readfile(filepath=filepath)
-            self._merge_with_existing(incoming_filedata_df=incoming_filedata_df)
-        self.filesdata_df = dfun.frames.sort_multiindex_columns_names_LEGACY(df=self.filesdata_df, priority_vars=None)
-        return self.filesdata_df
+            print(f"Reading file {filepath.stem}")
+            try:
+                incoming_data = ReadFileType(filepath=filepath, filetypeconfig=self.filetypeconfig).get_filedata()
+                data = self._merge_with_existing(incoming_data=incoming_data, data=data)
+            except pandas.errors.EmptyDataError:
+                continue
+        data['df'] = dfun.frames.sort_multiindex_columns_names(df=data['df'], priority_vars=None)
+        return data
 
-    def _merge_with_existing(self, incoming_filedata_df):
-        if self.filesdata_df.empty:
-            self.filesdata_df = incoming_filedata_df
+    def _merge_with_existing(self, incoming_data: dict, data: dict) -> dict:
+        if not isinstance(data, dict):
+            data = {}
+            data['df'] = incoming_data['df'].copy()
+            data['meta'] = incoming_data['meta'].copy()
         else:
-            self.filesdata_df = self.filesdata_df.combine_first(incoming_filedata_df)
+            data['df'] = data['df'].combine_first(incoming_data['df'])
+            data['meta'] = data['meta'].combine_first(incoming_data['meta'])
+        return data
 
-    def _readfile(self, filepath):
-        incoming_filedata_df = DataFileReader(
-            filepath=filepath,
-            data_skiprows=self.data_skiprows,
-            data_headerrows=self.data_headerrows,
-            data_headersection_rows=self.data_headersection_rows,
-            data_na_vals=self.data_na_vals,
-            data_delimiter=self.data_delimiter,
-            data_freq=self.data_freq,
-            timestamp_idx_col=self.timestamp_idx_col,
-            timestamp_datetime_format=self.timestamp_datetime_format,
-            timestamp_start_middle_end=self.timestamp_start_middle_end
-        )._read()
 
-        return incoming_filedata_df
+class ReadFileType:
+    """Read single data file using settings from dictionary for specified filetype"""
+
+    def __init__(self, filepath: str or Path, filetypeconfig: dict):
+        self.filepath = Path(filepath)
+        self.filetypeconfig = filetypeconfig
+        self.data = self._readfile()
+
+    def get_filedata(self):
+        return self.data
+
+    def _readfile(self):
+        """Load data"""
+        datafilereader = DataFileReader(
+            filepath=self.filepath,
+            data_skiprows=self.filetypeconfig['DATA']['SKIP_ROWS'],
+            data_headerrows=self.filetypeconfig['DATA']['HEADER_ROWS'],
+            data_headersection_rows=self.filetypeconfig['DATA']['HEADER_SECTION_ROWS'],
+            data_na_vals=self.filetypeconfig['DATA']['NA_VALUES'],
+            data_delimiter=self.filetypeconfig['DATA']['DELIMITER'],
+            data_freq=self.filetypeconfig['DATA']['FREQUENCY'],
+            timestamp_idx_col=self.filetypeconfig['TIMESTAMP']['INDEX_COLUMN'],
+            timestamp_datetime_format=self.filetypeconfig['TIMESTAMP']['DATETIME_FORMAT'],
+            timestamp_start_middle_end=self.filetypeconfig['TIMESTAMP']['SHOWS_START_MIDDLE_OR_END_OF_RECORD']
+        )
+        data = datafilereader.get_data()
+        return data
 
 
 class DataFileReader:
-    """Read datafile"""
+    """Read single data file with provided settings"""
 
     def __init__(
             self,
@@ -113,6 +156,7 @@ class DataFileReader:
         self.timestamp_idx_col = timestamp_idx_col
 
         self.data_df = pd.DataFrame()
+        self.data_metadata_df = pd.DataFrame()
         self.generated_missing_header_cols_list = []
 
         self._read()
@@ -120,13 +164,34 @@ class DataFileReader:
     def _read(self):
         headercols_list, self.generated_missing_header_cols_list = self._compare_len_header_vs_data()
         self.data_df = self._parse_file(headercols_list=headercols_list)
-        self._standardize_index()
+        self._standardize_timestamp_index()
         self._clean_data()
         if len(self.data_headerrows) == 1:
             self.data_df = self._add_second_header_row(df=self.data_df)
+        self.data_metadata_df = self._get_metadata()
+        self.data_df = flatten_multiindex_all_df_cols(df=self.data_df, keep_first_row_only=True)
 
-    def get_data(self) -> pd.DataFrame:
-        return self.data_df
+    def _get_metadata(self):
+        """Create separate dataframe collecting metadata for each variable
+        Metadata contains units, tags and time added.
+        """
+        _flatcols = [col[0] for col in self.data_df.columns]
+        index = ['UNITS', 'TAGS', 'ADDED']
+        data_metadata_df = pd.DataFrame(columns=_flatcols, index=index)
+        addtime = datetime.datetime.now()  # Datetime of when var was added
+        for ix, col in enumerate(self.data_df.columns):
+            var = col[0]
+            data_metadata_df.loc['UNITS', var] = col[1]
+            data_metadata_df.loc['TAGS', var] = "#orig"
+            data_metadata_df.loc['ADDED', var] = addtime
+        return data_metadata_df
+
+    def get_data(self) -> dict:
+        data = {
+            'df': self.data_df,
+            'meta': self.data_metadata_df
+        }
+        return data
 
     def _convert_timestamp_idx_col(self, var):
         """Convert to list of tuples if needed
@@ -206,11 +271,6 @@ class DataFileReader:
         # todo at some point, the string columns should also be considered
         self.data_df = self.data_df.apply(pd.to_numeric, errors='coerce')
 
-        # Set freq, at the same time this makes index CONTINUOUS w/o date gaps
-        self.data_df.asfreq(self.data_freq)
-
-        self.data_df.sort_index(inplace=True)
-
     def _parse_file(self, headercols_list):
         """Parse data file without header"""
 
@@ -239,7 +299,7 @@ class DataFileReader:
 
         return data_df
 
-    def _standardize_index(self):
+    def _standardize_timestamp_index(self):
         """Standardize timestamp index column"""
 
         # Index name is now the same for all filetypes w/ timestamp in data
@@ -249,6 +309,12 @@ class DataFileReader:
         # Make sure the index is datetime
         self.data_df.index = pd.to_datetime(self.data_df.index)
 
+        # Make continuous timestamp at current frequency, from first to last datetime
+        self.data_df = continuous_timestamp_freq(df=self.data_df, freq=self.data_freq)
+
+        # TODO? additional check: validate inferred freq from data like in `dataflow` script
+
+        # Timestamp convention
         # Shift timestamp by half-frequency, if needed
         if self.timestamp_start_middle_end == 'middle':
             pass

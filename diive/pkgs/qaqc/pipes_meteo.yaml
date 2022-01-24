@@ -1,0 +1,48 @@
+# <measurement>
+#   <variable pattern>:
+#     pipe: [ <check1>, <check2>, ... ]
+#     units: <units>
+#     range: [ <min>, <max> ]
+#
+# Options for <units>:
+#   'W m-2', 'degC', '%', 'umol m-2 s-1'
+# Options for <check#>:
+#   'remove_radiation_offset', 'range_check', 'setto_max_threshold',
+#   'setto_min_threshold', 'remove_relativehumidity_offset'
+
+
+LW:
+  LW_IN_:
+    pipe: [ range_check ]
+    units: W m-2
+    range: [ 50, 600 ]
+
+PA:
+  PA_:
+    pipe: [ range_check ]
+    units: hPa
+    range: [ 760, 1000 ]
+
+PPFD:
+  PPFD_IN_:
+    pipe: [ remove_radiation_offset, setto_max_threshold, setto_min_threshold, range_check ]
+    units: umol m-2 s-1
+    range: [ 0, 3000 ]
+
+RH:
+  RH_:
+    pipe: [ remove_relativehumidity_offset, setto_max_threshold, setto_min_threshold, range_check ]
+    units: "%"
+    range: [ 0, 100 ]
+
+SW:
+  SW_IN_:
+    pipe: [ remove_radiation_offset, setto_max_threshold, setto_min_threshold, range_check ]
+    units: W m-2
+    range: [ 0, 2000 ]
+
+TA:
+  TA_:
+    pipe: [ range_check ]
+    units: degC
+    range: [ -50, 50 ]

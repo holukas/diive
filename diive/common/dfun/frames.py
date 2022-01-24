@@ -2,8 +2,6 @@
 DATA FUNCTIONS: FRAMES
 ======================
 
-# last update in: v0.23.0
-
 This module is part of DIIVE:
 https://gitlab.ethz.ch/holukas/diive
 
@@ -13,23 +11,153 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from pandas import DataFrame, MultiIndex
+from pandas import Series
 from pandas._libs.tslibs import to_offset
 
-from common.dfun.times import timedelta_to_string
+from diive.common.dfun.times import timedelta_to_string
 
 pd.set_option('display.width', 1500)
 pd.set_option('display.max_columns', 30)
 pd.set_option('display.max_rows', 30)
 
 
+def continuous_timestamp_freq(df: DataFrame, freq: str = '30T') -> DataFrame:
+    """Generate continuous timestamp of given frequency between first and last date of df
+
+    This makes df continuous w/o date gaps but w/ data gaps at filled-in timestamps.
+    """
+    # Generate timestamp index
+    _index = pd.date_range(start=df.index[0], end=df.index[-1], freq=freq)
+
+    # Reindex data to continuous timestamp
+    df = df.reindex(_index)
+    df.index.name = 'TIMESTAMP'
+
+    # Set freq
+    df.index = pd.to_datetime(df.index)
+    df = df.asfreq(freq=freq)
+    df.sort_index(inplace=True)
+
+    return df
+
+
+def aggregated_as_hires(aggregate_series: Series,
+                        hires_timestamp,
+                        to_freq: str = 'D',
+                        to_agg: str = 'mean') -> Series:
+    """
+    Insert aggregated values as column in high-res dataframe
+    """
+    # Aggregate series
+    lowres_df = pd.DataFrame(aggregate_series.resample(to_freq).agg(to_agg))
+    agghires_col = f".{aggregate_series.name}_{to_freq}_{to_agg}"
+    lowres_df = rename_cols(df=lowres_df, renaming_dict={aggregate_series.name: agghires_col})
+
+    # Input data
+    hires_df = pd.DataFrame(index=hires_timestamp)
+    hires_df[aggregate_series.name] = aggregate_series
+
+    # Insert column to merge the two datasets on
+    mergecol = None
+    if to_freq == 'D':
+        mergecol = 'date'
+        lowres_df[mergecol] = lowres_df.index.date
+        hires_df[mergecol] = hires_df.index.date
+    elif to_freq == 'A':
+        mergecol = 'year'
+        lowres_df[mergecol] = lowres_df.index.year
+        hires_df[mergecol] = hires_df.index.year
+    elif to_freq == 'M':
+        mergecol = 'year-month'
+        lowres_df[mergecol] = lowres_df.index.year.astype(str).str.cat(lowres_df.index.month.astype(str).str.zfill(2),
+                                                                       sep='-')
+        hires_df[mergecol] = hires_df.index.year.astype(str).str.cat(hires_df.index.month.astype(str).str.zfill(2),
+                                                                     sep='-')
+
+    # Timestamp as column for index after merging (merging loses index)
+    hires_df['TIMESTAMP'] = hires_df.index
+    hires_df = hires_df.merge(lowres_df, left_on=mergecol, right_on=mergecol, how='left')
+
+    # Re-apply original index (merging lost index)
+    hires_df = hires_df.set_index('TIMESTAMP')
+    return hires_df[agghires_col]
+
+
+def insert_aggregated_in_hires(df: DataFrame, col: tuple,
+                               to_freq: str = 'D', to_agg: str = 'mean'):
+    """
+    Insert aggregated values as column in high-res dataframe
+
+    Args:
+        df: Dataframe containing column that is aggregated
+        col: Column name of variable that is aggregated
+        to_freq: Frequency string, 'D' for daily aggregation, 'A' for yearly, 'M' for monthly
+        to_agg: Aggregation type, e.g. 'mean' for mean, 'max' for maximum
+
+    """
+    # Resample and aggregate
+    agg_df = df[[col]].resample(to_freq).agg(to_agg)
+
+    new_colname = f".{col}_{to_freq}_{to_agg}"
+    agg_df = rename_cols(df=agg_df, renaming_dict={col: new_colname})
+
+    # Insert date as column to merge the two datasets
+    mergecol = None
+    if to_freq == 'D':
+        mergecol = 'date'
+        agg_df[mergecol] = agg_df.index.date
+        df[mergecol] = df.index.date
+    elif to_freq == 'A':
+        mergecol = 'year'
+        agg_df[mergecol] = agg_df.index.year
+        df[mergecol] = df.index.year
+    elif to_freq == 'M':
+        mergecol = 'year-month'
+        agg_df[mergecol] = agg_df.index.year.astype(str).str.cat(agg_df.index.month.astype(str).str.zfill(2), sep='-')
+        df[mergecol] = df.index.year.astype(str).str.cat(df.index.month.astype(str).str.zfill(2), sep='-')
+
+    # Timestamp as column for index after merging (merging loses index)
+    df['TIMESTAMP'] = df.index
+    df = df.merge(agg_df, left_on=mergecol, right_on=mergecol, how='left')
+
+    # Re-apply original index (merging lost index)
+    df = df.set_index('TIMESTAMP')
+    return df, new_colname
+
+
+def rename_cols(df: DataFrame, renaming_dict: dict) -> DataFrame:
+    """
+    Rename columns in dataframe
+
+    Args:
+        df: Data containing *oldname* column
+        renaming_dict: Dictionary that contains old column names as its keys,
+            and new column names as values, e.g. {'oldname': 'newname', 'oldname2': 'newname2', ...}.
+
+    Returns:
+        DataFrame
+    """
+    multiindex = False
+    if isinstance(df.columns, MultiIndex):  # Convert MultiIndex to flat index (tuples)
+        df.columns = df.columns.to_flat_index()
+        multiindex = True
+    df.rename(columns=renaming_dict, inplace=True)
+    if multiindex:
+        df.columns = pd.MultiIndex.from_tuples(df.columns)  # Restore column MultiIndex
+    return df
+
+
 def splitdata_daynight(
         df: pd.DataFrame,
-        split_on_col: tuple,
+        split_on: str,
+        split_day_start_hour: int,
+        split_day_end_hour: int,
         split_threshold: int = 20,
         split_flagtrue: str = 'Larger Than Threshold'
 ):
     """
-    Split data into two separate datasets based on column
+    Split data into two separate datasets based on values in column
 
     Consecutive nighttime
 
@@ -42,17 +170,15 @@ def splitdata_daynight(
 
     """
 
-    date_col = ('.DATE', '[aux]')
-    grp_daynight_col = ('.GRP_DAYNIGHT', '[aux]')
+    date_col = '.DATE'
+    grp_daynight_col = '.GRP_DAYNIGHT'
 
     # Add daytime flag to main data
     df, flag_daynight_col = \
         generate_flag_daynight(df=df,
-                               flag_based_on_col=split_on_col,
-                               flag_threshold=split_threshold,
-                               flagtrue=split_flagtrue)
-
-
+                               flag_based_on=split_on,
+                               ts_daytime_start_hour=split_day_start_hour,
+                               ts_daytime_end_hour=split_day_end_hour)
 
     # Add date as column
     df[date_col] = df.index.date
@@ -142,8 +268,18 @@ def count_unique_values(df):
     return counts_df.sort_index()
 
 
-def flatten_multiindex_all_df_cols(df):
-    df.columns = ['_'.join(col).strip() for col in df.columns.values]
+def flatten_multiindex_all_df_cols(df: DataFrame, keep_first_row_only: bool = False) -> DataFrame:
+    if keep_first_row_only:
+        # Keep only the first row (variabels) of the MultiIndex column names
+        vars = [col[0] for col in df.columns]
+        # # Alternative approach:
+        # df_orig_cols_as_tuples = df.columns.to_flat_index()
+        # vars = map(lambda x: x[0], df_orig_cols_as_tuples)  # Using map for 0 index
+        # vars = list(vars)  # Convert to list
+        df.columns = vars
+    else:
+        #  Combine first and second row of the MultiIndex column names to one line
+        df.columns = ['_'.join(col).strip() for col in df.columns.values]
     return df
 
 
@@ -198,9 +334,12 @@ def insert_drop_timestamp_col(df, timestamp_colname):
     return _df
 
 
-def resample_df(df, freq_str, agg_method, min_vals, to_freq_duration, to_freq):
-    """
-    Resample data to selected frequency, using the selected aggregation method
+def resample_df(df, freq_str, agg, mincounts_perc: float, to_freq=None):
+    """Resample data to selected frequency
+
+    Input data must have timestamp showing the MIDDLE of the time period.
+
+    Using the selected aggregation method
     and while also considering the minimum required values in the aggregation
     time window.
 
@@ -215,7 +354,7 @@ def resample_df(df, freq_str, agg_method, min_vals, to_freq_duration, to_freq):
             Which bin edge label to label bucket with. The default is ‘left’ for all frequency offsets
             except for ‘M’, ‘A’, ‘Q’, ‘BM’, ‘BA’, ‘BQ’, and ‘W’ which all have a default of ‘right’.
 
-    By default, for weekly aggregation the first day of the week in pandas is Sunday, but Amp uses Monday.
+    By default, for weekly aggregation the first day of the week in pandas is Sunday, but diive uses Monday.
 
     https://stackoverflow.com/questions/48340463/how-to-understand-closed-and-label-arguments-in-pandas-resample-method
         closed='right' =>  ( 3:00, 6:00 ]  or  3:00 <  x <= 6:00
@@ -223,8 +362,6 @@ def resample_df(df, freq_str, agg_method, min_vals, to_freq_duration, to_freq):
 
     """
 
-    # RESAMPLING
-    # ----------
     _df = df.copy()
 
     if to_freq in ['W', 'M', 'A']:
@@ -238,34 +375,28 @@ def resample_df(df, freq_str, agg_method, min_vals, to_freq_duration, to_freq):
     else:
         label = closed = timestamp_shows_start = '-not-defined-'
 
-    resampled_df = _df.resample(freq_str, label=label, closed=closed)  #
+    # Timestamp must be regular
+    if not _df.index.freq:
+        raise NotImplementedError("Error during resampling: Irregular timestamps are not supported.")
 
-    # AGGREGATION
-    # -----------
+    # Check maximum number of counts per aggregation interval
+    # Needed to calculate the required minimum number of counts from
+    # 'mincounts_perc', which is a relative threshold.
+    maxcounts = pd.Series(index=_df.index, data=1)  # Dummy series of 1s
+    maxcounts = maxcounts.resample(freq_str, label=label, closed=closed)
+    maxcounts = maxcounts.count().max()
+    mincounts = int(maxcounts * mincounts_perc)
+
+    # Aggregation
+    resampled_df = _df.resample(freq_str, label=label, closed=closed)
     agg_counts_df = resampled_df.count()  # Count aggregated values, always needed
+    agg_df = resampled_df.agg(agg)
 
-    # Aggregated values
-    if agg_method == 'Mean':
-        agg_df = resampled_df.mean()
-    elif agg_method == 'Median':
-        agg_df = resampled_df.median_col()
-    elif agg_method == 'SD':
-        agg_df = resampled_df.std_col()
-    elif agg_method == 'Minimum':
-        agg_df = resampled_df.min()
-    elif agg_method == 'Maximum':
-        agg_df = resampled_df.max()
-    elif agg_method == 'Count':
-        agg_df = resampled_df.count()
-    elif agg_method == 'Sum':
-        agg_df = resampled_df.sum()
-    elif agg_method == 'Variance':
-        agg_df = resampled_df.var_col()
-    else:
-        agg_df = -9999
-
-    filter_min = agg_counts_df >= min_vals
+    # Keep aggregates with enough values
+    filter_min = agg_counts_df >= mincounts
     agg_df = agg_df[filter_min]
+
+    # todo hier weiter
 
     # TIMESTAMP CONVENTION
     # --------------------
@@ -278,8 +409,91 @@ def resample_df(df, freq_str, agg_method, min_vals, to_freq_duration, to_freq):
     return agg_df, timestamp_info_df
 
 
+# todo delete if new function works
+# def resample_df(df, freq_str, agg_method, min_vals, to_freq_duration, to_freq):
+#     """
+#     Resample data to selected frequency, using the selected aggregation method
+#     and while also considering the minimum required values in the aggregation
+#     time window.
+#
+#
+#     Note regarding .resample:
+#     https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.resample.html
+#         closed : {‘right’, ‘left’}, default None
+#             Which side of bin interval is closed. The default is ‘left’ for all frequency offsets
+#             except for ‘M’, ‘A’, ‘Q’, ‘BM’, ‘BA’, ‘BQ’, and ‘W’ which all have a default of ‘right’.
+#
+#         label : {‘right’, ‘left’}, default None
+#             Which bin edge label to label bucket with. The default is ‘left’ for all frequency offsets
+#             except for ‘M’, ‘A’, ‘Q’, ‘BM’, ‘BA’, ‘BQ’, and ‘W’ which all have a default of ‘right’.
+#
+#     By default, for weekly aggregation the first day of the week in pandas is Sunday, but diive uses Monday.
+#
+#     https://stackoverflow.com/questions/48340463/how-to-understand-closed-and-label-arguments-in-pandas-resample-method
+#         closed='right' =>  ( 3:00, 6:00 ]  or  3:00 <  x <= 6:00
+#         closed='left'  =>  [ 3:00, 6:00 )  or  3:00 <= x <  6:00
+#
+#     """
+#
+#     # RESAMPLING
+#     # ----------
+#     _df = df.copy()
+#
+#     if to_freq in ['W', 'M', 'A']:
+#         label = 'right'
+#         closed = 'right'
+#         timestamp_shows_start = False
+#     elif to_freq in ['T', 'H', 'D']:
+#         label = 'left'
+#         closed = 'left'
+#         timestamp_shows_start = True
+#     else:
+#         label = closed = timestamp_shows_start = '-not-defined-'
+#
+#     resampled_df = _df.resample(freq_str, label=label, closed=closed)  #
+#
+#     # AGGREGATION
+#     # -----------
+#     agg_counts_df = resampled_df.count()  # Count aggregated values, always needed
+#
+#     # Aggregated values
+#     if agg_method == 'Mean':
+#         agg_df = resampled_df.mean()
+#     elif agg_method == 'Median':
+#         agg_df = resampled_df.median_col()
+#     elif agg_method == 'SD':
+#         agg_df = resampled_df.std_col()
+#     elif agg_method == 'Minimum':
+#         agg_df = resampled_df.min()
+#     elif agg_method == 'Maximum':
+#         agg_df = resampled_df.max()
+#     elif agg_method == 'Count':
+#         agg_df = resampled_df.count()
+#     elif agg_method == 'Sum':
+#         agg_df = resampled_df.sum()
+#     elif agg_method == 'Variance':
+#         agg_df = resampled_df.var_col()
+#     else:
+#         agg_df = -9999
+#
+#     filter_min = agg_counts_df >= min_vals
+#     agg_df = agg_df[filter_min]
+#
+#     # TIMESTAMP CONVENTION
+#     # --------------------
+#     agg_df, timestamp_info_df = timestamp_convention(df=agg_df,
+#                                                      timestamp_shows_start=timestamp_shows_start,
+#                                                      out_timestamp_convention='Middle of Record')
+#
+#     agg_df.index = pd.to_datetime(agg_df.index)
+#
+#     return agg_df, timestamp_info_df
+
+
 def timestamp_convention(df, timestamp_shows_start, out_timestamp_convention):
     """Set middle timestamp as main index"""
+
+    df=df.copy()
 
     original_cols = df.columns
     df.index = pd.to_datetime(df.index)
@@ -287,53 +501,53 @@ def timestamp_convention(df, timestamp_shows_start, out_timestamp_convention):
 
     # Original timestamp name
     ts_col = df.index.name
-    ts_var = ts_col[0]
-    ts_units = ts_col[1]
+    ts_var = ts_col
 
     # AUXILIARY COLUMNS
-    # -----------------
     # Define columns names
     if timestamp_shows_start:
-        start = (f"{ts_var}_START_INCL", ts_units)
-        end = (f"{ts_var}_END_EXCL", ts_units)
+        start_col = f"{ts_var}_START_INCL"
+        end_col = f"{ts_var}_END_EXCL"
     else:
-        start = (f"{ts_var}_START_EXCL", ts_units)
-        end = (f"{ts_var}_END_INCL", ts_units)
+        start_col = f"{ts_var}_START_EXCL"
+        end_col = f"{ts_var}_END_INCL"
+    middle_col = f"{ts_var}_MIDDLE"
+    diff_col = f"{ts_var}_DIFF"
+    halfdiff_col = f"{ts_var}_HALFDIFF"
+    aux_cols = [start_col, middle_col, end_col, diff_col, halfdiff_col]
 
-    middle = (f"{ts_var}_MIDDLE", ts_units)
-    diff = (f"{ts_var}_DIFF", ts_units)
-    halfdiff = (f"{ts_var}_HALFDIFF", ts_units)
-    aux_cols = [start, middle, end, diff, halfdiff]
-    # Add columns as empty
+    # Add columns as empty columns
     for col in aux_cols:
         df[col] = np.nan
 
     # Calculate auxiliary, e.g. to calculate timestamp for middle of record
     if timestamp_shows_start:
-        df[start] = df.index  # Original timestamp after resampling
-        df[end] = df[start].shift(-1)  # Shifted for time difference between next and current
+        df[start_col] = df.index  # Original timestamp after resampling
+        df[end_col] = df[start_col].shift(-1)  # Shifted for time difference between next and current
         fill_last_end = pd.date_range(start=df.index[-1], periods=2, freq=df.index.freq)
-        df[end].iloc[-1] = fill_last_end[1]  # Otherwise empty b/c shift
+        # df[end_col].iloc[-1] = fill_last_end[1]
+        df.loc[df.index[-1], end_col] = fill_last_end[1]  # Otherwise empty b/c shift
 
     else:
-        df[end] = df.index  # Original timestamp after resampling
-        df[start] = df[end].shift(1)  # Shifted for time difference between next and current
+        df[end_col] = df.index  # Original timestamp after resampling
+        df[start_col] = df[end_col].shift(1)  # Shifted for time difference between next and current
         fill_first_start = pd.date_range(end=df.index[0], periods=2, freq=df.index.freq)
-        df[start].iloc[0] = fill_first_start[0]  # Otherwise empty b/c shift
+        # df[start_col].iloc[0] = fill_first_start[0]
+        df.loc[df.index[0], start_col] = fill_first_start[0]  # Otherwise empty b/c shift
 
-    df[diff] = df[end] - df[start]  # Time difference
-    df[halfdiff] = df[diff] / 2  # Half-difference for middle of record
-    df[middle] = df[end] - df[halfdiff]  # Middle of record
+    df[diff_col] = df[end_col] - df[start_col]  # Time difference
+    df[halfdiff_col] = df[diff_col] / 2  # Half-difference for middle of record
+    df[middle_col] = df[end_col] - df[halfdiff_col]  # Middle of record
 
     # APPLY
     # -----
     # according to selected convention
     if out_timestamp_convention == 'Middle of Record':
-        df.index = df[middle]
+        df.index = df[middle_col]
     elif out_timestamp_convention == 'End of Record':
-        df.index = df[end]
+        df.index = df[end_col]
     elif out_timestamp_convention == 'Start of Record':
-        df.index = df[start]
+        df.index = df[start_col]
 
     # Set frequency
     # The problem is that if the middle timestamp is set as the main timestamp, the
@@ -360,20 +574,21 @@ def timestamp_convention(df, timestamp_shows_start, out_timestamp_convention):
     return df, timestamp_info_df
 
 
-def df_between_two_dates(df, start_date, end_date, dropna, dropna_col):
-    """ Get data for the time window, greater than the start date and smaller than the end date.
+def df_between_two_dates(df: DataFrame, start_date, end_date, dropna_col, dropna: bool = False):
+    """Get data for the time window, >= start date and <= end date
 
-    :param df: DataFrame
-    :param start_date: datetime
-    :param end_date: datetime
-    :param dropna: bool
-    :param dropna_col: Column name in df that is checked for NaNs.
-    :return: Data between start_date and end_date.
-    :rtype: DataFrame
+    Args:
+        df:
+        start_date:
+        end_date:
+        dropna: Remove NaNs
+        dropna_col: Column name in df that is checked for NaNs
+
+    Returns:
+        Data between start_date and end_date
     """
     mask = (df.index >= start_date) & (df.index <= end_date)
     snippet_df = df.loc[mask]
-
     if dropna:
         # Remove rows in df where dropna_col is NaN.
         filter_nan = snippet_df[dropna_col].isnull()  # True if NaN
@@ -440,62 +655,15 @@ def sort_multiindex_columns_names(df, priority_vars):
 
     cols_list.sort(key=custom_sort)
 
-    for ix, col in enumerate(cols_list):
-        if col[0] in priority_vars:
-            cols_list.insert(0, cols_list.pop(ix))  # removes from old location ix, puts to top of list
+    if priority_vars:
+        for ix, col in enumerate(cols_list):
+            if col[0] in priority_vars:
+                cols_list.insert(0, cols_list.pop(ix))  # removes from old location ix, puts to top of list
 
     # Custom vars are marked w/ a dot ('.') at beginning
     for ix, col in enumerate(cols_list):
         if col[0].startswith('.'):
             cols_list.insert(0, cols_list.pop(ix))
-
-    df = df[cols_list]  # assign new (sorted) column order
-
-    return df
-
-
-def sort_multiindex_columns_names_LEGACY(df, priority_vars):
-    """ Sort column names, ascending, with priority vars at top
-
-        Files w/ many columns are otherwise hard to navigate.
-
-        This is trickier than anticipated (by me), b/c sorting by
-              data_df.sort_index(axis=1, inplace=True)
-        sorts the columns, but is case-sensitive, i.e. 'Var2' is placed before
-        'var1', yielding the order 'Var2', 'var1'. However, we want it sorted like
-        this: 'var1', 'Var2'. Therefore, the columns are converted to a list, the
-        list is then sorted ignoring case, and the sorted list is then used to
-        define the column order in the df.
-    """
-    cols_list = df.columns.to_list()  # list of tuples
-
-    def custom_sort(col):
-        return col[0].lower()  # sort by 1st tuple element (var name), strictly lowercase
-
-    cols_list.sort(key=custom_sort)
-
-    # # Put priority vars first
-    # top_of_list = []
-    # for pv in priority_vars:
-    #     cols_list
-    #     top_of_list.append(pv)
-
-    for ix, col in enumerate(cols_list):
-        if col[0] in priority_vars:
-            cols_list.insert(0, cols_list.pop(ix))  # removes from old location ix, puts to top of list
-
-    for ix, col in enumerate(cols_list):
-        # Custom vars are marked w/ ++ at beginning
-        if (col[0].startswith('++')) and ('++_' not in str(col[0])):
-            cols_list.insert(0, cols_list.pop(ix))
-
-    # for ix, col in enumerate(cols_list):
-    #     # Underscore marks auxiliary varibles, move to end of list
-    #     if '++_' in str(col[0]):
-    #         cols_list.insert(-1, cols_list.pop(ix))
-
-    # elif any(fnmatch.fnmatch(col[0], gf_id) for gf_id in GAPFILLED_GENERAL_SCALARS):
-    #     cols_list.insert(0, cols_list.pop(ix))
 
     df = df[cols_list]  # assign new (sorted) column order
 
@@ -734,18 +902,32 @@ def generate_flag(df: pd.DataFrame, target_col: tuple, tag: str,
     return df, flag_col, target_nooutliers_col, target_outliervals_col
 
 
-def generate_flag_daynight(df: pd.DataFrame, flag_based_on_col: tuple, flagtrue: str, flag_threshold: float):
+def generate_flag_daynight(df: pd.DataFrame,
+                           flag_based_on: str = 'timestamp',
+                           ts_daytime_start_hour: int = 7,
+                           ts_daytime_end_hour: int = 19,
+                           col_thres_flagtrue: str = 'Larger Than Threshold',
+                           col_thres_flag_threshold: float = None):
     """Add flag to indicate group membership: daytime or nighttime data"""
-    flag_col = ('.FLAG_DAYTIME', '[1=daytime]')
+    flag_col = '.FLAG_DAYTIME'
     df[flag_col] = np.nan
     daytime_ix = None
     nighttime_ix = None
-    if flagtrue == 'Larger Than Threshold':
-        daytime_ix = df[flag_based_on_col] > flag_threshold
-        nighttime_ix = df[flag_based_on_col] <= flag_threshold
-    elif flagtrue == 'Smaller Than Threshold':
-        daytime_ix = df[flag_based_on_col] < flag_threshold
-        nighttime_ix = df[flag_based_on_col] >= flag_threshold
+
+    if flag_based_on == 'timestamp':
+        daytime_ix = (df.index.hour >= ts_daytime_start_hour) & \
+                     (df.index.hour <= ts_daytime_end_hour)
+        nighttime_ix = (df.index.hour < ts_daytime_start_hour) | \
+                       (df.index.hour > ts_daytime_end_hour)
+    else:
+        # If *flag_based_on* is name of column
+        if col_thres_flagtrue == 'Larger Than Threshold':
+            daytime_ix = df[flag_based_on] > col_thres_flag_threshold
+            nighttime_ix = df[flag_based_on] <= col_thres_flag_threshold
+        elif col_thres_flagtrue == 'Smaller Than Threshold':
+            daytime_ix = df[flag_based_on] < col_thres_flag_threshold
+            nighttime_ix = df[flag_based_on] >= col_thres_flag_threshold
+
     df.loc[daytime_ix, [flag_col]] = 1
     df.loc[nighttime_ix, [flag_col]] = 0
     return df, flag_col

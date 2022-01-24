@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pandas as pd
 
-import pkgs.dfun
-from pkgs.dfun.stats import CalcTimeSeriesStats
+import diive.pkgs.dfun
+from diive.pkgs.dfun.stats import CalcTimeSeriesStats
 
 
 def statsbox_txt(focus_stats_df, stat_name, stat_label, prev_stats_available, show_prev_stats):
