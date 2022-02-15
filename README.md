@@ -15,31 +15,30 @@ Recent releases: [Releases](https://gitlab.ethz.ch/holukas/diive/-/releases)
 ## Current Features
 
 ### Analyses
-- Optimum range (#anOPR)
+- Gapfinder
+- Optimum range
 
-### Flux
-- Critical heat days (#fxCHD)
+### Corrections
+- Offset correction
+- Set to threshold
 
-### Plots
-XXX
+### Create flag
+- Outside range
 
-### Outlier Detection
-XXX
+### Create variable
+- Potential radiation
+
+### Eddy covariance high-resolution
+- Flux detection limit
 
 ### Gap-filling
-XXX
+- Interpolate
 
-### Modifications
-XXX
+### Outlier Detection
+- Hampel filter
 
-### Create Variable
-XXX
-
-### Eddy Covariance
-XXX
-
-### Export
-XXX
+### Quality control
+- Meteo screening
 
 ## Installation
-XXX
+`diive` can be installed from source code

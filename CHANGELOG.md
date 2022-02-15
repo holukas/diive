@@ -30,7 +30,6 @@ which allows the calculation of the flux detection limit following Langford et a
 - Added `pkgs > createflag`: Create flag variables, e.g. for quality checks
 - Added `pkgs > createvar`: Calculate new variables, e.g. potential radiation
 - Added `pkgs > echires`: Calculations for eddy covariance high-resolution data, e.g. 20Hz data
-- Added `pkgs > flux`: Flux-specific analyses
 - Added `pkgs > gapfilling`: Gap-filling routines
 - Added `pkgs > outlierdetection`: Outlier detection
 - Added `pkgs > qaqc`: Quality screening for timeseries variables
@@ -43,8 +42,6 @@ which allows the calculation of the flux detection limit following Langford et a
 - Added `outsiderange` in `pkgs > createflag`
 - Added `potentialradiation` in `pkgs > createvar`
 - Added `fluxdetectionlimit` in `pkgs > echires`
-- Added `carboncost` in `pkgs > flux`
-- Added `criticalheatdays` in `pkgs > flux`
 - Added `interpolate` in `pkgs > gapfilling`
 - Added `hampel` in `pkgs > outlierdetection`
 - Added `meteoscreening` in `pkgs > qaqc`
