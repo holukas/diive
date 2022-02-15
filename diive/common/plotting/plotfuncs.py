@@ -1,6 +1,6 @@
 import time
 from pathlib import Path
-
+from diive.common.dfun.times import get_current_time
 import matplotlib.gridspec as gridspec
 import pandas as pd
 from matplotlib import pyplot as plt, _pylab_helpers, dates as mdates
@@ -65,7 +65,9 @@ def default_format(ax,
                    axlabels_fontsize: int = theme.AXLABELS_FONTSIZE,
                    axlabels_fontcolor: str = theme.AXLABELS_FONTCOLOR,
                    axlabels_fontweight=theme.AXLABELS_FONTWEIGHT,
-                   txt_xlabel=False, txt_ylabel=False, txt_ylabel_units=False,
+                   txt_xlabel=False,
+                   txt_ylabel=False,
+                   txt_ylabel_units=False,
                    ticks_width=theme.TICKS_WIDTH,
                    ticks_length=theme.TICKS_LENGTH,
                    ticks_direction=theme.TICKS_DIRECTION,
@@ -379,22 +381,30 @@ def quickplot_df(data: DataFrame or Series, hline: None or float = None, subplot
     gs = gridspec.GridSpec(1, 1)  # rows, cols
     # gs.update(wspace=.2, hspace=0, left=.1, right=.9, top=.9, bottom=.1)
     ax = fig.add_subplot(gs[0, 0])
-    data.plot(subplots=subplots, ax=ax, title=title)
+    data.plot(subplots=subplots, ax=ax, title=title, lw=2)
 
     if hline:
         ax.axhline(hline, label=f"value: {hline}", ls='--')
 
-    # if title:
-    #     ax.set_title(title)
-
     if saveplot:
-        from diive.common.dfun.times import get_current_time
-        _, cur_time = get_current_time(str_format='%Y%m%d-%H%M%S-%f')
-        outfilepath = Path(saveplot) / f"{cur_time}_output.png"
-        fig.savefig(outfilepath)
-        print(f"Saved plot {outfilepath}")
+        save_fig(fig=fig, path=saveplot, title=title)
 
     if showplot:
-        pass
-        # fig.show()
+        # pass
+        fig.show()
     plt.close(fig)
+
+def save_fig(fig, title: str, path=Path or str):
+    """Save figure to file
+
+    Filename is sanitized, i.e. not-allowed characters are removed,
+    removes also whitespace. Filename contains timestamp.
+    """
+    # Use alphanumeric for savename
+    filename_out = [character for character in title if character.isalnum()]
+    filename_out = "".join(filename_out)
+    _, cur_time = get_current_time(str_format='%Y%m%d-%H%M%S-%f')
+    filename_out = f"{cur_time}_{filename_out}.png"
+    outfilepath = Path(path) / filename_out
+    fig.savefig(outfilepath)
+    print(f"Saved plot {outfilepath}")

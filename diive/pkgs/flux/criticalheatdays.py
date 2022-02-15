@@ -10,7 +10,7 @@ from pandas import DataFrame
 
 import diive.pkgs.analyses.optimumrange
 from diive.common.dfun.fits import BinFitterCP
-from diive.common.dfun.frames import splitdata_daynight
+import diive.common.dfun.frames as frames
 from diive.common.plotting import plotfuncs
 from diive.common.plotting.fitplot import fitplot
 from diive.common.plotting.rectangle import rectangle
@@ -78,7 +78,7 @@ class CriticalHeatDays:
 
         # Resample dataset
         aggs = ['mean', 'median', 'count', 'max', 'sum']
-        self.df_aggs = self._resample_dataset(aggs=aggs, day_start_hour=7)
+        self.df_aggs = self._resample_dataset(df=self.df, aggs=aggs, day_start_hour=7)
 
         # Prepare separate daytime and nighttime datasets and aggregate
         self.df_daytime, \
@@ -146,9 +146,37 @@ class CriticalHeatDays:
         bts_ratios_df['ROW_Q975'] = bts_ratios_df.quantile(q=.975, axis=1)
         bts_ratios_df['fit_x'] = bts_results[1]['ratio_df']['fit_x']  # Add x
 
+        # Get (daytime) GPP and RECO values at detected CHD threshold
+
+        # Threshold from threshold detection
+        _thres = self.results_threshold_detection['thres_chd']
+        _thres = np.round(_thres, 4)  # Round to 4 digits to facilitate exact search match
+
+        # Get x values from (daytime) GPP and RECO fitting
+        _gpp_results = bts_results[0][self.gpp_col]['fit_df']['fit_x'].values
+        _gpp_results = np.round(_gpp_results, 4)
+        _reco_results = bts_results[0][self.reco_col]['fit_df']['fit_x'].values
+        _reco_results = np.round(_reco_results, 4)
+
+        # Find x threshold in x values used in fitting, returns location index
+        _gpp_thres_ix = np.where(_gpp_results == _thres)
+        _reco_thres_ix = np.where(_reco_results == _thres)
+
+        # Get values from fit at found location
+        _gpp_at_thres = bts_results[0][self.gpp_col]['fit_df']['nom'].iloc[_gpp_thres_ix]
+        _reco_at_thres = bts_results[0][self.reco_col]['fit_df']['nom'].iloc[_reco_thres_ix]
+        _ratio_at_thres = _gpp_at_thres / _reco_at_thres
+
+        daytime_values_at_threshold = {
+            'GPP': _gpp_at_thres,
+            'RECO': _reco_at_thres,
+            'RATIO': _ratio_at_thres
+        }
+
         # Collect results
         self._results_daytime_analysis = dict(bts_results=bts_results,
-                                              bts_ratios_df=bts_ratios_df)
+                                              bts_ratios_df=bts_ratios_df,
+                                              daytime_values_at_threshold=daytime_values_at_threshold)
 
     def detect_chd_threshold(self):
         """Detect critical heat days x threshold for NEE"""
@@ -321,12 +349,11 @@ class CriticalHeatDays:
         plot_chd_detection_from_nee(ax=ax, results_chd=self.results_threshold_detection,
                                     y_col=self.nee_col, highlight_year=highlight_year)
 
-    def plot_daytime_analysis(self, ax, highlight_year: int = None):
+    def plot_daytime_analysis(self, ax):
         plot_daytime_analysis(ax=ax,
                               results_chd=self.results_threshold_detection,
                               results_daytime_analysis=self.results_daytime_analysis,
-                              highlight_year=highlight_year,
-                              gpp_col=self.gpp_col, reco_col=self.reco_col, nee_col=self.nee_col)
+                              gpp_col=self.gpp_col, reco_col=self.reco_col)
 
     def plot_rolling_bin_aggregates(self, ax):
         """Plot optimum range: rolling bin aggregates"""
@@ -350,7 +377,7 @@ class CriticalHeatDays:
             fluxcol = self.reco_col
         return fluxcol
 
-    def _resample_dataset(self, aggs: list, day_start_hour: int = None):
+    def _resample_dataset(self, df: DataFrame, aggs: list, day_start_hour: int = None):
         """Resample to daily values from *day_start_hour* to *day_start_hour*"""
         df_aggs = df.resample('D', offset=f'{day_start_hour}H').agg(aggs)
         df_aggs = df_aggs.where(df_aggs[self.x_col]['count'] == 48).dropna()  # Full days only
@@ -385,7 +412,7 @@ class CriticalHeatDays:
 
     def _get_daynight_data(self):
         """Get daytime data from dataset"""
-        return splitdata_daynight(
+        return frames.splitdata_daynight(
             df=self.df.copy(),
             split_on=self.daynight_split,
             split_day_start_hour=self.daynight_split_day_start_hour,
@@ -403,7 +430,7 @@ class CriticalHeatDays:
         #     linecrossings_y_gpp.append(self.bts_results[b]['linecrossing_vals']['gpp_nom'])
 
         zerocrossings_aggs = dict(
-            x_median=bts_zerocrossings_df['x_col'].median(),
+            x_median=round(bts_zerocrossings_df['x_col'].median(), 6),
             x_min=bts_zerocrossings_df['x_col'].min(),
             x_max=bts_zerocrossings_df['x_col'].max(),
             y_nee_median=bts_zerocrossings_df['nee_nom'].median(),
@@ -738,9 +765,7 @@ def plot_daytime_analysis(ax,
                           results_chd,
                           results_daytime_analysis,
                           gpp_col: str,
-                          reco_col: str,
-                          nee_col: str,
-                          highlight_year: int = None):
+                          reco_col: str):
     """Plot daytime fluxes"""
 
     # fig = plt.figure(figsize=(9, 9))
@@ -798,6 +823,29 @@ def plot_daytime_analysis(ax,
                 # highlight_year=highlight_year,
                 flux_bts_results=flux_bts_results, alpha=.2, marker='s',
                 edgecolor='#9C27B0', color='none', color_fitline='#9C27B0')  # purple 500
+
+    # Values at threshold
+    scatter_gpp_at_thres = ax_twin.scatter(results_chd['thres_chd'],
+                                           results_daytime_analysis['daytime_values_at_threshold']['GPP'],
+                                           edgecolor='#2196F3', color='none', alpha=1, s=250, lw=2,
+                                           label='xxx', zorder=99, marker='s')
+
+    scatter_reco_at_thres = ax_twin.scatter(results_chd['thres_chd'],
+                                            results_daytime_analysis['daytime_values_at_threshold']['RECO'],
+                                            edgecolor='#2196F3', color='none', alpha=1, s=250, lw=2,
+                                            label='xxx', zorder=99, marker='s')
+    scatter_ratio_at_thres = ax.scatter(results_chd['thres_chd'],
+                                        results_daytime_analysis['daytime_values_at_threshold']['RATIO'],
+                                        edgecolor='#2196F3', color='none', alpha=1, s=250, lw=2,
+                                        label='xxx', zorder=99, marker='s')
+
+    _ratio_at_thres = results_daytime_analysis['daytime_values_at_threshold']['RATIO'].values
+    ax.text(results_chd['thres_chd'], _ratio_at_thres,
+            f"    Ratio at threshold: {_ratio_at_thres}",
+            size=theme.FONTSIZE_ANNOTATIONS_SMALL,
+            color='#2196F3', backgroundcolor='none',
+            alpha=1, horizontalalignment='left', verticalalignment='center',
+            bbox=dict(boxstyle='square,pad=0', fc='none', ec='none'))
 
     l = ax.legend(
         [
@@ -864,14 +912,14 @@ def plot_chd_detection_from_nee(ax, results_chd: dict, y_col: str, highlight_yea
     # Bootstrapped line crossing, the point where RECO = GPP
     line_bts_median_netzeroflux = ax.scatter(bts_zerocrossings_aggs['x_median'],
                                              0,
-                                             edgecolor='#2196F3', color='none', alpha=1, s=90, lw=2,
+                                             edgecolor='#2196F3', color='none', alpha=1, s=250, lw=2,
                                              label='net zero flux (bootstrapped median)', zorder=99, marker='s')
 
     # Vertical line showing median CHD threshold from bootstrap runs
     line_chd_vertical = ax.axvline(bts_zerocrossings_aggs['x_median'], lw=2, color='#2196F3', ls='--',
                                    label=f"critical heat days threshold, VPD = {bts_zerocrossings_aggs['x_median']:.1f} hPa")
 
-    # Rectangle (bootstrapped results)
+    # Rectangle bootstrap range
     num_bootstrap_runs = len(results_chd['bts_results'].keys()) - 1  # -1 b/c zero run is non-bootstrapped
     range_bts_netzeroflux = rectangle(ax=ax,
                                       rect_lower_left_x=bts_zerocrossings_aggs['x_min'],
@@ -1049,15 +1097,16 @@ def plot_chd_detection_from_nee(ax, results_chd: dict, y_col: str, highlight_yea
 
 if __name__ == '__main__':
     from tests.testdata.loadtestdata import loadtestdata
-    from diive.common.dfun.frames import flatten_multiindex_all_df_cols
 
     # Load data
-    df = loadtestdata()
-    df = flatten_multiindex_all_df_cols(df=df, keep_first_row_only=True)
+    data = loadtestdata()
+    df = data['df']
+    # from diive.common.dfun.frames import flatten_multiindex_all_df_cols
+    # df = flatten_multiindex_all_df_cols(df=df, keep_first_row_only=True)
 
-    # Use data from May to Sep only
-    maysep_filter = (df.index.month >= 5) & (df.index.month <= 9)
-    df = df.loc[maysep_filter].copy()
+    # # Use data from May to Sep only
+    # maysep_filter = (df.index.month >= 5) & (df.index.month <= 9)
+    # df = df.loc[maysep_filter].copy()
 
     # Settings
     x_col = 'VPD_f'
@@ -1099,24 +1148,24 @@ if __name__ == '__main__':
     ax = fig.add_subplot(gs[0, 0])
     ax2 = fig.add_subplot(gs[0, 1])
     chd.plot_chd_detection_from_nee(ax=ax, highlight_year=2019)
-    chd.plot_daytime_analysis(ax=ax2, highlight_year=2019)
+    chd.plot_daytime_analysis(ax=ax2)
     fig.tight_layout()
     fig.show()
 
-    # # Optimum range
-    # chd.find_nee_optimum_range()
-    # import matplotlib.gridspec as gridspec
-    # import matplotlib.pyplot as plt
-    #
-    # fig = plt.figure(figsize=(9, 16))
-    # gs = gridspec.GridSpec(3, 1)  # rows, cols
-    # # gs.update(wspace=.2, hspace=0, left=.1, right=.9, top=.9, bottom=.1)
-    # ax1 = fig.add_subplot(gs[0, 0])
-    # ax2 = fig.add_subplot(gs[1, 0])
-    # ax3 = fig.add_subplot(gs[2, 0])
-    # chd.plot_rolling_bin_aggregates(ax=ax1)
-    # chd.plot_bin_aggregates(ax=ax2)
-    # chd.plot_vals_in_optimum_range(ax=ax3)
-    # fig.show()
+    # Optimum range
+    chd.find_nee_optimum_range()
+    import matplotlib.gridspec as gridspec
+    import matplotlib.pyplot as plt
+
+    fig = plt.figure(figsize=(9, 16))
+    gs = gridspec.GridSpec(3, 1)  # rows, cols
+    # gs.update(wspace=.2, hspace=0, left=.1, right=.9, top=.9, bottom=.1)
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax2 = fig.add_subplot(gs[1, 0])
+    ax3 = fig.add_subplot(gs[2, 0])
+    chd.plot_rolling_bin_aggregates(ax=ax1)
+    chd.plot_bin_aggregates(ax=ax2)
+    chd.plot_vals_in_optimum_range(ax=ax3)
+    fig.show()
 
     print("END")

@@ -8,8 +8,20 @@
 #   'W m-2', 'degC', '%', 'umol m-2 s-1'
 # Options for <check#>:
 #   'remove_radiation_offset', 'range_check', 'setto_max_threshold',
-#   'setto_min_threshold', 'remove_relativehumidity_offset'
+#   'setto_min_threshold', 'remove_relativehumidity_offset',
+#   'remove_highres_outliers'
 
+D_SNOW:
+  D_SNOW_:
+    pipe: [ remove_highres_outliers, range_check ]
+    units: m
+    range: [ -0.1, 1.5 ]
+
+G:
+  SHFM:  # temporary entry
+    pipe: [ range_check ]
+    units: W m-2
+    range: [ -100, 100 ]
 
 LW:
   LW_IN_:
@@ -43,6 +55,6 @@ SW:
 
 TA:
   TA_:
-    pipe: [ range_check ]
+    pipe: [ remove_highres_outliers, range_check ]
     units: degC
     range: [ -50, 50 ]

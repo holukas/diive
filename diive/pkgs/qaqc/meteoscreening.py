@@ -3,11 +3,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from pandas import Series, DataFrame
-
-from diive.common.dfun.frames import resample_df
+from diive.pkgs.outlierdetection.hampel import hampel_filter
+import diive.common.dfun.frames as frames
 from diive.common.io.dirs import verify_dir
-from diive.common.io.filereader import ConfigFileReader
-from diive.common.io.filereader import MultiDataFileReader, search_files
+import diive.common.io.filereader as filereader
+# from diive.common.io.filereader import MultiDataFileReader, search_files
 from diive.common.plotting.plotfuncs import quickplot_df
 from diive.pkgs.corrections.offsetcorrection import remove_radiation_zero_offset, remove_relativehumidity_offset
 from diive.pkgs.corrections.setto_threshold import setto_threshold
@@ -41,7 +41,7 @@ class ScreenVar:
 
         # Processing pipes
         path = Path(__file__).parent.resolve()  # Search in this file's folder
-        self.pipes = ConfigFileReader(configfilepath=path / 'pipes_meteo.yaml').read()
+        self.pipes = filereader.ConfigFileReader(configfilepath=path / 'pipes_meteo.yaml').read()
         self.pipe_config = self._pipe_assign()
         self.series_qc = self._call_pipe_steps()
 
@@ -56,11 +56,14 @@ class ScreenVar:
 
         for step in pipe_steps:
 
-            if step == 'remove_radiation_offset':  # todo include setto threshold separately
+            if step == 'remove_radiation_offset':
                 series_qc = self._remove_radiation_offset(series=series_qc)
 
             elif step == 'remove_relativehumidity_offset':
                 series_qc = self._remove_relativehumidity_offset(series=series_qc)
+
+            elif step == 'remove_highres_outliers':
+                series_qc = self._remove_highres_outliers(series=series_qc)
 
             elif step == 'setto_max_threshold':
                 series_qc, _flag = self._setto_max_threshold(series=series_qc)
@@ -80,6 +83,10 @@ class ScreenVar:
         return remove_relativehumidity_offset(series=series,
                                               show=True, saveplot=self.saveplot)
 
+    def _remove_highres_outliers(self, series: Series) -> Series:
+        return hampel_filter(input_series=series, winsize=500, winsize_min_periods=1,
+                             n_sigmas=20, show=True, saveplot=self.saveplot)
+
     def _setto_max_threshold(self, series: Series) -> tuple[Series, Series]:
         series_qc, flag = setto_threshold(series=series, threshold=self.pipe_config['range'][1],
                                           type='max', show=True, saveplot=self.saveplot)
@@ -93,7 +100,7 @@ class ScreenVar:
     def _remove_radiation_offset(self, series: Series) -> Series:
         if (self.site_lat is None) | (self.site_lon is None):
             raise Exception("Radiation offset requires site latitude and longitude.")
-        return remove_radiation_zero_offset(series=series,
+        return remove_radiation_zero_offset(_series=series,
                                             lat=self.site_lat,
                                             lon=self.site_lon,
                                             show=True,
@@ -172,15 +179,18 @@ class MeteoScreening:
                      saveplot=self.outdir)
 
     def _fill_missing(self, qc_df_resampled: DataFrame) -> DataFrame:
+        """Fill missing values with -9999"""
         qc_df_resampled.fillna(-9999, inplace=True)
         return qc_df_resampled
 
     def _resampling(self, qc_df: DataFrame) -> DataFrame:
-        qc_df_resampled, _ = resample_df(df=qc_df, freq_str='30T', agg='mean',
+        """Resample data to output freq"""
+        qc_df_resampled, _ = frames.resample_df(df=qc_df, freq_str='30T', agg='mean',
                                          mincounts_perc=.9, to_freq='T')
         return qc_df_resampled
 
     def _screening_loop(self, subset_df: DataFrame) -> DataFrame:
+        """Loop variables and perform quality checks"""
         qc_df = pd.DataFrame()
         for col in self.cols.keys():
             series = subset_df[col].copy()
@@ -210,51 +220,57 @@ if __name__ == '__main__':
     # todo compare radiation peaks for time shift
     # todo check outliers before AND after first qc check
 
-    searchdir = r'C:\Users\holukas\Desktop\ch-aws\3_input_data_PA'
-    pattern = '*.csv'
-    filetype = 'CSV_1MIN'
-    filepaths = search_files(searchdir=searchdir, pattern=pattern)
-    mdfr = MultiDataFileReader(filepaths=filepaths, filetype=filetype)
-    data = mdfr.data
+    indir = r'F:\CH-AWS\snowheight\1-in'
+    mergeddir = r'F:\CH-AWS\snowheight\2-merged'
+    outdir = r'F:\CH-AWS\snowheight\3-out'
 
-    # df = data['df'][subset_cols].copy()
-    # meta = data['meta'][subset_cols].copy()
+    # Search & merge high-res data files
+    searchdir = indir
+    pattern = '*.csv'
+    filetype = 'diive_CSV_30MIN'
+    filepaths = filereader.search_files(searchdir=searchdir, pattern=pattern)
+    mdfr = filereader.MultiDataFileReader(filepaths=filepaths, filetype=filetype)
+    data_df = mdfr.data_df
+    data_df.fillna(-9999, inplace=True)
+    data_df.to_csv(Path(mergeddir) / "merged.diive.csv")
+    metadata_df = mdfr.metadata_df
+    metadata_df.to_csv(Path(mergeddir) / "merged.diive.metadata.csv")
+
+    # Search merged high-res file
+    searchdir = mergeddir
+    pattern = 'merged.diive.csv'
+    filetype = 'diive_CSV_1MIN'
+    filepaths = filereader.search_files(searchdir=searchdir, pattern=pattern)
+    mdfr = filereader.MultiDataFileReader(filepaths=filepaths, filetype=filetype)
+    data_df = mdfr.data_df
+    # metadata_df = mdfr.metadata_df  # todo automatic reading of metadata for diive formats
+
+
+    # cols = {
+    #     'D_SNOW_1_1_1': {'measurement': 'D_SNOW', 'units': 'm'},
+    #     'TA_M1_1.8_1': {'measurement': 'TA', 'units': 'degC'}
+    #     # 'SHFM3_05_Avg': {'measurement': 'G', 'units': 'W m-2'}
+    #     # 'TA_T2_2x1_1_Avg': {'measurement': 'TA', 'units': 'degC'},
+    #     # 'LW_IN_T2_2x1_1_Avg': {'measurement': 'LW', 'units': 'W m-2'},
+    #     # 'SW_IN_T2_2x1_1_Avg': {'measurement': 'SW', 'units': 'W m-2'},
+    #     # 'RH_T2_2x1_1_Avg': {'measurement': 'RH', 'units': '%'},
+    #     # 'PPFD_IN_T2_2x1_1_Avg': {'measurement': 'PPFD', 'units': 'umol m-2 s-1'},
+    # }
 
     cols = {
-        'PA_T1_1.3_1_1': {'measurement': 'PA', 'units': 'hPa'},
+        'D_SNOW_GF0_0_1': {'measurement': 'D_SNOW', 'units': 'm'},
+        'TA_M3_2.5_1': {'measurement': 'TA', 'units': 'degC'}
     }
 
-    mscr = MeteoScreening(df=data['df'].copy(),
-                          cols=cols,
-                          site='ch-aws',
-                          outdir=r'C:\Users\holukas\Desktop\ch-aws\4_screening_PA')
+    kwargs = dict(df=data_df.copy(),
+                          site='ch-das',
+                          site_lat=47.478333,  # CH-LAE
+                          site_lon=8.364389,  # CH-LAE
+                          # site_lat=46.815333,  # CH-DAS
+                          # site_lon=9.855972,  # CH-DAS
+                          outdir=outdir)
+    mscr = MeteoScreening(cols=cols, **kwargs)
+
+
     mscr.run()
     qc_df = mscr.qc_df
-
-    # Source data
-    # searchdir = r'M:\Downloads\_temp'
-    # pattern = '*.dat'
-    # filetype = 'TOA5_DAT_1MIN'
-    # filepaths = search_files(searchdir=searchdir, pattern=pattern)
-    # mdfr = MultiDataFileReader(filepaths=filepaths, filetype=filetype)
-    # data = mdfr.data
-    #
-    # # df = data['df'][subset_cols].copy()
-    # # meta = data['meta'][subset_cols].copy()
-    #
-    # cols = {
-    #     'SW_IN_M1B2_1x40_1_Avg': {'measurement': 'SW', 'units': 'W m-2'},
-    #     'PPFD_IN_M1B2_1x40_1_Avg': {'measurement': 'PPFD', 'units': 'umol m-2 s-1'},
-    #     'LW_IN_M1B2_1x40_1_Avg': {'measurement': 'LW', 'units': 'W m-2'},
-    #     'RH_M1B1_1x50_1_Avg': {'measurement': 'RH', 'units': '%'},
-    #     'TA_M1B1_1x50_1_Avg': {'measurement': 'TA', 'units': 'degC'},
-    # }
-    #
-    # mscr = MeteoScreening(df=data['df'].copy(),
-    #                       cols=cols,
-    #                       site='ch-aws',
-    #                       site_lat=46.583056,
-    #                       site_lon=9.790639,
-    #                       outdir=r'C:\Users\holukas\Desktop\ch-aws')
-    # mscr.run()
-    # qc_df = mscr.qc_df

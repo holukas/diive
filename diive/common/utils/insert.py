@@ -111,7 +111,7 @@ class AssembleStats:
         return self.stats_df
 
     def _assemble(self):
-        timeseries_stats = CalcTimeSeriesStats(series=self.series).get()
+        timeseries_stats = CalcTimeSeriesStats(series=self.series).get_detection_limit()
 
         dataset_run_stats = CalcDatasetRunStats(run_id=self.run_id,
                                                 data_df=self.data_df,

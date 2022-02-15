@@ -16,7 +16,7 @@ class FindOptimumRange:
     Example: VPD (x) range where NEE (y) carbon uptake is highest (=smallest number)
     """
 
-    def __init__(self, df: DataFrame, xcol: tuple, ycol: tuple, define_optimum: str = 'max'):
+    def __init__(self, df: DataFrame, xcol: str, ycol: str, define_optimum: str = 'max'):
         """
         :param df: data
         :param xcol: column name of x in df

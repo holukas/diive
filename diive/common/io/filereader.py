@@ -1,7 +1,7 @@
 """
 FILEREADER
 ==========
-This package is part of DIIVE.
+This package is part of the diive library.
 
 """
 import datetime
@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import pandas.errors
 import yaml
+from pandas import DataFrame
 
 from diive.common import dfun
 from diive.common.dfun.frames import flatten_multiindex_all_df_cols, continuous_timestamp_freq
@@ -30,13 +31,14 @@ def search_files(searchdir, pattern: str) -> list:
                 # found_files_dict[settings_file_name] = filepath
                 foundfiles.append(filepath)
     # return found_files_dict
+    foundfiles.sort()
     return foundfiles
 
 
 class ConfigFileReader:
 
-    def __init__(self, configfilepath: Path):
-        self.configfilepath = configfilepath
+    def __init__(self, configfilepath: Path or str):
+        self.configfilepath = Path(configfilepath)
 
     def read(self) -> dict:
         """
@@ -63,53 +65,81 @@ class MultiDataFileReader:
         self.filepaths = filepaths
 
         # Collect data from all files listed in filepaths
-        self._data = self._get_incoming_data()
+        self._data_df, self._metadata_df = self._get_incoming_data()
 
-        self._data['df'] = continuous_timestamp_freq(df=self._data['df'], freq=self.filetypeconfig['DATA']['FREQUENCY'])
+        self._data_df = continuous_timestamp_freq(df=self._data_df, freq=self.filetypeconfig['DATA']['FREQUENCY'])
 
     @property
-    def data(self):
+    def data_df(self):
         """Get dataframe of merged files data"""
-        if not isinstance(self._data, dict):
+        if not isinstance(self._data_df, DataFrame):
             raise Exception('data is empty')
-        return self._data
+        return self._data_df
 
-    def _get_incoming_data(self) -> dict:
+    @property
+    def metadata_df(self):
+        """Get dataframe of merged files metadata"""
+        if not isinstance(self._data_df, DataFrame):
+            raise Exception('metadata is empty')
+        return self._metadata_df
+
+    def _get_incoming_data(self) -> tuple[DataFrame,DataFrame]:
         """Merge data across all files"""
-        data = None
+        data_df = None
+        metadata_df = None
         for filepath in self.filepaths:
             print(f"Reading file {filepath.stem}")
             try:
-                incoming_data = ReadFileType(filepath=filepath, filetypeconfig=self.filetypeconfig).get_filedata()
-                data = self._merge_with_existing(incoming_data=incoming_data, data=data)
+                incoming_data_df, incoming_metadata_df = \
+                    ReadFileType(filepath=filepath, filetypeconfig=self.filetypeconfig).get_filedata()
+                data_df, metadata_df =\
+                    self._merge_with_existing(incoming_data_df=incoming_data_df, data_df=data_df,
+                                              incoming_metadata_df=incoming_metadata_df, metadata_df=metadata_df)
             except pandas.errors.EmptyDataError:
                 continue
-        data['df'] = dfun.frames.sort_multiindex_columns_names(df=data['df'], priority_vars=None)
-        return data
+        data_df = dfun.frames.sort_multiindex_columns_names(df=data_df, priority_vars=None)
+        return data_df, metadata_df
 
-    def _merge_with_existing(self, incoming_data: dict, data: dict) -> dict:
-        if not isinstance(data, dict):
-            data = {}
-            data['df'] = incoming_data['df'].copy()
-            data['meta'] = incoming_data['meta'].copy()
+    def _merge_with_existing(self,
+                             incoming_data_df: DataFrame, data_df: DataFrame,
+                             incoming_metadata_df: DataFrame, metadata_df:DataFrame
+                             ) -> tuple[DataFrame,DataFrame]:
+        if not isinstance(data_df, DataFrame):
+            data_df = incoming_data_df.copy()
+            metadata_df = incoming_metadata_df.copy()
         else:
-            data['df'] = data['df'].combine_first(incoming_data['df'])
-            data['meta'] = data['meta'].combine_first(incoming_data['meta'])
-        return data
+            data_df = data_df.combine_first(incoming_data_df)
+            metadata_df = metadata_df.combine_first(incoming_metadata_df)
+        return data_df, metadata_df
 
 
 class ReadFileType:
     """Read single data file using settings from dictionary for specified filetype"""
 
-    def __init__(self, filepath: str or Path, filetypeconfig: dict):
+    def __init__(self, filepath: str or Path, filetypeconfig: dict = None, filetype: str = None):
+        """
+
+        Args:
+            filepath:
+            filetypeconfig:
+            filetype:
+        """
         self.filepath = Path(filepath)
-        self.filetypeconfig = filetypeconfig
-        self.data = self._readfile()
 
-    def get_filedata(self):
-        return self.data
+        if filetype:
+            # Read settins for specified filetype
+            _available_filetypes = get_filetypes()
+            self.filetypeconfig = ConfigFileReader(_available_filetypes[filetype]).read()
+        else:
+            # Use provided settings dict
+            self.filetypeconfig = filetypeconfig
 
-    def _readfile(self):
+        self.data_df, self.metadata_df = self._readfile()
+
+    def get_filedata(self) -> tuple[DataFrame, DataFrame]:
+        return self.data_df, self.metadata_df
+
+    def _readfile(self) -> tuple[DataFrame, DataFrame]:
         """Load data"""
         datafilereader = DataFileReader(
             filepath=self.filepath,
@@ -123,8 +153,8 @@ class ReadFileType:
             timestamp_datetime_format=self.filetypeconfig['TIMESTAMP']['DATETIME_FORMAT'],
             timestamp_start_middle_end=self.filetypeconfig['TIMESTAMP']['SHOWS_START_MIDDLE_OR_END_OF_RECORD']
         )
-        data = datafilereader.get_data()
-        return data
+        data_df, metadata_df = datafilereader.get_data()
+        return data_df, metadata_df
 
 
 class DataFileReader:
@@ -156,7 +186,7 @@ class DataFileReader:
         self.timestamp_idx_col = timestamp_idx_col
 
         self.data_df = pd.DataFrame()
-        self.data_metadata_df = pd.DataFrame()
+        self.metadata_df = pd.DataFrame()
         self.generated_missing_header_cols_list = []
 
         self._read()
@@ -168,7 +198,7 @@ class DataFileReader:
         self._clean_data()
         if len(self.data_headerrows) == 1:
             self.data_df = self._add_second_header_row(df=self.data_df)
-        self.data_metadata_df = self._get_metadata()
+        self.metadata_df = self._get_metadata()
         self.data_df = flatten_multiindex_all_df_cols(df=self.data_df, keep_first_row_only=True)
 
     def _get_metadata(self):
@@ -186,12 +216,8 @@ class DataFileReader:
             data_metadata_df.loc['ADDED', var] = addtime
         return data_metadata_df
 
-    def get_data(self) -> dict:
-        data = {
-            'df': self.data_df,
-            'meta': self.data_metadata_df
-        }
-        return data
+    def get_data(self) -> tuple[DataFrame, DataFrame]:
+        return self.data_df, self.metadata_df
 
     def _convert_timestamp_idx_col(self, var):
         """Convert to list of tuples if needed
@@ -295,7 +321,7 @@ class DataFileReader:
                               index_col=None,
                               dtype=None,
                               skip_blank_lines=True,
-                              engine='python')
+                              engine='python')  # todo 'python', 'c'
 
         return data_df
 

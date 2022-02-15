@@ -6,7 +6,6 @@ This module is part of DIIVE:
 https://gitlab.ethz.ch/holukas/diive
 
 """
-
 from pathlib import Path
 
 import numpy as np
@@ -16,6 +15,7 @@ from pandas import Series
 from pandas._libs.tslibs import to_offset
 
 from diive.common.dfun.times import timedelta_to_string
+from diive.pkgs.gapfilling.interpolate import linear_interpolation
 
 pd.set_option('display.width', 1500)
 pd.set_option('display.max_columns', 30)
@@ -30,8 +30,15 @@ def continuous_timestamp_freq(df: DataFrame, freq: str = '30T') -> DataFrame:
     # Generate timestamp index
     _index = pd.date_range(start=df.index[0], end=df.index[-1], freq=freq)
 
+    if _index.duplicated().sum() > 0:
+        print(_index.duplicated().sum())
+
+    #todo check for duplicate index
     # Reindex data to continuous timestamp
-    df = df.reindex(_index)
+    try:
+        df = df.reindex(_index)
+    except:
+        print("test")
     df.index.name = 'TIMESTAMP'
 
     # Set freq
@@ -45,7 +52,9 @@ def continuous_timestamp_freq(df: DataFrame, freq: str = '30T') -> DataFrame:
 def aggregated_as_hires(aggregate_series: Series,
                         hires_timestamp,
                         to_freq: str = 'D',
-                        to_agg: str = 'mean') -> Series:
+                        to_agg: str = 'mean',
+                        interpolate_missing_vals: bool = False,
+                        interpolation_lim: int = False) -> Series:
     """
     Insert aggregated values as column in high-res dataframe
     """
@@ -53,6 +62,16 @@ def aggregated_as_hires(aggregate_series: Series,
     lowres_df = pd.DataFrame(aggregate_series.resample(to_freq).agg(to_agg))
     agghires_col = f".{aggregate_series.name}_{to_freq}_{to_agg}"
     lowres_df = rename_cols(df=lowres_df, renaming_dict={aggregate_series.name: agghires_col})
+
+    # Fill missing values in agg
+    if lowres_df[agghires_col].isnull().any() \
+            and interpolate_missing_vals \
+            and interpolation_lim:
+        lowres_df[agghires_col] = linear_interpolation(series=lowres_df[agghires_col],
+                                                       limit=interpolation_lim)
+
+        # lowres_df.interpolate(limit=1)
+    # todo here linear interpolation with gap length limit
 
     # Input data
     hires_df = pd.DataFrame(index=hires_timestamp)
@@ -493,7 +512,7 @@ def resample_df(df, freq_str, agg, mincounts_perc: float, to_freq=None):
 def timestamp_convention(df, timestamp_shows_start, out_timestamp_convention):
     """Set middle timestamp as main index"""
 
-    df=df.copy()
+    df = df.copy()
 
     original_cols = df.columns
     df.index = pd.to_datetime(df.index)
