@@ -1,13 +1,10 @@
 ![](images/logo_diive1_512px.png)
 
-# Post-processing for time series data
+# Time series data processing
 
 **D**ata - **I**mport - **I**nvestigate - **V**isualize - **E**xport
 
-`diive` is a Python library for time series post-processing. 
-
-The app is still in alpha phase, which means that new features
-are added (and sometimes removed) frequently (as needed) and bugs can be expected.
+`diive` is a Python library for time series processing. 
 
 Recent updates: [CHANGELOG](CHANGELOG.md)   
 Recent releases: [Releases](https://gitlab.ethz.ch/holukas/diive/-/releases)
@@ -30,6 +27,10 @@ Recent releases: [Releases](https://gitlab.ethz.ch/holukas/diive/-/releases)
 
 ### Eddy covariance high-resolution
 - Flux detection limit
+
+### Flux
+- Carbon cost
+- Critical heat days
 
 ### Gap-filling
 - Interpolate

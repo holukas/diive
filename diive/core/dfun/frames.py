@@ -19,7 +19,7 @@ from diive.pkgs.gapfilling.interpolate import linear_interpolation
 
 pd.set_option('display.width', 1500)
 pd.set_option('display.max_columns', 30)
-pd.set_option('display.max_rows', 30)
+pd.set_option('display.max_rows', 50)
 
 
 def continuous_timestamp_freq(df: DataFrame, freq: str = '30T') -> DataFrame:
@@ -33,7 +33,7 @@ def continuous_timestamp_freq(df: DataFrame, freq: str = '30T') -> DataFrame:
     if _index.duplicated().sum() > 0:
         print(_index.duplicated().sum())
 
-    #todo check for duplicate index
+    # todo check for duplicate index
     # Reindex data to continuous timestamp
     try:
         df = df.reindex(_index)
@@ -103,8 +103,10 @@ def aggregated_as_hires(aggregate_series: Series,
     return hires_df[agghires_col]
 
 
-def insert_aggregated_in_hires(df: DataFrame, col: tuple,
-                               to_freq: str = 'D', to_agg: str = 'mean'):
+def insert_aggregated_in_hires(df: DataFrame, col: str,
+                               to_freq: str = 'D',
+                               to_agg: str = 'mean',
+                               agg_offset: str = None):
     """
     Insert aggregated values as column in high-res dataframe
 
@@ -113,35 +115,46 @@ def insert_aggregated_in_hires(df: DataFrame, col: tuple,
         col: Column name of variable that is aggregated
         to_freq: Frequency string, 'D' for daily aggregation, 'A' for yearly, 'M' for monthly
         to_agg: Aggregation type, e.g. 'mean' for mean, 'max' for maximum
+        agg_offset: Timestamp offset for aggregation, e.g. '7H' when 'to_freq="D"' calculates
+            the daily average from 07:00 (current day) to 06:59 (next day).
 
     """
     # Resample and aggregate
-    agg_df = df[[col]].resample(to_freq).agg(to_agg)
+    agg_df = df[[col]].resample(to_freq, offset=agg_offset).agg(to_agg)
 
-    new_colname = f".{col}_{to_freq}_{to_agg}"
+    # Start and end of where agg is filled in
+    agg_df['start'] = agg_df.index
+    agg_df['end'] = agg_df.index.shift(1)
+
+    new_colname = f".{col}_{to_freq}{agg_offset}_{to_agg}"
     agg_df = rename_cols(df=agg_df, renaming_dict={col: new_colname})
 
-    # Insert date as column to merge the two datasets
-    mergecol = None
-    if to_freq == 'D':
-        mergecol = 'date'
-        agg_df[mergecol] = agg_df.index.date
-        df[mergecol] = df.index.date
-    elif to_freq == 'A':
-        mergecol = 'year'
-        agg_df[mergecol] = agg_df.index.year
-        df[mergecol] = df.index.year
-    elif to_freq == 'M':
-        mergecol = 'year-month'
-        agg_df[mergecol] = agg_df.index.year.astype(str).str.cat(agg_df.index.month.astype(str).str.zfill(2), sep='-')
-        df[mergecol] = df.index.year.astype(str).str.cat(df.index.month.astype(str).str.zfill(2), sep='-')
+    df[new_colname] = np.nan
 
-    # Timestamp as column for index after merging (merging loses index)
-    df['TIMESTAMP'] = df.index
-    df = df.merge(agg_df, left_on=mergecol, right_on=mergecol, how='left')
+    for ix, row in agg_df.iterrows():
+        df[new_colname].loc[(df.index >= row['start']) & (df.index < row['end'])] = row[new_colname]
 
-    # Re-apply original index (merging lost index)
-    df = df.set_index('TIMESTAMP')
+    # # Insert date as column to merge the two datasets
+    # mergecol = None
+    # if to_freq == 'D':
+    #     mergecol = 'date'
+    #     agg_df[mergecol] = agg_df.index.date
+    #     df[mergecol] = df.index.date
+    # elif to_freq == 'A':
+    #     mergecol = 'year'
+    #     agg_df[mergecol] = agg_df.index.year
+    #     df[mergecol] = df.index.year
+    # elif to_freq == 'M':
+    #     mergecol = 'year-month'
+    #     agg_df[mergecol] = agg_df.index.year.astype(str).str.cat(agg_df.index.month.astype(str).str.zfill(2), sep='-')
+    #     df[mergecol] = df.index.year.astype(str).str.cat(df.index.month.astype(str).str.zfill(2), sep='-')
+    #
+    # # Timestamp as column for index after merging (merging loses index)
+    # df['TIMESTAMP'] = df.index
+    # df = df.merge(agg_df, left_on=mergecol, right_on=mergecol, how='left')
+    #
+    # # Re-apply original index (merging lost index)
+    # df = df.set_index('TIMESTAMP')
     return df, new_colname
 
 

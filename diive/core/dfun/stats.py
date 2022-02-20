@@ -8,6 +8,10 @@ def q75(x):
     return x.quantile(0.75)
 
 
+def q50(x):
+    return x.quantile(0.5)
+
+
 def q25(x):
     return x.quantile(0.25)
 
