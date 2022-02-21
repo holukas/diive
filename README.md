@@ -42,4 +42,4 @@ Recent releases: [Releases](https://gitlab.ethz.ch/holukas/diive/-/releases)
 - Meteo screening
 
 ## Installation
-`diive` can be installed from source code
+`diive` can be installed from source code, e.g. using [`poetry`](https://python-poetry.org/) for dependencies.
