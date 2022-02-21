@@ -15,8 +15,8 @@ import pandas.errors
 import yaml
 from pandas import DataFrame
 
-from diive.common import dfun
-from diive.common.dfun.frames import flatten_multiindex_all_df_cols, continuous_timestamp_freq
+from diive.core import dfun
+from diive.core.dfun.frames import flatten_multiindex_all_df_cols, continuous_timestamp_freq
 from diive.configs.filetypes import get_filetypes
 
 

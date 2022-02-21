@@ -1,1 +1,1 @@
-from diive.common import dfun, io, plotting, utils
+from diive.core import dfun, io, plotting, utils

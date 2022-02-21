@@ -4,44 +4,34 @@ RANDOM FOREST GAP-FILLING FOR TIME SERIES
 randomforest_ts
 =========================================
 
-# last update in: DIIVE v0.22.1
-
-This module is part of DIIVE:
+This module is part of diive:
 https://gitlab.ethz.ch/holukas/diive
 
-"""
-import sys
 
+
+"""
 import numpy as np
 import pandas as pd
-# from eli5.sklearn import PermutationImportance
-from sklearn.ensemble import RandomForestRegressor  # Import the model we are using
-from sklearn.feature_selection import RFECV
-from sklearn.model_selection import TimeSeriesSplit
+from pandas import DataFrame
 
-from pkgs.dfun.frames import convert_to_arrays, steplagged_variants, rolling_variants
-from pkgs.dfun.times import include_timestamp_as_cols
-from pkgs.ml.common import train_random_forest_regressor, model_importances, mape_acc
+import diive.core.dfun.frames as frames
+from diive.core.dfun.times import include_timestamp_as_cols
+from diive.core.ml.common import train_random_forest_regressor, model_importances, mape_acc
 
 pd.set_option('display.max_rows', 50)
 pd.set_option('display.max_columns', 12)
 pd.set_option('display.width', 1000)
 
 
-# from sklearn.model_selection import cross_val_score
-
 class RandomForestTS:
-    id = "#gfRF"
 
     def __init__(
             self,
-            df: pd.DataFrame,
+            df: DataFrame,
             target_col: str or tuple,
-            rfecv_min_features_to_select: int = 1,
-            rfecv_step: int = 1,
-            rf_rfecv_n_estimators: int = 100,
-            rf_n_estimators: int = 100,
-            criterion: str = 'mse',
+            # feature_cols:list,
+            n_estimators: int = 100,
+            criterion: str = 'squared_error',
             max_depth: int = None,
             min_samples_split: int or float = 2,
             min_samples_leaf: int or float = 1,
@@ -74,7 +64,7 @@ class RandomForestTS:
         week_as_feature
         month_as_feature
         doy_as_feature
-        rf_n_estimators
+        n_estimators
         criterion
         max_depth
         min_samples_split
@@ -95,13 +85,10 @@ class RandomForestTS:
         """
         self.df = df
         self.target_col = target_col
+        # self.feature_cols=feature_cols
         self.random_state = random_state
         self.verbose = verbose
-        self.rfecv_min_features_to_select = rfecv_min_features_to_select
-        self.rfecv_step = rfecv_step
-
-        self.rf_n_estimators = rf_n_estimators  # Gapfilling
-        self.rf_rfecv_n_estimators = rf_rfecv_n_estimators  # Feature reduction
+        self.n_estimators = n_estimators
 
         self.model_params = dict(
             random_state=self.random_state,
@@ -121,10 +108,6 @@ class RandomForestTS:
             max_samples=max_samples
         )
 
-        # From .feature_reduction (rfecv)
-        self.feat_reduction_results = None
-        self.feat_reduction_df = None
-
         # From .build_final_model
         self.model_results = dict()
         self.model = None
@@ -133,123 +116,31 @@ class RandomForestTS:
         self.gapfilled_df = None
         self.gf_results = None
 
-    def rolling_variants(self, records: int, aggtypes: list, exclude_cols: list = None):
-        self.df = rolling_variants(df=self.df,
-                                   records=records,
-                                   aggtypes=aggtypes,
-                                   exclude_cols=exclude_cols)
+    def run(self):
+        # todo traintestsplit?
 
-    def steplagged_variants(self, stepsize: int, stepmax: int, exclude_cols: list = None):
-        self.df = steplagged_variants(df=self.df,
-                                      stepsize=stepsize,
-                                      stepmax=stepmax,
-                                      exclude_cols=exclude_cols)
+        # Prepare data
+        self.df = self._include_timestamp_as_features()
 
-    # def lagged_variants(self, periods: list, aggtypes: list, exclude_cols: list = None):
-    #     self.df = rolling_variants(df=self.df,
-    #                                periods=periods,
-    #                                aggtypes=aggtypes,
-    #                                exclude_cols=exclude_cols)
-    #
-    #     self.df = steplagged_variants(df=self.df,
-    #                                   periods=periods,
-    #                                   exclude_cols=exclude_cols)
+        # Build model for gapfilling
+        self.model_results = self._build_model()
 
-    def include_timestamp_as_features(self, doy_as_feature: bool = True, hour_as_feature: bool = True,
-                                      week_as_feature: bool = True, month_as_feature: bool = True):
-        self.df = include_timestamp_as_cols(df=self.df,
-                                            doy=doy_as_feature,
-                                            hour=hour_as_feature,
-                                            week=week_as_feature,
-                                            month=month_as_feature,
-                                            info=True)
+        print(self.model_results['mae'])
+        print(self.model_results['r2'])
 
-    def feature_reduction(self):
-        self.feat_reduction_results = self._rfecv()
+        self.model = self.model_results['model']
 
-        # Results: dataset w/ features w/ most occurrences
-        most_important_features_list = self.feat_reduction_results['most_important_features_after']
-        self.feat_reduction_df = self.df[most_important_features_list].copy()  # Subset w/ most important features
-        self.feat_reduction_df[self.target_col] = self.df[self.target_col].copy()  # Needs target
+        # Gapfilling
+        self.gapfilled_df, self.gf_results = self._fill()
 
-    def _rfecv(self) -> dict:
-        """Run Recursive Feature Elimination With Cross-Validation"""
-
-        _id_method = "[FEATURE REDUCTION]    "
-
-        if self.verbose > 0:
-            print(f"\n\n{_id_method}START {'=' * 30}")
-
-        _df = self.df.copy()
-
-        # # todo-- testing
-        # target_series = _df[self.target_col].copy()
-        # _df = _df.iloc[:, 0:48].copy()
-        # _df[self.target_col] = target_series
-        # # todo--
-
-        # Prepare data series, data can be used directly as pandas Series
-        _df = _df.dropna()
-        rfecv_targets = _df[self.target_col].copy()
-        _df.drop(self.target_col, axis=1, inplace=True)
-        rfecv_features = _df.copy()
-
-        # Find features
-        estimator = RandomForestRegressor(n_estimators=self.rf_rfecv_n_estimators,
-                                          **self.model_params)
-        splitter = TimeSeriesSplit(n_splits=5)  # Cross-validator
-
-        rfecv = RFECV(estimator=estimator,
-                      step=self.rfecv_step,
-                      min_features_to_select=self.rfecv_min_features_to_select,
-                      cv=splitter,
-                      scoring='explained_variance',
-                      verbose=self.verbose,
-                      n_jobs=-1)
-
-        # rfecv = RFECV(estimator=PermutationImportance(estimator=estimator, scoring='explained_variance',
-        #                                               n_iter=10, random_state=42, cv=splitter),
-        #               step=self.rfecv_step,
-        #               min_features_to_select=self.rfecv_min_features_to_select,
-        #               cv=splitter,
-        #               scoring='explained_variance',
-        #               verbose=self.verbose,
-        #               n_jobs=-1)
-
-        rfecv.fit(rfecv_features, rfecv_targets)
-        # rfecv.ranking_
-
-        # Feature importances
-        rfecv_features.drop(rfecv_features.columns[np.where(rfecv.support_ == False)[0]], axis=1, inplace=True)
-        rfecv_importances_df = pd.DataFrame()
-        rfecv_importances_df['feature'] = list(rfecv_features.columns)
-        rfecv_importances_df['importance'] = rfecv.estimator_.feature_importances_
-        rfecv_importances_df = rfecv_importances_df.sort_values(by='importance', ascending=False)
-
-        # Keep features where importance >= 0.01
-        rfecv_importances_df = rfecv_importances_df.loc[rfecv_importances_df['importance'] >= 0.01, :]
-
-        most_important_features_list = rfecv_importances_df['feature'].to_list()
-
-        # Store results
-        rfecv_results = dict(num_features_before=len(rfecv_features.columns),
-                             num_features_after=len(most_important_features_list),
-                             feature_importances_after=rfecv_importances_df,
-                             most_important_features_after=most_important_features_list,
-                             params=rfecv.get_params())
-
-        if self.verbose > 0:
-            print(f"{_id_method}Parameters:  {rfecv_results['params']}\n"
-                  f"{_id_method}Number of features *before* reduction:  {len(_df.columns)}\n"
-                  f"{_id_method}Number of features *after* reduction:  {rfecv_results['num_features_after']}\n"
-                  f"{_id_method}Most important features:  {rfecv_results['most_important_features_after']}\n"
-                  f"{rfecv_results['feature_importances_after']}\n"
-                  f"{_id_method}{'=' * 30} END\n")
-
-        return rfecv_results
-
-    def get_reduced_dataset(self):
-        return self.feat_reduction_df, self.feat_reduction_results
+    def _include_timestamp_as_features(self, doy_as_feature: bool = True, hour_as_feature: bool = True,
+                                       week_as_feature: bool = True, month_as_feature: bool = True) -> DataFrame:
+        return include_timestamp_as_cols(df=self.df,
+                                         doy=doy_as_feature,
+                                         hour=hour_as_feature,
+                                         week=week_as_feature,
+                                         month=month_as_feature,
+                                         info=True)
 
     def get_gapfilled_dataset(self):
         """
@@ -260,22 +151,7 @@ class RandomForestTS:
         """
         return self.gapfilled_df, self.gf_results
 
-    def gapfilling(self):
-        if isinstance(self.model_results, dict):
-            self.gapfilled_df, self.gf_results = self._fill()
-        else:
-            print("No final model available. Please run .build_final_model first.")
-            sys.exit()
-
-    def build_final_model(self):
-        if isinstance(self.feat_reduction_df, pd.DataFrame):
-            self.model_results = self._build()
-            self.model = self.model_results['model']
-        else:
-            print("No feature reduction data available. Please run .feature_reduction first.")
-            sys.exit()
-
-    def _build(self) -> dict:
+    def _build_model(self) -> dict:
         """Build final model for gapfilling"""
 
         _id_method = "[FINAL MODEL]    "
@@ -285,15 +161,15 @@ class RandomForestTS:
 
         # Data as arrays
         model_targets, model_features, model_feature_names, model_timestamp = \
-            convert_to_arrays(df=self.feat_reduction_df,
-                              target_col=self.target_col,
-                              complete_rows=True)
+            frames.convert_to_arrays(df=self.df,
+                                     target_col=self.target_col,
+                                     complete_rows=True)
 
         # Model training
         model, model_r2 = \
             train_random_forest_regressor(targets=model_targets,
                                           features=model_features,
-                                          n_estimators=self.rf_n_estimators,
+                                          n_estimators=self.n_estimators,
                                           model_params=self.model_params)  # All features, all targets
 
         # from sklearn.inspection import permutation_importance
@@ -302,6 +178,12 @@ class RandomForestTS:
         # Predict targets w/ features
         model_predictions = \
             model.predict(X=model_features)
+
+        # from sklearn.model_selection import TimeSeriesSplit, cross_val_score
+        # # np.mean(cross_val_score(clf, X_train, y_train, cv=10))
+        # tscv = TimeSeriesSplit(n_splits=5)
+        # cv_results = cross_val_score(model, X_train, y_train, cv=tscv, scoring='r2')
+
 
         # Stats
         model_mape, model_accuracy, model_mae = \
@@ -364,27 +246,26 @@ class RandomForestTS:
         if self.verbose > 0:
             print(f"\n\n{_id_method}START {'=' * 30}")
 
-        _feat_reduction_df = self.feat_reduction_df.copy()
+        df = self.df.copy()
 
-        # Targets w/ full timestamp
-        _targets_series = pd.Series(data=_feat_reduction_df[self.target_col],
-                                    index=_feat_reduction_df.index)
+        # Targets w/ full timestamp, gaps in this series will be filled
+        targets_ser = pd.Series(data=df[self.target_col], index=df.index)
 
         # Remove target from df
-        _feat_reduction_df.drop(self.target_col, axis=1, inplace=True)
+        df.drop(self.target_col, axis=1, inplace=True)
 
-        # Keep rows with complete features
-        _feat_reduction_df = _feat_reduction_df.dropna()
+        # df now contains features only, keep rows with complete features
+        df = df.dropna()
 
         # Data as arrays
-        _features = np.array(_feat_reduction_df)  # Features (used to predict target) need to be complete
-        _timestamp = _feat_reduction_df.index  # Timestamp for features and therefore predictions
+        features = np.array(df)  # Features (used to predict target) need to be complete
+        timestamp = df.index  # Timestamp for features and therefore predictions
 
         # Column names
-        _feature_names = list(_feat_reduction_df.columns)
+        feature_names = list(df.columns)
 
-        # Apply model (model already exists from feature reduction)
-        _predictions = self.model.predict(X=_features)  # Predict targets with features
+        # Apply model to predict target (model already exists from previous steps)
+        predictions = self.model.predict(X=features)  # Predict targets with features
         # _model_r2 = self.feat_reduction_model.score(X=_features, y=_targets_series.values)
 
         # Importances
@@ -392,14 +273,14 @@ class RandomForestTS:
         most_important_feat_df, \
         _most_important_feat_list = \
             model_importances(model=self.model,
-                              feature_names=_feature_names,
+                              feature_names=feature_names,
                               threshold_important_features=None)
 
         # Collect gapfilling results in df
         self._define_cols()  # Define column names for gapfilled_df
-        gapfilled_df = self._collect(predictions=_predictions,
-                                     timestamp=_timestamp,
-                                     targets_series=_targets_series)
+        gapfilled_df = self._collect(predictions=predictions,
+                                     timestamp=timestamp,
+                                     targets_series=targets_ser)
 
         # Fill still existing gaps (fallback)
         # Build model exclusively from timestamp features. Here, features are trained
@@ -422,8 +303,8 @@ class RandomForestTS:
 
         # Store results
         gf_results = dict(
-            feature_names=_feature_names,
-            num_features=len(_feature_names),
+            feature_names=feature_names,
+            num_features=len(feature_names),
             first_timestamp=gapfilled_df.index[0],
             last_timestamp=gapfilled_df.index[-1],
             max_potential_vals=len(gapfilled_df.index),
@@ -455,22 +336,22 @@ class RandomForestTS:
         # Build model for target predictions *from timestamp*
         # Only model-building, no predictions in this step.
         targets, features, _, _ = \
-            convert_to_arrays(df=gf_fallback_df,
-                              complete_rows=True,
-                              target_col=self.target_gapfilled_col)
+            frames.convert_to_arrays(df=gf_fallback_df,
+                                     complete_rows=True,
+                                     target_col=self.target_gapfilled_col)
 
         # Build model based in timestamp features
         model, model_r2 = \
             train_random_forest_regressor(features=features,
                                           targets=targets,
-                                          n_estimators=self.rf_n_estimators,
+                                          n_estimators=self.n_estimators,
                                           model_params=self.model_params)
 
         # Use model to predict complete time series
         _, features, _, timestamp = \
-            convert_to_arrays(df=gf_fallback_df,
-                              complete_rows=False,
-                              target_col=self.target_gapfilled_col)
+            frames.convert_to_arrays(df=gf_fallback_df,
+                                     complete_rows=False,
+                                     target_col=self.target_gapfilled_col)
         # Predict targets w/ features
         predictions = \
             model.predict(X=features)
@@ -528,77 +409,65 @@ class RandomForestTS:
         return gapfilled_df
 
     def _define_cols(self):
-        self.predictions_col = (".predictions", "[aux]")
-        self.predicted_gaps_col = (".gap_predictions", "[aux]")
-        self.target_gapfilled_col = (f"{self.target_col[0]}{self.id}", self.target_col[1])
-        self.target_gapfilled_flag_col = (f"QCF_{self.target_gapfilled_col[0]}", "[0=measured]")
-        self.predictions_fallback_col = (".predictions_fallback", "[aux]")
-        self.target_gapfilled_cumu_col = (".gapfilled_cumulative", "[aux]")
+        self.predictions_col = ".predictions"
+        self.predicted_gaps_col = ".gap_predictions"
+        self.target_gapfilled_col = f"{self.target_col}_gfRF"
+        self.target_gapfilled_flag_col = f"QCF_{self.target_gapfilled_col}"  # "[0=measured]"
+        self.predictions_fallback_col = ".predictions_fallback"
+        self.target_gapfilled_cumu_col = ".gapfilled_cumulative"
 
 
 if __name__ == '__main__':
-    # For testing purposes
-    from pathlib import Path
-
-    sourcefile = Path('../tests/test.csv')
-    source_df = pd.read_csv(sourcefile, header=[0, 1], parse_dates=True, index_col=0)
-    target_col = ('target', '-')
-
-    # todo TESTING
-    _testcols = [('SWC_0.05', '-'),
-                 ('TS_0.05', '-'),
-                 target_col]
-    source_df = source_df[_testcols].copy()
-    # todo TESTING
-
-    rfts = RandomForestTS(df=source_df,
-                          target_col=target_col,
-                          verbose=1,
-                          random_state=42,
-                          rfecv_step=1,
-                          rfecv_min_features_to_select=5,
-                          rf_rfecv_n_estimators=3,
-                          rf_n_estimators=3,
-                          bootstrap=True)
-
-    donotlag_cols = []
-    [donotlag_cols.append(x) for x in source_df.columns if '.timesince' in x[0]]
-    # [donotlag_cols.append(x) for x in source_df.columns if str(x[0]).startswith('.')]
-    target_col = ('target', '-')
-    donotlag_cols.append(target_col)
-
-    rfts.rolling_variants(records=6,
-                          aggtypes=['mean'],
-                          exclude_cols=donotlag_cols)
-    print(rfts.df)
-
-    rfts.steplagged_variants(stepsize=6,
-                             stepmax=48,
-                             exclude_cols=donotlag_cols)
-    print(rfts.df)
-
-    # rfts.include_timestamp_as_features(doy_as_feature=True,
-    #                                    week_as_feature=True,
-    #                                    month_as_feature=True,
-    #                                    hour_as_feature=True)
-
-    # Feature reduction
-    rfts.feature_reduction()
-    reduced_df, feat_reduction_results = rfts.get_reduced_dataset()
-
-    # Model for gapfilling
-    rfts.build_final_model()
-
-    # Gapfilling
-    rfts.gapfilling()
-    gapfilled_df, gf_results = rfts.get_gapfilled_dataset()
-
-    # Plot
-    import matplotlib.pyplot as plt
-
-    _scatter_df = gapfilled_df[[('target', '-'), ('.predictions', '[aux]')]].dropna()
-    _scatter_df.plot.scatter(('target', '-'), ('.predictions', '[aux]'))
-    plt.show()
-
-    rfts.gapfilled_df.plot(subplots=True, figsize=(16, 9))
-    plt.show()
+    pass
+    # # For testing purposes
+    # from pathlib import Path
+    #
+    # sourcefile = Path('../tests/test.csv')
+    # source_df = pd.read_csv(sourcefile, header=[0, 1], parse_dates=True, index_col=0)
+    # target_col = ('target', '-')
+    #
+    # # todo TESTING
+    # _testcols = [('SWC_0.05', '-'),
+    #              ('TS_0.05', '-'),
+    #              target_col]
+    # source_df = source_df[_testcols].copy()
+    # # todo TESTING
+    #
+    # rfts = RandomForestTS(df=source_df,
+    #                       target_col=target_col,
+    #                       verbose=1,
+    #                       random_state=42,
+    #                       rfecv_step=1,
+    #                       rfecv_min_features_to_select=5,
+    #                       rf_rfecv_n_estimators=3,
+    #                       n_estimators=3,
+    #                       bootstrap=True)
+    #
+    # donotlag_cols = []
+    # [donotlag_cols.append(x) for x in source_df.columns if '.timesince' in x[0]]
+    # # [donotlag_cols.append(x) for x in source_df.columns if str(x[0]).startswith('.')]
+    # target_col = ('target', '-')
+    # donotlag_cols.append(target_col)
+    #
+    # # rfts.include_timestamp_as_features(doy_as_feature=True,
+    # #                                    week_as_feature=True,
+    # #                                    month_as_feature=True,
+    # #                                    hour_as_feature=True)
+    #
+    #
+    # # Model for gapfilling
+    # rfts.build_final_model()
+    #
+    # # Gapfilling
+    # rfts.gapfilling()
+    # gapfilled_df, gf_results = rfts.get_gapfilled_dataset()
+    #
+    # # Plot
+    # import matplotlib.pyplot as plt
+    #
+    # _scatter_df = gapfilled_df[[('target', '-'), ('.predictions', '[aux]')]].dropna()
+    # _scatter_df.plot.scatter(('target', '-'), ('.predictions', '[aux]'))
+    # plt.show()
+    #
+    # rfts.gapfilled_df.plot(subplots=True, figsize=(16, 9))
+    # plt.show()

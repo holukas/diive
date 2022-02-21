@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "diive"
-version = "0.30.0"
+version = "0.31.0"
 description = "Time series post-processing and analysis"
-authors = ["holukas <lukas.hoertnagl@usys.ethz.ch>"]
+authors = ["Lukas Hörtnagl <holukas@ethz.ch>"]
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.11"
@@ -15,6 +15,7 @@ statsmodels = "^0.13.1"
 Sphinx = "^4.3.2"
 sphinx-rtd-theme = "^1.0.0"
 pysolar = "^0.10"
+scikit-learn = "^1.0.2"
 
 [tool.poetry.dev-dependencies]
 

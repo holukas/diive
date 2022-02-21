@@ -8,13 +8,13 @@ import pandas as pd
 from matplotlib.legend_handler import HandlerTuple
 from pandas import DataFrame
 
+import diive.core.dfun.frames as frames
 import diive.pkgs.analyses.optimumrange
-from diive.common.dfun.fits import BinFitterCP
-import diive.common.dfun.frames as frames
-from diive.common.plotting import plotfuncs
-from diive.common.plotting.fitplot import fitplot
-from diive.common.plotting.rectangle import rectangle
-from diive.common.plotting.styles import LightTheme as theme
+from diive.core.dfun.fits import BinFitterCP
+from diive.core.plotting import plotfuncs
+from diive.core.plotting.fitplot import fitplot
+from diive.core.plotting.rectangle import rectangle
+from diive.core.plotting.styles import LightTheme as theme
 from diive.pkgs.analyses.optimumrange import FindOptimumRange
 
 pd.set_option('display.width', 1500)
@@ -42,21 +42,23 @@ class CriticalHeatDays:
             bootstrap_runs: int = 10,
             bootstrapping_random_state: int = None
     ):
-        """Detect critical heat days from partitioned ecosystem fluxes
+        """Detect critical heat days from ecosystem fluxes
 
         XXX
 
         Args:
             df:
             x_col: Column name of x variable
-            nee_col: Column name of NEE (net ecosystem exchange, ecosytem flux)
-            gpp_col: Column name of GPP (gross primary production, ecosytem flux)
-            reco_col: Column name of RECO (ecosystem respiration, ecosytem flux)
+            nee_col: Column name of NEE (net ecosystem exchange, ecosystem flux)
+            gpp_col: Column name of GPP (gross primary production, ecosystem flux)
+            reco_col: Column name of RECO (ecosystem respiration, ecosystem flux)
             daynight_split: Column name of variable used for detection of daytime and nighttime
             daytime_threshold: Threshold for detection of daytime and nighttime from *daytime_col*
             set_daytime_if: 'Larger Than Threshold' or 'Smaller Than Threshold'
             usebins: XXX (default 10)
-            bootstrap_runs: XXX (default 10)
+            bootstrap_runs: Number of bootstrap runs during detection of
+                critical heat days. Must be an odd number. In case an even
+                number is given +1 is added automatically.
         """
 
         if daynight_split != 'timestamp':
@@ -73,8 +75,11 @@ class CriticalHeatDays:
         self.daytime_threshold = daytime_threshold
         self.set_daytime_if = set_daytime_if
         self.usebins = usebins
-        self.bootstrap_runs = bootstrap_runs
         self.bootstrapping_random_state = bootstrapping_random_state
+
+        if bootstrap_runs % 2 == 0:
+            bootstrap_runs += 1
+        self.bootstrap_runs = bootstrap_runs
 
         # Resample dataset
         aggs = ['mean', 'median', 'count', 'max', 'sum']
@@ -86,12 +91,6 @@ class CriticalHeatDays:
         self.df_nighttime, \
         self.df_nighttime_aggs, = \
             self._prepare_daynight_datasets(aggs=aggs)
-
-        # import matplotlib.pyplot as plt
-        # self.df_daytime_aggs[self.nee_col]['sum'].plot()
-        # plt.scatter(self.df_daytime_aggs[self.x_col]['max'],
-        #             self.df_daytime_aggs[self.nee_col]['sum'])
-        # plt.show()
 
         self.predict_min_x = self.df[x_col].min()
         self.predict_max_x = self.df[x_col].max()
@@ -387,6 +386,7 @@ class CriticalHeatDays:
         """Create separate daytime/nighttime datasets and aggregate"""
 
         # Get daytime data from dataset
+        df, \
         df_daytime, \
         df_nighttime, \
         grp_daynight_col, \
@@ -1096,76 +1096,73 @@ def plot_chd_detection_from_nee(ax, results_chd: dict, y_col: str, highlight_yea
 
 
 if __name__ == '__main__':
-    from tests.testdata.loadtestdata import loadtestdata
-
-    # Load data
-    data = loadtestdata()
-    df = data['df']
-    # from diive.common.dfun.frames import flatten_multiindex_all_df_cols
-    # df = flatten_multiindex_all_df_cols(df=df, keep_first_row_only=True)
-
-    # # Use data from May to Sep only
-    # maysep_filter = (df.index.month >= 5) & (df.index.month <= 9)
-    # df = df.loc[maysep_filter].copy()
-
-    # Settings
-    x_col = 'VPD_f'
-    nee_col = 'NEE_CUT_f'
-    gpp_col = 'GPP_DT_CUT'
-    reco_col = 'Reco_DT_CUT'
-    # daytime_col = 'Rg_f'
-
-    # Critical heat days
-    chd = CriticalHeatDays(
-        df=df,
-        x_col=x_col,
-        nee_col=nee_col,
-        gpp_col=gpp_col,
-        reco_col=reco_col,
-        daynight_split='timestamp',
-        daytime_threshold=50,
-        set_daytime_if='Larger Than Threshold',
-        usebins=0,
-        bootstrap_runs=3,
-        bootstrapping_random_state=None
-    )
-
-    # Critical heat days
-    chd.detect_chd_threshold()
-    # results = chd.results_threshold_detection()
-
-    # Analyze flux
-    chd.analyze_daytime()
-    # results = chd.results_daytime_analysis()
-
-    # Plot
-    import matplotlib.gridspec as gridspec
-    import matplotlib.pyplot as plt
-
-    fig = plt.figure(figsize=(20, 9))
-    gs = gridspec.GridSpec(1, 2)  # rows, cols
-    gs.update(wspace=.2, hspace=1, left=.1, right=.9, top=.85, bottom=.1)
-    ax = fig.add_subplot(gs[0, 0])
-    ax2 = fig.add_subplot(gs[0, 1])
-    chd.plot_chd_detection_from_nee(ax=ax, highlight_year=2019)
-    chd.plot_daytime_analysis(ax=ax2)
-    fig.tight_layout()
-    fig.show()
-
-    # Optimum range
-    chd.find_nee_optimum_range()
-    import matplotlib.gridspec as gridspec
-    import matplotlib.pyplot as plt
-
-    fig = plt.figure(figsize=(9, 16))
-    gs = gridspec.GridSpec(3, 1)  # rows, cols
-    # gs.update(wspace=.2, hspace=0, left=.1, right=.9, top=.9, bottom=.1)
-    ax1 = fig.add_subplot(gs[0, 0])
-    ax2 = fig.add_subplot(gs[1, 0])
-    ax3 = fig.add_subplot(gs[2, 0])
-    chd.plot_rolling_bin_aggregates(ax=ax1)
-    chd.plot_bin_aggregates(ax=ax2)
-    chd.plot_vals_in_optimum_range(ax=ax3)
-    fig.show()
-
-    print("END")
+    pass
+    # from tests.testdata.loadtestdata import loadtestdata
+    #
+    # # Load data
+    # data_df, metadata_df = loadtestdata()
+    # # # Use data from May to Sep only
+    # # maysep_filter = (df.index.month >= 5) & (df.index.month <= 9)
+    # # df = df.loc[maysep_filter].copy()
+    #
+    # # Settings
+    # x_col = 'VPD_f'
+    # nee_col = 'NEE_CUT_f'
+    # gpp_col = 'GPP_DT_CUT'
+    # reco_col = 'Reco_DT_CUT'
+    # # daytime_col = 'Rg_f'
+    #
+    # # Critical heat days
+    # chd = CriticalHeatDays(
+    #     df=data_df,
+    #     x_col=x_col,
+    #     nee_col=nee_col,
+    #     gpp_col=gpp_col,
+    #     reco_col=reco_col,
+    #     daynight_split='timestamp',
+    #     daytime_threshold=50,
+    #     set_daytime_if='Larger Than Threshold',
+    #     usebins=0,
+    #     bootstrap_runs=3,
+    #     bootstrapping_random_state=None
+    # )
+    #
+    # # Critical heat days
+    # chd.detect_chd_threshold()
+    # # results = chd.results_threshold_detection()
+    #
+    # # Analyze flux
+    # chd.analyze_daytime()
+    # # results = chd.results_daytime_analysis()
+    #
+    # # Plot
+    # import matplotlib.gridspec as gridspec
+    # import matplotlib.pyplot as plt
+    #
+    # fig = plt.figure(figsize=(20, 9))
+    # gs = gridspec.GridSpec(1, 2)  # rows, cols
+    # gs.update(wspace=.2, hspace=1, left=.1, right=.9, top=.85, bottom=.1)
+    # ax = fig.add_subplot(gs[0, 0])
+    # ax2 = fig.add_subplot(gs[0, 1])
+    # chd.plot_chd_detection_from_nee(ax=ax, highlight_year=2019)
+    # chd.plot_daytime_analysis(ax=ax2)
+    # fig.tight_layout()
+    # fig.show()
+    #
+    # # Optimum range
+    # chd.find_nee_optimum_range()
+    # import matplotlib.gridspec as gridspec
+    # import matplotlib.pyplot as plt
+    #
+    # fig = plt.figure(figsize=(9, 16))
+    # gs = gridspec.GridSpec(3, 1)  # rows, cols
+    # # gs.update(wspace=.2, hspace=0, left=.1, right=.9, top=.9, bottom=.1)
+    # ax1 = fig.add_subplot(gs[0, 0])
+    # ax2 = fig.add_subplot(gs[1, 0])
+    # ax3 = fig.add_subplot(gs[2, 0])
+    # chd.plot_rolling_bin_aggregates(ax=ax1)
+    # chd.plot_bin_aggregates(ax=ax2)
+    # chd.plot_vals_in_optimum_range(ax=ax3)
+    # fig.show()
+    #
+    # print("END")

@@ -4,7 +4,7 @@ import pandas as pd
 from pandas import DataFrame, DatetimeIndex
 from pysolar import radiation
 from pysolar.solar import get_altitude
-from diive.common.plotting.plotfuncs import quickplot_df
+from diive.core.plotting.plotfuncs import quickplot_df
 
 def potrad_from_latlon(
         lat: float,

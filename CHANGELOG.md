@@ -2,6 +2,27 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.31.0 | XX Feb 2022
+
+### Critical heat days
+
+#### **GENERAL**
+XXX
+
+#### **NEW PACKAGES**
+- Added `pkgs > flux`: Flux-specific analyses
+
+#### **NEW MODULES**
+- Added `carboncost` in `pkgs > flux`
+- Added `criticalheatdays` in `pkgs > flux`
+
+#### **CHANGES & ADDITIONS**
+- None
+
+#### **BUGFIXES**
+- None
+
+
 ## v0.30.0 | 15 Feb 2022
 
 ### Starting diive library

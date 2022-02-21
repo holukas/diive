@@ -49,7 +49,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from pandas import Series, DataFrame
 
-import diive.common.io.filereader as filereader
+import diive.core.io.filereader as filereader
 
 
 class TurbFluc:

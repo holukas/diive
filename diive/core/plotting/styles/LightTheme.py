@@ -9,7 +9,7 @@ LIGHT THEME
 
 """
 
-from diive.common.plotting.styles._material_design_colors import *
+from diive.core.plotting.styles._material_design_colors import *
 
 # DEFAULT LINE PLOT
 # COLOR_LINE_DEFAULT = '#026DA3'  # Line in time series plot

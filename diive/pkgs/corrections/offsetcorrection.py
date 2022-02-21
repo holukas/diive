@@ -3,7 +3,7 @@ from pathlib import Path
 import pandas as pd
 from pandas import Series
 
-import diive.common.dfun.frames as frames
+import diive.core.dfun.frames as frames
 # from diive.common.dfun.frames import resample_df
 from diive.pkgs.createvar.potentialradiation import potrad_from_latlon
 
@@ -58,7 +58,7 @@ def remove_relativehumidity_offset(series: Series,
 
     # Plot
     if saveplot:
-        from diive.common.plotting.plotfuncs import quickplot_df
+        from diive.core.plotting.plotfuncs import quickplot_df
         quickplot_df([series, _series_exceeds, _daily_mean_above_100, _offset, series_corr], subplots=False,
                      saveplot=saveplot, hline=100, title=f"Remove RH Offset From {series.name}")
 
@@ -139,7 +139,7 @@ def remove_radiation_zero_offset(_series: Series,
 
     # Plot
     if saveplot:
-        from diive.common.plotting.plotfuncs import quickplot_df
+        from diive.core.plotting.plotfuncs import quickplot_df
         quickplot_df([_series, _potential_radiation, _series_corr,
                       series_corr_settozero, _offset],
                      subplots=False,
