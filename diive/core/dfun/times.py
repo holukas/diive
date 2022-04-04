@@ -155,16 +155,26 @@ def build_timestamp_range(start_dt, df_len, freq):
     return date_rng
 
 
-def include_timestamp_as_cols(df, doy: bool = True, week: bool = True, month: bool = True, hour: bool = True,
+def include_timestamp_as_cols(df,
+                              year: bool = True,
+                              doy: bool = True,
+                              week: bool = True,
+                              month: bool = True,
+                              hour: bool = True,
                               info: bool = True):
     """Include timestamp info as data columns"""
 
+    df=df.copy()
     newcols = []
-    doy_col = ('.DOY', '[day_of_year]')
-    week_col = ('.WEEK', '[week_of_year]')
-    month_col = ('.MONTH', '[month]')
-    hour_col = ('.HOUR', '[hour]')
+    year_col = '.YEAR'
+    doy_col = '.DOY'  # '[day_of_year]'
+    week_col = '.WEEK'  # '[week_of_year]'
+    month_col = '.MONTH'  # '[month]'
+    hour_col = '.HOUR'  # '[hour]'
 
+    if year:
+        df[year_col] = df.index.year
+        newcols.append(doy_col)
     if doy:
         df[doy_col] = df.index.dayofyear
         newcols.append(doy_col)

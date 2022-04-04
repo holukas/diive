@@ -6,9 +6,9 @@ import numpy as np
 import pandas as pd
 from pandas import Series, DataFrame
 
-from diive.common.plotting.plotfuncs import default_format, default_legend
-from diive.common.plotting.plotfuncs import save_fig
-from diive.common.plotting.styles import LightTheme as theme
+from diive.core.plotting.plotfuncs import default_format, default_legend
+from diive.core.plotting.plotfuncs import save_fig
+from diive.core.plotting.styles import LightTheme as theme
 
 
 def hampel_filter(input_series: Series, winsize: int = 50, winsize_min_periods: int = 1,

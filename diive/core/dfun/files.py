@@ -5,10 +5,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 # from PyQt5 import QtWidgets as qw
-from common.io.dirs import verify_dir
-from diive.common.utils.config import validate_filetype_config
-from diive.common.dfun.frames import add_second_header_row
-from diive.common.dfun.times import make_timestamp_microsec_suffix
+from core.io.dirs import verify_dir
+from diive.core.utils.config import validate_filetype_config
+from diive.core.dfun.frames import add_second_header_row
+from diive.core.dfun.times import make_timestamp_microsec_suffix
 
 
 def parse_events_file(filepath, settings_dict):

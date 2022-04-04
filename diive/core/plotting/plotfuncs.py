@@ -1,6 +1,6 @@
 import time
 from pathlib import Path
-from diive.common.dfun.times import get_current_time
+from diive.core.dfun.times import get_current_time
 import matplotlib.gridspec as gridspec
 import pandas as pd
 from matplotlib import pyplot as plt, _pylab_helpers, dates as mdates
@@ -9,9 +9,9 @@ from pandas import DataFrame, Series
 
 # from modboxes.plots.styles.LightTheme import *
 # from modboxes.plots.styles.LightTheme import FONTSIZE_LABELS_AXIS, COLOR_TXT_LEGEND
-import diive.common.plotting.styles.LightTheme as theme
+import diive.core.plotting.styles.LightTheme as theme
 # from modboxes.plots.styles.LightTheme import *
-from diive.common.plotting.styles.LightTheme import *
+from diive.core.plotting.styles.LightTheme import *
 
 
 def remove_prev_lines(ax):

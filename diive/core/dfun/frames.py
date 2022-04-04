@@ -14,7 +14,7 @@ from pandas import DataFrame, MultiIndex
 from pandas import Series
 from pandas._libs.tslibs import to_offset
 
-from diive.common.dfun.times import timedelta_to_string
+from diive.core.dfun.times import timedelta_to_string
 from diive.pkgs.gapfilling.interpolate import linear_interpolation
 
 pd.set_option('display.width', 1500)
@@ -227,11 +227,11 @@ def splitdata_daynight(
     daytime_ix = df[flag_daynight_col] == 1
     df_flagtrue = df[daytime_ix].copy()
 
-    # Data where flag is 0
+    # Data where flag is 0 (e.g. nighttime)
     daytime_ix = df[flag_daynight_col] == 0
     df_flagfalse = df[daytime_ix].copy()
 
-    return df_flagtrue, df_flagfalse, grp_daynight_col, date_col, flag_daynight_col
+    return df, df_flagtrue, df_flagfalse, grp_daynight_col, date_col, flag_daynight_col
 
 
 def create_random_gaps(series: pd.Series, frac: float = 0.1):
@@ -941,8 +941,9 @@ def generate_flag_daynight(df: pd.DataFrame,
                            col_thres_flagtrue: str = 'Larger Than Threshold',
                            col_thres_flag_threshold: float = None):
     """Add flag to indicate group membership: daytime or nighttime data"""
+    df = df.copy()
     flag_col = '.FLAG_DAYTIME'
-    df[flag_col] = np.nan
+    df.loc[:, flag_col] = np.nan
     daytime_ix = None
     nighttime_ix = None
 

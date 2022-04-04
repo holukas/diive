@@ -4,11 +4,11 @@ import numpy as np
 import pandas as pd
 from pandas import Series, DataFrame
 from diive.pkgs.outlierdetection.hampel import hampel_filter
-import diive.common.dfun.frames as frames
-from diive.common.io.dirs import verify_dir
-import diive.common.io.filereader as filereader
+import diive.core.dfun.frames as frames
+from diive.core.io.dirs import verify_dir
+import diive.core.io.filereader as filereader
 # from diive.common.io.filereader import MultiDataFileReader, search_files
-from diive.common.plotting.plotfuncs import quickplot_df
+from diive.core.plotting.plotfuncs import quickplot_df
 from diive.pkgs.corrections.offsetcorrection import remove_radiation_zero_offset, remove_relativehumidity_offset
 from diive.pkgs.corrections.setto_threshold import setto_threshold
 from diive.pkgs.createflag.outsiderange import range_check

@@ -15,6 +15,18 @@ def q50(x):
 def q25(x):
     return x.quantile(0.25)
 
+def q99(x):
+    return x.quantile(0.99)
+
+def q01(x):
+    return x.quantile(0.01)
+
+def q05(x):
+    return x.quantile(0.05)
+
+def q95(x):
+    return x.quantile(0.95)
+
 
 def series_start(series: pd.Series, dtformat: str = "%Y-%m-%d %H:%M"):
     """Return start datetime of series"""

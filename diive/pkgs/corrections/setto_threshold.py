@@ -45,7 +45,7 @@ def setto_threshold(series: Series, threshold: float, type: str, show:bool=False
 
     # Plot
     if saveplot:
-        from diive.common.plotting.plotfuncs import quickplot_df
+        from diive.core.plotting.plotfuncs import quickplot_df
         quickplot_df([series, series_qc], subplots=False,
                      saveplot=saveplot, title=f"Set {series.name} to {type} threshold {threshold}")
 

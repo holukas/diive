@@ -29,7 +29,7 @@ def range_check(series: Series, min: int, max: int, show: bool = False, saveplot
 
     # Plot
     if saveplot:
-        from diive.common.plotting.plotfuncs import quickplot_df
+        from diive.core.plotting.plotfuncs import quickplot_df
         quickplot_df([series, series_qc], subplots=False, saveplot=saveplot,
                      title=f"Range check: {series.name} must be between {min} and {max}")
 

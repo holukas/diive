@@ -32,7 +32,7 @@ from scipy import stats
 from scipy.optimize import curve_fit
 
 # from gui import plotfuncs
-from diive.common.dfun.stats import q25, q75
+from diive.core.dfun.stats import q25, q75
 
 pd.set_option('display.width', 1500)
 pd.set_option('display.max_columns', 30)
@@ -191,6 +191,9 @@ class BinFitterCP:
         fit_y = a * fit_x ** 2 + b * fit_x + c
         nom = unp.nominal_values(fit_y)
         std = unp.std_devs(fit_y)
+
+        # sample_df = self.df.sample(n=int(len(self.df)), replace=True)
+
 
         # Best lower and upper prediction bands
         lower_predband, upper_predband = \

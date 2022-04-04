@@ -2,6 +2,27 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.31.0 | 4 Apr 2022
+
+### Carbon cost
+
+#### **GENERAL**
+- This version introduces the code for calculating carbon cost and critical heat days.
+
+#### **NEW PACKAGES**
+- Added new package for flux-specific calculations: `diive.pkgs.flux`
+
+#### **NEW MODULES**
+- Added new module for calculating carbon cost: `diive.pkgs.flux.carboncost`
+- Added new module for calculating critical heat days: `diive.pkgs.flux.criticalheatdays`
+
+#### **CHANGES & ADDITIONS**
+- None
+
+#### **BUGFIXES**
+- None
+
+
 ## v0.30.0 | 15 Feb 2022
 
 ### Starting diive library

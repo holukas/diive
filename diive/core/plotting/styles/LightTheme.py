@@ -9,7 +9,15 @@ LIGHT THEME
 
 """
 
-from diive.common.plotting.styles._material_design_colors import *
+from diive.core.plotting.styles._material_design_colors import *
+
+# Specific colors
+COLOR_GPP = '#39a7b3'  # nice blue
+COLOR_RECO = '#d95318'  # nice red
+COLOR_NEE = '#4CAF50'  # nice green
+COLOR_THRESHOLD = '#FFB72B'  # nice orange yellow
+COLOR_THRESHOLD2 = '#BA68C8'  # purple 300
+COLOR_NEE2 = bluegray(600)
 
 # DEFAULT LINE PLOT
 # COLOR_LINE_DEFAULT = '#026DA3'  # Line in time series plot
@@ -54,11 +62,11 @@ FONTSIZE_HEADER_AXIS_SMALL = 6
 FONTCOLOR_HEADER_AXIS = black()
 
 # Axis labels
-AXLABELS_FONTSIZE = 20
+AXLABELS_FONTSIZE = 16
 AXLABELS_FONTCOLOR = black()
 AXLABELS_FONTWEIGHT = 'normal'
 
-INFOTXT_FONTSIZE = 16
+INFOTXT_FONTSIZE = 12
 
 FONTSIZE_ANNOTATIONS_SMALL = 12
 
@@ -66,9 +74,9 @@ FONTSIZE_ANNOTATIONS_SMALL = 12
 TICKS_WIDTH = 1
 TICKS_LENGTH = 4
 TICKS_DIRECTION = 'in'
-TICKS_LABELSIZE = 20
+TICKS_LABELSIZE = 16
 
-FONTSIZE_LEGEND = 5
+FONTSIZE_LEGEND = 11
 
 FONTSIZE_INFO_LARGE_8 = 8
 FONTSIZE_INFO_LARGE = 7  # Info overlay in plots, e.g. r2 = 91%

@@ -1,19 +1,22 @@
+from pathlib import Path
+
 from pandas import DataFrame
 
-from diive.common.io.filereader import ReadFileType
+from diive.core.io.filereader import ReadFileType
 
 
-def loadtestdata() -> DataFrame:
+def loadtestdata(filetype: str,
+                 filepath: str) -> tuple[DataFrame, DataFrame]:
     # configfilepath = r'L:\Dropbox\luhk_work\20 - CODING\21 - DIIVE\diive\diive\configs\filetypes\DIIVE_CSV_30MIN.yml'
     # filetypeconfig = ConfigFileReader(configfilepath=configfilepath).read()
-    filetype = 'CSV_TS-FULL-MIDDLE_30MIN'
+    filepath = Path(filepath)
     loaddatafile = ReadFileType(
         filetype=filetype,
         # filetypeconfig=filetypeconfig,
-        filepath=r'L:\Dropbox\luhk_work\20 - CODING\21 - DIIVE\diive\tests\testdata\testfile_ch-dav_2016-2020_mayToSep.csv')
-    data = loaddatafile._readfile()
-    return data
+        filepath=filepath)
+    data_df, metadata_df = loaddatafile._readfile()
+    return data_df, metadata_df
 
 
 if __name__ == '__main__':
-    loadtestdata()
+    pass

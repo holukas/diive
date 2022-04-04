@@ -6,7 +6,7 @@ FLUX: OPTIMUM RANGE
 import pandas as pd
 from matplotlib.legend_handler import HandlerTuple
 from pandas import DataFrame
-from diive.common.plotting.plotfuncs import default_format, default_grid, default_legend
+from diive.core.plotting.plotfuncs import default_format, default_grid, default_legend
 import numpy as np
 import matplotlib.pyplot as plt
 
