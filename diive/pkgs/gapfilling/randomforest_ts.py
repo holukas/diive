@@ -318,7 +318,8 @@ class RandomForestTS:
             predictions_hq_numvals=gapfilled_df[self.predictions_col].count(),
             predictions_hq_numgaps=gapfilled_df[self.predictions_col].isnull().sum(),
             predictions_fallback_numvals=gapfilled_df[self.predictions_fallback_col].count(),
-            predictions_fallback_numgaps=gapfilled_df[self.predictions_fallback_col].isnull().sum()
+            predictions_fallback_numgaps=gapfilled_df[self.predictions_fallback_col].isnull().sum(),
+            model=self.model
         )
 
         if self.verbose > 0:

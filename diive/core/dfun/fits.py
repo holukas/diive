@@ -192,6 +192,9 @@ class BinFitterCP:
         nom = unp.nominal_values(fit_y)
         std = unp.std_devs(fit_y)
 
+        # sample_df = self.df.sample(n=int(len(self.df)), replace=True)
+
+
         # Best lower and upper prediction bands
         lower_predband, upper_predband = \
             self._predband(px=fit_x, x=x, y=y,

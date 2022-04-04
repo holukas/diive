@@ -227,7 +227,7 @@ def splitdata_daynight(
     daytime_ix = df[flag_daynight_col] == 1
     df_flagtrue = df[daytime_ix].copy()
 
-    # Data where flag is 0
+    # Data where flag is 0 (e.g. nighttime)
     daytime_ix = df[flag_daynight_col] == 0
     df_flagfalse = df[daytime_ix].copy()
 

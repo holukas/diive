@@ -7,16 +7,24 @@ def fitplot(
         label: str = 'label',
         edgecolor: str = 'none',
         marker: str = 'o',
-        alpha: float = 1
+        alpha: float = 1,
+        show_prediction_interval:bool=True,
+        size_scatter:int=60
 ):
     # x/y
     _numvals_y = len(flux_bts_results['y'])
-    _startyear_y = flux_bts_results['y'].index.year[0]
-    _endyear_y = flux_bts_results['y'].index.year[-1]
+    try:
+        # Add year info to label, if available
+        _startyear_y = flux_bts_results['y'].index.year[0]
+        _endyear_y = flux_bts_results['y'].index.year[-1]
+        _label = f"{label} {_startyear_y}-{_endyear_y} ({_numvals_y} days)"
+    except AttributeError:
+        _label = label
+
     line_xy = ax.scatter(flux_bts_results['x'],
                          flux_bts_results['y'],
-                         edgecolor=edgecolor, color=color, alpha=alpha, s=60,
-                         label=f"{label} {_startyear_y}-{_endyear_y} ({_numvals_y} days)",
+                         edgecolor=edgecolor, color=color, alpha=alpha, s=size_scatter,
+                         label=label,
                          zorder=1, marker=marker)
 
     # Highlight year
@@ -33,36 +41,40 @@ def fitplot(
                                     edgecolor='#455A64', color='#FFD54F',  # amber 300
                                     alpha=1, s=100,
                                     label=f"{label} {highlight_year} ({_numvals_y} days)",
-                                    zorder=100, marker=marker)
+                                    zorder=98, marker=marker)
 
     # Fit
     a = flux_bts_results['fit_params_opt'][0]
     b = flux_bts_results['fit_params_opt'][1]
     c = flux_bts_results['fit_params_opt'][2]
-    label_fit = rf"$y = {a:.2f}x^2 + {b:.2f}x + {c:.2f}$"
+    operator1 = "+" if b > 0 else ""
+    operator2 = "+" if c > 0 else ""
+    label_fit = rf"$y = {a:.4f}x^2{operator1}{b:.4f}x{operator2}{c:.4f}$"
     line_fit, = ax.plot(flux_bts_results['fit_df']['fit_x'],
                         flux_bts_results['fit_df']['nom'],
-                        c=color_fitline, lw=3, zorder=99, alpha=1, label=label_fit)
+                        c=color_fitline, lw=3, zorder=3, alpha=1, label=label_fit)
 
     # Fit confidence region
     # Uncertainty lines (95% confidence)
     line_fit_ci = ax.fill_between(flux_bts_results['fit_df']['fit_x'],
                                   flux_bts_results['fit_df']['nom_lower_ci95'],
                                   flux_bts_results['fit_df']['nom_upper_ci95'],
-                                  alpha=.2, color=color_fitline, zorder=99,
+                                  alpha=.2, color=color_fitline, zorder=2,
                                   label="95% confidence region")
 
     # Fit prediction interval
-    # Lower prediction band (95% confidence)
-    ax.plot(flux_bts_results['fit_df']['fit_x'],
-            flux_bts_results['fit_df']['lower_predband'],
-            color=color_fitline, ls='--', zorder=99, lw=2,
-            label="95% prediction interval")
-    # Upper prediction band (95% confidence)
-    line_fit_pb, = ax.plot(flux_bts_results['fit_df']['fit_x'],
-                           flux_bts_results['fit_df']['upper_predband'],
-                           color=color_fitline, ls='--', zorder=99, lw=2,
-                           label="95% prediction interval")
+    line_fit_pb = None
+    if show_prediction_interval:
+        # Lower prediction band (95% confidence)
+        ax.plot(flux_bts_results['fit_df']['fit_x'],
+                flux_bts_results['fit_df']['lower_predband'],
+                color=color_fitline, ls='--', zorder=3, lw=2,
+                label="95% prediction interval")
+        # Upper prediction band (95% confidence)
+        line_fit_pb, = ax.plot(flux_bts_results['fit_df']['fit_x'],
+                               flux_bts_results['fit_df']['upper_predband'],
+                               color=color_fitline, ls='--', zorder=3, lw=2,
+                               label="95% prediction interval")
 
     if highlight_year:
         return line_xy, line_fit, line_fit_ci, line_fit_pb, line_highlight

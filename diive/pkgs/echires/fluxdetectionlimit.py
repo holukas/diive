@@ -328,7 +328,7 @@ if __name__ == '__main__':
             fdl = FluxDetectionLimit(u=filepart_df[u_col].copy(),
                                      v=filepart_df[v_col].copy(),
                                      w=filepart_df[w_col].copy(),
-                                     c=filepart_df[n2o_col].copy().multiply(1000),
+                                     c=filepart_df[ch4_col].copy().multiply(1000),
                                      # c=filepart_df[ch4_col].copy().multiply(1000),
                                      # Convert from umol mol-1 to nmol mol-1
                                      ta=filepart_df[ta_col].copy(),  # K; R also has K
@@ -354,6 +354,6 @@ if __name__ == '__main__':
 
         print(filepart_results_df)
         # Save after each file
-        outfile = Path(outdir) / 'results_N2O.csv'
+        outfile = Path(outdir) / 'results_CH4.csv'
         # outfile = Path(outdir) / 'results_CH4.csv'
         filepart_results_df.to_csv(outfile)

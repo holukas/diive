@@ -9,13 +9,15 @@ from matplotlib.legend_handler import HandlerTuple
 from pandas import DataFrame
 
 import diive.core.dfun.frames as frames
+import diive.core.plotting.styles.LightTheme as theme
 import diive.pkgs.analyses.optimumrange
 from diive.core.dfun.fits import BinFitterCP
 from diive.core.plotting import plotfuncs
 from diive.core.plotting.fitplot import fitplot
 from diive.core.plotting.rectangle import rectangle
-from diive.core.plotting.styles import LightTheme as theme
+from diive.core.plotting.styles.LightTheme import INFOTXT_FONTSIZE
 from diive.pkgs.analyses.optimumrange import FindOptimumRange
+from importlib import reload
 
 pd.set_option('display.width', 1500)
 pd.set_option('display.max_columns', 30)
@@ -33,6 +35,7 @@ class CriticalHeatDays:
             nee_col: str,
             gpp_col: str,
             reco_col: str,
+            ta_col: str,
             daynight_split: str = 'timestamp',
             daynight_split_day_start_hour: int = 7,
             daynight_split_day_end_hour: int = 18,
@@ -52,6 +55,7 @@ class CriticalHeatDays:
             nee_col: Column name of NEE (net ecosystem exchange, ecosystem flux)
             gpp_col: Column name of GPP (gross primary production, ecosystem flux)
             reco_col: Column name of RECO (ecosystem respiration, ecosystem flux)
+            ta_col:
             daynight_split: Column name of variable used for detection of daytime and nighttime
             daytime_threshold: Threshold for detection of daytime and nighttime from *daytime_col*
             set_daytime_if: 'Larger Than Threshold' or 'Smaller Than Threshold'
@@ -62,13 +66,16 @@ class CriticalHeatDays:
         """
 
         if daynight_split != 'timestamp':
-            self.df = df[[x_col, nee_col, gpp_col, reco_col, daynight_split]].copy()
+            self.df = df[[x_col, nee_col, gpp_col, reco_col,
+                          ta_col, daynight_split]].copy()
         else:
-            self.df = df[[x_col, nee_col, gpp_col, reco_col]].copy()
+            self.df = df[[x_col, nee_col, gpp_col, reco_col,
+                          ta_col]].copy()
         self.x_col = x_col
         self.nee_col = nee_col
         self.gpp_col = gpp_col
         self.reco_col = reco_col
+        self.ta_col = ta_col
         self.daynight_split = daynight_split
         self.daynight_split_day_start_hour = daynight_split_day_start_hour
         self.daynight_split_day_end_hour = daynight_split_day_end_hour
@@ -77,12 +84,13 @@ class CriticalHeatDays:
         self.usebins = usebins
         self.bootstrapping_random_state = bootstrapping_random_state
 
+        # Number of bootstrap runs must be odd number
         if bootstrap_runs % 2 == 0:
             bootstrap_runs += 1
         self.bootstrap_runs = bootstrap_runs
 
         # Resample dataset
-        aggs = ['mean', 'median', 'count', 'max', 'sum']
+        aggs = ['mean', 'median', 'count', 'min', 'max', 'sum']
         self.df_aggs = self._resample_dataset(df=self.df, aggs=aggs, day_start_hour=7)
 
         # Prepare separate daytime and nighttime datasets and aggregate
@@ -125,7 +133,7 @@ class CriticalHeatDays:
 
         # Fit to bootstrapped data, daytime data only, daily time resolution
         # Stored as bootstrap runs > 0 (bts>0)
-        bts_results = self._bootstrap_fits(df_aggs=self.df_daytime_aggs,
+        bts_results = self._bootstrap_fits(df_aggs=self.df_aggs,  # Daytime and nighttime
                                            x_col=self.x_col,
                                            x_agg='max',
                                            y_cols=[self.nee_col, self.gpp_col, self.reco_col],
@@ -167,6 +175,7 @@ class CriticalHeatDays:
         _ratio_at_thres = _gpp_at_thres / _reco_at_thres
 
         daytime_values_at_threshold = {
+            'THRESHOLD': _thres,
             'GPP': _gpp_at_thres,
             'RECO': _reco_at_thres,
             'RATIO': _ratio_at_thres
@@ -184,6 +193,7 @@ class CriticalHeatDays:
         # Stored as bootstrap runs > 0 (bts>0)
         bts_results = self._bootstrap_fits(df_aggs=self.df_aggs,
                                            x_col=self.x_col,
+                                           # x_agg='min',
                                            x_agg='max',
                                            y_cols=[self.nee_col, self.gpp_col, self.reco_col],
                                            y_agg='sum',
@@ -198,8 +208,8 @@ class CriticalHeatDays:
         bts_zerocrossings_aggs = self._zerocrossings_aggs(bts_zerocrossings_df=bts_zerocrossings_df)
 
         # Threshold for Critical Heat Days (CHDs)
-        # defined as the linecrossing median x (e.g. VPD) from bootstrap runs
-        thres_chd = bts_zerocrossings_aggs['x_median']
+        # defined as the linecrossing max x (e.g. VPD) from bootstrap runs
+        thres_chd = bts_zerocrossings_aggs['x_max']
 
         # Collect days above or equal to CHD threshold
         df_aggs_chds = self.df_aggs.loc[self.df_aggs[self.x_col]['max'] >= thres_chd, :].copy()
@@ -241,108 +251,12 @@ class CriticalHeatDays:
             num_nchds=num_nchds
         )
 
-    # def detect_chd_threshold_from_partitioned(self):
-    #
-    #     # Fit to bootstrapped data
-    #     # Stored as bootstrap runs > 0 (bts>0)
-    #     bts_results = self._bootstrap_fits(df=self.df_daytime_aggs,
-    #                                        x_agg='max',
-    #                                        y_agg='max',
-    #                                        fit_to_bins=self.usebins)
-    #
-    #     # Get flux equilibrium points (RECO = GPP) from bootstrap runs
-    #     bts_linecrossings_df = self._bts_linecrossings_collect(bts_results=bts_results)
-    #
-    #     # Calc flux equilibrium points aggregates from bootstrap runs
-    #     bts_linecrossings_aggs = self._linecrossing_aggs(bts_linecrossings_df=bts_linecrossings_df)
-    #
-    #     # Threshold for Critical Heat Days (CHDs)
-    #     # defined as the linecrossing median x (e.g. VPD) from bootstrap runs
-    #     thres_chd = bts_linecrossings_aggs['x_median']
-    #
-    #     # Collect days above or equal to CHD threshold
-    #     df_daytime_aggs_chds = self.df_daytime_aggs.loc[self.df_daytime_aggs[self.x_col]['max'] >= thres_chd, :].copy()
-    #
-    #     # Number of days above CHD threshold
-    #     num_chds = len(df_daytime_aggs_chds)
-    #
-    #     # Collect Near-Critical Heat Days (nCHDs)
-    #     # With the number of CHDs known, collect data for the same number
-    #     # of days below of equal to CHD threshold.
-    #     # For example: if 10 CHDs were found, nCHDs are the 10 days closest
-    #     # to the CHD threshold (below or equal to the threshold).
-    #     sortby_col = (self.x_col[0], self.x_col[1], 'max')
-    #     nchds_start_ix = num_chds
-    #     nchds_end_ix = num_chds * 2
-    #     df_daytime_aggs_nchds = self.df_daytime_aggs \
-    #                                 .sort_values(by=sortby_col, ascending=False) \
-    #                                 .iloc[nchds_start_ix:nchds_end_ix]
-    #
-    #     # Threshold for nCHDs
-    #     # The lower threshold is the minimum of found x maxima
-    #     thres_nchds_lower = df_daytime_aggs_nchds[self.x_col]['max'].min()
-    #     thres_nchds_upper = thres_chd
-    #
-    #     # Number of days above nCHD threshold and below or equal CHD threshold
-    #     num_nchds = len(df_daytime_aggs_nchds)
-    #
-    #     # Collect results
-    #     self._results_threshold_detection = dict(
-    #         bts_results=bts_results,
-    #         bts_linecrossings_df=bts_linecrossings_df,
-    #         bts_linecrossings_aggs=bts_linecrossings_aggs,
-    #         thres_chd=thres_chd,
-    #         thres_nchds_lower=thres_nchds_lower,
-    #         thres_nchds_upper=thres_nchds_upper,
-    #         df_daytime_aggs_chds=df_daytime_aggs_chds,
-    #         df_daytime_aggs_nchds=df_daytime_aggs_nchds,
-    #         num_chds=num_chds,
-    #         num_nchds=num_nchds
-    #     )
-
     def find_nee_optimum_range(self):
         # Work w/ daytime data
         opr = FindOptimumRange(df=self.df_daytime, xcol=self.x_col, ycol=self.nee_col,
                                define_optimum='min')
         opr.find_optimum()
         self._results_optimum_range = opr.results_optrange()
-
-    # def analyze_flux(self, flux: str = 'nee'):
-    #     """Analyze flux vs CHD threshold"""
-    #
-    #     thres_chd = self.results_threshold_detection['thres_chd']
-    #
-    #     fluxcol = self._set_fluxcol(flux=flux)
-    #
-    #     # Flux subset
-    #     flux_df = self.df[[self.x_col, fluxcol]].copy()
-    #
-    #     # Daily maxima and sums
-    #     flux_aggs_df = flux_df.groupby(flux_df.index.date).agg(['max', 'sum'])
-    #
-    #     # Collect days above the CHD threshold
-    #     flux_aggs_chd_df = flux_aggs_df.loc[flux_aggs_df[self.x_col]['max'] >= thres_chd, :]
-    #     num_chds = len(flux_aggs_chd_df)
-    #
-    #     # Collect the same number of days closest to the threshold
-    #     flux_aggs_non_chd_df = flux_aggs_df.loc[flux_aggs_df[self.x_col]['max'] < thres_chd, :]
-    #     _sortby = (self.x_col[0], self.x_col[1], 'max')
-    #     flux_aggs_near_chd_df = flux_aggs_non_chd_df.sort_values(by=_sortby, ascending=False).head(num_chds)
-    #     num_near_chds = len(flux_aggs_near_chd_df)
-    #     thres_near_chd = flux_aggs_near_chd_df[_sortby].min()
-    #
-    #     # Fit to bootstrapped data
-    #     # Stored as bootstrap runs > 0 (bts>0)
-    #     flux_bts_results = self._bootstrap_fits(df_aggs=flux_aggs_df, x_agg='max', y_agg='sum', fit_to_bins=0)
-    #
-    #     # Collect results
-    #     self._results_flux_analysis['bts_results'] = flux_bts_results
-    #     self._results_flux_analysis['thres_chd'] = thres_chd  # x threshold for critical heat days
-    #     self._results_flux_analysis['thres_near_chd'] = thres_near_chd  # x threshold for near-critical heat days
-    #     self._results_flux_analysis['num_chds'] = num_chds  # Number of critical heat days
-    #     self._results_flux_analysis['num_near_chds'] = num_near_chds  # Number of near-critical heat days
-    #     self._results_flux_analysis['flux_aggs_near_chd_df'] = flux_aggs_near_chd_df  # Near-CHD data
-    #     self._results_flux_analysis['flux_aggs_chd_df'] = flux_aggs_chd_df  # CHD data
 
     def plot_chd_detection_from_nee(self, ax, highlight_year: int = None):
         plot_chd_detection_from_nee(ax=ax, results_chd=self.results_threshold_detection,
@@ -540,87 +454,6 @@ class CriticalHeatDays:
 
         return bts_results
 
-    # def _fits(self, df, x_agg: str, y_agg: str, fit_to_bins: int):
-    #     """Make fit to GPP, RECO and NEE vs x"""
-    #
-    #     nee_fit_results = None
-    #     linecrossing_vals = None
-    #
-    #     print(f"    Fitting {self.nee_col}")
-    #     nee_fit_results = \
-    #         self._calc_fit(df=df, x_col=self.x_col, x_agg=x_agg,
-    #                        y_col=self.nee_col, y_agg=y_agg, fit_to_bins=fit_to_bins)
-    #     # fitplot(x=nee_fit_results['x'], y=nee_fit_results['y'], fit_df=nee_fit_results['fit_df'])
-    #
-    #     # Line crossings
-    #     linecrossing_vals = \
-    #         self._detect_zerocrossing_nee(fit_results_nee=gpp_fit_results,
-    #                                       reco_fit_results=reco_fit_results)
-    #     if isinstance(linecrossing_vals, pd.Series):
-    #         pass
-    #     else:
-    #         raise ValueError
-    #
-    #     # Store bootstrap results in dict
-    #     bts_results = {'nee': nee_fit_results,
-    #                    'linecrossing_vals': linecrossing_vals}
-    #
-    #     return bts_results
-
-    # def _fits_gppreco(self, df, x_agg: str, y_agg: str, fit_to_bins: int):
-    #     """Make fit to GPP, RECO and NEE vs x"""
-    #
-    #     # Check what is available
-    #     gpp = True if self.gpp_col in df else False
-    #     reco = True if self.reco_col in df else False
-    #     nee = True if self.nee_col in df else False
-    #     gpp_fit_results = None
-    #     reco_fit_results = None
-    #     nee_fit_results = None
-    #     linecrossing_vals = None
-    #
-    #     # GPP sums (class mean) vs classes of x (max)
-    #     if gpp:
-    #         print(f"    Fitting {self.gpp_col}")
-    #         gpp_fit_results = \
-    #             self._calc_fit(df=df, x_col=self.x_col, x_agg=x_agg,
-    #                            y_col=self.gpp_col, y_agg=y_agg, fit_to_bins=fit_to_bins)
-    #         # fitplot(x=gpp_fit_results['x'], y=gpp_fit_results['y'], fit_df=gpp_fit_results['fit_df'])
-    #
-    #     # RECO sums (class mean) vs classes of x (max)
-    #     if reco:
-    #         print(f"    Fitting {self.reco_col}")
-    #         reco_fit_results = \
-    #             self._calc_fit(df=df, x_col=self.x_col, x_agg=x_agg,
-    #                            y_col=self.reco_col, y_agg=y_agg, fit_to_bins=fit_to_bins)
-    #         # fitplot(x=reco_fit_results['x'], y=reco_fit_results['y'], fit_df=reco_fit_results['fit_df'])
-    #
-    #     # NEE sums (class mean) vs classes of x (max)
-    #     if nee:
-    #         print(f"    Fitting {self.nee_col}")
-    #         nee_fit_results = \
-    #             self._calc_fit(df=df, x_col=self.x_col, x_agg=x_agg,
-    #                            y_col=self.nee_col, y_agg=y_agg, fit_to_bins=fit_to_bins)
-    #         # fitplot(x=nee_fit_results['x'], y=nee_fit_results['y'], fit_df=nee_fit_results['fit_df'])
-    #
-    #     # Line crossings
-    #     if gpp and reco:
-    #         linecrossing_vals = \
-    #             self._detect_linecrossing(gpp_fit_results=gpp_fit_results,
-    #                                       reco_fit_results=reco_fit_results)
-    #         if isinstance(linecrossing_vals, pd.Series):
-    #             pass
-    #         else:
-    #             raise ValueError
-    #
-    #     # Store bootstrap results in dict
-    #     bts_results = {'gpp': gpp_fit_results,
-    #                    'reco': reco_fit_results,
-    #                    'nee': nee_fit_results,
-    #                    'linecrossing_vals': linecrossing_vals}
-    #
-    #     return bts_results
-
     def _detect_zerocrossing_nee(self, fit_results_nee: dict):
         # kudos: https://stackoverflow.com/questions/28766692/intersection-of-two-graphs-in-python-find-the-x-value
 
@@ -704,25 +537,6 @@ class CriticalHeatDays:
     #         # If there is more than one line crossing, reject result
     #         return None
 
-    # def _calc_fit(self, df, x_col, x_agg, y_col, y_agg, fit_to_bins):
-    #     """Call BinFitterCP and fit to x and y"""
-    #
-    #     # Names of x and y cols in aggregated df
-    #     x_col = (x_col[0], x_col[1], x_agg)
-    #     y_col = (y_col[0], y_col[1], y_agg)
-    #
-    #     fitter = BinFitterCP(df=df,
-    #                          x_col=x_col,
-    #                          y_col=y_col,
-    #                          num_predictions=1000,
-    #                          predict_min_x=self.predict_min_x,
-    #                          predict_max_x=self.predict_max_x,
-    #                          bins_x_num=fit_to_bins,
-    #                          bins_y_agg='median',
-    #                          fit_type='quadratic')
-    #     fitter.run()
-    #     return fitter.get_results()
-
     def _aggregate_by_group(self, df, groupby_col, date_col, min_vals, aggs: list) -> pd.DataFrame:
         """Aggregate dataset by *day/night groups*"""
 
@@ -768,13 +582,27 @@ def plot_daytime_analysis(ax,
                           reco_col: str):
     """Plot daytime fluxes"""
 
-    # fig = plt.figure(figsize=(9, 9))
+    # # For testing: direct plotting
+    # COLOR_GPP = '#39a7b3' #blue(500)
+    # COLOR_RECO = '#d95318' #red(500)
+    # COLOR_THRESHOLD = '#FFB72B' #cyan(4000)
+    # INFOTXT_FONTSIZE = 11
+    # import matplotlib.pyplot as plt
+    # import matplotlib.gridspec as gridspec
+    # fig = plt.figure(figsize=(10, 10))
     # gs = gridspec.GridSpec(1, 1)  # rows, cols
-    # # gs.update(wspace=.2, hspace=0, left=.1, right=.9, top=.9, bottom=.1)
+    # gs.update(wspace=0, hspace=0, left=.2, right=.8, top=.8, bottom=.2)
     # ax = fig.add_subplot(gs[0, 0])
 
+
+    reload(diive.core.plotting.styles.LightTheme)
+    # import diive.core.plotting.styles.LightTheme
+    from diive.core.plotting.styles.LightTheme import COLOR_GPP, COLOR_RECO, COLOR_THRESHOLD, \
+        FONTSIZE_LEGEND, COLOR_THRESHOLD2
+
+    units = "$gC\ m^{-2}\ d^{-1}$"
+
     # Get data
-    bts_results = results_chd['bts_results'][0]  # 0 means non-bootstrapped data
     bts_zerocrossings_aggs = results_chd['bts_zerocrossings_aggs']
     bts_results_daytime = results_daytime_analysis['bts_results'][0]  # 0 means non-bootstrapped data
 
@@ -785,90 +613,125 @@ def plot_daytime_analysis(ax,
     line_ratio95 = ax.fill_between(results_daytime_analysis['bts_ratios_df']['fit_x'],
                                    results_daytime_analysis['bts_ratios_df']['ROW_Q025'],
                                    results_daytime_analysis['bts_ratios_df']['ROW_Q975'],
-                                   alpha=.2, color='black', zorder=99,
+                                   alpha=.2, color='black', zorder=89,
                                    label="95% confidence region")
 
-    # Vertical line showing median CHD threshold from bootstrap runs
-    line_chd_vertical = ax.axvline(bts_zerocrossings_aggs['x_median'], lw=2, color='#2196F3', ls='--',
-                                   label=f"critical heat days threshold, VPD = {bts_zerocrossings_aggs['x_median']:.1f} hPa")
+    # Threshold lines
+    # Vertical line showing max CHD threshold from bootstrap runs
+    _sub = "$_{CHD}$"
+    line_chd_vertical = ax.axvline(bts_zerocrossings_aggs['x_max'], lw=3, color=COLOR_THRESHOLD, ls='-', zorder=0,
+                                   label=f"THR{_sub}, VPD = {bts_zerocrossings_aggs['x_max']:.1f} hPa")
+    # Vertical line showing xCHD threshold
+    _sub = "$_{XTR}$"
+    # todo currently hardcoded!
+    line_xchd_vertical = ax.axvline(24.112612612612615, lw=3, color=COLOR_THRESHOLD2, ls='-', zorder=0,
+                                   label=f"THR{_sub}, VPD = 24.1 hPa")
+
 
     # Rectangle (bootstrapped results)
     num_bootstrap_runs = len(results_chd['bts_results'].keys()) - 1  # -1 b/c zero run is non-bootstrapped
+    _sub = "$_{CHD}$"
     range_bts_netzeroflux = rectangle(ax=ax,
                                       rect_lower_left_x=bts_zerocrossings_aggs['x_min'],
                                       rect_lower_left_y=0,
                                       rect_width=bts_zerocrossings_aggs['x_max'] - bts_zerocrossings_aggs['x_min'],
                                       rect_height=1,
-                                      label=f"threshold range ({num_bootstrap_runs} bootstraps)",
-                                      color='#2196F3')
+                                      label=f"THR{_sub} range ({num_bootstrap_runs} bootstraps)",
+                                      color=COLOR_THRESHOLD, alpha=.2)
 
+    # Secondary axis for fluxes
     ax_twin = ax.twinx()
 
     # GPP
-    _numvals_per_bin = bts_results_daytime[gpp_col]['numvals_per_bin']
+    # _numvals_per_bin = bts_results_daytime[gpp_col]['numvals_per_bin']
     flux_bts_results = bts_results_daytime[gpp_col]
     line_xy_gpp, line_fit_gpp, line_fit_ci_gpp, line_fit_pb_gpp = \
-        fitplot(ax=ax_twin,
-                label=gpp_col,
+        fitplot(ax=ax_twin, label=gpp_col,
                 # highlight_year=highlight_year,
                 flux_bts_results=flux_bts_results, alpha=.2,
-                edgecolor='#4CAF50', color='none', color_fitline='#4CAF50')  # green 500
+                edgecolor=COLOR_GPP, color='none', color_fitline=COLOR_GPP)
 
     # RECO
-    _numvals_per_bin = bts_results_daytime[reco_col]['numvals_per_bin']
+    # _numvals_per_bin = bts_results_daytime[reco_col]['numvals_per_bin']
     flux_bts_results = bts_results_daytime[reco_col]
     line_xy_reco, line_fit_reco, line_fit_ci_reco, line_fit_pb_reco = \
-        fitplot(ax=ax_twin,
-                label=reco_col,
+        fitplot(ax=ax_twin, label=reco_col,
                 # highlight_year=highlight_year,
                 flux_bts_results=flux_bts_results, alpha=.2, marker='s',
-                edgecolor='#9C27B0', color='none', color_fitline='#9C27B0')  # purple 500
+                edgecolor=COLOR_RECO, color='none', color_fitline=COLOR_RECO)
 
     # Values at threshold
-    scatter_gpp_at_thres = ax_twin.scatter(results_chd['thres_chd'],
-                                           results_daytime_analysis['daytime_values_at_threshold']['GPP'],
-                                           edgecolor='#2196F3', color='none', alpha=1, s=250, lw=2,
-                                           label='xxx', zorder=99, marker='s')
 
-    scatter_reco_at_thres = ax_twin.scatter(results_chd['thres_chd'],
-                                            results_daytime_analysis['daytime_values_at_threshold']['RECO'],
-                                            edgecolor='#2196F3', color='none', alpha=1, s=250, lw=2,
-                                            label='xxx', zorder=99, marker='s')
-    scatter_ratio_at_thres = ax.scatter(results_chd['thres_chd'],
-                                        results_daytime_analysis['daytime_values_at_threshold']['RATIO'],
-                                        edgecolor='#2196F3', color='none', alpha=1, s=250, lw=2,
-                                        label='xxx', zorder=99, marker='s')
+    # # Rectangles
+    # kwargs = dict(zorder=97, marker='s', color='none', alpha=1, s=350, lw=3, )
+    # scatter_gpp_at_thres = ax_twin.scatter(results_chd['thres_chd'],
+    #                                        results_daytime_analysis['daytime_values_at_threshold']['GPP'],
+    #                                        edgecolor=COLOR_GPP, label='xxx', **kwargs)
+    # scatter_reco_at_thres = ax_twin.scatter(results_chd['thres_chd'],
+    #                                         results_daytime_analysis['daytime_values_at_threshold']['RECO'],
+    #                                         edgecolor=COLOR_RECO, label='xxx', **kwargs)
+    # scatter_ratio_at_thres = ax.scatter(results_chd['thres_chd'],
+    #                                     results_daytime_analysis['daytime_values_at_threshold']['RATIO'],
+    #                                     edgecolor='black', label='xxx', **kwargs)
 
-    _ratio_at_thres = results_daytime_analysis['daytime_values_at_threshold']['RATIO'].values
-    ax.text(results_chd['thres_chd'], _ratio_at_thres,
-            f"    Ratio at threshold: {_ratio_at_thres}",
-            size=theme.FONTSIZE_ANNOTATIONS_SMALL,
-            color='#2196F3', backgroundcolor='none',
-            alpha=1, horizontalalignment='left', verticalalignment='center',
-            bbox=dict(boxstyle='square,pad=0', fc='none', ec='none'))
+    # # Texts: Values at threshold
+    # kwargs = dict(alpha=1, horizontalalignment='left', verticalalignment='center',
+    #               size=INFOTXT_FONTSIZE)
+    # # bbox=dict(boxstyle='square, pad=0', fc='none', ec='none')
+    # ax.text(bts_zerocrossings_aggs['x_max'], 0.96, "   Values at threshold:", color='black',
+    #         backgroundcolor='white',
+    #         transform=ax.get_xaxis_transform(), weight='bold', **kwargs)
+    # # t.set_bbox(dict(facecolor='white', alpha=0.5, edgecolor='black'))
+    # # GPP at threshold
+    # _gpp_at_thres = results_daytime_analysis['daytime_values_at_threshold']['GPP'].values[0]
+    # # ax_twin.text(results_chd['thres_chd'], _gpp_at_thres,
+    # #              f"{_gpp_at_thres:.0f}", color=COLOR_GPP, backgroundcolor='none', **kwargs)
+    # _gpp_at_thres = f"       GPP: {_gpp_at_thres:.2f} {units}"
+    # ax.text(bts_zerocrossings_aggs['x_max'], 0.92, _gpp_at_thres, color=COLOR_GPP,
+    #         transform=ax.get_xaxis_transform(), weight='normal', **kwargs)
+    # # RECO at threshold
+    # _reco_at_thres = results_daytime_analysis['daytime_values_at_threshold']['RECO'].values[0]
+    # # ax_twin.text(results_chd['thres_chd'], _reco_at_thres,
+    # #              f"{_reco_at_thres:.0f}", color=COLOR_RECO, backgroundcolor='none', **kwargs)
+    # _reco_at_thres = f"       RECO: {_reco_at_thres:.2f} {units}"
+    # ax.text(bts_zerocrossings_aggs['x_max'], 0.89, _reco_at_thres, color=COLOR_RECO, backgroundcolor='none',
+    #         transform=ax.get_xaxis_transform(), weight='normal', **kwargs)
+    # # Ratio at threshold
+    # _ratio_at_thres = results_daytime_analysis['daytime_values_at_threshold']['RATIO'].values[0]
+    # # ax.text(results_chd['thres_chd'], _ratio_at_thres,
+    # #         f"{_ratio_at_thres:.1f}", color='black', backgroundcolor='none', **kwargs)
+    # _ratio_at_thres = f"       ratio: {_ratio_at_thres:.2f}"
+    # ax.text(bts_zerocrossings_aggs['x_max'], 0.86, _ratio_at_thres, color='black', backgroundcolor='none',
+    #         transform=ax.get_xaxis_transform(), weight='normal', **kwargs)
 
     l = ax.legend(
         [
+            # line_chd_vertical,
+            # range_bts_netzeroflux,
+            # line_xchd_vertical,
             line_ratio,
             line_xy_gpp,
             line_xy_reco,
-            (line_fit_gpp, line_fit_reco),
+            line_fit_gpp,
+            line_fit_reco,
             (line_fit_ci_gpp, line_fit_ci_reco),
-            (line_fit_pb_gpp, line_fit_pb_reco),
-            line_chd_vertical,
-            range_bts_netzeroflux
+            (line_fit_pb_gpp, line_fit_pb_reco)
         ],
         [
+            # line_chd_vertical.get_label(),
+            # range_bts_netzeroflux.get_label(),
+            # line_xchd_vertical.get_label(),
             line_ratio.get_label(),
             line_xy_gpp.get_label(),
             line_xy_reco.get_label(),
-            line_fit_gpp.get_label(),
+            f"GPP: {line_fit_gpp.get_label()}",
+            f"RECO: {line_fit_reco.get_label()}",
             line_fit_ci_gpp.get_label(),
-            line_fit_pb_gpp.get_label(),
-            line_chd_vertical.get_label(),
-            range_bts_netzeroflux.get_label()
+            line_fit_pb_gpp.get_label()
         ],
         bbox_to_anchor=(0, 1),
+        frameon=False,
+        fontsize=FONTSIZE_LEGEND,
         loc="lower left",
         ncol=2,
         scatterpoints=1,
@@ -877,17 +740,48 @@ def plot_daytime_analysis(ax,
 
     # Format
     # ax.axhline(0, lw=1, color='black')
-    xlabel = "daily maximum VPD ($hPa$)"
+    xlabel = "Daily maximum VPD ($hPa$)"
     ylabel = r"GPP : RECO ($ratio$)"
     # ylabel = r"daily cumulative carbon flux ($\mu mol \/\ CO_2 \/\ m^{-2} \/\ s^{-1}$)"
     plotfuncs.default_format(ax=ax, txt_xlabel=xlabel, txt_ylabel=ylabel,
                              ticks_width=1)
+
+    # Format for secondary y-axis (fluxes)
+    from diive.core.plotting.plotfuncs import format_ticks
+    format_ticks(ax=ax_twin, width=theme.TICKS_WIDTH, length=theme.TICKS_LENGTH,
+                 direction=theme.TICKS_DIRECTION, color='black',
+                 labelsize=theme.TICKS_LABELSIZE)
+    ax_twin.set_ylabel(f'flux ({units})', color=theme.AXLABELS_FONTCOLOR,
+                       fontsize=theme.AXLABELS_FONTSIZE, fontweight=theme.AXLABELS_FONTWEIGHT)
+
+    # yticks = ax.yaxis.get_major_ticks()
+    # yticks[-1].set_visible(False)
+    # yticks = ax_twin.yaxis.get_major_ticks()
+    # yticks[-1].set_visible(False)
+
+    ax.text(0.06, 0.95, "(b)",
+            size=theme.AXLABELS_FONTSIZE, color='black', backgroundcolor='none', transform=ax.transAxes,
+            alpha=1, horizontalalignment='left', verticalalignment='top')
 
     # fig.show()
 
 
 def plot_chd_detection_from_nee(ax, results_chd: dict, y_col: str, highlight_year: int = None):
     """Plot results from critical heat days threshold detection"""
+
+    reload(diive.core.plotting.styles.LightTheme)
+    # import diive.core.plotting.styles.LightTheme
+    from diive.core.plotting.styles.LightTheme import COLOR_GPP, COLOR_RECO, COLOR_THRESHOLD, \
+        FONTSIZE_LEGEND, COLOR_THRESHOLD2, COLOR_NEE, INFOTXT_FONTSIZE
+    units = "$gC\ m^{-2}\ d^{-1}$"
+
+    # # For testing: direct plotting
+    # import matplotlib.pyplot as plt
+    # import matplotlib.gridspec as gridspec
+    # fig = plt.figure(figsize=(10, 10))
+    # gs = gridspec.GridSpec(1, 1)  # rows, cols
+    # gs.update(wspace=0, hspace=0, left=.2, right=.8, top=.8, bottom=.2)
+    # ax = fig.add_subplot(gs[0, 0])
 
     bts_results = results_chd['bts_results'][0]  # 0 means non-bootstrapped data
     bts_zerocrossings_aggs = results_chd['bts_zerocrossings_aggs']
@@ -901,7 +795,7 @@ def plot_chd_detection_from_nee(ax, results_chd: dict, y_col: str, highlight_yea
                 # label=f"NEE ({_numvals_per_bin['min']:.0f} - {_numvals_per_bin['max']:.0f} values per bin)",
                 highlight_year=highlight_year,
                 flux_bts_results=flux_bts_results,
-                edgecolor='#B0BEC5', color='none', color_fitline='#E53935')  # color red 600
+                edgecolor='#B0BEC5', color='none', color_fitline=COLOR_NEE)
 
     # # Actual non-bootstrapped line crossing, the point where RECO = GPP
     # line_netzeroflux = ax.scatter(bts_results['zerocrossing_vals']['x_col'],
@@ -909,57 +803,61 @@ def plot_chd_detection_from_nee(ax, results_chd: dict, y_col: str, highlight_yea
     #                               edgecolor='black', color='none', alpha=1, s=90, lw=2,
     #                               label='net zero flux', zorder=99, marker='s')
 
-    # Bootstrapped line crossing, the point where RECO = GPP
-    line_bts_median_netzeroflux = ax.scatter(bts_zerocrossings_aggs['x_median'],
-                                             0,
-                                             edgecolor='#2196F3', color='none', alpha=1, s=250, lw=2,
-                                             label='net zero flux (bootstrapped median)', zorder=99, marker='s')
+    # # Rectangle
+    # # Bootstrapped line crossing, the point where RECO = GPP
+    # line_bts_median_netzeroflux = ax.scatter(bts_zerocrossings_aggs['x_max'],
+    #                                          0,
+    #                                          edgecolor=COLOR_NEE, color='none', alpha=1, s=350, lw=3,
+    #                                          label='net zero flux (bootstrapped median)', zorder=97, marker='s')
 
-    # Vertical line showing median CHD threshold from bootstrap runs
-    line_chd_vertical = ax.axvline(bts_zerocrossings_aggs['x_median'], lw=2, color='#2196F3', ls='--',
-                                   label=f"critical heat days threshold, VPD = {bts_zerocrossings_aggs['x_median']:.1f} hPa")
+    # Threshold lines
+    # Vertical line showing max CHD threshold from bootstrap runs
+    _sub = "$_{CHD}$"
+    line_chd_vertical = ax.axvline(bts_zerocrossings_aggs['x_max'], lw=3, color=COLOR_THRESHOLD, ls='-', zorder=99,
+                                   label=f"THR{_sub}, VPD = {bts_zerocrossings_aggs['x_max']:.1f} hPa")
+    # Vertical line showing xCHD threshold
+    _sub = "$_{XTR}$"
+    # todo currently hardcoded!
+    line_xchd_vertical = ax.axvline(24.112612612612615, lw=3, color=COLOR_THRESHOLD2, ls='-', zorder=99,
+                                   label=f"THR{_sub}, VPD = 24.1 hPa")
 
     # Rectangle bootstrap range
     num_bootstrap_runs = len(results_chd['bts_results'].keys()) - 1  # -1 b/c zero run is non-bootstrapped
+    _sub = "$_{CHD}$"
     range_bts_netzeroflux = rectangle(ax=ax,
                                       rect_lower_left_x=bts_zerocrossings_aggs['x_min'],
                                       rect_lower_left_y=0,
                                       rect_width=bts_zerocrossings_aggs['x_max'] - bts_zerocrossings_aggs['x_min'],
                                       rect_height=1,
-                                      label=f"threshold range ({num_bootstrap_runs} bootstraps)",
-                                      color='#2196F3')
+                                      label=f"THR{_sub} range ({num_bootstrap_runs} bootstraps)",
+                                      color=COLOR_THRESHOLD)
 
     # CHDs
     num_chds = len(results_chd['df_aggs_chds'])
-    # area_chd = ax.fill_between([bts_zerocrossings_aggs['x_median'],
+    # area_chd = ax.fill_between([bts_zerocrossings_aggs['x_max'],
     #                             flux_bts_results['fit_df']['fit_x'].max()],
     #                            0, 1,
     #                            color='#BA68C8', alpha=0.1, transform=ax.get_xaxis_transform(),
     #                            label=f"CHDs ({num_chds} days)", zorder=1)
     sym_max = r'$\rightarrow$'
-    _pos = bts_zerocrossings_aggs['x_median'] + bts_zerocrossings_aggs['x_max'] * 0.05
-    ax.text(_pos, 0.05, f"{num_chds} critical heat days {sym_max}", size=theme.AXLABELS_FONTSIZE,
+    _pos = bts_zerocrossings_aggs['x_max'] + bts_zerocrossings_aggs['x_max'] * 0.03
+    t = ax.text(_pos, 0.07, f"{sym_max} {num_chds} critical heat days", size=INFOTXT_FONTSIZE,
             color='black', backgroundcolor='none', transform=ax.get_xaxis_transform(),
-            alpha=1, horizontalalignment='left', verticalalignment='top')
+            alpha=1, horizontalalignment='left', verticalalignment='top', zorder=99)
+    t.set_bbox(dict(facecolor='white', alpha=.7, edgecolor='black'))
 
-    # # Near-CHDs
-    # line_near_thres_chd = ax.axvline(results_flux['thres_near_chd'],
-    #                                  color='black', lw=1, ls='--', zorder=99, label="near-CHD threshold")
-    # area_near_chd = ax.fill_between([results_flux['thres_near_chd'],
-    #                                  results_flux['thres_chd']],
-    #                                 0, 1,
-    #                                 color='#FFA726', alpha=0.1, transform=ax.get_xaxis_transform(),
-    #                                 label=f"near-CHDs ({num_chds} days)", zorder=1)
-    # _pos = bts_zerocrossings_aggs['x_median'] - bts_zerocrossings_aggs['x_max'] * 0.05
-    # ax.text(_pos, 0.05, "near-critical heat days",size=theme.FONTSIZE_LABELS_AXIS,
-    #         color='black', backgroundcolor='none', transform=ax.get_xaxis_transform(),
-    #         alpha=1, horizontalalignment='right', verticalalignment='top')
+    # # Optimum range (OPDS)
+    # area_chd = ax.fill_between([bts_zerocrossings_aggs['x_max'],
+    #                             flux_bts_results['fit_df']['fit_x'].max()],
+    #                            0, 1,
+    #                            color='#BA68C8', alpha=0.1, transform=ax.get_xaxis_transform(),
+    #                            label=f"CHDs ({num_chds} days)", zorder=1)
 
     # Format
     ax.axhline(0, lw=1, color='black')
-    xlabel = "daily maximum VPD ($hPa$)"
+    xlabel = "Daily maximum VPD ($hPa$)"
 
-    ylabel = r"daily cumulative NEE ($\mu mol \/\ CO_2 \/\ m^{-2} \/\ s^{-1}$)"
+    ylabel = f"NEE ({units})"
     plotfuncs.default_format(ax=ax, txt_xlabel=xlabel, txt_ylabel=ylabel)
     # xlim_lower = flux_bts_results['fit_df']['fit_x'].min()
     # ax.set_xlim([-1, flux_bts_results['fit_df']['fit_x'].max()])
@@ -973,130 +871,45 @@ def plot_chd_detection_from_nee(ax, results_chd: dict, y_col: str, highlight_yea
     # https://matplotlib.org/stable/gallery/text_labels_and_annotations/legend_demo.html
     l = ax.legend(
         [
+            line_chd_vertical,
+            range_bts_netzeroflux,
+            line_xchd_vertical,
             line_xy_nee,
             line_highlight,
             line_fit_nee,
             # (line_fit_gpp, line_fit_reco),  # to display two patches next to each other in same line
             line_fit_ci_nee,
-            line_fit_pb_nee,
-            line_bts_median_netzeroflux,
-            line_chd_vertical,
-            range_bts_netzeroflux
+            line_fit_pb_nee
         ],
         [
+            line_chd_vertical.get_label(),
+            range_bts_netzeroflux.get_label(),
+            line_xchd_vertical.get_label(),
             line_xy_nee.get_label(),
             line_highlight.get_label(),
             line_fit_nee.get_label(),
             line_fit_ci_nee.get_label(),
-            line_fit_pb_nee.get_label(),
-            line_bts_median_netzeroflux.get_label(),
-            line_chd_vertical.get_label(),
-            range_bts_netzeroflux.get_label()
+            line_fit_pb_nee.get_label()
         ],
         bbox_to_anchor=(0, 1),
+        frameon=False,
+        fontsize=FONTSIZE_LEGEND,
         loc="lower left",
         ncol=2,
         scatterpoints=1,
         numpoints=1,
         handler_map={tuple: HandlerTuple(ndivide=None)})
 
-    # # Errorbar for bootstrapped min/max threshold findings
-    # xerr_upper = bts_zerocrossings_aggs['x_max'] - bts_results['zerocrossing_vals']['x_col']
-    # xerr_lower = bts_results['zerocrossing_vals']['x_col'] - bts_zerocrossings_aggs['x_min']
-    # line_xerr=plt.errorbar(bts_results['zerocrossing_vals']['x_col'],
-    #              bts_results['zerocrossing_vals']['nee_nom'],
-    #              xerr=([xerr_lower], [xerr_upper]),
-    #              capsize=0, ls='none', color='black',
-    #              alpha=.2, elinewidth=10, label="net zero flux range (bootstrapped)")
+    ax.text(0.06, 0.95, "(a)",
+            size=theme.AXLABELS_FONTSIZE, color='black', backgroundcolor='none', transform=ax.transAxes,
+            alpha=1, horizontalalignment='left', verticalalignment='top')
 
-
-# def plot_gpp_reco_vs_vpd(ax, results_chd: dict):
-#     """Create figure showing GPP and RECO vs VPD"""
-#
-#     bts_results = results_chd['bts_results'][0]  # 0 means non-bootstrapped data
-#     bts_linecrossings_aggs = results_chd['bts_linecrossings_aggs']
-#
-#     # GPP
-#     _numvals_per_bin = bts_results['gpp']['numvals_per_bin']
-#     flux_bts_results = bts_results['gpp']
-#     line_xy_gpp, line_fit_gpp, line_fit_ci_gpp, line_fit_pb_gpp = \
-#         fitplot(ax=ax,
-#                 # label=f"GPP ({_numvals_per_bin['min']:.0f} - {_numvals_per_bin['max']:.0f} values per bin)",
-#                 flux_bts_results=flux_bts_results,
-#                 color='#2196F3',
-#                 color_fitline='#2196F3')  # color blue 500
-#
-#     # RECO
-#     _numvals_per_bin = bts_results['reco']['numvals_per_bin']
-#     flux_bts_results = bts_results['reco']
-#     line_xy_reco, line_fit_reco, line_fit_ci_reco, line_fit_pb_reco = \
-#         fitplot(ax=ax,
-#                 # label=f"RECO ({_numvals_per_bin['min']:.0f} - {_numvals_per_bin['max']:.0f} values per bin)",
-#                 flux_bts_results=flux_bts_results,
-#                 color='#E53935',
-#                 color_fitline='#E53935')  # color red 600
-#
-#     # Actual non-bootstrapped line crossing, the point where RECO = GPP
-#     line_equilibrium = ax.scatter(bts_results['linecrossing_vals']['x_col'],
-#                                   bts_results['linecrossing_vals']['gpp_nom'],
-#                                   edgecolor='none', color='black', alpha=1, s=90,
-#                                   label='flux equilibrium, RECO = GPP', zorder=99, marker='s')
-#
-#     # Bootstrapped line crossing, the point where RECO = GPP
-#     line_bts_equilibrium = ax.scatter(bts_linecrossings_aggs['x_median'],
-#                                       bts_linecrossings_aggs['y_gpp_median'],
-#                                       edgecolor='black', color='none', alpha=1, s=90,
-#                                       label='flux equilibrium (bootstrapped median)', zorder=99, marker='s')
-#
-#     # Add rectangle (bootstrapped results)
-#     range_bts_equilibrium = rectangle(ax=ax,
-#                                       rect_lower_left_x=bts_linecrossings_aggs['x_min'],
-#                                       rect_lower_left_y=bts_linecrossings_aggs['y_gpp_min'],
-#                                       rect_width=bts_linecrossings_aggs['x_max'] - bts_linecrossings_aggs['x_min'],
-#                                       rect_height=bts_linecrossings_aggs['y_gpp_max'] - bts_linecrossings_aggs[
-#                                           'y_gpp_min'],
-#                                       label="equlibrium range (bootstrapped)")
-#
-#     # Format
-#     xlabel = "classes of daily VPD maxima ($hPa$)"
-#     ylabel = r"daytime median flux ($\mu mol \/\ CO_2 \/\ m^{-2} \/\ s^{-1}$)"
-#     # ylabel = "daytime median flux" + " (gC $\mathregular{m^{-2} \ d^{-1}}$  --> UNITS ???)"
-#     plotfuncs.default_format(ax=ax, txt_xlabel=xlabel, txt_ylabel=ylabel,
-#                              fontsize=12, width=1)
-#
-#     # Custom legend
-#     # Assign two of the handles to the same legend entry by putting them in a tuple
-#     # and using a generic handler map (which would be used for any additional
-#     # tuples of handles like (p1, p3)).
-#     # https://matplotlib.org/stable/gallery/text_labels_and_annotations/legend_demo.html
-#     l = ax.legend(
-#         [
-#             line_xy_gpp,
-#             line_xy_reco,
-#             (line_fit_gpp, line_fit_reco),
-#             (line_fit_ci_gpp, line_fit_ci_reco),
-#             (line_fit_pb_gpp, line_fit_pb_reco),
-#             line_equilibrium,
-#             line_bts_equilibrium,
-#             range_bts_equilibrium
-#         ],
-#         [
-#             line_xy_gpp.get_label(),
-#             line_xy_reco.get_label(),
-#             line_fit_gpp.get_label(),
-#             line_fit_ci_gpp.get_label(),
-#             line_fit_pb_gpp.get_label(),
-#             line_equilibrium.get_label(),
-#             line_bts_equilibrium.get_label(),
-#             range_bts_equilibrium.get_label()
-#         ],
-#         scatterpoints=1,
-#         numpoints=1,
-#         handler_map={tuple: HandlerTuple(ndivide=None)})
+    # fig.show()
 
 
 if __name__ == '__main__':
     pass
+
     # from tests.testdata.loadtestdata import loadtestdata
     #
     # # Load data
@@ -1166,3 +979,62 @@ if __name__ == '__main__':
     # fig.show()
     #
     # print("END")
+
+# def detect_chd_threshold_from_partitioned(self):
+#
+#     # Fit to bootstrapped data
+#     # Stored as bootstrap runs > 0 (bts>0)
+#     bts_results = self._bootstrap_fits(df=self.df_daytime_aggs,
+#                                        x_agg='max',
+#                                        y_agg='max',
+#                                        fit_to_bins=self.usebins)
+#
+#     # Get flux equilibrium points (RECO = GPP) from bootstrap runs
+#     bts_linecrossings_df = self._bts_linecrossings_collect(bts_results=bts_results)
+#
+#     # Calc flux equilibrium points aggregates from bootstrap runs
+#     bts_linecrossings_aggs = self._linecrossing_aggs(bts_linecrossings_df=bts_linecrossings_df)
+#
+#     # Threshold for Critical Heat Days (CHDs)
+#     # defined as the linecrossing median x (e.g. VPD) from bootstrap runs
+#     thres_chd = bts_linecrossings_aggs['x_max']
+#
+#     # Collect days above or equal to CHD threshold
+#     df_daytime_aggs_chds = self.df_daytime_aggs.loc[self.df_daytime_aggs[self.x_col]['max'] >= thres_chd, :].copy()
+#
+#     # Number of days above CHD threshold
+#     num_chds = len(df_daytime_aggs_chds)
+#
+#     # Collect Near-Critical Heat Days (nCHDs)
+#     # With the number of CHDs known, collect data for the same number
+#     # of days below of equal to CHD threshold.
+#     # For example: if 10 CHDs were found, nCHDs are the 10 days closest
+#     # to the CHD threshold (below or equal to the threshold).
+#     sortby_col = (self.x_col[0], self.x_col[1], 'max')
+#     nchds_start_ix = num_chds
+#     nchds_end_ix = num_chds * 2
+#     df_daytime_aggs_nchds = self.df_daytime_aggs \
+#                                 .sort_values(by=sortby_col, ascending=False) \
+#                                 .iloc[nchds_start_ix:nchds_end_ix]
+#
+#     # Threshold for nCHDs
+#     # The lower threshold is the minimum of found x maxima
+#     thres_nchds_lower = df_daytime_aggs_nchds[self.x_col]['max'].min()
+#     thres_nchds_upper = thres_chd
+#
+#     # Number of days above nCHD threshold and below or equal CHD threshold
+#     num_nchds = len(df_daytime_aggs_nchds)
+#
+#     # Collect results
+#     self._results_threshold_detection = dict(
+#         bts_results=bts_results,
+#         bts_linecrossings_df=bts_linecrossings_df,
+#         bts_linecrossings_aggs=bts_linecrossings_aggs,
+#         thres_chd=thres_chd,
+#         thres_nchds_lower=thres_nchds_lower,
+#         thres_nchds_upper=thres_nchds_upper,
+#         df_daytime_aggs_chds=df_daytime_aggs_chds,
+#         df_daytime_aggs_nchds=df_daytime_aggs_nchds,
+#         num_chds=num_chds,
+#         num_nchds=num_nchds
+#     )
