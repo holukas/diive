@@ -2,7 +2,7 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.32.0 | XX XXX 2022
+## v0.32.0 | 22 Jul 2022
 
 ### MeteoScreening Air Temperature
 #### General logic
