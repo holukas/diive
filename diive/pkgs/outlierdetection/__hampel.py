@@ -12,12 +12,30 @@ from diive.core.plotting.styles import LightTheme as theme
 
 
 def hampel_filter(input_series: Series, winsize: int = 50, winsize_min_periods: int = 1,
-                  n_sigmas: int = 5, show: bool = False, saveplot: bool = False) -> Series:
+                  n_sigmas: int = 5, saveplot: bool = False) -> Series:
     """
     kudos: https://towardsdatascience.com/outlier-detection-with-hampel-filter-85ddf523c73d
     """
 
+    # TODO should create and output QCF flag
+
     print(f"Removing outliers (Hampel) from {input_series.name} ...")
+
+    # Implementation from kudos:
+    # k = 1.4826  # scale factor for Gaussian distribution
+    # new_series = input_series.copy()
+    #
+    # # helper lambda function
+    # MAD = lambda x: np.median(np.abs(x - np.median(x)))
+    #
+    # rolling_median = input_series.rolling(window=2 * window_size, center=True).median()
+    # rolling_mad = k * input_series.rolling(window=2 * window_size, center=True).apply(MAD)
+    # diff = np.abs(input_series - rolling_median)
+    #
+    # indices = list(np.argwhere(diff > (n_sigmas * rolling_mad)).flatten())
+    # new_series[indices] = rolling_median[indices]
+    #
+    # # return new_series, indices
 
     k = 1.4826  # scale factor for Gaussian distribution
 
@@ -28,7 +46,7 @@ def hampel_filter(input_series: Series, winsize: int = 50, winsize_min_periods: 
 
     # MAD (median absolute deviation)
     MAD = lambda x: np.nanmedian(np.abs(x - np.nanmedian(x)))  # helper lambda function, ignores nan
-    rolling_mad = k * input_series.rolling(window=2 * winsize, min_periods=winsize_min_periods, center=True).apply(MAD)
+    rolling_mad = k * input_series.rolling(window=4 * winsize, min_periods=winsize_min_periods, center=True).apply(MAD)
 
     # print(len(rolling_mad.dropna()))
 
@@ -58,6 +76,8 @@ def hampel_filter(input_series: Series, winsize: int = 50, winsize_min_periods: 
     df['rolling_mad'] = rolling_mad
     df['rolling_median'] = rolling_median
     df['diff'] = diff
+
+    _plot_hampel(df, title='deleteme', saveplot=saveplot)
 
     if saveplot:
         title = f"Remove High-res Outliers (Hampel): {input_series.name}"
@@ -113,7 +133,8 @@ def _plot_hampel(df: DataFrame, title: str = None, saveplot: str or Path = None)
     #         alpha=1, horizontalalignment='left', verticalalignment='center',
     #         bbox=dict(boxstyle='square,pad=0', fc='none', ec='none'))
 
-    fig.show()
+    # fig.show()
+    # plt.show()
 
     if saveplot:
         save_fig(fig=fig, title=title, path=saveplot)

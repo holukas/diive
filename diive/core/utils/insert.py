@@ -5,6 +5,8 @@ import pandas as pd
 import diive.pkgs.dfun
 from diive.pkgs.dfun.stats import CalcTimeSeriesStats
 
+import core.times.times
+
 
 def statsbox_txt(focus_stats_df, stat_name, stat_label, prev_stats_available, show_prev_stats):
     """Add stats into GUI statsbox"""
@@ -142,7 +144,7 @@ class CalcDatasetRunStats():
         self.stats_df.loc[0, 'run_id'] = self.run_id
 
         # todo check if same as in config file
-        self.stats_df.loc[0, 'dataset_freq'] = pkgs.dfun.frames.infer_freq(self.data_df.index)
+        self.stats_df.loc[0, 'dataset_freq'] = core.times.times.infer_freq_timedelta(self.data_df.index)
 
         self.stats_df.loc[0, 'dataset_num_cols'] = len(self.data_df.columns)
         self.stats_df.loc[0, 'dataset_seasons_available'] = self._detect_if_seasons_available(df=self.data_df)

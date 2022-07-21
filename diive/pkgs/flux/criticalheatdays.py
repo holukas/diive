@@ -582,17 +582,17 @@ def plot_daytime_analysis(ax,
                           reco_col: str):
     """Plot daytime fluxes"""
 
-    # # For testing: direct plotting
-    # COLOR_GPP = '#39a7b3' #blue(500)
-    # COLOR_RECO = '#d95318' #red(500)
-    # COLOR_THRESHOLD = '#FFB72B' #cyan(4000)
-    # INFOTXT_FONTSIZE = 11
-    # import matplotlib.pyplot as plt
-    # import matplotlib.gridspec as gridspec
-    # fig = plt.figure(figsize=(10, 10))
-    # gs = gridspec.GridSpec(1, 1)  # rows, cols
-    # gs.update(wspace=0, hspace=0, left=.2, right=.8, top=.8, bottom=.2)
-    # ax = fig.add_subplot(gs[0, 0])
+    # For testing: direct plotting
+    COLOR_GPP = '#39a7b3' #blue(500)
+    COLOR_RECO = '#d95318' #red(500)
+    COLOR_THRESHOLD = '#FFB72B' #cyan(4000)
+    INFOTXT_FONTSIZE = 11
+    import matplotlib.pyplot as plt
+    import matplotlib.gridspec as gridspec
+    fig = plt.figure(figsize=(10, 10))
+    gs = gridspec.GridSpec(1, 1)  # rows, cols
+    gs.update(wspace=0, hspace=0, left=.2, right=.8, top=.8, bottom=.2)
+    ax = fig.add_subplot(gs[0, 0])
 
 
     reload(diive.core.plotting.styles.LightTheme)
@@ -606,42 +606,47 @@ def plot_daytime_analysis(ax,
     bts_zerocrossings_aggs = results_chd['bts_zerocrossings_aggs']
     bts_results_daytime = results_daytime_analysis['bts_results'][0]  # 0 means non-bootstrapped data
 
-    # Ratio GPP:RECO and uncertainty
-    line_ratio, = ax.plot(bts_results_daytime['ratio_df']['fit_x'],
-                          bts_results_daytime['ratio_df']['ratio'],
-                          c='black', lw=5, zorder=99, alpha=1, label="ratio GPP:RECO")
-    line_ratio95 = ax.fill_between(results_daytime_analysis['bts_ratios_df']['fit_x'],
-                                   results_daytime_analysis['bts_ratios_df']['ROW_Q025'],
-                                   results_daytime_analysis['bts_ratios_df']['ROW_Q975'],
-                                   alpha=.2, color='black', zorder=89,
-                                   label="95% confidence region")
+    # # TODO activate
+    # # Ratio GPP:RECO and uncertainty
+    # line_ratio, = ax.plot(bts_results_daytime['ratio_df']['fit_x'],
+    #                       bts_results_daytime['ratio_df']['ratio'],
+    #                       c='black', lw=5, zorder=99, alpha=1, label="ratio GPP:RECO")
+    # line_ratio95 = ax.fill_between(results_daytime_analysis['bts_ratios_df']['fit_x'],
+    #                                results_daytime_analysis['bts_ratios_df']['ROW_Q025'],
+    #                                results_daytime_analysis['bts_ratios_df']['ROW_Q975'],
+    #                                alpha=.2, color='black', zorder=89,
+    #                                label="95% confidence region")
 
-    # Threshold lines
-    # Vertical line showing max CHD threshold from bootstrap runs
-    _sub = "$_{CHD}$"
-    line_chd_vertical = ax.axvline(bts_zerocrossings_aggs['x_max'], lw=3, color=COLOR_THRESHOLD, ls='-', zorder=0,
-                                   label=f"THR{_sub}, VPD = {bts_zerocrossings_aggs['x_max']:.1f} hPa")
-    # Vertical line showing xCHD threshold
-    _sub = "$_{XTR}$"
-    # todo currently hardcoded!
-    line_xchd_vertical = ax.axvline(24.112612612612615, lw=3, color=COLOR_THRESHOLD2, ls='-', zorder=0,
-                                   label=f"THR{_sub}, VPD = 24.1 hPa")
+    # # TODO activate
+    # # Threshold lines
+    # # Vertical line showing max CHD threshold from bootstrap runs
+    # _sub = "$_{CHD}$"
+    # line_chd_vertical = ax.axvline(bts_zerocrossings_aggs['x_max'], lw=3, color=COLOR_THRESHOLD, ls='-', zorder=0,
+    #                                label=f"THR{_sub}, VPD = {bts_zerocrossings_aggs['x_max']:.1f} hPa")
+    # # Vertical line showing xCHD threshold
+    # _sub = "$_{XTR}$"
+    # # todo currently hardcoded!
+    # line_xchd_vertical = ax.axvline(24.112612612612615, lw=3, color=COLOR_THRESHOLD2, ls='-', zorder=0,
+    #                                label=f"THR{_sub}, VPD = 24.1 hPa")
 
 
-    # Rectangle (bootstrapped results)
-    num_bootstrap_runs = len(results_chd['bts_results'].keys()) - 1  # -1 b/c zero run is non-bootstrapped
-    _sub = "$_{CHD}$"
-    range_bts_netzeroflux = rectangle(ax=ax,
-                                      rect_lower_left_x=bts_zerocrossings_aggs['x_min'],
-                                      rect_lower_left_y=0,
-                                      rect_width=bts_zerocrossings_aggs['x_max'] - bts_zerocrossings_aggs['x_min'],
-                                      rect_height=1,
-                                      label=f"THR{_sub} range ({num_bootstrap_runs} bootstraps)",
-                                      color=COLOR_THRESHOLD, alpha=.2)
+    # # TODO activate
+    # # Rectangle (bootstrapped results)
+    # num_bootstrap_runs = len(results_chd['bts_results'].keys()) - 1  # -1 b/c zero run is non-bootstrapped
+    # _sub = "$_{CHD}$"
+    # range_bts_netzeroflux = rectangle(ax=ax,
+    #                                   rect_lower_left_x=bts_zerocrossings_aggs['x_min'],
+    #                                   rect_lower_left_y=0,
+    #                                   rect_width=bts_zerocrossings_aggs['x_max'] - bts_zerocrossings_aggs['x_min'],
+    #                                   rect_height=1,
+    #                                   label=f"THR{_sub} range ({num_bootstrap_runs} bootstraps)",
+    #                                   color=COLOR_THRESHOLD, alpha=.2)
 
     # Secondary axis for fluxes
     ax_twin = ax.twinx()
 
+
+    # todo act
     # GPP
     # _numvals_per_bin = bts_results_daytime[gpp_col]['numvals_per_bin']
     flux_bts_results = bts_results_daytime[gpp_col]
@@ -649,16 +654,19 @@ def plot_daytime_analysis(ax,
         fitplot(ax=ax_twin, label=gpp_col,
                 # highlight_year=highlight_year,
                 flux_bts_results=flux_bts_results, alpha=.2,
-                edgecolor=COLOR_GPP, color='none', color_fitline=COLOR_GPP)
+                edgecolor=COLOR_GPP, color='none', color_fitline=COLOR_GPP,
+                show_prediction_interval=False)
 
-    # RECO
-    # _numvals_per_bin = bts_results_daytime[reco_col]['numvals_per_bin']
-    flux_bts_results = bts_results_daytime[reco_col]
-    line_xy_reco, line_fit_reco, line_fit_ci_reco, line_fit_pb_reco = \
-        fitplot(ax=ax_twin, label=reco_col,
-                # highlight_year=highlight_year,
-                flux_bts_results=flux_bts_results, alpha=.2, marker='s',
-                edgecolor=COLOR_RECO, color='none', color_fitline=COLOR_RECO)
+    # # todo act
+    # # RECO
+    # # _numvals_per_bin = bts_results_daytime[reco_col]['numvals_per_bin']
+    # flux_bts_results = bts_results_daytime[reco_col]
+    # line_xy_reco, line_fit_reco, line_fit_ci_reco, line_fit_pb_reco = \
+    #     fitplot(ax=ax_twin, label=reco_col,
+    #             # highlight_year=highlight_year,
+    #             flux_bts_results=flux_bts_results, alpha=.2, marker='s',
+    #             edgecolor=COLOR_RECO, color='none', color_fitline=COLOR_RECO,
+    #             show_prediction_interval=False)
 
     # Values at threshold
 
@@ -704,39 +712,40 @@ def plot_daytime_analysis(ax,
     # ax.text(bts_zerocrossings_aggs['x_max'], 0.86, _ratio_at_thres, color='black', backgroundcolor='none',
     #         transform=ax.get_xaxis_transform(), weight='normal', **kwargs)
 
-    l = ax.legend(
-        [
-            # line_chd_vertical,
-            # range_bts_netzeroflux,
-            # line_xchd_vertical,
-            line_ratio,
-            line_xy_gpp,
-            line_xy_reco,
-            line_fit_gpp,
-            line_fit_reco,
-            (line_fit_ci_gpp, line_fit_ci_reco),
-            (line_fit_pb_gpp, line_fit_pb_reco)
-        ],
-        [
-            # line_chd_vertical.get_label(),
-            # range_bts_netzeroflux.get_label(),
-            # line_xchd_vertical.get_label(),
-            line_ratio.get_label(),
-            line_xy_gpp.get_label(),
-            line_xy_reco.get_label(),
-            f"GPP: {line_fit_gpp.get_label()}",
-            f"RECO: {line_fit_reco.get_label()}",
-            line_fit_ci_gpp.get_label(),
-            line_fit_pb_gpp.get_label()
-        ],
-        bbox_to_anchor=(0, 1),
-        frameon=False,
-        fontsize=FONTSIZE_LEGEND,
-        loc="lower left",
-        ncol=2,
-        scatterpoints=1,
-        numpoints=1,
-        handler_map={tuple: HandlerTuple(ndivide=None)})
+    ## TODO activate
+    # l = ax.legend(
+    #     [
+    #         # line_chd_vertical,
+    #         # range_bts_netzeroflux,
+    #         # line_xchd_vertical,
+    #         line_ratio,
+    #         line_xy_gpp,
+    #         line_xy_reco,
+    #         line_fit_gpp,
+    #         line_fit_reco,
+    #         (line_fit_ci_gpp, line_fit_ci_reco),
+    #         (line_fit_pb_gpp, line_fit_pb_reco)
+    #     ],
+    #     [
+    #         # line_chd_vertical.get_label(),
+    #         # range_bts_netzeroflux.get_label(),
+    #         # line_xchd_vertical.get_label(),
+    #         line_ratio.get_label(),
+    #         line_xy_gpp.get_label(),
+    #         line_xy_reco.get_label(),
+    #         f"GPP: {line_fit_gpp.get_label()}",
+    #         f"RECO: {line_fit_reco.get_label()}",
+    #         line_fit_ci_gpp.get_label(),
+    #         line_fit_pb_gpp.get_label()
+    #     ],
+    #     bbox_to_anchor=(0, 1),
+    #     frameon=False,
+    #     fontsize=FONTSIZE_LEGEND,
+    #     loc="lower left",
+    #     ncol=2,
+    #     scatterpoints=1,
+    #     numpoints=1,
+    #     handler_map={tuple: HandlerTuple(ndivide=None)})
 
     # Format
     # ax.axhline(0, lw=1, color='black')
@@ -763,7 +772,7 @@ def plot_daytime_analysis(ax,
             size=theme.AXLABELS_FONTSIZE, color='black', backgroundcolor='none', transform=ax.transAxes,
             alpha=1, horizontalalignment='left', verticalalignment='top')
 
-    # fig.show()
+    fig.show()
 
 
 def plot_chd_detection_from_nee(ax, results_chd: dict, y_col: str, highlight_year: int = None):
@@ -795,7 +804,8 @@ def plot_chd_detection_from_nee(ax, results_chd: dict, y_col: str, highlight_yea
                 # label=f"NEE ({_numvals_per_bin['min']:.0f} - {_numvals_per_bin['max']:.0f} values per bin)",
                 highlight_year=highlight_year,
                 flux_bts_results=flux_bts_results,
-                edgecolor='#B0BEC5', color='none', color_fitline=COLOR_NEE)
+                edgecolor='#B0BEC5', color='none', color_fitline=COLOR_NEE,
+                show_prediction_interval=True)
 
     # # Actual non-bootstrapped line crossing, the point where RECO = GPP
     # line_netzeroflux = ax.scatter(bts_results['zerocrossing_vals']['x_col'],
@@ -832,7 +842,7 @@ def plot_chd_detection_from_nee(ax, results_chd: dict, y_col: str, highlight_yea
                                       label=f"THR{_sub} range ({num_bootstrap_runs} bootstraps)",
                                       color=COLOR_THRESHOLD)
 
-    # CHDs
+    # # CHDs
     num_chds = len(results_chd['df_aggs_chds'])
     # area_chd = ax.fill_between([bts_zerocrossings_aggs['x_max'],
     #                             flux_bts_results['fit_df']['fit_x'].max()],

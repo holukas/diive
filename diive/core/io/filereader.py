@@ -15,9 +15,11 @@ import pandas.errors
 import yaml
 from pandas import DataFrame
 
-from diive.core import dfun
-from diive.core.dfun.frames import flatten_multiindex_all_df_cols, continuous_timestamp_freq
+from diive import core
 from diive.configs.filetypes import get_filetypes
+from diive.core import dfun
+from diive.core.dfun.frames import flatten_multiindex_all_df_cols
+from diive.core.times.times import continuous_timestamp_freq
 
 
 def search_files(searchdir, pattern: str) -> list:
@@ -67,7 +69,7 @@ class MultiDataFileReader:
         # Collect data from all files listed in filepaths
         self._data_df, self._metadata_df = self._get_incoming_data()
 
-        self._data_df = continuous_timestamp_freq(df=self._data_df, freq=self.filetypeconfig['DATA']['FREQUENCY'])
+        self._data_df = continuous_timestamp_freq(data=self._data_df, freq=self.filetypeconfig['DATA']['FREQUENCY'])
 
     @property
     def data_df(self):
@@ -83,7 +85,7 @@ class MultiDataFileReader:
             raise Exception('metadata is empty')
         return self._metadata_df
 
-    def _get_incoming_data(self) -> tuple[DataFrame,DataFrame]:
+    def _get_incoming_data(self) -> tuple[DataFrame, DataFrame]:
         """Merge data across all files"""
         data_df = None
         metadata_df = None
@@ -92,7 +94,7 @@ class MultiDataFileReader:
             try:
                 incoming_data_df, incoming_metadata_df = \
                     ReadFileType(filepath=filepath, filetypeconfig=self.filetypeconfig).get_filedata()
-                data_df, metadata_df =\
+                data_df, metadata_df = \
                     self._merge_with_existing(incoming_data_df=incoming_data_df, data_df=data_df,
                                               incoming_metadata_df=incoming_metadata_df, metadata_df=metadata_df)
             except pandas.errors.EmptyDataError:
@@ -102,8 +104,8 @@ class MultiDataFileReader:
 
     def _merge_with_existing(self,
                              incoming_data_df: DataFrame, data_df: DataFrame,
-                             incoming_metadata_df: DataFrame, metadata_df:DataFrame
-                             ) -> tuple[DataFrame,DataFrame]:
+                             incoming_metadata_df: DataFrame, metadata_df: DataFrame
+                             ) -> tuple[DataFrame, DataFrame]:
         if not isinstance(data_df, DataFrame):
             data_df = incoming_data_df.copy()
             metadata_df = incoming_metadata_df.copy()
@@ -116,7 +118,10 @@ class MultiDataFileReader:
 class ReadFileType:
     """Read single data file using settings from dictionary for specified filetype"""
 
-    def __init__(self, filepath: str or Path, filetypeconfig: dict = None, filetype: str = None):
+    def __init__(self,
+                 filepath: str or Path,
+                 filetypeconfig: dict = None,
+                 filetype: str = None):
         """
 
         Args:
@@ -141,6 +146,7 @@ class ReadFileType:
 
     def _readfile(self) -> tuple[DataFrame, DataFrame]:
         """Load data"""
+        print(f"Reading file {self.filepath.name} ...")
         datafilereader = DataFileReader(
             filepath=self.filepath,
             data_skiprows=self.filetypeconfig['DATA']['SKIP_ROWS'],
@@ -270,7 +276,7 @@ class DataFileReader:
 
         # Generate missing header columns if necessary
         generated_missing_header_cols_list = []
-        sfx = dfun.times.make_timestamp_microsec_suffix()
+        sfx = core.times.times.current_time_microseconds_str()
         if more_data_cols_than_header_cols:
             for m in list(range(1, num_missing_header_cols + 1)):
                 missing_col = (f'unknown-{m}-{sfx}', '[-unknown-]')
@@ -321,6 +327,7 @@ class DataFileReader:
                               index_col=None,
                               dtype=None,
                               skip_blank_lines=True,
+                              # nrows=2000,
                               engine='python')  # todo 'python', 'c'
 
         return data_df
@@ -336,7 +343,7 @@ class DataFileReader:
         self.data_df.index = pd.to_datetime(self.data_df.index)
 
         # Make continuous timestamp at current frequency, from first to last datetime
-        self.data_df = continuous_timestamp_freq(df=self.data_df, freq=self.data_freq)
+        self.data_df = continuous_timestamp_freq(data=self.data_df, freq=self.data_freq)
 
         # TODO? additional check: validate inferred freq from data like in `dataflow` script
 
@@ -352,5 +359,13 @@ class DataFileReader:
                 self.data_df.index = self.data_df.index + pd.Timedelta(timedelta)
 
 
+def example():
+    # Load data
+    filepath = Path(
+        "M:\Downloads\Warm Winter 2020 ecosystem eddy covariance flux product for 73 stations in FLUXNET-Archive format—release 2022-1\Swiss_Sites\FLX_CH-Dav_FLUXNET2015_FULLSET_1997-2020_beta-3\FLX_CH-Dav_FLUXNET2015_FULLSET_HH_1997-2020_beta-3.csv")
+    loaddatafile = ReadFileType(filetype='FLUXNET-FULLSET-HH-CSV-30MIN', filepath=filepath)
+    data_df, metadata_df = loaddatafile._readfile()
+
+
 if __name__ == '__main__':
-    pass
+    example()

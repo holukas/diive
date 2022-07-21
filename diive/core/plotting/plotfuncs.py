@@ -1,6 +1,6 @@
 import time
 from pathlib import Path
-from diive.core.dfun.times import get_current_time
+
 import matplotlib.gridspec as gridspec
 import pandas as pd
 from matplotlib import pyplot as plt, _pylab_helpers, dates as mdates
@@ -10,6 +10,7 @@ from pandas import DataFrame, Series
 # from modboxes.plots.styles.LightTheme import *
 # from modboxes.plots.styles.LightTheme import FONTSIZE_LABELS_AXIS, COLOR_TXT_LEGEND
 import diive.core.plotting.styles.LightTheme as theme
+from diive.core.times.times import current_datetime
 # from modboxes.plots.styles.LightTheme import *
 from diive.core.plotting.styles.LightTheme import *
 
@@ -394,6 +395,7 @@ def quickplot_df(data: DataFrame or Series, hline: None or float = None, subplot
         fig.show()
     plt.close(fig)
 
+
 def save_fig(fig, title: str, path=Path or str):
     """Save figure to file
 
@@ -403,7 +405,7 @@ def save_fig(fig, title: str, path=Path or str):
     # Use alphanumeric for savename
     filename_out = [character for character in title if character.isalnum()]
     filename_out = "".join(filename_out)
-    _, cur_time = get_current_time(str_format='%Y%m%d-%H%M%S-%f')
+    _, cur_time = current_datetime(str_format='%Y%m%d-%H%M%S-%f')
     filename_out = f"{cur_time}_{filename_out}.png"
     outfilepath = Path(path) / filename_out
     fig.savefig(outfilepath)

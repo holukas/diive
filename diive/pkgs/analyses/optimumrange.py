@@ -3,12 +3,12 @@ FLUX: OPTIMUM RANGE
 ===================
 """
 
+import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 from matplotlib.legend_handler import HandlerTuple
 from pandas import DataFrame
-from diive.core.plotting.plotfuncs import default_format, default_grid, default_legend
-import numpy as np
-import matplotlib.pyplot as plt
+
 
 class FindOptimumRange:
     """
@@ -37,7 +37,7 @@ class FindOptimumRange:
         return self._results_optrange
 
     def find_optimum(self):
-        self._prepare_data()
+        # self._prepare_data() todo?
         num_xbins = self._define_xbins()
         rwinsize = int(num_xbins / 5)  # Window size for rolling aggs
         bin_aggs_df = self._aggregate(bin_agg='median')
@@ -51,9 +51,9 @@ class FindOptimumRange:
         optimum_start_bin, optimum_end_bin = self._get_optimum_range(grouped_df=bin_aggs_df,
                                                                      roptimum_bin=roptimum_bin,
                                                                      winsize=rwinsize)
-        self._validate(roptimum_val=roptimum_val, optimum_ymean=optimum_ymean)
+        self._validate(roptimum_val=roptimum_val, optimum_ymean=optimum_ymean)  # todo no match
 
-        vals_in_optimum_range_df=\
+        vals_in_optimum_range_df = \
             self._values_in_optimum_range(optimum_xstart=optimum_xstart, optimum_xend=optimum_xend)
 
         self._results_optrange = dict(
@@ -106,8 +106,11 @@ class FindOptimumRange:
         xcounts_df['vals_belowoptimum_perc'] = xcounts_df['vals_belowoptimum'].div(xcounts_df['vals_total']).multiply(
             100)
 
-        return xcounts_df
+        # NaNs correspond to zero,
+        # e.g. if no values above optimum are found
+        xcounts_df = xcounts_df.fillna(0)
 
+        return xcounts_df
 
     def _prepare_data(self):
         # Keep x values > 0
@@ -119,7 +122,7 @@ class FindOptimumRange:
         Column w/ bin membership is added to data
         """
         num_xbins = int(len(self.df) / 100)  # Number of x bins
-        xbins = pd.qcut(self.df[self.xcol], num_xbins)  # How awesome!
+        xbins = pd.qcut(self.df[self.xcol], num_xbins, duplicates='drop')  # How awesome!
         self.df = self.df.assign(xbins=xbins)
         return num_xbins
 
@@ -144,7 +147,7 @@ class FindOptimumRange:
         elif self.define_optimum == 'max':
             roptimum_bin = rolling_df[use_rolling_agg].idxmax()
             roptimum_val = rolling_df[use_rolling_agg].iloc[roptimum_bin]
-        print(f"Max uptake found in VPD class: {roptimum_bin}  /  value: {roptimum_val}")
+        print(f"Max uptake found in class: {roptimum_bin}  /  value: {roptimum_val}")
         return roptimum_bin, roptimum_val
 
     def _get_optimum_range(self, grouped_df: DataFrame, roptimum_bin: pd.IntervalIndex, winsize: int):
@@ -156,7 +159,13 @@ class FindOptimumRange:
 
         # Get data range start and end
         roptimum_start_ix = int_loc - (int(winsize / 2))
-        roptimum_end_ix = int_loc + (int(winsize / 2) + 1)  # +1 b/c end of range not included in slicing
+        roptimum_end_ix = int_loc + (int(winsize / 2) + 1)  # was +1 b/c end of range not included in slicing
+
+        # Optimum end index cannot be larger than available indices
+        roptimum_end_ix = len(grouped_df) - 1 if roptimum_end_ix > len(grouped_df) - 1 else roptimum_end_ix
+
+        # Optimum start index cannot be smaller than the first available index 0
+        roptimum_start_ix = 0 if roptimum_start_ix < 0 else roptimum_start_ix
 
         # Get data range indices
         optimum_start_bin = grouped_df.iloc[roptimum_start_ix].name
@@ -192,52 +201,56 @@ class FindOptimumRange:
         # optimum_df.rolling(window=100).mean().plot()
         # plt.show()
 
-def plot_vals_in_optimum_range(ax, results_optrange: dict):
-    """Plot optimum range: values in, above and below optimum per year"""
+    def plot_vals_in_optimum_range(self, ax):
+        """Plot optimum range: values in, above and below optimum per year"""
 
-    # kudos: https://matplotlib.org/stable/gallery/lines_bars_and_markers/horizontal_barchart_distribution.html#sphx-glr-gallery-lines-bars-and-markers-horizontal-barchart-distribution-py
+        # kudos: https://matplotlib.org/stable/gallery/lines_bars_and_markers/horizontal_barchart_distribution.html#sphx-glr-gallery-lines-bars-and-markers-horizontal-barchart-distribution-py
 
-    # Get data
-    df = results_optrange['vals_in_optimum_range_df'].copy()
-    plotcols = ['vals_inoptimum_perc', 'vals_aboveoptimum_perc', 'vals_belowoptimum_perc']
-    df = df[plotcols]
-    xcol = results_optrange['xcol']
-    ycol = results_optrange['ycol']
+        results_optrange = self.results_optrange()
 
-    # Names of categories, shown in legend above plot
-    category_names = ['values in optimum range (%)', 'above optimum range (%)', 'below optimum range (%)']
-    # category_names = ['vals_inoptimum_perc', 'vals_aboveoptimum_perc', 'vals_belowoptimum_perc']
+        # Get data
+        df = results_optrange['vals_in_optimum_range_df'].copy()
+        plotcols = ['vals_inoptimum_perc', 'vals_aboveoptimum_perc', 'vals_belowoptimum_perc']
+        df = df[plotcols]
+        # xcol = results_optrange['xcol']
+        # ycol = results_optrange['ycol']
 
-    # Format data for bar plot
-    results = {}
-    for ix, row in df.iterrows():
-        results[ix]=df.loc[ix].to_list()
+        # Names of categories, shown in legend above plot
+        category_names = ['values in optimum range (%)', 'above optimum range (%)', 'below optimum range (%)']
+        # category_names = ['vals_inoptimum_perc', 'vals_aboveoptimum_perc', 'vals_belowoptimum_perc']
 
-    year_labels = list(results.keys())
-    data = np.array(list(results.values()))
-    data_cum = data.cumsum(axis=1)
-    category_colors = plt.colormaps['RdYlGn_r'](np.linspace(0.15, 0.85, data.shape[1]))
+        # Format data for bar plot
+        results = {}
+        for ix, row in df.iterrows():
+            results[ix] = df.loc[ix].to_list()
 
-    # fig, ax = plt.subplots(figsize=(9.2, 5))
-    ax.invert_yaxis()
-    ax.xaxis.set_visible(False)
-    ax.set_xlim(0, np.sum(data, axis=1).max())
+        year_labels = list(results.keys())
+        data = np.array(list(results.values()))
+        data_cum = data.cumsum(axis=1)
+        category_colors = plt.colormaps['RdYlGn_r'](np.linspace(0.15, 0.85, data.shape[1]))
 
-    for i, (colname, color) in enumerate(zip(category_names, category_colors)):
-        widths = data[:, i]
-        starts = data_cum[:, i] - widths
-        rects = ax.barh(year_labels, widths, left=starts, height=0.9,
-                        label=colname, color=color)
+        # fig, ax = plt.subplots(figsize=(9.2, 5))
+        ax.invert_yaxis()
+        ax.xaxis.set_visible(False)
+        ax.set_xlim(0, np.sum(data, axis=1).max())
 
-        r, g, b, _ = color
-        text_color = 'white' if r * g * b < 0.5 else 'darkgrey'
-        ax.bar_label(rects, label_type='center', color=text_color)
-    ax.legend(ncol=len(category_names), bbox_to_anchor=(0, 1),
-              loc='lower left', fontsize='small')
+        for i, (colname, color) in enumerate(zip(category_names, category_colors)):
+            widths = data[:, i]
+            starts = data_cum[:, i] - widths
+            rects = ax.barh(year_labels, widths, left=starts, height=0.9,
+                            label=colname, color=color)
 
-    # default_format(ax=ax, txt_xlabel="year", txt_ylabel=f'counts',
-    #                              txt_ylabel_units='[#]')
-    # default_grid(ax=ax)
+            r, g, b, _ = color
+            text_color = 'white' if r * g * b < 0.5 else 'darkgrey'
+            ax.bar_label(rects, label_type='center', color=text_color)
+        ax.legend(ncol=len(category_names), bbox_to_anchor=(0, 1),
+                  loc='lower left', fontsize='small')
+
+        # default_format(ax=ax, txt_xlabel="year", txt_ylabel=f'counts',
+        #                              txt_ylabel_units='[#]')
+        # default_grid(ax=ax)
+
+        return ax
 
 
 def plot_bin_aggregates(ax, results_optrange: dict):
@@ -324,6 +337,40 @@ def plot_rolling_bin_aggregates(ax, results_optrange: dict):
         numpoints=1,
         handler_map={tuple: HandlerTuple(ndivide=None)},
         ncol=2)
+
+
+def example():
+    from pathlib import Path
+    from diive.core.io.filereader import ReadFileType
+    import matplotlib.gridspec as gridspec
+
+    # # Load complete data
+    # filepath = Path(
+    #     "M:\Downloads\Warm Winter 2020 ecosystem eddy covariance flux product for 73 stations in FLUXNET-Archive format—release 2022-1\Swiss_Sites\FLX_CH-Dav_FLUXNET2015_FULLSET_1997-2020_beta-3\FLX_CH-Dav_FLUXNET2015_FULLSET_HH_1997-2020_beta-3.csv")
+    # readfiletype = ReadFileType(filetype='FLUXNET-FULLSET-HH-CSV-30MIN', filepath=filepath)
+    # data_df, metadata_df = readfiletype.get_filedata()
+
+    data_df = pd.read_csv(r"L:\Dropbox\luhk_work\20 - CODING\26 - NOTEBOOKS\GL-NOTEBOOKS\General Notebooks\test.csv", index_col=0)
+
+    optrange = FindOptimumRange(
+        df=data_df,
+        xcol="TA_F",
+        ycol="NEE_CUT_50",
+        define_optimum="min"
+    )
+
+    optrange.find_optimum()
+
+    fig = plt.figure(figsize=(9, 16))
+    gs = gridspec.GridSpec(1, 1)  # rows, cols
+    # gs.update(wspace=.2, hspace=0, left=.1, right=.9, top=.9, bottom=.1)
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax = optrange.plot_vals_in_optimum_range(ax=ax1)
+    fig.show()
+
+
+if __name__ == '__main__':
+    example()
 
 # def _testfig():
 #     import matplotlib.gridspec as gridspec

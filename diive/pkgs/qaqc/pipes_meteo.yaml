@@ -13,48 +13,60 @@
 
 D_SNOW:
   D_SNOW_:
-    pipe: [ remove_highres_outliers, range_check ]
+    pipe: [ remove_highres_outliers_thymeboost, remove_highres_outliers_absolute_limits ]
     units: m
-    range: [ -0.1, 1.5 ]
+    absolute_limits: [ -0.1, 1.5 ]
 
 G:
   SHFM:  # temporary entry
-    pipe: [ range_check ]
+    pipe: [ remove_highres_outliers_absolute_limits ]
     units: W m-2
-    range: [ -100, 100 ]
+    absolute_limits: [ -100, 100 ]
 
 LW:
   LW_IN_:
-    pipe: [ range_check ]
+    pipe: [ remove_highres_outliers_absolute_limits ]
     units: W m-2
-    range: [ 50, 600 ]
+    absolute_limits: [ 50, 600 ]
 
 PA:
   PA_:
-    pipe: [ range_check ]
+    pipe: [ remove_highres_outliers_absolute_limits ]
     units: hPa
-    range: [ 760, 1000 ]
+    absolute_limits: [ 760, 1000 ]
 
 PPFD:
   PPFD_IN_:
-    pipe: [ remove_radiation_offset, setto_max_threshold, setto_min_threshold, range_check ]
+    pipe: [ remove_radiation_offset, setto_max_threshold, setto_min_threshold, remove_highres_outliers_absolute_limits ]
     units: umol m-2 s-1
-    range: [ 0, 3000 ]
+    absolute_limits: [ 0, 3000 ]
+
+PREC:
+  PREC_:
+    pipe: [ remove_highres_outliers_absolute_limits ]
+    units: mm
+    absolute_limits: [ 0, 1000 ]
 
 RH:
   RH_:
-    pipe: [ remove_relativehumidity_offset, setto_max_threshold, setto_min_threshold, range_check ]
+    pipe: [ remove_relativehumidity_offset, setto_max_threshold, setto_min_threshold, remove_highres_outliers_absolute_limits ]
     units: "%"
-    range: [ 0, 100 ]
+    absolute_limits: [ 0, 100 ]
 
 SW:
   SW_IN_:
-    pipe: [ remove_radiation_offset, setto_max_threshold, setto_min_threshold, range_check ]
+    pipe: [ remove_radiation_offset, setto_max_threshold, setto_min_threshold, remove_highres_outliers_absolute_limits ]
     units: W m-2
-    range: [ 0, 2000 ]
+    absolute_limits: [ 0, 2000 ]
+
+SWC:
+  SWC_:
+    pipe: [ remove_highres_outliers_absolute_limits ]
+    units: "%"
+    absolute_limits: [ 0, 100 ]
 
 TA:
   TA_:
-    pipe: [ remove_highres_outliers, range_check ]
+    pipe: [ remove_highres_outliers_thymeboost, remove_highres_outliers_absolute_limits ]
     units: degC
-    range: [ -50, 50 ]
+    absolute_limits: [ -50, 50 ]

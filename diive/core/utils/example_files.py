@@ -1,5 +1,5 @@
 from diive.core.utils.config import validate_filetype_config
-from pkgs.filereader.filereader import ConfigFileReader
+from diive.core.io.filereader import ConfigFileReader
 
 
 def load(file, ctx):

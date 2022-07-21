@@ -14,39 +14,13 @@ from pandas import DataFrame, MultiIndex
 from pandas import Series
 from pandas._libs.tslibs import to_offset
 
-from diive.core.dfun.times import timedelta_to_string
+# from diive.core.times.times import timedelta_to_string
+# from diive.core.times.times import timedelta_to_string
 from diive.pkgs.gapfilling.interpolate import linear_interpolation
 
 pd.set_option('display.width', 1500)
 pd.set_option('display.max_columns', 30)
 pd.set_option('display.max_rows', 50)
-
-
-def continuous_timestamp_freq(df: DataFrame, freq: str = '30T') -> DataFrame:
-    """Generate continuous timestamp of given frequency between first and last date of df
-
-    This makes df continuous w/o date gaps but w/ data gaps at filled-in timestamps.
-    """
-    # Generate timestamp index
-    _index = pd.date_range(start=df.index[0], end=df.index[-1], freq=freq)
-
-    if _index.duplicated().sum() > 0:
-        print(_index.duplicated().sum())
-
-    # todo check for duplicate index
-    # Reindex data to continuous timestamp
-    try:
-        df = df.reindex(_index)
-    except:
-        print("test")
-    df.index.name = 'TIMESTAMP'
-
-    # Set freq
-    df.index = pd.to_datetime(df.index)
-    df = df.asfreq(freq=freq)
-    df.sort_index(inplace=True)
-
-    return df
 
 
 def aggregated_as_hires(aggregate_series: Series,
@@ -327,24 +301,6 @@ def downsample_data(df, freq, max_freq):
     else:
         new_freq = freq
     return df, new_freq
-
-
-def infer_freq(df_index):
-    """
-    Checks DataFrame index for frequency by subtracting successive timestamps from each other
-    and then checking the most frequent difference.
-    """
-    # https://stackoverflow.com/questions/16777570/calculate-time-difference-between-pandas-dataframe-indices
-    # https://stackoverflow.com/questions/31469811/convert-pandas-freq-string-to-timedelta
-    df = pd.DataFrame(columns=['tvalue'])
-    df['tvalue'] = df_index
-    df['tvalue_shifted'] = df['tvalue'].shift()
-    df['delta'] = (df['tvalue'] - df['tvalue_shifted'])
-    most_frequent_delta = df['delta'].mode()[0]  # timedelta
-    most_frequent_delta = timedelta_to_string(most_frequent_delta)
-    # most_frequent_delta = pd.to_timedelta(most_frequent_delta)
-
-    return most_frequent_delta
 
 
 def insert_drop_timestamp_col(df, timestamp_colname):

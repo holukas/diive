@@ -15,8 +15,8 @@ import pandas as pd
 from pandas import DataFrame
 
 import diive.core.dfun.frames as frames
-from diive.core.dfun.times import include_timestamp_as_cols
 from diive.core.ml.common import train_random_forest_regressor, model_importances, mape_acc
+from diive.core.times.times import include_timestamp_as_cols
 
 pd.set_option('display.max_rows', 50)
 pd.set_option('display.max_columns', 12)

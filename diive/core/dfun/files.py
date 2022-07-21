@@ -5,10 +5,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 # from PyQt5 import QtWidgets as qw
-from core.io.dirs import verify_dir
+from diive.core.io.dirs import verify_dir
 from diive.core.utils.config import validate_filetype_config
 from diive.core.dfun.frames import add_second_header_row
-from diive.core.dfun.times import make_timestamp_microsec_suffix
+from diive.core.times.times import current_time_microseconds_str
 
 
 def parse_events_file(filepath, settings_dict):
@@ -69,7 +69,7 @@ def compare_len_header_vs_data(filepath, skip_rows_list, header_rows_list):
     # Generate missing header columns if necessary
     header_cols_list = header_cols_df.columns.to_list()
     generated_missing_header_cols_list = []
-    sfx = make_timestamp_microsec_suffix()
+    sfx = current_time_microseconds_str()
     if more_data_cols_than_header_cols:
         for m in list(range(1, num_missing_header_cols + 1)):
             missing_col = (f'unknown_{m}-{sfx}', '[-unknown-]')
