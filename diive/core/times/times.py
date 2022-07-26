@@ -11,6 +11,26 @@ from pandas.tseries.frequencies import to_offset
 class TimestampSanitizer():
 
     def __init__(self, data: Series or DataFrame):
+        """
+        Validate and prepare timestamps for further processing
+
+        Performs various checks on timestamps, in this order:
+        - Validate timestamp naming
+        - Convert timestamp to datetime
+        - Sort timestamp ascending
+        - Remove duplicates from timestamp index
+        - Detect time resolution from timestamp
+        - Make timestamp continuous without date gaps
+        - Convert timestamp to show the middle of the averaging period
+
+        The `TimestampSanitizer` class acts as a wrapper to combine various
+        timestamp functions.
+
+        For more info please refer to the docstring of the respective function.
+
+        Args:
+            data: Data with timestamp index
+        """
         self.data = data.copy()
         self.inferred_freq = None
         self._run()
@@ -467,8 +487,51 @@ def continuous_timestamp_freq(data: Series or DataFrame, freq: str) -> Series or
 
 
 def convert_series_timestamp_to_middle(data: Series or DataFrame) -> Series or DataFrame:
-    """Standardize timestamp index column"""
+    """
+    Convert the timestamp index to show middle of averaging period
 
+    This conversion makes it easier to handle timeseries data. One of the
+    issues it solves is that it becomes straight forward to aggregate data
+    correctly.
+
+    The timestamp of `data` must have one of the following names:
+    - `TIMESTAMP_END` when the timestamp refers to the END of the averaging period.
+      * Example: `2022-07-26 12:00` refers to the time period between `2022-07-26 11:30` and `2022-07-26 12:00`
+    - `TIMESTAMP_START` when the timestamp refers to the START of the averaging period
+      * Example: `2022-07-26 12:00` refers to the time period between `2022-07-26 12:00` and `2022-07-26 12:30`
+    - `TIMESTAMP_MID` when the timestamp refers to the MIDDLE of the averaging period
+        * Example: `2022-07-26 12:15` refers to the time period between `2022-07-26 12:00` and `2022-07-26 12:30`
+
+    Note about timestamps:
+
+        `TIMESTAMP_END` is widely used. However, aggregating data can
+         easily lead to wrong aggregation windows. For example, half-hourly
+         data for the day 26 July 2022 would have `2022-07-26 00:30` as the
+         first valid timestamp for this day, the last timestamp would be
+         `2022-07-27 00:00`. When these data are simply aggregated by *date*
+         (`2022-07-26`), then `2022-07-26 00:00` would be taken as the first
+         timestamp, and `2022-07-26 23:30` as the last timestamp, both of
+         which is not correct. This leads to a wrongly attributed  first data
+         record and a missing last record in this example.
+
+        `TIMESTAMP_MID` solves this issue. Here, the first timestamp would be
+        `2022-07-26 00:15`, and the last timestamp `2022-07-26 23:45`, both of
+        which are correct when aggregating by *date*. The same is true for other
+        aggregation windows, e.g., by month, year etc.
+
+        The middle timestamp also helps in plotting the data correctly. Some plots
+        set the ticks shown in the plot specifically at the start or end of the
+        input timestamp, depending on the plot type. For example, plotting
+        a heatmap might show the tick at `12:00` but then plots the respective
+        data after the tick, which is not correct with `TIMESTAMP_END`. With the
+        middle timestamp data are plotted correctly at `12:15`.
+
+    Args:
+        data: Data with timestamp index
+
+    Returns:
+        Data with timestamp index that shows the middle of the averaging period
+    """
     timestamp_name_before = data.index.name
     timestamp_name_after = 'TIMESTAMP_MID'
     timestamp_freq = data.index.freq
