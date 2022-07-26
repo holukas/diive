@@ -1,7 +1,9 @@
 import pandas as pd
-from pandas import DataFrame,Series
-from diive.core.times.times import convert_series_timestamp_to_middle, sanitize_timestamp_index
+from pandas import Series
 from pandas.tseries.frequencies import to_offset
+
+from diive.core.times.times import convert_series_timestamp_to_middle, sanitize_timestamp_index
+
 
 def resample_series_to_30MIN(series: Series,
                              to_freqstr: str = '30T',
@@ -61,7 +63,7 @@ def resample_series_to_30MIN(series: Series,
     print(f"Resampling data from {series.index.freqstr} to {to_freqstr} frequency ...")
 
     # Make middle timestamp, for correct resampling
-    _series = convert_series_timestamp_to_middle(series=_series)
+    _series = convert_series_timestamp_to_middle(data=_series)
 
     # Check maximum number of counts per aggregation interval
     # Needed to calculate the required minimum number of counts from

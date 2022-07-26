@@ -2,39 +2,53 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.32.0 | 22 Jul 2022
 
+## v0.33.0 | 26 Jul 2022
+### MeteoScreening Preparations
+- Added new class `core.times.times.TimestampSanitizer`
+  - Class that handles timestamp checks and fixes, such as the creation of a continuous
+  timestamp without date gaps.    
+- Added `pkgs.createvar.nighttime_latlon.nighttime_flag_from_latlon` 
+  - Function for the calculation of a nighttime flag (1=nighttime) from latitude and
+  longitude coordinates of a specific location.
+- Added `core.plotting.heatmap_datetime.HeatmapDateTime`
+  - Class to generate a heatmap plot from timeseries data. 
+
+
+## v0.32.0 | 22 Jul 2022
 ### MeteoScreening Air Temperature
-#### General logic
 MeteoScreening uses a general settings file `pipes_meteo.yaml` that contains info how
-specific `measurements` should be screened. Such `measurements` can be air temperature `TA`
-#### `pkgs.qaqc.meteoscreening.ScreenVar`
-- Performs quality screening of air temperature `TA`. 
-- As first check, I implemented outlier detection via the newly added package `ThymeBoost`,
-along with checks for absolute limits.
-- Screening applies the checks defined in the file `pipes_meteo.yaml` for the respective
-`measurement`, e.g. `TA` for air temperature.
-- The screening outputs a separate dataframe that contains `QCF` flags for each check.
-- The checks do not change the original time series. Instead, only the flags are generated.
-- Screening routines for more variables will be added over the next updates. 
-#### `pkgs.qaqc.meteoscreening.MeteoScreeningFromDatabaseSingleVar`
-- Performs quality screening *and* resampling to 30MIN of variables downloaded from the database.
-- It uses the `detailed` data when downloading data from the database using `dbc-influxdb`.
-- The `detailed` data contains the measurement of the variable, along with multiple tags that
-describe the data. The tags are needed for storage in the database.
-- After quality screening of the original high-resolution data, flagged values are removed and
-then data are resampled.
-- It also handles the issue that data downloaded for a specific variable can have different time
-resolution over the years, although I still need to test this.
-- After screening and resampling, data are in a format that can be directly uploaded to the 
-database using `dbc-influxdb`.
-#### `pkgs.qaqc.meteoscreening.MeteoScreeningFromDatabaseMultipleVars`
-- Wrapper where multiple variables can be screened in one run.
-- This should also work in combination of different `measurements`. For example, screening
-radiation and temperature data in one run.
+specific `measurements` should be screened. Such `measurements` group similar variables
+together, e.g. different air temperatures are measurement `TA`.   
+Additions to module `pkgs.qaqc.meteoscreening`:
+- Added `ScreenVar`
+  - Performs quality screening of air temperature `TA`. 
+  - As first check, I implemented outlier detection via the newly added package `ThymeBoost`,
+  along with checks for absolute limits.
+  - Screening applies the checks defined in the file `pipes_meteo.yaml` for the respective
+  `measurement`, e.g. `TA` for air temperature.
+  - The screening outputs a separate dataframe that contains `QCF` flags for each check.
+  - The checks do not change the original time series. Instead, only the flags are generated.
+  - Screening routines for more variables will be added over the next updates. 
+- Added `MeteoScreeningFromDatabaseSingleVar`
+  - Performs quality screening *and* resampling to 30MIN of variables downloaded from the database.
+  - It uses the `detailed` data when downloading data from the database using `dbc-influxdb`.
+  - The `detailed` data contains the measurement of the variable, along with multiple tags that
+  describe the data. The tags are needed for storage in the database.
+  - After quality screening of the original high-resolution data, flagged values are removed and
+  then data are resampled.
+  - It also handles the issue that data downloaded for a specific variable can have different time
+  resolution over the years, although I still need to test this.
+  - After screening and resampling, data are in a format that can be directly uploaded to the 
+  database using `dbc-influxdb`.
+- Added `MeteoScreeningFromDatabaseMultipleVars`
+  - Wrapper where multiple variables can be screened in one run.
+  - This should also work in combination of different `measurements`. For example, screening
+  radiation and temperature data in one run.
 ### Outlier Detection
-- Added `pkgs.outlierdetection.thymeboost.thymeboost`
-- Added `pkgs.outlierdetection.absolutelimits.absolute_limits`
+Additions to `pkgs.outlierdetection`:
+- Added module `thymeboost`
+- Added module `absolute_limits`
 
 
 [//]: # (- optimum range)
@@ -44,30 +58,22 @@ radiation and temperature data in one run.
 
 
 ## v0.31.0 | 4 Apr 2022
-
 ### Carbon cost
-
 #### **GENERAL**
 - This version introduces the code for calculating carbon cost and critical heat days.
-
 #### **NEW PACKAGES**
 - Added new package for flux-specific calculations: `diive.pkgs.flux`
-
 #### **NEW MODULES**
 - Added new module for calculating carbon cost: `diive.pkgs.flux.carboncost`
 - Added new module for calculating critical heat days: `diive.pkgs.flux.criticalheatdays`
-
 #### **CHANGES & ADDITIONS**
 - None
-
 #### **BUGFIXES**
 - None
 
 
 ## v0.30.0 | 15 Feb 2022
-
 ### Starting diive library
-
 #### **GENERAL**
 The `diive` library contains packages and modules that aim to facilitate working
 with time series data, in particular ecosystem data.
@@ -84,7 +90,6 @@ packages that will be extended with the next versions.
 Notable introduction in this version is the package `echires` for working with
 high-resolution eddy covariance data. This package contains the module `fluxdetectionlimit`,
 which allows the calculation of the flux detection limit following Langford et al. (2015).
-
 #### **NEW PACKAGES**
 - Added `common`: Common functionality, e.g. reading data files
 - Added `pkgs > analyses`: General analyses
@@ -95,7 +100,6 @@ which allows the calculation of the flux detection limit following Langford et a
 - Added `pkgs > gapfilling`: Gap-filling routines
 - Added `pkgs > outlierdetection`: Outlier detection
 - Added `pkgs > qaqc`: Quality screening for timeseries variables
-
 #### **NEW MODULES**
 - Added `optimumrange` in `pkgs > analyses`
 - Added `gapfinder` in `pkgs > analyses`
@@ -107,12 +111,9 @@ which allows the calculation of the flux detection limit following Langford et a
 - Added `interpolate` in `pkgs > gapfilling`
 - Added `hampel` in `pkgs > outlierdetection`
 - Added `meteoscreening` in `pkgs > qaqc`
-
 #### **CHANGES & ADDITIONS**
 - None
-
 #### **BUGFIXES**
 - None
-
 #### **REFERENCES**
 Langford, B., Acton, W., Ammann, C., Valach, A., & Nemitz, E. (2015). Eddy-covariance data with low signal-to-noise ratio: Time-lag determination, uncertainties and limit of detection. Atmospheric Measurement Techniques, 8(10), 4197–4213. https://doi.org/10.5194/amt-8-4197-2015

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CsvFileAttributes">
+    <option name="attributeMap">
+      <map>
+        <entry key="\manuscripts\carboncost_dav\input_data\2_METEO_data_from_meteoscreening\4_2019-2020_BodenFeu_from_rawdata-files\2019-2020_30MIN_BodenFeu_Dataset_DIIVE-20220321-095127_Original-30T.diive.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\tests\testdata\testfile_ch-dav_2020.diive.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</project>

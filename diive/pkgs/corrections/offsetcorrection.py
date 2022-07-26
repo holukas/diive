@@ -5,7 +5,7 @@ from pandas import Series
 
 import diive.core.dfun.frames as frames
 # from diive.common.dfun.frames import resample_df
-from diive.pkgs.createvar.potentialradiation import potrad_from_latlon
+from diive.pkgs.createvar.nighttime_latlon import nighttime_flag_from_latlon
 
 
 def remove_relativehumidity_offset(series: Series,
@@ -97,7 +97,7 @@ def remove_radiation_zero_offset(_series: Series,
     # Calculate potential radiation for lower time resolution (30MIN)
     lower_res, _ = frames.resample_df(df=pd.DataFrame(_series), freq_str='30T', agg='mean', mincounts_perc=.9,
                                       to_freq='T')
-    _potential_radiation = potrad_from_latlon(lat=lat, lon=lon, timestamp_ix=lower_res.index)
+    _potential_radiation = nighttime_flag_from_latlon(lat=lat, lon=lon, timestamp_ix=lower_res.index)
     _potential_radiation = _potential_radiation.reindex(_series.index, method='nearest')  # Reindex to hires timestamp
     _potential_radiation.rename("potential_radiation", inplace=True)
 

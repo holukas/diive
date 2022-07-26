@@ -83,6 +83,12 @@ class ScreenVar:
                                                        max=self.pipe_config['absolute_limits'][1])
                 self.flags_df[_flag_outlier_abslim.name] = _flag_outlier_abslim
 
+            elif step == 'remove_radiation_offset':
+                _flag_outlier_abslim = absolute_limits(series=self.series,
+                                                       min=self.pipe_config['absolute_limits'][0],
+                                                       max=self.pipe_config['absolute_limits'][1])
+                self.flags_df[_flag_outlier_abslim.name] = _flag_outlier_abslim
+
             else:
                 raise Exception(f"No function defined for {step}.")
 
@@ -385,11 +391,11 @@ def test():
     # Testing MeteoScreeningFromDatabase
 
     # Example file from dbc.download output
-    testfile = r'L:\Dropbox\luhk_work\20 - CODING\26 - NOTEBOOKS\GL-NOTEBOOKS\General Notebooks\MeteoScreening\TA_NABEL_T1_35_1.csv'
+    testfile = r'L:\Dropbox\luhk_work\20 - CODING\26 - NOTEBOOKS\GL-NOTEBOOKS\General Notebooks\MeteoScreening\CH-DAV_2021-2022_SW_IN_NABEL_T1_35_1.csv'
     testdata = pd.read_csv(testfile, nrows=10000)
     testdata.set_index('TIMESTAMP_END', inplace=True)
     testdata.index = pd.to_datetime(testdata.index)
-    testdata['TA_NABEL_T1_35_1'].plot()
+    testdata['SW_IN_NABEL_T1_35_1'].plot()
     import matplotlib.pyplot as plt
     plt.show()
 
@@ -428,8 +434,8 @@ def test():
     mscr = \
         MeteoScreeningFromDatabaseSingleVar(var_df=testdata.copy(),
                                             site='CH-DAV',
-                                            measurement='TA',
-                                            field='TA_NABEL_T1_35_1',
+                                            measurement='SW',
+                                            field='SW_IN_NABEL_T1_35_1',
                                             resampling_agg='mean',
                                             resampling_freq='30T')
     mscr.run()

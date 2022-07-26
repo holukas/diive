@@ -209,6 +209,7 @@ def nice_date_ticks(ax, minticks, maxticks, which):
         ax.yaxis.set_major_locator(locator)
         ax.yaxis.set_major_formatter(formatter)
     elif which == 'x':
+        # formatter.formats = ['%H:%M']
         ax.xaxis.set_major_locator(locator)
         ax.xaxis.set_major_formatter(formatter)
     return None
