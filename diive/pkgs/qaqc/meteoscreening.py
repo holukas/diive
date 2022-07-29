@@ -5,7 +5,6 @@ METEOSCREENING
 This module is part of the 'diive' library.
 
 """
-
 from pathlib import Path
 
 import numpy as np
@@ -13,8 +12,10 @@ import pandas as pd
 from pandas import Series, DataFrame
 
 import diive.core.io.filereader as filereader
+from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+from diive.core.plotting.plotfuncs import quickplot
 from diive.core.times.resampling import resample_series_to_30MIN
-from diive.core.times.times import sanitize_timestamp_index
+from diive.core.times.times import TimestampSanitizer
 from diive.pkgs.corrections.offsetcorrection import remove_radiation_zero_offset, remove_relativehumidity_offset
 from diive.pkgs.corrections.setto_threshold import setto_threshold
 from diive.pkgs.outlierdetection.absolutelimits import absolute_limits
@@ -40,6 +41,7 @@ class ScreenVar:
             site: str,
             site_lat: float = None,
             site_lon: float = None,
+            timezone_of_timestamp: str = None
     ):
         self.series = series
         self.measurement = measurement
@@ -47,6 +49,7 @@ class ScreenVar:
         self.site = site
         self.site_lat = site_lat
         self.site_lon = site_lon
+        self.timezone_of_timestamp = timezone_of_timestamp
 
         # Processing pipes
         path = Path(__file__).parent.resolve()  # Search in this file's folder
@@ -56,11 +59,19 @@ class ScreenVar:
         # Collect all flags
         self.flags_df = pd.DataFrame(index=self.series.index)
 
+        self._plot_data(type='RAW', order='BEFORE')
         self._call_pipe_steps()
+        self._plot_data(type='QUALITY-CHECKED RAW', order='AFTER')
 
-    def get(self) -> DataFrame:
+    def _plot_data(self, type: str, order: str):
+        HeatmapDateTime(series=self.series,
+                        title=f"{self.series.name} {type} DATA\n"
+                              f"{order} HIGH-RES METEOSCREENING  |  "
+                              f"time resolution @{self.series.index.freqstr}").show()
+
+    def get(self) -> tuple[Series, DataFrame]:
         """Return all flags in DataFrame"""
-        return self.flags_df
+        return self.series, self.flags_df
 
     def _call_pipe_steps(self):
         pipe_steps = self.pipe_config['pipe']
@@ -72,37 +83,53 @@ class ScreenVar:
         for step in pipe_steps:
 
             if step == 'remove_highres_outliers_thymeboost':
+                # Generates flag
                 _flag_outlier_thyme = thymeboost(series=self.series,
                                                  flag_missing=self.flags_df[_flag_missing.name])
                 self.flags_df[_flag_outlier_thyme.name] = _flag_outlier_thyme
 
 
             elif step == 'remove_highres_outliers_absolute_limits':
+                # Generates flag
                 _flag_outlier_abslim = absolute_limits(series=self.series,
                                                        min=self.pipe_config['absolute_limits'][0],
                                                        max=self.pipe_config['absolute_limits'][1])
                 self.flags_df[_flag_outlier_abslim.name] = _flag_outlier_abslim
 
-            elif step == 'remove_radiation_offset':
-                _flag_outlier_abslim = absolute_limits(series=self.series,
-                                                       min=self.pipe_config['absolute_limits'][0],
-                                                       max=self.pipe_config['absolute_limits'][1])
-                self.flags_df[_flag_outlier_abslim.name] = _flag_outlier_abslim
+            elif step == 'remove_radiation_zero_offset':
+                # Generates corrected series
+                if (self.site_lat is None) \
+                        | (self.site_lon is None) \
+                        | (self.timezone_of_timestamp is None):
+                    raise Exception("Removing the radiation zero offset requires site latitude, "
+                                    "site longitude and site timezone (e.g., 'UTC+01:00' for CET).")
+                self.series = remove_radiation_zero_offset(
+                    series=self.series,
+                    lat=self.site_lat,
+                    lon=self.site_lon,
+                    timezone_of_timestamp=self.timezone_of_timestamp,
+                    showplot=True
+                )
+
+            elif step == 'setto_max_threshold':
+                # Generates corrected series
+                self.series = setto_threshold(series=self.series,
+                                              threshold=self.pipe_config['absolute_limits'][1],
+                                              type='max',
+                                              showplot=True)
+
+            elif step == 'setto_min_threshold':
+                # Generates corrected series
+                self.series = setto_threshold(series=self.series,
+                                              threshold=self.pipe_config['absolute_limits'][0],
+                                              type='min',
+                                              showplot=True)
 
             else:
                 raise Exception(f"No function defined for {step}.")
 
-            # elif step == 'remove_radiation_offset':
-            #     series_qc = self._remove_radiation_offset(series=series_qc)
-
             # elif step == 'remove_relativehumidity_offset':
             #     series_qc = self._remove_relativehumidity_offset(series=series_qc)
-
-            # elif step == 'setto_max_threshold':
-            #     series_qc, _flag = self._setto_max_threshold(series=series_qc)
-
-            # elif step == 'setto_min_threshold':
-            #     series_qc, _flag = self._setto_min_threshold(series=series_qc)
 
         # Overall quality flag
         self.flags_df.loc[:, 'QCF'] = self.flags_df.sum(axis=1)
@@ -110,25 +137,6 @@ class ScreenVar:
     def _remove_relativehumidity_offset(self, series: Series) -> Series:
         return remove_relativehumidity_offset(series=series,
                                               show=True, saveplot=self.saveplot)
-
-    def _setto_max_threshold(self, series: Series) -> tuple[Series, Series]:
-        series_qc, flag = setto_threshold(series=series, threshold=self.pipe_config['range'][1],
-                                          type='max', show=True, saveplot=self.saveplot)
-        return series_qc, flag
-
-    def _setto_min_threshold(self, series: Series) -> tuple[Series, Series]:
-        series_qc, flag = setto_threshold(series=series, threshold=self.pipe_config['range'][0],
-                                          type='min', show=True, saveplot=self.saveplot)
-        return series_qc, flag
-
-    def _remove_radiation_offset(self, series: Series) -> Series:
-        if (self.site_lat is None) | (self.site_lon is None):
-            raise Exception("Radiation offset requires site latitude and longitude.")
-        return remove_radiation_zero_offset(_series=series,
-                                            lat=self.site_lat,
-                                            lon=self.site_lon,
-                                            show=True,
-                                            saveplot=self.saveplot)
 
     def _pipe_assign(self) -> dict:
         """Assign appropriate processing pipe to this variable"""
@@ -231,33 +239,48 @@ class ScreenVar:
 #
 #         return subset_df
 
+
 class MeteoScreeningFromDatabaseMultipleVars:
 
-    def __init__(self, data_detailed: dict, assigned_measurements: dict, site: str):
+    def __init__(self,
+                 data_detailed: dict,
+                 assigned_measurements: dict,
+                 site: str,
+                 **kwargs):
         self.site = site
         self.data_detailed = data_detailed
         self.assigned_measurements = assigned_measurements
-        self.vars_qc_resampled = {}
-        self.qcflags_hires = {}
-        self.run()
+        self.kwargs = kwargs
 
-    def get(self):
-        return self.vars_qc_resampled, self.qcflags_hires
+        # Returned variables
+        self.resampled_detailed = {}
+        self.hires_qc = {}
+        self.hires_flags = {}
+        # self.run()
+
+    def get(self) -> tuple[dict, dict, dict]:
+        return self.resampled_detailed, self.hires_qc, self.hires_flags
 
     def run(self):
         for var in self.data_detailed.keys():
             m = self.assigned_measurements[var]
-            mscr = MeteoScreeningFromDatabaseSingleVar(var_df=self.data_detailed[var].copy(),
+            mscr = MeteoScreeningFromDatabaseSingleVar(data_detailed=self.data_detailed[var].copy(),
                                                        site=self.site,
                                                        measurement=m,
                                                        field=var,
                                                        resampling_agg='mean',
-                                                       resampling_freq='30T')
+                                                       resampling_freq='30T',
+                                                       **self.kwargs)
             mscr.run()
 
-            self.vars_qc_resampled[var], \
-            self.qcflags_hires[var] = \
-                mscr.get()
+            self.resampled_detailed[var], \
+            self.hires_qc[var], \
+            self.hires_flags[var] = mscr.get()
+
+
+#                         self.coll_resampled_detailed, \
+#             self.coll_hires_qc, \
+#             self.coll_hires_flags = mscr.get()
 
 
 class MeteoScreeningFromDatabaseSingleVar:
@@ -265,16 +288,19 @@ class MeteoScreeningFromDatabaseSingleVar:
      variable data (`field`) and tags
      """
 
-    def __init__(self,
-                 var_df: DataFrame,
-                 measurement: str,
-                 field: str,
-                 site: str,
-                 site_lat: float = None,
-                 site_lon: float = None,
-                 resampling_freq: str = '30T',
-                 resampling_agg: str = 'mean'):
-        self.var_df = var_df
+    def __init__(
+            self,
+            data_detailed: DataFrame,
+            measurement: str,
+            field: str,
+            site: str,
+            site_lat: float = None,
+            site_lon: float = None,
+            resampling_freq: str = '30T',
+            resampling_agg: str = 'mean',
+            timezone_of_timestamp: str = None
+    ):
+        self.data_detailed = data_detailed
         self.measurement = measurement
         self.field = field
         self.site = site
@@ -282,21 +308,24 @@ class MeteoScreeningFromDatabaseSingleVar:
         self.site_lon = site_lon
         self.resampling_freq = resampling_freq
         self.resampling_agg = resampling_agg
+        self.timezone_of_timestamp = timezone_of_timestamp
 
-        unique_units = list(set(self.var_df['units']))
+        unique_units = list(set(self.data_detailed['units']))
         if len(unique_units) > 1:
             raise Exception(f"More than one type of units in column 'units', "
                             f"but only one allowed. All data records must be "
                             f"in same units.")
 
-        self.grps = self.var_df.groupby(self.var_df['freq'])  # Groups by freq
+        self.grps = self.data_detailed.groupby(self.data_detailed['freq'])  # Groups by freq
 
         # Returned variables
-        self.var_qc_resampled_df = None
-        self.flags_hires_df = None
+        # Collected data across (potentially) different time resolutions
+        self.coll_resampled_detailed = None
+        self.coll_hires_qc = None
+        self.coll_hires_flags = None
 
-    def get(self) -> tuple[DataFrame, DataFrame]:
-        return self.var_qc_resampled_df, self.flags_hires_df
+    def get(self) -> tuple[DataFrame, Series, DataFrame]:
+        return self.coll_resampled_detailed, self.coll_hires_qc, self.coll_hires_flags
 
     def extract_tags(self, var_df: DataFrame, drop_field: str) -> dict:
         """Convert tag columns in DataFrame to simplified dict
@@ -325,8 +354,27 @@ class MeteoScreeningFromDatabaseSingleVar:
 
     def run(self):
         self._run_by_freq_group()
-        self.var_qc_resampled_df.sort_index(inplace=True)
-        self.flags_hires_df.sort_index(inplace=True)
+        self.coll_resampled_detailed.sort_index(inplace=True)
+        self.coll_hires_qc.sort_index(inplace=True)
+        self.coll_hires_flags.sort_index(inplace=True)
+        self._plots()
+
+    def _plots(self):
+        varname = self.field
+
+        # Plot heatmap
+        HeatmapDateTime(series=self.coll_resampled_detailed[varname],
+                        title=f"{self.coll_resampled_detailed[varname].name} RESAMPLED DATA\n"
+                              f"AFTER HIGH-RES METEOSCREENING  |  "
+                              f"time resolution @{self.coll_resampled_detailed.index.freqstr}").show()
+
+        # Plot comparison
+        _hires_qc = self.coll_hires_qc.copy()
+        _hires_qc.name = f"{_hires_qc.name} (HIGH-RES, after quality checks)"
+        _resampled = self.coll_resampled_detailed[varname].copy()
+        _resampled.name = f"{_resampled.name} (RESAMPLED)"
+        quickplot([_hires_qc, _resampled], subplots=False, showplot=True,
+                  title=f"Comparison")
 
     def _run_by_freq_group(self):
         """Screen and resample by frequency
@@ -338,31 +386,35 @@ class MeteoScreeningFromDatabaseSingleVar:
         """
         grp_counter = 0
         for grp_freq, grp_var_df in self.grps:
-            series = grp_var_df[self.field].copy()  # Group series
+            hires_raw = grp_var_df[self.field].copy()  # Group series
+            varname = hires_raw.name
             tags_dict = self.extract_tags(var_df=grp_var_df, drop_field=self.field)
             grp_counter += 1
-            print(f"Frequency group: {grp_freq}")
+            print(f"({varname}) Frequency group: {grp_freq}")
 
             # Sanitize timestamp index
-            series = sanitize_timestamp_index(data=series, freq=grp_freq)
+            hires_raw = TimestampSanitizer(data=hires_raw).get()
+            # series = sanitize_timestamp_index(data=series, freq=grp_freq)
 
             # Quality checks directly on high-res data
-            grp_flags_hires_df = ScreenVar(series=series,
-                                           measurement=self.measurement,
-                                           units=tags_dict['units'],
-                                           site=self.site,
-                                           site_lat=self.site_lat,
-                                           site_lon=self.site_lon).get()
+            hires_screened, \
+            hires_flags = ScreenVar(series=hires_raw,
+                                    measurement=self.measurement,
+                                    units=tags_dict['units'],
+                                    site=self.site,
+                                    site_lat=self.site_lat,
+                                    site_lon=self.site_lon,
+                                    timezone_of_timestamp=self.timezone_of_timestamp).get()
 
-            # Set flagged data to missing
-            series_qc = series.copy()
-            series_qc.loc[grp_flags_hires_df['QCF'] > 0] = np.nan
+            # Set flagged hi-res data to missing
+            hires_qc = hires_screened.copy()
+            hires_qc.loc[hires_flags['QCF'] > 0] = np.nan
 
             # Resample to 30MIN
-            series_qc_resampled = resample_series_to_30MIN(series=series_qc,
-                                                           to_freqstr=self.resampling_freq,
-                                                           agg=self.resampling_agg,
-                                                           mincounts_perc=.9)
+            resampled = resample_series_to_30MIN(series=hires_qc,
+                                                 to_freqstr=self.resampling_freq,
+                                                 agg=self.resampling_agg,
+                                                 mincounts_perc=.9)
 
             # Update tags after resampling
             tags_dict['freq'] = '30T'
@@ -370,34 +422,67 @@ class MeteoScreeningFromDatabaseSingleVar:
             tags_dict['data_version'] = 'meteoscreening'
 
             # Create df that includes the resampled series and its tags
-            grp_var_qc_resampled_df = pd.DataFrame(series_qc_resampled)
+            resampled_detailed = pd.DataFrame(resampled)
 
             # Insert tags as columns
             for key, value in tags_dict.items():
-                grp_var_qc_resampled_df[key] = value
+                resampled_detailed[key] = value
 
             if grp_counter == 1:
-                self.var_qc_resampled_df = grp_var_qc_resampled_df.copy()
-                self.flags_hires_df = grp_flags_hires_df.copy()
+                self.coll_resampled_detailed = resampled_detailed.copy()  # Collection
+                self.coll_hires_qc = hires_qc.copy()
+                self.coll_hires_flags = hires_flags.copy()
             else:
-                self.var_qc_resampled_df.combine_first(other=grp_var_qc_resampled_df)
-                self.flags_hires_df.combine_first(other=grp_flags_hires_df)
+                self.coll_resampled_detailed.combine_first(other=resampled_detailed)
+                self.coll_hires_qc.combine_first(other=hires_qc)
+                self.coll_hires_flags.combine_first(other=hires_flags)
                 # .append(grp_vardata_df_resampled)?
 
 
-def test():
+def example():
     # Testing code
 
     # Testing MeteoScreeningFromDatabase
 
+    # ============================================
+    # SCREENING DATA FILE DOWNLOADED FROM DATABASE
+    # ============================================
     # Example file from dbc.download output
+    import matplotlib.pyplot as plt
     testfile = r'L:\Dropbox\luhk_work\20 - CODING\26 - NOTEBOOKS\GL-NOTEBOOKS\General Notebooks\MeteoScreening\CH-DAV_2021-2022_SW_IN_NABEL_T1_35_1.csv'
-    testdata = pd.read_csv(testfile, nrows=10000)
+    testdata = pd.read_csv(testfile, nrows=100000)
     testdata.set_index('TIMESTAMP_END', inplace=True)
     testdata.index = pd.to_datetime(testdata.index)
     testdata['SW_IN_NABEL_T1_35_1'].plot()
-    import matplotlib.pyplot as plt
     plt.show()
+    assigned_measurements = {}
+    assigned_measurements['SW_IN_NABEL_T1_35_1'] = 'SW'
+    data_detailed = {}
+    data_detailed['SW_IN_NABEL_T1_35_1'] = testdata
+    mscr = \
+        MeteoScreeningFromDatabaseMultipleVars(
+            data_detailed=data_detailed,
+            site='CH-DAV',
+            assigned_measurements=assigned_measurements,
+            site_lat=46.815333,
+            site_lon=9.855972,
+            timezone_of_timestamp='UTC+01:00'
+        )
+    mscr.run()
+    resampled_detailed, hires_qc, hires_flags = mscr.get()
+
+    # mscr = \
+    #     MeteoScreeningFromDatabaseSingleVar(data_detailed=testdata.copy(),
+    #                                         site='CH-DAV',
+    #                                         measurement='SW',
+    #                                         field='SW_IN_NABEL_T1_35_1',
+    #                                         resampling_agg='mean',
+    #                                         resampling_freq='30T',
+    #                                         site_lat=46.815333,
+    #                                         site_lon=9.855972,
+    #                                         timezone_of_timestamp='UTC+01:00')
+    # mscr.run()
+    # vars_qc_resampled, qcflags_hires = mscr.get()
 
     # from dbc_influxdb import dbcInflux
     #
@@ -431,15 +516,15 @@ def test():
     #     dbc.download(bucket=BUCKET_RAW, measurements=MEASUREMENTS, fields=FIELDS,
     #                  start=START, stop=STOP, timezone_offset_to_utc_hours=1, data_version='raw')
 
-    mscr = \
-        MeteoScreeningFromDatabaseSingleVar(var_df=testdata.copy(),
-                                            site='CH-DAV',
-                                            measurement='SW',
-                                            field='SW_IN_NABEL_T1_35_1',
-                                            resampling_agg='mean',
-                                            resampling_freq='30T')
-    mscr.run()
-    vars_qc_resampled, qcflags_hires = mscr.get()
+    # mscr = \
+    #     MeteoScreeningFromDatabaseSingleVar(var_df=testdata.copy(),
+    #                                         site='CH-DAV',
+    #                                         measurement='SW',
+    #                                         field='SW_IN_NABEL_T1_35_1',
+    #                                         resampling_agg='mean',
+    #                                         resampling_freq='30T')
+    # mscr.run()
+    # vars_qc_resampled, qcflags_hires = mscr.get()
 
     # var_qc_resampled_df.to_csv(r'L:\Dropbox\luhk_work\20 - CODING\26 - NOTEBOOKS\meteoscreening\test_qc.csv')
 
@@ -501,4 +586,4 @@ def test():
 
 
 if __name__ == '__main__':
-    test()
+    example()

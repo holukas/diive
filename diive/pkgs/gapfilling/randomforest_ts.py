@@ -4,8 +4,8 @@ RANDOM FOREST GAP-FILLING FOR TIME SERIES
 randomforest_ts
 =========================================
 
-This module is part of diive:
-https://gitlab.ethz.ch/holukas/diive
+This module is part of the diive library:
+https://gitlab.ethz.ch/diive/diive
 
 
 
@@ -183,7 +183,6 @@ class RandomForestTS:
         # # np.mean(cross_val_score(clf, X_train, y_train, cv=10))
         # tscv = TimeSeriesSplit(n_splits=5)
         # cv_results = cross_val_score(model, X_train, y_train, cv=tscv, scoring='r2')
-
 
         # Stats
         model_mape, model_accuracy, model_mae = \

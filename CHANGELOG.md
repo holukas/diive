@@ -3,8 +3,24 @@
 ![DIIVE](images/logo_diive1_256px.png)
 
 
-## v0.34.0 | XX Jul 2022
-### MeteoScreening X
+## v0.34.0 | 29 Jul 2022
+### MeteoScreening Radiation
+#### MeteoScreening
+- Implemented corrections and quality screening for radiation data in `pkgs.qaqc.meteoscreening`
+#### Corrections
+Additions to `pkgs.corrections`:
+- Added function `.offsetcorrection.remove_radiation_zero_offset` to correct radiation
+data for nighttime offsets
+- Added function `.setto_threshold.setto_threshold` to set values above or below a
+specfied threshold value to the threshold.
+#### Plotting
+- Added function `core.plotting.plotfuncs.quickplot` for quickly plotting pandas
+Series and DataFrame data
+#### Resampling
+- Implemented `TimeSanitizer` in `core.times.resampling.resample_series_to_30MIN`
+#### Other
+- Added decorator class `core.utils.prints.ConsoleOutputDecorator`, a wrapper to
+execute functions with additional info that is output to the console.
 
 
 ## v0.33.0 | 26 Jul 2022
@@ -25,7 +41,7 @@ MeteoScreening uses a general settings file `pipes_meteo.yaml` that contains inf
 specific `measurements` should be screened. Such `measurements` group similar variables
 together, e.g. different air temperatures are measurement `TA`.   
 Additions to module `pkgs.qaqc.meteoscreening`:
-- Added `ScreenVar`
+- Added class `ScreenVar`
   - Performs quality screening of air temperature `TA`. 
   - As first check, I implemented outlier detection via the newly added package `ThymeBoost`,
   along with checks for absolute limits.
@@ -34,7 +50,7 @@ Additions to module `pkgs.qaqc.meteoscreening`:
   - The screening outputs a separate dataframe that contains `QCF` flags for each check.
   - The checks do not change the original time series. Instead, only the flags are generated.
   - Screening routines for more variables will be added over the next updates. 
-- Added `MeteoScreeningFromDatabaseSingleVar`
+- Added class `MeteoScreeningFromDatabaseSingleVar`
   - Performs quality screening *and* resampling to 30MIN of variables downloaded from the database.
   - It uses the `detailed` data when downloading data from the database using `dbc-influxdb`.
   - The `detailed` data contains the measurement of the variable, along with multiple tags that
@@ -45,7 +61,7 @@ Additions to module `pkgs.qaqc.meteoscreening`:
   resolution over the years, although I still need to test this.
   - After screening and resampling, data are in a format that can be directly uploaded to the 
   database using `dbc-influxdb`.
-- Added `MeteoScreeningFromDatabaseMultipleVars`
+- Added class `MeteoScreeningFromDatabaseMultipleVars`
   - Wrapper where multiple variables can be screened in one run.
   - This should also work in combination of different `measurements`. For example, screening
   radiation and temperature data in one run.

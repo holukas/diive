@@ -1,14 +1,20 @@
+from typing import Literal
+
 import pandas as pd
 from pandas import Series
 from pandas.tseries.frequencies import to_offset
 
-from diive.core.times.times import convert_series_timestamp_to_middle, sanitize_timestamp_index
+from diive.core.times.times import TimestampSanitizer
+from diive.core.times.times import convert_series_timestamp_to_middle
+from diive.core.utils.prints import ConsoleOutputDecorator
 
 
+@ConsoleOutputDecorator()
 def resample_series_to_30MIN(series: Series,
                              to_freqstr: str = '30T',
                              agg: str = 'mean',
-                             mincounts_perc: float = .9):
+                             mincounts_perc: float = .9,
+                             output_timestamp_shows: Literal['middle', 'end'] = 'end'):
     """Downsample data to 30-minute time resolution
 
     Input data must have timestamp showing the END of the time period.
@@ -88,7 +94,12 @@ def resample_series_to_30MIN(series: Series,
     agg_df = agg_df[filter_min]
 
     # Sanitize resampled timestamp index
-    agg_df = sanitize_timestamp_index(data=agg_df, freq='30T')
+    if output_timestamp_shows == 'middle':
+        agg_df = TimestampSanitizer(data=agg_df).get()
+    elif output_timestamp_shows == 'end':
+        agg_df = TimestampSanitizer(data=agg_df, output_middle_timestamp=False).get()
+
+    # agg_df = sanitize_timestamp_index(data=agg_df, freq='30T')
 
     # # Insert additional timestamps
     # timestamp_freq = agg_df.index.freq

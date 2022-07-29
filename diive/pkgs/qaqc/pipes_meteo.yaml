@@ -7,7 +7,7 @@
 # Options for <units>:
 #   'W m-2', 'degC', '%', 'umol m-2 s-1'
 # Options for <check#>:
-#   'remove_radiation_offset', 'range_check', 'setto_max_threshold',
+#   'remove_radiation_zero_offset', 'range_check', 'setto_max_threshold',
 #   'setto_min_threshold', 'remove_relativehumidity_offset',
 #   'remove_highres_outliers'
 
@@ -24,7 +24,7 @@ G:
     absolute_limits: [ -100, 100 ]
 
 LW:
-  LW_IN_:
+  LW_IN_:s
     pipe: [ remove_highres_outliers_absolute_limits ]
     units: W m-2
     absolute_limits: [ 50, 600 ]
@@ -37,9 +37,9 @@ PA:
 
 PPFD:
   PPFD_IN_:
-    pipe: [ remove_radiation_offset, setto_max_threshold, setto_min_threshold, remove_highres_outliers_absolute_limits ]
+    pipe: [ remove_radiation_zero_offset, setto_max_threshold, setto_min_threshold, remove_highres_outliers_absolute_limits ]
     units: umol m-2 s-1
-    absolute_limits: [ 0, 3000 ]
+    absolute_limits: [ 0, 4000 ]
 
 PREC:
   PREC_:
@@ -55,7 +55,7 @@ RH:
 
 SW:
   SW_IN_:
-    pipe: [ remove_radiation_offset, setto_max_threshold, setto_min_threshold, remove_highres_outliers_absolute_limits ]
+    pipe: [ remove_radiation_zero_offset, setto_max_threshold, setto_min_threshold, remove_highres_outliers_absolute_limits ]
     units: W m-2
     absolute_limits: [ 0, 2000 ]
 

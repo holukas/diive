@@ -1,9 +1,9 @@
 from pathlib import Path
 
-import pandas as pd
 from pandas import Series
 
 import diive.core.dfun.frames as frames
+from diive.core.utils.prints import ConsoleOutputDecorator
 # from diive.common.dfun.frames import resample_df
 from diive.pkgs.createvar.nighttime_latlon import nighttime_flag_from_latlon
 
@@ -58,58 +58,65 @@ def remove_relativehumidity_offset(series: Series,
 
     # Plot
     if saveplot:
-        from diive.core.plotting.plotfuncs import quickplot_df
-        quickplot_df([series, _series_exceeds, _daily_mean_above_100, _offset, series_corr], subplots=False,
-                     saveplot=saveplot, hline=100, title=f"Remove RH Offset From {series.name}")
+        from diive.core.plotting.plotfuncs import quickplot
+        quickplot([series, _series_exceeds, _daily_mean_above_100, _offset, series_corr], subplots=False,
+                  saveplot=saveplot, hline=100, title=f"Remove RH Offset From {series.name}")
 
     return series_corr
 
 
-def remove_radiation_zero_offset(_series: Series,
+@ConsoleOutputDecorator()
+def remove_radiation_zero_offset(series: Series,
                                  lat: float,
                                  lon: float,
-                                 show: bool = False,
-                                 saveplot: str or Path = None) -> Series:
-    """Remove nighttime offset from radiation data
+                                 timezone_of_timestamp: str,
+                                 showplot: bool = False) -> Series:
+    """Remove nighttime offset from all radiation data and set nighttime to zero
 
     Works for radiation data where radiation should be zero during nighttime.
 
-    Potential radiation is calculated and used to detect nighttime data. Then,
-    for each radiation variable, the nighttime mean is calculated for each
-    day in the dataset. This mean is the offset by which daytime and nighttime
+    Nighttime flag is calculated and used to detect nighttime data. Then,
+    for each radiation variable, the nighttime radiation mean is calculated for
+    each day in the dataset. This mean is the offset by which daytime and nighttime
     radiation data are corrected. Finally, after the application of the offset,
     nighttime data are set to zero.
 
     Args:
-        _series: Data for radiation variable that is corrected
+        series: Data for radiation variable that is corrected
         lat: Latitude of the location where radiation data were recorded
         lon: Longitude of the location where radiation data were recorded
-        show: Show plot
+        timezone_of_timestamp: timezone in the format e.g. 'UTC+01:00'
+            for CET (UTC + 1 hour), needed for nighttime detection via
+            pysolar which works with UTC
+        showplot: Show plot
 
     Returns:
-    Corrected series
+        Corrected series
     """
 
-    print(f"Removing radiation zero-offset from {_series.name} ...")
-    outname = _series.name
-    _series.name = "input_data"
+    outname = series.name
+    series.name = "input_data"
 
-    # Calculate potential radiation for lower time resolution (30MIN)
-    lower_res, _ = frames.resample_df(df=pd.DataFrame(_series), freq_str='30T', agg='mean', mincounts_perc=.9,
-                                      to_freq='T')
-    _potential_radiation = nighttime_flag_from_latlon(lat=lat, lon=lon, timestamp_ix=lower_res.index)
-    _potential_radiation = _potential_radiation.reindex(_series.index, method='nearest')  # Reindex to hires timestamp
-    _potential_radiation.rename("potential_radiation", inplace=True)
+    # Calculate potential radiation for 10MIN time resolution
+    nighttime_flag = nighttime_flag_from_latlon(
+        lat=lat, lon=lon,
+        start=str(series.index[0]), stop=str(series.index[-1]),
+        freq='10T', timezone_of_timestamp=timezone_of_timestamp)
 
-    # Detect series nighttime data from potential radiation
-    series_nighttime = _series.loc[_potential_radiation == 0]
-    nighttime_ix = series_nighttime.index
+    # Reindex to hires timestamp
+    nighttime_flag_in_hires = nighttime_flag.reindex(series.index, method='nearest')
+    nighttime_ix = nighttime_flag_in_hires == 1
+    # nighttime_flag.rename("nighttime_flag", inplace=True)
+
+    # Get series nighttime data
+    series_nighttime = series.loc[nighttime_ix]
+    nighttime_datetimes = series_nighttime.index
 
     # Calculate offset as the daily nighttime mean
     _offset = frames.aggregated_as_hires(aggregate_series=series_nighttime,
                                          to_freq='D',
                                          to_agg='mean',
-                                         hires_timestamp=_series.index,
+                                         hires_timestamp=series.index,
                                          interpolate_missing_vals=True)
 
     # Gap-fill offset values
@@ -125,31 +132,28 @@ def remove_radiation_zero_offset(_series: Series,
     #   In case of positive offset +8:
     #       (measured radiation should be zero but +8 was measured)
     #       120 - (+8) = 112
-    _series_corr = _series.sub(_offset)
+    _series_corr = series.sub(_offset)
     _series_corr.rename("corrected_by_offset", inplace=True)
 
     # Set nighttime radiation to zero (based on potential radiation)
     series_corr_settozero = _series_corr.copy()
     series_corr_settozero.loc[nighttime_ix] = 0
+    series_corr_settozero.rename("corrected_by_offset_and_night_settozero", inplace=True)
 
-    # # Set still remaining negative values to zero
-    # series_corr_settozero.loc[series_corr_settozero < 0] = 0
-
-    series_corr_settozero.rename(outname, inplace=True)
+    # Set still remaining negative values to zero
+    series_corr_settozero.loc[series_corr_settozero < 0] = 0
 
     # Plot
-    if saveplot:
-        from diive.core.plotting.plotfuncs import quickplot_df
-        quickplot_df([_series, _potential_radiation, _series_corr,
-                      series_corr_settozero, _offset],
-                     subplots=False,
-                     saveplot=saveplot,
-                     title=f"Removing radiation zero-offset from {_series.name}")
-        # Separate plot showing the offset
-        quickplot_df([_offset],
-                     subplots=False,
-                     saveplot=saveplot,
-                     title=f"Used offset values from removing radiation zero-offset from {_series.name}")
+    if showplot:
+        from diive.core.plotting.plotfuncs import quickplot
+        quickplot([series, _series_corr,
+                   series_corr_settozero, _offset],
+                  subplots=True,
+                  showplot=showplot,
+                  title=f"Removing radiation zero-offset from {outname}")
+
+    # Rename for output
+    series_corr_settozero.rename(outname, inplace=True)
 
     return series_corr_settozero
 

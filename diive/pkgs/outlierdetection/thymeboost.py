@@ -11,8 +11,11 @@ from ThymeBoost import ThymeBoost as tb
 from pandas import Series
 from pandas.tseries.frequencies import to_offset
 
+from diive.core.utils.prints import ConsoleOutputDecorator
 
-def thymeboost(series: Series, flag_missing:Series) -> Series:
+
+@ConsoleOutputDecorator()
+def thymeboost(series: Series, flag_missing: Series) -> Series:
     flag_name = f"QCF_OUTLIER_THYME_{series.name}"
     _series = series.copy()
 

@@ -369,8 +369,9 @@ def update_plotdate_main(series, ax, prevline, plot_title_ref):
     return plot_title_ref
 
 
-def quickplot_df(data: DataFrame or Series, hline: None or float = None, subplots: bool = True,
-                 title: str = None, saveplot: str or Path = None, showplot: bool = False) -> None:
+def quickplot(data: DataFrame or Series, hline: None or float = None, subplots: bool = True,
+              title: str = None, saveplot: str or Path = None, showplot: bool = False,
+              showstats: bool=True) -> None:
     if isinstance(data, Series):
         data = pd.DataFrame(data)
     elif isinstance(data, list):
@@ -380,13 +381,39 @@ def quickplot_df(data: DataFrame or Series, hline: None or float = None, subplot
         data = pd.concat(data_cols, axis=1)
 
     fig = plt.figure(figsize=(20, 9))
-    gs = gridspec.GridSpec(1, 1)  # rows, cols
-    # gs.update(wspace=.2, hspace=0, left=.1, right=.9, top=.9, bottom=.1)
-    ax = fig.add_subplot(gs[0, 0])
-    data.plot(subplots=subplots, ax=ax, title=title, lw=2)
 
-    if hline:
-        ax.axhline(hline, label=f"value: {hline}", ls='--')
+    # Number of plots in figure
+    n_plotrows = len(data.columns) if subplots else 1
+
+    gs = gridspec.GridSpec(n_plotrows, 1)  # rows, cols
+    # gs.update(wspace=.2, hspace=0, left=.1, right=.9, top=.9, bottom=.1)
+
+    # Create axis for each column
+    axes = {}
+    for a in range(0, n_plotrows):
+        axes[a] = fig.add_subplot(gs[a, 0])
+
+    colors = colors_12(400)
+    for ix, col in enumerate(data.columns):
+        ax = axes[ix] if subplots else axes[0]
+        mean = data[col].mean()
+        std = data[col].std()
+        max = data[col].max()
+        min = data[col].min()
+        ax.plot_date(x=data.index, y=data[col], color=colors[ix],
+                           label=f"{col}\n"
+                                 f"mean: {mean:.2f}±{std:.2f}\n"
+                                 f"min: {min:.2f}  |  max: {max:.2f}")
+        ax.text(0.02, 0.98, title,
+                size=theme.AXLABELS_FONTSIZE, color='black', backgroundcolor='none', transform=ax.transAxes,
+                alpha=1, horizontalalignment='left', verticalalignment='top')
+        default_legend(ax=ax, facecolor='white')
+        if hline:
+            ax.axhline(hline, label=f"value: {hline}", ls='--')
+
+
+    # ax = fig.add_subplot(gs[0, 0])
+    # _axes = data.plot(subplots=subplots, ax=ax, title=title, lw=2)
 
     if saveplot:
         save_fig(fig=fig, path=saveplot, title=title)
@@ -394,7 +421,7 @@ def quickplot_df(data: DataFrame or Series, hline: None or float = None, subplot
     if showplot:
         # pass
         fig.show()
-    plt.close(fig)
+    # plt.close(fig)
 
 
 def save_fig(fig, title: str, path=Path or str):

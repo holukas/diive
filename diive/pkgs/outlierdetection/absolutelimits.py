@@ -3,7 +3,10 @@ from pathlib import Path
 import pandas as pd
 from pandas import Series
 
+from diive.core.utils.prints import ConsoleOutputDecorator
 
+
+@ConsoleOutputDecorator()
 def absolute_limits(series: Series, min: int, max: int, saveplot: str or Path = None) -> Series:
     flag_name = f"QCF_OUTLIER_ABSLIM_{series.name}"
     flag = pd.Series(index=series.index, data=False)

@@ -2,7 +2,6 @@
 HEATMAP
 =======
 """
-
 import copy
 
 import matplotlib.gridspec as gridspec
@@ -14,9 +13,11 @@ from pandas.plotting import register_matplotlib_converters
 
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.plotting.plotfuncs import nice_date_ticks, default_format, format_spines
-from diive.core.times.times import convert_series_timestamp_to_middle, TimestampSanitizer
+from diive.core.times.times import TimestampSanitizer
+from diive.core.utils.prints import ConsoleOutputDecorator
 
 
+@ConsoleOutputDecorator(spacing=False)
 class HeatmapDateTime:
 
     def __init__(self,
@@ -48,8 +49,12 @@ class HeatmapDateTime:
             in https://gitlab.ethz.ch/gl-notebooks/general-notebooks
 
         """
+        print(f"Plotting heatmap  ...")
 
-        self.series = TimestampSanitizer(data=series).get()
+        self.series = series.copy()
+
+        print("Preparing timestamp for heatmap plotting ...")
+        self.series = TimestampSanitizer(data=self.series).get()
 
         self.title = title
         self.cmap = cmap
@@ -185,7 +190,6 @@ class HeatmapDateTime:
 
 
 def example():
-
     # Example with random data
     import pandas as pd
     import numpy as np

@@ -34,7 +34,7 @@ def nighttime_flag_from_latlon(
         lon: Longitude of location as float, e.g. 9.790639
         start: start date
         stop: end date
-        freq: time resolution of resulting dataframe, e.g. '1T' for 1-minute resolution
+        freq: time resolution of resulting dataframe, e.g. '30T' for 30-minute resolution
         timezone_of_timestamp: timezone in the format e.g. 'UTC+01:00' for CET (UTC + 1 hour)
             The datetime index of the resulting Series will be in this timezone.
 
@@ -67,9 +67,9 @@ def nighttime_flag_from_latlon(
 
     # Calculate flag
     print("Generating nighttime flag (1=nighttime, 0=daytime) from sun altitude ...")
-    df['FLAG_NIGHTTIME'] = nan
-    df.loc[df['ALTITUDE_SUN_deg'] < 0, 'FLAG_NIGHTTIME'] = 1
-    df.loc[df['ALTITUDE_SUN_deg'] > 0, 'FLAG_NIGHTTIME'] = 0
+    df['FLAG_NIGHTTIME_LATLON'] = nan
+    df.loc[df['ALTITUDE_SUN_deg'] < 0, 'FLAG_NIGHTTIME_LATLON'] = 1
+    df.loc[df['ALTITUDE_SUN_deg'] > 0, 'FLAG_NIGHTTIME_LATLON'] = 0
 
     # Remove timezone info from timestamp
     df['TIMESTAMP_END'] = df['TIMESTAMP_END'].dt.tz_localize(None)
@@ -93,7 +93,7 @@ def nighttime_flag_from_latlon(
     # df['SW_IN_POT'] = df.apply(
     #     lambda row: radiation.get_radiation_direct(row['TIMESTAMP_UTC_END'].to_pydatetime(), row['ALTITUDE_SUN_deg']), axis=1)
 
-    return df['FLAG_NIGHTTIME']
+    return df['FLAG_NIGHTTIME_LATLON']
 
 
 def potrad_from_latlon(

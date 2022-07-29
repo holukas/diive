@@ -10,7 +10,9 @@ from pandas.tseries.frequencies import to_offset
 
 class TimestampSanitizer():
 
-    def __init__(self, data: Series or DataFrame):
+    def __init__(self,
+                 data: Series or DataFrame,
+                 output_middle_timestamp: bool = True):
         """
         Validate and prepare timestamps for further processing
 
@@ -32,7 +34,9 @@ class TimestampSanitizer():
             data: Data with timestamp index
         """
         self.data = data.copy()
+        self.output_middle_timestamp = output_middle_timestamp
         self.inferred_freq = None
+
         self._run()
 
     def get(self) -> Series or DataFrame:
@@ -60,11 +64,12 @@ class TimestampSanitizer():
         self.data = continuous_timestamp_freq(data=self.data, freq=self.inferred_freq)
 
         # Convert timestamp to middle
-        self.data = convert_series_timestamp_to_middle(data=self.data)
+        if self.output_middle_timestamp:
+            self.data = convert_series_timestamp_to_middle(data=self.data)
 
 
 def sort_timestamp_ascending(data: Series or DataFrame) -> Series or DataFrame:
-    print("Sorting timestamp ascending ...", end=" ")
+    print(f"Sorting timestamp {data.index.name} ascending ...", end=" ")
     data.sort_index()
     print("OK")
     return data
@@ -84,7 +89,7 @@ def convert_timestamp_to_datetime(data: Series or DataFrame) -> Series or DataFr
         data with confirmed datetime index
 
     """
-    print("Converting timestamp to datetime ...", end=" ")
+    print(f"Converting timestamp {data.index.name} to datetime ...", end=" ")
     try:
         data.index = pd.to_datetime(data.index)
         print("OK")
@@ -105,9 +110,9 @@ def validate_timestamp_naming(data: Series or DataFrame) -> str:
         data: Data with timestamp index
 
     """
-    print("Validating timestamp naming ...", end=" ")
     timestamp_name = data.index.name
     allowed_timestamp_names = ['TIMESTAMP_END', 'TIMESTAMP_START', 'TIMESTAMP_MID']
+    print(f"Validating timestamp naming of timestamp column {timestamp_name} ...", end=" ")
     if any(fnmatch.fnmatch(timestamp_name, allowed_name) for allowed_name in allowed_timestamp_names):
         print("OK")
         return timestamp_name
@@ -178,7 +183,7 @@ def make_run_id(prefix: str = False) -> str:
 
 def timedelta_to_string(timedelta):
     """
-    Converts a pandas.Timedelta to a string representation
+    Converts a pandas.Timedelta to a frequency string representation
     compatible with pandas.Timedelta constructor format
     https://stackoverflow.com/questions/46429736/pandas-resampling-how-to-generate-offset-rules-string-from-timedelta
     https://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
@@ -201,6 +206,25 @@ def timedelta_to_string(timedelta):
         format += '%dU' % c.microseconds
     if c.nanoseconds > 0:
         format += '%dN' % c.nanoseconds
+
+    # Remove leading `1` to represent e.g. daily resolution
+    # This is in line with how pandas handles frequency strings,
+    # e.g., 1-minute time resolution is represented by `T` and
+    # not by `1T`.
+    if format == '1D':
+        format = 'D'
+    elif format == '1H':
+        format = 'H'
+    elif format == '1T':
+        format = 'T'
+    elif format == '1S':
+        format = 'S'
+    elif format == '1L':
+        format = 'L'
+    elif format == '1U':
+        format = 'U'
+    elif format == '1N':
+        format = 'N'
 
     return format
 
@@ -333,7 +357,7 @@ class DetectFrequency:
         self._run()
 
     def _run(self):
-        print("Detecting time resolution from data ...", end=" ")
+        print(f"Detecting time resolution from timestamp {self.index.name} ...", end=" ")
 
         freq_full = timestamp_infer_freq_from_fullset(timestamp_ix=self.index)
         freq_timedelta = timestamp_infer_freq_from_timedelta(timestamp_ix=self.index)
@@ -446,7 +470,7 @@ def timestamp_infer_freq_from_timedelta(timestamp_ix: pd.DatetimeIndex) -> str o
 def remove_index_duplicates(data: Series or DataFrame,
                             keep: Literal["first", "last", False] = "last") -> Series or DataFrame:
     """Remove index duplicates"""
-    print("Removing index duplicates ...", end=" ")
+    print("Removing data records with duplicate indexes ...", end=" ")
     n_duplicates = data.index.duplicated().sum()
     if n_duplicates > 0:
         # Duplicates found
@@ -467,7 +491,8 @@ def continuous_timestamp_freq(data: Series or DataFrame, freq: str) -> Series or
     first_date = data.index[0]
     last_date = data.index[-1]
 
-    print(f"Creating continuous {freq} timestamp index between {first_date} and {last_date} ...", end=" ")
+    print(f"Creating continuous {freq} timestamp index for timestamp {data.index.name} "
+          f"between {first_date} and {last_date} ...", end=" ")
 
     # Original timestamp name
     idx_name = data.index.name
@@ -534,6 +559,10 @@ def convert_series_timestamp_to_middle(data: Series or DataFrame) -> Series or D
     """
     timestamp_name_before = data.index.name
     timestamp_name_after = 'TIMESTAMP_MID'
+
+    if timestamp_name_before == timestamp_name_after:
+        return data
+
     timestamp_freq = data.index.freq
 
     print(f"Converting timestamp index {timestamp_name_before} to show middle of averaging period ...")
@@ -566,35 +595,6 @@ def convert_series_timestamp_to_middle(data: Series or DataFrame) -> Series or D
           f"{timestamp_name_after} from {first_timestamp_after} to {last_timestamp_after}")
 
     return data
-
-
-def sanitize_timestamp_index(data: Series or DataFrame, freq: str) -> Series:
-    """Sanitize timestamp index"""
-
-    # Sort index
-    data.sort_index(inplace=True)
-
-    # Remove index duplicates
-    data = remove_index_duplicates(data=data, keep='last')
-
-    # Detect time resolution from data
-    freq_validated = DetectFrequency(index=data.index, freq_expected=freq).get()
-
-    # Make timestamp continuous w/o date gaps
-    data = continuous_timestamp_freq(data=data, freq=freq_validated)
-
-    return data
-
-    # # Timestamp convention
-    # # Shift timestamp by half-frequency, if needed
-    # if self.timestamp_start_middle_end == 'middle':
-    #     pass
-    # else:
-    #     timedelta = pd.to_timedelta(self.data_freq) / 2
-    #     if self.timestamp_start_middle_end == 'end':
-    #         self.data_df.index = self.data_df.index - pd.Timedelta(timedelta)
-    #     elif self.timestamp_start_middle_end == 'start':
-    #         self.data_df.index = self.data_df.index + pd.Timedelta(timedelta)
 
 
 def add_timezone_info(timestamp_index, timezone_of_timestamp: str):
