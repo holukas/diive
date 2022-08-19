@@ -3,11 +3,14 @@ FLUX: OPTIMUM RANGE
 ===================
 """
 
+from math import isclose
+
+import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.legend_handler import HandlerTuple
-from pandas import DataFrame
+from pandas import DataFrame, Series
 
 
 class FindOptimumRange:
@@ -16,17 +19,24 @@ class FindOptimumRange:
     Example: VPD (x) range where NEE (y) carbon uptake is highest (=smallest number)
     """
 
-    def __init__(self, df: DataFrame, xcol: str, ycol: str, define_optimum: str = 'max'):
+    def __init__(self, x: Series, y: Series, define_optimum: str = 'max'):
         """
-        :param df: data
-        :param xcol: column name of x in df
-        :param ycol: column name of y in df
-        :param define_optimum: optimum can be based on 'min' or 'max'
+
+        Args:
+            df: data
+            x: column name of x in df
+            y: column name of y in df
+            define_optimum: optimum can be based on 'min' or 'max'
         """
-        self.df = df[[xcol, ycol]].copy()
-        self.xcol = xcol
-        self.ycol = ycol
         self.define_optimum = define_optimum
+
+        # Create dictonary, used to build df
+        self.xcol = f"{x.name}_x"
+        self.ycol = f"{y.name}_y"
+        cols = {self.xcol: x, self.ycol: y}
+
+        # Concatenate the series side by side with axis=1
+        self.df = pd.concat(cols, axis=1)
 
         self._results_optrange = {}
 
@@ -38,20 +48,30 @@ class FindOptimumRange:
 
     def find_optimum(self):
         # self._prepare_data() todo?
-        num_xbins = self._define_xbins()
-        rwinsize = int(num_xbins / 5)  # Window size for rolling aggs
-        bin_aggs_df = self._aggregate(bin_agg='median')
+        n_xbins = 200  # Number of x bins
+        rwinsize = 10  # Window size for rolling aggs
+        bin_agg = 'median'
+        rolling_agg = 'mean'
+
+        self._divide_xdata_into_bins(n_xbins=n_xbins)
+
+        bin_aggs_df = self._aggregate_per_bin(bin_agg=bin_agg)
+
         rbin_aggs_df = self._rolling_agg(bin_aggs_df=bin_aggs_df,
                                          winsize=rwinsize,
-                                         use_bin_agg='median',
-                                         rolling_agg='mean')
+                                         use_bin_agg=bin_agg,
+                                         rolling_agg=rolling_agg)
+
         roptimum_bin, roptimum_val = self._find_rolling_optimum(rolling_df=rbin_aggs_df,
-                                                                use_rolling_agg='mean')
+                                                                use_rolling_agg=rolling_agg)
+
+        # rwinsize = int(num_xbins / 5)  # Window size for rolling aggs
+
         optimum_xstart, optimum_xend, optimum_ymean, \
         optimum_start_bin, optimum_end_bin = self._get_optimum_range(grouped_df=bin_aggs_df,
                                                                      roptimum_bin=roptimum_bin,
                                                                      winsize=rwinsize)
-        self._validate(roptimum_val=roptimum_val, optimum_ymean=optimum_ymean)  # todo no match
+        self._validate(roptimum_val=roptimum_val, optimum_ymean=optimum_ymean)
 
         vals_in_optimum_range_df = \
             self._values_in_optimum_range(optimum_xstart=optimum_xstart, optimum_xend=optimum_xend)
@@ -67,7 +87,7 @@ class FindOptimumRange:
             rwinsize=rwinsize,
             roptimum_bin=roptimum_bin,
             roptimum_val=roptimum_val,
-            num_xbins=num_xbins,
+            n_xbins=n_xbins,
             xcol=self.xcol,
             ycol=self.ycol,
             vals_in_optimum_range_df=vals_in_optimum_range_df
@@ -116,17 +136,21 @@ class FindOptimumRange:
         # Keep x values > 0
         self.df = self.df.loc[self.df[self.xcol] > 0, :]
 
-    def _define_xbins(self):
-        """ Divide x data into bins
-        Number of bins is calculated from number of data rows
-        Column w/ bin membership is added to data
+    def _divide_xdata_into_bins(self, n_xbins: int = 200):
         """
-        num_xbins = int(len(self.df) / 100)  # Number of x bins
-        xbins = pd.qcut(self.df[self.xcol], num_xbins, duplicates='drop')  # How awesome!
-        self.df = self.df.assign(xbins=xbins)
-        return num_xbins
+        Divide x data into bins
 
-    def _aggregate(self, bin_agg: str = 'median'):
+        Column w/ bin membership is added to data
+
+        Args:
+            n_xbins: number of bins
+
+        """
+        # n_xbins = int(len(self.df) / 100)  # Number of x bins
+        xbins = pd.qcut(self.df[self.xcol], n_xbins, duplicates='drop')  # How awesome!
+        self.df = self.df.assign(xbins=xbins)
+
+    def _aggregate_per_bin(self, bin_agg: str = 'median'):
         """Aggregate by bin membership"""
         return self.df.groupby('xbins').agg({bin_agg, 'count'})
 
@@ -147,7 +171,7 @@ class FindOptimumRange:
         elif self.define_optimum == 'max':
             roptimum_bin = rolling_df[use_rolling_agg].idxmax()
             roptimum_val = rolling_df[use_rolling_agg].iloc[roptimum_bin]
-        print(f"Max uptake found in class: {roptimum_bin}  /  value: {roptimum_val}")
+        print(f"Optimum {self.define_optimum} found in class: {roptimum_bin}  /  value: {roptimum_val}")
         return roptimum_bin, roptimum_val
 
     def _get_optimum_range(self, grouped_df: DataFrame, roptimum_bin: pd.IntervalIndex, winsize: int):
@@ -155,7 +179,7 @@ class FindOptimumRange:
 
         # Find integer location of bin where rolling optimum value (y min or y max) was found
         int_loc = grouped_df.index.get_loc(roptimum_bin)
-        print(f"Index integer location of rolling max uptake: {int_loc}  /  {grouped_df.index[int_loc]}")
+        print(f"Index integer location of found optimum: {int_loc}  /  {grouped_df.index[int_loc]}")
 
         # Get data range start and end
         roptimum_start_ix = int_loc - (int(winsize / 2))
@@ -178,8 +202,12 @@ class FindOptimumRange:
                optimum_start_bin, optimum_end_bin
 
     def _validate(self, roptimum_val, optimum_ymean):
-        if roptimum_val == optimum_ymean:
+        check = isclose(roptimum_val, optimum_ymean, abs_tol=10**-3)
+        if check:
             print("Validation OK.")
+        else:
+            print("(!)Validation FAILED.")
+            assert isclose(roptimum_val, optimum_ymean)
 
         # rolling_range_mean = grouped_df.iloc[roptimum_start_ix:roptimum_end_ix].mean()
         # print(f"\nStats of range of rolling max uptake:\n{rolling_range_mean}")
@@ -341,24 +369,56 @@ def plot_rolling_bin_aggregates(ax, results_optrange: dict):
 
 def example():
     from pathlib import Path
-    from diive.core.io.filereader import ReadFileType
-    import matplotlib.gridspec as gridspec
+    import pickle
+    import time
+    pd.options.display.width = None
+    pd.options.display.max_columns = None
+    pd.set_option('display.max_rows', 3000)
+    pd.set_option('display.max_columns', 3000)
 
-    # # Load complete data
-    # filepath = Path(
-    #     "M:\Downloads\Warm Winter 2020 ecosystem eddy covariance flux product for 73 stations in FLUXNET-Archive format—release 2022-1\Swiss_Sites\FLX_CH-Dav_FLUXNET2015_FULLSET_1997-2020_beta-3\FLX_CH-Dav_FLUXNET2015_FULLSET_HH_1997-2020_beta-3.csv")
-    # readfiletype = ReadFileType(filetype='FLUXNET-FULLSET-HH-CSV-30MIN', filepath=filepath)
-    # data_df, metadata_df = readfiletype.get_filedata()
+    # site = "CH-Dav"
+    # ecosystem = "ENF"
 
-    data_df = pd.read_csv(r"L:\Dropbox\luhk_work\20 - CODING\26 - NOTEBOOKS\GL-NOTEBOOKS\General Notebooks\test.csv", index_col=0)
+    # Data location
+    dir_base = Path(r"L:\Dropbox\luhk_work\10 - PUBLICATIONS\11 - LEAD\11.01 - LEAD - CO2 PENALTY WW2020\data")
+    dir_data = Path(
+        f"ecosystem_type_ENF\FLX_CH-Dav_FLUXNET2015_FULLSET_1997-2020_beta-3\FLX_CH-Dav_FLUXNET2015_FULLSET_HH_1997-2020_beta-3.csv")
+    filepath = dir_base / dir_data
 
-    optrange = FindOptimumRange(
-        df=data_df,
-        xcol="TA_F",
-        ycol="NEE_CUT_50",
-        define_optimum="min"
-    )
+    # # Load data from file
+    # tic = time.time()
+    # readfiletype = ReadFileType(filetype='FLUXNET-FULLSET-HH-CSV-30MIN', filepath=filepath, data_nrows=200000)
+    # alldata_df, metadata_df = readfiletype.get_filedata()
+    # toc = time.time() - tic
+    # print(f"Reading csv took {toc} seconds.")
 
+    # # Export data to pickle
+    # tic = time.time()
+    # outfile = dir_base / "pickle" / "temp.pickle"
+    # pickle_out = open(outfile, "wb")
+    # pickle.dump(alldata_df, pickle_out)
+    # pickle_out.close()
+    # toc = time.time() - tic
+    # print(f"Saving pickle took {toc} seconds.")
+
+    # Import data from pickle
+    tic = time.time()
+    outfile = dir_base / "pickle" / "temp.pickle"
+    pickle_in = open(outfile, "rb")
+    alldata_df = pickle.load(pickle_in)
+    toc = time.time() - tic
+    print(f"Loading pickle took {toc} seconds.")
+
+    # # Check columns
+    # import fnmatch
+    # [print(col) for col in alldata_df.columns if any(fnmatch.fnmatch(col, ids) for ids in ['NEE_CUT_50*'])]
+
+    # Required data
+    ta = alldata_df['TA_F'].copy()
+    nee = alldata_df['NEE_CUT_50'].copy()
+
+    # Optimum range
+    optrange = FindOptimumRange(x=ta, y=nee, define_optimum="min")
     optrange.find_optimum()
 
     fig = plt.figure(figsize=(9, 16))

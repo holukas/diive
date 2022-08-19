@@ -3,6 +3,15 @@
 ![DIIVE](images/logo_diive1_256px.png)
 
 
+## v0.35.0 | 19 Aug 2022
+### Meteoscreening PA, RH
+- Added function `pkgs.corrections.offsetcorrection.remove_relativehumidity_offset` to correct 
+humidity measurements for values > 100%
+### Other
+- Added first code for outlier detection via seasonal trends in `pkgs/outlierdetection/seasonaltrend.py`
+- Prepared `pkgs/analyses/optimumrange.py` for future updates 
+
+
 ## v0.34.0 | 29 Jul 2022
 ### MeteoScreening Radiation
 #### MeteoScreening

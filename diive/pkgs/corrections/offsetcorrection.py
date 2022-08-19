@@ -8,22 +8,22 @@ from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.pkgs.createvar.nighttime_latlon import nighttime_flag_from_latlon
 
 
+@ConsoleOutputDecorator()
 def remove_relativehumidity_offset(series: Series,
-                                   show: bool = False,
-                                   saveplot: str or Path = None) -> Series:
+                                   showplot: bool = False) -> Series:
     """Remove relative humidity offset
 
     Works for relative humidity data where maximum values should not exceed 100%.
 
     Args:
         series: Data for relative humidity variable that is corrected
-        show: Show plot
+        showplot: Show plot
 
     Returns:
-    Corrected series
+        Corrected series
     """
 
-    print(f"Removing RH offset from {series.name} ...")
+    # print(f"Removing RH offset from {series.name} ...")
     outname = series.name
     series.name = "input_data"
 
@@ -54,13 +54,18 @@ def remove_relativehumidity_offset(series: Series,
     #       130 - (+30) = 100
     # Corrected RH is most likely not *exactly* 100%, but closer to it.
     series_corr = series.sub(_offset)
-    series_corr.rename(outname, inplace=True)
 
     # Plot
-    if saveplot:
+    if showplot:
         from diive.core.plotting.plotfuncs import quickplot
-        quickplot([series, _series_exceeds, _daily_mean_above_100, _offset, series_corr], subplots=False,
-                  saveplot=saveplot, hline=100, title=f"Remove RH Offset From {series.name}")
+        quickplot([series, _series_exceeds,
+                   _daily_mean_above_100, _offset, series_corr],
+                  subplots=True,
+                  showplot=showplot, hline=100,
+                  title=f"Remove RH offset from {outname}")
+
+    # Rename for output
+    series_corr.rename(outname, inplace=True)
 
     return series_corr
 

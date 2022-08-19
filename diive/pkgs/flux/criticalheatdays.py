@@ -253,7 +253,7 @@ class CriticalHeatDays:
 
     def find_nee_optimum_range(self):
         # Work w/ daytime data
-        opr = FindOptimumRange(df=self.df_daytime, xcol=self.x_col, ycol=self.nee_col,
+        opr = FindOptimumRange(df=self.df_daytime, x=self.x_col, y=self.nee_col,
                                define_optimum='min')
         opr.find_optimum()
         self._results_optimum_range = opr.results_optrange()

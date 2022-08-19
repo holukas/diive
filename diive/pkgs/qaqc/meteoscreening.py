@@ -125,6 +125,12 @@ class ScreenVar:
                                               type='min',
                                               showplot=True)
 
+            elif step == 'remove_relativehumidity_offset':
+                # Generates corrected series
+                self.series = remove_relativehumidity_offset(series=self.series,
+                                               showplot=True)
+
+
             else:
                 raise Exception(f"No function defined for {step}.")
 
@@ -134,9 +140,6 @@ class ScreenVar:
         # Overall quality flag
         self.flags_df.loc[:, 'QCF'] = self.flags_df.sum(axis=1)
 
-    def _remove_relativehumidity_offset(self, series: Series) -> Series:
-        return remove_relativehumidity_offset(series=series,
-                                              show=True, saveplot=self.saveplot)
 
     def _pipe_assign(self) -> dict:
         """Assign appropriate processing pipe to this variable"""
@@ -441,148 +444,79 @@ class MeteoScreeningFromDatabaseSingleVar:
 
 def example():
     # Testing code
+    import pickle
 
     # Testing MeteoScreeningFromDatabase
 
-    # ============================================
-    # SCREENING DATA FILE DOWNLOADED FROM DATABASE
-    # ============================================
-    # Example file from dbc.download output
-    import matplotlib.pyplot as plt
-    testfile = r'L:\Dropbox\luhk_work\20 - CODING\26 - NOTEBOOKS\GL-NOTEBOOKS\General Notebooks\MeteoScreening\CH-DAV_2021-2022_SW_IN_NABEL_T1_35_1.csv'
-    testdata = pd.read_csv(testfile, nrows=100000)
-    testdata.set_index('TIMESTAMP_END', inplace=True)
-    testdata.index = pd.to_datetime(testdata.index)
-    testdata['SW_IN_NABEL_T1_35_1'].plot()
-    plt.show()
-    assigned_measurements = {}
-    assigned_measurements['SW_IN_NABEL_T1_35_1'] = 'SW'
-    data_detailed = {}
-    data_detailed['SW_IN_NABEL_T1_35_1'] = testdata
-    mscr = \
-        MeteoScreeningFromDatabaseMultipleVars(
-            data_detailed=data_detailed,
-            site='CH-DAV',
-            assigned_measurements=assigned_measurements,
-            site_lat=46.815333,
-            site_lon=9.855972,
-            timezone_of_timestamp='UTC+01:00'
-        )
+    # =======================================
+    # SCREENING DATA DOWNLOADED FROM DATABASE
+    # =======================================
+
+    from dbc_influxdb import dbcInflux
+
+    # Settings
+    SITE = 'ch-dav'
+    BUCKET = 'ch-dav_raw'
+    MEASUREMENTS = ['RH']
+    FIELDS = ['RH_NABEL_T1_35_1']
+    START = '2021-04-01 00:01:00'
+    STOP = '2021-04-30 00:01:00'
+    TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # We need returned timestamps in CET (winter time), which is UTC + 1 hour
+    DATA_VERSION = 'raw'
+    DIRCONF = r'L:\Dropbox\luhk_work\20 - CODING\22 - POET\configs'
+
+    # # Instantiate class
+    # dbc = dbcInflux(dirconf=DIRCONF)
+    #
+    # # Data download
+    # data_simple, data_detailed, assigned_measurements = \
+    #     dbc.download(
+    #         bucket=BUCKET,
+    #         measurements=MEASUREMENTS,
+    #         fields=FIELDS,
+    #         start=START,
+    #         stop=STOP,
+    #         timezone_offset_to_utc_hours=TIMEZONE_OFFSET_TO_UTC_HOURS,
+    #         data_version=DATA_VERSION
+    #     )
+    #
+    basedir = Path(r"M:\_temp")
+    #
+    # # Export data to pickle for fast testing
+    # pickle_out = open(basedir / "data_simple.pickle", "wb")
+    # pickle.dump(data_simple, pickle_out)
+    # pickle_out.close()
+    # pickle_out = open(basedir / "data_detailed.pickle", "wb")
+    # pickle.dump(data_detailed, pickle_out)
+    # pickle_out.close()
+    # pickle_out = open(basedir / "assigned_measurements.pickle", "wb")
+    # pickle.dump(assigned_measurements, pickle_out)
+    # pickle_out.close()
+
+    # Import data from pickle for fast testing
+    pickle_in = open(basedir / "data_simple.pickle", "rb")
+    data_simple = pickle.load(pickle_in)
+    pickle_in = open(basedir / "data_detailed.pickle", "rb")
+    data_detailed = pickle.load(pickle_in)
+    pickle_in = open(basedir / "assigned_measurements.pickle", "rb")
+    assigned_measurements = pickle.load(pickle_in)
+
+    print(data_simple)
+    print(data_detailed)
+    print(assigned_measurements)
+
+    mscr = MeteoScreeningFromDatabaseMultipleVars(site=SITE,
+                                                  data_detailed=data_detailed,
+                                                  assigned_measurements=assigned_measurements,
+                                                  site_lat=46.815333,
+                                                  site_lon=9.855972,
+                                                  timezone_of_timestamp='UTC+01:00')
     mscr.run()
     resampled_detailed, hires_qc, hires_flags = mscr.get()
 
-    # mscr = \
-    #     MeteoScreeningFromDatabaseSingleVar(data_detailed=testdata.copy(),
-    #                                         site='CH-DAV',
-    #                                         measurement='SW',
-    #                                         field='SW_IN_NABEL_T1_35_1',
-    #                                         resampling_agg='mean',
-    #                                         resampling_freq='30T',
-    #                                         site_lat=46.815333,
-    #                                         site_lon=9.855972,
-    #                                         timezone_of_timestamp='UTC+01:00')
-    # mscr.run()
-    # vars_qc_resampled, qcflags_hires = mscr.get()
+    # todo compare radiation peaks for time shift
+    # todo check outliers before AND after first qc check
 
-    # from dbc_influxdb import dbcInflux
-    #
-    # DIRCONF = r'L:\Dropbox\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
-    # # Site name
-    # SITE = 'ch-dav'
-    # # Measurement name, used to group similar variable together, e.g., 'TA' contains all air temperature variables
-    # MEASUREMENTS = ['TA']
-    # # Variable name; InfluxDB stores variable names as '_field'
-    # FIELDS = ['TA_NABEL_T1_35_1']
-    # # Download data starting with this date
-    # START = '2021-06-01 00:01:00'
-    # # Download data before this date (the stop date itself is not included)
-    # STOP = '2021-06-02 00:01:00'
-    # # During MeteoScreening the screened high-res data will be resampled to this frequency;
-    # # '30T' = 30-minute time resolution
-    # resampling_freq = '30T'
-    # # The resampling of the high-res data will be done using this aggregation methos; e.g., 'mean'
-    # resampling_agg = 'mean'
-    #
-    # BUCKET_RAW = f'{SITE}_raw'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_raw' contains all raw data for CH-LAE
-    # BUCKET_PROCESSING = f'{SITE}_processing'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_processing' contains all processed data for CH-LAE
-    # print(f"Bucket containing raw data (source bucket): {BUCKET_RAW}")
-    # print(f"Bucket containing processed data (destination bucket): {BUCKET_PROCESSING}")
-    #
-    # dbc = dbcInflux(dirconf=DIRCONF)
-    #
-    # data_simple, \
-    # data_detailed, \
-    # assigned_measurements = \
-    #     dbc.download(bucket=BUCKET_RAW, measurements=MEASUREMENTS, fields=FIELDS,
-    #                  start=START, stop=STOP, timezone_offset_to_utc_hours=1, data_version='raw')
-
-    # mscr = \
-    #     MeteoScreeningFromDatabaseSingleVar(var_df=testdata.copy(),
-    #                                         site='CH-DAV',
-    #                                         measurement='SW',
-    #                                         field='SW_IN_NABEL_T1_35_1',
-    #                                         resampling_agg='mean',
-    #                                         resampling_freq='30T')
-    # mscr.run()
-    # vars_qc_resampled, qcflags_hires = mscr.get()
-
-    # var_qc_resampled_df.to_csv(r'L:\Dropbox\luhk_work\20 - CODING\26 - NOTEBOOKS\meteoscreening\test_qc.csv')
-
-    # # Testing MeteoScreeningFromFiles:
-    # # todo compare radiation peaks for time shift
-    # # todo check outliers before AND after first qc check
-    # indir = r'F:\CH-AWS\snowheight\1-in'
-    # mergeddir = r'F:\CH-AWS\snowheight\2-merged'
-    # outdir = r'F:\CH-AWS\snowheight\3-out'
-    #
-    # # Search & merge high-res data files
-    # searchdir = indir
-    # pattern = '*.csv'
-    # filetype = 'diive_CSV_30MIN'
-    # filepaths = filereader.search_files(searchdir=searchdir, pattern=pattern)
-    # mdfr = filereader.MultiDataFileReader(filepaths=filepaths, filetype=filetype)
-    # data_df = mdfr.data_df
-    # data_df.fillna(-9999, inplace=True)
-    # data_df.to_csv(Path(mergeddir) / "merged.diive.csv")
-    # metadata_df = mdfr.metadata_df
-    # metadata_df.to_csv(Path(mergeddir) / "merged.diive.metadata.csv")
-    #
-    # # Search merged high-res file
-    # searchdir = mergeddir
-    # pattern = 'merged.diive.csv'
-    # filetype = 'diive_CSV_1MIN'
-    # filepaths = filereader.search_files(searchdir=searchdir, pattern=pattern)
-    # mdfr = filereader.MultiDataFileReader(filepaths=filepaths, filetype=filetype)
-    # data_df = mdfr.data_df
-    # # metadata_df = mdfr.metadata_df  # todo automatic reading of metadata for diive formats
-    #
-    # # cols = {
-    # #     'D_SNOW_1_1_1': {'measurement': 'D_SNOW', 'units': 'm'},
-    # #     'TA_M1_1.8_1': {'measurement': 'TA', 'units': 'degC'}
-    # #     # 'SHFM3_05_Avg': {'measurement': 'G', 'units': 'W m-2'}
-    # #     # 'TA_T2_2x1_1_Avg': {'measurement': 'TA', 'units': 'degC'},
-    # #     # 'LW_IN_T2_2x1_1_Avg': {'measurement': 'LW', 'units': 'W m-2'},
-    # #     # 'SW_IN_T2_2x1_1_Avg': {'measurement': 'SW', 'units': 'W m-2'},
-    # #     # 'RH_T2_2x1_1_Avg': {'measurement': 'RH', 'units': '%'},
-    # #     # 'PPFD_IN_T2_2x1_1_Avg': {'measurement': 'PPFD', 'units': 'umol m-2 s-1'},
-    # # }
-    #
-    # cols = {
-    #     'D_SNOW_GF0_0_1': {'measurement': 'D_SNOW', 'units': 'm'},
-    #     'TA_M3_2.5_1': {'measurement': 'TA', 'units': 'degC'}
-    # }
-    #
-    # kwargs = dict(df=data_df.copy(),
-    #               site='ch-das',
-    #               site_lat=47.478333,  # CH-LAE
-    #               site_lon=8.364389,  # CH-LAE
-    #               # site_lat=46.815333,  # CH-DAS
-    #               # site_lon=9.855972,  # CH-DAS
-    #               outdir=outdir)
-    # mscr = MeteoScreeningFromFiles(cols=cols, **kwargs)
-    #
-    # mscr.run()
-    # qc_df = mscr.qc_df
 
 
 if __name__ == '__main__':

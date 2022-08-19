@@ -121,7 +121,8 @@ class ReadFileType:
     def __init__(self,
                  filepath: str or Path,
                  filetypeconfig: dict = None,
-                 filetype: str = None):
+                 filetype: str = None,
+                 data_nrows: int=None):
         """
 
         Args:
@@ -130,6 +131,7 @@ class ReadFileType:
             filetype:
         """
         self.filepath = Path(filepath)
+        self.data_nrows = data_nrows
 
         if filetype:
             # Read settins for specified filetype
@@ -155,6 +157,7 @@ class ReadFileType:
             data_na_vals=self.filetypeconfig['DATA']['NA_VALUES'],
             data_delimiter=self.filetypeconfig['DATA']['DELIMITER'],
             data_freq=self.filetypeconfig['DATA']['FREQUENCY'],
+            data_nrows=self.data_nrows,
             timestamp_idx_col=self.filetypeconfig['TIMESTAMP']['INDEX_COLUMN'],
             timestamp_datetime_format=self.filetypeconfig['TIMESTAMP']['DATETIME_FORMAT'],
             timestamp_start_middle_end=self.filetypeconfig['TIMESTAMP']['SHOWS_START_MIDDLE_OR_END_OF_RECORD']
@@ -175,6 +178,7 @@ class DataFileReader:
             data_na_vals: list = None,
             data_delimiter: str = None,
             data_freq: str = None,
+            data_nrows: int = None,
             timestamp_idx_col: list = None,
             timestamp_datetime_format: str = None,
             timestamp_start_middle_end: str = 'END'
@@ -187,6 +191,7 @@ class DataFileReader:
         self.data_na_vals = data_na_vals
         self.data_delimiter = data_delimiter
         self.data_freq = data_freq
+        self.data_nrows = data_nrows
         self.timestamp_datetime_format = timestamp_datetime_format
         self.timestamp_start_middle_end = timestamp_start_middle_end
         self.timestamp_idx_col = timestamp_idx_col
@@ -327,7 +332,7 @@ class DataFileReader:
                               index_col=None,
                               dtype=None,
                               skip_blank_lines=True,
-                              # nrows=2000,
+                              nrows=self.data_nrows,
                               engine='python')  # todo 'python', 'c'
 
         return data_df
