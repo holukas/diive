@@ -3,12 +3,24 @@ import pandas as pd
 from sklearn.ensemble import RandomForestRegressor  # Import the model we are using
 
 
-def train_random_forest_regressor(model_params: dict, targets: np.array, features: np.array,
-                                  n_estimators: int = 100):
-    """Create model and train on features and targets"""
+def train_random_forest_regressor(targets: np.array, features: np.array, **rf_model_params):
+    """
+    Create model and train on features and targets
+
+    See:
+        https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestRegressor.html
+
+    Args:
+        targets:
+        features:
+        **rf_model_params:
+
+    Returns:
+
+    """
 
     # Instantiate model with x decision trees
-    model = RandomForestRegressor(n_estimators, **model_params)
+    model = RandomForestRegressor(**rf_model_params)
 
     # Fit
     model.fit(X=features, y=targets)  # Train the model on data

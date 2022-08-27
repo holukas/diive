@@ -28,7 +28,7 @@ class HeatmapDateTime:
                  vmax: float = None,
                  cb_digits_after_comma: int = 2,
                  cmap: str = 'RdYlBu_r',
-                 color_bad: str = 'white',
+                 color_bad: str = 'grey',
                  display_type: str = 'Time & Date'):
         """
         Plot heatmap of time series data with date on y-axis and time on x-axis

@@ -23,7 +23,7 @@ class TimestampSanitizer():
         - Remove duplicates from timestamp index
         - Detect time resolution from timestamp
         - Make timestamp continuous without date gaps
-        - Convert timestamp to show the middle of the averaging period
+        - Convert timestamp to show the middle of the averaging period (optional)
 
         The `TimestampSanitizer` class acts as a wrapper to combine various
         timestamp functions.
@@ -32,6 +32,7 @@ class TimestampSanitizer():
 
         Args:
             data: Data with timestamp index
+            output_middle_timestamp:
         """
         self.data = data.copy()
         self.output_middle_timestamp = output_middle_timestamp
@@ -113,9 +114,12 @@ def validate_timestamp_naming(data: Series or DataFrame) -> str:
     timestamp_name = data.index.name
     allowed_timestamp_names = ['TIMESTAMP_END', 'TIMESTAMP_START', 'TIMESTAMP_MID']
     print(f"Validating timestamp naming of timestamp column {timestamp_name} ...", end=" ")
+
+    # First check if timestamp already has one of the required names
     if any(fnmatch.fnmatch(timestamp_name, allowed_name) for allowed_name in allowed_timestamp_names):
-        print("OK")
+        print("Timestamp name OK.")
         return timestamp_name
+
     else:
         raise Exception(f"Name of timestamp index must be one of the following: {allowed_timestamp_names} "
                         f"('{timestamp_name}' is not allowed)")
@@ -312,7 +316,7 @@ def include_timestamp_as_cols(df,
                               week: bool = True,
                               month: bool = True,
                               hour: bool = True,
-                              info: bool = True):
+                              info: bool = True) -> DataFrame:
     """Include timestamp info as data columns"""
 
     df = df.copy()
@@ -325,7 +329,7 @@ def include_timestamp_as_cols(df,
 
     if year:
         df[year_col] = df.index.year
-        newcols.append(doy_col)
+        newcols.append(year_col)
     if doy:
         df[doy_col] = df.index.dayofyear
         newcols.append(doy_col)

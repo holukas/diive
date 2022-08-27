@@ -10,7 +10,7 @@
             </Attribute>
           </value>
         </entry>
-        <entry key="\tests\testdata\testfile_ch-dav_2020.diive.csv">
+        <entry key="\tests\testdata\testdata_CH-DAV_FP2021.2_2016-2020_ID20220324003457_30MIN_SUBSET.csv">
           <value>
             <Attribute>
               <option name="separator" value="," />

@@ -18,8 +18,8 @@ from pandas import DataFrame
 from diive import core
 from diive.configs.filetypes import get_filetypes
 from diive.core import dfun
-from diive.core.dfun.frames import flatten_multiindex_all_df_cols
-from diive.core.times.times import continuous_timestamp_freq
+# from diive.core.dfun.frames import flatten_multiindex_all_df_cols
+from diive.core.times.times import continuous_timestamp_freq, TimestampSanitizer
 
 
 def search_files(searchdir, pattern: str) -> list:
@@ -122,7 +122,7 @@ class ReadFileType:
                  filepath: str or Path,
                  filetypeconfig: dict = None,
                  filetype: str = None,
-                 data_nrows: int=None):
+                 data_nrows: int = None):
         """
 
         Args:
@@ -167,7 +167,7 @@ class ReadFileType:
 
 
 class DataFileReader:
-    """Read single data file with provided settings"""
+    """Read single data file with *provided settings*"""
 
     def __init__(
             self,
@@ -205,12 +205,13 @@ class DataFileReader:
     def _read(self):
         headercols_list, self.generated_missing_header_cols_list = self._compare_len_header_vs_data()
         self.data_df = self._parse_file(headercols_list=headercols_list)
-        self._standardize_timestamp_index()
+        self.data_df = TimestampSanitizer(data=self.data_df,
+                                          output_middle_timestamp=True).get()
         self._clean_data()
         if len(self.data_headerrows) == 1:
             self.data_df = self._add_second_header_row(df=self.data_df)
         self.metadata_df = self._get_metadata()
-        self.data_df = flatten_multiindex_all_df_cols(df=self.data_df, keep_first_row_only=True)
+        self.data_df = dfun.frames.flatten_multiindex_all_df_cols(df=self.data_df, keep_first_row_only=True)
 
     def _get_metadata(self):
         """Create separate dataframe collecting metadata for each variable
@@ -292,13 +293,6 @@ class DataFileReader:
 
     def _clean_data(self):
         """Sanitize time series"""
-
-        # There exist certain instances where the float64 data column can contain
-        # non-numeric values that are interpreted as a float64 inf, which is basically
-        # a NaN value. To harmonize missing values inf is also set to NaN.
-        self.data_df.replace(float('inf'), np.nan, inplace=True)
-        self.data_df.replace(float('-inf'), np.nan, inplace=True)
-
         # Sanitize time series, numeric data is needed
         # After this conversion, all columns are of float64 type, strings will be substituted
         # by NaN. This means columns that contain only strings, e.g. the columns 'date' or
@@ -312,7 +306,11 @@ class DataFileReader:
         """Parse data file without header"""
 
         # Column settings for parsing dates / times correctly
-        parsed_index_col = ('index', '[parsed]')  # Column name for timestamp index
+
+        # Check filetype settings info about timestamp
+        # Column name for timestamp index
+        parsed_index_col = f"TIMESTAMP_{self.timestamp_start_middle_end.upper()}"
+
         parse_dates = self.timestamp_idx_col  # Columns used for creating the timestamp index
         parse_dates = {parsed_index_col: parse_dates}
         # date_parser = lambda x: dt.datetime.strptime(x, self.timestamp_datetime_format)
@@ -335,33 +333,35 @@ class DataFileReader:
                               nrows=self.data_nrows,
                               engine='python')  # todo 'python', 'c'
 
+        data_df.set_index(parsed_index_col, inplace=True)
+
         return data_df
 
-    def _standardize_timestamp_index(self):
-        """Standardize timestamp index column"""
-
-        # Index name is now the same for all filetypes w/ timestamp in data
-        self.data_df.set_index([('index', '[parsed]')], inplace=True)
-        self.data_df.index.name = ('TIMESTAMP', '[yyyy-mm-dd HH:MM:SS]')
-
-        # Make sure the index is datetime
-        self.data_df.index = pd.to_datetime(self.data_df.index)
-
-        # Make continuous timestamp at current frequency, from first to last datetime
-        self.data_df = continuous_timestamp_freq(data=self.data_df, freq=self.data_freq)
-
-        # TODO? additional check: validate inferred freq from data like in `dataflow` script
-
-        # Timestamp convention
-        # Shift timestamp by half-frequency, if needed
-        if self.timestamp_start_middle_end == 'middle':
-            pass
-        else:
-            timedelta = pd.to_timedelta(self.data_freq) / 2
-            if self.timestamp_start_middle_end == 'end':
-                self.data_df.index = self.data_df.index - pd.Timedelta(timedelta)
-            elif self.timestamp_start_middle_end == 'start':
-                self.data_df.index = self.data_df.index + pd.Timedelta(timedelta)
+    # def _standardize_timestamp_index(self):
+    #     """Standardize timestamp index column"""
+    #
+    #     # Index name is now the same for all filetypes w/ timestamp in data
+    #     self.data_df.set_index([('index', '[parsed]')], inplace=True)
+    #     self.data_df.index.name = ('TIMESTAMP', '[yyyy-mm-dd HH:MM:SS]')
+    #
+    #     # Make sure the index is datetime
+    #     self.data_df.index = pd.to_datetime(self.data_df.index)
+    #
+    #     # Make continuous timestamp at current frequency, from first to last datetime
+    #     self.data_df = continuous_timestamp_freq(data=self.data_df, freq=self.data_freq)
+    #
+    #     # TODO? additional check: validate inferred freq from data like in `dataflow` script
+    #
+    #     # Timestamp convention
+    #     # Shift timestamp by half-frequency, if needed
+    #     if self.timestamp_start_middle_end == 'middle':
+    #         pass
+    #     else:
+    #         timedelta = pd.to_timedelta(self.data_freq) / 2
+    #         if self.timestamp_start_middle_end == 'end':
+    #             self.data_df.index = self.data_df.index - pd.Timedelta(timedelta)
+    #         elif self.timestamp_start_middle_end == 'start':
+    #             self.data_df.index = self.data_df.index + pd.Timedelta(timedelta)
 
 
 def example():

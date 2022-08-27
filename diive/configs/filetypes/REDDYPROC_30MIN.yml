@@ -17,6 +17,6 @@ DATA:
   HEADER_SECTION_ROWS: [ 0 ]
   SKIP_ROWS: [ ]
   HEADER_ROWS: [ 0 ]
-  NA_VALUES: [ "NA" ]
+  NA_VALUES: [ "NA", -9999, "inf", "-inf" ]
   FREQUENCY: "30T"
   DELIMITER: ","

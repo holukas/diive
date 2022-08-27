@@ -384,8 +384,6 @@ def resample_df(df, freq_str, agg, mincounts_perc: float, to_freq=None):
     filter_min = agg_counts_df >= mincounts
     agg_df = agg_df[filter_min]
 
-    # todo hier weiter
-
     # TIMESTAMP CONVENTION
     # --------------------
     agg_df, timestamp_info_df = timestamp_convention(df=agg_df,
@@ -753,7 +751,7 @@ def create_lagged_variants(df: pd.DataFrame(), num_lags: int = 1, ignore_cols: l
     return newdf
 
 
-def convert_to_arrays(df: pd.DataFrame, target_col: tuple, complete_rows: bool = True):
+def convert_to_arrays(df: pd.DataFrame, target_col: str, complete_rows: bool = True):
     """Convert data from df to numpy arrays and prepare targets, features and their timestamp"""
 
     # Keep complete rows only
@@ -797,12 +795,29 @@ def rolling_variants(df, records: int, aggtypes: list, exclude_cols: list = None
     return df
 
 
-def steplagged_variants(df: pd.DataFrame(),
+def steplagged_variants(df: DataFrame,
                         stepsize: int = 1,
                         stepmax: int = 10,
                         exclude_cols: list = None,
-                        info: bool = True):
-    """Create step-lagged (no overlaps) variants of variables"""
+                        info: bool = True) -> DataFrame:
+    """
+    Create step-lagged (no overlaps) variants of variables
+
+    Important: sign convention changed in v0.36.0
+        The minus sign (-) is now used to display the record shift
+        in output data.
+        Example:
+            The column showing the previous records of variable `TA`
+            is labelled `TA-1`.
+
+    Example:
+
+    """
+
+    if len(df.columns) == 1:
+        print(f"(!) No step-lagged variants created because data "
+              f"comprises only one single column: {df.columns}.")
+        return df
 
     _included = []
     _excluded = []
@@ -824,18 +839,9 @@ def steplagged_variants(df: pd.DataFrame(),
                 continue
 
             for lagstep in lagsteps:
-                stepname = (f".{col[0]}+{lagstep}", col[1])
+                stepname = f".{col}-{lagstep}"
                 df[stepname] = df[col].shift(lagstep)
             _included.append(col)
-
-        # if col[0].startswith('.'):
-        #     for lagstep in lagsteps:
-        #         stepname = (f".{col[0]}+{lagstep}", col[1])
-        #         df[stepname] = df[col].shift(lagstep)
-        #     _included.append(col)
-        # else:
-        #     _excluded.append(col)
-        #     continue
 
     if info:
         print(f"Created step-lagged variants for: {_included}\n"
