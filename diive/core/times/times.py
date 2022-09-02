@@ -3,6 +3,7 @@ import fnmatch
 import time
 from typing import Literal
 
+import numpy as np
 import pandas as pd
 from pandas import DataFrame, Series
 from pandas.tseries.frequencies import to_offset
@@ -112,7 +113,7 @@ def validate_timestamp_naming(data: Series or DataFrame) -> str:
 
     """
     timestamp_name = data.index.name
-    allowed_timestamp_names = ['TIMESTAMP_END', 'TIMESTAMP_START', 'TIMESTAMP_MID']
+    allowed_timestamp_names = ['TIMESTAMP_END', 'TIMESTAMP_START', 'TIMESTAMP_MIDDLE']
     print(f"Validating timestamp naming of timestamp column {timestamp_name} ...", end=" ")
 
     # First check if timestamp already has one of the required names
@@ -562,7 +563,7 @@ def convert_series_timestamp_to_middle(data: Series or DataFrame) -> Series or D
         Data with timestamp index that shows the middle of the averaging period
     """
     timestamp_name_before = data.index.name
-    timestamp_name_after = 'TIMESTAMP_MID'
+    timestamp_name_after = 'TIMESTAMP_MIDDLE'
 
     if timestamp_name_before == timestamp_name_after:
         return data
@@ -574,7 +575,7 @@ def convert_series_timestamp_to_middle(data: Series or DataFrame) -> Series or D
     first_timestamp_before = data.index[0]
     last_timestamp_before = data.index[-1]
 
-    if timestamp_name_before == 'TIMESTAMP_MID':
+    if timestamp_name_before == 'TIMESTAMP_MIDDLE':
         pass
     else:
         to_offset('T')
@@ -585,9 +586,9 @@ def convert_series_timestamp_to_middle(data: Series or DataFrame) -> Series or D
             data.index = data.index + pd.Timedelta(timedelta)
         else:
             raise Exception("Timestamp index of the Series must be "
-                            "named 'TIMESTAMP_END', 'TIMESTAMP_START' or 'TIMESTAMP_MID'.")
+                            "named 'TIMESTAMP_END', 'TIMESTAMP_START' or 'TIMESTAMP_MIDDLE'.")
 
-    data.index.name = 'TIMESTAMP_MID'
+    data.index.name = 'TIMESTAMP_MIDDLE'
     first_timestamp_after = data.index[0]
     last_timestamp_after = data.index[-1]
 
@@ -615,6 +616,86 @@ def add_timezone_info(timestamp_index, timezone_of_timestamp: str):
 
     """
     return timestamp_index.tz_localize(timezone_of_timestamp)  # v0.3.1
+
+
+def remove_after_date(data: Series or DataFrame, yearly_end_date: str) -> Series or DataFrame:
+    """
+    Remove data after specifified date
+
+    Args:
+        data: Data with timestamp index
+        yearly_end_date: Month and day after which all data will be removed
+            Example:
+                "08-11" means that all data after 11 August will be removed,
+                this is done for each year in the dataset. For a dataset that
+                contains data of multiple years, e.g. 2016, 2017 and 2018, the
+                returned dataset will only contain data from all years, but
+                data for each year will end on 1 August (i.e., 11 August 2016,
+                11 August 2017 and 11 August 2018).
+
+    Returns:
+        Data with all data after *yearly_end_date* removed
+    """
+    month = int(yearly_end_date[0:2])
+    dayinmonth = int(yearly_end_date[3:])
+    data.loc[(data.index.month > month)] = np.nan
+    data.loc[(data.index.month == month) & (data.index.day > dayinmonth)] = np.nan
+    data = data.dropna()
+    return data
+
+
+def keep_years(data: Series or DataFrame,
+               start_year: int = None,
+               end_year: int = None) -> Series or DataFrame:
+    """
+    Keep data between start and end year
+
+    Args:
+        data: Data with timeseries index
+        start_year: First year of kept data
+        end_year: Last year of kept data
+
+    Returns:
+        Data between start year and end year
+    """
+    if start_year:
+        data = data.loc[data.index.year >= start_year]
+    if end_year:
+        data = data.loc[data.index.year <= end_year]
+    return data
+
+
+def calc_doy_timefraction(input_series: Series) -> DataFrame:
+    df = pd.DataFrame(input_series)
+    df['YEAR'] = df.index.year
+    df['DOY'] = df.index.dayofyear
+    df['TIMEFRACTION'] = (df.index.hour
+                          + (df.index.minute / 60)
+                          + (df.index.second / 3600)) / 24
+    df['DOY_TIME'] = df['DOY'].add(df['TIMEFRACTION'])
+    df[input_series.index.name] = df.index
+    return df
+
+
+def doy_cumulatives_per_year(series: Series) -> DataFrame:
+    df = calc_doy_timefraction(input_series=series)
+    return df.pivot(index='DOY_TIME', columns='YEAR', values=series.name).cumsum()
+
+
+def doy_mean_cumulative(cumulatives_per_year_df: DataFrame,
+                        excl_years_from_reference: list = None) -> DataFrame:
+    reference_years_df = cumulatives_per_year_df.copy()
+    if excl_years_from_reference:
+        reference_years_df.drop(excl_years_from_reference, axis=1, inplace=True)
+    df = pd.DataFrame()
+    df['MEAN_DOY_TIME'] = reference_years_df.mean(axis=1)
+    df['SD_DOY_TIME'] = reference_years_df.std(axis=1)
+    df['MEAN+SD'] = df['MEAN_DOY_TIME'].add(df['SD_DOY_TIME'])
+    df['MEAN-SD'] = df['MEAN_DOY_TIME'].sub(df['SD_DOY_TIME'])
+    df['1.96_SD_DOY_TIME'] = df['SD_DOY_TIME'].multiply(1.96)
+    df['MEAN+1.96_SD'] = df['MEAN_DOY_TIME'].add(df['1.96_SD_DOY_TIME'])
+    df['MEAN-1.96_SD'] = df['MEAN_DOY_TIME'].sub(df['1.96_SD_DOY_TIME'])
+    return df
 
 
 if __name__ == '__main__':

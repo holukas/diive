@@ -10,6 +10,13 @@
             </Attribute>
           </value>
         </entry>
+        <entry key="\manuscripts\carboncost_dav\input_data\2_METEO_data_from_meteoscreening\5_2007-2020_SWC_merging_Steps3+4\OUT_DIIVE-20220321-095127\2_SWC_FF0_0.05_0.15_merged_Dataset_DIIVE-20220321-095127_Original-30T.diive.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
         <entry key="\tests\testdata\testdata_CH-DAV_FP2021.2_2016-2020_ID20220324003457_30MIN_SUBSET.csv">
           <value>
             <Attribute>

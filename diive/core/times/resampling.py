@@ -105,7 +105,7 @@ def resample_series_to_30MIN(series: Series,
     # timestamp_freq = agg_df.index.freq
     # timedelta = pd.to_timedelta(timestamp_freq)
     # agg_df['TIMESTAMP_END'] = agg_df.index + pd.Timedelta(timedelta)
-    # agg_df['TIMESTAMP_MID'] = agg_df.index + pd.Timedelta(timedelta / 2)
+    # agg_df['TIMESTAMP_MIDDLE'] = agg_df.index + pd.Timedelta(timedelta / 2)
 
     # print(agg_df)
     # # # TIMESTAMP CONVENTION

@@ -2,6 +2,16 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.37.0 | 2 Sep 2022
+
+### Cumulative and Anomaly Plots
+
+- New plot: `core.plotting.cumulative.CumulativeYear` plots cumulative sums per year  
+![DIIVE](images/plotCumulativeYear_diive_v0.37.0.png)
+- New plot: `core.plotting.bar.LongtermAnomaliesYear` plots yearly anomalies in relation to a reference period  
+![DIIVE](images/plotBarLongtermAnomaliesYear_diive_v0.37.0.png)
+- Refactored various code bits for plotting
+
 ## v0.36.0 | 27 Aug 2022
 
 ### Random Forest Update

@@ -23,6 +23,7 @@ COLOR_NEE2 = bluegray(600)
 # COLOR_LINE_DEFAULT = '#026DA3'  # Line in time series plot
 COLOR_LINE_DEFAULT = bluegray(500)  # Line in time series plot
 WIDTH_LINE_DEFAULT = 1
+WIDTH_LINE_WIDER = 4
 COLOR_MARKER_DEFAULT = bluegray(500)  # Default, used in e.g. line plots
 COLOR_MARKER_DEFAULT_EDGE = 'none'
 SIZE_MARKER_DEFAULT = 3
@@ -62,13 +63,16 @@ FONTSIZE_HEADER_AXIS_SMALL = 6
 FONTCOLOR_HEADER_AXIS = black()
 
 # Axis labels
-AXLABELS_FONTSIZE = 16
+AXLABELS_FONTSIZE = 14
 AXLABELS_FONTCOLOR = black()
 AXLABELS_FONTWEIGHT = 'normal'
 
 INFOTXT_FONTSIZE = 12
 
 FONTSIZE_ANNOTATIONS_SMALL = 12
+
+# FIGURE
+FIGHEADER_FONTSIZE = 16
 
 # Ticks
 TICKS_WIDTH = 1
@@ -90,7 +94,7 @@ def colorwheel_36():
     """Create dictionary with a total of 36 colors."""
     picked_colors_dict = {}
     pick = -1
-    shades = [400, 600, 800]
+    shades = [300, 600, 900]
 
     for shade in shades:
         color_list = colors_12(shade=shade)

@@ -1,5 +1,6 @@
 import time
 from pathlib import Path
+from typing import Literal
 
 import matplotlib.gridspec as gridspec
 import pandas as pd
@@ -10,9 +11,9 @@ from pandas import DataFrame, Series
 # from modboxes.plots.styles.LightTheme import *
 # from modboxes.plots.styles.LightTheme import FONTSIZE_LABELS_AXIS, COLOR_TXT_LEGEND
 import diive.core.plotting.styles.LightTheme as theme
-from diive.core.times.times import current_datetime
 # from modboxes.plots.styles.LightTheme import *
 from diive.core.plotting.styles.LightTheme import *
+from diive.core.times.times import current_datetime
 
 
 def remove_prev_lines(ax):
@@ -74,13 +75,20 @@ def default_format(ax,
                    ticks_direction=theme.TICKS_DIRECTION,
                    ticks_labelsize=theme.TICKS_LABELSIZE,
                    color='black',
-                   facecolor='white'):
+                   facecolor='white',
+                   showgrid: bool = True) -> None:
     """Apply default format to ax"""
+    # Facecolor
     ax.set_facecolor(facecolor)
+
+    # Ticks
     format_ticks(ax=ax, width=ticks_width, length=ticks_length,
                  direction=ticks_direction, color=color, labelsize=ticks_labelsize)
+
+    # Spines
     format_spines(ax=ax, color=color, lw=theme.LINEWIDTH_SPINES)
 
+    # Labels
     if txt_xlabel:
         ax.set_xlabel(txt_xlabel, color=axlabels_fontcolor, fontsize=axlabels_fontsize, fontweight=axlabels_fontweight)
     if txt_ylabel and txt_ylabel_units:
@@ -89,7 +97,10 @@ def default_format(ax,
     if txt_ylabel and not txt_ylabel_units:
         ax.set_ylabel(f'{txt_ylabel}', color=axlabels_fontcolor, fontsize=axlabels_fontsize,
                       fontweight=axlabels_fontweight)
-    return None
+
+    # Grid
+    if showgrid:
+        default_grid(ax=ax)
 
 
 def format_ticks(ax, width, length, direction, color, labelsize):
@@ -201,10 +212,20 @@ def set_marker_color(current_color_ix, plot_color_list, current_marker_ix, plot_
 # format_spines(ax=ax, color='#444444', lw=1)
 
 
-def nice_date_ticks(ax, minticks, maxticks, which):
+def nice_date_ticks(ax, minticks: int = 3, maxticks: int = 9, which: Literal['x', 'y'] = 'x', locator: str = 'auto'):
     """ Nice format for date ticks. """
-    locator = mdates.AutoDateLocator(minticks=minticks, maxticks=maxticks)
-    formatter = mdates.ConciseDateFormatter(locator, show_offset=False)
+    # years = mdates.YearLocator(base=3, month=12, day=31)
+    # yearss_fmt = mdates.DateFormatter('%dn%bn%Y')
+    # ax.xaxis.set_major_locator(years)
+    # ax.xaxis.set_major_formatter(years_fmt)
+
+    if locator == 'year':
+        locator = mdates.YearLocator(base=3, month=12, day=31)
+        formatter = mdates.DateFormatter('%Y')
+    elif locator == 'auto':
+        locator = mdates.AutoDateLocator(minticks=minticks, maxticks=maxticks)
+        formatter = mdates.ConciseDateFormatter(locator, show_offset=False)
+
     if which == 'y':
         ax.yaxis.set_major_locator(locator)
         ax.yaxis.set_major_formatter(formatter)
@@ -263,7 +284,7 @@ def add_to_existing_ax_with_values(fig, add_to_ax, x, y, counts, ms, color, mark
     return line
 
 
-def default_legend(ax, loc='upper right', facecolor='None', edgecolor='None',
+def default_legend(ax, loc: int or str = 0, facecolor='None', edgecolor='None',
                    shadow=False, ncol=1, labelspacing=0.5, textcolor=theme.COLOR_TXT_LEGEND,
                    bbox_to_anchor=None, from_line_collection=False, line_collection=None,
                    textsize: int = theme.FONTSIZE_TXT_LEGEND):
@@ -300,12 +321,12 @@ def add_ax_title_inside(txt, ax):
     return text
 
 
-def _add_zeroline_y(series, ax):
+def add_zeroline_y(series, ax):
     if (series.min() < 0) & (series.max() > 0):
         ax.axhline(0, lw=LINEWIDTH_ZERO, color=COLOR_LINE_ZERO)
 
 
-def _remove_line(line):
+def remove_line(line):
     if line is None:
         pass
     else:
@@ -313,7 +334,7 @@ def _remove_line(line):
 
 
 def plotdate_limit(series, ax, prevline, label_txt):
-    _remove_line(prevline)
+    remove_line(prevline)
     line, = ax.plot_date(x=series.index,
                          y=series,
                          color=COLOR_LINE_LIMIT, alpha=1, ls='-',
@@ -323,7 +344,7 @@ def plotdate_limit(series, ax, prevline, label_txt):
 
 
 def plotdate_markers(series, ax, prevline, label_txt):
-    _remove_line(prevline)
+    remove_line(prevline)
     label_txt = series.name[0] if not label_txt else label_txt
     _numvals = series.dropna().count()
     line, = ax.plot_date(x=series.index,
@@ -335,22 +356,22 @@ def plotdate_markers(series, ax, prevline, label_txt):
     return line
 
 
-def plotdate_main(series, ax, label_txt: str = None):
-    label_txt = series.name[0] if not label_txt else label_txt
-    _numvals = series.dropna().count()
-    line, = ax.plot_date(x=series.index,
-                         y=series,
-                         color=COLOR_LINE_DEFAULT, alpha=1, ls='-',
-                         marker='o', lw=WIDTH_LINE_DEFAULT,
-                         markeredgecolor='none', ms=4, zorder=98,
-                         label=f"{label_txt} ({_numvals} values)")
-    plot_title_ref = add_ax_title_inside(txt=f"{series.name[0]}", ax=ax)
-    _add_zeroline_y(series=series, ax=ax)
-    _set_xylim(ax=ax, series=series)
-    return line, plot_title_ref
+# def plotdate_main(series, ax, label_txt: str = None):
+#     label_txt = series.name[0] if not label_txt else label_txt
+#     _numvals = series.dropna().count()
+#     line, = ax.plot_date(x=series.index,
+#                          y=series,
+#                          color=COLOR_LINE_DEFAULT, alpha=1, ls='-',
+#                          marker='o', lw=WIDTH_LINE_DEFAULT,
+#                          markeredgecolor='none', ms=4, zorder=98,
+#                          label=f"{label_txt} ({_numvals} values)")
+#     plot_title_ref = add_ax_title_inside(txt=f"{series.name[0]}", ax=ax)
+#     add_zeroline_y(series=series, ax=ax)
+#     set_xylim(ax=ax, series=series)
+#     return line, plot_title_ref
 
 
-def _set_xylim(ax, series):
+def set_xylim(ax, series):
     try:
         ax.set_xlim(series.index.min(), series.index.max())
         ax.set_ylim(series.min(), series.max())
@@ -358,20 +379,20 @@ def _set_xylim(ax, series):
         pass
 
 
-def update_plotdate_main(series, ax, prevline, plot_title_ref):
-    # kudos: https://www.pythonguis.com/tutorials/plotting-matplotlib/
-    prevline.set_xdata(series.index)
-    prevline.set_ydata(series)
-    plot_title_ref.remove()
-    plot_title_ref = add_ax_title_inside(txt=f"{series.name[0]}", ax=ax)
-    _add_zeroline_y(series=series, ax=ax)
-    _set_xylim(ax=ax, series=series)
-    return plot_title_ref
+# def update_plotdate_main(series, ax, prevline, plot_title_ref):
+#     # kudos: https://www.pythonguis.com/tutorials/plotting-matplotlib/
+#     prevline.set_xdata(series.index)
+#     prevline.set_ydata(series)
+#     plot_title_ref.remove()
+#     plot_title_ref = add_ax_title_inside(txt=f"{series.name[0]}", ax=ax)
+#     add_zeroline_y(series=series, ax=ax)
+#     set_xylim(ax=ax, series=series)
+#     return plot_title_ref
 
 
 def quickplot(data: DataFrame or Series, hline: None or float = None, subplots: bool = True,
               title: str = None, saveplot: str or Path = None, showplot: bool = False,
-              showstats: bool=True) -> None:
+              showstats: bool = True) -> None:
     if isinstance(data, Series):
         data = pd.DataFrame(data)
     elif isinstance(data, list):
@@ -401,16 +422,15 @@ def quickplot(data: DataFrame or Series, hline: None or float = None, subplots: 
         max = data[col].max()
         min = data[col].min()
         ax.plot_date(x=data.index, y=data[col], color=colors[ix],
-                           label=f"{col}\n"
-                                 f"mean: {mean:.2f}±{std:.2f}\n"
-                                 f"min: {min:.2f}  |  max: {max:.2f}")
+                     label=f"{col}\n"
+                           f"mean: {mean:.2f}±{std:.2f}\n"
+                           f"min: {min:.2f}  |  max: {max:.2f}")
         ax.text(0.02, 0.98, title,
                 size=theme.AXLABELS_FONTSIZE, color='black', backgroundcolor='none', transform=ax.transAxes,
                 alpha=1, horizontalalignment='left', verticalalignment='top')
         default_legend(ax=ax, facecolor='white')
         if hline:
             ax.axhline(hline, label=f"value: {hline}", ls='--')
-
 
     # ax = fig.add_subplot(gs[0, 0])
     # _axes = data.plot(subplots=subplots, ax=ax, title=title, lw=2)
@@ -438,3 +458,24 @@ def save_fig(fig, title: str, path=Path or str):
     outfilepath = Path(path) / filename_out
     fig.savefig(outfilepath)
     print(f"Saved plot {outfilepath}")
+
+
+def create_ax():
+    """Create figure and axis"""
+    # Figure setup
+    fig = plt.figure(facecolor='white', figsize=(16, 9))
+    gs = gridspec.GridSpec(1, 1)  # rows, cols
+    # gs.update(wspace=0.3, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
+    ax = fig.add_subplot(gs[0, 0])
+    return fig, ax
+
+
+def n_legend_cols(n_legend_entries: int) -> int:
+    """Set number of legend columns"""
+    if 1 <= n_legend_entries <= 5:
+        n_legend_cols = 1
+    elif 6 <= n_legend_entries <= 15:
+        n_legend_cols = 2
+    else:
+        n_legend_cols = 3
+    return n_legend_cols
