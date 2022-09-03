@@ -4,39 +4,65 @@ FLUX: OPTIMUM RANGE
 """
 
 from math import isclose
+from typing import Literal
 
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.legend_handler import HandlerTuple
-from pandas import DataFrame, Series
+from pandas import DataFrame
 
 
 class FindOptimumRange:
-    """
-    Find x range for optimum y
-    Example: VPD (x) range where NEE (y) carbon uptake is highest (=smallest number)
-    """
 
-    def __init__(self, x: Series, y: Series, define_optimum: str = 'max'):
+    def __init__(self,
+                 df: DataFrame,
+                 xcol: str,
+                 ycol: str,
+                 n_vals_per_bin: int = 300,
+                 bins_agg: Literal['median'] = 'median',
+                 rwinsize: float = 0.1,
+                 ragg: Literal['mean'] = 'mean',
+                 define_optimum: Literal['min', 'max'] = 'max'):
         """
+        Find x range for optimum y
+
+        First, x data are aggregated in y bins. By default, the median
+        value of x is calculated for each y bin (*bins_agg*). The number
+        of bins that is used is defined by total length of data divided
+        by *n_vals_per_bin*, i.e., each bin should contain e.g. 300 values.
+        Then, the rolling mean (*ragg*) with window size *rwinsize* is
+        calculated across all binned values. Here, *rwinsize* is given as
+        the fraction of the total number of detected bins. The optimum is
+        detected as the maximum (or other, *define_optimum*) of the values
+        found in the rolling aggregation.
+
+        Example: VPD (x) range where NEE (y) carbon uptake is highest (=smallest number)
 
         Args:
-            df: data
-            x: column name of x in df
-            y: column name of y in df
-            define_optimum: optimum can be based on 'min' or 'max'
+            df: Data
+            xcol: Column name of x in df
+            ycol: Column name of y in df
+            n_vals_per_bin: Number of values per x bin
+            bins_agg: How data in bins are aggregated
+            rwinsize: Window size for rolling aggregation, expressed as fraction of
+                the total number of bins. The total number of bins is calculated
+                from the total length of the data and *n_vals_per_bin*. The resulting
+                window size is then an integer value that is used in further calculations.
+                If the integer window size results in an even number, +1 is added since
+                the window size must be an odd number.
+            ragg: Rolling aggregation that is used in the rolling window.
+            define_optimum: Optimum can be based on 'min' or 'max'
         """
+        self.df = df[[xcol, ycol]].copy()
+        self.xcol = xcol
+        self.ycol = ycol
+        self.n_vals_per_bin = n_vals_per_bin
+        self.bins_agg = bins_agg
+        self.rwinsize = rwinsize
+        self.ragg = ragg
         self.define_optimum = define_optimum
-
-        # Create dictonary, used to build df
-        self.xcol = f"{x.name}_x"
-        self.ycol = f"{y.name}_y"
-        cols = {self.xcol: x, self.ycol: y}
-
-        # Concatenate the series side by side with axis=1
-        self.df = pd.concat(cols, axis=1)
 
         self._results_optrange = {}
 
@@ -48,29 +74,25 @@ class FindOptimumRange:
 
     def find_optimum(self):
         # self._prepare_data() todo?
-        n_xbins = 200  # Number of x bins
-        rwinsize = 10  # Window size for rolling aggs
-        bin_agg = 'median'
-        rolling_agg = 'mean'
 
-        self._divide_xdata_into_bins(n_xbins=n_xbins)
+        bins_df, bin_aggs_df, n_xbins = self._divide_xdata_into_bins()
 
-        bin_aggs_df = self._aggregate_per_bin(bin_agg=bin_agg)
-
+        winsize = int(n_xbins * self.rwinsize)
+        winsize = winsize + 1 if (winsize % 2 == 0) else winsize  # Must be odd number
         rbin_aggs_df = self._rolling_agg(bin_aggs_df=bin_aggs_df,
-                                         winsize=rwinsize,
-                                         use_bin_agg=bin_agg,
-                                         rolling_agg=rolling_agg)
+                                         use_bin_agg=self.bins_agg,
+                                         rolling_agg=self.ragg,
+                                         winsize=winsize)
 
         roptimum_bin, roptimum_val = self._find_rolling_optimum(rolling_df=rbin_aggs_df,
-                                                                use_rolling_agg=rolling_agg)
+                                                                use_rolling_agg=self.ragg)
 
         # rwinsize = int(num_xbins / 5)  # Window size for rolling aggs
 
         optimum_xstart, optimum_xend, optimum_ymean, \
         optimum_start_bin, optimum_end_bin = self._get_optimum_range(grouped_df=bin_aggs_df,
                                                                      roptimum_bin=roptimum_bin,
-                                                                     winsize=rwinsize)
+                                                                     winsize=winsize)
         self._validate(roptimum_val=roptimum_val, optimum_ymean=optimum_ymean)
 
         vals_in_optimum_range_df = \
@@ -84,7 +106,7 @@ class FindOptimumRange:
             optimum_end_bin=optimum_end_bin,
             bin_aggs_df=bin_aggs_df,
             rbin_aggs_df=rbin_aggs_df,
-            rwinsize=rwinsize,
+            rwinsize=winsize,
             roptimum_bin=roptimum_bin,
             roptimum_val=roptimum_val,
             n_xbins=n_xbins,
@@ -136,7 +158,7 @@ class FindOptimumRange:
         # Keep x values > 0
         self.df = self.df.loc[self.df[self.xcol] > 0, :]
 
-    def _divide_xdata_into_bins(self, n_xbins: int = 200):
+    def _divide_xdata_into_bins(self) -> tuple[DataFrame, DataFrame, int]:
         """
         Divide x data into bins
 
@@ -146,15 +168,21 @@ class FindOptimumRange:
             n_xbins: number of bins
 
         """
-        # n_xbins = int(len(self.df) / 100)  # Number of x bins
-        xbins = pd.qcut(self.df[self.xcol], n_xbins, duplicates='drop')  # How awesome!
-        self.df = self.df.assign(xbins=xbins)
+        bins_df = self.df.copy()
 
-    def _aggregate_per_bin(self, bin_agg: str = 'median'):
-        """Aggregate by bin membership"""
-        return self.df.groupby('xbins').agg({bin_agg, 'count'})
+        # Detect number of x bins
+        n_xbins = int(len(bins_df) / self.n_vals_per_bin)
 
-    def _rolling_agg(self, bin_aggs_df, winsize, use_bin_agg, rolling_agg):
+        # Divide data into bins and add as column
+        xbins = pd.qcut(bins_df[self.xcol], n_xbins, duplicates='drop')  # How awesome!
+        bins_df = bins_df.assign(xbins=xbins)
+
+        # Aggregate by bin membership
+        bin_aggs_df = bins_df.groupby('xbins').agg({self.bins_agg, 'count'})
+
+        return bins_df, bin_aggs_df, n_xbins
+
+    def _rolling_agg(self, bin_aggs_df, use_bin_agg, winsize, rolling_agg):
         rolling_df = bin_aggs_df[self.ycol][use_bin_agg].rolling(winsize, center=True)
         return rolling_df.agg({rolling_agg, 'std'}).dropna()
 
@@ -202,32 +230,24 @@ class FindOptimumRange:
                optimum_start_bin, optimum_end_bin
 
     def _validate(self, roptimum_val, optimum_ymean):
-        check = isclose(roptimum_val, optimum_ymean, abs_tol=10**-3)
+        check = isclose(roptimum_val, optimum_ymean, abs_tol=10 ** -3)
         if check:
             print("Validation OK.")
         else:
             print("(!)Validation FAILED.")
             assert isclose(roptimum_val, optimum_ymean)
 
-        # rolling_range_mean = grouped_df.iloc[roptimum_start_ix:roptimum_end_ix].mean()
-        # print(f"\nStats of range of rolling max uptake:\n{rolling_range_mean}")
-
-        # int_loc = rolling_df['mean'].index.get_loc(roptimum_ix)
-        # print(f"Index integer location of rolling max uptake: {int_loc}  /  {rolling_df['mean'].index[int_loc]}")
-        # max_class = mean.idxmin()
-        # max_uptake = mean[mean.idxmin()]
-
-        # print(f"\nRange of rolling max uptake: from {rolling_start_bin} to {rolling_end_bin}")
-
-        # grouped_df[ycol]['median'].plot(figsize=(10, 5))
-        # plt.axvline(int_loc)
-        # plt.axvline(roptimum_start_ix)
-        # plt.axvline(roptimum_end_ix)
-        # plt.show()
-
-        # optimum_df=optimum_df.set_index(xcol).sort_index()
-        # optimum_df.rolling(window=100).mean().plot()
-        # plt.show()
+    def plot_results(self):
+        fig = plt.figure(figsize=(16, 9))
+        gs = gridspec.GridSpec(4, 1)  # rows, cols
+        gs.update(wspace=.2, hspace=.5, left=.05, right=.95, top=.95, bottom=.05)
+        ax1 = fig.add_subplot(gs[0:2, 0])
+        ax2 = fig.add_subplot(gs[2, 0])
+        ax3 = fig.add_subplot(gs[3, 0])
+        ax = self.plot_vals_in_optimum_range(ax=ax1)
+        ax = self.plot_bin_aggregates(ax=ax2)
+        ax = self.plot_rolling_bin_aggregates(ax=ax3)
+        fig.show()
 
     def plot_vals_in_optimum_range(self, ax):
         """Plot optimum range: values in, above and below optimum per year"""
@@ -240,6 +260,7 @@ class FindOptimumRange:
         df = results_optrange['vals_in_optimum_range_df'].copy()
         plotcols = ['vals_inoptimum_perc', 'vals_aboveoptimum_perc', 'vals_belowoptimum_perc']
         df = df[plotcols]
+        df = df.round(1)
         # xcol = results_optrange['xcol']
         # ycol = results_optrange['ycol']
 
@@ -255,7 +276,7 @@ class FindOptimumRange:
         year_labels = list(results.keys())
         data = np.array(list(results.values()))
         data_cum = data.cumsum(axis=1)
-        category_colors = plt.colormaps['RdYlGn_r'](np.linspace(0.15, 0.85, data.shape[1]))
+        category_colors = plt.colormaps['RdYlBu_r'](np.linspace(0.20, 0.80, data.shape[1]))
 
         # fig, ax = plt.subplots(figsize=(9.2, 5))
         ax.invert_yaxis()
@@ -280,163 +301,119 @@ class FindOptimumRange:
 
         return ax
 
+    def plot_bin_aggregates(self, ax):
+        """Plot y median in bins of x"""
 
-def plot_bin_aggregates(ax, results_optrange: dict):
-    """Plot y median in bins of x"""
+        results_optrange = self.results_optrange()
 
-    # Get data
-    bin_aggs_df = results_optrange['bin_aggs_df'].copy()
-    xcol = results_optrange['xcol']
-    ycol = results_optrange['ycol']
-    num_xbins = results_optrange['num_xbins']
-    optimum_start_bin = results_optrange['optimum_start_bin']
-    optimum_end_bin = results_optrange['optimum_end_bin']
-    optimum_xstart = results_optrange['optimum_xstart']
-    optimum_xend = results_optrange['optimum_xend']
+        # Get data
+        bin_aggs_df = results_optrange['bin_aggs_df'].copy()
+        xcol = results_optrange['xcol']
+        ycol = results_optrange['ycol']
+        n_xbins = results_optrange['n_xbins']
+        optimum_start_bin = results_optrange['optimum_start_bin']
+        optimum_end_bin = results_optrange['optimum_end_bin']
+        optimum_xstart = results_optrange['optimum_xstart']
+        optimum_xend = results_optrange['optimum_xend']
 
-    # Find min/max of y, used for scaling yaxis
-    ymax = bin_aggs_df[ycol]['median'].max()
-    ymin = bin_aggs_df[ycol]['median'].min()
-    ax.set_ylim(ymin, ymax)
+        # Find min/max of y, used for scaling yaxis
+        ymax = bin_aggs_df[ycol]['median'].max()
+        ymin = bin_aggs_df[ycol]['median'].min()
+        ax.set_ylim(ymin, ymax)
 
-    # Show rolling mean
-    bin_aggs_df[ycol]['median'].plot(ax=ax, zorder=99,
-                                     title=f"{ycol} medians in {num_xbins} bins of {xcol}")
+        # Show rolling mean
+        bin_aggs_df[ycol]['median'].plot(ax=ax, zorder=99,
+                                         title=f"{ycol} medians in {n_xbins} bins of {xcol}")
 
-    # Show optimum range
-    optimum_start_bin_ix = bin_aggs_df.index.get_loc(optimum_start_bin)
-    optimum_end_bin_ix = bin_aggs_df.index.get_loc(optimum_end_bin)
-    ax.axvline(optimum_start_bin_ix)
-    ax.axvline(optimum_end_bin_ix)
-    area_opr = ax.fill_between([optimum_start_bin_ix,
-                                optimum_end_bin_ix],
-                               ymin, ymax,
-                               color='#FFC107', alpha=0.5, zorder=1,
-                               label=f"optimum range between {optimum_xstart} and {optimum_xend}")
+        # Show optimum range
+        optimum_start_bin_ix = bin_aggs_df.index.get_loc(optimum_start_bin)
+        optimum_end_bin_ix = bin_aggs_df.index.get_loc(optimum_end_bin)
+        ax.axvline(optimum_start_bin_ix)
+        ax.axvline(optimum_end_bin_ix)
+        area_opr = ax.fill_between([optimum_start_bin_ix,
+                                    optimum_end_bin_ix],
+                                   ymin, ymax,
+                                   color='#FFC107', alpha=0.5, zorder=1,
+                                   label=f"optimum range {self.define_optimum} between {optimum_xstart} and {optimum_xend}")
 
-    l = ax.legend(
-        [area_opr],
-        [area_opr.get_label()],
-        scatterpoints=1,
-        numpoints=1,
-        handler_map={tuple: HandlerTuple(ndivide=None)},
-        ncol=2)
+        l = ax.legend(
+            [area_opr],
+            [area_opr.get_label()],
+            scatterpoints=1,
+            numpoints=1,
+            handler_map={tuple: HandlerTuple(ndivide=None)},
+            ncol=2)
 
+    def plot_rolling_bin_aggregates(self, ax):
+        """Plot rolling mean of y medians in bins of x"""
 
-def plot_rolling_bin_aggregates(ax, results_optrange: dict):
-    """Plot rolling mean of y medians in bins of x"""
+        results_optrange = self.results_optrange()
 
-    # Get data
-    rbin_aggs_df = results_optrange['rbin_aggs_df'].copy()
-    xcol = results_optrange['xcol']
-    ycol = results_optrange['ycol']
-    num_xbins = results_optrange['num_xbins']
-    optimum_start_bin = results_optrange['optimum_start_bin']
-    optimum_end_bin = results_optrange['optimum_end_bin']
-    optimum_xstart = results_optrange['optimum_xstart']
-    optimum_xend = results_optrange['optimum_xend']
+        # Get data
+        rbin_aggs_df = results_optrange['rbin_aggs_df'].copy()
+        xcol = results_optrange['xcol']
+        ycol = results_optrange['ycol']
+        n_xbins = results_optrange['n_xbins']
+        optimum_start_bin = results_optrange['optimum_start_bin']
+        optimum_end_bin = results_optrange['optimum_end_bin']
+        optimum_xstart = results_optrange['optimum_xstart']
+        optimum_xend = results_optrange['optimum_xend']
 
-    # Find min/max across dataframe, used for scaling yaxis
-    rbin_aggs_df['mean+std'] = rbin_aggs_df['mean'].add(rbin_aggs_df['std'])
-    rbin_aggs_df['mean-std'] = rbin_aggs_df['mean'].sub(rbin_aggs_df['std'])
-    dfmax = rbin_aggs_df[['mean+std', 'mean-std']].max().max()
-    dfmin = rbin_aggs_df.min().min()
-    ax.set_ylim(dfmin, dfmax)
+        # Find min/max across dataframe, used for scaling yaxis
+        rbin_aggs_df['mean+std'] = rbin_aggs_df['mean'].add(rbin_aggs_df['std'])
+        rbin_aggs_df['mean-std'] = rbin_aggs_df['mean'].sub(rbin_aggs_df['std'])
+        dfmax = rbin_aggs_df[['mean+std', 'mean-std']].max().max()
+        dfmin = rbin_aggs_df.min().min()
+        ax.set_ylim(dfmin, dfmax)
 
-    # Show rolling mean
-    rbin_aggs_df.plot(ax=ax, y='mean', yerr='std', zorder=99,
-                      title=f"Rolling mean of {ycol} medians in {num_xbins} bins of {xcol}")
+        # Show rolling mean
+        rbin_aggs_df.plot(ax=ax, y='mean', yerr='std', zorder=99,
+                          title=f"Rolling mean of {ycol} medians in {n_xbins} bins of {xcol}")
 
-    # Show optimum range
-    optimum_start_bin_ix = rbin_aggs_df.index.get_loc(optimum_start_bin)
-    optimum_end_bin_ix = rbin_aggs_df.index.get_loc(optimum_end_bin)
-    ax.axvline(optimum_start_bin_ix)
-    ax.axvline(optimum_end_bin_ix)
-    area_opr = ax.fill_between([optimum_start_bin_ix,
-                                optimum_end_bin_ix],
-                               dfmin, dfmax,
-                               color='#FFC107', alpha=0.5, zorder=1,
-                               label=f"optimum range between {optimum_xstart} and {optimum_xend}")
+        # Show optimum range
+        optimum_start_bin_ix = rbin_aggs_df.index.get_loc(optimum_start_bin)
+        optimum_end_bin_ix = rbin_aggs_df.index.get_loc(optimum_end_bin)
+        ax.axvline(optimum_start_bin_ix)
+        ax.axvline(optimum_end_bin_ix)
+        area_opr = ax.fill_between([optimum_start_bin_ix,
+                                    optimum_end_bin_ix],
+                                   dfmin, dfmax,
+                                   color='#FFC107', alpha=0.5, zorder=1,
+                                   label=f"optimum range {self.define_optimum} between {optimum_xstart} and {optimum_xend}")
 
-    l = ax.legend(
-        [area_opr],
-        [area_opr.get_label()],
-        scatterpoints=1,
-        numpoints=1,
-        handler_map={tuple: HandlerTuple(ndivide=None)},
-        ncol=2)
+        l = ax.legend(
+            [area_opr],
+            [area_opr.get_label()],
+            scatterpoints=1,
+            numpoints=1,
+            handler_map={tuple: HandlerTuple(ndivide=None)},
+            ncol=2)
 
 
 def example():
-    from pathlib import Path
-    import pickle
-    import time
     pd.options.display.width = None
     pd.options.display.max_columns = None
     pd.set_option('display.max_rows', 3000)
     pd.set_option('display.max_columns', 3000)
 
-    # site = "CH-Dav"
-    # ecosystem = "ENF"
-
-    # Data location
-    dir_base = Path(r"L:\Dropbox\luhk_work\10 - PUBLICATIONS\11 - LEAD\11.01 - LEAD - CO2 PENALTY WW2020\data")
-    dir_data = Path(
-        f"ecosystem_type_ENF\FLX_CH-Dav_FLUXNET2015_FULLSET_1997-2020_beta-3\FLX_CH-Dav_FLUXNET2015_FULLSET_HH_1997-2020_beta-3.csv")
-    filepath = dir_base / dir_data
-
-    # # Load data from file
-    # tic = time.time()
-    # readfiletype = ReadFileType(filetype='FLUXNET-FULLSET-HH-CSV-30MIN', filepath=filepath, data_nrows=200000)
-    # alldata_df, metadata_df = readfiletype.get_filedata()
-    # toc = time.time() - tic
-    # print(f"Reading csv took {toc} seconds.")
-
-    # # Export data to pickle
-    # tic = time.time()
-    # outfile = dir_base / "pickle" / "temp.pickle"
-    # pickle_out = open(outfile, "wb")
-    # pickle.dump(alldata_df, pickle_out)
-    # pickle_out.close()
-    # toc = time.time() - tic
-    # print(f"Saving pickle took {toc} seconds.")
-
-    # Import data from pickle
-    tic = time.time()
-    outfile = dir_base / "pickle" / "temp.pickle"
-    pickle_in = open(outfile, "rb")
-    alldata_df = pickle.load(pickle_in)
-    toc = time.time() - tic
-    print(f"Loading pickle took {toc} seconds.")
+    # Test data
+    from diive.core.io.files import load_pickle
+    df_orig = load_pickle(
+        filepath=r'F:\Dropbox\luhk_work\_current\fp2022\7-14__IRGA627572__addingQCF0\CH-DAV_FP2022.1_1997-2022.08_ID20220826234456_30MIN.diive.csv.pickle')
 
     # # Check columns
     # import fnmatch
     # [print(col) for col in alldata_df.columns if any(fnmatch.fnmatch(col, ids) for ids in ['NEE_CUT_50*'])]
 
-    # Required data
-    ta = alldata_df['TA_F'].copy()
-    nee = alldata_df['NEE_CUT_50'].copy()
+    # Select daytime data between May and September
+    df = df_orig.copy()
+    df = df.loc[(df.index.month >= 5) & (df.index.month <= 9)]
+    df = df.loc[df['PotRad_CUT_REF'] > 20]
 
     # Optimum range
-    optrange = FindOptimumRange(x=ta, y=nee, define_optimum="min")
+    optrange = FindOptimumRange(df=df, xcol='Tair_f', ycol='NEE_CUT_REF_f', define_optimum="min")
     optrange.find_optimum()
-
-    fig = plt.figure(figsize=(9, 16))
-    gs = gridspec.GridSpec(1, 1)  # rows, cols
-    # gs.update(wspace=.2, hspace=0, left=.1, right=.9, top=.9, bottom=.1)
-    ax1 = fig.add_subplot(gs[0, 0])
-    ax = optrange.plot_vals_in_optimum_range(ax=ax1)
-    fig.show()
-
+    optrange.plot_results()
 
 if __name__ == '__main__':
     example()
-
-# def _testfig():
-#     import matplotlib.gridspec as gridspec
-#     import matplotlib.pyplot as plt
-#     fig = plt.figure(figsize=(9, 9))
-#     gs = gridspec.GridSpec(1, 1)  # rows, cols
-#     # gs.update(wspace=.2, hspace=0, left=.1, right=.9, top=.9, bottom=.1)
-#     ax = fig.add_subplot(gs[0, 0])
-#     fig.show()

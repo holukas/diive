@@ -93,19 +93,11 @@ def example():
     ta_longterm = pd.read_csv(data_longterm_TA, header=0, encoding='utf-8', delimiter=';',
                               keep_date_col=False, index_col='time', dtype=None,
                               engine='python')
-    # ta_longterm = ta_longterm['tre200y0'].copy()
     ta_longterm = ta_longterm['tre200y0'].copy()
-    # ta_longterm = ta_longterm.set_index('time')
-    # ta_longterm.index = pd.to_datetime(ta_longterm.index, format='%Y')
     LongtermAnomaliesYear(series=ta_longterm,
                           series_units='(°C)',
                           reference_start_year=1864,
                           reference_end_year=1913).plot()
-
-    # reference = ta_longterm.iloc[0:50]
-    # reference_mean = reference['tre200y0'].mean()
-    # ta_longterm['diff'] = ta_longterm['tre200y0'].sub(reference_mean)
-
 
 if __name__ == '__main__':
     example()
