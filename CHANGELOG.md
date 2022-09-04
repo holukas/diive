@@ -2,12 +2,24 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.39.0 | 4 Sep 2022
+
+### Critical Days
+
+- New analysis: `pkgs.flux.criticaldays.CriticalDays` detects days in y that are
+  above a detected x threshold. At the moment, this is implemented to work with
+  half-hourly flux data as input and was tested with VPD (x) and NEE (y). In the
+  example below critical days are defined as the VPD daily max value where the daily
+  sum of NEE (in g CO2 m-2 d-1) becomes positive (i.e., emission of CO2 from the
+  ecosystem to the atmosphere).
+  ![DIIVE](images/fluxCriticalDays_diive_v0.39.0.png)
+
 ## v0.38.0 | 3 Sep 2022
 
 ### Optimum Range Detection
 
 - New analysis: `pkgs.analyses.optimumrange.FindOptimumRange` finds the optimum for a
-  variable in binned other variable. This is useful for e.g. detecting the air temperature
+  variable in binned other variable. This is useful for e.g. detecting the VPD
   range where CO2 uptake was highest (=most negative).  
   ![DIIVE](images/analysesOptimumRange_diive_v0.38.0.png)
 

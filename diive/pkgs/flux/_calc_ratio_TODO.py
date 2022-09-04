@@ -3,6 +3,8 @@ FLUX: CRITICAL HEAT DAYS
 ========================
 """
 
+from importlib import reload
+
 import numpy as np
 import pandas as pd
 from matplotlib.legend_handler import HandlerTuple
@@ -15,16 +17,14 @@ from diive.core.dfun.fits import BinFitterCP
 from diive.core.plotting import plotfuncs
 from diive.core.plotting.fitplot import fitplot
 from diive.core.plotting.rectangle import rectangle
-from diive.core.plotting.styles.LightTheme import INFOTXT_FONTSIZE
 from diive.pkgs.analyses.optimumrange import FindOptimumRange
-from importlib import reload
 
 pd.set_option('display.width', 1500)
 pd.set_option('display.max_columns', 30)
 pd.set_option('display.max_rows', 30)
 
 
-class CriticalHeatDays:
+class CriticalDays:
     date_col = '.DATE'
     grp_daynight_col = '.GRP_DAYNIGHT'
 
@@ -32,11 +32,11 @@ class CriticalHeatDays:
             self,
             df: DataFrame,
             x_col: str,
-            nee_col: str,
-            gpp_col: str,
-            reco_col: str,
+            y_col: str,
             ta_col: str,
-            daynight_split: str = 'timestamp',
+            gpp_col:str,
+            reco_col:str,
+            daynight_split_on: str = 'timestamp',
             daynight_split_day_start_hour: int = 7,
             daynight_split_day_end_hour: int = 18,
             daytime_threshold: int = 20,
@@ -52,11 +52,11 @@ class CriticalHeatDays:
         Args:
             df:
             x_col: Column name of x variable
-            nee_col: Column name of NEE (net ecosystem exchange, ecosystem flux)
+            y_col: Column name of NEE (net ecosystem exchange, ecosystem flux)
             gpp_col: Column name of GPP (gross primary production, ecosystem flux)
             reco_col: Column name of RECO (ecosystem respiration, ecosystem flux)
             ta_col:
-            daynight_split: Column name of variable used for detection of daytime and nighttime
+            daynight_split_on: Column name of variable used for detection of daytime and nighttime
             daytime_threshold: Threshold for detection of daytime and nighttime from *daytime_col*
             set_daytime_if: 'Larger Than Threshold' or 'Smaller Than Threshold'
             usebins: XXX (default 10)
@@ -65,18 +65,18 @@ class CriticalHeatDays:
                 number is given +1 is added automatically.
         """
 
-        if daynight_split != 'timestamp':
-            self.df = df[[x_col, nee_col, gpp_col, reco_col,
-                          ta_col, daynight_split]].copy()
+        if daynight_split_on != 'timestamp':
+            self.df = df[[x_col, y_col, gpp_col, reco_col,
+                          ta_col, daynight_split_on]].copy()
         else:
-            self.df = df[[x_col, nee_col, gpp_col, reco_col,
+            self.df = df[[x_col, y_col, gpp_col, reco_col,
                           ta_col]].copy()
         self.x_col = x_col
-        self.nee_col = nee_col
+        self.nee_col = y_col
         self.gpp_col = gpp_col
         self.reco_col = reco_col
         self.ta_col = ta_col
-        self.daynight_split = daynight_split
+        self.daynight_split_on = daynight_split_on
         self.daynight_split_day_start_hour = daynight_split_day_start_hour
         self.daynight_split_day_end_hour = daynight_split_day_end_hour
         self.daytime_threshold = daytime_threshold
@@ -294,19 +294,27 @@ class CriticalHeatDays:
         """Resample to daily values from *day_start_hour* to *day_start_hour*"""
         df_aggs = df.resample('D', offset=f'{day_start_hour}H').agg(aggs)
         df_aggs = df_aggs.where(df_aggs[self.x_col]['count'] == 48).dropna()  # Full days only
+        df_aggs.index.name = 'TIMESTAMP_START'
         return df_aggs
 
     def _prepare_daynight_datasets(self, aggs):
         """Create separate daytime/nighttime datasets and aggregate"""
 
         # Get daytime data from dataset
+        print("Splitting dataset into daytime and nighttime data ...")
         df, \
         df_daytime, \
         df_nighttime, \
         grp_daynight_col, \
         date_col, \
-        flag_daynight_col = \
-            self._get_daynight_data()
+        flag_daynight_col = frames.splitdata_daynight(
+            df=self.df.copy(),
+            split_on=self.daynight_split_on,
+            # split_day_start_hour=self.daynight_split_day_start_hour,
+            # split_day_end_hour=self.daynight_split_day_end_hour,
+            split_threshold=self.daytime_threshold,
+            split_flagtrue=self.set_daytime_if
+        )
 
         args = dict(groupby_col=grp_daynight_col,
                     date_col=date_col,
@@ -314,26 +322,17 @@ class CriticalHeatDays:
                     aggs=aggs)
 
         # Aggregate daytime dataset
+        print("Aggregating daytime dataset ...")
         df_daytime_aggs = self._aggregate_by_group(df=df_daytime, **args)
 
         # Aggregate nighttime dataset
+        print("Aggregating nighttime dataset ...")
         df_nighttime_aggs = self._aggregate_by_group(df=df_nighttime, **args)
 
         # print(len(df_daytime_aggs))
         # print(len(df_nighttime_aggs))
 
         return df_daytime, df_daytime_aggs, df_nighttime, df_nighttime_aggs
-
-    def _get_daynight_data(self):
-        """Get daytime data from dataset"""
-        return frames.splitdata_daynight(
-            df=self.df.copy(),
-            split_on=self.daynight_split,
-            split_day_start_hour=self.daynight_split_day_start_hour,
-            split_day_end_hour=self.daynight_split_day_end_hour,
-            split_threshold=self.daytime_threshold,
-            split_flagtrue=self.set_daytime_if
-        )
 
     def _zerocrossings_aggs(self, bts_zerocrossings_df: pd.DataFrame) -> dict:
         """Aggregate linecrossing results from bootstrap runs"""
@@ -347,9 +346,9 @@ class CriticalHeatDays:
             x_median=round(bts_zerocrossings_df['x_col'].median(), 6),
             x_min=bts_zerocrossings_df['x_col'].min(),
             x_max=bts_zerocrossings_df['x_col'].max(),
-            y_nee_median=bts_zerocrossings_df['nee_nom'].median(),
-            y_nee_min=bts_zerocrossings_df['nee_nom'].min(),
-            y_nee_max=bts_zerocrossings_df['nee_nom'].max(),
+            y_nee_median=bts_zerocrossings_df['y_nom'].median(),
+            y_nee_min=bts_zerocrossings_df['y_nom'].min(),
+            y_nee_max=bts_zerocrossings_df['y_nom'].max(),
         )
 
         return zerocrossings_aggs
@@ -463,10 +462,10 @@ class CriticalHeatDays:
         # Collect predicted vals in df
         zerocrossings_df = pd.DataFrame()
         zerocrossings_df['x_col'] = fit_results_nee['fit_x']
-        zerocrossings_df['nee_nom'] = fit_results_nee['nom']
+        zerocrossings_df['y_nom'] = fit_results_nee['nom']
 
         # Check values above/below zero
-        _signs = np.sign(zerocrossings_df['nee_nom'])
+        _signs = np.sign(zerocrossings_df['y_nom'])
         _signs_max = _signs.max()
         _signs_min = _signs.min()
         _signs_num_totalvals = len(_signs)
@@ -495,12 +494,12 @@ class CriticalHeatDays:
 
         # NEE at zero crossing must zero or above,
         # i.e. reject if NEE after zero-crossing does not change to emission
-        if (zerocrossing_vals['nee_nom'] < 0):
+        if (zerocrossing_vals['y_nom'] < 0):
             return None
 
         # x value must be above threshold to be somewhat meaningful, otherwise reject result
-        if (zerocrossing_vals['x_col'] < 10):
-            # VPD is too low, must be at least 10 for valid crossing
+        if (zerocrossing_vals['x_col'] < 1):  # TODO currently hardcoded for VPD kPa
+            # VPD is too low, must be at least 1 kPa for valid crossing
             return None
 
         return zerocrossing_vals
@@ -583,9 +582,9 @@ def plot_daytime_analysis(ax,
     """Plot daytime fluxes"""
 
     # For testing: direct plotting
-    COLOR_GPP = '#39a7b3' #blue(500)
-    COLOR_RECO = '#d95318' #red(500)
-    COLOR_THRESHOLD = '#FFB72B' #cyan(4000)
+    COLOR_GPP = '#39a7b3'  # blue(500)
+    COLOR_RECO = '#d95318'  # red(500)
+    COLOR_THRESHOLD = '#FFB72B'  # cyan(4000)
     INFOTXT_FONTSIZE = 11
     import matplotlib.pyplot as plt
     import matplotlib.gridspec as gridspec
@@ -594,11 +593,9 @@ def plot_daytime_analysis(ax,
     gs.update(wspace=0, hspace=0, left=.2, right=.8, top=.8, bottom=.2)
     ax = fig.add_subplot(gs[0, 0])
 
-
     reload(diive.core.plotting.styles.LightTheme)
     # import diive.core.plotting.styles.LightTheme
-    from diive.core.plotting.styles.LightTheme import COLOR_GPP, COLOR_RECO, COLOR_THRESHOLD, \
-        FONTSIZE_LEGEND, COLOR_THRESHOLD2
+    from diive.core.plotting.styles.LightTheme import COLOR_GPP
 
     units = "$gC\ m^{-2}\ d^{-1}$"
 
@@ -629,7 +626,6 @@ def plot_daytime_analysis(ax,
     # line_xchd_vertical = ax.axvline(24.112612612612615, lw=3, color=COLOR_THRESHOLD2, ls='-', zorder=0,
     #                                label=f"THR{_sub}, VPD = 24.1 hPa")
 
-
     # # TODO activate
     # # Rectangle (bootstrapped results)
     # num_bootstrap_runs = len(results_chd['bts_results'].keys()) - 1  # -1 b/c zero run is non-bootstrapped
@@ -644,7 +640,6 @@ def plot_daytime_analysis(ax,
 
     # Secondary axis for fluxes
     ax_twin = ax.twinx()
-
 
     # todo act
     # GPP
@@ -780,7 +775,7 @@ def plot_chd_detection_from_nee(ax, results_chd: dict, y_col: str, highlight_yea
 
     reload(diive.core.plotting.styles.LightTheme)
     # import diive.core.plotting.styles.LightTheme
-    from diive.core.plotting.styles.LightTheme import COLOR_GPP, COLOR_RECO, COLOR_THRESHOLD, \
+    from diive.core.plotting.styles.LightTheme import COLOR_GPP, COLOR_THRESHOLD, \
         FONTSIZE_LEGEND, COLOR_THRESHOLD2, COLOR_NEE, INFOTXT_FONTSIZE
     units = "$gC\ m^{-2}\ d^{-1}$"
 
@@ -809,7 +804,7 @@ def plot_chd_detection_from_nee(ax, results_chd: dict, y_col: str, highlight_yea
 
     # # Actual non-bootstrapped line crossing, the point where RECO = GPP
     # line_netzeroflux = ax.scatter(bts_results['zerocrossing_vals']['x_col'],
-    #                               bts_results['zerocrossing_vals']['nee_nom'],
+    #                               bts_results['zerocrossing_vals']['y_nom'],
     #                               edgecolor='black', color='none', alpha=1, s=90, lw=2,
     #                               label='net zero flux', zorder=99, marker='s')
 
@@ -829,7 +824,7 @@ def plot_chd_detection_from_nee(ax, results_chd: dict, y_col: str, highlight_yea
     _sub = "$_{XTR}$"
     # todo currently hardcoded!
     line_xchd_vertical = ax.axvline(24.112612612612615, lw=3, color=COLOR_THRESHOLD2, ls='-', zorder=99,
-                                   label=f"THR{_sub}, VPD = 24.1 hPa")
+                                    label=f"THR{_sub}, VPD = 24.1 hPa")
 
     # Rectangle bootstrap range
     num_bootstrap_runs = len(results_chd['bts_results'].keys()) - 1  # -1 b/c zero run is non-bootstrapped
@@ -852,8 +847,8 @@ def plot_chd_detection_from_nee(ax, results_chd: dict, y_col: str, highlight_yea
     sym_max = r'$\rightarrow$'
     _pos = bts_zerocrossings_aggs['x_max'] + bts_zerocrossings_aggs['x_max'] * 0.03
     t = ax.text(_pos, 0.07, f"{sym_max} {num_chds} critical heat days", size=INFOTXT_FONTSIZE,
-            color='black', backgroundcolor='none', transform=ax.get_xaxis_transform(),
-            alpha=1, horizontalalignment='left', verticalalignment='top', zorder=99)
+                color='black', backgroundcolor='none', transform=ax.get_xaxis_transform(),
+                alpha=1, horizontalalignment='left', verticalalignment='top', zorder=99)
     t.set_bbox(dict(facecolor='white', alpha=.7, edgecolor='black'))
 
     # # Optimum range (OPDS)
@@ -871,8 +866,8 @@ def plot_chd_detection_from_nee(ax, results_chd: dict, y_col: str, highlight_yea
     plotfuncs.default_format(ax=ax, txt_xlabel=xlabel, txt_ylabel=ylabel)
     # xlim_lower = flux_bts_results['fit_df']['fit_x'].min()
     # ax.set_xlim([-1, flux_bts_results['fit_df']['fit_x'].max()])
-    # ax.set_ylim([bts_results['zerocrossing_vals']['nee_nom'].min(),
-    #              bts_results['zerocrossing_vals']['nee_nom'].max()])
+    # ax.set_ylim([bts_results['zerocrossing_vals']['y_nom'].min(),
+    #              bts_results['zerocrossing_vals']['y_nom'].max()])
 
     # Custom legend
     # Assign two of the handles to the same legend entry by putting them in a tuple
@@ -918,42 +913,49 @@ def plot_chd_detection_from_nee(ax, results_chd: dict, y_col: str, highlight_yea
 
 
 if __name__ == '__main__':
-    pass
+    pd.options.display.width = None
+    pd.options.display.max_columns = None
+    pd.set_option('display.max_rows', 3000)
+    pd.set_option('display.max_columns', 3000)
 
-    # from tests.testdata.loadtestdata import loadtestdata
-    #
-    # # Load data
-    # data_df, metadata_df = loadtestdata()
-    # # # Use data from May to Sep only
-    # # maysep_filter = (df.index.month >= 5) & (df.index.month <= 9)
-    # # df = df.loc[maysep_filter].copy()
-    #
-    # # Settings
-    # x_col = 'VPD_f'
-    # nee_col = 'NEE_CUT_f'
-    # gpp_col = 'GPP_DT_CUT'
-    # reco_col = 'Reco_DT_CUT'
-    # # daytime_col = 'Rg_f'
-    #
-    # # Critical heat days
-    # chd = CriticalHeatDays(
-    #     df=data_df,
-    #     x_col=x_col,
-    #     nee_col=nee_col,
-    #     gpp_col=gpp_col,
-    #     reco_col=reco_col,
-    #     daynight_split='timestamp',
-    #     daytime_threshold=50,
-    #     set_daytime_if='Larger Than Threshold',
-    #     usebins=0,
-    #     bootstrap_runs=3,
-    #     bootstrapping_random_state=None
-    # )
-    #
-    # # Critical heat days
-    # chd.detect_chd_threshold()
-    # # results = chd.results_threshold_detection()
-    #
+    # Test data
+    from diive.core.io.files import load_pickle
+
+    df_orig = load_pickle(
+        filepath=r'F:\Dropbox\luhk_work\_current\fp2022\7-14__IRGA627572__addingQCF0\CH-DAV_FP2022.1_1997-2022.08_ID20220826234456_30MIN.diive.csv.pickle')
+
+    # Settings
+    x_col = 'VPD_f'
+    ta_col = 'Tair_f'
+    radiation_col = 'PotRad_CUT_REF'
+    nee_col = 'NEE_CUT_REF_f'
+    gpp_col = 'GPP_DT_CUT_REF'
+    reco_col = 'Reco_DT_CUT_REF'
+    subset_cols = [x_col, ta_col, radiation_col, nee_col, gpp_col, reco_col]
+    df = df_orig[subset_cols].copy().dropna()
+    df = df.loc[df.index.year >= 2010]
+
+    # Critical days
+    chd = CriticalDays(
+        df=df,
+        x_col=x_col,
+        ta_col=ta_col,
+        y_col=nee_col,
+        gpp_col=gpp_col,
+        reco_col=reco_col,
+        daynight_split_on=radiation_col,
+        # daynight_split_on='timestamp',
+        daytime_threshold=20,
+        set_daytime_if='Larger Than Threshold',
+        usebins=0,
+        bootstrap_runs=3,
+        bootstrapping_random_state=None
+    )
+
+    # Critical heat days
+    chd.detect_chd_threshold()
+    # results = chd.results_threshold_detection()
+
     # # Analyze flux
     # chd.analyze_daytime()
     # # results = chd.results_daytime_analysis()

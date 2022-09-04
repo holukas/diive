@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "diive"
-version = "0.38.0"
+version = "0.39.0"
 description = "Time series post-processing and analysis"
 authors = ["Lukas Hörtnagl <holukas@ethz.ch>"]
 

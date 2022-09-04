@@ -157,8 +157,8 @@ def rename_cols(df: DataFrame, renaming_dict: dict) -> DataFrame:
 def splitdata_daynight(
         df: pd.DataFrame,
         split_on: str,
-        split_day_start_hour: int,
-        split_day_end_hour: int,
+        split_day_start_hour: int = None,
+        split_day_end_hour: int = None,
         split_threshold: int = 20,
         split_flagtrue: str = 'Larger Than Threshold'
 ):
@@ -184,7 +184,9 @@ def splitdata_daynight(
         generate_flag_daynight(df=df,
                                flag_based_on=split_on,
                                ts_daytime_start_hour=split_day_start_hour,
-                               ts_daytime_end_hour=split_day_end_hour)
+                               ts_daytime_end_hour=split_day_end_hour,
+                               col_thres_flagtrue=split_flagtrue,
+                               col_thres_flag_threshold=split_threshold)
 
     # Add date as column
     df[date_col] = df.index.date

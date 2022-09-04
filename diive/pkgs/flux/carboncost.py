@@ -8,7 +8,7 @@ from pandas import DataFrame
 
 import diive.core.dfun.frames as frames
 # from diive.common.dfun.frames import insert_aggregated_in_hires
-from diive.pkgs.flux.criticalheatdays import CriticalHeatDays
+from diive.pkgs.flux.criticaldays import CriticalDays
 from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
 
 
@@ -380,14 +380,14 @@ class CarbonCost:
     def _detect_criticalheatdays(self, usebins, bootstrap_runs:int=11, random_state:int=None):
         """Run analyses for critical heat days"""
         # Critical heat days
-        chd = CriticalHeatDays(
+        chd = CriticalDays(
             df=self.df,
             x_col=self.x_col,
-            nee_col=self.nee_col,
+            y_col=self.nee_col,
             gpp_col=self.gpp_col,
             reco_col=self.reco_col,
             ta_col=self.ta_col,
-            daynight_split='timestamp',
+            daynight_split_on='timestamp',
             usebins=usebins,
             # usebins=self.chd_usebins,
             bootstrap_runs=bootstrap_runs,
@@ -396,7 +396,7 @@ class CarbonCost:
         )
 
         # Run CHD analyses
-        chd.detect_chd_threshold()
+        chd.detect_crd_threshold()
         chd.analyze_daytime()
         chd.find_nee_optimum_range()
 
@@ -408,7 +408,7 @@ class CarbonCost:
         return chd
 
     def plot_chd_threshold_detection(self, ax, highlight_year: int = None):
-        self.chd_instance.plot_chd_detection_from_nee(ax=ax, highlight_year=highlight_year)
+        self.chd_instance.plot_crd_detection_results(ax=ax, highlight_year=highlight_year)
 
     def plot_daytime_analysis(self, ax, highlight_year: int = None):
         self.chd_instance.plot_daytime_analysis(ax=ax)
