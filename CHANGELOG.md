@@ -16,7 +16,13 @@
 
 ![DIIVE](images/fluxCO2penalty_dielCycles_diive_v0.40.0.png)
 
+### VPD Calculation
+
+- New calculation: `pkgs.createvar.vpd.calc_vpd_from_ta_rh` calculates vapor pressure
+  deficit (VPD) from air temperature and relative humidity
+
 ### Fixes
+
 - Fixed: `core.plotting.cumulative.CumulativeYear` now shows zero line if needed
 - Fixed: `core.plotting.cumulative.CumulativeYear` now shows proper axis labels
 
