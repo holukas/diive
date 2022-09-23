@@ -222,6 +222,12 @@ def nice_date_ticks(ax, minticks: int = 3, maxticks: int = 9, which: Literal['x'
     if locator == 'year':
         locator = mdates.YearLocator(base=3, month=12, day=31)
         formatter = mdates.DateFormatter('%Y')
+    elif locator == 'month':
+        locator = mdates.MonthLocator()
+        formatter = mdates.DateFormatter('%b')
+    elif locator == 'hour':
+        locator = mdates.HourLocator(byhour=[6,12,18])
+        formatter = mdates.DateFormatter('%H')
     elif locator == 'auto':
         locator = mdates.AutoDateLocator(minticks=minticks, maxticks=maxticks)
         formatter = mdates.ConciseDateFormatter(locator, show_offset=False)
@@ -321,8 +327,16 @@ def add_ax_title_inside(txt, ax):
     return text
 
 
-def add_zeroline_y(series, ax):
-    if (series.min() < 0) & (series.max() > 0):
+def add_zeroline_y(data: Series or DataFrame, ax):
+    if isinstance(data, DataFrame):
+        # Min/max across all columns in DataFrame
+        min = data.min().min()
+        max = data.max().max()
+    else:
+        # Min/max for Series
+        min = data.min()
+        max = data.max()
+    if (min < 0) & (max > 0):
         ax.axhline(0, lw=LINEWIDTH_ZERO, color=COLOR_LINE_ZERO)
 
 
@@ -444,18 +458,22 @@ def quickplot(data: DataFrame or Series, hline: None or float = None, subplots: 
     # plt.close(fig)
 
 
-def save_fig(fig, title: str, path=Path or str):
+def save_fig(fig, title: str, path: Path or str = None):
     """Save figure to file
 
     Filename is sanitized, i.e. not-allowed characters are removed,
     removes also whitespace. Filename contains timestamp.
     """
     # Use alphanumeric for savename
+    title = "plot" if not title else title
     filename_out = [character for character in title if character.isalnum()]
     filename_out = "".join(filename_out)
     _, cur_time = current_datetime(str_format='%Y%m%d-%H%M%S-%f')
-    filename_out = f"{cur_time}_{filename_out}.png"
-    outfilepath = Path(path) / filename_out
+    filename_out = f"{filename_out}_{cur_time}.png"
+    if path:
+        outfilepath = Path(path) / filename_out
+    else:
+        outfilepath = filename_out
     fig.savefig(outfilepath)
     print(f"Saved plot {outfilepath}")
 

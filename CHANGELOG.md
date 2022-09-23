@@ -2,6 +2,24 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.40.0 | 23 Sep 2022
+
+### CO2 Penalty
+
+- New analysis: `pkgs.flux.co2penalty.CO2Penalty` calculates the CO2 penalty as
+  the difference between the observed co2 flux and the potential co2 flux modelled
+  from less extreme environmental conditions.
+
+![DIIVE](images/fluxCO2penalty_cumulative_diive_v0.40.0.png)
+
+![DIIVE](images/fluxCO2penalty_penaltyPerYear_diive_v0.40.0.png)
+
+![DIIVE](images/fluxCO2penalty_dielCycles_diive_v0.40.0.png)
+
+### Fixes
+- Fixed: `core.plotting.cumulative.CumulativeYear` now shows zero line if needed
+- Fixed: `core.plotting.cumulative.CumulativeYear` now shows proper axis labels
+
 ## v0.39.0 | 4 Sep 2022
 
 ### Critical Days

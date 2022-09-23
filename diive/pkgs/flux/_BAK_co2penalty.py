@@ -12,7 +12,7 @@ from diive.pkgs.flux.criticaldays import CriticalDays
 from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
 
 
-class CarbonCost:
+class CO2Penalty:
 
     def __init__(
             self,
@@ -185,12 +185,12 @@ class CarbonCost:
         carboncost_df[f'QCF_{_nee_limited_col}_gfRF'] = gapfilled_df[f'QCF_{_nee_limited_col}_gfRF']
 
         # Calculate carbon cost
-        carboncost_df['CARBONCOST'] = carboncost_df[f'{_nee_limited_col}_gfRF'].sub(carboncost_df[self.nee_col])
+        carboncost_df['PENALTY'] = carboncost_df[f'{_nee_limited_col}_gfRF'].sub(carboncost_df[self.nee_col])
 
         # Cumulatives
         carboncost_df[f'CUMSUM_{_nee_limited_col}_gfRF'] = carboncost_df[f'{_nee_limited_col}_gfRF'].cumsum()
         carboncost_df[f'CUMSUM_{self.nee_col}'] = carboncost_df[self.nee_col].cumsum()
-        carboncost_df['CUMSUM_CARBONCOST'] = carboncost_df['CARBONCOST'].cumsum()
+        carboncost_df['CUMSUM_PENALTY'] = carboncost_df['PENALTY'].cumsum()
 
         # Limited TA, VPD
         carboncost_df[_ta_limited_col] = _df_limited[_ta_limited_col]
@@ -204,7 +204,7 @@ class CarbonCost:
         # Collect info for yearly overview
 
         # Detect year with highest carbon cost
-        cc_per_year_df = carboncost_df[['CARBONCOST']].groupby(carboncost_df.index.year).sum()
+        cc_per_year_df = carboncost_df[['PENALTY']].groupby(carboncost_df.index.year).sum()
         cc_per_year_df['NEE_LIMITED_gfRF'] = carboncost_df['NEE_LIMITED_gfRF'].groupby(carboncost_df.index.year).sum()
         cc_per_year_df[f'{self.nee_col}'] = carboncost_df[self.nee_col].groupby(carboncost_df.index.year).sum()
 
@@ -215,7 +215,7 @@ class CarbonCost:
         _num_chds = _num_chds.fillna(0)
         cc_per_year_df['num_CHDs'] = _num_chds
 
-        cc_min_year = int(cc_per_year_df['CARBONCOST'].idxmin())
+        cc_min_year = int(cc_per_year_df['PENALTY'].idxmin())
         cc_min = cc_per_year_df.min()
 
         # _carboncost_df[['CUMSUM_NEE_LIMITED_gfRF', f'CUMSUM_{self.nee_col}']].plot()
@@ -443,7 +443,7 @@ class CarbonCost:
             num_chds = int(self.cc_per_year_df.loc[self.cc_per_year_df.index == year]['num_CHDs'])
             measured = float(self.cc_per_year_df.loc[self.cc_per_year_df.index == year][self.nee_col])
             modeled = float(self.cc_per_year_df.loc[self.cc_per_year_df.index == year]['NEE_LIMITED_gfRF'])
-            carboncost = float(self.cc_per_year_df.loc[self.cc_per_year_df.index == year]['CARBONCOST'])
+            carboncost = float(self.cc_per_year_df.loc[self.cc_per_year_df.index == year]['PENALTY'])
             if year == 2018:
                 print("XXX")
 
@@ -463,7 +463,7 @@ class CarbonCost:
             num_chds = int(self.cc_per_year_df['num_CHDs'].sum())
             measured = float(self.cc_per_year_df[self.nee_col].sum())
             modeled = float(self.cc_per_year_df['NEE_LIMITED_gfRF'].sum())
-            carboncost = float(self.cc_per_year_df['CARBONCOST'].sum())
+            carboncost = float(self.cc_per_year_df['PENALTY'].sum())
             if (measured < 0) and (modeled < 0) and (modeled < measured):
                 carboncost_perc = (1 - (measured / modeled)) * 100
 

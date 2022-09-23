@@ -1,2 +1,2 @@
 import diive.pkgs.flux.criticaldays
-import diive.pkgs.flux.carboncost
+import diive.pkgs.flux.co2penalty

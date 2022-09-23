@@ -10,14 +10,13 @@ class CumulativeYear:
     def __init__(self,
                  series: Series,
                  series_units: str = None,
-                 ax=None,
                  yearly_end_date: str = None,
                  start_year: int = None,
                  end_year: int = None,
                  show_reference: bool = False,
                  excl_years_from_reference: list = None,
                  highlight_year: int = None,
-                 highlight_year_color: str = None):
+                 highlight_year_color: str = '#F44336'):
         """
 
         Args:
@@ -96,11 +95,10 @@ class CumulativeYear:
         ymax = self.cumulatives_per_year_df.max().max()
         self.ax.set_ylim(ymin, ymax)
 
-        if (ymin < 0) & (ymax > 0):
-            pf.add_zeroline_y(ax=self.ax, series=self.cumulatives_per_year_df.min())
+        pf.add_zeroline_y(ax=self.ax, data=self.cumulatives_per_year_df)
 
         pf.default_format(ax=self.ax,
-                          txt_xlabel='TIMESTAMP',
+                          txt_xlabel='Month',
                           txt_ylabel=self.varname,
                           txt_ylabel_units=self.series_units)
 
@@ -109,7 +107,7 @@ class CumulativeYear:
                           labelspacing=0.2,
                           ncol=n_legend_cols)
 
-        pf.nice_date_ticks(ax=self.ax, minticks=3, maxticks=20, which='x')
+        pf.nice_date_ticks(ax=self.ax, minticks=3, maxticks=20, which='x', locator='month')
 
         self.fig.tight_layout()
 
@@ -148,19 +146,25 @@ def example():
     # from diive.core.io.filereader import ReadFileType
     # loaddatafile = ReadFileType(
     #     filetype='DIIVE_CSV_30MIN',
-    #     filepath=r"L:\Dropbox\luhk_work\_current\fp2022\7-14__IRGA627572__addingQCF0\CH-DAV_FP2022.1_1997-2022.08_ID20220826234456_30MIN.diive.csv",
+    #     filepath=r"M:\Downloads\_temp\CH_LAE_FP2021_2004-2020_ID20210607205711.diive.csv",
+    #     # filepath=r"L:\Dropbox\luhk_work\_current\fp2022\7-14__IRGA627572__addingQCF0\CH-DAV_FP2022.1_1997-2022.08_ID20220826234456_30MIN.diive.csv",
     #     data_nrows=None)
     # data_df, metadata_df = loaddatafile.get_filedata()
     #
     # from diive.core.io.files import save_as_pickle
-    # filepath = save_as_pickle(outpath=r'L:\Dropbox\luhk_work\_current\fp2022\7-14__IRGA627572__addingQCF0',
-    #                           filename='CH-DAV_FP2022.1_1997-2022.08_ID20220826234456_30MIN.diive.csv',
-    #                           data=data_df)
+    # filepath = save_as_pickle(
+    #     outpath=r"M:\Downloads\_temp",
+    #     # outpath=r'L:\Dropbox\luhk_work\_current\fp2022\7-14__IRGA627572__addingQCF0',
+    #     filename='CH_LAE_FP2021_2004-2020_ID20210607205711.diive.csv',
+    #     # filename='CH-DAV_FP2022.1_1997-2022.08_ID20220826234456_30MIN.diive.csv',
+    #     data=data_df)
 
     # Test data
     from diive.core.io.files import load_pickle
     df_orig = load_pickle(
-        filepath=r'L:\Dropbox\luhk_work\_current\fp2022\7-14__IRGA627572__addingQCF0\CH-DAV_FP2022.1_1997-2022.08_ID20220826234456_30MIN.diive.csv.pickle')
+        filepath=r"M:\Downloads\_temp\CH_LAE_FP2021_2004-2020_ID20210607205711.diive.csv.pickle"
+        # filepath=r'L:\Dropbox\luhk_work\_current\fp2022\7-14__IRGA627572__addingQCF0\CH-DAV_FP2022.1_1997-2022.08_ID20220826234456_30MIN.diive.csv.pickle'
+    )
 
     df = df_orig.copy()
 
@@ -185,20 +189,26 @@ def example():
     # series.index = pd.to_datetime(series.index)
     # series = series.groupby(series.index.year).mean()  # yearly mean
 
+    series = df['NEE_f'].copy()
+    # series = df['NEE_CUT_REF_f'].copy()
+    series = series.multiply(0.02161926)  # umol CO2 m-2 s-1 --> g C m-2 30min-1
+    series_units = r'($\mathrm{gC\ m^{-2}}$)'
+    # series_units = '(umol CO2 m-2 s-1)'
+    # series = df['VPD_f'].copy()
+    # series_units = '(hPa)'
+    # series = df['Tair_f'].copy()
+    # series_units = '(°C)'
     CumulativeYear(
-        series=df['Tair_f'],
-        series_units='(°C)',
-        # series=df['VPD_f'],
-        # series_units='(hPa)',
-        # series=df['NEE_CUT_REF_f'],
-        # series_units='(umol CO2 m-2 s-1)',
+        series=series,
+        series_units=series_units,
         yearly_end_date=None,
         # yearly_end_date='08-11',
-        start_year=1997,
-        end_year=2022,
+        start_year=2005,
+        end_year=2020,
         show_reference=True,
-        excl_years_from_reference=[2018, 2019, 2020, 2021, 2022],
-        highlight_year=2022,
+        excl_years_from_reference=None,
+        # excl_years_from_reference=[2022],
+        # highlight_year=2022,
         highlight_year_color='#F44336').plot()
 
 

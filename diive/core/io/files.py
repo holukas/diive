@@ -6,10 +6,13 @@ import pandas as pd
 import pickle
 
 
-def save_as_pickle(outpath:str, filename: str, data) -> str:
+def save_as_pickle(outpath:str or None, filename: str, data) -> str:
     """Save data as pickle"""
-    outpath = Path(outpath)
-    filepath = Path(outpath) / f"{filename}.pickle"
+    if outpath:
+        outpath = Path(outpath)
+        filepath = Path(outpath) / f"{filename}.pickle"
+    else:
+        filepath = f"{filename}.pickle"
     tic = time.time()
     pickle_out = open(filepath, "wb")
     pickle.dump(data, pickle_out)

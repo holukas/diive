@@ -2,8 +2,6 @@
 DATA FUNCTIONS: FITS
 ====================
 
-# last update in: v0.23.0
-
 This module is part of DIIVE:
 https://gitlab.ethz.ch/holukas/diive
 
@@ -101,6 +99,7 @@ class BinFitterCP:
         self.num_predictions = 2 if self.num_predictions < 2 else self.num_predictions
 
         self.equation = self._set_fit_equation(type=fit_type)
+        self.fit_type = fit_type
 
         self.fit_results = {}  # Stores fit results
 
@@ -131,9 +130,15 @@ class BinFitterCP:
     def _set_fit_equation(self, type: str = 'quadratic'):
         if type == 'quadratic':
             equation = self._fit_quadratic
+        elif type == 'linear':
+            equation = self._fit_linear
         else:
             equation = self._fit_quadratic
         return equation
+
+    def _fit_linear(self, x, a, b):
+        """Linear fit"""
+        return a * x + b
 
     def _fit_quadratic(self, x, a, b, c):
         """Quadratic equation"""
@@ -176,24 +181,35 @@ class BinFitterCP:
         # Retrieve parameter values
         a = fit_params_opt[0]
         b = fit_params_opt[1]
-        c = fit_params_opt[2]
+        c = fit_params_opt[2] if self.fit_type == 'quadratic' else None
 
         # Calc r2
-        kwargs = dict(x=x, a=a, b=b, c=c)
-        fit_r2 = \
-            1.0 - (sum((y - self.equation(**kwargs)) ** 2) / ((len_y - 1.0) * np.var(y, ddof=1)))
+        kwargs = None
+        if self.fit_type == 'quadratic':
+            kwargs = dict(x=x, a=a, b=b, c=c)
+        elif self.fit_type == 'linear':
+            kwargs = dict(x=x, a=a, b=b)
+        fit_r2 = 1.0 - (sum((y - self.equation(**kwargs)) ** 2) / ((len_y - 1.0) * np.var(y, ddof=1)))
 
         # Calculate parameter confidence interval
-        a, b, c = unc.correlated_values(fit_params_opt, fit_params_cov)
+        c = None
+        if self.fit_type == 'quadratic':
+            a, b, c = unc.correlated_values(fit_params_opt, fit_params_cov)
+        elif self.fit_type == 'linear':
+            a, b = unc.correlated_values(fit_params_opt, fit_params_cov)
 
         # Calculate regression confidence interval
         fit_x = np.linspace(self.fit_x_min, self.fit_x_max, self.num_predictions)
-        fit_y = a * fit_x ** 2 + b * fit_x + c
+
+        if self.fit_type == 'quadratic':
+            fit_y = a * fit_x ** 2 + b * fit_x + c
+        elif self.fit_type == 'linear':
+            fit_y = a * fit_x + b
+
         nom = unp.nominal_values(fit_y)
         std = unp.std_devs(fit_y)
 
         # sample_df = self.df.sample(n=int(len(self.df)), replace=True)
-
 
         # Best lower and upper prediction bands
         lower_predband, upper_predband = \

@@ -66,7 +66,8 @@ class FindOptimumRange:
 
         self._results_optrange = {}
 
-    def results_optrange(self):
+    @property
+    def results_optrange(self) -> dict:
         """Return optimum range results"""
         if not self._results_optrange:
             raise Exception('Results for optimum range are empty')
@@ -254,10 +255,8 @@ class FindOptimumRange:
 
         # kudos: https://matplotlib.org/stable/gallery/lines_bars_and_markers/horizontal_barchart_distribution.html#sphx-glr-gallery-lines-bars-and-markers-horizontal-barchart-distribution-py
 
-        results_optrange = self.results_optrange()
-
         # Get data
-        df = results_optrange['vals_in_optimum_range_df'].copy()
+        df = self.results_optrange['vals_in_optimum_range_df'].copy()
         plotcols = ['vals_inoptimum_perc', 'vals_aboveoptimum_perc', 'vals_belowoptimum_perc']
         df = df[plotcols]
         df = df.round(1)
@@ -304,17 +303,15 @@ class FindOptimumRange:
     def plot_bin_aggregates(self, ax):
         """Plot y median in bins of x"""
 
-        results_optrange = self.results_optrange()
-
         # Get data
-        bin_aggs_df = results_optrange['bin_aggs_df'].copy()
-        xcol = results_optrange['xcol']
-        ycol = results_optrange['ycol']
-        n_xbins = results_optrange['n_xbins']
-        optimum_start_bin = results_optrange['optimum_start_bin']
-        optimum_end_bin = results_optrange['optimum_end_bin']
-        optimum_xstart = results_optrange['optimum_xstart']
-        optimum_xend = results_optrange['optimum_xend']
+        bin_aggs_df = self.results_optrange['bin_aggs_df'].copy()
+        xcol = self.results_optrange['xcol']
+        ycol = self.results_optrange['ycol']
+        n_xbins = self.results_optrange['n_xbins']
+        optimum_start_bin = self.results_optrange['optimum_start_bin']
+        optimum_end_bin = self.results_optrange['optimum_end_bin']
+        optimum_xstart = self.results_optrange['optimum_xstart']
+        optimum_xend = self.results_optrange['optimum_xend']
 
         # Find min/max of y, used for scaling yaxis
         ymax = bin_aggs_df[ycol]['median'].max()
@@ -347,17 +344,15 @@ class FindOptimumRange:
     def plot_rolling_bin_aggregates(self, ax):
         """Plot rolling mean of y medians in bins of x"""
 
-        results_optrange = self.results_optrange()
-
         # Get data
-        rbin_aggs_df = results_optrange['rbin_aggs_df'].copy()
-        xcol = results_optrange['xcol']
-        ycol = results_optrange['ycol']
-        n_xbins = results_optrange['n_xbins']
-        optimum_start_bin = results_optrange['optimum_start_bin']
-        optimum_end_bin = results_optrange['optimum_end_bin']
-        optimum_xstart = results_optrange['optimum_xstart']
-        optimum_xend = results_optrange['optimum_xend']
+        rbin_aggs_df = self.results_optrange['rbin_aggs_df'].copy()
+        xcol = self.results_optrange['xcol']
+        ycol = self.results_optrange['ycol']
+        n_xbins = self.results_optrange['n_xbins']
+        optimum_start_bin = self.results_optrange['optimum_start_bin']
+        optimum_end_bin = self.results_optrange['optimum_end_bin']
+        optimum_xstart = self.results_optrange['optimum_xstart']
+        optimum_xend = self.results_optrange['optimum_xend']
 
         # Find min/max across dataframe, used for scaling yaxis
         rbin_aggs_df['mean+std'] = rbin_aggs_df['mean'].add(rbin_aggs_df['std'])
@@ -399,7 +394,7 @@ def example():
     # Test data
     from diive.core.io.files import load_pickle
     df_orig = load_pickle(
-        filepath=r'F:\Dropbox\luhk_work\_current\fp2022\7-14__IRGA627572__addingQCF0\CH-DAV_FP2022.1_1997-2022.08_ID20220826234456_30MIN.diive.csv.pickle')
+        filepath=r"L:\Dropbox\luhk_work\20 - CODING\26 - NOTEBOOKS\GL-NOTEBOOKS\_data\ch-dav\CH-DAV_FP2022.1_1997-2022.08_ID20220826234456_30MIN.diive.csv.pickle")
 
     # # Check columns
     # import fnmatch
@@ -411,9 +406,10 @@ def example():
     df = df.loc[df['PotRad_CUT_REF'] > 20]
 
     # Optimum range
-    optrange = FindOptimumRange(df=df, xcol='Tair_f', ycol='NEE_CUT_REF_f', define_optimum="min")
+    optrange = FindOptimumRange(df=df, xcol='RH', ycol='NEE_CUT_REF_f', define_optimum="min", rwinsize=0.3)
     optrange.find_optimum()
     optrange.plot_results()
+
 
 if __name__ == '__main__':
     example()

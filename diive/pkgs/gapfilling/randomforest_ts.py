@@ -417,7 +417,7 @@ class RandomForestTS:
         if not current_yr:
             raise Exception("(!) Data that are gap-filled comprise more than one year.")
 
-        _id_method = f"[GAPFILLING {current_yr}]    "
+        _id_method = f"[GAPFILLING {self.target_col} {current_yr}]    "
         model = model_results['model']
 
         if self.verbose > 0:
