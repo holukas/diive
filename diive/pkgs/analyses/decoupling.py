@@ -101,7 +101,7 @@ def example():
     reco_col = 'Reco_DT_CUT_REF'
 
     # Load data, using pickle for fast loading
-    source_file = r'F:\Dropbox\luhk_work\20 - CODING\21 - DIIVE\diive\manuscripts\co2penalty_dav\input_data\CH-DAV_FP2022.1_1997-2022.08_ID20220826234456_30MIN.diive.csv.pickle'
+    source_file = r'L:\Dropbox\luhk_work\20 - CODING\21 - DIIVE\diive\manuscripts\co2penalty_dav\input_data\CH-DAV_FP2022.1_1997-2022.08_ID20220826234456_30MIN.diive.csv.pickle'
     df_orig = load_pickle(filepath=source_file)
     df_orig = df_orig.loc[df_orig.index.year >= 2020].copy()
     df_orig = df_orig.loc[(df_orig.index.month >= 5) & (df_orig.index.month <= 9)].copy()
@@ -109,10 +109,10 @@ def example():
 
     sbm = SortingBinsMethod(df=df,
                             var1_col=ta_col,
-                            var2_col=vpd_col,
+                            var2_col=ta_col,
                             var3_col=nee_col,
-                            n_bins=30,
-                            n_subpins=2)
+                            n_bins=3,
+                            n_subpins=3)
     sbm.calcbins()
     sbm.plot_bins()
 

@@ -226,7 +226,7 @@ def nice_date_ticks(ax, minticks: int = 3, maxticks: int = 9, which: Literal['x'
         locator = mdates.MonthLocator()
         formatter = mdates.DateFormatter('%b')
     elif locator == 'hour':
-        locator = mdates.HourLocator(byhour=[6,12,18])
+        locator = mdates.HourLocator(byhour=[6, 12, 18])
         formatter = mdates.DateFormatter('%H')
     elif locator == 'auto':
         locator = mdates.AutoDateLocator(minticks=minticks, maxticks=maxticks)
@@ -337,7 +337,7 @@ def add_zeroline_y(data: Series or DataFrame, ax):
         min = data.min()
         max = data.max()
     if (min < 0) & (max > 0):
-        ax.axhline(0, lw=LINEWIDTH_ZERO, color=COLOR_LINE_ZERO)
+        ax.axhline(0, lw=LINEWIDTH_ZERO, color=COLOR_LINE_ZERO, zorder=98)
 
 
 def remove_line(line):
@@ -458,16 +458,21 @@ def quickplot(data: DataFrame or Series, hline: None or float = None, subplots: 
     # plt.close(fig)
 
 
-def save_fig(fig, title: str, path: Path or str = None):
+def save_fig(fig, title: str = "", path: Path or str = None, sanitize_filename: bool = False):
     """Save figure to file
 
     Filename is sanitized, i.e. not-allowed characters are removed,
     removes also whitespace. Filename contains timestamp.
     """
     # Use alphanumeric for savename
+
     title = "plot" if not title else title
-    filename_out = [character for character in title if character.isalnum()]
-    filename_out = "".join(filename_out)
+    filename_out = title.replace(" ", "_")
+
+    if sanitize_filename:
+        filename_out = [character for character in title if character.isalnum()]
+        filename_out = "".join(filename_out)
+
     _, cur_time = current_datetime(str_format='%Y%m%d-%H%M%S-%f')
     filename_out = f"{filename_out}_{cur_time}.png"
     if path:

@@ -419,7 +419,7 @@ class CO2Penalty:
         penalty_vs_hh_thr = penalty_vs_hh_thr.fillna(0)
 
         xcol = 'Hours above THR_CRD'
-        if which_threshold == 'crt':
+        if which_threshold == 'crd':
             xcol = 'Hours above THR_CRD'
         elif which_threshold == 'xcrd':
             xcol = 'Hours above THR_xCRD'
@@ -853,76 +853,3 @@ class CO2Penalty:
 
 if __name__ == '__main__':
     pass
-    # from diive.core.io.files import load_pickle
-    # from pathlib import Path
-    #
-    # pd.options.display.width = None
-    # pd.options.display.max_columns = None
-    # # pd.set_option('display.max_rows', 3000)
-    # pd.set_option('display.max_columns', 3000)
-    #
-    # basedir = r'F:\Dropbox\luhk_work\_current\fp2022\7-15__IRGA627572__addingRH'
-    # filename = 'CH-DAV_FP2022.1_1997-2022.08_ID20220826234456_30MIN.diive.csv'
-    #
-    # # # Load data from source file
-    # # filepath = Path(basedir) / filename
-    # # df_orig, _ = ReadFileType(
-    # #     filepath=filepath,
-    # #     filetype='DIIVE_CSV_30MIN',
-    # #     data_nrows=None
-    # # ).get_filedata()
-    # #
-    # # # Save as pickle
-    # # save_as_pickle(data=df_orig, outpath=basedir, filename=filename)
-    #
-    # # Test data
-    # filepath = str(Path(basedir) / f"{filename}.pickle")
-    # df_orig = load_pickle(filepath=filepath)
-    #
-    # # Settings
-    # vpd_col = 'VPD_f'
-    # nee_col = 'NEE_CUT_REF_f'
-    # rh_col = 'RH'
-    # ta_col = 'Tair_f'
-    # swin_col = 'Rg_f'
-    # subset_cols = [vpd_col, nee_col, rh_col, ta_col, swin_col]
-    # subset_cols = list(dict.fromkeys(subset_cols))  # Remove duplicates from list
-    # df = df_orig[subset_cols].copy().dropna()
-    # # Convert units
-    # df[vpd_col] = df[vpd_col].multiply(0.1)  # hPa --> kPa
-    #
-    # df = df.loc[(df.index.year >= 2019)
-    #             & (df.index.year <= 2019)]
-    #
-    # # CO2 Penalty
-    # cop = CO2Penalty(
-    #     df=df,
-    #     vpd_col=vpd_col,
-    #     nee_col=nee_col,
-    #     swin_col=swin_col,
-    #     ta_col=ta_col,
-    #     rh_col=rh_col,
-    #     thres_crd=2.09,
-    #     thres_xcrd=2.44,
-    #     thres_ncrd_lower=1.9,
-    #     penalty_start_month=5,
-    #     penalty_end_month=9,
-    #     bootstrap_runs=9
-    # )
-    #
-    # cop.calculate_penalty()
-    #
-    # penalty_df = cop.penalty_hires_df
-    # penalty_per_year_df = cop.penalty_per_year_df
-    # gapfilled_df = cop.gapfilled_df
-    # gf_results = cop.gf_results
-    # penalty_min_year = cop.penalty_min_year
-    #
-    # cop.showplot_cumulatives()
-    #
-    # # # import importlib
-    # # # importlib.reload(cop.showplot_critical_hours)
-    # # cop.showplot_critical_hours(show_fitline=True,
-    # #                             which_threshold='crd',
-    # #                             fit_n_bootstraps=5,
-    # #                             show_year_labels='above')

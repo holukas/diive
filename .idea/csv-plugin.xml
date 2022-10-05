@@ -3,13 +3,6 @@
   <component name="CsvFileAttributes">
     <option name="attributeMap">
       <map>
-        <entry key="\manuscripts\__OLDcarboncost_dav\input_data\2_METEO_data_from_meteoscreening\4_2019-2020_BodenFeu_from_rawdata-files\2019-2020_30MIN_BodenFeu_Dataset_DIIVE-20220321-095127_Original-30T.diive.csv">
-          <value>
-            <Attribute>
-              <option name="separator" value="," />
-            </Attribute>
-          </value>
-        </entry>
         <entry key="\tests\testdata\testdata_CH-DAV_FP2021.2_2016-2020_ID20220324003457_30MIN_SUBSET.csv">
           <value>
             <Attribute>

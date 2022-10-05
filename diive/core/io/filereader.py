@@ -9,7 +9,6 @@ import fnmatch
 import os
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import pandas.errors
 import yaml
@@ -17,6 +16,8 @@ from pandas import DataFrame
 
 from diive import core
 from diive.configs.filetypes import get_filetypes
+# from diive.core.dfun.frames import rename_cols, sort_multiindex_columns_names, \
+#     flatten_multiindex_all_df_cols, get_len_header, get_len_data
 from diive.core import dfun
 # from diive.core.dfun.frames import flatten_multiindex_all_df_cols
 from diive.core.times.times import continuous_timestamp_freq, TimestampSanitizer
@@ -267,11 +268,11 @@ class DataFileReader:
         automatically generate names for the missing header columns.
         """
         num_headercols, headercols_list = dfun.frames.get_len_header(filepath=self.filepath,
-                                                                     skiprows=self.data_skiprows,
-                                                                     headerrows=self.data_headerrows)
+                                                         skiprows=self.data_skiprows,
+                                                         headerrows=self.data_headerrows)
         num_datacols = dfun.frames.get_len_data(filepath=self.filepath,
-                                                skiprows=self.data_skiprows,
-                                                headerrows=self.data_headerrows)
+                                    skiprows=self.data_skiprows,
+                                    headerrows=self.data_headerrows)
 
         # Check if there are more data columns than header columns
         more_data_cols_than_header_cols = False
@@ -311,8 +312,16 @@ class DataFileReader:
         # Column name for timestamp index
         parsed_index_col = f"TIMESTAMP_{self.timestamp_start_middle_end.upper()}"
 
+        # Create temporary column name for parsed index (v0.41.0)
+        # This solves the issue that a column named *parsed_index_col* might already be
+        # present in the dataset. In that case, parsing would not work and the code would
+        # raise an exception (e.g., "ValueError: Date column TIMESTAMP_END already in dict").
+        # The temporary column name will be changed to the correct name after data were
+        # read (see below).
+        _temp_parsed_index_col = f"_temp_{parsed_index_col}"
+
         parse_dates = self.timestamp_idx_col  # Columns used for creating the timestamp index
-        parse_dates = {parsed_index_col: parse_dates}
+        parse_dates = {_temp_parsed_index_col: parse_dates}
         # date_parser = lambda x: dt.datetime.strptime(x, self.timestamp_datetime_format)
         date_parser = lambda x: pd.to_datetime(x, format=self.timestamp_datetime_format, errors='coerce')
 
@@ -332,6 +341,11 @@ class DataFileReader:
                               skip_blank_lines=True,
                               nrows=self.data_nrows,
                               engine='python')  # todo 'python', 'c'
+
+        # Rename temporary column name for parsed index to correct name (v0.41.0)
+        data_df = dfun.frames.rename_cols(df=data_df, renaming_dict={_temp_parsed_index_col: parsed_index_col})
+        # if parsed_index_col in headercols_list:
+        #     headercols_list = [item.replace(parsed_index_col, f"{parsed_index_col}_ORIGINAL") for item in headercols_list]
 
         data_df.set_index(parsed_index_col, inplace=True)
 

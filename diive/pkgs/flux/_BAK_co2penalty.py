@@ -390,7 +390,7 @@ class CO2Penalty:
             daynight_split_on='timestamp',
             usebins=usebins,
             # usebins=self.chd_usebins,
-            bootstrap_runs=bootstrap_runs,
+            n_bootstrap_runs=bootstrap_runs,
             # bootstrap_runs=self.chd_bootstrap_runs,
             bootstrapping_random_state=random_state
         )

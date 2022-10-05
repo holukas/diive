@@ -4,6 +4,7 @@ FLUX: OPTIMUM RANGE
 """
 
 from math import isclose
+from pathlib import Path
 from typing import Literal
 
 import matplotlib.gridspec as gridspec
@@ -12,6 +13,8 @@ import numpy as np
 import pandas as pd
 from matplotlib.legend_handler import HandlerTuple
 from pandas import DataFrame
+
+from diive.core.plotting.plotfuncs import save_fig
 
 
 class FindOptimumRange:
@@ -238,7 +241,10 @@ class FindOptimumRange:
             print("(!)Validation FAILED.")
             assert isclose(roptimum_val, optimum_ymean)
 
-    def plot_results(self):
+    def showfig(self,
+                saveplot: bool = False,
+                title: str = None,
+                path: Path or str = None):
         fig = plt.figure(figsize=(16, 9))
         gs = gridspec.GridSpec(4, 1)  # rows, cols
         gs.update(wspace=.2, hspace=.5, left=.05, right=.95, top=.95, bottom=.05)
@@ -249,6 +255,8 @@ class FindOptimumRange:
         ax = self.plot_bin_aggregates(ax=ax2)
         ax = self.plot_rolling_bin_aggregates(ax=ax3)
         fig.show()
+        if saveplot:
+            save_fig(fig=fig, title=title, path=path)
 
     def plot_vals_in_optimum_range(self, ax):
         """Plot optimum range: values in, above and below optimum per year"""

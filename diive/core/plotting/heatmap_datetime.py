@@ -29,7 +29,8 @@ class HeatmapDateTime:
                  cb_digits_after_comma: int = 2,
                  cmap: str = 'RdYlBu_r',
                  color_bad: str = 'grey',
-                 display_type: str = 'Time & Date'):
+                 display_type: str = 'Time & Date',
+                 figsize:tuple=(9,16)):
         """
         Plot heatmap of time series data with date on y-axis and time on x-axis
 
@@ -63,6 +64,7 @@ class HeatmapDateTime:
         self.cb_digits_after_comma = cb_digits_after_comma
         self.color_bad = color_bad
         self.display_type = display_type
+        self.figsize=figsize
 
         # Create axis if none is given
         if not ax:
@@ -97,7 +99,7 @@ class HeatmapDateTime:
     def _create_ax(self):
         """Create figure and axis"""
         # Figure setup
-        fig = plt.figure(facecolor='white', figsize=(9, 16))
+        fig = plt.figure(facecolor='white', figsize=self.figsize)
         gs = gridspec.GridSpec(1, 1)  # rows, cols
         # gs.update(wspace=0.3, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
         ax = fig.add_subplot(gs[0, 0])
@@ -193,14 +195,27 @@ def example():
     # Example with random data
     import pandas as pd
     import numpy as np
-    date_rng = pd.date_range(start='2018-01-01 03:30', end='2018-01-05 00:00:00', freq='30T')
-    df = pd.DataFrame(date_rng, columns=['TIMESTAMP_END'])
-    df['DATA'] = np.random.randint(0, 10, size=(len(date_rng)))
-    df = df.set_index('TIMESTAMP_END')
-    df = df.asfreq('30T')
-    df.head()
-    series = df['DATA'].copy()
-    hm = HeatmapDateTime(series=series, title="Example heatmap")
+
+    # Load FLUXNET full output file
+    from diive.core.io.filereader import ReadFileType
+    loaddatafile = ReadFileType(
+        filetype='FLUXNET-FULLSET-HH-CSV-30MIN',
+        filepath=r"M:\Downloads\Warm Winter 2020 ecosystem eddy covariance flux product for 73 stations in FLUXNET-Archive format—release 2022-1\Swiss_Sites\FLX_CH-Oe2_FLUXNET2015_FULLSET_2004-2020_beta-3\FLX_CH-Oe2_FLUXNET2015_FULLSET_HH_2004-2020_beta-3.csv",
+        data_nrows=None)
+    data_df, metadata_df = loaddatafile.get_filedata()
+    series = data_df['NEE_CUT_50'].copy()
+
+    # # Create example data
+    # date_rng = pd.date_range(start='2018-01-01 03:30', end='2018-01-05 00:00:00', freq='30T')
+    # df = pd.DataFrame(date_rng, columns=['TIMESTAMP_END'])
+    # df['DATA'] = np.random.randint(0, 10, size=(len(date_rng)))
+    # df = df.set_index('TIMESTAMP_END')
+    # df = df.asfreq('30T')
+    # df.head()
+    # series = df['DATA'].copy()
+
+    hm = HeatmapDateTime(series=series, title="CH-OE2 cropland (2004-2020)",
+                         vmin=-40, vmax=20, figsize=(9,24))
     hm.show()
     print(hm.get_ax())
 

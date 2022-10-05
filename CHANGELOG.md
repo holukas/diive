@@ -2,6 +2,35 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.41.0 | 5 Oct 2022
+
+### BinFitterBTS
+
+- `pkgs.fits.binfitter.BinFitterBTS` fits a quadratic or linear equation to data.
+- This is a refactored version of the previous `BinFitter` to allow more options.
+- Implemented `pkgs.fits.binfitter.PlotBinFitterBTS` for plotting `BinFitterBTS` results
+- `PlotBinFitterBTS` now allows plotting of confidence intervals for the upper and
+  lower prediction bands
+- The updated `BinFitterBTS` is now implemented in `pkgs.flux.criticaldays.CriticalDays`
+
+#### Example of updated `BinFitterBTS` as used in `CriticalDays`
+It is now possible to show confidence intervals for the upper and lower prediction bands.  
+![DIIVE](images/fluxCriticalDaysWithUpdatedBinFitterBTS_diive_v0.41.0.png)
+
+### Other
+
+- `core.plotting.heatmap_datetime.HeatmapDateTime` now accepts `figsize`
+- When reading a file using `core.io.filereader.ReadFileType`, the index column is now
+  parsed to a temporarily named column. After reading the file data, the temporary column
+  name is renamed to the correct name. This was implemented to avoid duplicate issues
+  regarding the index column when parsing the file, because a data column with the same
+  name as the index column might be in the dataset.
+
+### Bugfixes
+
+- Fixes bug in `pkgs.gapfilling.randomforest_ts.RandomForestTS`: fallback option for
+  gap-filling was never used and some gaps would remain in the time series.
+
 ## v0.40.0 | 23 Sep 2022
 
 ### CO2 Penalty

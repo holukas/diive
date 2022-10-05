@@ -22,6 +22,8 @@ PI ... prediction interval
 - https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.curve_fit.html
 
 """
+from typing import Literal
+
 import numpy as np
 import pandas as pd
 import uncertainties as unc
@@ -82,7 +84,7 @@ class BinFitterCP:
             num_predictions: int = None,
             bins_x_num: int = 0,
             bins_y_agg: str = None,
-            fit_type: str = 'quadratic'
+            fit_type: Literal['linear', 'quadratic'] = 'quadratic'
     ):
         self.df = df[[x_col, y_col]].dropna()  # Remove NaNs, working data
         self.x_col = x_col
@@ -246,10 +248,6 @@ class BinFitterCP:
         return fit_results
 
 
-if __name__ == '__main__':
-    pass
-
-
 def fit_to_bins_linreg(df, x_col, y_col, bin_col):
     # https://www.geeksforgeeks.org/python-implementation-of-polynomial-regression/
     # https://towardsdatascience.com/a-beginners-guide-to-linear-regression-in-python-with-scikit-learn-83a8f7ae2b4f
@@ -365,3 +363,7 @@ def fit_to_bins_polyreg(df, x_col, y_col, bin_col, degree):
     # B1 through Bn are the coefficients. X1 through Xn are the features.
 
     return _df, predicted_col, predicted_results
+
+
+if __name__ == '__main__':
+    pass
