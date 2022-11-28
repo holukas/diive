@@ -2,7 +2,7 @@
 
 # e.g.: /src
 target/
-__apply/
+__manuscripts/
 
 
 # Byte-compiled / optimized / DLL files

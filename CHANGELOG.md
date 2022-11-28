@@ -2,6 +2,36 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.42.0 | 27 Nov 2022
+
+### New Features
+
+- **Decoupling**: Added first version of decoupling code (`pkgs.analyses.decoupling.SortingBinsMethod`).
+  This allows the investigation of binned aggregates of a variable `z` in binned classes of
+  `x` and `y`. For example: show mean GPP (`y`) in 5 classes of VPD (`x`), separate for
+  10 classes of air temperature (`z`).
+
+![DIIVE](images/analysesDecoupling_sortingBinsMethod_diive_v0.42.0.png)
+
+- **Time series plot**: `core.plotting.timeseries.TimeSeries` plots a simple time series. This will
+  be the default method to plot time series.
+
+### Changes
+
+- **Critical days**: Several changes in `pkgs.flux.criticaldays.CriticalDays`:
+
+    - By default, daily aggregates are now calculated from 00:00 to 00:00 (before it was
+      7:00 to 07:00).
+    - Added parameters for specifying the labels for the x- and y-axis in output figure
+    - Added parameter for setting dpi of output figure
+    - Some smaller adjustments
+    - `pkgs.flux.co2penalty.CO2Penalty.plot_critical_hours`: 95% predicion bands are now
+      smoothed (rolling mean)
+
+- **CO2 penalty**:
+
+    - Some code refactoring in `pkgs.flux.co2penalty.CO2Penalty`, e.g. relating to plot appearances
+
 ## v0.41.0 | 5 Oct 2022
 
 ### BinFitterBTS
@@ -14,6 +44,7 @@
 - The updated `BinFitterBTS` is now implemented in `pkgs.flux.criticaldays.CriticalDays`
 
 #### Example of updated `BinFitterBTS` as used in `CriticalDays`
+
 It is now possible to show confidence intervals for the upper and lower prediction bands.  
 ![DIIVE](images/fluxCriticalDaysWithUpdatedBinFitterBTS_diive_v0.41.0.png)
 
@@ -28,7 +59,7 @@ It is now possible to show confidence intervals for the upper and lower predicti
 
 ### Bugfixes
 
-- Fixes bug in `pkgs.gapfilling.randomforest_ts.RandomForestTS`: fallback option for
+- Fixed bug in `pkgs.gapfilling.randomforest_ts.RandomForestTS`: fallback option for
   gap-filling was never used and some gaps would remain in the time series.
 
 ## v0.40.0 | 23 Sep 2022

@@ -122,7 +122,7 @@ class CO2Penalty:
         self._penalty_hires_df, self._penalty_per_year_df, self._gapfilled_df, self._gf_results, self._penalty_min_year = \
             self._calculate_penalty(**kwargs)
 
-    def _gapfill(self, df: DataFrame, target_col: str, random_state: int = None, bootstrap_runs: int = 11,
+    def _gapfill(self, df: DataFrame, target_col: str, random_state: int = None, n_bootstrap_runs: int = 11,
                  lagged_variants: int = 1):
         # Gapfilling random forest
         rfts = RandomForestTS(df=df,
@@ -132,7 +132,7 @@ class CO2Penalty:
                               use_neighbor_years=True,
                               feature_reduction=False,
                               verbose=1)
-        rfts.build_models(n_estimators=bootstrap_runs,
+        rfts.build_models(n_estimators=n_bootstrap_runs,
                           random_state=random_state,
                           min_samples_split=2,
                           min_samples_leaf=1,
@@ -387,13 +387,20 @@ class CO2Penalty:
                             figletter: str = '',
                             show_fitline: bool = True,
                             fit_n_bootstraps: int = 10,
-                            show_year_labels: Literal['above', 'below', False] = 'below',
-                            fit_type: str = 'quadratic'):
+                            show_year_labels: bool = False,
+                            show_title: bool = False,
+                            fit_type: str = 'quadratic',
+                            labels_below: list = None,
+                            labels_above: list = None,
+                            labels_shifted: list = None,
+                            decorate_labels1: list = None,
+                            decorate_labels2: list = None):
 
         df = self.df.copy()
 
-        label_penalty = r"$\mathrm{CO_{2}\ penalty}$"
-        label_units = r"$\mathrm{gCO_{2}\ m^{-2}\ yr^{-1}}$"
+        xlabel_units = "$\mathrm{hours\ yr^{-1}}$"
+        ylabel_penalty = r"$\mathrm{CO_{2}\ penalty}$"
+        ylabel_units = r"$\mathrm{gCO_{2}\ m^{-2}\ yr^{-1}}$"
 
         # Count half-hours > CRD threshold
         # thr_crd = self.results_crd_threshold_detection['thres_crd']
@@ -463,7 +470,7 @@ class CO2Penalty:
                     print(f"Bootstrapping for fit line failed, repeating run {n_bts_successful + 1} ... ")
                     pass
 
-            # Collect bootstrapping results (bts_run > 0)
+            # Collect bootstrapping results
             _fit_x_predbands = pd.DataFrame()
             _upper_predbands = pd.DataFrame()
             _lower_predbands = pd.DataFrame()
@@ -497,6 +504,7 @@ class CO2Penalty:
             # line_xy = ax.plot(bts_fit_results[0]['fit_df']['fit_x'],
             #                      bts_fit_results[0]['fit_df']['lower_predband'],
             #                      zorder=1, ls='--', color=COLOR_RECO)
+
             # ax.fill_between(predbands_quantiles_95['fit_x'],
             #                 predbands_quantiles_95['upper_Q97.5'],
             #                 predbands_quantiles_95['upper_Q02.5'],
@@ -508,83 +516,73 @@ class CO2Penalty:
             #                 alpha=.2, lw=0, color='#ef9a9a', edgecolor='white',
             #                 zorder=1)
 
-            # line_xy = ax.plot(predbands_quantiles_95['fit_x'],
-            #                   predbands_quantiles_95['upper_Q97.5'],
-            #                   zorder=1, ls='--', color=COLOR_RECO, label="95% prediction interval")
-            # line_xy = ax.plot(predbands_quantiles_95['fit_x'],
-            #                   predbands_quantiles_95['lower_Q02.5'],
-            #                   zorder=1, ls='--', color=COLOR_RECO)
+            # Prediction bands (smoothed)
+            line_xy = ax.plot(predbands_quantiles_95['fit_x'],
+                              predbands_quantiles_95['upper_Q97.5'].rolling(400, center=True).mean(),
+                              zorder=1, ls='--', color=COLOR_RECO, label="95% prediction interval")
+            line_xy = ax.plot(predbands_quantiles_95['fit_x'],
+                              predbands_quantiles_95['lower_Q02.5'].rolling(400, center=True).mean(),
+                              zorder=1, ls='--', color=COLOR_RECO)
 
         # Title
-        ax.set_title(f"{figletter} {label_penalty} per year", x=0.05, y=1, size=24, ha='left', va='top',
-                     weight='normal')
+        if show_title:
+            ax.set_title(f"{figletter} {ylabel_penalty} per year", x=0.05, y=1, size=24, ha='left', va='top',
+                         weight='normal')
         # ax.set_title(f"Carbon cost per year", x=0.95, y=0.95, size=24, ha='right', weight='bold')
         # ax.text(0.95, 0.93, f"{_units}", size=20, color='#9E9E9E', backgroundcolor='none', alpha=1,
         #         horizontalalignment='right', verticalalignment='center', transform=ax.transAxes, weight='bold')
 
-        # Labels
-        _sub = "$hours\ yr^{-1}$"
-        ax.set_xlabel(f'Hours above threshold ({_sub})', fontsize=24)
-        # ax.set_xlabel(f'Hours per year > THR{_sub}', fontsize=24)
-        ax.set_ylabel(f'{label_penalty} ({label_units})', fontsize=24)
+        # Format
+
+        default_format(ax=ax,
+                       txt_xlabel=f'Hours above threshold ({xlabel_units})',
+                       txt_ylabel=f'{ylabel_penalty} ({ylabel_units})',
+                       showgrid=False)
 
         # Legend
-        ax.legend(ncol=1, edgecolor='none', loc=(.1, .7), prop={'size': 16}, facecolor='none')
-
-        # Ticks
-        ax.tick_params(axis='both', which='major', direction='in', labelsize=24, length=8, size=5)  # x/y ticks text
+        default_legend(ax=ax, ncol=1, loc=(.07, .75))
+        # ax.legend(ncol=1, edgecolor='none', loc=(.1, .7), prop={'size': 16}, facecolor='none')
 
         # Spines
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
 
-        # labels_years_below = [2003, 2011, 2015, 2018, 2020]
         if show_year_labels:
-            if show_year_labels == 'below':
-                xyoffset = (-10, -11)
-            elif show_year_labels == 'above':
-                xyoffset = (-10, 5)
-            else:
-                xyoffset = (-10, -11)
 
             for year in penalty_vs_hh_thr.index:
                 txt_y = penalty_vs_hh_thr['PENALTY'].loc[penalty_vs_hh_thr.index == year].values[0]
                 txt_x = penalty_vs_hh_thr[xcol].loc[penalty_vs_hh_thr.index == year].values[0]
-                text_in_ax = \
-                    ax.annotate(f'{year}', (txt_x, txt_y),
-                                xytext=xyoffset, xycoords='data',
-                                color='black', weight='normal', fontsize=8,
-                                textcoords='offset points', zorder=100)
-                # arrowprops=dict(arrowstyle='-')
+                xytext = (-14, -18)
+                arrowprops = None
 
-                # labels_years_above = [2019]
-                # for year in labels_years_above:
-                #     txt_y = penalty_vs_hh_thr['PENALTY'].loc[penalty_vs_hh_thr.index == year].values[0]
-                #     txt_x = penalty_vs_hh_thr[xcol].loc[penalty_vs_hh_thr.index == year].values[0]
-                #     text_in_ax = \
-                #         ax.annotate(f'{year}', (txt_x, txt_y), xytext=(-20, 10), xycoords='data',
-                #                     color='black', weight='normal', fontsize=16,
-                #                     textcoords='offset points', zorder=100)
+                if year in labels_below:
+                    pass
+                elif year in labels_above:
+                    xytext = (-14, 10)
+                elif year in labels_shifted:
+                    if year == 2018:
+                        xytext = (-14, -40)
+                    elif year == 2020:
+                        xytext = (-60, -5)
+                    elif year == 2006:
+                        xytext = (20, -20)
+                    arrowprops = dict(facecolor='black', arrowstyle='-')
+                else:
+                    xytext = None
 
-                # labels_years_above = [2006, 2014]
-                # for year in labels_years_above:
-                #     txt_y = penalty_vs_hh_thr['PENALTY'].loc[penalty_vs_hh_thr.index == year].values[0]
-                #     txt_x = penalty_vs_hh_thr[xcol].loc[penalty_vs_hh_thr.index == year].values[0]
-                #     if year == 2006:
-                #         text_in_ax = \
-                #             ax.annotate(f'{year}', (txt_x, txt_y), xytext=(-60, 30), xycoords='data',
-                #                         color='black', weight='normal', fontsize=16,
-                #                         textcoords='offset points', zorder=100,
-                #                         arrowprops=dict(facecolor='black', arrowstyle='-'))
-                #     if year == 2014:
-                #         text_in_ax = \
-                #             ax.annotate(f'{year}', (txt_x, txt_y), xytext=(-30, 40), xycoords='data',
-                #                         color='black', weight='normal', fontsize=16,
-                #                         textcoords='offset points', zorder=100,
-                #                         arrowprops=dict(facecolor='black', arrowstyle='-'))
+                decoration = ""
+                if year in decorate_labels1:
+                    decoration = "***"
+                elif year in decorate_labels2:
+                    decoration = "*"
 
-                # ax.text(txt_x, txt_y, f"{year}", size=14, color='black', backgroundcolor='none', alpha=1,
-                #         horizontalalignment='center', verticalalignment='top', weight='normal')
+                if xytext:
+                    text_in_ax = \
+                        ax.annotate(f'{year}{decoration}', (txt_x, txt_y),
+                                    xytext=xytext, xycoords='data',
+                                    color='black', weight='normal', fontsize=12,
+                                    textcoords='offset points', zorder=100,
+                                    arrowprops=arrowprops)
 
     def plot_cumulatives(self, ax,
                          figletter: str = '',
@@ -601,29 +599,46 @@ class CO2Penalty:
         if year:
             df = self.penalty_hires_df.loc[self.penalty_hires_df.index.year == year]
             num_crds = int(self.penalty_per_year_df.loc[self.penalty_per_year_df.index == year]['num_CRDs'])
-            measured = float(self.penalty_per_year_df.loc[self.penalty_per_year_df.index == year][self.nee_col])
-            modeled = float(self.penalty_per_year_df.loc[self.penalty_per_year_df.index == year][gapfilled_col])
+            obs = float(self.penalty_per_year_df.loc[self.penalty_per_year_df.index == year][self.nee_col])
+            pot = float(self.penalty_per_year_df.loc[self.penalty_per_year_df.index == year][gapfilled_col])
             penalty = float(self.penalty_per_year_df.loc[self.penalty_per_year_df.index == year]['PENALTY'])
 
-            # Modeled shows *MORE* UPTAKE than measured
-            if (measured < 0) and (modeled < 0) and (modeled < measured):
-                penalty_perc = (1 - (measured / modeled)) * 100
+            if (obs < 0) and (pot < 0):
+                # NEEobs and NEEpot both show UPTAKE
+                if pot < obs:
+                    # NEEpot shows *MORE* UPTAKE than NEEobs:
+                    penalty_perc = (1 - (obs / pot)) * 100
+                    # (1 - (-378 / -486)) * 100 = 22.2%
+                    # NEEobs uptake was 22.2% lower compared to NEEpot
+                elif pot > obs:
+                    # NEEpot shows *LESS* UPTAKE than NEEobs:
+                    penalty_perc = (1 - (obs / pot)) * 100 * -1
+                    # (1 - (-378 / -350)) * 100 = -8%
+                    # NEEpot uptake was 8% lower compared to NEEobs
+            elif (obs > 0) and (pot > 0):
+                # NEEobs and NEEpot both show EMISSION
+                if pot < obs:
+                    # NEEpot shows LESS EMISSION than NEEobs
+                    penalty_perc = (1 - (pot / obs)) * 100
+                    # (1 - (115 / 150)) * 100 = 23.3%
+                    # NEEpot emission was 23.3% lower than NEEobs
+                elif pot > obs:
+                    # Potential NEEpot shows MORE EMISSION than NEEobs
+                    penalty_perc = (1 - (pot / obs)) * 100 * -1
+                    # (1 - (95 / 57)) * 100 = -66.6%
+                    # NEEpot emissions are 66.6% higher than NEEobs
+            else:
+                penalty_perc = -9999
 
-            # Modeled shows LESS UPTAKE than measured
-            if (measured < 0) and (modeled < 0) and (modeled > measured):
-                penalty_perc = (1 - (measured / modeled)) * 100
 
-            # Modeled shows LESS EMISSION than measured
-            if (measured > 0) and (modeled > 0) and (modeled < measured):
-                penalty_perc = (1 - (modeled / measured)) * 100
         else:
             df = self.penalty_hires_df
             num_crds = int(self.penalty_per_year_df['num_CRDs'].sum())
-            measured = float(self.penalty_per_year_df[self.nee_col].sum())
-            modeled = float(self.penalty_per_year_df[gapfilled_col].sum())
+            obs = float(self.penalty_per_year_df[self.nee_col].sum())
+            pot = float(self.penalty_per_year_df[gapfilled_col].sum())
             penalty = float(self.penalty_per_year_df['PENALTY'].sum())
-            if (measured < 0) and (modeled < 0) and (modeled < measured):
-                penalty_perc = (1 - (measured / modeled)) * 100
+            if (obs < 0) and (pot < 0) and (pot < obs):
+                penalty_perc = (1 - (obs / pot)) * 100
 
         cumulative_orig = df[self.nee_col].cumsum()  # Cumulative of original measured and gap-filled NEE
         cumulative_model = df[gapfilled_col].cumsum()  # NEE where hot days were modeled
@@ -632,7 +647,7 @@ class CO2Penalty:
         x = cumulative_orig.index
         y = cumulative_orig
         ax.plot_date(x=x, y=y, color=COLOR_NEE2, alpha=0.9, ls='-', lw=3, marker='',
-                     markeredgecolor='none', ms=0, zorder=99, label='observed')
+                     markeredgecolor='none', ms=0, zorder=99, label='observed NEE')
         ax.plot_date(x[-1], y[-1], ms=10, zorder=100, color=COLOR_NEE2)
         ax.text(x[-1], y[-1], f"    {cumulative_orig[-1]:.0f}", size=20,
                 color=COLOR_NEE2, backgroundcolor='none', alpha=1,
@@ -643,7 +658,7 @@ class CO2Penalty:
             linestyle = '-'
             marksersize = 10
             txtsize = 20
-            label = 'critical days modelled'
+            label = 'potential NEE'
         else:
             # Hide elements if not required
             linestyle = 'None'
@@ -671,7 +686,7 @@ class CO2Penalty:
             # r"$\bf{" + str(number) + "}$"
             ax.text(.05, .1, txt, size=16, color='black', backgroundcolor='none',
                     alpha=1, horizontalalignment='left', verticalalignment='center',
-                    transform=ax.transAxes, weight='normal', linespacing=1)
+                    transform=ax.transAxes, weight='normal', linespacing=1.4)
 
         # Zero-line
         ax.axhline(0, color='black')
@@ -684,12 +699,15 @@ class CO2Penalty:
                 title_year = f"{df.index.year[0]} - {df.index.year[-1]}"
             ax.set_title(f"{figletter} {label_penalty} {title_year}", x=0.05, y=1, size=24, ha='left', weight='normal')
 
-        # Labels
-        ax.set_xlabel('date', fontsize=16)
-        ax.set_ylabel(f"cumulative NEE ({label_units_cumulative})", fontsize=16)
+        # Format
+        default_format(ax=ax,
+                       txt_xlabel='Date',
+                       txt_ylabel=f"Cumulative NEE ({label_units_cumulative})",
+                       showgrid=False)
 
         # Legend
-        ax.legend(ncol=1, edgecolor='none', loc=(.5, .7), prop={'size': 14})
+        default_legend(ax=ax, ncol=1, loc=(.51, .82))
+        # ax.legend(ncol=1, edgecolor='none', loc=(.5, .7), prop={'size': 14})
 
         # Ticks
         ax.tick_params(axis='both', which='major', direction='in', labelsize=16, length=8, size=5)  # x/y ticks text
@@ -805,8 +823,9 @@ class CO2Penalty:
                                 saveplot: bool = True,
                                 title: str = None,
                                 path: Path or str = None,
+                                dpi: int = 72,
                                 **kwargs):
-        fig = plt.figure(facecolor='white', figsize=(9, 9))
+        fig = plt.figure(facecolor='white', figsize=(9, 9), dpi=dpi)
         gs = gridspec.GridSpec(1, 1)  # rows, cols
         # gs.update(wspace=0, hspace=0, left=.2, right=.8, top=.8, bottom=.2)
         ax = fig.add_subplot(gs[0, 0])
@@ -820,8 +839,9 @@ class CO2Penalty:
                              saveplot: bool = False,
                              title: str = None,
                              path: Path or str = None,
+                             dpi: int = 72,
                              **kwargs):
-        fig = plt.figure(facecolor='white', figsize=(23, 6))
+        fig = plt.figure(facecolor='white', figsize=(23, 6), dpi=dpi)
         gs = gridspec.GridSpec(1, 4)  # rows, cols
         # gs.update(wspace=0, hspace=0, left=.2, right=.8, top=.8, bottom=.2)
         ax_nee = fig.add_subplot(gs[0, 0])
@@ -839,8 +859,9 @@ class CO2Penalty:
                              saveplot: bool = False,
                              title: str = '',
                              path: Path or str = None,
+                             dpi: int = 72,
                              **kwargs):
-        fig = plt.figure(facecolor='white', figsize=(9, 9))
+        fig = plt.figure(facecolor='white', figsize=(9, 9), dpi=dpi)
         gs = gridspec.GridSpec(1, 1)  # rows, cols
         # gs.update(wspace=0, hspace=0, left=.2, right=.8, top=.8, bottom=.2)
         ax = fig.add_subplot(gs[0, 0])

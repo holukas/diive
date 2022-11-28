@@ -55,12 +55,14 @@ def fitplot(
         b = flux_bts_results['fit_params_opt'][1]
         operator1 = "+" if b > 0 else ""
 
+        r2 = flux_bts_results['fit_r2']
+
         if fit_type == 'linear':
-            label_fit = rf"$y = {a:.4f}x{operator1}{b:.4f}$"
+            label_fit = rf"$y = {a:.4f}x{operator1}{b:.4f}, r^2={r2:.2f}$"
         elif fit_type == 'quadratic':
             c = flux_bts_results['fit_params_opt'][2]
             operator2 = "+" if c > 0 else ""
-            label_fit = rf"$y = {a:.4f}x^2{operator1}{b:.4f}x{operator2}{c:.4f}$"
+            label_fit = rf"$y = {a:.4f}x^2{operator1}{b:.4f}x{operator2}{c:.4f}, r^2={r2:.2f}$"
 
         line_fit, = ax.plot(flux_bts_results['fit_df']['fit_x'],
                             flux_bts_results['fit_df']['nom'],

@@ -1,5 +1,5 @@
 GENERAL:
-  NAME: "CSV_1MIN"
+  NAME: "GENERIC-CSV_HEADER-1ROW_TS-END-FULL_1MIN"
   DESCRIPTION: "Generic CSV format with 1-row header containing variable names and 1-column full timestamp."
   TAGS: [ "GENERIC-CSV" ]
 

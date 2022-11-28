@@ -141,7 +141,6 @@ class BinFitterBTS:
         gs = gridspec.GridSpec(1, 1)  # rows, cols
         # gs.update(wspace=.2, hspace=1, left=.1, right=.9, top=.85, bottom=.1)
         ax = fig.add_subplot(gs[0, 0])
-        # ax = self.plot_binfitter(ax=ax, **kwargs)
         PlotBinFitterBTS(ax=ax, fit_results=self.fit_results, **kwargs).plot_binfitter()  # todo
         fig.tight_layout()
         fig.show()
@@ -255,7 +254,7 @@ class PlotBinFitterBTS:
             numpoints=1,
             handler_map={tuple: HandlerTuple(ndivide=None)})
 
-        return self.ax, line_xy,line_highlight,line_fit,line_fit_ci,line_fit_pb
+        return self.ax, line_xy, line_highlight, line_fit, line_fit_ci, line_fit_pb
 
     def _plot_highlight_year(self, ax, highlight_year, label, marker):
         _subset_year = pd.DataFrame()
@@ -302,20 +301,20 @@ class PlotBinFitterBTS:
                 color=color_fitline, ls='--', zorder=97, lw=2,
                 label="95% prediction interval")
         ax.fill_between(self.fit_results['fit_df']['fit_x'],
-                                      self.fit_results['fit_df']['bts_lower_predband_Q97.5'],
-                                      self.fit_results['fit_df']['bts_lower_predband_Q02.5'],
-                                      alpha=.2, color=color_fitline, zorder=97,
-                                      label="95% confidence region")
+                        self.fit_results['fit_df']['bts_lower_predband_Q97.5'],
+                        self.fit_results['fit_df']['bts_lower_predband_Q02.5'],
+                        alpha=.2, color=color_fitline, zorder=97,
+                        label="95% confidence region")
         # Upper prediction band (95% confidence)
         line_fit_pb, = ax.plot(self.fit_results['fit_df']['fit_x'],
                                self.fit_results['fit_df']['upper_predband'],
                                color=color_fitline, ls='--', zorder=96, lw=2,
                                label="95% prediction interval")
         ax.fill_between(self.fit_results['fit_df']['fit_x'],
-                                      self.fit_results['fit_df']['bts_upper_predband_Q97.5'],
-                                      self.fit_results['fit_df']['bts_upper_predband_Q02.5'],
-                                      alpha=.2, color=color_fitline, zorder=97,
-                                      label="95% confidence region")
+                        self.fit_results['fit_df']['bts_upper_predband_Q97.5'],
+                        self.fit_results['fit_df']['bts_upper_predband_Q02.5'],
+                        alpha=.2, color=color_fitline, zorder=97,
+                        label="95% confidence region")
         return line_fit_pb
 
     def _plot_fit(self, ax, fit_type, color_fitline):

@@ -60,7 +60,8 @@ class CriticalDays:
                 selects 2.5 as threshold
         """
 
-        self.df = df[[x_col, y_col]].copy()
+        # self.df = df[[x_col, y_col]].copy()
+        self.df = df.copy()
         self.x_col = x_col
         self.x_agg = x_agg
         self.y_col = y_col
@@ -76,7 +77,7 @@ class CriticalDays:
 
         # Resample dataset
         aggs = ['mean', 'median', 'count', 'min', 'max', 'sum']
-        self.df_aggs = self._resample_dataset(df=self.df, aggs=aggs, day_start_hour=7)
+        self.df_aggs = self._resample_dataset(df=self.df, aggs=aggs, day_start_hour=None)
 
         self.predict_min_x = self.df[x_col].min()
         self.predict_max_x = self.df[x_col].max()
@@ -180,6 +181,8 @@ class CriticalDays:
     def plot_crd_detection_results(self, ax,
                                    x_units: str,
                                    y_units: str,
+                                   x_label: str = None,
+                                   y_label: str = None,
                                    showfit: bool = True,
                                    highlight_year: int = None,
                                    showline_crd: bool = True,
@@ -251,10 +254,15 @@ class CriticalDays:
 
         # Format
         ax.axhline(0, lw=1, color='black')
-        xlabel = f"Daily maximum VPD (${x_units}$)"
-
-        ylabel = f"{self.y_col} (${y_units}$)"
-        plotfuncs.default_format(ax=ax, txt_xlabel=xlabel, txt_ylabel=ylabel)
+        if x_label:
+            x_label = f"{x_label} (${x_units}$)"
+        else:
+            x_label = f"Daily {self.x_agg} {self.x_col} (${x_units}$)"
+        if y_label:
+            y_label = f"{y_label} (${y_units}$)"
+        else:
+            y_label = f"Daily {self.y_agg} {self.y_col} (${y_units}$)"
+        plotfuncs.default_format(ax=ax, txt_xlabel=x_label, txt_ylabel=y_label)
 
         # Custom legend
         # This legend replaces the legend from PlotBinFitterBTS
@@ -300,8 +308,12 @@ class CriticalDays:
 
     def _resample_dataset(self, df: DataFrame, aggs: list, day_start_hour: int = None):
         """Resample to daily values from *day_start_hour* to *day_start_hour*"""
-        df_aggs = df.resample('D', offset=f'{day_start_hour}H').agg(aggs)
-        df_aggs = df_aggs.where(df_aggs[self.x_col]['count'] == 48).dropna()  # Full days only
+        if day_start_hour:
+            df_aggs = df.resample('D', offset=f'{day_start_hour}H').agg(aggs)
+        else:
+            df_aggs = df.resample('D').agg(aggs)
+        df_aggs = df_aggs.where(df_aggs[self.x_col]['count'] == 48)  # Full days only
+        # df_aggs = df_aggs.where(df_aggs[self.x_col]['count'] == 48).dropna()  # Full days only
         df_aggs.index.name = 'TIMESTAMP_START'
         return df_aggs
 
@@ -469,8 +481,9 @@ class CriticalDays:
                               saveplot: bool = False,
                               title: str = None,
                               path: Path or str = None,
+                              dpi:int=72,
                               **kwargs):
-        fig = plt.figure(figsize=(9, 9))
+        fig = plt.figure(figsize=(9, 9), dpi=dpi)
         gs = gridspec.GridSpec(1, 1)  # rows, cols
         # gs.update(wspace=.2, hspace=1, left=.1, right=.9, top=.85, bottom=.1)
         ax = fig.add_subplot(gs[0, 0])
@@ -479,6 +492,7 @@ class CriticalDays:
         fig.show()
         if saveplot:
             save_fig(fig=fig, title=title, path=path)
+        return ax
 
 
 if __name__ == '__main__':

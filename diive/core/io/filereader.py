@@ -225,8 +225,10 @@ class DataFileReader:
         for ix, col in enumerate(self.data_df.columns):
             var = col[0]
             data_metadata_df.loc['UNITS', var] = col[1]
-            data_metadata_df.loc['TAGS', var] = "#orig"
+            data_metadata_df.loc['TAGS', var] = ["#orig"]
             data_metadata_df.loc['ADDED', var] = addtime
+            data_metadata_df.loc['VARINDEX', var] = ix
+        data_metadata_df = data_metadata_df.T
         return data_metadata_df
 
     def get_data(self) -> tuple[DataFrame, DataFrame]:

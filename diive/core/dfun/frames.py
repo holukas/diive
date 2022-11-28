@@ -15,7 +15,6 @@ from pandas import Series
 from pandas._libs.tslibs import to_offset
 
 # from diive.core.times.times import timedelta_to_string
-# from diive.core.times.times import timedelta_to_string
 from diive.pkgs.gapfilling.interpolate import linear_interpolation
 
 pd.set_option('display.width', 1500)
@@ -622,6 +621,38 @@ def find_nans_in_df_col(df, col):
     gap_count = len(gaps_df[col])
     return gaps_df, gap_count
 
+def sort_column_names(df, priority_vars):
+    """ Sort column names, ascending, with priority vars at top
+
+        Files w/ many columns are otherwise hard to navigate.
+
+        This is trickier than anticipated (by me), b/c sorting by
+              data_df.sort_index(axis=1, inplace=True)
+        sorts the columns, but is case-sensitive, i.e. 'Var2' is placed before
+        'var1', yielding the order 'Var2', 'var1'. However, we want it sorted like
+        this: 'var1', 'Var2'. Therefore, the columns are converted to a list, the
+        list is then sorted ignoring case, and the sorted list is then used to
+        define the column order in the df.
+    """
+    cols_list = df.columns.to_list()  # list of tuples
+
+    def custom_sort(col):
+        return col.lower()  # sort by 1st tuple element (var name), strictly lowercase
+
+    cols_list.sort(key=custom_sort)
+
+    for ix, col in enumerate(cols_list):
+        if col in priority_vars:
+            cols_list.insert(0, cols_list.pop(ix))  # removes from old location ix, puts to top of list
+
+    # Custom vars are marked w/ a dot ('.') at beginning
+    for ix, col in enumerate(cols_list):
+        if col.startswith('.'):
+            cols_list.insert(0, cols_list.pop(ix))
+
+    df = df[cols_list]  # assign new (sorted) column order
+
+    return df
 
 def sort_multiindex_columns_names(df, priority_vars):
     """ Sort column names, ascending, with priority vars at top

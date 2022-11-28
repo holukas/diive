@@ -196,14 +196,16 @@ def example():
     import pandas as pd
     import numpy as np
 
-    # Load FLUXNET full output file
+    # Load file
     from diive.core.io.filereader import ReadFileType
     loaddatafile = ReadFileType(
-        filetype='FLUXNET-FULLSET-HH-CSV-30MIN',
-        filepath=r"M:\Downloads\Warm Winter 2020 ecosystem eddy covariance flux product for 73 stations in FLUXNET-Archive format—release 2022-1\Swiss_Sites\FLX_CH-Oe2_FLUXNET2015_FULLSET_2004-2020_beta-3\FLX_CH-Oe2_FLUXNET2015_FULLSET_HH_2004-2020_beta-3.csv",
+        filetype='GENERIC-CSV_HEADER-1ROW_TS-END-FULL_1MIN',
+        # filepath=r"M:\Downloads\_temp\orig.csv",
+        filepath=r"M:\Downloads\_temp\db.csv",
         data_nrows=None)
     data_df, metadata_df = loaddatafile.get_filedata()
-    series = data_df['NEE_CUT_50'].copy()
+    # series = data_df['SW_IN_T1_1_1_Avg'].copy()
+    series = data_df['SW_IN_T1_1_1'].copy()
 
     # # Create example data
     # date_rng = pd.date_range(start='2018-01-01 03:30', end='2018-01-05 00:00:00', freq='30T')
@@ -214,8 +216,8 @@ def example():
     # df.head()
     # series = df['DATA'].copy()
 
-    hm = HeatmapDateTime(series=series, title="CH-OE2 cropland (2004-2020)",
-                         vmin=-40, vmax=20, figsize=(9,24))
+    hm = HeatmapDateTime(series=series, title="from database",
+                         vmin=-0, vmax=1000, figsize=(9,24))
     hm.show()
     print(hm.get_ax())
 

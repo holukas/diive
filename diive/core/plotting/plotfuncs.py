@@ -290,9 +290,17 @@ def add_to_existing_ax_with_values(fig, add_to_ax, x, y, counts, ms, color, mark
     return line
 
 
-def default_legend(ax, loc: int or str = 0, facecolor='None', edgecolor='None',
-                   shadow=False, ncol=1, labelspacing=0.5, textcolor=theme.COLOR_TXT_LEGEND,
-                   bbox_to_anchor=None, from_line_collection=False, line_collection=None,
+def default_legend(ax,
+                   loc: int or str = 0,
+                   facecolor='None',
+                   edgecolor='None',
+                   shadow=False,
+                   ncol=1,
+                   labelspacing=0.5,
+                   textcolor=theme.COLOR_TXT_LEGEND,
+                   bbox_to_anchor=None,
+                   from_line_collection=False,
+                   line_collection=None,
                    textsize: int = theme.FONTSIZE_TXT_LEGEND):
     # fontP = FontProperties()
     # fontP.set_size('x-large')
@@ -458,7 +466,10 @@ def quickplot(data: DataFrame or Series, hline: None or float = None, subplots: 
     # plt.close(fig)
 
 
-def save_fig(fig, title: str = "", path: Path or str = None, sanitize_filename: bool = False):
+def save_fig(fig,
+             title: str = "",
+             path: Path or str = None,
+             sanitize_filename: bool = False):
     """Save figure to file
 
     Filename is sanitized, i.e. not-allowed characters are removed,
