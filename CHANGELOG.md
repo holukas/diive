@@ -2,6 +2,49 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.43.0 | 8 Dec 2022
+
+### New Features
+
+- **Frequency groups detection**: Data in long-term datasets are often characterized by changing time
+  resolutions at which data were recorded. `core.times.times.detect_freq_groups` detects changing
+  time resolutions in datasets and adds a group identifier in a new column that gives info about the
+  detected time resolution in seconds, e.g., `600` for 10MIN data records. This info allows to
+  address and process the different time resolutions separately during later processing, which is
+  needed e.g. during data quality-screening and resampling.
+- **Outlier removal using z-score**: First version of `pkgs.outlierdetection.zscore.zscoreiqr`
+  Removes outliers based on the z-score of interquartile range data. Data are divided
+  into 8 groups based on quantiles. The z-score is calculated for each data point
+  in the respective group and based on the mean and SD of the respective group.
+  The z-score threshold to identify outlier data is calculated as the max of
+  z-scores found in IQR data multiplied by *factor*. z-scores above the threshold
+  are marked as outliers.
+- **Outlier removal using local standard deviation**: First version of `pkgs.outlierdetection.local3sd.localsd`
+  Calculates mean and SD in a rolling window and marks data points outside a specified range.
+
+### Additions
+
+- **MeteoScreening**: Added the new parameter `resampling_aggregation` in the meteoscreening setting
+  `diive/pkgs/qaqc/pipes_meteo.yaml`. For example, `TA` needs `mean`, `PRECIP` needs `sum`.
+
+### Changes
+
+- **MeteoScreening**: `pkgs.qaqc.meteoscreening.MeteoScreeningFromDatabaseSingleVar`
+  Refactored the merging of quality-controlled 30MIN data when more than one raw data time
+  resolution is involved.
+- **Resampling**: `core.times.resampling.resample_series_to_30MIN`
+  The minimum required values for resampling is `1`. However, this is only relevant for
+  lower resolution data e.g. 10MIN and 30MIN, because for higher resolutions the calculated value
+  for minimum required values yields values > 1 anyway. In addition, if data are already in
+  30MIN resolution, they are still going through the resampling processing although it would not
+  be necessary, because the processing includes other steps relevant to all data resolutions, such
+  as the change of the timestamp from TIMESTAMP_MIDDLE to TIMESTAMP_END.
+
+### Bugs
+
+- Removed display bug when showing data after high-res meteoscreening in heatmap. Plot showed
+  original instead of meteoscreened data
+
 ## v0.42.0 | 27 Nov 2022
 
 ### New Features

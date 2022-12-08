@@ -5,8 +5,134 @@ from typing import Literal
 
 import numpy as np
 import pandas as pd
-from pandas import DataFrame, Series
+from pandas import DataFrame, Series, DatetimeIndex
 from pandas.tseries.frequencies import to_offset
+
+
+def detect_freq_groups(index: DatetimeIndex) -> Series:
+    """
+    Analyze timestamp for records where the time resolution is absolutely certain
+
+    This function calculates the timedeltas (the time differences) between the current
+    timestamp and the timestamp of the record before and after. For data records where
+    the two differences are the same (in absolute terms) have an absolutely certain
+    timestamp.
+
+    The determined time resolution of each record is described in the newly created column
+    'FREQ_AUTO_SEC' in terms of seconds. The column is added to *df* and can be used to
+    access the different time resolution groups separately during later processing.
+
+    Example:
+
+                        TIMESTAMP_CURRENT   TIMESTAMP_PREV      TIMESTAMP_NEXT           DELTA_PREV  DELTA_NEXT  DELTA_DIFF
+    TIMESTAMP_CURRENT
+    2020-10-01 00:20:00 2020-10-01 00:20:00 2020-10-01 00:10:00 2020-10-01 00:30:00      -600.0       600.0         0.0
+    2020-10-01 00:30:00 2020-10-01 00:30:00 2020-10-01 00:20:00 2020-10-01 00:40:00      -600.0       600.0         0.0
+    2020-10-01 00:40:00 2020-10-01 00:40:00 2020-10-01 00:30:00 2020-10-01 00:50:00      -600.0       600.0         0.0
+    ...                                 ...                 ...                 ...         ...         ...         ...
+    2021-09-30 23:57:00 2021-09-30 23:57:00 2021-09-30 23:56:00 2021-09-30 23:58:00       -60.0        60.0         0.0
+    2021-09-30 23:58:00 2021-09-30 23:58:00 2021-09-30 23:57:00 2021-09-30 23:59:00       -60.0        60.0         0.0
+    2021-09-30 23:59:00 2021-09-30 23:59:00 2021-09-30 23:58:00 2021-10-01 00:00:00       -60.0        60.0         0.0
+
+    The example shows a dataset that starts with 10MIN time resolution and ends with
+    1MIN time resolution. For each record, the previous and next timestamp are detected
+    and the delta between these two and the current timestamp are calculated. The sum
+    of DELTA_PREV and DELTA_NEXT will yield DELTA_DIFF = 0 if the time differences
+    were the same. DELTA_DIFF = 0 therefore describes locations where the time resolution
+    is certain.
+
+    For 10MIN time records, the 'FREQ_AUTO_SEC' will be set to '600', for 1MIN records
+    to '60'. The first and last records of each frequency group are added during processing,
+    e.g., the timestamp '2020-10-01 00:10:00' is the first timestamp for the '600' group
+    although it is not part of the main index (main index starts one record later with
+    '2020-10-01 00:20:00' because '2020-10-01 00:10:00' does not have a value for
+    TIMESTAMP_PREV).
+
+    Note:
+        Sometimes there are transition periods between one time resolution and another.
+        For example, when the time resolution changes from 10MIN to 1MIN, there might be
+        several records in between that have neither 10MIN nor 1MIN, but e.g. 7S or 29MIN etc.
+        For these transitional records, the time resolution is not clear and therefore they
+        are discarded. This typically affects only a handful of records during the transition
+        period(s).
+
+    Args:
+        index: Time series dataframe
+
+    Returns:
+        df: Time series dataframe with the new column 'FREQ_AUTO_SEC' added
+
+    :: Added in v0.43.0
+    """
+
+    groups_ser = pd.Series(index=index, data=np.nan, name='FREQ_AUTO_SEC')
+    # index['FREQ_AUTO_SEC'] = np.nan
+
+    # Analyse data for different time resolutions
+    timedeltas_df = pd.DataFrame()
+    timedeltas_df['TIMESTAMP_CURRENT'] = index
+
+    # Add previous and next timestamps
+    timedeltas_df['TIMESTAMP_PREV'] = timedeltas_df['TIMESTAMP_CURRENT'].shift(1)
+    timedeltas_df['TIMESTAMP_NEXT'] = timedeltas_df['TIMESTAMP_CURRENT'].shift(-1)
+
+    # DELTA is the difference between the current and the previous/next timestamp,
+    # expressed as total seconds
+    timedeltas_df['DELTA_PREV'] = timedeltas_df['TIMESTAMP_PREV'].sub(timedeltas_df['TIMESTAMP_CURRENT'])
+    timedeltas_df['DELTA_NEXT'] = timedeltas_df['TIMESTAMP_NEXT'].sub(timedeltas_df['TIMESTAMP_CURRENT'])
+    timedeltas_df['DELTA_PREV'] = timedeltas_df['DELTA_PREV'].dt.total_seconds()
+    timedeltas_df['DELTA_NEXT'] = timedeltas_df['DELTA_NEXT'].dt.total_seconds()
+
+    # The sum of DELTA_PREV and DELTA_NEXT can identify data records where
+    # the time resolution is unambiguous.
+    # For example: DELTA_PREV = -60, DELTA_NEXT = +60, DELTA_DIFF = 0
+    #   In this case the time differences of the current timestamp to
+    #   the previous and next timestamps are the same (in absolute terms)
+    #   and therefore yields the sum zero.
+    timedeltas_df['DELTA_DIFF'] = timedeltas_df['DELTA_PREV'] + timedeltas_df['DELTA_NEXT']
+    ix = timedeltas_df['DELTA_DIFF'] == 0
+    timedelta_unambiguous_df = timedeltas_df.loc[ix].copy()
+    timedelta_unambiguous_df.set_index(timedelta_unambiguous_df['TIMESTAMP_CURRENT'], inplace=True)
+
+    # Count occurrences of respective DELTA
+    delta_counts_df = timedelta_unambiguous_df['DELTA_NEXT'].groupby(
+        timedelta_unambiguous_df['DELTA_NEXT']).count().sort_values(ascending=False)
+    delta_counts_df = pd.DataFrame(delta_counts_df)
+    delta_counts_df.rename(columns={"DELTA_NEXT": "COUNTS"}, inplace=True)
+
+    # Calculate how much time is covered by each DELTA
+    delta_counts_df['DELTA_NEXT'] = delta_counts_df.index
+    delta_counts_df['DELTA_TOTAL_TIME'] = delta_counts_df['DELTA_NEXT'].multiply(delta_counts_df['COUNTS'])
+    delta_counts_df['TOTAL_TIME'] = delta_counts_df['DELTA_TOTAL_TIME'].sum()
+    delta_counts_df['%_DELTA_TOTAL_TIME'] = delta_counts_df['DELTA_TOTAL_TIME'] / delta_counts_df['TOTAL_TIME']
+    delta_counts_df['%_DELTA_TOTAL_TIME'] = delta_counts_df['%_DELTA_TOTAL_TIME'] * 100
+
+    # List of found time resolutions (unambiguous)
+    deltas = delta_counts_df['DELTA_NEXT'].to_list()
+
+    # Detect first and last date for each delta
+    # First and last dates need to be included by using:
+    #   - 'TIMESTAMP_PREV' for first date
+    #   - 'TIMESTAMP_NEXT' for last date
+    for d in deltas:
+        this_delta = timedelta_unambiguous_df.loc[timedelta_unambiguous_df['DELTA_NEXT'] == d].copy()
+        this_delta.set_index(this_delta['TIMESTAMP_CURRENT'], inplace=True)
+        first_date = this_delta['TIMESTAMP_PREV'].min()
+        last_date = this_delta['TIMESTAMP_NEXT'].max()
+
+        # Add first and last date to df
+        new_index = this_delta.index.union([first_date, last_date])
+        this_delta = this_delta.reindex(new_index)
+
+        groups_ser.loc[this_delta.index] = d
+
+        # freq = f"{int(d)}S"
+        # _index = pd.date_range(start=first_date, end=last_date, freq=freq)
+        # this_delta.reindex(_index)
+        delta_counts_df.loc[d, 'FIRST_DATE'] = first_date
+        delta_counts_df.loc[d, 'LAST_DATE'] = last_date
+
+    return groups_ser
 
 
 class TimestampSanitizer():
@@ -37,7 +163,8 @@ class TimestampSanitizer():
         """
         self.data = data.copy()
         self.output_middle_timestamp = output_middle_timestamp
-        self.inferred_freq = None
+
+        self.inferred_freq = None if not data.index.freq else data.index.freq
 
         self._run()
 
@@ -60,7 +187,8 @@ class TimestampSanitizer():
         self.data = remove_index_duplicates(data=self.data, keep='last')
 
         # Detect time resolution from data
-        self.inferred_freq = DetectFrequency(index=self.data.index).get()
+        if not self.inferred_freq:
+            self.inferred_freq = DetectFrequency(index=self.data.index).get()
 
         # Make timestamp continuous w/o date gaps
         self.data = continuous_timestamp_freq(data=self.data, freq=self.inferred_freq)

@@ -23,12 +23,16 @@ def thymeboost(series: Series, flag_missing: Series) -> Series:
     num_vals_oneday = int(to_offset('1D') / to_offset(_series.index.freq))
 
     # Gap-filling w/ running mean, for outlier detection
-    num_missing_vals = flag_missing.sum()
-    if num_missing_vals > 0:
-        rolling_mean = _series.rolling(window=num_vals_oneday, min_periods=1, center=True).mean()
-        _series = _series.fillna(rolling_mean)
-        if _series.isnull().sum() > 0:
-            raise Exception("Thyme Boost outlier removal cannot handle gaps in series.")
+    # Thyme Boost needs gapless data
+    n_missing_vals = flag_missing.sum()
+    if n_missing_vals > 0:
+        while n_missing_vals > 0:
+            rolling_mean = _series.rolling(window=num_vals_oneday, min_periods=1, center=True).median()
+            _series = _series.fillna(rolling_mean)
+            n_missing_vals = _series.isnull().sum()
+
+    if _series.isnull().sum() > 0:
+        raise Exception("Thyme Boost outlier removal cannot handle gaps in series.")
 
     boosted_model = tb.ThymeBoost(normalize_seasonality=True,
                                   verbose=1,

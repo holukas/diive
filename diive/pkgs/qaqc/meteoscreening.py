@@ -10,17 +10,21 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from pandas import Series, DataFrame
+from pandas.tseries.frequencies import to_offset
 
 import diive.core.io.filereader as filereader
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
 from diive.core.plotting.plotfuncs import quickplot
 from diive.core.times.resampling import resample_series_to_30MIN
 from diive.core.times.times import TimestampSanitizer
+from diive.core.times.times import detect_freq_groups
 from diive.pkgs.corrections.offsetcorrection import remove_radiation_zero_offset, remove_relativehumidity_offset
 from diive.pkgs.corrections.setto_threshold import setto_threshold
 from diive.pkgs.outlierdetection.absolutelimits import absolute_limits
 from diive.pkgs.outlierdetection.missing import missing_values
 from diive.pkgs.outlierdetection.thymeboost import thymeboost
+from diive.pkgs.outlierdetection.zscore import zscoreiqr
+from diive.pkgs.outlierdetection.local3sd import localsd
 
 
 class ScreenVar:
@@ -59,19 +63,20 @@ class ScreenVar:
         # Collect all flags
         self.flags_df = pd.DataFrame(index=self.series.index)
 
-        self._plot_data(type='RAW', order='BEFORE')
+        self._plot_data(type='RAW', order='BEFORE', series=self.series.copy())
         self._call_pipe_steps()
-        self._plot_data(type='QUALITY-CHECKED RAW', order='AFTER')
+        self._plot_data(type='QUALITY-CHECKED RAW', order='AFTER',
+                        series=self.series.loc[self.flags_df['QCF']==0].asfreq(self.series.index.freqstr))
 
-    def _plot_data(self, type: str, order: str):
-        HeatmapDateTime(series=self.series,
-                        title=f"{self.series.name} {type} DATA\n"
+    def _plot_data(self, type: str, order: str, series:Series):
+        HeatmapDateTime(series=series,
+                        title=f"{series.name} {type} DATA\n"
                               f"{order} HIGH-RES METEOSCREENING  |  "
-                              f"time resolution @{self.series.index.freqstr}").show()
+                              f"time resolution @{series.index.freqstr}").show()
 
-    def get(self) -> tuple[Series, DataFrame]:
+    def get(self) -> tuple[Series, DataFrame, dict]:
         """Return all flags in DataFrame"""
-        return self.series, self.flags_df
+        return self.series, self.flags_df, self.pipe_config
 
     def _call_pipe_steps(self):
         pipe_steps = self.pipe_config['pipe']
@@ -84,10 +89,29 @@ class ScreenVar:
 
             if step == 'remove_highres_outliers_thymeboost':
                 # Generates flag
-                _flag_outlier_thyme = thymeboost(series=self.series,
-                                                 flag_missing=self.flags_df[_flag_missing.name])
+                # Needs QC'd data
+                _series = self.series.copy()
+                _flags_df = self.flags_df.copy()
+                _flags_df.loc[:, 'QCF'] = _flags_df.sum(axis=1)
+                _series.loc[_flags_df['QCF'] > 0] = np.nan
+                _flag_outlier_thyme = thymeboost(series=_series,
+                                                 flag_missing=_flags_df[_flag_missing.name])
                 self.flags_df[_flag_outlier_thyme.name] = _flag_outlier_thyme
 
+            elif step == 'remove_highres_outliers_zscore':
+                # Generates flag
+                _flag_outlier_zscore = zscoreiqr(series=self.series, factor=4.5, showplot=True)
+                self.flags_df[_flag_outlier_zscore.name] = _flag_outlier_zscore
+
+            elif step == 'remove_highres_outliers_localsd':
+                # Generates flag
+                # Needs QC'd data
+                _series = self.series.copy()
+                _flags_df = self.flags_df.copy()
+                _flags_df.loc[:, 'QCF'] = _flags_df.sum(axis=1)
+                _series.loc[_flags_df['QCF'] > 0] = np.nan
+                _flag_outlier_local3sd = localsd(series=_series, n_sd=7, showplot=True)
+                self.flags_df[_flag_outlier_local3sd.name] = _flag_outlier_local3sd
 
             elif step == 'remove_highres_outliers_absolute_limits':
                 # Generates flag
@@ -128,7 +152,7 @@ class ScreenVar:
             elif step == 'remove_relativehumidity_offset':
                 # Generates corrected series
                 self.series = remove_relativehumidity_offset(series=self.series,
-                                               showplot=True)
+                                                             showplot=True)
 
 
             else:
@@ -139,7 +163,6 @@ class ScreenVar:
 
         # Overall quality flag
         self.flags_df.loc[:, 'QCF'] = self.flags_df.sum(axis=1)
-
 
     def _pipe_assign(self) -> dict:
         """Assign appropriate processing pipe to this variable"""
@@ -271,7 +294,6 @@ class MeteoScreeningFromDatabaseMultipleVars:
                                                        site=self.site,
                                                        measurement=m,
                                                        field=var,
-                                                       resampling_agg='mean',
                                                        resampling_freq='30T',
                                                        **self.kwargs)
             mscr.run()
@@ -300,18 +322,18 @@ class MeteoScreeningFromDatabaseSingleVar:
             site_lat: float = None,
             site_lon: float = None,
             resampling_freq: str = '30T',
-            resampling_agg: str = 'mean',
             timezone_of_timestamp: str = None
     ):
-        self.data_detailed = data_detailed
+        self.data_detailed = data_detailed.copy()
         self.measurement = measurement
         self.field = field
         self.site = site
         self.site_lat = site_lat
         self.site_lon = site_lon
         self.resampling_freq = resampling_freq
-        self.resampling_agg = resampling_agg
         self.timezone_of_timestamp = timezone_of_timestamp
+
+        self.pipe_config = None  # Variable settings
 
         unique_units = list(set(self.data_detailed['units']))
         if len(unique_units) > 1:
@@ -319,13 +341,104 @@ class MeteoScreeningFromDatabaseSingleVar:
                             f"but only one allowed. All data records must be "
                             f"in same units.")
 
-        self.grps = self.data_detailed.groupby(self.data_detailed['freq'])  # Groups by freq
+        # Group data by time resolution
+        groups_ser = detect_freq_groups(index=self.data_detailed.index)
+        self.data_detailed[groups_ser.name] = groups_ser
+        self.grps = self.data_detailed.groupby(self.data_detailed['FREQ_AUTO_SEC'])
 
         # Returned variables
         # Collected data across (potentially) different time resolutions
         self.coll_resampled_detailed = None
         self.coll_hires_qc = None
         self.coll_hires_flags = None
+
+    def run(self):
+        self._run_by_freq_group()
+        self.coll_resampled_detailed.drop(['FREQ_AUTO_SEC'], axis=1, inplace=True)  # Currently not used as tag in db
+        self.coll_resampled_detailed.sort_index(inplace=True)
+        self.coll_hires_qc.sort_index(inplace=True)
+        self.coll_hires_flags.sort_index(inplace=True)
+        self._plots()
+
+    def _run_by_freq_group(self):
+        """Screen and resample by frequency
+
+        When downloading data from the database, it is possible that the same
+        variable was recorded at a different time resolution in the past. Each
+        time resolution has to be handled separately. After the meteoscreening,
+        all data are in 30MIN time resolution.
+        """
+        # Loop through frequency groups
+        # All group members have the same, confirmed frequency
+        grp_counter = 0
+        for grp_freq, grp_var_df in self.grps:
+            hires_raw = grp_var_df[self.field].copy()  # Group series
+            varname = hires_raw.name
+            tags_dict = self.extract_tags(var_df=grp_var_df, drop_field=self.field)
+            grp_counter += 1
+            print(f"({varname}) Working on data with time resolution {grp_freq}S")
+
+            # Since all group members have the same time resolution, the freq of
+            # the Series can already be set.
+            offset = to_offset(pd.Timedelta(f'{grp_freq}S'))
+            hires_raw = hires_raw.asfreq(offset.freqstr)  # Set to group freq
+
+            # Sanitize timestamp index
+            hires_raw = TimestampSanitizer(data=hires_raw).get()
+            # series = sanitize_timestamp_index(data=series, freq=grp_freq)
+
+            # Quality checks directly on high-res data
+            hires_screened, \
+            hires_flags, \
+            self.pipe_config = \
+                ScreenVar(series=hires_raw,
+                          measurement=self.measurement,
+                          units=tags_dict['units'],
+                          site=self.site,
+                          site_lat=self.site_lat,
+                          site_lon=self.site_lon,
+                          timezone_of_timestamp=self.timezone_of_timestamp).get()
+
+            # Set flagged hi-res data to missing
+            hires_qc = hires_screened.copy()
+            hires_qc.loc[hires_flags['QCF'] > 0] = np.nan
+
+            # Resample to 30MIN
+            resampled = resample_series_to_30MIN(series=hires_qc,
+                                                 to_freqstr=self.resampling_freq,
+                                                 agg=self.pipe_config['resampling_aggregation'],
+                                                 mincounts_perc=.25)
+
+            # Update tags after resampling
+            tags_dict['freq'] = '30T'
+            # tags_dict['freqfrom'] = 'resampling'
+            tags_dict['data_version'] = 'meteoscreening'
+
+            # Create df that includes the resampled series and its tags
+            resampled_detailed = pd.DataFrame(resampled)
+            resampled_detailed = resampled_detailed.asfreq(resampled.index.freqstr)
+
+            # Insert tags as columns
+            for key, value in tags_dict.items():
+                resampled_detailed[key] = value
+
+            if grp_counter == 1:
+                self.coll_resampled_detailed = resampled_detailed.copy()  # Collection
+                self.coll_hires_qc = hires_qc.copy()
+                self.coll_hires_flags = hires_flags.copy()
+            else:
+                # self.coll_resampled_detailed = pd.concat([self.coll_resampled_detailed, resampled_detailed], axis=0)
+                self.coll_resampled_detailed = self.coll_resampled_detailed.combine_first(other=resampled_detailed)
+                self.coll_resampled_detailed.sort_index(ascending=True, inplace=True)
+                self.coll_resampled_detailed = self.coll_resampled_detailed.asfreq(resampled_detailed.index.freqstr)
+
+                # self.coll_hires_qc = pd.concat([self.coll_hires_qc, hires_qc], axis=0)
+                self.coll_hires_qc = self.coll_hires_qc.combine_first(other=hires_qc)
+                self.coll_hires_qc.sort_index(ascending=True, inplace=True)
+
+                # self.coll_hires_flags = pd.concat([self.coll_hires_flags, hires_flags], axis=0)
+                self.coll_hires_flags = self.coll_hires_flags.combine_first(other=hires_flags)
+                self.coll_hires_flags.sort_index(ascending=True, inplace=True)
 
     def get(self) -> tuple[DataFrame, Series, DataFrame]:
         return self.coll_resampled_detailed, self.coll_hires_qc, self.coll_hires_flags
@@ -355,13 +468,6 @@ class MeteoScreeningFromDatabaseSingleVar:
         print("Number of values per frequency group:")
         print(self.grps.count())
 
-    def run(self):
-        self._run_by_freq_group()
-        self.coll_resampled_detailed.sort_index(inplace=True)
-        self.coll_hires_qc.sort_index(inplace=True)
-        self.coll_hires_flags.sort_index(inplace=True)
-        self._plots()
-
     def _plots(self):
         varname = self.field
 
@@ -375,71 +481,10 @@ class MeteoScreeningFromDatabaseSingleVar:
         _hires_qc = self.coll_hires_qc.copy()
         _hires_qc.name = f"{_hires_qc.name} (HIGH-RES, after quality checks)"
         _resampled = self.coll_resampled_detailed[varname].copy()
-        _resampled.name = f"{_resampled.name} (RESAMPLED)"
+        _resampled.name = f"{_resampled.name} (RESAMPLED) " \
+                          f"{_resampled.index.freqstr} {self.pipe_config['resampling_aggregation']}"
         quickplot([_hires_qc, _resampled], subplots=False, showplot=True,
                   title=f"Comparison")
-
-    def _run_by_freq_group(self):
-        """Screen and resample by frequency
-
-        When downloading data from the database, it is possible that the same
-        variable was recorded at a different time resolution in the past. Each
-        time resolution has to be handled separately. After the meteoscreening,
-        all data are in 30MIN time resolution.
-        """
-        grp_counter = 0
-        for grp_freq, grp_var_df in self.grps:
-            hires_raw = grp_var_df[self.field].copy()  # Group series
-            varname = hires_raw.name
-            tags_dict = self.extract_tags(var_df=grp_var_df, drop_field=self.field)
-            grp_counter += 1
-            print(f"({varname}) Frequency group: {grp_freq}")
-
-            # Sanitize timestamp index
-            hires_raw = TimestampSanitizer(data=hires_raw).get()
-            # series = sanitize_timestamp_index(data=series, freq=grp_freq)
-
-            # Quality checks directly on high-res data
-            hires_screened, \
-            hires_flags = ScreenVar(series=hires_raw,
-                                    measurement=self.measurement,
-                                    units=tags_dict['units'],
-                                    site=self.site,
-                                    site_lat=self.site_lat,
-                                    site_lon=self.site_lon,
-                                    timezone_of_timestamp=self.timezone_of_timestamp).get()
-
-            # Set flagged hi-res data to missing
-            hires_qc = hires_screened.copy()
-            hires_qc.loc[hires_flags['QCF'] > 0] = np.nan
-
-            # Resample to 30MIN
-            resampled = resample_series_to_30MIN(series=hires_qc,
-                                                 to_freqstr=self.resampling_freq,
-                                                 agg=self.resampling_agg,
-                                                 mincounts_perc=.9)
-
-            # Update tags after resampling
-            tags_dict['freq'] = '30T'
-            # tags_dict['freqfrom'] = 'resampling'
-            tags_dict['data_version'] = 'meteoscreening'
-
-            # Create df that includes the resampled series and its tags
-            resampled_detailed = pd.DataFrame(resampled)
-
-            # Insert tags as columns
-            for key, value in tags_dict.items():
-                resampled_detailed[key] = value
-
-            if grp_counter == 1:
-                self.coll_resampled_detailed = resampled_detailed.copy()  # Collection
-                self.coll_hires_qc = hires_qc.copy()
-                self.coll_hires_flags = hires_flags.copy()
-            else:
-                self.coll_resampled_detailed.combine_first(other=resampled_detailed)
-                self.coll_hires_qc.combine_first(other=hires_qc)
-                self.coll_hires_flags.combine_first(other=hires_flags)
-                # .append(grp_vardata_df_resampled)?
 
 
 def example():
@@ -452,20 +497,23 @@ def example():
     # SCREENING DATA DOWNLOADED FROM DATABASE
     # =======================================
 
-    from dbc_influxdb import dbcInflux
-
     # Settings
-    SITE = 'ch-dav'
     BUCKET = 'ch-dav_raw'
-    MEASUREMENTS = ['RH']
-    FIELDS = ['RH_NABEL_T1_35_1']
-    START = '2021-04-01 00:01:00'
-    STOP = '2021-04-30 00:01:00'
-    TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # We need returned timestamps in CET (winter time), which is UTC + 1 hour
+    DIRCONF = r'F:\Dropbox\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
+    SITE = 'ch-dav'  # Site name
+    # Measurement name, used to group similar variable together, e.g., 'TA' contains all air temperature variables
+    MEASUREMENTS = ['SWC']
+    # FIELDS = ['SWC_H1_0.8_4']  # Variable name; InfluxDB stores variable names as '_field'
+    FIELDS = ['SWC_H1_0.15_4']  # Variable name; InfluxDB stores variable names as '_field'
     DATA_VERSION = 'raw'
-    DIRCONF = r'L:\Dropbox\luhk_work\20 - CODING\22 - POET\configs'
+    START = '2021-01-01 00:01:00'  # Download data starting with this date
+    STOP = '2023-01-01 00:01:00'  # Download data before this date (the stop date itself is not included)
+    TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
+
+    basedir = Path(r"F:\Dropbox\luhk_work\_temp")
 
     # # Instantiate class
+    # from dbc_influxdb import dbcInflux
     # dbc = dbcInflux(dirconf=DIRCONF)
     #
     # # Data download
@@ -480,7 +528,9 @@ def example():
     #         data_version=DATA_VERSION
     #     )
     #
-    basedir = Path(r"M:\_temp")
+    # import matplotlib.pyplot as plt
+    # data_simple.plot()
+    # plt.show()
     #
     # # Export data to pickle for fast testing
     # pickle_out = open(basedir / "data_simple.pickle", "wb")
@@ -505,18 +555,25 @@ def example():
     print(data_detailed)
     print(assigned_measurements)
 
+    # DAV
+    site_lat=46.815333
+    site_lon=9.855972
+
+    # # LAE
+    # site_lat = 47.478333
+    # site_lon = 8.364389
+
     mscr = MeteoScreeningFromDatabaseMultipleVars(site=SITE,
                                                   data_detailed=data_detailed,
                                                   assigned_measurements=assigned_measurements,
-                                                  site_lat=46.815333,
-                                                  site_lon=9.855972,
+                                                  site_lat=site_lat,
+                                                  site_lon=site_lon,
                                                   timezone_of_timestamp='UTC+01:00')
     mscr.run()
     resampled_detailed, hires_qc, hires_flags = mscr.get()
 
     # todo compare radiation peaks for time shift
     # todo check outliers before AND after first qc check
-
 
 
 if __name__ == '__main__':
