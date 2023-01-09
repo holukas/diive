@@ -2,6 +2,47 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.44.0 | 9 Jan 2023
+
+### New Features
+
+- **Quality-control**: (`pkgs.qaqc.fluxes.FluxQCF`)
+    - First implementation of quality control of ecosystem fluxes. Generates one
+      overall flag (`QCF`=quality control flag) from multiple quality test results
+      in EddyPro's `fluxnet` output file. The resulting `QCF` is Level-2 in the
+      Swiss FluxNet processing chain,
+      described [here](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/).
+      `QCF` is mostly based on the ICOS methodology, described
+      by [Sabbatini et al. (2018)](https://doi.org/10.1515/intag-2017-0043).
+- **Histogram**: (`pkgs.analyses.histogram.Histogram`)
+    - Calculates histogram from time series, identifies peak distribution
+- **Percentiles**: (`pkgs.analyses.quantiles.percentiles`)
+    - Calculates percentiles (0-100) for a time series
+- **Scatter**: Implemented first version of `core.plotting.scatter.Scatter`, which will
+  be used for scatter plots in the future
+
+### Changes
+
+- **Critical days**: (`pkgs.flux.criticaldays.CriticalDays`)
+    - Renamed Variables, now using Dcrit (instead of CRD) and nDcrit (instead of nCRD)
+- **NEP Penalty**: (`pkgs.flux.nep_penalty.NEPpenalty`)
+    - Code was refactored to work with NEP (net ecosystem productivity) instead of NEE
+      (net ecosystem exchange)
+    - CO2 penalty was renamed to the more descriptive NEP penalty
+- **Sanitize column names**: implemented in `core.io.filereader.ColumnNamesSanitizer`
+  Column names are now checked for duplicates. Found duplicates are renamed by adding a
+  suffix to the column name. Example: `co2_mean` and `co2_mean` are renamed to
+  `co2_mean.1` and `co2_mean.2`. This check is now implemented during the reading of
+  the data file in `core.io.filereader.DataFileReader`.
+- **Configuration files**: When reading filetype configuration files in `core.io.filereader.ConfigFileReader`,
+  the resulting dictionary that contains all configurations is now validated. The validation makes
+  sure the parameters for `.read_csv()` are in the proper format.
+- Updated all dependencies to their newest (possible) version
+
+### Additions
+
+- Added support for filetype `EDDYPRO_FLUXNET_30MIN` (`configs/filetypes/EDDYPRO_FLUXNET_30MIN.yml`)
+
 ## v0.43.0 | 8 Dec 2022
 
 ### New Features
@@ -71,7 +112,7 @@
     - `pkgs.flux.co2penalty.CO2Penalty.plot_critical_hours`: 95% predicion bands are now
       smoothed (rolling mean)
 
-- **CO2 penalty**:
+- **CO2 penalty**: (since v0.44.0 renamed to NEP penalty)
 
     - Some code refactoring in `pkgs.flux.co2penalty.CO2Penalty`, e.g. relating to plot appearances
 

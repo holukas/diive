@@ -13,6 +13,7 @@ import pandas as pd
 import pandas.errors
 import yaml
 from pandas import DataFrame
+from pandas.io.parsers.base_parser import ParserBase
 
 from diive import core
 from diive.configs.filetypes import get_filetypes
@@ -45,7 +46,7 @@ class ConfigFileReader:
 
     def read(self) -> dict:
         """
-        Load configuration from YAML file and store in dict
+        Load and validate configuration from YAML file and store in dict
 
         kudos: https://stackoverflow.com/questions/57687058/yaml-safe-load-special-character-from-file
 
@@ -54,7 +55,99 @@ class ConfigFileReader:
         """
         with open(self.configfilepath, 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
+        validate_filetype_config(config=config)
         return config
+
+
+def validate_filetype_config(config: dict):
+    """Convert to required types"""
+
+    # GENERAL
+    config['GENERAL']['NAME'] = str(config['GENERAL']['NAME'])
+    config['GENERAL']['DESCRIPTION'] = str(config['GENERAL']['DESCRIPTION'])
+    config['GENERAL']['TAGS'] = list(config['GENERAL']['TAGS'])
+
+    # FILE
+    config['FILE']['EXTENSION'] = str(config['FILE']['EXTENSION'])
+    config['FILE']['COMPRESSION'] = str(config['FILE']['COMPRESSION'])
+
+    # TIMESTAMP
+    config['TIMESTAMP']['DESCRIPTION'] = str(config['TIMESTAMP']['DESCRIPTION'])
+
+    config['TIMESTAMP']['INDEX_COLUMN'] = list(config['TIMESTAMP']['INDEX_COLUMN'])
+    config['TIMESTAMP']['INDEX_COLUMN'] = \
+        _convert_timestamp_idx_col(var=config['TIMESTAMP']['INDEX_COLUMN'])
+
+    config['TIMESTAMP']['DATETIME_FORMAT'] = str(config['TIMESTAMP']['DATETIME_FORMAT'])
+    config['TIMESTAMP']['SHOWS_START_MIDDLE_OR_END_OF_RECORD'] = str(
+        config['TIMESTAMP']['SHOWS_START_MIDDLE_OR_END_OF_RECORD'])
+
+    # DATA
+    config['DATA']['HEADER_SECTION_ROWS'] = list(config['DATA']['HEADER_SECTION_ROWS'])
+    config['DATA']['SKIP_ROWS'] = list(config['DATA']['SKIP_ROWS'])
+    config['DATA']['HEADER_ROWS'] = list(config['DATA']['HEADER_ROWS'])
+    config['DATA']['NA_VALUES'] = list(config['DATA']['NA_VALUES'])
+    config['DATA']['FREQUENCY'] = str(config['DATA']['FREQUENCY'])
+    config['DATA']['DELIMITER'] = str(config['DATA']['DELIMITER'])
+
+    return config
+
+
+def _convert_timestamp_idx_col(var: int or list):
+    """Convert to list of tuples if needed
+
+    Since YAML is not good at processing list of tuples,
+    they are given as list of lists,
+        e.g. [ [ "date", "[yyyy-mm-dd]" ], [ "time", "[HH:MM]" ] ].
+    In this case, convert to list of tuples,
+        e.g.  [ ( "date", "[yyyy-mm-dd]" ), ( "time", "[HH:MM]" ) ].
+    """
+    new = var
+    if isinstance(var[0], int):
+        pass
+    elif isinstance(var[0], list):
+        for idx, c in enumerate(var):
+            new[idx] = (c[0], c[1])
+    return new
+
+
+def rename_duplicate_cols(df: DataFrame) -> DataFrame:
+    """
+    Rename columns with the same name to unique names
+
+    For example:
+        - two columns with the same name in *df*:
+            'co2_mean' and 'co2_mean'
+            will be renamed to
+            'co2_mean.1' and 'co2_mean.2'
+
+    Args:
+        df: DataFrame with multiple columns
+
+    Returns:
+        Complete df with renamed columns. If no duplicates
+        were found, the returned df is the same as the input df.
+
+    Kudos:
+    - https://stackoverflow.com/questions/24685012/pandas-dataframe-renaming-multiple-identically-named-columns
+
+    """
+    df.columns = ParserBase({'usecols': None})._maybe_dedup_names(df.columns)
+    return df
+
+
+class ColumnNamesSanitizer:
+
+    def __init__(self,
+                 df: DataFrame):
+        self.df = df.copy()
+        self._run()
+
+    def get(self) -> DataFrame:
+        return self.df
+
+    def _run(self):
+        self.df = rename_duplicate_cols(df=self.df)
 
 
 class MultiDataFileReader:
@@ -91,7 +184,7 @@ class MultiDataFileReader:
         data_df = None
         metadata_df = None
         for filepath in self.filepaths:
-            print(f"Reading file {filepath.stem}")
+            print(f"\n{'-' * 40}\nReading file {filepath.stem}\n{'-' * 40}")
             try:
                 incoming_data_df, incoming_metadata_df = \
                     ReadFileType(filepath=filepath, filetypeconfig=self.filetypeconfig).get_filedata()
@@ -214,6 +307,8 @@ class DataFileReader:
         self.metadata_df = self._get_metadata()
         self.data_df = dfun.frames.flatten_multiindex_all_df_cols(df=self.data_df, keep_first_row_only=True)
 
+        self.data_df = ColumnNamesSanitizer(df=self.data_df).get()
+
     def _get_metadata(self):
         """Create separate dataframe collecting metadata for each variable
         Metadata contains units, tags and time added.
@@ -270,11 +365,11 @@ class DataFileReader:
         automatically generate names for the missing header columns.
         """
         num_headercols, headercols_list = dfun.frames.get_len_header(filepath=self.filepath,
-                                                         skiprows=self.data_skiprows,
-                                                         headerrows=self.data_headerrows)
+                                                                     skiprows=self.data_skiprows,
+                                                                     headerrows=self.data_headerrows)
         num_datacols = dfun.frames.get_len_data(filepath=self.filepath,
-                                    skiprows=self.data_skiprows,
-                                    headerrows=self.data_headerrows)
+                                                skiprows=self.data_skiprows,
+                                                headerrows=self.data_headerrows)
 
         # Check if there are more data columns than header columns
         more_data_cols_than_header_cols = False
@@ -314,7 +409,7 @@ class DataFileReader:
         # Column name for timestamp index
         parsed_index_col = f"TIMESTAMP_{self.timestamp_start_middle_end.upper()}"
 
-        # Create temporary column name for parsed index (v0.41.0)
+        # Create temporary column name for parsed index :: v0.41.0
         # This solves the issue that a column named *parsed_index_col* might already be
         # present in the dataset. In that case, parsing would not work and the code would
         # raise an exception (e.g., "ValueError: Date column TIMESTAMP_END already in dict").
@@ -327,22 +422,24 @@ class DataFileReader:
         # date_parser = lambda x: dt.datetime.strptime(x, self.timestamp_datetime_format)
         date_parser = lambda x: pd.to_datetime(x, format=self.timestamp_datetime_format, errors='coerce')
 
-        data_df = pd.read_csv(self.filepath,
-                              skiprows=self.data_headersection_rows,
-                              header=None,
-                              names=headercols_list,
-                              na_values=self.data_na_vals,
-                              encoding='utf-8',
-                              delimiter=self.data_delimiter,
-                              mangle_dupe_cols=True,
-                              keep_date_col=False,
-                              parse_dates=parse_dates,
-                              date_parser=date_parser,
-                              index_col=None,
-                              dtype=None,
-                              skip_blank_lines=True,
-                              nrows=self.data_nrows,
-                              engine='python')  # todo 'python', 'c'
+        data_df = pd.read_csv(
+            self.filepath,
+            skiprows=self.data_headersection_rows,
+            header=None,
+            names=headercols_list,
+            na_values=self.data_na_vals,
+            encoding='utf-8',
+            delimiter=self.data_delimiter,
+            mangle_dupe_cols=True,
+            keep_date_col=False,
+            parse_dates=parse_dates,
+            date_parser=date_parser,
+            index_col=None,
+            dtype=None,
+            skip_blank_lines=True,
+            nrows=self.data_nrows,
+            engine='python'  # todo 'python', 'c'
+        )
 
         # Rename temporary column name for parsed index to correct name (v0.41.0)
         data_df = dfun.frames.rename_cols(df=data_df, renaming_dict={_temp_parsed_index_col: parsed_index_col})

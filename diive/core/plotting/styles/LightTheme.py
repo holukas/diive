@@ -19,7 +19,7 @@ COLOR_NEE = '#4CAF50'  # nice green
 COLOR_THRESHOLD = '#d95318'  # nice red
 # COLOR_THRESHOLD2 = '#39a7b3'  # nice blue
 COLOR_THRESHOLD2 = '#BA68C8'  # purple 300
-COLOR_NEE2 = bluegray(600)
+COLOR_NEP = bluegray(600)
 
 # DEFAULT LINE PLOT
 # COLOR_LINE_DEFAULT = '#026DA3'  # Line in time series plot

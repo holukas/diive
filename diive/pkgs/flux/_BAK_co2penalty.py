@@ -396,7 +396,7 @@ class CO2Penalty:
         )
 
         # Run CHD analyses
-        chd.detect_crd_threshold()
+        chd.detect_dcrit_threshold()
         chd.analyze_daytime()
         chd.find_nee_optimum_range()
 
@@ -408,7 +408,7 @@ class CO2Penalty:
         return chd
 
     def plot_chd_threshold_detection(self, ax, highlight_year: int = None):
-        self.chd_instance.plot_crd_detection_results(ax=ax, highlight_year=highlight_year)
+        self.chd_instance.plot_dcrit_detection_results(ax=ax, highlight_year=highlight_year)
 
     def plot_daytime_analysis(self, ax, highlight_year: int = None):
         self.chd_instance.plot_daytime_analysis(ax=ax)
@@ -424,7 +424,7 @@ class CO2Penalty:
 
     def plot_cumulatives(self, ax, figletter:str=None, year: int = None):
 
-        from diive.core.plotting.styles.LightTheme import COLOR_NEE2, COLOR_RECO
+        from diive.core.plotting.styles.LightTheme import COLOR_NEP, COLOR_RECO
 
         # # For testing: direct plotting
         # import matplotlib.pyplot as plt
@@ -473,11 +473,11 @@ class CO2Penalty:
         # Original data as measured and gap-filled
         x = cumulative_orig.index
         y = cumulative_orig
-        ax.plot_date(x=x, y=y, color=COLOR_NEE2, alpha=0.9, ls='-', lw=3, marker='',
+        ax.plot_date(x=x, y=y, color=COLOR_NEP, alpha=0.9, ls='-', lw=3, marker='',
                      markeredgecolor='none', ms=0, zorder=99, label='observed')
-        ax.plot_date(x[-1], y[-1], ms=10, zorder=100, color=COLOR_NEE2)
+        ax.plot_date(x[-1], y[-1], ms=10, zorder=100, color=COLOR_NEP)
         ax.text(x[-1], y[-1], f"    {cumulative_orig[-1]:.0f}", size=20,
-                color=COLOR_NEE2, backgroundcolor='none', alpha=1,
+                color=COLOR_NEP, backgroundcolor='none', alpha=1,
                 horizontalalignment='left', verticalalignment='center')
 
         # Modeled hot days

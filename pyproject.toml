@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "diive"
-version = "0.43.0"
+version = "0.44.0"
 description = "Time series post-processing and analysis"
 authors = ["Lukas Hörtnagl <holukas@ethz.ch>"]
 
@@ -12,14 +12,15 @@ PyYAML = "^6.0"
 matplotlib = "^3.5.1"
 uncertainties = "^3.1.6"
 statsmodels = "^0.13.1"
-Sphinx = "^4.3.2"
-sphinx-rtd-theme = "^1.0.0"
 pysolar = "^0.10"
 scikit-learn = "^1.0.2"
 ThymeBoost = "^0.1.10"
+jupyterlab = "^3.5.1"
 
 [tool.poetry.dev-dependencies]
 dbc-influxdb = { path = "../../22 - POET/dbc-influxdb", develop = true }
+Sphinx = "^4.3.2"
+sphinx-rtd-theme = "^1.0.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

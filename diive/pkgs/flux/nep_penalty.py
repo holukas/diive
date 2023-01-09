@@ -13,23 +13,23 @@ import diive.core.dfun.frames as frames
 from diive.core.dfun.fits import BinFitterCP
 from diive.core.plotting.fitplot import fitplot
 from diive.core.plotting.plotfuncs import default_legend, default_format, nice_date_ticks, save_fig
-from diive.core.plotting.styles.LightTheme import COLOR_NEE2, COLOR_RECO
+from diive.core.plotting.styles.LightTheme import COLOR_NEP, COLOR_RECO
 from diive.pkgs.createvar.vpd import calc_vpd_from_ta_rh
 from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
 
 
-class CO2Penalty:
+class NEPpenalty:
 
     def __init__(
             self,
             df: DataFrame,
             vpd_col: str,
-            nee_col: str,
+            nep_col: str,
             swin_col: str,
             ta_col: str,
             rh_col: str,
             thres_crd: float,
-            thres_xcrd: float,
+            # thres_xcrd: float,
             thres_ncrd_lower: float,
             penalty_start_month: int = 5,
             penalty_end_month: int = 9,
@@ -40,7 +40,7 @@ class CO2Penalty:
         Args:
             df: Timeseries data with timestamp as index in half-hourly time resolution
             vpd_col: VPD column name, is used to define critical conditions (kPa)
-            nee_col: NEE column name (umol CO2 m-2 s-1)
+            nep_col: NEP column name (umol CO2 m-2 s-1) (NEP=-NEE)
             swin_col: Short-wave incoming radiation column name (W m-2)
             ta_col: Air temperature column name (°C)
             rh_col: Relative humidity column name (%)
@@ -53,19 +53,19 @@ class CO2Penalty:
         # Columns
         self.df = df.copy()
         self.vpd_col = vpd_col
-        self.nee_col = nee_col
+        self.nep_col = nep_col
         self.swin_col = swin_col
         self.ta_col = ta_col
         self.rh_col = rh_col
         self.thres_crd = thres_crd
-        self.thres_xcrd = thres_xcrd
+        # self.thres_xcrd = thres_xcrd
         self.thres_ncrd_lower = thres_ncrd_lower
         self.penalty_start_month = penalty_start_month
         self.penalty_end_month = penalty_end_month
         self.random_forest_params = random_forest_params
 
         # Convert NEE units: umol CO2 m-2 s-1 --> g CO2 m-2 30min-1
-        self.df[nee_col] = self.df[nee_col].multiply(0.0792171)
+        self.df[self.nep_col] = self.df[self.nep_col].multiply(0.0792171)
 
         # Columns that will be limited
         self.vpd_col_limited = f'_LIMITED_{self.vpd_col}'
@@ -74,8 +74,8 @@ class CO2Penalty:
         self.ta_col_limited = f'_LIMITED_{self.ta_col}'
         self.swin_col_limited = f'_LIMITED_{self.swin_col}'
         self.swin_col_limited_gapfilled = f'_LIMITED_{self.swin_col}_gfRF'
-        self.nee_col_limited = f'_LIMITED_{self.nee_col}'
-        self.nee_col_limited_gf = f'_LIMITED_{self.nee_col}_gfRF'
+        self.nep_col_limited = f'_LIMITED_{self.nep_col}'
+        self.nep_col_limited_gf = f'_LIMITED_{self.nep_col}_gfRF'
 
         # Results from gapfilling
         self._gapfilled_df = None
@@ -153,32 +153,29 @@ class CO2Penalty:
 
         # Make subset with vars required for gapfilling
         # limited_cols = [col for col in _df.columns if '_LIMITED_' in col]
-        limited_cols = [self.nee_col_limited, self.ta_col_limited,
+        limited_cols = [self.nep_col_limited, self.ta_col_limited,
                         self.vpd_col_limited_gapfilled, self.swin_col_limited_gapfilled]
         _df_limited = _df[limited_cols].copy()
-        # _df_limited = _df[[_nee_limited_col, _ta_limited_col, _vpd_limited_col, self.swin_col]].copy()
 
         # Gapfilling
         gapfilled_df, gf_results = self._gapfill(df=_df_limited,
-                                                 target_col=self.nee_col_limited,
+                                                 target_col=self.nep_col_limited,
                                                  random_state=random_state,
                                                  **self.random_forest_params)
 
         # Merge gapfilled with full data range
         penalty_df = self.df.copy()
 
-        gapfilled_flag_col = f'QCF_{self.nee_col_limited_gf}'
-        penalty_df[self.nee_col_limited_gf] = gapfilled_df[self.nee_col_limited_gf].copy()
+        gapfilled_flag_col = f'QCF_{self.nep_col_limited_gf}'
+        penalty_df[self.nep_col_limited_gf] = gapfilled_df[self.nep_col_limited_gf].copy()
         penalty_df[gapfilled_flag_col] = gapfilled_df[gapfilled_flag_col].copy()
-        # penalty_df[gapfilled_col] = gapfilled_df[gapfilled_col].fillna(penalty_df[self.nee_col])
-        # penalty_df[f'QCF_{_nee_limited_col}_gfRF'] = gapfilled_df[f'QCF_{_nee_limited_col}_gfRF']
 
         # Calculate carbon cost
-        penalty_df['PENALTY'] = penalty_df[self.nee_col_limited_gf].sub(penalty_df[self.nee_col])
+        penalty_df['PENALTY'] = penalty_df[self.nep_col_limited_gf].sub(penalty_df[self.nep_col])
 
         # Cumulatives
-        penalty_df[f'CUMSUM_{self.nee_col_limited_gf}'] = penalty_df[self.nee_col_limited_gf].cumsum()
-        penalty_df[f'CUMSUM_{self.nee_col}'] = penalty_df[self.nee_col].cumsum()
+        penalty_df[f'CUMSUM_{self.nep_col_limited_gf}'] = penalty_df[self.nep_col_limited_gf].cumsum()
+        penalty_df[f'CUMSUM_{self.nep_col}'] = penalty_df[self.nep_col].cumsum()
         penalty_df['CUMSUM_PENALTY'] = penalty_df['PENALTY'].cumsum()
 
         # Add limited columns
@@ -192,9 +189,9 @@ class CO2Penalty:
 
         # Detect year with highest carbon cost
         penalty_per_year_df = penalty_df[['PENALTY']].groupby(penalty_df.index.year).sum()
-        penalty_per_year_df[self.nee_col_limited_gf] = \
-            penalty_df[self.nee_col_limited_gf].groupby(penalty_df.index.year).sum()
-        penalty_per_year_df[f'{self.nee_col}'] = penalty_df[self.nee_col].groupby(penalty_df.index.year).sum()
+        penalty_per_year_df[self.nep_col_limited_gf] = \
+            penalty_df[self.nep_col_limited_gf].groupby(penalty_df.index.year).sum()
+        penalty_per_year_df[f'{self.nep_col}'] = penalty_df[self.nep_col].groupby(penalty_df.index.year).sum()
 
         # Add info about number of CRDs
         _num_crds = penalty_df['VPD_f'].resample('D').max()
@@ -208,81 +205,11 @@ class CO2Penalty:
 
         return penalty_df, penalty_per_year_df, gapfilled_df, gf_results, penalty_min_year
 
-        # # TODO code for pairing hires daytime with its previous nighttime means
-        # # Add flag for day/night groups (nights are consecutive, i.e. from 19:00 to 07:00)
-        # df, _, _, grp_daynight_col, date_col, flag_daynight_col = \
-        #     frames.splitdata_daynight(df=df_limited, split_on='timestamp',
-        #                               split_day_start_hour=7, split_day_end_hour=18)
-        #
-        # df_grpaggs = df.groupby(grp_daynight_col).mean()
-        # df_grpaggs[grp_daynight_col] = df_grpaggs.index  # Needed for merging
-        # df_grpaggs.index.name = 'INDEX'  # To avoid duplicate names
-        # df_grpaggs.columns = [f"{col}_GRP_MEAN" for col in df_grpaggs.columns]
-        # keepcols = ['TA_LIMITED_GRP_MEAN', 'VPD_LIMITED_GRP_MEAN', '.GRP_DAYNIGHT_GRP_MEAN']
-        # df_grpaggs = df_grpaggs[keepcols].copy()
-        #
-        # # Means from previous day/night grp
-        # # This pairs each day or night group with the mean of the previous group
-        # # Daytime (07:00-19:00) is paired with the means of the *previous* nighttime (19:00-07:00)
-        # # Nighttime is paired with the means of the *previous* daytime
-        # df_grpaggs_prevgrp = df_grpaggs.copy()
-        # # Shift grouping col by one record for merging each record with the mean of the respective previous record
-        # # e.g. daytime (grp 1324) is paired with the mean of the previous nighttime (grp 1323)
-        # df_grpaggs_prevgrp['.PAIRWITH_GRP'] = df_grpaggs_prevgrp['.GRP_DAYNIGHT_GRP_MEAN'].shift(-1)
-        # df_grpaggs_prevgrp.columns = [f"{col}_PREVGRP" for col in df_grpaggs_prevgrp.columns]
-        #
-        # df['TIMESTAMP'] = df.index  # Store before merging
-        #
-        # # Merge data with grp means
-        # df = df.merge(df_grpaggs, how='left',
-        #               left_on=grp_daynight_col,
-        #               right_on='.GRP_DAYNIGHT_GRP_MEAN')
-        #
-        # # Merge data with means of previous grp
-        # df = df.merge(df_grpaggs_prevgrp, how='left',
-        #               left_on=grp_daynight_col,
-        #               right_on='.PAIRWITH_GRP_PREVGRP')
-        #
-        # df.set_index('TIMESTAMP', inplace=True)
-        #
-        # keepcols = ['NEE_LIMITED', 'TA_LIMITED', 'VPD_LIMITED', 'Rg_f',
-        #       'TA_LIMITED_GRP_MEAN', 'VPD_LIMITED_GRP_MEAN',
-        #       'TA_LIMITED_GRP_MEAN_PREVGRP', 'VPD_LIMITED_GRP_MEAN_PREVGRP']
-        #
-        # df = df[keepcols].copy()
-        #
-        # df = df.dropna()  # todo currently the first night is lost due to shift
-
-        # df.to_csv('M:\Downloads\_temp2\check.csv')
-
-        # # Gapfilling
-        # rfts = RandomForestTS(df=df_limited,
-        #                       target_col=nee_limited_col,
-        #                       verbose=1,
-        #                       random_state=42,
-        #                       n_estimators=3,
-        #                       bootstrap=True)
-        # rfts.run()
-        #
-        # # Get gapfilled focus range
-        # _gapfilled_df, _gf_results = rfts.get_gapfilled_dataset()
-        #
-        # # Reindex to have same index as full dataset (full timestamp range)
-        # _gapfilled_df = _gapfilled_df.reindex(self.full_df.index)
-
-        # import matplotlib.pyplot as plt
-        # import pandas as pd
-        # plot_df = self.gapfilled_df[['NEE_LIMITED_gfRF', 'NEE_LIMITED']].copy()
-        # plot_df = pd.concat([plot_df, self.df[nee_col]], axis=1)
-        # plot_df.plot(xlim=('2019-06-15', '2019-07-15'), alpha=.5)
-        # plot_df.cumsum().plot(alpha=.5)
-        # plt.show()
-
     def _limit_crd_data(self) -> DataFrame:
         """Limit/remove data on critical heat days
 
         - Set CRD data to their diel cycle medians
-        - Remove NEE CRD data
+        - Remove NEP CRD data
         """
 
         # Insert aggregated x as column in hires dataframe
@@ -343,10 +270,10 @@ class CO2Penalty:
                                                    **self.random_forest_params)
         df[self.swin_col_limited_gapfilled] = _gapfilled_df[self.swin_col_limited_gapfilled].copy()
 
-        # Remove NEE on critical days
+        # Remove NEP on critical days
         # Will be gap-filled with random forest
-        df[self.nee_col_limited] = df[self.nee_col].copy()
-        df.loc[crds_ix, self.nee_col_limited] = np.nan
+        df[self.nep_col_limited] = df[self.nep_col].copy()
+        df.loc[crds_ix, self.nep_col_limited] = np.nan
 
         # Add flag to mark CRD and nCRD data
         flag_crd_col = 'FLAG_CRD'
@@ -361,7 +288,7 @@ class CO2Penalty:
         # import matplotlib.pyplot as plt
         # df[['Tair_f', '_TEMPLATE_Tair_f', '_LIMITED_Tair_f']].plot(title='Tair_f', xlim=('2019-06-15', '2019-07-15'), subplots=True)
         # df[['VPD_f', '_TEMPLATE_VPD_f', '_LIMITED_VPD_f']].plot(title='VPD_f', xlim=('2019-06-15', '2019-07-15'), subplots=True)
-        # df[['NEE_CUT_REF_f', '_LIMITED_NEE_CUT_REF_f']].plot(title=nee_col, xlim=('2019-06-15', '2019-07-15'))
+        # df[['NEP', '_LIMITED_NEP_f']].plot(title=nep_col, xlim=('2019-06-15', '2019-07-15'))
         # plt.show()
 
         return df
@@ -372,18 +299,10 @@ class CO2Penalty:
         diel_cycles_df['TIME'] = diel_cycles_df.index.time
         diel_cycles_df = diel_cycles_df.groupby('TIME').agg(agg)
         diel_cycles_df = diel_cycles_df.add_prefix('_TEMPLATE_')
-        # new_ta_col = f"TA_TEMPLATE"
-        # new_vpd_col = f"VPD_TEMPLATE"
-        # frames.rename_cols(df=diel_cycles_df, renaming_dict={self.ta_col: new_ta_col,
-        #                                                      self.x_col: new_vpd_col})
-        # # diel_cycles_df.columns = [f"{col}_ncrds_{agg}" for col in diel_cycles_df.columns]  # Rename column
-        # # templates_df = diel_cycles_df[[(self.ta_col, 'q50'), (self.x_col, 'q50')]].copy()
-        # # diel_cycles_df.columns = ['_'.join(col).strip() for col in diel_cycles_df.columns.values]  # Make one-row header
-        # return diel_cycles_df, new_ta_col, new_vpd_col
         return diel_cycles_df
 
     def plot_critical_hours(self, ax,
-                            which_threshold: Literal['crd', 'xcrd'] = 'crd',
+                            which_threshold: Literal['crd'] = 'crd',
                             figletter: str = '',
                             show_fitline: bool = True,
                             fit_n_bootstraps: int = 10,
@@ -399,7 +318,7 @@ class CO2Penalty:
         df = self.df.copy()
 
         xlabel_units = "$\mathrm{hours\ yr^{-1}}$"
-        ylabel_penalty = r"$\mathrm{CO_{2}\ penalty}$"
+        ylabel_penalty = r"$\mathrm{NEP\ penalty}$"
         ylabel_units = r"$\mathrm{gCO_{2}\ m^{-2}\ yr^{-1}}$"
 
         # Count half-hours > CRD threshold
@@ -408,28 +327,28 @@ class CO2Penalty:
         df_above_thr_crd = df.loc[locs_above_thr_crd, self.vpd_col].copy()
         hh_above_thr_crd = df_above_thr_crd.groupby(df_above_thr_crd.index.year).count()
 
-        # Count half-hours > xCRD threshold
-        locs_above_thr_xcrd = df[self.vpd_col] > self.thres_xcrd
-        df_above_thr_xcrd = df.loc[locs_above_thr_xcrd, self.vpd_col].copy()
-        hh_above_thr_xcrd = df_above_thr_xcrd.groupby(df_above_thr_xcrd.index.year).count()
+        # # Count half-hours > xCRD threshold
+        # locs_above_thr_xcrd = df[self.vpd_col] > self.thres_xcrd
+        # df_above_thr_xcrd = df.loc[locs_above_thr_xcrd, self.vpd_col].copy()
+        # hh_above_thr_xcrd = df_above_thr_xcrd.groupby(df_above_thr_xcrd.index.year).count()
 
         # Penalty YY results, overview
         penalty_per_year = self.penalty_per_year_df['PENALTY'].copy()
-        penalty_per_year = penalty_per_year.multiply(-1)  # Make penalty positive
+        # penalty_per_year = penalty_per_year.multiply(-1)  # Make penalty positive --> is already positive w/ NEP
         # penalty_per_year.loc[penalty_per_year < 0] = 0  # Leave negative CCT in dataset
         penalty_per_year.loc[penalty_per_year == 0] = 0
 
         # Combine
         penalty_vs_hh_thr = pd.DataFrame(penalty_per_year)
         penalty_vs_hh_thr['Hours above THR_CRD'] = hh_above_thr_crd.divide(2)
-        penalty_vs_hh_thr['Hours above THR_xCRD'] = hh_above_thr_xcrd.divide(2)
+        # penalty_vs_hh_thr['Hours above THR_xCRD'] = hh_above_thr_xcrd.divide(2)
         penalty_vs_hh_thr = penalty_vs_hh_thr.fillna(0)
 
         xcol = 'Hours above THR_CRD'
         if which_threshold == 'crd':
             xcol = 'Hours above THR_CRD'
-        elif which_threshold == 'xcrd':
-            xcol = 'Hours above THR_xCRD'
+        # elif which_threshold == 'xcrd':
+        #     xcol = 'Hours above THR_xCRD'
 
         # Fit
         if show_fitline:
@@ -535,7 +454,7 @@ class CO2Penalty:
         # Format
 
         default_format(ax=ax,
-                       txt_xlabel=f'Hours above threshold ({xlabel_units})',
+                       txt_xlabel=f'Hours above VPD threshold ({xlabel_units})',
                        txt_ylabel=f'{ylabel_penalty} ({ylabel_units})',
                        showgrid=False)
 
@@ -565,7 +484,7 @@ class CO2Penalty:
                     elif year == 2020:
                         xytext = (-60, -5)
                     elif year == 2006:
-                        xytext = (20, -20)
+                        xytext = (20, -15)
                     arrowprops = dict(facecolor='black', arrowstyle='-')
                 else:
                     xytext = None
@@ -591,42 +510,42 @@ class CO2Penalty:
                          showfill_penalty: bool = True,
                          showtitle: bool = True):
 
-        gapfilled_col = f'_LIMITED_{self.nee_col}_gfRF'
-        label_penalty = r"$\mathrm{CO_{2}\ penalty}$"
+        gapfilled_col = f'_LIMITED_{self.nep_col}_gfRF'
+        label_penalty = r"$\mathrm{NEP\ penalty}$"
         label_units_cumulative = r"$\mathrm{gCO_{2}\ m^{-2}}$"
 
         penalty_perc = None
         if year:
             df = self.penalty_hires_df.loc[self.penalty_hires_df.index.year == year]
             num_crds = int(self.penalty_per_year_df.loc[self.penalty_per_year_df.index == year]['num_CRDs'])
-            obs = float(self.penalty_per_year_df.loc[self.penalty_per_year_df.index == year][self.nee_col])
+            obs = float(self.penalty_per_year_df.loc[self.penalty_per_year_df.index == year][self.nep_col])
             pot = float(self.penalty_per_year_df.loc[self.penalty_per_year_df.index == year][gapfilled_col])
             penalty = float(self.penalty_per_year_df.loc[self.penalty_per_year_df.index == year]['PENALTY'])
 
-            if (obs < 0) and (pot < 0):
-                # NEEobs and NEEpot both show UPTAKE
-                if pot < obs:
-                    # NEEpot shows *MORE* UPTAKE than NEEobs:
-                    penalty_perc = (1 - (obs / pot)) * 100
-                    # (1 - (-378 / -486)) * 100 = 22.2%
-                    # NEEobs uptake was 22.2% lower compared to NEEpot
-                elif pot > obs:
-                    # NEEpot shows *LESS* UPTAKE than NEEobs:
-                    penalty_perc = (1 - (obs / pot)) * 100 * -1
-                    # (1 - (-378 / -350)) * 100 = -8%
-                    # NEEpot uptake was 8% lower compared to NEEobs
-            elif (obs > 0) and (pot > 0):
-                # NEEobs and NEEpot both show EMISSION
-                if pot < obs:
-                    # NEEpot shows LESS EMISSION than NEEobs
-                    penalty_perc = (1 - (pot / obs)) * 100
-                    # (1 - (115 / 150)) * 100 = 23.3%
-                    # NEEpot emission was 23.3% lower than NEEobs
-                elif pot > obs:
-                    # Potential NEEpot shows MORE EMISSION than NEEobs
-                    penalty_perc = (1 - (pot / obs)) * 100 * -1
-                    # (1 - (95 / 57)) * 100 = -66.6%
-                    # NEEpot emissions are 66.6% higher than NEEobs
+            # obs and pot both show UPTAKE and
+            # pot shows *MORE* uptake than obs
+            if (obs > 0) and (pot > 0) and (pot > obs):
+                diff = pot - obs
+                penalty_perc = diff / pot
+                penalty_perc *= 100
+                # Example:
+                #   pot=488, obs=378
+                #   488 - 378 = 110
+                #   110 / 488 = 0.225
+                #   obs uptake was 22.5% lower compared to pot
+
+            # obs and pot both show EMISSION and
+            # pot shows *LESS* emission than obs
+            elif (obs < 0) and (pot < 0) and (pot < obs):
+                diff = pot - obs
+                penalty_perc = diff / abs(pot)
+                penalty_perc *= 100
+                # Example:
+                #   pot=-115, obs=-150
+                #   -115 - -150 = 35
+                #   35 / 115 = 0.304
+                #   obs emission was 30.4% higher compared to pot
+
             else:
                 penalty_perc = -9999
 
@@ -634,23 +553,23 @@ class CO2Penalty:
         else:
             df = self.penalty_hires_df
             num_crds = int(self.penalty_per_year_df['num_CRDs'].sum())
-            obs = float(self.penalty_per_year_df[self.nee_col].sum())
+            obs = float(self.penalty_per_year_df[self.nep_col].sum())
             pot = float(self.penalty_per_year_df[gapfilled_col].sum())
             penalty = float(self.penalty_per_year_df['PENALTY'].sum())
             if (obs < 0) and (pot < 0) and (pot < obs):
                 penalty_perc = (1 - (obs / pot)) * 100
 
-        cumulative_orig = df[self.nee_col].cumsum()  # Cumulative of original measured and gap-filled NEE
-        cumulative_model = df[gapfilled_col].cumsum()  # NEE where hot days were modeled
+        cumulative_orig = df[self.nep_col].cumsum()  # Cumulative of original measured and gap-filled NEP
+        cumulative_model = df[gapfilled_col].cumsum()  # NEP where hot days were modeled
 
         # Original data as measured and gap-filled
         x = cumulative_orig.index
         y = cumulative_orig
-        ax.plot_date(x=x, y=y, color=COLOR_NEE2, alpha=0.9, ls='-', lw=3, marker='',
-                     markeredgecolor='none', ms=0, zorder=99, label='observed NEE')
-        ax.plot_date(x[-1], y[-1], ms=10, zorder=100, color=COLOR_NEE2)
+        ax.plot_date(x=x, y=y, color=COLOR_NEP, alpha=0.9, ls='-', lw=3, marker='',
+                     markeredgecolor='none', ms=0, zorder=99, label='observed NEP')
+        ax.plot_date(x[-1], y[-1], ms=10, zorder=100, color=COLOR_NEP)
         ax.text(x[-1], y[-1], f"    {cumulative_orig[-1]:.0f}", size=20,
-                color=COLOR_NEE2, backgroundcolor='none', alpha=1,
+                color=COLOR_NEP, backgroundcolor='none', alpha=1,
                 horizontalalignment='left', verticalalignment='center')
 
         # Modeled hot days
@@ -658,7 +577,7 @@ class CO2Penalty:
             linestyle = '-'
             marksersize = 10
             txtsize = 20
-            label = 'potential NEE'
+            label = 'potential NEP'
         else:
             # Hide elements if not required
             linestyle = 'None'
@@ -674,17 +593,17 @@ class CO2Penalty:
                 backgroundcolor='none', alpha=1, horizontalalignment='left',
                 verticalalignment='center')
 
-        # Fill between: CO2 penalty
+        # Fill between: NEP penalty
         if showfill_penalty:
             mpl.rcParams['hatch.linewidth'] = 2  # Set width of hatch lines
             ax.fill_between(cumulative_model.index, cumulative_model, cumulative_orig,
                             alpha=.7, lw=0, color='#ef9a9a', edgecolor='white',
                             zorder=1, hatch='//', label=label_penalty)
             txt = f"critical days: {num_crds}\n" \
-                  f"uptake reduction: {penalty_perc:.0f}%\n" \
+                  f"NEP reduction: {penalty_perc:.0f}%\n" \
                   f"{label_penalty}: {np.abs(penalty):.0f} {label_units_cumulative}\n"
             # r"$\bf{" + str(number) + "}$"
-            ax.text(.05, .1, txt, size=16, color='black', backgroundcolor='none',
+            ax.text(.5, .1, txt, size=16, color='black', backgroundcolor='none',
                     alpha=1, horizontalalignment='left', verticalalignment='center',
                     transform=ax.transAxes, weight='normal', linespacing=1.4)
 
@@ -702,11 +621,11 @@ class CO2Penalty:
         # Format
         default_format(ax=ax,
                        txt_xlabel='Date',
-                       txt_ylabel=f"Cumulative NEE ({label_units_cumulative})",
+                       txt_ylabel=f"Cumulative NEP ({label_units_cumulative})",
                        showgrid=False)
 
         # Legend
-        default_legend(ax=ax, ncol=1, loc=(.51, .82))
+        default_legend(ax=ax, ncol=1, loc=(.11, .82))
         # ax.legend(ncol=1, edgecolor='none', loc=(.5, .7), prop={'size': 14})
 
         # Ticks
@@ -725,15 +644,15 @@ class CO2Penalty:
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
 
-    def plot_day_example(self, ax_nee, ax_ta, ax_vpd, ax_swin,
-                         showline_nee_modeled: bool = True,
+    def plot_day_example(self, ax_nep, ax_ta, ax_vpd, ax_swin,
+                         showline_nep_modeled: bool = True,
                          showline_ta_modeled: bool = True,
                          showline_vpd_modeled: bool = True,
                          showline_swin_modeled: bool = True,
                          showfill_penalty: bool = True,
                          ):
 
-        label_penalty = r"$\mathrm{CO_{2}\ penalty}$"
+        label_penalty = r"$\mathrm{NEP\ penalty}$"
         label_units = r"$\mathrm{gCO_{2}\ m^{-2}\ 30min^{-1}}$"
 
         df = self.penalty_hires_df.copy()
@@ -745,20 +664,20 @@ class CO2Penalty:
         x = subset.index
         props = dict(ls='-')
 
-        # Observed NEE
-        ax_nee.plot_date(x=x, y=subset[self.nee_col],
-                         label="on critical days", color=COLOR_NEE2, lw=2, ms=6, **props)
+        # Observed NEP
+        ax_nep.plot_date(x=x, y=subset[self.nep_col],
+                         label="on critical days", color=COLOR_NEP, lw=2, ms=6, **props)
 
-        # Modeled NEE
-        lw = 2 if showline_nee_modeled else 0
-        ms = 6 if showline_nee_modeled else 0
-        label = "modeled" if showline_nee_modeled else None
-        ax_nee.plot_date(x=x, y=subset[self.nee_col_limited_gf],
+        # Modeled NEP
+        lw = 2 if showline_nep_modeled else 0
+        ms = 6 if showline_nep_modeled else 0
+        label = "modeled" if showline_nep_modeled else None
+        ax_nep.plot_date(x=x, y=subset[self.nep_col_limited_gf],
                          label=label, color=COLOR_RECO, lw=lw, ms=ms, **props)
 
         # Observed TA
         ax_ta.plot_date(x=x, y=subset[self.ta_col],
-                        label="on critical days", color=COLOR_NEE2, lw=2, ms=6, **props)
+                        label="on critical days", color=COLOR_NEP, lw=2, ms=6, **props)
 
         # Modeled TA
         lw = 2 if showline_ta_modeled else 0
@@ -769,7 +688,7 @@ class CO2Penalty:
 
         # Observed VPD
         ax_vpd.plot_date(x=x, y=subset[self.vpd_col],
-                         label="on critical days", color=COLOR_NEE2, lw=2, ms=6, **props)
+                         label="on critical days", color=COLOR_NEP, lw=2, ms=6, **props)
 
         # Newly calculated VPD
         lw = 2 if showline_vpd_modeled else 0
@@ -780,7 +699,7 @@ class CO2Penalty:
 
         # Observed SW_IN
         ax_swin.plot_date(x=x, y=subset[self.swin_col],
-                          label="on critical days", color=COLOR_NEE2, lw=2, ms=6, **props)
+                          label="on critical days", color=COLOR_NEP, lw=2, ms=6, **props)
 
         # SW_IN from random forest
         lw = 2 if showline_swin_modeled else 0
@@ -791,30 +710,30 @@ class CO2Penalty:
 
         # Fill area penalty
         if showfill_penalty:
-            ax_nee.fill_between(x, subset[self.nee_col], subset[self.nee_col_limited_gf],
+            ax_nep.fill_between(x, subset[self.nep_col], subset[self.nep_col_limited_gf],
                                 alpha=.7, lw=0, color='#ef9a9a', edgecolor='white',
                                 zorder=1, hatch='//', label=label_penalty)
 
         props = dict(x=.5, y=1.05, size=24, ha='center', va='center', weight='normal')
-        ax_nee.set_title("NEE", **props)
+        ax_nep.set_title("NEP", **props)
         ax_ta.set_title("TA", **props)
         ax_vpd.set_title("VPD", **props)
         ax_swin.set_title("SW_IN", **props)
 
-        ax_nee.axhline(0, color='black', lw=1)
+        ax_nep.axhline(0, color='black', lw=1)
 
-        default_legend(ax=ax_nee, loc='upper center')
+        default_legend(ax=ax_nep, loc='upper center')
         default_legend(ax=ax_ta, loc='upper left')
         default_legend(ax=ax_vpd, loc='upper left')
         default_legend(ax=ax_swin, loc='upper left')
 
         props = dict(axlabels_fontsize=16)
-        default_format(ax=ax_nee, txt_ylabel='NEE', txt_ylabel_units=f"({label_units})", **props)
+        default_format(ax=ax_nep, txt_ylabel='NEP', txt_ylabel_units=f"({label_units})", **props)
         default_format(ax=ax_ta, txt_ylabel='TA', txt_ylabel_units="(°C)", txt_xlabel='Time (hour)', **props)
         default_format(ax=ax_vpd, txt_ylabel="VPD", txt_ylabel_units="(kPa)", **props)
         default_format(ax=ax_swin, txt_ylabel="SW_IN", txt_ylabel_units="(W m-2)", **props)
 
-        nice_date_ticks(ax=ax_nee, locator='hour')
+        nice_date_ticks(ax=ax_nep, locator='hour')
         nice_date_ticks(ax=ax_ta, locator='hour')
         nice_date_ticks(ax=ax_vpd, locator='hour')
         nice_date_ticks(ax=ax_swin, locator='hour')
@@ -844,11 +763,11 @@ class CO2Penalty:
         fig = plt.figure(facecolor='white', figsize=(23, 6), dpi=dpi)
         gs = gridspec.GridSpec(1, 4)  # rows, cols
         # gs.update(wspace=0, hspace=0, left=.2, right=.8, top=.8, bottom=.2)
-        ax_nee = fig.add_subplot(gs[0, 0])
+        ax_nep = fig.add_subplot(gs[0, 0])
         ax_ta = fig.add_subplot(gs[0, 1])
         ax_vpd = fig.add_subplot(gs[0, 2])
         ax_swin = fig.add_subplot(gs[0, 3])
-        self.plot_day_example(ax_nee=ax_nee, ax_ta=ax_ta,
+        self.plot_day_example(ax_nep=ax_nep, ax_ta=ax_ta,
                               ax_vpd=ax_vpd, ax_swin=ax_swin, **kwargs)
         fig.tight_layout()
         fig.show()

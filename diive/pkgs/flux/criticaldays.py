@@ -1,6 +1,7 @@
 """
-FLUX: CRITICAL HEAT DAYS
-========================
+=============
+CRITICAL DAYS
+=============
 """
 from pathlib import Path
 from typing import Literal
@@ -17,7 +18,7 @@ from diive.core.plotting import plotfuncs
 from diive.core.plotting.plotfuncs import save_fig
 from diive.core.plotting.rectangle import rectangle
 from diive.core.plotting.styles.LightTheme import COLOR_THRESHOLD, \
-    FONTSIZE_LEGEND, COLOR_NEE, INFOTXT_FONTSIZE, COLOR_THRESHOLD2
+    FONTSIZE_LEGEND, COLOR_NEE, INFOTXT_FONTSIZE
 from diive.pkgs.fits.binfitter import BinFitterBTS, PlotBinFitterBTS
 
 pd.set_option('display.width', 1500)
@@ -32,22 +33,26 @@ class CriticalDays:
             df: DataFrame,
             x_col: str,
             y_col: str,
+            thres_min_x: float or int,
             x_agg: Literal['max'] = 'max',
             y_agg: Literal['sum'] = 'sum',
             usebins: int = 10,
             n_bootstrap_runs: int = 10,
             bootstrapping_random_state: int = None,
-            thres_from_bootstrap: Literal['max', 'median'] = 'max'
+            thres_from_bootstrap: Literal['max', 'median'] = 'max',
+            thres_y_sign_change: Literal['+', '-'] = '-'
     ):
         """Detect threshold in x that defines critical days in y
 
-        For example, investigate daily NEE sums (y) in relation to
+        For example, investigate daily NEP sums (y) in relation to
         daily max VPD (x).
 
         Args:
             df: Data in half-hourly time resolution
             x_col: Column name of x variable, e.g. 'VPD'
-            y_col: Column name of y variable, e.g. 'NEE'
+            y_col: Column name of y variable, e.g. 'NEP'
+            thres_min_x: Minimum value for x at threshold
+                e.g., VPD must be min 1 kPa for threshold to be accepted
             x_agg: Daily aggregation for x, e.g. 'max' selects the daily maximum
             y_agg: Daily aggregation for y, e.g. 'sum' selects daily sums
             usebins: XXX (default 10)
@@ -58,6 +63,16 @@ class CriticalDays:
             thres_from_bootstrap: Which aggregate to use as threshold,
                 e.g., for bootstrapping results [2.1, 2.2, 2.1, 2.5, 2.3] 'max'
                 selects 2.5 as threshold
+            thres_y_sign_change: Defines what the detected threshold describes, can
+                be '+' or '-'
+                e.g., if '+', the threshold describes the *x* value where
+                    *y* changes from a negative sign to a positive sign
+                e.g., if '-', the threshold describes the *x* value where
+                    *y* changes from a positive sign to a negative sign
+                e.g., for flux NEE if '+', the threshold describes the VPD
+                    value where NEE becomes positive (i.e., net loss of CO2)
+                e.g., for flux NEP if '-', the threshold describes the VPD
+                    value where NEP becomes negative (i.e., net loss of CO2)
         """
 
         # self.df = df[[x_col, y_col]].copy()
@@ -69,10 +84,9 @@ class CriticalDays:
         self.usebins = usebins
         self.bootstrapping_random_state = bootstrapping_random_state
         self.thres_from_bootstrap = thres_from_bootstrap
+        self.thres_y_sign_change = thres_y_sign_change
+        self.thres_min_x = thres_min_x
 
-        # # todo Number of bootstrap runs must be odd number???
-        # if bootstrap_runs % 2 == 0:
-        #     bootstrap_runs += 1
         self.n_bootstrap_runs = n_bootstrap_runs
 
         # Resample dataset
@@ -93,23 +107,8 @@ class CriticalDays:
             raise Exception('Results for threshold detection are empty')
         return self._results_threshold_detection
 
-    def _detect_xcrd_threshold(self):
-        """Detect extremely critical x threshold for y"""
-        _x = (self.x_col, self.x_agg)
-        _y = (self.y_col, self.y_agg)
-        xcrd_subset = self.df_aggs[[_x, _y]].copy()
-        xcrd_subset = xcrd_subset.sort_values(by=_x, ascending=False)
-        xcrd_subset.reset_index(inplace=True)  # Also inserts index as col
-        xcrd_subset_ybelowzero = xcrd_subset.loc[xcrd_subset[_y] < 0, :].copy()  # todo check < 0, make setting for this
-        thres_xcrd = xcrd_subset_ybelowzero[_x].max()
-        num_xcrds = len(xcrd_subset.loc[xcrd_subset[_x] > thres_xcrd])
-        print(f"Extreme threshold: {thres_xcrd}")
-        return thres_xcrd, num_xcrds
-
-    def detect_crd_threshold(self):
+    def detect_dcrit_threshold(self):
         """Detect critical days x threshold for y"""
-
-        thres_xcrd, num_xcrds = self._detect_xcrd_threshold()
 
         # Fit to bootstrapped data, daily time resolution
         fit_results, bts_fit_results = self._bootstrap_fits(df_aggs=self.df_aggs,
@@ -130,65 +129,65 @@ class CriticalDays:
         # Calc flux equilibrium points aggregates from bootstrap runs
         bts_zerocrossings_aggs = self._zerocrossings_aggs(bts_zerocrossings_df=bts_zerocrossings_df)
 
-        # Threshold for Critical Heat Days (CRDs)
+        # Threshold for Critical Heat Days (Dcrit)
         # defined as the linecrossing e.g. MAX x (e.g. VPD) from bootstrap runs
-        # thres_crd = bts_zerocrossings_aggs['x_median']
-        thres_crd = bts_zerocrossings_aggs[f"x_{self.thres_from_bootstrap}"]  # e.g. "x_max"
+        # thres_dcrit = bts_zerocrossings_aggs['x_median']
+        thres_dcrit = bts_zerocrossings_aggs[f"x_{self.thres_from_bootstrap}"]  # e.g. "x_max"
 
-        # Collect days above or equal to CRD threshold
-        df_aggs_crds = self.df_aggs.loc[self.df_aggs[self.x_col][self.x_agg] >= thres_crd, :].copy()
+        # Collect days above or equal to Dcrit threshold
+        df_aggs_dcrit = self.df_aggs.loc[self.df_aggs[self.x_col][self.x_agg] >= thres_dcrit, :].copy()
 
-        # Number of days above CRD threshold
-        num_crds = len(df_aggs_crds)
+        # Number of days above Dcrit threshold
+        n_dcrit = len(df_aggs_dcrit)
 
-        # Collect Near-Critical Heat Days (nCRDs)
-        # With the number of CRDs known, collect data for the same number
-        # of days below of equal to CRD threshold.
-        # For example: if 10 CRDs were found, nCRDs are the 10 days closest
-        # to the CRD threshold (below or equal to the threshold).
+        # Collect Near-Critical Heat Days (nDcrit)
+        # With the number of Dcrit known, collect data for the same number
+        # of days below of equal to Dcrit threshold.
+        # For example: if 10 Dcrit were found, nDcrit are the 10 days closest
+        # to the Dcrit threshold (below or equal to the threshold).
         sortby_col = (self.x_col, self.x_agg)
-        ncrds_start_ix = num_crds
-        ncrds_end_ix = num_crds * 2
-        df_aggs_ncrds = self.df_aggs \
-                            .sort_values(by=sortby_col, ascending=False) \
-                            .iloc[ncrds_start_ix:ncrds_end_ix]
+        ndcrit_start_ix = n_dcrit
+        ndcrit_end_ix = n_dcrit * 2
+        df_aggs_ndcrit = self.df_aggs \
+                             .sort_values(by=sortby_col, ascending=False) \
+                             .iloc[ndcrit_start_ix:ndcrit_end_ix]
 
-        # Threshold for nCRDs
+        # Threshold for nDcrit
         # The lower threshold is e.g. the minimum of found x maxima, depending
         # on the param "thres_from_bootstrap"
-        thres_ncrds_lower = df_aggs_ncrds[self.x_col][self.x_agg].min()
-        thres_ncrds_upper = thres_crd
+        thres_ndcrit_lower = df_aggs_ndcrit[self.x_col][self.x_agg].min()
+        thres_ndcrit_upper = thres_dcrit
 
-        # Number of days above nCRD threshold and below or equal CRD threshold
-        num_ncrds = len(df_aggs_ncrds)
+        # Number of days above nDcrit threshold and below or equal Dcrit threshold
+        n_ndcrit = len(df_aggs_ndcrit)
 
         # Collect results
         self._results_threshold_detection = dict(
             fit_results=fit_results,  # Non-boostrapped fit results
             bts_zerocrossings_df=bts_zerocrossings_df,
             bts_zerocrossings_aggs=bts_zerocrossings_aggs,
-            thres_crd=thres_crd,
-            thres_xcrd=thres_xcrd,
-            thres_ncrds_lower=thres_ncrds_lower,
-            thres_ncrds_upper=thres_ncrds_upper,
-            df_aggs_crds=df_aggs_crds,
-            df_aggs_ncrds=df_aggs_ncrds,
-            num_crds=num_crds,
-            num_ncrds=num_ncrds,
-            num_xcrds=num_xcrds
+            thres_dcrit=thres_dcrit,
+            thres_ndcrit_lower=thres_ndcrit_lower,
+            thres_ndcrit_upper=thres_ndcrit_upper,
+            df_aggs_dcrit=df_aggs_dcrit,
+            df_aggs_ndcrit=df_aggs_ndcrit,
+            n_dcrit=n_dcrit,
+            n_ndcrit=n_ndcrit,
         )
 
-    def plot_crd_detection_results(self, ax,
-                                   x_units: str,
-                                   y_units: str,
-                                   x_label: str = None,
-                                   y_label: str = None,
-                                   showfit: bool = True,
-                                   highlight_year: int = None,
-                                   showline_crd: bool = True,
-                                   showrange_crd: bool = True,
-                                   showline_xcrd: bool = True):
+    def plot_dcrit_detection_results(self, ax,
+                                     x_units: str,
+                                     y_units: str,
+                                     x_label: str = None,
+                                     y_label: str = None,
+                                     showfit: bool = True,
+                                     highlight_year: int = None,
+                                     showline_dcrit: bool = True,
+                                     showrange_dcrit: bool = True,
+                                     label_threshold: str = None):
         """Plot results from critical days threshold detection"""
+
+        label_threshold = 'threshold' if not label_threshold else label_threshold
 
         # bts_results = self.results_threshold_detection['bts_results'][0]  # 0 means non-bootstrapped data
         fit_results = self.results_threshold_detection['fit_results']
@@ -202,55 +201,40 @@ class CriticalDays:
                              showfit=showfit, show_prediction_interval=True).plot_binfitter()
 
         # Threshold line
-        # Vertical line showing e.g. MAX CRD threshold from bootstrap runs
-        line_crd_vertical = None
-        if showline_crd:
-            _sub = "$_{CRD}$"
-            thres_crd = self.results_threshold_detection['thres_crd']
-            line_crd_vertical = ax.axvline(thres_crd, lw=3,
-                                           color=COLOR_THRESHOLD, ls='-', zorder=99,
-                                           label=f"THR{_sub}, VPD = {thres_crd:.2f} {x_units}")
-            # Text CRDs
-            num_crds = len(self.results_threshold_detection['df_aggs_crds'])
+        # Vertical line showing e.g. MAX Dcrit threshold from bootstrap runs
+        line_dcrit_vertical = None
+        if showline_dcrit:
+            thres_dcrit = self.results_threshold_detection['thres_dcrit']
+            line_dcrit_vertical = ax.axvline(thres_dcrit, lw=3,
+                                             color=COLOR_THRESHOLD, ls='-', zorder=99,
+                                             label=f"{label_threshold} = {thres_dcrit:.2f} {x_units}")
+            # Text Dcrit
+            n_dcrit = len(self.results_threshold_detection['df_aggs_dcrit'])
             sym_max = r'$\rightarrow$'
-            _pos = thres_crd + thres_crd * 0.02
-            t = ax.text(_pos, 0.1, f"{sym_max} {num_crds} critical days {sym_max}", size=INFOTXT_FONTSIZE,
+            _pos = thres_dcrit + thres_dcrit * 0.02
+            t = ax.text(_pos, 0.1, f"{sym_max} {n_dcrit} critical days {sym_max}", size=INFOTXT_FONTSIZE,
                         color='black', backgroundcolor='none', transform=ax.get_xaxis_transform(),
                         alpha=1, horizontalalignment='left', verticalalignment='top', zorder=99)
             t.set_bbox(dict(facecolor=COLOR_THRESHOLD, alpha=.7, edgecolor=COLOR_THRESHOLD))
 
-            # # Area CRDs
-            # area_crd = ax.fill_between([bts_zerocrossings_aggs[_thres_agg],
+            # # Area Dcrit
+            # area_dcrit = ax.fill_between([bts_zerocrossings_aggs[_thres_agg],
             #                             fit_results['fit_df']['fit_x'].max()],
             #                            0, 1, color='#BA68C8', alpha=0.1,
             #                            transform=ax.get_xaxis_transform(),
-            #                            label=f"CRDs ({num_crds} days)", zorder=1)
+            #                            label=f"Dcrit ({n_dcrit} days)", zorder=1)
 
-        # ## Rectangle bootstrap range CRD
+        # ## Rectangle bootstrap range Dcrit
         range_bts_netzeroflux = None
-        if showrange_crd:
-            _sub = "$_{CRD}$"
+        if showrange_dcrit:
             range_bts_netzeroflux = rectangle(
                 ax=ax,
                 rect_lower_left_x=bts_zerocrossings_aggs['x_min'],
                 rect_lower_left_y=0,
                 rect_width=bts_zerocrossings_aggs['x_max'] - bts_zerocrossings_aggs['x_min'],
                 rect_height=1,
-                label=f"THR{_sub} range ({self.n_bootstrap_runs} bootstraps)",
+                label=f"{label_threshold} range ({self.n_bootstrap_runs} bootstraps)",
                 color=COLOR_THRESHOLD)
-
-        # ## Vertical line showing xCRD threshold
-        line_xcrd_vertical = None
-        if showline_xcrd:
-            thres_xcrd = self.results_threshold_detection['thres_xcrd']
-            num_xcrds = self.results_threshold_detection['num_xcrds']
-            _sub = "$_{XCRD}$"
-            line_xcrd_vertical = ax.axvline(thres_xcrd, lw=3, color=COLOR_THRESHOLD2, ls='-', zorder=99,
-                                            label=f"THR{_sub}, VPD = {thres_xcrd:.2f} {x_units}")
-            # t = ax.text(thres_xcrd + thres_xcrd * 0.02, 0.04, f"{num_xcrd} extremely critical days",
-            #             size=INFOTXT_FONTSIZE,
-            #             color='black', backgroundcolor='none', transform=ax.get_xaxis_transform(),
-            #             alpha=1, horizontalalignment='left', verticalalignment='top', zorder=99)
 
         # Format
         ax.axhline(0, lw=1, color='black')
@@ -272,9 +256,8 @@ class CriticalDays:
         # https://matplotlib.org/stable/gallery/text_labels_and_annotations/legend_demo.html
         l = ax.legend(
             [
-                line_crd_vertical if showline_crd else None,
-                range_bts_netzeroflux if showrange_crd else None,
-                line_xcrd_vertical if showline_xcrd else None,
+                line_dcrit_vertical if showline_dcrit else None,
+                range_bts_netzeroflux if showrange_dcrit else None,
                 line_xy,
                 line_highlight if line_highlight else None,
                 line_fit if showfit else None,
@@ -282,9 +265,8 @@ class CriticalDays:
                 line_fit_pb if showfit else None
             ],
             [
-                line_crd_vertical.get_label() if showline_crd else None,
-                range_bts_netzeroflux.get_label() if showrange_crd else None,
-                line_xcrd_vertical.get_label() if showline_xcrd else None,
+                line_dcrit_vertical.get_label() if showline_dcrit else None,
+                range_bts_netzeroflux.get_label() if showrange_dcrit else None,
                 line_xy.get_label(),
                 line_highlight.get_label() if line_highlight else None,
                 line_fit.get_label() if showfit else None,
@@ -369,8 +351,8 @@ class CriticalDays:
             y_col=y_col,
             predict_max_x=self.predict_max_x,
             predict_min_x=self.predict_min_x,
-            num_predictions=1000,
-            bins_x_num=0,
+            n_predictions=1000,
+            n_bins_x=0,
             # bins_y_agg='mean',
             fit_type='quadratic'
         )
@@ -395,7 +377,7 @@ class CriticalDays:
     def _detect_zerocrossing_y(self, fit_df: DataFrame):
         # kudos: https://stackoverflow.com/questions/28766692/intersection-of-two-graphs-in-python-find-the-x-value
 
-        num_zerocrossings = None
+        n_zerocrossings = None
         zerocrossings_ix = None
 
         # Collect predicted vals in df
@@ -407,35 +389,46 @@ class CriticalDays:
         _signs = np.sign(zerocrossings_df['y_nom'])
         _signs_max = _signs.max()
         _signs_min = _signs.min()
-        _signs_num_totalvals = len(_signs)
-        _signs_num_abovezero = _signs.loc[_signs > 0].count()
-        _signs_num_belowzero = _signs.loc[_signs < 0].count()
 
         if _signs_max == _signs_min:
             print("y does not cross zero-line.")
         else:
             zerocrossings_ix = np.argwhere(np.diff(_signs)).flatten()
-            num_zerocrossings = len(zerocrossings_ix)
+            n_zerocrossings = len(zerocrossings_ix)
 
         # There must be one single line crossing to accept result
         # If there is more than one line crossing, reject result
-        zerocrossings_ix = zerocrossings_ix[-1]  # Use last detected crossing
-        # if num_zerocrossings > 1:
-        #     return None
+        if n_zerocrossings == 1:
+            zerocrossings_ix = zerocrossings_ix[0]
+        else:
+            raise ("More than 1 zero-crossing detected. "
+                   "There must be one single line crossing to accept result. "
+                   "Stopping.")
 
         # Values at zero crossing needed
         # Found index is last element *before* zero-crossing, therefore + 1
         zerocrossing_vals = zerocrossings_df.iloc[zerocrossings_ix + 1]
         zerocrossing_vals = zerocrossing_vals.to_dict()
 
-        # NEE at zero crossing must zero or above,
+        # Value for y at zero crossing
         # i.e. reject if NEE after zero-crossing does not change to emission
-        if (zerocrossing_vals['y_nom'] < 0):
+
+        # Check if the sign after the crossing is indeed negative as expected
+        if (self.thres_y_sign_change == '-') & (zerocrossing_vals['y_nom'] < 0):
+            pass
+        # Check if the sign after the crossing is indeed positive as expected
+        elif (self.thres_y_sign_change == '+') & (zerocrossing_vals['y_nom'] > 0):
+            pass
+        # If the sign after the crossing is positive against expectations, return None
+        elif (self.thres_y_sign_change == '-') & (zerocrossing_vals['y_nom'] > 0):
+            return None
+        # If the sign after the crossing is negative against expectations, return None
+        elif (self.thres_y_sign_change == '+') & (zerocrossing_vals['y_nom'] < 0):
             return None
 
         # x value must be above threshold to be somewhat meaningful, otherwise reject result
-        if (zerocrossing_vals['x_col'] < 1):  # TODO currently hardcoded for VPD kPa
-            # VPD is too low, must be at least 1 kPa for valid crossing
+        if (zerocrossing_vals['x_col'] < self.thres_min_x):
+            # x is too low, must be at least 1 kPa for valid crossing
             return None
 
         return zerocrossing_vals
@@ -481,13 +474,13 @@ class CriticalDays:
                               saveplot: bool = False,
                               title: str = None,
                               path: Path or str = None,
-                              dpi:int=72,
+                              dpi: int = 72,
                               **kwargs):
         fig = plt.figure(figsize=(9, 9), dpi=dpi)
         gs = gridspec.GridSpec(1, 1)  # rows, cols
         # gs.update(wspace=.2, hspace=1, left=.1, right=.9, top=.85, bottom=.1)
         ax = fig.add_subplot(gs[0, 0])
-        ax = self.plot_crd_detection_results(ax=ax, **kwargs)
+        ax = self.plot_dcrit_detection_results(ax=ax, **kwargs)
         fig.tight_layout()
         fig.show()
         if saveplot:
@@ -532,7 +525,7 @@ if __name__ == '__main__':
     ylabel = f"{y_col} (${y_units}$)"
 
     # Critical days
-    crd = CriticalDays(
+    dcrit = CriticalDays(
         df=maysep_dt_df,
         x_col=vpd_col,
         x_agg='max',
@@ -543,11 +536,10 @@ if __name__ == '__main__':
         bootstrapping_random_state=None,
         thres_from_bootstrap='max'
     )
-    crd.detect_crd_threshold()
-    results_threshold_detection = crd.results_threshold_detection
-    crd.showplot_criticaldays(x_units='kPa',
-                              y_units="gCO_{2}\ m^{-2}\ d^{-1}",
-                              highlight_year=2019,
-                              showline_crd=True,
-                              showrange_crd=True,
-                              showline_xcrd=False)
+    dcrit.detect_dcrit_threshold()
+    results_threshold_detection = dcrit.results_threshold_detection
+    dcrit.showplot_criticaldays(x_units='kPa',
+                                y_units="gCO_{2}\ m^{-2}\ d^{-1}",
+                                highlight_year=2019,
+                                showline_dcrit=True,
+                                showrange_dcrit=True)

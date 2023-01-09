@@ -107,27 +107,6 @@ def insert_aggregated_in_hires(df: DataFrame, col: str,
     for ix, row in agg_df.iterrows():
         df[new_colname].loc[(df.index >= row['start']) & (df.index < row['end'])] = row[new_colname]
 
-    # # Insert date as column to merge the two datasets
-    # mergecol = None
-    # if to_freq == 'D':
-    #     mergecol = 'date'
-    #     agg_df[mergecol] = agg_df.index.date
-    #     df[mergecol] = df.index.date
-    # elif to_freq == 'A':
-    #     mergecol = 'year'
-    #     agg_df[mergecol] = agg_df.index.year
-    #     df[mergecol] = df.index.year
-    # elif to_freq == 'M':
-    #     mergecol = 'year-month'
-    #     agg_df[mergecol] = agg_df.index.year.astype(str).str.cat(agg_df.index.month.astype(str).str.zfill(2), sep='-')
-    #     df[mergecol] = df.index.year.astype(str).str.cat(df.index.month.astype(str).str.zfill(2), sep='-')
-    #
-    # # Timestamp as column for index after merging (merging loses index)
-    # df['TIMESTAMP'] = df.index
-    # df = df.merge(agg_df, left_on=mergecol, right_on=mergecol, how='left')
-    #
-    # # Re-apply original index (merging lost index)
-    # df = df.set_index('TIMESTAMP')
     return df, new_colname
 
 

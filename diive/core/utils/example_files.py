@@ -1,4 +1,4 @@
-from diive.core.utils.config import validate_filetype_config
+from core.io.filereader import validate_filetype_config
 from diive.core.io.filereader import ConfigFileReader
 
 
@@ -19,7 +19,7 @@ def load(file, ctx):
         examplefilepath = ctx.file_EDDYPRO_FULL_OUTPUT_30MIN
 
     filetype_config = ConfigFileReader(configfilepath=configfilepath).read()
-    filetype_config = validate_filetype_config(filetype_config=filetype_config)
+    filetype_config = validate_filetype_config(config=filetype_config)
 
 
     # elif file == 'DIIVE_CSV_1H':
