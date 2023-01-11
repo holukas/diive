@@ -65,6 +65,7 @@ class HeatmapDateTime:
         self.color_bad = color_bad
         self.display_type = display_type
         self.figsize=figsize
+        self.ax = ax
 
         # Create axis if none is given
         if not ax:

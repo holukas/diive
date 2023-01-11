@@ -195,7 +195,7 @@ class CriticalDays:
 
         self.ax, line_xy, line_highlight, line_fit, line_fit_ci, line_fit_pb = \
             PlotBinFitterBTS(fit_results=fit_results,
-                             ax=ax, label="NEE",
+                             ax=ax, label="NEP",
                              highlight_year=highlight_year, edgecolor='#B0BEC5',
                              color='none', color_fitline=COLOR_NEE,
                              showfit=showfit, show_prediction_interval=True).plot_binfitter()
@@ -239,15 +239,15 @@ class CriticalDays:
         # Format
         ax.axhline(0, lw=1, color='black')
         if x_label:
-            x_label = f"{x_label} (${x_units}$)"
+            x_label = f"{x_label} ({x_units})"
         else:
-            x_label = f"Daily {self.x_agg} {self.x_col} (${x_units}$)"
+            x_label = f"Daily {self.x_agg} {self.x_col} ({x_units})"
         if y_label:
-            y_label = f"{y_label} (${y_units}$)"
+            y_label = f"{y_label} ({y_units})"
         else:
-            y_label = f"Daily {self.y_agg} {self.y_col} (${y_units}$)"
+            y_label = f"Daily {self.y_agg} {self.y_col} ({y_units})"
         plotfuncs.default_format(ax=ax, txt_xlabel=x_label, txt_ylabel=y_label)
-
+        
         # Custom legend
         # This legend replaces the legend from PlotBinFitterBTS
         # Assign two of the handles to the same legend entry by putting them in a tuple

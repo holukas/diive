@@ -1,9 +1,11 @@
 # TODO currently indev
+import matplotlib.gridspec as gridspec
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from pandas import DataFrame, Series
 
-from diive.pkgs.analyses.quantiles import percentiles
+from diive.core.plotting.heatmap_datetime import HeatmapDateTime
 
 
 class FluxQCF:
@@ -29,7 +31,7 @@ class FluxQCF:
         self.nighttimetime_accept_qcf_below = nighttimetime_accept_qcf_below
 
         self.fqcfcol = f"{self.fluxcol}_QCF"  # Quality-controlled flux
-        self.qcfcol = f"QCF_{self.fluxcol}"  # Overall flag
+        self.qcfcol = f"FLAG_{self.fluxcol}_QCF"  # Overall flag
         self.swin_pot_col = "SW_IN_POT"  # Potential radiation
         self.daytimecol = "DAYTIME"
         self.nighttimecol = "NIGHTTIME"
@@ -65,16 +67,27 @@ class FluxQCF:
         return self._fluxqcf
 
     def calculate_qcf(self):
-        flagsums = self._calculate_flagsums_qcf(df=self.fluxflags)
-        self._update_fluxflags(flagsums=flagsums)
-        self._apply_flag()
+        self._fluxflags = self._calculate_flagsums(df=self.fluxflags)
+        self._fluxflags = self._calculate_qcf(df=self.fluxflags)
+
+        # Create quality-checked time series
+        self._fluxflags[self.fqcfcol] = self._fluxflags[self.fluxcol].copy()
+        self._fluxflags[self.fqcfcol].loc[self._fluxflags[self.qcfcol] == 2] = np.nan
+
+        # Create nice subset
+        cols = [self.fluxcol, self.fqcfcol, self.qcfcol, self.swin_pot_col, self.daytimecol, self.nighttimecol]
+        self._fluxqcf = self.fluxflags[cols].copy()
 
     def report_flags(self):
+
+        test_cols = [t for t in self.fluxflags.columns if str(t).startswith('FLAG_')]
+
         # Report for individual flags
         print(f"\n{'=' * 40}\nREPORT: FLUX FLAGS INCL. MISSING VALUES\n{'=' * 40}")
         print("Stats with missing values in the dataset")
-        for col in self.fluxflags.columns:
+        for col in test_cols:
             self._flagstats_dt_nt(col=col, df=self.fluxflags)
+
         # Report for available values (missing values are ignored)
         # Only executed if the QCF variable was created
         if self.qcfcol in self.fluxflags.columns:
@@ -84,13 +97,19 @@ class FluxQCF:
             df = self.fluxflags.copy()
             ix_missing_vals = df[f'FLAG_{self.fluxcol}_MISSING_TEST'] == 2
             df = df[~ix_missing_vals].copy()
-            for col in df.columns:
+            for col in test_cols:
                 self._flagstats_dt_nt(col=col, df=df)
 
     def report_qcf_evolution(self):
+        """
+        Apply multiple test flags sequentially
+
+        Returns:
+
+        """
 
         # QCF flag evolution
-        print(f"{'=' * 40}\nQCF FLAG EVOLUTION\n{'=' * 40}\n"
+        print(f"\n\n{'=' * 40}\nQCF FLAG EVOLUTION\n{'=' * 40}\n"
               f"Swiss FluxNet processing chain, Level-2: Quality flag expansion\n"
               f"This output shows the evolution of the QCF overall quality flag\n"
               f"when test flags from the EddyPro output are applied sequentially\n"
@@ -98,37 +117,43 @@ class FluxQCF:
         df = self.fluxflags.copy()
         ix_missing_vals = df[f'FLAG_{self.fluxcol}_MISSING_TEST'] == 2
         df = df[~ix_missing_vals].copy()  # Ignore missing values
-        testcols = [c for c in df.columns if str(c).endswith('_TEST')]
-        alltests_df = df[testcols].copy()
-        n_tests = len(testcols) + 1  # +1 b/c for loop
+        flagcols = [c for c in df.columns if str(c).startswith('FLAG_')]
+        allflags_df = df[flagcols].copy()
+        n_tests = len(flagcols) + 1  # +1 b/c for loop
         ix_first_test = 0
         n_vals_total_rejected = 0
         n_flag2 = 0
         perc_flag2 = 0
-        n_vals = len(alltests_df)
+        n_vals = len(allflags_df)
         print(f"\nNumber of {self.fluxcol} records before QC: {n_vals}")
         for ix_last_test in range(1, n_tests):
-            prog_testcols = testcols[ix_first_test:ix_last_test]
-            prog_df = alltests_df[prog_testcols].copy()
-            prog_df = self._calculate_flagsums_qcf(df=prog_df)
+            prog_testcols = flagcols[ix_first_test:ix_last_test]
+            prog_df = allflags_df[prog_testcols].copy()
+
+            # Calculate QCF (so far)
+            prog_df = self._calculate_flagsums(df=prog_df)
+            prog_df[self.nighttimecol] = df[self.nighttimecol].copy()  # QCF calc needs radiation
+            prog_df = self._calculate_qcf(df=prog_df)
+
             n_flag0 = prog_df[self.qcfcol].loc[prog_df[self.qcfcol] == 0].count()
             n_flag1 = prog_df[self.qcfcol].loc[prog_df[self.qcfcol] == 1].count()
             n_flag2 = prog_df[self.qcfcol].loc[prog_df[self.qcfcol] == 2].count()
+
             n_vals_test_rejected = n_flag2 - n_vals_total_rejected
             perc_vals_test_rejected = (n_vals_test_rejected / n_vals) * 100
             perc_flag0 = (n_flag0 / n_vals) * 100
             perc_flag1 = (n_flag1 / n_vals) * 100
             perc_flag2 = (n_flag2 / n_vals) * 100
+
             print(f"+++ {prog_testcols[ix_last_test - 1]} rejected {n_vals_test_rejected} values "
                   f"(+{perc_vals_test_rejected:.2f}%)      "
                   f"TOTALS: flag 0: {n_flag0} ({perc_flag0:.2f}%) / "
                   f"flag 1: {n_flag1} ({perc_flag1:.2f}%) / "
                   f"flag 2: {n_flag2} ({perc_flag2:.2f}%)")
+
             n_vals_total_rejected = n_flag2
 
-            # TODO hier weiter überlegen wie NIGHTTIME QCF=0 Filterung berücksichtigt werden kann
-
-        print(f"\nIn total, {n_flag2} ({perc_flag2:.2f}%) records were rejected in this step.")
+        print(f"\nIn total, {n_flag2} ({perc_flag2:.2f}%) of the available records were rejected in this step.")
         print(f"\n| Note that this is not the final QC step. More values need to be \n"
               f"| rejected after storage correction (Level-3.1) during outlier\n"
               f"| removal (Level-3.2) and USTAR filtering (Level-3.3).")
@@ -136,75 +161,63 @@ class FluxQCF:
     def report_flux(self):
         self._fluxstats()
 
-    def _update_fluxflags(self, flagsums: DataFrame):
-        """Update fluxflags property"""
-        # Re-assemble flags, including flux, SW_IN_POT, daytime and nighttime
-        cols = [self.fluxcol, self.swin_pot_col, self.daytimecol, self.nighttimecol]
-        self._fluxflags = self._fluxflags[cols].copy()  # Keep flux and swin
-        self._fluxflags = pd.concat([self._fluxflags, flagsums], axis=1)  # Add all flags, including SUM variables
-
-    def _calculate_flagsums_qcf(self, df: DataFrame) -> DataFrame:
+    def _calculate_flagsums(self, df: DataFrame) -> DataFrame:
         # Generate subset with all flags (tests)
-        tests_cols = [t for t in df.columns if "_TEST" in t]
-        flagsums = df[tests_cols].copy()
+        flagcols = [t for t in df.columns if str(t).startswith('FLAG_')]
+        subset_tests = df[flagcols].copy()
 
         # The sum of all flags that show 2
-        flagsums['SUM_HARDFLAGS'] = flagsums[flagsums == 2].sum(axis=1)
+        subset_tests['SUM_HARDFLAGS'] = subset_tests[subset_tests == 2].sum(axis=1)
 
         # The sum of all flags that show 1
-        flagsums['SUM_SOFTFLAGS'] = flagsums[flagsums == 1].sum(axis=1)
-        flagsums['SUM_FLAGS'] = flagsums['SUM_HARDFLAGS'].add(flagsums['SUM_SOFTFLAGS'])
+        subset_tests['SUM_SOFTFLAGS'] = subset_tests[subset_tests == 1].sum(axis=1)
+        subset_tests['SUM_FLAGS'] = subset_tests['SUM_HARDFLAGS'].add(subset_tests['SUM_SOFTFLAGS'])
 
+        df['SUM_HARDFLAGS'] = subset_tests['SUM_HARDFLAGS'].copy()
+        df['SUM_SOFTFLAGS'] = subset_tests['SUM_SOFTFLAGS'].copy()
+        df['SUM_FLAGS'] = subset_tests['SUM_FLAGS'].copy()
+
+        return df
+
+    def _calculate_qcf(self, df: DataFrame) -> DataFrame:
+        """Calculate QCF from flag sums"""
         # QCF is NaN if no flag is available
-        flagsums[self.qcfcol] = np.nan
+        df[self.qcfcol] = np.nan
 
         # QCF is 0 if all flags show zero
-        flagsums[self.qcfcol].loc[flagsums['SUM_FLAGS'] == 0] = 0
+        df[self.qcfcol].loc[df['SUM_FLAGS'] == 0] = 0
 
         # tests[QCF].loc[tests['SUM_FLAGS'] == 1] = 1
 
         # QCF is 2 if three soft flags were raised
-        flagsums[self.qcfcol].loc[flagsums['SUM_SOFTFLAGS'] > 3] = 2
+        df[self.qcfcol].loc[df['SUM_SOFTFLAGS'] > 3] = 2
 
         # QCF is 2 if at least one hard flag was raised
-        flagsums[self.qcfcol].loc[flagsums['SUM_HARDFLAGS'] >= 2] = 2
+        df[self.qcfcol].loc[df['SUM_HARDFLAGS'] >= 2] = 2
 
         # QCF is 1 if no hard flag and max. three soft flags and
         # min. one soft flag were raised
-        flagsums[self.qcfcol].loc[(flagsums['SUM_SOFTFLAGS'] <= 3)
-                                  & (flagsums['SUM_SOFTFLAGS'] >= 1)
-                                  & (flagsums['SUM_HARDFLAGS'] == 0)] = 1
-        return flagsums
-
-    def _apply_flag(self):
-
-        # Apply QCF to flux, separately for daytime and nighttime
-        # Get flux, swin and QCF
-        cols = [self.fluxcol, self.qcfcol, self.swin_pot_col, self.daytimecol, self.nighttimecol]
-        self._fluxqcf = self._fluxflags[cols].copy()
-        self._fluxqcf[self.fqcfcol] = self._fluxqcf[self.fluxcol].copy()
-
-        # Remove daytime values where QCF = 2
-        self._fluxqcf[self.fqcfcol].loc[
-            (self._fluxqcf[self.qcfcol] == 2)
-            & (self._fluxqcf['DAYTIME'] == 1)] = np.nan
+        df[self.qcfcol].loc[(df['SUM_SOFTFLAGS'] <= 3)
+                            & (df['SUM_SOFTFLAGS'] >= 1)
+                            & (df['SUM_HARDFLAGS'] == 0)] = 1
 
         # Remove nighttime values where QCF = 1 or QCF = 2
-        self._fluxqcf[self.fqcfcol].loc[
-            # (self._fluxqcf[self.qcf] > 0)
-            (self._fluxqcf[self.qcfcol] == 2)
-            # self._fluxqcf[self.qcf].loc[(self._fluxqcf[self.qcf] == 2)
-            & (self._fluxqcf['NIGHTTIME'] == 1)] = np.nan
+        df[self.qcfcol].loc[(df[self.qcfcol] > 0)
+                            & (df['NIGHTTIME'] == 1)] = 2
+
+        return df
 
     def _fluxstats(self):
-        print(f"{self.fqcfcol}:")
+
+        print(f"\n\n{'=' * 40}\nSUMMARY: {self.qcfcol}, QCF FLAG FOR {self.fluxcol}\n{'=' * 40}")
+
         flux = self.fluxqcf[self.fluxcol]
         fqcf = self.fluxqcf[self.fqcfcol]
 
         n_potential = len(flux)
         n_measured = len(flux.dropna())
         n_missed = n_potential - n_measured
-        n_available = len(fqcf.dropna())  # Available after QC
+        n_available = len(fqcf.loc[self.fluxqcf[self.qcfcol] < 2])  # Available after QC
         n_rejected = n_measured - n_available  # Rejected measured values
 
         perc_measured = (n_measured / n_potential) * 100
@@ -289,6 +302,10 @@ class FluxQCF:
         # Collect all required flags
         for i, c in flagcols_used.items():
             self._fluxflags[c] = flagdf[c].copy()
+            print(f"Fetching {c} for {self.gas} "
+                  f"with flag 0 (good values) where test passed, "
+                  f"flag 2 (bad values) where test failed (for hard flags) or "
+                  f"flag 1 (ok values) where test failed (for soft flags) ...")
 
     def signal_strength_test(self,
                              signal_strength_col: str,
@@ -299,15 +316,15 @@ class FluxQCF:
         flagdf[flagname] = np.nan
 
         if method == 'discard below':
-            print(f"\nCalculating {flagname} from {signal_strength_col} with "
+            print(f"Calculating {flagname} from {signal_strength_col} with "
                   f"flag 0 (good values) where {signal_strength_col} >= {threshold}, "
                   f"flag 2 (bad values) where {signal_strength_col} < {threshold} ...")
         elif method == 'discard above':
-            print(f"\nCalculating {flagname} from {signal_strength_col} with "
+            print(f"Calculating {flagname} from {signal_strength_col} with "
                   f"flag 0 (good values) where {signal_strength_col} <= {threshold}, "
                   f"flag 2 (bad values) where {signal_strength_col} > {threshold} ...")
 
-        percentiles_df = percentiles(series=flagdf[signal_strength_col], showplot=False)
+        # percentiles_df = percentiles(series=flagdf[signal_strength_col], showplot=False)
 
         good = None
         bad = None
@@ -331,11 +348,11 @@ class FluxQCF:
         flagdf = self.df[[self.fluxcol, scf]].copy()
         flagdf[flagname] = np.nan
 
-        print(f"\nCalculating {flagname} from {scf} with "
+        print(f"Calculating {flagname} from {scf} with "
               f"flag 0 (good values) where {scf} < {thres_good}, "
               f"flag 1 (ok values) where {scf} >= {thres_good} and < {thres_ok}, "
               f"flag 2 (bad values) where {scf} >= {thres_ok}...")
-        percentiles_df = percentiles(series=flagdf[scf], showplot=False)
+        # percentiles_df = percentiles(series=flagdf[scf], showplot=False)
 
         good = flagdf[scf] < thres_good
         ok = (flagdf[scf] >= thres_good) & (flagdf[scf] < thres_ok)
@@ -353,7 +370,7 @@ class FluxQCF:
         flagdf = self.df[[self.fluxcol]].copy()
         flagdf[flagname] = np.nan
 
-        print(f"\nCalculating {flagname} from {self.fluxcol} "
+        print(f"Calculating {flagname} from {self.fluxcol} "
               f"with flag 0 (good values) where {self.fluxcol} is available, "
               f"flag 2 (bad values) where {self.fluxcol} is missing ...")
         # percentiles_df = percentiles(series=flagdf[self.flux])
@@ -372,7 +389,7 @@ class FluxQCF:
 
         flagdf = self.df[[self.fluxcol, _flagname]].copy()
 
-        print(f"\nFetching {_flagname} directly from output file, renaming to {flagname} ...")
+        print(f"Fetching {_flagname} directly from output file, renaming to {flagname} ...")
         # percentiles_df = percentiles(series=flagdf[flagname])
 
         self._fluxflags[flagname] = flagdf[_flagname].copy()
@@ -392,11 +409,11 @@ class FluxQCF:
         flagdf[gas_n_records_perc] = flagdf[gas_n_records].divide(flagdf[expected_n_records])
         flagdf[flagname] = np.nan
 
-        print(f"\nCalculating {flagname} from {gas_n_records_perc} with "
+        print(f"Calculating {flagname} from {gas_n_records_perc} with "
               f"flag 0 (good values) where {gas_n_records_perc} >= {thres_good}, "
               f"flag 1 (ok values) where {gas_n_records_perc} >= {thres_ok} and < {thres_good}, "
               f"flag 2 (bad values) < {thres_ok}...")
-        percentiles_df = percentiles(series=flagdf[gas_n_records_perc], showplot=False)
+        # percentiles_df = percentiles(series=flagdf[gas_n_records_perc], showplot=False)
 
         good = flagdf[gas_n_records_perc] >= thres_good
         ok = (flagdf[gas_n_records_perc] >= thres_ok) & (flagdf[gas_n_records_perc] < thres_good)
@@ -423,6 +440,39 @@ class FluxQCF:
             gas = 'CH4'
         print(f"Detected gas: {gas}")
         return gas
+
+    def showplot(self, maxflux:float):
+
+        fig = plt.figure(facecolor='white', figsize=(19, 9))
+        gs = gridspec.GridSpec(1, 4)  # rows, cols
+        gs.update(wspace=0.3, hspace=0.3, left=0.06, right=0.94, top=0.9, bottom=0.1)
+        ax_before = fig.add_subplot(gs[0, 0])
+        ax_after = fig.add_subplot(gs[0, 1], sharey=ax_before)
+        ax_flagsum = fig.add_subplot(gs[0, 2], sharey=ax_before)
+        ax_flag = fig.add_subplot(gs[0, 3], sharey=ax_before)
+
+        HeatmapDateTime(ax=ax_before, series=self.fluxqcf['FC'], vmin=-maxflux, vmax=maxflux,
+                        cb_digits_after_comma=0).plot()
+        HeatmapDateTime(ax=ax_after, series=self.fluxqcf['FC_QCF'], vmin=-maxflux, vmax=maxflux,
+                        cb_digits_after_comma=0).plot()
+        HeatmapDateTime(ax=ax_flagsum, series=self.fluxflags['SUM_FLAGS'],
+                        cb_digits_after_comma=0).plot()
+        HeatmapDateTime(ax=ax_flag, series=self.fluxqcf['FLAG_FC_QCF'],
+                        cb_digits_after_comma=0).plot()
+
+        plt.setp(ax_after.get_yticklabels(), visible=False)
+        plt.setp(ax_flagsum.get_yticklabels(), visible=False)
+        plt.setp(ax_flag.get_yticklabels(), visible=False)
+
+        ax_after.axes.get_yaxis().get_label().set_visible(False)
+        ax_flagsum.axes.get_yaxis().get_label().set_visible(False)
+        ax_flag.axes.get_yaxis().get_label().set_visible(False)
+
+        # plt.setp(ax_after.get_ylabel(), visible=False)
+        # plt.setp(ax_flagsum.get_ylabel(), visible=False)
+        # plt.setp(ax_flag.get_ylabel(), visible=False)
+
+        fig.show()
 
 
 def example():
@@ -469,8 +519,7 @@ def example():
     # fluxqc.fluxflags
     # fluxqc.fluxqcf
 
-    # from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-    # HeatmapDateTime(series=fluxqc.fluxqcf['FC_QCF'], vmin=-20, vmax=20).show()
+    fluxqc.showplot(maxflux=25)
 
 
 if __name__ == '__main__':

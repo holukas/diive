@@ -2,11 +2,20 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.44.1 | 11 Jan 2023
+
+### Changes
+
+- **Flux quality-control**: (`pkgs.qaqc.fluxes.FluxQCF`)
+  - Added heatmap plots for before/after QC comparison
+  - Improved code for calculation of overall flag `QCF`
+  - Improved console output 
+
 ## v0.44.0 | 9 Jan 2023
 
 ### New Features
 
-- **Quality-control**: (`pkgs.qaqc.fluxes.FluxQCF`)
+- **Flux quality-control**: (`pkgs.qaqc.fluxes.FluxQCF`)
     - First implementation of quality control of ecosystem fluxes. Generates one
       overall flag (`QCF`=quality control flag) from multiple quality test results
       in EddyPro's `fluxnet` output file. The resulting `QCF` is Level-2 in the
