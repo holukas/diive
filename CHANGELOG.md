@@ -2,20 +2,39 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.45.0 | 13 Jan 2023
+
+### New Features
+
+- **Flux storage correction**: (`pkgs.flux.storage.StorageCorrectionSinglePoint`)
+    - Calculate storage-corrected fluxes
+    - Creates Level-3.1 in the flux processing chain
+- **Overall quality flag**: (`pkgs.qaqc.qcf.QCF`)
+    - Calculate overall quality flag from multiple individual flags
+
+### Changes
+
+- **Flux quality-control**: (`pkgs.qaqc.fluxes.QualityFlagsLevel2`)
+    - Flags now have the string `_L2_` in their name to identify them as
+      flags created during Level-2 calculations in the Swiss FluxNet flux
+      processing chain.
+    - All flags can now be returned to the main data
+- Renamed `pkgs.qaqc.fluxes.FluxQualityControlFlag` to `pkgs.qaqc.fluxes.QualityFlagsLevel2`
+
 ## v0.44.1 | 11 Jan 2023
 
 ### Changes
 
-- **Flux quality-control**: (`pkgs.qaqc.fluxes.FluxQCF`)
-  - Added heatmap plots for before/after QC comparison
-  - Improved code for calculation of overall flag `QCF`
-  - Improved console output 
+- **Flux quality-control**: (`pkgs.qaqc.fluxes.FluxQualityControlFlag`)
+    - Added heatmap plots for before/after QC comparison
+    - Improved code for calculation of overall flag `QCF`
+    - Improved console output
 
 ## v0.44.0 | 9 Jan 2023
 
 ### New Features
 
-- **Flux quality-control**: (`pkgs.qaqc.fluxes.FluxQCF`)
+- **Flux quality-control**: (`pkgs.qaqc.fluxes.FluxQualityControlFlag`)
     - First implementation of quality control of ecosystem fluxes. Generates one
       overall flag (`QCF`=quality control flag) from multiple quality test results
       in EddyPro's `fluxnet` output file. The resulting `QCF` is Level-2 in the

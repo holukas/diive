@@ -484,6 +484,14 @@ def example():
     loaddatafile = ReadFileType(filetype='FLUXNET-FULLSET-HH-CSV-30MIN', filepath=filepath)
     data_df, metadata_df = loaddatafile._readfile()
 
+    FOLDER = r"L:\Sync\luhk_work\20 - CODING\26 - NOTEBOOKS\gl-notebooks\FluxProcessingChain\FRU\data"
+    filepaths = [f for f in os.listdir(FOLDER) if f.endswith(".csv")]
+    filepaths = [FOLDER + "/" + f for f in filepaths]
+    filepaths = [Path(f) for f in filepaths]
+    loaddatafile = MultiDataFileReader(filetype='EDDYPRO_FLUXNET_30MIN', filepaths=filepaths)
+    # df = loaddatafile.data_df
+    # save_as_pickle(outpath=r'F:\Dropbox\luhk_work\_temp', filename="data", data=df)
+
 
 if __name__ == '__main__':
     example()
