@@ -18,7 +18,7 @@ class StorageCorrectionSinglePoint:
         self.gascol = detect_fluxgas(fluxcol=self.fluxcol)
         self.strgcol = self._detect_storage_var()
         self.flux_corrected_col = self._output_name()
-        self.flagname = f'FLAG_L3.1_{self.fluxcol}_{self.strgcol}_MISSING_TEST'
+        self.flagname = f'FLAG_L3.1_{self.fluxcol}_{self.strgcol}-MISSING_TEST'
 
         self._storage = None
 

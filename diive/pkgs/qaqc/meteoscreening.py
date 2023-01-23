@@ -26,7 +26,7 @@ from diive.pkgs.outlierdetection.missing import MissingValues
 from diive.pkgs.outlierdetection.seasonaltrend import OutlierSTLIQR
 from diive.pkgs.outlierdetection.thymeboost import ThymeBoostOutlier
 from diive.pkgs.outlierdetection.zscore import zScoreIQR
-from diive.pkgs.qaqc.qcf import MeteoQCF
+from diive.pkgs.qaqc.qcf import FlagQCF
 
 
 class ScreenMeteoVar:
@@ -126,7 +126,7 @@ class ScreenMeteoVar:
 
             elif step == 'remove_highres_outliers_thymeboost':
                 # Generates flag, needs QC'd data
-                _mqcf = MeteoQCF(flags_df=self._flags_df, series=self.series, missingflag=str(_miss.flag.name))
+                _mqcf = FlagQCF(df=self._flags_df, series=self.series, missingflag=str(_miss.flag.name))
                 _mqcf.calculate()
                 _thymeboost = ThymeBoostOutlier(series=_mqcf.seriesqcf)
                 _thymeboost.calc(showplot=True)
@@ -140,7 +140,7 @@ class ScreenMeteoVar:
 
             elif step == 'remove_highres_outliers_localsd':
                 # Generates flag, needs QC'd data
-                _mqcf = MeteoQCF(flags_df=self._flags_df, series=self.series, missingflag=str(_miss.flag.name))
+                _mqcf = FlagQCF(df=self._flags_df, series=self.series, missingflag=str(_miss.flag.name))
                 _mqcf.calculate()
                 _localsd = LocalSD(series=_mqcf.seriesqcf)
                 _localsd.calc(n_sd=7, showplot=True, verbose=True)
@@ -199,7 +199,7 @@ class ScreenMeteoVar:
 
     def _calculate_qcf(self, missingflag: str):
         """Calculate overall quality flag QCF and Add QCF results to other flags"""
-        mqcf = MeteoQCF(flags_df=self._flags_df, series=self.series, missingflag=missingflag)
+        mqcf = FlagQCF(df=self._flags_df, series=self.series, missingflag=missingflag)
         mqcf.calculate()
         _flags_df = pd.concat([self._flags_df, mqcf.flags], axis=1)
         _flags_df = _flags_df.loc[:, ~_flags_df.columns.duplicated(keep='last')]

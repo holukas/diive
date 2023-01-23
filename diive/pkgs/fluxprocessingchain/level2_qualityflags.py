@@ -3,7 +3,6 @@ import pandas as pd
 from pandas import DataFrame
 
 from diive.pkgs.flux.common import detect_fluxgas
-from pkgs.qaqc.qcf import FluxQCF
 
 
 class QualityFlagsLevel2:
@@ -42,7 +41,16 @@ class QualityFlagsLevel2:
         _df = pd.concat([_df, flags_df], axis=1)  # Add flags to main data
         return _df
 
-    def raw_data_screening_vm97(self):
+    def raw_data_screening_vm97(self,
+                                spikes: bool = True,
+                                amplitude: bool = False,
+                                dropout: bool = True,
+                                abslim: bool = False,
+                                skewkurt_hf: bool = False,
+                                skewkurt_sf: bool = False,
+                                discont_hf: bool = False,
+                                discont_sf: bool = False,
+                                ):
         """
         Flag from EddyPro fluxnet files is an integer and looks like this, e.g.: 801000100
         One integer contains *multiple tests* for *one* gas.
@@ -82,8 +90,19 @@ class QualityFlagsLevel2:
                 # Hard flag 1 corresponds to bad value
                 flagdf[c] = flagdf[c].replace(1, 2)
 
+        # Select flags that are selected
+        selected = []
+        if spikes: selected.append('1')
+        if amplitude: selected.append('2')
+        if dropout: selected.append('3')
+        if abslim: selected.append('4')
+        if skewkurt_hf: selected.append('5')
+        if skewkurt_sf: selected.append('6')
+        if discont_hf: selected.append('7')
+        if discont_sf: selected.append('8')
+
         # Make new dict that contains flags that we use later
-        flagcols_used = {x: flagcols[x] for x in flagcols if x in ('1', '3')}
+        flagcols_used = {x: flagcols[x] for x in flagcols if x in selected}
         # flagcols_used = {x: flagcols[x] for x in flagcols if x in ('1', '3', '4')}
 
         # Collect all required flags
@@ -99,6 +118,10 @@ class QualityFlagsLevel2:
                              method: str,
                              threshold: int):
         flagname = f'FLAG_L2_{self.fluxcol}_SIGNAL_STRENGTH_TEST'
+        if signal_strength_col in self.df.columns:
+            pass
+        else:
+            raise (f"The column {signal_strength_col} is not in data, please check.")
         flagdf = self.df[[self.fluxcol, signal_strength_col]].copy()
         flagdf[flagname] = np.nan
 
@@ -214,51 +237,52 @@ class QualityFlagsLevel2:
 
 
 def example():
-    # # Load data from files
-    # import os
-    # from pathlib import Path
-    # from diive.core.io.filereader import MultiDataFileReader
-    # from diive.core.io.files import save_as_pickle
-    # FOLDER = r"L:\Sync\luhk_work\20 - CODING\26 - NOTEBOOKS\gl-notebooks\__indev__\data\fluxnet"
-    # filepaths = [f for f in os.listdir(FOLDER) if f.endswith(".csv")]
-    # filepaths = [FOLDER + "/" + f for f in filepaths]
-    # filepaths = [Path(f) for f in filepaths]
-    # [print(f) for f in filepaths]
-    # loaddatafile = MultiDataFileReader(filetype='EDDYPRO_FLUXNET_30MIN', filepaths=filepaths)
-    # df = loaddatafile.data_df
-    # save_as_pickle(outpath=r'F:\Dropbox\luhk_work\_temp', filename="data", data=df)
-
-    # Load data from pickle (much faster loading)
-    from diive.core.io.files import load_pickle
-    df = load_pickle(filepath=r"L:\Sync\luhk_work\_temp\data.pickle")
-    # print(df)
-    # [print(c) for c in df.columns if "CUSTOM" in c]
-
-    # FLUXES = ['FC', 'H2O', 'LE', 'ET', 'FCH4', 'FN2O', 'TAU']
-
-    # from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-    # HeatmapDateTime(series=df['FC'], vmin=-20, vmax=20).show()
-
-    fluxqc = QualityFlagsLevel2(fluxcol='FC', df=df)
-    fluxqc.missing_vals_test()
-    fluxqc.ssitc_test()
-    fluxqc.gas_completeness_test()
-    fluxqc.spectral_correction_factor_test()
-    fluxqc.signal_strength_test(signal_strength_col='CUSTOM_AGC_MEAN',
-                                method='discard above', threshold=90)
-    fluxqc.raw_data_screening_vm97()
-    print(fluxqc.fluxflags)
-    _df = fluxqc.get()
-
-    qcf = FluxQCF(df=_df, fluxcol='FC', level=2, swinpotcol='SW_IN_POT',
-                  nighttime_threshold=50,
-                  daytime_accept_qcf_below=2, nighttimetime_accept_qcf_below=1)
-    qcf.calculate()
-    qcf.report_flags()
-    qcf.report_qcf_evolution()
-    qcf.report_flux()
-    qcf.showplot(maxflux=10)
-    _df = qcf.get()
+    pass
+    # # # Load data from files
+    # # import os
+    # # from pathlib import Path
+    # # from diive.core.io.filereader import MultiDataFileReader
+    # # from diive.core.io.files import save_as_pickle
+    # # FOLDER = r"L:\Sync\luhk_work\20 - CODING\26 - NOTEBOOKS\gl-notebooks\__indev__\data\fluxnet"
+    # # filepaths = [f for f in os.listdir(FOLDER) if f.endswith(".csv")]
+    # # filepaths = [FOLDER + "/" + f for f in filepaths]
+    # # filepaths = [Path(f) for f in filepaths]
+    # # [print(f) for f in filepaths]
+    # # loaddatafile = MultiDataFileReader(filetype='EDDYPRO_FLUXNET_30MIN', filepaths=filepaths)
+    # # df = loaddatafile.data_df
+    # # save_as_pickle(outpath=r'F:\Dropbox\luhk_work\_temp', filename="data", data=df)
+    #
+    # # Load data from pickle (much faster loading)
+    # from diive.core.io.files import load_pickle
+    # df = load_pickle(filepath=r"L:\Sync\luhk_work\_temp\data.pickle")
+    # # print(df)
+    # # [print(c) for c in df.columns if "CUSTOM" in c]
+    #
+    # # FLUXES = ['FC', 'H2O', 'LE', 'ET', 'FCH4', 'FN2O', 'TAU']
+    #
+    # # from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+    # # HeatmapDateTime(series=df['FC'], vmin=-20, vmax=20).show()
+    #
+    # fluxqc = QualityFlagsLevel2(fluxcol='FC', df=df)
+    # fluxqc.missing_vals_test()
+    # fluxqc.ssitc_test()
+    # fluxqc.gas_completeness_test()
+    # fluxqc.spectral_correction_factor_test()
+    # fluxqc.signal_strength_test(signal_strength_col='CUSTOM_AGC_MEAN',
+    #                             method='discard above', threshold=90)
+    # fluxqc.raw_data_screening_vm97()
+    # print(fluxqc.fluxflags)
+    # _df = fluxqc.get()
+    #
+    # qcf = FluxQCF(df=_df, fluxcol='FC', level=2, swinpotcol='SW_IN_POT',
+    #               nighttime_threshold=50,
+    #               daytime_accept_qcf_below=2, nighttimetime_accept_qcf_below=1)
+    # qcf.calculate()
+    # qcf.report_flags()
+    # qcf.report_qcf_evolution()
+    # qcf.report_flux()
+    # qcf.showplot(maxflux=10)
+    # _df = qcf.get()
 
 
 if __name__ == '__main__':
