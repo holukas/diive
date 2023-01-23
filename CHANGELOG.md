@@ -2,6 +2,41 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.46.0 | 23 Jan 2023
+
+### New Features
+
+- **Outlier Removal using STL**: (`pkgs.outlierdetection.seasonaltrend.OutlierSTLIQR`)
+    - Implemented first code to remove outliers using seasonal-srend decomposition using LOESS.
+      This method divides a time series into seasonal, trend and residual components. `diive`
+      uses the residuals to detect outliers based on z-score calculations.
+- **Overall quality flag for meteo data**: (`pkgs.qaqc.qcf.MeteoQCF`)
+    - Combines the results from multiple flags into one single flag
+    - Very similar to the calculation of the flux QCF flag
+
+### Changes
+
+- **MeteoScreening**: (`diive/pkgs/qaqc/meteoscreening.py`)
+    - Refactored most of the code relating to the quality-screening of meteo data
+    - Implemented the calculation of the overall quality flag QCF
+    - Two overview figures are now created at the end on the screening
+    - Flags for tests used during screening are now created using a base class (`core.base.flagbase.FlagBase`)
+- **Flux Processing Chain**: All modules relating to the Swiss FluxNet flux processing
+  chain are now collected in the dedicated package `fluxprocessingchain`. Relevant
+  modules were moved to this package, some renamed:
+    - `pkgs.fluxprocessingchain.level2_qualityflags.QualityFlagsLevel2`
+    - `pkgs.fluxprocessingchain.level31_storagecorrection.StorageCorrectionSinglePoint`
+    - `pkgs.fluxprocessingchain.qcf.QCF`
+- **Reading YAML files**: (`core.io.filereader.ConfigFileReader`)
+    - Only filetype configuration files are validated, i.e. checked if they follow the
+      expected file structure. However, there can be other YAML files, such as the file
+      `pipes_meteo.yaml` that defines the QA/QC steps for each meteo variable. For the
+      moment, only the filetype files are validated and the validation is skipped for
+      the pipes file.
+- Refactored calculation of nighttime flag from sun altitude: code is now vectorized
+  and runs - unsurprisingly - much faster (`pkgs.createvar.nighttime_latlon.nighttime_flag_from_latlon`)
+- Some smaller changes relating to text output to the console
+
 ## v0.45.0 | 13 Jan 2023
 
 ### New Features

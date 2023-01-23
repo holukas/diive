@@ -1,181 +1,264 @@
 """
 SEASONAL TREND DECOMPOSITION (LOESS)
 
-    https://www.statsmodels.org/devel/examples/notebooks/generated/stl_decomposition.html
-    https://www.statsmodels.org/dev/generated/statsmodels.tsa.seasonal.STL.html
-    https://github.com/jrmontag/STLDecompose
-    https://github.com/ServiceNow/stl-decomp-4j
-    https://machinelearningmastery.com/decompose-time-series-data-trend-seasonality/
-    https://towardsdatascience.com/stl-decomposition-how-to-do-it-from-scratch-b686711986ec
-    https://github.com/hafen/stlplus
+
+    - https://www.statsmodels.org/dev/examples/notebooks/generated/stl_decomposition.html
+    - https://www.statsmodels.org/devel/examples/notebooks/generated/stl_decomposition.html
+    - https://www.statsmodels.org/dev/generated/statsmodels.tsa.seasonal.STL.html
+    - https://github.com/jrmontag/STLDecompose
+    - https://github.com/ServiceNow/stl-decomp-4j
+    - https://machinelearningmastery.com/decompose-time-series-data-trend-seasonality/
+    - https://towardsdatascience.com/stl-decomposition-how-to-do-it-from-scratch-b686711986ec
+    - https://github.com/hafen/stlplus
+    - https://towardsdatascience.com/how-to-detect-seasonality-outliers-and-changepoints-in-your-time-series-5d0901498cff
+    - https://github.com/facebookresearch/Kats
+    - https://neptune.ai/blog/anomaly-detection-in-time-series
+    - todo https://towardsdatascience.com/multi-seasonal-time-series-decomposition-using-mstl-in-python-136630e67530
+    - todo from statsmodels.tsa.st import MSTL
+    - todo MSTL is coming in statsmodels v0.14.0!
+    - https://towardsdatascience.com/hands-on-unsupervised-outlier-detection-using-machine-learning-with-python-ec599fe5a6b5
+
 """
+import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
+from pandas import Series, DatetimeIndex
+from pandas.tseries.frequencies import to_offset
 from statsmodels.tsa.seasonal import STL
 
-
-def calc():
-    # https://www.statsmodels.org/devel/examples/notebooks/generated/stl_decomposition.html
-    # https://www.statsmodels.org/dev/generated/statsmodels.tsa.seasonal.STL.html
-    # https://github.com/ServiceNow/stl-decomp-4j
-    # https://machinelearningmastery.com/decompose-time-series-data-trend-seasonality/
-    # https://towardsdatascience.com/stl-decomposition-how-to-do-it-from-scratch-b686711986ec
-    # https://github.com/hafen/stlplus
-
-    self.get_settings_from_fields()
-    df = self.var_selected_df.copy()
-
-    # Gapless series needed for STL
-    num_gaps = self.var_selected_df[self.target_col].isnull().sum()
-    if num_gaps > 0:
-        target_series_gf = randomForest.quickfill(df=df.copy(),
-                                                  target_col=self.target_col,
-                                                  target_gf_col=self.target_gf_col)
-        df[self.target_gf_col] = target_series_gf
-    else:
-        df[self.target_gf_col] = df[self.target_col].copy()
-
-    trend, seasonal, resid = self.decompose(series_gf=df[self.target_gf_col],
-                                            loops=0,
-                                            period=self.period,
-                                            trend=self.trend,
-                                            seasonal=self.season,
-                                            lowpass_filter=self.lowpass_filter,
-                                            trend_deg=self.trend_deg,
-                                            seasonal_deg=self.seasonal_deg,
-                                            lowpass_deg=self.lowpass_deg)
-    df[self.trend_col] = trend
-    df[self.seasonal_col] = seasonal
-    df[self.resid_col] = resid
-
-    self.var_selected_df = df.copy()
-
-    self.plot_stl_results()
-
-    self.btn_add_as_new_var.setEnabled(True)
+from diive.core.base.flagbase import FlagBase
+from diive.core.utils.prints import ConsoleOutputDecorator
+from diive.pkgs.createvar.nighttime_latlon import nighttime_flag_from_latlon
+from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
+from diive.pkgs.outlierdetection.zscore import zScoreIQR
 
 
-def decompose(series_gf, period, trend, lowpass_filter, loops=0, seasonal=7,
-              trend_deg=0, seasonal_deg=0, lowpass_deg=0):
-    # series_res_gf = series_gf.resample('H').mean()
-    trend += 1 if (trend % 2) == 0 else 0  # Trend needs to be odd number
-    res = STL(series_gf,
-              period=period,
-              trend=trend,
-              seasonal=seasonal,
-              low_pass=lowpass_filter,
-              trend_deg=trend_deg,
-              seasonal_deg=seasonal_deg,
-              low_pass_deg=lowpass_deg).fit()
-    # res.plot()
-    # # res.seasonal[500:1050].plot()
-    # plt.show()
-    if loops > 0:
-        for i in range(0, loops):
-            series = res.observed
-            series = series.sub(res.trend)
-            series = series.sub(res.seasonal)
-            res = STL(series, trend=trend, seasonal=seasonal, low_pass=lowpass_filter,
-                      trend_deg=trend_deg, seasonal_deg=seasonal_deg, low_pass_deg=lowpass_deg).fit()
-            res.plot()
-            plt.show()
-    return res.trend, res.seasonal, res.resid
+@ConsoleOutputDecorator()
+class OutlierSTLIQR(FlagBase):
+    """
+    Identify outliers based on seasonal-trend decomposition and z-score calculations
+
+    ...
+
+    Methods:
+        calc(): Calculates flag
+
+    After running calc, results can be accessed with:
+        flag: Series
+            Flag series where accepted (ok) values are indicated
+            with flag=0, rejected values are indicated with flag=2
+        filteredseries: Series
+            Data with rejected values set to missing
+
+    kudos: https://www.analyticsvidhya.com/blog/2022/08/outliers-pruning-using-python/
+
+    """
+    flagid = 'OUTLIER_STLZ'
+
+    def __init__(self, series: Series, lat: float, lon: float, levelid: str = None):
+        super().__init__(series=series, flagid=self.flagid, levelid=levelid)
+        self.showplot = False
+        self.lat = lat
+        self.lon = lon
+        self.is_nighttime = self._detect_nighttime()
+
+    def calc(self, showplot: bool = False):
+        """Calculate flag"""
+        self.showplot = showplot
+        self.reset()
+        ok, rejected = self._flagtests()
+        self.setflag(ok=ok, rejected=rejected)
+        self.setfiltered(rejected=rejected)
+
+    def _detect_nighttime(self) -> bool:
+        """Create nighttime flag"""
+
+        # XXX = potrad_from_latlon(
+        #     lat=self.lat, lon=self.lon, freq='10T',
+        #     start=str(self.series.index[0]), stop=str(self.series.index[-1]),
+        #     timezone_of_timestamp='UTC+01:00')
+
+        nighttimeflag = nighttime_flag_from_latlon(
+            lat=self.lat, lon=self.lon, freq='10T',
+            start=str(self.series.index[0]), stop=str(self.series.index[-1]),
+            timezone_of_timestamp='UTC+01:00', threshold_daytime=0)
+
+        # Reindex to hires timestamp
+        nighttime_flag_in_hires = nighttimeflag.reindex(self.series.index, method='nearest')
+        nighttime_ix = nighttime_flag_in_hires == 1
+        return nighttime_ix
+
+    def _flagtests(self) -> tuple[DatetimeIndex, DatetimeIndex]:
+        """Perform tests required for this flag"""
+
+        # Work series
+        _series = self.series.copy()
+
+        # Collect flags for good and bad data from all iterations
+        ok_coll = pd.Series(index=_series.index, data=False)  # Collects all good flags
+        rejected_coll = pd.Series(index=_series.index, data=False)  # Collected all bad flags
+        decompose_df = None
+
+        # Repeat multiple times until all outliers removed (untile *outliers=False*)
+        outliers = True
+        while outliers:
+            _series = self._randomforest_quickfill(series=_series)
+            decompose_df = self._decompose(series=_series)
+            _flag_thisstep = self._detect_residual_outliers(series=decompose_df['RESIDUAL'])
+
+            # Collect good and bad values
+            _ok = _flag_thisstep.loc[_flag_thisstep == 0]
+            _ok = _ok.loc[_ok.index]
+            ok_coll.loc[_ok.index] = True
+            _rejected = _flag_thisstep.loc[_flag_thisstep == 2]
+            _rejected = _rejected.loc[_rejected.index]
+            rejected_coll.loc[_rejected.index] = True
+
+            # ix_outliers = _flag.loc[_flag == 2].index
+            _series = self.series.copy()
+            _series.loc[rejected_coll] = np.nan
+            # self.series.plot()
+            outliers = True if len(_rejected) > 0 else False
+            # outliers = False
+
+        # Convert to index
+        ok_coll = ok_coll[ok_coll].index
+        rejected_coll = rejected_coll[rejected_coll].index
+        # flag.loc[ok_coll] = 0
+        # flag.loc[rejected_coll] = 2
+
+        return ok_coll, rejected_coll
+
+    def _detect_residual_outliers(self, series: Series):
+        """Detect residual outliers separately for daytime and nighttime data"""
+        flag = pd.Series(index=series.index, data=np.nan)
+
+        # Nighttime
+        _series = series[self.is_nighttime].copy()
+        _zscoreiqr = zScoreIQR(series=_series)
+        _zscoreiqr.calc(factor=4.5, showplot=True, verbose=True)
+        _flag_nighttime = _zscoreiqr.flag
+
+        # Daytime
+        _series = series[~self.is_nighttime].copy()
+        _zscoreiqr = zScoreIQR(series=_series)
+        _zscoreiqr.calc(factor=4.5, showplot=True, verbose=True)
+        _flag_daytime = _zscoreiqr.flag
+        # _series = series[self.is_daytime].copy()
+        # _flag_daytime = zscoreiqr(series=_series, factor=2, level=3.2, showplot=False)
+
+        rejected_daytime = _flag_daytime == 2
+        rejected_daytime = rejected_daytime[rejected_daytime]
+        flag.loc[rejected_daytime.index] = 2
+
+        ok_daytime = _flag_daytime == 0
+        ok_daytime = ok_daytime[ok_daytime]
+        flag.loc[ok_daytime.index] = 0
+
+        rejected_nighttime = _flag_nighttime == 2
+        rejected_nighttime = rejected_nighttime[rejected_nighttime]
+        flag.loc[rejected_nighttime.index] = 2
+
+        ok_nighttime = _flag_nighttime == 0
+        ok_nighttime = ok_nighttime[ok_nighttime]
+        flag.loc[ok_nighttime.index] = 0
+        return flag
+
+    def _decompose(self, series: Series):
+        # TODO
+        _series = series.resample('1H').mean()
+        import time
+        tic = time.time()
+
+        # Expected values per day for this freq
+        num_vals_oneday = int(to_offset('1D') / to_offset(_series.index.freq))
+
+        period = num_vals_oneday
+        seasonal = (num_vals_oneday * 30) + 1
+        trend = None
+        low_pass = period + 1
+        seasonal_deg = 1
+        trend_deg = 1
+        low_pass_deg = 1
+        robust = False
+        seasonal_jump = 1
+        trend_jump = 1
+        low_pass_jump = 2
+        res = STL(
+            _series,
+            period=period,
+            seasonal=seasonal,
+            trend=trend,
+            low_pass=low_pass,
+            seasonal_deg=seasonal_deg,
+            trend_deg=trend_deg,
+            low_pass_deg=low_pass_deg,
+            robust=robust,
+            seasonal_jump=seasonal_jump,
+            trend_jump=trend_jump,
+            low_pass_jump=low_pass_jump
+        ).fit()
+        toc = time.time() - tic
+        print(toc)
+
+        res.plot()
+        plt.show()
+
+        _frame = {'TREND': res.trend, 'SEASONAL': res.seasonal}
+        _frame = pd.DataFrame(_frame)
+        _frame = _frame.reindex(series.index, method='nearest')
+        _frame['TREND+SEASONAL'] = _frame['TREND'].add(_frame['SEASONAL'])
+        _frame['SERIES'] = series.copy()
+        _frame['RESIDUAL'] = _frame['SERIES'] - _frame['TREND+SEASONAL']
+        _frame.plot(subplots=True)
+        plt.show()
+        decompose_df = pd.DataFrame(_frame)
+
+        # todo prophet?
+
+        # frame = {'OBSERVED': res.observed, 'TREND': res.trend, 'SEASONAL': res.seasonal, 'RESIDUAL': res.resid}
+        # decompose_df = pd.DataFrame(frame)
+        return decompose_df
+
+    def _randomforest_quickfill(self, series: Series) -> Series:
+        # Gapfilling random forest
+        rfts = RandomForestTS(df=pd.DataFrame(series),
+                              target_col=series.name,
+                              include_timestamp_as_features=True,
+                              lagged_variants=None,
+                              use_neighbor_years=True,
+                              feature_reduction=False,
+                              verbose=0)
+        rfts.build_models(n_estimators=100,
+                          random_state=42,
+                          min_samples_split=20,
+                          min_samples_leaf=10,
+                          n_jobs=-1)
+        rfts.gapfill_yrs()
+        _gapfilled_df, _gf_results = rfts.get_gapfilled_dataset()
+        gapfilled_name = f"{self.series.name}_gfRF"
+        series = _gapfilled_df[gapfilled_name].copy()
+        series.plot()
+        plt.show()
+        return series
 
 
-def example_data_to_pickle():
-    import pickle
-    from pathlib import Path
+# # Relative extrema
+# # https://stackoverflow.com/questions/57069892/how-to-detect-anomaly-in-a-time-series-dataspecifically-with-trend-and-seasona
+# import numpy as np
+# from scipy.signal import argrelextrema
+# a = argrelextrema(df['residuals'].values, np.greater, order=100)
+# df3 = pd.DataFrame()
+# df3['residuals'] = df['residuals'].copy()
+# df3['residuals_extrema'] = df3['residuals'].iloc[a]
+#
+# plt.plot_date(df3['residuals'].index, df3['residuals'])
+# plt.plot_date(df3['residuals_extrema'].index, df3['residuals_extrema'])
+# plt.show()
 
-    from dbc_influxdb import dbcInflux
-
-    # Settings
-    BUCKET = 'test'
-    MEASUREMENTS = ['TA']
-    FIELDS = ['TA_F']
-    START = '2020-01-01 00:30:00'
-    STOP = '2020-06-01 00:30:00'
-    TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # We need returned timestamps in CET (winter time), which is UTC + 1 hour
-    DATA_VERSION = 'FLUXNET-WW2020_RELEASE-2022-1'
-    DIRCONF = r'L:\Dropbox\luhk_work\20 - CODING\22 - POET\configs'
-
-    # Instantiate class
-    dbc = dbcInflux(dirconf=DIRCONF)
-
-    # Data download
-    data_simple, data_detailed, assigned_measurements = \
-        dbc.download(
-            bucket=BUCKET,
-            measurements=MEASUREMENTS,
-            fields=FIELDS,
-            start=START,
-            stop=STOP,
-            timezone_offset_to_utc_hours=TIMEZONE_OFFSET_TO_UTC_HOURS,
-            data_version=DATA_VERSION
-        )
-
-    # Store data as pickle for fast data loading during testing
-    outfile = Path(r"M:\Downloads\_temp") / "temp.pickle"
-    pickle_out = open(outfile, "wb")
-    pickle.dump(data_simple, pickle_out)
-    pickle_out.close()
-
-
-def testing_from_pickle():
-    import pickle
-    from pathlib import Path
-    import matplotlib.pyplot as plt
-
-    outfile = Path(r"M:\Downloads\_temp") / "temp.pickle"
-    pickle_in = open(outfile, "rb")
-    data_simple = pickle.load(pickle_in)
-    print(data_simple)
-
-    df = pd.DataFrame(data_simple['TA_F'])
-    df = df.asfreq('30T')
-
-    trend, seasonal, resid = decompose(series_gf=df['TA_F'],
-                                       loops=0,
-                                       period=48,
-                                       trend=48 * 21,
-                                       trend_deg=1,
-                                       seasonal=(48) + 1,
-                                       seasonal_deg=1,
-                                       lowpass_filter=49,
-                                       lowpass_deg=1)
-    df['trend'] = trend
-    df['seasonal'] = seasonal
-    df['residuals'] = resid
-    df['reconstructed'] = df['trend'] + df['seasonal']
-    df.plot(subplots=True)
-    plt.show()
-
-    df2 = pd.DataFrame()
-    df2['TA_F'] = df['TA_F'].copy()
-    df2['reconstructed_rmedian'] = df['reconstructed'].copy()
-    df2['reconstructed_rmedian'] = df2['reconstructed_rmedian'].rolling(48, center=True).median()
-    std = df2['reconstructed_rmedian'].rolling(48, center=True).std().multiply(10)
-    df2['reconstructed+std'] = df2['reconstructed_rmedian'] + std
-    df2['reconstructed-std'] = df2['reconstructed_rmedian'] - std
-    df2.plot(subplots=False)
-    plt.show()
-
-    # Relative extrema
-    # https://stackoverflow.com/questions/57069892/how-to-detect-anomaly-in-a-time-series-dataspecifically-with-trend-and-seasona
-    import numpy as np
-    from scipy.signal import argrelextrema
-    a = argrelextrema(df['residuals'].values, np.greater, order=100)
-    df3 = pd.DataFrame()
-    df3['residuals'] = df['residuals'].copy()
-    df3['residuals_extrema'] = df3['residuals'].iloc[a]
-
-    plt.plot_date(df3['residuals'].index, df3['residuals'])
-    plt.plot_date(df3['residuals_extrema'].index, df3['residuals_extrema'])
-    plt.show()
-
-    df['residuals'].iloc[a].plot()
-    df['residuals'].plot()
-    plt.show()
+def example():
+    pass
 
 
 if __name__ == '__main__':
-    # example_data_to_pickle()
-    testing_from_pickle()
+    example()

@@ -18,8 +18,7 @@ def load(file, ctx):
         configfilepath = ctx.filetype_EDDYPRO_FULL_OUTPUT_30MIN
         examplefilepath = ctx.file_EDDYPRO_FULL_OUTPUT_30MIN
 
-    filetype_config = ConfigFileReader(configfilepath=configfilepath).read()
-    filetype_config = validate_filetype_config(config=filetype_config)
+    filetype_config = ConfigFileReader(configfilepath=configfilepath, validation='filetype').read()
 
 
     # elif file == 'DIIVE_CSV_1H':

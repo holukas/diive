@@ -20,14 +20,16 @@ from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import detect_freq_groups
 from diive.pkgs.corrections.offsetcorrection import remove_radiation_zero_offset, remove_relativehumidity_offset
 from diive.pkgs.corrections.setto_threshold import setto_threshold
-from diive.pkgs.outlierdetection.absolutelimits import absolute_limits
-from diive.pkgs.outlierdetection.missing import missing_values
-from diive.pkgs.outlierdetection.thymeboost import thymeboost
-from diive.pkgs.outlierdetection.zscore import zscoreiqr
-from diive.pkgs.outlierdetection.local3sd import localsd
+from diive.pkgs.outlierdetection.absolutelimits import AbsoluteLimits
+from diive.pkgs.outlierdetection.local3sd import LocalSD
+from diive.pkgs.outlierdetection.missing import MissingValues
+from diive.pkgs.outlierdetection.seasonaltrend import OutlierSTLIQR
+from diive.pkgs.outlierdetection.thymeboost import ThymeBoostOutlier
+from diive.pkgs.outlierdetection.zscore import zScoreIQR
+from diive.pkgs.qaqc.qcf import MeteoQCF
 
 
-class ScreenVar:
+class ScreenMeteoVar:
     """Quality screening of one single meteo data time series
 
     Input series is not altered. Instead, this class produces a DataFrame
@@ -57,68 +59,100 @@ class ScreenVar:
 
         # Processing pipes
         path = Path(__file__).parent.resolve()  # Search in this file's folder
-        self.pipes = filereader.ConfigFileReader(configfilepath=path / 'pipes_meteo.yaml').read()
-        self.pipe_config = self._pipe_assign()
+        self.pipes = filereader.ConfigFileReader(configfilepath=path / 'pipes_meteo.yaml',
+                                                 validation='meteopipe').read()
+        self._pipe_config = self._pipe_assign()
 
         # Collect all flags
-        self.flags_df = pd.DataFrame(index=self.series.index)
+        self._flags_df = None
 
-        self._plot_data(type='RAW', order='BEFORE', series=self.series.copy())
-        self._call_pipe_steps()
-        self._plot_data(type='QUALITY-CHECKED RAW', order='AFTER',
-                        series=self.series.loc[self.flags_df['QCF']==0].asfreq(self.series.index.freqstr))
+        self._run()
 
-    def _plot_data(self, type: str, order: str, series:Series):
-        HeatmapDateTime(series=series,
-                        title=f"{series.name} {type} DATA\n"
-                              f"{order} HIGH-RES METEOSCREENING  |  "
-                              f"time resolution @{series.index.freqstr}").show()
+    @property
+    def pipe_config(self) -> dict:
+        """Processing pipe configuration"""
+        if not isinstance(self._pipe_config, dict):
+            raise Exception('Pipe configuration not available')
+        return self._pipe_config
 
-    def get(self) -> tuple[Series, DataFrame, dict]:
-        """Return all flags in DataFrame"""
-        return self.series, self.flags_df, self.pipe_config
+    @property
+    def flags(self) -> DataFrame:
+        """Processing pipe configuration"""
+        if not isinstance(self._flags_df, DataFrame):
+            raise Exception('Flags are empty')
+        return self._flags_df
+
+    @property
+    def seriesqcf(self) -> Series:
+        """Series with rejected values set to missing"""
+        if not isinstance(self._seriesqcf, Series):
+            raise Exception('Flags are empty')
+        return self._seriesqcf
+
+    def _run(self):
+
+        # Call the various checks for this variable and generate flags
+        mqcf = self._call_pipe_steps()
+
+        # Print some info about QCF
+        # # mqcf.report_flags()
+        # # mqcf.report_series()
+        mqcf.report_qcf_evolution()
+
+        # Plot
+        mqcf.showplot_heatmaps()
+        mqcf.showplot_timeseries()
+
+        # # Find column that contains the QCF info
+        # flagqcfcol = findqcfcol(df=self._flags_df, varname=str(self.series.name))
 
     def _call_pipe_steps(self):
+        # Initiate new flag collection
+        self._flags_df = pd.DataFrame(index=self.series.index)
+
+        # Processing steps for this variable
         pipe_steps = self.pipe_config['pipe']
 
         # Missing values flag, always generated (high-res)
-        _flag_missing = missing_values(series=self.series)
-        self.flags_df[_flag_missing.name] = _flag_missing
+        _miss = MissingValues(series=self.series)
+        _miss.calc()
+        self._flags_df[_miss.flag.name] = _miss.flag
 
         for step in pipe_steps:
 
-            if step == 'remove_highres_outliers_thymeboost':
-                # Generates flag
-                # Needs QC'd data
-                _series = self.series.copy()
-                _flags_df = self.flags_df.copy()
-                _flags_df.loc[:, 'QCF'] = _flags_df.sum(axis=1)
-                _series.loc[_flags_df['QCF'] > 0] = np.nan
-                _flag_outlier_thyme = thymeboost(series=_series,
-                                                 flag_missing=_flags_df[_flag_missing.name])
-                self.flags_df[_flag_outlier_thyme.name] = _flag_outlier_thyme
+            if step == 'remove_highres_outliers_stl':
+                _stl = OutlierSTLIQR(series=self.series, lat=self.site_lat, lon=self.site_lon)
+                _stl.calc(showplot=True)
+
+            elif step == 'remove_highres_outliers_thymeboost':
+                # Generates flag, needs QC'd data
+                _mqcf = MeteoQCF(flags_df=self._flags_df, series=self.series, missingflag=str(_miss.flag.name))
+                _mqcf.calculate()
+                _thymeboost = ThymeBoostOutlier(series=_mqcf.seriesqcf)
+                _thymeboost.calc(showplot=True)
+                self._flags_df[_thymeboost.flag.name] = _thymeboost.flag
 
             elif step == 'remove_highres_outliers_zscore':
                 # Generates flag
-                _flag_outlier_zscore = zscoreiqr(series=self.series, factor=4.5, showplot=True)
-                self.flags_df[_flag_outlier_zscore.name] = _flag_outlier_zscore
+                _zscoreiqr = zScoreIQR(series=self.series)
+                _zscoreiqr.calc(factor=4.5, showplot=True, verbose=True)
+                self._flags_df[_zscoreiqr.flag.name] = _zscoreiqr.flag
 
             elif step == 'remove_highres_outliers_localsd':
-                # Generates flag
-                # Needs QC'd data
-                _series = self.series.copy()
-                _flags_df = self.flags_df.copy()
-                _flags_df.loc[:, 'QCF'] = _flags_df.sum(axis=1)
-                _series.loc[_flags_df['QCF'] > 0] = np.nan
-                _flag_outlier_local3sd = localsd(series=_series, n_sd=7, showplot=True)
-                self.flags_df[_flag_outlier_local3sd.name] = _flag_outlier_local3sd
+                # Generates flag, needs QC'd data
+                _mqcf = MeteoQCF(flags_df=self._flags_df, series=self.series, missingflag=str(_miss.flag.name))
+                _mqcf.calculate()
+                _localsd = LocalSD(series=_mqcf.seriesqcf)
+                _localsd.calc(n_sd=7, showplot=True, verbose=True)
+                # _flag_outlier_local3sd = xxxlocalsd(series=_series, n_sd=7, showplot=True)
+                self._flags_df[_localsd.flag.name] = _localsd.flag
 
             elif step == 'remove_highres_outliers_absolute_limits':
                 # Generates flag
-                _flag_outlier_abslim = absolute_limits(series=self.series,
-                                                       min=self.pipe_config['absolute_limits'][0],
-                                                       max=self.pipe_config['absolute_limits'][1])
-                self.flags_df[_flag_outlier_abslim.name] = _flag_outlier_abslim
+                _abslim = AbsoluteLimits(series=self.series)
+                _abslim.calc(min=self.pipe_config['absolute_limits'][0],
+                             max=self.pipe_config['absolute_limits'][1])
+                self._flags_df[_abslim.flag.name] = _abslim.flag
 
             elif step == 'remove_radiation_zero_offset':
                 # Generates corrected series
@@ -137,10 +171,11 @@ class ScreenVar:
 
             elif step == 'setto_max_threshold':
                 # Generates corrected series
-                self.series = setto_threshold(series=self.series,
-                                              threshold=self.pipe_config['absolute_limits'][1],
-                                              type='max',
-                                              showplot=True)
+                self.series = setto_threshold(
+                    series=self.series,
+                    threshold=self.pipe_config['absolute_limits'][1],
+                    type='max',
+                    showplot=True)
 
             elif step == 'setto_min_threshold':
                 # Generates corrected series
@@ -154,15 +189,22 @@ class ScreenVar:
                 self.series = remove_relativehumidity_offset(series=self.series,
                                                              showplot=True)
 
-
             else:
                 raise Exception(f"No function defined for {step}.")
 
-            # elif step == 'remove_relativehumidity_offset':
-            #     series_qc = self._remove_relativehumidity_offset(series=series_qc)
+        # Calculate overall quality flag QCF and Add QCF results to other flags
+        mqcf = self._calculate_qcf(missingflag=str(_miss.flag.name))
+        self._seriesqcf = mqcf.seriesqcf.copy()
+        return mqcf
 
-        # Overall quality flag
-        self.flags_df.loc[:, 'QCF'] = self.flags_df.sum(axis=1)
+    def _calculate_qcf(self, missingflag: str):
+        """Calculate overall quality flag QCF and Add QCF results to other flags"""
+        mqcf = MeteoQCF(flags_df=self._flags_df, series=self.series, missingflag=missingflag)
+        mqcf.calculate()
+        _flags_df = pd.concat([self._flags_df, mqcf.flags], axis=1)
+        _flags_df = _flags_df.loc[:, ~_flags_df.columns.duplicated(keep='last')]
+        self._flags_df = _flags_df
+        return mqcf
 
     def _pipe_assign(self) -> dict:
         """Assign appropriate processing pipe to this variable"""
@@ -180,90 +222,6 @@ class ScreenVar:
         print(f"Variable '{self.series.name}' has been assigned to processing pipe {pipe_config['pipe']}")
 
         return pipe_config
-
-
-# class MeteoScreeningFromFiles:
-#     """Quality screening of selected variables in a dataframe
-#
-#     """
-#
-#     def __init__(
-#             self,
-#             df: DataFrame,
-#             cols: dict,
-#             site: str,
-#             site_lat: float = None,
-#             site_lon: float = None,
-#             outdir: str or Path = None,
-#     ):
-#         self.df = df
-#         self.cols = cols
-#         self.site = site
-#         self.site_lat = site_lat
-#         self.site_lon = site_lon
-#         self.outdir = Path(outdir)
-#
-#         self._qc_df_resampled_gf = None
-#
-#     @property
-#     def qc_df(self) -> DataFrame:
-#         """Get dataframe of quality checked data"""
-#         if not isinstance(self._qc_df_resampled_gf, DataFrame):
-#             raise Exception('data is empty')
-#         return self._qc_df_resampled_gf
-#
-#     def run(self):
-#         if self.outdir:
-#             verify_dir(self.outdir)
-#         subset_df = self._subset()
-#         qc_df = self._screening_loop(subset_df=subset_df)
-#         qc_df_resampled = self._resampling(qc_df=qc_df)
-#         self._qc_df_resampled_gf = self._fill_missing(qc_df_resampled=qc_df_resampled)
-#         if self.outdir:
-#             self._export_to_file()
-#
-#     def _export_to_file(self):
-#         self._qc_df_resampled_gf.to_csv(self.outdir / 'out.csv')
-#         quickplot_df(self._qc_df_resampled_gf.replace(-9999, np.nan),
-#                      title="** COLUMNS AFTER QUALITY CONTROL **",
-#                      saveplot=self.outdir)
-#
-#     def _fill_missing(self, qc_df_resampled: DataFrame) -> DataFrame:
-#         """Fill missing values with -9999"""
-#         qc_df_resampled.fillna(-9999, inplace=True)
-#         return qc_df_resampled
-#
-#     def _resampling(self, qc_df: DataFrame) -> DataFrame:
-#         """Resample data to output freq"""
-#         qc_df_resampled, _ = frames.resample_df(df=qc_df, freq_str='30T', agg='mean',
-#                                                 mincounts_perc=.9, to_freq='T')
-#         return qc_df_resampled
-#
-#     def _screening_loop(self, subset_df: DataFrame) -> DataFrame:
-#         """Loop variables and perform quality checks"""
-#         qc_df = pd.DataFrame()
-#         for col in self.cols.keys():
-#             series = subset_df[col].copy()
-#             measurement = self.cols[col]['measurement']
-#             units = self.cols[col]['units']
-#             col_qc = ScreenVar(series=series, measurement=measurement, units=units,
-#                                site=self.site, site_lat=self.site_lat, site_lon=self.site_lon,
-#                                saveplot=self.outdir).get()
-#             qc_df[col_qc.name] = col_qc
-#         return qc_df
-#
-#     def _subset(self) -> DataFrame:
-#         subset_cols = []
-#         for col in self.cols.keys():
-#             subset_cols.append(col)
-#         subset_df = self.df[subset_cols].copy()
-#
-#         if self.outdir:
-#             quickplot_df(subset_df.replace(-9999, np.nan),
-#                          title="COLUMNS *BEFORE* QUALITY CONTROL",
-#                          saveplot=self.outdir)
-#
-#         return subset_df
 
 
 class MeteoScreeningFromDatabaseMultipleVars:
@@ -299,13 +257,8 @@ class MeteoScreeningFromDatabaseMultipleVars:
             mscr.run()
 
             self.resampled_detailed[var], \
-            self.hires_qc[var], \
-            self.hires_flags[var] = mscr.get()
-
-
-#                         self.coll_resampled_detailed, \
-#             self.coll_hires_qc, \
-#             self.coll_hires_flags = mscr.get()
+                self.hires_qc[var], \
+                self.hires_flags[var] = mscr.get()
 
 
 class MeteoScreeningFromDatabaseSingleVar:
@@ -358,7 +311,7 @@ class MeteoScreeningFromDatabaseSingleVar:
         self.coll_resampled_detailed.sort_index(inplace=True)
         self.coll_hires_qc.sort_index(inplace=True)
         self.coll_hires_flags.sort_index(inplace=True)
-        self._plots()
+        # self._plots()
 
     def _run_by_freq_group(self):
         """Screen and resample by frequency
@@ -388,26 +341,31 @@ class MeteoScreeningFromDatabaseSingleVar:
             # series = sanitize_timestamp_index(data=series, freq=grp_freq)
 
             # Quality checks directly on high-res data
-            hires_screened, \
-            hires_flags, \
-            self.pipe_config = \
-                ScreenVar(series=hires_raw,
-                          measurement=self.measurement,
-                          units=tags_dict['units'],
-                          site=self.site,
-                          site_lat=self.site_lat,
-                          site_lon=self.site_lon,
-                          timezone_of_timestamp=self.timezone_of_timestamp).get()
+            # hires_screened, \
+            #     hires_flags, \
+            #     self.pipe_config = \
 
-            # Set flagged hi-res data to missing
-            hires_qc = hires_screened.copy()
-            hires_qc.loc[hires_flags['QCF'] > 0] = np.nan
+            screening = ScreenMeteoVar(series=hires_raw,
+                                       measurement=self.measurement,
+                                       units=tags_dict['units'],
+                                       site=self.site,
+                                       site_lat=self.site_lat,
+                                       site_lon=self.site_lon,
+                                       timezone_of_timestamp=self.timezone_of_timestamp)
+            flags_hires = screening.flags
+            seriesqcf_hires = screening.seriesqcf
+            self.pipe_config = screening.pipe_config
 
             # Resample to 30MIN
-            resampled = resample_series_to_30MIN(series=hires_qc,
-                                                 to_freqstr=self.resampling_freq,
-                                                 agg=self.pipe_config['resampling_aggregation'],
-                                                 mincounts_perc=.25)
+            seriesqcf_resampled = resample_series_to_30MIN(series=seriesqcf_hires,
+                                                           to_freqstr=self.resampling_freq,
+                                                           agg=self.pipe_config['resampling_aggregation'],
+                                                           mincounts_perc=.25)
+
+            # Rename QC'd series to original name (without _QCF at the end)
+            # This is done to comply with the naming convention, which needs
+            # the positional indices at the end of the variable name (not _QCF).
+            seriesqcf_resampled.name = hires_raw.name
 
             # Update tags after resampling
             tags_dict['freq'] = '30T'
@@ -415,8 +373,8 @@ class MeteoScreeningFromDatabaseSingleVar:
             tags_dict['data_version'] = 'meteoscreening'
 
             # Create df that includes the resampled series and its tags
-            resampled_detailed = pd.DataFrame(resampled)
-            resampled_detailed = resampled_detailed.asfreq(resampled.index.freqstr)
+            resampled_detailed = pd.DataFrame(seriesqcf_resampled)
+            resampled_detailed = resampled_detailed.asfreq(seriesqcf_resampled.index.freqstr)
 
             # Insert tags as columns
             for key, value in tags_dict.items():
@@ -424,8 +382,8 @@ class MeteoScreeningFromDatabaseSingleVar:
 
             if grp_counter == 1:
                 self.coll_resampled_detailed = resampled_detailed.copy()  # Collection
-                self.coll_hires_qc = hires_qc.copy()
-                self.coll_hires_flags = hires_flags.copy()
+                self.coll_hires_qc = seriesqcf_hires.copy()
+                self.coll_hires_flags = flags_hires.copy()
             else:
                 # self.coll_resampled_detailed = pd.concat([self.coll_resampled_detailed, resampled_detailed], axis=0)
                 self.coll_resampled_detailed = self.coll_resampled_detailed.combine_first(other=resampled_detailed)
@@ -433,11 +391,11 @@ class MeteoScreeningFromDatabaseSingleVar:
                 self.coll_resampled_detailed = self.coll_resampled_detailed.asfreq(resampled_detailed.index.freqstr)
 
                 # self.coll_hires_qc = pd.concat([self.coll_hires_qc, hires_qc], axis=0)
-                self.coll_hires_qc = self.coll_hires_qc.combine_first(other=hires_qc)
+                self.coll_hires_qc = self.coll_hires_qc.combine_first(other=seriesqcf_hires)
                 self.coll_hires_qc.sort_index(ascending=True, inplace=True)
 
                 # self.coll_hires_flags = pd.concat([self.coll_hires_flags, hires_flags], axis=0)
-                self.coll_hires_flags = self.coll_hires_flags.combine_first(other=hires_flags)
+                self.coll_hires_flags = self.coll_hires_flags.combine_first(other=flags_hires)
                 self.coll_hires_flags.sort_index(ascending=True, inplace=True)
 
     def get(self) -> tuple[DataFrame, Series, DataFrame]:
@@ -491,6 +449,15 @@ def example():
     # Testing code
     import pickle
 
+    # from datetime import datetime
+    # import pkg_resources
+    # dt_string = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # print(f"This page was last modified on: {dt_string}")
+    # version_diive = pkg_resources.get_distribution("diive").version
+    # print(f"diive version: v{version_diive}")
+    # version_dbc_influxdb = pkg_resources.get_distribution("dbc_influxdb").version
+    # print(f"dbc-influxdb version: v{version_dbc_influxdb}")
+
     # Testing MeteoScreeningFromDatabase
 
     # =======================================
@@ -498,70 +465,74 @@ def example():
     # =======================================
 
     # Settings
-    BUCKET = 'ch-dav_raw'
-    DIRCONF = r'F:\Dropbox\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
+    DIRCONF = r'L:\Sync\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
     SITE = 'ch-dav'  # Site name
-    # Measurement name, used to group similar variable together, e.g., 'TA' contains all air temperature variables
     MEASUREMENTS = ['SWC']
-    # FIELDS = ['SWC_H1_0.8_4']  # Variable name; InfluxDB stores variable names as '_field'
-    FIELDS = ['SWC_H1_0.15_4']  # Variable name; InfluxDB stores variable names as '_field'
+    # MEASUREMENTS = ['TA']
+    FIELDS = ['SWC_FF1_0.05_3']  # Variable name; InfluxDB stores variable names as '_field'
+    # FIELDS = ['TA_NABEL_T1_35_1']  # Variable name; InfluxDB stores variable names as '_field'
     DATA_VERSION = 'raw'
-    START = '2021-01-01 00:01:00'  # Download data starting with this date
+    START = '2022-12-01 00:01:00'  # Download data starting with this date
     STOP = '2023-01-01 00:01:00'  # Download data before this date (the stop date itself is not included)
     TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
+    RESAMPLING_FREQ = '30T'  # During MeteoScreening the screened high-res data will be resampled to this frequency; '30T' = 30-minute time resolution
+    RESAMPLING_AGG = 'mean'  # The resampling of the high-res data will be done using this aggregation methos; e.g., 'mean'
 
-    basedir = Path(r"F:\Dropbox\luhk_work\_temp")
+    basedir = Path(r"L:\Sync\luhk_work\_temp")
+
+    BUCKET_RAW = f'{SITE}_raw'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_raw' contains all raw data for CH-LAE
+    BUCKET_PROCESSING = f'{SITE}_processing'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_processing' contains all processed data for CH-LAE
+    print(f"Bucket containing raw data (source bucket): {BUCKET_RAW}")
+    print(f"Bucket containing processed data (destination bucket): {BUCKET_PROCESSING}")
 
     # # Instantiate class
     # from dbc_influxdb import dbcInflux
     # dbc = dbcInflux(dirconf=DIRCONF)
-    #
-    # # Data download
-    # data_simple, data_detailed, assigned_measurements = \
-    #     dbc.download(
-    #         bucket=BUCKET,
-    #         measurements=MEASUREMENTS,
-    #         fields=FIELDS,
-    #         start=START,
-    #         stop=STOP,
-    #         timezone_offset_to_utc_hours=TIMEZONE_OFFSET_TO_UTC_HOURS,
-    #         data_version=DATA_VERSION
-    #     )
-    #
+    # data_simple, data_detailed, assigned_measurements = dbc.download(
+    #     bucket=BUCKET_RAW,
+    #     measurements=MEASUREMENTS,
+    #     fields=FIELDS,
+    #     start=START,
+    #     stop=STOP,
+    #     timezone_offset_to_utc_hours=TIMEZONE_OFFSET_TO_UTC_HOURS,
+    #     data_version=DATA_VERSION)
     # import matplotlib.pyplot as plt
     # data_simple.plot()
     # plt.show()
-    #
+
     # # Export data to pickle for fast testing
-    # pickle_out = open(basedir / "data_simple.pickle", "wb")
+    # pickle_out = open(basedir / "meteodata_simple.pickle", "wb")
     # pickle.dump(data_simple, pickle_out)
     # pickle_out.close()
-    # pickle_out = open(basedir / "data_detailed.pickle", "wb")
+    # pickle_out = open(basedir / "meteodata_detailed.pickle", "wb")
     # pickle.dump(data_detailed, pickle_out)
     # pickle_out.close()
-    # pickle_out = open(basedir / "assigned_measurements.pickle", "wb")
+    # pickle_out = open(basedir / "meteodata_assigned_measurements.pickle", "wb")
     # pickle.dump(assigned_measurements, pickle_out)
     # pickle_out.close()
 
     # Import data from pickle for fast testing
-    pickle_in = open(basedir / "data_simple.pickle", "rb")
+    pickle_in = open(basedir / "meteodata_simple.pickle", "rb")
     data_simple = pickle.load(pickle_in)
-    pickle_in = open(basedir / "data_detailed.pickle", "rb")
+    pickle_in = open(basedir / "meteodata_detailed.pickle", "rb")
     data_detailed = pickle.load(pickle_in)
-    pickle_in = open(basedir / "assigned_measurements.pickle", "rb")
+    pickle_in = open(basedir / "meteodata_assigned_measurements.pickle", "rb")
     assigned_measurements = pickle.load(pickle_in)
 
-    print(data_simple)
-    print(data_detailed)
-    print(assigned_measurements)
+    # print(data_simple)
+    # print(data_detailed)
+    # print(assigned_measurements)
 
     # DAV
-    site_lat=46.815333
-    site_lon=9.855972
+    site_lat = 46.815333
+    site_lon = 9.855972
 
     # # LAE
     # site_lat = 47.478333
     # site_lon = 8.364389
+    # data_detailed['TA_NABEL_T1_35_1'] = data_detailed['TA_NABEL_T1_35_1'].iloc[0:10000]
+
+    # data_detailed['TA_NABEL_T1_35_1']['TA_NABEL_T1_35_1'].iloc[1000] = 99
 
     mscr = MeteoScreeningFromDatabaseMultipleVars(site=SITE,
                                                   data_detailed=data_detailed,

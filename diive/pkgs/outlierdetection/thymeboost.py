@@ -8,112 +8,156 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 from ThymeBoost import ThymeBoost as tb
-from pandas import Series
+from pandas import Series, DatetimeIndex
 from pandas.tseries.frequencies import to_offset
 
+from diive.core.base.flagbase import FlagBase
 from diive.core.utils.prints import ConsoleOutputDecorator
+from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
 
 
 @ConsoleOutputDecorator()
-def thymeboost(series: Series, flag_missing: Series) -> Series:
-    flag_name = f"QCF_OUTLIER_THYME_{series.name}"
-    _series = series.copy()
+class ThymeBoostOutlier(FlagBase):
+    """
+    Identify outliers based on thymeboost
 
-    # Expected values per day for this freq
-    num_vals_oneday = int(to_offset('1D') / to_offset(_series.index.freq))
+    ...
 
-    # Gap-filling w/ running mean, for outlier detection
-    # Thyme Boost needs gapless data
-    n_missing_vals = flag_missing.sum()
-    if n_missing_vals > 0:
-        while n_missing_vals > 0:
-            rolling_mean = _series.rolling(window=num_vals_oneday, min_periods=1, center=True).median()
-            _series = _series.fillna(rolling_mean)
-            n_missing_vals = _series.isnull().sum()
+    Methods:
+        calc(): Calculates flag
 
-    if _series.isnull().sum() > 0:
-        raise Exception("Thyme Boost outlier removal cannot handle gaps in series.")
+    After running calc, results can be accessed with:
+        flag: Series
+            Flag series where accepted (ok) values are indicated
+            with flag=0, rejected values are indicated with flag=2
+        filteredseries: Series
+            Data with rejected values set to missing
 
-    boosted_model = tb.ThymeBoost(normalize_seasonality=True,
-                                  verbose=1,
-                                  approximate_splits=True,
-                                  cost_penalty=.001,
-                                  n_rounds=None,
-                                  regularization=1.2,
-                                  smoothed_trend=True)
+    kudos: https://www.analyticsvidhya.com/blog/2022/08/outliers-pruning-using-python/
 
-    repeat = True
-    repeat_run = -1
-    flag_outliers = Series(index=_series.index, data=False)
-    while repeat:
-        repeat_run += 1
-        print(f"========================"
-              f"Repetition #{repeat_run}"
-              f"========================")
-        output = boosted_model.detect_outliers(_series,
-                                               trend_estimator='ses',
-                                               # trend_estimator='linear',
-                                               # trend_estimator=['linear', 'arima'],
-                                               # arima_order=(1, 1, 1),
-                                               # arima_order=[(1, 0, 0), (1, 0, 1), (1, 1, 1)],
-                                               seasonal_estimator='fourier',
-                                               seasonal_period=num_vals_oneday,
-                                               # global_cost='mse',
-                                               global_cost='maicc',
-                                               split_cost='mae',
-                                               fit_type='local',
-                                               window_size=int(num_vals_oneday / 10))
+    """
+    flagid = 'OUTLIER_THYME'
 
+    def __init__(self, series: Series, levelid: str = None):
+        super().__init__(series=series, flagid=self.flagid, levelid=levelid)
+        self.showplot = False
+
+    def calc(self, showplot: bool = False):
+        """Calculate flag"""
+        self.showplot = showplot
+        self.reset()
+        ok, rejected = self._flagtests()
+        self.setflag(ok=ok, rejected=rejected)
+        self.setfiltered(rejected=rejected)
+
+    def _plot(self, boosted_model, output):
         # Plots
         boosted_model.plot_results(output, figsize=(30, 9))
         boosted_model.plot_components(output, figsize=(16, 9))
 
-        # Outliers
-        ix_outliers = output['outliers'] == True  # Outlier indices (locations)
-        flag_outliers.loc[ix_outliers] = True
-        # outliers = output.loc[ix_outliers, :]  # Get outlier rows
-        # all_removed_outliers = all_removed_outliers.append(outliers)  # Collect outliers
+    def _randomforest_quickfill(self, series: Series) -> Series:
+        # Gapfilling random forest
+        rfts = RandomForestTS(df=pd.DataFrame(series),
+                              target_col=series.name,
+                              include_timestamp_as_features=True,
+                              lagged_variants=None,
+                              use_neighbor_years=True,
+                              feature_reduction=False,
+                              verbose=0)
+        rfts.build_models(n_estimators=100,
+                          random_state=42,
+                          min_samples_split=20,
+                          min_samples_leaf=10,
+                          n_jobs=-1)
+        rfts.gapfill_yrs()
+        _gapfilled_df, _gf_results = rfts.get_gapfilled_dataset()
+        gapfilled_name = f"{self.series.name}_gfRF"
+        series = _gapfilled_df[gapfilled_name].copy()
+        series.plot()
+        plt.show()
+        return series
 
-        # Replace outlier values w/ predicted value (seasonality + trend)
-        # In this step, outliers cannot be removed from the dataset b/c
-        # thymeboost needs time series w/o NaN.
-        _series.loc[ix_outliers] = output.loc[ix_outliers, 'yhat']
+    def _flagtests(self) -> tuple[DatetimeIndex, DatetimeIndex]:
+        """Perform tests required for this flag"""
 
-        # Stop outlier removal if no more outliers found
-        num_outliers = len(_series.loc[ix_outliers])
-        if num_outliers == 0: repeat = False
+        # Work series
+        _series = self.series.copy()
 
-    num_vals_before = len(series.loc[flag_missing == False])  # From input series
-    num_vals_after = len(_series.loc[(flag_missing == False) & (flag_outliers == False)])
-    print("Outlier detection finished.")
-    print(f"Number of values before outlier removal: {num_vals_before}")
-    print(f"Number of values after outlier removal: {num_vals_after}")
-    num_outliers_total = num_vals_before - num_vals_after
-    outliers_perc = (num_outliers_total / num_vals_before) * 100
-    print(f"Number of values identified as outliers: {outliers_perc:.3f}%")
+        # Expected values per day for this freq
+        num_vals_oneday = int(to_offset('1D') / to_offset(_series.index.freq))
 
-    # Last run did not remove outliers, therefore 'repeat_run - 1'
-    print(f"Total outliers removed ({repeat_run - 1} repetitions): {num_outliers_total}")
-    print("Removed outliers:")
-    print(series.loc[flag_outliers == True])
-    flag_outliers.name = flag_name
-    return flag_outliers
+        # Gap-filling w/ running mean, for outlier detection
+        # Thyme Boost needs gapless data
+        n_missing_vals = _series.isnull().sum()
+        if n_missing_vals > 0:
+            while n_missing_vals > 0:
+                _series = self._randomforest_quickfill(series=_series)
+                n_missing_vals = _series.isnull().sum()
+        if n_missing_vals > 0:
+            raise Exception("Thyme Boost outlier removal cannot handle gaps in series.")
+
+        boosted_model = tb.ThymeBoost(normalize_seasonality=True,
+                                      verbose=1,
+                                      approximate_splits=True,
+                                      cost_penalty=.001,
+                                      n_rounds=None,
+                                      regularization=1.2,
+                                      smoothed_trend=True)
+
+        # Collect flags for good and bad data from all iterations
+        ok_coll = pd.Series(index=self.series.index, data=False)
+        rejected_coll = pd.Series(index=self.series.index, data=False)
+
+        outliers = True
+        iter = 0
+        while outliers:
+            iter += 1
+            print(f"========================"
+                  f"Repetition #{iter}"
+                  f"========================")
+            output = boosted_model.detect_outliers(_series,
+                                                   trend_estimator='ses',
+                                                   # trend_estimator='linear',
+                                                   # trend_estimator=['linear', 'arima'],
+                                                   # arima_order=(1, 1, 1),
+                                                   # arima_order=[(1, 0, 0), (1, 0, 1), (1, 1, 1)],
+                                                   seasonal_estimator='fourier',
+                                                   seasonal_period=num_vals_oneday,
+                                                   # global_cost='mse',
+                                                   global_cost='maicc',
+                                                   split_cost='mae',
+                                                   fit_type='local',
+                                                   window_size=int(num_vals_oneday / 10))
+
+            if self.showplot: self._plot(boosted_model, output)
+
+            # Outliers
+            ok = output['outliers'] == False  # Non-outlier indices
+            ok = ok[ok].index
+            ok_coll.loc[ok] = True
+            rejected = output['outliers'] == True  # Outlier indices (locations)
+            rejected = rejected[rejected].index
+            rejected_coll.loc[rejected] = True
+
+            # Replace outlier values w/ predicted value (seasonality + trend)
+            # In this step, outliers cannot be removed from the dataset b/c
+            # thymeboost needs time series w/o NaN.
+            _series.loc[rejected] = output.loc[rejected, 'yhat']
+
+            # Stop outlier removal if no more outliers found
+            num_outliers = len(_series.loc[rejected])
+            if num_outliers == 0: outliers = False
+
+        # Convert to index
+        ok_coll = ok_coll[ok_coll].index
+        rejected_coll = rejected_coll[rejected_coll].index
+
+        print(f"Total found outliers: {len(rejected_coll)} values")
+
+        return ok_coll, rejected_coll
+
+
 
 
 if __name__ == '__main__':
     pass
-
-    # Testing code
-
-    # Testing MeteoScreeningFromDatabase
-    # Example file from dbget output
-    testfile = r'L:\Dropbox\luhk_work\20 - CODING\26 - NOTEBOOKS\meteoscreening\test.csv'
-    testdata = pd.read_csv(testfile)
-    testdata.set_index('TIMESTAMP_END', inplace=True)
-    testdata.index = pd.to_datetime(testdata.index)
-    series = testdata['TA_M1B1_1.50_1'].copy()
-    testdata.plot()
-    plt.show()
-
-    series_qc, removed_outliers = thymeboost(_series=series)
-    # series_qc

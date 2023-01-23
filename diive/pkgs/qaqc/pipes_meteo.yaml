@@ -7,13 +7,14 @@
 # Options for <units>:
 #   'W m-2', 'degC', '%', 'umol m-2 s-1'
 # Options for <check#>:
-#   'remove_radiation_zero_offset', 'range_check', 'setto_max_threshold',
-#   'setto_min_threshold', 'remove_relativehumidity_offset',
+#   'correct_for_radiation_zero_offset', 'range_check', 'correct_for_allowed_max',
+#   'correct_for_allowed_min', 'correct_for_relativehumidity_offset',
 #   'remove_highres_outliers'
 
 D_SNOW:
   D_SNOW_:
-    pipe: [ remove_highres_outliers_thymeboost, remove_highres_outliers_absolute_limits ]
+    pipe: [ remove_highres_outliers_thymeboost,
+            remove_highres_outliers_absolute_limits ]
     units: m
     resampling_aggregation: mean
     absolute_limits: [ -0.1, 1.5 ]
@@ -41,7 +42,10 @@ PA:
 
 PPFD:
   PPFD_IN_:
-    pipe: [ remove_radiation_zero_offset, setto_max_threshold, setto_min_threshold, remove_highres_outliers_absolute_limits ]
+    pipe: [ remove_radiation_zero_offset,
+            setto_max_threshold,
+            setto_min_threshold,
+            remove_highres_outliers_absolute_limits ]
     units: umol m-2 s-1
     resampling_aggregation: mean
     absolute_limits: [ 0, 4000 ]
@@ -55,14 +59,20 @@ PREC:
 
 RH:
   RH_:
-    pipe: [ remove_relativehumidity_offset, setto_max_threshold, setto_min_threshold, remove_highres_outliers_absolute_limits ]
+    pipe: [ remove_relativehumidity_offset,
+            setto_max_threshold,
+            setto_min_threshold,
+            remove_highres_outliers_absolute_limits ]
     units: "%"
     resampling_aggregation: mean
     absolute_limits: [ 0, 100 ]
 
 SW:
   SW_IN_:
-    pipe: [ remove_radiation_zero_offset, setto_max_threshold, setto_min_threshold, remove_highres_outliers_absolute_limits ]
+    pipe: [ remove_radiation_zero_offset,
+            setto_max_threshold,
+            setto_min_threshold,
+            remove_highres_outliers_absolute_limits ]
     units: W m-2
     resampling_aggregation: mean
     absolute_limits: [ 0, 2000 ]
@@ -78,9 +88,12 @@ SWC:
 
 TA:
   TA_:
-    pipe: [ remove_highres_outliers_zscore,
-            remove_highres_outliers_absolute_limits,
-            remove_highres_outliers_thymeboost ]
+    pipe: [
+      remove_highres_outliers_stl,
+      remove_highres_outliers_zscore,
+      remove_highres_outliers_absolute_limits,
+      remove_highres_outliers_thymeboost
+    ]
     units: degC
     resampling_aggregation: mean
     absolute_limits: [ -50, 50 ]

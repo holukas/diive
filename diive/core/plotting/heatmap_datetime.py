@@ -14,10 +14,9 @@ from pandas.plotting import register_matplotlib_converters
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.plotting.plotfuncs import nice_date_ticks, default_format, format_spines
 from diive.core.times.times import TimestampSanitizer
-from diive.core.utils.prints import ConsoleOutputDecorator
 
 
-@ConsoleOutputDecorator(spacing=False)
+# @ConsoleOutputDecorator(spacing=False)
 class HeatmapDateTime:
 
     def __init__(self,
@@ -30,7 +29,8 @@ class HeatmapDateTime:
                  cmap: str = 'RdYlBu_r',
                  color_bad: str = 'grey',
                  display_type: str = 'Time & Date',
-                 figsize:tuple=(9,16)):
+                 figsize: tuple = (9, 16),
+                 verbose: bool = False):
         """
         Plot heatmap of time series data with date on y-axis and time on x-axis
 
@@ -50,12 +50,12 @@ class HeatmapDateTime:
             in https://gitlab.ethz.ch/gl-notebooks/general-notebooks
 
         """
-        print(f"Plotting heatmap  ...")
-
         self.series = series.copy()
+        self.verbose = verbose
 
-        print("Preparing timestamp for heatmap plotting ...")
-        self.series = TimestampSanitizer(data=self.series).get()
+        if self.verbose: print(f"Plotting heatmap  ...")
+        if self.verbose: print("Preparing timestamp for heatmap plotting ...")
+        self.series = TimestampSanitizer(data=self.series, verbose=self.verbose).get()
 
         self.title = title
         self.cmap = cmap
@@ -64,7 +64,7 @@ class HeatmapDateTime:
         self.cb_digits_after_comma = cb_digits_after_comma
         self.color_bad = color_bad
         self.display_type = display_type
-        self.figsize=figsize
+        self.figsize = figsize
         self.ax = ax
 
         # Create axis if none is given
@@ -194,8 +194,6 @@ class HeatmapDateTime:
 
 def example():
     # Example with random data
-    import pandas as pd
-    import numpy as np
 
     # Load file
     from diive.core.io.filereader import ReadFileType
@@ -218,7 +216,7 @@ def example():
     # series = df['DATA'].copy()
 
     hm = HeatmapDateTime(series=series, title="from database",
-                         vmin=-0, vmax=1000, figsize=(9,24))
+                         vmin=-0, vmax=1000, figsize=(9, 24))
     hm.show()
     print(hm.get_ax())
 

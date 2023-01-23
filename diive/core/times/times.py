@@ -139,7 +139,8 @@ class TimestampSanitizer():
 
     def __init__(self,
                  data: Series or DataFrame,
-                 output_middle_timestamp: bool = True):
+                 output_middle_timestamp: bool = True,
+                 verbose: bool = False):
         """
         Validate and prepare timestamps for further processing
 
@@ -163,6 +164,7 @@ class TimestampSanitizer():
         """
         self.data = data.copy()
         self.output_middle_timestamp = output_middle_timestamp
+        self.verbose = verbose
 
         self.inferred_freq = None if not data.index.freq else data.index.freq
 
@@ -172,40 +174,39 @@ class TimestampSanitizer():
         return self.data
 
     def _run(self):
-        print("Sanitizing timestamp ...")
+        if self.verbose: print("Sanitizing timestamp ...")
 
         # Validate timestamp name
-        _ = validate_timestamp_naming(data=self.data)
+        _ = validate_timestamp_naming(data=self.data, verbose=self.verbose)
 
         # Convert timestamp to datetime
-        self.data = convert_timestamp_to_datetime(self.data)
+        self.data = convert_timestamp_to_datetime(self.data, verbose=self.verbose)
 
         # Sort timestamp index ascending
-        self.data = sort_timestamp_ascending(self.data)
+        self.data = sort_timestamp_ascending(self.data, verbose=self.verbose)
 
         # Remove index duplicates
-        self.data = remove_index_duplicates(data=self.data, keep='last')
+        self.data = remove_index_duplicates(data=self.data, keep='last', verbose=self.verbose)
 
         # Detect time resolution from data
         if not self.inferred_freq:
-            self.inferred_freq = DetectFrequency(index=self.data.index).get()
+            self.inferred_freq = DetectFrequency(index=self.data.index, verbose=self.verbose).get()
 
         # Make timestamp continuous w/o date gaps
-        self.data = continuous_timestamp_freq(data=self.data, freq=self.inferred_freq)
+        self.data = continuous_timestamp_freq(data=self.data, freq=self.inferred_freq, verbose=self.verbose)
 
         # Convert timestamp to middle
         if self.output_middle_timestamp:
-            self.data = convert_series_timestamp_to_middle(data=self.data)
+            self.data = convert_series_timestamp_to_middle(data=self.data, verbose=self.verbose)
 
 
-def sort_timestamp_ascending(data: Series or DataFrame) -> Series or DataFrame:
-    print(f"Sorting timestamp {data.index.name} ascending ...", end=" ")
+def sort_timestamp_ascending(data: Series or DataFrame, verbose: bool = False) -> Series or DataFrame:
+    if verbose: print(f"Sorting timestamp {data.index.name} ascending ...", end=" ")
     data.sort_index()
-    print("OK")
     return data
 
 
-def convert_timestamp_to_datetime(data: Series or DataFrame) -> Series or DataFrame:
+def convert_timestamp_to_datetime(data: Series or DataFrame, verbose: bool = False) -> Series or DataFrame:
     """
     Convert timestamp index to datetime format
 
@@ -219,16 +220,16 @@ def convert_timestamp_to_datetime(data: Series or DataFrame) -> Series or DataFr
         data with confirmed datetime index
 
     """
-    print(f"Converting timestamp {data.index.name} to datetime ...", end=" ")
+    if verbose: print(f"Converting timestamp {data.index.name} to datetime ...", end=" ")
     try:
         data.index = pd.to_datetime(data.index)
-        print("OK")
+        if verbose: print("OK")
     except:
         raise Exception("Conversion of timestamp to datetime format failed.")
     return data
 
 
-def validate_timestamp_naming(data: Series or DataFrame) -> str:
+def validate_timestamp_naming(data: Series or DataFrame, verbose: bool = False) -> str:
     """
     Check if timestamp is correctly named
 
@@ -242,11 +243,11 @@ def validate_timestamp_naming(data: Series or DataFrame) -> str:
     """
     timestamp_name = data.index.name
     allowed_timestamp_names = ['TIMESTAMP_END', 'TIMESTAMP_START', 'TIMESTAMP_MIDDLE']
-    print(f"Validating timestamp naming of timestamp column {timestamp_name} ...", end=" ")
+    if verbose: print(f"Validating timestamp naming of timestamp column {timestamp_name} ...", end=" ")
 
     # First check if timestamp already has one of the required names
     if any(fnmatch.fnmatch(timestamp_name, allowed_name) for allowed_name in allowed_timestamp_names):
-        print("Timestamp name OK.")
+        if verbose: print("Timestamp name OK.")
         return timestamp_name
 
     else:
@@ -482,15 +483,16 @@ class DetectFrequency:
 
     """
 
-    def __init__(self, index: pd.DatetimeIndex):
+    def __init__(self, index: pd.DatetimeIndex, verbose: bool = False):
         self.index = index
+        self.verbose = verbose
         # self.freq_expected = freq_expected
         self.num_datarows = self.index.__len__()
         self.freq = None
         self._run()
 
     def _run(self):
-        print(f"Detecting time resolution from timestamp {self.index.name} ...", end=" ")
+        if self.verbose: print(f"Detecting time resolution from timestamp {self.index.name} ...", end=" ")
 
         freq_full = timestamp_infer_freq_from_fullset(timestamp_ix=self.index)
         freq_timedelta = timestamp_infer_freq_from_timedelta(timestamp_ix=self.index)
@@ -504,23 +506,23 @@ class DetectFrequency:
             if len(freq_list) == 1:
                 # Maximum certainty, one single freq found across all checks
                 self.freq = freq_list[0]
-                print(f"OK (detected {self.freq} time resolution with maximum confidence)")
+                if self.verbose: print(f"OK (detected {self.freq} time resolution with maximum confidence)")
 
         elif freq_full:
             # High certainty, freq found from full range of dataset
             self.freq = freq_full
-            print(f"OK (detected {self.freq} time resolution {self.freq} with high confidence)")
+            if self.verbose: print(f"OK (detected {self.freq} time resolution {self.freq} with high confidence)")
 
         elif freq_progressive:
             # Medium certainty, freq found from start and end of dataset
             self.freq = freq_progressive
-            print(f"OK (detected {self.freq} time resolution {self.freq} with medium confidence)")
+            if self.verbose: print(f"OK (detected {self.freq} time resolution {self.freq} with medium confidence)")
 
         elif freq_timedelta:
             # High certainty, freq found from most frequent timestep that
             # occurred at least 99% of the time
             self.freq = freq_timedelta
-            print(f"OK (detected {self.freq} time resolution {self.freq} high confidence)")
+            if self.verbose: print(f"OK (detected {self.freq} time resolution {self.freq} high confidence)")
 
         else:
             raise Exception("Frequency detection failed.")
@@ -601,22 +603,23 @@ def timestamp_infer_freq_from_timedelta(timestamp_ix: pd.DatetimeIndex) -> str o
 
 
 def remove_index_duplicates(data: Series or DataFrame,
-                            keep: Literal["first", "last", False] = "last") -> Series or DataFrame:
+                            keep: Literal["first", "last", False] = "last",
+                            verbose: bool = False) -> Series or DataFrame:
     """Remove index duplicates"""
-    print("Removing data records with duplicate indexes ...", end=" ")
+    if verbose: print("Removing data records with duplicate indexes ...", end=" ")
     n_duplicates = data.index.duplicated().sum()
     if n_duplicates > 0:
         # Duplicates found
         data = data[~data.index.duplicated(keep=keep)]
-        print(f"OK (removed {n_duplicates} rows with duplicate timestamps)")
+        if verbose: print(f"OK (removed {n_duplicates} rows with duplicate timestamps)")
         return data
     else:
         # No duplicates found
-        print(f"OK (no duplicates found in timestamp index)")
+        if verbose: print(f"OK (no duplicates found in timestamp index)")
         return data
 
 
-def continuous_timestamp_freq(data: Series or DataFrame, freq: str) -> Series or DataFrame:
+def continuous_timestamp_freq(data: Series or DataFrame, freq: str, verbose: bool = False) -> Series or DataFrame:
     """Generate continuous timestamp of given frequency between first and last date of index
 
     This makes df continuous w/o date gaps but w/ data gaps at filled-in timestamps.
@@ -624,8 +627,8 @@ def continuous_timestamp_freq(data: Series or DataFrame, freq: str) -> Series or
     first_date = data.index[0]
     last_date = data.index[-1]
 
-    print(f"Creating continuous {freq} timestamp index for timestamp {data.index.name} "
-          f"between {first_date} and {last_date} ...", end=" ")
+    if verbose: print(f"Creating continuous {freq} timestamp index for timestamp {data.index.name} "
+                      f"between {first_date} and {last_date} ...", end=" ")
 
     # Original timestamp name
     idx_name = data.index.name
@@ -640,11 +643,10 @@ def continuous_timestamp_freq(data: Series or DataFrame, freq: str) -> Series or
     data.index = pd.to_datetime(data.index)
     data = data.asfreq(freq=freq)
     # df.sort_index(inplace=True)
-    print("OK")
     return data
 
 
-def convert_series_timestamp_to_middle(data: Series or DataFrame) -> Series or DataFrame:
+def convert_series_timestamp_to_middle(data: Series or DataFrame, verbose: bool = False) -> Series or DataFrame:
     """
     Convert the timestamp index to show middle of averaging period
 
@@ -698,7 +700,7 @@ def convert_series_timestamp_to_middle(data: Series or DataFrame) -> Series or D
 
     timestamp_freq = data.index.freq
 
-    print(f"Converting timestamp index {timestamp_name_before} to show middle of averaging period ...")
+    if verbose: print(f"Converting timestamp index {timestamp_name_before} to show middle of averaging period ...")
 
     first_timestamp_before = data.index[0]
     last_timestamp_before = data.index[-1]
@@ -720,12 +722,13 @@ def convert_series_timestamp_to_middle(data: Series or DataFrame) -> Series or D
     first_timestamp_after = data.index[0]
     last_timestamp_after = data.index[-1]
 
-    print(f"    {timestamp_name_before} was converted to {timestamp_name_after}")
-    print(f"    First and last dates:")
-    print(f"        Before conversion: "
-          f"{timestamp_name_before} from {first_timestamp_before} to {last_timestamp_before}")
-    print(f"         After conversion: "
-          f"{timestamp_name_after} from {first_timestamp_after} to {last_timestamp_after}")
+    if verbose:
+        print(f"    {timestamp_name_before} was converted to {timestamp_name_after}")
+        print(f"    First and last dates:")
+        print(f"        Before conversion: "
+              f"{timestamp_name_before} from {first_timestamp_before} to {last_timestamp_before}")
+        print(f"         After conversion: "
+              f"{timestamp_name_after} from {first_timestamp_after} to {last_timestamp_after}")
 
     return data
 

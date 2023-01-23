@@ -8,6 +8,7 @@ import datetime
 import fnmatch
 import os
 from pathlib import Path
+from typing import Literal
 
 import pandas as pd
 import pandas.errors
@@ -40,22 +41,34 @@ def search_files(searchdir, pattern: str) -> list:
 
 
 class ConfigFileReader:
+    """
+    Load and validate configuration from YAML file and store in dict
 
-    def __init__(self, configfilepath: Path or str):
+    - kudos: https://stackoverflow.com/questions/57687058/yaml-safe-load-special-character-from-file
+
+    """
+
+    def __init__(self,
+                 configfilepath: Path or str,
+                 validation: Literal['filetype', 'meteopipe']):
+        """
+        Args:
+            configfilepath: Path to YAML file with configuration
+            validation:
+                - If *filetype*, the file is checked whether it follows the
+                structure of required filetype settings. These files give
+                info about the structure of the respective filetype.
+                - If *meteopipe*, currently no validation is done. These files
+                define the QA/QC steps that are performed for each variable.
+        """
         self.configfilepath = Path(configfilepath)
+        self.validation = validation
 
     def read(self) -> dict:
-        """
-        Load and validate configuration from YAML file and store in dict
-
-        kudos: https://stackoverflow.com/questions/57687058/yaml-safe-load-special-character-from-file
-
-        :param config_file: YAML file with configuration
-        :return: dict
-        """
         with open(self.configfilepath, 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
-        validate_filetype_config(config=config)
+        if self.validation == 'filetype':
+            validate_filetype_config(config=config)
         return config
 
 
@@ -157,7 +170,7 @@ class MultiDataFileReader:
 
         # Getting configs for filetype
         configfilepath = get_filetypes()[filetype]
-        self.filetypeconfig = ConfigFileReader(configfilepath=configfilepath).read()
+        self.filetypeconfig = ConfigFileReader(configfilepath=configfilepath, validation='filetype').read()
         self.filepaths = filepaths
 
         # Collect data from all files listed in filepaths
@@ -230,7 +243,7 @@ class ReadFileType:
         if filetype:
             # Read settins for specified filetype
             _available_filetypes = get_filetypes()
-            self.filetypeconfig = ConfigFileReader(_available_filetypes[filetype]).read()
+            self.filetypeconfig = ConfigFileReader(_available_filetypes[filetype], validation='filetype').read()
         else:
             # Use provided settings dict
             self.filetypeconfig = filetypeconfig

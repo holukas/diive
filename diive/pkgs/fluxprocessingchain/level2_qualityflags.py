@@ -3,7 +3,7 @@ import pandas as pd
 from pandas import DataFrame
 
 from diive.pkgs.flux.common import detect_fluxgas
-from diive.pkgs.qaqc.qcf import QCF
+from pkgs.qaqc.qcf import FluxQCF
 
 
 class QualityFlagsLevel2:
@@ -83,7 +83,8 @@ class QualityFlagsLevel2:
                 flagdf[c] = flagdf[c].replace(1, 2)
 
         # Make new dict that contains flags that we use later
-        flagcols_used = {x: flagcols[x] for x in flagcols if x in ('1', '3', '4')}
+        flagcols_used = {x: flagcols[x] for x in flagcols if x in ('1', '3')}
+        # flagcols_used = {x: flagcols[x] for x in flagcols if x in ('1', '3', '4')}
 
         # Collect all required flags
         for i, c in flagcols_used.items():
@@ -249,9 +250,9 @@ def example():
     print(fluxqc.fluxflags)
     _df = fluxqc.get()
 
-    qcf = QCF(df=_df, fluxcol='FC', level=2, swinpotcol='SW_IN_POT',
-              nighttime_threshold=50,
-              daytime_accept_qcf_below=2, nighttimetime_accept_qcf_below=1)
+    qcf = FluxQCF(df=_df, fluxcol='FC', level=2, swinpotcol='SW_IN_POT',
+                  nighttime_threshold=50,
+                  daytime_accept_qcf_below=2, nighttimetime_accept_qcf_below=1)
     qcf.calculate()
     qcf.report_flags()
     qcf.report_qcf_evolution()

@@ -102,7 +102,7 @@ def remove_radiation_zero_offset(series: Series,
     outname = series.name
     series.name = "input_data"
 
-    # Calculate potential radiation for 10MIN time resolution
+    # Calculate nighttime flag from sun position (angle) for 10MIN time resolution
     nighttime_flag = nighttime_flag_from_latlon(
         lat=lat, lon=lon,
         start=str(series.index[0]), stop=str(series.index[-1]),
