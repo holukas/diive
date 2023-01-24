@@ -298,7 +298,7 @@ if __name__ == '__main__':
     # Search & merge high-res data files
     searchdir = indir
     pattern = '*.csv'
-    filepaths = filereader.search_files(searchdir=searchdir, pattern=pattern)
+    filepaths = filereader.search_files(searchdirs=searchdir, pattern=pattern)
 
     # Column names
     u_col = 'U_[R350-A]'  # m s-1

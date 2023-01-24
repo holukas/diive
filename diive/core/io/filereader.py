@@ -25,17 +25,18 @@ from diive.core import dfun
 from diive.core.times.times import continuous_timestamp_freq, TimestampSanitizer
 
 
-def search_files(searchdir, pattern: str) -> list:
+def search_files(searchdirs: str or list, pattern: str) -> list:
     """ Search files and store their filename and the path to the file in dictionary. """
     # found_files_dict = {}
     foundfiles = []
-    for root, dirs, files in os.walk(searchdir):
-        for idx, settings_file_name in enumerate(files):
-            if fnmatch.fnmatch(settings_file_name, pattern):
-                filepath = Path(root) / settings_file_name
-                # found_files_dict[settings_file_name] = filepath
-                foundfiles.append(filepath)
-    # return found_files_dict
+    if isinstance(searchdirs, str): searchdirs = [searchdirs]  # Use str as list
+    for searchdir in searchdirs:
+        for root, dirs, files in os.walk(searchdir):
+            for idx, settings_file_name in enumerate(files):
+                if fnmatch.fnmatch(settings_file_name, pattern):
+                    filepath = Path(root) / settings_file_name
+                    # found_files_dict[settings_file_name] = filepath
+                    foundfiles.append(filepath)
     foundfiles.sort()
     return foundfiles
 
@@ -197,7 +198,7 @@ class MultiDataFileReader:
         data_df = None
         metadata_df = None
         for filepath in self.filepaths:
-            print(f"\n{'-' * 40}\nReading file {filepath.stem}\n{'-' * 40}")
+            # print(f"\n{'-' * 40}\nReading file {filepath.stem}\n{'-' * 40}")
             try:
                 incoming_data_df, incoming_metadata_df = \
                     ReadFileType(filepath=filepath, filetypeconfig=self.filetypeconfig).get_filedata()
@@ -491,19 +492,17 @@ class DataFileReader:
 
 
 def example():
-    # Load data
-    filepath = Path(
-        "M:\Downloads\Warm Winter 2020 ecosystem eddy covariance flux product for 73 stations in FLUXNET-Archive format—release 2022-1\Swiss_Sites\FLX_CH-Dav_FLUXNET2015_FULLSET_1997-2020_beta-3\FLX_CH-Dav_FLUXNET2015_FULLSET_HH_1997-2020_beta-3.csv")
-    loaddatafile = ReadFileType(filetype='FLUXNET-FULLSET-HH-CSV-30MIN', filepath=filepath)
-    data_df, metadata_df = loaddatafile._readfile()
+    import os
+    from pathlib import Path
+    FOLDER = r"Z:\CH-FRU_Fruebuel\20_ec_fluxes\2023\Level-0"
+    filepaths = search_files(FOLDER, "*.csv")
+    filepaths = [fp for fp in filepaths
+                 if fp.stem.startswith("eddypro_")
+                 and "_fluxnet_" in fp.stem
+                 and fp.stem.endswith("_adv")]
+    print(filepaths)
 
-    FOLDER = r"L:\Sync\luhk_work\20 - CODING\26 - NOTEBOOKS\gl-notebooks\FluxProcessingChain\FRU\data"
-    filepaths = [f for f in os.listdir(FOLDER) if f.endswith(".csv")]
-    filepaths = [FOLDER + "/" + f for f in filepaths]
-    filepaths = [Path(f) for f in filepaths]
     loaddatafile = MultiDataFileReader(filetype='EDDYPRO_FLUXNET_30MIN', filepaths=filepaths)
-    # df = loaddatafile.data_df
-    # save_as_pickle(outpath=r'F:\Dropbox\luhk_work\_temp', filename="data", data=df)
 
 
 if __name__ == '__main__':

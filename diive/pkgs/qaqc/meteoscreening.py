@@ -95,8 +95,8 @@ class ScreenMeteoVar:
         mqcf = self._call_pipe_steps()
 
         # Print some info about QCF
-        # # mqcf.report_flags()
-        # # mqcf.report_series()
+        mqcf.report_flags()
+        mqcf.report_series()
         mqcf.report_qcf_evolution()
 
         # Plot
@@ -126,7 +126,7 @@ class ScreenMeteoVar:
 
             elif step == 'remove_highres_outliers_thymeboost':
                 # Generates flag, needs QC'd data
-                _mqcf = FlagQCF(df=self._flags_df, series=self.series, missingflag=str(_miss.flag.name))
+                _mqcf = FlagQCF(df=self._flags_df, series=self.series)
                 _mqcf.calculate()
                 _thymeboost = ThymeBoostOutlier(series=_mqcf.seriesqcf)
                 _thymeboost.calc(showplot=True)
@@ -140,7 +140,7 @@ class ScreenMeteoVar:
 
             elif step == 'remove_highres_outliers_localsd':
                 # Generates flag, needs QC'd data
-                _mqcf = FlagQCF(df=self._flags_df, series=self.series, missingflag=str(_miss.flag.name))
+                _mqcf = FlagQCF(df=self._flags_df, series=self.series)
                 _mqcf.calculate()
                 _localsd = LocalSD(series=_mqcf.seriesqcf)
                 _localsd.calc(n_sd=7, showplot=True, verbose=True)
@@ -199,7 +199,7 @@ class ScreenMeteoVar:
 
     def _calculate_qcf(self, missingflag: str):
         """Calculate overall quality flag QCF and Add QCF results to other flags"""
-        mqcf = FlagQCF(df=self._flags_df, series=self.series, missingflag=missingflag)
+        mqcf = FlagQCF(df=self._flags_df, series=self.series)
         mqcf.calculate()
         _flags_df = pd.concat([self._flags_df, mqcf.flags], axis=1)
         _flags_df = _flags_df.loc[:, ~_flags_df.columns.duplicated(keep='last')]
@@ -467,10 +467,9 @@ def example():
     # Settings
     DIRCONF = r'L:\Sync\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
     SITE = 'ch-dav'  # Site name
-    MEASUREMENTS = ['SWC']
-    # MEASUREMENTS = ['TA']
-    FIELDS = ['SWC_FF1_0.05_3']  # Variable name; InfluxDB stores variable names as '_field'
-    # FIELDS = ['TA_NABEL_T1_35_1']  # Variable name; InfluxDB stores variable names as '_field'
+    MEASUREMENTS = ['TA']
+    # FIELDS = ['SWC_FF1_0.05_3']  # Variable name; InfluxDB stores variable names as '_field'
+    FIELDS = ['TA_NABEL_T1_35_1']  # Variable name; InfluxDB stores variable names as '_field'
     DATA_VERSION = 'raw'
     START = '2022-12-01 00:01:00'  # Download data starting with this date
     STOP = '2023-01-01 00:01:00'  # Download data before this date (the stop date itself is not included)

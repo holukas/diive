@@ -73,13 +73,8 @@ class OutlierSTLIQR(FlagBase):
     def _detect_nighttime(self) -> bool:
         """Create nighttime flag"""
 
-        # XXX = potrad_from_latlon(
-        #     lat=self.lat, lon=self.lon, freq='10T',
-        #     start=str(self.series.index[0]), stop=str(self.series.index[-1]),
-        #     timezone_of_timestamp='UTC+01:00')
-
         nighttimeflag = nighttime_flag_from_latlon(
-            lat=self.lat, lon=self.lon, freq='10T',
+            lat=self.lat, lon=self.lon, freq=self.series.index.freqstr,
             start=str(self.series.index[0]), stop=str(self.series.index[-1]),
             timezone_of_timestamp='UTC+01:00', threshold_daytime=0)
 

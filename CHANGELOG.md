@@ -2,6 +2,17 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.47.0 | XX Jan 2023
+
+### Changes
+
+- **QCF flag**: (`pkgs.qaqc.qcf.FlagQCF`)
+    - Refactored code: the creation of overall quality flags `QCF` is now done using the same
+      code for flux and meteo data. The general logic of the `QCF` calculation is that results
+      from multiple quality checks that are stored as flags in the data are combined into
+      one single quality flag.
+- **Search files** can now search in subfolders of multiple base folders (`core.io.filereader.search_files`)
+
 ## v0.46.0 | 23 Jan 2023
 
 ### New Features

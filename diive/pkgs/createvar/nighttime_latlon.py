@@ -24,7 +24,7 @@ def nighttime_flag_from_latlon(
         stop: str,
         freq: str,
         timezone_of_timestamp: str,
-        threshold_daytime:float=0
+        threshold_daytime: float = 0
 ) -> Series:
     """Calculate flag for nighttime based on site location (latitude/longitude)
 
@@ -90,7 +90,7 @@ def potrad_from_latlon(
         freq: str,
         timezone_of_timestamp: str
 ) -> DataFrame:
-    #TODO
+    # TODO
     """Calculate potential radiation from latitude/longitude
 
     Args:
@@ -150,8 +150,6 @@ def potrad_from_latlon(
     df.set_index('TIMESTAMP_END', inplace=True)
     df = df.asfreq(freq)
     return df
-
-
 
     # # Potential radiation
     # # https://pysolar.readthedocs.io/en/latest/#
