@@ -4,13 +4,38 @@
 
 ## v0.47.0 | XX Jan 2023
 
+### New Features
+
+- **Outlier detection: LOF, local outlier factor**: (`pkgs.outlierdetection.lof.LocalOutlierFactorDaytimeNighttime`)
+    - Identify outliers based on the local outlier factor, done separately for
+      daytime and nighttime data
+- **Multiple z-score outlier detection**:
+    - Simple outlier detection based on the z-score of observations, calculated from
+      mean and std from the complete timeseries. (`pkgs.outlierdetection.zscore.zScore`)
+    - z-score outlier detection separately for daytime and nighttime
+      data (`pkgs.outlierdetection.zscore.zScoreDaytimeNighttime`)
+    - Identify outliers based on the z-score of the interquartile range data (`pkgs.outlierdetection.zscore.zScoreIQR`)
+- **Outlier detection**: (`pkgs.fluxprocessingchain.level32_outlierremoval.OutlierRemovalLevel32`):
+    - Class that allows to apply multiple methods for outlier detection during as part of the flux processing chain
+
 ### Changes
 
+- **Flux Processing Chain**:
+    - Worked on making the chain more accessible to users. The purpose of the modules in
+      `pkgs/fluxprocessingchain` is to expose functionality to the user, i.e., they make
+      functionality needed in the chain accessible to the user. This should be as easy as possible
+      and this update further simplified this access. At the moment there are three modules in
+      `pkgs/fluxprocessingchain/`: `level2_qualityflags.py`, `level31_storagecorrection.py` and
+      `level32_outlierremoval.py`. An example for the chain is given in `fluxprocessingchain.py`.
 - **QCF flag**: (`pkgs.qaqc.qcf.FlagQCF`)
     - Refactored code: the creation of overall quality flags `QCF` is now done using the same
       code for flux and meteo data. The general logic of the `QCF` calculation is that results
       from multiple quality checks that are stored as flags in the data are combined into
       one single quality flag.
+- **Outlier Removal using STL**:
+    - Module was renamed to `pkgs.outlierdetection.seasonaltrend.OutlierSTLRIQRZ`. It is not the
+      most convenient name, I know, but it stands for **S**easonal **T**rend decomposition using
+      **L**OESS, based on **R**esidual analysis of the **I**nter**Q**uartile **R**ange using **Z**-scores
 - **Search files** can now search in subfolders of multiple base folders (`core.io.filereader.search_files`)
 
 ## v0.46.0 | 23 Jan 2023

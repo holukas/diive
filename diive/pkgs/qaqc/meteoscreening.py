@@ -23,7 +23,7 @@ from diive.pkgs.corrections.setto_threshold import setto_threshold
 from diive.pkgs.outlierdetection.absolutelimits import AbsoluteLimits
 from diive.pkgs.outlierdetection.local3sd import LocalSD
 from diive.pkgs.outlierdetection.missing import MissingValues
-from diive.pkgs.outlierdetection.seasonaltrend import OutlierSTLIQR
+from diive.pkgs.outlierdetection.seasonaltrend import OutlierSTLRIQRZ
 from diive.pkgs.outlierdetection.thymeboost import ThymeBoostOutlier
 from diive.pkgs.outlierdetection.zscore import zScoreIQR
 from diive.pkgs.qaqc.qcf import FlagQCF
@@ -121,7 +121,7 @@ class ScreenMeteoVar:
         for step in pipe_steps:
 
             if step == 'remove_highres_outliers_stl':
-                _stl = OutlierSTLIQR(series=self.series, lat=self.site_lat, lon=self.site_lon)
+                _stl = OutlierSTLRIQRZ(series=self.series, lat=self.site_lat, lon=self.site_lon)
                 _stl.calc(showplot=True)
 
             elif step == 'remove_highres_outliers_thymeboost':

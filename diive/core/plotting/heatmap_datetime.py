@@ -231,7 +231,7 @@ def example():
     # STOP = '2022-01-15 00:00:10'
     # TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # We need returned timestamps in CET (winter time), which is UTC + 1 hour
     # DATA_VERSION = 'raw'
-    # DIRCONF = r'L:\Dropbox\luhk_work\20 - CODING\22 - POET\configs'
+    # DIRCONF = r'F:\Dropbox\luhk_work\20 - CODING\22 - POET\configs'
     # dbc = dbcInflux(dirconf=DIRCONF)
     #
     # # Download data

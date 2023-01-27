@@ -43,15 +43,6 @@ class AbsoluteLimits(FlagBase):
         return ok, rejected
 
 
-# @ConsoleOutputDecorator()
-# def absolute_limits(series: Series, min: int, max: int) -> Series:
-#     # flag_name = f"QCF_OUTLIER_ABSLIM_{series.name}"
-#     flag = pd.Series(index=series.index, data=False)
-#     flag.loc[series < min] = True
-#     flag.loc[series > max] = True
-#     flag.name = flag_name
-#     return flag
-
 def example():
     import numpy as np
     import pandas as pd

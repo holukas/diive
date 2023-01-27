@@ -76,7 +76,7 @@ def aggregated_as_hires(aggregate_series: Series,
     return hires_df[agghires_col]
 
 
-def insert_aggregated_in_hires(df: DataFrame, col: str,
+def insert_aggregated_in_hires(df: DataFrame, coF: str,
                                to_freq: str = 'D',
                                to_agg: str = 'mean',
                                agg_offset: str = None):
@@ -85,7 +85,7 @@ def insert_aggregated_in_hires(df: DataFrame, col: str,
 
     Args:
         df: Dataframe containing column that is aggregated
-        col: Column name of variable that is aggregated
+        coF: Column name of variable that is aggregated
         to_freq: Frequency string, 'D' for daily aggregation, 'A' for yearly, 'M' for monthly
         to_agg: Aggregation type, e.g. 'mean' for mean, 'max' for maximum
         agg_offset: Timestamp offset for aggregation, e.g. '7H' when 'to_freq="D"' calculates

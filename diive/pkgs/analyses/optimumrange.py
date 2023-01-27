@@ -21,8 +21,8 @@ class FindOptimumRange:
 
     def __init__(self,
                  df: DataFrame,
-                 xcol: str,
-                 ycol: str,
+                 xcoF: str,
+                 ycoF: str,
                  n_vals_per_bin: int = 300,
                  bins_agg: Literal['median'] = 'median',
                  rwinsize: float = 0.1,
@@ -45,8 +45,8 @@ class FindOptimumRange:
 
         Args:
             df: Data
-            xcol: Column name of x in df
-            ycol: Column name of y in df
+            xcoF: Column name of x in df
+            ycoF: Column name of y in df
             n_vals_per_bin: Number of values per x bin
             bins_agg: How data in bins are aggregated
             rwinsize: Window size for rolling aggregation, expressed as fraction of
@@ -123,7 +123,7 @@ class FindOptimumRange:
         df = self.df[[self.xcol, self.ycol]].copy()
 
         # Full data range
-        fullrange_df = df.groupby(df.index.year).agg({self.xcol: ['count', 'mean']})
+        fullrange_df = df.groupby(df.index.year).agg({self.xcoF: ['count', 'mean']})
 
         xcounts_df = pd.DataFrame()
         # xcounts_df['vals_total'] = df.groupby(df.index.year).agg({'count'})

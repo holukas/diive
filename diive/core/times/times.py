@@ -508,7 +508,7 @@ class DetectFrequency:
                 self.freq = freq_list[0]
                 if self.verbose: print(f"OK (detected {self.freq} time resolution with maximum confidence)")
 
-        elif freq_full:
+        elif freq_fulF:
             # High certainty, freq found from full range of dataset
             self.freq = freq_full
             if self.verbose: print(f"OK (detected {self.freq} time resolution {self.freq} with high confidence)")
@@ -833,7 +833,7 @@ if __name__ == '__main__':
     pass
 
     # # Test code
-    # filepath = r'L:\Dropbox\luhk_work\20 - CODING\21 - DIIVE\diive\tests\testdata\testfile_ch-dav_2020.diive.csv'
+    # filepath = r'F:\Dropbox\luhk_work\20 - CODING\21 - DIIVE\diive\tests\testdata\testfile_ch-dav_2020.diive.csv'
     # df = pd.read_csv(filepath, index_col=0, parse_dates=True, skiprows=[1])
     #
     # # Remove index duplicates

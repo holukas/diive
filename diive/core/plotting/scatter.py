@@ -95,8 +95,8 @@ def example():
     # from diive.core.io.filereader import ReadFileType
     # loaddatafile = ReadFileType(
     #     filetype='DIIVE_CSV_30MIN',
-    #     filepath=r"L:\Dropbox\luhk_work\20 - CODING\21 - DIIVE\diive-gui\src\main\resources\base\example_files\ExampleFile_DIIVE_CSV_30T.diive.csv",
-    #     # filepath=r"L:\Dropbox\luhk_work\_current\fp2022\7-14__IRGA627572__addingQCF0\CH-DAV_FP2022.1_1997-2022.08_ID20220826234456_30MIN.diive.csv",
+    #     filepath=r"F:\Dropbox\luhk_work\20 - CODING\21 - DIIVE\diive-gui\src\main\resources\base\example_files\ExampleFile_DIIVE_CSV_30T.diive.csv",
+    #     # filepath=r"F:\Dropbox\luhk_work\_current\fp2022\7-14__IRGA627572__addingQCF0\CH-DAV_FP2022.1_1997-2022.08_ID20220826234456_30MIN.diive.csv",
     #     data_nrows=None)
     # data_df, metadata_df = loaddatafile.get_filedata()
     #

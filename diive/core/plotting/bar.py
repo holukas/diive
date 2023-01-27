@@ -89,7 +89,7 @@ class LongtermAnomaliesYear:
 def example():
     ## Long-term TA
     ## space-separated data
-    data_longterm_TA = r"L:\Dropbox\luhk_work\_current\CH-DAV_1864-2021_TA-YEARLY_Meteoswiss_order_105469_data.txt"
+    data_longterm_TA = r"F:\Dropbox\luhk_work\_current\CH-DAV_1864-2021_TA-YEARLY_Meteoswiss_order_105469_data.txt"
     ta_longterm = pd.read_csv(data_longterm_TA, header=0, encoding='utf-8', delimiter=';',
                               keep_date_col=False, index_col='time', dtype=None,
                               engine='python')

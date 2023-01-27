@@ -4,8 +4,179 @@ import numpy as np
 import pandas as pd
 from pandas import Series, DatetimeIndex
 
+import diive.core.funcs.funcs as funcs
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.prints import ConsoleOutputDecorator
+from diive.pkgs.createvar.nighttime_latlon import nighttime_flag_from_latlon
+
+
+@ConsoleOutputDecorator()
+class zScoreDaytimeNighttime(FlagBase):
+    """
+    Identify outliers based on the z-score, separately for daytime and nighttime
+    ...
+
+    Methods:
+        calc(factor: float = 4): Calculates flag
+
+    After running calc(), results can be accessed with:
+        flag: Series
+            Flag series where accepted (ok) values are indicated
+            with flag=0, rejected values are indicated with flag=2
+        filteredseries: Series
+            Data with rejected values set to missing
+
+    """
+    flagid = 'OUTLIER_ZSCOREDTNT'
+
+    def __init__(self, series: Series, site_lat: float, site_lon: float, levelid: str = None):
+        super().__init__(series=series, flagid=self.flagid, levelid=levelid)
+        self.showplot = False
+        self.verbose = False
+
+        # Detect nighttime
+        self.is_nighttime = nighttime_flag_from_latlon(
+            lat=site_lat, lon=site_lon, freq=self.series.index.freqstr,
+            start=str(self.series.index[0]), stop=str(self.series.index[-1]),
+            timezone_of_timestamp='UTC+01:00', threshold_daytime=0)
+        self.is_nighttime = self.is_nighttime == 1  # Convert 0/1 flag to False/True flag
+        self.is_daytime = ~self.is_nighttime  # Daytime is inverse of nighttime
+
+    def calc(self, threshold: float = 4, showplot: bool = False, verbose: bool = False):
+        """Calculate flag"""
+        self.showplot = showplot
+        self.verbose = verbose
+        self.reset()
+        ok, rejected = self._flagtests(threshold=threshold)
+        self.setflag(ok=ok, rejected=rejected)
+        self.setfiltered(rejected=rejected)
+
+    def _flagtests(self, threshold: float = 4) -> tuple[DatetimeIndex, DatetimeIndex]:
+        """Perform tests required for this flag"""
+
+        # Working data
+        s = self.series.copy().dropna()
+        flag = pd.Series(index=self.series.index, data=np.nan)
+
+        # Run for daytime (dt)
+        _s_dt = s[self.is_nighttime].copy()  # Daytime data
+        _zscore_dt = funcs.zscore(series=_s_dt)
+        _ok_dt = _zscore_dt <= threshold
+        _ok_dt = _ok_dt[_ok_dt].index
+        _rejected_dt = _zscore_dt > threshold
+        _rejected_dt = _rejected_dt[_rejected_dt].index
+
+        # Run for nighttime (nt)
+        _s_nt = s[self.is_daytime].copy()  # Daytime data
+        _zscore_nt = funcs.zscore(series=_s_nt)
+        _ok_nt = _zscore_nt <= threshold
+        _ok_nt = _ok_nt[_ok_nt].index
+        _rejected_nt = _zscore_nt > threshold
+        _rejected_nt = _rejected_nt[_rejected_nt].index
+
+        # Collect daytime and nighttime flags in one overall flag
+        flag.loc[_ok_dt] = 0
+        flag.loc[_rejected_dt] = 2
+        flag.loc[_ok_nt] = 0
+        flag.loc[_rejected_nt] = 2
+
+        total_outliers = (flag == 2).sum()
+
+        ok = (flag == 0)
+        ok = ok[ok].index
+        rejected = (flag == 2)
+        rejected = rejected[rejected].index
+
+        if self.verbose:
+            print(f"Total found outliers: {len(_rejected_dt)} values (daytime)")
+            print(f"Total found outliers: {len(_rejected_nt)} values (nighttime)")
+            print(f"Total found outliers: {total_outliers} values (daytime+nighttime)")
+
+        if self.showplot: self._plot(ok, rejected)
+
+        return ok, rejected
+
+    def _plot(self, ok, rejected):
+        # Plot
+        fig = plt.figure(facecolor='white', figsize=(16, 9))
+        gs = gridspec.GridSpec(1, 1)  # rows, cols
+        # gs.update(wspace=0.3, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
+        ax = fig.add_subplot(gs[0, 0])
+        ax.plot_date(self.series[ok].index, self.series[ok],
+                     label="OK", color="#4CAF50")
+        ax.plot_date(self.series[rejected].index, self.series[rejected],
+                     label="outlier (rejected)", color="#F44336", marker="X")
+        ax.legend()
+        fig.show()
+
+
+@ConsoleOutputDecorator()
+class zScore(FlagBase):
+    """
+    Identify outliers based on the z-score
+    ...
+
+    Methods:
+        calc(factor: float = 4): Calculates flag
+
+    After running calc(), results can be accessed with:
+        flag: Series
+            Flag series where accepted (ok) values are indicated
+            with flag=0, rejected values are indicated with flag=2
+        filteredseries: Series
+            Data with rejected values set to missing
+
+    kudos: https://www.analyticsvidhya.com/blog/2022/08/outliers-pruning-using-python/
+
+    """
+    flagid = 'OUTLIER_ZSCORE'
+
+    def __init__(self, series: Series, levelid: str = None):
+        super().__init__(series=series, flagid=self.flagid, levelid=levelid)
+        self.showplot = False
+        self.verbose = False
+
+    def calc(self, threshold: float = 4, showplot: bool = False, verbose: bool = False):
+        """Calculate flag"""
+        self.showplot = showplot
+        self.verbose = verbose
+        self.reset()
+        ok, rejected = self._flagtests(threshold=threshold)
+        self.setflag(ok=ok, rejected=rejected)
+        self.setfiltered(rejected=rejected)
+
+    def _flagtests(self, threshold: float = 4) -> tuple[DatetimeIndex, DatetimeIndex]:
+        """Perform tests required for this flag"""
+
+        # Working data
+        s = self.series.copy().dropna()
+
+        # Run with threshold
+        zscore = funcs.zscore(series=s)
+        ok = zscore <= threshold
+        ok = ok[ok].index
+        rejected = zscore > threshold
+        rejected = rejected[rejected].index
+
+        if self.verbose: print(f"Total found outliers: {len(rejected)} values")
+        # print(f"z-score of {threshold} corresponds to a prob of {100 * 2 * norm.sf(threshold):0.2f}%")
+
+        if self.showplot: self._plot(ok, rejected)
+
+        return ok, rejected
+
+    def _plot(self, ok, rejected):
+        # Plot
+        fig = plt.figure(facecolor='white', figsize=(16, 9))
+        gs = gridspec.GridSpec(1, 1)  # rows, cols
+        # gs.update(wspace=0.3, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
+        ax = fig.add_subplot(gs[0, 0])
+        ax.plot_date(self.series[ok].index, self.series[ok],
+                     label="OK", color="#4CAF50")
+        ax.plot_date(self.series[rejected].index, self.series[rejected],
+                     label="outlier (rejected)", color="#F44336", marker="X")
+        ax.legend()
+        fig.show()
 
 
 @ConsoleOutputDecorator()

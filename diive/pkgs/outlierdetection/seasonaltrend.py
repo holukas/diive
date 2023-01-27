@@ -34,9 +34,12 @@ from diive.pkgs.outlierdetection.zscore import zScoreIQR
 
 
 @ConsoleOutputDecorator()
-class OutlierSTLIQR(FlagBase):
+class OutlierSTLRIQRZ(FlagBase):
     """
     Identify outliers based on seasonal-trend decomposition and z-score calculations
+
+    (S)easonal (T)rend decomposition using (L)OESS, based on (R)esidual analysis
+    of the (I)nter(Q)uartile (R)ange using (Z)-scores
 
     ...
 
@@ -58,15 +61,16 @@ class OutlierSTLIQR(FlagBase):
     def __init__(self, series: Series, lat: float, lon: float, levelid: str = None):
         super().__init__(series=series, flagid=self.flagid, levelid=levelid)
         self.showplot = False
+        self.repeat=True
         self.lat = lat
         self.lon = lon
         self.is_nighttime = self._detect_nighttime()
 
-    def calc(self, showplot: bool = False):
+    def calc(self, zfactor: float = 4.5, repeat:bool=False, showplot: bool = False):
         """Calculate flag"""
         self.showplot = showplot
         self.reset()
-        ok, rejected = self._flagtests()
+        ok, rejected = self._flagtests(zfactor=zfactor, repeat=repeat)
         self.setflag(ok=ok, rejected=rejected)
         self.setfiltered(rejected=rejected)
 
@@ -83,11 +87,12 @@ class OutlierSTLIQR(FlagBase):
         nighttime_ix = nighttime_flag_in_hires == 1
         return nighttime_ix
 
-    def _flagtests(self) -> tuple[DatetimeIndex, DatetimeIndex]:
+    def _flagtests(self, zfactor: float = 4.5, repeat:bool=True) -> tuple[DatetimeIndex, DatetimeIndex]:
         """Perform tests required for this flag"""
 
         # Work series
         _series = self.series.copy()
+        n_available_prev = len(_series.dropna())
 
         # Collect flags for good and bad data from all iterations
         ok_coll = pd.Series(index=_series.index, data=False)  # Collects all good flags
@@ -97,9 +102,10 @@ class OutlierSTLIQR(FlagBase):
         # Repeat multiple times until all outliers removed (untile *outliers=False*)
         outliers = True
         while outliers:
-            _series = self._randomforest_quickfill(series=_series)
-            decompose_df = self._decompose(series=_series)
-            _flag_thisstep = self._detect_residual_outliers(series=decompose_df['RESIDUAL'])
+
+            _series_gf, _flag_gf = self._randomforest_quickfill(series=_series)  # Adds suffix _gfRF to varname
+            decompose_df = self._decompose(series=_series_gf)
+            _flag_thisstep = self._detect_residual_outliers(series=decompose_df['RESIDUAL'], zfactor=zfactor)
 
             # Collect good and bad values
             _ok = _flag_thisstep.loc[_flag_thisstep == 0]
@@ -109,35 +115,39 @@ class OutlierSTLIQR(FlagBase):
             _rejected = _rejected.loc[_rejected.index]
             rejected_coll.loc[_rejected.index] = True
 
-            # ix_outliers = _flag.loc[_flag == 2].index
-            _series = self.series.copy()
-            _series.loc[rejected_coll] = np.nan
-            # self.series.plot()
-            outliers = True if len(_rejected) > 0 else False
-            # outliers = False
+            _series.loc[rejected_coll] = np.nan  # Set rejected to missing
+
+            n_available = len(_series.dropna())  # Number of missing values
+            n_newoutliers = n_available_prev - n_available
+            if repeat:
+                outliers = True if n_newoutliers > 0 else False  # Continue while new outliers found
+            else:
+                outliers = False  # No repetition if *repeat=False*
+            n_available_prev = len(_series.dropna())  # Update number
+            print(f"New outliers: {n_newoutliers}")
+
 
         # Convert to index
         ok_coll = ok_coll[ok_coll].index
         rejected_coll = rejected_coll[rejected_coll].index
-        # flag.loc[ok_coll] = 0
-        # flag.loc[rejected_coll] = 2
 
         return ok_coll, rejected_coll
 
-    def _detect_residual_outliers(self, series: Series):
+    def _detect_residual_outliers(self, series: Series, zfactor: float = 4.5):
         """Detect residual outliers separately for daytime and nighttime data"""
+        print("Detecting residual outliers ...")
         flag = pd.Series(index=series.index, data=np.nan)
 
         # Nighttime
         _series = series[self.is_nighttime].copy()
         _zscoreiqr = zScoreIQR(series=_series)
-        _zscoreiqr.calc(factor=4.5, showplot=True, verbose=True)
+        _zscoreiqr.calc(factor=zfactor, showplot=False, verbose=False)
         _flag_nighttime = _zscoreiqr.flag
 
         # Daytime
         _series = series[~self.is_nighttime].copy()
         _zscoreiqr = zScoreIQR(series=_series)
-        _zscoreiqr.calc(factor=4.5, showplot=True, verbose=True)
+        _zscoreiqr.calc(factor=zfactor, showplot=False, verbose=False)
         _flag_daytime = _zscoreiqr.flag
         # _series = series[self.is_daytime].copy()
         # _flag_daytime = zscoreiqr(series=_series, factor=2, level=3.2, showplot=False)
@@ -161,16 +171,16 @@ class OutlierSTLIQR(FlagBase):
 
     def _decompose(self, series: Series):
         # TODO
+        print("Decomposing timeseries ...")
         _series = series.resample('1H').mean()
-        import time
-        tic = time.time()
 
         # Expected values per day for this freq
         num_vals_oneday = int(to_offset('1D') / to_offset(_series.index.freq))
 
         period = num_vals_oneday
-        seasonal = (num_vals_oneday * 30) + 1
-        trend = None
+        seasonal = (num_vals_oneday * 28) + 1
+        # trend = None
+        trend = (num_vals_oneday * 28) + 1
         low_pass = period + 1
         seasonal_deg = 1
         trend_deg = 1
@@ -193,18 +203,15 @@ class OutlierSTLIQR(FlagBase):
             trend_jump=trend_jump,
             low_pass_jump=low_pass_jump
         ).fit()
-        toc = time.time() - tic
-        print(toc)
 
-        res.plot()
-        plt.show()
-
-        _frame = {'TREND': res.trend, 'SEASONAL': res.seasonal}
+        _frame = {'TREND': res.trend,
+                  'SEASONAL': res.seasonal,
+                  'RESIDUAL': res.resid}
         _frame = pd.DataFrame(_frame)
         _frame = _frame.reindex(series.index, method='nearest')
-        _frame['TREND+SEASONAL'] = _frame['TREND'].add(_frame['SEASONAL'])
+        # _frame['TREND+SEASONAL'] = _frame['TREND'].add(_frame['SEASONAL'])
         _frame['SERIES'] = series.copy()
-        _frame['RESIDUAL'] = _frame['SERIES'] - _frame['TREND+SEASONAL']
+        # _frame['RESIDUAL'] = _frame['SERIES'] - _frame['TREND+SEASONAL']
         _frame.plot(subplots=True)
         plt.show()
         decompose_df = pd.DataFrame(_frame)
@@ -215,7 +222,7 @@ class OutlierSTLIQR(FlagBase):
         # decompose_df = pd.DataFrame(frame)
         return decompose_df
 
-    def _randomforest_quickfill(self, series: Series) -> Series:
+    def _randomforest_quickfill(self, series: Series) -> tuple[Series, Series]:
         # Gapfilling random forest
         rfts = RandomForestTS(df=pd.DataFrame(series),
                               target_col=series.name,
@@ -224,18 +231,20 @@ class OutlierSTLIQR(FlagBase):
                               use_neighbor_years=True,
                               feature_reduction=False,
                               verbose=0)
-        rfts.build_models(n_estimators=100,
+        rfts.build_models(n_estimators=10,
                           random_state=42,
                           min_samples_split=20,
                           min_samples_leaf=10,
                           n_jobs=-1)
         rfts.gapfill_yrs()
         _gapfilled_df, _gf_results = rfts.get_gapfilled_dataset()
-        gapfilled_name = f"{self.series.name}_gfRF"
+        gapfilled_name = f"{series.name}_gfRF"
         series = _gapfilled_df[gapfilled_name].copy()
-        series.plot()
-        plt.show()
-        return series
+        flag_gapfilled_name = f"QCF_{gapfilled_name}"
+        flag_gapfilled = _gapfilled_df[flag_gapfilled_name].copy()
+        # series.plot()
+        # plt.show()
+        return series, flag_gapfilled
 
 
 # # Relative extrema

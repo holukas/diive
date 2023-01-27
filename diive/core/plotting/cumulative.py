@@ -147,14 +147,14 @@ def example():
     # loaddatafile = ReadFileType(
     #     filetype='DIIVE_CSV_30MIN',
     #     filepath=r"M:\Downloads\_temp\CH_LAE_FP2021_2004-2020_ID20210607205711.diive.csv",
-    #     # filepath=r"L:\Dropbox\luhk_work\_current\fp2022\7-14__IRGA627572__addingQCF0\CH-DAV_FP2022.1_1997-2022.08_ID20220826234456_30MIN.diive.csv",
+    #     # filepath=r"F:\Dropbox\luhk_work\_current\fp2022\7-14__IRGA627572__addingQCF0\CH-DAV_FP2022.1_1997-2022.08_ID20220826234456_30MIN.diive.csv",
     #     data_nrows=None)
     # data_df, metadata_df = loaddatafile.get_filedata()
     #
     # from diive.core.io.files import save_as_pickle
     # filepath = save_as_pickle(
     #     outpath=r"M:\Downloads\_temp",
-    #     # outpath=r'L:\Dropbox\luhk_work\_current\fp2022\7-14__IRGA627572__addingQCF0',
+    #     # outpath=r'F:\Dropbox\luhk_work\_current\fp2022\7-14__IRGA627572__addingQCF0',
     #     filename='CH_LAE_FP2021_2004-2020_ID20210607205711.diive.csv',
     #     # filename='CH-DAV_FP2022.1_1997-2022.08_ID20220826234456_30MIN.diive.csv',
     #     data=data_df)
@@ -163,7 +163,7 @@ def example():
     from diive.core.io.files import load_pickle
     df_orig = load_pickle(
         filepath=r"M:\Downloads\_temp\CH_LAE_FP2021_2004-2020_ID20210607205711.diive.csv.pickle"
-        # filepath=r'L:\Dropbox\luhk_work\_current\fp2022\7-14__IRGA627572__addingQCF0\CH-DAV_FP2022.1_1997-2022.08_ID20220826234456_30MIN.diive.csv.pickle'
+        # filepath=r'F:\Dropbox\luhk_work\_current\fp2022\7-14__IRGA627572__addingQCF0\CH-DAV_FP2022.1_1997-2022.08_ID20220826234456_30MIN.diive.csv.pickle'
     )
 
     df = df_orig.copy()

@@ -28,7 +28,7 @@ class SortingBinsMethod:
 
     def __init__(self,
                  df: DataFrame,
-                 var1_col: str,
+                 var1_coF: str,
                  var2_col: str,
                  var3_col: str,
                  n_bins_var1: int = 10,

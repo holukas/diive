@@ -17,6 +17,7 @@ pysolar = "^0.10"
 ThymeBoost = "^0.1.15"
 jupyterlab = "^3.5.2"
 prophet = "^1.1.2"
+fitter = "^1.5.2"
 
 [tool.poetry.dev-dependencies]
 dbc-influxdb = { path = "../../22 - POET/dbc-influxdb", develop = true }

@@ -164,10 +164,10 @@ class FlagQCF:
         print(f"{col}:")
         flag = df[col]
         self._flagstats(flag=flag, prefix="OVERALL")
-        if self.daytime:
+        if isinstance(self.daytime, Series):
             flag = df[col].loc[self.daytime == 1]
             self._flagstats(flag=flag, prefix="DAYTIME")
-        if self.nighttime:
+        if isinstance(self.nighttime, Series):
             flag = df[col].loc[self.nighttime == 1]
             self._flagstats(flag=flag, prefix="NIGHTTIME")
 
@@ -289,19 +289,20 @@ class FlagQCF:
                                 & (df[self.sumhardflagscol] == 0)] = 1
 
         # Flag daytime values based on param
-        if self.daytime:
+        if isinstance(self.daytime, Series):
             df[self.flagqcfcol].loc[(df[self.flagqcfcol] >= self.daytime_accept_qcf_below)
                                     & (self.daytime == 1)] = 2
 
         # Flag nighttime values based on param
-        if self.nighttime:
+        if isinstance(self.nighttime, Series):
             df[self.flagqcfcol].loc[(df[self.flagqcfcol] >= self.nighttimetime_accept_qcf_below)
                                     & (self.nighttime == 1)] = 2
 
         # Daytime and nighttime flags are only calculated when swinpot is provided.
         # This means that if both do not exist, no separation into daytime and nighttime
         # was done. In that case, all records where QCF = 2 are rejected.
-        if not self.daytime and not self.nighttime:
+        if not isinstance(self.daytime, Series) \
+                and not isinstance(self.nighttime, Series):
             default_accept_qcf_below = 2
             df[self.flagqcfcol].loc[(df[self.flagqcfcol] >= default_accept_qcf_below)] = 2
 
