@@ -123,7 +123,7 @@ class ScreenMeteoVar:
             if step == 'remove_highres_outliers_stl':
                 # Generates flag
                 _stl = OutlierSTLRIQRZ(series=self.series, lat=self.site_lat, lon=self.site_lon)
-                _stl.calc(showplot=True)
+                _stl.calc(zfactor=4.5, decompose_downsampling_freq='1H', showplot=True)
                 self._flags_df[_stl.flag.name] = _stl.flag
 
             elif step == 'remove_highres_outliers_thymeboost':
@@ -468,13 +468,13 @@ def example():
 
     # Settings
     DIRCONF = r'F:\Sync\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
-    SITE = 'ch-dav'  # Site name
+    SITE = 'ch-cha'  # Site name
     MEASUREMENTS = ['TA']
     # FIELDS = ['SWC_FF1_0.05_3']  # Variable name; InfluxDB stores variable names as '_field'
-    FIELDS = ['TA_NABEL_T1_35_1']  # Variable name; InfluxDB stores variable names as '_field'
+    FIELDS = ['TA_T1_2_1']  # Variable name; InfluxDB stores variable names as '_field'
     DATA_VERSION = 'raw'
-    START = '2022-12-01 00:01:00'  # Download data starting with this date
-    STOP = '2023-01-01 00:01:00'  # Download data before this date (the stop date itself is not included)
+    START = '2021-12-01 00:01:00'  # Download data starting with this date
+    STOP = '2023-09-01 00:01:00'  # Download data before this date (the stop date itself is not included)
     TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
     RESAMPLING_FREQ = '30T'  # During MeteoScreening the screened high-res data will be resampled to this frequency; '30T' = 30-minute time resolution
     RESAMPLING_AGG = 'mean'  # The resampling of the high-res data will be done using this aggregation methos; e.g., 'mean'
@@ -486,20 +486,20 @@ def example():
     print(f"Bucket containing raw data (source bucket): {BUCKET_RAW}")
     print(f"Bucket containing processed data (destination bucket): {BUCKET_PROCESSING}")
 
-    # # Instantiate class
-    # from dbc_influxdb import dbcInflux
-    # dbc = dbcInflux(dirconf=DIRCONF)
-    # data_simple, data_detailed, assigned_measurements = dbc.download(
-    #     bucket=BUCKET_RAW,
-    #     measurements=MEASUREMENTS,
-    #     fields=FIELDS,
-    #     start=START,
-    #     stop=STOP,
-    #     timezone_offset_to_utc_hours=TIMEZONE_OFFSET_TO_UTC_HOURS,
-    #     data_version=DATA_VERSION)
-    # import matplotlib.pyplot as plt
-    # data_simple.plot()
-    # plt.show()
+    # Instantiate class
+    from dbc_influxdb import dbcInflux
+    dbc = dbcInflux(dirconf=DIRCONF)
+    data_simple, data_detailed, assigned_measurements = dbc.download(
+        bucket=BUCKET_RAW,
+        measurements=MEASUREMENTS,
+        fields=FIELDS,
+        start=START,
+        stop=STOP,
+        timezone_offset_to_utc_hours=TIMEZONE_OFFSET_TO_UTC_HOURS,
+        data_version=DATA_VERSION)
+    import matplotlib.pyplot as plt
+    data_simple.plot()
+    plt.show()
 
     # # Export data to pickle for fast testing
     # pickle_out = open(basedir / "meteodata_simple.pickle", "wb")
