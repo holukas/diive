@@ -9,7 +9,7 @@
 - **Outlier detection: LOF, local outlier factor**: (`pkgs.outlierdetection.lof.LocalOutlierFactorDaytimeNighttime`)
     - Identify outliers based on the local outlier factor, done separately for
       daytime and nighttime data
-- **Multiple z-score outlier detection**:
+- **Multiple z-score outlier detections**:
     - Simple outlier detection based on the z-score of observations, calculated from
       mean and std from the complete timeseries. (`pkgs.outlierdetection.zscore.zScore`)
     - z-score outlier detection separately for daytime and nighttime

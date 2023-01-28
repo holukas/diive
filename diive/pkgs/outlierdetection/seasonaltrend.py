@@ -61,16 +61,18 @@ class OutlierSTLRIQRZ(FlagBase):
     def __init__(self, series: Series, lat: float, lon: float, levelid: str = None):
         super().__init__(series=series, flagid=self.flagid, levelid=levelid)
         self.showplot = False
-        self.repeat=True
+        self.repeat = True
         self.lat = lat
         self.lon = lon
         self.is_nighttime = self._detect_nighttime()
 
-    def calc(self, zfactor: float = 4.5, repeat:bool=False, showplot: bool = False):
+    def calc(self, zfactor: float = 4.5, decompose_downsampling_freq:str='1H',
+             repeat: bool = False, showplot: bool = False):
         """Calculate flag"""
         self.showplot = showplot
         self.reset()
-        ok, rejected = self._flagtests(zfactor=zfactor, repeat=repeat)
+        ok, rejected = self._flagtests(zfactor=zfactor, repeat=repeat,
+                                       decompose_downsampling_freq=decompose_downsampling_freq)
         self.setflag(ok=ok, rejected=rejected)
         self.setfiltered(rejected=rejected)
 
@@ -87,7 +89,8 @@ class OutlierSTLRIQRZ(FlagBase):
         nighttime_ix = nighttime_flag_in_hires == 1
         return nighttime_ix
 
-    def _flagtests(self, zfactor: float = 4.5, repeat:bool=True) -> tuple[DatetimeIndex, DatetimeIndex]:
+    def _flagtests(self, zfactor: float = 4.5, repeat: bool = True,
+                   decompose_downsampling_freq: str = '1H') -> tuple[DatetimeIndex, DatetimeIndex]:
         """Perform tests required for this flag"""
 
         # Work series
@@ -104,7 +107,7 @@ class OutlierSTLRIQRZ(FlagBase):
         while outliers:
 
             _series_gf, _flag_gf = self._randomforest_quickfill(series=_series)  # Adds suffix _gfRF to varname
-            decompose_df = self._decompose(series=_series_gf)
+            decompose_df = self._decompose(series=_series_gf, decompose_downsampling_freq=decompose_downsampling_freq)
             _flag_thisstep = self._detect_residual_outliers(series=decompose_df['RESIDUAL'], zfactor=zfactor)
 
             # Collect good and bad values
@@ -125,7 +128,6 @@ class OutlierSTLRIQRZ(FlagBase):
                 outliers = False  # No repetition if *repeat=False*
             n_available_prev = len(_series.dropna())  # Update number
             print(f"New outliers: {n_newoutliers}")
-
 
         # Convert to index
         ok_coll = ok_coll[ok_coll].index
@@ -169,10 +171,9 @@ class OutlierSTLRIQRZ(FlagBase):
         flag.loc[ok_nighttime.index] = 0
         return flag
 
-    def _decompose(self, series: Series):
-        # TODO
+    def _decompose(self, series: Series, decompose_downsampling_freq: str = '1H'):
         print("Decomposing timeseries ...")
-        _series = series.resample('1H').mean()
+        _series = series.resample(decompose_downsampling_freq).mean()
 
         # Expected values per day for this freq
         num_vals_oneday = int(to_offset('1D') / to_offset(_series.index.freq))

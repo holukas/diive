@@ -121,8 +121,10 @@ class ScreenMeteoVar:
         for step in pipe_steps:
 
             if step == 'remove_highres_outliers_stl':
+                # Generates flag
                 _stl = OutlierSTLRIQRZ(series=self.series, lat=self.site_lat, lon=self.site_lon)
                 _stl.calc(showplot=True)
+                self._flags_df[_stl.flag.name] = _stl.flag
 
             elif step == 'remove_highres_outliers_thymeboost':
                 # Generates flag, needs QC'd data
@@ -465,7 +467,7 @@ def example():
     # =======================================
 
     # Settings
-    DIRCONF = r'L:\Sync\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
+    DIRCONF = r'F:\Sync\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
     SITE = 'ch-dav'  # Site name
     MEASUREMENTS = ['TA']
     # FIELDS = ['SWC_FF1_0.05_3']  # Variable name; InfluxDB stores variable names as '_field'
@@ -477,7 +479,7 @@ def example():
     RESAMPLING_FREQ = '30T'  # During MeteoScreening the screened high-res data will be resampled to this frequency; '30T' = 30-minute time resolution
     RESAMPLING_AGG = 'mean'  # The resampling of the high-res data will be done using this aggregation methos; e.g., 'mean'
 
-    basedir = Path(r"L:\Sync\luhk_work\_temp")
+    basedir = Path(r"F:\Sync\luhk_work\_temp")
 
     BUCKET_RAW = f'{SITE}_raw'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_raw' contains all raw data for CH-LAE
     BUCKET_PROCESSING = f'{SITE}_processing'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_processing' contains all processed data for CH-LAE
