@@ -15,6 +15,7 @@ import pandas as pd
 from pandas import DataFrame, Series
 
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+from diive.pkgs.createvar.daynightflag import daytime_nighttime_flag_from_swinpot
 
 
 class FlagQCF:
@@ -37,7 +38,9 @@ class FlagQCF:
         # Detect daytime and nighttime
         if isinstance(swinpot, Series):
             self.daytime, self.nighttime = \
-                self._add_daytime_info(swinpot=swinpot, nighttime_threshold=nighttime_threshold)
+                daytime_nighttime_flag_from_swinpot(swinpot=swinpot, nighttime_threshold=nighttime_threshold)
+            # self.daytime, self.nighttime = \
+            #     self._add_daytime_info(swinpot=swinpot, nighttime_threshold=nighttime_threshold)
         else:
             self.daytime = None
             self.nighttime = None
@@ -317,17 +320,6 @@ class FlagQCF:
         df[self.sumsoftflagscol] = sumsoftflags
         df[self.sumflagscol] = sumflags
         return df
-
-    def _add_daytime_info(self, swinpot: Series,
-                          nighttime_threshold: float = 50) -> tuple[Series, Series]:
-        """Separate columns to indicate daytime or nighttime"""
-        daytime = pd.Series(index=swinpot.index, data=np.nan, name='DAYTIME')
-        daytime.loc[swinpot >= nighttime_threshold] = 1
-        daytime.loc[swinpot < nighttime_threshold] = 0
-        nighttime = pd.Series(index=swinpot.index, data=np.nan, name='NIGHTTIME')
-        nighttime.loc[swinpot >= nighttime_threshold] = 0
-        nighttime.loc[swinpot < nighttime_threshold] = 1
-        return daytime, nighttime
 
     def showplot_heatmaps(self, maxflux: float = None):
 

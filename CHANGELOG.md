@@ -2,11 +2,30 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.48.0 | 1 Feb 2023
+
+### New Features
+
+- **USTAR threshold**: (`pkgs.flux.ustarthreshold.UstarThresholdConstantScenarios`)
+    - Calculates how many records of e.g. a flux variable are still available after the application
+      of different USTAR thresholds. In essence, it gives an overview of the sensitivity of the
+      variable to different thresholds.
+- **Outlier detection, LOF across all data**: (`pkgs.outlierdetection.lof.LocalOutlierFactorAllData`)
+    - Calculation of the local outlier factor across all data, i.e., no differentiation between
+      daytime and nighttime data.
+- **Outlier detection, increments**: (`pkgs.outlierdetection.incremental.zScoreIncremental`)
+    - Based on the absolute change of on record in comparison to the previous record. These
+      differences are stored as timeseries, the z-score is calculated and outliers are removed
+      based on the observed differences. Works well with data that do not have a diel cycle,
+      e.g. soil water content.
+
+![DIIVE](images/fluxUstarthreshold_UstarThresholdConstantScenarios_diive_v0.48.0.png)
+
 ## v0.47.0 | 28 Jan 2023
 
 ### New Features
 
-- **Outlier detection: LOF, local outlier factor**: (`pkgs.outlierdetection.lof.LocalOutlierFactorDaytimeNighttime`)
+- **Outlier detection**: LOF, local outlier factor**: (`pkgs.outlierdetection.lof.LocalOutlierFactorDaytimeNighttime`)
     - Identify outliers based on the local outlier factor, done separately for
       daytime and nighttime data
 - **Multiple z-score outlier detections**:

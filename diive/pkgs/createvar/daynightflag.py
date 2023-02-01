@@ -8,6 +8,7 @@ from site location, latitude/longitude
 - https://stackoverflow.com/questions/69766581/pysolar-get-azimuth-function-applied-to-pandas-dataframe
 """
 
+import numpy as np
 import pandas as pd
 from numpy import nan
 from pandas import DataFrame, Series
@@ -15,6 +16,29 @@ from pysolar.radiation import get_radiation_direct
 from pysolar.solar import get_altitude_fast
 
 from diive.core.times.times import add_timezone_info
+
+
+def daytime_nighttime_flag_from_swinpot(swinpot: Series,
+                                        nighttime_threshold: float = 50) -> tuple[Series, Series]:
+    """
+    Create flags to identify daytime and nighttime data
+
+    Args:
+        swinpot: Potential short-wave incoming radiation (W m-2)
+        nighttime_threshold: Threshold below which data are flagged as nighttime (W m-2)
+
+    Returns:
+        Flags as two separate Series:
+            *daytime* with flags 1=daytime, 0=not daytime
+            *nighttime* with flags 1=nighttime, 0=not nighttime
+    """
+    daytime = pd.Series(index=swinpot.index, data=np.nan, name='DAYTIME')
+    daytime.loc[swinpot >= nighttime_threshold] = 1  # Yes, it is daytime
+    daytime.loc[swinpot < nighttime_threshold] = 0  # No, it is not daytime
+    nighttime = pd.Series(index=swinpot.index, data=np.nan, name='NIGHTTIME')
+    nighttime.loc[swinpot >= nighttime_threshold] = 0
+    nighttime.loc[swinpot < nighttime_threshold] = 1
+    return daytime, nighttime
 
 
 def nighttime_flag_from_latlon(

@@ -79,8 +79,10 @@ SW:
 
 SWC:
   SWC_:
-    pipe: [ remove_highres_outliers_zscore,
+    pipe: [ remove_highres_outliers_incremental_zscore,
+            remove_highres_outliers_zscore,
             remove_highres_outliers_localsd,
+      #            remove_highres_outliers_lof,
             remove_highres_outliers_absolute_limits ]
     units: "%"
     resampling_aggregation: mean

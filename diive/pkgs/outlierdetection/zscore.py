@@ -5,9 +5,10 @@ import pandas as pd
 from pandas import Series, DatetimeIndex
 
 import diive.core.funcs.funcs as funcs
+import diive.core.plotting.styles.LightTheme as theme
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.pkgs.createvar.nighttime_latlon import nighttime_flag_from_latlon
+from diive.pkgs.createvar.daynightflag import nighttime_flag_from_latlon
 
 
 @ConsoleOutputDecorator()
@@ -134,11 +135,13 @@ class zScore(FlagBase):
     def __init__(self, series: Series, levelid: str = None):
         super().__init__(series=series, flagid=self.flagid, levelid=levelid)
         self.showplot = False
+        self.plottitle = None
         self.verbose = False
 
-    def calc(self, threshold: float = 4, showplot: bool = False, verbose: bool = False):
+    def calc(self, threshold: float = 4, showplot: bool = False, plottitle: str = None, verbose: bool = False):
         """Calculate flag"""
         self.showplot = showplot
+        self.plottitle = plottitle
         self.verbose = verbose
         self.reset()
         ok, rejected = self._flagtests(threshold=threshold)
@@ -175,6 +178,8 @@ class zScore(FlagBase):
                      label="OK", color="#4CAF50")
         ax.plot_date(self.series[rejected].index, self.series[rejected],
                      label="outlier (rejected)", color="#F44336", marker="X")
+        if self.plottitle:
+            fig.suptitle(self.plottitle, fontsize=theme.FIGHEADER_FONTSIZE)
         ax.legend()
         fig.show()
 

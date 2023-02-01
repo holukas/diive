@@ -7,7 +7,6 @@ This module is part of the 'diive' library.
 """
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 from pandas import Series, DataFrame
 from pandas.tseries.frequencies import to_offset
@@ -21,7 +20,9 @@ from diive.core.times.times import detect_freq_groups
 from diive.pkgs.corrections.offsetcorrection import remove_radiation_zero_offset, remove_relativehumidity_offset
 from diive.pkgs.corrections.setto_threshold import setto_threshold
 from diive.pkgs.outlierdetection.absolutelimits import AbsoluteLimits
+from diive.pkgs.outlierdetection.incremental import zScoreIncremental
 from diive.pkgs.outlierdetection.local3sd import LocalSD
+from diive.pkgs.outlierdetection.lof import LocalOutlierFactorAllData
 from diive.pkgs.outlierdetection.missing import MissingValues
 from diive.pkgs.outlierdetection.seasonaltrend import OutlierSTLRIQRZ
 from diive.pkgs.outlierdetection.thymeboost import ThymeBoostOutlier
@@ -119,8 +120,25 @@ class ScreenMeteoVar:
         self._flags_df[_miss.flag.name] = _miss.flag
 
         for step in pipe_steps:
+            # remove_highres_outliers_incremental_zscore,
 
-            if step == 'remove_highres_outliers_stl':
+            if step == 'remove_highres_outliers_incremental_zscore':
+                # Generates flag
+                _mqcf = FlagQCF(df=self._flags_df, series=self.series)
+                _mqcf.calculate()
+                _izsc = zScoreIncremental(series=_mqcf.seriesqcf)
+                _izsc.calc(threshold=2, showplot=True)
+                self._flags_df[_izsc.flag.name] = _izsc.flag
+
+            elif step == 'remove_highres_outliers_lof':
+                # Generates flag, needs QC'd data
+                _mqcf = FlagQCF(df=self._flags_df, series=self.series)
+                _mqcf.calculate()
+                _lof = LocalOutlierFactorAllData(series=_mqcf.seriesqcf)
+                _lof.calc(n_neighbors=100, contamination=0.01, showplot=True)
+                self._flags_df[_lof.flag.name] = _lof.flag
+
+            elif step == 'remove_highres_outliers_stl':
                 # Generates flag
                 _stl = OutlierSTLRIQRZ(series=self.series, lat=self.site_lat, lon=self.site_lon)
                 _stl.calc(zfactor=4.5, decompose_downsampling_freq='1H', showplot=True)
@@ -136,7 +154,12 @@ class ScreenMeteoVar:
 
             elif step == 'remove_highres_outliers_zscore':
                 # Generates flag
-                _zscoreiqr = zScoreIQR(series=self.series)
+                _mqcf = FlagQCF(df=self._flags_df, series=self.series)
+                _mqcf.calculate()
+                # import matplotlib.pyplot as plt
+                # _mqcf.seriesqcf.plot()
+                # plt.show()
+                _zscoreiqr = zScoreIQR(series=_mqcf.seriesqcf)
                 _zscoreiqr.calc(factor=4.5, showplot=True, verbose=True)
                 self._flags_df[_zscoreiqr.flag.name] = _zscoreiqr.flag
 
@@ -467,39 +490,39 @@ def example():
     # =======================================
 
     # Settings
-    DIRCONF = r'F:\Sync\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
-    SITE = 'ch-cha'  # Site name
-    MEASUREMENTS = ['TA']
+    DIRCONF = r'L:\Sync\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
+    SITE = 'ch-dav'  # Site name
+    MEASUREMENTS = ['SWC']
     # FIELDS = ['SWC_FF1_0.05_3']  # Variable name; InfluxDB stores variable names as '_field'
-    FIELDS = ['TA_T1_2_1']  # Variable name; InfluxDB stores variable names as '_field'
+    FIELDS = ['SWC_FF0_0.15_1']  # Variable name; InfluxDB stores variable names as '_field'
     DATA_VERSION = 'raw'
-    START = '2021-12-01 00:01:00'  # Download data starting with this date
-    STOP = '2023-09-01 00:01:00'  # Download data before this date (the stop date itself is not included)
+    START = '2022-01-01 00:01:00'  # Download data starting with this date
+    STOP = '2023-01-01 00:01:00'  # Download data before this date (the stop date itself is not included)
     TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
     RESAMPLING_FREQ = '30T'  # During MeteoScreening the screened high-res data will be resampled to this frequency; '30T' = 30-minute time resolution
     RESAMPLING_AGG = 'mean'  # The resampling of the high-res data will be done using this aggregation methos; e.g., 'mean'
 
-    basedir = Path(r"F:\Sync\luhk_work\_temp")
+    basedir = Path(r"L:\Sync\luhk_work\_temp")
 
     BUCKET_RAW = f'{SITE}_raw'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_raw' contains all raw data for CH-LAE
     BUCKET_PROCESSING = f'{SITE}_processing'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_processing' contains all processed data for CH-LAE
     print(f"Bucket containing raw data (source bucket): {BUCKET_RAW}")
     print(f"Bucket containing processed data (destination bucket): {BUCKET_PROCESSING}")
 
-    # Instantiate class
-    from dbc_influxdb import dbcInflux
-    dbc = dbcInflux(dirconf=DIRCONF)
-    data_simple, data_detailed, assigned_measurements = dbc.download(
-        bucket=BUCKET_RAW,
-        measurements=MEASUREMENTS,
-        fields=FIELDS,
-        start=START,
-        stop=STOP,
-        timezone_offset_to_utc_hours=TIMEZONE_OFFSET_TO_UTC_HOURS,
-        data_version=DATA_VERSION)
-    import matplotlib.pyplot as plt
-    data_simple.plot()
-    plt.show()
+    # # Instantiate class
+    # from dbc_influxdb import dbcInflux
+    # dbc = dbcInflux(dirconf=DIRCONF)
+    # data_simple, data_detailed, assigned_measurements = dbc.download(
+    #     bucket=BUCKET_RAW,
+    #     measurements=MEASUREMENTS,
+    #     fields=FIELDS,
+    #     start=START,
+    #     stop=STOP,
+    #     timezone_offset_to_utc_hours=TIMEZONE_OFFSET_TO_UTC_HOURS,
+    #     data_version=DATA_VERSION)
+    # import matplotlib.pyplot as plt
+    # data_simple.plot()
+    # plt.show()
 
     # # Export data to pickle for fast testing
     # pickle_out = open(basedir / "meteodata_simple.pickle", "wb")

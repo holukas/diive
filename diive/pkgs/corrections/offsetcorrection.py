@@ -5,7 +5,7 @@ from pandas import Series
 import diive.core.dfun.frames as frames
 from diive.core.utils.prints import ConsoleOutputDecorator
 # from diive.common.dfun.frames import resample_df
-from diive.pkgs.createvar.nighttime_latlon import nighttime_flag_from_latlon
+from diive.pkgs.createvar.daynightflag import nighttime_flag_from_latlon
 
 
 @ConsoleOutputDecorator()

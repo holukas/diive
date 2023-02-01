@@ -28,7 +28,7 @@ from statsmodels.tsa.seasonal import STL
 
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.pkgs.createvar.nighttime_latlon import nighttime_flag_from_latlon
+from diive.pkgs.createvar.daynightflag import nighttime_flag_from_latlon
 from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
 from diive.pkgs.outlierdetection.zscore import zScoreIQR
 
