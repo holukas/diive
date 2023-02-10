@@ -76,7 +76,7 @@ def aggregated_as_hires(aggregate_series: Series,
     return hires_df[agghires_col]
 
 
-def insert_aggregated_in_hires(df: DataFrame, coF: str,
+def insert_aggregated_in_hires(df: DataFrame, col: str,
                                to_freq: str = 'D',
                                to_agg: str = 'mean',
                                agg_offset: str = None):
@@ -85,7 +85,7 @@ def insert_aggregated_in_hires(df: DataFrame, coF: str,
 
     Args:
         df: Dataframe containing column that is aggregated
-        coF: Column name of variable that is aggregated
+        col: Column name of variable that is aggregated
         to_freq: Frequency string, 'D' for daily aggregation, 'A' for yearly, 'M' for monthly
         to_agg: Aggregation type, e.g. 'mean' for mean, 'max' for maximum
         agg_offset: Timestamp offset for aggregation, e.g. '7H' when 'to_freq="D"' calculates
@@ -540,7 +540,7 @@ def timestamp_convention(df, timestamp_shows_start, out_timestamp_convention):
     return df, timestamp_info_df
 
 
-def df_between_two_dates(df: DataFrame, start_date, end_date, dropna_col, dropna: bool = False):
+def df_between_two_dates(df: DataFrame, start_date, end_date, dropna_col:str=None, dropna: bool = False):
     """Get data for the time window, >= start date and <= end date
 
     Args:

@@ -77,7 +77,7 @@ class BinFitterCP:
     def __init__(
             self,
             df: pd.DataFrame,
-            x_coF: str or tuple,
+            x_col: str or tuple,
             y_col: str or tuple,
             predict_max_x: float = None,
             predict_min_x: float = None,

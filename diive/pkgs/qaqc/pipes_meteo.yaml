@@ -91,6 +91,7 @@ SWC:
 TA:
   TA_:
     pipe: [
+      remove_highres_outliers_incremental_zscore,
       remove_highres_outliers_stl,
       remove_highres_outliers_zscore,
       remove_highres_outliers_absolute_limits,

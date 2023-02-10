@@ -47,7 +47,7 @@ class FlagQCF:
 
         # Generate QCF column names
         levelid = f"L{levelid}_" if levelid else ""
-        self.seriesqcfcol = f"{self.series.name}_{levelid}QCF"  # Quality-controlled flux
+        self.filteredseriescol = f"{self.series.name}_{levelid}QCF"  # Quality-controlled flux
         self.flagqcfcol = f"FLAG_{levelid}{self.series.name}_QCF"  # Overall flag
         self.sumflagscol = f'SUM_{levelid}{self.series.name}_FLAGS'
         self.sumhardflagscol = f'SUM_{levelid}{self.series.name}_HARDFLAGS'
@@ -64,9 +64,9 @@ class FlagQCF:
         return self._flags_df
 
     @property
-    def seriesqcf(self) -> Series:
+    def filteredseries(self) -> Series:
         """Return series with rejected values set to missing"""
-        return self.flags[self.seriesqcfcol]
+        return self.flags[self.filteredseriescol]
 
     @property
     def flagqcf(self) -> Series:
@@ -97,8 +97,8 @@ class FlagQCF:
 
     def _calculate_series_qcf(self):
         """Create quality-checked time series"""
-        self._flags_df[self.seriesqcfcol] = self._flags_df[self.series.name].copy()
-        self._flags_df[self.seriesqcfcol].loc[self._flags_df[self.flagqcfcol] == 2] = np.nan
+        self._flags_df[self.filteredseriescol] = self._flags_df[self.series.name].copy()
+        self._flags_df[self.filteredseriescol].loc[self._flags_df[self.flagqcfcol] == 2] = np.nan
 
     def _identify_relevants(self, seriescol: str) -> list:
         """
@@ -140,10 +140,10 @@ class FlagQCF:
         missingcol = [c for c in flagcols if '_MISSING_' in c]
         missingcol = str(missingcol[0]) if len(missingcol) == 1 else False
         if not missingcol:
-            raise ("Only one column for missing values test allowed.")
+            raise ("No flag for missing values test found.")
         return flagcols, missingcol
 
-    def report_flags(self):
+    def report_qcf_flags(self):
 
         flagcols, missingflagcol = self._identify_flagcols(df=self.flags, seriescol=str(self.series.name))
 
@@ -241,12 +241,12 @@ class FlagQCF:
         print(f"    {prefix} flag missing: {flagmissing} values ({flagmissing_perc:.2f}%)  ")
         print("")
 
-    def report_series(self):
+    def report_qcf_series(self):
 
         print(f"\n\n{'=' * 40}\nSUMMARY: {self.flagqcfcol}, QCF FLAG FOR {self.series.name}\n{'=' * 40}")
 
         series = self.flags[self.series.name]
-        seriesqcf = self.flags[self.seriesqcfcol]
+        seriesqcf = self.flags[self.filteredseriescol]
 
         n_potential = len(series)
         n_measured = len(series.dropna())
@@ -321,22 +321,22 @@ class FlagQCF:
         df[self.sumflagscol] = sumflags
         return df
 
-    def showplot_heatmaps(self, maxflux: float = None):
+    def showplot_qcf_heatmaps(self, maxabsval: float = None, figsize: tuple = (18, 8)):
 
-        fig = plt.figure(facecolor='white', figsize=(20, 15))
+        fig = plt.figure(facecolor='white', figsize=figsize)
         gs = gridspec.GridSpec(1, 4)  # rows, cols
-        gs.update(wspace=0.3, hspace=0.5, left=0.06, right=0.94, top=0.9, bottom=0.1)
+        gs.update(wspace=0.4, hspace=0, left=0.03, right=0.97, top=0.9, bottom=0.1)
         ax_before = fig.add_subplot(gs[0, 0])
         ax_after = fig.add_subplot(gs[0, 1], sharey=ax_before)
         ax_flagsum = fig.add_subplot(gs[0, 2], sharey=ax_before)
         ax_flag = fig.add_subplot(gs[0, 3], sharey=ax_before)
 
         # Heatmaps
-        vmin = -maxflux if maxflux else None
-        vmax = maxflux if maxflux else None
+        vmin = -maxabsval if maxabsval else None
+        vmax = maxabsval if maxabsval else None
         HeatmapDateTime(ax=ax_before, series=self.flags[self.series.name], vmin=vmin, vmax=vmax,
                         cb_digits_after_comma=0).plot()
-        HeatmapDateTime(ax=ax_after, series=self.flags[self.seriesqcfcol], vmin=vmin, vmax=vmax,
+        HeatmapDateTime(ax=ax_after, series=self.flags[self.filteredseriescol], vmin=vmin, vmax=vmax,
                         cb_digits_after_comma=0).plot()
         HeatmapDateTime(ax=ax_flagsum, series=self.flags[self.sumflagscol],
                         cb_digits_after_comma=0).plot()
@@ -351,6 +351,6 @@ class FlagQCF:
 
         fig.show()
 
-    def showplot_timeseries(self):
-        self.flags.plot(subplots=True, figsize=(20, 15))
+    def showplot_qcf_timeseries(self, figsize=(16, 20)):
+        self.flags.plot(subplots=True, figsize=figsize)
         plt.show()

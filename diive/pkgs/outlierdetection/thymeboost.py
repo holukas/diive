@@ -64,8 +64,8 @@ class ThymeBoostOutlier(FlagBase):
                               use_neighbor_years=True,
                               feature_reduction=False,
                               verbose=0)
-        rfts.build_models(n_estimators=100,
-                          random_state=42,
+        rfts.build_models(n_estimators=10,
+                          random_state=None,
                           min_samples_split=20,
                           min_samples_leaf=10,
                           n_jobs=-1)
@@ -153,6 +153,10 @@ class ThymeBoostOutlier(FlagBase):
         rejected_coll = rejected_coll[rejected_coll].index
 
         print(f"Total found outliers: {len(rejected_coll)} values")
+
+        if self.showplot:
+            self.plot(ok_coll, rejected_coll,
+                      plottitle=f"Outlier detection based on thymeboost results for {self.series.name}")
 
         return ok_coll, rejected_coll
 

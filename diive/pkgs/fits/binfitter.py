@@ -343,8 +343,8 @@ class BinFitter:
                  y_col: str or tuple,
                  predict_max_x: float = None,
                  predict_min_x: float = None,
-                 num_predictions: int = None,
-                 bins_x_num: int = 0,
+                 n_predictions: int = None,
+                 n_bins_x: int = 0,
                  bins_y_agg: str = None,
                  fit_type: Literal['linear', 'quadratic'] = 'quadratic'
                  ):
@@ -354,12 +354,12 @@ class BinFitter:
         self.x = self.df[self.x_col]
         self.y = self.df[self.y_col]
         self.bins_y_agg = bins_y_agg
-        self.num_predictions = num_predictions
-        self.usebins = bins_x_num if bins_x_num >= 0 else 0  # Must be positive
+        self.n_predictions = n_predictions
+        self.usebins = n_bins_x if n_bins_x >= 0 else 0  # Must be positive
         self.fit_x_max = predict_max_x if isinstance(predict_max_x, float) else self.x.max()
         self.fit_x_min = predict_min_x if isinstance(predict_min_x, float) else self.x.min()
-        self.num_predictions = num_predictions if isinstance(num_predictions, int) else len(self.x)
-        self.num_predictions = 2 if self.num_predictions < 2 else self.num_predictions
+        self.n_predictions = n_predictions if isinstance(n_predictions, int) else len(self.x)
+        self.n_predictions = 2 if self.n_predictions < 2 else self.n_predictions
 
         self.equation = self._set_fit_equation(type=fit_type)
         self.fit_type = fit_type
@@ -468,7 +468,7 @@ class BinFitter:
             a, b = unc.correlated_values(fit_params_opt, fit_params_cov)
 
         # Calculate regression confidence interval
-        fit_x = np.linspace(self.fit_x_min, self.fit_x_max, self.num_predictions)
+        fit_x = np.linspace(self.fit_x_min, self.fit_x_max, self.n_predictions)
 
         if self.fit_type == 'quadratic':
             fit_y = a * fit_x ** 2 + b * fit_x + c

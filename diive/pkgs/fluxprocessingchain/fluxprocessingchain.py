@@ -94,11 +94,11 @@ def example():
                   swinpot=_df['SW_IN_POT'], nighttime_threshold=50)
     qcf.calculate(daytime_accept_qcf_below=2,
                   nighttimetime_accept_qcf_below=1)
-    qcf.report_flags()
+    qcf.report_qcf_flags()
     qcf.report_qcf_evolution()
-    qcf.report_series()
-    qcf.showplot_heatmaps(maxflux=10)
-    qcf.showplot_timeseries()
+    qcf.report_qcf_series()
+    qcf.showplot_qcf_heatmaps(maxabsval=10)
+    qcf.showplot_qcf_timeseries()
     _df = qcf.get()
     save_as_pickle(outpath=r'F:\Sync\luhk_work\_temp', filename="data_L3.2", data=_df)
 

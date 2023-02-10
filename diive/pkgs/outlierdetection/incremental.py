@@ -1,16 +1,12 @@
-import matplotlib.gridspec as gridspec
-import matplotlib.pyplot as plt
-from pandas import Series, DatetimeIndex, DataFrame
+from pandas import Series, DatetimeIndex
 
-import diive.core.plotting.styles.LightTheme as theme
 from diive.core.base.flagbase import FlagBase
-from diive.core.plotting.plotfuncs import default_format, default_legend
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.pkgs.outlierdetection.zscore import zScore
 
 
 @ConsoleOutputDecorator()
-class zScoreIncremental(FlagBase):
+class zScoreIncrements(FlagBase):
     """
     Identify outliers based on the z-score of increments
     ...
@@ -45,11 +41,11 @@ class zScoreIncremental(FlagBase):
     def _flagtests(self, threshold: float = 4) -> tuple[DatetimeIndex, DatetimeIndex]:
         """Perform tests required for this flag"""
 
-        # todo hier weiter
         s = self.series.copy()
         shifted = s.shift(1)
-        diff = s - shifted
-        _zsc = zScore(series=diff)
+        increment = s - shifted
+        increment.name = 'INCREMENT'
+        _zsc = zScore(series=increment)
         _zsc.calc(threshold=threshold, plottitle=f"z-score of {self.series.name} increments",
                   showplot=True, verbose=True)
         ok = _zsc.flag == 0
@@ -61,41 +57,29 @@ class zScoreIncremental(FlagBase):
         if self.verbose:
             print(f"Total found outliers: {total_outliers} values (daytime+nighttime)")
 
-        # if self.showplot: self._plot(df=df)
+        if self.showplot: self.plot(ok=ok, rejected=rejected,
+                                    plottitle=f"Outlier detection based on z-score "
+                                              f"from {self.series.name} increments")
 
         return ok, rejected
 
-    def _plot(self, df: DataFrame):
-        fig = plt.figure(facecolor='white', figsize=(12, 16))
-        gs = gridspec.GridSpec(3, 1)  # rows, cols
-        gs.update(wspace=0.3, hspace=0.1, left=0.05, right=0.95, top=0.95, bottom=0.05)
-        ax1 = fig.add_subplot(gs[0, 0])
-        ax2 = fig.add_subplot(gs[1, 0], sharex=ax1)
-        ax3 = fig.add_subplot(gs[2, 0], sharex=ax1)
-
-        ax1.plot_date(x=df.index, y=df[self.series.name], marker='o', mec='none',
-                      alpha=.5, color='black', label="series")
-
-        ax2.plot_date(x=df.index, y=df['CLEANED'], marker='o', mec='none',
-                      alpha=.5, label="cleaned series")
-
-        ax3.plot_date(x=df.index, y=df['NOT_OUTLIER_'], marker='o', mec='none',
-                      alpha=.5, label="OK daytime")
-        ax3.plot_date(x=df.index, y=df['OUTLIER_'], marker='o', mec='none',
-                      alpha=.5, color='red', label="outlier daytime")
-
-        default_format(ax=ax1)
-        default_format(ax=ax2)
-        default_format(ax=ax3)
-
-        default_legend(ax=ax1)
-        default_legend(ax=ax2)
-        default_legend(ax=ax3)
-
-        plt.setp(ax1.get_xticklabels(), visible=False)
-        plt.setp(ax2.get_xticklabels(), visible=False)
-        plt.setp(ax3.get_xticklabels(), visible=False)
-
-        title = f"Outlier detection - local outlier factor"
-        fig.suptitle(title, fontsize=theme.FIGHEADER_FONTSIZE)
-        fig.show()
+    # def _plot(self, ok:DatetimeIndex, rejected:DatetimeIndex, plottitle:str=""):
+    #     fig = plt.figure(facecolor='white', figsize=(16, 7))
+    #     gs = gridspec.GridSpec(2, 1)  # rows, cols
+    #     gs.update(wspace=0.3, hspace=0.1, left=0.03, right=0.97, top=0.95, bottom=0.05)
+    #     ax_series = fig.add_subplot(gs[0, 0])
+    #     ax_ok = fig.add_subplot(gs[1, 0], sharex=ax_series)
+    #     ax_series.plot_date(self.series.index, self.series, label=f"{self.series.name}", color="#42A5F5",
+    #                         alpha=.5, markersize=2, markeredgecolor='none')
+    #     ax_series.plot_date(self.series[rejected].index, self.series[rejected],
+    #                         label="outlier (rejected)", color="#F44336", marker="X", alpha=1,
+    #                         markersize=8, markeredgecolor='none')
+    #     ax_ok.plot_date(self.series[ok].index, self.series[ok], label=f"OK", color="#9CCC65", alpha=.5,
+    #                     markersize=2, markeredgecolor='none')
+    #     default_format(ax=ax_series)
+    #     default_format(ax=ax_ok)
+    #     default_legend(ax=ax_series)
+    #     default_legend(ax=ax_ok)
+    #     plt.setp(ax_series.get_xticklabels(), visible=False)
+    #     fig.suptitle(plottitle, fontsize=theme.FIGHEADER_FONTSIZE)
+    #     fig.show()

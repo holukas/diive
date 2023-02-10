@@ -317,6 +317,8 @@ class NEPpenalty:
 
         df = self.df.copy()
 
+        if fit_n_bootstraps < 2: fit_n_bootstraps = 2
+
         xlabel_units = "$\mathrm{hours\ yr^{-1}}$"
         ylabel_penalty = r"$\mathrm{NEP\ penalty}$"
         ylabel_units = r"$\mathrm{gCO_{2}\ m^{-2}\ yr^{-1}}$"
@@ -485,6 +487,8 @@ class NEPpenalty:
                         xytext = (-60, -5)
                     elif year == 2006:
                         xytext = (20, -15)
+                    elif year == 2015:
+                        xytext = (-20, -40)
                     arrowprops = dict(facecolor='black', arrowstyle='-')
                 else:
                     xytext = None
@@ -499,7 +503,7 @@ class NEPpenalty:
                     text_in_ax = \
                         ax.annotate(f'{year}{decoration}', (txt_x, txt_y),
                                     xytext=xytext, xycoords='data',
-                                    color='black', weight='normal', fontsize=12,
+                                    color='black', weight='normal', fontsize=10,
                                     textcoords='offset points', zorder=100,
                                     arrowprops=arrowprops)
 

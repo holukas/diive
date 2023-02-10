@@ -508,7 +508,7 @@ class DetectFrequency:
                 self.freq = freq_list[0]
                 if self.verbose: print(f"OK (detected {self.freq} time resolution with maximum confidence)")
 
-        elif freq_fulF:
+        elif freq_full:
             # High certainty, freq found from full range of dataset
             self.freq = freq_full
             if self.verbose: print(f"OK (detected {self.freq} time resolution {self.freq} with high confidence)")

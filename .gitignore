@@ -109,3 +109,4 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+/notebooks/Manuscripts/Hörtnagl et al. (2023) - NEP Penalty/

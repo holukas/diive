@@ -2,6 +2,49 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.49.0 | 10 Feb 2023
+
+### New Features
+
+- **Stepwise MeteoScreening**: (`pkgs.qaqc.meteoscreening.MetScrDbMeasurementVars`)
+    - **Helper class to screen time series of meteo variables directly from the
+      database**. The class is optimized to work in Jupyter notebooks. Various outlier
+      detection methods can be called on-demand. Outlier results are displayed and
+      the user can accept the results and proceed, or repeat the step with adjusted
+      method parameters. An unlimited amount of tests can be chained together. At
+      the end of the screening, an overall flag is calculated from ALL single flags.
+      The overall flag is then used to filter the time series.
+    - **Variables**: The class allows the simultaneous quality-screening of multiple
+      variables from one single measurement, e.g., multiple air temperature variables.
+    - **Resampling**:Filtered time series are resampled to 30MIN time resolution.
+    - **Database tags**: Is optimized to work with the InfluxDB format of the ETH
+      Grassland Sciences Group. The class can handle database tags and updates tags
+      after data screening and resampling.
+    - **Handling different time resolutions**: One challenging aspect of the screening
+      were the different time resolutions of the raw data. In some cases, the time
+      resolution changed from e.g. 10MIN for older data to 1MIN for newer date. In
+      cases of different time resolution, the lower resolution is upsampled to the
+      higher resolution, the emerging gaps are back-filled with available data.
+      Back-filling is used because the timestamp in the database always is TIMESTAMP_END,
+      i.e., it gives the *end* of the averaging interval. The advantage of upsampling
+      is that all outlier detection routines can be applied to the whole dataset.
+      Since data are resampled to 30MIN after screening and since the TIMESTAMP_END
+      is respected, the upsampling itself has no impact on resulting aggregates.
+
+### Changes
+
+- Generating the plot NEP penalty vs hours above threshold now requires a
+  minimum of 2 bootstrap runs to calculate prediction intervals
+  (`pkgs.flux.nep_penalty.NEPpenalty.plot_critical_hours`)
+
+### Bugfixes
+
+- Fixed bug in `BinFitter`, the parameter to set the number of predictions is now correctly
+  named `n_predictions`. Similar `n_bins_x`.
+- Fixed typos in functions `insert_aggregated_in_hires`, `SortingBinsMethod`, `FindOptimumRange`
+  and `pkgs.analyses.optimumrange.FindOptimumRange._values_in_optimum_range` and others.
+- Other typos
+
 ## v0.48.0 | 1 Feb 2023
 
 ### New Features

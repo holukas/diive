@@ -95,6 +95,7 @@ class HeatmapDateTime:
     def show(self):
         """Generate plot and show figure"""
         self.plot()
+        plt.tight_layout()
         self.fig.show()
 
     def _create_ax(self):

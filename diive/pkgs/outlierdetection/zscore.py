@@ -5,7 +5,6 @@ import pandas as pd
 from pandas import Series, DatetimeIndex
 
 import diive.core.funcs.funcs as funcs
-import diive.core.plotting.styles.LightTheme as theme
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.pkgs.createvar.daynightflag import nighttime_flag_from_latlon
@@ -93,22 +92,12 @@ class zScoreDaytimeNighttime(FlagBase):
             print(f"Total found outliers: {len(_rejected_nt)} values (nighttime)")
             print(f"Total found outliers: {total_outliers} values (daytime+nighttime)")
 
-        if self.showplot: self._plot(ok, rejected)
+        if self.showplot:
+            self.plot(ok, rejected,
+                      plottitle=f"Outlier detection based on "
+                                f"daytime/nighttime z-scores of {self.series.name}")
 
         return ok, rejected
-
-    def _plot(self, ok, rejected):
-        # Plot
-        fig = plt.figure(facecolor='white', figsize=(16, 9))
-        gs = gridspec.GridSpec(1, 1)  # rows, cols
-        # gs.update(wspace=0.3, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
-        ax = fig.add_subplot(gs[0, 0])
-        ax.plot_date(self.series[ok].index, self.series[ok],
-                     label="OK", color="#4CAF50")
-        ax.plot_date(self.series[rejected].index, self.series[rejected],
-                     label="outlier (rejected)", color="#F44336", marker="X")
-        ax.legend()
-        fig.show()
 
 
 @ConsoleOutputDecorator()
@@ -155,45 +144,38 @@ class zScore(FlagBase):
         s = self.series.copy().dropna()
 
         # Run with threshold
-        zscore = funcs.zscore(series=s)
-        ok = zscore <= threshold
+        zscores = funcs.zscore(series=s)
+        ok = zscores <= threshold
         ok = ok[ok].index
-        rejected = zscore > threshold
+        rejected = zscores > threshold
         rejected = rejected[rejected].index
 
         if self.verbose: print(f"Total found outliers: {len(rejected)} values")
         # print(f"z-score of {threshold} corresponds to a prob of {100 * 2 * norm.sf(threshold):0.2f}%")
 
-        if self.showplot: self._plot(ok, rejected)
+        if self.showplot:
+            self.plot(ok, rejected, plottitle=f"Outlier detection based on z-scores of {self.series.name}")
 
         return ok, rejected
-
-    def _plot(self, ok, rejected):
-        # Plot
-        fig = plt.figure(facecolor='white', figsize=(16, 9))
-        gs = gridspec.GridSpec(1, 1)  # rows, cols
-        # gs.update(wspace=0.3, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
-        ax = fig.add_subplot(gs[0, 0])
-        ax.plot_date(self.series[ok].index, self.series[ok],
-                     label="OK", color="#4CAF50")
-        ax.plot_date(self.series[rejected].index, self.series[rejected],
-                     label="outlier (rejected)", color="#F44336", marker="X")
-        if self.plottitle:
-            fig.suptitle(self.plottitle, fontsize=theme.FIGHEADER_FONTSIZE)
-        ax.legend()
-        fig.show()
 
 
 @ConsoleOutputDecorator()
 class zScoreIQR(FlagBase):
     """
-    Identify outliers based on the z-score of interquartile range data
+    Identify outliers based on max z-scores in the interquartile range data
 
-    Data are divided into 8 groups based on quantiles. The z-score is calculated
-    for each data points in the respective group and based on the mean and SD of
-    the respective group. The z-score threshold to identify outlier data is
-    calculated as the max of z-scores found in IQR data multiplied by *factor*.
-    z-scores above the threshold are marked as outliers.
+    Data are divided into 8 groups based on quantiles. Each of the 8 groups
+    have their own respective z-score threshold.
+
+    Then, the z-score threshold is calculated for each group by:
+
+    (1) Dividing each group into 8 subgroups, which corresponds to indexes
+        from 0-7. Subgroups with index 2,3,4 and 5 correspond to the IQR.
+    (2) The z-score is calculated for each data point in subgroups 2-5.
+    (3) The z-score group threshold is calculated from the maximum z-score
+        found in subgroups 2-5, multiplied by *factor*.
+    (4) Group data above the group threshold are marked as outliers.
+
     ...
 
     Methods:
@@ -236,56 +218,25 @@ class zScoreIQR(FlagBase):
         s = self.series.copy()
         s = s.dropna()
 
-        # First run with high threshold, weak detection
-        threshold = 10
-        mean, std = np.mean(s), np.std(s)
-        z_score = np.abs((s - mean) / std)
-        # plt.scatter(z_score.index, z_score)
-        # plt.show()
-        ok = z_score <= threshold
-        ok = ok[ok]
-        ok_coll.loc[ok.index] = True
-        rejected = z_score > threshold
-        rejected = rejected[rejected]
-        rejected_coll.loc[rejected.index] = True
-
-        n_outliers_prev = 0
-        outliers = True
-        iter = 0
-        while outliers:
-            iter += 1
-            if self.verbose: print(f"Starting iteration#{iter} ... ")
-
-            # group, bins = pd.cut(s, bins=2, retbins=True, duplicates='drop')
-            group, bins = pd.qcut(s, q=8, retbins=True, duplicates='drop')
-            df = pd.DataFrame(s)
-            df['_GROUP'] = group
-            grouped = df.groupby('_GROUP')
-            for ix, group_df in grouped:
-                vardata = group_df[s.name]
-                mean = np.mean(vardata)
-                sd = np.std(vardata)
-                z_score = np.abs((vardata - mean) / sd)
-                # plt.scatter(z_score.index, z_score)
-                # plt.show()
-                threshold = self._detect_z_threshold_from_iqr(series=vardata, factor=factor, quantiles=8)
-                ok = z_score < threshold
-                ok = ok[ok]
-                ok_coll.loc[ok.index] = True
-                rejected = z_score > threshold
-                rejected = rejected[rejected]
-                rejected_coll.loc[rejected.index] = True
-            n_outliers = rejected_coll.sum()
-            new_n_outliers = n_outliers - n_outliers_prev
-            if self.verbose: print(f"Found {new_n_outliers} outliers during iteration#{iter} ... ")
-            if new_n_outliers > 0:
-                n_outliers_prev = n_outliers
-                s.loc[rejected_coll] = np.nan
-                # outliers = False  # Set to *False* means outlier removal runs one time only
-                outliers = True  # *True* means run outlier removal several times until all outliers removed
-            else:
-                if self.verbose: print(f"No more outliers found during iteration#{iter}, outlier search finished.")
-                outliers = False
+        # group, bins = pd.cut(s, bins=2, retbins=True, duplicates='drop')
+        group, bins = pd.qcut(s, q=8, retbins=True, duplicates='drop')
+        df = pd.DataFrame(s)
+        df['_GROUP'] = group
+        grouped = df.groupby('_GROUP')
+        for ix, group_df in grouped:
+            vardata = group_df[s.name]
+            mean = np.mean(vardata)
+            sd = np.std(vardata)
+            z_score = np.abs((vardata - mean) / sd)
+            # plt.scatter(z_score.index, z_score)
+            # plt.show()
+            threshold = self._detect_z_threshold_from_iqr(series=vardata, factor=factor, quantiles=8)
+            ok = z_score < threshold
+            ok = ok[ok]
+            ok_coll.loc[ok.index] = True
+            rejected = z_score > threshold
+            rejected = rejected[rejected]
+            rejected_coll.loc[rejected.index] = True
 
         # Convert to index
         ok_coll = ok_coll[ok_coll].index
@@ -294,7 +245,11 @@ class zScoreIQR(FlagBase):
         if self.verbose: print(f"Total found outliers: {len(rejected_coll)} values")
         # print(f"z-score of {threshold} corresponds to a prob of {100 * 2 * norm.sf(threshold):0.2f}%")
 
-        if self.showplot: self._plot(ok_coll, rejected_coll)
+        if self.showplot:
+            self._plot(ok_coll, rejected_coll)
+            self.plot(ok_coll, rejected_coll,
+                      plottitle=f"Outlier detection based on max z-scores "
+                                f"in the interquartile range data of {self.series.name}")
 
         return ok_coll, rejected_coll
 
