@@ -24,8 +24,13 @@ be zero. Instead of cutting off negative values, `diive` detects the nighttime o
 for each day and then calculates a correction slope between individual days. This way,
 the daytime values are also corrected. 
 
+After quality-screening and corrections, data are resampled to 30MIN time resolution. 
+
 At the moment, the stepwise meteoscreening works for data downloaded from the `InfluxDB`
-database. Due to its modular approach, the stepwise screening can be easily adjusted
+database. The screening respects the database format (including tags) and prepares
+the screened, corrected and resampled data for direct database upload.
+
+Due to its modular approach, the stepwise screening can be easily adjusted
 to work with any type of data files. This adjustment will be done in one of the next
 updates.
 
