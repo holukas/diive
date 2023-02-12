@@ -64,7 +64,7 @@ def remove_prev_lines(ax):
 #     return twin_ax
 
 def default_format(ax,
-                   axlabels_fontsize: int = theme.AXLABELS_FONTSIZE,
+                   axlabels_fontsize: float = theme.AXLABELS_FONTSIZE,
                    axlabels_fontcolor: str = theme.AXLABELS_FONTCOLOR,
                    axlabels_fontweight=theme.AXLABELS_FONTWEIGHT,
                    txt_xlabel=False,
@@ -301,7 +301,8 @@ def default_legend(ax,
                    bbox_to_anchor=None,
                    from_line_collection=False,
                    line_collection=None,
-                   textsize: int = theme.FONTSIZE_TXT_LEGEND):
+                   textsize: int = theme.FONTSIZE_TXT_LEGEND,
+                   markerscale:float=None):
     # fontP = FontProperties()
     # fontP.set_size('x-large')
     if from_line_collection:
@@ -309,11 +310,13 @@ def default_legend(ax,
         legend = ax.legend(line_collection, labs,
                            loc=loc, bbox_to_anchor=bbox_to_anchor, shadow=shadow,
                            ncol=ncol, facecolor=facecolor, edgecolor=edgecolor,
-                           labelspacing=labelspacing, prop={'size': textsize})
+                           labelspacing=labelspacing, prop={'size': textsize},
+                           markerscale=markerscale)
     else:
         legend = ax.legend(loc=loc, bbox_to_anchor=bbox_to_anchor, shadow=shadow,
                            ncol=ncol, facecolor=facecolor, edgecolor=edgecolor,
-                           labelspacing=labelspacing, prop={'size': textsize})
+                           labelspacing=labelspacing, prop={'size': textsize},
+                           markerscale=markerscale)
     for text in legend.get_texts():
         text.set_color(textcolor)
 

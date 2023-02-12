@@ -11,8 +11,8 @@ from diive.core.utils.prints import ConsoleOutputDecorator
 
 @ConsoleOutputDecorator()
 def resample_series_to_30MIN(series: Series,
-                             to_freqstr: str = '30T',
-                             agg: str = 'mean',
+                             to_freqstr: Literal['30T'] = '30T',
+                             agg: Literal['mean', 'sum'] = 'mean',
                              mincounts_perc: float = .9,
                              output_timestamp_shows: Literal['middle', 'end'] = 'end') -> Series:
     """Downsample data to 30-minute time resolution

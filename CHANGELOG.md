@@ -2,6 +2,55 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.50.0 | 12 Feb 2023
+
+### StepwiseMeteoScreeningDb
+
+**Stepwise quality-screening of meteorological data, directly from the database**
+
+In this update, the stepwise meteoscreening directly from the database introduced in the
+previous update was further refined and extended, with additional outlier tests and corrections
+implemented. The stepwise meteoscreening allows to perform quality tests on meteorological
+data on-demand. A preview plot after running a test is shown and the user can decide if
+results are satisfactory or if the same test with different parameters should be re-run.
+Once results are satisfactory, the respective test flag is added to the data. After running
+the desired tests, an overall flag `QCF` is calculated from all individual tests.
+
+In addition to the creation of quality flags, the stepwise screening allows to correct 
+data for common issues. For example, short-wave radiation sensors often measure negative
+values during the night. These negative values are useful because they give info about
+the accuracy and precision of the sensor. In this case, values during the night should
+be zero. Instead of cutting off negative values, `diive` detects the nighttime offset
+for each day and then calculates a correction slope between individual days. This way,
+the daytime values are also corrected. 
+
+At the moment, the stepwise meteoscreening works for data downloaded from the `InfluxDB`
+database. Due to its modular approach, the stepwise screening can be easily adjusted
+to work with any type of data files. This adjustment will be done in one of the next
+updates.
+
+### Changes
+
+- Renamed class `MetScrDbMeasurementVars`
+  to `StepwiseMeteoScreeningDb` (`pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb`)
+
+### Additions
+
+- **Stepwise MeteoScreening**:
+  Added access to multiple methods for easy stepwise execution:
+    - Added local SD outlier test (`pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.flag_outliers_localsd_test`)
+    - Added absolute limits outlier test (`pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.flag_outliers_abslim_test`)
+    - Added correction to remove radiation zero
+      offset (`pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.correction_remove_radiation_zero_offset`)
+    - Added correction to remove relative humidity
+      offset (`pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.correction_remove_relativehumidity_offset`)
+    - Added correction to set values above a threshold to
+      threshold (`pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.correction_setto_max_threshold`)
+    - Added correction to set values below a threshold to
+      threshold (`pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.correction_setto_min_threshold`)
+    - Added comparison plot before/after QC and
+      corrections (`pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.showplot_resampled`)
+
 ## v0.49.0 | 10 Feb 2023
 
 ### New Features

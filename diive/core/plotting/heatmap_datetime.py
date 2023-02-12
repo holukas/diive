@@ -3,7 +3,7 @@ HEATMAP
 =======
 """
 import copy
-
+import diive.core.plotting.styles.LightTheme as theme
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
@@ -21,11 +21,17 @@ class HeatmapDateTime:
 
     def __init__(self,
                  series: Series,
+                 fig=None,
                  ax=None,
                  title: str = None,
                  vmin: float = None,
                  vmax: float = None,
                  cb_digits_after_comma: int = 2,
+                 cb_labelsize: float = theme.AXLABELS_FONTSIZE,
+                 axlabels_fontsize: float = theme.AXLABELS_FONTSIZE,
+                 ticks_labelsize: float = theme.TICKS_LABELSIZE,
+                 minyticks: int = 3,
+                 maxyticks: int = 10,
                  cmap: str = 'RdYlBu_r',
                  color_bad: str = 'grey',
                  display_type: str = 'Time & Date',
@@ -45,10 +51,6 @@ class HeatmapDateTime:
             color_bad: Color of missing values
             display_type: Currently only option is 'Time & Date'
 
-            Example notebook:
-            diive/Plotting/Heatmap.ipynb
-            in https://gitlab.ethz.ch/gl-notebooks/general-notebooks
-
         """
         self.series = series.copy()
         self.verbose = verbose
@@ -62,10 +64,16 @@ class HeatmapDateTime:
         self.vmin = vmin
         self.vmax = vmax
         self.cb_digits_after_comma = cb_digits_after_comma
+        self.cb_labelsize = cb_labelsize
         self.color_bad = color_bad
         self.display_type = display_type
         self.figsize = figsize
         self.ax = ax
+        self.axlabels_fontsize = axlabels_fontsize
+        self.fig = fig
+        self.ticks_labelsize = ticks_labelsize
+        self.minyticks = minyticks
+        self.maxyticks = maxyticks
 
         # Create axis if none is given
         if not ax:
@@ -123,17 +131,20 @@ class HeatmapDateTime:
 
         # Colorbar
         cb = plt.colorbar(p, ax=self.ax, format=f"%.{int(self.cb_digits_after_comma)}f")
-        cb.ax.tick_params(labelsize=theme.AXLABELS_FONTSIZE)
+        cb.ax.tick_params(labelsize=self.cb_labelsize)
         # cbytick_obj = plt.getp(cb.axes_dict, 'yticklabels')  # Set y tick label color
         # plt.setp(cbytick_obj, color='black', fontsize=FONTSIZE_HEADER_AXIS)
 
         # Ticks
         self.ax.set_xticks(['3:00', '6:00', '9:00', '12:00', '15:00', '18:00', '21:00'])
         self.ax.set_xticklabels([3, 6, 9, 12, 15, 18, 21])
-        nice_date_ticks(ax=self.ax, minticks=6, maxticks=8, which='y')
+        nice_date_ticks(ax=self.ax, minticks=self.minyticks, maxticks=self.maxyticks, which='y')
 
+        # Format
         default_format(ax=self.ax, txt_xlabel='Time (hours)', txt_ylabel='Date',
-                       ticks_direction='out', ticks_length=8, ticks_width=2)
+                       ticks_direction='out', ticks_length=8, ticks_width=2,
+                       axlabels_fontsize=self.axlabels_fontsize,
+                       ticks_labelsize=self.ticks_labelsize)
         format_spines(ax=self.ax, color='black', lw=2)
 
     def _transform_data(self):
@@ -152,6 +163,7 @@ class HeatmapDateTime:
 
         # Put needed data in new df_pivot, then pivot to bring it in needed shape
         plot_df_pivot = self.plot_df.pivot(index='y_vals', columns='x_vals', values='z')  ## new in pandas 23.4
+        # plot_df_pivot = plot_df_pivot.append(plot_df_pivot.iloc[-1])
         x = plot_df_pivot.columns.values
         y = plot_df_pivot.index.values
         z = plot_df_pivot.values

@@ -26,9 +26,13 @@ class AbsoluteLimits(FlagBase):
 
     def __init__(self, series: Series, levelid: str = None):
         super().__init__(series=series, flagid=self.flagid, levelid=levelid)
+        self.showplot = False
+        self.verbose = False
 
-    def calc(self, min: float, max: float):
+    def calc(self, min: float, max: float, showplot: bool = False, verbose: bool = False):
         """Calculate flag"""
+        self.showplot = showplot
+        self.verbose = verbose
         self.reset()
         ok, rejected = self._flagtests(min, max)
         self.setflag(ok=ok, rejected=rejected)
@@ -40,6 +44,9 @@ class AbsoluteLimits(FlagBase):
         ok = ok[ok].index
         rejected = (self.series < min) | (self.series > max)
         rejected = rejected[rejected].index
+        if self.showplot: self.plot(ok=ok, rejected=rejected,
+                                    plottitle=f"Outlier detection based on "
+                                              f"absolute limits for {self.series.name}")
         return ok, rejected
 
 

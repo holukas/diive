@@ -7,17 +7,42 @@ METEOSCREENING
 
 This module is part of the 'diive' library.
 
-"""
+Corrections and QC flags that can be directly accessed
+via the class 'MetScrDbMeasurementVars':
+    - correction_remove_radiation_zero_offset
+    - correction_remove_relativehumidity_offset
+    - correction_setto_max_threshold
+    - correction_setto_min_threshold
+    - flag_missingvals_test
+    - flag_outliers_abslim_test
+    - flag_outliers_increments_zcore_test
+    - flag_outliers_localsd_test
+    - flag_outliers_stl_riqrz_test
+    - flag_outliers_thymeboost_test
+    - flag_outliers_zscore_dtnt_test
+    - flag_outliers_zscore_test
+    - flag_outliers_zscoreiqr_test
 
+"""
+from typing import Literal
+import diive.core.plotting.styles.LightTheme as theme
+import matplotlib.gridspec as gridspec
+import matplotlib.pyplot as plt
 import pandas as pd
-from pandas import Series, DataFrame
+from pandas import DataFrame
 from pandas.tseries.frequencies import to_offset
 
+from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+from diive.core.plotting.plotfuncs import default_format, default_legend, nice_date_ticks
 from diive.core.plotting.timeseries import TimeSeries
 from diive.core.times.resampling import resample_series_to_30MIN
 from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import detect_freq_groups
+from diive.pkgs.corrections.offsetcorrection import remove_radiation_zero_offset, remove_relativehumidity_offset
+from diive.pkgs.corrections.setto_threshold import setto_threshold
+from diive.pkgs.outlierdetection.absolutelimits import AbsoluteLimits
 from diive.pkgs.outlierdetection.incremental import zScoreIncrements
+from diive.pkgs.outlierdetection.local3sd import LocalSD
 from diive.pkgs.outlierdetection.missing import MissingValues
 from diive.pkgs.outlierdetection.seasonaltrend import OutlierSTLRIQRZ
 from diive.pkgs.outlierdetection.thymeboost import ThymeBoostOutlier
@@ -25,7 +50,7 @@ from diive.pkgs.outlierdetection.zscore import zScoreDaytimeNighttime, zScoreIQR
 from diive.pkgs.qaqc.qcf import FlagQCF
 
 
-class MetScrDbMeasurementVars:
+class StepwiseMeteoScreeningDb:
     """MeteoScreening from database: Screen multiple vars from single measurement"""
 
     def __init__(
@@ -48,6 +73,7 @@ class MetScrDbMeasurementVars:
         self._resampled_detailed = {}
         self._hires_flags = {}
         self._tags = {}
+        self._series_hires_orig = {}
         self._series_hires_cleaned = {}
         self._results_qcf = {}
         self._last_results = {}  # Results of most recent QC tests (objects)
@@ -67,26 +93,6 @@ class MetScrDbMeasurementVars:
         if not isinstance(self._results_qcf, dict):
             raise Exception(f"No QCF results available.")
         return self._results_qcf
-
-    def showplot_qcf_heatmaps(self, **kwargs):
-        for field in self.fields:
-            self.results_qcf[field].showplot_qcf_heatmaps(**kwargs)
-
-    def showplot_qcf_timeseries(self, **kwargs):
-        for field in self.fields:
-            self.results_qcf[field].showplot_qcf_timeseries(**kwargs)
-
-    def report_qcf_evolution(self):
-        for field in self.fields:
-            self.results_qcf[field].report_qcf_evolution()
-
-    def report_qcf_flags(self):
-        for field in self.fields:
-            self.results_qcf[field].report_qcf_flags()
-
-    def report_qcf_series(self):
-        for field in self.fields:
-            self.results_qcf[field].report_qcf_series()
 
     @property
     def data_detailed(self) -> dict:
@@ -117,41 +123,95 @@ class MetScrDbMeasurementVars:
         return self._series_hires_cleaned
 
     @property
+    def series_hires_orig(self) -> dict:
+        """Return original time series of field(s) as dict of Series"""
+        if not isinstance(self._series_hires_orig, dict):
+            raise Exception(f"No hires original data available.")
+        return self._series_hires_orig
+
+    @property
     def hires_flags(self) -> dict:
         """Return flag(s) as dict of Series"""
         if not isinstance(self._hires_flags, dict):
             raise Exception(f"No hires flags available.")
         return self._hires_flags
 
-    def _setup(self):
-        """Setup variable (field) data for meteoscreening"""
-        # Loop over fields in measurement
+    def showplot_qcf_heatmaps(self, **kwargs):
         for field in self.fields:
-            data_detailed = self._data_detailed[field]  # Data for this field
-            timestamp_name = data_detailed.index.name  # Get name of timestamp for later use
-            self._check_units(data_detailed=data_detailed)
-            self._check_fields(data_detailed=data_detailed)
+            self.results_qcf[field].showplot_qcf_heatmaps(**kwargs)
 
-            # Harmonize different time resolutions (upsampling to highest freq)
-            groups = self._make_timeres_groups(data_detailed=data_detailed)
-            group_counts = self._count_group_records(group_series=groups[field])
-            targetfreq, used_freqs, rejected_freqs = self._validate_n_grouprecords(group_counts=group_counts)
-            data_detailed = self._filter_data(data_detailed=data_detailed, used_freqs=used_freqs)
-            data_detailed = self._harmonize_timeresolution(targetfreq=targetfreq, data_detailed=data_detailed,
-                                                           timestamp_name=timestamp_name)
-            data_detailed = self._sanitize_timestamp(targetfreq=targetfreq, data_detailed=data_detailed)
+    def showplot_qcf_timeseries(self, **kwargs):
+        for field in self.fields:
+            self.results_qcf[field].showplot_qcf_timeseries(**kwargs)
 
-            # Store tags for this field in dict
-            self._tags[field] = self._extract_tags(data_detailed=data_detailed, field=field)
+    def showplot_resampled(self):
+        """Show resampled data after high-resolution screening and corrections"""
 
-            # Store data_detailed for this field in dict
-            self._data_detailed[field] = data_detailed.copy()
+        for field in self.fields:
+            series_orig = self.series_hires_orig[field]
+            series_resampled = self.resampled_detailed[field][field]
 
-            # Initialize quality flags for this field
-            self._hires_flags[field] = self._init_flagsdf(data_detailed=data_detailed, field=field)
+            fig = plt.figure(facecolor='white', figsize=(18, 9))
+            gs = gridspec.GridSpec(3, 5)  # rows, cols
+            gs.update(wspace=0.4, hspace=0.1, left=0.03, right=0.96, top=0.91, bottom=0.06)
 
-            # Store timeseries for this field dict
-            self._series_hires_cleaned[field] = self._data_detailed[field][field].copy()  # Timeseries
+            # Axes
+            ax_orig = fig.add_subplot(gs[0, 0:3])
+            ax_resampled = fig.add_subplot(gs[1, 0:3], sharex=ax_orig)
+            ax_both = fig.add_subplot(gs[2, 0:3], sharex=ax_orig)
+            ax_heatmap_hires_before = fig.add_subplot(gs[0:3, 3])
+            ax_heatmap_resampled_after = fig.add_subplot(gs[0:3, 4], sharey=ax_heatmap_hires_before)
+
+            # Time series
+            ax_orig.plot_date(series_orig.index, series_orig, label=f"{series_orig.name}", color="#78909C",
+                              alpha=.5, markersize=2, markeredgecolor='none')
+            ax_resampled.plot_date(series_resampled.index, series_resampled, label=f"resampled",
+                                   color="#FFA726", alpha=1, markersize=3, markeredgecolor='none')
+            ax_both.plot_date(series_orig.index, series_orig, label=f"{series_orig.name}", color="#78909C",
+                              alpha=.5, markersize=2, markeredgecolor='none')
+            ax_both.plot_date(series_resampled.index, series_resampled, label=f"resampled",
+                              color="#FFA726", alpha=1, markersize=3, markeredgecolor='none')
+
+            # Heatmaps
+            kwargs_heatmap = dict(cb_labelsize=10, axlabels_fontsize=10, ticks_labelsize=10,
+                                  minyticks=3, maxyticks=99)
+            HeatmapDateTime(ax=ax_heatmap_hires_before, series=series_orig, **kwargs_heatmap).plot()
+            HeatmapDateTime(ax=ax_heatmap_resampled_after, series=series_resampled, **kwargs_heatmap).plot()
+
+            # Format time series
+            default_format(ax=ax_orig, ticks_labelsize=10)
+            default_format(ax=ax_resampled, ticks_labelsize=10)
+            default_format(ax=ax_both, ticks_labelsize=10)
+            nice_date_ticks(ax=ax_orig, minticks=3, maxticks=20, which='x', locator='auto')
+            default_legend(ax=ax_orig, markerscale=3, textsize=10)
+            default_legend(ax=ax_resampled, markerscale=3, textsize=10)
+            default_legend(ax=ax_both, markerscale=3, textsize=10)
+            plt.setp(ax_orig.get_xticklabels(), visible=False)
+            plt.setp(ax_resampled.get_xticklabels(), visible=False)
+            plt.setp(ax_heatmap_resampled_after.get_yticklabels(), visible=False)
+
+            fig.suptitle(f"{self.series_hires_orig[field].name}: "
+                         f"High-resolution before QC & corrections vs "
+                         f"resampled after QC & corrections",
+                         fontsize=theme.FIGHEADER_FONTSIZE)
+            fig.show()
+
+    def showplot_orig(self):
+        """Show original high-resolution data used as input"""
+        for field in self.fields:
+            TimeSeries(series=self._series_hires_orig[field]).plot()
+
+    def report_qcf_evolution(self):
+        for field in self.fields:
+            self.results_qcf[field].report_qcf_evolution()
+
+    def report_qcf_flags(self):
+        for field in self.fields:
+            self.results_qcf[field].report_qcf_flags()
+
+    def report_qcf_series(self):
+        for field in self.fields:
+            self.results_qcf[field].report_qcf_series()
 
     def flag_missingvals_test(self):
         """Flag missing values"""
@@ -187,9 +247,6 @@ class MetScrDbMeasurementVars:
             _zsciqr.calc(factor=factor, showplot=showplot, verbose=verbose)
             self._last_results[field] = _zsciqr
 
-    #todo localsd
-    #todo corrections
-
     def flag_outliers_zscore_test(self, threshold: int = 4, showplot: bool = False, verbose: bool = False,
                                   plottitle: str = None):
         """Identify outliers based on the z-score of records"""
@@ -207,6 +264,22 @@ class MetScrDbMeasurementVars:
             _thymeboost.calc(showplot=showplot)
             self._last_results[field] = _thymeboost
 
+    def flag_outliers_localsd_test(self, n_sd: float, showplot: bool = False, verbose: bool = False):
+        """Identify outliers based on standard deviation in a rolling window"""
+        for field in self.fields:
+            series_cleaned = self._series_hires_cleaned[field]  # Timeseries
+            _locsd = LocalSD(series=series_cleaned)
+            _locsd.calc(showplot=showplot)
+            self._last_results[field] = _locsd
+
+    def flag_outliers_abslim_test(self, min: float, max: float, showplot: bool = False, verbose: bool = False):
+        """Identify outliers based on absolute limits"""
+        for field in self.fields:
+            series_cleaned = self._series_hires_cleaned[field]  # Timeseries
+            _abslim = AbsoluteLimits(series=series_cleaned)
+            _abslim.calc(min=min, max=max, showplot=showplot)
+            self._last_results[field] = _abslim
+
     def flag_outliers_stl_riqrz_test(self, zfactor: float = 4.5, decompose_downsampling_freq: str = '1H',
                                      repeat: bool = False, showplot: bool = False):
         """Seasonsal trend decomposition with z-score on residuals"""
@@ -217,22 +290,46 @@ class MetScrDbMeasurementVars:
                       repeat=repeat, showplot=showplot)
             self._last_results[field] = _stl
 
-    def finalize(self):
+    def correction_remove_radiation_zero_offset(self):
+        """Remove nighttime offset from all radiation data and set nighttime to zero"""
         for field in self.fields:
-            series_orig = self._data_detailed[field][field].copy()
+            self._series_hires_cleaned[field] = \
+                remove_radiation_zero_offset(series=self._series_hires_cleaned[field],
+                                             lat=self.site_lat, lon=self.site_lon,
+                                             timezone_of_timestamp='UTC+01:00', showplot=True)
 
-            # Calculate overall flag QCF
-            _qcf = self._calculate_qcf(df=self._hires_flags[field], series=series_orig)
-            self._hires_flags[field] = _qcf.flags
-            self._series_hires_cleaned[field] = _qcf.filteredseries
-            self._results_qcf[field] = _qcf
-            self._last_results[field] = _qcf
+    def correction_setto_max_threshold(self, threshold: float):
+        """Remove nighttime offset from all radiation data and set nighttime to zero"""
+        for field in self.fields:
+            self._series_hires_cleaned[field] = \
+                setto_threshold(series=self._series_hires_cleaned[field],
+                                threshold=threshold, type='max', showplot=True)
+
+    def correction_setto_min_threshold(self, threshold: float):
+        """Remove nighttime offset from all radiation data and set nighttime to zero"""
+        for field in self.fields:
+            self._series_hires_cleaned[field] = \
+                setto_threshold(series=self._series_hires_cleaned[field],
+                                threshold=threshold, type='min', showplot=True)
+
+    def correction_remove_relativehumidity_offset(self):
+        """Remove nighttime offset from all radiation data and set nighttime to zero"""
+        for field in self.fields:
+            self._series_hires_cleaned[field] = \
+                remove_relativehumidity_offset(series=self._series_hires_cleaned[field], showplot=True)
+
+    def resample(self,
+                 to_freqstr: Literal['30T'] = '30T',
+                 agg: Literal['mean', 'sum'] = 'mean',
+                 mincounts_perc: float = .25):
+
+        for field in self.fields:
 
             # Resample to 30MIN
             series_resampled = resample_series_to_30MIN(series=self._series_hires_cleaned[field],
-                                                        to_freqstr='30T',
-                                                        agg='mean',
-                                                        mincounts_perc=.25)
+                                                        to_freqstr=to_freqstr,
+                                                        agg=agg,
+                                                        mincounts_perc=mincounts_perc)
 
             # Update tags with resampling info
             self._tags[field]['freq'] = '30T'
@@ -247,13 +344,16 @@ class MetScrDbMeasurementVars:
             for key, value in self._tags[field].items():
                 self._resampled_detailed[field][key] = value
 
-    def _calculate_qcf(self, df: DataFrame, series: Series):
+    def calc_qcf(self):
         """Calculate overall quality flag QCF and add QCF results to other flags"""
-        qcf = FlagQCF(df=df, series=series)
-        qcf.calculate()
-        # flags_df = pd.concat([df, qcf.flags], axis=1)
-        # flags_df = flags_df.loc[:, ~flags_df.columns.duplicated(keep='last')]
-        return qcf
+        for field in self.fields:
+            series_orig = self._data_detailed[field][field].copy()
+            qcf = FlagQCF(df=self._hires_flags[field], series=series_orig)
+            qcf.calculate()
+            self._hires_flags[field] = qcf.flags
+            self._series_hires_cleaned[field] = qcf.filteredseries
+            self._results_qcf[field] = qcf
+            self._last_results[field] = qcf
 
     def addflag(self):
         """Add flag of most recent test to data and update filtered series
@@ -270,10 +370,38 @@ class MetScrDbMeasurementVars:
             # self._fulldf[flag.name] = flag
             print(f"++Added flag column {flag.name} to flag data")
 
-    def showplot(self):
+    def _setup(self):
+        """Setup variable (field) data for meteoscreening"""
+        # Loop over fields in measurement
         for field in self.fields:
-            series_cleaned = self._series_hires_cleaned[field]  # Timeseries
-            TimeSeries(series=series_cleaned).plot()
+            data_detailed = self._data_detailed[field]  # Data for this field
+            timestamp_name = data_detailed.index.name  # Get name of timestamp for later use
+            self._check_units(data_detailed=data_detailed)
+            self._check_fields(data_detailed=data_detailed)
+
+            # Harmonize different time resolutions (upsampling to highest freq)
+            groups = self._make_timeres_groups(data_detailed=data_detailed)
+            group_counts = self._count_group_records(group_series=groups[field])
+            targetfreq, used_freqs, rejected_freqs = self._validate_n_grouprecords(group_counts=group_counts)
+            data_detailed = self._filter_data(data_detailed=data_detailed, used_freqs=used_freqs)
+            data_detailed = self._harmonize_timeresolution(targetfreq=targetfreq, data_detailed=data_detailed,
+                                                           timestamp_name=timestamp_name)
+            data_detailed = self._sanitize_timestamp(targetfreq=targetfreq, data_detailed=data_detailed)
+
+            # Store tags for this field in dict
+            self._tags[field] = self._extract_tags(data_detailed=data_detailed, field=field)
+
+            # Store data_detailed for this field in dict
+            self._data_detailed[field] = data_detailed.copy()
+
+            # Initialize quality flags for this field
+            self._hires_flags[field] = self._init_flagsdf(data_detailed=data_detailed, field=field)
+
+            # Store original timeseries for this field dict, will be cleaned
+            self._series_hires_cleaned[field] = self._data_detailed[field][field].copy()  # Timeseries
+
+            # Store original timeseries for this field dict, stays the same for later comparisons
+            self._series_hires_orig[field] = self._data_detailed[field][field].copy()
 
     def _sanitize_timestamp(self, targetfreq, data_detailed):
         """
@@ -865,8 +993,10 @@ def example():
     SITE = 'ch-dav'  # Site name
     SITE_LAT = 46.815333
     SITE_LON = 9.855972
-    MEASUREMENT = 'TA'
-    FIELDS = ['TA_NABEL_T1_35_1']  # Variable name; InfluxDB stores variable names as '_field'
+    MEASUREMENT = 'RH'
+    FIELDS = ['RH_PRF_T1_35_1']  # Variable name; InfluxDB stores variable names as '_field'
+    # FIELDS = ['SW_IN_T1_35_2']  # Variable name; InfluxDB stores variable names as '_field'
+    # FIELDS = ['TA_NABEL_T1_35_1']  # Variable name; InfluxDB stores variable names as '_field'
     START = '2022-10-20 00:01:00'  # Download data starting with this date
     STOP = '2022-11-21 00:01:00'  # Download data before this date (the stop date itself is not included)
 
@@ -880,11 +1010,11 @@ def example():
     print(f"dbc-influxdb version: v{version_dbc_influxdb}")
 
     # Auto-settings
-    DIRCONF = r'L:\Sync\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
+    DIRCONF = r'F:\Sync\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
     TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
     RESAMPLING_FREQ = '30T'  # During MeteoScreening the screened high-res data will be resampled to this frequency; '30T' = 30-minute time resolution
     RESAMPLING_AGG = 'mean'  # The resampling of the high-res data will be done using this aggregation methos; e.g., 'mean'
-    basedir = Path(r"L:\Sync\luhk_work\_temp")
+    basedir = Path(r"F:\Sync\luhk_work\_temp")
     BUCKET_RAW = f'{SITE}_raw'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_raw' contains all raw data for CH-LAE
     BUCKET_PROCESSING = f'{SITE}_processing'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_processing' contains all processed data for CH-LAE
     print(f"Bucket containing raw data (source bucket): {BUCKET_RAW}")
@@ -892,10 +1022,7 @@ def example():
 
     # # Download data from database with "dbc-influxdb"
     # from dbc_influxdb import dbcInflux
-    #
-    # # Instantiate class
-    # dbc = dbcInflux(dirconf=DIRCONF)
-    #
+    # dbc = dbcInflux(dirconf=DIRCONF)  # Instantiate class
     # data_simple, data_detailed, assigned_measurements = \
     #     dbc.download(bucket=BUCKET_RAW,
     #                  measurements=[MEASUREMENT],
@@ -904,12 +1031,12 @@ def example():
     #                  stop=STOP,
     #                  timezone_offset_to_utc_hours=TIMEZONE_OFFSET_TO_UTC_HOURS,
     #                  data_version='raw')
-    #
-    # # import matplotlib.pyplot as plt
-    # # data_simple.plot()
-    # # plt.show()
+    # import matplotlib.pyplot as plt
+    # data_simple.plot()
+    # plt.show()
 
     # # Export data to pickle for fast testing
+    # import pickle
     # pickle_out = open(basedir / "meteodata_simple.pickle", "wb")
     # pickle.dump(data_simple, pickle_out)
     # pickle_out.close()
@@ -930,52 +1057,60 @@ def example():
     pickle_in = open(basedir / "meteodata_assigned_measurements.pickle", "rb")
     assigned_measurements = pickle.load(pickle_in)
 
-    # Restrict data for testing
-    from diive.core.dfun.frames import df_between_two_dates
-    for key in data_detailed.keys():
-        data_detailed[key] = df_between_two_dates(df=data_detailed[key], start_date='2019-06-01', end_date='2019-10-01')
+    # # Restrict data for testing
+    # from diive.core.dfun.frames import df_between_two_dates
+    # for key in data_detailed.keys():
+    #     data_detailed[key] = df_between_two_dates(df=data_detailed[key], start_date='2019-06-01', end_date='2019-10-01')
 
     # Start MeteoScreening session
-    mscr = MetScrDbMeasurementVars(site=SITE,
-                                   data_detailed=data_detailed,
-                                   measurement='TA',
-                                   fields=['TA_NABEL_T1_35_1'],
-                                   site_lat=SITE_LAT,
-                                   site_lon=SITE_LON)
+    mscr = StepwiseMeteoScreeningDb(site=SITE,
+                                    data_detailed=data_detailed,
+                                    measurement='RH',
+                                    fields=['RH_PRF_T1_35_1'],
+                                    site_lat=SITE_LAT,
+                                    site_lon=SITE_LON)
 
     # Plot data
-    # mscr.showplot()
+    mscr.showplot_orig()
 
     # Missing values test
     mscr.flag_missingvals_test()
     mscr.addflag()
 
-    # Outlier detection: z-score over all data
-    mscr.flag_outliers_zscore_test(threshold=4, showplot=True, verbose=True)
-    mscr.addflag()
+    # # Outlier detection: z-score over all data
+    # mscr.flag_outliers_zscore_test(threshold=4, showplot=True, verbose=True)
+    # mscr.addflag()
+    #
+    # # Outlier detection: z-score over all data
+    # mscr.flag_outliers_zscoreiqr_test(factor=4, showplot=True, verbose=True)
+    # mscr.addflag()
+    #
+    # # Outlier detection: z-score over all data, separate for daytime and nighttime
+    # mscr.flag_outliers_zscore_dtnt_test(threshold=4, showplot=True, verbose=True)
+    # mscr.addflag()
+    #
+    # # Outlier detection: Seasonal trend decomposition (residuals, IQR, z-score)
+    # mscr.flag_outliers_stl_riqrz_test(zfactor=4.5, decompose_downsampling_freq='2H', showplot=True, repeat=False)
+    # mscr.addflag()
+    #
+    # # Outlier detection: Increments z-score
+    # mscr.flag_outliers_increments_zcore_test(threshold=10, showplot=True)
+    # mscr.addflag()
+    #
+    # # Outlier detection: Thymeboost
+    # mscr.flag_outliers_thymeboost_test(showplot=True)
+    # mscr.addflag()
+    #
+    # # Outlier detection: Absolute limits
+    # mscr.flag_outliers_abslim_test(min=-50, max=50, showplot=True)
+    # mscr.addflag()
 
-    # Outlier detection: z-score over all data
-    mscr.flag_outliers_zscoreiqr_test(factor=4, showplot=True, verbose=True)
-    mscr.addflag()
+    # # Outlier detection: Local SD
+    # mscr.flag_outliers_localsd_test(n_sd=7, showplot=True)
+    # mscr.addflag()
 
-    # Outlier detection: z-score over all data, separate for daytime and nighttime
-    mscr.flag_outliers_zscore_dtnt_test(threshold=4, showplot=True, verbose=True)
-    mscr.addflag()
-
-    # Outlier detection: Seasonal trend decomposition (residuals, IQR, z-score)
-    mscr.flag_outliers_stl_riqrz_test(zfactor=4.5, decompose_downsampling_freq='2H', showplot=True, repeat=False)
-    mscr.addflag()
-
-    # Outlier detection: Increments z-score
-    mscr.flag_outliers_increments_zcore_test(threshold=10, showplot=True)
-    mscr.addflag()
-
-    # Outlier detection: Thymeboost
-    mscr.flag_outliers_thymeboost_test(showplot=True)
-    mscr.addflag()
-
-    # # End MeteoScreening session
-    # mscr.finalize()
+    # After all QC flags generated, calculate overall flag QCF
+    mscr.calc_qcf()
 
     # QCF reports
     # mscr.report_qcf_evolution()
@@ -984,7 +1119,17 @@ def example():
     # mscr.showplot_qcf_heatmaps()
     # mscr.showplot_qcf_timeseries()
 
-    # print(mscr.resampled_detailed)
+    # Apply corrections
+    # mscr.correction_remove_radiation_zero_offset()
+    # mscr.correction_setto_max_threshold(threshold=400)
+    # mscr.correction_setto_min_threshold(threshold=100)
+    mscr.correction_remove_relativehumidity_offset()
+
+    # End MeteoScreening session
+    mscr.resample()
+    mscr.showplot_resampled()
+
+    print(mscr.resampled_detailed)
 
 
 if __name__ == '__main__':
