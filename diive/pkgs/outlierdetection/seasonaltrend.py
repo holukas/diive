@@ -143,13 +143,13 @@ class OutlierSTLRIQRZ(FlagBase):
         # Nighttime
         _series = series[self.is_nighttime].copy()
         _zscoreiqr = zScoreIQR(series=_series)
-        _zscoreiqr.calc(factor=zfactor, showplot=False, verbose=False)
+        _zscoreiqr.calc(factor=zfactor, showplot=True, verbose=False, plottitle_add="NIGHTTIME")
         _flag_nighttime = _zscoreiqr.flag
 
         # Daytime
         _series = series[~self.is_nighttime].copy()
         _zscoreiqr = zScoreIQR(series=_series)
-        _zscoreiqr.calc(factor=zfactor, showplot=False, verbose=False)
+        _zscoreiqr.calc(factor=zfactor, showplot=True, verbose=False, plottitle_add="DAYTIME")
         _flag_daytime = _zscoreiqr.flag
         # _series = series[self.is_daytime].copy()
         # _flag_daytime = zscoreiqr(series=_series, factor=2, level=3.2, showplot=False)

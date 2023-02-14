@@ -8,7 +8,7 @@ METEOSCREENING
 This module is part of the 'diive' library.
 
 Corrections and QC flags that can be directly accessed
-via the class 'MetScrDbMeasurementVars':
+via the class 'StepwiseMeteoScreeningDb':
     - correction_remove_radiation_zero_offset
     - correction_remove_relativehumidity_offset
     - correction_setto_max_threshold
@@ -1010,11 +1010,11 @@ def example():
     print(f"dbc-influxdb version: v{version_dbc_influxdb}")
 
     # Auto-settings
-    DIRCONF = r'F:\Sync\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
+    DIRCONF = r'L:\Sync\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
     TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
     RESAMPLING_FREQ = '30T'  # During MeteoScreening the screened high-res data will be resampled to this frequency; '30T' = 30-minute time resolution
     RESAMPLING_AGG = 'mean'  # The resampling of the high-res data will be done using this aggregation methos; e.g., 'mean'
-    basedir = Path(r"F:\Sync\luhk_work\_temp")
+    basedir = Path(r"L:\Sync\luhk_work\_temp")
     BUCKET_RAW = f'{SITE}_raw'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_raw' contains all raw data for CH-LAE
     BUCKET_PROCESSING = f'{SITE}_processing'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_processing' contains all processed data for CH-LAE
     print(f"Bucket containing raw data (source bucket): {BUCKET_RAW}")
@@ -1070,8 +1070,8 @@ def example():
                                     site_lat=SITE_LAT,
                                     site_lon=SITE_LON)
 
-    # Plot data
-    mscr.showplot_orig()
+    # # Plot data
+    # mscr.showplot_orig()
 
     # Missing values test
     mscr.flag_missingvals_test()
@@ -1088,15 +1088,15 @@ def example():
     # # Outlier detection: z-score over all data, separate for daytime and nighttime
     # mscr.flag_outliers_zscore_dtnt_test(threshold=4, showplot=True, verbose=True)
     # mscr.addflag()
-    #
-    # # Outlier detection: Seasonal trend decomposition (residuals, IQR, z-score)
-    # mscr.flag_outliers_stl_riqrz_test(zfactor=4.5, decompose_downsampling_freq='2H', showplot=True, repeat=False)
-    # mscr.addflag()
-    #
+
+    # Outlier detection: Seasonal trend decomposition (residuals, IQR, z-score)
+    mscr.flag_outliers_stl_riqrz_test(zfactor=4.5, decompose_downsampling_freq='2H', showplot=True, repeat=False)
+    mscr.addflag()
+
     # # Outlier detection: Increments z-score
     # mscr.flag_outliers_increments_zcore_test(threshold=10, showplot=True)
     # mscr.addflag()
-    #
+
     # # Outlier detection: Thymeboost
     # mscr.flag_outliers_thymeboost_test(showplot=True)
     # mscr.addflag()
@@ -1109,8 +1109,8 @@ def example():
     # mscr.flag_outliers_localsd_test(n_sd=7, showplot=True)
     # mscr.addflag()
 
-    # After all QC flags generated, calculate overall flag QCF
-    mscr.calc_qcf()
+    # # After all QC flags generated, calculate overall flag QCF
+    # mscr.calc_qcf()
 
     # QCF reports
     # mscr.report_qcf_evolution()
@@ -1123,13 +1123,13 @@ def example():
     # mscr.correction_remove_radiation_zero_offset()
     # mscr.correction_setto_max_threshold(threshold=400)
     # mscr.correction_setto_min_threshold(threshold=100)
-    mscr.correction_remove_relativehumidity_offset()
+    # mscr.correction_remove_relativehumidity_offset()
 
-    # End MeteoScreening session
-    mscr.resample()
-    mscr.showplot_resampled()
+    # # End MeteoScreening session
+    # mscr.resample()
+    # mscr.showplot_resampled()
 
-    print(mscr.resampled_detailed)
+    # print(mscr.resampled_detailed)
 
 
 if __name__ == '__main__':

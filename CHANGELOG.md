@@ -10,8 +10,8 @@
 
 In this update, the stepwise meteoscreening directly from the database introduced in the
 previous update was further refined and extended, with additional outlier tests and corrections
-implemented. The stepwise meteoscreening allows to perform quality tests on meteorological
-data on-demand. A preview plot after running a test is shown and the user can decide if
+implemented. The stepwise meteoscreening allows to perform step-by-step quality tests on
+meteorological. A preview plot after running a test is shown and the user can decide if
 results are satisfactory or if the same test with different parameters should be re-run.
 Once results are satisfactory, the respective test flag is added to the data. After running
 the desired tests, an overall flag `QCF` is calculated from all individual tests.

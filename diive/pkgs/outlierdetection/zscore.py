@@ -1,5 +1,3 @@
-import matplotlib.gridspec as gridspec
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from pandas import Series, DatetimeIndex
@@ -197,11 +195,13 @@ class zScoreIQR(FlagBase):
         super().__init__(series=series, flagid=self.flagid, levelid=levelid)
         self.showplot = False
         self.verbose = False
+        self.plottitle_add = None
 
-    def calc(self, factor: float = 4, showplot: bool = False, verbose: bool = False):
+    def calc(self, factor: float = 4, showplot: bool = False, verbose: bool = False, plottitle_add: str = None):
         """Calculate flag"""
         self.showplot = showplot
         self.verbose = verbose
+        self.plottitle_add = plottitle_add
         self.reset()
         ok, rejected = self._flagtests(factor=factor)
         self.setflag(ok=ok, rejected=rejected)
@@ -246,10 +246,12 @@ class zScoreIQR(FlagBase):
         # print(f"z-score of {threshold} corresponds to a prob of {100 * 2 * norm.sf(threshold):0.2f}%")
 
         if self.showplot:
-            self._plot(ok_coll, rejected_coll)
+            plottitle = f"Outlier detection based on max z-scores " \
+                        f"in the interquartile range data of {self.series.name}"
+            if self.plottitle_add:
+                plottitle += f" / {self.plottitle_add}"
             self.plot(ok_coll, rejected_coll,
-                      plottitle=f"Outlier detection based on max z-scores "
-                                f"in the interquartile range data of {self.series.name}")
+                      plottitle=plottitle)
 
         return ok_coll, rejected_coll
 
@@ -281,16 +283,3 @@ class zScoreIQR(FlagBase):
         if self.verbose: print(f"Detected threshold for z-value from IQR data: {threshold} "
                                f"(max z-value in IQR data multiplied by factor {factor})")
         return threshold
-
-    def _plot(self, ok_coll, rejected_coll):
-        # Plot
-        fig = plt.figure(facecolor='white', figsize=(16, 9))
-        gs = gridspec.GridSpec(1, 1)  # rows, cols
-        # gs.update(wspace=0.3, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
-        ax = fig.add_subplot(gs[0, 0])
-        ax.plot_date(self.series[ok_coll].index, self.series[ok_coll],
-                     label="OK", color="#4CAF50")
-        ax.plot_date(self.series[rejected_coll].index, self.series[rejected_coll],
-                     label="outlier (rejected)", color="#F44336", marker="X")
-        ax.legend()
-        fig.show()
