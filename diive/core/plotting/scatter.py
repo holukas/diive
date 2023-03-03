@@ -15,10 +15,9 @@ class Scatter:
     def __init__(self,
                  x: Series,
                  y: Series,
-                 ax=None,
                  xunits: str = None,
                  yunits: str = None,
-                 title:str = None
+                 title: str = None
                  ):
         """
 
@@ -32,37 +31,38 @@ class Scatter:
 
         self.title = title if title else None
 
-        # Create axis
-        if ax:
-            # If ax is given, plot directly to ax, no fig needed
-            self.fig = None
-            self.ax = ax
-            self.showplot = False
-        else:
-            # If no ax is given, create fig and ax and then show the plot
-            self.fig, self.ax = pf.create_ax()
-            self.showplot = True
+        # # Create axis
+        # if ax:
+        #     # If ax is given, plot directly to ax, no fig needed
+        #     self.fig = None
+        #     self.ax = ax
+        #     self.showplot = False
+        # else:
+        #     # If no ax is given, create fig and ax and then show the plot
+        #     self.fig, self.ax = pf.create_ax()
+        #     self.showplot = True
 
-
-    def plot(self, nbins:int=10):
+    def plot(self, ax, nbins: int = 10, lw: float or None = theme.WIDTH_LINE_DEFAULT):
         nbins += 1  # To include zero
 
         label = self.yname
 
+        if ax: self.ax=ax
+
         self.ax.plot(self.xy_df[self.xname],
-                        self.xy_df[self.yname],
-                        color='black', alpha=1,
-                        ls='-', lw=theme.WIDTH_LINE_DEFAULT,
-                        marker='o', markeredgecolor='none', ms=5,
-                        zorder=99, label=label)
+                     self.xy_df[self.yname],
+                     color='black', alpha=1,
+                     ls='-', lw=lw,
+                     marker='o', markeredgecolor='none', ms=5,
+                     zorder=99, label=label)
 
         self._apply_format()
 
         self.ax.locator_params(axis='x', nbins=nbins)
         self.ax.locator_params(axis='y', nbins=nbins)
 
-        if self.showplot:
-            self.fig.show()
+        # if self.showplot:
+        #     self.fig.show()
 
     def _apply_format(self):
 
@@ -84,9 +84,9 @@ class Scatter:
 
         # pf.nice_date_ticks(ax=self.ax, minticks=3, maxticks=20, which='x', locator='auto')
 
-        if self.showplot:
-            self.fig.suptitle(f"{self.title}", fontsize=theme.FIGHEADER_FONTSIZE)
-            self.fig.tight_layout()
+        # if self.showplot:
+        #     self.fig.suptitle(f"{self.title}", fontsize=theme.FIGHEADER_FONTSIZE)
+        #     self.fig.tight_layout()
 
 
 def example():

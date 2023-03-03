@@ -101,7 +101,7 @@ class zScoreDaytimeNighttime(FlagBase):
 @ConsoleOutputDecorator()
 class zScore(FlagBase):
     """
-    Identify outliers based on the z-score
+    Identify outliers based on the z-score of records
     ...
 
     Methods:

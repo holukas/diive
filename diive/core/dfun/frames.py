@@ -540,7 +540,7 @@ def timestamp_convention(df, timestamp_shows_start, out_timestamp_convention):
     return df, timestamp_info_df
 
 
-def df_between_two_dates(df: DataFrame, start_date, end_date, dropna_col:str=None, dropna: bool = False):
+def df_between_two_dates(df: DataFrame, start_date, end_date, dropna_col:str=None, dropna: bool = False) -> DataFrame:
     """Get data for the time window, >= start date and <= end date
 
     Args:

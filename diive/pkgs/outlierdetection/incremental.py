@@ -8,7 +8,7 @@ from diive.pkgs.outlierdetection.zscore import zScore
 @ConsoleOutputDecorator()
 class zScoreIncrements(FlagBase):
     """
-    Identify outliers based on the z-score of increments
+    Identify outliers based on the z-score of record increments
     ...
 
     Methods:

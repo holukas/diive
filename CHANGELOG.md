@@ -2,6 +2,26 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.51.0 | 3 Mar 2023
+
+### Random uncertainty
+
+- Implemented random flux uncertainty calculation, based on Holliner and Richardson (2005)
+  and Pastorello et al. (2020). Calculations also include a first estimate of the error 
+  propagation when summing up flux values to annual sums. See end of CHANGELOG for links to references.
+  (`pkgs.flux.uncertainty.RandomUncertaintyPAS20`)
+
+### Additions
+
+- Added example data in `diive/configs/exampledata`, including functions to load the data.
+
+### Changes
+
+- In `core.io.filereader`, the following classes now also accept `output_middle_timestamp`
+  (boolean with default `True`) as parameter: `MultiDataFileReader`, `ReadFileType`,`DataFileReader`.
+  This allows to keep the original timestamp of the data.
+- Some minor plotting adjustments
+
 ## v0.50.0 | 12 Feb 2023
 
 ### StepwiseMeteoScreeningDb
@@ -16,15 +36,15 @@ results are satisfactory or if the same test with different parameters should be
 Once results are satisfactory, the respective test flag is added to the data. After running
 the desired tests, an overall flag `QCF` is calculated from all individual tests.
 
-In addition to the creation of quality flags, the stepwise screening allows to correct 
+In addition to the creation of quality flags, the stepwise screening allows to correct
 data for common issues. For example, short-wave radiation sensors often measure negative
 values during the night. These negative values are useful because they give info about
 the accuracy and precision of the sensor. In this case, values during the night should
 be zero. Instead of cutting off negative values, `diive` detects the nighttime offset
 for each day and then calculates a correction slope between individual days. This way,
-the daytime values are also corrected. 
+the daytime values are also corrected.
 
-After quality-screening and corrections, data are resampled to 30MIN time resolution. 
+After quality-screening and corrections, data are resampled to 30MIN time resolution.
 
 At the moment, the stepwise meteoscreening works for data downloaded from the `InfluxDB`
 database. The screening respects the database format (including tags) and prepares
@@ -620,3 +640,12 @@ which allows the calculation of the flux detection limit following Langford et a
 Langford, B., Acton, W., Ammann, C., Valach, A., & Nemitz, E. (2015). Eddy-covariance data with low signal-to-noise
 ratio: Time-lag determination, uncertainties and limit of detection. Atmospheric Measurement Techniques, 8(10),
 4197–4213. https://doi.org/10.5194/amt-8-4197-2015
+
+# References
+
+- Hollinger, D. Y., & Richardson, A. D. (2005). Uncertainty in eddy covariance measurements
+  and its application to physiological models. Tree Physiology, 25(7),
+  873–885. https://doi.org/10.1093/treephys/25.7.873
+- Pastorello, G. et al. (2020). The FLUXNET2015 dataset and the ONEFlux processing pipeline
+  for eddy covariance data. 27. https://doi.org/10.1038/s41597-020-0534-3
+

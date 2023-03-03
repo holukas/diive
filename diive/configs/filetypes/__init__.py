@@ -12,6 +12,3 @@ def get_filetypes() -> dict:
         if os.path.isfile(filepath):
             filetypes[filepath.stem] = Path(filepath)
     return filetypes
-
-# x = get_filetypes(path)
-# print(x)

@@ -7,31 +7,16 @@ METEOSCREENING
 
 This module is part of the 'diive' library.
 
-Corrections and QC flags that can be directly accessed
-via the class 'StepwiseMeteoScreeningDb':
-    - correction_remove_radiation_zero_offset
-    - correction_remove_relativehumidity_offset
-    - correction_setto_max_threshold
-    - correction_setto_min_threshold
-    - flag_missingvals_test
-    - flag_outliers_abslim_test
-    - flag_outliers_increments_zcore_test
-    - flag_outliers_localsd_test
-    - flag_outliers_stl_riqrz_test
-    - flag_outliers_thymeboost_test
-    - flag_outliers_zscore_dtnt_test
-    - flag_outliers_zscore_test
-    - flag_outliers_zscoreiqr_test
-
 """
 from typing import Literal
-import diive.core.plotting.styles.LightTheme as theme
+
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import pandas as pd
 from pandas import DataFrame
 from pandas.tseries.frequencies import to_offset
 
+import diive.core.plotting.styles.LightTheme as theme
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
 from diive.core.plotting.plotfuncs import default_format, default_legend, nice_date_ticks
 from diive.core.plotting.timeseries import TimeSeries
@@ -51,7 +36,84 @@ from diive.pkgs.qaqc.qcf import FlagQCF
 
 
 class StepwiseMeteoScreeningDb:
-    """MeteoScreening from database: Screen multiple vars from single measurement"""
+    """
+    Stepwise MeteoScreening from database: Screen multiple vars from single measurement
+
+    Corrections and QC flags that can be directly accessed via the class 'StepwiseMeteoScreeningDb'
+
+    - `.correction_remove_radiation_zero_offset()`: Remove nighttime offset from all radiation data and set nighttime to zero
+    - `.correction_remove_relativehumidity_offset()`: Remove relative humidity offset
+    - `.correction_setto_max_threshold()`: Set values above a threshold value to threshold value
+    - `.correction_setto_min_threshold()`: Set values below a threshold value to threshold value
+    - `.flag_missingvals_test()`: Generate flag that indicates missing records in data
+    - `.flag_outliers_abslim_test()`: Generate flag that indicates if values in data are outside the specified range
+    - `.flag_outliers_increments_zcore_test()`: Identify outliers based on the z-score of increments
+    - `.flag_outliers_localsd_test()`: Identify outliers based on the local standard deviation
+    - `.flag_outliers_stl_riqrz_test()`: Identify outliers based on seasonal-trend decomposition and z-score calculations
+    - `.flag_outliers_thymeboost_test()`: Identify outliers based on [thymeboost](https://github.com/tblume1992/ThymeBoost)
+    - `.flag_outliers_zscore_dtnt_test()`: Identify outliers based on the z-score, separately for daytime and nighttime
+    - `.flag_outliers_zscore_test()`:  Identify outliers based on the z-score
+    - `.flag_outliers_zscoreiqr_test()`: Identify outliers based on max z-scores in the interquartile range data
+
+    The class is optimized to work in Jupyter notebooks. Various outlier detection
+    methods can be called on-demand. Outlier results are displayed and the user can
+    accept the results and proceed, or repeat the step with adjusted method parameters.
+    An unlimited amount of tests can be chained together. At the end of the screening,
+    an overall flag is calculated from ALL single flags. The overall flag is then used
+    to filter the time series.
+
+    **Screening**
+    The stepwise meteoscreening allows to perform **step-by-step** quality tests on
+    meteorological data. A preview plot after running a test is shown and the user can
+    decide if results are satisfactory or if the same test with different parameters
+    should be re-run. Once results are satisfactory, the respective test flag is added
+    to the data with `.addflag()`. After running the desired tests, an overall flag
+    `QCF` is calculated from all individual tests.
+
+    **Corrections**
+    In addition to the creation of quality flags, the stepwise screening allows to
+    **correct data for common issues**. For example, short-wave radiation sensors
+    often measure negative values during the night. These negative values are useful
+    because they give info about the accuracy and precision of the sensor. In this
+    case, values during the night should be zero. Instead of cutting off negative
+    values, `diive` detects the nighttime offset for each day and then calculates
+    a correction slope between individual days. This way, the daytime values are
+    also corrected.
+
+    **Resampling**
+    After quality-screening and corrections, data are resampled to 30MIN time resolution.
+
+    **Handling different time resolutions**
+    One challenging aspect of the screening were the different time resolutions of the raw
+    data. In some cases, the time resolution changed from e.g. 10MIN for older data to 1MIN
+    for newer date. In cases of different time resolution, **the lower resolution is upsampled
+    to the higher resolution**, the emerging gaps are *back-filled* with available data.
+    Back-filling is used because the timestamp in the database always is TIMESTAMP_END, i.e.,
+    it gives the *end* of the averaging interval. The advantage of upsampling is that all
+    outlier detection routines can be applied to the whole dataset. Since data are resampled
+    to 30MIN after screening and since the TIMESTAMP_END is respected, the upsampling itself
+    has no impact on resulting aggregates.
+
+    **Variables**
+    The class allows the simultaneous quality-screening of multiple variables from one single
+    measurement, e.g., multiple air temperature variables.
+
+    **Database tags**
+    Is optimized to work with the InfluxDB format of the ETH Grassland Sciences Group. The
+    class can handle database tags and updates tags after data screening and resampling.
+
+    **Modular structure**
+    At the moment, the stepwise meteoscreening works for data downloaded from the `InfluxDB`
+    database. The screening respects the database format (including tags) and prepares the
+    screened, corrected and resampled data for direct database upload. Due to its modular
+    approach, the stepwise screening can be easily adjusted to work with any type of data
+    files. This adjustment will be done in one of the next updates.
+
+    **Current methods**
+    A listing of currently implemented quality checks and correction can be found at the top
+    of this file.
+
+    """
 
     def __init__(
             self,
@@ -299,14 +361,14 @@ class StepwiseMeteoScreeningDb:
                                              timezone_of_timestamp='UTC+01:00', showplot=True)
 
     def correction_setto_max_threshold(self, threshold: float):
-        """Remove nighttime offset from all radiation data and set nighttime to zero"""
+        """Set values above threshold to threshold"""
         for field in self.fields:
             self._series_hires_cleaned[field] = \
                 setto_threshold(series=self._series_hires_cleaned[field],
                                 threshold=threshold, type='max', showplot=True)
 
     def correction_setto_min_threshold(self, threshold: float):
-        """Remove nighttime offset from all radiation data and set nighttime to zero"""
+        """Set values below threshold to threshold"""
         for field in self.fields:
             self._series_hires_cleaned[field] = \
                 setto_threshold(series=self._series_hires_cleaned[field],
@@ -1077,17 +1139,17 @@ def example():
     mscr.flag_missingvals_test()
     mscr.addflag()
 
-    # # Outlier detection: z-score over all data
-    # mscr.flag_outliers_zscore_test(threshold=4, showplot=True, verbose=True)
-    # mscr.addflag()
-    #
-    # # Outlier detection: z-score over all data
-    # mscr.flag_outliers_zscoreiqr_test(factor=4, showplot=True, verbose=True)
-    # mscr.addflag()
-    #
-    # # Outlier detection: z-score over all data, separate for daytime and nighttime
-    # mscr.flag_outliers_zscore_dtnt_test(threshold=4, showplot=True, verbose=True)
-    # mscr.addflag()
+    # Outlier detection: z-score over all data
+    mscr.flag_outliers_zscore_test(threshold=4, showplot=True, verbose=True)
+    mscr.addflag()
+
+    # Outlier detection: z-score over all data with IQR
+    mscr.flag_outliers_zscoreiqr_test(factor=4, showplot=True, verbose=True)
+    mscr.addflag()
+
+    # Outlier detection: z-score over all data, separate for daytime and nighttime
+    mscr.flag_outliers_zscore_dtnt_test(threshold=4, showplot=True, verbose=True)
+    mscr.addflag()
 
     # Outlier detection: Seasonal trend decomposition (residuals, IQR, z-score)
     mscr.flag_outliers_stl_riqrz_test(zfactor=4.5, decompose_downsampling_freq='2H', showplot=True, repeat=False)
@@ -1120,14 +1182,14 @@ def example():
     # mscr.showplot_qcf_timeseries()
 
     # Apply corrections
-    # mscr.correction_remove_radiation_zero_offset()
-    # mscr.correction_setto_max_threshold(threshold=400)
-    # mscr.correction_setto_min_threshold(threshold=100)
-    # mscr.correction_remove_relativehumidity_offset()
+    mscr.correction_remove_radiation_zero_offset()
+    mscr.correction_setto_max_threshold(threshold=400)
+    mscr.correction_setto_min_threshold(threshold=100)
+    mscr.correction_remove_relativehumidity_offset()
 
-    # # End MeteoScreening session
-    # mscr.resample()
-    # mscr.showplot_resampled()
+    # End MeteoScreening session
+    mscr.resample(to_freqstr='30T', agg='mean', mincounts_perc=.25)
+    mscr.showplot_resampled()
 
     # print(mscr.resampled_detailed)
 

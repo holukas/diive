@@ -3,6 +3,7 @@
 # e.g.: /src
 target/
 __manuscripts/
+__workbench/
 
 
 # Byte-compiled / optimized / DLL files

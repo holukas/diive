@@ -481,6 +481,8 @@ def include_timestamp_as_cols(df,
 class DetectFrequency:
     """Detect data time resolution from time series index
 
+    TODO detect freq like in dbc-influxdb
+
     """
 
     def __init__(self, index: pd.DatetimeIndex, verbose: bool = False):

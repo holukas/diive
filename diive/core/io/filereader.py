@@ -167,12 +167,13 @@ class ColumnNamesSanitizer:
 class MultiDataFileReader:
     """Read and merge multiple datafiles of the same filetype"""
 
-    def __init__(self, filepaths: list, filetype: str):
+    def __init__(self, filepaths: list, filetype: str, output_middle_timestamp:bool=True):
 
         # Getting configs for filetype
         configfilepath = get_filetypes()[filetype]
         self.filetypeconfig = ConfigFileReader(configfilepath=configfilepath, validation='filetype').read()
         self.filepaths = filepaths
+        self.output_middle_timestamp=output_middle_timestamp
 
         # Collect data from all files listed in filepaths
         self._data_df, self._metadata_df = self._get_incoming_data()
@@ -201,7 +202,8 @@ class MultiDataFileReader:
             # print(f"\n{'-' * 40}\nReading file {filepath.stem}\n{'-' * 40}")
             try:
                 incoming_data_df, incoming_metadata_df = \
-                    ReadFileType(filepath=filepath, filetypeconfig=self.filetypeconfig).get_filedata()
+                    ReadFileType(filepath=filepath, filetypeconfig=self.filetypeconfig,
+                                 output_middle_timestamp=self.output_middle_timestamp).get_filedata()
                 data_df, metadata_df = \
                     self._merge_with_existing(incoming_data_df=incoming_data_df, data_df=data_df,
                                               incoming_metadata_df=incoming_metadata_df, metadata_df=metadata_df)
@@ -230,7 +232,8 @@ class ReadFileType:
                  filepath: str or Path,
                  filetypeconfig: dict = None,
                  filetype: str = None,
-                 data_nrows: int = None):
+                 data_nrows: int = None,
+                 output_middle_timestamp:bool=True):
         """
 
         Args:
@@ -240,6 +243,7 @@ class ReadFileType:
         """
         self.filepath = Path(filepath)
         self.data_nrows = data_nrows
+        self.output_middle_timestamp=output_middle_timestamp
 
         if filetype:
             # Read settins for specified filetype
@@ -268,7 +272,8 @@ class ReadFileType:
             data_nrows=self.data_nrows,
             timestamp_idx_col=self.filetypeconfig['TIMESTAMP']['INDEX_COLUMN'],
             timestamp_datetime_format=self.filetypeconfig['TIMESTAMP']['DATETIME_FORMAT'],
-            timestamp_start_middle_end=self.filetypeconfig['TIMESTAMP']['SHOWS_START_MIDDLE_OR_END_OF_RECORD']
+            timestamp_start_middle_end=self.filetypeconfig['TIMESTAMP']['SHOWS_START_MIDDLE_OR_END_OF_RECORD'],
+            output_middle_timestamp=self.output_middle_timestamp
         )
         data_df, metadata_df = datafilereader.get_data()
         return data_df, metadata_df
@@ -289,7 +294,8 @@ class DataFileReader:
             data_nrows: int = None,
             timestamp_idx_col: list = None,
             timestamp_datetime_format: str = None,
-            timestamp_start_middle_end: str = 'END'
+            timestamp_start_middle_end: str = 'END',
+            output_middle_timestamp:bool=True
     ):
 
         self.filepath = filepath
@@ -303,6 +309,7 @@ class DataFileReader:
         self.timestamp_datetime_format = timestamp_datetime_format
         self.timestamp_start_middle_end = timestamp_start_middle_end
         self.timestamp_idx_col = timestamp_idx_col
+        self.output_middle_timestamp=output_middle_timestamp
 
         self.data_df = pd.DataFrame()
         self.metadata_df = pd.DataFrame()
@@ -314,7 +321,7 @@ class DataFileReader:
         headercols_list, self.generated_missing_header_cols_list = self._compare_len_header_vs_data()
         self.data_df = self._parse_file(headercols_list=headercols_list)
         self.data_df = TimestampSanitizer(data=self.data_df,
-                                          output_middle_timestamp=True).get()
+                                          output_middle_timestamp=self.output_middle_timestamp).get()
         self._clean_data()
         if len(self.data_headerrows) == 1:
             self.data_df = self._add_second_header_row(df=self.data_df)

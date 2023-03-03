@@ -33,7 +33,9 @@ class ThymeBoostOutlier(FlagBase):
         filteredseries: Series
             Data with rejected values set to missing
 
-    kudos: https://www.analyticsvidhya.com/blog/2022/08/outliers-pruning-using-python/
+    kudos:
+    - https://www.analyticsvidhya.com/blog/2022/08/outliers-pruning-using-python/
+    - https://github.com/tblume1992/ThymeBoost
 
     """
     flagid = 'OUTLIER_THYME'
