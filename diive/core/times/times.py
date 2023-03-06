@@ -648,6 +648,113 @@ def continuous_timestamp_freq(data: Series or DataFrame, freq: str, verbose: boo
     return data
 
 
+def insert_timestamp(
+        data: DataFrame,
+        convention: Literal['start', 'middle', 'end'],
+        insert_as_first_col: bool = True,
+        verbose: bool = False) -> DataFrame:
+    """
+    Insert timestamp column that shows the START, END or MIDDLE time of the averaging interval
+
+    The new timestamp column is added as data column, the current
+    *data* index remains unchanged.
+
+    The current *data* index must be a properly named timestamp index.
+    Allowed names are: 'TIMESTAMP_START', 'TIMESTAMP_MIDDLE', 'TIMESTAMP_END'.
+
+    Args:
+        data: Dataset to which the new timestamp is added as new column
+        convention: Timestamp convention of the new timestamp column
+            - 'start': Timestamp denoting start of averaging interval
+            - 'middle': Timestamp denoting middle of averaging interval
+            - 'end': Timestamp denoting end of averaging interval
+        insert_as_first_col: If *True*, the new timestamp column is
+            added as the first column to *data*. If *False*, the new
+            timestamp column is added as the last column to *data*.
+        verbose: If *True*, gives additional text output
+
+    Returns:
+        *data* with newly added timestamp column
+
+    Added in: v0.52.0
+    """
+    # Current index timestamp name
+    timestamp_index_name = data.index.name
+
+    # Check if current index timestamp properly named
+    allowed_timestamp_names = ['TIMESTAMP_END', 'TIMESTAMP_START', 'TIMESTAMP_MIDDLE']
+    if timestamp_index_name not in allowed_timestamp_names:
+        raise Exception("Timestamp index of the Series must be "
+                        "named 'TIMESTAMP_END', 'TIMESTAMP_START' or 'TIMESTAMP_MIDDLE'.")
+
+    # Name of new timestamp series
+    new_timestamp_col = None
+    if convention == 'start':
+        new_timestamp_col = 'TIMESTAMP_START'
+    elif convention == 'middle':
+        new_timestamp_col = 'TIMESTAMP_MIDDLE'
+    elif convention == 'end':
+        new_timestamp_col = 'TIMESTAMP_END'
+
+    # Get time resolution of data
+    timestamp_freq = data.index.freq
+
+    if verbose: print(f"\nAdding new timestamp column {new_timestamp_col} "
+                      f"to show {convention} of averaging period ...")
+
+    # Interval of data records
+    timedelta = pd.to_timedelta(timestamp_freq)
+    timedelta_half = timedelta / 2
+
+    # Data has MIDDLE timestamp
+    if timestamp_index_name == 'TIMESTAMP_MIDDLE':
+        if new_timestamp_col == 'TIMESTAMP_MIDDLE':
+            data[new_timestamp_col] = data.index
+        elif new_timestamp_col == 'TIMESTAMP_END':
+            # '2023-03-05 18:15:00'  -->  '2023-03-05 18:30:00'
+            data[new_timestamp_col] = data.index + pd.Timedelta(timedelta_half)
+        elif new_timestamp_col == 'TIMESTAMP_START':
+            # '2023-03-05 18:15:00'  -->  '2023-03-05 18:00:00'
+            data[new_timestamp_col] = data.index - pd.Timedelta(timedelta_half)
+
+    # Data has END timestamp
+    elif timestamp_index_name == 'TIMESTAMP_END':
+        if new_timestamp_col == 'TIMESTAMP_END':
+            data[new_timestamp_col] = data.index
+        elif new_timestamp_col == 'TIMESTAMP_MIDDLE':
+            # '2023-03-05 18:30:00'  -->  '2023-03-05 18:15:00'
+            data[new_timestamp_col] = data.index - pd.Timedelta(timedelta_half)
+        elif new_timestamp_col == 'TIMESTAMP_START':
+            # '2023-03-05 18:30:00'  -->  '2023-03-05 18:00:00'
+            data[new_timestamp_col] = data.index - pd.Timedelta(timedelta)
+
+    # Data has START timestamp
+    elif timestamp_index_name == 'TIMESTAMP_START':
+        if new_timestamp_col == 'TIMESTAMP_START':
+            data[new_timestamp_col] = data.index
+        elif new_timestamp_col == 'TIMESTAMP_MIDDLE':
+            # '2023-03-05 18:00:00'  -->  '2023-03-05 18:15:00'
+            data[new_timestamp_col] = data.index + pd.Timedelta(timedelta_half)
+        elif new_timestamp_col == 'TIMESTAMP_END':
+            # '2023-03-05 18:00:00'  -->  '2023-03-05 18:30:00'
+            data[new_timestamp_col] = data.index + pd.Timedelta(timedelta)
+
+    # Make new timestamp column the first column in data
+    if insert_as_first_col:
+        first_col = data.pop(new_timestamp_col)
+        data.insert(0, new_timestamp_col, first_col)
+
+    if verbose:
+        print(f"    ++Added new timestamp column {new_timestamp_col}:\n"
+              f"        first date: {data[new_timestamp_col].iloc[0]}\n"
+              f"        last date:  {data[new_timestamp_col].iloc[-1]}")
+        print(f"    The timestamp index was not changed:\n"
+              f"        first date: {data.index[0]}\n"
+              f"        last date:  {data.index[-1]}")
+
+    return data
+
+
 def convert_series_timestamp_to_middle(data: Series or DataFrame, verbose: bool = False) -> Series or DataFrame:
     """
     Convert the timestamp index to show middle of averaging period

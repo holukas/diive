@@ -12,7 +12,17 @@ def load_exampledata_DIIVE_CSV_30MIN():
     loaddatafile = ReadFileType(filetype='DIIVE_CSV_30MIN',
                                 filepath=filepath,
                                 data_nrows=None)
-    data_df, metadata_df = loaddatafile._readfile()
+    data_df, metadata_df = loaddatafile.get_filedata()
+    return data_df, metadata_df
+
+
+def load_exampledata_eddypro_fluxnet_CSV_30MIN():
+    filepath = Path(
+        DIR_PATH) / 'exampledata_CH-AWS_2022.07_FR-20220127-164245_eddypro_fluxnet_2022-01-28T112538_adv.csv'
+    loaddatafile = ReadFileType(filetype='EDDYPRO_FLUXNET_30MIN',
+                                filepath=filepath,
+                                data_nrows=None)
+    data_df, metadata_df = loaddatafile.get_filedata()
     return data_df, metadata_df
 
 

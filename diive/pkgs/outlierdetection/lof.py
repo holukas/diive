@@ -227,7 +227,7 @@ class LocalOutlierFactorDaytimeNighttime(FlagBase):
 
         # Nighttime
         s_nighttime = self.series[self.is_nighttime].copy()
-        nighttime_df = self.lof(series=s_nighttime, n_neighbors=n_neighbors,
+        nighttime_df = lof(series=s_nighttime, n_neighbors=n_neighbors,
                                 contamination=contamination, suffix="NIGHTTIME")
         ok_nighttime = nighttime_df['NOT_OUTLIER_NIGHTTIME'].dropna().index
         rejected_nighttime = nighttime_df['OUTLIER_NIGHTTIME'].dropna().index

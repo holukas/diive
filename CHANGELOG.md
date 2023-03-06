@@ -2,12 +2,35 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.52.0 | 6 Mar 2023
+
+### New Features
+
+- **Data formats**: Added new package `diive/pkgs/formats` that assists in converting
+  data outputs to formats required e.g. for data sharing with FLUXNET.
+    - Convert the EddyPro `_fluxnet_` output file to the FLUXNET data format for
+      data upload (data sharing). (`pkgs.formats.fluxnet.ConvertEddyProFluxnetFileForUpload`)
+- **Insert timestamp column**: Insert timestamp column that shows the START, END
+  or MIDDLE time of the averaging interval (`core.times.times.insert_timestamp`)
+- **Manual removal of data points**: Flag manually defined data points as outliers.
+  (`pkgs.outlierdetection.manualremoval.ManualRemoval`)
+
+### Additions
+
+Added additional outlier detection algorithms
+to `StepwiseMeteoScreeningDb` (`pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb`):
+
+- Added local outlier factor test, across all data
+  (`pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.flag_outliers_lof_test`)
+- Added local outlier factor test, separately for daytime and nighttime
+  (`pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.flag_outliers_lof_dtnt_test`)
+
 ## v0.51.0 | 3 Mar 2023
 
 ### Random uncertainty
 
 - Implemented random flux uncertainty calculation, based on Holliner and Richardson (2005)
-  and Pastorello et al. (2020). Calculations also include a first estimate of the error 
+  and Pastorello et al. (2020). Calculations also include a first estimate of the error
   propagation when summing up flux values to annual sums. See end of CHANGELOG for links to references.
   (`pkgs.flux.uncertainty.RandomUncertaintyPAS20`)
 

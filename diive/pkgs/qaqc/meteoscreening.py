@@ -28,6 +28,8 @@ from diive.pkgs.corrections.setto_threshold import setto_threshold
 from diive.pkgs.outlierdetection.absolutelimits import AbsoluteLimits
 from diive.pkgs.outlierdetection.incremental import zScoreIncrements
 from diive.pkgs.outlierdetection.local3sd import LocalSD
+from diive.pkgs.outlierdetection.lof import LocalOutlierFactorDaytimeNighttime, LocalOutlierFactorAllData
+from diive.pkgs.outlierdetection.manualremoval import ManualRemoval
 from diive.pkgs.outlierdetection.missing import MissingValues
 from diive.pkgs.outlierdetection.seasonaltrend import OutlierSTLRIQRZ
 from diive.pkgs.outlierdetection.thymeboost import ThymeBoostOutlier
@@ -54,6 +56,8 @@ class StepwiseMeteoScreeningDb:
     - `.flag_outliers_zscore_dtnt_test()`: Identify outliers based on the z-score, separately for daytime and nighttime
     - `.flag_outliers_zscore_test()`:  Identify outliers based on the z-score
     - `.flag_outliers_zscoreiqr_test()`: Identify outliers based on max z-scores in the interquartile range data
+    - `.flag_outliers_lof_dtnt_test()`: Identify outliers based on local outlier factor, daytime nighttime separately
+    - `.flag_outliers_lof_test()`: Identify outliers based on local outlier factor, across all data
 
     The class is optimized to work in Jupyter notebooks. Various outlier detection
     methods can be called on-demand. Outlier results are displayed and the user can
@@ -285,6 +289,14 @@ class StepwiseMeteoScreeningDb:
             self._last_results[field] = _miss  # Store in dict
             # self._hires_flags[_miss.flag.name] = _miss.flag
 
+    def flag_manualremoval_test(self, remove_dates: list, showplot: bool = False, verbose: bool = False):
+        """Flag specified records for removal"""
+        for field in self.fields:
+            series_cleaned = self._series_hires_cleaned[field]  # Timeseries
+            _mr = ManualRemoval(series=series_cleaned)
+            _mr.calc(remove_dates=remove_dates, showplot=showplot, verbose=verbose)
+            self._last_results[field] = _mr  # Store in dict
+
     def flag_outliers_zscore_dtnt_test(self, threshold: float = 4, showplot: bool = False, verbose: bool = False):
         """z-score, calculated separately for daytime and nighttime"""
         for field in self.fields:
@@ -351,6 +363,41 @@ class StepwiseMeteoScreeningDb:
             _stl.calc(zfactor=zfactor, decompose_downsampling_freq=decompose_downsampling_freq,
                       repeat=repeat, showplot=showplot)
             self._last_results[field] = _stl
+
+    def flag_outliers_lof_dtnt_test(self, n_neighbors: int = None, contamination: float = 'auto',
+                                    showplot: bool = False, verbose: bool = False):
+        """Local outlier factor, separately for daytime and nighttime data"""
+
+        for field in self.fields:
+            series_cleaned = self._series_hires_cleaned[field]  # Timeseries
+
+            # Number of neighbors is automatically calculated if not provided
+            n_neighbors = int(len(series_cleaned.dropna()) / 100) if not n_neighbors else n_neighbors
+
+            # Contamination is set automatically unless float is given
+            contamination = contamination if isinstance(contamination, float) else 'auto'
+
+            _lof = LocalOutlierFactorDaytimeNighttime(series=series_cleaned, site_lat=self.site_lat,
+                                                      site_lon=self.site_lon)
+            _lof.calc(n_neighbors=n_neighbors, contamination=contamination, showplot=showplot, verbose=verbose)
+            self._last_result = _lof
+
+    def flag_outliers_lof_test(self, n_neighbors: int = None, contamination: float = 'auto',
+                               showplot: bool = False, verbose: bool = False):
+        """Local outlier factor, across all data"""
+
+        for field in self.fields:
+            series_cleaned = self._series_hires_cleaned[field]  # Timeseries
+
+            # Number of neighbors is automatically calculated if not provided
+            n_neighbors = int(len(series_cleaned.dropna()) / 100) if not n_neighbors else n_neighbors
+
+            # Contamination is set automatically unless float is given
+            contamination = contamination if isinstance(contamination, float) else 'auto'
+
+            _lof = LocalOutlierFactorAllData(series=series_cleaned)
+            _lof.calc(n_neighbors=n_neighbors, contamination=contamination, showplot=showplot, verbose=verbose)
+            self._last_result = _lof
 
     def correction_remove_radiation_zero_offset(self):
         """Remove nighttime offset from all radiation data and set nighttime to zero"""
@@ -1052,16 +1099,15 @@ def example():
     # todo For examples see notebooks/MeteoScreening
 
     # Settings
-    SITE = 'ch-dav'  # Site name
-    SITE_LAT = 46.815333
-    SITE_LON = 9.855972
-    MEASUREMENT = 'RH'
-    FIELDS = ['RH_PRF_T1_35_1']  # Variable name; InfluxDB stores variable names as '_field'
-    # FIELDS = ['SW_IN_T1_35_2']  # Variable name; InfluxDB stores variable names as '_field'
-    # FIELDS = ['TA_NABEL_T1_35_1']  # Variable name; InfluxDB stores variable names as '_field'
-    START = '2022-10-20 00:01:00'  # Download data starting with this date
-    STOP = '2022-11-21 00:01:00'  # Download data before this date (the stop date itself is not included)
+    SITE = 'ch-cha'  # Site name
+    SITE_LAT = 47.210222
+    SITE_LON = 8.410444
+    MEASUREMENT = 'TA'
+    FIELDS = ['TA_T1_2_1']  # Variable name; InfluxDB stores variable names as '_field'
+    START = '2022-01-01 00:01:00'  # Download data starting with this date
+    STOP = '2023-01-01 00:01:00'  # Download data before this date (the stop date itself is not included)
 
+    # Some info
     from datetime import datetime
     from pathlib import Path
     import pkg_resources
@@ -1119,16 +1165,16 @@ def example():
     pickle_in = open(basedir / "meteodata_assigned_measurements.pickle", "rb")
     assigned_measurements = pickle.load(pickle_in)
 
-    # # Restrict data for testing
-    # from diive.core.dfun.frames import df_between_two_dates
-    # for key in data_detailed.keys():
-    #     data_detailed[key] = df_between_two_dates(df=data_detailed[key], start_date='2019-06-01', end_date='2019-10-01')
+    # Restrict data for testing
+    from diive.core.dfun.frames import df_between_two_dates
+    for key in data_detailed.keys():
+        data_detailed[key] = df_between_two_dates(df=data_detailed[key], start_date='2022-06-01', end_date='2022-06-30')
 
     # Start MeteoScreening session
     mscr = StepwiseMeteoScreeningDb(site=SITE,
                                     data_detailed=data_detailed,
-                                    measurement='RH',
-                                    fields=['RH_PRF_T1_35_1'],
+                                    measurement=MEASUREMENT,
+                                    fields=FIELDS,
                                     site_lat=SITE_LAT,
                                     site_lon=SITE_LON)
 
@@ -1139,26 +1185,33 @@ def example():
     mscr.flag_missingvals_test()
     mscr.addflag()
 
+    # Missing values test
+    mscr.flag_manualremoval_test(remove_dates=['2022-06-29 23:59:30',
+                                               ['2022-06-05', '2022-06-07']
+                                               ],
+                                 showplot=True, verbose=True)
+    mscr.addflag()
+
     # Outlier detection: z-score over all data
-    mscr.flag_outliers_zscore_test(threshold=4, showplot=True, verbose=True)
+    mscr.flag_outliers_zscore_test(threshold=2, showplot=True, verbose=True)
     mscr.addflag()
 
-    # Outlier detection: z-score over all data with IQR
-    mscr.flag_outliers_zscoreiqr_test(factor=4, showplot=True, verbose=True)
-    mscr.addflag()
-
-    # Outlier detection: z-score over all data, separate for daytime and nighttime
-    mscr.flag_outliers_zscore_dtnt_test(threshold=4, showplot=True, verbose=True)
-    mscr.addflag()
-
-    # Outlier detection: Seasonal trend decomposition (residuals, IQR, z-score)
-    mscr.flag_outliers_stl_riqrz_test(zfactor=4.5, decompose_downsampling_freq='2H', showplot=True, repeat=False)
-    mscr.addflag()
-
+    # # Outlier detection: z-score over all data with IQR
+    # mscr.flag_outliers_zscoreiqr_test(factor=4, showplot=True, verbose=True)
+    # mscr.addflag()
+    #
+    # # Outlier detection: z-score over all data, separate for daytime and nighttime
+    # mscr.flag_outliers_zscore_dtnt_test(threshold=4, showplot=True, verbose=True)
+    # mscr.addflag()
+    #
+    # # Outlier detection: Seasonal trend decomposition (residuals, IQR, z-score)
+    # mscr.flag_outliers_stl_riqrz_test(zfactor=4.5, decompose_downsampling_freq='2H', showplot=True, repeat=False)
+    # mscr.addflag()
+    #
     # # Outlier detection: Increments z-score
     # mscr.flag_outliers_increments_zcore_test(threshold=10, showplot=True)
     # mscr.addflag()
-
+    #
     # # Outlier detection: Thymeboost
     # mscr.flag_outliers_thymeboost_test(showplot=True)
     # mscr.addflag()
@@ -1166,20 +1219,28 @@ def example():
     # # Outlier detection: Absolute limits
     # mscr.flag_outliers_abslim_test(min=-50, max=50, showplot=True)
     # mscr.addflag()
-
+    #
     # # Outlier detection: Local SD
     # mscr.flag_outliers_localsd_test(n_sd=7, showplot=True)
     # mscr.addflag()
 
-    # # After all QC flags generated, calculate overall flag QCF
-    # mscr.calc_qcf()
+    # Outlier detection: Local outlier factor, across all data
+    mscr.flag_outliers_lof_test(n_neighbors=None, showplot=True, verbose=True)
+    mscr.addflag()
+
+    # Outlier detection: Local outlier factor, daytime nighttime
+    mscr.flag_outliers_lof_dtnt_test(n_neighbors=None, showplot=True, verbose=True)
+    mscr.addflag()
+
+    # After all QC flags generated, calculate overall flag QCF
+    mscr.calc_qcf()
 
     # QCF reports
-    # mscr.report_qcf_evolution()
-    # mscr.report_qcf_flags()
-    # mscr.report_qcf_series()
-    # mscr.showplot_qcf_heatmaps()
-    # mscr.showplot_qcf_timeseries()
+    mscr.report_qcf_evolution()
+    mscr.report_qcf_flags()
+    mscr.report_qcf_series()
+    mscr.showplot_qcf_heatmaps()
+    mscr.showplot_qcf_timeseries()
 
     # Apply corrections
     mscr.correction_remove_radiation_zero_offset()
