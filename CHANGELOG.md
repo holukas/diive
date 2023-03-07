@@ -2,6 +2,22 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.52.1 | 7 Mar 2023
+
+### Additions
+
+- In `StepwiseMeteoScreeningDb` the current cleaned timeseries can now be
+  plotted with `showplot_current_cleaned`.
+- Timeseries can now be plotted using the `bokeh` library. This plot are interactive
+  and can be directly used in jupyter notebooks. (`core.plotting.timeseries.TimeSeries`)
+- Added new plotting package `jupyter_bokeh` for interactive plotting in Jupyter lab.
+- Added new plotting package `seaborn`.
+
+### Bugfixes
+
+- `StepwiseMeteoScreeningDb` now works on a copy of the input data to avoid
+  unintended data overwrite of input.
+
 ## v0.52.0 | 6 Mar 2023
 
 ### New Features

@@ -41,8 +41,9 @@ class StepwiseMeteoScreeningDb:
     """
     Stepwise MeteoScreening from database: Screen multiple vars from single measurement
 
-    Corrections and QC flags that can be directly accessed via the class 'StepwiseMeteoScreeningDb'
+    The class is optimized to work in Jupyter notebooks.
 
+    Corrections and QC flags that can be directly accessed via the class 'StepwiseMeteoScreeningDb':
     - `.correction_remove_radiation_zero_offset()`: Remove nighttime offset from all radiation data and set nighttime to zero
     - `.correction_remove_relativehumidity_offset()`: Remove relative humidity offset
     - `.correction_setto_max_threshold()`: Set values above a threshold value to threshold value
@@ -129,7 +130,7 @@ class StepwiseMeteoScreeningDb:
             site_lon: float
     ):
         self.site = site
-        self._data_detailed = data_detailed
+        self._data_detailed = data_detailed.copy()
         self.measurement = measurement
         self.fields = fields if isinstance(fields, list) else list(fields)
         self.site_lat = site_lat
@@ -262,10 +263,17 @@ class StepwiseMeteoScreeningDb:
                          fontsize=theme.FIGHEADER_FONTSIZE)
             fig.show()
 
-    def showplot_orig(self):
+    def showplot_orig(self, interactive: bool = False):
         """Show original high-resolution data used as input"""
         for field in self.fields:
-            TimeSeries(series=self._series_hires_orig[field]).plot()
+            p = TimeSeries(series=self._series_hires_cleaned[field])
+            p.plot() if not interactive else p.plot_interactive()
+
+    def showplot_cleaned(self, interactive: bool = False):
+        """Show *current* cleaned high-resolution data"""
+        for field in self.fields:
+            p = TimeSeries(series=self._series_hires_cleaned[field])
+            p.plot() if not interactive else p.plot_interactive()
 
     def report_qcf_evolution(self):
         for field in self.fields:
@@ -1104,8 +1112,8 @@ def example():
     SITE_LON = 8.410444
     MEASUREMENT = 'TA'
     FIELDS = ['TA_T1_2_1']  # Variable name; InfluxDB stores variable names as '_field'
-    START = '2022-01-01 00:01:00'  # Download data starting with this date
-    STOP = '2023-01-01 00:01:00'  # Download data before this date (the stop date itself is not included)
+    START = '2022-05-01 00:01:00'  # Download data starting with this date
+    STOP = '2022-07-01 00:01:00'  # Download data before this date (the stop date itself is not included)
 
     # Some info
     from datetime import datetime
@@ -1142,7 +1150,7 @@ def example():
     # import matplotlib.pyplot as plt
     # data_simple.plot()
     # plt.show()
-
+    #
     # # Export data to pickle for fast testing
     # import pickle
     # pickle_out = open(basedir / "meteodata_simple.pickle", "wb")
@@ -1165,10 +1173,10 @@ def example():
     pickle_in = open(basedir / "meteodata_assigned_measurements.pickle", "rb")
     assigned_measurements = pickle.load(pickle_in)
 
-    # Restrict data for testing
-    from diive.core.dfun.frames import df_between_two_dates
-    for key in data_detailed.keys():
-        data_detailed[key] = df_between_two_dates(df=data_detailed[key], start_date='2022-06-01', end_date='2022-06-30')
+    # # Restrict data for testing
+    # from diive.core.dfun.frames import df_between_two_dates
+    # for key in data_detailed.keys():
+    #     data_detailed[key] = df_between_two_dates(df=data_detailed[key], start_date='2022-06-01', end_date='2022-06-30')
 
     # Start MeteoScreening session
     mscr = StepwiseMeteoScreeningDb(site=SITE,
@@ -1181,13 +1189,15 @@ def example():
     # # Plot data
     # mscr.showplot_orig()
 
+    mscr.showplot_cleaned()
+
     # Missing values test
     mscr.flag_missingvals_test()
     mscr.addflag()
 
     # Missing values test
     mscr.flag_manualremoval_test(remove_dates=['2022-06-29 23:59:30',
-                                               ['2022-06-05', '2022-06-07']
+                                               ['2022-06-01', '2022-06-16']
                                                ],
                                  showplot=True, verbose=True)
     mscr.addflag()
