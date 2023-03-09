@@ -10,8 +10,8 @@
   the latter caused issues when trying to install `diive` in a `conda` environment
   on a shared machine. Both dependencies are still listed in the `pyproject.toml`
   file as `dev` dependencies. It makes sense to keep both packages separate from
-  `diive` because they are specifically for `jupyter` notebooks and strictly related
-  to `diive` functionality.
+  `diive` because they are specifically for `jupyter` notebooks and not strictly
+  related to `diive` functionality.
 
 ## v0.52.1 | 7 Mar 2023
 
