@@ -2,6 +2,13 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.52.4 | 10 Mar 2023
+
+### Bugfix
+
+- Fixed bug: during resampling, the info for the tag `data_version` was incorrectly
+  stored in tag `freq`. (`pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.resample`)
+
 ## v0.52.3 | 10 Mar 2023
 
 ## Additions

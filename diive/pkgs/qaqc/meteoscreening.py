@@ -450,7 +450,7 @@ class StepwiseMeteoScreeningDb:
 
             # Update tags with resampling info
             self._tags[field]['freq'] = '30T'
-            self._tags[field]['freq'] = 'meteoscreening'
+            self._tags[field]['data_version'] = 'meteoscreening'
 
             # Create df that includes the resampled series and its tags
             self._resampled_detailed[field] = pd.DataFrame()
