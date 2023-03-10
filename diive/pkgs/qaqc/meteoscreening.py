@@ -1116,9 +1116,9 @@ def example():
     SITE_LAT = 47.478333
     SITE_LON = 8.364389
     MEASUREMENT = 'TA'
-    FIELDS = ['TA_M2_1_1']  # Variable name; InfluxDB stores variable names as '_field'
-    START = '2022-01-01 00:01:00'  # Download data starting with this date
-    STOP = '2023-01-01 00:01:00'  # Download data before this date (the stop date itself is not included)
+    FIELDS = ['TA_M1_2_1']  # Variable name; InfluxDB stores variable names as '_field'
+    START = '2022-02-01 00:01:00'  # Download data starting with this date
+    STOP = '2022-02-10 00:01:00'  # Download data before this date (the stop date itself is not included)
 
     # Some info
     from datetime import datetime
@@ -1131,42 +1131,42 @@ def example():
     print(f"dbc-influxdb version: v{version_dbc_influxdb}")
 
     # Auto-settings
-    DIRCONF = r'L:\Sync\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
+    DIRCONF = r'F:\Sync\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
     TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
     RESAMPLING_FREQ = '30T'  # During MeteoScreening the screened high-res data will be resampled to this frequency; '30T' = 30-minute time resolution
     RESAMPLING_AGG = 'mean'  # The resampling of the high-res data will be done using this aggregation methos; e.g., 'mean'
-    basedir = Path(r"L:\Sync\luhk_work\_temp")
+    basedir = Path(r"F:\Sync\luhk_work\_temp")
     BUCKET_RAW = f'{SITE}_raw'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_raw' contains all raw data for CH-LAE
     BUCKET_PROCESSING = f'{SITE}_processing'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_processing' contains all processed data for CH-LAE
     print(f"Bucket containing raw data (source bucket): {BUCKET_RAW}")
     print(f"Bucket containing processed data (destination bucket): {BUCKET_PROCESSING}")
 
-    # # Download data from database with "dbc-influxdb"
-    # from dbc_influxdb import dbcInflux
-    # dbc = dbcInflux(dirconf=DIRCONF)  # Instantiate class
-    # data_simple, data_detailed, assigned_measurements = \
-    #     dbc.download(bucket=BUCKET_RAW,
-    #                  measurements=[MEASUREMENT],
-    #                  fields=FIELDS,
-    #                  start=START,
-    #                  stop=STOP,
-    #                  timezone_offset_to_utc_hours=TIMEZONE_OFFSET_TO_UTC_HOURS,
-    #                  data_version='raw')
+    # Download data from database with "dbc-influxdb"
+    from dbc_influxdb import dbcInflux
+    dbc = dbcInflux(dirconf=DIRCONF)  # Instantiate class
+    data_simple, data_detailed, assigned_measurements = \
+        dbc.download(bucket=BUCKET_RAW,
+                     measurements=[MEASUREMENT],
+                     fields=FIELDS,
+                     start=START,
+                     stop=STOP,
+                     timezone_offset_to_utc_hours=TIMEZONE_OFFSET_TO_UTC_HOURS,
+                     data_version='raw')
     # import matplotlib.pyplot as plt
     # data_simple.plot()
     # plt.show()
-    #
-    # # Export data to pickle for fast testing
-    # import pickle
-    # pickle_out = open(basedir / "meteodata_simple.pickle", "wb")
-    # pickle.dump(data_simple, pickle_out)
-    # pickle_out.close()
-    # pickle_out = open(basedir / "meteodata_detailed.pickle", "wb")
-    # pickle.dump(data_detailed, pickle_out)
-    # pickle_out.close()
-    # pickle_out = open(basedir / "meteodata_assigned_measurements.pickle", "wb")
-    # pickle.dump(assigned_measurements, pickle_out)
-    # pickle_out.close()
+
+    # Export data to pickle for fast testing
+    import pickle
+    pickle_out = open(basedir / "meteodata_simple.pickle", "wb")
+    pickle.dump(data_simple, pickle_out)
+    pickle_out.close()
+    pickle_out = open(basedir / "meteodata_detailed.pickle", "wb")
+    pickle.dump(data_detailed, pickle_out)
+    pickle_out.close()
+    pickle_out = open(basedir / "meteodata_assigned_measurements.pickle", "wb")
+    pickle.dump(assigned_measurements, pickle_out)
+    pickle_out.close()
 
     # Import data from pickle for fast testing
     # from diive.core.io.files import load_pickle
@@ -1193,39 +1193,38 @@ def example():
 
     # # Plot data
     # mscr.showplot_orig()
-
-    mscr.showplot_cleaned()
+    # mscr.showplot_cleaned()
 
     # Missing values test
     mscr.flag_missingvals_test()
     mscr.addflag()
 
-    # Missing values test
-    mscr.flag_manualremoval_test(remove_dates=['2022-06-29 23:59:30',
-                                               ['2022-06-01', '2022-06-16']
-                                               ],
-                                 showplot=True, verbose=True)
-    mscr.addflag()
+    # # Missing values test
+    # mscr.flag_manualremoval_test(remove_dates=['2022-06-29 23:59:30',
+    #                                            ['2022-06-01', '2022-06-16']
+    #                                            ],
+    #                              showplot=True, verbose=True)
+    # mscr.addflag()
 
-    # Outlier detection: z-score over all data
-    mscr.flag_outliers_zscore_test(threshold=3, showplot=True, verbose=True)
-    mscr.addflag()
+    # # Outlier detection: z-score over all data
+    # mscr.flag_outliers_zscore_test(threshold=3, showplot=True, verbose=True)
+    # mscr.addflag()
 
     # # Outlier detection: z-score over all data with IQR
     # mscr.flag_outliers_zscoreiqr_test(factor=4, showplot=True, verbose=True)
     # mscr.addflag()
 
-    # Outlier detection: z-score over all data, separate for daytime and nighttime
-    mscr.flag_outliers_zscore_dtnt_test(threshold=2, showplot=True, verbose=True)
-    mscr.addflag()
+    # # Outlier detection: z-score over all data, separate for daytime and nighttime
+    # mscr.flag_outliers_zscore_dtnt_test(threshold=2, showplot=True, verbose=True)
+    # mscr.addflag()
 
     # # Outlier detection: Seasonal trend decomposition (residuals, IQR, z-score)
     # mscr.flag_outliers_stl_riqrz_test(zfactor=4.5, decompose_downsampling_freq='2H', showplot=True, repeat=False)
     # mscr.addflag()
 
-    # Outlier detection: Increments z-score
-    mscr.flag_outliers_increments_zcore_test(threshold=5, showplot=True)
-    mscr.addflag()
+    # # Outlier detection: Increments z-score
+    # mscr.flag_outliers_increments_zcore_test(threshold=5, showplot=True)
+    # mscr.addflag()
 
     # # Outlier detection: Thymeboost
     # mscr.flag_outliers_thymeboost_test(showplot=True)
@@ -1239,35 +1238,40 @@ def example():
     # mscr.flag_outliers_localsd_test(n_sd=7, showplot=True)
     # mscr.addflag()
 
-    # Outlier detection: Local outlier factor, across all data
-    mscr.flag_outliers_lof_test(n_neighbors=None, showplot=True, verbose=True)
-    mscr.addflag()
+    # # Outlier detection: Local outlier factor, across all data
+    # mscr.flag_outliers_lof_test(n_neighbors=None, showplot=True, verbose=True)
+    # mscr.addflag()
 
-    # Outlier detection: Local outlier factor, daytime nighttime
-    mscr.flag_outliers_lof_dtnt_test(n_neighbors=None, showplot=True, verbose=True)
-    mscr.addflag()
+    # # Outlier detection: Local outlier factor, daytime nighttime
+    # mscr.flag_outliers_lof_dtnt_test(n_neighbors=None, showplot=True, verbose=True)
+    # mscr.addflag()
 
     # After all QC flags generated, calculate overall flag QCF
     mscr.calc_qcf()
 
     # QCF reports
     mscr.report_qcf_evolution()
-    mscr.report_qcf_flags()
-    mscr.report_qcf_series()
+    # mscr.report_qcf_flags()
+    # mscr.report_qcf_series()
     mscr.showplot_qcf_heatmaps()
-    mscr.showplot_qcf_timeseries()
+    # mscr.showplot_qcf_timeseries()
 
-    # Apply corrections
-    mscr.correction_remove_radiation_zero_offset()
-    mscr.correction_setto_max_threshold(threshold=400)
-    mscr.correction_setto_min_threshold(threshold=100)
-    mscr.correction_remove_relativehumidity_offset()
+    # # Apply corrections
+    # mscr.correction_remove_radiation_zero_offset()
+    # mscr.correction_setto_max_threshold(threshold=400)
+    # mscr.correction_setto_min_threshold(threshold=100)
+    # mscr.correction_remove_relativehumidity_offset()
 
     # End MeteoScreening session
     mscr.resample(to_freqstr='30T', agg='mean', mincounts_perc=.25)
     mscr.showplot_resampled()
 
-    # print(mscr.resampled_detailed)
+    for v in mscr.resampled_detailed.keys():
+        m = assigned_measurements[v]
+        dbc.upload_singlevar(to_bucket=BUCKET_PROCESSING,
+                             to_measurement=m,
+                             var_df=mscr.resampled_detailed[v],
+                             timezone_of_timestamp='UTC+01:00')
 
 
 if __name__ == '__main__':
