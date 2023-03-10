@@ -571,17 +571,22 @@ class StepwiseMeteoScreeningDb:
             limit = int((freq / targetfreq) - 1)
 
             # The timestamp is TIMESTAMP_END, therefore 'backfill'
-            cur_upsampleddf = groupdf.reindex(hires_ix, method='backfill', limit=limit)
+            cur_upsampleddf = groupdf.reindex(hires_ix)
+            cur_upsampleddf = cur_upsampleddf.fillna(method='backfill', limit=limit)
 
             # Delete first timestamp index, outside limit
             cur_upsampleddf = cur_upsampleddf.iloc[1:].copy()
 
             # Add to upsampled data
-            upsampleddf = pd.concat([upsampleddf, cur_upsampleddf], axis=0)
+            # upsampleddf = pd.concat([upsampleddf, cur_upsampleddf], axis=0)
+            # Better use .combine_first to avoid duplicates
+            upsampleddf = upsampleddf.combine_first(cur_upsampleddf)
 
         # Sort timestamp index ascending
         upsampleddf = upsampleddf.sort_index(ascending=True)
         upsampleddf.index.name = timestamp_name
+
+        # upsampleddf.index.duplicated().sum()
 
         # import matplotlib.pyplot as plt
         # upsampleddf['TA_NABEL_T1_35_1'].plot()
@@ -1107,13 +1112,13 @@ def example():
     # todo For examples see notebooks/MeteoScreening
 
     # Settings
-    SITE = 'ch-cha'  # Site name
-    SITE_LAT = 47.210222
-    SITE_LON = 8.410444
+    SITE = 'ch-lae'  # Site name
+    SITE_LAT = 47.478333
+    SITE_LON = 8.364389
     MEASUREMENT = 'TA'
-    FIELDS = ['TA_T1_2_1']  # Variable name; InfluxDB stores variable names as '_field'
-    START = '2022-05-01 00:01:00'  # Download data starting with this date
-    STOP = '2022-07-01 00:01:00'  # Download data before this date (the stop date itself is not included)
+    FIELDS = ['TA_M2_1_1']  # Variable name; InfluxDB stores variable names as '_field'
+    START = '2022-01-01 00:01:00'  # Download data starting with this date
+    STOP = '2023-01-01 00:01:00'  # Download data before this date (the stop date itself is not included)
 
     # Some info
     from datetime import datetime
@@ -1203,25 +1208,25 @@ def example():
     mscr.addflag()
 
     # Outlier detection: z-score over all data
-    mscr.flag_outliers_zscore_test(threshold=2, showplot=True, verbose=True)
+    mscr.flag_outliers_zscore_test(threshold=3, showplot=True, verbose=True)
     mscr.addflag()
 
     # # Outlier detection: z-score over all data with IQR
     # mscr.flag_outliers_zscoreiqr_test(factor=4, showplot=True, verbose=True)
     # mscr.addflag()
-    #
-    # # Outlier detection: z-score over all data, separate for daytime and nighttime
-    # mscr.flag_outliers_zscore_dtnt_test(threshold=4, showplot=True, verbose=True)
-    # mscr.addflag()
-    #
+
+    # Outlier detection: z-score over all data, separate for daytime and nighttime
+    mscr.flag_outliers_zscore_dtnt_test(threshold=2, showplot=True, verbose=True)
+    mscr.addflag()
+
     # # Outlier detection: Seasonal trend decomposition (residuals, IQR, z-score)
     # mscr.flag_outliers_stl_riqrz_test(zfactor=4.5, decompose_downsampling_freq='2H', showplot=True, repeat=False)
     # mscr.addflag()
-    #
-    # # Outlier detection: Increments z-score
-    # mscr.flag_outliers_increments_zcore_test(threshold=10, showplot=True)
-    # mscr.addflag()
-    #
+
+    # Outlier detection: Increments z-score
+    mscr.flag_outliers_increments_zcore_test(threshold=5, showplot=True)
+    mscr.addflag()
+
     # # Outlier detection: Thymeboost
     # mscr.flag_outliers_thymeboost_test(showplot=True)
     # mscr.addflag()

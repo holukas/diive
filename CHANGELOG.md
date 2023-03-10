@@ -2,6 +2,24 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.52.3 | 10 Mar 2023
+
+## Additions
+
+- Added plotting library `bokeh` to dependencies
+
+### Changes
+
+- When combining data of different time resolutions, the data are now combined using
+  `.combine_first()` instead of `.concat()` to avoid duplicates during merging. This
+  should work reliably because data of the highest resolution are available first, and then
+  lower resolution upsampled (backfilled) data are added, filling gaps in the high
+  resolution data. Because gaps are filled, overlaps between the two resolutions are avoided.
+  With `.concat()`, gaps were not filled, but timestamps were simply added as new records,
+  and thus duplicates in the timestamp occurred.
+  (`pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb._harmonize_timeresolution`)
+- Updated dependencies to newest possible versions
+
 ## v0.52.2 | 9 Mar 2023
 
 ### Changes
