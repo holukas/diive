@@ -346,12 +346,12 @@ class StepwiseMeteoScreeningDb:
             _thymeboost.calc(showplot=showplot)
             self._last_results[field] = _thymeboost
 
-    def flag_outliers_localsd_test(self, n_sd: float, showplot: bool = False, verbose: bool = False):
+    def flag_outliers_localsd_test(self, n_sd: float, winsize: int = None, showplot: bool = False, verbose: bool = False):
         """Identify outliers based on standard deviation in a rolling window"""
         for field in self.fields:
             series_cleaned = self._series_hires_cleaned[field]  # Timeseries
             _locsd = LocalSD(series=series_cleaned)
-            _locsd.calc(showplot=showplot)
+            _locsd.calc(n_sd=n_sd, winsize=winsize, showplot=showplot)
             self._last_results[field] = _locsd
 
     def flag_outliers_abslim_test(self, min: float, max: float, showplot: bool = False, verbose: bool = False):
@@ -1233,10 +1233,10 @@ def example():
     # # Outlier detection: Absolute limits
     # mscr.flag_outliers_abslim_test(min=-50, max=50, showplot=True)
     # mscr.addflag()
-    #
-    # # Outlier detection: Local SD
-    # mscr.flag_outliers_localsd_test(n_sd=7, showplot=True)
-    # mscr.addflag()
+
+    # Outlier detection: Local SD
+    mscr.flag_outliers_localsd_test(n_sd=5, winsize=None, showplot=True)
+    mscr.addflag()
 
     # # Outlier detection: Local outlier factor, across all data
     # mscr.flag_outliers_lof_test(n_neighbors=None, showplot=True, verbose=True)

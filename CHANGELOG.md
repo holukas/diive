@@ -2,6 +2,20 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.52.6 | 12 Mar 2023
+
+## Additions
+
+- `LocalSD` in `StepwiseMeteoScreeningDb` now accepts the parameter `winsize` to
+  define the size of the rolling window (default `None`, in which case the window
+  size is calculated automatically as 1/20 of the number of records).
+  (`pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.flag_outliers_localsd_test`)
+
+### Bugfix
+
+- Fixed bug: outlier test `LocalSD` did not consider user input `n_sd`
+  (`pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.flag_outliers_localsd_test`)
+
 ## v0.52.4 and v0.52.5 | 10 Mar 2023
 
 ### Bugfix
