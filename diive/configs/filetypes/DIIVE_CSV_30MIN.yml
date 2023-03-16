@@ -5,7 +5,7 @@ GENERAL:
 
 FILE:
   EXTENSION: "*.diive.csv"
-  COMPRESSION: "none"
+  COMPRESSION: "None"
 
 TIMESTAMP:
   DESCRIPTION: "1 column with full timestamp with seconds"

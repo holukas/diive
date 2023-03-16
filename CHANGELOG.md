@@ -2,9 +2,27 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.52.6 | 12 Mar 2023
+## v0.52.7 | 16 Mar 2023
 
 ## Additions
+
+- The DataFileReader can now directly read zipped files (`core.io.filereader.DataFileReader`)
+- **Interactive time series plot**: (`core.plotting.timeseries.TimeSeries.plot_interactive`)
+    - added x- and y-axis to the plots
+    - new parameters `width` and `height` allow to control the size of the plot
+    - more controls such as undo/redo and zoom in/zoom out buttons were added
+- The filetypes defined in `diive/configs/filetypes` now accept the setting `COMPRESSION: "zip"`.
+  In essence, this allows to read zipped files directly.
+- New filetype `ICOS_H2R_CSVZIP_10S`
+
+## Changes
+
+- Compression in filetypes is now given as `COMPRESSION: "None"` for no compression,
+  and `COMPRESSION: "zip"` for zipped CSV files.
+
+## v0.52.6 | 12 Mar 2023
+
+### Additions
 
 - `LocalSD` in `StepwiseMeteoScreeningDb` now accepts the parameter `winsize` to
   define the size of the rolling window (default `None`, in which case the window

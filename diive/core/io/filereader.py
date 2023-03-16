@@ -84,6 +84,7 @@ def validate_filetype_config(config: dict):
     # FILE
     config['FILE']['EXTENSION'] = str(config['FILE']['EXTENSION'])
     config['FILE']['COMPRESSION'] = str(config['FILE']['COMPRESSION'])
+    config['FILE']['COMPRESSION'] = None if config['FILE']['COMPRESSION'] == 'None' else config['FILE']['COMPRESSION']
 
     # TIMESTAMP
     config['TIMESTAMP']['DESCRIPTION'] = str(config['TIMESTAMP']['DESCRIPTION'])
@@ -273,7 +274,8 @@ class ReadFileType:
             timestamp_idx_col=self.filetypeconfig['TIMESTAMP']['INDEX_COLUMN'],
             timestamp_datetime_format=self.filetypeconfig['TIMESTAMP']['DATETIME_FORMAT'],
             timestamp_start_middle_end=self.filetypeconfig['TIMESTAMP']['SHOWS_START_MIDDLE_OR_END_OF_RECORD'],
-            output_middle_timestamp=self.output_middle_timestamp
+            output_middle_timestamp=self.output_middle_timestamp,
+            compression=self.filetypeconfig['FILE']['COMPRESSION']
         )
         data_df, metadata_df = datafilereader.get_data()
         return data_df, metadata_df
@@ -295,7 +297,8 @@ class DataFileReader:
             timestamp_idx_col: list = None,
             timestamp_datetime_format: str = None,
             timestamp_start_middle_end: str = 'END',
-            output_middle_timestamp:bool=True
+            output_middle_timestamp:bool=True,
+            compression:str=None
     ):
 
         self.filepath = filepath
@@ -310,6 +313,7 @@ class DataFileReader:
         self.timestamp_start_middle_end = timestamp_start_middle_end
         self.timestamp_idx_col = timestamp_idx_col
         self.output_middle_timestamp=output_middle_timestamp
+        self.compression=compression
 
         self.data_df = pd.DataFrame()
         self.metadata_df = pd.DataFrame()
@@ -459,7 +463,8 @@ class DataFileReader:
             dtype=None,
             skip_blank_lines=True,
             nrows=self.data_nrows,
-            engine='python'  # todo 'python', 'c'
+            engine='python',  # todo 'python', 'c'
+            compression=self.compression
         )
 
         # Rename temporary column name for parsed index to correct name (v0.41.0)

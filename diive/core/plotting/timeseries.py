@@ -1,6 +1,7 @@
 import pandas as pd
+from bokeh.models import BoxZoomTool, PanTool, ResetTool, WheelZoomTool, WheelPanTool, UndoTool, \
+    RedoTool, SaveTool, HoverTool, ZoomInTool, ZoomOutTool, BoxSelectTool
 from bokeh.models import ColumnDataSource
-from bokeh.models.tools import HoverTool
 from bokeh.plotting import figure, show
 from pandas import Series
 
@@ -34,7 +35,7 @@ class TimeSeries:
 
         self.series = self.series.dropna()
 
-    def plot_interactive(self):
+    def plot_interactive(self, height: int = 600, width: int = 1200):
         # output_file(filename=r"M:\Downloads\_temp\bokeh.html", title="Static HTML file")
 
         # Bokeh needs dataframe
@@ -46,29 +47,48 @@ class TimeSeries:
         # Convert dataframe for bokeh
         source = ColumnDataSource(df)
 
-        p = figure(height=500,
-                   width=1000,
+        # todo selection: https://docs.bokeh.org/en/latest/docs/user_guide/interaction/tools.html#ug-interaction-tools-pandrag
+        p = figure(height=height,
+                   width=width,
                    title=f"{self.series.name} ({self.series.index.name})",
-                   x_axis_type='datetime',
-                   y_axis_type=None)
+                   tools=[
+                       HoverTool(tooltips=[('Date', '@date{%F %T}'),
+                                           ('Value', '@value')],
+                                 formatters={'@date': 'datetime'},
+                                 mode='mouse'),
+                       BoxZoomTool(),
+                       ResetTool(),
+                       PanTool(),
+                       BoxSelectTool(),
+                       WheelZoomTool(),
+                       WheelPanTool(),
+                       UndoTool(),
+                       RedoTool(),
+                       ZoomInTool(),
+                       ZoomOutTool(),
+                       SaveTool()],
+                   x_axis_type='datetime')
+
         p.line(x='date', y='value', line_width=2, source=source, color='#455A64')
+        p.circle(x='date', y='value', size=5, source=source, color='#455A64')
+
         p.yaxis.axis_label = self.series.name
 
-        # Add hover tooltip
-        hover = HoverTool(
-            tooltips=[
-                ('Date', '@date{%F %T}'),
-                ('Value', '@value')
-            ],
-            formatters={
-                '@date':'datetime'
-            },
-            # Display a tooltip whenever the cursor is vertically in line with a glyph
-            mode='vline'
-        )
+        # # Add hover tooltip
+        # hover = HoverTool(
+        #     tooltips=[
+        #         ('Date', '@date{%F %T}'),
+        #         ('Value', '@value')
+        #     ],
+        #     formatters={
+        #         '@date':'datetime'
+        #     },
+        #     # Display a tooltip whenever the cursor is vertically in line with a glyph
+        #     mode='vline'
+        # )
 
         # hover.formatters = {'@date': 'datetime'}
-        p.add_tools(hover)
+        # p.add_tools(hover)
 
         # HoverTool(tooltips=[('date', '@DateTime{%F}')],
         #           formatters={'@DateTime': 'datetime'})
@@ -131,14 +151,19 @@ def example():
     data_df, metadata_df = load_exampledata_DIIVE_CSV_30MIN()
     # series_units = metadata_df.loc[series_col]['UNITS']
 
-    # Plot to existing ax
-    fig, ax = pf.create_ax()
-    # series_units = r'($\mathrm{gC\ m^{-2}}$)'
-    TimeSeries(ax=ax,
-               series=data_df['NEE_CUT_REF_f'],
-               series_units=None).plot()
-    fig.tight_layout()
-    fig.show()
+    # # Plot to existing ax
+    # fig, ax = pf.create_ax()
+    # # series_units = r'($\mathrm{gC\ m^{-2}}$)'
+    # TimeSeries(ax=ax,
+    #            series=data_df['NEE_CUT_REF_f'],
+    #            series_units=None).plot()
+    # fig.tight_layout()
+    # fig.show()
+
+    # Plot interactive
+    from bokeh.plotting import output_file
+    output_file(filename=r"F:\Downloads\_temp\bokeh.html", title="Static HTML file")
+    TimeSeries(series=data_df['NEE_CUT_REF_f']).plot_interactive()
 
 
 if __name__ == '__main__':

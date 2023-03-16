@@ -5,7 +5,7 @@ GENERAL:
 
 FILE:
   EXTENSION: "*.csv"
-  COMPRESSION: "none"
+  COMPRESSION: "None"
 
 TIMESTAMP:
   DESCRIPTION: "2 columns, date and time in separate columns, time without seconds"
