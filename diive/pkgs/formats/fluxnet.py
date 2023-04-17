@@ -103,7 +103,7 @@ class ConvertEddyProFluxnetFileForUpload:
         """Search for data files, merge data and store to one dataframe"""
         print(f"Searching for EddyPro _fluxnet_ files in folder {self.sourcedir} ...")
         filepaths = [f for f in os.listdir(self.sourcedir) if f.endswith(".csv")]
-        filepaths = [f for f in filepaths if '_eddypro_' in f]
+        # filepaths = [f for f in filepaths if '_eddypro_' in f]
         filepaths = [f for f in filepaths if '_fluxnet_' in f]
         filepaths = [self.sourcedir + "/" + f for f in filepaths]
         filepaths = [Path(f) for f in filepaths]
@@ -121,7 +121,7 @@ class ConvertEddyProFluxnetFileForUpload:
             yearlocs = self.subset.index.year == year
             yeardata = self.subset[yearlocs].copy()
             yeardata.to_csv(outpath, index=False)
-            print(f"\nSaved file {outpath}.")
+            print(f"\n--> Saved file {outpath}.")
 
     def _missing_values(self):
         """Set all missing values to -9999 as required by FLUXNET"""
@@ -173,9 +173,10 @@ class ConvertEddyProFluxnetFileForUpload:
 def example():
     # from diive.configs.exampledata import load_exampledata_eddypro_fluxnet_CSV_30MIN
     # data_df, metadata_df = load_exampledata_eddypro_fluxnet_CSV_30MIN()
+    SOURCE = r"F:\01-NEW\FF202303\FRU\2022\2-FLUXRUN\Level-1_FR-20230402-163038\2-0_eddypro_flux_calculations\results"
     con = ConvertEddyProFluxnetFileForUpload(
-        sourcedir=r'L:\Sync\luhk_work\20 - CODING\21 - DIIVE\diive\diive\configs\exampledata',
-        outdir='M:\Downloads\_temp')
+        sourcedir=SOURCE,
+        outdir='F:\_temp')
     con.run()
     # data_fluxnet = con.get_data()
 

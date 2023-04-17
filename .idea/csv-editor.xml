@@ -3,7 +3,105 @@
   <component name="CsvFileAttributes">
     <option name="attributeMap">
       <map>
+        <entry key="\__workbench\PP-ICOS_10_meteo_overview_log.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\__workbench\icos_fix_timestamp_start_end_dailyfiles\0-2-TEST-files with correct timestamp\CSV\CH-Dav_BM_20221018_L02_F03.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\__workbench\icos_fix_timestamp_start_end_dailyfiles\0-2-TEST-files with correct timestamp\CSV\CH-Dav_BM_20221019_L02_F03.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\__workbench\icos_fix_timestamp_start_end_dailyfiles\0-2-TEST-files with correct timestamp\CSV\CH-Dav_BM_20221020_L02_F03.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\__workbench\icos_replace_precip_in_files\0-1-TEST-files originally transferred to ICOS with wrong precip - 13_meteo_nabel\CH-Dav_BM_20191001_L22_F03.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\__workbench\icos_replace_precip_in_files\0-1-TEST-files originally transferred to ICOS with wrong precip - 13_meteo_nabel\CH-Dav_BM_20191002_L22_F03.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\__workbench\icos_replace_precip_in_files\0-1-TEST-files originally transferred to ICOS with wrong precip - 13_meteo_nabel\CH-Dav_BM_20191003_L22_F03.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\__workbench\icos_replace_precip_in_files\0-1-TEST-files originally transferred to ICOS with wrong precip - 13_meteo_nabel\CH-Dav_BM_20230226_L22_F03.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\__workbench\icos_replace_precip_in_files\0-1-TEST-files originally transferred to ICOS with wrong precip - 13_meteo_nabel\CH-Dav_BM_20230227_L22_F03.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\__workbench\icos_replace_precip_in_files\0-1-TEST-files originally transferred to ICOS with wrong precip - 13_meteo_nabel\CH-Dav_BM_20230228_L22_F03.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\__workbench\x-2023-03-15_CH-Dav_fix_timestamp_start_end_dailyfiles_L02_F03\0 - SCRIPT\icos_fix_timestamp_start_end_dailyfiles\0-2-TEST-files with correct timestamp\CSV\CH-Dav_BM_20221018_L02_F03.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\__workbench\x-2023-03-15_CH-Dav_fix_timestamp_start_end_dailyfiles_L02_F03\0 - SCRIPT\icos_fix_timestamp_start_end_dailyfiles\0-2-TEST-files with correct timestamp\CSV\CH-Dav_BM_20221019_L02_F03.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\__workbench\x-2023-03-15_CH-Dav_fix_timestamp_start_end_dailyfiles_L02_F03\0 - SCRIPT\icos_fix_timestamp_start_end_dailyfiles\0-2-TEST-files with correct timestamp\CSV\CH-Dav_BM_20221020_L02_F03.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
         <entry key="\diive\configs\exampledata\exampledata_CH-AWS_2022.07_FR-20220127-164245_eddypro_fluxnet_2022-01-28T112538_adv.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\diive\configs\exampledata\exampledata_CH-DAV_FP2022.5_2022.07_ID20230206154316_30MIN.diive.csv">
           <value>
             <Attribute>
               <option name="separator" value="," />

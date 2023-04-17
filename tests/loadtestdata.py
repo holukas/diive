@@ -2,21 +2,37 @@ import unittest
 
 from pandas import DataFrame
 
-from diive.core.io.filereader import ReadFileType
-from diive.core.io.files import load_pickle
+import diive.configs.exampledata as ed
 
 
+class TestLoadFiletypes(unittest.TestCase):
 
-class TestLoadData(unittest.TestCase):
-
-    def test_readfiletype(self):
-        data_df, metadata_df = loadtestdata()
+    def test_load_exampledata_DIIVE_CSV_30MIN(self):
+        """Load diive csv file"""
+        data_df, metadata_df = ed.load_exampledata_DIIVE_CSV_30MIN()
         self.assertEqual(type(data_df), DataFrame)
-        return data_df, metadata_df
+        self.assertEqual(type(metadata_df), DataFrame)
+        self.assertEqual(len(data_df.columns), 101)
+        self.assertEqual(len(data_df), 1488)
+        self.assertEqual(len(metadata_df.columns), 4)
+        self.assertEqual(len(metadata_df), 101)
 
-    def test_load_pickle(self):
-        data_df = load_pickle(filepath='../diive/configs/exampledata/exampledata_CH-DAV_FP2022.5_2022_ID20230206154316_30MIN.diive.csv.pickle')
+    def test_load_exampledata_eddypro_fluxnet_CSV_30MIN(self):
+        """Load EddyPro _fluxnet_ file"""
+        data_df, metadata_df = ed.load_exampledata_eddypro_fluxnet_CSV_30MIN()
         self.assertEqual(type(data_df), DataFrame)
+        self.assertEqual(type(metadata_df), DataFrame)
+        self.assertEqual(len(data_df.columns), 488)
+        self.assertEqual(len(data_df), 1488)
+        self.assertEqual(len(metadata_df.columns), 4)
+        self.assertEqual(len(metadata_df), 488)
+
+    def test_exampledata_pickle(self):
+        """Load pickled file"""
+        data_df = ed.load_exampledata_pickle()
+        self.assertEqual(type(data_df), DataFrame)
+        self.assertEqual(len(data_df.columns), 101)
+        self.assertEqual(len(data_df), 17520)
 
 
 if __name__ == '__main__':

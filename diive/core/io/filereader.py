@@ -18,10 +18,7 @@ from pandas.io.parsers.base_parser import ParserBase
 
 from diive import core
 from diive.configs.filetypes import get_filetypes
-# from diive.core.dfun.frames import rename_cols, sort_multiindex_columns_names, \
-#     flatten_multiindex_all_df_cols, get_len_header, get_len_data
 from diive.core import dfun
-# from diive.core.dfun.frames import flatten_multiindex_all_df_cols
 from diive.core.times.times import continuous_timestamp_freq, TimestampSanitizer
 
 
@@ -168,13 +165,13 @@ class ColumnNamesSanitizer:
 class MultiDataFileReader:
     """Read and merge multiple datafiles of the same filetype"""
 
-    def __init__(self, filepaths: list, filetype: str, output_middle_timestamp:bool=True):
+    def __init__(self, filepaths: list, filetype: str, output_middle_timestamp: bool = True):
 
         # Getting configs for filetype
         configfilepath = get_filetypes()[filetype]
         self.filetypeconfig = ConfigFileReader(configfilepath=configfilepath, validation='filetype').read()
         self.filepaths = filepaths
-        self.output_middle_timestamp=output_middle_timestamp
+        self.output_middle_timestamp = output_middle_timestamp
 
         # Collect data from all files listed in filepaths
         self._data_df, self._metadata_df = self._get_incoming_data()
@@ -234,7 +231,7 @@ class ReadFileType:
                  filetypeconfig: dict = None,
                  filetype: str = None,
                  data_nrows: int = None,
-                 output_middle_timestamp:bool=True):
+                 output_middle_timestamp: bool = True):
         """
 
         Args:
@@ -244,7 +241,7 @@ class ReadFileType:
         """
         self.filepath = Path(filepath)
         self.data_nrows = data_nrows
-        self.output_middle_timestamp=output_middle_timestamp
+        self.output_middle_timestamp = output_middle_timestamp
 
         if filetype:
             # Read settins for specified filetype
@@ -297,8 +294,8 @@ class DataFileReader:
             timestamp_idx_col: list = None,
             timestamp_datetime_format: str = None,
             timestamp_start_middle_end: str = 'END',
-            output_middle_timestamp:bool=True,
-            compression:str=None
+            output_middle_timestamp: bool = True,
+            compression: str = None
     ):
 
         self.filepath = filepath
@@ -312,8 +309,8 @@ class DataFileReader:
         self.timestamp_datetime_format = timestamp_datetime_format
         self.timestamp_start_middle_end = timestamp_start_middle_end
         self.timestamp_idx_col = timestamp_idx_col
-        self.output_middle_timestamp=output_middle_timestamp
-        self.compression=compression
+        self.output_middle_timestamp = output_middle_timestamp
+        self.compression = compression
 
         self.data_df = pd.DataFrame()
         self.metadata_df = pd.DataFrame()
@@ -503,9 +500,18 @@ class DataFileReader:
     #             self.data_df.index = self.data_df.index + pd.Timedelta(timedelta)
 
 
-def example():
-    import os
-    from pathlib import Path
+def example_icosfile():
+    FILE = r"L:\Sync\luhk_work\20 - CODING\21 - DIIVE\diive\diive\configs\exampledata\CH-Dav_BM_20230328_L02_F03.zip"
+    rft = ReadFileType(filepath=FILE, filetype='ICOS_H2R_CSVZIP_10S', output_middle_timestamp=True)
+    df, meta = rft.get_filedata()
+
+    # # Read all original data files to dataframe, convert timestamp index to show TIMESTAMP_MIDDLE
+    # orig = MultiDataFileReader(filepaths=origfiles, filetype='ICOS_H2R_CSVZIP_10S', output_middle_timestamp=True)
+    # origdf = orig.data_df
+    # origmeta = orig.metadata_df
+
+
+def example_ep_fluxnet():
     FOLDER = r"Z:\CH-FRU_Fruebuel\20_ec_fluxes\2023\Level-0"
     filepaths = search_files(FOLDER, "*.csv")
     filepaths = [fp for fp in filepaths
@@ -518,4 +524,5 @@ def example():
 
 
 if __name__ == '__main__':
-    example()
+    # example_ep_fluxnet()
+    example_icosfile()

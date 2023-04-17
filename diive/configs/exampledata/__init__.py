@@ -27,6 +27,23 @@ def load_exampledata_eddypro_fluxnet_CSV_30MIN():
 
 
 def load_exampledata_pickle():
+    """Load pickled dataframe"""
     filepath = Path(DIR_PATH) / 'exampledata_CH-DAV_FP2022.5_2022_ID20230206154316_30MIN.diive.csv.pickle'
     data_df = load_pickle(filepath=str(filepath))
     return data_df
+
+
+def load_exampledata_winddir():
+    """Load time series if wind direction in degrees"""
+    filepath = Path(DIR_PATH) / 'exampledata_CH-FRU_2005-2022_winddirection_degrees.pickle'
+    data_df = load_pickle(filepath=str(filepath))
+    return data_df
+
+
+def example():
+    df = load_exampledata_winddir()
+    print(df)
+
+
+if __name__ == '__main__':
+    example()
