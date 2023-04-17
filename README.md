@@ -2,12 +2,12 @@
 
 # Time series data processing
 
-**D**ata - **I**mport - **I**nvestigate - **V**isualize - **E**xport
-
 `diive` is a Python library for time series processing.
 
 Recent updates: [CHANGELOG](CHANGELOG.md)   
 Recent releases: [Releases](https://gitlab.ethz.ch/holukas/diive/-/releases)
+
+First example notebooks can be found in the folder `notebooks`.
 
 ## Current Features
 
@@ -23,6 +23,7 @@ Recent releases: [Releases](https://gitlab.ethz.ch/holukas/diive/-/releases)
 
 - Offset correction
 - Set to threshold
+- Wind direction offset detection and correction
 
 ### Create variable
 
