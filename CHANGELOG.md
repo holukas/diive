@@ -2,17 +2,22 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.XX.0 | XX Apr 2023
-INDEV
-XXX
+## v0.53.1 | 18 Apr 2023
 
-- (`pkgs.analyses.gapfinder.GapFinder`)
+### Changes
+
+- **GapFinder** now gives by default sorted output, i.e. the output dataframe shows start and
+  end date for the largest gaps first (`pkgs.analyses.gapfinder.GapFinder`)
 
 ### Notebooks
 
-- Added new notebook for **finding gaps in time series** in `notebooks/Analyses/GapFinder.ipynb` 
-- Added new notebook for **time functions** in `notebooks/TimeFunctions/times.ipynb` 
- 
+- Added new notebook for **finding gaps in time series** in `notebooks/Analyses/GapFinder.ipynb`
+- Added new notebook for **time functions** in `notebooks/TimeFunctions/times.ipynb`
+
+### Other
+
+- New repository branch `indev` is used as developement branch from now on
+- Branch `main` will contain code from the most recent release
 
 ## v0.53.0 | 17 Apr 2023
 
