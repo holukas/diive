@@ -2,12 +2,24 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.XX.0 | XX Apr 2023
+
+XXX
+
+- (`pkgs.analyses.gapfinder.GapFinder`)
+
+### Notebooks
+
+- Added new notebook for **finding gaps in time series** in `notebooks/Analyses/GapFinder.ipynb` 
+- Added new notebook for **time functions** in `notebooks/TimeFunctions/times.ipynb` 
+ 
+
 ## v0.53.0 | 17 Apr 2023
 
 This update focuses on wind direction time series and adds the first example notebooks
 to `diive`. From now on, new example notebooks will be added regularly.
 
-## New features
+### New features
 
 - **Wind direction offset correction**: Compare yearly wind direction histograms to
   reference, detect offset in comparison to reference and correct wind directions
@@ -15,22 +27,22 @@ to `diive`. From now on, new example notebooks will be added regularly.
 - **Wind direction aggregation**: Calculate mean etc. of wind direction in
   degrees (`core.funcs.funcs.winddirection_agg_kanda`)
 
-## Notebooks
+### Notebooks
 
 - Added new notebook for **wind direction offset correction** in `notebooks/Corrections/WindDirectionOffset.ipynb`
 - Added new notebok for **reading ICOS BM files** in `notebooks/ReadFiles/Read_data_from_ICOS_BM_files.ipynb`
 
-## Changes
+### Changes
 
 - **Histogram analysis** now accepts pandas Series as input (`pkgs.analyses.histogram.Histogram`)
 
-## Additions
+### Additions
 
 - Added unittests for reading (some) filetypes
 
 ## v0.52.7 | 16 Mar 2023
 
-## Additions
+### Additions
 
 - The DataFileReader can now directly read zipped files (`core.io.filereader.DataFileReader`)
 - **Interactive time series plot**: (`core.plotting.timeseries.TimeSeries.plot_interactive`)
@@ -41,7 +53,7 @@ to `diive`. From now on, new example notebooks will be added regularly.
   In essence, this allows to read zipped files directly.
 - New filetype `ICOS_H2R_CSVZIP_10S`
 
-## Changes
+### Changes
 
 - Compression in filetypes is now given as `COMPRESSION: "None"` for no compression,
   and `COMPRESSION: "zip"` for zipped CSV files.
