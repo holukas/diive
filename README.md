@@ -23,7 +23,7 @@ First example notebooks can be found in the folder `notebooks`.
 
 - Offset correction
 - Set to threshold
-- Wind direction offset detection and correction
+- Wind direction offset detection and correction ([notebook](notebooks/Corrections/WindDirectionOffset.ipynb))
 
 ### Create variable
 
