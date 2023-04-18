@@ -14,7 +14,7 @@ First example notebooks can be found in the folder `notebooks`.
 ### Analyses
 
 - Decoupling
-- Gapfinder
+- Gapfinder ([notebook example](notebooks/Analyses/GapFinder.ipynb))
 - Histogram
 - Optimum range
 - Quantiles
@@ -23,7 +23,7 @@ First example notebooks can be found in the folder `notebooks`.
 
 - Offset correction
 - Set to threshold
-- Wind direction offset detection and correction ([notebook](notebooks/Corrections/WindDirectionOffset.ipynb))
+- Wind direction offset detection and correction ([notebook example](notebooks/Corrections/WindDirectionOffset.ipynb))
 
 ### Create variable
 
