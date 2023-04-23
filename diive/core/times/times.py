@@ -277,6 +277,18 @@ def current_datetime(str_format: str = '%Y-%m-%d %H:%M:%S') -> tuple[dt.datetime
     now_time_str = now_time_dt.strftime(str_format)
     return now_time_dt, now_time_str
 
+def current_date_str_condensed() -> str:
+    """
+    Current date as string
+
+    - Example notebook available in:
+        -
+    """
+    now_time_dt = dt.datetime.now()
+    now_time_str = now_time_dt.strftime("%Y%m%d")
+    run_id = f'{now_time_str}'
+    # log(name=make_run_id.__name__, dict={'run id': run_id}, highlight=False)
+    return run_id
 
 def current_datetime_str_condensed() -> str:
     """

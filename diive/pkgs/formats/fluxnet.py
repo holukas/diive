@@ -48,6 +48,7 @@ import re
 from pathlib import Path
 
 from diive.core.io.filereader import MultiDataFileReader
+from diive.core.times.times import current_date_str_condensed
 from diive.core.times.times import insert_timestamp
 
 VARS_CO2 = ['FC', 'FC_SSITC_TEST', 'SC_SINGLE', 'CO2']
@@ -78,10 +79,16 @@ class ConvertEddyProFluxnetFileForUpload:
     """
 
     def __init__(self,
+                 site: str,
                  sourcedir: str,
-                 outdir: str):
+                 outdir: str,
+                 limit_n_files: int = None,
+                 add_runid: bool = True):
+        self.site = site
         self.sourcedir = sourcedir
         self.outdir = outdir
+        self.limit_n_files = limit_n_files
+        self.add_runid = add_runid
 
         self.data_df = None
         self.subset = None
@@ -109,14 +116,17 @@ class ConvertEddyProFluxnetFileForUpload:
         filepaths = [Path(f) for f in filepaths]
         print(f"    Found {len(filepaths)} files:")
         [print(f"       --> {f}") for f in filepaths]
+        if self.limit_n_files:
+            filepaths = filepaths[0:self.limit_n_files]
         loaddatafile = MultiDataFileReader(filetype='EDDYPRO_FLUXNET_30MIN', filepaths=filepaths)
         self.data_df = loaddatafile.data_df
 
     def _save_one_file_per_year(self):
         """Save data to yearly files"""
         uniq_years = list(self.subset.index.year.unique())
+        runid = f"_{current_date_str_condensed()}" if self.add_runid else ""
         for year in uniq_years:
-            outname = f"data_for_fluxnet_upload_{year}.csv"
+            outname = f"{self.site}_{year}_fluxes_meteo{runid}.csv"
             outpath = Path(self.outdir) / outname
             yearlocs = self.subset.index.year == year
             yeardata = self.subset[yearlocs].copy()
@@ -173,10 +183,14 @@ class ConvertEddyProFluxnetFileForUpload:
 def example():
     # from diive.configs.exampledata import load_exampledata_eddypro_fluxnet_CSV_30MIN
     # data_df, metadata_df = load_exampledata_eddypro_fluxnet_CSV_30MIN()
-    SOURCE = r"F:\01-NEW\FF202303\FRU\2022\2-FLUXRUN\Level-1_FR-20230402-163038\2-0_eddypro_flux_calculations\results"
+    SOURCE = r"F:\Sync\luhk_work\_current\Level-1_results_for_FLUXNET_upload\0-eddypro_fluxnet_files"
+    OUTDIR = r"F:\Sync\luhk_work\_current\Level-1_results_for_FLUXNET_upload\1-formatted_for_upload"
     con = ConvertEddyProFluxnetFileForUpload(
+        site='CH-FRU',
         sourcedir=SOURCE,
-        outdir='F:\_temp')
+        outdir=OUTDIR,
+        limit_n_files=1,
+        add_runid=True)
     con.run()
     # data_fluxnet = con.get_data()
 

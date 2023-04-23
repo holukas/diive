@@ -2,11 +2,24 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.XX | XX Apr 2023
+## v0.XX.X | 23 Apr 2023
 
-### XX
+### Additions
 
-- XXX
+- Added more parameters when formatting EddyPro _fluxnet_ file for FLUXNET
+  (`pkgs.formats.fluxnet.ConvertEddyProFluxnetFileForUpload`)
+
+### Changes
+
+- Removed left-over code
+
+## v0.53.3 | 23 Apr 2023
+
+### Notebooks
+
+- Added new notebooks for reading data files (ICOS BM files)
+- Added additional output to other notebooks
+- Added new notebook section `Workbench` for practical use cases
 
 ### Additions
 
