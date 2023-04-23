@@ -1,0 +1,22 @@
+GENERAL:
+  NAME: "REDDYPROC_30MIN"
+  DESCRIPTION: "Output file from ReddyProc."
+  TAGS: [ "REDDYPROC" ]
+
+FILE:
+  EXTENSION: "*.csv"
+  COMPRESSION: "None"
+
+TIMESTAMP:
+  DESCRIPTION: "1 column, full timestamp with seconds"
+  INDEX_COLUMN: [ 'TIMESTAMP' ]
+  DATETIME_FORMAT: "%Y-%m-%d %H:%M:%S"
+  SHOWS_START_MIDDLE_OR_END_OF_RECORD: "end"
+
+DATA:
+  HEADER_SECTION_ROWS: [ 0 ]
+  SKIP_ROWS: [ ]
+  HEADER_ROWS: [ 0 ]
+  NA_VALUES: [ "NA", -9999, "inf", "-inf" ]
+  FREQUENCY: "30T"
+  DELIMITER: ","

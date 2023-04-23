@@ -1,0 +1,22 @@
+GENERAL:
+  NAME: "EDDYPRO_FLUXNET_30MIN"
+  DESCRIPTION: "The *_fluxnet_* file from EddyPro."
+  TAGS: [ "EDDYPRO" ]
+
+FILE:
+  EXTENSION: "*.csv"
+  COMPRESSION: "None"
+
+TIMESTAMP:
+  DESCRIPTION: "1 column with date and time in ISO format, no seconds"
+  INDEX_COLUMN: [ 'TIMESTAMP_END' ]
+  DATETIME_FORMAT: "%Y%m%d%H%M"
+  SHOWS_START_MIDDLE_OR_END_OF_RECORD: "end"
+
+DATA:
+  HEADER_SECTION_ROWS: [ 0 ]
+  SKIP_ROWS: [ ]
+  HEADER_ROWS: [ 0 ]
+  NA_VALUES: [ -9999 ]
+  FREQUENCY: "30T"
+  DELIMITER: ","
