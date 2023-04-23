@@ -2,6 +2,18 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.53.3 | 23 Apr 2023
+
+### Notebooks
+
+- Added new notebooks for reading data files (ICOS BM files)
+- Added additional output to other notebooks
+- Added new notebook section `Workbench` for practical use cases
+
+### Additions
+
+- New filetype `configs/filetypes/ICOS_H1R_CSVZIP_1MIN.yml`
+
 ## v0.53.2 | 23 Apr 2023
 
 ### Changes
