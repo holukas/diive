@@ -3,6 +3,13 @@
   <component name="CsvFileAttributes">
     <option name="attributeMap">
       <map>
+        <entry key="F:\Sync\luhk_work\_current\CH-Dav_BM_20220721_L22_F03\CH-Dav_BM_20220721_L22_F03.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
         <entry key="\__workbench\PP-ICOS_10_meteo_overview_log.csv">
           <value>
             <Attribute>
