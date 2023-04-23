@@ -360,8 +360,8 @@ class RandomForestTS:
 
         # Importances
         model_fi_all, \
-        model_fi_most_important_df, \
-        model_fi_most_important_list = \
+            model_fi_most_important_df, \
+            model_fi_most_important_list = \
             model_importances(model=model,
                               feature_names=model_feature_names,
                               threshold_important_features=None)
@@ -445,8 +445,8 @@ class RandomForestTS:
 
         # Importances
         _feat_importances_all_list, \
-        most_important_feat_df, \
-        _most_important_feat_list = \
+            most_important_feat_df, \
+            _most_important_feat_list = \
             model_importances(model=model,
                               feature_names=feature_names,
                               threshold_important_features=None)
@@ -594,62 +594,27 @@ class RandomForestTS:
 
 
 def example():
-    import matplotlib.pyplot as plt
     from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+    from diive.configs.exampledata import load_exampledata_pickle
 
-    # # Read data file
-    # from diive.core.io.filereader import ReadFileType
-    # loaddatafile = ReadFileType(
-    #     filetype='REDDYPROC_30MIN',
-    #     filepath=r'F:\Dropbox\luhk_work\20 - CODING\21 - DIIVE\diive\tests\testdata\testdata_CH-DAV_FP2021.2_2016-2020_ID20220324003457_30MIN_SUBSET.csv',
-    #     data_nrows=None)
-    # data_df, metadata_df = loaddatafile._readfile()
-    #
-    # filepath = save_as_pickle(outpath=r'F:\Dropbox\luhk_work\20 - CODING\21 - DIIVE\diive\tests\testdata',
-    #                filename='testdata_CH-DAV_FP2021.2_2016-2020_ID20220324003457_30MIN_SUBSET.csv',
-    #                data=data_df)
+    # Example data
+    df = load_exampledata_pickle()
+    # [print(c) for c in df.columns if "Rg" in c]
 
-    # # Test data
-    # from diive.core.io.files import load_pickle
-    # df = load_pickle(
-    #     filepath=r'L:\Dropbox\luhk_work\20 - CODING\21 - DIIVE\diive\tests\testdata\testdata_CH-DAV_FP2021.2_2016-2020_ID20220324003457_30MIN_SUBSET.csv.pickle')
-    # df.drop('NEE_CUT_f', axis=1, inplace=True)
-
-    # Download from database
-    from dbc_influxdb import dbcInflux
-    DIRCONF = r'L:\Dropbox\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
-    SITE = 'ch-dav'  # Site name
-    BUCKET_PROCESSING = f"{SITE}_processing"
-    TARGET_COL = 'TA_NABEL_T1_35_1'
-    MEASUREMENTS = ['TA', 'SW', 'RH']  # Measurement name, e.g., 'TA' contains all air temperature variables
-    FIELDS = ['TA_NABEL_T1_35_1', 'SW_IN_NABEL_T1_35_1', 'RH_NABEL_T1_35_1']  # Variable name; InfluxDB stores variable names as '_field'
-    DATA_VERSION = 'meteoscreening'
-    START = '2021-10-01 00:01:00'  # Download data starting with this date
-    STOP = '2021-12-01 00:01:00'  # Download data before this date (the stop date itself is not included)
-    TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
-
-    dbc = dbcInflux(dirconf=DIRCONF)
-
-    data_simple, data_detailed, assigned_measurements = dbc.download(bucket=BUCKET_PROCESSING,
-                                                                     measurements=MEASUREMENTS,
-                                                                     fields=FIELDS,
-                                                                     start=START,
-                                                                     stop=STOP,
-                                                                     timezone_offset_to_utc_hours=TIMEZONE_OFFSET_TO_UTC_HOURS,
-                                                                     data_version=DATA_VERSION)
-
-    # df = df.loc[df.index.year == 2016, :].copy()
-    df = data_simple.copy()
+    # Subset with target and features
+    TARGET_COL = 'NEE_CUT_REF_orig'
+    subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
+    df = df[subsetcols].copy()
 
     # Random forest
     rfts = RandomForestTS(df=df,
                           target_col=TARGET_COL,
                           include_timestamp_as_features=True,
-                          lagged_variants=3,
+                          lagged_variants=6,
                           use_neighbor_years=True,
-                          feature_reduction=False,
+                          feature_reduction=True,
                           verbose=1)
-    rfts.build_models(n_estimators=200,
+    rfts.build_models(n_estimators=10,
                       random_state=42,
                       min_samples_split=2,
                       min_samples_leaf=1,
@@ -659,24 +624,12 @@ def example():
 
     # Gap-filled data series
     target_col_gf = f'{TARGET_COL}_gfRF'
-    gapfilled_series = gapfilled_yrs_df[target_col_gf].copy()
 
     # Plot
     HeatmapDateTime(series=rfts.gapfilled_yrs_df[TARGET_COL]).show()
     HeatmapDateTime(series=rfts.gapfilled_yrs_df[target_col_gf]).show()
     # gapfilled_yrs_df['.gapfilled_cumulative'].plot()
     # plt.show()
-
-    # Merge gapfilled series with tags
-    data_detailed_gf_var = data_detailed[TARGET_COL].copy()  # Original data with tags
-    data_detailed_gf_var[TARGET_COL] = gapfilled_series  # Replace original series w/ gapfilled series (same name)
-    data_detailed_gf_var['data_version'] = 'gapfilled'  # Change data version to 'gapfilled'
-
-    # Upload gapfilled var to database
-    dbc.upload_singlevar(to_bucket=BUCKET_PROCESSING,
-                         to_measurement=assigned_measurements[TARGET_COL],
-                         var_df=data_detailed_gf_var,
-                         timezone_of_timestamp='UTC+01:00')
 
     print("Finished.")
 

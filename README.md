@@ -14,7 +14,8 @@ First example notebooks can be found in the folder `notebooks`.
 ### Analyses
 
 - Decoupling
-- Gapfinder ([notebook example](notebooks/Analyses/GapFinder.ipynb))
+- Detect time resolution from data ([notebook example](notebooks/TimeStamps/Detect_time_resolution.ipynb))
+- Find data gaps ([notebook example](notebooks/Analyses/GapFinder.ipynb))
 - Histogram
 - Optimum range
 - Quantiles

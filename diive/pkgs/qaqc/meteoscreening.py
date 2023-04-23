@@ -520,7 +520,8 @@ class StepwiseMeteoScreeningDb:
             # Store original timeseries for this field dict, stays the same for later comparisons
             self._series_hires_orig[field] = self._data_detailed[field][field].copy()
 
-    def _sanitize_timestamp(self, targetfreq, data_detailed):
+    @staticmethod
+    def _sanitize_timestamp(targetfreq, data_detailed):
         """
         Set frequency info and sanitize timestamp
 
@@ -531,7 +532,8 @@ class StepwiseMeteoScreeningDb:
         data_detailed = TimestampSanitizer(data=data_detailed).get()
         return data_detailed
 
-    def _harmonize_timeresolution(self, targetfreq, data_detailed, timestamp_name: str) -> DataFrame:
+    @staticmethod
+    def _harmonize_timeresolution(targetfreq, data_detailed, timestamp_name: str) -> DataFrame:
         """
         Create timestamp index of highest resolution and upsample
         lower resolution data
@@ -593,7 +595,8 @@ class StepwiseMeteoScreeningDb:
         # plt.show()
         return upsampleddf
 
-    def _extract_tags(self, data_detailed, field) -> dict:
+    @staticmethod
+    def _extract_tags(data_detailed, field) -> dict:
         """For each variable, extract tag columns from the respective DataFrame
          and store info in simplified dict"""
         tags_df = data_detailed.drop(columns=[field, 'FREQ_AUTO_SEC'])
@@ -607,13 +610,15 @@ class StepwiseMeteoScreeningDb:
             tags_dict[tag] = str_of_vals
         return tags_dict
 
-    def _init_flagsdf(self, data_detailed, field) -> DataFrame:
+    @staticmethod
+    def _init_flagsdf(data_detailed, field) -> DataFrame:
         """Initialize dataframe that will contain all flags for each variable"""
         series = data_detailed[field]  # Timeseries of variable
         hires_flags = pd.DataFrame(index=series.index)
         return hires_flags
 
-    def _check_units(self, data_detailed):
+    @staticmethod
+    def _check_units(data_detailed):
         """Check if units are the same for all records"""
         unique_units = list(set(data_detailed['units']))
         if len(unique_units) > 1:
@@ -621,7 +626,8 @@ class StepwiseMeteoScreeningDb:
                             f"but only one allowed. All data records must be "
                             f"in same units.")
 
-    def _check_fields(self, data_detailed):
+    @staticmethod
+    def _check_fields(data_detailed):
         """Check if really only one field in data"""
         unique_fields = list(set(data_detailed['varname']))
         if len(unique_fields) > 1:
@@ -629,19 +635,22 @@ class StepwiseMeteoScreeningDb:
                             f"but only one allowed. All data records must be "
                             f"for same variable.")
 
-    def _make_timeres_groups(self, data_detailed):
+    @staticmethod
+    def _make_timeres_groups(data_detailed):
         """Group data by time resolution"""
         groups_ser = detect_freq_groups(index=data_detailed.index)
         data_detailed[groups_ser.name] = groups_ser
         groups = data_detailed.groupby(data_detailed['FREQ_AUTO_SEC'])
         return groups
 
-    def _count_group_records(self, group_series):
+    @staticmethod
+    def _count_group_records(group_series):
         """Count records for each found time resolution"""
         group_counts = group_series.count().sort_values(ascending=False)
         return group_counts
 
-    def _validate_n_grouprecords(self, group_counts) -> tuple[float, list, list]:
+    @staticmethod
+    def _validate_n_grouprecords(group_counts) -> tuple[float, list, list]:
         """Detect which frequencies have enough records to be used"""
         n_vals = group_counts.sum()
         n_freqs = group_counts.index.unique()
@@ -1112,30 +1121,31 @@ def example():
     # todo For examples see notebooks/MeteoScreening
 
     # Settings
-    SITE = 'ch-lae'  # Site name
-    SITE_LAT = 47.478333
-    SITE_LON = 8.364389
-    MEASUREMENT = 'TA'
-    FIELDS = ['TA_M1_2_1']  # Variable name; InfluxDB stores variable names as '_field'
-    START = '2022-02-01 00:01:00'  # Download data starting with this date
-    STOP = '2022-02-10 00:01:00'  # Download data before this date (the stop date itself is not included)
+    SITE = 'ch-dav'  # Site name
+    SITE_LAT = 46.815333
+    SITE_LON = 9.855972
+    MEASUREMENT = 'SW'
+    FIELDS = ['SW_IN_NABEL_T1_35_1']  # Variable name; InfluxDB stores variable names as '_field'
+    START = '2021-01-01 00:01:00'  # Download data starting with this date
+    STOP = '2021-01-05 00:01:00'  # Download data before this date (the stop date itself is not included)
 
-    # Some info
-    from datetime import datetime
-    from pathlib import Path
-    import pkg_resources
-    # from diive.pkgs.qaqc.meteoscreening import MetScrDbMeasurementVars
-    dt_string = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"This page was last modified on: {dt_string}")
-    version_dbc_influxdb = pkg_resources.get_distribution("dbc_influxdb").version
-    print(f"dbc-influxdb version: v{version_dbc_influxdb}")
+    # # Some info
+    # from datetime import datetime
+    # from pathlib import Path
+    # import pkg_resources
+    # # from diive.pkgs.qaqc.meteoscreening import MetScrDbMeasurementVars
+    # dt_string = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # print(f"This page was last modified on: {dt_string}")
+    # version_dbc_influxdb = pkg_resources.get_distribution("dbc_influxdb").version
+    # print(f"dbc-influxdb version: v{version_dbc_influxdb}")
 
     # Auto-settings
-    DIRCONF = r'F:\Sync\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
+    DIRCONF = r'L:\Sync\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
     TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
     RESAMPLING_FREQ = '30T'  # During MeteoScreening the screened high-res data will be resampled to this frequency; '30T' = 30-minute time resolution
     RESAMPLING_AGG = 'mean'  # The resampling of the high-res data will be done using this aggregation methos; e.g., 'mean'
-    basedir = Path(r"F:\Sync\luhk_work\_temp")
+    from pathlib import Path
+    basedir = Path(r"L:\Sync\luhk_work\_temp")
     BUCKET_RAW = f'{SITE}_raw'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_raw' contains all raw data for CH-LAE
     BUCKET_PROCESSING = f'{SITE}_processing'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_processing' contains all processed data for CH-LAE
     print(f"Bucket containing raw data (source bucket): {BUCKET_RAW}")
@@ -1156,27 +1166,27 @@ def example():
     # data_simple.plot()
     # plt.show()
 
-    # Export data to pickle for fast testing
-    import pickle
-    pickle_out = open(basedir / "meteodata_simple.pickle", "wb")
-    pickle.dump(data_simple, pickle_out)
-    pickle_out.close()
-    pickle_out = open(basedir / "meteodata_detailed.pickle", "wb")
-    pickle.dump(data_detailed, pickle_out)
-    pickle_out.close()
-    pickle_out = open(basedir / "meteodata_assigned_measurements.pickle", "wb")
-    pickle.dump(assigned_measurements, pickle_out)
-    pickle_out.close()
+    # # Export data to pickle for fast testing
+    # import pickle
+    # pickle_out = open(basedir / "meteodata_simple.pickle", "wb")
+    # pickle.dump(data_simple, pickle_out)
+    # pickle_out.close()
+    # pickle_out = open(basedir / "meteodata_detailed.pickle", "wb")
+    # pickle.dump(data_detailed, pickle_out)
+    # pickle_out.close()
+    # pickle_out = open(basedir / "meteodata_assigned_measurements.pickle", "wb")
+    # pickle.dump(assigned_measurements, pickle_out)
+    # pickle_out.close()
 
-    # Import data from pickle for fast testing
-    # from diive.core.io.files import load_pickle
-    import pickle
-    pickle_in = open(basedir / "meteodata_simple.pickle", "rb")
-    data_simple = pickle.load(pickle_in)
-    pickle_in = open(basedir / "meteodata_detailed.pickle", "rb")
-    data_detailed = pickle.load(pickle_in)
-    pickle_in = open(basedir / "meteodata_assigned_measurements.pickle", "rb")
-    assigned_measurements = pickle.load(pickle_in)
+    # # Import data from pickle for fast testing
+    # # from diive.core.io.files import load_pickle
+    # import pickle
+    # pickle_in = open(basedir / "meteodata_simple.pickle", "rb")
+    # data_simple = pickle.load(pickle_in)
+    # pickle_in = open(basedir / "meteodata_detailed.pickle", "rb")
+    # data_detailed = pickle.load(pickle_in)
+    # pickle_in = open(basedir / "meteodata_assigned_measurements.pickle", "rb")
+    # assigned_measurements = pickle.load(pickle_in)
 
     # # Restrict data for testing
     # from diive.core.dfun.frames import df_between_two_dates
@@ -1234,9 +1244,9 @@ def example():
     # mscr.flag_outliers_abslim_test(min=-50, max=50, showplot=True)
     # mscr.addflag()
 
-    # Outlier detection: Local SD
-    mscr.flag_outliers_localsd_test(n_sd=5, winsize=None, showplot=True)
-    mscr.addflag()
+    # # Outlier detection: Local SD
+    # mscr.flag_outliers_localsd_test(n_sd=5, winsize=None, showplot=True)
+    # mscr.addflag()
 
     # # Outlier detection: Local outlier factor, across all data
     # mscr.flag_outliers_lof_test(n_neighbors=None, showplot=True, verbose=True)

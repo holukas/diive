@@ -2,17 +2,32 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.XX.0 | XX Apr 2023
+## v0.53.2 | 23 Apr 2023
 
-XXX
+### Changes
 
-- (`pkgs.analyses.gapfinder.GapFinder`)
+- Added more output for detecting frequency from timeseries index (`core.times.times.DetectFrequency`)
+    - The associated functions have been updated accordingly: `core.times.times.timestamp_infer_freq_from_fullset`,
+      `core.times.times.timestamp_infer_freq_progressively`, `core.times.times.timestamp_infer_freq_from_timedelta`
+    - Added new notebook (`notebooks/TimeStamps/Detect_time_resolution.ipynb` )
+    - Added new unittest (`tests/test_timestamps.py`)
+
+## v0.53.1 | 18 Apr 2023
+
+### Changes
+
+- **GapFinder** now gives by default sorted output, i.e. the output dataframe shows start and
+  end date for the largest gaps first (`pkgs.analyses.gapfinder.GapFinder`)
 
 ### Notebooks
 
-- Added new notebook for **finding gaps in time series** in `notebooks/Analyses/GapFinder.ipynb` 
-- Added new notebook for **time functions** in `notebooks/TimeFunctions/times.ipynb` 
- 
+- Added new notebook for **finding gaps in time series** in `notebooks/Analyses/GapFinder.ipynb`
+- Added new notebook for **time functions** in `notebooks/TimeFunctions/times.ipynb`
+
+### Other
+
+- New repository branch `indev` is used as developement branch from now on
+- Branch `main` will contain code from the most recent release
 
 ## v0.53.0 | 17 Apr 2023
 
