@@ -2,6 +2,16 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.53.2 | 23 Apr 2023
+
+### Changes
+
+- Added more output for detecting frequency from timeseries index (`core.times.times.DetectFrequency`)
+    - The associated functions have been updated accordingly: `core.times.times.timestamp_infer_freq_from_fullset`,
+      `core.times.times.timestamp_infer_freq_progressively`, `core.times.times.timestamp_infer_freq_from_timedelta`
+    - Added new notebook (`notebooks/TimeStamps/Detect_time_resolution.ipynb` )
+    - Added new unittest (`tests/test_timestamps.py`)
+
 ## v0.53.1 | 18 Apr 2023
 
 ### Changes

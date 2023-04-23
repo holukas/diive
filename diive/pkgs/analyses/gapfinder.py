@@ -9,6 +9,9 @@ class GapFinder:
 
     Results are collected in a dataframe that gives info
     about gap locations within the limit.
+
+    - Example notebook available in:
+        notebooks/Analyses/GapFinder.ipynb
     """
     # Define column names
     gap_values = 'GAPVALUES'

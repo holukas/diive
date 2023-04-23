@@ -135,7 +135,7 @@ def detect_freq_groups(index: DatetimeIndex) -> Series:
     return groups_ser
 
 
-class TimestampSanitizer():
+class TimestampSanitizer:
 
     def __init__(self,
                  data: Series or DataFrame,
@@ -259,7 +259,8 @@ def current_unixtime() -> int:
     """
     Current time as integer number of nanoseconds since the epoch
 
-    Notebook example available: https://gitlab.ethz.ch/diive/diive-notebooks
+    - Example notebook available in:
+        notebooks/TimeFunctions/times.ipynb
     """
     current_time_unix = time.time_ns()
     return current_time_unix
@@ -269,7 +270,8 @@ def current_datetime(str_format: str = '%Y-%m-%d %H:%M:%S') -> tuple[dt.datetime
     """
     Current datetime as datetime and string
 
-    Notebook example available: https://gitlab.ethz.ch/diive/diive-notebooks
+    - Example notebook available in:
+        notebooks/TimeFunctions/times.ipynb
     """
     now_time_dt = dt.datetime.now()
     now_time_str = now_time_dt.strftime(str_format)
@@ -280,7 +282,8 @@ def current_datetime_str_condensed() -> str:
     """
     Current datetime as string
 
-    Notebook example available: https://gitlab.ethz.ch/diive/diive-notebooks
+    - Example notebook available in:
+        notebooks/TimeFunctions/times.ipynb
     """
     now_time_dt = dt.datetime.now()
     now_time_str = now_time_dt.strftime("%Y%m%d%H%M%S")
@@ -293,7 +296,8 @@ def current_time_microseconds_str() -> str:
     """
     Current time including microseconds as string
 
-    Notebook example available: https://gitlab.ethz.ch/diive/diive-notebooks
+    - Example notebook available in:
+        notebooks/TimeFunctions/times.ipynb
     """
     now_time_dt = dt.datetime.now()
     now_time_str = now_time_dt.strftime("%H%M%S%f")
@@ -306,7 +310,8 @@ def make_run_id(prefix: str = False) -> str:
     """
     Create string identifier that includes current datetime
 
-    Notebook example available: https://gitlab.ethz.ch/diive/diive-notebooks
+    - Example notebook available in:
+        notebooks/TimeFunctions/times.ipynb
     """
     now_time_dt, _ = current_datetime()
     now_time_str = now_time_dt.strftime("%Y%m%d-%H%M%S")
@@ -322,7 +327,8 @@ def timedelta_to_string(timedelta):
     https://stackoverflow.com/questions/46429736/pandas-resampling-how-to-generate-offset-rules-string-from-timedelta
     https://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
 
-    Notebook example available: https://gitlab.ethz.ch/diive/diive-notebooks
+    - Example notebook available in:
+        notebooks/TimeFunctions/times.ipynb
     """
     c = timedelta.components
     format = ''
@@ -481,6 +487,12 @@ def include_timestamp_as_cols(df,
 class DetectFrequency:
     """Detect data time resolution from time series index
 
+
+    - Example notebook available in:
+        notebooks/TimeStamps/Detect_time_resolution.ipynb
+    - Unittest:
+        test_timestamps.TestTimestamps
+
     TODO detect freq like in dbc-influxdb
 
     """
@@ -496,9 +508,9 @@ class DetectFrequency:
     def _run(self):
         if self.verbose: print(f"Detecting time resolution from timestamp {self.index.name} ...", end=" ")
 
-        freq_full = timestamp_infer_freq_from_fullset(timestamp_ix=self.index)
-        freq_timedelta = timestamp_infer_freq_from_timedelta(timestamp_ix=self.index)
-        freq_progressive = timestamp_infer_freq_progressively(timestamp_ix=self.index)
+        freq_full, freqinfo_full = timestamp_infer_freq_from_fullset(timestamp_ix=self.index)
+        freq_timedelta, freqinfo_timedelta = timestamp_infer_freq_from_timedelta(timestamp_ix=self.index)
+        freq_progressive, freqinfo_progressive = timestamp_infer_freq_progressively(timestamp_ix=self.index)
 
         if all(f for f in [freq_full, freq_timedelta, freq_progressive]):
 
@@ -508,23 +520,44 @@ class DetectFrequency:
             if len(freq_list) == 1:
                 # Maximum certainty, one single freq found across all checks
                 self.freq = freq_list[0]
-                if self.verbose: print(f"OK (detected {self.freq} time resolution with maximum confidence)")
+                if self.verbose: print(f"OK\n"
+                                       f"   Detected {self.freq} time resolution with MAXIMUM confidence.\n"
+                                       f"   All approaches yielded the same result:\n"
+                                       f"       from full data = {freq_full} / {freqinfo_full} (OK)\n"
+                                       f"       from timedelta = {freq_timedelta} / {freqinfo_timedelta} (OK)\n"
+                                       f"       from progressive = {freq_progressive} / {freqinfo_progressive} (OK)\n")
 
         elif freq_full:
             # High certainty, freq found from full range of dataset
             self.freq = freq_full
-            if self.verbose: print(f"OK (detected {self.freq} time resolution {self.freq} with high confidence)")
+            if self.verbose: print(f"OK\n"
+                                   f"   Detected {self.freq} time resolution with MAXIMUM confidence.\n"
+                                   f"   Full data has consistent timestamp:\n"
+                                   f"       from full data = {freq_full} / {freqinfo_full} (OK)\n"
+                                   f"       from timedelta = {freq_timedelta} / {freqinfo_timedelta} (not used)\n"
+                                   f"       from progressive = {freq_progressive} / {freqinfo_progressive} (not used)\n")
 
         elif freq_progressive:
             # Medium certainty, freq found from start and end of dataset
             self.freq = freq_progressive
-            if self.verbose: print(f"OK (detected {self.freq} time resolution {self.freq} with medium confidence)")
+            if self.verbose: print(f"OK (detected {self.freq} time resolution {self.freq} with MEDIUM confidence)")
+            if self.verbose: print(f"OK\n"
+                                   f"   Detected {self.freq} time resolution with MEDIUM confidence.\n"
+                                   f"   Records at start and end of file have consistent timestamp:\n"
+                                   f"       from full data = {freq_full} / {freqinfo_full} (not used)\n"
+                                   f"       from timedelta = {freq_timedelta} / {freqinfo_timedelta} (not used)\n"
+                                   f"       from progressive = {freq_progressive} / {freqinfo_progressive} (OK)\n")
 
         elif freq_timedelta:
             # High certainty, freq found from most frequent timestep that
             # occurred at least 99% of the time
             self.freq = freq_timedelta
-            if self.verbose: print(f"OK (detected {self.freq} time resolution {self.freq} high confidence)")
+            if self.verbose: print(f"OK\n"
+                                   f"   Detected {self.freq} time resolution with HIGH confidence.\n"
+                                   f"   Resolution detected from most frequent timestep (timedelta):\n"
+                                   f"       from full data = {freq_full} / {freqinfo_full} (not used)\n"
+                                   f"       from timedelta = {freq_timedelta} / {freqinfo_timedelta} (OK)\n"
+                                   f"       from progressive = {freq_progressive} / {freqinfo_progressive} (not used)\n")
 
         else:
             raise Exception("Frequency detection failed.")
@@ -533,7 +566,7 @@ class DetectFrequency:
         return self.freq
 
 
-def timestamp_infer_freq_progressively(timestamp_ix: pd.DatetimeIndex) -> str or None:
+def timestamp_infer_freq_progressively(timestamp_ix: pd.DatetimeIndex) -> tuple:
     """Try to infer freq from first x and last x rows of data, if these
     match we can be relatively certain that the file has the same freq
     from start to finish.
@@ -541,6 +574,7 @@ def timestamp_infer_freq_progressively(timestamp_ix: pd.DatetimeIndex) -> str or
     # Try to infer freq, starting from first 1000 and last 1000 rows of data, must match
     n_datarows = timestamp_ix.__len__()
     inferred_freq = None
+    freqinfo = None
     checkrange = 1000
     if n_datarows > 0:
         for ndr in range(checkrange, 5, -1):  # ndr = number of data rows
@@ -549,14 +583,14 @@ def timestamp_infer_freq_progressively(timestamp_ix: pd.DatetimeIndex) -> str or
                 _inferred_freq_end = pd.infer_freq(timestamp_ix[-ndr:])
                 inferred_freq = _inferred_freq_start if _inferred_freq_start == _inferred_freq_end else None
                 if inferred_freq:
-                    freqfrom = f'data {ndr}+{ndr}' if inferred_freq else '-'
-                    return inferred_freq
+                    freqinfo = f'data {ndr}+{ndr}' if inferred_freq else '-'
+                    return inferred_freq, freqinfo
             else:
                 continue
-    return inferred_freq
+    return inferred_freq, freqinfo
 
 
-def timestamp_infer_freq_from_fullset(timestamp_ix: pd.DatetimeIndex) -> str or None:
+def timestamp_infer_freq_from_fullset(timestamp_ix: pd.DatetimeIndex) -> tuple:
     """
     Infer data frequency from all timestamps in time series index
 
@@ -568,23 +602,30 @@ def timestamp_infer_freq_from_fullset(timestamp_ix: pd.DatetimeIndex) -> str or 
     Returns:
         Frequency string, e.g. '10T' for 10-minute time resolution
     """
+    inferred_freq = None
+    freqinfo = None
     n_datarows = timestamp_ix.__len__()
     if n_datarows < 10:
-        return None
+        freqinfo = '-not-enough-datarows-'
+        return inferred_freq, freqinfo
     inferred_freq = pd.infer_freq(timestamp_ix)
     if inferred_freq:
-        return inferred_freq
+        freqinfo = 'full data'
+        return inferred_freq, freqinfo
     else:
-        return None
+        freqinfo = '-failed-'
+        return inferred_freq, freqinfo
 
 
-def timestamp_infer_freq_from_timedelta(timestamp_ix: pd.DatetimeIndex) -> str or None:
+def timestamp_infer_freq_from_timedelta(timestamp_ix: pd.DatetimeIndex) -> tuple:
     """Check DataFrame index for frequency by subtracting successive timestamps from each other
     and then checking the most frequent difference
 
     - https://stackoverflow.com/questions/16777570/calculate-time-difference-between-pandas-dataframe-indices
     - https://stackoverflow.com/questions/31469811/convert-pandas-freq-string-to-timedelta
     """
+    inferred_freq = None
+    freqinfo = None
     df = pd.DataFrame(columns=['tvalue'])
     df['tvalue'] = timestamp_ix
     df['tvalue_shifted'] = df['tvalue'].shift()
@@ -598,10 +639,12 @@ def timestamp_infer_freq_from_timedelta(timestamp_ix: pd.DatetimeIndex) -> str o
     # Check whether the most frequent delta appears in >99% of all data rows
     if most_frequent_delta_perc > 0.99:
         inferred_freq = timedelta_to_string(most_frequent_delta)
+        freqinfo = '>99% occurrence'
         # most_frequent_delta = pd.to_timedelta(most_frequent_delta)
-        return inferred_freq
+        return inferred_freq, freqinfo
     else:
-        return None
+        freqinfo = '-failed-'
+        return inferred_freq, freqinfo
 
 
 def remove_index_duplicates(data: Series or DataFrame,
