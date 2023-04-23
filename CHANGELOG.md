@@ -2,13 +2,11 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.53.3 | 23 Apr 2023
+## v0.XX | XX Apr 2023
 
-### Notebooks
+### XX
 
-- Added new notebooks for reading data files (ICOS BM files)
-- Added additional output to other notebooks
-- Added new notebook section `Workbench` for practical use cases
+- XXX
 
 ### Additions
 
