@@ -75,7 +75,8 @@ class ConvertEddyProFluxnetFileForUpload:
     - Format the two timestamp columns to FLUXNET format YYYYMMDDhhmm
     - Save data from dataframe to yearly files
 
-    Added in v0.52.0
+    - Example notebook available in:
+        notebooks/Formats/ConvertEddyProFluxnetFileForUpload.ipynb
     """
 
     def __init__(self,
@@ -95,6 +96,7 @@ class ConvertEddyProFluxnetFileForUpload:
 
     def run(self):
         """Convert files to FLUXNET format"""
+        # todo separate functions from class
         self._load_sourcefiles()
         self._make_subset()
         self._missing_values()
