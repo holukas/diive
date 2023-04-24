@@ -35,6 +35,10 @@ First example notebooks can be found in the folder `notebooks`.
 
 - Flux detection limit
 
+### Formats
+
+- Convert EddyPro fluxnet output files for upload to FLUXNET database  ([notebook example](notebooks/Formats/ConvertEddyProFluxnetFileForUpload.ipynb))
+
 ### Fits
 
 - Bin fitter
@@ -54,7 +58,15 @@ see [here](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux
 - Level-3.1 storage correction
 - Level-3.2 outlier removal
 
+### Formats
+
+Format data to specific formats
+
+- Format EddyPro _fluxnet_ output file for upload to FLUXNET database
+
 ### Gap-filling
+
+Fill gaps in time series with various methods
 
 - Interpolate
 - RandomForestTS

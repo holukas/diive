@@ -3,13 +3,6 @@
   <component name="CsvFileAttributes">
     <option name="attributeMap">
       <map>
-        <entry key="F:\Sync\luhk_work\_current\CH-Dav_BM_20220721_L22_F03\CH-Dav_BM_20220721_L22_F03.csv">
-          <value>
-            <Attribute>
-              <option name="separator" value="," />
-            </Attribute>
-          </value>
-        </entry>
         <entry key="\__workbench\PP-ICOS_10_meteo_overview_log.csv">
           <value>
             <Attribute>
@@ -74,6 +67,62 @@
           </value>
         </entry>
         <entry key="\__workbench\icos_replace_precip_in_files\0-1-TEST-files originally transferred to ICOS with wrong precip - 13_meteo_nabel\CH-Dav_BM_20230228_L22_F03.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\__workbench\icos_replace_precip_in_files\0-3-TEST-OUT\CSV\CH-Dav_BM_20191001_L22_F03.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\__workbench\icos_replace_precip_in_files\0-3-TEST-OUT\CSV\CH-Dav_BM_20191002_L22_F03.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\__workbench\icos_replace_precip_in_files\0-3-TEST-OUT\CSV\CH-Dav_BM_20191003_L22_F03.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\__workbench\icos_replace_precip_in_files\0-3-TEST-OUT\CSV\CH-Dav_BM_20230226_L22_F03.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\__workbench\icos_replace_precip_in_files\0-3-TEST-OUT\CSV\CH-Dav_BM_20230227_L22_F03.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\__workbench\icos_replace_precip_in_files\0-3-TEST-OUT\CSV\CH-Dav_BM_20230228_L22_F03.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\__workbench\icos_replace_precip_in_files\0-3-TEST-OUT\ZIP\CH-Dav_BM_20230227_L22_F03.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\__workbench\icos_replace_precip_in_files\0-3-TEST-OUT\stats_sums.csv">
           <value>
             <Attribute>
               <option name="separator" value="," />
