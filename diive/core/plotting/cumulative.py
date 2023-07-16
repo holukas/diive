@@ -98,8 +98,8 @@ class CumulativeYear:
         pf.add_zeroline_y(ax=self.ax, data=self.cumulatives_per_year_df)
 
         pf.default_format(ax=self.ax,
-                          txt_xlabel='Month',
-                          txt_ylabel=self.varname,
+                          ax_xlabel_txt='Month',
+                          ax_ylabel_txt=self.varname,
                           txt_ylabel_units=self.series_units)
 
         n_legend_cols = pf.n_legend_cols(n_legend_entries=len(self.uniq_years))

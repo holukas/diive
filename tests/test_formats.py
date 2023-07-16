@@ -2,7 +2,7 @@ import unittest
 
 import diive.configs.exampledata as ed
 from diive.core.times.times import DetectFrequency
-from diive.pkgs.formats.fluxnet import ConvertEddyProFluxnetFileForUpload
+from diive.pkgs.formats.fluxnet import FormatEddyProFluxnetFileForUpload
 
 
 class TestFormats(unittest.TestCase):

@@ -180,7 +180,7 @@ class MakeNewTab:
                      'ax_USTAR_thres_seasons_scatterplot': ax_USTAR_thres_seasons_scatterplot}
 
         for key, ax in axes_dict.items():
-            gui.plotfuncs.default_format(ax=ax, txt_xlabel=False)
+            gui.plotfuncs.default_format(ax=ax, ax_xlabel_txt=False)
 
         return axes_dict
 
@@ -998,8 +998,8 @@ class Run:
                    marker=self.markers[0],
                    edgecolors='black')
 
-        gui.plotfuncs.default_format(ax=ax, txt_xlabel='Bootstrap run #',
-                                     txt_ylabel=self.ustar_data_col[0],
+        gui.plotfuncs.default_format(ax=ax, ax_xlabel_txt='Bootstrap run #',
+                                     ax_ylabel_txt=self.ustar_data_col[0],
                                      txt_ylabel_units=self.ustar_data_col[1],
                                      label_color='black', fontsize=FONTSIZE_LABELS_AXIS)
         if bts_run == 0:
@@ -1037,7 +1037,7 @@ class Run:
                       data=boxenplot_df,
                       palette='RdYlBu',
                       ax=ax, scale='area')
-        gui.plotfuncs.default_format(ax=ax, txt_xlabel='Season', txt_ylabel=self.ustar_data_col[0],
+        gui.plotfuncs.default_format(ax=ax, ax_xlabel_txt='Season', ax_ylabel_txt=self.ustar_data_col[0],
                                      txt_ylabel_units=self.ustar_data_col[1],
                                      label_color='black', fontsize=FONTSIZE_LABELS_AXIS)
         gui.plotfuncs.default_legend(ax=ax, loc='upper right', bbox_to_anchor=(1, 1), labelspacing=0.4)
@@ -1535,7 +1535,7 @@ class Run:
                          marker=self.markers[0],
                          ms=SIZE_MARKER_DEFAULT)
 
-        gui.plotfuncs.default_format(ax=ax, txt_xlabel='-', txt_ylabel=data_col[0], txt_ylabel_units=data_col[1],
+        gui.plotfuncs.default_format(ax=ax, ax_xlabel_txt='-', ax_ylabel_txt=data_col[0], txt_ylabel_units=data_col[1],
                                      label_color='black', fontsize=FONTSIZE_LABELS_AXIS)
 
         ax.text(0.05, 0.95, f"Season {current_season_data_pool_key} / {data_col[0]} per {ta_class_col[0]}",

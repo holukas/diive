@@ -523,6 +523,35 @@ def example_ep_fluxnet():
     loaddatafile = MultiDataFileReader(filetype='EDDYPRO_FLUXNET_30MIN', filepaths=filepaths)
 
 
+def example_toa5():
+    corrected = r"C:\Users\holukas\Downloads\corrected_files\c-CH-OE2_iDL_BOX1_0_1_TBL1_20220629-1714.dat"
+    uncorrected = r"C:\Users\holukas\Downloads\corrected_files\CH-OE2_iDL_BOX1_0_1_TBL1_20220629-1714.dat"
+
+    corr_df, corr_meta = ReadFileType(filepath=corrected, filetype='TOA5_DAT_1MIN',
+                                      output_middle_timestamp=True).get_filedata()
+    uncorr_df, uncorr_meta = ReadFileType(filepath=uncorrected, filetype='TOA5_DAT_1MIN',
+                                          output_middle_timestamp=True).get_filedata()
+
+    corr_descr = corr_df.describe()
+    uncorr_descr = uncorr_df.describe()
+
+    for c in corr_descr.columns:
+        c_corr_descr = corr_descr[c]
+        c_uncorr_descr = uncorr_descr[c]
+        checkok = c_corr_descr.equals(c_uncorr_descr)
+        if checkok:
+            print(f"OK  -  Variable {c} is the same in both files")
+        else:
+            print(f"{'#' * 40}\n"
+                  f"### FABIO EMERGENCY  -  Variable {c} is not the same in both files\n")
+            print("Stats of CORRECTED:")
+            print(c_corr_descr)
+            print("Stats of uncorrected:")
+            print(c_uncorr_descr)
+            print(f"{'#' * 40}")
+
+
 if __name__ == '__main__':
     # example_ep_fluxnet()
-    example_icosfile()
+    # example_icosfile()
+    example_toa5()

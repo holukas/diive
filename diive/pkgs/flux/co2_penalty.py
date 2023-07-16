@@ -7,30 +7,31 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib import dates as mdates
-from pandas import DataFrame
+from pandas import DataFrame, Series
 
 import diive.core.dfun.frames as frames
 from diive.core.dfun.fits import BinFitterCP
 from diive.core.plotting.fitplot import fitplot
-from diive.core.plotting.plotfuncs import default_legend, default_format, nice_date_ticks, save_fig
+from diive.core.plotting.plotfuncs import default_legend, default_format, nice_date_ticks, save_fig, add_zeroline_y
 from diive.core.plotting.styles.LightTheme import COLOR_NEP, COLOR_RECO
 from diive.pkgs.createvar.vpd import calc_vpd_from_ta_rh
 from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
 
 
-class NEPpenalty:
+class CO2penalty:
 
     def __init__(
             self,
             df: DataFrame,
             vpd_col: str,
-            nep_col: str,
+            nee_col: str,
             swin_col: str,
             ta_col: str,
             rh_col: str,
-            thres_crd: float,
-            # thres_xcrd: float,
-            thres_ncrd_lower: float,
+            thres_chd_ta: float,
+            thres_chd_vpd: float,
+            thres_nchd_ta: tuple[float, float],
+            thres_nchd_vpd: tuple[float, float],
             penalty_start_month: int = 5,
             penalty_end_month: int = 9,
             **random_forest_params
@@ -40,32 +41,40 @@ class NEPpenalty:
         Args:
             df: Timeseries data with timestamp as index in half-hourly time resolution
             vpd_col: VPD column name, is used to define critical conditions (kPa)
-            nep_col: NEP column name (umol CO2 m-2 s-1) (NEP=-NEE)
+            nee_col: NEE column name (net ecosystem exchange of CO2, umol CO2 m-2 s-1),
+                used to calculate net ecosystem productivity (NEP=-NEE)
             swin_col: Short-wave incoming radiation column name (W m-2)
             ta_col: Air temperature column name (°C)
             rh_col: Relative humidity column name (%)
-            thres_crd: Critical threshold
-                Threshold of *x_col* above which days are defined as critical.
-            thres_ncrd_lower: Lower near-critical threshold
-                Threshold of *x_col* above which days are defined as near-critical.
-                *thres_ncrd_lower* <= near-critical days <= *thres_crd*
+            thres_chd_ta: Air temperature threshold for critical heat days
+            thres_chd_vpd: VPD threshold for critical heat days
+            thres_nchd_ta: Lower and upper air temperature thresholds that define
+                near-critical heat days
+                lower threshold <= near-critical days <= upper threshold
+            thres_nchd_vpd: Lower and upper VPD thresholds that define near-critical heat days
+                lower threshold <= near-critical days <= upper threshold
         """
         # Columns
         self.df = df.copy()
         self.vpd_col = vpd_col
-        self.nep_col = nep_col
+        self.nee_col = nee_col
         self.swin_col = swin_col
         self.ta_col = ta_col
         self.rh_col = rh_col
-        self.thres_crd = thres_crd
-        # self.thres_xcrd = thres_xcrd
-        self.thres_ncrd_lower = thres_ncrd_lower
+        self.thres_chd_ta = thres_chd_ta
+        self.thres_chd_vpd = thres_chd_vpd
+        self.thres_nchd_ta = thres_nchd_ta
+        self.thres_nchd_vpd = thres_nchd_vpd
         self.penalty_start_month = penalty_start_month
         self.penalty_end_month = penalty_end_month
         self.random_forest_params = random_forest_params
 
         # Convert NEE units: umol CO2 m-2 s-1 --> g CO2 m-2 30min-1
-        self.df[self.nep_col] = self.df[self.nep_col].multiply(0.0792171)
+        self.df[self.nee_col] = self.df[self.nee_col].multiply(0.0792171)
+
+        # Calculate NEP from NEE
+        self.nep_col = "NEP"
+        self.df[self.nep_col] = self.df[self.nee_col].multiply(-1)
 
         # Columns that will be limited
         self.vpd_col_limited = f'_LIMITED_{self.vpd_col}'
@@ -82,6 +91,7 @@ class NEPpenalty:
         self._gf_results = None
         self._penalty_hires_df = None
         self._penalty_min_year = None
+        self._penalty_per_year_df = None
 
     @property
     def penalty_hires_df(self) -> DataFrame:
@@ -119,7 +129,11 @@ class NEPpenalty:
         return self._gf_results
 
     def calculate_penalty(self, **kwargs):
-        self._penalty_hires_df, self._penalty_per_year_df, self._gapfilled_df, self._gf_results, self._penalty_min_year = \
+        self._penalty_hires_df, \
+            self._penalty_per_year_df, \
+            self._gapfilled_df, \
+            self._gf_results, \
+            self._penalty_min_year = \
             self._calculate_penalty(**kwargs)
 
     def _gapfill(self, df: DataFrame, target_col: str, random_state: int = None, n_bootstrap_runs: int = 11,
@@ -148,8 +162,8 @@ class NEPpenalty:
 
         print("Calculating penalty ...")
 
-        # Limit/remove CRD data
-        _df = self._limit_crd_data()
+        # Limit/remove CHD data
+        _df = self._limit_chd_data()
 
         # Make subset with vars required for gapfilling
         # limited_cols = [col for col in _df.columns if '_LIMITED_' in col]
@@ -157,7 +171,7 @@ class NEPpenalty:
                         self.vpd_col_limited_gapfilled, self.swin_col_limited_gapfilled]
         _df_limited = _df[limited_cols].copy()
 
-        # Gapfilling
+        # Gapfilling NEP
         gapfilled_df, gf_results = self._gapfill(df=_df_limited,
                                                  target_col=self.nep_col_limited,
                                                  random_state=random_state,
@@ -170,7 +184,7 @@ class NEPpenalty:
         penalty_df[self.nep_col_limited_gf] = gapfilled_df[self.nep_col_limited_gf].copy()
         penalty_df[gapfilled_flag_col] = gapfilled_df[gapfilled_flag_col].copy()
 
-        # Calculate carbon cost
+        # Calculate CO2 penalty
         penalty_df['PENALTY'] = penalty_df[self.nep_col_limited_gf].sub(penalty_df[self.nep_col])
 
         # Cumulatives
@@ -182,8 +196,8 @@ class NEPpenalty:
         penalty_df[limited_cols] = _df_limited[limited_cols].copy()
 
         # Add flag columns
-        penalty_df['FLAG_CRD'] = _df['FLAG_CRD'].copy()
-        penalty_df['FLAG_nCRD'] = _df['FLAG_nCRD'].copy()
+        penalty_df['FLAG_CHD'] = _df['FLAG_CHD'].copy()
+        penalty_df['FLAG_nCHD'] = _df['FLAG_nCHD'].copy()
 
         # Collect info for yearly overview
 
@@ -193,109 +207,169 @@ class NEPpenalty:
             penalty_df[self.nep_col_limited_gf].groupby(penalty_df.index.year).sum()
         penalty_per_year_df[f'{self.nep_col}'] = penalty_df[self.nep_col].groupby(penalty_df.index.year).sum()
 
-        # Add info about number of CRDs
-        _num_crds = penalty_df['VPD_f'].resample('D').max()
-        _num_crds = _num_crds.loc[_num_crds > self.thres_crd]
-        _num_crds = _num_crds.groupby(_num_crds.index.year).count()
-        _num_crds = _num_crds.fillna(0)
-        penalty_per_year_df['num_CRDs'] = _num_crds
+        # Add info about number of CHDs
+        _subset = penalty_df[[self.ta_col, self.vpd_col]].copy()
+        _subset = _subset.resample('D').max()
+        _locs_chd = (_subset[self.vpd_col] > self.thres_chd_vpd) & (_subset[self.ta_col] > self.thres_chd_ta)
+        _subset = _subset.loc[_locs_chd].copy()
+        _subset = _subset.groupby(_subset.index.year).count()
+        penalty_per_year_df['num_CHDs'] = _subset[self.ta_col].copy()
+        penalty_per_year_df = penalty_per_year_df.fillna(0)
+        # todo hier weiter
+
+        # _n_chd = _n_chd.loc[_locs_chd]
+        # _n_chd = _n_chd.groupby(_n_chd.index.year).count()
+        # _n_chd = _n_chd.fillna(0)
+        # penalty_per_year_df['num_CHDs'] = _n_chd
 
         penalty_min_year = int(penalty_per_year_df['PENALTY'].idxmin())
         penalty_min = penalty_per_year_df.min()
 
         return penalty_df, penalty_per_year_df, gapfilled_df, gf_results, penalty_min_year
 
-    def _limit_crd_data(self) -> DataFrame:
-        """Limit/remove data on critical heat days
+    def _insert_aggregates_into_hires(self, hires_df: DataFrame) -> tuple[DataFrame, str, str]:
+        """Insert daily max of TA and VPD into high-res dataframe"""
 
-        - Set CRD data to their diel cycle medians
-        - Remove NEP CRD data
+        # Aggregation settings
+        settings = dict(to_freq='D',
+                        to_agg='max',
+                        interpolate_missing_vals=False,
+                        interpolation_lim=False)
+
+        # Insert aggregated TA as column in hires dataframe
+        _hiresagg_ta = frames.aggregated_as_hires(aggregate_series=hires_df[self.ta_col],
+                                                  hires_timestamp=hires_df.index,
+                                                  **settings)
+        hires_df[_hiresagg_ta.name] = _hiresagg_ta
+        hiresagg_ta_name = str(_hiresagg_ta.name)
+
+        # Insert aggregated VPD as column in hires dataframe
+        _hiresagg_vpd = frames.aggregated_as_hires(aggregate_series=hires_df[self.vpd_col],
+                                                   hires_timestamp=hires_df.index,
+                                                   **settings)
+        hires_df[_hiresagg_vpd.name] = _hiresagg_vpd
+        hiresagg_vpd_name = str(_hiresagg_vpd.name)
+        return hires_df, hiresagg_ta_name, hiresagg_vpd_name
+
+    def _get_hires_chd_data(self,
+                            hires_df: DataFrame,
+                            hiresagg_ta_name: str,
+                            hiresagg_vpd_name: str) -> tuple[DataFrame, Series]:
+        # Get hires CHD data (critical heat days)
+        _locs_chd = (hires_df[hiresagg_ta_name] >= self.thres_chd_ta) & \
+                    (hires_df[hiresagg_vpd_name] >= self.thres_chd_vpd) & \
+                    (hires_df.index.month >= self.penalty_start_month) & \
+                    (hires_df.index.month <= self.penalty_end_month)
+        chd_hires_df = hires_df[_locs_chd].copy()
+        return chd_hires_df, _locs_chd
+
+    def _get_hires_nchd_data(self,
+                             hires_df: DataFrame,
+                             hiresagg_ta_name: str,
+                             hiresagg_vpd_name: str) -> tuple[DataFrame, Series]:
+        locs_nchd = (hires_df[hiresagg_ta_name] <= self.thres_nchd_ta[1]) & \
+                    (hires_df[hiresagg_ta_name] >= self.thres_nchd_ta[0]) & \
+                    (hires_df[hiresagg_vpd_name] <= self.thres_nchd_vpd[1]) & \
+                    (hires_df[hiresagg_vpd_name] >= self.thres_nchd_vpd[0]) & \
+                    (hires_df.index.month >= self.penalty_start_month) & \
+                    (hires_df.index.month <= self.penalty_end_month)
+        nchd_hires_df = hires_df[locs_nchd].copy()
+        return nchd_hires_df, locs_nchd
+
+    def _limit_chd_data(self) -> DataFrame:
+        """Limit/remove data on critical heat days
+        - Set CHD data to their diel cycle medians
+        - Remove NEP CHD data
         """
 
-        # Insert aggregated x as column in hires dataframe
-        df, aggcol = frames.insert_aggregated_in_hires(df=self.df.copy(), col=self.vpd_col,
-                                                       to_freq='D', to_agg='max', agg_offset='7H')
+        # High-res dataframe
+        hires_df = self.df.copy()
 
-        # Get hires TA for nCRDs
-        ncrds_ix = (df[aggcol] >= self.thres_ncrd_lower) \
-                   & (df[aggcol] < self.thres_crd) \
-                   & (df.index.month >= self.penalty_start_month) \
-                   & (df.index.month <= self.penalty_end_month)
-        ncrds_ta_hires_df = df.loc[ncrds_ix, self.ta_col].copy()
-        # ncrds_ta_hires_df = df.loc[ncrds_ix, self.features_cols].copy()
+        # Add daily maxima of TA and VPD
+        hires_df, \
+            hiresagg_ta_name, \
+            hiresagg_vpd_name = self._insert_aggregates_into_hires(hires_df=hires_df)
 
-        # Calculate TA diel cycles (half-hourly medians) for nCRDs
-        diel_cycles_ncrds_df = self._diel_cycle(df=ncrds_ta_hires_df, agg='median')
+        # Get hires CHD data (critical heat days)
+        chd_hires_df, locs_chd = self._get_hires_chd_data(hires_df=hires_df,
+                                                          hiresagg_ta_name=hiresagg_ta_name,
+                                                          hiresagg_vpd_name=hiresagg_vpd_name)
 
-        # Time as column for merging
-        diel_cycles_ncrds_df['TIME'] = diel_cycles_ncrds_df.index
-        diel_cycles_ncrds_df.index.name = 'INDEX'  # Rename to avoid same name as TIME column, otherwise merging fails
-        df['TIME'] = df.index.time
+        # Get highres nCHD data (near-critical heat days)
+        nchd_hires_df, locs_nchd = self._get_hires_nchd_data(hires_df=hires_df,
+                                                             hiresagg_ta_name=hiresagg_ta_name,
+                                                             hiresagg_vpd_name=hiresagg_vpd_name)
 
-        # Add TA diel cycles from nCRDs to full data, merge on time
-        orig_ix_name = df.index.name
-        df[orig_ix_name] = df.index  # Original index
-        df = df.merge(diel_cycles_ncrds_df, left_on='TIME', right_on='TIME', how='left')
-        df = df.set_index(orig_ix_name)  # Re-apply original index (merging lost index)
+        # Add flag to mark CHD and nCHD data
+        flag_chd_col = 'FLAG_CHD'
+        hires_df[flag_chd_col] = 0
+        hires_df.loc[locs_chd, flag_chd_col] = 1
 
-        # Indices of CRD data
-        crds_ix = (df[aggcol] >= self.thres_crd) \
-                  & (df.index.month >= self.penalty_start_month) \
-                  & (df.index.month <= self.penalty_end_month)
+        flag_nchd_col = 'FLAG_nCHD'
+        hires_df[flag_nchd_col] = 0
+        hires_df.loc[locs_nchd, flag_nchd_col] = 1
 
-        # Remove TA CRD data and replace with TEMPLATE (diel cycles)
-        # TA CRD data will be replaced with nCRD diel cycle median
+        # Calculate TA diel cycles (half-hourly medians) for nCHD
+        diel_cycles_nchds_df = self._diel_cycle(data=nchd_hires_df[self.ta_col], agg='median')
+
+        # Insert time as column for merging diel cycles with hires data
+        diel_cycles_nchds_df['TIME'] = diel_cycles_nchds_df.index
+        diel_cycles_nchds_df.index.name = 'INDEX'  # Rename to avoid same name as TIME column, otherwise merging fails
+        hires_df['TIME'] = hires_df.index.time
+
+        # Add TA diel cycles from nCHDs to hires data, merge on time
+        orig_ix_name = hires_df.index.name
+        hires_df[orig_ix_name] = hires_df.index  # Original index
+        hires_df = hires_df.merge(diel_cycles_nchds_df, left_on='TIME', right_on='TIME', how='left')
+        hires_df = hires_df.set_index(orig_ix_name)  # Re-apply original index (merging lost index)
+
+        # Remove TA CHD data and replace with TEMPLATE (diel cycles)
+        # TA CHD data will be replaced with nCHD diel cycle median
         matching_template_col = f'_TEMPLATE_{self.ta_col}'
-        df[self.ta_col_limited] = df[self.ta_col].copy()  # Copy original data
-        df.loc[crds_ix, self.ta_col_limited] = np.nan  # Remove data on critical days, creates gaps
-        df[self.ta_col_limited].fillna(df[matching_template_col],
-                                       inplace=True)  # Fill gaps with diel cycle nCRD medians
+        hires_df[self.ta_col_limited] = hires_df[self.ta_col].copy()  # Copy original data
+        hires_df.loc[locs_chd, self.ta_col_limited] = np.nan  # Remove data on critical days, creates gaps
+        hires_df[self.ta_col_limited].fillna(hires_df[matching_template_col],
+                                             inplace=True)  # Fill gaps with diel cycle nCHD medians
 
         # Calculate VPD from limited TA and original (measured) RH,
         # also needs gap-filling (using SW_IN, limited TA and timestamp info as features)
-        df[self.vpd_col_limited] = calc_vpd_from_ta_rh(df=df, rh_col=self.rh_col, ta_col=self.ta_col_limited)
-        rf_subset = df[[self.vpd_col_limited, self.swin_col, self.ta_col_limited]].copy()
+        hires_df[self.vpd_col_limited] = calc_vpd_from_ta_rh(df=hires_df, rh_col=self.rh_col,
+                                                             ta_col=self.ta_col_limited)
+        rf_subset = hires_df[[self.vpd_col_limited, self.swin_col, self.ta_col_limited]].copy()
         _gapfilled_df, _gf_results = self._gapfill(df=rf_subset, target_col=self.vpd_col_limited,
-                                                   **self.random_forest_params)
-        df[self.vpd_col_limited_gapfilled] = _gapfilled_df[self.vpd_col_limited_gapfilled].copy()
+                                                   n_bootstrap_runs=100)
+        hires_df[self.vpd_col_limited_gapfilled] = _gapfilled_df[self.vpd_col_limited_gapfilled].copy()
 
-        # Remove SW_IN CRD data
-        # SW_IN CRD data will be replaced with random forest gapfilling
+        # Remove SW_IN CHD data
+        # SW_IN CHD data will be replaced with random forest gapfilling
         # matching_template_col = f'_TEMPLATE_{self.swin_col}'
-        df[self.swin_col_limited] = df[self.swin_col].copy()  # Copy original data
-        df.loc[crds_ix, self.swin_col_limited] = np.nan  # Remove data on critical days, creates gaps
-        rf_subset = df[[self.swin_col_limited, self.ta_col_limited]].copy()
+        hires_df[self.swin_col_limited] = hires_df[self.swin_col].copy()  # Copy original data
+        hires_df.loc[locs_chd, self.swin_col_limited] = np.nan  # Remove data on critical days, creates gaps
+        rf_subset = hires_df[[self.swin_col_limited, self.ta_col_limited]].copy()
         _gapfilled_df, _gf_results = self._gapfill(df=rf_subset, target_col=self.swin_col_limited,
-                                                   lagged_variants=0,
-                                                   **self.random_forest_params)
-        df[self.swin_col_limited_gapfilled] = _gapfilled_df[self.swin_col_limited_gapfilled].copy()
+                                                   lagged_variants=0, n_bootstrap_runs=100)
+        hires_df[self.swin_col_limited_gapfilled] = _gapfilled_df[self.swin_col_limited_gapfilled].copy()
 
         # Remove NEP on critical days
         # Will be gap-filled with random forest
-        df[self.nep_col_limited] = df[self.nep_col].copy()
-        df.loc[crds_ix, self.nep_col_limited] = np.nan
+        hires_df[self.nep_col_limited] = hires_df[self.nep_col].copy()
+        hires_df.loc[locs_chd, self.nep_col_limited] = np.nan
 
-        # Add flag to mark CRD and nCRD data
-        flag_crd_col = 'FLAG_CRD'
-        df[flag_crd_col] = 0
-        df.loc[crds_ix, flag_crd_col] = 1
+        # Plot check
+        hires_df[[self.ta_col, '_TEMPLATE_Tair_f', self.ta_col_limited]].plot(title='Tair_f',
+                                                                              xlim=('2019-06-15', '2019-07-15'),
+                                                                              subplots=True)
+        hires_df[[self.vpd_col, self.vpd_col_limited]].plot(title='VPD_f',
+                                                            xlim=('2019-06-15', '2019-07-15'),
+                                                            subplots=True)
+        hires_df[[self.nep_col, self.nep_col_limited]].plot(title=self.nep_col, xlim=('2019-06-15', '2019-07-15'))
+        plt.show()
 
-        flag_ncrd_col = 'FLAG_nCRD'
-        df[flag_ncrd_col] = 0
-        df.loc[ncrds_ix, flag_ncrd_col] = 1
+        return hires_df
 
-        # # Plot check
-        # import matplotlib.pyplot as plt
-        # df[['Tair_f', '_TEMPLATE_Tair_f', '_LIMITED_Tair_f']].plot(title='Tair_f', xlim=('2019-06-15', '2019-07-15'), subplots=True)
-        # df[['VPD_f', '_TEMPLATE_VPD_f', '_LIMITED_VPD_f']].plot(title='VPD_f', xlim=('2019-06-15', '2019-07-15'), subplots=True)
-        # df[['NEP', '_LIMITED_NEP_f']].plot(title=nep_col, xlim=('2019-06-15', '2019-07-15'))
-        # plt.show()
-
-        return df
-
-    def _diel_cycle(self, df: DataFrame, agg: str or dict) -> DataFrame:
+    def _diel_cycle(self, data: DataFrame or Series, agg: str or dict) -> DataFrame:
         """Calculate diel cycles grouped by time"""
-        diel_cycles_df = DataFrame(df)
+        diel_cycles_df = DataFrame(data)
         diel_cycles_df['TIME'] = diel_cycles_df.index.time
         diel_cycles_df = diel_cycles_df.groupby('TIME').agg(agg)
         diel_cycles_df = diel_cycles_df.add_prefix('_TEMPLATE_')
@@ -308,9 +382,11 @@ class NEPpenalty:
                             fit_n_bootstraps: int = 10,
                             show_year_labels: bool = False,
                             show_title: bool = False,
-                            fit_type: str = 'quadratic',
+                            fit_type: str = 'quadratic_offset',
                             labels_below: list = None,
                             labels_above: list = None,
+                            labels_right: list = None,
+                            labels_left: list = None,
                             labels_shifted: list = None,
                             decorate_labels1: list = None,
                             decorate_labels2: list = None):
@@ -320,19 +396,15 @@ class NEPpenalty:
         if fit_n_bootstraps < 2: fit_n_bootstraps = 2
 
         xlabel_units = "$\mathrm{hours\ yr^{-1}}$"
-        ylabel_penalty = r"$\mathrm{NEP\ penalty}$"
+        ylabel_penalty = r"$\mathrm{CO_{2}\ penalty}$"
         ylabel_units = r"$\mathrm{gCO_{2}\ m^{-2}\ yr^{-1}}$"
 
-        # Count half-hours > CRD threshold
+        # Count half-hours > CHD threshold
         # thr_crd = self.results_crd_threshold_detection['thres_crd']
-        locs_above_thr_crd = df[self.vpd_col] > self.thres_crd
-        df_above_thr_crd = df.loc[locs_above_thr_crd, self.vpd_col].copy()
-        hh_above_thr_crd = df_above_thr_crd.groupby(df_above_thr_crd.index.year).count()
-
-        # # Count half-hours > xCRD threshold
-        # locs_above_thr_xcrd = df[self.vpd_col] > self.thres_xcrd
-        # df_above_thr_xcrd = df.loc[locs_above_thr_xcrd, self.vpd_col].copy()
-        # hh_above_thr_xcrd = df_above_thr_xcrd.groupby(df_above_thr_xcrd.index.year).count()
+        locs_above_thr_chd = (df[self.vpd_col] > self.thres_chd_vpd) & (df[self.ta_col] > self.thres_chd_ta)
+        df_above_thr_chd = df.loc[locs_above_thr_chd].copy()
+        df_above_thr_chd = df_above_thr_chd[[self.ta_col, self.vpd_col]].copy()
+        hh_above_thr_crd = df_above_thr_chd.groupby(df_above_thr_chd.index.year).count()
 
         # Penalty YY results, overview
         penalty_per_year = self.penalty_per_year_df['PENALTY'].copy()
@@ -342,15 +414,10 @@ class NEPpenalty:
 
         # Combine
         penalty_vs_hh_thr = pd.DataFrame(penalty_per_year)
-        penalty_vs_hh_thr['Hours above THR_CRD'] = hh_above_thr_crd.divide(2)
-        # penalty_vs_hh_thr['Hours above THR_xCRD'] = hh_above_thr_xcrd.divide(2)
+        penalty_vs_hh_thr['Hours above THR_CHD'] = hh_above_thr_crd[self.ta_col].divide(2)
         penalty_vs_hh_thr = penalty_vs_hh_thr.fillna(0)
 
-        xcol = 'Hours above THR_CRD'
-        if which_threshold == 'crd':
-            xcol = 'Hours above THR_CRD'
-        # elif which_threshold == 'xcrd':
-        #     xcol = 'Hours above THR_xCRD'
+        xcol = 'Hours above THR_CHD'
 
         # Fit
         if show_fitline:
@@ -454,11 +521,11 @@ class NEPpenalty:
         #         horizontalalignment='right', verticalalignment='center', transform=ax.transAxes, weight='bold')
 
         # Format
-
         default_format(ax=ax,
-                       txt_xlabel=f'Hours above VPD threshold ({xlabel_units})',
-                       txt_ylabel=f'{ylabel_penalty} ({ylabel_units})',
+                       ax_xlabel_txt=f'Critical heat ({xlabel_units})',
+                       ax_ylabel_txt=f'{ylabel_penalty} ({ylabel_units})',
                        showgrid=False)
+        add_zeroline_y(ax=ax, data=bts_fit_results[0]['y'])
 
         # Legend
         default_legend(ax=ax, ncol=1, loc=(.07, .75))
@@ -473,23 +540,17 @@ class NEPpenalty:
             for year in penalty_vs_hh_thr.index:
                 txt_y = penalty_vs_hh_thr['PENALTY'].loc[penalty_vs_hh_thr.index == year].values[0]
                 txt_x = penalty_vs_hh_thr[xcol].loc[penalty_vs_hh_thr.index == year].values[0]
-                xytext = (-14, -18)
+                xytext = (-11, -14)
                 arrowprops = None
 
                 if year in labels_below:
                     pass
                 elif year in labels_above:
-                    xytext = (-14, 10)
-                elif year in labels_shifted:
-                    if year == 2018:
-                        xytext = (-14, -40)
-                    elif year == 2020:
-                        xytext = (-60, -5)
-                    elif year == 2006:
-                        xytext = (20, -15)
-                    elif year == 2015:
-                        xytext = (-20, -40)
-                    arrowprops = dict(facecolor='black', arrowstyle='-')
+                    xytext = (-11, 5)
+                elif year in labels_right:
+                    xytext = (5, -4)
+                elif year in labels_left:
+                    xytext = (-28, -4)
                 else:
                     xytext = None
 
@@ -503,7 +564,7 @@ class NEPpenalty:
                     text_in_ax = \
                         ax.annotate(f'{year}{decoration}', (txt_x, txt_y),
                                     xytext=xytext, xycoords='data',
-                                    color='black', weight='normal', fontsize=10,
+                                    color='black', weight='normal', fontsize=9,
                                     textcoords='offset points', zorder=100,
                                     arrowprops=arrowprops)
 
@@ -515,13 +576,13 @@ class NEPpenalty:
                          showtitle: bool = True):
 
         gapfilled_col = f'_LIMITED_{self.nep_col}_gfRF'
-        label_penalty = r"$\mathrm{NEP\ penalty}$"
+        label_penalty = r"$\mathrm{CO_{2}\ penalty}$"
         label_units_cumulative = r"$\mathrm{gCO_{2}\ m^{-2}}$"
 
         penalty_perc = None
         if year:
             df = self.penalty_hires_df.loc[self.penalty_hires_df.index.year == year]
-            num_crds = int(self.penalty_per_year_df.loc[self.penalty_per_year_df.index == year]['num_CRDs'])
+            num_crds = int(self.penalty_per_year_df.loc[self.penalty_per_year_df.index == year]['num_CHDs'])
             obs = float(self.penalty_per_year_df.loc[self.penalty_per_year_df.index == year][self.nep_col])
             pot = float(self.penalty_per_year_df.loc[self.penalty_per_year_df.index == year][gapfilled_col])
             penalty = float(self.penalty_per_year_df.loc[self.penalty_per_year_df.index == year]['PENALTY'])
@@ -556,7 +617,7 @@ class NEPpenalty:
 
         else:
             df = self.penalty_hires_df
-            num_crds = int(self.penalty_per_year_df['num_CRDs'].sum())
+            num_crds = int(self.penalty_per_year_df['num_CHDs'].sum())
             obs = float(self.penalty_per_year_df[self.nep_col].sum())
             pot = float(self.penalty_per_year_df[gapfilled_col].sum())
             penalty = float(self.penalty_per_year_df['PENALTY'].sum())
@@ -603,7 +664,7 @@ class NEPpenalty:
             ax.fill_between(cumulative_model.index, cumulative_model, cumulative_orig,
                             alpha=.7, lw=0, color='#ef9a9a', edgecolor='white',
                             zorder=1, hatch='//', label=label_penalty)
-            txt = f"critical days: {num_crds}\n" \
+            txt = f"critical heat days: {num_crds}\n" \
                   f"NEP reduction: {penalty_perc:.0f}%\n" \
                   f"{label_penalty}: {np.abs(penalty):.0f} {label_units_cumulative}\n"
             # r"$\bf{" + str(number) + "}$"
@@ -624,8 +685,8 @@ class NEPpenalty:
 
         # Format
         default_format(ax=ax,
-                       txt_xlabel='Date',
-                       txt_ylabel=f"Cumulative NEP ({label_units_cumulative})",
+                       ax_xlabel_txt='Date',
+                       ax_ylabel_txt=f"Cumulative NEP ({label_units_cumulative})",
                        showgrid=False)
 
         # Legend
@@ -661,7 +722,7 @@ class NEPpenalty:
 
         df = self.penalty_hires_df.copy()
 
-        subset = df.loc[df['FLAG_CRD'] == 1, :].copy()
+        subset = df.loc[df['FLAG_CHD'] == 1, :].copy()
         subset = subset.groupby(subset.index.time).mean()
         subset.index = pd.to_datetime(subset.index, format='%H:%M:%S')
 
@@ -731,11 +792,11 @@ class NEPpenalty:
         default_legend(ax=ax_vpd, loc='upper left')
         default_legend(ax=ax_swin, loc='upper left')
 
-        props = dict(axlabels_fontsize=16)
-        default_format(ax=ax_nep, txt_ylabel='NEP', txt_ylabel_units=f"({label_units})", **props)
-        default_format(ax=ax_ta, txt_ylabel='TA', txt_ylabel_units="(°C)", txt_xlabel='Time (hour)', **props)
-        default_format(ax=ax_vpd, txt_ylabel="VPD", txt_ylabel_units="(kPa)", **props)
-        default_format(ax=ax_swin, txt_ylabel="SW_IN", txt_ylabel_units="(W m-2)", **props)
+        props = dict(ax_labels_fontsize=16)
+        default_format(ax=ax_nep, ax_ylabel_txt='NEP', txt_ylabel_units=f"({label_units})", **props)
+        default_format(ax=ax_ta, ax_ylabel_txt='TA', txt_ylabel_units="(°C)", ax_xlabel_txt='Time (hour)', **props)
+        default_format(ax=ax_vpd, ax_ylabel_txt="VPD", txt_ylabel_units="(kPa)", **props)
+        default_format(ax=ax_swin, ax_ylabel_txt="SW_IN", txt_ylabel_units="(W m-2)", **props)
 
         nice_date_ticks(ax=ax_nep, locator='hour')
         nice_date_ticks(ax=ax_ta, locator='hour')

@@ -35,6 +35,8 @@ class ManualRemoval(FlagBase):
         Calculate flag
 
         Args:
+            verbose: more text output to console if *True*
+            showplot:
             remove_dates: list, can be given as a mix of strings and lists that
                 contain the date(times) of records that should be removed
                 Example:

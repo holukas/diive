@@ -43,11 +43,12 @@ Non-mandatory meteo:
 - SWC (%): soil water content (volumetric), range 0–100%
 
 """
-import os
 import re
 from pathlib import Path
 
-from diive.core.io.filereader import MultiDataFileReader
+from pandas import DataFrame
+
+from diive.core.io.files import loadfiles
 from diive.core.times.times import current_date_str_condensed
 from diive.core.times.times import insert_timestamp
 
@@ -60,7 +61,7 @@ VARS_METEO = ['SW_IN_1_1_1', 'TA_1_1_1', 'RH_1_1_1', 'PA_1_1_1', 'LW_IN_1_1_1', 
 VARIABLES = VARS_CO2 + VARS_H2O + VARS_H + VARS_WIND + VARS_METEO
 
 
-class ConvertEddyProFluxnetFileForUpload:
+class FormatEddyProFluxnetFileForUpload:
     """
     Helper class to convert EddyPro _fluxnet_ output files to the file
     format required for data upload (data sharing) to FLUXNET
@@ -96,102 +97,99 @@ class ConvertEddyProFluxnetFileForUpload:
 
     def run(self):
         """Convert files to FLUXNET format"""
-        # todo separate functions from class
-        self._load_sourcefiles()
-        self._make_subset()
-        self._missing_values()
-        self._rename()
-        self._insert_timestamp_columns()
-        self._adjust_timestamp_formats()
-        self._save_one_file_per_year()
+        self.data_df = loadfiles(filetype='EDDYPRO_FLUXNET_30MIN',
+                                 sourcedir=self.sourcedir,
+                                 limit_n_files=self.limit_n_files,
+                                 fileext='.csv',
+                                 idstr='_fluxnet_')
+        self.subset = self._make_subset(df=self.data_df)
+        self.subset = self._missing_values(df=self.subset)
+        self.subset = self._rename_with_suffix(df=self.subset)
+        self.subset = self._insert_timestamp_columns(df=self.subset)
+        self.subset = self._adjust_timestamp_formats(df=self.subset)
+        self._save_one_file_per_year(df=self.subset)
 
     def get_data(self):
         return self.subset
 
-    def _load_sourcefiles(self):
-        """Search for data files, merge data and store to one dataframe"""
-        print(f"Searching for EddyPro _fluxnet_ files in folder {self.sourcedir} ...")
-        filepaths = [f for f in os.listdir(self.sourcedir) if f.endswith(".csv")]
-        # filepaths = [f for f in filepaths if '_eddypro_' in f]
-        filepaths = [f for f in filepaths if '_fluxnet_' in f]
-        filepaths = [self.sourcedir + "/" + f for f in filepaths]
-        filepaths = [Path(f) for f in filepaths]
-        print(f"    Found {len(filepaths)} files:")
-        [print(f"       --> {f}") for f in filepaths]
-        if self.limit_n_files:
-            filepaths = filepaths[0:self.limit_n_files]
-        loaddatafile = MultiDataFileReader(filetype='EDDYPRO_FLUXNET_30MIN', filepaths=filepaths)
-        self.data_df = loaddatafile.data_df
-
-    def _save_one_file_per_year(self):
+    def _save_one_file_per_year(self, df: DataFrame):
         """Save data to yearly files"""
-        uniq_years = list(self.subset.index.year.unique())
+        uniq_years = list(df.index.year.unique())
         runid = f"_{current_date_str_condensed()}" if self.add_runid else ""
         for year in uniq_years:
             outname = f"{self.site}_{year}_fluxes_meteo{runid}.csv"
             outpath = Path(self.outdir) / outname
-            yearlocs = self.subset.index.year == year
-            yeardata = self.subset[yearlocs].copy()
+            yearlocs = df.index.year == year
+            yeardata = df[yearlocs].copy()
             yeardata.to_csv(outpath, index=False)
             print(f"\n--> Saved file {outpath}.")
 
-    def _missing_values(self):
+    @staticmethod
+    def _missing_values(df: DataFrame):
         """Set all missing values to -9999 as required by FLUXNET"""
-        self.subset = self.subset.fillna(-9999)
+        return df.fillna(-9999)
 
-    def _adjust_timestamp_formats(self):
+    @staticmethod
+    def _adjust_timestamp_formats(df: DataFrame):
         """Apply FLUXNET timestamp format (YYYYMMDDhhmm) to timestamp columns (not index)"""
-        self.subset['TIMESTAMP_END'] = self.subset['TIMESTAMP_END'].dt.strftime('%Y%m%d%H%M')
-        self.subset['TIMESTAMP_START'] = self.subset['TIMESTAMP_START'].dt.strftime('%Y%m%d%H%M')
+        df['TIMESTAMP_END'] = df['TIMESTAMP_END'].dt.strftime('%Y%m%d%H%M')
+        df['TIMESTAMP_START'] = df['TIMESTAMP_START'].dt.strftime('%Y%m%d%H%M')
+        return df
 
-    def _insert_timestamp_columns(self):
+    @staticmethod
+    def _insert_timestamp_columns(df: DataFrame):
         """Insert timestamp columns denoting start and end of averaging interval"""
         # Add timestamp column TIMESTAMP_END
-        self.subset = insert_timestamp(data=self.subset, convention='end', insert_as_first_col=True, verbose=True)
+        df = insert_timestamp(data=df, convention='end', insert_as_first_col=True, verbose=True)
         # Add timestamp column TIMESTAMP_START
-        self.subset = insert_timestamp(data=self.subset, convention='start', insert_as_first_col=True, verbose=True)
+        df = insert_timestamp(data=df, convention='start', insert_as_first_col=True, verbose=True)
+        return df
 
-    def _rename(self):
+    @staticmethod
+    def _rename_with_suffix(df: DataFrame):
         """Rename variables to FLUXNET format by adding suffix _1_1_1"""
         renaming_dict = {}
         notrenamed = []
-        for var in self.subset.columns:
+        for var in df.columns:
             # Check whether the variable name ends with a FLUXNET suffix
             has_suffix = re.match('.*_[0-9]_[0-9]_[0-9]$', var)
             if not has_suffix:
                 renaming_dict[var] = f"{var}_1_1_1"
             else:
                 notrenamed.append(var)
-        self.subset = self.subset.rename(columns=renaming_dict)
+        df = df.rename(columns=renaming_dict)
         print(f"\nThe following variables have been renamed:")
         for ix, val in renaming_dict.items():
             print(f"    RENAMED --> {ix} was renamed to {val}")
         print(f"\nThe following variables have not been renamed:")
         for var in notrenamed:
             print(f"    NOT RENAMED --> {var} was not renamed")
+        return df
 
-    def _make_subset(self):
+    @staticmethod
+    def _make_subset(df: DataFrame) -> DataFrame:
         """Make subset that contains variables available for sharing"""
-        available_vars = self.data_df.columns
+        available_vars = df.columns
         subsetcols = []
         notavailablecols = []
         for var in VARIABLES:
             subsetcols.append(var) if var in available_vars else notavailablecols.append(var)
         print(f"Found: {subsetcols}")
         print(f"Not found: {notavailablecols}")
-        self.subset = self.data_df[subsetcols].copy()
+        subset = df[subsetcols].copy()
+        return subset
 
 
 def example():
     # from diive.configs.exampledata import load_exampledata_eddypro_fluxnet_CSV_30MIN
     # data_df, metadata_df = load_exampledata_eddypro_fluxnet_CSV_30MIN()
-    SOURCE = r"F:\Sync\luhk_work\_current\Level-1_results_for_FLUXNET_upload\0-eddypro_fluxnet_files"
-    OUTDIR = r"F:\Sync\luhk_work\_current\Level-1_results_for_FLUXNET_upload\1-formatted_for_upload"
-    con = ConvertEddyProFluxnetFileForUpload(
+    SOURCE = r"L:\Sync\luhk_work\_current\fru\Level-1_results_fluxnet\0-eddypro_fluxnet_files"
+    OUTDIR = r"L:\Sync\luhk_work\_current\fru\Level-1_results_fluxnet\1-formatted_for_upload"
+    con = FormatEddyProFluxnetFileForUpload(
         site='CH-FRU',
         sourcedir=SOURCE,
         outdir=OUTDIR,
-        limit_n_files=1,
+        limit_n_files=None,
         add_runid=True)
     con.run()
     # data_fluxnet = con.get_data()

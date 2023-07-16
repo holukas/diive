@@ -73,8 +73,8 @@ class Scatter:
         # pf.add_zeroline_y(ax=self.ax, data=self.series)
 
         pf.default_format(ax=self.ax,
-                          txt_xlabel=self.xname,
-                          txt_ylabel=self.yname,
+                          ax_xlabel_txt=self.xname,
+                          ax_ylabel_txt=self.yname,
                           # txt_ylabel_units=self.yunits,
                           txt_ylabel_units=self.yunits)
 

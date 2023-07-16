@@ -94,10 +94,10 @@ class SortingBinsMethod:
                     mec='grey', alpha=.9, **kwargs)
         n_vals = int(self.df.groupby('var1_group').count().mean()[self.var1_col])
         ax.text(0.98, 0.98, f'{n_vals} values per {self.var1_col} class',
-                size=theme.AXLABELS_FONTSIZE, color='k', backgroundcolor='none', transform=ax.transAxes,
+                size=theme.AX_LABELS_FONTSIZE, color='k', backgroundcolor='none', transform=ax.transAxes,
                 alpha=1, horizontalalignment='right', verticalalignment='top')
-        default_format(ax=ax, txt_xlabel=f"{self.var2_col} class", txt_ylabel=self.var3_col)
-        default_legend(ax=ax)
+        default_format(ax=ax, ax_xlabel_txt=f"{self.var2_col} class", ax_ylabel_txt=self.var3_col)
+        # default_legend(ax=ax, ncol=5)  # todo auto ncol
         return ax
 
 
@@ -109,19 +109,22 @@ def example():
     gpp_col = 'GPP_DT_CUT_REF'
     reco_col = 'Reco_DT_CUT_REF'
     rh_col = 'RH'
+    swin_col = 'Rg_f'
 
     # Load data, using pickle for fast loading
-    source_file = r"F:\Dropbox\luhk_work\20 - CODING\21 - DIIVE\diive\__manuscripts\co2penalty_dav\data\CH-DAV_FP2022.3_1997-2022.09_ID20221028163633_30MIN.diive.csv.pickle"
+    source_file = r"L:\Sync\luhk_work\20 - CODING\21 - DIIVE\diive\__manuscripts\11.01_NEP-Penalty_CH-DAV_1997-2022.09 (2023)\data\CH-DAV_FP2022.5_1997-2022_ID20230206154316_30MIN.diive.csv.pickle"
     df_orig = load_pickle(filepath=source_file)
-    df_orig = df_orig.loc[df_orig.index.year >= 2020].copy()
+    # df_orig = df_orig.loc[df_orig.index.year >= 2019].copy()
     df_orig = df_orig.loc[(df_orig.index.month >= 5) & (df_orig.index.month <= 9)].copy()
-    df = df_orig[[nee_col, vpd_col, ta_col, gpp_col, reco_col]].copy()
+    df = df_orig[[nee_col, vpd_col, ta_col, gpp_col, reco_col, swin_col]].copy()
+    daytime_locs = (df[swin_col] > 50) & (df[ta_col] > 15)
+    df = df[daytime_locs].copy()
 
     sbm = SortingBinsMethod(df=df,
                             var1_col=ta_col,
                             var2_col=vpd_col,
-                            var3_col=gpp_col,
-                            n_bins_var1=10,
+                            var3_col=nee_col,
+                            n_bins_var1=20,
                             n_subbins_var2=5)
     sbm.calcbins()
     sbm.showplot_decoupling_sbm(marker='o')

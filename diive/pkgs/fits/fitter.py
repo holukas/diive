@@ -32,121 +32,6 @@ from diive.core.plotting.plotfuncs import save_fig, default_format, add_zeroline
 from diive.core.plotting.styles.LightTheme import FONTSIZE_LEGEND
 
 
-def groupagg(df, num_bins, bin_col) -> DataFrame:
-    # Divide into groups of x
-
-    # # Alternative: using .cut
-    # group, bins = pd.cut(df[bin_col],
-    #                       bins=num_bins,
-    #                       retbins=True,
-    #                       duplicates='raise')  # How awesome!
-
-    # Alternative: using .qcut
-    group, bins = pd.qcut(df[bin_col],
-                          q=num_bins,
-                          retbins=True,
-                          duplicates='drop')  # How awesome!
-
-    df['group'] = group
-
-    df.sort_index(axis=1, inplace=True)  # lexsort for better performance
-
-    # Calc stats for each group
-    grouped_df = \
-        df.groupby('group').agg(
-            {'mean', 'median', 'max', 'min', 'count', 'std', q25, q75})
-
-    # print(numvals_in_group)
-
-    # Bins info
-    grouped_df['BIN_START'] = bins[0:-1]
-
-    return grouped_df
-
-
-class BinFitterBTS:
-    """Use bootstrapped data in multiple BinFitter runs"""
-
-    def __init__(self,
-                 df: DataFrame,
-                 n_bootstraps: int = 10,
-                 **params):
-        self.df = df.copy()
-        self.n_bootstraps = n_bootstraps
-        self.params = params
-
-        self._fit_results = {}
-        self._bts_fit_results = {}
-
-    @property
-    def fit_results(self) -> dict:
-        """Return fit results"""
-        if self._fit_results is None:
-            raise Exception('No fit results available.')
-        return self._fit_results
-
-    @property
-    def bts_fit_results(self) -> dict:
-        """Return bootstrapped fit results"""
-        if not self._bts_fit_results:
-            raise Exception('No fit results available.')
-        return self._bts_fit_results
-
-    def fit(self):
-
-        # Non-bootstrapped fit results
-        bf = BinFitter(df=self.df, **self.params)
-        bf.fit()
-        self._fit_results = bf.fit_results
-
-        n_bts_successful = 0  # Number of succesful bootstrapping runs
-
-        while n_bts_successful < self.n_bootstraps:
-            try:
-                bts_df = self.df.sample(n=int(len(self.df)), replace=True, random_state=None)  # Bootstrap data
-                bts_df = bts_df.sort_index()
-                bf = BinFitter(df=bts_df, **self.params)
-                bf.fit()
-                self._bts_fit_results[n_bts_successful] = bf.fit_results  # Store bootstrapped results in dict
-                print(f"Bootstrapping run {n_bts_successful} for fit line successful ... ")
-                n_bts_successful += 1
-            except:
-                print(f"Bootstrapping for fit line failed, repeating run {n_bts_successful} ... ")
-                pass
-
-        self._collect_predband_quantiles()
-
-    def _collect_predband_quantiles(self):
-        # Collect bootstrapping results
-        _fit_x_predbands = pd.DataFrame()
-        _upper_predbands = pd.DataFrame()
-        _lower_predbands = pd.DataFrame()
-        for bts_run in range(0, self.n_bootstraps):
-            _fit_x_predbands[bts_run] = self.bts_fit_results[bts_run]['fit_df']['fit_x'].copy()
-            _upper_predbands[bts_run] = self.bts_fit_results[bts_run]['fit_df']['upper_predband'].copy()
-            _lower_predbands[bts_run] = self.bts_fit_results[bts_run]['fit_df']['lower_predband'].copy()
-        self._fit_results['fit_df']['bts_predband_fit_x'] = _fit_x_predbands.mean(
-            axis=1)  # Output is the same for all bootstraps
-        self._fit_results['fit_df']['bts_upper_predband_Q97.5'] = _upper_predbands.quantile(q=.975, axis=1)
-        self._fit_results['fit_df']['bts_upper_predband_Q02.5'] = _upper_predbands.quantile(q=.025, axis=1)
-        self._fit_results['fit_df']['bts_lower_predband_Q97.5'] = _lower_predbands.quantile(q=.975, axis=1)
-        self._fit_results['fit_df']['bts_lower_predband_Q02.5'] = _lower_predbands.quantile(q=.025, axis=1)
-
-    def showplot_binfitter(self,
-                           saveplot: bool = False,
-                           title: str = None,
-                           path: Path or str = None,
-                           **kwargs):
-        fig = plt.figure(figsize=(9, 9))
-        gs = gridspec.GridSpec(1, 1)  # rows, cols
-        # gs.update(wspace=.2, hspace=1, left=.1, right=.9, top=.85, bottom=.1)
-        ax = fig.add_subplot(gs[0, 0])
-        PlotBinFitterBTS(ax=ax, fit_results=self.fit_results, **kwargs).plot_binfitter()  # todo
-        fig.tight_layout()
-        fig.show()
-        if saveplot:
-            save_fig(fig=fig, title=title, path=path)
-
 
 class PlotBinFitterBTS:
 
@@ -334,7 +219,7 @@ class PlotBinFitterBTS:
         return line_fit
 
 
-class BinFitter:
+class QuadraticFit:
     """Fit function to (binned) data and give CI and bootstrapped PI"""
 
     def __init__(self,
@@ -344,25 +229,19 @@ class BinFitter:
                  predict_max_x: float = None,
                  predict_min_x: float = None,
                  n_predictions: int = None,
-                 n_bins_x: int = 0,
-                 bins_y_agg: str = None,
-                 fit_type: Literal['linear', 'quadratic'] = 'quadratic'
                  ):
         self.df = df[[xcol, ycol]].copy().dropna()  # Remove NaNs, working data
-        self.x_col = xcol
-        self.y_col = ycol
-        self.x = self.df[self.x_col]
-        self.y = self.df[self.y_col]
-        self.bins_y_agg = bins_y_agg
+        self.xcol = xcol
+        self.ycol = ycol
+        self.x = self.df[self.xcol].copy()
+        self.y = self.df[self.ycol].copy()
         self.n_predictions = n_predictions
-        self.usebins = n_bins_x if n_bins_x >= 0 else 0  # Must be positive
         self.fit_x_max = predict_max_x if isinstance(predict_max_x, float) else self.x.max()
         self.fit_x_min = predict_min_x if isinstance(predict_min_x, float) else self.x.min()
         self.n_predictions = n_predictions if isinstance(n_predictions, int) else len(self.x)
         self.n_predictions = 2 if self.n_predictions < 2 else self.n_predictions
 
-        self.equation = self._set_fit_equation(type=fit_type)
-        self.fit_type = fit_type
+        self.equation = self._fit_quadratic
 
         self._fit_results = {}  # Stores fit results
 
@@ -377,9 +256,6 @@ class BinFitter:
 
     def get_results(self):
         return self._fit_results
-
-    def _bin_data(self, df, num_bins: int = 10) -> pd.DataFrame:
-        return groupagg(df=df, num_bins=num_bins, bin_col=self.x_col)
 
     def _predband(self, px, x, y, params_opt, func, conf=0.95):
         """Prediction band"""
@@ -396,45 +272,17 @@ class BinFitter:
         lpb, upb = yp - dy, yp + dy  # Upper & lower prediction bands.
         return lpb, upb
 
-    def _set_fit_equation(self, type: str = 'quadratic'):
-        if type == 'quadratic':
-            equation = self._fit_quadratic
-        elif type == 'linear':
-            equation = self._fit_linear
-        else:
-            equation = self._fit_quadratic
-        return equation
-
-    def _fit_linear(self, x, a, b):
-        """Linear fit"""
-        return a * x + b
-
-    def _fit_quadratic(self, x, a, b, c):
+    @staticmethod
+    def _fit_quadratic(x, a, b, c):
         """Quadratic equation"""
         return a * x ** 2 + b * x + c
 
-    # def _func(self, x, a, b, c):
-    #     """Fitting function"""
-    #     return a * x ** 2 + b * x + c
-
     def _set_fit_data(self, df):
         # Bin data
-        numvals_per_bin = {}
-        if self.usebins == 0:
-            _df = df.copy()
-            x = self.x
-            y = self.y
-            len_y = len(y)
-            numvals_per_bin['min'] = len_y
-            numvals_per_bin['max'] = len_y
-        else:
-            _df = self._bin_data(df=df, num_bins=self.usebins)
-            x = _df['BIN_START']
-            y = _df[self.y_col][self.bins_y_agg]
-            len_y = len(self.y)
-            numvals_per_bin = \
-                _df[self.y_col]['count'].describe()[['min', 'max']].to_dict()
-        return _df, x, y, len_y, numvals_per_bin
+        _df = df.copy()
+        x = self.x
+        y = self.y
+        return _df, x, y
 
     def _fit(self, df):
         """Calculate curve fit, confidence intervals and prediction bands
@@ -442,7 +290,7 @@ class BinFitter:
         kudos: https://apmonitor.com/che263/index.php/Main/PythonRegressionStatistics
         """
 
-        df, x, y, len_y, numvals_per_bin = self._set_fit_data(df=df)
+        df, x, y = self._set_fit_data(df=df)
 
         # Fit function f to data
         fit_params_opt, fit_params_cov = curve_fit(self.equation, x, y)
@@ -450,35 +298,25 @@ class BinFitter:
         # Retrieve parameter values
         a = fit_params_opt[0]
         b = fit_params_opt[1]
-        c = fit_params_opt[2] if self.fit_type == 'quadratic' else None
+        c = fit_params_opt[2]
 
         # Calc r2
-        kwargs = None
-        if self.fit_type == 'quadratic':
-            kwargs = dict(x=x, a=a, b=b, c=c)
-        elif self.fit_type == 'linear':
-            kwargs = dict(x=x, a=a, b=b)
+
+        kwargs = dict(x=x, a=a, b=b, c=c)
+        len_y = len(y)
         fit_r2 = 1.0 - (sum((y - self.equation(**kwargs)) ** 2) / ((len_y - 1.0) * np.var(y, ddof=1)))
 
         # Calculate parameter confidence interval
         c = None
-        if self.fit_type == 'quadratic':
-            a, b, c = unc.correlated_values(fit_params_opt, fit_params_cov)
-        elif self.fit_type == 'linear':
-            a, b = unc.correlated_values(fit_params_opt, fit_params_cov)
+        a, b, c = unc.correlated_values(fit_params_opt, fit_params_cov)
 
         # Calculate regression confidence interval
         fit_x = np.linspace(self.fit_x_min, self.fit_x_max, self.n_predictions)
 
-        if self.fit_type == 'quadratic':
-            fit_y = a * fit_x ** 2 + b * fit_x + c
-        elif self.fit_type == 'linear':
-            fit_y = a * fit_x + b
+        fit_y = a * fit_x ** 2 + b * fit_x + c
 
         nom = unp.nominal_values(fit_y)
         std = unp.std_devs(fit_y)
-
-        # sample_df = self.df.sample(n=int(len(self.df)), replace=True)
 
         # Best lower and upper prediction bands
         lower_predband, upper_predband = \
@@ -507,10 +345,9 @@ class BinFitter:
                            fit_r2=fit_r2,
                            x=x,
                            y=y,
-                           xvar=self.x_col,
-                           yvar=self.y_col,
-                           fit_equation=self.equation,
-                           numvals_per_bin=numvals_per_bin)
+                           xvar=self.xcol,
+                           yvar=self.ycol,
+                           fit_equation=self.equation)
 
         return fit_results
 

@@ -41,13 +41,13 @@ class LongtermAnomaliesYear:
                                  f"{ref_n_years} years)\n"
                                  f"last 10 years mean: {last10_mean:.2f}±{last10_std:.2f}sd "
                                  f"({last10.index[0]}-{last10.index[-1]})",
-                     size=theme.AXLABELS_FONTSIZE, color='black', backgroundcolor='none', transform=self.ax.transAxes,
+                     size=theme.AX_LABELS_FONTSIZE, color='black', backgroundcolor='none', transform=self.ax.transAxes,
                      alpha=0.8, horizontalalignment='right', verticalalignment='bottom')
         nbins = 50 if len(self.series) > 50 else len(self.series)
         self.ax.locator_params(axis='x', nbins=nbins)
         pf.default_format(ax=self.ax,
-                          txt_xlabel='Year',
-                          txt_ylabel=self.series.name,
+                          ax_xlabel_txt='Year',
+                          ax_ylabel_txt=self.series.name,
                           txt_ylabel_units=self.series_units,
                           showgrid=False)
         self.ax.axhline(0, lw=1, color='black')

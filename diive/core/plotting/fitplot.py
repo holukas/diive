@@ -8,10 +8,10 @@ def fitplot(
         edgecolor: str = 'none',
         marker: str = 'o',
         alpha: float = 1,
-        showfit:bool=True,
-        show_prediction_interval:bool=True,
-        size_scatter:int=60,
-        fit_type:str='quadratic'
+        showfit: bool = True,
+        show_prediction_interval: bool = True,
+        size_scatter: int = 60,
+        fit_type: str = 'quadratic_offset'
 ):
     # x/y
     _numvals_y = len(flux_bts_results['y'])
@@ -59,10 +59,12 @@ def fitplot(
 
         if fit_type == 'linear':
             label_fit = rf"$y = {a:.4f}x{operator1}{b:.4f}, r^2={r2:.2f}$"
-        elif fit_type == 'quadratic':
+        elif fit_type == 'quadratic_offset':
             c = flux_bts_results['fit_params_opt'][2]
             operator2 = "+" if c > 0 else ""
             label_fit = rf"$y = {a:.4f}x^2{operator1}{b:.4f}x{operator2}{c:.4f}, r^2={r2:.2f}$"
+        elif fit_type == 'quadratic':
+            label_fit = rf"$y = {a:.4f}x^2{operator1}{b:.4f}x, r^2={r2:.2f}$"
 
         line_fit, = ax.plot(flux_bts_results['fit_df']['fit_x'],
                             flux_bts_results['fit_df']['nom'],

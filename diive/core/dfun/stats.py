@@ -1,6 +1,6 @@
 # import diive.pkgs.dfun
 # from stats.boxes import insert_statsboxes_txt
-
+from pandas import Series, DataFrame
 import pandas as pd
 
 
@@ -15,14 +15,18 @@ def q50(x):
 def q25(x):
     return x.quantile(0.25)
 
+
 def q99(x):
     return x.quantile(0.99)
+
 
 def q01(x):
     return x.quantile(0.01)
 
+
 def q05(x):
     return x.quantile(0.05)
+
 
 def q95(x):
     return x.quantile(0.95)
@@ -63,36 +67,47 @@ def series_sd_over_mean(series: pd.Series):
     return series.std() / series.mean()
 
 
-class CalcTimeSeriesStats():
-    """Calc stats for time series and store results in stats_df"""
+def sstats(s: Series) -> DataFrame:
+    """
+    Calculate stats for time series and store results in dataframe
 
-    def __init__(self, series):
-        self.series = series
+    - Example notebook available in:
+        notebooks/Stats/TimeSeriesStats.ipynb
 
-        self.stats_df = pd.DataFrame()
+    """
+    col = s.name
+    df = pd.DataFrame(columns=[col])
+    df.loc['STARTDATE', col] = series_start(s)
+    df.loc['ENDDATE', col] = series_end(s)
+    df.loc['PERIOD', col] = series_duration(s)
+    df.loc['NOV', col] = series_numvals(s)
+    df.loc['MISSING', col] = series_numvals_missing(s)
+    df.loc['MISSING_PERC', col] = series_perc_missing(s)
+    df.loc['MEAN', col] = s.mean()
+    df.loc['SD', col] = s.std()
+    df.loc['VAR', col] = s.var()
+    df.loc['SD/MEAN'] = series_sd_over_mean(s)
+    df.loc['MAD', col] = s.mad()
+    # df.loc['CUMSUM_MIN', col] = s.cummin().iloc[-1]
+    # df.loc['CUMSUM_MAX', col] = s.cummax().iloc[-1]
+    df.loc['SUM', col] = s.sum()
+    df.loc['MEDIAN', col] = s.quantile(q=0.50)
+    df.loc['MIN', col] = s.min()
+    df.loc['MAX', col] = s.max()
+    df.loc['P05', col] = s.quantile(q=0.05)
+    df.loc['P25', col] = s.quantile(q=0.25)
+    df.loc['P75', col] = s.quantile(q=0.75)
+    df.loc['P95', col] = s.quantile(q=0.95)
+    return df
 
-        self._calc()
 
-    def get(self):
-        return self.stats_df
+def example():
+    from diive.configs.exampledata import load_exampledata_pickle
+    df = load_exampledata_pickle()
+    series = df['NEE_CUT_REF_orig'].copy()
+    stats = sstats(series)
+    print(stats)
 
-    def _calc(self):
-        self.stats_df.loc[0, 'startdate'] = series_start(self.series)
-        self.stats_df.loc[0, 'enddate'] = series_end(self.series)
-        self.stats_df.loc[0, 'period'] = series_duration(self.series)
-        self.stats_df.loc[0, 'nov'] = series_numvals(self.series)
-        self.stats_df.loc[0, 'dtype'] = self.series.dtypes
-        self.stats_df.loc[0, 'missing'] = series_numvals_missing(self.series)
-        self.stats_df.loc[0, 'missing_perc'] = series_perc_missing(self.series)
-        self.stats_df.loc[0, 'mean'] = self.series.mean()
-        self.stats_df.loc[0, 'sd'] = self.series.std()
-        self.stats_df.loc[0, 'sd/mean'] = series_sd_over_mean(self.series)
-        self.stats_df.loc[0, 'median'] = self.series.quantile(q=0.50)
-        self.stats_df.loc[0, 'max'] = self.series.max()
-        self.stats_df.loc[0, 'min'] = self.series.min()
-        self.stats_df.loc[0, 'mad'] = self.series.mad()
-        self.stats_df.loc[0, 'cumsum'] = self.series.cumsum().iloc[-1]
-        self.stats_df.loc[0, 'p95'] = self.series.quantile(q=0.95)
-        self.stats_df.loc[0, 'p75'] = self.series.quantile(q=0.75)
-        self.stats_df.loc[0, 'p25'] = self.series.quantile(q=0.25)
-        self.stats_df.loc[0, 'p05'] = self.series.quantile(q=0.05)
+
+if __name__ == '__main__':
+    example()

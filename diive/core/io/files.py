@@ -1,7 +1,12 @@
+import os
 import pickle
 import time
 import zipfile as zf
 from pathlib import Path
+
+from pandas import DataFrame
+
+from diive.core.io.filereader import MultiDataFileReader
 
 
 def save_as_pickle(outpath: str or None, filename: str, data) -> str:
@@ -50,3 +55,20 @@ def unzip_file(filepath):
     filename_unzipped = Path(filename_unzipped).with_suffix(ext)  # replace .amp with .csv
     filepath = dir_temp_unzipped / filename_unzipped
     return filepath, dir_temp_unzipped
+
+
+def loadfiles(sourcedir: str, fileext: str, filetype: str,
+              idstr: str, limit_n_files: int = None) -> DataFrame:
+    """Search and load data files of type *filetype*, merge data and store to one dataframe"""
+    print(f"Searching for {filetype} files with extension {fileext} and"
+          f"ID {idstr} in folder {sourcedir} ...")
+    filepaths = [f for f in os.listdir(sourcedir) if f.endswith(fileext)]
+    filepaths = [f for f in filepaths if idstr in f]
+    filepaths = [sourcedir + "/" + f for f in filepaths]
+    filepaths = [Path(f) for f in filepaths]
+    print(f"    Found {len(filepaths)} files:")
+    [print(f"       --> {f}") for f in filepaths]
+    if limit_n_files:
+        filepaths = filepaths[0:limit_n_files]
+    mergedfiledata = MultiDataFileReader(filetype=filetype, filepaths=filepaths)
+    return mergedfiledata.data_df

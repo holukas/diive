@@ -747,16 +747,16 @@ def plot_daytime_analysis(ax,
     xlabel = "Daily maximum VPD ($hPa$)"
     ylabel = r"GPP : RECO ($ratio$)"
     # ylabel = r"daily cumulative carbon flux ($\mu mol \/\ CO_2 \/\ m^{-2} \/\ s^{-1}$)"
-    plotfuncs.default_format(ax=ax, txt_xlabel=xlabel, txt_ylabel=ylabel,
+    plotfuncs.default_format(ax=ax, ax_xlabel_txt=xlabel, ax_ylabel_txt=ylabel,
                              ticks_width=1)
 
     # Format for secondary y-axis (fluxes)
     from diive.core.plotting.plotfuncs import format_ticks
     format_ticks(ax=ax_twin, width=theme.TICKS_WIDTH, length=theme.TICKS_LENGTH,
                  direction=theme.TICKS_DIRECTION, color='black',
-                 labelsize=theme.TICKS_LABELSIZE)
-    ax_twin.set_ylabel(f'flux ({units})', color=theme.AXLABELS_FONTCOLOR,
-                       fontsize=theme.AXLABELS_FONTSIZE, fontweight=theme.AXLABELS_FONTWEIGHT)
+                 labelsize=theme.TICKS_LABELS_FONTSIZE)
+    ax_twin.set_ylabel(f'flux ({units})', color=theme.AX_LABELS_FONTCOLOR,
+                       fontsize=theme.AX_LABELS_FONTSIZE, fontweight=theme.AX_LABELS_FONTWEIGHT)
 
     # yticks = ax.yaxis.get_major_ticks()
     # yticks[-1].set_visible(False)
@@ -764,7 +764,7 @@ def plot_daytime_analysis(ax,
     # yticks[-1].set_visible(False)
 
     ax.text(0.06, 0.95, "(b)",
-            size=theme.AXLABELS_FONTSIZE, color='black', backgroundcolor='none', transform=ax.transAxes,
+            size=theme.AX_LABELS_FONTSIZE, color='black', backgroundcolor='none', transform=ax.transAxes,
             alpha=1, horizontalalignment='left', verticalalignment='top')
 
     fig.show()
@@ -863,7 +863,7 @@ def plot_chd_detection_from_nee(ax, results_chd: dict, y_col: str, highlight_yea
     xlabel = "Daily maximum VPD ($hPa$)"
 
     ylabel = f"NEE ({units})"
-    plotfuncs.default_format(ax=ax, txt_xlabel=xlabel, txt_ylabel=ylabel)
+    plotfuncs.default_format(ax=ax, ax_xlabel_txt=xlabel, ax_ylabel_txt=ylabel)
     # xlim_lower = flux_bts_results['fit_df']['fit_x'].min()
     # ax.set_xlim([-1, flux_bts_results['fit_df']['fit_x'].max()])
     # ax.set_ylim([bts_results['zerocrossing_vals']['y_nom'].min(),
@@ -906,7 +906,7 @@ def plot_chd_detection_from_nee(ax, results_chd: dict, y_col: str, highlight_yea
         handler_map={tuple: HandlerTuple(ndivide=None)})
 
     ax.text(0.06, 0.95, "(a)",
-            size=theme.AXLABELS_FONTSIZE, color='black', backgroundcolor='none', transform=ax.transAxes,
+            size=theme.AX_LABELS_FONTSIZE, color='black', backgroundcolor='none', transform=ax.transAxes,
             alpha=1, horizontalalignment='left', verticalalignment='top')
 
     # fig.show()
