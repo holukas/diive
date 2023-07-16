@@ -129,8 +129,8 @@ class TimeSeries:
         pf.add_zeroline_y(ax=self.ax, data=self.series)
 
         pf.default_format(ax=self.ax,
-                          txt_xlabel='Date',
-                          txt_ylabel=self.varname,
+                          ax_xlabel_txt='Date',
+                          ax_ylabel_txt=self.varname,
                           txt_ylabel_units=self.series_units)
 
         pf.default_legend(ax=self.ax,

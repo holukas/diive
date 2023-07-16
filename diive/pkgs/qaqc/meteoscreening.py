@@ -52,6 +52,7 @@ class StepwiseMeteoScreeningDb:
     - `.flag_outliers_abslim_test()`: Generate flag that indicates if values in data are outside the specified range
     - `.flag_outliers_increments_zcore_test()`: Identify outliers based on the z-score of increments
     - `.flag_outliers_localsd_test()`: Identify outliers based on the local standard deviation
+    - `.flag_manualremoval_test()`: Remove data points for range, time or point-by-point
     - `.flag_outliers_stl_riqrz_test()`: Identify outliers based on seasonal-trend decomposition and z-score calculations
     - `.flag_outliers_thymeboost_test()`: Identify outliers based on [thymeboost](https://github.com/tblume1992/ThymeBoost)
     - `.flag_outliers_zscore_dtnt_test()`: Identify outliers based on the z-score, separately for daytime and nighttime
@@ -246,9 +247,9 @@ class StepwiseMeteoScreeningDb:
             HeatmapDateTime(ax=ax_heatmap_resampled_after, series=series_resampled, **kwargs_heatmap).plot()
 
             # Format time series
-            default_format(ax=ax_orig, ticks_labelsize=10)
-            default_format(ax=ax_resampled, ticks_labelsize=10)
-            default_format(ax=ax_both, ticks_labelsize=10)
+            default_format(ax=ax_orig, ticks_labels_fontsize=10)
+            default_format(ax=ax_resampled, ticks_labels_fontsize=10)
+            default_format(ax=ax_both, ticks_labels_fontsize=10)
             nice_date_ticks(ax=ax_orig, minticks=3, maxticks=20, which='x', locator='auto')
             default_legend(ax=ax_orig, markerscale=3, textsize=10)
             default_legend(ax=ax_resampled, markerscale=3, textsize=10)

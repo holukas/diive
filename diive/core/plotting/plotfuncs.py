@@ -64,16 +64,16 @@ def remove_prev_lines(ax):
 #     return twin_ax
 
 def default_format(ax,
-                   axlabels_fontsize: float = theme.AXLABELS_FONTSIZE,
-                   axlabels_fontcolor: str = theme.AXLABELS_FONTCOLOR,
-                   axlabels_fontweight=theme.AXLABELS_FONTWEIGHT,
-                   txt_xlabel=False,
-                   txt_ylabel=False,
+                   ax_labels_fontsize: float = theme.AX_LABELS_FONTSIZE,
+                   ax_labels_fontcolor: str = theme.AX_LABELS_FONTCOLOR,
+                   ax_labels_fontweight=theme.AX_LABELS_FONTWEIGHT,
+                   ax_xlabel_txt=False,
+                   ax_ylabel_txt=False,
                    txt_ylabel_units=False,
                    ticks_width=theme.TICKS_WIDTH,
                    ticks_length=theme.TICKS_LENGTH,
                    ticks_direction=theme.TICKS_DIRECTION,
-                   ticks_labelsize=theme.TICKS_LABELSIZE,
+                   ticks_labels_fontsize=theme.TICKS_LABELS_FONTSIZE,
                    color='black',
                    facecolor='white',
                    showgrid: bool = True) -> None:
@@ -83,20 +83,20 @@ def default_format(ax,
 
     # Ticks
     format_ticks(ax=ax, width=ticks_width, length=ticks_length,
-                 direction=ticks_direction, color=color, labelsize=ticks_labelsize)
+                 direction=ticks_direction, color=color, labelsize=ticks_labels_fontsize)
 
     # Spines
     format_spines(ax=ax, color=color, lw=theme.LINEWIDTH_SPINES)
 
     # Labels
-    if txt_xlabel:
-        ax.set_xlabel(txt_xlabel, color=axlabels_fontcolor, fontsize=axlabels_fontsize, fontweight=axlabels_fontweight)
-    if txt_ylabel and txt_ylabel_units:
-        ax.set_ylabel(f'{txt_ylabel}  {txt_ylabel_units}', color=axlabels_fontcolor, fontsize=axlabels_fontsize,
-                      fontweight=axlabels_fontweight)
-    if txt_ylabel and not txt_ylabel_units:
-        ax.set_ylabel(f'{txt_ylabel}', color=axlabels_fontcolor, fontsize=axlabels_fontsize,
-                      fontweight=axlabels_fontweight)
+    if ax_xlabel_txt:
+        ax.set_xlabel(ax_xlabel_txt, color=ax_labels_fontcolor, fontsize=ax_labels_fontsize, fontweight=ax_labels_fontweight)
+    if ax_ylabel_txt and txt_ylabel_units:
+        ax.set_ylabel(f'{ax_ylabel_txt}  {txt_ylabel_units}', color=ax_labels_fontcolor, fontsize=ax_labels_fontsize,
+                      fontweight=ax_labels_fontweight)
+    if ax_ylabel_txt and not txt_ylabel_units:
+        ax.set_ylabel(f'{ax_ylabel_txt}', color=ax_labels_fontcolor, fontsize=ax_labels_fontsize,
+                      fontweight=ax_labels_fontweight)
 
     # Grid
     if showgrid:
@@ -108,6 +108,8 @@ def format_ticks(ax, width, length, direction, color, labelsize):
                    colors=color, labelsize=labelsize)
     ax.tick_params(axis='y', width=width, length=length, direction=direction,
                    colors=color, labelsize=labelsize)
+    # from matplotlib.ticker import (MultipleLocator, AutoMinorLocator)
+    # ax.xaxis.set_minor_locator(AutoMinorLocator())
 
 
 def format_spines(ax, color, lw):
@@ -245,7 +247,7 @@ def nice_date_ticks(ax, minticks: int = 3, maxticks: int = 9, which: Literal['x'
 def show_txt_in_ax_bad_values(fig, ax, df, sum_for_col):
     """ Show number of bad values / marked values as text """
     ax.text(0.02, 0.98, '{} bad values'.format(df[sum_for_col].sum()),
-            size=theme.AXLABELS_FONTSIZE, color='#eab839', backgroundcolor='none', transform=ax.transAxes,
+            size=theme.AX_LABELS_FONTSIZE, color='#eab839', backgroundcolor='none', transform=ax.transAxes,
             alpha=0.8, horizontalalignment='left', verticalalignment='top')
     fig.canvas.draw()
     fig.canvas.flush_events()
@@ -302,7 +304,7 @@ def default_legend(ax,
                    from_line_collection=False,
                    line_collection=None,
                    textsize: int = theme.FONTSIZE_TXT_LEGEND,
-                   markerscale:float=None):
+                   markerscale: float = None):
     # fontP = FontProperties()
     # fontP.set_size('x-large')
     if from_line_collection:
@@ -341,13 +343,13 @@ def add_ax_title_inside(txt, ax):
 def add_zeroline_y(data: Series or DataFrame, ax):
     if isinstance(data, DataFrame):
         # Min/max across all columns in DataFrame
-        min = data.min().min()
-        max = data.max().max()
+        _min = data.min().min()
+        _max = data.max().max()
     else:
         # Min/max for Series
-        min = data.min()
-        max = data.max()
-    if (min < 0) & (max > 0):
+        _min = data.min()
+        _max = data.max()
+    if (_min < 0) & (_max > 0):
         ax.axhline(0, lw=LINEWIDTH_ZERO, color=COLOR_LINE_ZERO, zorder=98)
 
 
@@ -451,7 +453,7 @@ def quickplot(data: DataFrame or Series, hline: None or float = None, subplots: 
                            f"mean: {mean:.2f}±{std:.2f}\n"
                            f"min: {min:.2f}  |  max: {max:.2f}")
         ax.text(0.02, 0.98, title,
-                size=theme.AXLABELS_FONTSIZE, color='black', backgroundcolor='none', transform=ax.transAxes,
+                size=theme.AX_LABELS_FONTSIZE, color='black', backgroundcolor='none', transform=ax.transAxes,
                 alpha=1, horizontalalignment='left', verticalalignment='top')
         default_legend(ax=ax, facecolor='white')
         if hline:

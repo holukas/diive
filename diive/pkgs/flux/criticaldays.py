@@ -246,7 +246,7 @@ class CriticalDays:
             y_label = f"{y_label} ({y_units})"
         else:
             y_label = f"Daily {self.y_agg} {self.y_col} ({y_units})"
-        plotfuncs.default_format(ax=ax, txt_xlabel=x_label, txt_ylabel=y_label)
+        plotfuncs.default_format(ax=ax, ax_xlabel_txt=x_label, ax_ylabel_txt=y_label)
         
         # Custom legend
         # This legend replaces the legend from PlotBinFitterBTS
@@ -283,7 +283,7 @@ class CriticalDays:
             handler_map={tuple: HandlerTuple(ndivide=None)})
 
         ax.text(0.06, 0.95, "(a)",
-                size=theme.AXLABELS_FONTSIZE, color='black', backgroundcolor='none', transform=ax.transAxes,
+                size=theme.AX_LABELS_FONTSIZE, color='black', backgroundcolor='none', transform=ax.transAxes,
                 alpha=1, horizontalalignment='left', verticalalignment='top')
 
         return ax

@@ -29,7 +29,9 @@ def aggregated_as_hires(aggregate_series: Series,
                         interpolate_missing_vals: bool = False,
                         interpolation_lim: int = False) -> Series:
     """
-    Insert aggregated values as column in high-res dataframe
+    Calculate aggregated values and apply high-res timestamp
+
+    Example: half-hourly timestamp for daily maximum temperature
     """
     # Aggregate series
     lowres_df = pd.DataFrame(aggregate_series.resample(to_freq).agg(to_agg))
@@ -68,11 +70,12 @@ def aggregated_as_hires(aggregate_series: Series,
                                                                      sep='-')
 
     # Timestamp as column for index after merging (merging loses index)
-    hires_df['TIMESTAMP'] = hires_df.index
+    hires_df['_TIMESTAMP'] = hires_df.index
     hires_df = hires_df.merge(lowres_df, left_on=mergecol, right_on=mergecol, how='left')
 
     # Re-apply original index (merging lost index)
-    hires_df = hires_df.set_index('TIMESTAMP')
+    hires_df = hires_df.set_index('_TIMESTAMP')
+    hires_df.index.name = hires_timestamp.name
     return hires_df[agghires_col]
 
 
@@ -99,7 +102,10 @@ def insert_aggregated_in_hires(df: DataFrame, col: str,
     agg_df['start'] = agg_df.index
     agg_df['end'] = agg_df.index.shift(1)
 
-    new_colname = f".{col}_{to_freq}{agg_offset}_{to_agg}"
+    if agg_offset:
+        new_colname = f".{col}_{to_freq}{agg_offset}_{to_agg}"
+    else:
+        new_colname = f".{col}_{to_freq}_{to_agg}"
     agg_df = rename_cols(df=agg_df, renaming_dict={col: new_colname})
 
     df[new_colname] = np.nan
@@ -540,7 +546,8 @@ def timestamp_convention(df, timestamp_shows_start, out_timestamp_convention):
     return df, timestamp_info_df
 
 
-def df_between_two_dates(df: DataFrame, start_date, end_date, dropna_col:str=None, dropna: bool = False) -> DataFrame:
+def df_between_two_dates(df: DataFrame or Series, start_date, end_date, dropna_col: str = None,
+                         dropna: bool = False) -> DataFrame:
     """Get data for the time window, >= start date and <= end date
 
     Args:
@@ -600,6 +607,7 @@ def find_nans_in_df_col(df, col):
     gap_count = len(gaps_df[col])
     return gaps_df, gap_count
 
+
 def sort_column_names(df, priority_vars):
     """ Sort column names, ascending, with priority vars at top
 
@@ -632,6 +640,7 @@ def sort_column_names(df, priority_vars):
     df = df[cols_list]  # assign new (sorted) column order
 
     return df
+
 
 def sort_multiindex_columns_names(df, priority_vars):
     """ Sort column names, ascending, with priority vars at top

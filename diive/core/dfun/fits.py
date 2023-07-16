@@ -84,7 +84,7 @@ class BinFitterCP:
             num_predictions: int = None,
             bins_x_num: int = 0,
             bins_y_agg: str = None,
-            fit_type: Literal['linear', 'quadratic'] = 'quadratic'
+            fit_type: Literal['linear', 'quadratic_offset', 'quadratic'] = 'quadratic_offset'
     ):
         self.df = df[[x_col, y_col]].dropna()  # Remove NaNs, working data
         self.x_col = x_col
@@ -100,7 +100,7 @@ class BinFitterCP:
         self.num_predictions = num_predictions if isinstance(num_predictions, int) else len(self.x)
         self.num_predictions = 2 if self.num_predictions < 2 else self.num_predictions
 
-        self.equation = self._set_fit_equation(type=fit_type)
+        self.equation = self._set_fit_equation(eqtype=fit_type)
         self.fit_type = fit_type
 
         self.fit_results = {}  # Stores fit results
@@ -129,22 +129,28 @@ class BinFitterCP:
         lpb, upb = yp - dy, yp + dy  # Upper & lower prediction bands.
         return lpb, upb
 
-    def _set_fit_equation(self, type: str = 'quadratic'):
-        if type == 'quadratic':
+    def _set_fit_equation(self, eqtype: str = 'quadratic_offset'):
+        if eqtype == 'quadratic_offset':
+            equation = self._fit_quadratic_offset
+        elif eqtype == 'quadratic':
             equation = self._fit_quadratic
-        elif type == 'linear':
+        elif eqtype == 'linear':
             equation = self._fit_linear
         else:
-            equation = self._fit_quadratic
+            equation = self._fit_quadratic_offset
         return equation
 
     def _fit_linear(self, x, a, b):
         """Linear fit"""
         return a * x + b
 
-    def _fit_quadratic(self, x, a, b, c):
+    def _fit_quadratic_offset(self, x, a, b, c):
         """Quadratic equation"""
         return a * x ** 2 + b * x + c
+
+    def _fit_quadratic(self, x, a, b):
+        """Quadratic equation"""
+        return a * x ** 2 + b * x
 
     # def _func(self, x, a, b, c):
     #     """Fitting function"""
@@ -183,28 +189,34 @@ class BinFitterCP:
         # Retrieve parameter values
         a = fit_params_opt[0]
         b = fit_params_opt[1]
-        c = fit_params_opt[2] if self.fit_type == 'quadratic' else None
+        c = fit_params_opt[2] if self.fit_type == 'quadratic_offset' else None
 
         # Calc r2
         kwargs = None
-        if self.fit_type == 'quadratic':
+        if self.fit_type == 'quadratic_offset':
             kwargs = dict(x=x, a=a, b=b, c=c)
+        elif self.fit_type == 'quadratic':
+            kwargs = dict(x=x, a=a, b=b)
         elif self.fit_type == 'linear':
             kwargs = dict(x=x, a=a, b=b)
         fit_r2 = 1.0 - (sum((y - self.equation(**kwargs)) ** 2) / ((len_y - 1.0) * np.var(y, ddof=1)))
 
         # Calculate parameter confidence interval
         c = None
-        if self.fit_type == 'quadratic':
+        if self.fit_type == 'quadratic_offset':
             a, b, c = unc.correlated_values(fit_params_opt, fit_params_cov)
+        if self.fit_type == 'quadratic':
+            a, b = unc.correlated_values(fit_params_opt, fit_params_cov)
         elif self.fit_type == 'linear':
             a, b = unc.correlated_values(fit_params_opt, fit_params_cov)
 
         # Calculate regression confidence interval
         fit_x = np.linspace(self.fit_x_min, self.fit_x_max, self.num_predictions)
 
-        if self.fit_type == 'quadratic':
+        if self.fit_type == 'quadratic_offset':
             fit_y = a * fit_x ** 2 + b * fit_x + c
+        if self.fit_type == 'quadratic':
+            fit_y = a * fit_x ** 2 + b * fit_x
         elif self.fit_type == 'linear':
             fit_y = a * fit_x + b
 

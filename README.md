@@ -29,11 +29,15 @@ First example notebooks can be found in the folder `notebooks`.
 ### Create variable
 
 - Day/night flag from sun angle
-- VPD from air temperature and RH
+- VPD from air temperature and RH ([notebook example](notebooks/CalculateVariable/Calculate_VPD_from_TA_and_RH.ipynb))
 
 ### Eddy covariance high-resolution
 
 - Flux detection limit
+
+### Formats
+
+- Convert EddyPro fluxnet output files for upload to FLUXNET database ([notebook example](notebooks/Formats/FormatEddyProFluxnetFileForUpload.ipynb))
 
 ### Fits
 
@@ -41,7 +45,7 @@ First example notebooks can be found in the folder `notebooks`.
 
 ### Flux
 
-- Critical days
+- Critical heat days for NEP, based on air temperature and VPD
 - NEP penalty
 - USTAR threshold scenarios
 
@@ -54,7 +58,15 @@ see [here](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux
 - Level-3.1 storage correction
 - Level-3.2 outlier removal
 
+### Formats
+
+Format data to specific formats
+
+- Format EddyPro _fluxnet_ output file for upload to FLUXNET database
+
 ### Gap-filling
+
+Fill gaps in time series with various methods
 
 - Interpolate
 - RandomForestTS
@@ -70,13 +82,17 @@ see [here](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux
 - Thymeboost
 - Various z-score approaches
 
+### Plotting
+
+- Various classes to generate heatmaps, bar plots, time series plots and scatter plots, among others
+
 ### Quality control
 
 - Stepwise MeteoScreening
 
-### Plotting
+### Stats
 
-- Various classes to generate heatmaps, bar plots, time series plots and scatter plots, among others
+- Time series stats ([notebook example](notebooks/Stats/TimeSeriesStats.ipynb))
 
 ## Installation
 

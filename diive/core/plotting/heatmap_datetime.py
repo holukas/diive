@@ -27,9 +27,9 @@ class HeatmapDateTime:
                  vmin: float = None,
                  vmax: float = None,
                  cb_digits_after_comma: int = 2,
-                 cb_labelsize: float = theme.AXLABELS_FONTSIZE,
-                 axlabels_fontsize: float = theme.AXLABELS_FONTSIZE,
-                 ticks_labelsize: float = theme.TICKS_LABELSIZE,
+                 cb_labelsize: float = theme.AX_LABELS_FONTSIZE,
+                 axlabels_fontsize: float = theme.AX_LABELS_FONTSIZE,
+                 ticks_labelsize: float = theme.TICKS_LABELS_FONTSIZE,
                  minyticks: int = 3,
                  maxyticks: int = 10,
                  cmap: str = 'RdYlBu_r',
@@ -141,10 +141,10 @@ class HeatmapDateTime:
         nice_date_ticks(ax=self.ax, minticks=self.minyticks, maxticks=self.maxyticks, which='y')
 
         # Format
-        default_format(ax=self.ax, txt_xlabel='Time (hours)', txt_ylabel='Date',
+        default_format(ax=self.ax, ax_xlabel_txt='Time (hours)', ax_ylabel_txt='Date',
                        ticks_direction='out', ticks_length=8, ticks_width=2,
-                       axlabels_fontsize=self.axlabels_fontsize,
-                       ticks_labelsize=self.ticks_labelsize)
+                       ax_labels_fontsize=self.axlabels_fontsize,
+                       ticks_labels_fontsize=self.ticks_labelsize)
         format_spines(ax=self.ax, color='black', lw=2)
 
     def _transform_data(self):

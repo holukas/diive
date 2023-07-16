@@ -2,6 +2,34 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.54.0 | 16 Jul 2023
+
+### New Features
+
+- Identify critical heat days for ecosytem flux NEE (net ecosystem exchange, based on air temperature and VPD
+  (`pkgs.flux.criticalheatdays.FluxCriticalHeatDaysP95`)
+- Calculate z-aggregates in classes of x and y (`pkgs.analyses.quantilexyaggz.QuantileXYAggZ`)
+- Plot heatmap from pivoted dataframe, using x,y,z values (`core.plotting.heatmap_xyz.HeatmapPivotXYZ`)
+- Calculate stats for time series and store results in dataframe (`core.dfun.stats.sstats`)
+- New helper function to load and merge files of a specific filetype (`core.io.files.loadfiles`)
+
+### Additions
+
+- Added more parameters when formatting EddyPro _fluxnet_ file for FLUXNET
+  (`pkgs.formats.fluxnet.FormatEddyProFluxnetFileForUpload`)
+
+### Changes
+
+- Removed left-over code
+- Multiple smaller refactorings
+
+### Notebooks
+
+- Added new notebook for calculating VPD in `notebooks/CalculateVariable/Calculate_VPD_from_TA_and_RH.ipynb`
+- Added new notebook for calculating time series stats `notebooks/Stats/TimeSeriesStats.ipynb`
+- Added new notebook for formatting EddyPro output for upload to
+  FLUXNET `notebooks/Formats/FormatEddyProFluxnetFileForUpload.ipynb`
+
 ## v0.53.3 | 23 Apr 2023
 
 ### Notebooks

@@ -213,7 +213,7 @@ class PlotBinFitterBTS:
             line_fit_pb = self._plot_fit_pi(ax=self.ax, color_fitline=self.color_fitline)
 
         # Format
-        default_format(ax=self.ax, txt_xlabel=self.xlabel, txt_ylabel=self.ylabel)
+        default_format(ax=self.ax, ax_xlabel_txt=self.xlabel, ax_ylabel_txt=self.ylabel)
         add_zeroline_y(ax=self.ax, data=ydata)
 
         # return line_xy, line_fit, line_fit_ci, line_fit_pb, line_highlight
@@ -339,8 +339,8 @@ class BinFitter:
 
     def __init__(self,
                  df: pd.DataFrame,
-                 x_col: str or tuple,
-                 y_col: str or tuple,
+                 xcol: str or tuple,
+                 ycol: str or tuple,
                  predict_max_x: float = None,
                  predict_min_x: float = None,
                  n_predictions: int = None,
@@ -348,9 +348,9 @@ class BinFitter:
                  bins_y_agg: str = None,
                  fit_type: Literal['linear', 'quadratic'] = 'quadratic'
                  ):
-        self.df = df[[x_col, y_col]].copy().dropna()  # Remove NaNs, working data
-        self.x_col = x_col
-        self.y_col = y_col
+        self.df = df[[xcol, ycol]].copy().dropna()  # Remove NaNs, working data
+        self.x_col = xcol
+        self.y_col = ycol
         self.x = self.df[self.x_col]
         self.y = self.df[self.y_col]
         self.bins_y_agg = bins_y_agg
