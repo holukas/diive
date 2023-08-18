@@ -171,6 +171,13 @@
             </Attribute>
           </value>
         </entry>
+        <entry key="\notebooks\CalculateVariable\CH-FRU_VPD_RH_TA_2020-2022_20230615.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
       </map>
     </option>
   </component>

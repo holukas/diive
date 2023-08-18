@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "diive"
-version = "0.54.0"
+version = "0.55.0"
 description = "Time series post-processing and analysis"
 authors = ["holukas <lukas.hoertnagl@usys.ethz.ch>"]
 
@@ -19,6 +19,8 @@ prophet = "^1.1.2"
 fitter = "^1.5.2"
 seaborn = "^0.12.2"
 bokeh = "^3.0.3"
+pyarrow = "^12.0.1"
+pymannkendall = "^1.4.3"
 
 [tool.poetry.dev-dependencies]
 dbc-influxdb = { path = "../../22 - POET/dbc-influxdb", develop = true }

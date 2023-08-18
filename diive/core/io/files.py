@@ -4,18 +4,64 @@ import time
 import zipfile as zf
 from pathlib import Path
 
-from pandas import DataFrame
+from pandas import Series, DataFrame, read_parquet
 
 from diive.core.io.filereader import MultiDataFileReader
 
 
-def save_as_pickle(outpath: str or None, filename: str, data) -> str:
-    """Save data as pickle"""
+def set_outpath(outpath: str or None, filename: str, fileextension: str):
     if outpath:
         outpath = Path(outpath)
-        filepath = Path(outpath) / f"{filename}.pickle"
+        filepath = Path(outpath) / f"{filename}.{fileextension}"
     else:
-        filepath = f"{filename}.pickle"
+        filepath = f"{filename}.{fileextension}"
+    return filepath
+
+
+def save_parquet(filename: str, data: Series or DataFrame, outpath: str or None = None) -> str:
+    """
+    Save pandas Series or DataFrame as parquet file
+
+    Args:
+        filename: str
+            Name of the generated parquet file.
+        data: pandas Series or DataFrame
+        outpath: str or None
+            If *None*, file is saved to system default folder. When used within
+            a notebook, the file is saved in the same location as the notebook.
+
+    Returns:
+        str, filepath to parquet file
+    """
+    filepath = set_outpath(outpath=outpath, filename=filename, fileextension='parquet')
+    tic = time.time()
+    data.to_parquet(filepath)
+    toc = time.time() - tic
+    print(f"Saved file {filepath} ({toc:.3f} seconds).")
+    return str(filepath)
+
+
+def load_parquet(filepath: str) -> DataFrame:
+    """
+    Load data from Parquet file to pandas DataFrame
+
+    Args:
+        filepath: str
+            filepath to parquet file
+
+    Returns:
+        pandas DataFrame, data from Parquet file as pandas DataFrame
+    """
+    tic = time.time()
+    df = read_parquet(filepath)
+    toc = time.time() - tic
+    print(f"Saved file {filepath} ({toc:.3f} seconds).")
+    return df
+
+
+def save_as_pickle(outpath: str or None, filename: str, data) -> str:
+    """Save data as pickle"""
+    filepath = set_outpath(outpath=outpath, filename=filename, fileextension='pickle')
     tic = time.time()
     pickle_out = open(filepath, "wb")
     pickle.dump(data, pickle_out)

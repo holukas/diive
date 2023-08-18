@@ -94,10 +94,12 @@ def sstats(s: Series) -> DataFrame:
     df.loc['MEDIAN', col] = s.quantile(q=0.50)
     df.loc['MIN', col] = s.min()
     df.loc['MAX', col] = s.max()
+    df.loc['P01', col] = s.quantile(q=0.01)
     df.loc['P05', col] = s.quantile(q=0.05)
     df.loc['P25', col] = s.quantile(q=0.25)
     df.loc['P75', col] = s.quantile(q=0.75)
     df.loc['P95', col] = s.quantile(q=0.95)
+    df.loc['P99', col] = s.quantile(q=0.99)
     return df
 
 

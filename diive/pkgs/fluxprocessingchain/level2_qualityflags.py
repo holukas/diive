@@ -5,11 +5,16 @@ from pandas import DataFrame
 from diive.pkgs.flux.common import detect_fluxgas
 
 
-class QualityFlagsLevel2:
+class FluxQualityFlagsLevel2EddyPro:
+    """
+    Create QCF (quality-control flag) for selected flags, calculated
+    from EddyPro's _fluxnet_ output files
+    """
 
     def __init__(self,
                  df: DataFrame,
-                 fluxcol: str):
+                 fluxcol: str,
+                 levelid: str = 'L2'):
         """
         Create QCF (quality-control flag) for selected flags, calculated
         from EddyPro's _fluxnet_ output files
@@ -17,9 +22,11 @@ class QualityFlagsLevel2:
         Args:
             df: Dataframe containing data from EddyPro's _fluxnet_ file
             fluxcol: Name of the flux variable in *df*
+            levelid: Suffix added to output variable names
         """
         self.fluxcol = fluxcol
         self.df = df.copy()
+        self.levelid = levelid if levelid else ""
 
         self.gas = detect_fluxgas(fluxcol=self.fluxcol)
 
@@ -33,24 +40,50 @@ class QualityFlagsLevel2:
         return self._fluxflags
 
     def get(self) -> DataFrame:
-        """Return original data with QCF flag"""
+        """Return original data with QCF flags"""
         _df = self.df.copy()  # Main data
-        test_cols = [t for t in self.fluxflags.columns if str(t).startswith('FLAG_L2_')]
+        test_cols = [t for t in self.fluxflags.columns if str(t).startswith(f'FLAG_{self.levelid}_')]
         flags_df = self.fluxflags[test_cols].copy()  # Subset w/ flags
         [print(f"++Adding new column {c} (Level-2 quality flag) to main data ...") for c in test_cols]
         _df = pd.concat([_df, flags_df], axis=1)  # Add flags to main data
         return _df
 
-    def raw_data_screening_vm97(self,
-                                spikes: bool = True,
-                                amplitude: bool = False,
-                                dropout: bool = True,
-                                abslim: bool = False,
-                                skewkurt_hf: bool = False,
-                                skewkurt_sf: bool = False,
-                                discont_hf: bool = False,
-                                discont_sf: bool = False,
-                                ):
+    def angle_of_attack_test(self):
+        """
+        Flag from EddyPro fluxnet files is an integer and looks like this, e.g.: 81
+        The integer contains angle-of-attack test results for the sonic anemometer.
+
+        Flag = 1 means that the angle was too large.
+
+        This is a hard flag:
+        _HF_ = hard flag (flag 1 = bad values)
+
+        """
+        aoa = "VM97_AOA_HF"  # Name of the flag in EddyPro output file
+        flagdf = self.df[[aoa]].copy()
+
+        flagdf[aoa] = flagdf[aoa].apply(pd.to_numeric, errors='coerce').astype(float)
+        flagdf[aoa] = flagdf[aoa].fillna(89)  # 9 = missing flags
+        flagcol = f"FLAG_{self.levelid}_{self.fluxcol}_VM97_AOA_HF_TEST"
+        flagdf[flagcol] = flagdf[aoa].astype(str).str[int(1)].astype(float).replace(9, np.nan)
+        # Hard flag 1 corresponds to bad value
+        flagdf[flagcol] = flagdf[flagcol].replace(1, 2)
+        self._fluxflags[flagcol] = flagdf[flagcol].copy()
+
+        print(f"Fetching {flagcol} "
+              f"with flag 0 (good values) where test passed "
+              f"and flag 2 (bad values) where test failed ...")
+
+    def raw_data_screening_vm97_tests(self,
+                                      spikes: bool = True,
+                                      amplitude: bool = False,
+                                      dropout: bool = True,
+                                      abslim: bool = False,
+                                      skewkurt_hf: bool = False,
+                                      skewkurt_sf: bool = False,
+                                      discont_hf: bool = False,
+                                      discont_sf: bool = False,
+                                      ):
         """
         Flag from EddyPro fluxnet files is an integer and looks like this, e.g.: 801000100
         One integer contains *multiple tests* for *one* gas.
@@ -71,15 +104,18 @@ class QualityFlagsLevel2:
 
         flagcols = {
             # '0': XXX,  # Index 0 is always the number `8`
-            '1': f"FLAG_L2_{self.fluxcol}_{self.gas}_VM97_SPIKE_HF_TEST",  # Spike detection, hard flag
-            '2': f"FLAG_L2_{self.fluxcol}_{self.gas}_VM97_AMPLITUDE_RESOLUTION_HF_TEST",
+            '1': f"FLAG_{self.levelid}_{self.fluxcol}_{self.gas}_VM97_SPIKE_HF_TEST",  # Spike detection, hard flag
+            '2': f"FLAG_{self.levelid}_{self.fluxcol}_{self.gas}_VM97_AMPLITUDE_RESOLUTION_HF_TEST",
             # Amplitude resolution, hard flag
-            '3': f"FLAG_L2_{self.fluxcol}_{self.gas}_VM97_DROPOUT_TEST",  # Drop-out, hard flag
-            '4': f"FLAG_L2_{self.fluxcol}_{self.gas}_VM97_ABSOLUTE_LIMITS_HF_TEST",  # Absolute limits, hard flag
-            '5': f"FLAG_L2_{self.fluxcol}_{self.gas}_VM97_SKEWKURT_HF_TEST",  # Skewness/kurtosis, hard flag
-            '6': f"FLAG_L2_{self.fluxcol}_{self.gas}_VM97_SKEWKURT_SF_TEST",  # Skewness/kurtosis, soft flag
-            '7': f"FLAG_L2_{self.fluxcol}_{self.gas}_VM97_DISCONTINUITIES_HF_TEST",  # Discontinuities, hard flag
-            '8': f"FLAG_L2_{self.fluxcol}_{self.gas}_VM97_DISCONTINUITIES_SF_TEST"  # Discontinuities, soft flag
+            '3': f"FLAG_{self.levelid}_{self.fluxcol}_{self.gas}_VM97_DROPOUT_TEST",  # Drop-out, hard flag
+            '4': f"FLAG_{self.levelid}_{self.fluxcol}_{self.gas}_VM97_ABSOLUTE_LIMITS_HF_TEST",
+            # Absolute limits, hard flag
+            '5': f"FLAG_{self.levelid}_{self.fluxcol}_{self.gas}_VM97_SKEWKURT_HF_TEST",  # Skewness/kurtosis, hard flag
+            '6': f"FLAG_{self.levelid}_{self.fluxcol}_{self.gas}_VM97_SKEWKURT_SF_TEST",  # Skewness/kurtosis, soft flag
+            '7': f"FLAG_{self.levelid}_{self.fluxcol}_{self.gas}_VM97_DISCONTINUITIES_HF_TEST",
+            # Discontinuities, hard flag
+            '8': f"FLAG_{self.levelid}_{self.fluxcol}_{self.gas}_VM97_DISCONTINUITIES_SF_TEST"
+            # Discontinuities, soft flag
         }
 
         # Extract 8 individual flags from VM97 multi-flag integer
@@ -92,14 +128,22 @@ class QualityFlagsLevel2:
 
         # Select flags that are selected
         selected = []
-        if spikes: selected.append('1')
-        if amplitude: selected.append('2')
-        if dropout: selected.append('3')
-        if abslim: selected.append('4')
-        if skewkurt_hf: selected.append('5')
-        if skewkurt_sf: selected.append('6')
-        if discont_hf: selected.append('7')
-        if discont_sf: selected.append('8')
+        if spikes:
+            selected.append('1')
+        if amplitude:
+            selected.append('2')
+        if dropout:
+            selected.append('3')
+        if abslim:
+            selected.append('4')
+        if skewkurt_hf:
+            selected.append('5')
+        if skewkurt_sf:
+            selected.append('6')
+        if discont_hf:
+            selected.append('7')
+        if discont_sf:
+            selected.append('8')
 
         # Make new dict that contains flags that we use later
         flagcols_used = {x: flagcols[x] for x in flagcols if x in selected}
@@ -117,11 +161,9 @@ class QualityFlagsLevel2:
                              signal_strength_col: str,
                              method: str,
                              threshold: int):
-        flagname = f'FLAG_L2_{self.fluxcol}_SIGNAL_STRENGTH_TEST'
-        if signal_strength_col in self.df.columns:
-            pass
-        else:
-            raise (f"The column {signal_strength_col} is not in data, please check.")
+        flagname = f'FLAG_{self.levelid}_{self.fluxcol}_SIGNAL_STRENGTH_TEST'
+        if signal_strength_col not in self.df.columns:
+            raise f"The column {signal_strength_col} is not in data, please check."
         flagdf = self.df[[self.fluxcol, signal_strength_col]].copy()
         flagdf[flagname] = np.nan
 
@@ -153,7 +195,7 @@ class QualityFlagsLevel2:
     def spectral_correction_factor_test(self,
                                         thres_good: int = 2,
                                         thres_ok: int = 4):
-        flagname = f'FLAG_L2_{self.fluxcol}_SCF_TEST'
+        flagname = f'FLAG_{self.levelid}_{self.fluxcol}_SCF_TEST'
         scf = f'{self.fluxcol}_SCF'
         flagdf = self.df[[self.fluxcol, scf]].copy()
         flagdf[flagname] = np.nan
@@ -175,7 +217,7 @@ class QualityFlagsLevel2:
         self._fluxflags[flagname] = flagdf[flagname].copy()
 
     def missing_vals_test(self):
-        flagname = f'FLAG_L2_{self.fluxcol}_MISSING_TEST'
+        flagname = f'FLAG_{self.levelid}_{self.fluxcol}_MISSING_TEST'
 
         flagdf = self.df[[self.fluxcol]].copy()
         flagdf[flagname] = np.nan
@@ -194,7 +236,7 @@ class QualityFlagsLevel2:
         self._fluxflags[flagname] = flagdf[flagname].copy()
 
     def ssitc_test(self):
-        flagname = f'FLAG_L2_{self.fluxcol}_SSITC_TEST'
+        flagname = f'FLAG_{self.levelid}_{self.fluxcol}_SSITC_TEST'
         _flagname = f'{self.fluxcol}_SSITC_TEST'  # Name in EddyPro file
 
         flagdf = self.df[[self.fluxcol, _flagname]].copy()
@@ -208,7 +250,7 @@ class QualityFlagsLevel2:
                               thres_good: float = 0.99,
                               thres_ok: float = 0.97):
 
-        flagname = f'FLAG_L2_{self.fluxcol}_COMPLETENESS_TEST'
+        flagname = f'FLAG_{self.levelid}_{self.fluxcol}_COMPLETENESS_TEST'
         expected_n_records = 'EXPECT_NR'
         gas_n_records = f'{self.gas}_NR'
         gas_n_records_perc = f'{self.gas}_NR_PERC'

@@ -43,9 +43,11 @@ class ThymeBoostOutlier(FlagBase):
     def __init__(self, series: Series, levelid: str = None):
         super().__init__(series=series, flagid=self.flagid, levelid=levelid)
         self.showplot = False
+        self.maxiter = 1
 
-    def calc(self, showplot: bool = False):
+    def calc(self, maxiter:int=1, showplot: bool = False):
         """Calculate flag"""
+        self.maxiter = maxiter
         self.showplot = showplot
         self.reset()
         ok, rejected = self._flagtests()
@@ -111,11 +113,11 @@ class ThymeBoostOutlier(FlagBase):
         rejected_coll = pd.Series(index=self.series.index, data=False)
 
         outliers = True
-        iter = 0
-        while outliers:
-            iter += 1
+        iteration = 0
+        while outliers and iteration <= self.maxiter:
+            iteration += 1
             print(f"========================"
-                  f"Repetition #{iter}"
+                  f"Repetition #{iteration}"
                   f"========================")
             output = boosted_model.detect_outliers(_series,
                                                    trend_estimator='ses',
