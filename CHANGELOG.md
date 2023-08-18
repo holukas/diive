@@ -2,6 +2,68 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.55.0 | 18 Aug 2023
+
+This update focuses on the flux processing chain, in particular the creation of the extended
+quality flags, the flux storage correction and the creation of the overall quality flag `QCF`.
+
+### New Features
+
+- Added new class `StepwiseOutlierDetection` that can be used for general outlier detection in
+  time series data. It is based on the `StepwiseMeteoScreeningDb` class introduced in v0.50.0,
+  but aims to be more generally applicable to all sorts of time series data stored in
+  files (`pkgs.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection`)
+- Added new outlier detection class that identifies outliers based on seasonal-trend decomposition
+  and z-score calculations (`pkgs.outlierdetection.seasonaltrend.OutlierSTLRZ`)
+- Added new outlier detection class that flags values based on absolute limits that can be defined
+  separately for daytime and nighttime (`pkgs.outlierdetection.absolutelimits.AbsoluteLimitsDaytimeNighttime`)
+- Added small functions to directly save (`core.io.files.save_as_parquet`) and
+  load (`core.io.files.load_parquet`) parquet files. Parquet files offer fast loading and saving in
+  combination with good compression. For more information about the Parquet format
+  see [here](https://parquet.apache.org/)
+
+### Additions
+
+- **Angle-of-attack**: The angle-of-attack test can now be used during QC flag creation
+  (`pkgs.fluxprocessingchain.level2_qualityflags.FluxQualityFlagsLevel2.angle_of_attack_test`)
+- Various smaller additions
+
+### Changes
+
+- Renamed class `FluxQualityFlagsLevel2` to `FluxQualityFlagsLevel2EddyPro` because it is directly based
+  on the EddyPro output (`pkgs.fluxprocessingchain.level2_qualityflags.FluxQualityFlagsLevel2EddyPro`)
+- Renamed class `FluxStorageCorrectionSinglePoint`
+  to `FluxStorageCorrectionSinglePointEddyPro` (`pkgs.fluxprocessingchain.level31_storagecorrection.FluxStorageCorrectionSinglePointEddyPro`)
+- Refactored creation of flux quality
+  flags (`pkgs.fluxprocessingchain.level2_qualityflags.FluxQualityFlagsLevel2EddyPro`)
+- **Missing storage correction terms** are now gap-filled using random forest before the storage terms are
+  added to the flux. For some records, the calculated flux was available but the storage term was missing, resulting
+  in a missing storage-corrected flux (example: 97% of fluxes had storage term available, but for 3% it was missing).
+  The gap-filling makes sure that each flux values has a corresponding storage term and thus more values are
+  available for further processing. The gap-filling is done solely based on timestamp information, such as DOY
+  and hour. (`pkgs.fluxprocessingchain.level31_storagecorrection.FluxStorageCorrectionSinglePoint`)
+- The **outlier detection using z-scores for daytime and nighttime data** uses latitude/longitude settings to
+  calculate daytime/nighttime via `pkgs.createvar.daynightflag.nighttime_flag_from_latlon`. Before z-score
+  calculation, the time resolution of the time series is now checked and assigned automatically.
+  (`pkgs.outlierdetection.zscore.zScoreDaytimeNighttime`)
+- Removed `pkgs.fluxprocessingchain.level32_outlierremoval.FluxOutlierRemovalLevel32` since flux outlier
+  removal is now done in the generally applicable class `StepwiseOutlierDetection` (see new features)
+- Various smaller changes and refactorings
+
+### Environment
+
+- Updated `poetry` to newest version `v1.5.1`. The `lock` files have a new format since `v1.3.0`.
+- Created new `lock` file for `poetry`.
+- Added new package `pyarrow`.
+- Added new package `pymannkendall` (see [GitHub](https://pypi.org/project/pymannkendall/)) to analyze
+  time series data for trends. Functions of this package are not yet implemented in `diive`.
+
+### Notebooks
+
+- Added new notebook for loading and saving parquet files in `notebooks/Formats/LoadSaveParquetFile.ipynb`
+- **Flux processing chain**: Added new notebook for flux post-processing
+  in `notebooks/FluxProcessingChain/FluxProcessingChain.ipynb`.
+
 ## v0.54.0 | 16 Jul 2023
 
 ### New Features

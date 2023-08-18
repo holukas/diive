@@ -649,9 +649,9 @@ def timestamp_infer_freq_from_timedelta(timestamp_ix: pd.DatetimeIndex) -> tuple
         most_frequent_delta]  # Number of occurrences for most frequent delta
     most_frequent_delta_perc = most_frequent_delta_counts / n_rows  # Fraction
     # Check whether the most frequent delta appears in >99% of all data rows
-    if most_frequent_delta_perc > 0.99:
+    if most_frequent_delta_perc > 0.98:
         inferred_freq = timedelta_to_string(most_frequent_delta)
-        freqinfo = '>99% occurrence'
+        freqinfo = '>98% occurrence'
         # most_frequent_delta = pd.to_timedelta(most_frequent_delta)
         return inferred_freq, freqinfo
     else:

@@ -25,11 +25,12 @@ class FlagQCF:
                  df: DataFrame,
                  series: Series,
                  swinpot: Series = None,
-                 nighttime_threshold: int = 50,
-                 levelid: float = None
+                 levelid: str = None,
+                 nighttime_threshold: int = 50
                  ):
         self.df = df.copy()  # Original data
         self.series = series.copy()
+        self.levelid = levelid if levelid else ""
 
         # Identify FLAG columns
         flagcols, self.missingflagcol = self._identify_flagcols(df=df, seriescol=str(series.name))
@@ -46,12 +47,11 @@ class FlagQCF:
             self.nighttime = None
 
         # Generate QCF column names
-        levelid = f"L{levelid}_" if levelid else ""
-        self.filteredseriescol = f"{self.series.name}_{levelid}QCF"  # Quality-controlled flux
-        self.flagqcfcol = f"FLAG_{levelid}{self.series.name}_QCF"  # Overall flag
-        self.sumflagscol = f'SUM_{levelid}{self.series.name}_FLAGS'
-        self.sumhardflagscol = f'SUM_{levelid}{self.series.name}_HARDFLAGS'
-        self.sumsoftflagscol = f'SUM_{levelid}{self.series.name}_SOFTFLAGS'
+        self.filteredseriescol = f"{self.series.name}_{levelid}_QCF"  # Quality-controlled flux
+        self.flagqcfcol = f"FLAG_{levelid}_{self.series.name}_QCF"  # Overall flag
+        self.sumflagscol = f'SUM_{levelid}_{self.series.name}_FLAGS'
+        self.sumhardflagscol = f'SUM_{levelid}_{self.series.name}_HARDFLAGS'
+        self.sumsoftflagscol = f'SUM_{levelid}_{self.series.name}_SOFTFLAGS'
 
         self.daytime_accept_qcf_below = None
         self.nighttimetime_accept_qcf_below = None
@@ -279,7 +279,7 @@ class FlagQCF:
 
         # tests[QCF].loc[tests['SUM_FLAGS'] == 1] = 1
 
-        # QCF is 2 if three soft flags were raised
+        # QCF is 2 if more than three soft flags were raised
         df[self.flagqcfcol].loc[df[self.sumsoftflagscol] > 3] = 2
 
         # QCF is 2 if at least one hard flag was raised

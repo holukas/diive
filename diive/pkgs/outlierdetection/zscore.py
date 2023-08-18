@@ -4,6 +4,7 @@ from pandas import Series, DatetimeIndex
 
 import diive.core.funcs.funcs as funcs
 from diive.core.base.flagbase import FlagBase
+from diive.core.times.times import DetectFrequency
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.pkgs.createvar.daynightflag import nighttime_flag_from_latlon
 
@@ -27,16 +28,37 @@ class zScoreDaytimeNighttime(FlagBase):
     """
     flagid = 'OUTLIER_ZSCOREDTNT'
 
-    def __init__(self, series: Series, site_lat: float, site_lon: float, levelid: str = None):
+    def __init__(self,
+                 series: Series,
+                 lat: float,
+                 lon: float,
+                 timezone_of_timestamp: str,
+                 levelid: str = None):
+        """
+
+        Args:
+            series: Time series
+            lat: Latitude of location as float, e.g. 46.583056
+            lon: Longitude of location as float, e.g. 9.790639
+            timezone_of_timestamp: timezone in the format e.g. 'UTC+01:00' for CET (UTC + 1 hour)
+                The datetime index of the resulting Series will be in this timezone.
+            levelid: Identifier, added as suffix to output variable names
+        """
         super().__init__(series=series, flagid=self.flagid, levelid=levelid)
         self.showplot = False
         self.verbose = False
 
+        # Make sure time series has frequency
+        # Freq is needed for the detection of daytime/nighttime from lat/lon
+        if not self.series.index.freq:
+            freq = DetectFrequency(index=self.series.index, verbose=True).get()
+            self.series = self.series.asfreq(freq)
+
         # Detect nighttime
         self.is_nighttime = nighttime_flag_from_latlon(
-            lat=site_lat, lon=site_lon, freq=self.series.index.freqstr,
+            lat=lat, lon=lon, freq=self.series.index.freqstr,
             start=str(self.series.index[0]), stop=str(self.series.index[-1]),
-            timezone_of_timestamp='UTC+01:00', threshold_daytime=0)
+            timezone_of_timestamp=timezone_of_timestamp, threshold_daytime=0)
         self.is_nighttime = self.is_nighttime == 1  # Convert 0/1 flag to False/True flag
         self.is_daytime = ~self.is_nighttime  # Daytime is inverse of nighttime
 
@@ -57,7 +79,7 @@ class zScoreDaytimeNighttime(FlagBase):
         flag = pd.Series(index=self.series.index, data=np.nan)
 
         # Run for daytime (dt)
-        _s_dt = s[self.is_nighttime].copy()  # Daytime data
+        _s_dt = s[self.is_daytime].copy()  # Daytime data
         _zscore_dt = funcs.zscore(series=_s_dt)
         _ok_dt = _zscore_dt <= threshold
         _ok_dt = _ok_dt[_ok_dt].index
@@ -65,7 +87,7 @@ class zScoreDaytimeNighttime(FlagBase):
         _rejected_dt = _rejected_dt[_rejected_dt].index
 
         # Run for nighttime (nt)
-        _s_nt = s[self.is_daytime].copy()  # Daytime data
+        _s_nt = s[self.is_nighttime].copy()  # Daytime data
         _zscore_nt = funcs.zscore(series=_s_nt)
         _ok_nt = _zscore_nt <= threshold
         _ok_nt = _ok_nt[_ok_nt].index

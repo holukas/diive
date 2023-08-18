@@ -46,7 +46,7 @@ First example notebooks can be found in the folder `notebooks`.
 ### Flux
 
 - Critical heat days for NEP, based on air temperature and VPD
-- NEP penalty
+- CO2 penalty
 - USTAR threshold scenarios
 
 ### Flux processing chain
@@ -54,9 +54,11 @@ First example notebooks can be found in the folder `notebooks`.
 For info about the Swiss FluxNet flux levels,
 see [here](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/).
 
-- Level-2 quality flags
-- Level-3.1 storage correction
-- Level-3.2 outlier removal
+- Flux processing chain ([notebook example](notebooks/FluxProcessingChain/FluxProcessingChain.ipynb))
+- The notebook example shows the application of:
+  - Level-2 quality flags
+  - Level-3.1 storage correction
+  - Level-3.2 outlier removal
 
 ### Formats
 

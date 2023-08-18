@@ -118,6 +118,7 @@ class HeatmapPivotXYZ(HeatmapBase):
 
     def plot(self,
              ax=None,
+             cmap=None,
              xlabel: str = None,
              ylabel: str = None,
              zlabel: str = None,
@@ -125,7 +126,8 @@ class HeatmapPivotXYZ(HeatmapBase):
              ticklabels: list = None,
              cb_digits_after_comma: int = 2):
         ax = ax if ax else self.ax
-        cmap, z = self._set_cmap(cmap=self.cmap, color_bad=self.color_bad, z=self.z)
+        cmap = cmap if cmap else self.cmap
+        cmap, z = self._set_cmap(cmap=cmap, color_bad=self.color_bad, z=self.z)
         vmin = np.nanmin(z)
         vmax = np.nanmax(z)
         p = ax.pcolormesh(self.x, self.y, z,

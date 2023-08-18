@@ -116,7 +116,7 @@ class StepwiseMeteoScreeningDb:
     files. This adjustment will be done in one of the next updates.
 
     **Current methods**
-    A listing of currently implemented quality checks and correction can be found at the top
+    A listing of currently implemented quality checks and corrections can be found at the top
     of this file.
 
     """
@@ -310,7 +310,7 @@ class StepwiseMeteoScreeningDb:
         """z-score, calculated separately for daytime and nighttime"""
         for field in self.fields:
             series_cleaned = self._series_hires_cleaned[field]  # Timeseries
-            _zscoredtnt = zScoreDaytimeNighttime(series=series_cleaned, site_lat=self.site_lat, site_lon=self.site_lon)
+            _zscoredtnt = zScoreDaytimeNighttime(series=series_cleaned, lat=self.site_lat, lon=self.site_lon)
             _zscoredtnt.calc(threshold=threshold, showplot=showplot, verbose=verbose)
             self._last_results[field] = _zscoredtnt
 
