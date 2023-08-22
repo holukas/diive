@@ -3,23 +3,20 @@
 
 def example():
     from pathlib import Path
-    outpath = Path(r'Z:\CH-FRU_Fruebuel\20_ec_fluxes\2023\Level-0\CH-FRU_FR-20230730-090003\2-0_eddypro_flux_calculations\results')
-    # outpath = Path(r'F:\Sync\luhk_work\TMP')
+    SOURCEFOLDER = [Path(r'F:\TMP')]
+    OUTPATH = Path(r'F:\TMP')
 
     # ----------------------
     # Load data from files
     # ----------------------
-    import os
-    from pathlib import Path
-    from diive.core.io.filereader import MultiDataFileReader
+    from diive.core.io.filereader import MultiDataFileReader, search_files
     from diive.core.io.files import save_parquet
-    filepaths = [f for f in os.listdir(outpath) if f.endswith(".csv")]
-    filepaths = [outpath / f for f in filepaths]
-    filepaths = [Path(f) for f in filepaths]
-    [print(f) for f in filepaths]
+    filepaths = search_files(SOURCEFOLDER, "*.csv")
+    filepaths = [fp for fp in filepaths if
+                 "eddypro_" in fp.stem and "_fluxnet_" in fp.stem and fp.stem.endswith("_adv")]
     loaddatafile = MultiDataFileReader(filetype='EDDYPRO_FLUXNET_30MIN', filepaths=filepaths)
     df = loaddatafile.data_df
-    save_parquet(outpath=outpath, filename="data", data=df)
+    save_parquet(outpath=OUTPATH, filename="data", data=df)
 
     # -------------------------------
     # Level-2: Quality flag expansion
@@ -27,9 +24,9 @@ def example():
     from pandas import read_parquet
     from diive.pkgs.fluxprocessingchain.level2_qualityflags import FluxQualityFlagsLevel2EddyPro
     from diive.core.io.files import save_parquet
-    filepath = str(outpath / "data.parquet")
+    filepath = str(OUTPATH / "data.parquet")
     df = read_parquet(filepath)
-    fluxqc = FluxQualityFlagsLevel2EddyPro(fluxcol='FC', df=df, levelid='L2')
+    fluxqc = FluxQualityFlagsLevel2EddyPro(fluxcol='H', df=df, levelid='L2')
     fluxqc.missing_vals_test()
     fluxqc.ssitc_test()
     fluxqc.gas_completeness_test()
@@ -47,15 +44,15 @@ def example():
     fluxqc.angle_of_attack_test()
     # print(fluxqc.fluxflags)
     _df = fluxqc.get()
-    save_parquet(outpath=outpath, filename="data_L2", data=_df)
+    save_parquet(outpath=OUTPATH, filename="data_L2", data=_df)
 
     # -----------------------------
     # Level-3.1: Storage correction
     # -----------------------------
     from pandas import read_parquet
     from diive.pkgs.fluxprocessingchain.level31_storagecorrection import FluxStorageCorrectionSinglePointEddyPro
-    from diive.core.io.files import save_as_parquet
-    filepath = str(outpath / "data_L2.parquet")
+    from diive.core.io.files import save_parquet
+    filepath = str(OUTPATH / "data_L2.parquet")
     df = read_parquet(filepath)
     s = FluxStorageCorrectionSinglePointEddyPro(df=df, fluxcol='FC')
     s.storage_correction()
@@ -63,17 +60,17 @@ def example():
     # print(s.storage)
     s.report()
     _df = s.get()
-    save_as_parquet(outpath=outpath, filename="data_L3.1", data=_df)
+    save_parquet(outpath=OUTPATH, filename="data_L3.1", data=_df)
 
     # -------------------
     # QCF after Level-3.1
     # -------------------
     from pandas import read_parquet
     from diive.pkgs.qaqc.qcf import FlagQCF
-    from diive.core.io.files import save_as_parquet
-    filepath = str(outpath / "data_L3.1.parquet")
+    from diive.core.io.files import save_parquet
+    filepath = str(OUTPATH / "data_L3.1.parquet")
     _df = read_parquet(filepath)
-    qcf = FlagQCF(series=_df['NEE_L3.1'], df=_df, levelid='L3.1', swinpot=_df['SW_IN_POT'], nighttime_threshold=50)
+    qcf = FlagQCF(series=_df['H_L3.1'], df=_df, levelid='L3.1', swinpot=_df['SW_IN_POT'], nighttime_threshold=50)
     qcf.calculate(daytime_accept_qcf_below=2, nighttimetime_accept_qcf_below=2)
     # qcf.report_qcf_flags()
     qcf.report_qcf_evolution()
@@ -81,7 +78,7 @@ def example():
     # qcf.showplot_qcf_heatmaps(maxabsval=10)
     # qcf.showplot_qcf_timeseries()
     _df = qcf.get()
-    save_as_parquet(outpath=outpath, filename="data_L3.1b", data=_df)
+    save_parquet(outpath=OUTPATH, filename="data_L3.1b", data=_df)
 
     # # todo TESTING hq fluxes
     # df_hq = _df.loc[_df['FLAG_L3.1_NEE_L3.1_QCF'] == 1].copy()
@@ -113,7 +110,7 @@ def example():
     from pandas import read_parquet
     from diive.pkgs.outlierdetection.stepwiseoutlierdetection import StepwiseOutlierDetection
     from diive.core.io.files import save_parquet
-    filepath = str(outpath / "data_L3.1b.parquet")
+    filepath = str(OUTPATH / "data_L3.1b.parquet")
     _df = read_parquet(filepath)
 
     sod = StepwiseOutlierDetection(dataframe=_df,
@@ -174,7 +171,7 @@ def example():
     # todo ? olr = FluxOutlierRemovalLevel32(df=_df, fluxcol='NEE_L3.1_L3.1_QCF', site_lat=site_lat, site_lon=site_lon)
 
     # # TODO CHECK outlier removal options, remove qcf=1 based on qcf=0?
-    save_parquet(outpath=outpath, filename="data_L3.2", data=_df)
+    save_parquet(outpath=OUTPATH, filename="data_L3.2", data=_df)
 
     # -------------------
     # QCF after Level-3.2
@@ -182,7 +179,7 @@ def example():
     from pandas import read_parquet
     from diive.pkgs.qaqc.qcf import FlagQCF
     from diive.core.io.files import save_parquet
-    filepath = str(outpath / "data_L3.2.parquet")
+    filepath = str(OUTPATH / "data_L3.2.parquet")
     _df = read_parquet(filepath)
     qcf = FlagQCF(series=_df['NEE_L3.1_L3.1_QCF'], df=_df, levelid='3.2',
                   swinpot=_df['SW_IN_POT'], nighttime_threshold=50)
@@ -194,7 +191,7 @@ def example():
     qcf.showplot_qcf_heatmaps(maxabsval=10)
     qcf.showplot_qcf_timeseries()
     _df = qcf.get()
-    save_parquet(outpath=outpath, filename="data_L3.2q", data=_df)
+    save_parquet(outpath=OUTPATH, filename="data_L3.2q", data=_df)
 
     # from diive.core.io.files import load_pickle
     # _df = load_pickle(filepath=r"F:\Sync\luhk_work\_temp\data_L3.2.pickle")

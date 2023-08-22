@@ -2,6 +2,33 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.57.0 | 22 Aug 2023
+
+### Changes
+
+- Relaxed conditions a bit when inferring time resolution of time
+  series (`core.times.times.timestamp_infer_freq_progressively`, `core.times.times.timestamp_infer_freq_from_timedelta`)
+
+### Additions
+
+- When reading parquet files, the TimestampSanitizer is applied by default to detect e.g. the time resolution
+  of the time series. Parquet files do not store info on time resolution like it is stored in pandas dataframes
+  (e.g. `30T` for 30MIN time resolution), even if the dataframe containing that info was saved to a parquet file.
+
+### Bugfixes
+
+- Fixed bug where interactive time series plot did not show in Jupyter notebooks (`core.plotting.timeseries.TimeSeries`)
+- Fixed bug where certain parts of the flux processing chain could not be used for the sensible heat flux `H`.
+  The issue was that `H` is calculated from sonic temperature (`T_SONIC` in EddyPro `_fluxnet_` output files),
+  which was not considered in function `pkgs.flux.common.detect_flux_basevar`.
+- Fixed bug: interactive plotting in notebooks using `bokeh` did not work. The reason was that the `bokeh` plot
+  tools (controls) `ZoomInTool()` and `ZoomOutTool()` do not seem to work anymore. Both tools are now deactivated.
+
+### Notebooks
+
+- Added new notebook for simple (interactive) time series plotting `notebooks/Plotting/TimeSeries.ipynb`
+- Updated notebook `notebooks/FluxProcessingChain/FluxProcessingChain.ipynb` to version 3
+
 ## v0.55.0 | 18 Aug 2023
 
 This update focuses on the flux processing chain, in particular the creation of the extended

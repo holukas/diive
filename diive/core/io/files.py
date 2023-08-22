@@ -7,6 +7,7 @@ from pathlib import Path
 from pandas import Series, DataFrame, read_parquet
 
 from diive.core.io.filereader import MultiDataFileReader
+from diive.core.times.times import TimestampSanitizer
 
 
 def set_outpath(outpath: str or None, filename: str, fileextension: str):
@@ -18,7 +19,7 @@ def set_outpath(outpath: str or None, filename: str, fileextension: str):
     return filepath
 
 
-def save_parquet(filename: str, data: Series or DataFrame, outpath: str or None = None) -> str:
+def save_parquet(filename: str, data: DataFrame or Series, outpath: str or None = None) -> str:
     """
     Save pandas Series or DataFrame as parquet file
 
@@ -55,7 +56,10 @@ def load_parquet(filepath: str) -> DataFrame:
     tic = time.time()
     df = read_parquet(filepath)
     toc = time.time() - tic
-    print(f"Saved file {filepath} ({toc:.3f} seconds).")
+    # Check timestamp, also detects frequency of time series, this info was lost when saving to the parquet file
+    df = TimestampSanitizer(data=df).get()
+    print(f"Loaded .parquet file {filepath} ({toc:.3f} seconds). "
+          f"Detected time resolution of {df.index.freq} / {df.index.freqstr} ")
     return df
 
 

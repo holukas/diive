@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from pandas import DataFrame
 
-from diive.pkgs.flux.common import detect_fluxgas
+from diive.pkgs.flux.common import detect_flux_basevar
 
 
 class FluxQualityFlagsLevel2EddyPro:
@@ -28,7 +28,8 @@ class FluxQualityFlagsLevel2EddyPro:
         self.df = df.copy()
         self.levelid = levelid if levelid else ""
 
-        self.gas = detect_fluxgas(fluxcol=self.fluxcol)
+        # Base variable from which the flux was calculated, e.g. CO2 for FC, H2O for LE, ...
+        self.basevar = detect_flux_basevar(fluxcol=self.fluxcol)
 
         self._fluxflags = self.df[[fluxcol]].copy()
 
@@ -70,9 +71,10 @@ class FluxQualityFlagsLevel2EddyPro:
         flagdf[flagcol] = flagdf[flagcol].replace(1, 2)
         self._fluxflags[flagcol] = flagdf[flagcol].copy()
 
-        print(f"Fetching {flagcol} "
-              f"with flag 0 (good values) where test passed "
-              f"and flag 2 (bad values) where test failed ...")
+        print(f"Generating new flag variable {flagcol}, "
+              f"values taken from output variable {aoa}, with "
+              f"flag 0 (good values) where test passed, "
+              f"flag 2 (bad values) where test failed ...")
 
     def raw_data_screening_vm97_tests(self,
                                       spikes: bool = True,
@@ -96,7 +98,7 @@ class FluxQualityFlagsLevel2EddyPro:
         _SF_ = soft flag (flag 1 = ok values)
 
         """
-        vm97 = f"{self.gas}_VM97_TEST"
+        vm97 = f"{self.basevar}_VM97_TEST"
         flagdf = self.df[[self.fluxcol, vm97]].copy()
 
         flagdf[vm97] = flagdf[vm97].apply(pd.to_numeric, errors='coerce').astype(float)
@@ -104,17 +106,19 @@ class FluxQualityFlagsLevel2EddyPro:
 
         flagcols = {
             # '0': XXX,  # Index 0 is always the number `8`
-            '1': f"FLAG_{self.levelid}_{self.fluxcol}_{self.gas}_VM97_SPIKE_HF_TEST",  # Spike detection, hard flag
-            '2': f"FLAG_{self.levelid}_{self.fluxcol}_{self.gas}_VM97_AMPLITUDE_RESOLUTION_HF_TEST",
+            '1': f"FLAG_{self.levelid}_{self.fluxcol}_{self.basevar}_VM97_SPIKE_HF_TEST",  # Spike detection, hard flag
+            '2': f"FLAG_{self.levelid}_{self.fluxcol}_{self.basevar}_VM97_AMPLITUDE_RESOLUTION_HF_TEST",
             # Amplitude resolution, hard flag
-            '3': f"FLAG_{self.levelid}_{self.fluxcol}_{self.gas}_VM97_DROPOUT_TEST",  # Drop-out, hard flag
-            '4': f"FLAG_{self.levelid}_{self.fluxcol}_{self.gas}_VM97_ABSOLUTE_LIMITS_HF_TEST",
+            '3': f"FLAG_{self.levelid}_{self.fluxcol}_{self.basevar}_VM97_DROPOUT_TEST",  # Drop-out, hard flag
+            '4': f"FLAG_{self.levelid}_{self.fluxcol}_{self.basevar}_VM97_ABSOLUTE_LIMITS_HF_TEST",
             # Absolute limits, hard flag
-            '5': f"FLAG_{self.levelid}_{self.fluxcol}_{self.gas}_VM97_SKEWKURT_HF_TEST",  # Skewness/kurtosis, hard flag
-            '6': f"FLAG_{self.levelid}_{self.fluxcol}_{self.gas}_VM97_SKEWKURT_SF_TEST",  # Skewness/kurtosis, soft flag
-            '7': f"FLAG_{self.levelid}_{self.fluxcol}_{self.gas}_VM97_DISCONTINUITIES_HF_TEST",
+            '5': f"FLAG_{self.levelid}_{self.fluxcol}_{self.basevar}_VM97_SKEWKURT_HF_TEST",
+            # Skewness/kurtosis, hard flag
+            '6': f"FLAG_{self.levelid}_{self.fluxcol}_{self.basevar}_VM97_SKEWKURT_SF_TEST",
+            # Skewness/kurtosis, soft flag
+            '7': f"FLAG_{self.levelid}_{self.fluxcol}_{self.basevar}_VM97_DISCONTINUITIES_HF_TEST",
             # Discontinuities, hard flag
-            '8': f"FLAG_{self.levelid}_{self.fluxcol}_{self.gas}_VM97_DISCONTINUITIES_SF_TEST"
+            '8': f"FLAG_{self.levelid}_{self.fluxcol}_{self.basevar}_VM97_DISCONTINUITIES_SF_TEST"
             # Discontinuities, soft flag
         }
 
@@ -152,8 +156,11 @@ class FluxQualityFlagsLevel2EddyPro:
         # Collect all required flags
         for i, c in flagcols_used.items():
             self._fluxflags[c] = flagdf[c].copy()
-            print(f"Fetching {c} for {self.gas} "
-                  f"with flag 0 (good values) where test passed, "
+
+            print(f"Generating new flag variable {c}, "
+                  f"values taken from output variable {vm97} from position {i}, "
+                  f"based on {self.basevar}, with "
+                  f"flag 0 (good values) where test passed, "
                   f"flag 2 (bad values) where test failed (for hard flags) or "
                   f"flag 1 (ok values) where test failed (for soft flags) ...")
 
@@ -168,15 +175,15 @@ class FluxQualityFlagsLevel2EddyPro:
         flagdf[flagname] = np.nan
 
         if method == 'discard below':
-            print(f"Calculating {flagname} from {signal_strength_col} with "
+            print(f"Generating new flag variable {flagname}, "
+                  f"newly calculated from output variable {signal_strength_col}, with "
                   f"flag 0 (good values) where {signal_strength_col} >= {threshold}, "
                   f"flag 2 (bad values) where {signal_strength_col} < {threshold} ...")
         elif method == 'discard above':
-            print(f"Calculating {flagname} from {signal_strength_col} with "
+            print(f"Generating new flag variable {flagname}, "
+                  f"newly calculated from output variable {signal_strength_col}, with "
                   f"flag 0 (good values) where {signal_strength_col} <= {threshold}, "
                   f"flag 2 (bad values) where {signal_strength_col} > {threshold} ...")
-
-        # percentiles_df = percentiles(series=flagdf[signal_strength_col], showplot=False)
 
         good = None
         bad = None
@@ -200,11 +207,11 @@ class FluxQualityFlagsLevel2EddyPro:
         flagdf = self.df[[self.fluxcol, scf]].copy()
         flagdf[flagname] = np.nan
 
-        print(f"Calculating {flagname} from {scf} with "
+        print(f"Generating new flag variable {flagname}, "
+              f"newly calculated from output variable {scf}, with"
               f"flag 0 (good values) where {scf} < {thres_good}, "
               f"flag 1 (ok values) where {scf} >= {thres_good} and < {thres_ok}, "
               f"flag 2 (bad values) where {scf} >= {thres_ok}...")
-        # percentiles_df = percentiles(series=flagdf[scf], showplot=False)
 
         good = flagdf[scf] < thres_good
         ok = (flagdf[scf] >= thres_good) & (flagdf[scf] < thres_ok)
@@ -222,10 +229,10 @@ class FluxQualityFlagsLevel2EddyPro:
         flagdf = self.df[[self.fluxcol]].copy()
         flagdf[flagname] = np.nan
 
-        print(f"Calculating {flagname} from {self.fluxcol} "
+        print(f"Generating new flag variable {flagname}, "
+              f"newly calculated from output variable {self.fluxcol},"
               f"with flag 0 (good values) where {self.fluxcol} is available, "
               f"flag 2 (bad values) where {self.fluxcol} is missing ...")
-        # percentiles_df = percentiles(series=flagdf[self.flux])
 
         bad = flagdf[self.fluxcol].isnull()
         good = ~bad
@@ -238,12 +245,9 @@ class FluxQualityFlagsLevel2EddyPro:
     def ssitc_test(self):
         flagname = f'FLAG_{self.levelid}_{self.fluxcol}_SSITC_TEST'
         _flagname = f'{self.fluxcol}_SSITC_TEST'  # Name in EddyPro file
-
         flagdf = self.df[[self.fluxcol, _flagname]].copy()
-
-        print(f"Fetching {_flagname} directly from output file, renaming to {flagname} ...")
-        # percentiles_df = percentiles(series=flagdf[flagname])
-
+        print(f"Generating new flag variable {flagname}, "
+              f"values taken from output variable {_flagname} ...")
         self._fluxflags[flagname] = flagdf[_flagname].copy()
 
     def gas_completeness_test(self,
@@ -252,8 +256,8 @@ class FluxQualityFlagsLevel2EddyPro:
 
         flagname = f'FLAG_{self.levelid}_{self.fluxcol}_COMPLETENESS_TEST'
         expected_n_records = 'EXPECT_NR'
-        gas_n_records = f'{self.gas}_NR'
-        gas_n_records_perc = f'{self.gas}_NR_PERC'
+        gas_n_records = f'{self.basevar}_NR'
+        gas_n_records_perc = f'{self.basevar}_NR_PERC'
 
         flagdf = self.df[[self.fluxcol]].copy()
         flagdf[expected_n_records] = self.df[expected_n_records].copy()
@@ -261,11 +265,11 @@ class FluxQualityFlagsLevel2EddyPro:
         flagdf[gas_n_records_perc] = flagdf[gas_n_records].divide(flagdf[expected_n_records])
         flagdf[flagname] = np.nan
 
-        print(f"Calculating {flagname} from {gas_n_records_perc} with "
+        print(f"Generating new flag variable {flagname}, "
+              f"newly calculated from output variable {gas_n_records_perc}, with "
               f"flag 0 (good values) where {gas_n_records_perc} >= {thres_good}, "
               f"flag 1 (ok values) where {gas_n_records_perc} >= {thres_ok} and < {thres_good}, "
               f"flag 2 (bad values) < {thres_ok}...")
-        # percentiles_df = percentiles(series=flagdf[gas_n_records_perc], showplot=False)
 
         good = flagdf[gas_n_records_perc] >= thres_good
         ok = (flagdf[gas_n_records_perc] >= thres_ok) & (flagdf[gas_n_records_perc] < thres_good)
