@@ -1,12 +1,15 @@
 import pandas as pd
 from bokeh.models import BoxZoomTool, PanTool, ResetTool, WheelZoomTool, WheelPanTool, UndoTool, \
-    RedoTool, SaveTool, HoverTool, ZoomInTool, ZoomOutTool, BoxSelectTool
+    RedoTool, SaveTool, HoverTool, BoxSelectTool
 from bokeh.models import ColumnDataSource
 from bokeh.plotting import figure, show
+from bokeh.plotting import output_notebook
 from pandas import Series
 
 import diive.core.plotting.plotfuncs as pf
 import diive.core.plotting.styles.LightTheme as theme
+
+output_notebook()
 
 
 # TODO
@@ -64,8 +67,8 @@ class TimeSeries:
                        WheelPanTool(),
                        UndoTool(),
                        RedoTool(),
-                       ZoomInTool(),
-                       ZoomOutTool(),
+                       # ZoomInTool(),  # not working, plot will not show
+                       # ZoomOutTool(),  # not working, plot will not show
                        SaveTool()],
                    x_axis_type='datetime')
 
@@ -117,7 +120,8 @@ class TimeSeries:
                           marker='', markeredgecolor='none', ms=0,
                           zorder=99, label=label)
         self._apply_format()
-        if self.showplot: self.fig.show()
+        if self.showplot:
+            self.fig.show()
 
     def _apply_format(self):
         """Format matplotlib plot"""

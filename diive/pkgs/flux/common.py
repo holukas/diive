@@ -1,16 +1,18 @@
-# TODO what if flux is sensible heat H???
-def detect_fluxgas(fluxcol: str) -> str:
-    """Detect name of gas column that was used to calculate the flux"""
-    gascol = None
+def detect_flux_basevar(fluxcol: str) -> str:
+    """Detect name of base variable that was used to calculate
+    the respective flux"""
+    basevar = None
     if fluxcol == 'FC':
-        gascol = 'CO2'
+        basevar = 'CO2'
     elif (fluxcol == 'FH2O') \
             | (fluxcol == 'LE') \
             | (fluxcol == 'ET'):
-        gascol = 'H2O'
+        basevar = 'H2O'
+    elif fluxcol == 'H':
+        basevar = 'T_SONIC'
     elif fluxcol == 'FN2O':
-        gascol = 'N2O'
+        basevar = 'N2O'
     elif fluxcol == 'FCH4':
-        gascol = 'CH4'
-    print(f"Detected gas {gascol} for {fluxcol}.")
-    return gascol
+        basevar = 'CH4'
+    print(f"Detected base variable {basevar} for {fluxcol}.")
+    return basevar

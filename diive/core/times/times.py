@@ -277,6 +277,7 @@ def current_datetime(str_format: str = '%Y-%m-%d %H:%M:%S') -> tuple[dt.datetime
     now_time_str = now_time_dt.strftime(str_format)
     return now_time_dt, now_time_str
 
+
 def current_date_str_condensed() -> str:
     """
     Current date as string
@@ -289,6 +290,7 @@ def current_date_str_condensed() -> str:
     run_id = f'{now_time_str}'
     # log(name=make_run_id.__name__, dict={'run id': run_id}, highlight=False)
     return run_id
+
 
 def current_datetime_str_condensed() -> str:
     """
@@ -532,44 +534,49 @@ class DetectFrequency:
             if len(freq_list) == 1:
                 # Maximum certainty, one single freq found across all checks
                 self.freq = freq_list[0]
-                if self.verbose: print(f"OK\n"
-                                       f"   Detected {self.freq} time resolution with MAXIMUM confidence.\n"
-                                       f"   All approaches yielded the same result:\n"
-                                       f"       from full data = {freq_full} / {freqinfo_full} (OK)\n"
-                                       f"       from timedelta = {freq_timedelta} / {freqinfo_timedelta} (OK)\n"
-                                       f"       from progressive = {freq_progressive} / {freqinfo_progressive} (OK)\n")
+                if self.verbose:
+                    print(f"OK\n"
+                          f"   Detected {self.freq} time resolution with MAXIMUM confidence.\n"
+                          f"   All approaches yielded the same result:\n"
+                          f"       from full data = {freq_full} / {freqinfo_full} (OK)\n"
+                          f"       from timedelta = {freq_timedelta} / {freqinfo_timedelta} (OK)\n"
+                          f"       from progressive = {freq_progressive} / {freqinfo_progressive} (OK)\n")
 
         elif freq_full:
             # High certainty, freq found from full range of dataset
             self.freq = freq_full
-            if self.verbose: print(f"OK\n"
-                                   f"   Detected {self.freq} time resolution with MAXIMUM confidence.\n"
-                                   f"   Full data has consistent timestamp:\n"
-                                   f"       from full data = {freq_full} / {freqinfo_full} (OK)\n"
-                                   f"       from timedelta = {freq_timedelta} / {freqinfo_timedelta} (not used)\n"
-                                   f"       from progressive = {freq_progressive} / {freqinfo_progressive} (not used)\n")
+            if self.verbose:
+                print(f"OK\n"
+                      f"   Detected {self.freq} time resolution with MAXIMUM confidence.\n"
+                      f"   Full data has consistent timestamp:\n"
+                      f"       from full data = {freq_full} / {freqinfo_full} (OK)\n"
+                      f"       from timedelta = {freq_timedelta} / {freqinfo_timedelta} (not used)\n"
+                      f"       from progressive = {freq_progressive} / {freqinfo_progressive} (not used)\n")
 
         elif freq_progressive:
             # Medium certainty, freq found from start and end of dataset
             self.freq = freq_progressive
-            if self.verbose: print(f"OK (detected {self.freq} time resolution {self.freq} with MEDIUM confidence)")
-            if self.verbose: print(f"OK\n"
-                                   f"   Detected {self.freq} time resolution with MEDIUM confidence.\n"
-                                   f"   Records at start and end of file have consistent timestamp:\n"
-                                   f"       from full data = {freq_full} / {freqinfo_full} (not used)\n"
-                                   f"       from timedelta = {freq_timedelta} / {freqinfo_timedelta} (not used)\n"
-                                   f"       from progressive = {freq_progressive} / {freqinfo_progressive} (OK)\n")
+            if self.verbose:
+                print(f"OK (detected {self.freq} time resolution {self.freq} with MEDIUM confidence)")
+            if self.verbose:
+                print(f"OK\n"
+                      f"   Detected {self.freq} time resolution with MEDIUM confidence.\n"
+                      f"   Records at start and end of file have consistent timestamp:\n"
+                      f"       from full data = {freq_full} / {freqinfo_full} (not used)\n"
+                      f"       from timedelta = {freq_timedelta} / {freqinfo_timedelta} (not used)\n"
+                      f"       from progressive = {freq_progressive} / {freqinfo_progressive} (OK)\n")
 
         elif freq_timedelta:
             # High certainty, freq found from most frequent timestep that
-            # occurred at least 99% of the time
+            # occurred at least 90% of the time
             self.freq = freq_timedelta
-            if self.verbose: print(f"OK\n"
-                                   f"   Detected {self.freq} time resolution with HIGH confidence.\n"
-                                   f"   Resolution detected from most frequent timestep (timedelta):\n"
-                                   f"       from full data = {freq_full} / {freqinfo_full} (not used)\n"
-                                   f"       from timedelta = {freq_timedelta} / {freqinfo_timedelta} (OK)\n"
-                                   f"       from progressive = {freq_progressive} / {freqinfo_progressive} (not used)\n")
+            if self.verbose:
+                print(f"OK\n"
+                      f"   Detected {self.freq} time resolution with HIGH confidence.\n"
+                      f"   Resolution detected from most frequent timestep (timedelta):\n"
+                      f"       from full data = {freq_full} / {freqinfo_full} (not used)\n"
+                      f"       from timedelta = {freq_timedelta} / {freqinfo_timedelta} (OK)\n"
+                      f"       from progressive = {freq_progressive} / {freqinfo_progressive} (not used)\n")
 
         else:
             raise Exception("Frequency detection failed.")
@@ -589,7 +596,7 @@ def timestamp_infer_freq_progressively(timestamp_ix: pd.DatetimeIndex) -> tuple:
     freqinfo = None
     checkrange = 1000
     if n_datarows > 0:
-        for ndr in range(checkrange, 5, -1):  # ndr = number of data rows
+        for ndr in range(checkrange, 3, -1):  # ndr = number of data rows
             if n_datarows >= ndr * 2:  # Same amount of ndr needed for start and end of file
                 _inferred_freq_start = pd.infer_freq(timestamp_ix[0:ndr])
                 _inferred_freq_end = pd.infer_freq(timestamp_ix[-ndr:])
@@ -649,9 +656,9 @@ def timestamp_infer_freq_from_timedelta(timestamp_ix: pd.DatetimeIndex) -> tuple
         most_frequent_delta]  # Number of occurrences for most frequent delta
     most_frequent_delta_perc = most_frequent_delta_counts / n_rows  # Fraction
     # Check whether the most frequent delta appears in >99% of all data rows
-    if most_frequent_delta_perc > 0.98:
+    if most_frequent_delta_perc > 0.90:
         inferred_freq = timedelta_to_string(most_frequent_delta)
-        freqinfo = '>98% occurrence'
+        freqinfo = '>90% occurrence'
         # most_frequent_delta = pd.to_timedelta(most_frequent_delta)
         return inferred_freq, freqinfo
     else:

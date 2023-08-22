@@ -5,7 +5,7 @@ import pandas as pd
 from pandas import DataFrame
 
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-from diive.pkgs.flux.common import detect_fluxgas
+from diive.pkgs.flux.common import detect_flux_basevar
 from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
 
 
@@ -23,7 +23,7 @@ class FluxStorageCorrectionSinglePointEddyPro:
         self.fluxcol = fluxcol
         self.levelid = levelid if levelid else ""
 
-        self.gascol = detect_fluxgas(fluxcol=self.fluxcol)
+        self.gascol = detect_flux_basevar(fluxcol=self.fluxcol)
         self.strgcol = self._detect_storage_var()
         self.flux_corrected_col = self._output_name()
         self.flagname = f'FLAG_{self.levelid}_{self.fluxcol}_{self.strgcol}-MISSING_TEST'

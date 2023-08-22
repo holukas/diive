@@ -132,7 +132,7 @@ class FlagQCF:
                     if str(c).startswith('FLAG_')
                     and (str(c).endswith(('_TEST', '_QCF')))]
 
-        # Collect relevant columns
+        # Collect columns relevant for this flux
         relevant = self._identify_relevants(seriescol=seriescol)
         flagcols = [f for f in flagcols if any(n in f for n in relevant)]
 

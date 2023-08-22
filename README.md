@@ -86,6 +86,7 @@ Fill gaps in time series with various methods
 
 ### Plotting
 
+- Simple (interactive) time series plot ([notebook example](notebooks/Plotting/TimeSeries.ipynb))
 - Various classes to generate heatmaps, bar plots, time series plots and scatter plots, among others
 
 ### Quality control
