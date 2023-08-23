@@ -168,6 +168,17 @@ class FluxQualityFlagsLevel2EddyPro:
                              signal_strength_col: str,
                              method: str,
                              threshold: int):
+        """
+        Remove flux values where signal strength / AGC is not sufficient (too high or too low)
+
+        Args:
+            signal_strength_col: str, name of signal strength or AGC variable
+            method: str, 'discard above' or 'discard below' *threshold*
+            threshold: int, threshold to remove data points
+
+        Returns:
+
+        """
         flagname = f'FLAG_{self.levelid}_{self.fluxcol}_SIGNAL_STRENGTH_TEST'
         if signal_strength_col not in self.df.columns:
             raise f"The column {signal_strength_col} is not in data, please check."

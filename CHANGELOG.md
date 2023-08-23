@@ -2,6 +2,35 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.57.1 | 23 Aug 2023
+
+### Changes
+
+Updates to class `FormatEddyProFluxnetFileForUpload`, for quickly formatting the EddyPro _fluxnet_
+output file to comply with [FLUXNET](https://fluxnet.org/) requirements for uploading data.
+
+### Additions
+
+- **Formatting EddyPro _fluxnet_ files for upload to FLUXNET**: `FormatEddyProFluxnetFileForUpload`
+
+    - Added new method to rename variables from the EddyPro _fluxnet_ file to comply
+      with [FLUXNET variable codes](http://www.europe-fluxdata.eu/home/guidelines/how-to-submit-data/variables-codes).
+      `._rename_to_variable_codes()`
+    - Added new method to remove errneous time periods from dataset `.remove_erroneous_data()`
+    - Added new method to remove fluxes from time periods of insufficient signal strength / AGC
+      `.remove_low_signal_data()`
+
+### Bugfixes
+
+- Fixed bug: when data points are removed manually using class `ManualRemoval` and the data to be removed
+  is a single datetime (e.g., `2005-07-05 23:15:00`) then the removal now also works if the
+  provided datetime is not found in the time series. Previously, the class raised the error that
+  the provided datetime is not part of the index. (`pkgs.outlierdetection.manualremoval.ManualRemoval`)
+
+### Notebooks
+
+- Updated notebook `notebooks/Formats\FormatEddyProFluxnetFileForUpload.ipynb` to version `3`
+
 ## v0.57.0 | 22 Aug 2023
 
 ### Changes
