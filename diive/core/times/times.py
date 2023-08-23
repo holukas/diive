@@ -761,8 +761,9 @@ def insert_timestamp(
     # Get time resolution of data
     timestamp_freq = data.index.freq
 
-    if verbose: print(f"\nAdding new timestamp column {new_timestamp_col} "
-                      f"to show {convention} of averaging period ...")
+    if verbose:
+        print(f"\nAdding new timestamp column {new_timestamp_col} "
+              f"to show {convention} of averaging period ...")
 
     # Interval of data records
     timedelta = pd.to_timedelta(timestamp_freq)

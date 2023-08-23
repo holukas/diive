@@ -36,13 +36,16 @@ class ManualRemoval(FlagBase):
 
         Args:
             verbose: more text output to console if *True*
-            showplot:
+            showplot: show plot with removed data points
             remove_dates: list, can be given as a mix of strings and lists that
                 contain the date(times) of records that should be removed
                 Example:
-                    *remove_dates=['2022-06-30 23:58:30', ['2022-06-05 00:00:30', '2022-06-07 14:30:00']]*
+                    * remove_dates=['2022-06-30 23:58:30', ['2022-06-05 00:00:30', '2022-06-07 14:30:00']]*
                     will remove the record for '2022-06-30 23:58:30' and all records between
                     '2022-06-05 00:00:30' (inclusive) and '2022-06-07 14:30:00' (inclusive).
+                    * This also works when providing only the date, e.g.
+                      removed_dates=['2006-05-01', '2006-07-18'] will remove all data points between
+                      2006-05-01 and 2006-07-18.
 
         """
 
@@ -61,6 +64,10 @@ class ManualRemoval(FlagBase):
         # Location of rejected records
         for date in remove_dates:
             if isinstance(date, str):
+                # Neat solution: even though here only data for a single datetime
+                # is removed, the >= and <= comparators are used to avoid an error
+                # in case the datetime is not found in the flag.index
+                date = (flag.index >= date) & (flag.index <= date)
                 flag.loc[date] = 2
             elif isinstance(date, list):
                 dates = (flag.index >= date[0]) & (flag.index <= date[1])
@@ -75,7 +82,8 @@ class ManualRemoval(FlagBase):
         # All records that were not rejected are OK
         ok = flag.index.difference(rejected)
 
-        if self.showplot: self.plot(ok=ok, rejected=rejected)
+        if self.showplot:
+            self.plot(ok=ok, rejected=rejected)
 
         return ok, rejected
 
