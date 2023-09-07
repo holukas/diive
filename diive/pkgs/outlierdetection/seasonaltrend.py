@@ -27,6 +27,7 @@ from pandas.tseries.frequencies import to_offset
 from statsmodels.tsa.seasonal import STL
 
 from diive.core.base.flagbase import FlagBase
+from diive.core.times.times import include_timestamp_as_cols
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.pkgs.createvar.daynightflag import nighttime_flag_from_latlon
 from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
@@ -208,24 +209,23 @@ class OutlierSTLRZ(FlagBase):
 
     def _randomforest_quickfill(self, series: Series) -> tuple[Series, Series]:
         # Gapfilling random forest
-        rfts = RandomForestTS(df=pd.DataFrame(series),
-                              target_col=series.name,
-                              include_timestamp_as_features=True,
-                              lagged_variants=None,
-                              use_neighbor_years=True,
-                              feature_reduction=False,
-                              verbose=0)
-        rfts.build_models(n_estimators=10,
-                          random_state=42,
-                          min_samples_split=20,
-                          min_samples_leaf=10,
-                          n_jobs=-1)
-        rfts.gapfill_yrs()
-        _gapfilled_df, _gf_results = rfts.get_gapfilled_dataset()
-        gapfilled_name = f"{series.name}_gfRF"
-        series = _gapfilled_df[gapfilled_name].copy()
-        flag_gapfilled_name = f"QCF_{gapfilled_name}"
-        flag_gapfilled = _gapfilled_df[flag_gapfilled_name].copy()
+        _df = pd.DataFrame(series)
+        _df = include_timestamp_as_cols(df=_df)
+        rfts = RandomForestTS(
+            input_df=_df,
+            target_col=series.name,
+            verbose=0,
+            n_estimators=10,
+            random_state=42,
+            min_samples_split=20,
+            min_samples_leaf=10,
+            n_jobs=-1
+        )
+        rfts.trainmodel(showplot_predictions=False, showplot_importance=False, verbose=0)
+        rfts.fillgaps(showplot_scores=True, showplot_importance=True, verbose=1)
+        series = rfts.get_gapfilled_target()
+        flag_gapfilled_name = f"FLAG_{series.name}_ISFILLED"  # "[0=measured]"
+        flag_gapfilled = rfts.gapfilling_df[flag_gapfilled_name].copy()
         # series.plot()
         # plt.show()
         return series, flag_gapfilled
@@ -304,7 +304,7 @@ class OutlierSTLRIQRZ(FlagBase):
         outliers = True
         while outliers:
 
-            _series_gf, _flag_gf = self._randomforest_quickfill(series=_series)  # Adds suffix _gfRF to varname
+            _series_gf = self._randomforest_quickfill(series=_series)  # Adds suffix _gfRF to varname
             decompose_df = self._decompose(series=_series_gf, decompose_downsampling_freq=decompose_downsampling_freq)
             _flag_thisstep = self._detect_residual_outliers(series=decompose_df['RESIDUAL'], zfactor=zfactor)
 
@@ -421,29 +421,26 @@ class OutlierSTLRIQRZ(FlagBase):
         # decompose_df = pd.DataFrame(frame)
         return decompose_df
 
-    def _randomforest_quickfill(self, series: Series) -> tuple[Series, Series]:
+    def _randomforest_quickfill(self, series: Series) -> Series:
         # Gapfilling random forest
-        rfts = RandomForestTS(df=pd.DataFrame(series),
-                              target_col=series.name,
-                              include_timestamp_as_features=True,
-                              lagged_variants=None,
-                              use_neighbor_years=True,
-                              feature_reduction=False,
-                              verbose=0)
-        rfts.build_models(n_estimators=10,
-                          random_state=42,
-                          min_samples_split=20,
-                          min_samples_leaf=10,
-                          n_jobs=-1)
-        rfts.gapfill_yrs()
-        _gapfilled_df, _gf_results = rfts.get_gapfilled_dataset()
-        gapfilled_name = f"{series.name}_gfRF"
-        series = _gapfilled_df[gapfilled_name].copy()
-        flag_gapfilled_name = f"QCF_{gapfilled_name}"
-        flag_gapfilled = _gapfilled_df[flag_gapfilled_name].copy()
+        _df = pd.DataFrame(series)
+        _df = include_timestamp_as_cols(df=_df)
+        rfts = RandomForestTS(
+            input_df=_df,
+            target_col=series.name,
+            verbose=0,
+            n_estimators=10,
+            random_state=42,
+            min_samples_split=20,
+            min_samples_leaf=10,
+            n_jobs=-1
+        )
+        rfts.trainmodel(showplot_predictions=False, showplot_importance=False, verbose=0)
+        rfts.fillgaps(showplot_scores=True, showplot_importance=True, verbose=1)
+        series = rfts.get_gapfilled_target()
         # series.plot()
         # plt.show()
-        return series, flag_gapfilled
+        return series
 
 
 # # Relative extrema

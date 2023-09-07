@@ -152,7 +152,7 @@ class CO2Penalty:
 
     def _gapfill(self, df: DataFrame, target_col: str, random_state:int=None, bootstrap_runs:int=11):
         # Gapfilling
-        rfts = RandomForestTS(df=df, target_col=target_col,
+        rfts = RandomForestTS(input_df=df, target_col=target_col,
                               verbose=1, random_state=random_state,
                               n_estimators=bootstrap_runs, bootstrap=True)
         rfts.run()

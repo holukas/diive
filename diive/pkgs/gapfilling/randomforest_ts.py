@@ -1,3 +1,5 @@
+# TODO generalization bias
+
 """
 =========================================
 RANDOM FOREST GAP-FILLING FOR TIME SERIES
@@ -7,23 +9,19 @@ randomforest_ts
 This module is part of the diive library:
 https://gitlab.ethz.ch/diive/diive
 
-[x] lagged variants by default v0.36.0
-[x] longterm filling from 3-year pools v0.36.0
-[x] share already existing models v0.36.0
-[x] gap-filling for all data in one model v0.36.0
-[x] timeseriessplit v0.36.0
-[x] later feature reduction (rfecv) v0.36.0
+Kudos, optimization of hyper-parameters, grid search
+- https://scikit-learn.org/stable/modules/grid_search.html
+- https://www.kaggle.com/code/carloscliment/random-forest-regressor-and-gridsearch
 
 """
 import numpy as np
 import pandas as pd
-from pandas import DataFrame
-from sklearn.feature_selection import RFECV
-from sklearn.model_selection import TimeSeriesSplit
+from pandas import DataFrame, Series
+from sklearn.ensemble import RandomForestRegressor  # Import the model we are using
+from sklearn.model_selection import train_test_split
 
 import diive.core.dfun.frames as frames
-from diive.core.funcs.funcs import find_nearest_val
-from diive.core.ml.common import train_random_forest_regressor, model_importances, mape_acc
+from diive.core.ml.common import feature_importances, prediction_scores_regr
 from diive.core.times.times import include_timestamp_as_cols
 
 pd.set_option('display.max_rows', 50)
@@ -35,504 +33,532 @@ class RandomForestTS:
 
     def __init__(
             self,
-            df: DataFrame,
+            input_df: DataFrame,
             target_col: str or tuple,
-            lagged_variants: int or None = 1,
-            include_timestamp_as_features: bool = True,
-            use_neighbor_years: bool = True,
-            feature_reduction: bool = False,
             verbose: int = 0,
+            perm_n_repeats: int = 10,
+            test_size: float = 0.25,
+            **kwargs
     ):
         """
         Gap-fill timeseries with random forest
 
         Args:
-            df:
-                Contains timeseries of target and features.
+            input_df:
+                Contains timeseries of 1 target column and 1+ feature columns.
 
             target_col:
-                Column name of variable that will be gap-filled.
+                Column name of variable in *input_df* that will be gap-filled.
 
-            lagged_variants:
-                Include lagged variants of the features. If and int is
-                given, then variants lagged by int records will be included
-                as additional features.
-                Example:
-                    Assuming one of the features is `TA` and `lagged_variants=1`,
-                    then the new feature `TA-1` is created and added to the dataset
-                    as additional feature. In this case, `TA-1` contains values from
-                    the previous `TA` record (i.e., `TA` was shifted by one record).
+            perm_n_repeats:
+                Number of repeats for calculating permutation feature importance.
 
-            include_timestamp_as_features:
-                If *True*, timestamp info is added as columns to the dataset. By
-                default, this adds the following columns: YEAR, DOY, WEEK, MONTH
-                and HOUR.
-
-            use_neighbor_years:
-                If *True*, the random forest model that is used to gap-fill data
-                for a specific year is built from data comprising also data from
-                the neighboring years.
-                Example:
-                    When gap-filling 2017, the random forest model is built from
-                    2016, 2017 and 2018 data.
-
-            feature_reduction:
-                If *True*, recursive feature elimination with cross-validation
-                is performed before the random forest model is built. In essence,
-                this tries to reduce the number of features that are included in
-                the random forest model.
-                The random forest regressor is used as estimator.
-                TimeSeriesSplit is used as the cross-validation splitting strategy.
-                See: https://scikit-learn.org/stable/modules/generated/sklearn.feature_selection.RFECV.html
-                See: https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.TimeSeriesSplit.html
+            test_size:
+                Proportion of the dataset to include in the test split,
+                between 0.0 and 1.0.
 
             verbose:
                 If *1*, more output is printed.
         """
-        self.df = df
+        self.model_df = input_df.copy()
         self.target_col = target_col
         self.verbose = verbose
-        self.use_neighbor_years = use_neighbor_years
-        self.feature_reduction = feature_reduction
+        self.kwargs = kwargs
+        self.perm_n_repeats = perm_n_repeats
+        self.test_size = test_size
 
-        if lagged_variants:
-            self.df = frames.steplagged_variants(df=self.df.copy(), stepsize=1, stepmax=lagged_variants,
-                                                 exclude_cols=[self.target_col])
-
-        if include_timestamp_as_features:
-            self.df = include_timestamp_as_cols(df=self.df)
-
-        if len(self.df.columns) == 1:
+        if len(self.model_df.columns) == 1:
             raise Exception(f"(!) Stopping execution because dataset comprises "
-                            f"only one single column : {self.df.columns}")
+                            f"only one single column : {self.model_df.columns}")
 
-        self.yrpools_assignments = self._assign_yearpools()
+        self._gapfilling_df = None  # Will contain gapfilled target and auxiliary variables
+        self._model = None
 
-        self.yrpool_model_results = dict()  # Contains yearpool models
-        self.yrpool_gf_results = dict()  # Contains yearpool gapfilling results (info)
-        self.gapfilled_yrs_df = self.df.copy()  # Will contain gapfilled data for all years
+        self._feature_importances = dict()
+        self._scores = dict()
+        self._feature_importances_test = dict()
+        self._scores_test = dict()
+        self._traintest_details = dict()
 
-    def _assign_yearpools(self) -> dict:
+    def get_gapfilled_target(self):
+        """Gap-filled target time series"""
+        return self.gapfilling_df[self.target_gapfilled_col]
+
+    def get_flag(self):
+        """Gap-filling flag, where 0=observed, 1=gap-filled, 2=gap-filled with fallback"""
+        return self.gapfilling_df[self.target_gapfilled_flag_col]
+
+    @property
+    def model(self) -> RandomForestRegressor:
+        """Return model, trained on test data"""
+        if not self._model:
+            raise Exception(f'Not available: model.')
+        return self._model
+
+    @property
+    def feature_importances(self) -> dict:
+        """Return feature importance for model used in gap-filling"""
+        if not self._feature_importances:
+            raise Exception(f'Not available: feature importances for gap-filling.')
+        return self._feature_importances
+
+    @property
+    def scores(self) -> dict:
+        """Return model scores for model used in gap-filling"""
+        if not self._scores:
+            raise Exception(f'Not available: model scores for gap-filling.')
+        return self._scores
+
+    @property
+    def gapfilling_df(self) -> DataFrame:
+        """Return gapfilled data and auxiliary variables"""
+        if not isinstance(self._gapfilling_df, DataFrame):
+            raise Exception(f'Gapfilled data not available.')
+        return self._gapfilling_df
+
+    @property
+    def feature_importances_test(self) -> dict:
+        """Return feature importance from model training on training data,
+        with importances calculated using test data (holdout set)"""
+        if not self._feature_importances_test:
+            raise Exception(f'Not available: feature importances for gap-filling.')
+        return self._feature_importances_test
+
+    @property
+    def scores_test(self) -> dict:
+        """Return model scores for model trained on training data,
+        with scores calculated using test data (holdout set)"""
+        if not self._scores_test:
+            raise Exception(f'Not available: model scores for gap-filling.')
+        return self._scores_test
+
+    @property
+    def traintest_details(self) -> dict:
+        """Return details from train/test splits"""
+        if not self._traintest_details:
+            raise Exception(f'Not available: model scores for gap-filling.')
+        return self._traintest_details
+
+    def fillgaps(self,
+                 showplot_scores: bool = True,
+                 showplot_importance: bool = True,
+                 verbose: int = 1
+                 ):
         """
-        Assign years to model that is used to gap-fill a specific year
+        Gap-fill data with previously built model
 
-        Use data from neighboring years when building model for
-        a specific year
+        No new model is built here, instead the last model built in
+        the preceding step .trainmodel() is used.
 
-        Example:
-            For gap-filling 2017, build random forest model from 2016, 2017 and 2018 data.
-
-        Returns:
-            Dict with years as keys and the list of assigned years as values.
-
-        """
-        print("Assigning years for gap-filling ...")
-        uniq_years = list(self.df.index.year.unique())
-        yearpools_dict = {}
-
-        # For each year's model, use data from the neighboring years
-        if self.use_neighbor_years:
-            # For each year, build model from the 2 neighboring years
-            # yearpool = 3
-            yearpools_dict = {}
-
-            for ix, year in enumerate(uniq_years):
-                years_in_pool = []
-                _uniq_years = uniq_years.copy()
-                _uniq_years.remove(year)
-                years_in_pool.append(year)
-
-                if _uniq_years:
-                    nearest_1 = find_nearest_val(array=_uniq_years, value=year)
-                    _uniq_years.remove(nearest_1)
-                    years_in_pool.append(nearest_1)
-
-                    if _uniq_years:
-                        nearest_2 = find_nearest_val(array=_uniq_years, value=year)
-                        years_in_pool.append(nearest_2)
-
-                years_in_pool = sorted(years_in_pool)
-
-                yearpools_dict[str(year)] = years_in_pool
-                print(f"Gap-filling for year {year} is based on data from years "
-                      f"{years_in_pool}.")
-
-        # Use one model for all years
-        else:
-            for ix, year in enumerate(uniq_years):
-                years_in_pool = (uniq_years).copy()
-                yearpools_dict[str(year)] = years_in_pool
-                print(f"Gap-filling for year {year} is based on data from years "
-                      f"{years_in_pool}.")
-
-        return yearpools_dict
-
-    def get_gapfilled_dataset(self) -> tuple[DataFrame, dict]:
-        """
-
-        Returns:
-            Gap-filled data and info
-
-        """
-        return self.gapfilled_yrs_df, self.yrpool_gf_results
-
-    def build_models(self, **rf_model_params):
-        for yr, poolyrs in self.yrpools_assignments.items():
-
-            model_available = False
-
-            # Check if results and therefore a model for this timespan already exists
-            for key, val in self.yrpool_model_results.items():
-                if val['years_in_model'] == poolyrs:
-                    self.yrpool_model_results[yr] = val
-                    model_available = True
-                    break
-
-            # Build model for this year if none is already available
-            if not model_available:
-                # Years in model
-                first_yr = min(poolyrs)
-                last_yr = max(poolyrs)
-                yrpool_df = self.df.loc[(self.df.index.year >= first_yr) &
-                                        (self.df.index.year <= last_yr), :].copy()
-
-                # Feature reduction
-                if self.feature_reduction:
-                    rfecv_results = self._rfecv(df=yrpool_df, **rf_model_params)
-                    reduced_yrpool_df = yrpool_df[rfecv_results['most_important_features_after']].copy()
-                    reduced_yrpool_df[self.target_col] = yrpool_df[self.target_col].copy()  # Needs target
-                    self.yrpool_model_results[yr] = self._build_model(df=reduced_yrpool_df, **rf_model_params)
-                else:
-                    self.yrpool_model_results[yr] = self._build_model(df=yrpool_df, **rf_model_params)
-
-    def _rfecv(self, df: DataFrame, **rf_model_params) -> dict:
-        """
-        Run Recursive Feature Elimination With Cross-Validation
-
-        More info:
-            https://scikit-learn.org/stable/modules/generated/sklearn.feature_selection.RFECV.html
+        y = target
+        X = features
 
         """
 
-        _id_method = "[FEATURE REDUCTION]    "
+        self._fillgaps_main(showplot_scores, showplot_importance, verbose)
+        self._fillgaps_fallback()
 
-        if self.verbose > 0:
-            print(f"\n\n{_id_method}START {'=' * 30}")
+    def report(self):
 
-        _df = df.copy()
+        idtxt = f"({self.report.__name__} gap-filling) "
 
-        # Prepare data series, data can be used directly as pandas Series
-        _df = _df.dropna()
-        rfecv_targets = _df[self.target_col].copy()
-        _df.drop(self.target_col, axis=1, inplace=True)
-        rfecv_features = _df.copy()
+        # Gapfilling stats from flag
+        locs_observed = self.gapfilling_df[self.target_gapfilled_flag_col] == 0
+        locs_observed_missing_fromflag = self.gapfilling_df[self.target_gapfilled_flag_col] > 0
+        locs_observed_missing_fromdata = self.gapfilling_df[self.target_col].isnull()
+        locs_gapfilled_missing = self.gapfilling_df[self.target_gapfilled_col].isnull()
+        locs_hq = self.gapfilling_df[self.target_gapfilled_flag_col] == 1
+        locs_fallback = self.gapfilling_df[self.target_gapfilled_flag_col] == 2
 
-        # Find features
-        from sklearn.ensemble import RandomForestRegressor  # Import the model we are using
-        estimator = RandomForestRegressor(**rf_model_params)
-        splitter = TimeSeriesSplit(n_splits=5)  # Cross-validator
+        n_available = len(self.gapfilling_df[self.target_gapfilled_col].dropna())
+        n_potential = len(self.gapfilling_df.index)
+        n_observed = locs_observed.sum()
+        n_observed_missing_fromflag = locs_observed_missing_fromflag.sum()
+        n_observed_missing_fromdata = locs_observed_missing_fromdata.sum()
+        n_gapfilled_missing = locs_gapfilled_missing.sum()
+        n_hq = locs_hq.sum()
+        n_fallback = locs_fallback.sum()
 
-        rfecv = RFECV(estimator=estimator,
-                      step=1,
-                      min_features_to_select=3,
-                      cv=splitter,
-                      scoring='explained_variance',
-                      verbose=self.verbose,
-                      n_jobs=-1)
+        feature_names = self.feature_importances['importances'].index.to_list()
+        n_features = len(feature_names)
 
-        # rfecv = RFECV(estimator=PermutationImportance(estimator=estimator, scoring='explained_variance',
-        #                                               n_iter=10, random_state=42, cv=splitter),
-        #               step=self.rfecv_step,
-        #               min_features_to_select=self.rfecv_min_features_to_select,
-        #               cv=splitter,
-        #               scoring='explained_variance',
-        #               verbose=self.verbose,
-        #               n_jobs=-1)
+        print(
+            f"{idtxt} GAP-FILLING RESULTS\n"
+            f"{idtxt}   First timestamp:  {self.gapfilling_df.index[0]}\n"
+            f"{idtxt}   Last timestamp:  {self.gapfilling_df.index[-1]}\n"
+            f"{idtxt}   Potential number of values: {n_potential} values)\n"
+            f"{idtxt}\n"
+            f"{idtxt}   TARGET\n"
+            f"{idtxt}   - target column (observed):  {self.target_col}\n"
+            f"{idtxt}   - missing records (observed):  {n_observed_missing_fromdata} "
+            f"(cross-check from flag: {n_observed_missing_fromflag})\n"
+            f"{idtxt}   - target column (gap-filled):  {self.target_gapfilled_col}  ({n_available} values)\n"
+            f"{idtxt}   - missing records (gap-filled):  {n_gapfilled_missing}\n"
+            f"{idtxt}   - gap-filling flag: {self.target_gapfilled_flag_col}\n"
+            f"{idtxt}       - flag 0 ... observed targets ({n_observed} values)\n"
+            f"{idtxt}       - flag 1 ... targets gap-filled with high-quality, all features available "
+            f"({n_hq} values)\n"
+            f"{idtxt}       - flag 2 ... targets gap-filled with fallback ({n_fallback} values)\n"
+            f"{idtxt}\n"
+            f"{idtxt}   MODEL\n"
+            f"{idtxt}   The model was trained on a training set.\n"
+            f"{idtxt}   - estimator:  {self.model}\n"
+            f"{idtxt}   - parameters:  {self.model.get_params()}\n"
+            f"{idtxt}   - names of features used in model:  {feature_names}\n"
+            f"{idtxt}   - number of features used in model:  {n_features}\n"
+            f"{idtxt}\n"
+            f"{idtxt}   MODEL SCORES\n"
+            f"{idtxt}   Model scores were calculated from high-quality predicted targets "
+            f"({n_hq} values, {self.target_gapfilled_col} where flag=1) in comparison to "
+            f"observed targets ({n_observed} values, {self.target_col}).\n"
+            f"{idtxt}   - MAE:  {self.scores['mae']} (mean absolute error)\n"
+            f"{idtxt}   - MedAE:  {self.scores['medae']} (median absolute error)\n"
+            f"{idtxt}   - MSE:  {self.scores['mse']} (mean squared error)\n"
+            f"{idtxt}   - RMSE:  {self.scores['rmse']} (root mean squared error)\n"
+            f"{idtxt}   - MAXE:  {self.scores['maxe']} (max error)\n"
+            f"{idtxt}   - MAPE:  {self.scores['mape']:.3f} (mean absolute percentage error)\n"
+            f"{idtxt}   - R2:  {self.scores['r2']}\n"
+            f"{idtxt}\n"
+            f"{idtxt}   FEATURE IMPORTANCES\n"
+            f"{idtxt}   Feature importances were calculated from high-quality predicted targets "
+            f"({n_hq} values, {self.target_gapfilled_col} where flag=1) in comparison to "
+            f"observed targets ({n_observed} values, {self.target_col}).\n"
+            f"{idtxt}\n{self.feature_importances['importances']}\n"
+            f"{idtxt}   Permutation importances were calculated from {self.perm_n_repeats} repeats.\n"
+        )
 
-        rfecv.fit(rfecv_features, rfecv_targets)
-        # rfecv.ranking_
+        # if results['include_random']:
+        #     print(
+        #         f"{idtxt}\n"
+        #         f"{idtxt}   --> {len(results['recommended_features'])} recommended features: "
+        #         f"{results['recommended_features']} "
+        #         f"(permutation importance larger than random)\n"
+        #     )
 
-        # Feature importances
-        rfecv_features.drop(rfecv_features.columns[np.where(rfecv.support_ == False)[0]], axis=1, inplace=True)
-        rfecv_importances_df = pd.DataFrame()
-        rfecv_importances_df['feature'] = list(rfecv_features.columns)
-        rfecv_importances_df['importance'] = rfecv.estimator_.feature_importances_
-        rfecv_importances_df = rfecv_importances_df.sort_values(by='importance', ascending=False)
+    # todo only QCF=0?
 
-        # Keep features where importance >= 0.01
-        rfecv_importances_df = rfecv_importances_df.loc[rfecv_importances_df['importance'] >= 0.01, :]
+    def _fillgaps_main(self, showplot_scores, showplot_importance, verbose):
+        """Apply model to fill missing targets for records where all features are available
+        (high-quality gap-filling)"""
 
-        most_important_features_list = rfecv_importances_df['feature'].to_list()
+        # Original input data, contains target and features
+        # This dataframe has the full timestamp
+        df = self.model_df.copy()
 
-        # Store results
-        rfecv_results = dict(num_features_before=len(rfecv_features.columns),
-                             num_features_after=len(most_important_features_list),
-                             feature_importances_after=rfecv_importances_df,
-                             most_important_features_after=most_important_features_list,
-                             params=rfecv.get_params())
-
-        if self.verbose > 0:
-            print(f"{_id_method}Parameters:  {rfecv_results['params']}\n"
-                  f"{_id_method}Number of features *before* reduction:  {len(_df.columns)}\n"
-                  f"{_id_method}Number of features *after* reduction:  {rfecv_results['num_features_after']}\n"
-                  f"{_id_method}Most important features:  {rfecv_results['most_important_features_after']}\n"
-                  f"{rfecv_results['feature_importances_after']}\n"
-                  f"{_id_method}{'=' * 30} END\n")
-
-        return rfecv_results
-
-    def gapfill_yrs(self):
-        """Gap-fill years with their respective model"""
-        for yr, model_results in self.yrpool_model_results.items():
-            # Data for this year
-            yr_df = self.df.loc[self.df.index.year == int(yr), :].copy()
-
-            # Only use features that were used in building model,
-            # this step also removes the target column
-            reduced_yr_df = yr_df[model_results['feature_names']].copy()
-
-            # Add target column back to data
-            reduced_yr_df[self.target_col] = yr_df[self.target_col].copy()  # Needs target
-
-            # Perform gap-filling
-            gapfilled_yr_df, self.yrpool_gf_results[yr] = self._gapfill_yr(df=reduced_yr_df,
-                                                                           model_results=model_results)
-
-            # Add this year to collection of all years
-            self.gapfilled_yrs_df = self.gapfilled_yrs_df.combine_first(gapfilled_yr_df)
-
-    def _build_model(self, df: DataFrame, **rf_model_params) -> dict:
-        """Build final model for gapfilling
-
-        Parameters (default) for RandomForestRegressor:
-            criterion: str = 'squared_error',
-            max_depth: int = None,
-            min_samples_split: int or float = 2,
-            min_samples_leaf: int or float = 1,
-            min_weight_fraction_leaf: float = 0.0,
-            max_features: int or float = 'auto',
-            max_leaf_nodes: int = None,
-            min_impurity_decrease: float = 0.0,
-            bootstrap: bool = True,
-            oob_score: bool = False,
-            n_jobs: int = -1,  # Custom default
-            warm_start: bool = False,
-            ccp_alpha: float = 0.0,  # Non-negative
-            max_samples: int or float = None
-
-        """
-
-        _id_method = "[BUILDING MODEL]    "
-
-        yrs_in_model = list(df.index.year.unique())
-
-        if self.verbose > 0:
-            print(f"\n{_id_method}Based on data from years {yrs_in_model} {'=' * 30}")
-
-        # Data as arrays
-        model_targets, model_features, model_feature_names, model_timestamp = \
+        # Test how the model performs with all y data
+        # Since the model was previously trained on test data,
+        # here it is checked how well the model performs when
+        # predicting all available y data.
+        # This is needed to calculate feature importance and scores.
+        y, X, X_names, timestamp = \
             frames.convert_to_arrays(df=df,
                                      target_col=self.target_col,
                                      complete_rows=True)
 
-        # Model training
-        model, model_r2 = \
-            train_random_forest_regressor(targets=model_targets,
-                                          features=model_features,
-                                          **rf_model_params)  # All features, all targets
+        # Predict all targets (no test split)
+        pred_y = self.model.predict(X=X)
 
-        # from sklearn.inspection import permutation_importance
-        # perm_importance = permutation_importance(model, model_features, model_targets)
+        # Calculate feature importance, using all targets
+        self._feature_importances = feature_importances(estimator=self.model,
+                                                        X=X,
+                                                        y=y,
+                                                        model_feature_names=X_names,
+                                                        random_col=None,
+                                                        perm_n_repeats=self.perm_n_repeats,
+                                                        showplot=showplot_importance)
 
-        # Predict targets w/ features
-        model_predictions = \
-            model.predict(X=model_features)
+        # Model scores, using all targets
+        self._scores = prediction_scores_regr(predictions=pred_y,
+                                              targets=y,
+                                              infotxt="trained on training set, tested on full set",
+                                              showplot=showplot_scores)
 
-        # from sklearn.model_selection import TimeSeriesSplit, cross_val_score
-        # # np.mean(cross_val_score(clf, X_train, y_train, cv=10))
-        # tscv = TimeSeriesSplit(n_splits=5)
-        # cv_results = cross_val_score(model, X_train, y_train, cv=tscv, scoring='r2')
+        # In the next step, all available features are used to
+        # predict the target for records where all features are available.
+        # Feature data for records where all features are available:
+        features_df = df.drop(self.target_col, axis=1)  # Remove target data
+        features_df = features_df.dropna()  # Keep rows where all features available
+        X = features_df.to_numpy()  # Features are needed as numpy array
+        feature_names = features_df.columns.tolist()
 
-        # Stats
-        model_mape, model_accuracy, model_mae = \
-            mape_acc(predictions=model_predictions,
-                     targets=model_targets)
-
-        # Importances
-        model_fi_all, \
-            model_fi_most_important_df, \
-            model_fi_most_important_list = \
-            model_importances(model=model,
-                              feature_names=model_feature_names,
-                              threshold_important_features=None)
-
-        model_results = dict(targets=model_targets,
-                             features=model_features,
-                             feature_names=model_feature_names,
-                             timestamp=model_timestamp,
-                             model=model,
-                             years_in_model=yrs_in_model,
-                             params=model.get_params(),
-                             r2=model_r2,
-                             predictions=model_predictions,
-                             mae=model_mae,
-                             mape=model_mape,
-                             accuracy=model_accuracy,
-                             fi_all=model_fi_all,
-                             fi_most_important_df=model_fi_most_important_df,
-                             fi_most_important_list=model_fi_most_important_list)
-
-        if self.verbose > 0:
-            print(f"{_id_method}Target column:  {self.target_col}  ({model_results['targets'].size} values)\n"
-                  f"{_id_method}Number of features used in model:  {len(model_results['feature_names'])}\n"
-                  f"{_id_method}Names of features used in model:  {model_results['feature_names']}\n"
-                  f"{_id_method}Model data first timestamp:  {model_results['timestamp'][0]}\n"
-                  f"{_id_method}Model data last timestamp:  {model_results['timestamp'][-1]}\n"
-                  f"{_id_method}Model parameters:  {model_results['params']}\n"
-                  f"{_id_method}Model MAE:  {model_results['mae']}\n"
-                  f"{_id_method}Model MAPE:  {model_results['mape']:.3f}%\n"
-                  f"{_id_method}Model R2:  {model_results['r2']}\n"
-                  f"{_id_method}Model features:\n"
-                  f"{model_results['fi_most_important_df']}\n"
-                  f"{_id_method}{'=' * 30} END\n")
-
-        return model_results
-
-    def _gapfill_yr(self, df: DataFrame, model_results: dict):
-        """
-        Fill gaps in target year
-
-        The model used for gapfilling was built during feature
-        reduction. Only rows where all features are available
-        can be gapfilled.
-
-        This means that predictions might not be available for
-        some rows, namely those where at least one feature is
-        missing.
-
-        """
-
-        uniq_years = list(df.index.year.unique())
-        current_yr = uniq_years[0] if len(uniq_years) == 1 else None
-        if not current_yr:
-            raise Exception("(!) Data that are gap-filled comprise more than one year.")
-
-        _id_method = f"[GAPFILLING {self.target_col} {current_yr}]    "
-        model = model_results['model']
-
-        if self.verbose > 0:
-            print(f"\n\n{_id_method}START {'=' * 30}")
-
-        # Targets w/ full timestamp, gaps in this series will be filled
-        targets_ser = pd.Series(data=df[self.target_col], index=df.index)
-
-        # Remove target from data
-        df.drop(self.target_col, axis=1, inplace=True)
-
-        # df now contains features only, keep rows with complete features
-        df = df.dropna()
-
-        # Data as arrays
-        features = np.array(df)  # Features (used to predict target) need to be complete
-        timestamp = df.index  # Timestamp for features and therefore predictions
-
-        # Column names
-        feature_names = list(df.columns)
-
-        # Apply model to predict target (model already exists from previous steps)
-        predictions = model.predict(X=features)  # Predict targets with features
-        # _model_r2 = self.feat_reduction_model.score(X=_features, y=_targets_series.values)
-
-        # Importances
-        _feat_importances_all_list, \
-            most_important_feat_df, \
-            _most_important_feat_list = \
-            model_importances(model=model,
-                              feature_names=feature_names,
-                              threshold_important_features=None)
+        # Predict targets for all records where all features are available
+        pred_y = self.model.predict(X=X)
 
         # Collect gapfilling results in df
-        self._define_cols()  # Define column names for gapfilled_df
-        gapfilled_yr_df = self._collect(predictions=predictions,
-                                        timestamp=timestamp,
-                                        targets_series=targets_ser)
+        # Define column names for gapfilled_df
+        self._define_cols()
 
-        # Fill still existing gaps (fallback)
-        # Build model exclusively from timestamp features. Here, features are trained
-        # on the already gapfilled time series.
-        _still_missing_locs = gapfilled_yr_df[self.target_gapfilled_col].isnull()
-        _num_still_missing = _still_missing_locs.sum()
+        # Collect predictions in dataframe
+        self._gapfilling_df = pd.DataFrame(data={self.predictions_col: pred_y}, index=features_df.index)
+
+        # Add target to dataframe
+        self._gapfilling_df[self.target_col] = df[self.target_col].copy()
+
+        # Gap locations
+        # Make column that contains predicted values
+        # for rows where target is missing
+        _gap_locs = self._gapfilling_df[self.target_col].isnull()  # Locations where target is missing
+        self._gapfilling_df[self.predicted_gaps_col] = self._gapfilling_df.loc[
+            _gap_locs, self.predictions_col]
+
+        # Flag
+        # Make flag column that indicates where predictions for
+        # missing targets are available, where 0=observed, 1=gapfilled
+        # todo Note that missing predicted gaps = 0. change?
+        _gapfilled_locs = self._gapfilling_df[self.predicted_gaps_col].isnull()  # Non-gapfilled locations
+        _gapfilled_locs = ~_gapfilled_locs  # Inverse for gapfilled locations
+        self._gapfilling_df[self.target_gapfilled_flag_col] = _gapfilled_locs
+        self._gapfilling_df[self.target_gapfilled_flag_col] = self._gapfilling_df[
+            self.target_gapfilled_flag_col].astype(
+            int)
+
+        # Gap-filled time series
+        # Fill missing records in target with predicions
+        self._gapfilling_df[self.target_gapfilled_col] = \
+            self._gapfilling_df[self.target_col].fillna(self._gapfilling_df[self.predictions_col])
+
+        # Restore original full timestamp
+        self._gapfilling_df = self._gapfilling_df.reindex(df.index)
+
+        # SHAP values
+        # https://pypi.org/project/shap/
+        # https://mljar.com/blog/feature-importance-in-random-forest/
+
+    def _fillgaps_fallback(self):
+
+        # Fallback gapfilling
+        # Fill still existing gaps in full timestamp data
+        # Build fallback model exclusively from timestamp features.
+        # Here, the model is trained on the already gapfilled time series,
+        # using info from the timestamp, e.g. DOY
+        _still_missing_locs = self._gapfilling_df[self.target_gapfilled_col].isnull()
+        _num_still_missing = _still_missing_locs.sum()  # Count number of still-missing values
         if _num_still_missing > 0:
-            fallback_predictions, fallback_timestamp = \
-                self._gapfilling_fallback(series=gapfilled_yr_df[self.target_gapfilled_col],
-                                          model_params=model_results['params'])
+
+            fallback_predictions, \
+                fallback_timestamp = \
+                self._predict_fallback(series=self._gapfilling_df[self.target_gapfilled_col])
+
             fallback_series = pd.Series(data=fallback_predictions, index=fallback_timestamp)
-            gapfilled_yr_df[self.target_gapfilled_col].fillna(fallback_series, inplace=True)
-            gapfilled_yr_df[self.predictions_fallback_col] = fallback_series
-            gapfilled_yr_df.loc[_still_missing_locs, self.target_gapfilled_flag_col] = 2  # Adjust flag
+            self._gapfilling_df[self.predictions_fallback_col] = fallback_series
+            self._gapfilling_df[self.target_gapfilled_col] = \
+                self._gapfilling_df[self.target_gapfilled_col].fillna(fallback_series)
+
+            self._gapfilling_df.loc[_still_missing_locs, self.target_gapfilled_flag_col] = 2  # Adjust flag, 2=fallback
         else:
-            gapfilled_yr_df[self.predictions_fallback_col] = None
+            self._gapfilling_df[self.predictions_fallback_col] = None
 
         # Cumulative
-        gapfilled_yr_df[self.target_gapfilled_cumu_col] = \
-            gapfilled_yr_df[self.target_gapfilled_col].cumsum()
+        self._gapfilling_df[self.target_gapfilled_cumu_col] = \
+            self._gapfilling_df[self.target_gapfilled_col].cumsum()
 
-        # Store results
-        gapfilled_yr_info = dict(
-            feature_names=feature_names,
-            num_features=len(feature_names),
-            first_timestamp=gapfilled_yr_df.index[0],
-            last_timestamp=gapfilled_yr_df.index[-1],
-            max_potential_vals=len(gapfilled_yr_df.index),
-            target_numvals=gapfilled_yr_df[self.target_col].count(),
-            target_numgaps=gapfilled_yr_df[self.target_col].isnull().sum(),
-            target_gapfilled_numvals=gapfilled_yr_df[self.target_gapfilled_col].count(),
-            target_gapfilled_numgaps=gapfilled_yr_df[self.target_gapfilled_col].isnull().sum(),
-            target_gapfilled_flag_notfilled=int((gapfilled_yr_df[self.target_gapfilled_flag_col] == 0).sum()),
-            target_gapfilled_flag_with_hq=int((gapfilled_yr_df[self.target_gapfilled_flag_col] == 1).sum()),
-            target_gapfilled_flag_with_fallback=int((gapfilled_yr_df[self.target_gapfilled_flag_col] == 2).sum()),
-            predictions_hq_numvals=gapfilled_yr_df[self.predictions_col].count(),
-            predictions_hq_numgaps=gapfilled_yr_df[self.predictions_col].isnull().sum(),
-            predictions_fallback_numvals=gapfilled_yr_df[self.predictions_fallback_col].count(),
-            predictions_fallback_numgaps=gapfilled_yr_df[self.predictions_fallback_col].isnull().sum(),
-            years_in_model=model_results['years_in_model']
+    def trainmodel(self,
+                   traintest_split_random_state: int = 42,
+                   remove_features_low_importance: bool = True,
+                   showplot_predictions: bool = True,
+                   showplot_importance: bool = True,
+                   verbose: int = 1):
+        """
+        Train random forest model for gap-filling
+
+        No gap-filling is done here, only the model is trained.
+
+        Args:
+            traintest_split_random_state: random state to keep results consistent between runs
+            remove_features_low_importance: If *True*, variables with lower permutation importance
+                than a random variable are not included in the model training.
+            showplot_predictions: shows plot of predicted vs observed
+            showplot_importance: shows plot of permutation importances
+            verbose: if > 0 prints more text output
+
+        """
+
+        if remove_features_low_importance:
+            # Train model with random variable included, to detect unimportant features
+            self._trainmodel(df=self.model_df.copy(),
+                             include_random=True,
+                             traintest_split_random_state=traintest_split_random_state,
+                             showplot_scores=showplot_predictions,
+                             showplot_importance=showplot_importance,
+                             verbose=verbose)
+
+            recommended_features = self.feature_importances_test['recommended_features']
+            usecols = [self.target_col]
+            usecols = usecols + recommended_features
+            self.model_df = self.model_df[usecols].copy()
+
+        # Train model for gap-filling
+        self._trainmodel(df=self.model_df,
+                         include_random=False,
+                         traintest_split_random_state=traintest_split_random_state,
+                         showplot_scores=showplot_predictions,
+                         showplot_importance=showplot_importance,
+                         verbose=verbose)
+
+    def _trainmodel(self,
+                    df: DataFrame,
+                    include_random: bool = False,
+                    traintest_split_random_state: int = 42,
+                    showplot_scores: bool = True,
+                    showplot_importance: bool = True,
+                    verbose: int = 1):
+        """Build and test model
+
+        See:
+            - https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestRegressor.html
+
+        """
+
+        # Add random variable as benchmark for relevant feature importances
+        if include_random:
+            random_col = '.RANDOM'  # Random variable as benchmark for relevant importances
+            df[random_col] = np.random.rand(df.shape[0], 1)
+            idtxt = f"({self._trainmodel.__name__} with random)    "
+        else:
+            random_col = None
+            idtxt = f"({self._trainmodel.__name__})    "
+
+        # Info
+        if verbose > 0:
+            print(f"{idtxt}Building random forest model based on data between "
+                  f"{df.index[0]} and {df.index[-1]} ...")
+
+        # Data as arrays
+        # y = targets, X = features
+        y, X, X_names, timestamp = \
+            frames.convert_to_arrays(df=df,
+                                     target_col=self.target_col,
+                                     complete_rows=True)
+
+        # Train and test set
+        X_train, X_test, y_train, y_test = train_test_split(X, y,
+                                                            test_size=self.test_size,
+                                                            random_state=traintest_split_random_state)
+
+        # Instantiate model with params
+        self._model = RandomForestRegressor(**self.kwargs)
+
+        # Train the model
+        self._model.fit(X=X_train, y=y_train)
+
+        # Predict targets in test data
+        pred_y_test = self._model.predict(X=X_test)
+
+        # Calculate feature importance
+        self._feature_importances_test = feature_importances(estimator=self._model,
+                                                             X=X_test,
+                                                             y=y_test,
+                                                             model_feature_names=X_names,
+                                                             random_col=random_col,
+                                                             perm_n_repeats=self.perm_n_repeats,
+                                                             showplot=showplot_importance)
+
+        # Stats
+        self._scores_test = prediction_scores_regr(predictions=pred_y_test,
+                                                   targets=y_test,
+                                                   infotxt=f"{idtxt}, trained on training set, tested on test set",
+                                                   showplot=showplot_scores)
+
+        # SHAP values
+        # https://pypi.org/project/shap/
+        # https://mljar.com/blog/feature-importance-in-random-forest/
+
+        # Collect results
+        self._traintest_details = dict(
+            X=X,
+            y=y,
+            timestamp=timestamp,
+            predictions=pred_y_test,
+            include_random=include_random,
+            X_names=X_names,
+            y_name=self.target_col,
+            X_train=X_train,
+            y_train=y_train,
+            X_test=X_test,
+            y_test=y_test,
+            model=self._model,
         )
 
         if self.verbose > 0:
-            for key, val in gapfilled_yr_info.items():
-                print(f"{_id_method}{key}:  {val}")
-            print(f"{_id_method}{'=' * 30} END\n")
+            self.report_training(idtxt=idtxt, results=self.traintest_details)
 
-        return gapfilled_yr_df, gapfilled_yr_info
+    def report_training(self, idtxt: str, results: dict):
+        """Results from model training on test data"""
+        test_size_perc = self.test_size * 100
+        training_size_perc = 100 - test_size_perc
+        n_vals_observed = len(results['y'])
+        n_vals_train = len(results['y_train'])
+        n_vals_test = len(results['y_test'])
+        timestamp = results['timestamp']
+        used_features = results['X_names']
+        model = results['model']
 
-    def _gapfilling_fallback(self, series: pd.Series, model_params: dict):
+        print(
+            f"{idtxt} MODEL TRAINING & TESTING RESULTS\n"
+            f"{idtxt}   - the model was trained and tested based on data between "
+            f"{timestamp[0]} and {timestamp[-1]}.\n"
+            f"{idtxt}   - in total, {n_vals_observed} observed target values were available for training and testing\n"
+            f"{idtxt}   - the dataset was split into training and test datasets\n"
+            f"{idtxt}       - the training dataset comprised {n_vals_train} target values ({training_size_perc:.1f}%)\n"
+            f"{idtxt}       - the test dataset comprised {n_vals_test} target values ({test_size_perc:.1f}%)\n"
+            f"{idtxt}\n"
+            f"{idtxt}   MODEL\n"
+            f"{idtxt}   The model was trained on the training set.\n"
+            f"{idtxt}   - estimator:  {model}\n"
+            f"{idtxt}   - parameters:  {model.get_params()}\n"
+            f"{idtxt}   - names of features used in model:  {used_features}\n"
+            f"{idtxt}   - number of features used in model:  {len(used_features)}\n"
+            f"{idtxt}\n"
+            f"{idtxt}   MODEL SCORES\n"
+            f"{idtxt}   Model was trained on training data ({n_vals_train} values).\n"
+            f"{idtxt}   Model was tested on test data ({n_vals_test} values).\n"
+            f"{idtxt}   All scores were calculated for test split.\n"
+            f"{idtxt}   - MAE:  {self.scores_test['mae']} (mean absolute error)\n"
+            f"{idtxt}   - MedAE:  {self.scores_test['medae']} (median absolute error)\n"
+            f"{idtxt}   - MSE:  {self.scores_test['mse']} (mean squared error)\n"
+            f"{idtxt}   - RMSE:  {self.scores_test['rmse']} (root mean squared error)\n"
+            f"{idtxt}   - MAXE:  {self.scores_test['maxe']} (max error)\n"
+            f"{idtxt}   - MAPE:  {self.scores_test['mape']:.3f} (mean absolute percentage error)\n"
+            f"{idtxt}   - R2:  {self.scores_test['r2']}\n"
+            f"{idtxt}\n"
+            f"{idtxt}   FEATURE IMPORTANCES\n"
+            f"{idtxt}   Feature importances were calculated for test data ({n_vals_test} target values).\n"
+            f"{idtxt}\n{self.feature_importances_test['importances']}\n"
+            f"{idtxt}   Permutation importances were calculated from {self.perm_n_repeats} repeats."
+        )
+
+        if results['include_random']:
+            print(
+                f"{idtxt}\n"
+                f"{idtxt} --> {len(self.feature_importances_test['recommended_features'])} recommended features: "
+                f"{self.feature_importances_test['recommended_features']} "
+                f"(permutation importance larger than random)\n"
+            )
+
+    def _predict_fallback(self, series: pd.Series):
         """Fill data gaps using timestamp features only, fallback for still existing gaps"""
         gf_fallback_df = pd.DataFrame(series)
-        gf_fallback_df = include_timestamp_as_cols(df=gf_fallback_df)
+        gf_fallback_df = include_timestamp_as_cols(df=gf_fallback_df, txt="(ONLY FALLBACK)")
 
         # Build model for target predictions *from timestamp*
-        # Only model-building, no predictions in this step.
-        targets, features, _, _ = \
+        y_fallback, X_fallback, _, _ = \
             frames.convert_to_arrays(df=gf_fallback_df,
-                                     complete_rows=True,
-                                     target_col=self.target_gapfilled_col)
+                                     target_col=self.target_gapfilled_col,
+                                     complete_rows=True)
 
-        # Build model based on timestamp features
-        model, model_r2 = \
-            train_random_forest_regressor(features=features,
-                                          targets=targets,
-                                          **model_params)
+        # Instantiate new model with same params as before
+        model_fallback = RandomForestRegressor(**self.kwargs)
 
-        # Use model to predict complete time series
-        _, features, _, timestamp = \
-            frames.convert_to_arrays(df=gf_fallback_df,
-                                     complete_rows=False,
-                                     target_col=self.target_gapfilled_col)
-        # Predict targets w/ features
-        predictions = \
-            model.predict(X=features)
+        # Train the model on all available records ...
+        model_fallback.fit(X=X_fallback, y=y_fallback)
 
-        return predictions, timestamp
+        # ... and use it to predict all records for full timestamp
+        full_timestamp_df = gf_fallback_df.drop(self.target_gapfilled_col, axis=1)  # Remove target data
+        X_fallback_full = full_timestamp_df.to_numpy()  # Features are needed as numpy array
+        pred_y_fallback = model_fallback.predict(X=X_fallback_full)  # Predict targets in test data
+        full_timestamp = full_timestamp_df.index
+
+        return pred_y_fallback, full_timestamp
 
     def _results(self, gapfilled_df, most_important_df, model_r2, still_missing_locs):
         """Summarize gap-filling results"""
@@ -551,85 +577,103 @@ class RandomForestTS:
               f"used features:\n{most_important_df}\n"
               f"predictions vs targets, R2 = {model_r2:.3f}")
 
-    def _collect(self, predictions, timestamp, targets_series):
-        # Make series w/ timestamp for predictions
-        predicted_series = pd.Series(data=predictions, index=timestamp, name=self.predictions_col)
-
-        # Reindex predictions to same timestamp as targets
-        predicted_series = predicted_series.reindex(targets_series.index)
-
-        # Collect predictions and targets in df
-        gapfilled_df = \
-            pd.concat([targets_series, predicted_series], axis=1)
-
-        # Gap locations
-        # Make column that contains predicted values for rows
-        # where target is missing.
-        _gap_locs = gapfilled_df[self.target_col].isnull()
-        gapfilled_df[self.predicted_gaps_col] = \
-            gapfilled_df.loc[_gap_locs, self.predictions_col]
-
-        # Flag
-        # Make flag column that indicates where predictions for
-        # missing targets are available.
-        # todo Note that missing predicted gaps = 0. change?
-        _gapfilled_locs = gapfilled_df[self.predicted_gaps_col].isnull()  # Non-gapfilled locations
-        _gapfilled_locs = ~_gapfilled_locs  # Inverse for gapfilled locations
-        gapfilled_df[self.target_gapfilled_flag_col] = _gapfilled_locs
-        gapfilled_df[self.target_gapfilled_flag_col] = gapfilled_df[self.target_gapfilled_flag_col].astype(int)
-
-        # Gap-filled time series
-        gapfilled_df[self.target_gapfilled_col] = \
-            gapfilled_df[self.target_col].fillna(gapfilled_df[self.predictions_col])
-
-        return gapfilled_df
-
     def _define_cols(self):
-        self.predictions_col = ".predictions"
-        self.predicted_gaps_col = ".gap_predictions"
+        self.predictions_col = ".PREDICTIONS"
+        self.predicted_gaps_col = ".GAP_PREDICTIONS"
         self.target_gapfilled_col = f"{self.target_col}_gfRF"
-        self.target_gapfilled_flag_col = f"QCF_{self.target_gapfilled_col}"  # "[0=measured]"
-        self.predictions_fallback_col = ".predictions_fallback"
-        self.target_gapfilled_cumu_col = ".gapfilled_cumulative"
+        self.target_gapfilled_flag_col = f"FLAG_{self.target_gapfilled_col}_ISFILLED"  # "[0=measured]"
+        self.predictions_fallback_col = ".PREDICTIONS_FALLBACK"
+        self.target_gapfilled_cumu_col = ".GAPFILLED_CUMULATIVE"
+
+
+class QuickFillRFTS:
+
+    def __init__(self, df: DataFrame, target_col: str or tuple):
+        self.df = df.copy()
+        self.target_col = target_col
+        self.rfts = None
+
+    def fill(self):
+        self.df = include_timestamp_as_cols(df=self.df.copy(), txt="(...)")
+        self.rfts = RandomForestTS(input_df=self.df, target_col=self.target_col, n_estimators=20)
+        self.rfts.trainmodel(showplot_predictions=False, showplot_importance=False, verbose=0)
+        self.rfts.fillgaps(showplot_scores=True, showplot_importance=True, verbose=1)
+
+    def gapfilling_df(self):
+        return self.rfts.gapfilling_df
+
+    def report(self):
+        return self.rfts.report()
+
+    def get_gapfilled(self) -> Series:
+        return self.rfts.get_gapfilled_target()
 
 
 def example():
-    from diive.core.plotting.heatmap_datetime import HeatmapDateTime
     from diive.configs.exampledata import load_exampledata_pickle
+
+    TARGET_COL = 'NEE_CUT_REF_orig'
+    subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
+    # [print(c) for c in df.columns if "Rg" in c]
 
     # Example data
     df = load_exampledata_pickle()
-    # [print(c) for c in df.columns if "Rg" in c]
 
     # Subset with target and features
-    TARGET_COL = 'NEE_CUT_REF_orig'
-    subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
+    # Only High-quality (QCF=0) measured NEE used for model training in this example
+    df = df.copy()
+    reject = df["QCF_NEE"] > 0
+    df.loc[reject, TARGET_COL] = np.nan
     df = df[subsetcols].copy()
 
-    # Random forest
-    rfts = RandomForestTS(df=df,
-                          target_col=TARGET_COL,
-                          include_timestamp_as_features=True,
-                          lagged_variants=6,
-                          use_neighbor_years=True,
-                          feature_reduction=True,
-                          verbose=1)
-    rfts.build_models(n_estimators=10,
-                      random_state=42,
-                      min_samples_split=2,
-                      min_samples_leaf=1,
-                      n_jobs=-1)
-    rfts.gapfill_yrs()
-    gapfilled_yrs_df, yrpool_gf_results = rfts.get_gapfilled_dataset()
+    # QuickFill example
+    qf = QuickFillRFTS(df=df, target_col=TARGET_COL)
+    qf.fill()
+    gapfilled = qf.get_gapfilled()
+    # Plot
+    from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+    HeatmapDateTime(series=df[TARGET_COL]).show()
+    HeatmapDateTime(series=gapfilled).show()
 
-    # Gap-filled data series
-    target_col_gf = f'{TARGET_COL}_gfRF'
+    # Lagged variants
+    from diive.core.dfun.frames import steplagged_variants
+    df = steplagged_variants(df=df,
+                             stepsize=1,
+                             stepmax=1,
+                             exclude_cols=[TARGET_COL])
+
+    df = include_timestamp_as_cols(df=df, txt="(...)")
+
+    # Random forest
+    rfts = RandomForestTS(
+        input_df=df,
+        target_col=TARGET_COL,
+        verbose=1,
+        n_estimators=99,
+        random_state=42,
+        min_samples_split=10,
+        min_samples_leaf=5,
+        perm_n_repeats=22,
+        n_jobs=-1
+    )
+    rfts.trainmodel(showplot_predictions=True, showplot_importance=True, verbose=1)
+    rfts.fillgaps(showplot_scores=True, showplot_importance=True, verbose=1)
+    rfts.report()
+    observed = df[TARGET_COL]
+    gapfilled = rfts.get_gapfilled_target()
+    # rfts.feature_importances
+    # rfts.scores
+    # rfts.gapfilling_df
 
     # Plot
-    HeatmapDateTime(series=rfts.gapfilled_yrs_df[TARGET_COL]).show()
-    HeatmapDateTime(series=rfts.gapfilled_yrs_df[target_col_gf]).show()
-    # gapfilled_yrs_df['.gapfilled_cumulative'].plot()
-    # plt.show()
+    from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+    HeatmapDateTime(series=observed).show()
+    HeatmapDateTime(series=gapfilled).show()
+
+    import matplotlib.pyplot as plt
+    gapfilled.cumsum().plot(label="model HQ, all gaps filled with model")
+    plt.legend()
+    plt.show()
 
     print("Finished.")
 

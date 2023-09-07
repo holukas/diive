@@ -462,40 +462,127 @@ def build_timestamp_range(start_dt, df_len, freq):
 
 def include_timestamp_as_cols(df,
                               year: bool = True,
-                              doy: bool = True,
-                              week: bool = True,
+                              season: bool = True,
                               month: bool = True,
+                              week: bool = True,
+                              doy: bool = True,
                               hour: bool = True,
-                              info: bool = True) -> DataFrame:
-    """Include timestamp info as data columns"""
+                              txt: str = "",
+                              verbose: int = 1) -> DataFrame:
+    """
+    Include timestamp info as data columns
+
+    Kudos:
+    - https://datascience.stackexchange.com/questions/60951/is-it-necessary-to-convert-labels-in-string-to-integer-for-scikit-learn-and-xgbo
+    - https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.OneHotEncoder.html
+
+    """
 
     df = df.copy()
     newcols = []
-    year_col = '.YEAR'
-    doy_col = '.DOY'  # '[day_of_year]'
-    week_col = '.WEEK'  # '[week_of_year]'
-    month_col = '.MONTH'  # '[month]'
-    hour_col = '.HOUR'  # '[hour]'
 
     if year:
-        df[year_col] = df.index.year
+        year_col = '.YEAR'
         newcols.append(year_col)
-    if doy:
-        df[doy_col] = df.index.dayofyear
-        newcols.append(doy_col)
-    if week:
-        df[week_col] = df.index.isocalendar().week
-        newcols.append(week_col)
-    if month:
-        df[month_col] = df.index.month
-        newcols.append(month_col)
-    if hour:
-        df[hour_col] = df.index.hour
-        newcols.append(hour_col)
+        df[year_col] = df.index.year.astype(int)
 
-    if info:
-        print(f"Added timestamp as columns: {newcols}")
+    if season:
+        season_col = '.SEASON'
+        newcols.append(season_col)
+        df[season_col] = insert_season(timestamp=df.index)
+
+    if month:
+        month_col = '.MONTH'
+        newcols.append(month_col)
+        df[month_col] = df.index.month.astype(int)
+
+    if week:
+        week_col = '.WEEK'
+        newcols.append(week_col)
+        df[week_col] = df.index.isocalendar().week.astype(int)
+
+    if doy:
+        doy_col = '.DOY'
+        newcols.append(doy_col)
+        df[doy_col] = df.index.dayofyear.astype(int)
+
+    if hour:
+        hour_col = '.HOUR'
+        newcols.append(hour_col)
+        df[hour_col] = df.index.hour.astype(int)
+
+
+    # yeardoy_col = '.YEARDOY'
+    # yearweek_col = '.YEARWEEK'
+    # yearmonthweekdoy_col = '.YEARMONTHWEEKDOY'
+    # yearmonth_col = '.YEARMONTH'
+    # yearmonthweek_col = '.YEARMONTHWEEK'
+    # weekhour_col = '.WEEKHOUR'
+
+    # Combined variables
+    # Year and month: YEAR2023+MONTH8 = 20238
+    # df[yearmonth_col] = (df[year_col].astype(str) + df[month_col].astype(str)).astype(int)
+
+    # Year and week: YEAR2023+WEEK15 = 202315
+    # df[yearweek_col] = (df[year_col].astype(str) + df[week_col].astype(str)).astype(int)
+
+    # Year and month and week: YEAR2023+MONTH8+WEEK15 = 2023815
+    # df[yearmonthweek_col] = (df[year_col].astype(str) + df[month_col].astype(str) + df[week_col].astype(str)).astype(
+    #     int)
+
+    # Year and week and DOY: YEAR2023+MONTH8+WEEK15+DOY194 = 2023815194
+    # df[yearmonthweekdoy_col] = (
+    #         df[year_col].astype(str)
+    #         + df[month_col].astype(str)
+    #         + df[week_col].astype(str)
+    #         + df[doy_col].astype(str)
+    # ).astype(np.int64)  # todo check int64
+
+    # Year and DOY: YEAR2023+DOY194 = 2023194
+    # df[yeardoy_col] = (df[year_col].astype(str) + df[doy_col].astype(str)).astype(int)
+
+    # Week and hour: WEEK42+HOUR22 = 4222
+    # df[weekhour_col] = (df[week_col].astype(str) + df[hour_col].astype(str)).astype(int)
+
+    if verbose > 0:
+        print(f"Added timestamp as columns: {newcols} {txt}")
+
     return df
+
+
+def insert_season(timestamp: DatetimeIndex) -> Series:
+    """
+    Insert meteorological season as integer
+
+    spring = 1 (DJF)
+    summer = 2 (MAM)
+    autumn = 3 (JJA)
+    winter = 4 (SON)
+
+    Args:
+        timestamp: timestamp of time series
+
+    Returns:
+        season series with timestamp
+    """
+
+    winter = [1, 2, 12]
+    spring = [3, 4, 5]
+    summer = [6, 7, 8]
+    autumn = [9, 10, 11]
+    season = pd.Series(data=timestamp.month, index=timestamp)
+
+    is_winter = season.isin(winter)
+    is_spring = season.isin(spring)
+    is_summer = season.isin(summer)
+    is_autumn = season.isin(autumn)
+
+    season[is_spring] = 1
+    season[is_summer] = 2
+    season[is_autumn] = 3
+    season[is_winter] = 4
+
+    return season
 
 
 class DetectFrequency:

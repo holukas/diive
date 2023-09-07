@@ -1,3 +1,5 @@
+# todo SEE FURTHER DOWN: RandomForestTS was updated (Sep 2023), but this NEARLY should work
+
 from pathlib import Path
 from typing import Literal
 
@@ -11,9 +13,11 @@ from pandas import DataFrame, Series
 
 import diive.core.dfun.frames as frames
 from diive.core.dfun.fits import BinFitterCP
+# from diive.core.dfun.frames import steplagged_variants
 from diive.core.plotting.fitplot import fitplot
 from diive.core.plotting.plotfuncs import default_legend, default_format, nice_date_ticks, save_fig, add_zeroline_y
 from diive.core.plotting.styles.LightTheme import COLOR_NEP, COLOR_RECO
+from diive.core.times.times import include_timestamp_as_cols
 from diive.pkgs.createvar.vpd import calc_vpd_from_ta_rh
 from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
 
@@ -139,19 +143,31 @@ class CO2penalty:
     def _gapfill(self, df: DataFrame, target_col: str, random_state: int = None, n_bootstrap_runs: int = 11,
                  lagged_variants: int = 1):
         # Gapfilling random forest
-        rfts = RandomForestTS(df=df,
-                              target_col=target_col,
-                              include_timestamp_as_features=True,
-                              lagged_variants=lagged_variants,
-                              use_neighbor_years=True,
-                              feature_reduction=False,
-                              verbose=1)
-        rfts.build_models(n_estimators=n_bootstrap_runs,
-                          random_state=random_state,
-                          min_samples_split=2,
-                          min_samples_leaf=1,
-                          n_jobs=-1)
-        rfts.gapfill_yrs()
+
+        # todo RandomForestTS was updated (Sep 2023), but this NEARLY should work
+        # todo The yearpools are not implements
+        # Lagged variants
+        df = steplagged_variants(df=df,
+                                 stepsize=1,
+                                 stepmax=1,
+                                 exclude_cols=[target_col])
+
+        df = include_timestamp_as_cols(df=df, txt="(...)")
+
+        rfts = RandomForestTS(
+            input_df=df,
+            target_col=target_col,
+            verbose=1,
+            n_estimators=n_bootstrap_runs,
+            random_state=random_state,
+            min_samples_split=2,
+            min_samples_leaf=1,
+            n_jobs=-1
+        )
+
+        rfts.trainmodel(showplot_predictions=True, showplot_importance=True, verbose=1)
+        rfts.fillgaps(showplot_scores=True, showplot_importance=True, verbose=1)
+
         _gapfilled_df, _gf_results = rfts.get_gapfilled_dataset()
 
         # Reindex to have same index as full dataset (full timestamp range)
