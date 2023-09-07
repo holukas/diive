@@ -5,6 +5,7 @@ import pandas as pd
 from pandas import DataFrame
 
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+from diive.core.times.times import include_timestamp_as_cols
 from diive.pkgs.flux.common import detect_flux_basevar
 from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
 
@@ -30,7 +31,7 @@ class FluxStorageCorrectionSinglePointEddyPro:
 
         # Name of gapfilled storage column and its flag
         self.gapfilled_strgcol = f"{self.strgcol}_gfRF_{self.levelid}"
-        self.qcf_gapfilled_strgcol = f"QCF_{self.gapfilled_strgcol}"
+        self.qcf_gapfilled_strgcol = f"FLAG_{self.gapfilled_strgcol}_ISFILLED"
 
         self._storage = None
 
@@ -91,30 +92,35 @@ class FluxStorageCorrectionSinglePointEddyPro:
         The storage term can be missing for quite a few records,
         which means that we lose measured flux data.
         """
-        # Settings for random forest
-        rfsettings = dict(include_timestamp_as_features=True,
-                          lagged_variants=1, use_neighbor_years=True,
-                          feature_reduction=False, verbose=1)
-        rfsettings_model = dict(n_estimators=99, random_state=42,
-                                min_samples_split=20, min_samples_leaf=10, n_jobs=-1)
-
         # Assemble dataframe for gapfilling
         gfcols = [self.strgcol]
         gf_df = self.df[gfcols].copy()
 
         # Run random forest
-        rfts = RandomForestTS(df=gf_df, target_col=self.strgcol, **rfsettings)
-        rfts.build_models(**rfsettings_model)
-        rfts.gapfill_yrs()
-        gapfilled_yrs_df, yrpool_gf_results = rfts.get_gapfilled_dataset()
+        gf_df = include_timestamp_as_cols(df=gf_df)
+        rfts = RandomForestTS(
+            input_df=gf_df,
+            target_col=self.strgcol,
+            n_estimators=99,
+            random_state=42,
+            min_samples_split=2,
+            min_samples_leaf=1,
+            n_jobs=-1
+        )
+        rfts.trainmodel(remove_features_low_importance=False, showplot_predictions=False, showplot_importance=False, verbose=0)
+        rfts.fillgaps(showplot_scores=True, showplot_importance=True, verbose=0)
+        print(rfts.report())
+        series = rfts.get_gapfilled_target()
+        flag = rfts.get_flag()
+        d = {series.name: series, flag.name: flag}
+        gapfilled_df = pd.DataFrame.from_dict(d)
 
         # Add Level-ID to gapfilling results
-        renamedcols = [f"{c}_{self.levelid}" for c in gapfilled_yrs_df.columns]
-        gapfilled_yrs_df.columns = renamedcols
-
-        subset = gapfilled_yrs_df[[self.gapfilled_strgcol, self.qcf_gapfilled_strgcol]].copy()
-
-        return subset
+        renamedcols = [f"{c}_{self.levelid}" for c in gapfilled_df.columns]
+        gapfilled_df.columns = renamedcols
+        self.gapfilled_strgcol = f"{series.name}_{self.levelid}"
+        self.qcf_gapfilled_strgcol = f"{flag.name}_{self.levelid}"
+        return gapfilled_df
 
     def storage_correction(self):
         print(f"Calculating storage-corrected flux {self.flux_corrected_col} "
@@ -201,8 +207,8 @@ class FluxStorageCorrectionSinglePointEddyPro:
 
 def example():
     # Load data from pickle (much faster loading)
-    from diive.core.io.files import load_pickle
-    df = load_pickle(filepath=r"L:\Sync\luhk_work\_temp\data.pickle")
+    from diive.configs.exampledata import load_exampledata_eddypro_fluxnet_CSV_30MIN
+    df, _ = load_exampledata_eddypro_fluxnet_CSV_30MIN()
     s = FluxStorageCorrectionSinglePointEddyPro(df=df, fluxcol='FC')
     s.storage_correction()
     # s.showplot(maxflux=20)

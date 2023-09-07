@@ -4,6 +4,7 @@
 target/
 __manuscripts/
 __workbench/
+__todo/
 
 
 # Byte-compiled / optimized / DLL files

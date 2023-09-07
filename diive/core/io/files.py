@@ -42,7 +42,7 @@ def save_parquet(filename: str, data: DataFrame or Series, outpath: str or None 
     return str(filepath)
 
 
-def load_parquet(filepath: str) -> DataFrame:
+def load_parquet(filepath: str or Path) -> DataFrame:
     """
     Load data from Parquet file to pandas DataFrame
 

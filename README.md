@@ -9,6 +9,8 @@ Recent releases: [Releases](https://gitlab.ethz.ch/holukas/diive/-/releases)
 
 First example notebooks can be found in the folder `notebooks`.
 
+More notebooks are added constantly.
+
 ## Current Features
 
 ### Analyses
@@ -33,11 +35,12 @@ First example notebooks can be found in the folder `notebooks`.
 
 ### Eddy covariance high-resolution
 
-- Flux detection limit
+- Flux detection limit from high-resolution data
 
 ### Formats
 
-- Convert EddyPro fluxnet output files for upload to FLUXNET database ([notebook example](notebooks/Formats/FormatEddyProFluxnetFileForUpload.ipynb))
+- Convert EddyPro fluxnet output files for upload to FLUXNET
+  database ([notebook example](notebooks/Formats/FormatEddyProFluxnetFileForUpload.ipynb))
 
 ### Fits
 
@@ -55,16 +58,17 @@ For info about the Swiss FluxNet flux levels,
 see [here](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/).
 
 - Flux processing chain ([notebook example](notebooks/FluxProcessingChain/FluxProcessingChain.ipynb))
-- The notebook example shows the application of:
-  - Level-2 quality flags
-  - Level-3.1 storage correction
-  - Level-3.2 outlier removal
+    - The notebook example shows the application of:
+        - Level-2 quality flags
+        - Level-3.1 storage correction
+        - Level-3.2 outlier removal
 
 ### Formats
 
 Format data to specific formats
 
-- Format EddyPro _fluxnet_ output file for upload to FLUXNET database
+- Format EddyPro _fluxnet_ output file for upload to FLUXNET
+  database ([notebook example](notebooks/Formats/FormatEddyProFluxnetFileForUpload.ipynb))
 
 ### Gap-filling
 
@@ -76,13 +80,21 @@ Fill gaps in time series with various methods
 ### Outlier Detection
 
 - Absolute limits
-- Incremental z-score
-- Local standard deviation
-- Local outlier factor
-- Missing values
-- Seasonal trend decomposition using LOESS, z-score on residuals of IQR
-- Thymeboost
-- Various z-score approaches
+- Absolute limits, separately defined for daytime and nighttime data
+- Incremental z-score: Identify outliers based on the z-score of increments
+- Local standard deviation: Identify outliers based on the local standard deviation from a running median
+- Local outlier factor: Identify outliers based on local outlier factor, across all data
+- Local outlier factor: Identify outliers based on local outlier factor, daytime nighttime separately
+- Manual removal: Remove time periods (from-to) or single records from time series
+- Missing values: Simply creates a flag that indicated available and missing data in a time series
+- Seasonal trend decomposition using LOESS, identify outliers based on seasonal-trend decomposition and
+  z-score calculations, taking the inter-quartile range of the data into account
+- Seasonal trend decomposition using LOESS, identify outliers based on seasonal-trend decomposition and
+  z-score calculations
+- Thymeboost: Identify outliers based on [thymeboost](https://github.com/tblume1992/ThymeBoost)
+- z-score: Identify outliers based on the z-score across all time series data
+- z-score: Identify outliers based on the z-score, separately for daytime and nighttime
+- z-score: Identify outliers based on max z-scores in the interquartile range data
 
 ### Plotting
 
@@ -100,3 +112,20 @@ Fill gaps in time series with various methods
 ## Installation
 
 `diive` can be installed from source code, e.g. using [`poetry`](https://python-poetry.org/) for dependencies.
+
+`diive` is currently developed under Python 3.9.7, but newer (and many older) versions should also work.
+
+One way to install and use `diive` with a specific Python version on a local machine:
+
+- Install [miniconda](https://docs.conda.io/en/latest/miniconda.html)
+- Start `miniconda` prompt
+- Create a environment named `diive-env` that contains Python 3.9.7:
+  `conda create --name diive-env python=3.9.7`
+- Activate the new environment: `conda activate diive-env`
+- Install `diive` version directly from source code:
+  `pip install https://gitlab.ethz.ch/diive/diive/-/archive/v0.57.1/diive-v0.57.1.tar.gz`
+- If you want to use `diive` in Jupyter notebooks, you can install Jupyterlab.
+  In this example Jupyterlab is installed from the `conda` distribution channel `conda-forge`:
+  `conda install -c conda-forge jupyterlab`
+- If used in Jupyter notebooks, `diive` can generate dynamic plots. This requires the installation of:
+  `conda install -c bokeh jupyter_bokeh`

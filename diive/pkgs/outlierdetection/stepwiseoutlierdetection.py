@@ -26,7 +26,7 @@ class StepwiseOutlierDetection:
     - `.flag_outliers_abslim_dtnt_test()`: Generate flag that indicates if daytime and nighttime values in data are
         outside their respectively specified ranges
     - `.flag_outliers_increments_zcore_test()`: Identify outliers based on the z-score of increments
-    - `.flag_outliers_localsd_test()`: Identify outliers based on the local standard deviation
+    - `.flag_outliers_localsd_test()`: Identify outliers based on the local standard deviation from a running median
     - `.flag_manualremoval_test()`: Remove data points for range, time or point-by-point
     - `.flag_outliers_stl_riqrz_test()`: Identify outliers based on seasonal-trend decomposition and z-score
         calculations, taking the inter-quartile range into account

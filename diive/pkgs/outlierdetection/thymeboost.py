@@ -4,14 +4,13 @@
 - https://towardsdatascience.com/time-series-outlier-detection-with-thymeboost-ec2046e17458
 - https://towardsdatascience.com/thymeboost-a0529353bf34
 """
-
-import matplotlib.pyplot as plt
 import pandas as pd
 from ThymeBoost import ThymeBoost as tb
 from pandas import Series, DatetimeIndex
 from pandas.tseries.frequencies import to_offset
 
 from diive.core.base.flagbase import FlagBase
+from diive.core.times.times import include_timestamp_as_cols
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
 
@@ -45,7 +44,7 @@ class ThymeBoostOutlier(FlagBase):
         self.showplot = False
         self.maxiter = 1
 
-    def calc(self, maxiter:int=1, showplot: bool = False):
+    def calc(self, maxiter: int = 1, showplot: bool = False):
         """Calculate flag"""
         self.maxiter = maxiter
         self.showplot = showplot
@@ -61,24 +60,23 @@ class ThymeBoostOutlier(FlagBase):
 
     def _randomforest_quickfill(self, series: Series) -> Series:
         # Gapfilling random forest
-        rfts = RandomForestTS(df=pd.DataFrame(series),
-                              target_col=series.name,
-                              include_timestamp_as_features=True,
-                              lagged_variants=None,
-                              use_neighbor_years=True,
-                              feature_reduction=False,
-                              verbose=0)
-        rfts.build_models(n_estimators=10,
-                          random_state=None,
-                          min_samples_split=20,
-                          min_samples_leaf=10,
-                          n_jobs=-1)
-        rfts.gapfill_yrs()
-        _gapfilled_df, _gf_results = rfts.get_gapfilled_dataset()
-        gapfilled_name = f"{self.series.name}_gfRF"
-        series = _gapfilled_df[gapfilled_name].copy()
-        series.plot()
-        plt.show()
+        _df = pd.DataFrame(series)
+        _df = include_timestamp_as_cols(df=_df)
+        rfts = RandomForestTS(
+            input_df=_df,
+            target_col=series.name,
+            verbose=0,
+            n_estimators=10,
+            random_state=None,
+            min_samples_split=20,
+            min_samples_leaf=10,
+            n_jobs=-1
+        )
+        rfts.trainmodel(showplot_predictions=False, showplot_importance=False, verbose=0)
+        rfts.fillgaps(showplot_scores=True, showplot_importance=True, verbose=1)
+        series = rfts.get_gapfilled_target()
+        # series.plot()
+        # plt.show()
         return series
 
     def _flagtests(self) -> tuple[DatetimeIndex, DatetimeIndex]:
@@ -163,8 +161,6 @@ class ThymeBoostOutlier(FlagBase):
                       plottitle=f"Outlier detection based on thymeboost results for {self.series.name}")
 
         return ok_coll, rejected_coll
-
-
 
 
 if __name__ == '__main__':

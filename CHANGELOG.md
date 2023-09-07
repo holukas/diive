@@ -2,6 +2,76 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.58.0 | 7 Sep 2023
+
+### Random forest update
+
+The class `RandomForestTS` has been refactored. In essence, it still uses the same
+`RandomForestRegressor` as before, but now outputs feature importances additionally
+as computed by permutation. More details about permutation importance can be found
+in scikit's official documentation
+here: [Permutation feature importance](https://scikit-learn.org/stable/modules/permutation_importance.html).
+
+When the model is trained using `.trainmodel()`, a random variable is included as additional
+feature. Permutation importances of all features - including the random variable - are then
+analyzed. Variables that yield a lower importance score than the random variables are removed
+from the dataset and are not used to build the model. Typically, the permutation importance for
+the random variable is very close to zero or even negative.
+
+The built-in importance calculation in the `RandomForestRegressor` uses the Gini importance,
+an impurity-based feature importance that favors high cardinality features over low cardinality
+features. This is not ideal in case of time series data that is combined with categorical data.
+Permutation importance is therefore a better indicator whether a variable included in the model
+is an important predictor or not.
+
+The class now splits input data into training and testing datasets (holdout set). By
+default, the training set comprises 75% of the input data, the testing set 25%. After
+the model was trained, it is tested on the testing set. This should give a
+better indication of how well the model works on unseen data.
+
+Once `.trainmodel()` is finished, the model is stored internally and can be used to gap-fill
+the target variable by calling `.fillgaps()`.
+
+In addition, the class now offers improved output with additional text output and plots
+that give more info about model training, testing and application during gap-filling.
+
+`RandomForestTS` has also been streamlined. The option to include timestamp info as features
+(e.g., a column describing the season of the respective record) during model building is now
+its own function (`.include_timestamp_as_cols()`) and was removed from the class.
+
+### New features
+
+- New class `QuickFillRFTS` that uses `RandomForestTS` in the background to quickly fill time series
+  data (`pkgs.gapfilling.randomforest_ts.QuickFillRFTS`)
+- New function to include timestamp info as features, e.g. YEAR and DOY (`core.times.times.include_timestamp_as_cols`)
+- New function to calculate various model scores, e.g. mean absolute error, R2 and
+  more (`core.ml.common.prediction_scores_regr`)
+- New function to insert the meteorological season (Northern hemisphere) as variable (`core.times.times.insert_season`).
+  For each record in the time series, the seasonal info between spring (March, April, May) and winter (December,
+  January, February) is added as integer number (0=spring, summer=1, autumn=2, winter=3).
+
+### Additions
+
+- Added new example dataset, comprising ecosystem fluxes between 1997 and 2022 from the
+  [ICOS Class 1 Ecosystem station CH-Dav](https://www.swissfluxnet.ethz.ch/index.php/sites/ch-dav-davos/site-info-ch-dav/).
+  This dataset will be used for testing code on long-term time series. The dataset is stored in the `parquet`
+  file format, which allows fast loading and saving of datafiles in combination with good compression.
+  The simplest way to load the dataset is to use:
+
+```python
+from diive.configs.exampledata import load_exampledata_parquet
+
+df = load_exampledata_parquet()
+```
+
+### Changes
+
+- Updated README with installation details
+
+### Notebooks
+
+- Updated notebook `notebooks/CalculateVariable/Calculate_VPD_from_TA_and_RH.ipynb`
+
 ## v0.57.1 | 23 Aug 2023
 
 ### Changes

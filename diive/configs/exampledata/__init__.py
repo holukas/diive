@@ -1,10 +1,19 @@
 import os
 from pathlib import Path
 
+from pandas import DataFrame
+
 from diive.core.io.filereader import ReadFileType
+from diive.core.io.files import load_parquet
 from diive.core.io.files import load_pickle
 
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))  # Dir of this file
+
+
+def load_exampledata_parquet() -> DataFrame:
+    filepath = Path(DIR_PATH) / 'exampledata_CH-DAV_FP2022.5_1997-2022_ID20230206154316_30MIN.parquet'
+    data_df = load_parquet(filepath=filepath)
+    return data_df
 
 
 def load_exampledata_DIIVE_CSV_30MIN():
@@ -41,7 +50,7 @@ def load_exampledata_winddir():
 
 
 def example():
-    df = load_exampledata_winddir()
+    df = load_exampledata_parquet()
     print(df)
 
 
