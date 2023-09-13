@@ -2,6 +2,14 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.58.1 | X Sep 2023
+
+### Notebooks
+
+- Added new notebook `notebooks/GapFilling/RandomForestGapFilling.ipynb`
+- Added new notebook `notebooks/GapFilling/QuickRandomForestGapFilling.ipynb`
+- Added new notebook `notebooks/Workbench/Remove_unneeded_cols.ipynb`
+
 ## v0.58.0 | 7 Sep 2023
 
 ### Random forest update

@@ -1133,7 +1133,7 @@ def example():
     # # Some info
     # from datetime import datetime
     # from pathlib import Path
-    # import pkg_resources
+    # import importlib.metadata
     # # from diive.pkgs.qaqc.meteoscreening import MetScrDbMeasurementVars
     # dt_string = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     # print(f"This page was last modified on: {dt_string}")
