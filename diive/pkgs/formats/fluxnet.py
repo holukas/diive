@@ -1,4 +1,3 @@
-from diive.pkgs.qaqc.qcf import FlagQCF
 import re
 from pathlib import Path
 
@@ -9,6 +8,7 @@ from diive.core.times.times import current_date_str_condensed
 from diive.core.times.times import insert_timestamp
 from diive.pkgs.fluxprocessingchain.level2_qualityflags import FluxQualityFlagsLevel2EddyPro
 from diive.pkgs.outlierdetection.manualremoval import ManualRemoval
+from diive.pkgs.qaqc.qcf import FlagQCF
 
 # Names of variables in the EddyPro _fluxnet_ output file
 VARS_CO2 = ['FC', 'FC_SSITC_TEST', 'SC_SINGLE', 'CO2']
@@ -329,13 +329,13 @@ def example():
     OUTDIR = r"F:\Sync\luhk_work\CURRENT\fru\Level-1_results_fluxnet\1-formatted_for_upload"
 
     # Imports
-    import pkg_resources
+    import importlib.metadata
     from datetime import datetime
     from diive.pkgs.formats.fluxnet import FormatEddyProFluxnetFileForUpload
 
     dt_string = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"This page was last modified on: {dt_string}")
-    version_diive = pkg_resources.get_distribution("diive").version
+    version_diive = importlib.metadata.version("diive")
     print(f"diive version: v{version_diive}")
 
     # Show docstring

@@ -13,9 +13,6 @@ SEASONAL TREND DECOMPOSITION (LOESS)
     - https://towardsdatascience.com/how-to-detect-seasonality-outliers-and-changepoints-in-your-time-series-5d0901498cff
     - https://github.com/facebookresearch/Kats
     - https://neptune.ai/blog/anomaly-detection-in-time-series
-    - todo https://towardsdatascience.com/multi-seasonal-time-series-decomposition-using-mstl-in-python-136630e67530
-    - todo from statsmodels.tsa.st import MSTL
-    - todo MSTL is coming in statsmodels v0.14.0!
     - https://towardsdatascience.com/hands-on-unsupervised-outlier-detection-using-machine-learning-with-python-ec599fe5a6b5
 
 """
@@ -34,7 +31,6 @@ from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
 from diive.pkgs.outlierdetection.zscore import zScoreIQR, zScoreDaytimeNighttime
 
 
-# todo hier weiter
 @ConsoleOutputDecorator()
 class OutlierSTLRZ(FlagBase):
     """

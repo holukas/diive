@@ -11,7 +11,7 @@ DIR_PATH = os.path.dirname(os.path.realpath(__file__))  # Dir of this file
 
 
 def load_exampledata_parquet() -> DataFrame:
-    filepath = Path(DIR_PATH) / 'exampledata_CH-DAV_FP2022.5_1997-2022_ID20230206154316_30MIN.parquet'
+    filepath = Path(DIR_PATH) / 'exampledata_CH-DAV_FP2022.5_2013-2022_ID20230206154316_30MIN.parquet'
     data_df = load_parquet(filepath=filepath)
     return data_df
 

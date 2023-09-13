@@ -75,7 +75,7 @@ Format data to specific formats
 Fill gaps in time series with various methods
 
 - Interpolate
-- RandomForestTS
+- RandomForestTS ([notebook example](notebooks/GapFilling/RandomForestGapFilling.ipynb))
 
 ### Outlier Detection
 

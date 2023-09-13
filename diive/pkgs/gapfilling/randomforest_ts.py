@@ -9,6 +9,9 @@ randomforest_ts
 This module is part of the diive library:
 https://gitlab.ethz.ch/diive/diive
 
+    - Example notebook available in:
+        notebooks/GapFilling/RandomForestGapFilling.ipynb
+
 Kudos, optimization of hyper-parameters, grid search
 - https://scikit-learn.org/stable/modules/grid_search.html
 - https://www.kaggle.com/code/carloscliment/random-forest-regressor-and-gridsearch
@@ -41,7 +44,7 @@ class RandomForestTS:
             **kwargs
     ):
         """
-        Gap-fill timeseries with random forest
+        Gap-fill timeseries with predictions from random forest model
 
         Args:
             input_df:
@@ -587,6 +590,13 @@ class RandomForestTS:
 
 
 class QuickFillRFTS:
+    """
+    Quick gap-filling using RandomForestTS with pre-defined parameters
+
+    The purpose of this class is preliminary gap-filling e.g. for quick tests
+    how gap-filled data could look like. It is not meant to be used for
+    final gap-filling.
+    """
 
     def __init__(self, df: DataFrame, target_col: str or tuple):
         self.df = df.copy()
@@ -609,34 +619,92 @@ class QuickFillRFTS:
         return self.rfts.get_gapfilled_target()
 
 
-def example():
-    from diive.configs.exampledata import load_exampledata_pickle
-
+def example_quickfill():
+    # Setup, user settings
     TARGET_COL = 'NEE_CUT_REF_orig'
     subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
-    # [print(c) for c in df.columns if "Rg" in c]
+
+    # Setup, imports
+    import numpy as np
+    import importlib.metadata
+    from datetime import datetime
+    from diive.configs.exampledata import load_exampledata_pickle
+    from diive.core.plotting.timeseries import TimeSeries  # For simple (interactive) time series plotting
+    from diive.core.dfun.stats import sstats  # Time series stats
+    from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+    # from diive.pkgs.gapfilling.randomforest_ts import QuickFillRFTS
+    dt_string = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"This page was last modified on: {dt_string}")
+    version_diive = importlib.metadata.version("diive")
+    print(f"diive version: v{version_diive}")
+
+    # Show docstring for QuickFillRFTS
+    print(QuickFillRFTS.__name__)
+    print(QuickFillRFTS.__doc__)
 
     # Example data
     df = load_exampledata_pickle()
 
     # Subset with target and features
     # Only High-quality (QCF=0) measured NEE used for model training in this example
-    df = df.copy()
-    reject = df["QCF_NEE"] > 0
-    df.loc[reject, TARGET_COL] = np.nan
+    lowquality = df["QCF_NEE"] > 0
+    df.loc[lowquality, TARGET_COL] = np.nan
     df = df[subsetcols].copy()
+    df.describe()
+    statsdf = sstats(df[TARGET_COL])
+    print(statsdf)
+    TimeSeries(series=df[TARGET_COL]).plot()
 
     # QuickFill example
     qf = QuickFillRFTS(df=df, target_col=TARGET_COL)
     qf.fill()
+    qf.report()
     gapfilled = qf.get_gapfilled()
+
     # Plot
-    from diive.core.plotting.heatmap_datetime import HeatmapDateTime
     HeatmapDateTime(series=df[TARGET_COL]).show()
     HeatmapDateTime(series=gapfilled).show()
 
-    # Lagged variants
+
+def example_rfts():
+
+    # Setup, user settings
+    TARGET_COL = 'NEE_CUT_REF_orig'
+    subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
+
+    # Setup, imports
+    import numpy as np
+    import importlib.metadata
+    from datetime import datetime
+    import matplotlib.pyplot as plt
+    from diive.configs.exampledata import load_exampledata_pickle
+    from diive.core.plotting.timeseries import TimeSeries  # For simple (interactive) time series plotting
+    from diive.core.dfun.stats import sstats  # Time series stats
+    from diive.core.plotting.heatmap_datetime import HeatmapDateTime
     from diive.core.dfun.frames import steplagged_variants
+    dt_string = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"This page was last modified on: {dt_string}")
+    version_diive = importlib.metadata.version("diive")
+    print(f"diive version: v{version_diive}")
+
+    # Show docstring for QuickFillRFTS
+    print(RandomForestTS.__name__)
+    print(RandomForestTS.__doc__)
+
+    # Example data
+    df = load_exampledata_pickle()
+
+    # Subset with target and features
+    # Only High-quality (QCF=0) measured NEE used for model training in this example
+    lowquality = df["QCF_NEE"] > 0
+    df.loc[lowquality, TARGET_COL] = np.nan
+    df = df[subsetcols].copy()
+    df.describe()
+    statsdf = sstats(df[TARGET_COL])
+    print(statsdf)
+    TimeSeries(series=df[TARGET_COL]).plot()
+
+    # Lagged variants
     df = steplagged_variants(df=df,
                              stepsize=1,
                              stepmax=1,
@@ -666,11 +734,9 @@ def example():
     # rfts.gapfilling_df
 
     # Plot
-    from diive.core.plotting.heatmap_datetime import HeatmapDateTime
     HeatmapDateTime(series=observed).show()
     HeatmapDateTime(series=gapfilled).show()
 
-    import matplotlib.pyplot as plt
     gapfilled.cumsum().plot(label="model HQ, all gaps filled with model")
     plt.legend()
     plt.show()
@@ -679,4 +745,5 @@ def example():
 
 
 if __name__ == '__main__':
-    example()
+    example_quickfill()
+    # example_rfts()
