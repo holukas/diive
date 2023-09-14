@@ -150,9 +150,6 @@ def example():
     # sod.flag_outliers_abslim_test(minval=-10, maxval=5, showplot=True, verbose=True)
     # sod.addflag()
 
-    # sod.flag_outliers_stl_riqrz_test(zfactor=2, decompose_downsampling_freq='6H', repeat=False, showplot=True)
-    # sod.addflag()
-
     # sod.flag_outliers_stl_rz_test(zfactor=3, decompose_downsampling_freq='6H', repeat=False, showplot=True)
     # sod.addflag()
     # sod.showplot_orig()

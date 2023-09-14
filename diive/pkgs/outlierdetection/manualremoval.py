@@ -8,24 +8,25 @@ from diive.core.utils.prints import ConsoleOutputDecorator
 
 @ConsoleOutputDecorator()
 class ManualRemoval(FlagBase):
-    """
-    Generate flag for data points that should be removed
-    ...
 
-    Methods:
-        calc(): Calculates flag
-
-    After running calc, results can be accessed with:
-        flag: Series
-            Flag series where accepted (ok) values are indicated
-            with flag=0, rejected values are indicated with flag=2
-        filteredseries: Series
-            Data with rejected values set to missing
-
-    """
     flagid = 'OUTLIER_MANUAL'
 
     def __init__(self, series: Series, levelid: str = None):
+        """
+        Generate flag for data points that should be removed
+        ...
+
+        Methods:
+            calc(): Calculates flag
+
+        After running calc, results can be accessed with:
+            flag: Series
+                Flag series where accepted (ok) values are indicated
+                with flag=0, rejected values are indicated with flag=2
+            filteredseries: Series
+                Data with rejected values set to missing
+
+        """
         super().__init__(series=series, flagid=self.flagid, levelid=levelid)
         self.showplot = False
         self.verbose = False

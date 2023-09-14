@@ -25,15 +25,7 @@ from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import detect_freq_groups
 from diive.pkgs.corrections.offsetcorrection import remove_radiation_zero_offset, remove_relativehumidity_offset
 from diive.pkgs.corrections.setto_threshold import setto_threshold
-from diive.pkgs.outlierdetection.absolutelimits import AbsoluteLimits
-from diive.pkgs.outlierdetection.incremental import zScoreIncrements
-from diive.pkgs.outlierdetection.local3sd import LocalSD
-from diive.pkgs.outlierdetection.lof import LocalOutlierFactorDaytimeNighttime, LocalOutlierFactorAllData
-from diive.pkgs.outlierdetection.manualremoval import ManualRemoval
-from diive.pkgs.outlierdetection.missing import MissingValues
-from diive.pkgs.outlierdetection.seasonaltrend import OutlierSTLRIQRZ
-from diive.pkgs.outlierdetection.thymeboost import ThymeBoostOutlier
-from diive.pkgs.outlierdetection.zscore import zScoreDaytimeNighttime, zScoreIQR, zScore
+from diive.pkgs.outlierdetection.stepwiseoutlierdetection import StepwiseOutlierDetection
 from diive.pkgs.qaqc.qcf import FlagQCF
 
 
@@ -41,13 +33,15 @@ class StepwiseMeteoScreeningDb:
     """
     Stepwise MeteoScreening from database: Screen multiple vars from single measurement
 
-    The class is optimized to work in Jupyter notebooks.
+    The class is optimized to work in Jupyter notebooks. Various outlier detection
+    methods can be called on-demand. Outlier results are displayed and the user can
+    accept the results and proceed, or repeat the step with adjusted method parameters.
+    An unlimited amount of tests can be chained together. At the end of the screening,
+    an overall flag is calculated from ALL single flags. The overall flag is then used
+    to filter the time series.
 
-    Corrections and QC flags that can be directly accessed via the class 'StepwiseMeteoScreeningDb':
-    - `.correction_remove_radiation_zero_offset()`: Remove nighttime offset from all radiation data and set nighttime to zero
-    - `.correction_remove_relativehumidity_offset()`: Remove relative humidity offset
-    - `.correction_setto_max_threshold()`: Set values above a threshold value to threshold value
-    - `.correction_setto_min_threshold()`: Set values below a threshold value to threshold value
+    Implemented outlier tests:
+    For a full list of outlier tests see: pkgs/outlierdetection/stepwiseoutlierdetection.py
     - `.flag_missingvals_test()`: Generate flag that indicates missing records in data
     - `.flag_outliers_abslim_test()`: Generate flag that indicates if values in data are outside the specified range
     - `.flag_outliers_increments_zcore_test()`: Identify outliers based on the z-score of increments
@@ -61,14 +55,13 @@ class StepwiseMeteoScreeningDb:
     - `.flag_outliers_lof_dtnt_test()`: Identify outliers based on local outlier factor, daytime nighttime separately
     - `.flag_outliers_lof_test()`: Identify outliers based on local outlier factor, across all data
 
-    The class is optimized to work in Jupyter notebooks. Various outlier detection
-    methods can be called on-demand. Outlier results are displayed and the user can
-    accept the results and proceed, or repeat the step with adjusted method parameters.
-    An unlimited amount of tests can be chained together. At the end of the screening,
-    an overall flag is calculated from ALL single flags. The overall flag is then used
-    to filter the time series.
+    Implemented corrections:
+    - `.correction_remove_radiation_zero_offset()`: Remove nighttime offset from all radiation data and set nighttime to zero
+    - `.correction_remove_relativehumidity_offset()`: Remove relative humidity offset
+    - `.correction_setto_max_threshold()`: Set values above a threshold value to threshold value
+    - `.correction_setto_min_threshold()`: Set values below a threshold value to threshold value
 
-    **Screening**
+    **Outlier tests**
     The stepwise meteoscreening allows to perform **step-by-step** quality tests on
     meteorological data. A preview plot after running a test is shown and the user can
     decide if results are satisfactory or if the same test with different parameters
@@ -115,27 +108,34 @@ class StepwiseMeteoScreeningDb:
     approach, the stepwise screening can be easily adjusted to work with any type of data
     files. This adjustment will be done in one of the next updates.
 
-    **Current methods**
-    A listing of currently implemented quality checks and corrections can be found at the top
-    of this file.
-
     """
 
     def __init__(
             self,
             data_detailed: dict,
-            measurement: str,
+            # measurement: str,
             fields: list or str,
             site: str,
             site_lat: float,
-            site_lon: float
+            site_lon: float,
+            timezone_of_timestamp: str
     ):
         self.site = site
         self._data_detailed = data_detailed.copy()
-        self.measurement = measurement
+        # self.measurement = measurement
         self.fields = fields if isinstance(fields, list) else list(fields)
         self.site_lat = site_lat
         self.site_lon = site_lon
+        self.timezone_of_timestamp = timezone_of_timestamp
+
+        # Prepare step-wise outlier detection (sod) for each field
+        self.sod = {}
+        for field in self.fields:
+            self.sod[field] = StepwiseOutlierDetection(dataframe=self.data_detailed[field].copy(),
+                                                       col=field,
+                                                       site_lat=self.site_lat,
+                                                       site_lon=self.site_lon,
+                                                       timezone_of_timestamp=self.timezone_of_timestamp)
 
         # Returned variables
         self._resampled_detailed = {}
@@ -291,122 +291,97 @@ class StepwiseMeteoScreeningDb:
     def flag_missingvals_test(self):
         """Flag missing values"""
         for field in self.fields:
-            # data_detailed = self._data_detailed[field]  # Detailed data with tags
-            series_cleaned = self._series_hires_cleaned[field]  # Timeseries
-            _miss = MissingValues(series=series_cleaned)
-            _miss.calc()
-            self._last_results[field] = _miss  # Store in dict
-            # self._hires_flags[_miss.flag.name] = _miss.flag
+            self.sod[field].flag_missingvals_test()
 
     def flag_manualremoval_test(self, remove_dates: list, showplot: bool = False, verbose: bool = False):
         """Flag specified records for removal"""
         for field in self.fields:
-            series_cleaned = self._series_hires_cleaned[field]  # Timeseries
-            _mr = ManualRemoval(series=series_cleaned)
-            _mr.calc(remove_dates=remove_dates, showplot=showplot, verbose=verbose)
-            self._last_results[field] = _mr  # Store in dict
+            self.sod[field].flag_manualremoval_test(remove_dates=remove_dates,
+                                                    showplot=showplot,
+                                                    verbose=verbose)
 
     def flag_outliers_zscore_dtnt_test(self, threshold: float = 4, showplot: bool = False, verbose: bool = False):
         """z-score, calculated separately for daytime and nighttime"""
         for field in self.fields:
-            series_cleaned = self._series_hires_cleaned[field]  # Timeseries
-            _zscoredtnt = zScoreDaytimeNighttime(series=series_cleaned, lat=self.site_lat, lon=self.site_lon)
-            _zscoredtnt.calc(threshold=threshold, showplot=showplot, verbose=verbose)
-            self._last_results[field] = _zscoredtnt
+            self.sod[field].flag_outliers_zscore_dtnt_test(threshold=threshold,
+                                                           showplot=showplot,
+                                                           verbose=verbose)
 
     def flag_outliers_increments_zcore_test(self, threshold: int = 30, showplot: bool = False, verbose: bool = False):
         """Identify outliers based on the z-score of record increments"""
         for field in self.fields:
-            series_cleaned = self._series_hires_cleaned[field]  # Timeseries
-            _izsc = zScoreIncrements(series=series_cleaned)
-            _izsc.calc(threshold=threshold, showplot=showplot)
-            self._last_results[field] = _izsc
-
-    def flag_outliers_zscoreiqr_test(self, factor: float = 4, showplot: bool = False, verbose: bool = False):
-        """Identify outliers based on the z-score of records in the IQR"""
-        for field in self.fields:
-            series_cleaned = self._series_hires_cleaned[field]  # Timeseries
-            _zsciqr = zScoreIQR(series=series_cleaned)
-            _zsciqr.calc(factor=factor, showplot=showplot, verbose=verbose)
-            self._last_results[field] = _zsciqr
+            self.sod[field].flag_outliers_increments_zcore_test(threshold=threshold,
+                                                                showplot=showplot,
+                                                                verbose=verbose)
 
     def flag_outliers_zscore_test(self, threshold: int = 4, showplot: bool = False, verbose: bool = False,
                                   plottitle: str = None):
         """Identify outliers based on the z-score of records"""
         for field in self.fields:
-            series_cleaned = self._series_hires_cleaned[field]  # Timeseries
-            _zsc = zScore(series=series_cleaned)
-            _zsc.calc(threshold=threshold, showplot=showplot, verbose=verbose, plottitle=plottitle)
-            self._last_results[field] = _zsc
+            self.sod[field].flag_outliers_zscore_test(threshold=threshold,
+                                                      showplot=showplot,
+                                                      verbose=verbose,
+                                                      plottitle=plottitle)
 
     def flag_outliers_thymeboost_test(self, showplot: bool = False, verbose: bool = False):
         """Identify outliers based on thymeboost"""
         for field in self.fields:
-            series_cleaned = self._series_hires_cleaned[field]  # Timeseries
-            _thymeboost = ThymeBoostOutlier(series=series_cleaned)
-            _thymeboost.calc(showplot=showplot)
-            self._last_results[field] = _thymeboost
+            self.sod[field].flag_outliers_thymeboost_test(showplot=showplot,
+                                                          verbose=verbose)
 
-    def flag_outliers_localsd_test(self, n_sd: float, winsize: int = None, showplot: bool = False, verbose: bool = False):
+    def flag_outliers_localsd_test(self, n_sd: float, winsize: int = None, showplot: bool = False,
+                                   verbose: bool = False):
         """Identify outliers based on standard deviation in a rolling window"""
         for field in self.fields:
-            series_cleaned = self._series_hires_cleaned[field]  # Timeseries
-            _locsd = LocalSD(series=series_cleaned)
-            _locsd.calc(n_sd=n_sd, winsize=winsize, showplot=showplot)
-            self._last_results[field] = _locsd
+            self.sod[field].flag_outliers_localsd_test(n_sd=n_sd,
+                                                       winsize=winsize,
+                                                       showplot=showplot,
+                                                       verbose=verbose)
 
-    def flag_outliers_abslim_test(self, min: float, max: float, showplot: bool = False, verbose: bool = False):
+    def flag_outliers_abslim_test(self, minval: float, maxval: float, showplot: bool = False, verbose: bool = False):
         """Identify outliers based on absolute limits"""
         for field in self.fields:
-            series_cleaned = self._series_hires_cleaned[field]  # Timeseries
-            _abslim = AbsoluteLimits(series=series_cleaned)
-            _abslim.calc(min=min, max=max, showplot=showplot)
-            self._last_results[field] = _abslim
+            self.sod[field].flag_outliers_abslim_test(minval=minval,
+                                                      maxval=maxval,
+                                                      showplot=showplot,
+                                                      verbose=verbose)
 
-    def flag_outliers_stl_riqrz_test(self, zfactor: float = 4.5, decompose_downsampling_freq: str = '1H',
-                                     repeat: bool = False, showplot: bool = False):
-        """Seasonsal trend decomposition with z-score on residuals"""
+    def flag_outliers_abslim_dtnt_test(self, daytime_minmax: list[float, float],
+                                       nighttime_minmax: list[float, float], showplot: bool = False):
+        """Identify outliers based on absolute limits"""
         for field in self.fields:
-            series_cleaned = self._series_hires_cleaned[field]  # Timeseries
-            _stl = OutlierSTLRIQRZ(series=series_cleaned, lat=self.site_lat, lon=self.site_lon)
-            _stl.calc(zfactor=zfactor, decompose_downsampling_freq=decompose_downsampling_freq,
-                      repeat=repeat, showplot=showplot)
-            self._last_results[field] = _stl
+            self.sod[field].flag_outliers_abslim_dtnt_test(daytime_minmax=daytime_minmax,
+                                                           nighttime_minmax=nighttime_minmax,
+                                                           showplot=showplot)
+
+    def flag_outliers_stl_rz_test(self, zfactor: float = 4.5, decompose_downsampling_freq: str = '1H',
+                                  repeat: bool = False, showplot: bool = False):
+        """Identify outliers based on seasonal-trend decomposition and z-score calculations"""
+        for field in self.fields:
+            self.sod[field].flag_outliers_stl_rz_test(zfactor=zfactor,
+                                                      decompose_downsampling_freq=decompose_downsampling_freq,
+                                                      repeat=repeat,
+                                                      showplot=showplot)
 
     def flag_outliers_lof_dtnt_test(self, n_neighbors: int = None, contamination: float = 'auto',
                                     showplot: bool = False, verbose: bool = False):
         """Local outlier factor, separately for daytime and nighttime data"""
 
         for field in self.fields:
-            series_cleaned = self._series_hires_cleaned[field]  # Timeseries
-
-            # Number of neighbors is automatically calculated if not provided
-            n_neighbors = int(len(series_cleaned.dropna()) / 100) if not n_neighbors else n_neighbors
-
-            # Contamination is set automatically unless float is given
-            contamination = contamination if isinstance(contamination, float) else 'auto'
-
-            _lof = LocalOutlierFactorDaytimeNighttime(series=series_cleaned, site_lat=self.site_lat,
-                                                      site_lon=self.site_lon)
-            _lof.calc(n_neighbors=n_neighbors, contamination=contamination, showplot=showplot, verbose=verbose)
-            self._last_result = _lof
+            self.sod[field].flag_outliers_lof_dtnt_test(n_neighbors=n_neighbors,
+                                                        contamination=contamination,
+                                                        showplot=showplot,
+                                                        verbose=verbose)
 
     def flag_outliers_lof_test(self, n_neighbors: int = None, contamination: float = 'auto',
                                showplot: bool = False, verbose: bool = False):
         """Local outlier factor, across all data"""
 
         for field in self.fields:
-            series_cleaned = self._series_hires_cleaned[field]  # Timeseries
-
-            # Number of neighbors is automatically calculated if not provided
-            n_neighbors = int(len(series_cleaned.dropna()) / 100) if not n_neighbors else n_neighbors
-
-            # Contamination is set automatically unless float is given
-            contamination = contamination if isinstance(contamination, float) else 'auto'
-
-            _lof = LocalOutlierFactorAllData(series=series_cleaned)
-            _lof.calc(n_neighbors=n_neighbors, contamination=contamination, showplot=showplot, verbose=verbose)
-            self._last_result = _lof
+            self.sod[field].flag_outliers_lof_test(n_neighbors=n_neighbors,
+                                                   contamination=contamination,
+                                                   showplot=showplot,
+                                                   verbose=verbose)
 
     def correction_remove_radiation_zero_offset(self):
         """Remove nighttime offset from all radiation data and set nighttime to zero"""
@@ -466,27 +441,43 @@ class StepwiseMeteoScreeningDb:
         """Calculate overall quality flag QCF and add QCF results to other flags"""
         for field in self.fields:
             series_orig = self._data_detailed[field][field].copy()
-            qcf = FlagQCF(df=self._hires_flags[field], series=series_orig)
-            qcf.calculate()
+
+            qcf = FlagQCF(series=series_orig,
+                          df=self.sod[field].hires_flags,
+                          levelid='METSCR',
+                          swinpot=None,
+                          nighttime_threshold=50)
+            qcf.calculate(daytime_accept_qcf_below=2, nighttimetime_accept_qcf_below=2)
+            df_level32_qcf = qcf.get()
+
             self._hires_flags[field] = qcf.flags
             self._series_hires_cleaned[field] = qcf.filteredseries
             self._results_qcf[field] = qcf
             self._last_results[field] = qcf
 
+            # series_orig = self._data_detailed[field][field].copy()
+            # qcf = FlagQCF(df=self._hires_flags[field], series=series_orig)
+            # qcf.calculate()
+            # self._hires_flags[field] = qcf.flags
+            # self._series_hires_cleaned[field] = qcf.filteredseries
+            # self._results_qcf[field] = qcf
+            # self._last_results[field] = qcf
+
     def addflag(self):
         """Add flag of most recent test to data and update filtered series
         that will be used to continue with the next test"""
         for field in self.fields:
-            flag = self._last_results[field].flag
-            self._series_hires_cleaned[field] = self._last_results[field].filteredseries
-            if not flag.name in self._hires_flags[field].columns:
-                self._hires_flags[field][flag.name] = flag
-            else:
-                pass  # todo check
-            # if flag.name in self._fulldf.columns:
-            #     self._fulldf.drop([flag.name], axis=1, inplace=True)
-            # self._fulldf[flag.name] = flag
-            print(f"++Added flag column {flag.name} to flag data")
+            self.sod[field].addflag()
+            # flag = self._last_results[field].flag
+            # self._series_hires_cleaned[field] = self._last_results[field].filteredseries
+            # if not flag.name in self._hires_flags[field].columns:
+            #     self._hires_flags[field][flag.name] = flag
+            # else:
+            #     pass  # todo check
+            # # if flag.name in self._fulldf.columns:
+            # #     self._fulldf.drop([flag.name], axis=1, inplace=True)
+            # # self._fulldf[flag.name] = flag
+            # print(f"++Added flag column {flag.name} to flag data")
 
     def _setup(self):
         """Setup variable (field) data for meteoscreening"""
@@ -685,509 +676,80 @@ class StepwiseMeteoScreeningDb:
         return data_detailed
 
 
-# class MeteoScreeningFromDatabaseMultipleVars:
-#
-#     def __init__(self,
-#                  data_detailed: dict,
-#                  assigned_measurements: dict,
-#                  site: str,
-#                  **kwargs):
-#         self.site = site
-#         self.data_detailed = data_detailed
-#         self.assigned_measurements = assigned_measurements
-#         self.kwargs = kwargs
-#
-#         # Returned variables
-#         self.resampled_detailed = {}
-#         self.hires_qc = {}
-#         self.hires_flags = {}
-#         # self.run()
-#
-#     def get(self) -> tuple[dict, dict, dict]:
-#         return self.resampled_detailed, self.hires_qc, self.hires_flags
-#
-#     def run(self):
-#         for var in self.data_detailed.keys():
-#             m = self.assigned_measurements[var]
-#             mscr = MeteoScreeningFromDatabaseSingleVar(data_detailed=self.data_detailed[var].copy(),
-#                                                        site=self.site,
-#                                                        measurement=m,
-#                                                        field=var,
-#                                                        resampling_freq='30T',
-#                                                        **self.kwargs)
-#             mscr.run()
-#
-#             self.resampled_detailed[var], \
-#                 self.hires_qc[var], \
-#                 self.hires_flags[var] = mscr.get()
-
-
-# class MeteoScreeningFromDatabaseSingleVar:
-#     """Accepts the output df from the `dbc` library that includes
-#      variable data (`field`) and tags
-#      """
-#
-#     def __init__(
-#             self,
-#             data_detailed: DataFrame,
-#             measurement: str,
-#             field: str,
-#             site: str,
-#             site_lat: float = None,
-#             site_lon: float = None,
-#             resampling_freq: str = '30T',
-#             timezone_of_timestamp: str = None
-#     ):
-#         self.data_detailed = data_detailed.copy()
-#         self.measurement = measurement
-#         self.field = field
-#         self.site = site
-#         self.site_lat = site_lat
-#         self.site_lon = site_lon
-#         self.resampling_freq = resampling_freq
-#         self.timezone_of_timestamp = timezone_of_timestamp
-#
-#         self.pipe_config = None  # Variable settings
-#
-#         unique_units = list(set(self.data_detailed['units']))
-#         if len(unique_units) > 1:
-#             raise Exception(f"More than one type of units in column 'units', "
-#                             f"but only one allowed. All data records must be "
-#                             f"in same units.")
-#
-#         # Group data by time resolution
-#         groups_ser = detect_freq_groups(index=self.data_detailed.index)
-#         self.data_detailed[groups_ser.name] = groups_ser
-#         self.grps = self.data_detailed.groupby(self.data_detailed['FREQ_AUTO_SEC'])
-#
-#         # Returned variables
-#         # Collected data across (potentially) different time resolutions
-#         self.coll_resampled_detailed = None
-#         self.coll_hires_qc = None
-#         self.coll_hires_flags = None
-#
-#     def run(self):
-#         self._run_by_freq_group()
-#         self.coll_resampled_detailed.drop(['FREQ_AUTO_SEC'], axis=1, inplace=True)  # Currently not used as tag in db
-#         self.coll_resampled_detailed.sort_index(inplace=True)
-#         self.coll_hires_qc.sort_index(inplace=True)
-#         self.coll_hires_flags.sort_index(inplace=True)
-#         # self._plots()
-#
-#     def _run_by_freq_group(self):
-#         """Screen and resample by frequency
-#
-#         When downloading data from the database, it is possible that the same
-#         variable was recorded at a different time resolution in the past. Each
-#         time resolution has to be handled separately. After the meteoscreening,
-#         all data are in 30MIN time resolution.
-#         """
-#         # Loop through frequency groups
-#         # All group members have the same, confirmed frequency
-#         grp_counter = 0
-#         for grp_freq, grp_var_df in self.grps:
-#             hires_raw = grp_var_df[self.field].copy()  # Group series
-#             varname = hires_raw.name
-#             tags_dict = self.extract_tags(var_df=grp_var_df, drop_field=self.field)
-#             grp_counter += 1
-#             print(f"({varname}) Working on data with time resolution {grp_freq}S")
-#
-#             # Since all group members have the same time resolution, the freq of
-#             # the Series can already be set.
-#             offset = to_offset(pd.Timedelta(f'{grp_freq}S'))
-#             hires_raw = hires_raw.asfreq(offset.freqstr)  # Set to group freq
-#
-#             # Sanitize timestamp index
-#             hires_raw = TimestampSanitizer(data=hires_raw).get()
-#             # series = sanitize_timestamp_index(data=series, freq=grp_freq)
-#
-#             screening = ScreenMeteoVar(series=hires_raw,
-#                                        measurement=self.measurement,
-#                                        units=tags_dict['units'],
-#                                        site=self.site,
-#                                        site_lat=self.site_lat,
-#                                        site_lon=self.site_lon,
-#                                        timezone_of_timestamp=self.timezone_of_timestamp)
-#             flags_hires = screening.flags
-#             seriesqcf_hires = screening.seriesqcf
-#             self.pipe_config = screening.pipe_config
-#
-#             # Resample to 30MIN
-#             seriesqcf_resampled = resample_series_to_30MIN(series=seriesqcf_hires,
-#                                                            to_freqstr=self.resampling_freq,
-#                                                            agg=self.pipe_config['resampling_aggregation'],
-#                                                            mincounts_perc=.25)
-#
-#             # Rename QC'd series to original name (without _QCF at the end)
-#             # This is done to comply with the naming convention, which needs
-#             # the positional indices at the end of the variable name (not _QCF).
-#             seriesqcf_resampled.name = hires_raw.name
-#
-#             # Update tags after resampling
-#             tags_dict['freq'] = '30T'
-#             # tags_dict['freqfrom'] = 'resampling'
-#             tags_dict['data_version'] = 'meteoscreening'
-#
-#             # Create df that includes the resampled series and its tags
-#             resampled_detailed = pd.DataFrame(seriesqcf_resampled)
-#             resampled_detailed = resampled_detailed.asfreq(seriesqcf_resampled.index.freqstr)
-#
-#             # Insert tags as columns
-#             for key, value in tags_dict.items():
-#                 resampled_detailed[key] = value
-#
-#             if grp_counter == 1:
-#                 self.coll_resampled_detailed = resampled_detailed.copy()  # Collection
-#                 self.coll_hires_qc = seriesqcf_hires.copy()
-#                 self.coll_hires_flags = flags_hires.copy()
-#             else:
-#                 # self.coll_resampled_detailed = pd.concat([self.coll_resampled_detailed, resampled_detailed], axis=0)
-#                 self.coll_resampled_detailed = self.coll_resampled_detailed.combine_first(other=resampled_detailed)
-#                 self.coll_resampled_detailed.sort_index(ascending=True, inplace=True)
-#                 self.coll_resampled_detailed = self.coll_resampled_detailed.asfreq(resampled_detailed.index.freqstr)
-#
-#                 # self.coll_hires_qc = pd.concat([self.coll_hires_qc, hires_qc], axis=0)
-#                 self.coll_hires_qc = self.coll_hires_qc.combine_first(other=seriesqcf_hires)
-#                 self.coll_hires_qc.sort_index(ascending=True, inplace=True)
-#
-#                 # self.coll_hires_flags = pd.concat([self.coll_hires_flags, hires_flags], axis=0)
-#                 self.coll_hires_flags = self.coll_hires_flags.combine_first(other=flags_hires)
-#                 self.coll_hires_flags.sort_index(ascending=True, inplace=True)
-#
-#     def get(self) -> tuple[DataFrame, Series, DataFrame]:
-#         return self.coll_resampled_detailed, self.coll_hires_qc, self.coll_hires_flags
-#
-#     def extract_tags(self, var_df: DataFrame, drop_field: str) -> dict:
-#         """Convert tag columns in DataFrame to simplified dict
-#
-#         Args:
-#             var_df:
-#             drop_field:
-#
-#         Returns:
-#             dict of tags
-#
-#         """
-#         _df = var_df.copy()
-#         tags_df = _df.drop(columns=[drop_field])
-#         tags_df.nunique()
-#         tags_dict = {}
-#         for col in tags_df.columns:
-#             list_of_vals = list(tags_df[col].unique())
-#             str_of_vals = ",".join([str(i) for i in list_of_vals])
-#             tags_dict[col] = str_of_vals
-#         return tags_dict
-#
-#     def show_groups(self):
-#         print("Number of values per frequency group:")
-#         print(self.grps.count())
-#
-#     def _plots(self):
-#         varname = self.field
-#
-#         # Plot heatmap
-#         HeatmapDateTime(series=self.coll_resampled_detailed[varname],
-#                         title=f"{self.coll_resampled_detailed[varname].name} RESAMPLED DATA\n"
-#                               f"AFTER HIGH-RES METEOSCREENING  |  "
-#                               f"time resolution @{self.coll_resampled_detailed.index.freqstr}").show()
-#
-#         # Plot comparison
-#         _hires_qc = self.coll_hires_qc.copy()
-#         _hires_qc.name = f"{_hires_qc.name} (HIGH-RES, after quality checks)"
-#         _resampled = self.coll_resampled_detailed[varname].copy()
-#         _resampled.name = f"{_resampled.name} (RESAMPLED) " \
-#                           f"{_resampled.index.freqstr} {self.pipe_config['resampling_aggregation']}"
-#         quickplot([_hires_qc, _resampled], subplots=False, showplot=True,
-#                   title=f"Comparison")
-
-# class ScreenMeteoVar:
-#     """Quality screening of one single meteo data time series
-#
-#     Input series is not altered. Instead, this class produces a DataFrame
-#     that contains all quality flags.
-#
-#     Typical time series: radiation, air temperature, soil water content.
-#
-#     """
-#
-#     def __init__(
-#             self,
-#             series: Series,
-#             measurement: str,
-#             units: str,
-#             site: str,
-#             site_lat: float = None,
-#             site_lon: float = None,
-#             timezone_of_timestamp: str = None
-#     ):
-#         self.series = series
-#         self.measurement = measurement
-#         self.units = units
-#         self.site = site
-#         self.site_lat = site_lat
-#         self.site_lon = site_lon
-#         self.timezone_of_timestamp = timezone_of_timestamp
-#
-#         # Processing pipes
-#         path = Path(__file__).parent.resolve()  # Search in this file's folder
-#         self.pipes = filereader.ConfigFileReader(configfilepath=path / 'pipes_meteo.yaml',
-#                                                  validation='meteopipe').read()
-#         self._pipe_config = self._pipe_assign()
-#
-#         # Collect all flags
-#         self._flags_df = None
-#
-#         self._run()
-#
-#     @property
-#     def pipe_config(self) -> dict:
-#         """Processing pipe configuration"""
-#         if not isinstance(self._pipe_config, dict):
-#             raise Exception('Pipe configuration not available')
-#         return self._pipe_config
-#
-#     @property
-#     def flags(self) -> DataFrame:
-#         """Processing pipe configuration"""
-#         if not isinstance(self._flags_df, DataFrame):
-#             raise Exception('Flags are empty')
-#         return self._flags_df
-#
-#     @property
-#     def seriesqcf(self) -> Series:
-#         """Series with rejected values set to missing"""
-#         if not isinstance(self._seriesqcf, Series):
-#             raise Exception('Flags are empty')
-#         return self._seriesqcf
-#
-#     def _run(self):
-#
-#         # Call the various checks for this variable and generate flags
-#         mqcf = self._call_pipe_steps()
-#
-#         # Print some info about QCF
-#         mqcf.report_qcf_flags()
-#         mqcf.report_qcf_series()
-#         mqcf.report_qcf_evolution()
-#
-#         # Plot
-#         mqcf.showplot_qcf_heatmaps()
-#         mqcf.showplot_qcf_timeseries()
-#
-#         # # Find column that contains the QCF info
-#         # flagqcfcol = findqcfcol(df=self._flags_df, varname=str(self.series.name))
-#
-#     def _call_pipe_steps(self):
-#         # Initiate new flag collection
-#         self._flags_df = pd.DataFrame(index=self.series.index)
-#
-#         # Processing steps for this variable
-#         pipe_steps = self.pipe_config['pipe']
-#
-#         # Missing values flag, always generated (high-res)
-#         _miss = MissingValues(series=self.series)
-#         _miss.calc()
-#         self._flags_df[_miss.flag.name] = _miss.flag
-#
-#         for step in pipe_steps:
-#             # remove_highres_outliers_incremental_zscore,
-#
-#             if step == 'remove_highres_outliers_incremental_zscore':
-#                 # Generates flag
-#                 _mqcf = FlagQCF(df=self._flags_df, series=self.series)
-#                 _mqcf.calculate()
-#                 _izsc = zScoreIncrements(series=_mqcf.filteredseries)
-#                 _izsc.calc(threshold=30, showplot=True)
-#                 self._flags_df[_izsc.flag.name] = _izsc.flag
-#
-#             elif step == 'remove_highres_outliers_lof':
-#                 # Generates flag, needs QC'd data
-#                 _mqcf = FlagQCF(df=self._flags_df, series=self.series)
-#                 _mqcf.calculate()
-#                 _lof = LocalOutlierFactorAllData(series=_mqcf.filteredseries)
-#                 _lof.calc(n_neighbors=100, contamination=0.01, showplot=True)
-#                 self._flags_df[_lof.flag.name] = _lof.flag
-#
-#             elif step == 'remove_highres_outliers_stl':
-#                 # Generates flag
-#                 _stl = OutlierSTLRIQRZ(series=self.series, lat=self.site_lat, lon=self.site_lon)
-#                 _stl.calc(zfactor=4.5, decompose_downsampling_freq='1H', showplot=True)
-#                 self._flags_df[_stl.flag.name] = _stl.flag
-#
-#             elif step == 'remove_highres_outliers_thymeboost':
-#                 # Generates flag, needs QC'd data
-#                 _mqcf = FlagQCF(df=self._flags_df, series=self.series)
-#                 _mqcf.calculate()
-#                 _thymeboost = ThymeBoostOutlier(series=_mqcf.filteredseries)
-#                 _thymeboost.calc(showplot=True)
-#                 self._flags_df[_thymeboost.flag.name] = _thymeboost.flag
-#
-#             elif step == 'remove_highres_outliers_zscore':
-#                 # Generates flag
-#                 _mqcf = FlagQCF(df=self._flags_df, series=self.series)
-#                 _mqcf.calculate()
-#                 # import matplotlib.pyplot as plt
-#                 # _mqcf.seriesqcf.plot()
-#                 # plt.show()
-#                 _zscoreiqr = zScoreIQR(series=_mqcf.filteredseries)
-#                 _zscoreiqr.calc(factor=4.5, showplot=True, verbose=True)
-#                 self._flags_df[_zscoreiqr.flag.name] = _zscoreiqr.flag
-#
-#             elif step == 'remove_highres_outliers_localsd':
-#                 # Generates flag, needs QC'd data
-#                 _mqcf = FlagQCF(df=self._flags_df, series=self.series)
-#                 _mqcf.calculate()
-#                 _localsd = LocalSD(series=_mqcf.filteredseries)
-#                 _localsd.calc(n_sd=7, showplot=True, verbose=True)
-#                 # _flag_outlier_local3sd = xxxlocalsd(series=_series, n_sd=7, showplot=True)
-#                 self._flags_df[_localsd.flag.name] = _localsd.flag
-#
-#             elif step == 'remove_highres_outliers_absolute_limits':
-#                 # Generates flag
-#                 _abslim = AbsoluteLimits(series=self.series)
-#                 _abslim.calc(min=self.pipe_config['absolute_limits'][0],
-#                              max=self.pipe_config['absolute_limits'][1])
-#                 self._flags_df[_abslim.flag.name] = _abslim.flag
-#
-#             elif step == 'remove_radiation_zero_offset':
-#                 # Generates corrected series
-#                 if (self.site_lat is None) \
-#                         | (self.site_lon is None) \
-#                         | (self.timezone_of_timestamp is None):
-#                     raise Exception("Removing the radiation zero offset requires site latitude, "
-#                                     "site longitude and site timezone (e.g., 'UTC+01:00' for CET).")
-#                 self.series = remove_radiation_zero_offset(
-#                     series=self.series,
-#                     lat=self.site_lat,
-#                     lon=self.site_lon,
-#                     timezone_of_timestamp=self.timezone_of_timestamp,
-#                     showplot=True
-#                 )
-#
-#             elif step == 'setto_max_threshold':
-#                 # Generates corrected series
-#                 self.series = setto_threshold(
-#                     series=self.series,
-#                     threshold=self.pipe_config['absolute_limits'][1],
-#                     type='max',
-#                     showplot=True)
-#
-#             elif step == 'setto_min_threshold':
-#                 # Generates corrected series
-#                 self.series = setto_threshold(series=self.series,
-#                                               threshold=self.pipe_config['absolute_limits'][0],
-#                                               type='min',
-#                                               showplot=True)
-#
-#             elif step == 'remove_relativehumidity_offset':
-#                 # Generates corrected series
-#                 self.series = remove_relativehumidity_offset(series=self.series,
-#                                                              showplot=True)
-#
-#             else:
-#                 raise Exception(f"No function defined for {step}.")
-#
-#         # Calculate overall quality flag QCF and Add QCF results to other flags
-#         mqcf = self._calculate_qcf(missingflag=str(_miss.flag.name))
-#         self._seriesqcf = mqcf.filteredseries.copy()
-#         return mqcf
-#
-#     def _calculate_qcf(self, missingflag: str):
-#         """Calculate overall quality flag QCF and Add QCF results to other flags"""
-#         mqcf = FlagQCF(df=self._flags_df, series=self.series)
-#         mqcf.calculate()
-#         _flags_df = pd.concat([self._flags_df, mqcf.flags], axis=1)
-#         _flags_df = _flags_df.loc[:, ~_flags_df.columns.duplicated(keep='last')]
-#         self._flags_df = _flags_df
-#         return mqcf
-#
-#     def _pipe_assign(self) -> dict:
-#         """Assign appropriate processing pipe to this variable"""
-#         if self.measurement not in self.pipes.keys():
-#             raise KeyError(f"{self.measurement} is not defined in meteo_pipes.yaml")
-#
-#         pipe_config = var = None
-#         for var in self.pipes[self.measurement].keys():
-#             if var in self.series.name:
-#                 if self.pipes[self.measurement][var]['units'] != self.units:
-#                     continue
-#                 pipe_config = self.pipes[self.measurement][var]
-#                 break
-#
-#         print(f"Variable '{self.series.name}' has been assigned to processing pipe {pipe_config['pipe']}")
-#
-#         return pipe_config
-
 def example():
-    # todo For examples see notebooks/MeteoScreening
+    from pathlib import Path
+    testdir = Path(r"L:\Sync\luhk_work\TMP")
 
-    # Settings
-    SITE = 'ch-dav'  # Site name
-    SITE_LAT = 46.815333
-    SITE_LON = 9.855972
+    # User settings, site
+    SITE = 'ch-dav'
+    SITE_LAT = 46.81524
+    SITE_LON = 9.85597
+
+    # User settings, variables to screen
+    FIELDS = ['SW_IN_NABEL_T1_35_1']
     MEASUREMENT = 'SW'
-    FIELDS = ['SW_IN_NABEL_T1_35_1']  # Variable name; InfluxDB stores variable names as '_field'
-    START = '2021-01-01 00:01:00'  # Download data starting with this date
-    STOP = '2021-01-05 00:01:00'  # Download data before this date (the stop date itself is not included)
 
-    # # Some info
-    # from datetime import datetime
-    # from pathlib import Path
-    # import importlib.metadata
-    # # from diive.pkgs.qaqc.meteoscreening import MetScrDbMeasurementVars
-    # dt_string = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    # print(f"This page was last modified on: {dt_string}")
-    # version_dbc_influxdb = pkg_resources.get_distribution("dbc_influxdb").version
-    # print(f"dbc-influxdb version: v{version_dbc_influxdb}")
+    # User settings, time range to screen
+    START = '2023-01-01 00:00:01'
+    STOP = '2024-01-01 00:00:01'
 
-    # Auto-settings
-    DIRCONF = r'L:\Sync\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
+    # Auto-settings, data settings
+    DATA_VERSION = 'raw'
     TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
     RESAMPLING_FREQ = '30T'  # During MeteoScreening the screened high-res data will be resampled to this frequency; '30T' = 30-minute time resolution
     RESAMPLING_AGG = 'mean'  # The resampling of the high-res data will be done using this aggregation methos; e.g., 'mean'
-    from pathlib import Path
-    basedir = Path(r"L:\Sync\luhk_work\_temp")
+    # DIRCONF = r'P:\Flux\RDS_calculations\_scripts\_configs\configs'  # Location of configuration files, needed e.g. for connection to database
+    DIRCONF = r'L:\Sync\luhk_work\20 - CODING\22 - POET\configs'
+
+    # Auto-settings, imports
+    from datetime import datetime
+    import importlib.metadata
+    # %matplotlib inline
+    from bokeh.plotting import output_notebook
+    output_notebook()
+    # from diive.pkgs.qaqc.meteoscreening import StepwiseMeteoScreeningDb
+    dt_string = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"This page was last modified on: {dt_string}")
+    version_diive = importlib.metadata.version("diive")
+    print(f"diive version: v{version_diive}")
+
+    # Auto-settings, automatic settings
     BUCKET_RAW = f'{SITE}_raw'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_raw' contains all raw data for CH-LAE
     BUCKET_PROCESSING = f'{SITE}_processing'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_processing' contains all processed data for CH-LAE
     print(f"Bucket containing raw data (source bucket): {BUCKET_RAW}")
     print(f"Bucket containing processed data (destination bucket): {BUCKET_PROCESSING}")
 
-    # Download data from database with "dbc-influxdb"
-    from dbc_influxdb import dbcInflux
-    dbc = dbcInflux(dirconf=DIRCONF)  # Instantiate class
-    data_simple, data_detailed, assigned_measurements = \
-        dbc.download(bucket=BUCKET_RAW,
-                     measurements=[MEASUREMENT],
-                     fields=FIELDS,
-                     start=START,
-                     stop=STOP,
-                     timezone_offset_to_utc_hours=TIMEZONE_OFFSET_TO_UTC_HOURS,
-                     data_version='raw')
-    # import matplotlib.pyplot as plt
-    # data_simple.plot()
-    # plt.show()
-
+    # # Auto-settings, connect to database
+    # dbc = dbcInflux(dirconf=DIRCONF)
+    #
+    # # Download data from database with "dbc-influxdb"
+    # from dbc_influxdb import dbcInflux
+    # dbc = dbcInflux(dirconf=DIRCONF)  # Instantiate class
+    # data_simple, data_detailed, assigned_measurements = \
+    #     dbc.download(bucket=BUCKET_RAW,
+    #                  measurements=[MEASUREMENT],
+    #                  fields=FIELDS,
+    #                  start=START,
+    #                  stop=STOP,
+    #                  timezone_offset_to_utc_hours=TIMEZONE_OFFSET_TO_UTC_HOURS,
+    #                  data_version='raw')
+    # # import matplotlib.pyplot as plt
+    # # data_simple.plot()
+    # # plt.show()
+    #
     # # Export data to pickle for fast testing
-    # import pickle
-    # pickle_out = open(basedir / "meteodata_simple.pickle", "wb")
-    # pickle.dump(data_simple, pickle_out)
-    # pickle_out.close()
-    # pickle_out = open(basedir / "meteodata_detailed.pickle", "wb")
-    # pickle.dump(data_detailed, pickle_out)
-    # pickle_out.close()
-    # pickle_out = open(basedir / "meteodata_assigned_measurements.pickle", "wb")
-    # pickle.dump(assigned_measurements, pickle_out)
-    # pickle_out.close()
+    # from diive.core.io.files import save_parquet, save_as_pickle
+    # save_parquet(filename="meteodata_simple", data=data_simple, outpath=testdir)
+    # save_as_pickle(filename="meteodata_detailed", data=data_detailed, outpath=testdir)
+    # save_as_pickle(filename="meteodata_assigned_measurements", data=assigned_measurements, outpath=testdir)
 
-    # # Import data from pickle for fast testing
-    # # from diive.core.io.files import load_pickle
-    # import pickle
-    # pickle_in = open(basedir / "meteodata_simple.pickle", "rb")
-    # data_simple = pickle.load(pickle_in)
-    # pickle_in = open(basedir / "meteodata_detailed.pickle", "rb")
-    # data_detailed = pickle.load(pickle_in)
-    # pickle_in = open(basedir / "meteodata_assigned_measurements.pickle", "rb")
-    # assigned_measurements = pickle.load(pickle_in)
+    # Import data from pickle for fast testing
+    from diive.core.io.files import load_parquet, load_pickle
+    data_simple = load_parquet(filepath=testdir / "meteodata_simple.parquet")
+    _f = str(testdir / "meteodata_detailed.pickle")
+    data_detailed = load_pickle(_f)
+    _f = str(testdir / "meteodata_assigned_measurements.pickle")
+    assigned_measurements = load_pickle(_f)
 
     # # Restrict data for testing
     # from diive.core.dfun.frames import df_between_two_dates
@@ -1197,10 +759,11 @@ def example():
     # Start MeteoScreening session
     mscr = StepwiseMeteoScreeningDb(site=SITE,
                                     data_detailed=data_detailed,
-                                    measurement=MEASUREMENT,
+                                    # measurement=MEASUREMENT,
                                     fields=FIELDS,
                                     site_lat=SITE_LAT,
-                                    site_lon=SITE_LON)
+                                    site_lon=SITE_LON,
+                                    timezone_of_timestamp='UTC+01:00')
 
     # # Plot data
     # mscr.showplot_orig()
@@ -1210,50 +773,52 @@ def example():
     mscr.flag_missingvals_test()
     mscr.addflag()
 
-    # # Missing values test
-    # mscr.flag_manualremoval_test(remove_dates=['2022-06-29 23:59:30',
-    #                                            ['2022-06-01', '2022-06-16']
-    #                                            ],
-    #                              showplot=True, verbose=True)
-    # mscr.addflag()
+    # Missing values test
+    mscr.flag_manualremoval_test(remove_dates=['2023-02-02 23:59:30',
+                                               ['2023-02-05', '2023-02-27']
+                                               ],
+                                 showplot=True, verbose=True)
+    mscr.addflag()
 
-    # # Outlier detection: z-score over all data
-    # mscr.flag_outliers_zscore_test(threshold=3, showplot=True, verbose=True)
-    # mscr.addflag()
+    # Outlier detection: Absolute limits
+    mscr.flag_outliers_abslim_test(minval=-50, maxval=50, showplot=True)
+    mscr.addflag()
 
-    # # Outlier detection: z-score over all data with IQR
-    # mscr.flag_outliers_zscoreiqr_test(factor=4, showplot=True, verbose=True)
-    # mscr.addflag()
+    # Outlier detection: Absolute limits, separate for daytime and nighttime
+    mscr.flag_outliers_abslim_dtnt_test(daytime_minmax=[-50, 50], nighttime_minmax=[-10, 20], showplot=True)
+    mscr.addflag()
 
-    # # Outlier detection: z-score over all data, separate for daytime and nighttime
-    # mscr.flag_outliers_zscore_dtnt_test(threshold=2, showplot=True, verbose=True)
-    # mscr.addflag()
+    # Outlier detection: Absolute limits, separate for daytime and nighttime
+    mscr.flag_outliers_stl_rz_test(zfactor=4.5, decompose_downsampling_freq='2H', repeat=False, showplot=True)
+    mscr.addflag()
 
-    # # Outlier detection: Seasonal trend decomposition (residuals, IQR, z-score)
-    # mscr.flag_outliers_stl_riqrz_test(zfactor=4.5, decompose_downsampling_freq='2H', showplot=True, repeat=False)
-    # mscr.addflag()
+    # Outlier detection: z-score over all data
+    mscr.flag_outliers_zscore_test(threshold=4, showplot=True, verbose=True)
+    mscr.addflag()
 
-    # # Outlier detection: Increments z-score
-    # mscr.flag_outliers_increments_zcore_test(threshold=5, showplot=True)
-    # mscr.addflag()
+    # Outlier detection: z-score over all data, separate for daytime and nighttime
+    mscr.flag_outliers_zscore_dtnt_test(threshold=4, showplot=True, verbose=True)
+    mscr.addflag()
 
-    # # Outlier detection: Thymeboost
-    # mscr.flag_outliers_thymeboost_test(showplot=True)
-    # mscr.addflag()
-    #
-    # # Outlier detection: Absolute limits
-    # mscr.flag_outliers_abslim_test(min=-50, max=50, showplot=True)
-    # mscr.addflag()
+    # Outlier detection: Increments z-score
+    mscr.flag_outliers_increments_zcore_test(threshold=50, showplot=True)
+    mscr.addflag()
 
-    # # Outlier detection: Local SD
-    # mscr.flag_outliers_localsd_test(n_sd=5, winsize=None, showplot=True)
-    # mscr.addflag()
+    # Outlier detection: Thymeboost
+    mscr.flag_outliers_thymeboost_test(showplot=True)
+    mscr.addflag()
+
+    # Outlier detection: Local SD
+    mscr.flag_outliers_localsd_test(n_sd=5, winsize=None, showplot=True)
+    mscr.addflag()
 
     # # Outlier detection: Local outlier factor, across all data
+    # # todo hires data problematic, and reduce njobs
     # mscr.flag_outliers_lof_test(n_neighbors=None, showplot=True, verbose=True)
     # mscr.addflag()
 
     # # Outlier detection: Local outlier factor, daytime nighttime
+    # # todo hires data problematic
     # mscr.flag_outliers_lof_dtnt_test(n_neighbors=None, showplot=True, verbose=True)
     # mscr.addflag()
 
@@ -1267,11 +832,11 @@ def example():
     mscr.showplot_qcf_heatmaps()
     # mscr.showplot_qcf_timeseries()
 
-    # # Apply corrections
-    # mscr.correction_remove_radiation_zero_offset()
-    # mscr.correction_setto_max_threshold(threshold=400)
-    # mscr.correction_setto_min_threshold(threshold=100)
-    # mscr.correction_remove_relativehumidity_offset()
+    # Apply corrections
+    mscr.correction_remove_radiation_zero_offset()
+    mscr.correction_setto_max_threshold(threshold=400)
+    mscr.correction_setto_min_threshold(threshold=100)
+    mscr.correction_remove_relativehumidity_offset()
 
     # End MeteoScreening session
     mscr.resample(to_freqstr='30T', agg='mean', mincounts_perc=.25)
