@@ -9,9 +9,9 @@ from diive.pkgs.outlierdetection.local3sd import LocalSD
 from diive.pkgs.outlierdetection.lof import LocalOutlierFactorDaytimeNighttime, LocalOutlierFactorAllData
 from diive.pkgs.outlierdetection.manualremoval import ManualRemoval
 from diive.pkgs.outlierdetection.missing import MissingValues
-from diive.pkgs.outlierdetection.seasonaltrend import OutlierSTLRZ, OutlierSTLRIQRZ
+from diive.pkgs.outlierdetection.seasonaltrend import OutlierSTLRZ
 from diive.pkgs.outlierdetection.thymeboost import ThymeBoostOutlier
-from diive.pkgs.outlierdetection.zscore import zScoreDaytimeNighttime, zScoreIQR, zScore
+from diive.pkgs.outlierdetection.zscore import zScoreDaytimeNighttime, zScore
 
 
 class StepwiseOutlierDetection:
@@ -28,13 +28,10 @@ class StepwiseOutlierDetection:
     - `.flag_outliers_increments_zcore_test()`: Identify outliers based on the z-score of increments
     - `.flag_outliers_localsd_test()`: Identify outliers based on the local standard deviation from a running median
     - `.flag_manualremoval_test()`: Remove data points for range, time or point-by-point
-    - `.flag_outliers_stl_riqrz_test()`: Identify outliers based on seasonal-trend decomposition and z-score
-        calculations, taking the inter-quartile range into account
     - `.flag_outliers_stl_rz_test()`: Identify outliers based on seasonal-trend decomposition and z-score calculations
     - `.flag_outliers_thymeboost_test()`: Identify outliers based on [thymeboost](https://github.com/tblume1992/ThymeBoost)
     - `.flag_outliers_zscore_dtnt_test()`: Identify outliers based on the z-score, separately for daytime and nighttime
     - `.flag_outliers_zscore_test()`:  Identify outliers based on the z-score
-    - `.flag_outliers_zscoreiqr_test()`: Identify outliers based on max z-scores in the interquartile range data
     - `.flag_outliers_lof_dtnt_test()`: Identify outliers based on local outlier factor, daytime nighttime separately
     - `.flag_outliers_lof_test()`: Identify outliers based on local outlier factor, across all data
 
@@ -57,10 +54,6 @@ class StepwiseOutlierDetection:
     **Modular structure**
     Due to its modular (step-wise) approach, the stepwise screening can be easily adjusted
     to work with any type of time series data.
-
-    **Current methods**
-    A listing of currently implemented quality checks and corrections can be found at the top
-    of this file.
 
     """
 
@@ -87,9 +80,9 @@ class StepwiseOutlierDetection:
         self._last_results = None  # Results of most recent QC tests (objects)
 
     @property
-    def last_results(self) -> dict:
+    def last_results(self) -> object:
         """Return high-resolution detailed data with tags as dict of objects"""
-        if not isinstance(self._last_results, dict):
+        if not isinstance(self._last_results, object):
             raise Exception(f"No recent results available.")
         return self._last_results
 
@@ -153,13 +146,6 @@ class StepwiseOutlierDetection:
         results.calc(threshold=threshold, showplot=showplot, verbose=verbose)
         self._last_results = results
 
-    def flag_outliers_zscoreiqr_test(self, factor: float = 4, showplot: bool = False, verbose: bool = False):
-        """Identify outliers based on the z-score of records in the IQR"""
-        series_cleaned = self._series_hires_cleaned.copy()
-        results = zScoreIQR(series=series_cleaned)
-        results.calc(factor=factor, showplot=showplot, verbose=verbose)
-        self._last_results = results
-
     def flag_outliers_zscore_test(self, threshold: int = 4, showplot: bool = False, verbose: bool = False,
                                   plottitle: str = None):
         """Identify outliers based on the z-score of records"""
@@ -203,19 +189,10 @@ class StepwiseOutlierDetection:
 
     def flag_outliers_stl_rz_test(self, zfactor: float = 4.5, decompose_downsampling_freq: str = '1H',
                                   repeat: bool = False, showplot: bool = False):
-        """Seasonsal trend decomposition with z-score on residuals"""
+        """Identify outliers based on seasonal-trend decomposition and z-score calculations"""
         series_cleaned = self._series_hires_cleaned.copy()
         results = OutlierSTLRZ(series=series_cleaned, lat=self.site_lat, lon=self.site_lon,
                                timezone_of_timestamp=self.timezone_of_timestamp)
-        results.calc(zfactor=zfactor, decompose_downsampling_freq=decompose_downsampling_freq,
-                     repeat=repeat, showplot=showplot)
-        self._last_results = results
-
-    def flag_outliers_stl_riqrz_test(self, zfactor: float = 4.5, decompose_downsampling_freq: str = '1H',
-                                     repeat: bool = False, showplot: bool = False):
-        """Seasonsal trend decomposition with z-score on residuals"""
-        series_cleaned = self._series_hires_cleaned.copy()
-        results = OutlierSTLRIQRZ(series=series_cleaned, lat=self.site_lat, lon=self.site_lon)
         results.calc(zfactor=zfactor, decompose_downsampling_freq=decompose_downsampling_freq,
                      repeat=repeat, showplot=showplot)
         self._last_results = results

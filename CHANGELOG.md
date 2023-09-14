@@ -2,7 +2,28 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.58.1 | X Sep 2023
+## v0.59.0 | 14 Sep 2023
+
+### MeteoScreening from database - update
+
+The class `StepwiseMeteoScreeningDb`, which is used for quality-screening of meteo data
+stored in the ETH Grassland Sciences database, has been refactored. It is now using the
+previously introduced class `StepwiseOutlierDetection` for outlier
+tests. (`pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb`)
+
+### Removed
+
+The following classes are no longer used and were removed from step-wise outlier detection:
+
+- Removed z-score IQR test, too unreliable (`pkgs.outlierdetection.zscore.zScoreIQR`)
+- Similarly, removed seasonal trend decomposition that used z-score IQR test, too
+  unreliable (`pkgs.outlierdetection.seasonaltrend.OutlierSTLRIQRZ`)
+
+### Notebooks
+
+- Updated notebook `notebooks/MeteoScreening/StepwiseMeteoScreeningFromDatabase.ipynb`
+
+## v0.58.1 | 13 Sep 2023
 
 ### Notebooks
 
