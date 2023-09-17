@@ -34,6 +34,13 @@ class TestLoadFiletypes(unittest.TestCase):
         self.assertEqual(len(data_df.columns), 101)
         self.assertEqual(len(data_df), 17520)
 
+    def test_exampledata_parquet(self):
+        """Load parquet file"""
+        data_df = ed.load_exampledata_parquet()
+        self.assertEqual(type(data_df), DataFrame)
+        self.assertEqual(len(data_df.columns), 49)
+        self.assertEqual(len(data_df), 175296)
+
 
 if __name__ == '__main__':
     unittest.main()

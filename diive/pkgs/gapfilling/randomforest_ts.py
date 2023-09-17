@@ -1,4 +1,7 @@
 # TODO generalization bias
+# TODO SHAP values
+# https://pypi.org/project/shap/
+# https://mljar.com/blog/feature-importance-in-random-forest/
 
 """
 =========================================
@@ -21,15 +24,133 @@ import numpy as np
 import pandas as pd
 from pandas import DataFrame, Series
 from sklearn.ensemble import RandomForestRegressor  # Import the model we are using
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, TimeSeriesSplit, GridSearchCV
 
 import diive.core.dfun.frames as frames
-from diive.core.ml.common import feature_importances, prediction_scores_regr
+from diive.core.ml.common import feature_importances, prediction_scores_regr, plot_prediction_residuals_error_regr
 from diive.core.times.times import include_timestamp_as_cols
 
 pd.set_option('display.max_rows', 50)
 pd.set_option('display.max_columns', 12)
 pd.set_option('display.width', 1000)
+
+
+class OptimizeParamsRFTS:
+    """
+    Optimize parameters for random forest model
+
+    """
+
+    def __init__(self,
+                 df: DataFrame,
+                 target_col: str,
+                 **rf_params: dict):
+        """
+        Args:
+            df: dataframe of target and predictor time series
+            target_col: name of target in *df*, all variables that are not *target* are
+                used as predictors
+            **rf_params: dict of parameters for random forest model, where parameter ranges are
+                provided as lists, e.g.
+                    rf_params = {
+                        'n_estimators': list(range(2, 12, 2)),
+                        'criterion': ['squared_error'],
+                        'max_depth': [None],
+                        'min_samples_split': list(range(2, 12, 2)),
+                        'min_samples_leaf': [1, 3, 6]
+                    }
+
+                For an overview of RF parameters see:
+                https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestRegressor.html
+        """
+        self.model_df = df.copy()
+        self.target_col = target_col
+
+        self.regr = RandomForestRegressor()
+
+        self.params = rf_params
+
+        # Attributes
+        self._best_params = None
+        self._scores = None
+        self._cv_results = None
+        self._best_score = None
+        self._cv_n_splits = None
+
+    @property
+    def best_params(self) -> dict:
+        """Estimator which gave highest score (or smallest loss if specified) on the left out data"""
+        if not self._best_params:
+            raise Exception(f'Not available: model scores.')
+        return self._best_params
+
+    @property
+    def scores(self) -> dict:
+        """Return model scores for best model"""
+        if not self._scores:
+            raise Exception(f'Not available: model scores.')
+        return self._scores
+
+    @property
+    def cv_results(self) -> DataFrame:
+        """Cross-validation results"""
+        if not isinstance(self._cv_results, DataFrame):
+            raise Exception(f'Not available: cv scores.')
+        return self._cv_results
+
+    @property
+    def best_score(self) -> float:
+        """Mean cross-validated score of the best_estimator"""
+        if not self._best_score:
+            raise Exception(f'Not available: cv scores.')
+        return self._best_score
+
+    @property
+    def cv_n_splits(self) -> int:
+        """The number of cross-validation splits (folds/iterations)"""
+        if not self._cv_n_splits:
+            raise Exception(f'Not available: cv scores.')
+        return self._cv_n_splits
+
+    def optimize(self):
+
+        y, X, X_names, timestamp = \
+            frames.convert_to_arrays(df=self.model_df,
+                                     target_col=self.target_col,
+                                     complete_rows=True)
+
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
+
+        grid = GridSearchCV(estimator=self.regr,
+                            param_grid=self.params,
+                            scoring='neg_mean_squared_error',
+                            cv=TimeSeriesSplit(n_splits=10),
+                            n_jobs=-1)
+        grid.fit(X_train, y_train)
+
+        self._cv_results = pd.DataFrame.from_dict(grid.cv_results_)
+
+        # Best parameters after tuning
+        # Estimator which gave highest score (or smallest loss if specified) on the left out data
+        self._best_params = grid.best_params_
+
+        # Mean cross-validated score of the best_estimator
+        self._best_score = grid.best_score_
+
+        # Scorer function used on the held out data to choose the best parameters for the model
+        self._scorer = grid.scorer_
+
+        # The number of cross-validation splits (folds/iterations)
+        self._cv_n_splits = grid.n_splits_
+
+        grid_predictions = grid.predict(X_test)
+
+        # Stats
+        self._scores = prediction_scores_regr(predictions=grid_predictions,
+                                              targets=y_test,
+                                              infotxt=f"trained on training set, "
+                                                      f"tested on test set",
+                                              showplot=True)
 
 
 class RandomForestTS:
@@ -238,8 +359,6 @@ class RandomForestTS:
         #         f"(permutation importance larger than random)\n"
         #     )
 
-    # todo only QCF=0?
-
     def _fillgaps_main(self, showplot_scores, showplot_importance, verbose):
         """Apply model to fill missing targets for records where all features are available
         (high-quality gap-filling)"""
@@ -273,7 +392,8 @@ class RandomForestTS:
         # Model scores, using all targets
         self._scores = prediction_scores_regr(predictions=pred_y,
                                               targets=y,
-                                              infotxt="trained on training set, tested on full set",
+                                              infotxt="trained on training set, "
+                                                      "tested on full set",
                                               showplot=showplot_scores)
 
         # In the next step, all available features are used to
@@ -356,7 +476,6 @@ class RandomForestTS:
             self._gapfilling_df[self.target_gapfilled_col].cumsum()
 
     def trainmodel(self,
-                   traintest_split_random_state: int = 42,
                    remove_features_low_importance: bool = True,
                    showplot_predictions: bool = True,
                    showplot_importance: bool = True,
@@ -367,7 +486,6 @@ class RandomForestTS:
         No gap-filling is done here, only the model is trained.
 
         Args:
-            traintest_split_random_state: random state to keep results consistent between runs
             remove_features_low_importance: If *True*, variables with lower permutation importance
                 than a random variable are not included in the model training.
             showplot_predictions: shows plot of predicted vs observed
@@ -380,7 +498,6 @@ class RandomForestTS:
             # Train model with random variable included, to detect unimportant features
             self._trainmodel(df=self.model_df.copy(),
                              include_random=True,
-                             traintest_split_random_state=traintest_split_random_state,
                              showplot_scores=showplot_predictions,
                              showplot_importance=showplot_importance,
                              verbose=verbose)
@@ -393,7 +510,6 @@ class RandomForestTS:
         # Train model for gap-filling
         self._trainmodel(df=self.model_df,
                          include_random=False,
-                         traintest_split_random_state=traintest_split_random_state,
                          showplot_scores=showplot_predictions,
                          showplot_importance=showplot_importance,
                          verbose=verbose)
@@ -401,7 +517,6 @@ class RandomForestTS:
     def _trainmodel(self,
                     df: DataFrame,
                     include_random: bool = False,
-                    traintest_split_random_state: int = 42,
                     showplot_scores: bool = True,
                     showplot_importance: bool = True,
                     verbose: int = 1):
@@ -415,11 +530,12 @@ class RandomForestTS:
         # Add random variable as benchmark for relevant feature importances
         if include_random:
             random_col = '.RANDOM'  # Random variable as benchmark for relevant importances
-            df[random_col] = np.random.rand(df.shape[0], 1)
-            idtxt = f"({self._trainmodel.__name__} with random)    "
+            df[random_col] = np.random.RandomState(self.kwargs['random_state']).randn(df.shape[0], 1)
+            # df[random_col] = np.random.rand(df.shape[0], 1)
+            idtxt = f"({self._trainmodel.__name__} with random) "
         else:
             random_col = None
-            idtxt = f"({self._trainmodel.__name__})    "
+            idtxt = f"({self._trainmodel.__name__}) "
 
         # Info
         if verbose > 0:
@@ -436,7 +552,7 @@ class RandomForestTS:
         # Train and test set
         X_train, X_test, y_train, y_test = train_test_split(X, y,
                                                             test_size=self.test_size,
-                                                            random_state=traintest_split_random_state)
+                                                            random_state=self.kwargs['random_state'])
 
         # Instantiate model with params
         self._model = RandomForestRegressor(**self.kwargs)
@@ -459,12 +575,18 @@ class RandomForestTS:
         # Stats
         self._scores_test = prediction_scores_regr(predictions=pred_y_test,
                                                    targets=y_test,
-                                                   infotxt=f"{idtxt}, trained on training set, tested on test set",
+                                                   infotxt=f"{idtxt} trained on training set, "
+                                                           f"tested on test set",
                                                    showplot=showplot_scores)
 
-        # SHAP values
-        # https://pypi.org/project/shap/
-        # https://mljar.com/blog/feature-importance-in-random-forest/
+        if showplot_scores:
+            plot_prediction_residuals_error_regr(model=self._model,
+                                                 X_train=X_train,
+                                                 y_train=y_train,
+                                                 X_test=X_test,
+                                                 y_test=y_test,
+                                                 infotxt=f"{idtxt} trained on training set, "
+                                                         f"tested on test set")
 
         # Collect results
         self._traintest_details = dict(
@@ -628,7 +750,7 @@ def example_quickfill():
     import numpy as np
     import importlib.metadata
     from datetime import datetime
-    from diive.configs.exampledata import load_exampledata_pickle
+    from diive.configs.exampledata import load_exampledata_parquet
     from diive.core.plotting.timeseries import TimeSeries  # For simple (interactive) time series plotting
     from diive.core.dfun.stats import sstats  # Time series stats
     from diive.core.plotting.heatmap_datetime import HeatmapDateTime
@@ -643,7 +765,7 @@ def example_quickfill():
     print(QuickFillRFTS.__doc__)
 
     # Example data
-    df = load_exampledata_pickle()
+    df = load_exampledata_parquet()
 
     # Subset with target and features
     # Only High-quality (QCF=0) measured NEE used for model training in this example
@@ -667,7 +789,6 @@ def example_quickfill():
 
 
 def example_rfts():
-
     # Setup, user settings
     TARGET_COL = 'NEE_CUT_REF_orig'
     subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
@@ -676,12 +797,11 @@ def example_rfts():
     import numpy as np
     import importlib.metadata
     from datetime import datetime
-    import matplotlib.pyplot as plt
-    from diive.configs.exampledata import load_exampledata_pickle
+    from diive.core.times.times import include_timestamp_as_cols
+    from diive.configs.exampledata import load_exampledata_parquet
     from diive.core.plotting.timeseries import TimeSeries  # For simple (interactive) time series plotting
     from diive.core.dfun.stats import sstats  # Time series stats
-    from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-    from diive.core.dfun.frames import steplagged_variants
+    from diive.core.dfun.frames import steplagged_variants, add_continuous_record_number
     dt_string = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"This page was last modified on: {dt_string}")
     version_diive = importlib.metadata.version("diive")
@@ -692,7 +812,7 @@ def example_rfts():
     print(RandomForestTS.__doc__)
 
     # Example data
-    df = load_exampledata_pickle()
+    df = load_exampledata_parquet()
 
     # Subset with target and features
     # Only High-quality (QCF=0) measured NEE used for model training in this example
@@ -711,6 +831,8 @@ def example_rfts():
                              exclude_cols=[TARGET_COL])
 
     df = include_timestamp_as_cols(df=df, txt="(...)")
+
+    df = add_continuous_record_number(df=df)
 
     # Random forest
     rfts = RandomForestTS(
@@ -733,17 +855,56 @@ def example_rfts():
     # rfts.scores
     # rfts.gapfilling_df
 
-    # Plot
-    HeatmapDateTime(series=observed).show()
-    HeatmapDateTime(series=gapfilled).show()
-
-    gapfilled.cumsum().plot(label="model HQ, all gaps filled with model")
-    plt.legend()
-    plt.show()
+    # # Plot
+    # HeatmapDateTime(series=observed).show()
+    # HeatmapDateTime(series=gapfilled).show()
+    #
+    # gapfilled.cumsum().plot(label="model HQ, all gaps filled with model")
+    # plt.legend()
+    # plt.show()
 
     print("Finished.")
 
 
+def example_optimize():
+    from diive.configs.exampledata import load_exampledata_parquet
+
+    # Setup, user settings
+    TARGET_COL = 'NEE_CUT_REF_orig'
+    subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
+
+    # Example data
+    df = load_exampledata_parquet()
+    subset = df[subsetcols].copy()
+    _subset = df.index.year == 2019
+    subset = subset[_subset].copy()
+
+    # Random forest parameters
+    rf_params = {
+        'n_estimators': list(range(2, 12, 2)),
+        'criterion': ['squared_error'],
+        'max_depth': [None],
+        'min_samples_split': list(range(2, 12, 2)),
+        'min_samples_leaf': list(range(1, 6, 1))
+    }
+
+    # Optimization
+    opt = OptimizeParamsRFTS(
+        df=subset,
+        target_col=TARGET_COL,
+        **rf_params
+    )
+
+    opt.optimize()
+
+    print(opt.best_params)
+    print(opt.scores)
+    print(opt.cv_results)
+    print(opt.best_score)
+    print(opt.cv_n_splits)
+
+
 if __name__ == '__main__':
-    example_quickfill()
+    # example_quickfill()
     # example_rfts()
+    example_optimize()

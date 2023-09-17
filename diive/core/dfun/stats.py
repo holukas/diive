@@ -87,7 +87,7 @@ def sstats(s: Series) -> DataFrame:
     df.loc['SD', col] = s.std()
     df.loc['VAR', col] = s.var()
     df.loc['SD/MEAN'] = series_sd_over_mean(s)
-    df.loc['MAD', col] = s.mad()
+    # df.loc['MAD', col] = s.mad()  # deprecated in pandas
     # df.loc['CUMSUM_MIN', col] = s.cummin().iloc[-1]
     # df.loc['CUMSUM_MAX', col] = s.cummax().iloc[-1]
     df.loc['SUM', col] = s.sum()

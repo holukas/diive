@@ -3,8 +3,8 @@
 
 def example():
     from pathlib import Path
-    SOURCEFOLDER = [Path(r'F:\TMP')]
-    OUTPATH = Path(r'F:\TMP')
+    SOURCEFOLDER = [Path(r'F:\Sync\luhk_work\TMP\fru')]
+    OUTPATH = Path(r'F:\Sync\luhk_work\TMP\fru')
 
     # ----------------------
     # Load data from files
