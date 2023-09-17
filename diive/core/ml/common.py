@@ -8,6 +8,7 @@ from sklearn.ensemble import RandomForestRegressor  # Import the model we are us
 from sklearn.inspection import permutation_importance
 from sklearn.metrics import PredictionErrorDisplay, max_error, median_absolute_error, mean_absolute_error, \
     mean_absolute_percentage_error, r2_score, mean_squared_error
+from yellowbrick.regressor import PredictionError, ResidualsPlot
 
 
 def feature_importances(estimator: RandomForestRegressor,
@@ -171,3 +172,54 @@ def prediction_scores_regr(predictions: np.array,
         plt.tight_layout()
         plt.show()
     return scores
+
+
+def plot_prediction_residuals_error_regr(model,
+                                         X_train: np.ndarray,
+                                         y_train: np.ndarray,
+                                         X_test: np.ndarray,
+                                         y_test: np.ndarray,
+                                         infotxt: str):
+    """
+    Plot residuals and prediction error
+
+    Args:
+        model:
+        X_train: predictors in training data
+        y_train: targets in training data
+        X_test: predictors in test data
+        y_test: targets in test data
+        infotxt: text displayed in figure header
+
+    Kudos:
+    - https://www.scikit-yb.org/en/latest/api/regressor/residuals.html
+    - https://www.scikit-yb.org/en/latest/api/regressor/peplot.html
+
+    """
+
+    # fig, axs = plt.subplots(ncols=2, figsize=(14, 4))
+    # fig, ax = plt.subplots()
+
+    # Histogram can be replaced with a Q-Q plot, which is a common way
+    # to check that residuals are normally distributed. If the residuals
+    # are normally distributed, then their quantiles when plotted against
+    # quantiles of normal distribution should form a straight line.
+    fig, ax = plt.subplots()
+    fig.suptitle(f"{infotxt}")
+    vis = ResidualsPlot(model, hist=False, qqplot=True, ax=ax)
+    vis.fit(X_train, y_train)  # Fit the training data to the visualizer
+    vis.score(X_test, y_test)  # Evaluate the model on the test data
+    vis.show()  # Finalize and render the figure
+
+    # difference between the observed value of the target variable (y)
+    # and the predicted value (ŷ), i.e. the error of the prediction
+    fig, ax = plt.subplots()
+    fig.suptitle(f"{infotxt}")
+    vis = PredictionError(model)
+    vis.fit(X_train, y_train)  # Fit the training data to the visualizer
+    vis.score(X_test, y_test)  # Evaluate the model on the test data
+    vis.show()
+
+    # fig.suptitle(f"{infotxt}")
+    # plt.tight_layout()
+    # fig.show()

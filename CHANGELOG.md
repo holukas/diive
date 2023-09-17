@@ -2,6 +2,49 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.60.0 | 17 Sep 2023
+
+### New features
+
+- Added new class for optimizing random forest parameters (`pkgs.gapfilling.randomforest_ts.OptimizeParamsRFTS`)
+- Added new plots for prediction error and residuals (`core.ml.common.plot_prediction_residuals_error_regr`)
+- Added function that adds a continuous record number as new column in a dataframe. This
+  could be useful to include as feature in gap-filling models for long-term datasets spanning multiple years.
+  (`core.dfun.frames.add_continuous_record_number`)
+
+### Changes
+
+- When reading CSV files with pandas `.read_csv()`, the arg `mangle_dupe_cols=True`
+  was removed because it is deprecated since pandas 2.0 ...
+- ... therefore the check for duplicate column names in class `ColumnNamesSanitizer`
+  has been refactored. In case of duplicate columns names, an integer suffix is added to
+  the column name. For example: `VAR` is renamed to `VAR.1` if it already exists in the
+  dataframe. In case `VAR.1` also already exists, it is renamed to `VAR.2`, and so on.
+  The integer suffix is increased until the variable name is unique. (`core.io.filereader.ColumnNamesSanitizer`)
+- Similarly, when reading CSV files with pandas `.read_csv()`, the arg `date_parser` was
+  removed because it is deprecated since pandas 2.0. When reading a CSV, the arg `date_format`
+  is now used instead. The input format remains unchanged, it is still a string giving the datetime
+  format, such as `"%Y%m%d%H%M"`.
+- The random feature variable is now generated using the same random state as the
+  model. (`pkgs.gapfilling.randomforest_ts.RandomForestTS`)
+- Similarly, `train_test_split` is now also using the same random state as the
+  model. (`pkgs.gapfilling.randomforest_ts.RandomForestTS`)
+
+### Notebooks
+
+- Added new notebook `notebooks/GapFilling/RandomForestParamOptimization.ipynb`
+
+### Tests
+
+- Added testcase for loading dataframe from parquet file (`test_loaddata.TestLoadFiletypes.test_exampledata_parquet`)
+- Added testcase for gap-filling with random forest (`test_gapfilling.TestGapFilling.test_gapfilling_randomforest`)
+
+### Environment
+
+- Updated `poetry` to latest version `1.6.1`
+- Updated all packages to their latest versions
+- Added new package [yellowbrick](https://www.scikit-yb.org/en/latest/)
+
 ## v0.59.0 | 14 Sep 2023
 
 ### MeteoScreening from database - update

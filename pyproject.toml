@@ -1,32 +1,35 @@
 [tool.poetry]
 name = "diive"
-version = "0.59.0"
-description = "Time series post-processing and analysis"
-authors = ["holukas <lukas.hoertnagl@usys.ethz.ch>"]
+version = "0.60.0"
+description = ""
+authors = ["holukas <holukas@ethz.ch>"]
+readme = "README.md"
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.11"
-pandas = "^1.5.3"
-scipy = "^1.10.0"
-scikit-learn = "^1.2.0"
-matplotlib = "^3.6.3"
-PyYAML = "^6.0"
+pandas = "^2.1.0"
+scipy = "^1.11.2"
+scikit-learn = "^1.3.0"
+matplotlib = "^3.7.3"
+pyyaml = "^6.0.1"
 uncertainties = "^3.1.7"
-statsmodels = "0.13.1"
-pysolar = "^0.10"
-ThymeBoost = "^0.1.15"
-prophet = "^1.1.2"
-fitter = "^1.5.2"
+statsmodels = "^0.14.0"
+pysolar = "^0.11"
+thymeboost = "^0.1.16"
+prophet = "^1.1.4"
+fitter = "^1.6.0"
 seaborn = "^0.12.2"
-bokeh = "^3.0.3"
-pyarrow = "^12.0.1"
+bokeh = "^3.2.2"
+pyarrow = "^13.0.0"
 pymannkendall = "^1.4.3"
+yellowbrick = "^1.5"
 
 [tool.poetry.dev-dependencies]
 dbc-influxdb = { path = "../../22 - POET/dbc-influxdb", develop = true }
 jupyterlab = "^3.5.2"
 jupyter-bokeh = "^3.0.5"
 
+
 [build-system]
-requires = ["poetry-core>=1.0.0"]
+requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

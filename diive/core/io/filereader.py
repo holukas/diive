@@ -14,7 +14,6 @@ import pandas as pd
 import pandas.errors
 import yaml
 from pandas import DataFrame
-from pandas.io.parsers.base_parser import ParserBase
 
 from diive import core
 from diive.configs.filetypes import get_filetypes
@@ -123,29 +122,29 @@ def _convert_timestamp_idx_col(var: int or list):
     return new
 
 
-def rename_duplicate_cols(df: DataFrame) -> DataFrame:
-    """
-    Rename columns with the same name to unique names
-
-    For example:
-        - two columns with the same name in *df*:
-            'co2_mean' and 'co2_mean'
-            will be renamed to
-            'co2_mean.1' and 'co2_mean.2'
-
-    Args:
-        df: DataFrame with multiple columns
-
-    Returns:
-        Complete df with renamed columns. If no duplicates
-        were found, the returned df is the same as the input df.
-
-    Kudos:
-    - https://stackoverflow.com/questions/24685012/pandas-dataframe-renaming-multiple-identically-named-columns
-
-    """
-    df.columns = ParserBase({'usecols': None})._maybe_dedup_names(df.columns)
-    return df
+# def rename_duplicate_cols(df: DataFrame) -> DataFrame:
+#     """
+#     Rename columns with the same name to unique names
+#
+#     For example:
+#         - two columns with the same name in *df*:
+#             'co2_mean' and 'co2_mean'
+#             will be renamed to
+#             'co2_mean.1' and 'co2_mean.2'
+#
+#     Args:
+#         df: DataFrame with multiple columns
+#
+#     Returns:
+#         Complete df with renamed columns. If no duplicates
+#         were found, the returned df is the same as the input df.
+#
+#     Kudos:
+#     - https://stackoverflow.com/questions/24685012/pandas-dataframe-renaming-multiple-identically-named-columns
+#
+#     """
+#     df.columns = ParserBase({'usecols': None})._maybe_dedup_names(df.columns)
+#     return df
 
 
 class ColumnNamesSanitizer:
@@ -153,13 +152,57 @@ class ColumnNamesSanitizer:
     def __init__(self,
                  df: DataFrame):
         self.df = df.copy()
+
+        # # For testing: create a duplicate column name
+        # self.df['DOY_START2'] = self.df['DOY_START'].copy()
+        # self.df['DOY_START3'] = self.df['DOY_START'].copy()
+        # self.df['DOY_START4'] = self.df['DOY_START'].copy()
+        # rename = {'DOY_START2': 'DOY_START', 'DOY_START3': 'DOY_START', 'DOY_START4': 'DOY_START'}
+        # self.df.rename(columns=rename, inplace=True)
+
         self._run()
 
     def get(self) -> DataFrame:
         return self.df
 
     def _run(self):
-        self.df = rename_duplicate_cols(df=self.df)
+        self._rename_duplicate_columns()
+
+    def _rename_duplicate_columns(self):
+
+        # Identify the duplicate columns
+        duplicate_colnames_loc = self.df.columns.duplicated()
+
+        # List of duplicate column names
+        duplicate_names = self.df.loc[:, duplicate_colnames_loc].columns.to_list()
+        uniq_duplicate_names = list(set(duplicate_names))
+
+        if uniq_duplicate_names:
+            print(f"(!)WARNING: Duplicate column names found")
+            print(f"(!)WARNING: Duplicate columns will be renamed")
+
+            for u in uniq_duplicate_names:
+                occurrences = len(self.df[u].columns)
+                print(f"(!)WARNING There are {occurrences} columns with name {u}")
+
+            newcols = []
+            for col in self.df.columns:
+                if col not in newcols:
+                    pass
+                else:
+                    # Add integer suffix
+                    counter = 0
+                    newcol = col
+                    while newcol in newcols:
+                        # Maybe the renamed column with suffix already exists, therefore
+                        # increase the integer suffix until a free name is found
+                        counter += 1
+                        newcol = f'{col}.{counter}'
+                    print(f"(!)WARNING Duplicate column names found: {col} was renamed to --> {newcol}")
+                    col = newcol
+                newcols.append(col)
+
+            self.df.columns = newcols
 
 
 class MultiDataFileReader:
@@ -442,7 +485,7 @@ class DataFileReader:
         parse_dates = self.timestamp_idx_col  # Columns used for creating the timestamp index
         parse_dates = {_temp_parsed_index_col: parse_dates}
         # date_parser = lambda x: dt.datetime.strptime(x, self.timestamp_datetime_format)
-        date_parser = lambda x: pd.to_datetime(x, format=self.timestamp_datetime_format, errors='coerce')
+        # date_parser = lambda x: pd.to_datetime(x, format=self.timestamp_datetime_format, errors='coerce')
 
         data_df = pd.read_csv(
             self.filepath,
@@ -452,10 +495,11 @@ class DataFileReader:
             na_values=self.data_na_vals,
             encoding='utf-8',
             delimiter=self.data_delimiter,
-            mangle_dupe_cols=True,
+            # mangle_dupe_cols=True,  # deprecated since pandas 2.0
             keep_date_col=False,
             parse_dates=parse_dates,
-            date_parser=date_parser,
+            # date_parser=date_parser,  # deprecated since pandas 2.0
+            date_format=self.timestamp_datetime_format,
             index_col=None,
             dtype=None,
             skip_blank_lines=True,

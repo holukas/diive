@@ -816,6 +816,13 @@ def rolling_variants(df, records: int, aggtypes: list, exclude_cols: list = None
     return df
 
 
+def add_continuous_record_number(df: DataFrame) -> DataFrame:
+    """Add continuous record number as new column"""
+    newcol = '.RECORDNUMBER'
+    data = range(1, len(df) + 1)
+    df[newcol] = data
+    return df
+
 def steplagged_variants(df: DataFrame,
                         stepsize: int = 1,
                         stepmax: int = 10,
