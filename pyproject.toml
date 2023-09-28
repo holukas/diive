@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "diive"
-version = "0.60.0"
+version = "0.61.0"
 description = ""
 authors = ["holukas <holukas@ethz.ch>"]
 readme = "README.md"
@@ -26,9 +26,10 @@ yellowbrick = "^1.5"
 
 [tool.poetry.dev-dependencies]
 dbc-influxdb = { path = "../../22 - POET/dbc-influxdb", develop = true }
-jupyterlab = "^3.5.2"
 jupyter-bokeh = "^3.0.5"
 
+[tool.poetry.group.dev.dependencies]
+jupyterlab = "^4.0.6"
 
 [build-system]
 requires = ["poetry-core"]

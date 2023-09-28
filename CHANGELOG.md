@@ -2,6 +2,53 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.61.0 | 28 Sep 2023
+
+### New features
+
+- Added function to calculate the daily correlation between two time
+  series (`pkgs.analyses.correlation.daily_correlation`)
+- Added function to calculate potential radiation (`pkgs.createvar.potentialradiation.potrad`)
+
+### Bugfixes
+
+- Fixed bug in `StepwiseMeteoScreeningDb` where the subclass `StepwiseOutlierDetection`
+  did not use the already sanitized timestamp from the parent class, but sanitized the timestamp
+  a second time, leading to potentially erroneous and irregular timestamps.
+
+### Changes
+
+- `RandomForestTS` now has the following functions included as methods:
+    - `steplagged_variants`: includes lagged variants of features
+    - `include_timestamp_as_cols`: includes timestamp info as data columns
+    - `add_continuous_record_number`: adds continuous record number as new column
+    - `sanitize`: validates and prepares timestamps for further processing
+- `RandomForestTS` now outputs an additional predictions column where predictions from
+  the full model and predictions from the fallback model are collected
+- Renamed function `steplagged_variants` to `lagged_variants` (`core.dfun.frames.lagged_variants`)
+- Updated function `lagged_variants`: now accepts a list of lag times. This makes it possible
+  to lag variables in both directions, i.e., the observed value can be paired with values before
+  and after the actual time. For example, the variable `TA` is the observed value at the current
+  timestamp, `TA-1` is the value from the preceding record, and `TA+1` is the value from the next
+  record. Using values from the next record can be useful when modeling observations using data
+  from a neighboring measurement location that has similar records but lagged in time due to
+  distance.
+- Updated README
+
+### Tests
+
+- Updated testcase for gap-filling with random
+  forest (`test_gapfilling.TestGapFilling.test_gapfilling_randomforest`)
+
+### Notebooks
+
+- Updated `notebooks/MeteoScreening/StepwiseMeteoScreeningFromDatabase.ipynb`
+
+### Additions
+
+- Added more args for better control of `TimestampSanitizer` (`core.times.times.TimestampSanitizer`)
+- Refined various docstrings
+
 ## v0.60.0 | 17 Sep 2023
 
 ### New features
