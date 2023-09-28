@@ -26,9 +26,10 @@ from pandas import DataFrame, Series
 from sklearn.ensemble import RandomForestRegressor  # Import the model we are using
 from sklearn.model_selection import train_test_split, TimeSeriesSplit, GridSearchCV
 
-import diive.core.dfun.frames as frames
+import diive.core.dfun.frames as fr
 from diive.core.ml.common import feature_importances, prediction_scores_regr, plot_prediction_residuals_error_regr
 from diive.core.times.times import include_timestamp_as_cols
+from diive.core.times.times import TimestampSanitizer
 
 pd.set_option('display.max_rows', 50)
 pd.set_option('display.max_columns', 12)
@@ -115,9 +116,9 @@ class OptimizeParamsRFTS:
     def optimize(self):
 
         y, X, X_names, timestamp = \
-            frames.convert_to_arrays(df=self.model_df,
-                                     target_col=self.target_col,
-                                     complete_rows=True)
+            fr.convert_to_arrays(df=self.model_df,
+                                 target_col=self.target_col,
+                                 complete_rows=True)
 
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
 
@@ -162,6 +163,11 @@ class RandomForestTS:
             verbose: int = 0,
             perm_n_repeats: int = 10,
             test_size: float = 0.25,
+            features_lag: list = None,
+            features_lagmax: int = None,
+            include_timestamp_as_features: bool = False,
+            add_continuous_record_number: bool = False,
+            sanitize_timestamp: bool = False,
             **kwargs
     ):
         """
@@ -181,8 +187,38 @@ class RandomForestTS:
                 Proportion of the dataset to include in the test split,
                 between 0.0 and 1.0.
 
+            features_lag:
+                List of integers (number of records), includes lagged variants of predictors.
+                If features_lag=None, no lagged variants are added.
+                Example:
+                    - features_lag=[-2, +2] includes variants that are lagged by -2, -1, +1 and
+                    +2 records in the dataset, for each feature already present in the data.
+                     For a variable named *TA*, this created the following output:
+                    TA    = [  5,   6,   7, 8  ]
+                    TA-2  = [NaN, NaN,   5, 6  ]
+                    TA-1  = [NaN,   5,   6, 7  ]  --> each TA record is paired with the preceding record TA-1
+                    TA+1  = [  6,   7,   8, NaN]  --> each TA record is paired with the next record TA+1
+                    TA+2  = [  7,   8, NaN, NaN]
+
+            include_timestamp_as_features:
+                Include timestamp info as integer data: year, season, month, week, doy, hour
+
+            add_continuous_record_number:
+                Add continuous record number as new column
+
+            sanitize_timestamp:
+                Validate and prepare timestamps for further processing
+
             verbose:
                 If *1*, more output is printed.
+
+        Attributes:
+            gapfilled_df
+            - .PREDICTIONS_FULLMODEL uses the output from the full RF model where
+              all features where available.
+            - .PREDICTIONS_FALLBACK uses the output from the fallback RF model, which
+              was trained on the combined observed + .PREDICTIONS_FULLMODEL data, using
+              only the timestamp info as features.
         """
         self.model_df = input_df.copy()
         self.target_col = target_col
@@ -190,19 +226,44 @@ class RandomForestTS:
         self.kwargs = kwargs
         self.perm_n_repeats = perm_n_repeats
         self.test_size = test_size
+        self.features_lag = features_lag
+        self.features_lagmax = features_lagmax
 
-        if len(self.model_df.columns) == 1:
-            raise Exception(f"(!) Stopping execution because dataset comprises "
-                            f"only one single column : {self.model_df.columns}")
+        self._check_n_cols()
 
+        if self.features_lag:
+            self.model_df = self._lag_features()
+
+        if include_timestamp_as_features:
+            self.model_df = include_timestamp_as_cols(df=self.model_df, txt="")
+
+        if add_continuous_record_number:
+            self.model_df = fr.add_continuous_record_number(df=self.model_df)
+
+        if sanitize_timestamp:
+            tss = TimestampSanitizer(data=self.model_df, output_middle_timestamp=True, verbose=True)
+            self.model_df = tss.get()
+
+        # Attributes
         self._gapfilling_df = None  # Will contain gapfilled target and auxiliary variables
         self._model = None
-
         self._feature_importances = dict()
         self._scores = dict()
         self._feature_importances_test = dict()
         self._scores_test = dict()
         self._traintest_details = dict()
+
+    def _lag_features(self):
+        return fr.lagged_variants(df=self.model_df,
+                                  stepsize=1,
+                                  lag=self.features_lag,
+                                  exclude_cols=[self.target_col])
+
+    def _check_n_cols(self):
+        """Check number of columns"""
+        if len(self.model_df.columns) == 1:
+            raise Exception(f"(!) Stopping execution because dataset comprises "
+                            f"only one single column : {self.model_df.columns}")
 
     def get_gapfilled_target(self):
         """Gap-filled target time series"""
@@ -278,9 +339,9 @@ class RandomForestTS:
         X = features
 
         """
-
-        self._fillgaps_main(showplot_scores, showplot_importance, verbose)
+        self._fillgaps_fullmodel(showplot_scores, showplot_importance, verbose)
         self._fillgaps_fallback()
+        self._fillgaps_combinepredictions()
 
     def report(self):
 
@@ -351,15 +412,7 @@ class RandomForestTS:
             f"{idtxt}   Permutation importances were calculated from {self.perm_n_repeats} repeats.\n"
         )
 
-        # if results['include_random']:
-        #     print(
-        #         f"{idtxt}\n"
-        #         f"{idtxt}   --> {len(results['recommended_features'])} recommended features: "
-        #         f"{results['recommended_features']} "
-        #         f"(permutation importance larger than random)\n"
-        #     )
-
-    def _fillgaps_main(self, showplot_scores, showplot_importance, verbose):
+    def _fillgaps_fullmodel(self, showplot_scores, showplot_importance, verbose):
         """Apply model to fill missing targets for records where all features are available
         (high-quality gap-filling)"""
 
@@ -373,9 +426,9 @@ class RandomForestTS:
         # predicting all available y data.
         # This is needed to calculate feature importance and scores.
         y, X, X_names, timestamp = \
-            frames.convert_to_arrays(df=df,
-                                     target_col=self.target_col,
-                                     complete_rows=True)
+            fr.convert_to_arrays(df=df,
+                                 target_col=self.target_col,
+                                 complete_rows=True)
 
         # Predict all targets (no test split)
         pred_y = self.model.predict(X=X)
@@ -412,7 +465,7 @@ class RandomForestTS:
         self._define_cols()
 
         # Collect predictions in dataframe
-        self._gapfilling_df = pd.DataFrame(data={self.predictions_col: pred_y}, index=features_df.index)
+        self._gapfilling_df = pd.DataFrame(data={self.pred_fullmodel_col: pred_y}, index=features_df.index)
 
         # Add target to dataframe
         self._gapfilling_df[self.target_col] = df[self.target_col].copy()
@@ -421,14 +474,14 @@ class RandomForestTS:
         # Make column that contains predicted values
         # for rows where target is missing
         _gap_locs = self._gapfilling_df[self.target_col].isnull()  # Locations where target is missing
-        self._gapfilling_df[self.predicted_gaps_col] = self._gapfilling_df.loc[
-            _gap_locs, self.predictions_col]
+        self._gapfilling_df[self.pred_gaps_col] = self._gapfilling_df.loc[
+            _gap_locs, self.pred_fullmodel_col]
 
         # Flag
         # Make flag column that indicates where predictions for
         # missing targets are available, where 0=observed, 1=gapfilled
         # todo Note that missing predicted gaps = 0. change?
-        _gapfilled_locs = self._gapfilling_df[self.predicted_gaps_col].isnull()  # Non-gapfilled locations
+        _gapfilled_locs = self._gapfilling_df[self.pred_gaps_col].isnull()  # Non-gapfilled locations
         _gapfilled_locs = ~_gapfilled_locs  # Inverse for gapfilled locations
         self._gapfilling_df[self.target_gapfilled_flag_col] = _gapfilled_locs
         self._gapfilling_df[self.target_gapfilled_flag_col] = self._gapfilling_df[
@@ -438,7 +491,7 @@ class RandomForestTS:
         # Gap-filled time series
         # Fill missing records in target with predicions
         self._gapfilling_df[self.target_gapfilled_col] = \
-            self._gapfilling_df[self.target_col].fillna(self._gapfilling_df[self.predictions_col])
+            self._gapfilling_df[self.target_col].fillna(self._gapfilling_df[self.pred_fullmodel_col])
 
         # Restore original full timestamp
         self._gapfilling_df = self._gapfilling_df.reindex(df.index)
@@ -463,17 +516,25 @@ class RandomForestTS:
                 self._predict_fallback(series=self._gapfilling_df[self.target_gapfilled_col])
 
             fallback_series = pd.Series(data=fallback_predictions, index=fallback_timestamp)
-            self._gapfilling_df[self.predictions_fallback_col] = fallback_series
+            self._gapfilling_df[self.pred_fallback_col] = fallback_series
             self._gapfilling_df[self.target_gapfilled_col] = \
                 self._gapfilling_df[self.target_gapfilled_col].fillna(fallback_series)
 
             self._gapfilling_df.loc[_still_missing_locs, self.target_gapfilled_flag_col] = 2  # Adjust flag, 2=fallback
         else:
-            self._gapfilling_df[self.predictions_fallback_col] = None
+            self._gapfilling_df[self.pred_fallback_col] = None
 
         # Cumulative
         self._gapfilling_df[self.target_gapfilled_cumu_col] = \
             self._gapfilling_df[self.target_gapfilled_col].cumsum()
+
+    def _fillgaps_combinepredictions(self):
+        """Combine predictions of full model with fallback predictions"""
+        # First add predictions from full model
+        self._gapfilling_df[self.pred_col] = self._gapfilling_df[self.pred_fullmodel_col].copy()
+        # Then fill remaining gaps with predictions from fallback model
+        self._gapfilling_df[self.pred_col] = (
+            self._gapfilling_df[self.pred_col].fillna(self._gapfilling_df[self.pred_fallback_col]))
 
     def trainmodel(self,
                    remove_features_low_importance: bool = True,
@@ -545,9 +606,9 @@ class RandomForestTS:
         # Data as arrays
         # y = targets, X = features
         y, X, X_names, timestamp = \
-            frames.convert_to_arrays(df=df,
-                                     target_col=self.target_col,
-                                     complete_rows=True)
+            fr.convert_to_arrays(df=df,
+                                 target_col=self.target_col,
+                                 complete_rows=True)
 
         # Train and test set
         X_train, X_test, y_train, y_test = train_test_split(X, y,
@@ -667,9 +728,9 @@ class RandomForestTS:
 
         # Build model for target predictions *from timestamp*
         y_fallback, X_fallback, _, _ = \
-            frames.convert_to_arrays(df=gf_fallback_df,
-                                     target_col=self.target_gapfilled_col,
-                                     complete_rows=True)
+            fr.convert_to_arrays(df=gf_fallback_df,
+                                 target_col=self.target_gapfilled_col,
+                                 complete_rows=True)
 
         # Instantiate new model with same params as before
         model_fallback = RandomForestRegressor(**self.kwargs)
@@ -703,11 +764,12 @@ class RandomForestTS:
               f"predictions vs targets, R2 = {model_r2:.3f}")
 
     def _define_cols(self):
-        self.predictions_col = ".PREDICTIONS"
-        self.predicted_gaps_col = ".GAP_PREDICTIONS"
+        self.pred_col = ".PREDICTIONS"
+        self.pred_fullmodel_col = ".PREDICTIONS_FULLMODEL"
+        self.pred_fallback_col = ".PREDICTIONS_FALLBACK"
+        self.pred_gaps_col = ".GAP_PREDICTIONS"
         self.target_gapfilled_col = f"{self.target_col}_gfRF"
         self.target_gapfilled_flag_col = f"FLAG_{self.target_gapfilled_col}_ISFILLED"  # "[0=measured]"
-        self.predictions_fallback_col = ".PREDICTIONS_FALLBACK"
         self.target_gapfilled_cumu_col = ".GAPFILLED_CUMULATIVE"
 
 
@@ -797,11 +859,11 @@ def example_rfts():
     import numpy as np
     import importlib.metadata
     from datetime import datetime
-    from diive.core.times.times import include_timestamp_as_cols
+    import matplotlib.pyplot as plt
     from diive.configs.exampledata import load_exampledata_parquet
     from diive.core.plotting.timeseries import TimeSeries  # For simple (interactive) time series plotting
     from diive.core.dfun.stats import sstats  # Time series stats
-    from diive.core.dfun.frames import steplagged_variants, add_continuous_record_number
+    from diive.core.plotting.heatmap_datetime import HeatmapDateTime
     dt_string = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"This page was last modified on: {dt_string}")
     version_diive = importlib.metadata.version("diive")
@@ -814,6 +876,15 @@ def example_rfts():
     # Example data
     df = load_exampledata_parquet()
 
+    # # Create a large gap
+    # remove = df.index.year != 2014
+    # # df = df.drop(df.index[100:2200])
+    # df = df[remove].copy()
+
+    # # Subset
+    # keep = df.index.year <= 2016
+    # df = df[keep].copy()
+
     # Subset with target and features
     # Only High-quality (QCF=0) measured NEE used for model training in this example
     lowquality = df["QCF_NEE"] > 0
@@ -824,26 +895,21 @@ def example_rfts():
     print(statsdf)
     TimeSeries(series=df[TARGET_COL]).plot()
 
-    # Lagged variants
-    df = steplagged_variants(df=df,
-                             stepsize=1,
-                             stepmax=1,
-                             exclude_cols=[TARGET_COL])
-
-    df = include_timestamp_as_cols(df=df, txt="(...)")
-
-    df = add_continuous_record_number(df=df)
-
     # Random forest
     rfts = RandomForestTS(
         input_df=df,
         target_col=TARGET_COL,
         verbose=1,
-        n_estimators=99,
+        # features_lag=None,
+        features_lag=[-1, -1],
+        include_timestamp_as_features=True,
+        add_continuous_record_number=True,
+        sanitize_timestamp=True,
+        n_estimators=200,
         random_state=42,
         min_samples_split=10,
         min_samples_leaf=5,
-        perm_n_repeats=22,
+        perm_n_repeats=11,
         n_jobs=-1
     )
     rfts.trainmodel(showplot_predictions=True, showplot_importance=True, verbose=1)
@@ -855,13 +921,23 @@ def example_rfts():
     # rfts.scores
     # rfts.gapfilling_df
 
-    # # Plot
-    # HeatmapDateTime(series=observed).show()
-    # HeatmapDateTime(series=gapfilled).show()
-    #
-    # gapfilled.cumsum().plot(label="model HQ, all gaps filled with model")
-    # plt.legend()
+    # Plot
+    HeatmapDateTime(series=observed).show()
+    HeatmapDateTime(series=gapfilled).show()
+
+    # rfts.gapfilling_df['.PREDICTIONS_FALLBACK'].cumsum().plot()
+    # rfts.gapfilling_df['.PREDICTIONS_FULLMODEL'].cumsum().plot()
+    # rfts.gapfilling_df['.PREDICTIONS'].cumsum().plot()
+    rfts.gapfilling_df['NEE_CUT_REF_orig_gfRF'].cumsum().plot()
+    plt.legend()
+    plt.show()
+
+    # d = rfts.gapfilling_df['NEE_CUT_REF_orig'] - rfts.gapfilling_df['.PREDICTIONS']
+    # d.plot()
     # plt.show()
+    # d = abs(d)
+    # d.mean()  # MAE
+
 
     print("Finished.")
 
@@ -906,5 +982,5 @@ def example_optimize():
 
 if __name__ == '__main__':
     # example_quickfill()
-    # example_rfts()
-    example_optimize()
+    example_rfts()
+    # example_optimize()

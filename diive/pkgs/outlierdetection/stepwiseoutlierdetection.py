@@ -87,9 +87,9 @@ class StepwiseOutlierDetection:
         return self._last_results
 
     @property
-    def series_hires_cleaned(self) -> dict:
+    def series_hires_cleaned(self) -> Series:
         """Return cleaned time series of field(s) as dict of Series"""
-        if not isinstance(self._series_hires_cleaned, dict):
+        if not isinstance(self._series_hires_cleaned, Series):
             raise Exception(f"No hires quality-controlled data available.")
         return self._series_hires_cleaned
 

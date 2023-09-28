@@ -5,21 +5,14 @@ from datetime import datetime
 import numpy as np
 
 import diive.configs.exampledata as ed
-from diive.core.dfun.frames import steplagged_variants, add_continuous_record_number
 from diive.core.dfun.stats import sstats  # Time series stats
-from diive.core.times.times import include_timestamp_as_cols
 from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
-
-dt_string = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-print(f"This page was last modified on: {dt_string}")
-version_diive = importlib.metadata.version("diive")
-print(f"diive version: v{version_diive}")
 
 
 class TestGapFilling(unittest.TestCase):
 
     def test_optimize_rf_params(self):
-
+        pass
 
     def test_gapfilling_randomforest(self):
         """Fill gaps using random forest"""
@@ -37,28 +30,19 @@ class TestGapFilling(unittest.TestCase):
         statsdf = sstats(df[TARGET_COL])
         print(statsdf)
 
-        # Lagged variants
-        df = steplagged_variants(df=df,
-                                 stepsize=1,
-                                 stepmax=1,
-                                 exclude_cols=[TARGET_COL])
-
-        # Include timestamp info as data columns
-        df = include_timestamp_as_cols(df=df, txt="(...)")
-
-        # Add continuous record number as new column
-        df = add_continuous_record_number(df=df)
-
-        # Random forest
         rfts = RandomForestTS(
             input_df=df,
             target_col=TARGET_COL,
             verbose=1,
+            features_lag=[-2, 2],
+            include_timestamp_as_features=True,
+            add_continuous_record_number=True,
+            sanitize_timestamp=True,
             n_estimators=9,
             random_state=42,
-            min_samples_split=10,
-            min_samples_leaf=5,
-            perm_n_repeats=22,
+            min_samples_split=20,
+            min_samples_leaf=10,
+            perm_n_repeats=11,
             n_jobs=-1
         )
         rfts.trainmodel(showplot_predictions=False, showplot_importance=False, verbose=1)
@@ -77,11 +61,11 @@ class TestGapFilling(unittest.TestCase):
         # gapfilled.cumsum().plot()
         # plt.show()
 
-        self.assertEqual(scores['mae'], 1.718126947003101)
-        self.assertEqual(scores['r2'], 0.8319161959118784)
-        self.assertEqual(scores['mse'], 6.2244492336365935)
-        self.assertEqual(gfdf['NEE_CUT_REF_orig_gfRF'].sum(), -64338.46474027201)
-        self.assertEqual(fi['importances']['PERM_IMPORTANCE']['Rg_f'], 1.1448277365835955)
+        self.assertEqual(scores['mae'], 1.9060864968011548)
+        self.assertEqual(scores['r2'], 0.8026866876500566)
+        self.assertEqual(scores['mse'], 7.306871131968254)
+        self.assertEqual(gfdf['NEE_CUT_REF_orig_gfRF'].sum(), -64754.77103135061)
+        self.assertEqual(fi['importances']['PERM_IMPORTANCE']['Rg_f'], 0.9903003111303493)
 
 
 if __name__ == '__main__':

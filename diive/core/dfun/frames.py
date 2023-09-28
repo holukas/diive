@@ -381,87 +381,6 @@ def resample_df(df, freq_str, agg, mincounts_perc: float, to_freq=None):
     return agg_df, timestamp_info_df
 
 
-# todo delete if new function works
-# def resample_df(df, freq_str, agg_method, min_vals, to_freq_duration, to_freq):
-#     """
-#     Resample data to selected frequency, using the selected aggregation method
-#     and while also considering the minimum required values in the aggregation
-#     time window.
-#
-#
-#     Note regarding .resample:
-#     https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.resample.html
-#         closed : {‘right’, ‘left’}, default None
-#             Which side of bin interval is closed. The default is ‘left’ for all frequency offsets
-#             except for ‘M’, ‘A’, ‘Q’, ‘BM’, ‘BA’, ‘BQ’, and ‘W’ which all have a default of ‘right’.
-#
-#         label : {‘right’, ‘left’}, default None
-#             Which bin edge label to label bucket with. The default is ‘left’ for all frequency offsets
-#             except for ‘M’, ‘A’, ‘Q’, ‘BM’, ‘BA’, ‘BQ’, and ‘W’ which all have a default of ‘right’.
-#
-#     By default, for weekly aggregation the first day of the week in pandas is Sunday, but diive uses Monday.
-#
-#     https://stackoverflow.com/questions/48340463/how-to-understand-closed-and-label-arguments-in-pandas-resample-method
-#         closed='right' =>  ( 3:00, 6:00 ]  or  3:00 <  x <= 6:00
-#         closed='left'  =>  [ 3:00, 6:00 )  or  3:00 <= x <  6:00
-#
-#     """
-#
-#     # RESAMPLING
-#     # ----------
-#     _df = df.copy()
-#
-#     if to_freq in ['W', 'M', 'A']:
-#         label = 'right'
-#         closed = 'right'
-#         timestamp_shows_start = False
-#     elif to_freq in ['T', 'H', 'D']:
-#         label = 'left'
-#         closed = 'left'
-#         timestamp_shows_start = True
-#     else:
-#         label = closed = timestamp_shows_start = '-not-defined-'
-#
-#     resampled_df = _df.resample(freq_str, label=label, closed=closed)  #
-#
-#     # AGGREGATION
-#     # -----------
-#     agg_counts_df = resampled_df.count()  # Count aggregated values, always needed
-#
-#     # Aggregated values
-#     if agg_method == 'Mean':
-#         agg_df = resampled_df.mean()
-#     elif agg_method == 'Median':
-#         agg_df = resampled_df.median_col()
-#     elif agg_method == 'SD':
-#         agg_df = resampled_df.std_col()
-#     elif agg_method == 'Minimum':
-#         agg_df = resampled_df.min()
-#     elif agg_method == 'Maximum':
-#         agg_df = resampled_df.max()
-#     elif agg_method == 'Count':
-#         agg_df = resampled_df.count()
-#     elif agg_method == 'Sum':
-#         agg_df = resampled_df.sum()
-#     elif agg_method == 'Variance':
-#         agg_df = resampled_df.var_col()
-#     else:
-#         agg_df = -9999
-#
-#     filter_min = agg_counts_df >= min_vals
-#     agg_df = agg_df[filter_min]
-#
-#     # TIMESTAMP CONVENTION
-#     # --------------------
-#     agg_df, timestamp_info_df = timestamp_convention(df=agg_df,
-#                                                      timestamp_shows_start=timestamp_shows_start,
-#                                                      out_timestamp_convention='Middle of Record')
-#
-#     agg_df.index = pd.to_datetime(agg_df.index)
-#
-#     return agg_df, timestamp_info_df
-
-
 def timestamp_convention(df, timestamp_shows_start, out_timestamp_convention):
     """Set middle timestamp as main index"""
 
@@ -823,13 +742,32 @@ def add_continuous_record_number(df: DataFrame) -> DataFrame:
     df[newcol] = data
     return df
 
-def steplagged_variants(df: DataFrame,
-                        stepsize: int = 1,
-                        stepmax: int = 10,
-                        exclude_cols: list = None,
-                        info: bool = True) -> DataFrame:
+
+def lagged_variants(df: DataFrame,
+                    lag: list[int, int],
+                    stepsize: int = 1,
+                    exclude_cols: list = None,
+                    verbose: bool = True) -> DataFrame:
     """
-    Create step-lagged (no overlaps) variants of variables
+    Create lagged variants of variables
+
+    Args:
+        df: dataframe that contains variables that will be lagged
+        lag: list of integers given as number or records, defining the range of generated lag times
+            For example lag=[-3, 2] and stepsize=1 will generated lagged
+            variants -3, -2, -1, +1 and +2
+        stepsize: stepsize between the different lagged variants given as number of records
+            For example lag=[-8, 4] and stepsize=2 will generated lagged
+            variants -8, -6, -4, -2 and +2
+        exclude_cols: list of column names, these variables will not be lagged
+        verbose: if *True*, print more output to console
+
+    Returns:
+        input dataframe with added lagged variants
+    """
+
+    """
+    
 
     Important: sign convention changed in v0.36.0
         The minus sign (-) is now used to display the record shift
@@ -843,21 +781,33 @@ def steplagged_variants(df: DataFrame,
     """
 
     if len(df.columns) == 1:
-        print(f"(!) No step-lagged variants created because data "
-              f"comprises only one single column: {df.columns}.")
+        if df.columns[0] in exclude_cols:
+            raise Exception(f"(!) No lagged variants can be created "
+                            f"because there is only one single column in the dataframe "
+                            f"({df.columns[0]}) and the same column is also defined in "
+                            f"the exclude list (exclude_cols={exclude_cols}). "
+                            f"This means there are no data left to lag.")
         return df
+
+    if not isinstance(lag, list):
+        raise Exception(f"(!) Error in lag={lag}: No lagged variables can be created "
+                        f"because lag is not given as a list, e.g. lag=[-10, -1]. "
+                        f"(it was given as lag={lag})")
+
+    if len(lag) != 2:
+        raise Exception(f"(!) Error in lag={lag}: No lagged variables can be created "
+                        f"because lag must be given as a list with two elements, "
+                        f"e.g. lag=[-10, -1]. (it was given as lag={lag})")
+
+    for _lag in lag:
+        if not isinstance(_lag, int):
+            raise TypeError(f"(!) Error in lag={lag}: No lagged variables can be created "
+                            f"because {_lag} is not an integer.")
 
     _included = []
     _excluded = []
 
-    lagsteps = range(stepsize, stepmax + 1, stepsize)
-
-    # # Create lagsteps for each period and collect
-    # for s in stepsize:
-    #     p_lagsteps = list(range(s, s * (num_lags + 1), s))
-    #     # p_lagsteps = list(range(p, p * 4, p))
-    #     [lagsteps.append(x) for x in p_lagsteps if x not in lagsteps]  # Avoid duplicates
-    # lagsteps.sort(reverse=False)
+    lagsteps = range(lag[0], lag[1] + 1, stepsize)
 
     for col in df.columns:
         if exclude_cols:
@@ -867,13 +817,22 @@ def steplagged_variants(df: DataFrame,
                 continue
 
             for lagstep in lagsteps:
-                stepname = f".{col}-{lagstep}"
-                df[stepname] = df[col].shift(lagstep)
+                if lagstep < 0:
+                    stepname = f".{col}{lagstep}"
+                    _shift = abs(lagstep)
+                elif lagstep > 0:
+                    stepname = f".{col}+{lagstep}"
+                    _shift = -lagstep
+                else:
+                    # skip if lagstep = 0
+                    continue
+                df[stepname] = df[col].shift(_shift)
             _included.append(col)
 
-    if info:
-        print(f"Created step-lagged variants for: {_included}\n"
-              f"No step-lagged variants for: {_excluded}")
+    if verbose:
+        print(f"Created lagged variants for: {_included} (lags between {lag[0]} and {lag[1]} "
+              f"with stepsize {stepsize})\n"
+              f"No lagged variants for: {_excluded}")
     return df
 
 

@@ -1,10 +1,7 @@
-from pathlib import Path
-
 from pandas import Series
 
 import diive.core.dfun.frames as frames
 from diive.core.utils.prints import ConsoleOutputDecorator
-# from diive.common.dfun.frames import resample_df
 from diive.pkgs.createvar.daynightflag import nighttime_flag_from_latlon
 
 
@@ -161,7 +158,3 @@ def remove_radiation_zero_offset(series: Series,
     series_corr_settozero.rename(outname, inplace=True)
 
     return series_corr_settozero
-
-
-if __name__ == '__main__':
-    pass

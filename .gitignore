@@ -6,7 +6,6 @@ __manuscripts/
 __workbench/
 __todo/
 
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -112,3 +111,4 @@ venv.bak/
 # mypy
 .mypy_cache/
 /notebooks/Manuscripts/Hörtnagl et al. (2023) - NEP Penalty/
+/notebooks/Workbench/example_n2o_outlier/

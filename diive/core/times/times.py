@@ -140,6 +140,11 @@ class TimestampSanitizer:
     def __init__(self,
                  data: Series or DataFrame,
                  output_middle_timestamp: bool = True,
+                 validate_naming: bool = True,
+                 convert_to_datetime: bool = True,
+                 sort_ascending: bool = True,
+                 remove_duplicates: bool = True,
+                 regularize: bool = True,
                  verbose: bool = False):
         """
         Validate and prepare timestamps for further processing
@@ -156,6 +161,24 @@ class TimestampSanitizer:
         The `TimestampSanitizer` class acts as a wrapper to combine various
         timestamp functions.
 
+        Args:
+            data:
+            output_middle_timestamp:
+                Convert the timestamp index to show middle of averaging period
+            validate_naming:
+                Check if timestamp is correctly named, allowed names are 'TIMESTAMP_END',
+                'TIMESTAMP_START', and 'TIMESTAMP_MIDDLE'.
+            convert_to_datetime:
+                Convert timestamp index to datetime format
+            sort_ascending:
+                Sort timestamp in ascending order
+            remove_duplicates:
+                Remove duplicates in the timestamp index (keep last)
+            regularize:
+                Generate continuous timestamp of given frequency between first and last date of index
+            verbose:
+                Generate more text output if *True*
+
         For more info please refer to the docstring of the respective function.
 
         Args:
@@ -164,6 +187,11 @@ class TimestampSanitizer:
         """
         self.data = data.copy()
         self.output_middle_timestamp = output_middle_timestamp
+        self.validate_naming = validate_naming
+        self.convert_to_datetime = convert_to_datetime
+        self.sort_ascending = sort_ascending
+        self.remove_duplicates = remove_duplicates
+        self.regularize = regularize
         self.verbose = verbose
 
         self.inferred_freq = None if not data.index.freq else data.index.freq
@@ -174,26 +202,32 @@ class TimestampSanitizer:
         return self.data
 
     def _run(self):
-        if self.verbose: print("Sanitizing timestamp ...")
+        if self.verbose:
+            print("Sanitizing timestamp ...")
 
         # Validate timestamp name
-        _ = validate_timestamp_naming(data=self.data, verbose=self.verbose)
+        if self.validate_naming:
+            _ = validate_timestamp_naming(data=self.data, verbose=self.verbose)
 
         # Convert timestamp to datetime
-        self.data = convert_timestamp_to_datetime(self.data, verbose=self.verbose)
+        if self.convert_to_datetime:
+            self.data = convert_timestamp_to_datetime(self.data, verbose=self.verbose)
 
         # Sort timestamp index ascending
-        self.data = sort_timestamp_ascending(self.data, verbose=self.verbose)
+        if self.sort_ascending:
+            self.data = sort_timestamp_ascending(self.data, verbose=self.verbose)
 
         # Remove index duplicates
-        self.data = remove_index_duplicates(data=self.data, keep='last', verbose=self.verbose)
+        if self.remove_duplicates:
+            self.data = remove_index_duplicates(data=self.data, keep='last', verbose=self.verbose)
 
         # Detect time resolution from data
         if not self.inferred_freq:
             self.inferred_freq = DetectFrequency(index=self.data.index, verbose=self.verbose).get()
 
         # Make timestamp continuous w/o date gaps
-        self.data = continuous_timestamp_freq(data=self.data, freq=self.inferred_freq, verbose=self.verbose)
+        if self.regularize:
+            self.data = continuous_timestamp_freq(data=self.data, freq=self.inferred_freq, verbose=self.verbose)
 
         # Convert timestamp to middle
         if self.output_middle_timestamp:
@@ -201,8 +235,10 @@ class TimestampSanitizer:
 
 
 def sort_timestamp_ascending(data: Series or DataFrame, verbose: bool = False) -> Series or DataFrame:
-    if verbose: print(f"Sorting timestamp {data.index.name} ascending ...", end=" ")
-    data.sort_index()
+    """Sort timestamp in ascending order"""
+    if verbose:
+        print(f"Sorting timestamp {data.index.name} ascending ...", end=" ")
+    data = data.sort_index()
     return data
 
 
@@ -220,10 +256,12 @@ def convert_timestamp_to_datetime(data: Series or DataFrame, verbose: bool = Fal
         data with confirmed datetime index
 
     """
-    if verbose: print(f"Converting timestamp {data.index.name} to datetime ...", end=" ")
+    if verbose:
+        print(f"Converting timestamp {data.index.name} to datetime ...", end=" ")
     try:
         data.index = pd.to_datetime(data.index)
-        if verbose: print("OK")
+        if verbose:
+            print("OK")
     except:
         raise Exception("Conversion of timestamp to datetime format failed.")
     return data
@@ -236,6 +274,8 @@ def validate_timestamp_naming(data: Series or DataFrame, verbose: bool = False) 
     This check is done to make sure that the timestamp gives specific
     information if it refers to the start, middle or end of the averaging
     period.
+
+    Allowed names are 'TIMESTAMP_END', 'TIMESTAMP_START', and 'TIMESTAMP_MIDDLE'
 
     Args:
         data: Data with timestamp index
@@ -460,8 +500,6 @@ def build_timestamp_range(start_dt, df_len, freq):
     return date_rng
 
 
-
-
 def include_timestamp_as_cols(df,
                               year: bool = True,
                               season: bool = True,
@@ -512,7 +550,6 @@ def include_timestamp_as_cols(df,
         hour_col = '.HOUR'
         newcols.append(hour_col)
         df[hour_col] = df.index.hour.astype(int)
-
 
     # yeardoy_col = '.YEARDOY'
     # yearweek_col = '.YEARWEEK'
@@ -595,8 +632,6 @@ class DetectFrequency:
         notebooks/TimeStamps/Detect_time_resolution.ipynb
     - Unittest:
         test_timestamps.TestTimestamps
-
-    TODO detect freq like in dbc-influxdb
 
     """
 
@@ -759,16 +794,19 @@ def remove_index_duplicates(data: Series or DataFrame,
                             keep: Literal["first", "last", False] = "last",
                             verbose: bool = False) -> Series or DataFrame:
     """Remove index duplicates"""
-    if verbose: print("Removing data records with duplicate indexes ...", end=" ")
+    if verbose:
+        print("Removing data records with duplicate indexes ...", end=" ")
     n_duplicates = data.index.duplicated().sum()
     if n_duplicates > 0:
         # Duplicates found
         data = data[~data.index.duplicated(keep=keep)]
-        if verbose: print(f"OK (removed {n_duplicates} rows with duplicate timestamps)")
+        if verbose:
+            print(f"OK (removed {n_duplicates} rows with duplicate timestamps)")
         return data
     else:
         # No duplicates found
-        if verbose: print(f"OK (no duplicates found in timestamp index)")
+        if verbose:
+            print(f"OK (no duplicates found in timestamp index)")
         return data
 
 
@@ -780,8 +818,9 @@ def continuous_timestamp_freq(data: Series or DataFrame, freq: str, verbose: boo
     first_date = data.index[0]
     last_date = data.index[-1]
 
-    if verbose: print(f"Creating continuous {freq} timestamp index for timestamp {data.index.name} "
-                      f"between {first_date} and {last_date} ...", end=" ")
+    if verbose:
+        print(f"Creating continuous {freq} timestamp index for timestamp {data.index.name} "
+              f"between {first_date} and {last_date} ...", end=" ")
 
     # Original timestamp name
     idx_name = data.index.name

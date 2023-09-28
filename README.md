@@ -41,6 +41,7 @@ More notebooks are added constantly.
 
 - Convert EddyPro fluxnet output files for upload to FLUXNET
   database ([notebook example](notebooks/Formats/FormatEddyProFluxnetFileForUpload.ipynb))
+- Load and save parquet files ([notebook example](notebooks/Formats/LoadSaveParquetFile.ipynb))
 
 ### Fits
 
@@ -76,6 +77,7 @@ Fill gaps in time series with various methods
 
 - Interpolate
 - RandomForestTS ([notebook example](notebooks/GapFilling/RandomForestGapFilling.ipynb))
+- Quick random forest gap-filling ([notebook example](notebooks/GapFilling/QuickRandomForestGapFilling.ipynb))
 
 ### Outlier Detection
 
@@ -87,8 +89,6 @@ Fill gaps in time series with various methods
 - Local outlier factor: Identify outliers based on local outlier factor, daytime nighttime separately
 - Manual removal: Remove time periods (from-to) or single records from time series
 - Missing values: Simply creates a flag that indicated available and missing data in a time series
-- Seasonal trend decomposition using LOESS, identify outliers based on seasonal-trend decomposition and
-  z-score calculations, taking the inter-quartile range of the data into account
 - Seasonal trend decomposition using LOESS, identify outliers based on seasonal-trend decomposition and
   z-score calculations
 - Thymeboost: Identify outliers based on [thymeboost](https://github.com/tblume1992/ThymeBoost)
@@ -103,7 +103,8 @@ Fill gaps in time series with various methods
 
 ### Quality control
 
-- Stepwise MeteoScreening
+- Stepwise MeteoScreening from
+  database ([notebook example](notebooks/MeteoScreening/StepwiseMeteoScreeningFromDatabase.ipynb))
 
 ### Stats
 
