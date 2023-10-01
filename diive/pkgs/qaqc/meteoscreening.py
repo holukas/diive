@@ -572,8 +572,8 @@ class StepwiseMeteoScreeningDb:
             results_qcf[field] = {}
             last_results[field] = {}
 
-            return (series_hires_cleaned, series_hires_orig, tags, hires_flags,
-                    resampled_detailed, results_qcf, last_results)
+        return (series_hires_cleaned, series_hires_orig, tags, hires_flags,
+                resampled_detailed, results_qcf, last_results)
 
     @staticmethod
     def _sanitize_timestamp(targetfreq, data_detailed):
@@ -745,17 +745,18 @@ def example():
     TESTDIR = Path(r"F:\Sync\luhk_work\TMP")
 
     # User settings, site
-    SITE = 'ch-fru'
-    SITE_LAT = 47.115833
-    SITE_LON = 8.537778
+    SITE = 'ch-cha'
+    SITE_LAT = 47.210222
+    SITE_LON = 8.410444
 
     # User settings, variables to screen
-    FIELDS = ['SW_IN_T1_1_1', 'SW_IN_T1_2_1']
-    MEASUREMENT = 'SW'
+    # FIELDS = ['TS_GF1_0.05_1']
+    FIELDS = ['TS_GF1_0.05_1', 'TS_GF1_0.1_1', 'TS_GF1_0.2_1', 'TS_GF1_0.3_1', 'TS_GF1_0.4_1', 'TS_GF1_0.5_1']
+    MEASUREMENT = 'TS'
 
     # User settings, time range to screen
-    START = '2023-01-01 00:00:01'
-    STOP = '2024-01-01 00:00:01'
+    START = '2022-01-01 00:00:01'
+    STOP = '2023-01-01 00:00:01'
 
     # Auto-settings, data settings
     DATA_VERSION = 'raw'
@@ -783,9 +784,10 @@ def example():
     print(f"Bucket containing raw data (source bucket): {BUCKET_RAW}")
     print(f"Bucket containing processed data (destination bucket): {BUCKET_PROCESSING}")
 
-    # # Download data from database with "dbc-influxdb"
-    # from dbc_influxdb import dbcInflux
-    # dbc = dbcInflux(dirconf=DIRCONF)  # Instantiate class
+    # Download data from database with "dbc-influxdb"
+    from dbc_influxdb import dbcInflux
+    dbc = dbcInflux(dirconf=DIRCONF)  # Instantiate class
+
     # data_simple, data_detailed, assigned_measurements = \
     #     dbc.download(bucket=BUCKET_RAW,
     #                  measurements=[MEASUREMENT],
@@ -798,7 +800,7 @@ def example():
     # data_simple.plot()
     # plt.show()
     #
-    # # Export data to pickle for fast testing
+    # # Export data to pickle and parquet for fast testing
     # from diive.core.io.files import save_parquet, save_as_pickle
     # save_parquet(filename="meteodata_simple", data=data_simple, outpath=TESTDIR)
     # save_as_pickle(filename="meteodata_detailed", data=data_detailed, outpath=TESTDIR)
@@ -834,8 +836,8 @@ def example():
                                     site_lon=SITE_LON,
                                     timezone_of_timestamp='UTC+01:00')
 
-    # # Plot data
-    # mscr.showplot_orig()
+    # Plot data
+    mscr.showplot_orig()
     # mscr.showplot_cleaned()
 
     # Missing values test

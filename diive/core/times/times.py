@@ -203,7 +203,7 @@ class TimestampSanitizer:
 
     def _run(self):
         if self.verbose:
-            print("Sanitizing timestamp ...")
+            print("\nSanitizing timestamp ...")
 
         # Validate timestamp name
         if self.validate_naming:
@@ -517,6 +517,7 @@ def include_timestamp_as_cols(df,
     - https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.OneHotEncoder.html
 
     """
+    print("\nAdding timestamp as data columns ...")
 
     df = df.copy()
     newcols = []

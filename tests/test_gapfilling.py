@@ -51,9 +51,9 @@ class TestGapFilling(unittest.TestCase):
         observed = df[TARGET_COL]
         gapfilled = rfts.get_gapfilled_target()
 
-        fi = rfts.feature_importances
-        scores = rfts.scores
-        gfdf = rfts.gapfilling_df
+        fi = rfts.feature_importances_
+        scores = rfts.scores_
+        gfdf = rfts.gapfilling_df_
 
         # # Plot
         # HeatmapDateTime(series=observed).show()

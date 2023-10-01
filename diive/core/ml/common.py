@@ -123,7 +123,8 @@ def feature_importances(estimator: RandomForestRegressor,
 def prediction_scores_regr(predictions: np.array,
                            targets: np.array,
                            infotxt: str = None,
-                           showplot: bool = True) -> dict:
+                           showplot: bool = True,
+                           verbose:int=0) -> dict:
     """
     Calculate prediction scores for regression estimator
 

@@ -221,7 +221,7 @@ class OutlierSTLRZ(FlagBase):
         rfts.fillgaps(showplot_scores=True, showplot_importance=True, verbose=1)
         series = rfts.get_gapfilled_target()
         flag_gapfilled_name = f"FLAG_{series.name}_ISFILLED"  # "[0=measured]"
-        flag_gapfilled = rfts.gapfilling_df[flag_gapfilled_name].copy()
+        flag_gapfilled = rfts.gapfilling_df_[flag_gapfilled_name].copy()
         # series.plot()
         # plt.show()
         return series, flag_gapfilled

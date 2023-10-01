@@ -737,9 +737,11 @@ def rolling_variants(df, records: int, aggtypes: list, exclude_cols: list = None
 
 def add_continuous_record_number(df: DataFrame) -> DataFrame:
     """Add continuous record number as new column"""
+    print("\nAdding continuous record number ...")
     newcol = '.RECORDNUMBER'
     data = range(1, len(df) + 1)
     df[newcol] = data
+    print(f"Added new column {newcol} with record numbers from {df[newcol][0]} to {df[newcol][-1]}.")
     return df
 
 
@@ -779,7 +781,7 @@ def lagged_variants(df: DataFrame,
     Example:
 
     """
-
+    print(f"\nCreating lagged variants ...")
     if len(df.columns) == 1:
         if df.columns[0] in exclude_cols:
             raise Exception(f"(!) No lagged variants can be created "

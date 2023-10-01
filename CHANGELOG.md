@@ -2,6 +2,18 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.62.0 | 1 Oct 2023
+
+### New features
+
+- Re-implemented gap-filling of long-term time series spanning multiple years, where the model
+  to gap-fill a specific year is built from data from the respective year and its two closest
+  neighboring years. (`pkgs.gapfilling.randomforest_ts.LongTermRandomForestTS`)
+
+### Bugfixes
+
+- Fixed bug in `StepwiseMeteoScreeningDb` where position of `return` during setup was incorrect
+
 ## v0.61.0 | 28 Sep 2023
 
 ### New features
