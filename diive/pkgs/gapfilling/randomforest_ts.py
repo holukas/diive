@@ -28,8 +28,9 @@ from sklearn.model_selection import train_test_split, TimeSeriesSplit, GridSearc
 
 import diive.core.dfun.frames as fr
 from diive.core.ml.common import feature_importances, prediction_scores_regr, plot_prediction_residuals_error_regr
-from diive.core.times.times import include_timestamp_as_cols
+from diive.core.times.neighbors import neighboring_years
 from diive.core.times.times import TimestampSanitizer
+from diive.core.times.times import include_timestamp_as_cols
 
 pd.set_option('display.max_rows', 50)
 pd.set_option('display.max_columns', 12)
@@ -241,7 +242,8 @@ class RandomForestTS:
             self.model_df = fr.add_continuous_record_number(df=self.model_df)
 
         if sanitize_timestamp:
-            tss = TimestampSanitizer(data=self.model_df, output_middle_timestamp=True, verbose=True)
+            verbose = True if verbose > 0 else False
+            tss = TimestampSanitizer(data=self.model_df, output_middle_timestamp=True, verbose=verbose)
             self.model_df = tss.get()
 
         # Attributes
@@ -253,56 +255,44 @@ class RandomForestTS:
         self._scores_test = dict()
         self._traintest_details = dict()
 
-    def _lag_features(self):
-        return fr.lagged_variants(df=self.model_df,
-                                  stepsize=1,
-                                  lag=self.features_lag,
-                                  exclude_cols=[self.target_col])
-
-    def _check_n_cols(self):
-        """Check number of columns"""
-        if len(self.model_df.columns) == 1:
-            raise Exception(f"(!) Stopping execution because dataset comprises "
-                            f"only one single column : {self.model_df.columns}")
-
     def get_gapfilled_target(self):
         """Gap-filled target time series"""
-        return self.gapfilling_df[self.target_gapfilled_col]
+        return self.gapfilling_df_[self.target_gapfilled_col]
 
     def get_flag(self):
         """Gap-filling flag, where 0=observed, 1=gap-filled, 2=gap-filled with fallback"""
-        return self.gapfilling_df[self.target_gapfilled_flag_col]
+        return self.gapfilling_df_[self.target_gapfilled_flag_col]
 
     @property
-    def model(self) -> RandomForestRegressor:
+    def model_(self) -> RandomForestRegressor:
         """Return model, trained on test data"""
         if not self._model:
             raise Exception(f'Not available: model.')
         return self._model
 
     @property
-    def feature_importances(self) -> dict:
+    def feature_importances_(self) -> dict:
         """Return feature importance for model used in gap-filling"""
         if not self._feature_importances:
             raise Exception(f'Not available: feature importances for gap-filling.')
         return self._feature_importances
 
     @property
-    def scores(self) -> dict:
+    def scores_(self) -> dict:
         """Return model scores for model used in gap-filling"""
         if not self._scores:
             raise Exception(f'Not available: model scores for gap-filling.')
         return self._scores
 
     @property
-    def gapfilling_df(self) -> DataFrame:
+    def gapfilling_df_(self) -> DataFrame:
         """Return gapfilled data and auxiliary variables"""
         if not isinstance(self._gapfilling_df, DataFrame):
             raise Exception(f'Gapfilled data not available.')
         return self._gapfilling_df
 
     @property
-    def feature_importances_test(self) -> dict:
+    def feature_importances_test_(self) -> dict:
         """Return feature importance from model training on training data,
         with importances calculated using test data (holdout set)"""
         if not self._feature_importances_test:
@@ -310,7 +300,7 @@ class RandomForestTS:
         return self._feature_importances_test
 
     @property
-    def scores_test(self) -> dict:
+    def scores_test_(self) -> dict:
         """Return model scores for model trained on training data,
         with scores calculated using test data (holdout set)"""
         if not self._scores_test:
@@ -318,7 +308,7 @@ class RandomForestTS:
         return self._scores_test
 
     @property
-    def traintest_details(self) -> dict:
+    def traintest_details_(self) -> dict:
         """Return details from train/test splits"""
         if not self._traintest_details:
             raise Exception(f'Not available: model scores for gap-filling.')
@@ -348,15 +338,15 @@ class RandomForestTS:
         idtxt = f"({self.report.__name__} gap-filling) "
 
         # Gapfilling stats from flag
-        locs_observed = self.gapfilling_df[self.target_gapfilled_flag_col] == 0
-        locs_observed_missing_fromflag = self.gapfilling_df[self.target_gapfilled_flag_col] > 0
-        locs_observed_missing_fromdata = self.gapfilling_df[self.target_col].isnull()
-        locs_gapfilled_missing = self.gapfilling_df[self.target_gapfilled_col].isnull()
-        locs_hq = self.gapfilling_df[self.target_gapfilled_flag_col] == 1
-        locs_fallback = self.gapfilling_df[self.target_gapfilled_flag_col] == 2
+        locs_observed = self.gapfilling_df_[self.target_gapfilled_flag_col] == 0
+        locs_observed_missing_fromflag = self.gapfilling_df_[self.target_gapfilled_flag_col] > 0
+        locs_observed_missing_fromdata = self.gapfilling_df_[self.target_col].isnull()
+        locs_gapfilled_missing = self.gapfilling_df_[self.target_gapfilled_col].isnull()
+        locs_hq = self.gapfilling_df_[self.target_gapfilled_flag_col] == 1
+        locs_fallback = self.gapfilling_df_[self.target_gapfilled_flag_col] == 2
 
-        n_available = len(self.gapfilling_df[self.target_gapfilled_col].dropna())
-        n_potential = len(self.gapfilling_df.index)
+        n_available = len(self.gapfilling_df_[self.target_gapfilled_col].dropna())
+        n_potential = len(self.gapfilling_df_.index)
         n_observed = locs_observed.sum()
         n_observed_missing_fromflag = locs_observed_missing_fromflag.sum()
         n_observed_missing_fromdata = locs_observed_missing_fromdata.sum()
@@ -364,13 +354,13 @@ class RandomForestTS:
         n_hq = locs_hq.sum()
         n_fallback = locs_fallback.sum()
 
-        feature_names = self.feature_importances['importances'].index.to_list()
+        feature_names = self.feature_importances_['importances'].index.to_list()
         n_features = len(feature_names)
 
         print(
             f"{idtxt} GAP-FILLING RESULTS\n"
-            f"{idtxt}   First timestamp:  {self.gapfilling_df.index[0]}\n"
-            f"{idtxt}   Last timestamp:  {self.gapfilling_df.index[-1]}\n"
+            f"{idtxt}   First timestamp:  {self.gapfilling_df_.index[0]}\n"
+            f"{idtxt}   Last timestamp:  {self.gapfilling_df_.index[-1]}\n"
             f"{idtxt}   Potential number of values: {n_potential} values)\n"
             f"{idtxt}\n"
             f"{idtxt}   TARGET\n"
@@ -387,8 +377,8 @@ class RandomForestTS:
             f"{idtxt}\n"
             f"{idtxt}   MODEL\n"
             f"{idtxt}   The model was trained on a training set.\n"
-            f"{idtxt}   - estimator:  {self.model}\n"
-            f"{idtxt}   - parameters:  {self.model.get_params()}\n"
+            f"{idtxt}   - estimator:  {self.model_}\n"
+            f"{idtxt}   - parameters:  {self.model_.get_params()}\n"
             f"{idtxt}   - names of features used in model:  {feature_names}\n"
             f"{idtxt}   - number of features used in model:  {n_features}\n"
             f"{idtxt}\n"
@@ -396,21 +386,33 @@ class RandomForestTS:
             f"{idtxt}   Model scores were calculated from high-quality predicted targets "
             f"({n_hq} values, {self.target_gapfilled_col} where flag=1) in comparison to "
             f"observed targets ({n_observed} values, {self.target_col}).\n"
-            f"{idtxt}   - MAE:  {self.scores['mae']} (mean absolute error)\n"
-            f"{idtxt}   - MedAE:  {self.scores['medae']} (median absolute error)\n"
-            f"{idtxt}   - MSE:  {self.scores['mse']} (mean squared error)\n"
-            f"{idtxt}   - RMSE:  {self.scores['rmse']} (root mean squared error)\n"
-            f"{idtxt}   - MAXE:  {self.scores['maxe']} (max error)\n"
-            f"{idtxt}   - MAPE:  {self.scores['mape']:.3f} (mean absolute percentage error)\n"
-            f"{idtxt}   - R2:  {self.scores['r2']}\n"
+            f"{idtxt}   - MAE:  {self.scores_['mae']} (mean absolute error)\n"
+            f"{idtxt}   - MedAE:  {self.scores_['medae']} (median absolute error)\n"
+            f"{idtxt}   - MSE:  {self.scores_['mse']} (mean squared error)\n"
+            f"{idtxt}   - RMSE:  {self.scores_['rmse']} (root mean squared error)\n"
+            f"{idtxt}   - MAXE:  {self.scores_['maxe']} (max error)\n"
+            f"{idtxt}   - MAPE:  {self.scores_['mape']:.3f} (mean absolute percentage error)\n"
+            f"{idtxt}   - R2:  {self.scores_['r2']}\n"
             f"{idtxt}\n"
             f"{idtxt}   FEATURE IMPORTANCES\n"
             f"{idtxt}   Feature importances were calculated from high-quality predicted targets "
             f"({n_hq} values, {self.target_gapfilled_col} where flag=1) in comparison to "
             f"observed targets ({n_observed} values, {self.target_col}).\n"
-            f"{idtxt}\n{self.feature_importances['importances']}\n"
+            f"{idtxt}\n{self.feature_importances_['importances']}\n"
             f"{idtxt}   Permutation importances were calculated from {self.perm_n_repeats} repeats.\n"
         )
+
+    def _lag_features(self):
+        return fr.lagged_variants(df=self.model_df,
+                                  stepsize=1,
+                                  lag=self.features_lag,
+                                  exclude_cols=[self.target_col])
+
+    def _check_n_cols(self):
+        """Check number of columns"""
+        if len(self.model_df.columns) == 1:
+            raise Exception(f"(!) Stopping execution because dataset comprises "
+                            f"only one single column : {self.model_df.columns}")
 
     def _fillgaps_fullmodel(self, showplot_scores, showplot_importance, verbose):
         """Apply model to fill missing targets for records where all features are available
@@ -431,16 +433,17 @@ class RandomForestTS:
                                  complete_rows=True)
 
         # Predict all targets (no test split)
-        pred_y = self.model.predict(X=X)
+        pred_y = self.model_.predict(X=X)
 
         # Calculate feature importance, using all targets
-        self._feature_importances = feature_importances(estimator=self.model,
+        self._feature_importances = feature_importances(estimator=self.model_,
                                                         X=X,
                                                         y=y,
                                                         model_feature_names=X_names,
                                                         random_col=None,
                                                         perm_n_repeats=self.perm_n_repeats,
-                                                        showplot=showplot_importance)
+                                                        showplot=showplot_importance,
+                                                        verbose=verbose)
 
         # Model scores, using all targets
         self._scores = prediction_scores_regr(predictions=pred_y,
@@ -458,7 +461,7 @@ class RandomForestTS:
         feature_names = features_df.columns.tolist()
 
         # Predict targets for all records where all features are available
-        pred_y = self.model.predict(X=X)
+        pred_y = self.model_.predict(X=X)
 
         # Collect gapfilling results in df
         # Define column names for gapfilled_df
@@ -563,7 +566,7 @@ class RandomForestTS:
                              showplot_importance=showplot_importance,
                              verbose=verbose)
 
-            recommended_features = self.feature_importances_test['recommended_features']
+            recommended_features = self.feature_importances_test_['recommended_features']
             usecols = [self.target_col]
             usecols = usecols + recommended_features
             self.model_df = self.model_df[usecols].copy()
@@ -631,7 +634,8 @@ class RandomForestTS:
                                                              model_feature_names=X_names,
                                                              random_col=random_col,
                                                              perm_n_repeats=self.perm_n_repeats,
-                                                             showplot=showplot_importance)
+                                                             showplot=showplot_importance,
+                                                             verbose=verbose)
 
         # Stats
         self._scores_test = prediction_scores_regr(predictions=pred_y_test,
@@ -665,8 +669,8 @@ class RandomForestTS:
             model=self._model,
         )
 
-        if self.verbose > 0:
-            self.report_training(idtxt=idtxt, results=self.traintest_details)
+        if verbose > 0:
+            self.report_training(idtxt=idtxt, results=self.traintest_details_)
 
     def report_training(self, idtxt: str, results: dict):
         """Results from model training on test data"""
@@ -699,25 +703,25 @@ class RandomForestTS:
             f"{idtxt}   Model was trained on training data ({n_vals_train} values).\n"
             f"{idtxt}   Model was tested on test data ({n_vals_test} values).\n"
             f"{idtxt}   All scores were calculated for test split.\n"
-            f"{idtxt}   - MAE:  {self.scores_test['mae']} (mean absolute error)\n"
-            f"{idtxt}   - MedAE:  {self.scores_test['medae']} (median absolute error)\n"
-            f"{idtxt}   - MSE:  {self.scores_test['mse']} (mean squared error)\n"
-            f"{idtxt}   - RMSE:  {self.scores_test['rmse']} (root mean squared error)\n"
-            f"{idtxt}   - MAXE:  {self.scores_test['maxe']} (max error)\n"
-            f"{idtxt}   - MAPE:  {self.scores_test['mape']:.3f} (mean absolute percentage error)\n"
-            f"{idtxt}   - R2:  {self.scores_test['r2']}\n"
+            f"{idtxt}   - MAE:  {self.scores_test_['mae']} (mean absolute error)\n"
+            f"{idtxt}   - MedAE:  {self.scores_test_['medae']} (median absolute error)\n"
+            f"{idtxt}   - MSE:  {self.scores_test_['mse']} (mean squared error)\n"
+            f"{idtxt}   - RMSE:  {self.scores_test_['rmse']} (root mean squared error)\n"
+            f"{idtxt}   - MAXE:  {self.scores_test_['maxe']} (max error)\n"
+            f"{idtxt}   - MAPE:  {self.scores_test_['mape']:.3f} (mean absolute percentage error)\n"
+            f"{idtxt}   - R2:  {self.scores_test_['r2']}\n"
             f"{idtxt}\n"
             f"{idtxt}   FEATURE IMPORTANCES\n"
             f"{idtxt}   Feature importances were calculated for test data ({n_vals_test} target values).\n"
-            f"{idtxt}\n{self.feature_importances_test['importances']}\n"
+            f"{idtxt}\n{self.feature_importances_test_['importances']}\n"
             f"{idtxt}   Permutation importances were calculated from {self.perm_n_repeats} repeats."
         )
 
         if results['include_random']:
             print(
                 f"{idtxt}\n"
-                f"{idtxt} --> {len(self.feature_importances_test['recommended_features'])} recommended features: "
-                f"{self.feature_importances_test['recommended_features']} "
+                f"{idtxt} --> {len(self.feature_importances_test_['recommended_features'])} recommended features: "
+                f"{self.feature_importances_test_['recommended_features']} "
                 f"(permutation importance larger than random)\n"
             )
 
@@ -794,13 +798,161 @@ class QuickFillRFTS:
         self.rfts.fillgaps(showplot_scores=True, showplot_importance=True, verbose=1)
 
     def gapfilling_df(self):
-        return self.rfts.gapfilling_df
+        return self.rfts.gapfilling_df_
 
     def report(self):
         return self.rfts.report()
 
     def get_gapfilled(self) -> Series:
         return self.rfts.get_gapfilled_target()
+
+
+class LongTermRandomForestTS:
+
+    def __init__(self,
+                 input_df: DataFrame,
+                 target_col: str or tuple,
+                 verbose: int = 0,
+                 perm_n_repeats: int = 10,
+                 test_size: float = 0.25,
+                 features_lag: list = None,
+                 features_lagmax: int = None,
+                 include_timestamp_as_features: bool = False,
+                 add_continuous_record_number: bool = False,
+                 sanitize_timestamp: bool = False,
+                 **kwargs
+                 ):
+        """
+        Gap-fill each year based on data from the respective year and the two closest neighboring years
+
+        Example:
+            Given a long-term time series comprising data between 2013-2017:
+                - for 2013, the model is built from 2013, 2014 and 2015 data
+                - for 2014, the model is built from 2013, 2014 and 2015 data
+                - for 2015, the model is built from 2014, 2015 and 2016 data
+                - for 2016, the model is built from 2015, 2016 and 2017 data
+                - for 2017, the model is built from 2015, 2016 and 2017 data
+
+        Args:
+            See docstring for pkgs.gapfilling.randomforest_ts.RandomForestTS
+
+        Attributes:
+            gapfilling_df_: dataframe, gapfilling results from all years in one dataframe
+            gapfilled_: series, gap-filled target series from all years in one time series
+            results_yearly_: dict, detailed results for each year
+            scores_: dict, scoring results for each year
+            feature_importances_: dict, feature importances for each year
+        """
+        self.input_df = input_df
+        self.target_col = target_col
+        self.verbose = verbose
+        self.perm_n_repeats = perm_n_repeats
+        self.test_size = test_size
+        self.features_lag = features_lag
+        self.features_lagmax = features_lagmax
+        self.include_timestamp_as_features = include_timestamp_as_features
+        self.add_continuous_record_number = add_continuous_record_number
+        self.sanitize_timestamp = sanitize_timestamp
+        self.kwargs = kwargs
+
+        self.yearpools_dict = None
+        self._results_yearly = {}
+        self._gapfilling_df = pd.DataFrame()
+        self._scores = {}
+        self._feature_importances = {}
+        self._gapfilled = pd.Series()
+
+    @property
+    def gapfilling_df_(self) -> DataFrame:
+        """Return gapfilling results from all years in one dataframe"""
+        if not isinstance(self._gapfilling_df, DataFrame):
+            raise Exception(f'Not available: collected gap-filled data for all years.')
+        return self._gapfilling_df
+
+    @property
+    def gapfilled_(self) -> Series:
+        """Return gap-filled target series from all years in one time series"""
+        if not isinstance(self._gapfilled, Series):
+            raise Exception(f'Not available: collected gap-filled data for all years.')
+        return self._gapfilled
+
+    @property
+    def results_yearly_(self) -> dict:
+        """Return detailed results for each year"""
+        if not self._results_yearly:
+            raise Exception(f'Not available: yearly model results.')
+        return self._results_yearly
+
+    @property
+    def scores_(self) -> dict:
+        """Return scoring results for each year"""
+        if not self._scores:
+            raise Exception(f'Not available: collected scores.')
+        return self._scores
+
+    @property
+    def feature_importances_(self) -> dict:
+        """Return feature importances for each year"""
+        if not self._feature_importances:
+            raise Exception(f'Not available: collected scores.')
+        return self._feature_importances
+
+    def run(self):
+        self.yearpools_dict = self._create_yearpools()
+        self._initialize_models()
+        self._trainmodels()
+        self._fillgaps()
+        self._collect()
+
+    def _create_yearpools(self):
+        """For each year create a dataset comprising the respective year
+        and the neighboring years"""
+        yearpools_dict = neighboring_years(df=self.input_df)
+        return yearpools_dict
+
+    def _initialize_models(self):
+        """Initialize model for each year"""
+        for year, _df in self.yearpools_dict.items():
+            print(f"Initializing model for {year} ...")
+            df = _df['df'].copy()
+            # Random forest
+            rfts = RandomForestTS(
+                input_df=df,
+                target_col=self.target_col,
+                verbose=self.verbose,
+                features_lag=self.features_lag,
+                include_timestamp_as_features=self.include_timestamp_as_features,
+                add_continuous_record_number=self.add_continuous_record_number,
+                sanitize_timestamp=self.sanitize_timestamp,
+                **self.kwargs
+            )
+            self._results_yearly[year] = rfts
+
+    def _trainmodels(self):
+        """Train model for each year"""
+        for year, _df in self.yearpools_dict.items():
+            print(f"Training model for {year} ...")
+            rfts = self.results_yearly_[year]
+            rfts.trainmodel(showplot_predictions=False, showplot_importance=False, verbose=0)
+
+    def _fillgaps(self):
+        """Gap-fill each year with the respective model"""
+        for year, _df in self.yearpools_dict.items():
+            print(f"Gap-filling {year} ...")
+            rfts = self.results_yearly_[year]
+            rfts.fillgaps(showplot_scores=True, showplot_importance=True, verbose=0)
+
+    def _collect(self):
+        """Collect results"""
+        for year, _df in self.yearpools_dict.items():
+            print(f"Collecting results for {year} ...")
+            rfts = self.results_yearly_[year]
+            keepyear = rfts.gapfilling_df_.index.year == int(year)
+            self._gapfilling_df = pd.concat([self._gapfilling_df, rfts.gapfilling_df_[keepyear]], axis=0)
+            self._scores[year] = rfts.scores_
+            self._feature_importances[year] = rfts.feature_importances_
+            gapfilled = rfts.get_gapfilled_target()
+            self._gapfilled = pd.concat([self._gapfilled, gapfilled[keepyear]])
 
 
 def example_quickfill():
@@ -850,50 +1002,91 @@ def example_quickfill():
     HeatmapDateTime(series=gapfilled).show()
 
 
-def example_rfts():
+def example_longterm_rfts():
     # Setup, user settings
     TARGET_COL = 'NEE_CUT_REF_orig'
     subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
 
-    # Setup, imports
-    import numpy as np
-    import importlib.metadata
-    from datetime import datetime
-    import matplotlib.pyplot as plt
-    from diive.configs.exampledata import load_exampledata_parquet
-    from diive.core.plotting.timeseries import TimeSeries  # For simple (interactive) time series plotting
-    from diive.core.dfun.stats import sstats  # Time series stats
-    from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-    dt_string = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"This page was last modified on: {dt_string}")
-    version_diive = importlib.metadata.version("diive")
-    print(f"diive version: v{version_diive}")
-
-    # Show docstring for QuickFillRFTS
-    print(RandomForestTS.__name__)
-    print(RandomForestTS.__doc__)
-
     # Example data
+    from diive.configs.exampledata import load_exampledata_parquet
     df = load_exampledata_parquet()
 
-    # # Create a large gap
-    # remove = df.index.year != 2014
-    # # df = df.drop(df.index[100:2200])
-    # df = df[remove].copy()
-
-    # # Subset
-    # keep = df.index.year <= 2016
-    # df = df[keep].copy()
+    # Subset
+    keep = df.index.year <= 2016
+    df = df[keep].copy()
 
     # Subset with target and features
     # Only High-quality (QCF=0) measured NEE used for model training in this example
     lowquality = df["QCF_NEE"] > 0
     df.loc[lowquality, TARGET_COL] = np.nan
     df = df[subsetcols].copy()
-    df.describe()
-    statsdf = sstats(df[TARGET_COL])
-    print(statsdf)
-    TimeSeries(series=df[TARGET_COL]).plot()
+
+    ltrf = LongTermRandomForestTS(
+        input_df=df,
+        target_col=TARGET_COL,
+        verbose=0,
+        features_lag=None,
+        include_timestamp_as_features=False,
+        add_continuous_record_number=True,
+        sanitize_timestamp=True,
+        n_estimators=99,
+        random_state=42,
+        min_samples_split=10,
+        min_samples_leaf=5,
+        perm_n_repeats=11,
+        n_jobs=-1
+    )
+
+    ltrf.run()
+
+    for year, s in ltrf.scores_.items():
+        print(f"{year}: r2 = {s['r2']}  MAE = {s['mae']}")
+
+
+def example_rfts():
+    # Setup, user settings
+    # TARGET_COL = 'LE_orig'
+    TARGET_COL = 'NEE_CUT_REF_orig'
+    subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
+
+    # from datetime import datetime
+    # dt_string = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # print(f"This page was last modified on: {dt_string}")
+    # import importlib.metadata
+    # version_diive = importlib.metadata.version("diive")
+    # print(f"diive version: v{version_diive}")
+
+    # # Show docstring for QuickFillRFTS
+    # print(RandomForestTS.__name__)
+    # print(RandomForestTS.__doc__)
+
+    # Example data
+    from diive.configs.exampledata import load_exampledata_parquet
+    df_orig = load_exampledata_parquet()
+
+    # # Create a large gap
+    # remove = df.index.year != 2014
+    # # df = df.drop(df.index[100:2200])
+    # df = df[remove].copy()
+
+    # Subset
+    keep = df_orig.index.year >= 2016
+    df = df_orig[keep].copy()
+    # df = df_orig.copy()
+
+    # Subset with target and features
+    # Only High-quality (QCF=0) measured NEE used for model training in this example
+    lowquality = df["QCF_NEE"] > 0
+    df.loc[lowquality, TARGET_COL] = np.nan
+    df = df[subsetcols].copy()
+
+    # Time series stats
+    # from diive.core.dfun.stats import sstats
+    # statsdf = sstats(df[TARGET_COL])
+    # print(statsdf)
+
+    # from diive.core.plotting.timeseries import TimeSeries  # For simple (interactive) time series plotting
+    # TimeSeries(series=df[TARGET_COL]).plot()
 
     # Random forest
     rfts = RandomForestTS(
@@ -905,15 +1098,15 @@ def example_rfts():
         include_timestamp_as_features=True,
         add_continuous_record_number=True,
         sanitize_timestamp=True,
-        n_estimators=200,
+        n_estimators=99,
         random_state=42,
         min_samples_split=10,
         min_samples_leaf=5,
         perm_n_repeats=11,
         n_jobs=-1
     )
-    rfts.trainmodel(showplot_predictions=True, showplot_importance=True, verbose=1)
-    rfts.fillgaps(showplot_scores=True, showplot_importance=True, verbose=1)
+    rfts.trainmodel(showplot_predictions=False, showplot_importance=False, verbose=0)
+    rfts.fillgaps(showplot_scores=False, showplot_importance=False, verbose=0)
     rfts.report()
     observed = df[TARGET_COL]
     gapfilled = rfts.get_gapfilled_target()
@@ -922,13 +1115,19 @@ def example_rfts():
     # rfts.gapfilling_df
 
     # Plot
+    from diive.core.plotting.heatmap_datetime import HeatmapDateTime
     HeatmapDateTime(series=observed).show()
     HeatmapDateTime(series=gapfilled).show()
 
-    # rfts.gapfilling_df['.PREDICTIONS_FALLBACK'].cumsum().plot()
-    # rfts.gapfilling_df['.PREDICTIONS_FULLMODEL'].cumsum().plot()
-    # rfts.gapfilling_df['.PREDICTIONS'].cumsum().plot()
-    rfts.gapfilling_df['NEE_CUT_REF_orig_gfRF'].cumsum().plot()
+    mds = df_orig['NEE_CUT_REF_f'].copy()
+    mds = mds[mds.index.year >= 2016]
+
+    import matplotlib.pyplot as plt
+    # rfts.gapfilling_df_['.PREDICTIONS_FALLBACK'].cumsum().plot()
+    # rfts.gapfilling_df_['.PREDICTIONS_FULLMODEL'].cumsum().plot()
+    # rfts.gapfilling_df_['.PREDICTIONS'].cumsum().plot()
+    rfts.get_gapfilled_target().cumsum().plot()
+    mds.cumsum().plot()
     plt.legend()
     plt.show()
 
@@ -937,7 +1136,6 @@ def example_rfts():
     # plt.show()
     # d = abs(d)
     # d.mean()  # MAE
-
 
     print("Finished.")
 
@@ -982,5 +1180,6 @@ def example_optimize():
 
 if __name__ == '__main__':
     # example_quickfill()
-    example_rfts()
+    example_longterm_rfts()
+    # example_rfts()
     # example_optimize()

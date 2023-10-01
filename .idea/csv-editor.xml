@@ -24,6 +24,27 @@
             </Attribute>
           </value>
         </entry>
+        <entry key="\__workbench\meteoscr_fru\.ipynb_checkpoints\WD_fromdb-checkpoint.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value=":" />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\__workbench\meteoscr_fru\WD_fromdb.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value=":" />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\__workbench\meteoscr_fru\fromdb.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value=":" />
+            </Attribute>
+          </value>
+        </entry>
         <entry key="\__workbench\x-2023-03-15_CH-Dav_fix_timestamp_start_end_dailyfiles_L02_F03\0 - SCRIPT\icos_fix_timestamp_start_end_dailyfiles\0-2-TEST-files with correct timestamp\CSV\CH-Dav_BM_20221018_L02_F03.csv">
           <value>
             <Attribute>
