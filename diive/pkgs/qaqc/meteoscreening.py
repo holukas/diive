@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from pandas import DataFrame, Series
 from pandas.tseries.frequencies import to_offset
-
+from diive.pkgs.corrections.setto_value import setto_value
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
 from diive.core.plotting.plotfuncs import default_format, default_legend, nice_date_ticks
@@ -62,9 +62,10 @@ class StepwiseMeteoScreeningDb:
     - `.correction_remove_relativehumidity_offset()`: Remove relative humidity offset
     - `.correction_setto_max_threshold()`: Set values above a threshold value to threshold value
     - `.correction_setto_min_threshold()`: Set values below a threshold value to threshold value
+    - `.correction_setto_value()`: Set records in time range(s) to constant value
 
     Implemented analyses:
-    -
+    - `.analysis_potential_radiation_correlation()`: Analyzes time series daily correlation with potential radiation
 
     **Outlier tests**
     The stepwise meteoscreening allows to perform **step-by-step** quality tests on
@@ -411,6 +412,13 @@ class StepwiseMeteoScreeningDb:
                 setto_threshold(series=self._series_hires_cleaned[field],
                                 threshold=threshold, type='min', showplot=True)
 
+    def correction_setto_value(self, dates: list, value: float, verbose: int = 1):
+        """Set records within time range to value"""
+        for field in self.fields:
+            self._series_hires_cleaned[field] = \
+                setto_value(series=self._series_hires_cleaned[field],
+                            dates=dates, value=value, verbose=verbose)
+
     def correction_remove_relativehumidity_offset(self):
         """Remove nighttime offset from all radiation data and set nighttime to zero"""
         for field in self.fields:
@@ -751,8 +759,8 @@ def example():
 
     # User settings, variables to screen
     # FIELDS = ['TS_GF1_0.05_1']
-    FIELDS = ['TS_GF1_0.05_1', 'TS_GF1_0.1_1', 'TS_GF1_0.2_1', 'TS_GF1_0.3_1', 'TS_GF1_0.4_1', 'TS_GF1_0.5_1']
-    MEASUREMENT = 'TS'
+    FIELDS = ['PREC_RAIN_TOT_GF1_0.5_1']
+    MEASUREMENT = 'PREC'
 
     # User settings, time range to screen
     START = '2022-01-01 00:00:01'
@@ -762,7 +770,7 @@ def example():
     DATA_VERSION = 'raw'
     TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
     RESAMPLING_FREQ = '30T'  # During MeteoScreening the screened high-res data will be resampled to this frequency; '30T' = 30-minute time resolution
-    RESAMPLING_AGG = 'mean'  # The resampling of the high-res data will be done using this aggregation methos; e.g., 'mean'
+    RESAMPLING_AGG = 'sum'  # The resampling of the high-res data will be done using this aggregation methos; e.g., 'mean'
     # DIRCONF = r'P:\Flux\RDS_calculations\_scripts\_configs\configs'  # Location of configuration files, needed e.g. for connection to database
     DIRCONF = r'F:\Sync\luhk_work\20 - CODING\22 - POET\configs'
 
@@ -859,10 +867,10 @@ def example():
     # mscr.addflag()
     # mscr.showplot_cleaned()
 
-    # Outlier detection: Absolute limits, separate for daytime and nighttime
-    mscr.flag_outliers_abslim_dtnt_test(daytime_minmax=[-50, 2000], nighttime_minmax=[-50, 2000], showplot=True)
-    mscr.addflag()
-    mscr.showplot_cleaned()
+    # # Outlier detection: Absolute limits, separate for daytime and nighttime
+    # mscr.flag_outliers_abslim_dtnt_test(daytime_minmax=[-50, 2000], nighttime_minmax=[-50, 2000], showplot=True)
+    # mscr.addflag()
+    # mscr.showplot_cleaned()
 
     # # Outlier detection: Absolute limits, separate for daytime and nighttime
     # mscr.flag_outliers_stl_rz_test(zfactor=4.5, decompose_downsampling_freq='6H', repeat=False, showplot=True)
@@ -872,9 +880,9 @@ def example():
     # mscr.flag_outliers_zscore_test(threshold=4, showplot=True, verbose=True)
     # mscr.addflag()
 
-    # Outlier detection: z-score over all data, separate for daytime and nighttime
-    mscr.flag_outliers_zscore_dtnt_test(threshold=5, showplot=True, verbose=True)
-    mscr.addflag()
+    # # Outlier detection: z-score over all data, separate for daytime and nighttime
+    # mscr.flag_outliers_zscore_dtnt_test(threshold=5, showplot=True, verbose=True)
+    # mscr.addflag()
 
     # # Outlier detection: Increments z-score
     # mscr.flag_outliers_increments_zcore_test(threshold=50, showplot=True)
@@ -909,9 +917,14 @@ def example():
     # mscr.showplot_qcf_timeseries()
 
     # Apply corrections
-    mscr.correction_remove_radiation_zero_offset()
+    # mscr.correction_remove_radiation_zero_offset()
     # mscr.correction_setto_max_threshold(threshold=400)
     # mscr.correction_setto_min_threshold(threshold=100)
+    DATES = [
+        ['2022-03-01 00:00:01', '2022-09-15 00:00:01'],
+        ['2022-08-15 00:00:01', '2022-09-01 00:00:01']
+    ]
+    mscr.correction_setto_value(dates=DATES, value=0, verbose=1)
     # mscr.correction_remove_relativehumidity_offset()
 
     mscr.analysis_potential_radiation_correlation(utc_offset=1,
@@ -919,7 +932,7 @@ def example():
                                                   showplot=True)
 
     # End MeteoScreening session
-    mscr.resample(to_freqstr='30T', agg='mean', mincounts_perc=.25)
+    mscr.resample(to_freqstr='30T', agg=RESAMPLING_AGG, mincounts_perc=.25)
     mscr.showplot_resampled()
 
     for v in mscr.resampled_detailed.keys():

@@ -14,6 +14,9 @@ class TestGapFilling(unittest.TestCase):
     def test_optimize_rf_params(self):
         pass
 
+    def test_quickfill(self):
+        pass
+
     def test_gapfilling_randomforest(self):
         """Fill gaps using random forest"""
         df = ed.load_exampledata_parquet()
@@ -45,9 +48,12 @@ class TestGapFilling(unittest.TestCase):
             perm_n_repeats=11,
             n_jobs=-1
         )
-        rfts.trainmodel(showplot_predictions=False, showplot_importance=False, verbose=1)
-        rfts.fillgaps(showplot_scores=False, showplot_importance=False, verbose=1)
-        rfts.report()
+        rfts.reduce_features()
+        rfts.report_feature_reduction()
+        rfts.trainmodel(showplot_scores=True, showplot_importance=True)
+        rfts.report_traintest()
+        rfts.fillgaps(showplot_scores=True, showplot_importance=True)
+        rfts.report_gapfilling()
         observed = df[TARGET_COL]
         gapfilled = rfts.get_gapfilled_target()
 
@@ -61,11 +67,11 @@ class TestGapFilling(unittest.TestCase):
         # gapfilled.cumsum().plot()
         # plt.show()
 
-        self.assertEqual(scores['mae'], 1.9060864968011548)
-        self.assertEqual(scores['r2'], 0.8026866876500566)
-        self.assertEqual(scores['mse'], 7.306871131968254)
-        self.assertEqual(gfdf['NEE_CUT_REF_orig_gfRF'].sum(), -64754.77103135061)
-        self.assertEqual(fi['importances']['PERM_IMPORTANCE']['Rg_f'], 0.9903003111303493)
+        self.assertEqual(scores['mae'], 1.902421699006966)
+        self.assertEqual(scores['r2'], 0.8028454341680735)
+        self.assertEqual(scores['mse'], 7.300992459434791)
+        self.assertEqual(gfdf['NEE_CUT_REF_orig_gfRF'].sum(), -63541.1261782166)
+        self.assertEqual(fi['PERM_IMPORTANCE']['Rg_f'], 0.9831618002267694)
 
 
 if __name__ == '__main__':

@@ -20,14 +20,16 @@ Kudos, optimization of hyper-parameters, grid search
 - https://www.kaggle.com/code/carloscliment/random-forest-regressor-and-gridsearch
 
 """
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from pandas import DataFrame, Series
 from sklearn.ensemble import RandomForestRegressor  # Import the model we are using
+from sklearn.inspection import permutation_importance
 from sklearn.model_selection import train_test_split, TimeSeriesSplit, GridSearchCV
 
 import diive.core.dfun.frames as fr
-from diive.core.ml.common import feature_importances, prediction_scores_regr, plot_prediction_residuals_error_regr
+from diive.core.ml.common import prediction_scores_regr, plot_prediction_residuals_error_regr
 from diive.core.times.neighbors import neighboring_years
 from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import include_timestamp_as_cols
@@ -210,9 +212,6 @@ class RandomForestTS:
             sanitize_timestamp:
                 Validate and prepare timestamps for further processing
 
-            verbose:
-                If *1*, more output is printed.
-
         Attributes:
             gapfilled_df
             - .PREDICTIONS_FULLMODEL uses the output from the full RF model where
@@ -223,12 +222,12 @@ class RandomForestTS:
         """
         self.model_df = input_df.copy()
         self.target_col = target_col
-        self.verbose = verbose
         self.kwargs = kwargs
         self.perm_n_repeats = perm_n_repeats
         self.test_size = test_size
         self.features_lag = features_lag
         self.features_lagmax = features_lagmax
+        self.verbose = verbose
 
         self._check_n_cols()
 
@@ -246,14 +245,18 @@ class RandomForestTS:
             tss = TimestampSanitizer(data=self.model_df, output_middle_timestamp=True, verbose=verbose)
             self.model_df = tss.get()
 
+        self.random_col = None
+
         # Attributes
         self._gapfilling_df = None  # Will contain gapfilled target and auxiliary variables
         self._model = None
         self._feature_importances = dict()
+        self._feature_importances_traintest = dict()
+        self._feature_importances_reduction = dict()
         self._scores = dict()
-        self._feature_importances_test = dict()
         self._scores_test = dict()
-        self._traintest_details = dict()
+        self._accepted_features = []
+        self._rejected_features = []
 
     def get_gapfilled_target(self):
         """Gap-filled target time series"""
@@ -271,11 +274,27 @@ class RandomForestTS:
         return self._model
 
     @property
-    def feature_importances_(self) -> dict:
+    def feature_importances_(self) -> DataFrame:
         """Return feature importance for model used in gap-filling"""
-        if not self._feature_importances:
+        if not isinstance(self._feature_importances, DataFrame):
             raise Exception(f'Not available: feature importances for gap-filling.')
         return self._feature_importances
+
+    @property
+    def feature_importances_traintest_(self) -> DataFrame:
+        """Return feature importance from model training on training data,
+        with importances calculated using test data (holdout set)"""
+        if not isinstance(self._feature_importances_traintest, DataFrame):
+            raise Exception(f'Not available: feature importances from training & testing.')
+        return self._feature_importances_traintest
+
+    @property
+    def feature_importances_reduction_(self) -> DataFrame:
+        """Return feature importance from feature reduction, model training on training data,
+        with importances calculated using test data (holdout set)"""
+        if not isinstance(self._feature_importances_reduction, DataFrame):
+            raise Exception(f'Not available: feature importances from feature reduction.')
+        return self._feature_importances_reduction
 
     @property
     def scores_(self) -> dict:
@@ -283,21 +302,6 @@ class RandomForestTS:
         if not self._scores:
             raise Exception(f'Not available: model scores for gap-filling.')
         return self._scores
-
-    @property
-    def gapfilling_df_(self) -> DataFrame:
-        """Return gapfilled data and auxiliary variables"""
-        if not isinstance(self._gapfilling_df, DataFrame):
-            raise Exception(f'Gapfilled data not available.')
-        return self._gapfilling_df
-
-    @property
-    def feature_importances_test_(self) -> dict:
-        """Return feature importance from model training on training data,
-        with importances calculated using test data (holdout set)"""
-        if not self._feature_importances_test:
-            raise Exception(f'Not available: feature importances for gap-filling.')
-        return self._feature_importances_test
 
     @property
     def scores_test_(self) -> dict:
@@ -308,17 +312,191 @@ class RandomForestTS:
         return self._scores_test
 
     @property
+    def gapfilling_df_(self) -> DataFrame:
+        """Return gapfilled data and auxiliary variables"""
+        if not isinstance(self._gapfilling_df, DataFrame):
+            raise Exception(f'Gapfilled data not available.')
+        return self._gapfilling_df
+
+    @property
     def traintest_details_(self) -> dict:
         """Return details from train/test splits"""
         if not self._traintest_details:
-            raise Exception(f'Not available: model scores for gap-filling.')
+            raise Exception(f'Not available: details about training & testing.')
         return self._traintest_details
+
+    @property
+    def accepted_features_(self) -> list:
+        """Return list of accepted features from feature reduction"""
+        if not self._accepted_features:
+            raise Exception(f'Not available: accepted features from feature reduction.')
+        return self._accepted_features
+
+    @property
+    def rejected_features_(self) -> list:
+        """Return list of rejected features from feature reduction"""
+        if not self._rejected_features:
+            raise Exception(f'Not available: accepted features from feature reduction.')
+        return self._rejected_features
+
+    def reduce_features(self):
+        """Reduce number of features using permutation importance
+
+        A random variable is added to features and the permutation importances
+        are calculated. The permutation importance of the random variable is the
+        benchmark to determine whether a feature is relevant. All features where
+        permutation importance is smaller or equal to the importance of the random
+        variable are rejected.
+        """
+
+        df = self.model_df.copy()
+
+        # Info
+        print(f"Feature reduction ...")
+
+        # Add random variable as feature
+        df, self.random_col = self._add_random_variable(df=df)
+
+        # Data as arrays, y = targets, X = features
+        y, X, X_names, timestamp = fr.convert_to_arrays(
+            df=df, target_col=self.target_col, complete_rows=True)
+
+        # Train and test set
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=self.test_size, random_state=self.kwargs['random_state'])
+
+        # Instantiate model with params
+        model = RandomForestRegressor(**self.kwargs)
+
+        # Train the model
+        model.fit(X=X_train, y=y_train)
+
+        # # Predict targets in test data
+        # pred_y_test = model.predict(X=X_test)
+
+        # Calculate permutation importance and store in dataframe
+        self._feature_importances_reduction = self._permutation_importance(
+            model=model, X=X_test, y=y_test, X_names=X_names, showplot_importance=False)
+
+        # Threshold for feature acceptance
+        fi_threshold = self.feature_importances_reduction_['PERM_IMPORTANCE'][self.random_col]
+
+        # Get accepted and rejected features
+        fidf_accepted = self.feature_importances_reduction_.loc[
+            self.feature_importances_reduction_['PERM_IMPORTANCE'] > fi_threshold].copy()
+        self._accepted_features = fidf_accepted.index.tolist()
+        fidf_rejected = self.feature_importances_reduction_.loc[
+            self.feature_importances_reduction_['PERM_IMPORTANCE'] <= fi_threshold].copy()
+        self._rejected_features = fidf_rejected.index.tolist()
+
+        # Assemble dataframe for next model
+        usecols = [self.target_col]
+        usecols = usecols + self._accepted_features
+        self.model_df = df[usecols].copy()
+
+        # # This could be a way to combine permutation importance with RFECV,
+        # # but at the time of this writing an import failed (Oct 2023)
+        # # Train model with random variable included, to detect unimportant features
+        # df = df.dropna()
+        # targets = df[self.target_col].copy()
+        # df = df.drop(self.target_col, axis=1, inplace=False)
+        # features = df.copy()
+        # estimator = RandomForestRegressor(**self.kwargs)
+        # splitter = TimeSeriesSplit(n_splits=10)
+        # from eli5.sklearn import PermutationImportance
+        # rfecv = RFECV(estimator=PermutationImportance(estimator, scoring='r2', n_iter=10, random_state=42, cv=splitter),
+        #               step=1,
+        #               min_features_to_select=3,
+        #               cv=splitter,
+        #               scoring='r2',
+        #               verbose=self.verbose,
+        #               n_jobs=-1)
+        # rfecv.fit(features, targets)
+        # # Feature importances
+        # features.drop(features.columns[np.where(rfecv.support_ == False)[0]], axis=1, inplace=True)
+        # rfecv_fi_df = pd.DataFrame()
+        # rfecv_fi_df['FEATURE'] = list(features.columns)
+        # rfecv_fi_df['IMPORTANCE'] = rfecv.estimator_.feature_importances_
+        # rfecv_fi_df = rfecv_fi_df.set_index('FEATURE')
+        # rfecv_fi_df = rfecv_fi_df.sort_values(by='IMPORTANCE', ascending=False)
+        # # rfecv.cv_results_
+        # # rfecv.n_features_
+        # # rfecv.n_features_in_
+        # # rfecv.ranking_
+        # # rfecv.support_
+
+    def trainmodel(self,
+                   showplot_scores: bool = True,
+                   showplot_importance: bool = True):
+        """
+        Train random forest model for gap-filling
+
+        No gap-filling is done here, only the model is trained.
+
+        Args:
+            showplot_predictions: shows plot of predicted vs observed
+            showplot_importance: shows plot of permutation importances
+            verbose: if > 0 prints more text output
+
+        """
+
+        df = self.model_df.copy()
+
+        # Info
+        idtxt = f"TRAIN & TEST "
+        print(f"Building random forest model based on data between "
+              f"{df.index[0]} and {df.index[-1]} ...")
+
+        # Data as arrays
+        # y = targets, X = features
+        y, X, X_names, timestamp = fr.convert_to_arrays(
+            df=df, target_col=self.target_col, complete_rows=True)
+
+        # Train and test set
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=self.test_size, random_state=self.kwargs['random_state'])
+
+        # Instantiate model with params
+        self._model = RandomForestRegressor(**self.kwargs)
+
+        # Train the model
+        self._model.fit(X=X_train, y=y_train)
+
+        # Predict targets in test data
+        pred_y_test = self._model.predict(X=X_test)
+
+        # Calculate permutation importance and store in dataframe
+        self._feature_importances_traintest = self._permutation_importance(
+            model=self._model, X=X_test, y=y_test, X_names=X_names, showplot_importance=showplot_importance)
+
+        # Stats
+        self._scores_test = prediction_scores_regr(
+            predictions=pred_y_test, targets=y_test, showplot=showplot_scores,
+            infotxt=f"{idtxt} trained on training set, tested on test set")
+
+        if showplot_scores:
+            plot_prediction_residuals_error_regr(
+                model=self._model, X_train=X_train, y_train=y_train, X_test=X_test, y_test=y_test,
+                infotxt=f"{idtxt} trained on training set, tested on test set")
+
+        # Collect results
+        self._traintest_details = dict(
+            X=X,
+            y=y,
+            timestamp=timestamp,
+            predictions=pred_y_test,
+            X_names=X_names,
+            y_name=self.target_col,
+            X_train=X_train,
+            y_train=y_train,
+            X_test=X_test,
+            y_test=y_test,
+            model=self._model,
+        )
 
     def fillgaps(self,
                  showplot_scores: bool = True,
-                 showplot_importance: bool = True,
-                 verbose: int = 1
-                 ):
+                 showplot_importance: bool = True):
         """
         Gap-fill data with previously built model
 
@@ -329,80 +507,217 @@ class RandomForestTS:
         X = features
 
         """
-        self._fillgaps_fullmodel(showplot_scores, showplot_importance, verbose)
+        self._fillgaps_fullmodel(showplot_scores, showplot_importance)
         self._fillgaps_fallback()
         self._fillgaps_combinepredictions()
 
-    def report(self):
+    def report_feature_reduction(self):
+        """Results from feature reduction"""
 
-        idtxt = f"({self.report.__name__} gap-filling) "
+        idtxt = "FEATURE REDUCTION"
 
-        # Gapfilling stats from flag
-        locs_observed = self.gapfilling_df_[self.target_gapfilled_flag_col] == 0
-        locs_observed_missing_fromflag = self.gapfilling_df_[self.target_gapfilled_flag_col] > 0
-        locs_observed_missing_fromdata = self.gapfilling_df_[self.target_col].isnull()
-        locs_gapfilled_missing = self.gapfilling_df_[self.target_gapfilled_col].isnull()
-        locs_hq = self.gapfilling_df_[self.target_gapfilled_flag_col] == 1
-        locs_fallback = self.gapfilling_df_[self.target_gapfilled_flag_col] == 2
+        fi = self.feature_importances_reduction_
 
-        n_available = len(self.gapfilling_df_[self.target_gapfilled_col].dropna())
-        n_potential = len(self.gapfilling_df_.index)
-        n_observed = locs_observed.sum()
-        n_observed_missing_fromflag = locs_observed_missing_fromflag.sum()
-        n_observed_missing_fromdata = locs_observed_missing_fromdata.sum()
-        n_gapfilled_missing = locs_gapfilled_missing.sum()
-        n_hq = locs_hq.sum()
-        n_fallback = locs_fallback.sum()
+        # TODO hier weiter
 
-        feature_names = self.feature_importances_['importances'].index.to_list()
-        n_features = len(feature_names)
-
+        _X_names = [x for x in fi.index if x != self.random_col]  # Original features without random variable
         print(
-            f"{idtxt} GAP-FILLING RESULTS\n"
-            f"{idtxt}   First timestamp:  {self.gapfilling_df_.index[0]}\n"
-            f"{idtxt}   Last timestamp:  {self.gapfilling_df_.index[-1]}\n"
-            f"{idtxt}   Potential number of values: {n_potential} values)\n"
+            f"\n"
+            f"{'=' * len(idtxt)}\n"
             f"{idtxt}\n"
-            f"{idtxt}   TARGET\n"
-            f"{idtxt}   - target column (observed):  {self.target_col}\n"
-            f"{idtxt}   - missing records (observed):  {n_observed_missing_fromdata} "
-            f"(cross-check from flag: {n_observed_missing_fromflag})\n"
-            f"{idtxt}   - target column (gap-filled):  {self.target_gapfilled_col}  ({n_available} values)\n"
-            f"{idtxt}   - missing records (gap-filled):  {n_gapfilled_missing}\n"
-            f"{idtxt}   - gap-filling flag: {self.target_gapfilled_flag_col}\n"
-            f"{idtxt}       - flag 0 ... observed targets ({n_observed} values)\n"
-            f"{idtxt}       - flag 1 ... targets gap-filled with high-quality, all features available "
-            f"({n_hq} values)\n"
-            f"{idtxt}       - flag 2 ... targets gap-filled with fallback ({n_fallback} values)\n"
-            f"{idtxt}\n"
-            f"{idtxt}   MODEL\n"
-            f"{idtxt}   The model was trained on a training set.\n"
-            f"{idtxt}   - estimator:  {self.model_}\n"
-            f"{idtxt}   - parameters:  {self.model_.get_params()}\n"
-            f"{idtxt}   - names of features used in model:  {feature_names}\n"
-            f"{idtxt}   - number of features used in model:  {n_features}\n"
-            f"{idtxt}\n"
-            f"{idtxt}   MODEL SCORES\n"
-            f"{idtxt}   Model scores were calculated from high-quality predicted targets "
-            f"({n_hq} values, {self.target_gapfilled_col} where flag=1) in comparison to "
-            f"observed targets ({n_observed} values, {self.target_col}).\n"
-            f"{idtxt}   - MAE:  {self.scores_['mae']} (mean absolute error)\n"
-            f"{idtxt}   - MedAE:  {self.scores_['medae']} (median absolute error)\n"
-            f"{idtxt}   - MSE:  {self.scores_['mse']} (mean squared error)\n"
-            f"{idtxt}   - RMSE:  {self.scores_['rmse']} (root mean squared error)\n"
-            f"{idtxt}   - MAXE:  {self.scores_['maxe']} (max error)\n"
-            f"{idtxt}   - MAPE:  {self.scores_['mape']:.3f} (mean absolute percentage error)\n"
-            f"{idtxt}   - R2:  {self.scores_['r2']}\n"
-            f"{idtxt}\n"
-            f"{idtxt}   FEATURE IMPORTANCES\n"
-            f"{idtxt}   Feature importances were calculated from high-quality predicted targets "
-            f"({n_hq} values, {self.target_gapfilled_col} where flag=1) in comparison to "
-            f"observed targets ({n_observed} values, {self.target_col}).\n"
-            f"{idtxt}\n{self.feature_importances_['importances']}\n"
-            f"{idtxt}   Permutation importances were calculated from {self.perm_n_repeats} repeats.\n"
+            f"{'=' * len(idtxt)}\n"
+            f"\n"
+            f"- the random variable {self.random_col} was added to the original features, "
+            f"used as benchmark for detecting relevant feature importances\n"
+            f"- target variable: {self.target_col}\n"
+            f"- features before reduction: {fi.index.to_list()}\n"
+            f"- permutation importance was calculated from {self.perm_n_repeats} permutations\n"
+            f"- These results are from feature reduction. Note that feature importances for "
+            f"the final model are calculated during gap-filling.\n"
+            f"\n"
+            f"\n"
+            f"PERMUTATION IMPORTANCE (FULL RESULTS):\n"
+            f"\n"
+            f"{fi}"
+            f"\n"
+            f"\n"
+            f"--> {len(fi.index)} input features, "
+            f"including {self.random_col}: {fi.index.tolist()}\n"
+            f"--> {len(self.accepted_features_)} accepted features, "
+            f"larger than {self.random_col}: {self.accepted_features_}\n"
+            f"--> {len(self.rejected_features_)} rejected features, "
+            f"smaller than or equal to {self.random_col}: {self.rejected_features_}\n"
         )
 
+    def report_traintest(self):
+        """Results from model training on test data"""
+
+        idtxt = "MODEL TRAINING & TESTING RESULTS"
+
+        results = self.traintest_details_
+        fi = self.feature_importances_traintest_
+
+        test_size_perc = self.test_size * 100
+        training_size_perc = 100 - test_size_perc
+        n_vals_observed = len(results['y'])
+        n_vals_train = len(results['y_train'])
+        n_vals_test = len(results['y_test'])
+        timestamp = results['timestamp']
+        used_features = results['X_names']
+        model = results['model']
+
+        print(
+            f"\n"
+            f"{'=' * len(idtxt)}\n"
+            f"{idtxt}\n"
+            f"{'=' * len(idtxt)}\n"
+            f"\n"
+            f"- the model was trained and tested based on data between "
+            f"{timestamp[0]} and {timestamp[-1]}.\n"
+            f"- in total, {n_vals_observed} observed target values were available for training and testing\n"
+            f"- the dataset was split into training and test datasets\n"
+            f"  > the training dataset comprised {n_vals_train} target values ({training_size_perc:.1f}%)\n"
+            f"  > the test dataset comprised {n_vals_test} target values ({test_size_perc:.1f}%)\n"
+            f"\n"
+            f"## FEATURE IMPORTANCES\n"
+            f"- feature importances were calculated for test data ({n_vals_test} target values).\n"
+            f"- permutation importances were calculated from {self.perm_n_repeats} repeats."
+            f"\n"
+            f"{fi}"
+            f"\n"
+            f"\n"
+            f"## MODEL\n"
+            f"The model was trained on the training set.\n"
+            f"- estimator:  {model}\n"
+            f"- parameters:  {model.get_params()}\n"
+            f"- names of features used in model:  {used_features}\n"
+            f"- number of features used in model:  {len(used_features)}\n"
+            f"\n"
+            f"## MODEL SCORES\n"
+            f"- the model was trained on training data ({n_vals_train} values).\n"
+            f"- the model was tested on test data ({n_vals_test} values).\n"
+            f"- all scores were calculated for test split.\n"
+            f"  > MAE:  {self.scores_test_['mae']} (mean absolute error)\n"
+            f"  > MedAE:  {self.scores_test_['medae']} (median absolute error)\n"
+            f"  > MSE:  {self.scores_test_['mse']} (mean squared error)\n"
+            f"  > RMSE:  {self.scores_test_['rmse']} (root mean squared error)\n"
+            f"  > MAXE:  {self.scores_test_['maxe']} (max error)\n"
+            f"  > MAPE:  {self.scores_test_['mape']:.3f} (mean absolute percentage error)\n"
+            f"  > R2:  {self.scores_test_['r2']}\n"
+        )
+
+    def report_gapfilling(self):
+        """Results from gap-filling"""
+        # Setup
+        idtxt = "GAP-FILLING RESULTS"
+
+        df = self.gapfilling_df_
+        model = self.model_
+        scores = self.scores_
+        fi = self.feature_importances_
+
+        feature_names = fi.index.to_list()
+        n_features = len(feature_names)
+
+        locs_observed = df[self.target_gapfilled_flag_col] == 0
+        locs_hq = df[self.target_gapfilled_flag_col] == 1
+        locs_observed_missing_fromflag = df[self.target_gapfilled_flag_col] > 0
+        locs_fallback = df[self.target_gapfilled_flag_col] == 2
+
+        n_observed = locs_observed.sum()
+        n_hq = locs_hq.sum()
+        n_observed_missing_fromflag = locs_observed_missing_fromflag.sum()
+        n_available = len(df[self.target_gapfilled_col].dropna())
+        n_potential = len(df.index)
+        n_fallback = locs_fallback.sum()
+        test_size_perc = self.test_size * 100
+
+        print(
+            f"\n"
+            f"{'=' * len(idtxt)}\n"
+            f"{idtxt}\n"
+            f"{'=' * len(idtxt)}\n"
+            f"\n"
+            f"Model scores and feature importances were calculated from high-quality "
+            f"predicted targets ({n_hq} values, {self.target_gapfilled_col} where flag=1) "
+            f"in comparison to observed targets ({n_observed} values, {self.target_col}).\n"
+            f"\n"
+            f"## TARGET\n"
+            f"- first timestamp:  {df.index[0]}\n"
+            f"- last timestamp:  {df.index[-1]}\n"
+            f"- potential number of values: {n_potential} values)\n"
+            f"- target column (observed):  {self.target_col}\n"
+            f"- missing records (observed):  {df[self.target_col].isnull().sum()} "
+            f"(cross-check from flag: {n_observed_missing_fromflag})\n"
+            f"- target column (gap-filled):  {self.target_gapfilled_col}  ({n_available} values)\n"
+            f"- missing records (gap-filled):  {df[self.target_gapfilled_col].isnull().sum()}\n"
+            f"- gap-filling flag: {self.target_gapfilled_flag_col}\n"
+            f"  > flag 0 ... observed targets ({n_observed} values)\n"
+            f"  > flag 1 ... targets gap-filled with high-quality, all features available ({n_hq} values)\n"
+            f"  > flag 2 ... targets gap-filled with fallback ({n_fallback} values)\n"
+            f"\n"
+            f"## FEATURE IMPORTANCES\n"
+            f"- names of features used in model:  {feature_names}\n"
+            f"- number of features used in model:  {n_features}\n"
+            f"- permutation importances were calculated from {self.perm_n_repeats} repeats.\n"
+            f"\n"
+            f"{fi}"
+            f"\n"
+            f"\n"
+            f"## MODEL\n"
+            f"The model was trained on a training set with test size {test_size_perc:.2f}.\n"
+            f"- estimator:  {model}\n"
+            f"- parameters:  {model.get_params()}\n"
+            f"\n"
+            f"## MODEL SCORES\n"
+            f"- MAE:  {scores['mae']} (mean absolute error)\n"
+            f"- MedAE:  {scores['medae']} (median absolute error)\n"
+            f"- MSE:  {scores['mse']} (mean squared error)\n"
+            f"- RMSE:  {scores['rmse']} (root mean squared error)\n"
+            f"- MAXE:  {scores['maxe']} (max error)\n"
+            f"- MAPE:  {scores['mape']:.3f} (mean absolute percentage error)\n"
+            f"- R2:  {scores['r2']}\n"
+        )
+
+    def _permutation_importance(self, model, X, y, X_names, showplot_importance) -> DataFrame:
+        """Calculate permutation importance"""
+        # https://scikit-learn.org/stable/modules/permutation_importance.html#permutation-feature-importance
+        fi = permutation_importance(estimator=model,
+                                    X=X, y=y,
+                                    n_repeats=self.perm_n_repeats,
+                                    random_state=42,
+                                    scoring='r2',
+                                    n_jobs=-1)
+
+        # Store permutation importance
+        fidf = pd.DataFrame({'PERM_IMPORTANCE': fi.importances_mean,
+                             'PERM_SD': fi.importances_std},
+                            index=X_names)
+
+        fidf = fidf.sort_values(by='PERM_IMPORTANCE', ascending=False)
+
+        if showplot_importance:
+            fig, axs = plt.subplots(ncols=1, figsize=(9, 16))
+            _fidf = fidf.copy().sort_values(by='PERM_IMPORTANCE', ascending=True)
+            _fidf['PERM_IMPORTANCE'].plot.barh(color='#008bfb', yerr=_fidf['PERM_SD'], ax=axs)
+            axs.set_xlabel("Feature importance")
+            axs.set_ylabel("Feature")
+            axs.set_title(f"Permutation importance ({self.perm_n_repeats} permutations)")
+            axs.legend(loc='lower right')
+            fig.tight_layout()
+            fig.show()
+
+        return fidf
+
+    def _add_random_variable(self, df: DataFrame) -> tuple[DataFrame, str]:
+        # Add random variable as benchmark for relevant feature importances
+        random_col = '.RANDOM'  # Random variable as benchmark for relevant importances
+        df[random_col] = np.random.RandomState(self.kwargs['random_state']).randn(df.shape[0], 1)
+        # df[random_col] = np.random.rand(df.shape[0], 1)
+        return df, random_col
+
     def _lag_features(self):
+        """Add lagged variants of variables as new features"""
         return fr.lagged_variants(df=self.model_df,
                                   stepsize=1,
                                   lag=self.features_lag,
@@ -414,7 +729,7 @@ class RandomForestTS:
             raise Exception(f"(!) Stopping execution because dataset comprises "
                             f"only one single column : {self.model_df.columns}")
 
-    def _fillgaps_fullmodel(self, showplot_scores, showplot_importance, verbose):
+    def _fillgaps_fullmodel(self, showplot_scores, showplot_importance):
         """Apply model to fill missing targets for records where all features are available
         (high-quality gap-filling)"""
 
@@ -427,23 +742,15 @@ class RandomForestTS:
         # here it is checked how well the model performs when
         # predicting all available y data.
         # This is needed to calculate feature importance and scores.
-        y, X, X_names, timestamp = \
-            fr.convert_to_arrays(df=df,
-                                 target_col=self.target_col,
-                                 complete_rows=True)
+        y, X, X_names, timestamp = fr.convert_to_arrays(
+            df=df, target_col=self.target_col, complete_rows=True)
 
         # Predict all targets (no test split)
         pred_y = self.model_.predict(X=X)
 
-        # Calculate feature importance, using all targets
-        self._feature_importances = feature_importances(estimator=self.model_,
-                                                        X=X,
-                                                        y=y,
-                                                        model_feature_names=X_names,
-                                                        random_col=None,
-                                                        perm_n_repeats=self.perm_n_repeats,
-                                                        showplot=showplot_importance,
-                                                        verbose=verbose)
+        # Calculate permutation importance and store in dataframe
+        self._feature_importances = self._permutation_importance(
+            model=self._model, X=X, y=y, X_names=X_names, showplot_importance=showplot_importance)
 
         # Model scores, using all targets
         self._scores = prediction_scores_regr(predictions=pred_y,
@@ -539,192 +846,6 @@ class RandomForestTS:
         self._gapfilling_df[self.pred_col] = (
             self._gapfilling_df[self.pred_col].fillna(self._gapfilling_df[self.pred_fallback_col]))
 
-    def trainmodel(self,
-                   remove_features_low_importance: bool = True,
-                   showplot_predictions: bool = True,
-                   showplot_importance: bool = True,
-                   verbose: int = 1):
-        """
-        Train random forest model for gap-filling
-
-        No gap-filling is done here, only the model is trained.
-
-        Args:
-            remove_features_low_importance: If *True*, variables with lower permutation importance
-                than a random variable are not included in the model training.
-            showplot_predictions: shows plot of predicted vs observed
-            showplot_importance: shows plot of permutation importances
-            verbose: if > 0 prints more text output
-
-        """
-
-        if remove_features_low_importance:
-            # Train model with random variable included, to detect unimportant features
-            self._trainmodel(df=self.model_df.copy(),
-                             include_random=True,
-                             showplot_scores=showplot_predictions,
-                             showplot_importance=showplot_importance,
-                             verbose=verbose)
-
-            recommended_features = self.feature_importances_test_['recommended_features']
-            usecols = [self.target_col]
-            usecols = usecols + recommended_features
-            self.model_df = self.model_df[usecols].copy()
-
-        # Train model for gap-filling
-        self._trainmodel(df=self.model_df,
-                         include_random=False,
-                         showplot_scores=showplot_predictions,
-                         showplot_importance=showplot_importance,
-                         verbose=verbose)
-
-    def _trainmodel(self,
-                    df: DataFrame,
-                    include_random: bool = False,
-                    showplot_scores: bool = True,
-                    showplot_importance: bool = True,
-                    verbose: int = 1):
-        """Build and test model
-
-        See:
-            - https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestRegressor.html
-
-        """
-
-        # Add random variable as benchmark for relevant feature importances
-        if include_random:
-            random_col = '.RANDOM'  # Random variable as benchmark for relevant importances
-            df[random_col] = np.random.RandomState(self.kwargs['random_state']).randn(df.shape[0], 1)
-            # df[random_col] = np.random.rand(df.shape[0], 1)
-            idtxt = f"({self._trainmodel.__name__} with random) "
-        else:
-            random_col = None
-            idtxt = f"({self._trainmodel.__name__}) "
-
-        # Info
-        if verbose > 0:
-            print(f"{idtxt}Building random forest model based on data between "
-                  f"{df.index[0]} and {df.index[-1]} ...")
-
-        # Data as arrays
-        # y = targets, X = features
-        y, X, X_names, timestamp = \
-            fr.convert_to_arrays(df=df,
-                                 target_col=self.target_col,
-                                 complete_rows=True)
-
-        # Train and test set
-        X_train, X_test, y_train, y_test = train_test_split(X, y,
-                                                            test_size=self.test_size,
-                                                            random_state=self.kwargs['random_state'])
-
-        # Instantiate model with params
-        self._model = RandomForestRegressor(**self.kwargs)
-
-        # Train the model
-        self._model.fit(X=X_train, y=y_train)
-
-        # Predict targets in test data
-        pred_y_test = self._model.predict(X=X_test)
-
-        # Calculate feature importance
-        self._feature_importances_test = feature_importances(estimator=self._model,
-                                                             X=X_test,
-                                                             y=y_test,
-                                                             model_feature_names=X_names,
-                                                             random_col=random_col,
-                                                             perm_n_repeats=self.perm_n_repeats,
-                                                             showplot=showplot_importance,
-                                                             verbose=verbose)
-
-        # Stats
-        self._scores_test = prediction_scores_regr(predictions=pred_y_test,
-                                                   targets=y_test,
-                                                   infotxt=f"{idtxt} trained on training set, "
-                                                           f"tested on test set",
-                                                   showplot=showplot_scores)
-
-        if showplot_scores:
-            plot_prediction_residuals_error_regr(model=self._model,
-                                                 X_train=X_train,
-                                                 y_train=y_train,
-                                                 X_test=X_test,
-                                                 y_test=y_test,
-                                                 infotxt=f"{idtxt} trained on training set, "
-                                                         f"tested on test set")
-
-        # Collect results
-        self._traintest_details = dict(
-            X=X,
-            y=y,
-            timestamp=timestamp,
-            predictions=pred_y_test,
-            include_random=include_random,
-            X_names=X_names,
-            y_name=self.target_col,
-            X_train=X_train,
-            y_train=y_train,
-            X_test=X_test,
-            y_test=y_test,
-            model=self._model,
-        )
-
-        if verbose > 0:
-            self.report_training(idtxt=idtxt, results=self.traintest_details_)
-
-    def report_training(self, idtxt: str, results: dict):
-        """Results from model training on test data"""
-        test_size_perc = self.test_size * 100
-        training_size_perc = 100 - test_size_perc
-        n_vals_observed = len(results['y'])
-        n_vals_train = len(results['y_train'])
-        n_vals_test = len(results['y_test'])
-        timestamp = results['timestamp']
-        used_features = results['X_names']
-        model = results['model']
-
-        print(
-            f"{idtxt} MODEL TRAINING & TESTING RESULTS\n"
-            f"{idtxt}   - the model was trained and tested based on data between "
-            f"{timestamp[0]} and {timestamp[-1]}.\n"
-            f"{idtxt}   - in total, {n_vals_observed} observed target values were available for training and testing\n"
-            f"{idtxt}   - the dataset was split into training and test datasets\n"
-            f"{idtxt}       - the training dataset comprised {n_vals_train} target values ({training_size_perc:.1f}%)\n"
-            f"{idtxt}       - the test dataset comprised {n_vals_test} target values ({test_size_perc:.1f}%)\n"
-            f"{idtxt}\n"
-            f"{idtxt}   MODEL\n"
-            f"{idtxt}   The model was trained on the training set.\n"
-            f"{idtxt}   - estimator:  {model}\n"
-            f"{idtxt}   - parameters:  {model.get_params()}\n"
-            f"{idtxt}   - names of features used in model:  {used_features}\n"
-            f"{idtxt}   - number of features used in model:  {len(used_features)}\n"
-            f"{idtxt}\n"
-            f"{idtxt}   MODEL SCORES\n"
-            f"{idtxt}   Model was trained on training data ({n_vals_train} values).\n"
-            f"{idtxt}   Model was tested on test data ({n_vals_test} values).\n"
-            f"{idtxt}   All scores were calculated for test split.\n"
-            f"{idtxt}   - MAE:  {self.scores_test_['mae']} (mean absolute error)\n"
-            f"{idtxt}   - MedAE:  {self.scores_test_['medae']} (median absolute error)\n"
-            f"{idtxt}   - MSE:  {self.scores_test_['mse']} (mean squared error)\n"
-            f"{idtxt}   - RMSE:  {self.scores_test_['rmse']} (root mean squared error)\n"
-            f"{idtxt}   - MAXE:  {self.scores_test_['maxe']} (max error)\n"
-            f"{idtxt}   - MAPE:  {self.scores_test_['mape']:.3f} (mean absolute percentage error)\n"
-            f"{idtxt}   - R2:  {self.scores_test_['r2']}\n"
-            f"{idtxt}\n"
-            f"{idtxt}   FEATURE IMPORTANCES\n"
-            f"{idtxt}   Feature importances were calculated for test data ({n_vals_test} target values).\n"
-            f"{idtxt}\n{self.feature_importances_test_['importances']}\n"
-            f"{idtxt}   Permutation importances were calculated from {self.perm_n_repeats} repeats."
-        )
-
-        if results['include_random']:
-            print(
-                f"{idtxt}\n"
-                f"{idtxt} --> {len(self.feature_importances_test_['recommended_features'])} recommended features: "
-                f"{self.feature_importances_test_['recommended_features']} "
-                f"(permutation importance larger than random)\n"
-            )
-
     def _predict_fallback(self, series: pd.Series):
         """Fill data gaps using timestamp features only, fallback for still existing gaps"""
         gf_fallback_df = pd.DataFrame(series)
@@ -792,16 +913,29 @@ class QuickFillRFTS:
         self.rfts = None
 
     def fill(self):
-        self.df = include_timestamp_as_cols(df=self.df.copy(), txt="(...)")
-        self.rfts = RandomForestTS(input_df=self.df, target_col=self.target_col, n_estimators=20)
-        self.rfts.trainmodel(showplot_predictions=False, showplot_importance=False, verbose=0)
-        self.rfts.fillgaps(showplot_scores=True, showplot_importance=True, verbose=1)
+        self.rfts = RandomForestTS(
+            input_df=self.df,
+            target_col=self.target_col,
+            verbose=1,
+            features_lag=[-1, -1],
+            include_timestamp_as_features=True,
+            add_continuous_record_number=True,
+            sanitize_timestamp=True,
+            n_estimators=20,
+            random_state=42,
+            min_samples_split=2,
+            min_samples_leaf=1,
+            perm_n_repeats=9,
+            n_jobs=-1
+        )
+        self.rfts.trainmodel(showplot_scores=False, showplot_importance=False)
+        self.rfts.fillgaps(showplot_scores=True, showplot_importance=True)
 
     def gapfilling_df(self):
         return self.rfts.gapfilling_df_
 
     def report(self):
-        return self.rfts.report()
+        return self.rfts.report_gapfilling()
 
     def get_gapfilled(self) -> Series:
         return self.rfts.get_gapfilled_target()
@@ -1011,9 +1145,9 @@ def example_longterm_rfts():
     from diive.configs.exampledata import load_exampledata_parquet
     df = load_exampledata_parquet()
 
-    # Subset
-    keep = df.index.year <= 2016
-    df = df[keep].copy()
+    # # Subset
+    # keep = df.index.year <= 2016
+    # df = df[keep].copy()
 
     # Subset with target and features
     # Only High-quality (QCF=0) measured NEE used for model training in this example
@@ -1025,11 +1159,11 @@ def example_longterm_rfts():
         input_df=df,
         target_col=TARGET_COL,
         verbose=0,
-        features_lag=None,
-        include_timestamp_as_features=False,
+        features_lag=[-1, -1],
+        include_timestamp_as_features=True,
         add_continuous_record_number=True,
         sanitize_timestamp=True,
-        n_estimators=99,
+        n_estimators=200,
         random_state=42,
         min_samples_split=10,
         min_samples_leaf=5,
@@ -1070,7 +1204,7 @@ def example_rfts():
     # df = df[remove].copy()
 
     # Subset
-    keep = df_orig.index.year >= 2016
+    keep = df_orig.index.year <= 2015
     df = df_orig[keep].copy()
     # df = df_orig.copy()
 
@@ -1095,41 +1229,57 @@ def example_rfts():
         verbose=1,
         # features_lag=None,
         features_lag=[-1, -1],
+        # include_timestamp_as_features=False,
         include_timestamp_as_features=True,
+        # add_continuous_record_number=False,
         add_continuous_record_number=True,
         sanitize_timestamp=True,
-        n_estimators=99,
+        n_estimators=9,
         random_state=42,
-        min_samples_split=10,
-        min_samples_leaf=5,
-        perm_n_repeats=11,
+        min_samples_split=2,
+        min_samples_leaf=1,
+        perm_n_repeats=9,
         n_jobs=-1
     )
-    rfts.trainmodel(showplot_predictions=False, showplot_importance=False, verbose=0)
-    rfts.fillgaps(showplot_scores=False, showplot_importance=False, verbose=0)
-    rfts.report()
-    observed = df[TARGET_COL]
-    gapfilled = rfts.get_gapfilled_target()
+    rfts.reduce_features()
+    rfts.report_feature_reduction()
+
+    rfts.trainmodel(showplot_scores=True, showplot_importance=True)
+    rfts.report_traintest()
+
+    rfts.fillgaps(showplot_scores=True, showplot_importance=True)
+    rfts.report_gapfilling()
+
+    # observed = df[TARGET_COL]
+    # gapfilled = rfts.get_gapfilled_target()
     # rfts.feature_importances
     # rfts.scores
     # rfts.gapfilling_df
 
-    # Plot
-    from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-    HeatmapDateTime(series=observed).show()
-    HeatmapDateTime(series=gapfilled).show()
+    # # https://www.datacamp.com/tutorial/introduction-to-shap-values-machine-learning-interpretability
+    # import shap
+    # explainer = shap.TreeExplainer(rfts.model_)
+    # xtest = rfts.traintest_details_['X_test']
+    # shap_values = explainer.shap_values(xtest)
+    # shap.summary_plot(shap_values, xtest)
+    # # shap.summary_plot(shap_values[0], xtest)
+    # shap.dependence_plot("Feature 12", shap_values, xtest, interaction_index="Feature 11")
 
-    mds = df_orig['NEE_CUT_REF_f'].copy()
-    mds = mds[mds.index.year >= 2016]
+    # # Plot
+    # from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+    # HeatmapDateTime(series=observed).show()
+    # HeatmapDateTime(series=gapfilled).show()
 
-    import matplotlib.pyplot as plt
-    # rfts.gapfilling_df_['.PREDICTIONS_FALLBACK'].cumsum().plot()
-    # rfts.gapfilling_df_['.PREDICTIONS_FULLMODEL'].cumsum().plot()
-    # rfts.gapfilling_df_['.PREDICTIONS'].cumsum().plot()
-    rfts.get_gapfilled_target().cumsum().plot()
-    mds.cumsum().plot()
-    plt.legend()
-    plt.show()
+    # mds = df_orig['NEE_CUT_REF_f'].copy()
+    # mds = mds[mds.index.year >= 2016]
+    # import matplotlib.pyplot as plt
+    # # rfts.gapfilling_df_['.PREDICTIONS_FALLBACK'].cumsum().plot()
+    # # rfts.gapfilling_df_['.PREDICTIONS_FULLMODEL'].cumsum().plot()
+    # # rfts.gapfilling_df_['.PREDICTIONS'].cumsum().plot()
+    # rfts.get_gapfilled_target().cumsum().plot()
+    # mds.cumsum().plot()
+    # plt.legend()
+    # plt.show()
 
     # d = rfts.gapfilling_df['NEE_CUT_REF_orig'] - rfts.gapfilling_df['.PREDICTIONS']
     # d.plot()
@@ -1179,7 +1329,7 @@ def example_optimize():
 
 
 if __name__ == '__main__':
-    # example_quickfill()
-    example_longterm_rfts()
+    example_quickfill()
+    # example_longterm_rfts()
     # example_rfts()
     # example_optimize()
