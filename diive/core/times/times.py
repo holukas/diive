@@ -552,34 +552,33 @@ def include_timestamp_as_cols(df,
         newcols.append(hour_col)
         df[hour_col] = df.index.hour.astype(int)
 
-    # yeardoy_col = '.YEARDOY'
-    # yearweek_col = '.YEARWEEK'
+    # Year and month: YEAR2023+MONTH8 = 20238
+    yearmonth_col = '.YEARMONTH'
+    newcols.append(yearmonth_col)
+    df[yearmonth_col] = (df[year_col].astype(str) + df[month_col].astype(str)).astype(int)
+
+    # Year and DOY: YEAR2023+DOY194 = 2023194
+    yeardoy_col = '.YEARDOY'
+    newcols.append(yeardoy_col)
+    df[yeardoy_col] = (df[year_col].astype(str) + df[doy_col].astype(str)).astype(int)
+
+    # Year and week: YEAR2023+WEEK15 = 202315
+    yearweek_col = '.YEARWEEK'
+    newcols.append(yearweek_col)
+    df[yearweek_col] = (df[year_col].astype(str) + df[week_col].astype(str)).astype(int)
+
+
     # yearmonthweekdoy_col = '.YEARMONTHWEEKDOY'
-    # yearmonth_col = '.YEARMONTH'
+
     # yearmonthweek_col = '.YEARMONTHWEEK'
     # weekhour_col = '.WEEKHOUR'
 
     # Combined variables
-    # Year and month: YEAR2023+MONTH8 = 20238
-    # df[yearmonth_col] = (df[year_col].astype(str) + df[month_col].astype(str)).astype(int)
 
-    # Year and week: YEAR2023+WEEK15 = 202315
-    # df[yearweek_col] = (df[year_col].astype(str) + df[week_col].astype(str)).astype(int)
 
     # Year and month and week: YEAR2023+MONTH8+WEEK15 = 2023815
     # df[yearmonthweek_col] = (df[year_col].astype(str) + df[month_col].astype(str) + df[week_col].astype(str)).astype(
     #     int)
-
-    # Year and week and DOY: YEAR2023+MONTH8+WEEK15+DOY194 = 2023815194
-    # df[yearmonthweekdoy_col] = (
-    #         df[year_col].astype(str)
-    #         + df[month_col].astype(str)
-    #         + df[week_col].astype(str)
-    #         + df[doy_col].astype(str)
-    # ).astype(np.int64)  # todo check int64
-
-    # Year and DOY: YEAR2023+DOY194 = 2023194
-    # df[yeardoy_col] = (df[year_col].astype(str) + df[doy_col].astype(str)).astype(int)
 
     # Week and hour: WEEK42+HOUR22 = 4222
     # df[weekhour_col] = (df[week_col].astype(str) + df[hour_col].astype(str)).astype(int)

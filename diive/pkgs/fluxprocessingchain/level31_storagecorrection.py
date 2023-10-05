@@ -109,7 +109,7 @@ class FluxStorageCorrectionSinglePointEddyPro:
         )
         rfts.trainmodel(remove_features_low_importance=False, showplot_predictions=False, showplot_importance=False, verbose=0)
         rfts.fillgaps(showplot_scores=True, showplot_importance=True, verbose=0)
-        print(rfts.report())
+        print(rfts.report_gapfilling())
         series = rfts.get_gapfilled_target()
         flag = rfts.get_flag()
         d = {series.name: series, flag.name: flag}

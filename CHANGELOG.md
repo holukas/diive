@@ -2,6 +2,32 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.63.0 | 5 Oct 2023
+
+### New features
+
+- Implemented feature reduction (permutation importance) as separate method in `RandomForestTS`
+- Added new function to set values within specified time ranges to a constant
+  value(`pkgs.corrections.setto_value.setto_value`)
+    - The function is now also implemented as method
+      in `StepwiseMeteoScreeningDb` (`pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.correction_setto_value`)
+
+### Notebooks
+
+- Updated notebook `notebooks/GapFilling/RandomForestGapFilling.ipynb`
+- Updated notebook `notebooks/GapFilling/QuickRandomForestGapFilling.ipynb`
+- Updated notebook `notebooks/MeteoScreening/StepwiseMeteoScreeningFromDatabase.ipynb`
+
+### Environment
+
+- Added new package [SHAP](https://shap.readthedocs.io/en/latest/)
+- Added new package [eli5](https://pypi.org/project/eli5/)
+
+### Tests
+
+- Updated testcase for gap-filling with random
+  forest (`test_gapfilling.TestGapFilling.test_gapfilling_randomforest`)
+
 ## v0.62.0 | 1 Oct 2023
 
 ### New features
