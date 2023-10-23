@@ -23,14 +23,14 @@ Kudos, optimization of hyper-parameters, grid search
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from pandas import DataFrame, Series
+import xgboost as xgb
+from pandas import DataFrame
 from sklearn.ensemble import RandomForestRegressor  # Import the model we are using
 from sklearn.inspection import permutation_importance
-from sklearn.model_selection import train_test_split, TimeSeriesSplit, GridSearchCV
+from sklearn.model_selection import train_test_split
 
 import diive.core.dfun.frames as fr
 from diive.core.ml.common import prediction_scores_regr, plot_prediction_residuals_error_regr
-from diive.core.times.neighbors import neighboring_years
 from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import include_timestamp_as_cols
 
@@ -39,125 +39,7 @@ pd.set_option('display.max_columns', 12)
 pd.set_option('display.width', 1000)
 
 
-class OptimizeParamsRFTS:
-    """
-    Optimize parameters for random forest model
-
-    """
-
-    def __init__(self,
-                 df: DataFrame,
-                 target_col: str,
-                 **rf_params: dict):
-        """
-        Args:
-            df: dataframe of target and predictor time series
-            target_col: name of target in *df*, all variables that are not *target* are
-                used as predictors
-            **rf_params: dict of parameters for random forest model, where parameter ranges are
-                provided as lists, e.g.
-                    rf_params = {
-                        'n_estimators': list(range(2, 12, 2)),
-                        'criterion': ['squared_error'],
-                        'max_depth': [None],
-                        'min_samples_split': list(range(2, 12, 2)),
-                        'min_samples_leaf': [1, 3, 6]
-                    }
-
-                For an overview of RF parameters see:
-                https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestRegressor.html
-        """
-        self.model_df = df.copy()
-        self.target_col = target_col
-
-        self.regr = RandomForestRegressor()
-
-        self.params = rf_params
-
-        # Attributes
-        self._best_params = None
-        self._scores = None
-        self._cv_results = None
-        self._best_score = None
-        self._cv_n_splits = None
-
-    @property
-    def best_params(self) -> dict:
-        """Estimator which gave highest score (or smallest loss if specified) on the left out data"""
-        if not self._best_params:
-            raise Exception(f'Not available: model scores.')
-        return self._best_params
-
-    @property
-    def scores(self) -> dict:
-        """Return model scores for best model"""
-        if not self._scores:
-            raise Exception(f'Not available: model scores.')
-        return self._scores
-
-    @property
-    def cv_results(self) -> DataFrame:
-        """Cross-validation results"""
-        if not isinstance(self._cv_results, DataFrame):
-            raise Exception(f'Not available: cv scores.')
-        return self._cv_results
-
-    @property
-    def best_score(self) -> float:
-        """Mean cross-validated score of the best_estimator"""
-        if not self._best_score:
-            raise Exception(f'Not available: cv scores.')
-        return self._best_score
-
-    @property
-    def cv_n_splits(self) -> int:
-        """The number of cross-validation splits (folds/iterations)"""
-        if not self._cv_n_splits:
-            raise Exception(f'Not available: cv scores.')
-        return self._cv_n_splits
-
-    def optimize(self):
-
-        y, X, X_names, timestamp = \
-            fr.convert_to_arrays(df=self.model_df,
-                                 target_col=self.target_col,
-                                 complete_rows=True)
-
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
-
-        grid = GridSearchCV(estimator=self.regr,
-                            param_grid=self.params,
-                            scoring='neg_mean_squared_error',
-                            cv=TimeSeriesSplit(n_splits=10),
-                            n_jobs=-1)
-        grid.fit(X_train, y_train)
-
-        self._cv_results = pd.DataFrame.from_dict(grid.cv_results_)
-
-        # Best parameters after tuning
-        # Estimator which gave highest score (or smallest loss if specified) on the left out data
-        self._best_params = grid.best_params_
-
-        # Mean cross-validated score of the best_estimator
-        self._best_score = grid.best_score_
-
-        # Scorer function used on the held out data to choose the best parameters for the model
-        self._scorer = grid.scorer_
-
-        # The number of cross-validation splits (folds/iterations)
-        self._cv_n_splits = grid.n_splits_
-
-        grid_predictions = grid.predict(X_test)
-
-        # Stats
-        self._scores = prediction_scores_regr(predictions=grid_predictions,
-                                              targets=y_test,
-                                              infotxt=f"trained on training set, "
-                                                      f"tested on test set",
-                                              showplot=True)
-
-
-class RandomForestTS:
+class XGBoostTS:
 
     def __init__(
             self,
@@ -367,8 +249,90 @@ class RandomForestTS:
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=self.test_size, random_state=self.kwargs['random_state'])
 
+        # TODO -------------------------------------------------------------------------->
+        # TODO -------------------------------------------------------------------------->
+        # TODO -------------------------------------------------------------------------->
+        from sklearn.model_selection import TimeSeriesSplit
+        splitter = TimeSeriesSplit(n_splits=5)
+
+        from sklearn.model_selection import GridSearchCV
+        params = {
+            'max_depth': [2, 4, 8],
+            'n_estimators': [5, 10, 20],
+            'learning_rate': [0.1, 0.05, 0.01],
+            'gamma': [0],
+            'reg_lambda': [0, 1, 5],
+            'early_stopping_rounds': [10],
+            'colsample_bytree': [0.3, 0.5, 1],
+            'scale_pos_weight': [0.1, 1, 3]
+        }
+        grid = GridSearchCV(estimator=xgb.XGBRegressor(subsample=0.1),
+                            param_grid=params,
+                            scoring='neg_mean_squared_error',
+                            cv=TimeSeriesSplit(n_splits=10),
+                            n_jobs=-1, verbose=1)
+        grid.fit(X_train, y_train,
+                 eval_set=[(X_train, y_train), (X_test, y_test)],
+                 verbose=100)
+        grid.best_params_
+
+        # # Plot
+        # fig, axs = plt.subplots(10, 1, figsize=(15, 30), sharex=True)
+        # fold = 0
+        # for train_idx, val_idx in splitter.split(df):
+        #     train = df.iloc[train_idx]
+        #     test = df.iloc[val_idx]
+        #     train[self.target_col].plot(ax=axs[fold], label='Training Set', title=f'Data Train/Test Split Fold {fold}')
+        #     test[self.target_col].plot(ax=axs[fold], label='Test Set')
+        #     axs[fold].axvline(test.index.min(), color='black', ls='--')
+        #     fold += 1
+        # plt.show()
+
+        fold = 0
+        preds = []
+        scores = []
+        df = df.dropna()
+        for train_idx, val_idx in splitter.split(df):
+            train = df.iloc[train_idx]
+            test = df.iloc[val_idx]
+
+            features_list = df.columns.tolist()
+            features_list.remove(self.target_col)
+
+            X_train = train[features_list]
+            y_train = train[self.target_col]
+
+            X_test = test[features_list]
+            y_test = test[self.target_col]
+
+            reg = xgb.XGBRegressor(base_score=0.5, booster='gbtree',
+                                   n_estimators=1000,
+                                   early_stopping_rounds=50,
+                                   objective='reg:squarederror',
+                                   max_depth=3,
+                                   learning_rate=0.02)
+            reg.fit(X_train, y_train,
+                    early_stopping_rounds=10,
+                    eval_set=[(X_train, y_train), (X_test, y_test)],
+                    verbose=100)
+
+            y_pred = reg.predict(X_test)
+            preds.append(y_pred)
+            from sklearn.metrics import mean_squared_error
+            score = np.sqrt(mean_squared_error(y_test, y_pred))
+            scores.append(score)
+            fold += 1
+
+        print(f'Score across folds {np.mean(scores):0.4f}')
+        print(f'Fold scores:{scores}')
+
+        # TODO <--------------------------------------------------------------------------
+        # TODO <--------------------------------------------------------------------------
+        # TODO <--------------------------------------------------------------------------
+
         # Instantiate model with params
-        model = RandomForestRegressor(**self.kwargs)
+        model = xgb.XGBRegressor(**self.kwargs)
+        # model = RandomForestRegressor(**self.kwargs)
 
         # Train the model
         model.fit(X=X_train, y=y_train)
@@ -459,10 +423,14 @@ class RandomForestTS:
             X, y, test_size=self.test_size, random_state=self.kwargs['random_state'])
 
         # Instantiate model with params
-        self._model = RandomForestRegressor(**self.kwargs)
+        self._model = xgb.XGBRegressor(**self.kwargs)
+        # self._model = RandomForestRegressor(**self.kwargs)
 
         # Train the model
-        self._model.fit(X=X_train, y=y_train)
+        self._model.fit(X=X_train, y=y_train,
+                        eval_set=[(X_train, y_train), (X_test, y_test)],
+                        # early_stopping_rounds=50,
+                        verbose=1)
 
         # Predict targets in test data
         pred_y_test = self._model.predict(X=X_test)
@@ -860,7 +828,9 @@ class RandomForestTS:
                                  complete_rows=True)
 
         # Instantiate new model with same params as before
-        model_fallback = RandomForestRegressor(**self.kwargs)
+        self.kwargs['early_stopping_rounds'] = 0
+        model_fallback = xgb.XGBRegressor(**self.kwargs)
+        # model_fallback = RandomForestRegressor(**self.kwargs)
 
         # Train the model on all available records ...
         model_fallback.fit(X=X_fallback, y=y_fallback)
@@ -900,285 +870,6 @@ class RandomForestTS:
         self.target_gapfilled_cumu_col = ".GAPFILLED_CUMULATIVE"
 
 
-class QuickFillRFTS:
-    """
-    Quick gap-filling using RandomForestTS with pre-defined parameters
-
-    The purpose of this class is preliminary gap-filling e.g. for quick tests
-    how gap-filled data could look like. It is not meant to be used for
-    final gap-filling.
-    """
-
-    def __init__(self, df: DataFrame, target_col: str or tuple):
-        self.df = df.copy()
-        self.target_col = target_col
-        self.rfts = None
-
-    def fill(self):
-        self.rfts = RandomForestTS(
-            input_df=self.df,
-            target_col=self.target_col,
-            verbose=1,
-            features_lag=[-1, -1],
-            include_timestamp_as_features=True,
-            add_continuous_record_number=True,
-            sanitize_timestamp=True,
-            n_estimators=20,
-            random_state=42,
-            min_samples_split=2,
-            min_samples_leaf=1,
-            perm_n_repeats=9,
-            n_jobs=-1
-        )
-        self.rfts.trainmodel(showplot_scores=False, showplot_importance=False)
-        self.rfts.fillgaps(showplot_scores=True, showplot_importance=True)
-
-    def gapfilling_df(self):
-        return self.rfts.gapfilling_df_
-
-    def report(self):
-        return self.rfts.report_gapfilling()
-
-    def get_gapfilled(self) -> Series:
-        return self.rfts.get_gapfilled_target()
-
-
-class LongTermRandomForestTS:
-
-    def __init__(self,
-                 input_df: DataFrame,
-                 target_col: str or tuple,
-                 verbose: int = 0,
-                 perm_n_repeats: int = 10,
-                 test_size: float = 0.25,
-                 features_lag: list = None,
-                 features_lagmax: int = None,
-                 include_timestamp_as_features: bool = False,
-                 add_continuous_record_number: bool = False,
-                 sanitize_timestamp: bool = False,
-                 **kwargs
-                 ):
-        """
-        Gap-fill each year based on data from the respective year and the two closest neighboring years
-
-        Example:
-            Given a long-term time series comprising data between 2013-2017:
-                - for 2013, the model is built from 2013, 2014 and 2015 data
-                - for 2014, the model is built from 2013, 2014 and 2015 data
-                - for 2015, the model is built from 2014, 2015 and 2016 data
-                - for 2016, the model is built from 2015, 2016 and 2017 data
-                - for 2017, the model is built from 2015, 2016 and 2017 data
-
-        Args:
-            See docstring for pkgs.gapfilling.randomforest_ts.RandomForestTS
-
-        Attributes:
-            gapfilling_df_: dataframe, gapfilling results from all years in one dataframe
-            gapfilled_: series, gap-filled target series from all years in one time series
-            results_yearly_: dict, detailed results for each year
-            scores_: dict, scoring results for each year
-            feature_importances_: dict, feature importances for each year
-        """
-        self.input_df = input_df
-        self.target_col = target_col
-        self.verbose = verbose
-        self.perm_n_repeats = perm_n_repeats
-        self.test_size = test_size
-        self.features_lag = features_lag
-        self.features_lagmax = features_lagmax
-        self.include_timestamp_as_features = include_timestamp_as_features
-        self.add_continuous_record_number = add_continuous_record_number
-        self.sanitize_timestamp = sanitize_timestamp
-        self.kwargs = kwargs
-
-        self.yearpools_dict = None
-        self._results_yearly = {}
-        self._gapfilling_df = pd.DataFrame()
-        self._scores = {}
-        self._feature_importances = {}
-        self._gapfilled = pd.Series()
-
-    @property
-    def gapfilling_df_(self) -> DataFrame:
-        """Return gapfilling results from all years in one dataframe"""
-        if not isinstance(self._gapfilling_df, DataFrame):
-            raise Exception(f'Not available: collected gap-filled data for all years.')
-        return self._gapfilling_df
-
-    @property
-    def gapfilled_(self) -> Series:
-        """Return gap-filled target series from all years in one time series"""
-        if not isinstance(self._gapfilled, Series):
-            raise Exception(f'Not available: collected gap-filled data for all years.')
-        return self._gapfilled
-
-    @property
-    def results_yearly_(self) -> dict:
-        """Return detailed results for each year"""
-        if not self._results_yearly:
-            raise Exception(f'Not available: yearly model results.')
-        return self._results_yearly
-
-    @property
-    def scores_(self) -> dict:
-        """Return scoring results for each year"""
-        if not self._scores:
-            raise Exception(f'Not available: collected scores.')
-        return self._scores
-
-    @property
-    def feature_importances_(self) -> dict:
-        """Return feature importances for each year"""
-        if not self._feature_importances:
-            raise Exception(f'Not available: collected scores.')
-        return self._feature_importances
-
-    def run(self):
-        self.yearpools_dict = self._create_yearpools()
-        self._initialize_models()
-        self._trainmodels()
-        self._fillgaps()
-        self._collect()
-
-    def _create_yearpools(self):
-        """For each year create a dataset comprising the respective year
-        and the neighboring years"""
-        yearpools_dict = neighboring_years(df=self.input_df)
-        return yearpools_dict
-
-    def _initialize_models(self):
-        """Initialize model for each year"""
-        for year, _df in self.yearpools_dict.items():
-            print(f"Initializing model for {year} ...")
-            df = _df['df'].copy()
-            # Random forest
-            rfts = RandomForestTS(
-                input_df=df,
-                target_col=self.target_col,
-                verbose=self.verbose,
-                features_lag=self.features_lag,
-                include_timestamp_as_features=self.include_timestamp_as_features,
-                add_continuous_record_number=self.add_continuous_record_number,
-                sanitize_timestamp=self.sanitize_timestamp,
-                **self.kwargs
-            )
-            self._results_yearly[year] = rfts
-
-    def _trainmodels(self):
-        """Train model for each year"""
-        for year, _df in self.yearpools_dict.items():
-            print(f"Training model for {year} ...")
-            rfts = self.results_yearly_[year]
-            rfts.trainmodel(showplot_predictions=False, showplot_importance=False, verbose=0)
-
-    def _fillgaps(self):
-        """Gap-fill each year with the respective model"""
-        for year, _df in self.yearpools_dict.items():
-            print(f"Gap-filling {year} ...")
-            rfts = self.results_yearly_[year]
-            rfts.fillgaps(showplot_scores=True, showplot_importance=True, verbose=0)
-
-    def _collect(self):
-        """Collect results"""
-        for year, _df in self.yearpools_dict.items():
-            print(f"Collecting results for {year} ...")
-            rfts = self.results_yearly_[year]
-            keepyear = rfts.gapfilling_df_.index.year == int(year)
-            self._gapfilling_df = pd.concat([self._gapfilling_df, rfts.gapfilling_df_[keepyear]], axis=0)
-            self._scores[year] = rfts.scores_
-            self._feature_importances[year] = rfts.feature_importances_
-            gapfilled = rfts.get_gapfilled_target()
-            self._gapfilled = pd.concat([self._gapfilled, gapfilled[keepyear]])
-
-
-def example_quickfill():
-    # Setup, user settings
-    TARGET_COL = 'NEE_CUT_REF_orig'
-    subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
-
-    # Setup, imports
-    import numpy as np
-    import importlib.metadata
-    from datetime import datetime
-    from diive.configs.exampledata import load_exampledata_parquet
-    from diive.core.plotting.timeseries import TimeSeries  # For simple (interactive) time series plotting
-    from diive.core.dfun.stats import sstats  # Time series stats
-    from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-    # from diive.pkgs.gapfilling.randomforest_ts import QuickFillRFTS
-    dt_string = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"This page was last modified on: {dt_string}")
-    version_diive = importlib.metadata.version("diive")
-    print(f"diive version: v{version_diive}")
-
-    # Show docstring for QuickFillRFTS
-    print(QuickFillRFTS.__name__)
-    print(QuickFillRFTS.__doc__)
-
-    # Example data
-    df = load_exampledata_parquet()
-
-    # Subset with target and features
-    # Only High-quality (QCF=0) measured NEE used for model training in this example
-    lowquality = df["QCF_NEE"] > 0
-    df.loc[lowquality, TARGET_COL] = np.nan
-    df = df[subsetcols].copy()
-    df.describe()
-    statsdf = sstats(df[TARGET_COL])
-    print(statsdf)
-    TimeSeries(series=df[TARGET_COL]).plot()
-
-    # QuickFill example
-    qf = QuickFillRFTS(df=df, target_col=TARGET_COL)
-    qf.fill()
-    qf.report()
-    gapfilled = qf.get_gapfilled()
-
-    # Plot
-    HeatmapDateTime(series=df[TARGET_COL]).show()
-    HeatmapDateTime(series=gapfilled).show()
-
-
-def example_longterm_rfts():
-    # Setup, user settings
-    TARGET_COL = 'NEE_CUT_REF_orig'
-    subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
-
-    # Example data
-    from diive.configs.exampledata import load_exampledata_parquet
-    df = load_exampledata_parquet()
-
-    # # Subset
-    # keep = df.index.year <= 2016
-    # df = df[keep].copy()
-
-    # Subset with target and features
-    # Only High-quality (QCF=0) measured NEE used for model training in this example
-    lowquality = df["QCF_NEE"] > 0
-    df.loc[lowquality, TARGET_COL] = np.nan
-    df = df[subsetcols].copy()
-
-    ltrf = LongTermRandomForestTS(
-        input_df=df,
-        target_col=TARGET_COL,
-        verbose=0,
-        features_lag=[-1, -1],
-        include_timestamp_as_features=True,
-        add_continuous_record_number=True,
-        sanitize_timestamp=True,
-        n_estimators=200,
-        random_state=42,
-        min_samples_split=10,
-        min_samples_leaf=5,
-        perm_n_repeats=11,
-        n_jobs=-1
-    )
-
-    ltrf.run()
-
-    for year, s in ltrf.scores_.items():
-        print(f"{year}: r2 = {s['r2']}  MAE = {s['mae']}")
-
-
 def example_rfts():
     # Setup, user settings
     # TARGET_COL = 'LE_orig'
@@ -1206,7 +897,7 @@ def example_rfts():
     # df = df[remove].copy()
 
     # Subset
-    keep = df_orig.index.year <= 2015
+    keep = df_orig.index.year <= 2014
     df = df_orig[keep].copy()
     # df = df_orig.copy()
 
@@ -1224,8 +915,9 @@ def example_rfts():
     # from diive.core.plotting.timeseries import TimeSeries  # For simple (interactive) time series plotting
     # TimeSeries(series=df[TARGET_COL]).plot()
 
-    # Random forest
-    rfts = RandomForestTS(
+    # XGBoost
+    # https://xgboost.readthedocs.io/en/stable/parameter.html#parameters-for-tree-booster
+    xts = XGBoostTS(
         input_df=df,
         target_col=TARGET_COL,
         verbose=1,
@@ -1237,23 +929,25 @@ def example_rfts():
         add_continuous_record_number=True,
         sanitize_timestamp=True,
         perm_n_repeats=9,
-        n_estimators=9,
+        n_estimators=99,
         random_state=42,
-        min_samples_split=2,
-        min_samples_leaf=1,
+        early_stopping_rounds=5,
+        max_depth=10,
+        learning_rate=0.05,
+        colsample_bytree=1,
         n_jobs=-1
     )
-    rfts.reduce_features()
-    rfts.report_feature_reduction()
+    xts.reduce_features()
+    xts.report_feature_reduction()
 
-    rfts.trainmodel(showplot_scores=True, showplot_importance=True)
-    rfts.report_traintest()
+    xts.trainmodel(showplot_scores=False, showplot_importance=False)
+    xts.report_traintest()
 
-    rfts.fillgaps(showplot_scores=True, showplot_importance=True)
-    rfts.report_gapfilling()
+    xts.fillgaps(showplot_scores=False, showplot_importance=False)
+    xts.report_gapfilling()
 
     observed = df[TARGET_COL]
-    gapfilled = rfts.get_gapfilled_target()
+    gapfilled = xts.get_gapfilled_target()
     # rfts.feature_importances
     # rfts.scores
     # rfts.gapfilling_df
@@ -1267,10 +961,10 @@ def example_rfts():
     # # shap.summary_plot(shap_values[0], xtest)
     # shap.dependence_plot("Feature 12", shap_values, xtest, interaction_index="Feature 11")
 
-    # Plot
-    from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-    HeatmapDateTime(series=observed).show()
-    HeatmapDateTime(series=gapfilled).show()
+    # # Plot
+    # from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+    # HeatmapDateTime(series=observed).show()
+    # HeatmapDateTime(series=gapfilled).show()
 
     # mds = df_orig['NEE_CUT_REF_f'].copy()
     # mds = mds[mds.index.year >= 2016]
@@ -1278,7 +972,7 @@ def example_rfts():
     # # rfts.gapfilling_df_['.PREDICTIONS_FALLBACK'].cumsum().plot()
     # # rfts.gapfilling_df_['.PREDICTIONS_FULLMODEL'].cumsum().plot()
     # # rfts.gapfilling_df_['.PREDICTIONS'].cumsum().plot()
-    rfts.get_gapfilled_target().cumsum().plot()
+    xts.get_gapfilled_target().cumsum().plot()
     # mds.cumsum().plot()
     # plt.legend()
     plt.show()
@@ -1290,44 +984,6 @@ def example_rfts():
     # d.mean()  # MAE
 
     print("Finished.")
-
-
-def example_optimize():
-    from diive.configs.exampledata import load_exampledata_parquet
-
-    # Setup, user settings
-    TARGET_COL = 'NEE_CUT_REF_orig'
-    subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
-
-    # Example data
-    df = load_exampledata_parquet()
-    subset = df[subsetcols].copy()
-    _subset = df.index.year == 2019
-    subset = subset[_subset].copy()
-
-    # Random forest parameters
-    rf_params = {
-        'n_estimators': list(range(2, 12, 2)),
-        'criterion': ['squared_error'],
-        'max_depth': [None],
-        'min_samples_split': list(range(2, 12, 2)),
-        'min_samples_leaf': list(range(1, 6, 1))
-    }
-
-    # Optimization
-    opt = OptimizeParamsRFTS(
-        df=subset,
-        target_col=TARGET_COL,
-        **rf_params
-    )
-
-    opt.optimize()
-
-    print(opt.best_params)
-    print(opt.scores)
-    print(opt.cv_results)
-    print(opt.best_score)
-    print(opt.cv_n_splits)
 
 
 if __name__ == '__main__':

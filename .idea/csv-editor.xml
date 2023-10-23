@@ -87,6 +87,13 @@
             </Attribute>
           </value>
         </entry>
+        <entry key="\notebooks\Workbench\CH-OE2_SW_IN_2021.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value=":" />
+            </Attribute>
+          </value>
+        </entry>
       </map>
     </option>
   </component>
