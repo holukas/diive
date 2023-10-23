@@ -1,6 +1,7 @@
 # Folders not needed for repo (old)
 
 # e.g.: /src
+/.idea/
 target/
 __manuscripts/
 __workbench/

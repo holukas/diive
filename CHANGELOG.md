@@ -2,6 +2,20 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+TODO TimeSeriesSplit like in https://www.youtube.com/watch?v=z3ZnOW-S550
+
+## v0.XX.X | X Oct 2023
+
+- Removed large data files for migration to GitHub
+
+### New features
+
+- Added first code for XGBoost gap-filling, not production-ready yet
+
+### Environment
+
+- Added new package [xgboost](https://xgboost.readthedocs.io/en/stable/#)
+
 ## v0.63.0 | 5 Oct 2023
 
 ### New features
