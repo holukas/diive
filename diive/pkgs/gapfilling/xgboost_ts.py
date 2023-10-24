@@ -1,3 +1,4 @@
+# TODO TimeSeriesSplit like in https://www.youtube.com/watch?v=z3ZnOW-S550
 # TODO generalization bias
 # TODO SHAP values
 # https://pypi.org/project/shap/
