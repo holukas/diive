@@ -84,7 +84,7 @@ def example():
     gf_df = subset_df[gfcols].copy()
     rfts = QuickFillRFTS(df=gf_df, target_col=vpd_col)
     rfts.fill()
-    subset_df[vpd_new_col] = rfts.get_gapfilled()
+    subset_df[vpd_new_col] = rfts.get_gapfilled_target()
 
     rfts.report()
 

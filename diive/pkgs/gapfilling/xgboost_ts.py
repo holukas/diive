@@ -1,3 +1,4 @@
+# TODO TimeSeriesSplit like in https://www.youtube.com/watch?v=z3ZnOW-S550
 # TODO generalization bias
 # TODO SHAP values
 # https://pypi.org/project/shap/
@@ -635,7 +636,7 @@ class XGBoostTS:
             f"\n"
             f"\n"
             f"## MODEL\n"
-            f"The model was trained on a training set with test size {test_size_perc:.2f}.\n"
+            f"The model was trained on a training set with test size {test_size_perc:.2f}%.\n"
             f"- estimator:  {model}\n"
             f"- parameters:  {model.get_params()}\n"
             f"\n"

@@ -1,13 +1,12 @@
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 from pandas import DataFrame
 
+from diive.core.dfun.stats import sstats  # Time series stats
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-from diive.core.times.times import include_timestamp_as_cols
 from diive.pkgs.flux.common import detect_flux_basevar
-from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
+from diive.pkgs.gapfilling.randomforest_ts import QuickFillRFTS
 
 
 class FluxStorageCorrectionSinglePointEddyPro:
@@ -31,7 +30,7 @@ class FluxStorageCorrectionSinglePointEddyPro:
 
         # Name of gapfilled storage column and its flag
         self.gapfilled_strgcol = f"{self.strgcol}_gfRF_{self.levelid}"
-        self.qcf_gapfilled_strgcol = f"FLAG_{self.gapfilled_strgcol}_ISFILLED"
+        self.flag_isgapfilled = f"FLAG_{self.gapfilled_strgcol}_ISFILLED"
 
         self._storage = None
 
@@ -47,7 +46,7 @@ class FluxStorageCorrectionSinglePointEddyPro:
         indicating storage term availability"""
         df = self.df.copy()  # Main data
         return_cols = [self.flux_corrected_col, self.gapfilled_strgcol]
-        [print(f"++Adding new column {c} ({self.levelid} quality flag) to main data ...") for c in return_cols]
+        [print(f"++Adding new column {c} to main data ...") for c in return_cols]
         storage_df = self.storage[return_cols].copy()
         df = pd.concat([df, storage_df], axis=1)  # Add storage columns to main data
         return df
@@ -60,30 +59,37 @@ class FluxStorageCorrectionSinglePointEddyPro:
         print(f"The storage-corrected flux was stored as {self.flux_corrected_col}.")
 
         n_flux = len(self.storage[self.fluxcol].dropna())
-        n_storageterm = len(self.storage[self.strgcol].dropna())
-        n_storageterm_gapfilled = len(self.storage[self.gapfilled_strgcol].dropna())
         print(f"\nThe flux was available for {n_flux} records ({self.fluxcol}).")
+
+        n_storageterm = len(self.storage[self.strgcol].dropna())
         print(f"Originally, the non-gapfilled storage term was available for "
               f"{n_storageterm} records ({self.strgcol}).")
-        print(f"After gap-filling the storage term, it was available for "
-              f"{n_storageterm_gapfilled} records ({self.gapfilled_strgcol}).")
 
-        myfilter = self.storage[self.strgcol].isnull()
-        n_storageterm_used = self.storage[~myfilter][self.fluxcol].dropna().count()
-        print(f"The non-gapfilled storage term ({self.strgcol}) was used for {n_storageterm_used} records "
-              f"in the storage-corrected flux ({self.flux_corrected_col}).")
+        n_missing = n_flux - n_storageterm
+        print(f"This means that the storage term {self.strgcol} was missing for "
+              f"{n_missing} measured flux ({self.fluxcol}) records.")
 
-        myfilter = self.storage[self.strgcol].isnull()
-        n_storageterm_gapfilled_used = self.storage[myfilter][self.fluxcol].dropna().count()
-        print(f"The gapfilled storage term ({self.gapfilled_strgcol}) was used for {n_storageterm_gapfilled_used} "
-              f"records in the storage-corrected flux ({self.flux_corrected_col}).")
+        locs_fluxmissing = self.storage[self.fluxcol].isnull()
+        fluxavailable = self.storage[~locs_fluxmissing].copy()
+        locs_isfilled = fluxavailable[self.flag_isgapfilled] == 1
+        n_isfilled = len(fluxavailable[locs_isfilled])  # Filled storage terms for available fluxes
+        print(f"After gap-filling the storage term, it was available for an additional "
+              f"{n_isfilled} records ({self.gapfilled_strgcol}).")
 
-        n_flux_corrected = len(self.storage[self.flux_corrected_col].dropna())
-        perc1 = (n_storageterm_used / n_flux) * 100
-        perc2 = (n_storageterm_gapfilled_used / n_flux) * 100
+        perc1 = (n_storageterm / n_flux) * 100
+        perc2 = (n_missing / n_flux) * 100
+        n_flux_corrected = self.storage[self.flux_corrected_col].dropna().count()
         print(f"\nIn the storage-corrected flux {self.flux_corrected_col} with {n_flux_corrected} records, "
-              f"\n  - {perc1:.1f}% of used storage terms come from originally calculated data ({self.strgcol})"
-              f"\n  - {perc2:.1f}% of used storage terms come from gap-filled data ({self.gapfilled_strgcol})")
+              f"\n  - {perc1:.1f}% ({n_storageterm} records) of used storage terms come from originally calculated data ({self.strgcol})"
+              f"\n  - {perc2:.1f}% ({n_missing} records) of used storage terms come from gap-filled data ({self.gapfilled_strgcol})")
+
+        filledstats = sstats(fluxavailable[locs_isfilled][self.gapfilled_strgcol])
+        print(f"\nStats for gap-filled storage terms:"
+              f"\n{filledstats.T[['NOV', 'P01', 'MEDIAN', 'P99']]}")
+
+        measuredstats = sstats(fluxavailable[~locs_isfilled][self.gapfilled_strgcol])
+        print(f"\nStats for measured storage terms:"
+              f"\n{measuredstats.T[['NOV', 'P01', 'MEDIAN', 'P99']]}")
 
     def _gapfill_storage_term(self) -> DataFrame:
         """
@@ -97,21 +103,11 @@ class FluxStorageCorrectionSinglePointEddyPro:
         gf_df = self.df[gfcols].copy()
 
         # Run random forest
-        gf_df = include_timestamp_as_cols(df=gf_df)
-        rfts = RandomForestTS(
-            input_df=gf_df,
-            target_col=self.strgcol,
-            n_estimators=99,
-            random_state=42,
-            min_samples_split=2,
-            min_samples_leaf=1,
-            n_jobs=-1
-        )
-        rfts.trainmodel(remove_features_low_importance=False, showplot_predictions=False, showplot_importance=False, verbose=0)
-        rfts.fillgaps(showplot_scores=True, showplot_importance=True, verbose=0)
-        print(rfts.report_gapfilling())
-        series = rfts.get_gapfilled_target()
-        flag = rfts.get_flag()
+        qf = QuickFillRFTS(df=gf_df, target_col=self.strgcol)
+        qf.fill()
+        print(qf.report())
+        series = qf.get_gapfilled_target()
+        flag = qf.get_flag()
         d = {series.name: series, flag.name: flag}
         gapfilled_df = pd.DataFrame.from_dict(d)
 
@@ -119,7 +115,7 @@ class FluxStorageCorrectionSinglePointEddyPro:
         renamedcols = [f"{c}_{self.levelid}" for c in gapfilled_df.columns]
         gapfilled_df.columns = renamedcols
         self.gapfilled_strgcol = f"{series.name}_{self.levelid}"
-        self.qcf_gapfilled_strgcol = f"{flag.name}_{self.levelid}"
+        self.flag_isgapfilled = f"{flag.name}_{self.levelid}"
         return gapfilled_df
 
     def storage_correction(self):
@@ -136,15 +132,15 @@ class FluxStorageCorrectionSinglePointEddyPro:
 
         # Add gapfilled storage data to flux data
         self._storage[self.flux_corrected_col] = self._storage[self.fluxcol].add(self._storage[self.gapfilled_strgcol])
-        self._storageterm_missing_test()
+        # self._storageterm_missing_test()
 
-    def _storageterm_missing_test(self):
-        """Add flag that shows if the storage term is available"""
-        self._storage[self.flagname] = np.nan
-        bad = self._storage[self.strgcol].isnull()
-        good = ~bad
-        self._storage[self.flagname][good] = 0
-        self._storage[self.flagname][bad] = 2
+    # def _storageterm_missing_test(self):
+    #     """Add flag that shows if the storage term is available"""
+    #     self._storage[self.flagname] = np.nan
+    #     bad = self._storage[self.strgcol].isnull()
+    #     good = ~bad
+    #     self._storage[self.flagname][good] = 0
+    #     self._storage[self.flagname][bad] = 2
 
     def _output_name(self) -> str:
         """
