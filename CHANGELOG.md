@@ -11,10 +11,19 @@
 ### Additions
 
 - Added first code for XGBoost gap-filling, not production-ready yet
+- Added check if enough columns for lagging features in class `RandomForestTS`
+- Added more details in report for class `FluxStorageCorrectionSinglePointEddyPro`
+
+### Bugfixes
+
+- Fixed check in `RandomForestTS` for bug in `QuickFillRFTS`: number of available columns was checked too early
+- Fixed `QuickFillRFTS` implementation in `OutlierSTLRZ`
+- Fixed `QuickFillRFTS` implementation in `ThymeBoostOutlier`
 
 ### Environment
 
 - Added new package [xgboost](https://xgboost.readthedocs.io/en/stable/#)
+- Updated all packages
 
 ## v0.63.0 | 5 Oct 2023
 

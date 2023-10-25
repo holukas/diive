@@ -10,9 +10,8 @@ from pandas import Series, DatetimeIndex
 from pandas.tseries.frequencies import to_offset
 
 from diive.core.base.flagbase import FlagBase
-from diive.core.times.times import include_timestamp_as_cols
 from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
+from diive.pkgs.gapfilling.randomforest_ts import QuickFillRFTS
 
 
 @ConsoleOutputDecorator()
@@ -53,30 +52,21 @@ class ThymeBoostOutlier(FlagBase):
         self.setflag(ok=ok, rejected=rejected)
         self.setfiltered(rejected=rejected)
 
-    def _plot(self, boosted_model, output):
+    @staticmethod
+    def _plot(boosted_model, output):
         # Plots
         boosted_model.plot_results(output, figsize=(30, 9))
         boosted_model.plot_components(output, figsize=(16, 9))
 
-    def _randomforest_quickfill(self, series: Series) -> Series:
+    @staticmethod
+    def _randomforest_quickfill(series: Series) -> Series:
         # Gapfilling random forest
         _df = pd.DataFrame(series)
-        _df = include_timestamp_as_cols(df=_df)
-        rfts = RandomForestTS(
-            input_df=_df,
-            target_col=series.name,
-            verbose=0,
-            n_estimators=10,
-            random_state=None,
-            min_samples_split=20,
-            min_samples_leaf=10,
-            n_jobs=-1
-        )
-        rfts.trainmodel(showplot_predictions=False, showplot_importance=False, verbose=0)
-        rfts.fillgaps(showplot_scores=True, showplot_importance=True, verbose=1)
-        series = rfts.get_gapfilled_target()
-        # series.plot()
-        # plt.show()
+        _df = pd.DataFrame(series)
+        qf = QuickFillRFTS(df=_df, target_col=series.name)
+        qf.fill()
+        # print(qf.report())
+        series = qf.get_gapfilled_target()
         return series
 
     def _flagtests(self) -> tuple[DatetimeIndex, DatetimeIndex]:
@@ -131,7 +121,8 @@ class ThymeBoostOutlier(FlagBase):
                                                    fit_type='local',
                                                    window_size=int(num_vals_oneday / 10))
 
-            if self.showplot: self._plot(boosted_model, output)
+            if self.showplot:
+                self._plot(boosted_model, output)
 
             # Outliers
             ok = output['outliers'] == False  # Non-outlier indices

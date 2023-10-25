@@ -636,7 +636,7 @@ class XGBoostTS:
             f"\n"
             f"\n"
             f"## MODEL\n"
-            f"The model was trained on a training set with test size {test_size_perc:.2f}.\n"
+            f"The model was trained on a training set with test size {test_size_perc:.2f}%.\n"
             f"- estimator:  {model}\n"
             f"- parameters:  {model.get_params()}\n"
             f"\n"

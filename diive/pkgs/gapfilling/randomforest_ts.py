@@ -167,7 +167,6 @@ class RandomForestTS:
             perm_n_repeats: int = 10,
             test_size: float = 0.25,
             features_lag: list = None,
-            features_lagmax: int = None,
             include_timestamp_as_features: bool = False,
             add_continuous_record_number: bool = False,
             sanitize_timestamp: bool = False,
@@ -228,12 +227,9 @@ class RandomForestTS:
         self.perm_n_repeats = perm_n_repeats
         self.test_size = test_size
         self.features_lag = features_lag
-        self.features_lagmax = features_lagmax
         self.verbose = verbose
 
-        self._check_n_cols()
-
-        if self.features_lag:
+        if self.features_lag and (len(self.model_df.columns) > 1):
             self.model_df = self._lag_features()
 
         if include_timestamp_as_features:
@@ -246,6 +242,8 @@ class RandomForestTS:
             verbose = True if verbose > 0 else False
             tss = TimestampSanitizer(data=self.model_df, output_middle_timestamp=True, verbose=verbose)
             self.model_df = tss.get()
+
+        self._check_n_cols()
 
         self.random_col = None
 
@@ -667,7 +665,7 @@ class RandomForestTS:
             f"\n"
             f"\n"
             f"## MODEL\n"
-            f"The model was trained on a training set with test size {test_size_perc:.2f}.\n"
+            f"The model was trained on a training set with test size {test_size_perc:.2f}%.\n"
             f"- estimator:  {model}\n"
             f"- parameters:  {model.get_params()}\n"
             f"\n"
@@ -914,7 +912,6 @@ class QuickFillRFTS:
         self.target_col = target_col
         self.rfts = None
 
-    def fill(self):
         self.rfts = RandomForestTS(
             input_df=self.df,
             target_col=self.target_col,
@@ -930,6 +927,8 @@ class QuickFillRFTS:
             perm_n_repeats=9,
             n_jobs=-1
         )
+
+    def fill(self):
         self.rfts.trainmodel(showplot_scores=False, showplot_importance=False)
         self.rfts.fillgaps(showplot_scores=True, showplot_importance=True)
 
@@ -939,8 +938,11 @@ class QuickFillRFTS:
     def report(self):
         return self.rfts.report_gapfilling()
 
-    def get_gapfilled(self) -> Series:
+    def get_gapfilled_target(self) -> Series:
         return self.rfts.get_gapfilled_target()
+
+    def get_flag(self) -> Series:
+        return self.rfts.get_flag()
 
 
 class LongTermRandomForestTS:
@@ -1131,7 +1133,7 @@ def example_quickfill():
     qf = QuickFillRFTS(df=df, target_col=TARGET_COL)
     qf.fill()
     qf.report()
-    gapfilled = qf.get_gapfilled()
+    gapfilled = qf.get_gapfilled_target()
 
     # Plot
     HeatmapDateTime(series=df[TARGET_COL]).show()
@@ -1331,7 +1333,7 @@ def example_optimize():
 
 
 if __name__ == '__main__':
-    # example_quickfill()
+    example_quickfill()
     # example_longterm_rfts()
     example_rfts()
     # example_optimize()

@@ -3,104 +3,82 @@
 
 def example():
     from pathlib import Path
-    SOURCEFOLDER = [Path(r'F:\Sync\luhk_work\TMP\fru')]
+    SOURCEFOLDER = [Path(r'F:\Sync\luhk_work\CURRENT\fru\Level-1_results_fluxnet_2020-2022')]
     OUTPATH = Path(r'F:\Sync\luhk_work\TMP\fru')
 
-    # ----------------------
-    # Load data from files
-    # ----------------------
-    from diive.core.io.filereader import MultiDataFileReader, search_files
-    from diive.core.io.files import save_parquet
-    filepaths = search_files(SOURCEFOLDER, "*.csv")
-    filepaths = [fp for fp in filepaths if
-                 "eddypro_" in fp.stem and "_fluxnet_" in fp.stem and fp.stem.endswith("_adv")]
-    loaddatafile = MultiDataFileReader(filetype='EDDYPRO_FLUXNET_30MIN', filepaths=filepaths)
-    df = loaddatafile.data_df
-    save_parquet(outpath=OUTPATH, filename="data", data=df)
+    # # ----------------------
+    # # Load data from files
+    # # ----------------------
+    # from diive.core.io.filereader import MultiDataFileReader, search_files
+    # from diive.core.io.files import save_parquet
+    # filepaths = search_files(SOURCEFOLDER, "*.csv")
+    # filepaths = [fp for fp in filepaths if
+    #              "eddypro_" in fp.stem and "_fluxnet_" in fp.stem and fp.stem.endswith("_adv")]
+    # loaddatafile = MultiDataFileReader(filetype='EDDYPRO_FLUXNET_30MIN', filepaths=filepaths)
+    # df = loaddatafile.data_df
+    # save_parquet(outpath=OUTPATH, filename="data", data=df)
 
-    # -------------------------------
-    # Level-2: Quality flag expansion
-    # -------------------------------
-    from pandas import read_parquet
-    from diive.pkgs.fluxprocessingchain.level2_qualityflags import FluxQualityFlagsLevel2EddyPro
-    from diive.core.io.files import save_parquet
-    filepath = str(OUTPATH / "data.parquet")
-    df = read_parquet(filepath)
-    fluxqc = FluxQualityFlagsLevel2EddyPro(fluxcol='H', df=df, levelid='L2')
-    fluxqc.missing_vals_test()
-    fluxqc.ssitc_test()
-    fluxqc.gas_completeness_test()
-    fluxqc.spectral_correction_factor_test()
-    fluxqc.signal_strength_test(signal_strength_col='CUSTOM_AGC_MEAN',
-                                method='discard above', threshold=90)
-    fluxqc.raw_data_screening_vm97_tests(spikes=True,
-                                         amplitude=True,
-                                         dropout=True,
-                                         abslim=False,
-                                         skewkurt_hf=False,
-                                         skewkurt_sf=False,
-                                         discont_hf=False,
-                                         discont_sf=False)
-    fluxqc.angle_of_attack_test()
-    # print(fluxqc.fluxflags)
-    _df = fluxqc.get()
-    save_parquet(outpath=OUTPATH, filename="data_L2", data=_df)
+    # # -------------------------------
+    # # Level-2: Quality flag expansion
+    # # -------------------------------
+    # from pandas import read_parquet
+    # from diive.pkgs.fluxprocessingchain.level2_qualityflags import FluxQualityFlagsLevel2EddyPro
+    # from diive.core.io.files import save_parquet
+    # filepath = str(OUTPATH / "data.parquet")
+    # df = read_parquet(filepath)
+    # fluxqc = FluxQualityFlagsLevel2EddyPro(fluxcol='FC', df=df, levelid='L2')
+    # fluxqc.missing_vals_test()
+    # fluxqc.ssitc_test()
+    # fluxqc.gas_completeness_test()
+    # fluxqc.spectral_correction_factor_test()
+    # fluxqc.signal_strength_test(signal_strength_col='CUSTOM_AGC_MEAN',
+    #                             method='discard above', threshold=90)
+    # fluxqc.raw_data_screening_vm97_tests(spikes=True,
+    #                                      amplitude=True,
+    #                                      dropout=True,
+    #                                      abslim=False,
+    #                                      skewkurt_hf=False,
+    #                                      skewkurt_sf=False,
+    #                                      discont_hf=False,
+    #                                      discont_sf=False)
+    # fluxqc.angle_of_attack_test()
+    # # print(fluxqc.fluxflags)
+    # _df = fluxqc.get()
+    # save_parquet(outpath=OUTPATH, filename="data_L2", data=_df)
 
-    # -----------------------------
-    # Level-3.1: Storage correction
-    # -----------------------------
-    from pandas import read_parquet
-    from diive.pkgs.fluxprocessingchain.level31_storagecorrection import FluxStorageCorrectionSinglePointEddyPro
-    from diive.core.io.files import save_parquet
-    filepath = str(OUTPATH / "data_L2.parquet")
-    df = read_parquet(filepath)
-    s = FluxStorageCorrectionSinglePointEddyPro(df=df, fluxcol='FC')
-    s.storage_correction()
-    # s.showplot(maxflux=20)
-    # print(s.storage)
-    s.report()
-    _df = s.get()
-    save_parquet(outpath=OUTPATH, filename="data_L3.1", data=_df)
+    # # -----------------------------
+    # # Level-3.1: Storage correction
+    # # -----------------------------
+    # from pandas import read_parquet
+    # from diive.pkgs.fluxprocessingchain.level31_storagecorrection import FluxStorageCorrectionSinglePointEddyPro
+    # from diive.core.io.files import save_parquet
+    # filepath = str(OUTPATH / "data_L2.parquet")
+    # df = read_parquet(filepath)
+    # s = FluxStorageCorrectionSinglePointEddyPro(df=df, fluxcol='FC')
+    # s.storage_correction()
+    # # s.showplot(maxflux=20)
+    # # print(s.storage)
+    # s.report()
+    # _df = s.get()
+    # save_parquet(outpath=OUTPATH, filename="data_L3.1", data=_df)
 
-    # -------------------
-    # QCF after Level-3.1
-    # -------------------
-    from pandas import read_parquet
-    from diive.pkgs.qaqc.qcf import FlagQCF
-    from diive.core.io.files import save_parquet
-    filepath = str(OUTPATH / "data_L3.1.parquet")
-    _df = read_parquet(filepath)
-    qcf = FlagQCF(series=_df['H_L3.1'], df=_df, levelid='L3.1', swinpot=_df['SW_IN_POT'], nighttime_threshold=50)
-    qcf.calculate(daytime_accept_qcf_below=2, nighttimetime_accept_qcf_below=2)
-    # qcf.report_qcf_flags()
-    qcf.report_qcf_evolution()
-    # qcf.report_qcf_series()
-    # qcf.showplot_qcf_heatmaps(maxabsval=10)
-    # qcf.showplot_qcf_timeseries()
-    _df = qcf.get()
-    save_parquet(outpath=OUTPATH, filename="data_L3.1b", data=_df)
-
-    # # todo TESTING hq fluxes
-    # df_hq = _df.loc[_df['FLAG_L3.1_NEE_L3.1_QCF'] == 1].copy()
-    # df_hq = df_hq.loc[df_hq['USTAR'] > 0.1].copy()
-    #
-    # dt = df_hq['SW_IN_POT'] > 20
-    # nt = df_hq['SW_IN_POT'] <= 20
-    #
-    # df_hq_dt = df_hq[dt].copy()
-    # df_hq_nt = df_hq[nt].copy()
-    #
-    # df_hq_dt_flux = df_hq_dt['NEE_L3.1_L3.1_QCF'].copy()
-    # df_hq_nt_flux = df_hq_nt['NEE_L3.1_L3.1_QCF'].copy()
-    #
-    # from diive.core.dfun.stats import sstats
-    # sstats(df_hq_dt_flux)
-    # sstats(df_hq_nt_flux)
-    #
-    # import matplotlib.pyplot as plt
-    # df_hq_dt_flux.plot()
-    # df_hq_nt_flux.plot()
-    # plt.show()
+    # # -------------------
+    # # QCF after Level-3.1
+    # # -------------------
+    # from pandas import read_parquet
+    # from diive.pkgs.qaqc.qcf import FlagQCF
+    # from diive.core.io.files import save_parquet
+    # filepath = str(OUTPATH / "data_L3.1.parquet")
+    # _df = read_parquet(filepath)
+    # qcf = FlagQCF(series=_df['NEE_L3.1'], df=_df, levelid='L3.1', swinpot=_df['SW_IN_POT'], nighttime_threshold=50)
+    # qcf.calculate(daytime_accept_qcf_below=2, nighttimetime_accept_qcf_below=2)
+    # # qcf.report_qcf_flags()
+    # qcf.report_qcf_evolution()
+    # # qcf.report_qcf_series()
+    # # qcf.showplot_qcf_heatmaps(maxabsval=10)
+    # # qcf.showplot_qcf_timeseries()
+    # _df = qcf.get()
+    # save_parquet(outpath=OUTPATH, filename="data_L3.1b", data=_df)
 
     # ----------------------------
     # Level-3.2: Outlier detection
@@ -122,52 +100,42 @@ def example():
     sod.flag_missingvals_test()
     sod.addflag()
 
-    # sod.flag_outliers_abslim_dtnt_test(daytime_minmax=[-50, 50], nighttime_minmax=[-5, 20], showplot=True, verbose=True)
+    # sod.flag_outliers_abslim_dtnt_test(daytime_minmax=[-50, 50], nighttime_minmax=[-10, 50], showplot=True, verbose=True)
     # sod.addflag()
-
-    # sod.flag_manualremoval_test(remove_dates=[['2019-12-31 19:45:00', '2020-01-31 19:45:00']],
+    #
+    # sod.flag_outliers_abslim_test(minval=-50, maxval=50, showplot=True, verbose=True)
+    # sod.addflag()
+    #
+    # sod.flag_outliers_zscore_dtnt_test(threshold=4, showplot=True, verbose=True)
+    # sod.addflag()
+    #
+    # sod.flag_outliers_localsd_test(n_sd=4, winsize=480, showplot=True, verbose=True)
+    # sod.addflag()
+    #
+    # sod.flag_manualremoval_test(remove_dates=[['2023-03-05 19:45:00', '2023-04-05 19:45:00']],
     #                             showplot=True, verbose=True)
     # sod.addflag()
-
-    # sod.flag_outliers_zscore_dtnt_test(threshold=3, showplot=True, verbose=True)
+    #
+    # sod.flag_outliers_increments_zcore_test(threshold=8, showplot=True, verbose=True)
     # sod.addflag()
-
-    # sod.flag_outliers_increments_zcore_test(threshold=10, showplot=True, verbose=True)
+    #
+    # sod.flag_outliers_zscore_test(threshold=5, showplot=True, verbose=True)
     # sod.addflag()
-
-    # sod.flag_outliers_zscoreiqr_test(factor=3, showplot=True, verbose=True)
-    # sod.addflag()
-
-    # sod.flag_outliers_zscore_test(threshold=3, showplot=True, verbose=True)
-    # sod.addflag()
-
-    # sod.flag_outliers_thymeboost_test(showplot=True, verbose=True)
-    # sod.addflag()
-
-    # sod.flag_outliers_localsd_test(n_sd=3, winsize=480, showplot=True, verbose=True)
-    # sod.addflag()
-
-    # sod.flag_outliers_abslim_test(minval=-10, maxval=5, showplot=True, verbose=True)
-    # sod.addflag()
-
+    #
     # sod.flag_outliers_stl_rz_test(zfactor=3, decompose_downsampling_freq='6H', repeat=False, showplot=True)
     # sod.addflag()
-    # sod.showplot_orig()
-    # sod.showplot_cleaned()
 
-    # sod.flag_outliers_lof_dtnt_test(n_neighbors=None, contamination=0.0005, showplot=True, verbose=True)
-    # sod.addflag()
+    sod.flag_outliers_thymeboost_test(showplot=True, verbose=True)
+    sod.addflag()
 
-    # sod.flag_outliers_lof_test(n_neighbors=None, contamination=0.005, showplot=True, verbose=True)
-    # sod.addflag()
+    sod.flag_outliers_lof_test(n_neighbors=None, contamination=0.005, showplot=True, verbose=True)
+    sod.addflag()
+
+    sod.flag_outliers_lof_dtnt_test(n_neighbors=None, contamination=0.0005, showplot=True, verbose=True)
+    sod.addflag()
 
     _df = sod.get()
 
-
-
-    # todo ? olr = FluxOutlierRemovalLevel32(df=_df, fluxcol='NEE_L3.1_L3.1_QCF', site_lat=site_lat, site_lon=site_lon)
-
-    # # TODO CHECK outlier removal options, remove qcf=1 based on qcf=0?
     save_parquet(outpath=OUTPATH, filename="data_L3.2", data=_df)
 
     # -------------------
