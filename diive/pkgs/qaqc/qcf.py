@@ -122,6 +122,10 @@ class FlagQCF:
             relevant = ['_FH2O_']
         elif seriescol.startswith('TAU_') or seriescol == 'TAU':
             relevant = ['_TAU_']
+        elif seriescol.startswith('FN2O_') or seriescol == 'FN2O':
+            relevant = ['_FN2O_']
+        elif seriescol.startswith('FCH4_') or seriescol == 'FCH4':
+            relevant = ['_FCH4_']
         else:
             relevant = [seriescol]
         return relevant

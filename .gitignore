@@ -113,3 +113,4 @@ venv.bak/
 .mypy_cache/
 /notebooks/Manuscripts/Hörtnagl et al. (2023) - NEP Penalty/
 /notebooks/Workbench/example_n2o_outlier/
+/notebooks/Workbench/FLUXNET CH4 N2O Committee WP2/data/
