@@ -124,7 +124,7 @@ One way to install and use `diive` with a specific Python version on a local mac
   `conda create --name diive-env python=3.9.7`
 - Activate the new environment: `conda activate diive-env`
 - Install `diive` version directly from source code:
-  `pip install https://gitlab.ethz.ch/diive/diive/-/archive/v0.57.1/diive-v0.57.1.tar.gz`
+  `pip install https://github.com/holukas/diive/archive/refs/tags/v0.63.1.tar.gz`
 - If you want to use `diive` in Jupyter notebooks, you can install Jupyterlab.
   In this example Jupyterlab is installed from the `conda` distribution channel `conda-forge`:
   `conda install -c conda-forge jupyterlab`
