@@ -2,6 +2,12 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.63.2 | xx Oct 2023
+
+### Additions
+
+- Added support for N2O and CH4 fluxes during the calculation of the `QCF` quality flag in class `FlagQCF` 
+
 ## v0.63.1 | 25 Oct 2023
 
 ### Changes

@@ -3,8 +3,8 @@
 
 def example():
     from pathlib import Path
-    SOURCEFOLDER = [Path(r'F:\Sync\luhk_work\CURRENT\fru\Level-1_results_fluxnet_2020-2022')]
-    OUTPATH = Path(r'F:\Sync\luhk_work\TMP\fru')
+    SOURCEFOLDER = [Path(r'L:\Sync\luhk_work\20 - CODING\21 - DIIVE\diive\notebooks\Workbench\FLUXNET CH4 N2O Committee WP2\data')]
+    OUTPATH = Path(r'L:\Sync\luhk_work\TMP\fru')
 
     # # ----------------------
     # # Load data from files
@@ -17,7 +17,7 @@ def example():
     # loaddatafile = MultiDataFileReader(filetype='EDDYPRO_FLUXNET_30MIN', filepaths=filepaths)
     # df = loaddatafile.data_df
     # save_parquet(outpath=OUTPATH, filename="data", data=df)
-
+    #
     # # -------------------------------
     # # Level-2: Quality flag expansion
     # # -------------------------------
@@ -26,13 +26,13 @@ def example():
     # from diive.core.io.files import save_parquet
     # filepath = str(OUTPATH / "data.parquet")
     # df = read_parquet(filepath)
-    # fluxqc = FluxQualityFlagsLevel2EddyPro(fluxcol='FC', df=df, levelid='L2')
+    # fluxqc = FluxQualityFlagsLevel2EddyPro(fluxcol='FN2O', df=df, levelid='L2')
     # fluxqc.missing_vals_test()
     # fluxqc.ssitc_test()
     # fluxqc.gas_completeness_test()
     # fluxqc.spectral_correction_factor_test()
-    # fluxqc.signal_strength_test(signal_strength_col='CUSTOM_AGC_MEAN',
-    #                             method='discard above', threshold=90)
+    # # fluxqc.signal_strength_test(signal_strength_col='CUSTOM_AGC_MEAN',
+    # #                             method='discard above', threshold=90)
     # fluxqc.raw_data_screening_vm97_tests(spikes=True,
     #                                      amplitude=True,
     #                                      dropout=True,
@@ -54,7 +54,7 @@ def example():
     # from diive.core.io.files import save_parquet
     # filepath = str(OUTPATH / "data_L2.parquet")
     # df = read_parquet(filepath)
-    # s = FluxStorageCorrectionSinglePointEddyPro(df=df, fluxcol='FC')
+    # s = FluxStorageCorrectionSinglePointEddyPro(df=df, fluxcol='FN2O')
     # s.storage_correction()
     # # s.showplot(maxflux=20)
     # # print(s.storage)
@@ -62,23 +62,23 @@ def example():
     # _df = s.get()
     # save_parquet(outpath=OUTPATH, filename="data_L3.1", data=_df)
 
-    # # -------------------
-    # # QCF after Level-3.1
-    # # -------------------
-    # from pandas import read_parquet
-    # from diive.pkgs.qaqc.qcf import FlagQCF
-    # from diive.core.io.files import save_parquet
-    # filepath = str(OUTPATH / "data_L3.1.parquet")
-    # _df = read_parquet(filepath)
-    # qcf = FlagQCF(series=_df['NEE_L3.1'], df=_df, levelid='L3.1', swinpot=_df['SW_IN_POT'], nighttime_threshold=50)
-    # qcf.calculate(daytime_accept_qcf_below=2, nighttimetime_accept_qcf_below=2)
-    # # qcf.report_qcf_flags()
-    # qcf.report_qcf_evolution()
-    # # qcf.report_qcf_series()
-    # # qcf.showplot_qcf_heatmaps(maxabsval=10)
-    # # qcf.showplot_qcf_timeseries()
-    # _df = qcf.get()
-    # save_parquet(outpath=OUTPATH, filename="data_L3.1b", data=_df)
+    # -------------------
+    # QCF after Level-3.1
+    # -------------------
+    from pandas import read_parquet
+    from diive.pkgs.qaqc.qcf import FlagQCF
+    from diive.core.io.files import save_parquet
+    filepath = str(OUTPATH / "data_L3.1.parquet")
+    _df = read_parquet(filepath)
+    qcf = FlagQCF(series=_df['FN2O_L3.1'], df=_df, levelid='L3.1', swinpot=_df['SW_IN_POT'], nighttime_threshold=50)
+    qcf.calculate(daytime_accept_qcf_below=2, nighttimetime_accept_qcf_below=2)
+    # qcf.report_qcf_flags()
+    qcf.report_qcf_evolution()
+    # qcf.report_qcf_series()
+    qcf.showplot_qcf_heatmaps(maxabsval=20)
+    # qcf.showplot_qcf_timeseries()
+    _df = qcf.get()
+    save_parquet(outpath=OUTPATH, filename="data_L3.1b", data=_df)
 
     # ----------------------------
     # Level-3.2: Outlier detection
