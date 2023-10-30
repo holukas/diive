@@ -30,6 +30,7 @@ More notebooks are added constantly.
 
 ### Create variable
 
+- Calculate daytime flag, nighttime flag and potential radiation from latitude and longitude ([notebook example](notebooks/CalculateVariable/Daytime_and_nighttime_flag.ipynb))
 - Day/night flag from sun angle
 - VPD from air temperature and RH ([notebook example](notebooks/CalculateVariable/Calculate_VPD_from_TA_and_RH.ipynb))
 

@@ -2,11 +2,22 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.63.2 | xx Oct 2023
+## v0.64.0 | XX Oct 2023
+
+### New features
+
+- Added new class `DaytimeNighttimeFlag` to calculate daytime flag (1=daytime, 0=nighttime),
+  nighttime flag (1=nighttime, 0=daytime) and potential radiation from latitude and
+  longitude (`diive.pkgs.createvar.daynightflag.DaytimeNighttimeFlag`)
 
 ### Additions
 
-- Added support for N2O and CH4 fluxes during the calculation of the `QCF` quality flag in class `FlagQCF` 
+- Added support for N2O and CH4 fluxes during the calculation of the `QCF` quality flag in class `FlagQCF`
+- Added first code for USTAR threshold detection for NEE
+
+### Notebooks
+
+- Added new notebook `notebooks/CalculateVariable/Daytime_and_nighttime_flag.ipynb`
 
 ## v0.63.1 | 25 Oct 2023
 
