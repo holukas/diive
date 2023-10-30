@@ -14,7 +14,7 @@ def potrad(timestamp_index: DatetimeIndex, lat: float, lon: float, utc_offset: i
         timestamp_index: time series index
         lat: latitude
         lon: longitude
-        utc_offset: UTC offset, e.g. 1 for UTC+01:00
+        utc_offset: UTC offset of *timestamp_index*, e.g. 1 for UTC+01:00
 
     Returns:
         potential radiation

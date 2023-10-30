@@ -123,7 +123,7 @@ class UstarDetectionMPT:
         return flag_daytime.name, flag_nighttime.name
 
     def _calc_swin_pot(self):
-        """Calculate potential radiation of get directly from data"""
+        """Calculate potential radiation or get directly from data"""
         if self.lat and self.lon:
             swin_pot = potrad(timestamp_index=self.df.index,
                               lat=self.lat,
