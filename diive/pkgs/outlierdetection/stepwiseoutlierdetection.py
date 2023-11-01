@@ -63,13 +63,13 @@ class StepwiseOutlierDetection:
             col: str,
             site_lat: float,
             site_lon: float,
-            timezone_of_timestamp: str
+            utc_offset: int
     ):
         self._dataframe_orig = dataframe.copy()
         self._series = self._dataframe_orig[col].copy()
         self.site_lat = site_lat
         self.site_lon = site_lon
-        self.timezone_of_timestamp = timezone_of_timestamp
+        self.utc_offset = utc_offset
 
         # Setup
         self._hires_flags, \
@@ -135,7 +135,7 @@ class StepwiseOutlierDetection:
         """Flag outliers based on z-score, calculated separately for daytime and nighttime"""
         series_cleaned = self._series_hires_cleaned.copy()
         results = zScoreDaytimeNighttime(series=series_cleaned, lat=self.site_lat, lon=self.site_lon,
-                                         timezone_of_timestamp=self.timezone_of_timestamp)
+                                         utc_offset=self.utc_offset)
         results.calc(threshold=threshold, showplot=showplot, verbose=verbose)
         self._last_results = results
 
@@ -183,7 +183,7 @@ class StepwiseOutlierDetection:
         """Identify outliers based on absolute limits separately for daytime and nighttime"""
         series_cleaned = self._series_hires_cleaned.copy()
         results = AbsoluteLimitsDaytimeNighttime(series=series_cleaned, lat=self.site_lat, lon=self.site_lon,
-                                                 timezone_of_timestamp=self.timezone_of_timestamp)
+                                                 utc_offset=self.utc_offset)
         results.calc(daytime_minmax=daytime_minmax, nighttime_minmax=nighttime_minmax, showplot=showplot)
         self._last_results = results
 
@@ -192,7 +192,7 @@ class StepwiseOutlierDetection:
         """Identify outliers based on seasonal-trend decomposition and z-score calculations"""
         series_cleaned = self._series_hires_cleaned.copy()
         results = OutlierSTLRZ(series=series_cleaned, lat=self.site_lat, lon=self.site_lon,
-                               timezone_of_timestamp=self.timezone_of_timestamp)
+                               utc_offset=self.utc_offset)
         results.calc(zfactor=zfactor, decompose_downsampling_freq=decompose_downsampling_freq,
                      repeat=repeat, showplot=showplot)
         self._last_results = results
@@ -205,8 +205,8 @@ class StepwiseOutlierDetection:
         n_neighbors = int(len(series_cleaned.dropna()) / 100) if not n_neighbors else n_neighbors
         # Contamination is set automatically unless float is given
         contamination = contamination if isinstance(contamination, float) else 'auto'
-        results = LocalOutlierFactorDaytimeNighttime(series=series_cleaned, site_lat=self.site_lat,
-                                                     site_lon=self.site_lon)
+        results = LocalOutlierFactorDaytimeNighttime(series=series_cleaned, lat=self.site_lat,
+                                                     lon=self.site_lon, utc_offset=self.utc_offset)
         results.calc(n_neighbors=n_neighbors, contamination=contamination, showplot=showplot, verbose=verbose)
         self._last_results = results
 

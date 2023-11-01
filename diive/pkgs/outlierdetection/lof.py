@@ -10,7 +10,7 @@ import diive.core.plotting.styles.LightTheme as theme
 from diive.core.base.flagbase import FlagBase
 from diive.core.plotting.plotfuncs import default_format, default_legend
 from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.pkgs.createvar.daynightflag import nighttime_flag_from_latlon
+from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag
 
 
 def lof(series: Series, n_neighbors: int = 20, contamination: float = 0.01, suffix: str = None):
@@ -191,18 +191,27 @@ class LocalOutlierFactorDaytimeNighttime(FlagBase):
     """
     flagid = 'OUTLIER_LOFDTNT'
 
-    def __init__(self, series: Series, site_lat: float, site_lon: float, levelid: str = None):
+    def __init__(self,
+                 series: Series,
+                 lat: float,
+                 lon: float,
+                 utc_offset: int,
+                 levelid: str = None):
         super().__init__(series=series, flagid=self.flagid, levelid=levelid)
         self.showplot = False
         self.verbose = False
 
-        # Detect nighttime
-        self.is_nighttime = nighttime_flag_from_latlon(
-            lat=site_lat, lon=site_lon, freq=self.series.index.freqstr,
-            start=str(self.series.index[0]), stop=str(self.series.index[-1]),
-            timezone_of_timestamp='UTC+01:00', threshold_daytime=0)
-        self.is_nighttime = self.is_nighttime == 1  # Convert 0/1 flag to False/True flag
-        self.is_daytime = ~self.is_nighttime  # Daytime is inverse of nighttime
+        # Detect daytime and nighttime
+        dnf = DaytimeNighttimeFlag(
+            timestamp_index=self.series.index,
+            nighttime_threshold=50,
+            lat=lat,
+            lon=lon,
+            utc_offset=utc_offset)
+        nighttimeflag = dnf.get_nighttime_flag()
+        daytimeflag = dnf.get_daytime_flag()
+        self.is_nighttime = nighttimeflag == 1  # Convert 0/1 flag to False/True flag
+        self.is_daytime = daytimeflag == 1  # Convert 0/1 flag to False/True flag
 
     def calc(self, n_neighbors: int = 20, contamination: float = 0.01, showplot: bool = False, verbose: bool = False):
         """Calculate flag"""
@@ -228,7 +237,7 @@ class LocalOutlierFactorDaytimeNighttime(FlagBase):
         # Nighttime
         s_nighttime = self.series[self.is_nighttime].copy()
         nighttime_df = lof(series=s_nighttime, n_neighbors=n_neighbors,
-                                contamination=contamination, suffix="NIGHTTIME")
+                           contamination=contamination, suffix="NIGHTTIME")
         ok_nighttime = nighttime_df['NOT_OUTLIER_NIGHTTIME'].dropna().index
         rejected_nighttime = nighttime_df['OUTLIER_NIGHTTIME'].dropna().index
 

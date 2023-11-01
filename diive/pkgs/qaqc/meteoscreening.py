@@ -13,9 +13,9 @@ from typing import Literal
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import pandas as pd
-from pandas import DataFrame, Series
+from pandas import DataFrame
 from pandas.tseries.frequencies import to_offset
-from diive.pkgs.corrections.setto_value import setto_value
+
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
 from diive.core.plotting.plotfuncs import default_format, default_legend, nice_date_ticks
@@ -26,6 +26,7 @@ from diive.core.times.times import detect_freq_groups
 from diive.pkgs.analyses.correlation import daily_correlation
 from diive.pkgs.corrections.offsetcorrection import remove_radiation_zero_offset, remove_relativehumidity_offset
 from diive.pkgs.corrections.setto_threshold import setto_threshold
+from diive.pkgs.corrections.setto_value import setto_value
 from diive.pkgs.createvar.potentialradiation import potrad
 from diive.pkgs.outlierdetection.stepwiseoutlierdetection import StepwiseOutlierDetection
 from diive.pkgs.qaqc.qcf import FlagQCF
@@ -124,7 +125,7 @@ class StepwiseMeteoScreeningDb:
             site: str,
             site_lat: float,
             site_lon: float,
-            timezone_of_timestamp: str
+            utc_offset: int
     ):
         self.site = site
         self._data_detailed = data_detailed.copy()
@@ -132,7 +133,7 @@ class StepwiseMeteoScreeningDb:
         self.fields = fields if isinstance(fields, list) else list(fields)
         self.site_lat = site_lat
         self.site_lon = site_lon
-        self.timezone_of_timestamp = timezone_of_timestamp
+        self.utc_offset = utc_offset
 
         # Setup
         (
@@ -153,7 +154,7 @@ class StepwiseMeteoScreeningDb:
                                                        col=field,
                                                        site_lat=self.site_lat,
                                                        site_lon=self.site_lon,
-                                                       timezone_of_timestamp=self.timezone_of_timestamp)
+                                                       utc_offset=self.utc_offset)
 
     @property
     def resampled_detailed(self) -> dict:
@@ -396,7 +397,7 @@ class StepwiseMeteoScreeningDb:
             self._series_hires_cleaned[field] = \
                 remove_radiation_zero_offset(series=self._series_hires_cleaned[field],
                                              lat=self.site_lat, lon=self.site_lon,
-                                             timezone_of_timestamp='UTC+01:00', showplot=True)
+                                             utc_offset=self.utc_offset, showplot=True)
 
     def correction_setto_max_threshold(self, threshold: float):
         """Set values above threshold to threshold"""
@@ -842,7 +843,7 @@ def example():
                                     fields=FIELDS,
                                     site_lat=SITE_LAT,
                                     site_lon=SITE_LON,
-                                    timezone_of_timestamp='UTC+01:00')
+                                    utc_offset=1)
 
     # Plot data
     mscr.showplot_orig()

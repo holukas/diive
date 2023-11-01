@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "diive"
-version = "0.64.0"
+version = "0.65.0"
 description = "Time series processing"
 authors = ["holukas <holukas@ethz.ch>"]
 readme = "README.md"
@@ -14,7 +14,6 @@ matplotlib = "^3.7.3"
 pyyaml = "^6.0.1"
 uncertainties = "^3.1.7"
 statsmodels = "^0.14.0"
-pysolar = "^0.11"
 thymeboost = "^0.1.16"
 prophet = "^1.1.4"
 fitter = "^1.6.0"

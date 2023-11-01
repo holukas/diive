@@ -25,7 +25,7 @@ from statsmodels.tsa.seasonal import STL
 
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.pkgs.createvar.daynightflag import nighttime_flag_from_latlon
+from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag
 from diive.pkgs.gapfilling.randomforest_ts import QuickFillRFTS
 from diive.pkgs.outlierdetection.zscore import zScoreDaytimeNighttime
 
@@ -56,13 +56,13 @@ class OutlierSTLRZ(FlagBase):
     flagid = 'OUTLIER_STLRZ'
 
     def __init__(self, series: Series, lat: float, lon: float,
-                 timezone_of_timestamp: str, levelid: str = None):
+                 utc_offset: int, levelid: str = None):
         super().__init__(series=series, flagid=self.flagid, levelid=levelid)
         self.showplot = False
         self.repeat = True
         self.lat = lat
         self.lon = lon
-        self.timezone_of_timestamp = timezone_of_timestamp
+        self.utc_offset = utc_offset
         self.is_nighttime = self._detect_nighttime()
 
     def calc(self, zfactor: float = 4.5, decompose_downsampling_freq: str = '1H',
@@ -78,14 +78,19 @@ class OutlierSTLRZ(FlagBase):
     def _detect_nighttime(self) -> bool:
         """Create nighttime flag"""
 
-        nighttimeflag = nighttime_flag_from_latlon(
-            lat=self.lat, lon=self.lon, freq=self.series.index.freqstr,
-            start=str(self.series.index[0]), stop=str(self.series.index[-1]),
-            timezone_of_timestamp=self.timezone_of_timestamp, threshold_daytime=0)
+        # Detect nighttime
+        dnf = DaytimeNighttimeFlag(
+            timestamp_index=self.series.index,
+            nighttime_threshold=50,
+            lat=self.lat,
+            lon=self.lon,
+            utc_offset=self.utc_offset)
+        nighttimeflag = dnf.get_nighttime_flag()
+        # daytime = dnf.get_daytime_flag()
 
         # Reindex to hires timestamp
-        nighttime_flag_in_hires = nighttimeflag.reindex(self.series.index, method='nearest')
-        nighttime_ix = nighttime_flag_in_hires == 1
+        # nighttime_flag_in_hires = nighttimeflag.reindex(self.series.index, method='nearest')
+        nighttime_ix = nighttimeflag == 1
         return nighttime_ix
 
     def _flagtests(self, zfactor: float = 4.5, repeat: bool = True,
@@ -146,7 +151,7 @@ class OutlierSTLRZ(FlagBase):
         """Detect residual outliers separately for daytime and nighttime data"""
         print("Detecting residual outliers ...")
         zscores = zScoreDaytimeNighttime(series=series, lat=self.lat, lon=self.lon,
-                                         timezone_of_timestamp=self.timezone_of_timestamp)
+                                         utc_offset=self.utc_offset)
         zscores.calc(threshold=zfactor, showplot=True, verbose=True)
         return zscores.flag
 
@@ -227,7 +232,21 @@ class OutlierSTLRZ(FlagBase):
 # plt.show()
 
 def example():
-    pass
+    from diive.configs.exampledata import load_exampledata_parquet
+    df = load_exampledata_parquet()
+    series = df['Tair_f'].copy()
+
+    stl = OutlierSTLRZ(
+        series=series,
+        lat=47.286417,
+        lon=7.733750,
+        utc_offset=1)
+
+    stl.calc(zfactor=1.5, decompose_downsampling_freq='6H')
+
+    from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+    HeatmapDateTime(series=stl.filteredseries).show()
+    HeatmapDateTime(series=stl.flag).show()
 
 
 if __name__ == '__main__':
