@@ -2,6 +2,16 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.65.0 | 1 Nov 2023
+
+### Changes
+
+- Calculation of daytime and nighttime flag was harmonized, using class `DaytimeNighttimeFlag`
+
+### Environment
+
+- Removed `pysolar`
+
 ## v0.64.0 | 31 Oct 2023
 
 ### New features

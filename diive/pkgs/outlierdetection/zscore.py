@@ -6,7 +6,7 @@ import diive.core.funcs.funcs as funcs
 from diive.core.base.flagbase import FlagBase
 from diive.core.times.times import DetectFrequency
 from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.pkgs.createvar.daynightflag import nighttime_flag_from_latlon
+from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag
 
 
 @ConsoleOutputDecorator()
@@ -32,7 +32,7 @@ class zScoreDaytimeNighttime(FlagBase):
                  series: Series,
                  lat: float,
                  lon: float,
-                 timezone_of_timestamp: str,
+                 utc_offset: int,
                  levelid: str = None):
         """
 
@@ -40,7 +40,7 @@ class zScoreDaytimeNighttime(FlagBase):
             series: Time series
             lat: Latitude of location as float, e.g. 46.583056
             lon: Longitude of location as float, e.g. 9.790639
-            timezone_of_timestamp: timezone in the format e.g. 'UTC+01:00' for CET (UTC + 1 hour)
+            utc_offset: UTC offset of *timestamp_index*, e.g. 1 for UTC+01:00
                 The datetime index of the resulting Series will be in this timezone.
             levelid: Identifier, added as suffix to output variable names
         """
@@ -55,12 +55,16 @@ class zScoreDaytimeNighttime(FlagBase):
             self.series = self.series.asfreq(freq)
 
         # Detect nighttime
-        self.is_nighttime = nighttime_flag_from_latlon(
-            lat=lat, lon=lon, freq=self.series.index.freqstr,
-            start=str(self.series.index[0]), stop=str(self.series.index[-1]),
-            timezone_of_timestamp=timezone_of_timestamp, threshold_daytime=0)
-        self.is_nighttime = self.is_nighttime == 1  # Convert 0/1 flag to False/True flag
-        self.is_daytime = ~self.is_nighttime  # Daytime is inverse of nighttime
+        dnf = DaytimeNighttimeFlag(
+            timestamp_index=self.series.index,
+            nighttime_threshold=50,
+            lat=lat,
+            lon=lon,
+            utc_offset=utc_offset)
+        daytime = dnf.get_daytime_flag()
+        nighttime = dnf.get_nighttime_flag()
+        self.is_daytime = daytime == 1  # Convert 0/1 flag to False/True flag
+        self.is_nighttime = nighttime == 1  # Convert 0/1 flag to False/True flag
 
     def calc(self, threshold: float = 4, showplot: bool = False, verbose: bool = False):
         """Calculate flag"""
@@ -177,6 +181,7 @@ class zScore(FlagBase):
             self.plot(ok, rejected, plottitle=f"Outlier detection based on z-scores of {self.series.name}")
 
         return ok, rejected
+
 
 # @ConsoleOutputDecorator()
 # class zScoreIQR(FlagBase):
@@ -306,3 +311,24 @@ class zScore(FlagBase):
 #         if self.verbose: print(f"Detected threshold for z-value from IQR data: {threshold} "
 #                                f"(max z-value in IQR data multiplied by factor {factor})")
 #         return threshold
+
+def example():
+    from diive.configs.exampledata import load_exampledata_parquet
+    df = load_exampledata_parquet()
+    series = df['Tair_f'].copy()
+
+    zdn = zScoreDaytimeNighttime(
+        series=series,
+        lat=47.286417,
+        lon=7.733750,
+        utc_offset=1)
+
+    zdn.calc(threshold=1.5, showplot=True, verbose=True)
+
+    from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+    HeatmapDateTime(series=zdn.filteredseries).show()
+    HeatmapDateTime(series=zdn.flag).show()
+
+
+if __name__ == '__main__':
+    example()

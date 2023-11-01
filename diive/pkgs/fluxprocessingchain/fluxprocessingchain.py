@@ -95,7 +95,7 @@ def example():
                                    col='NEE_L3.1_L3.1_QCF',
                                    site_lat=site_lat,
                                    site_lon=site_lon,
-                                   timezone_of_timestamp='UTC+01:00')
+                                   utc_offset='UTC+01:00')
 
     sod.flag_missingvals_test()
     sod.addflag()

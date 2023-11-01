@@ -247,9 +247,12 @@ class RandomForestTS:
 
         self.random_col = None
 
+        # Instantiate model with params
+        self._model = RandomForestRegressor(**self.kwargs)
+
         # Attributes
         self._gapfilling_df = None  # Will contain gapfilled target and auxiliary variables
-        self._model = None
+        # self._model = None
         self._feature_importances = dict()
         self._feature_importances_traintest = dict()
         self._feature_importances_reduction = dict()
@@ -455,9 +458,6 @@ class RandomForestTS:
         # Train and test set
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=self.test_size, random_state=self.kwargs['random_state'])
-
-        # Instantiate model with params
-        self._model = RandomForestRegressor(**self.kwargs)
 
         # Train the model
         self._model.fit(X=X_train, y=y_train)
@@ -1333,7 +1333,7 @@ def example_optimize():
 
 
 if __name__ == '__main__':
-    example_quickfill()
+    # example_quickfill()
     # example_longterm_rfts()
     example_rfts()
     # example_optimize()

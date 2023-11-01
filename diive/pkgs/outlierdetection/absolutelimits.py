@@ -5,7 +5,7 @@ from pandas import Series, DatetimeIndex
 from diive.core.base.flagbase import FlagBase
 from diive.core.times.times import DetectFrequency
 from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.pkgs.createvar.daynightflag import nighttime_flag_from_latlon
+from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag
 
 
 @ConsoleOutputDecorator()
@@ -29,8 +29,12 @@ class AbsoluteLimitsDaytimeNighttime(FlagBase):
     """
     flagid = 'OUTLIER_ABSLIM_DTNT'
 
-    def __init__(self, series: Series, lat: float, lon: float,
-                 timezone_of_timestamp: str, levelid: str = None):
+    def __init__(self,
+                 series: Series,
+                 lat: float,
+                 lon: float,
+                 utc_offset: int,
+                 levelid: str = None):
         super().__init__(series=series, flagid=self.flagid, levelid=levelid)
         self.showplot = False
         self.verbose = False
@@ -41,40 +45,17 @@ class AbsoluteLimitsDaytimeNighttime(FlagBase):
             freq = DetectFrequency(index=self.series.index, verbose=True).get()
             self.series = self.series.asfreq(freq)
 
-        # Detect nighttime
-        self.is_nighttime = nighttime_flag_from_latlon(
-            lat=lat, lon=lon, freq=self.series.index.freqstr,
-            start=str(self.series.index[0]), stop=str(self.series.index[-1]),
-            timezone_of_timestamp=timezone_of_timestamp, threshold_daytime=0)
-        self.is_nighttime = self.is_nighttime == 1  # Convert 0/1 flag to False/True flag
-        self.is_daytime = ~self.is_nighttime  # Daytime is inverse of nighttime
-
-        # means_dt = []
-        # sds_dt = []
-        # means_nt = []
-        # sds_nt = []
-        # series_dt = self.series[self.is_daytime].dropna().copy()
-        # series_nt = self.series[self.is_nighttime].dropna().copy()
-        # for r in range(0, 100):
-        #     ss_dt = series_dt.sample(n=int(len(series_dt)), replace=True, random_state=None)  # Bootstrap data
-        #     ss_dt = ss_dt.sort_index()
-        #     means_dt.append(ss_dt.mean())
-        #     sds_dt.append(ss_dt.std())
-        #
-        #     ss_nt = series_nt.sample(n=int(len(series_nt)), replace=True, random_state=None)  # Bootstrap data
-        #     ss_nt = ss_nt.sort_index()
-        #     means_nt.append(ss_nt.quantile(.01))
-        #     sds_nt.append(ss_nt.std())
-        #
-        # x_dt = np.median(means_dt)
-        # y_dt = np.median(sds_dt) * 3
-        # upper_dt = x_dt + y_dt
-        # lower_dt = x_dt - y_dt
-        #
-        # x_nt = np.median(means_nt)
-        # y_nt = np.median(sds_nt) * 3
-        # upper_nt = x_nt + y_nt
-        # lower_nt = x_nt - y_nt
+        # Detect daytime and nighttime
+        dnf = DaytimeNighttimeFlag(
+            timestamp_index=self.series.index,
+            nighttime_threshold=50,
+            lat=lat,
+            lon=lon,
+            utc_offset=utc_offset)
+        nighttimeflag = dnf.get_nighttime_flag()
+        daytimeflag = dnf.get_daytime_flag()
+        self.is_nighttime = nighttimeflag == 1  # Convert 0/1 flag to False/True flag
+        self.is_daytime = daytimeflag == 1  # Convert 0/1 flag to False/True flag
 
     def calc(self, daytime_minmax: list[float, float], nighttime_minmax: list[float, float],
              showplot: bool = False, verbose: bool = False):

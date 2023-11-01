@@ -2,7 +2,7 @@ from pandas import Series
 
 import diive.core.dfun.frames as frames
 from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.pkgs.createvar.daynightflag import nighttime_flag_from_latlon
+from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag
 
 
 @ConsoleOutputDecorator()
@@ -71,7 +71,7 @@ def remove_relativehumidity_offset(series: Series,
 def remove_radiation_zero_offset(series: Series,
                                  lat: float,
                                  lon: float,
-                                 timezone_of_timestamp: str,
+                                 utc_offset: int,
                                  showplot: bool = False) -> Series:
     """Remove nighttime offset from all radiation data and set nighttime to zero
 
@@ -87,9 +87,8 @@ def remove_radiation_zero_offset(series: Series,
         series: Data for radiation variable that is corrected
         lat: Latitude of the location where radiation data were recorded
         lon: Longitude of the location where radiation data were recorded
-        timezone_of_timestamp: timezone in the format e.g. 'UTC+01:00'
-            for CET (UTC + 1 hour), needed for nighttime detection via
-            pysolar which works with UTC
+        utc_offset: UTC offset of *timestamp_index*, e.g. 1 for UTC+01:00
+            The datetime index of the resulting Series will be in this timezone.
         showplot: Show plot
 
     Returns:
@@ -99,16 +98,17 @@ def remove_radiation_zero_offset(series: Series,
     outname = series.name
     series.name = "input_data"
 
-    # Calculate nighttime flag from sun position (angle) for 10MIN time resolution
-    nighttime_flag = nighttime_flag_from_latlon(
-        lat=lat, lon=lon,
-        start=str(series.index[0]), stop=str(series.index[-1]),
-        freq='10T', timezone_of_timestamp=timezone_of_timestamp)
+    # Detect nighttime
+    dnf = DaytimeNighttimeFlag(
+        timestamp_index=series.index,
+        nighttime_threshold=50,
+        lat=lat,
+        lon=lon,
+        utc_offset=utc_offset)
+    nighttimeflag = dnf.get_nighttime_flag()
+    # daytime = dnf.get_daytime_flag()
 
-    # Reindex to hires timestamp
-    nighttime_flag_in_hires = nighttime_flag.reindex(series.index, method='nearest')
-    nighttime_ix = nighttime_flag_in_hires == 1
-    # nighttime_flag.rename("nighttime_flag", inplace=True)
+    nighttime_ix = nighttimeflag == 1
 
     # Get series nighttime data
     series_nighttime = series.loc[nighttime_ix]
