@@ -5,7 +5,7 @@
 `diive` is a Python library for time series processing.
 
 Recent updates: [CHANGELOG](CHANGELOG.md)   
-Recent releases: [Releases](https://gitlab.ethz.ch/holukas/diive/-/releases)
+Recent releases: [Releases](https://github.com/holukas/diive/releases)
 
 First example notebooks can be found in the folder `notebooks`.
 
