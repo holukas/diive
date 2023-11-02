@@ -90,7 +90,8 @@ def default_format(ax,
 
     # Labels
     if ax_xlabel_txt:
-        ax.set_xlabel(ax_xlabel_txt, color=ax_labels_fontcolor, fontsize=ax_labels_fontsize, fontweight=ax_labels_fontweight)
+        ax.set_xlabel(ax_xlabel_txt, color=ax_labels_fontcolor, fontsize=ax_labels_fontsize,
+                      fontweight=ax_labels_fontweight)
     if ax_ylabel_txt and txt_ylabel_units:
         ax.set_ylabel(f'{ax_ylabel_txt}  {txt_ylabel_units}', color=ax_labels_fontcolor, fontsize=ax_labels_fontsize,
                       fontweight=ax_labels_fontweight)
@@ -314,11 +315,13 @@ def default_legend(ax,
                            ncol=ncol, facecolor=facecolor, edgecolor=edgecolor,
                            labelspacing=labelspacing, prop={'size': textsize},
                            markerscale=markerscale)
+
     else:
         legend = ax.legend(loc=loc, bbox_to_anchor=bbox_to_anchor, shadow=shadow,
                            ncol=ncol, facecolor=facecolor, edgecolor=edgecolor,
                            labelspacing=labelspacing, prop={'size': textsize},
                            markerscale=markerscale)
+
     for text in legend.get_texts():
         text.set_color(textcolor)
 
@@ -499,10 +502,12 @@ def save_fig(fig,
     print(f"Saved plot {outfilepath}")
 
 
-def create_ax():
+def create_ax(facecolor: str = 'white',
+              figsize: tuple = (8, 4.5),
+              dpi: int = 100):
     """Create figure and axis"""
     # Figure setup
-    fig = plt.figure(facecolor='white', figsize=(16, 9))
+    fig = plt.figure(facecolor=facecolor, figsize=figsize, dpi=dpi)
     gs = gridspec.GridSpec(1, 1)  # rows, cols
     # gs.update(wspace=0.3, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
     ax = fig.add_subplot(gs[0, 0])

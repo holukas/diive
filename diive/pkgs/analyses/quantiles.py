@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from pandas import Series, DataFrame
 
-from diive.core.plotting.scatter import Scatter
+from diive.core.plotting.scatter import ScatterXY
 
 
 def percentiles(series: Series, showplot: bool = True) -> DataFrame:
@@ -18,9 +18,9 @@ def percentiles(series: Series, showplot: bool = True) -> DataFrame:
     print(percentiles_df[percentiles_df["PERCENTILE"].isin(show)])
 
     if showplot:
-        scatter = Scatter(x=percentiles_df['PERCENTILE'],
-                          y=percentiles_df['VALUE'],
-                          title=f"Percentile values: {series.name}")
+        scatter = ScatterXY(x=percentiles_df['PERCENTILE'],
+                            y=percentiles_df['VALUE'],
+                            title=f"Percentile values: {series.name}")
         scatter.plot(nbins=10)
 
     # plt.plot(percentiles_df['PERCENTILE'], percentiles_df['VALUE'],

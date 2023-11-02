@@ -139,36 +139,33 @@ class UstarDetectionMPT:
 
 def example():
     from pathlib import Path
-    OUTPATH = r"F:\TMP\fru"
+    FOLDER = r"F:\Sync\luhk_work\20 - CODING\21 - DIIVE\diive\notebooks\Workbench\FLUXNET_CH4-N2O_Committee_WP2\data"
 
     # from diive.core.io.filereader import search_files, MultiDataFileReader
-    # FOLDER = r"L:\Sync\luhk_work\CURRENT\fru\Level-1_results_fluxnet_2020-2022"
     # filepaths = search_files(FOLDER, "*.csv")
-    # filepaths = [fp for fp in filepaths
-    #              if "_fluxnet_" in fp.stem
-    #              and fp.stem.endswith("_adv")]
+    # filepaths = [fp for fp in filepaths if "_fluxnet_" in fp.stem and fp.stem.endswith("_adv")]
     # print(filepaths)
     # fr = MultiDataFileReader(filetype='EDDYPRO_FLUXNET_30MIN', filepaths=filepaths)
     # df = fr.data_df
     # from diive.core.io.files import save_parquet
-    # save_parquet(outpath=OUTPATH, filename="data", data=df)
+    # save_parquet(outpath=FOLDER, filename="data", data=df)
 
     from diive.core.io.files import load_parquet
-    filepath = Path(OUTPATH) / 'data.parquet'
+    filepath = Path(FOLDER) / 'data.parquet'
     df = load_parquet(filepath=filepath)
 
-    UstarDetectionMPT(
-        df=df,
-        nee_col='FC',
-        ta_col='TA_1_1_1',
-        ustar_col='USTAR',
-        n_bootstraps=10,
-        swin_pot_col='SW_IN_POT',
-        nighttime_threshold=20,
-        utc_offset=1,
-        lat=47.115833,
-        lon=8.537778
-    )
+    # UstarDetectionMPT(
+    #     df=df,
+    #     nee_col='FC',
+    #     ta_col='TA_1_1_1',
+    #     ustar_col='USTAR',
+    #     n_bootstraps=10,
+    #     swin_pot_col='SW_IN_POT',
+    #     nighttime_threshold=20,
+    #     utc_offset=1,
+    #     lat=47.115833,
+    #     lon=8.537778
+    # )
 
 
 if __name__ == '__main__':
