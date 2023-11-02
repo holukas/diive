@@ -1,76 +1,112 @@
+import matplotlib.pyplot as plt
 import pandas as pd
 from pandas import Series
 
 import diive.core.plotting.plotfuncs as pf
-import diive.core.plotting.styles.LightTheme as theme
 
 
-# TODO
-# TODO
-# TODO
-# TODO
-# TODO
-
-class Scatter:
-    def __init__(self,
-                 x: Series,
-                 y: Series,
-                 xunits: str = None,
-                 yunits: str = None,
-                 title: str = None
-                 ):
+class ScatterXY:
+    def __init__(
+            self,
+            x: Series,
+            y: Series,
+            xunits: str = None,
+            yunits: str = None,
+            title: str = None,
+            ax: plt.Axes = None,
+            nbins: int = 0,
+            xlim: list = None,
+            ylim: list = None
+    ):
         """
 
+        https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.scatter.html
+
         """
-        self.xy_df = pd.concat([x, y], axis=1)
-        self.xy_df = self.xy_df.dropna()
         self.xname = x.name
         self.yname = y.name
         self.xunits = xunits
         self.yunits = yunits
+        self.ax = ax
+        self.nbins = nbins
+        self.xlim = xlim
+        self.ylim = ylim
 
-        self.title = title if title else None
+        self.xy_df = pd.concat([x, y], axis=1)
+        self.xy_df = self.xy_df.dropna()
 
-        # # Create axis
-        # if ax:
-        #     # If ax is given, plot directly to ax, no fig needed
-        #     self.fig = None
-        #     self.ax = ax
-        #     self.showplot = False
-        # else:
-        #     # If no ax is given, create fig and ax and then show the plot
-        #     self.fig, self.ax = pf.create_ax()
-        #     self.showplot = True
+        self.title = title if title else f"{self.yname} vs. {self.xname}"
 
-    def plot(self, ax, nbins: int = 10, lw: float or None = theme.WIDTH_LINE_DEFAULT):
+        self.fig = None
+
+        if self.nbins > 0:
+            self._databinning()
+
+    def _databinning(self):
+        group, bins = pd.qcut(self.xy_df[self.xname], q=self.nbins, retbins=True, duplicates='drop')
+        groupcol = f'GROUP_{self.xname}'
+        self.xy_df[groupcol] = group
+        self.xy_df_binned = self.xy_df.groupby(groupcol).agg({'mean', 'std', 'count'})
+
+    def plot(self):
+        """Generate plot"""
+        if not self.ax:
+            # Create ax if none is given
+            self.fig, self.ax = pf.create_ax(figsize=(8, 8))
+            self._plot()
+            plt.tight_layout()
+            self.fig.show()
+        else:
+            # Otherwise plot to given ax
+            self._plot()
+
+    def _plot(self, nbins: int = 10):
+        """Generate plot on axis"""
         nbins += 1  # To include zero
-
         label = self.yname
+        self.ax.scatter(x=self.xy_df[self.xname],
+                        y=self.xy_df[self.yname],
+                        c='none',
+                        s=40,
+                        marker='o',
+                        edgecolors='#607D8B',
+                        label=label)
 
-        if ax: self.ax=ax
-
-        self.ax.plot(self.xy_df[self.xname],
-                     self.xy_df[self.yname],
-                     color='black', alpha=1,
-                     ls='-', lw=lw,
-                     marker='o', markeredgecolor='none', ms=5,
-                     zorder=99, label=label)
+        if self.nbins > 0:
+            _min = self.xy_df_binned[self.yname]['count'].min()
+            _max = self.xy_df_binned[self.yname]['count'].max()
+            self.ax.scatter(x=self.xy_df_binned[self.xname]['mean'],
+                            y=self.xy_df_binned[self.yname]['mean'],
+                            c='none',
+                            s=80,
+                            marker='o',
+                            edgecolors='r',
+                            lw=2,
+                            label=f"binned data, mean±SD "
+                                  f"({_min}-{_max} values per bin)")
+            self.ax.errorbar(x=self.xy_df_binned[self.xname]['mean'],
+                             y=self.xy_df_binned[self.yname]['mean'],
+                             xerr=self.xy_df_binned[self.xname]['std'],
+                             yerr=self.xy_df_binned[self.yname]['std'],
+                             elinewidth=3, ecolor='red', alpha=.6, lw=0)
 
         self._apply_format()
-
         self.ax.locator_params(axis='x', nbins=nbins)
         self.ax.locator_params(axis='y', nbins=nbins)
 
-        # if self.showplot:
-        #     self.fig.show()
-
     def _apply_format(self):
 
-        # ymin = self.series.min()
-        # ymax = self.series.max()
-        # self.ax.set_ylim(ymin, ymax)
+        if self.xlim:
+            xmin = self.xlim[0]
+            xmax = self.xlim[1]
+            self.ax.set_xlim(xmin, xmax)
 
-        # pf.add_zeroline_y(ax=self.ax, data=self.series)
+        if self.ylim:
+            ymin = self.ylim[0]
+            ymax = self.ylim[1]
+            self.ax.set_ylim(ymin, ymax)
+
+        pf.add_zeroline_y(ax=self.ax, data=self.xy_df[self.yname])
 
         pf.default_format(ax=self.ax,
                           ax_xlabel_txt=self.xname,
@@ -90,27 +126,43 @@ class Scatter:
 
 
 def example():
-    pass
-    # # Test data
-    # from diive.core.io.filereader import ReadFileType
-    # loaddatafile = ReadFileType(
-    #     filetype='DIIVE_CSV_30MIN',
-    #     filepath=r"F:\Dropbox\luhk_work\20 - CODING\21 - DIIVE\diive-gui\src\main\resources\base\example_files\ExampleFile_DIIVE_CSV_30T.diive.csv",
-    #     # filepath=r"F:\Dropbox\luhk_work\_current\fp2022\7-14__IRGA627572__addingQCF0\CH-DAV_FP2022.1_1997-2022.08_ID20220826234456_30MIN.diive.csv",
-    #     data_nrows=None)
-    # data_df, metadata_df = loaddatafile.get_filedata()
-    #
-    # series_col = 'co2_flux'
-    # series = data_df[series_col].copy()
-    # series_units = metadata_df.loc[series_col]['UNITS']
-    #
+    from pathlib import Path
+    FOLDER = r"F:\Sync\luhk_work\20 - CODING\21 - DIIVE\diive\notebooks\Workbench\FLUXNET_CH4-N2O_Committee_WP2\data"
+
+    # from diive.core.io.filereader import search_files, MultiDataFileReader
+    # filepaths = search_files(FOLDER, "*.csv")
+    # filepaths = [fp for fp in filepaths if "_fluxnet_" in fp.stem and fp.stem.endswith("_adv")]
+    # print(filepaths)
+    # fr = MultiDataFileReader(filetype='EDDYPRO_FLUXNET_30MIN', filepaths=filepaths)
+    # df = fr.data_df
+    # from diive.core.io.files import save_parquet
+    # save_parquet(outpath=FOLDER, filename="data", data=df)
+
+    from diive.core.io.files import load_parquet
+    filepath = Path(FOLDER) / 'data.parquet'
+    df = load_parquet(filepath=filepath)
+
+    _filter = df['SW_IN_POT'] > 50
+    df = df[_filter].copy()
+
+    # fluxcol = 'FCH4'
+    xcol = 'Rg_1_1_1'
+    ycol = 'Ta_1_1_1'
+
+    x = df[xcol].copy()
+    y = df[ycol].copy()
+
+    # # Plot to given ax
     # fig, ax = pf.create_ax()
-    # # series_units = r'($\mathrm{gC\ m^{-2}}$)'
-    # TimeSeries(ax=ax,
-    #            series=series,
-    #            series_units=series_units).plot()
+    # Scatter(x=x, y=y, ax=ax).plot()
     # fig.tight_layout()
     # fig.show()
+
+    # Plot without given ax
+    ScatterXY(x=x, y=y, nbins=10).plot()
+    # Scatter(x=x, y=y, nbins=10, ylim=[0, 2]).plot()
+
+    # series_units = r'($\mathrm{gC\ m^{-2}}$)'
 
 
 if __name__ == '__main__':

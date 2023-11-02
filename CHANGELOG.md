@@ -2,11 +2,17 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.66.0 | X Nov 2023
+## v0.66.0 | 2 Nov 2023
 
-### XXX
+### New features
 
-- XXX
+- Added new class `ScatterXY`: a simple scatter plot that supports bins (`core.plotting.scatter.ScatterXY`)
+
+![DIIVE](images/ScatterXY_diive_v0.66.0.png)
+
+### Notebooks
+
+- Added notebook `notebooks/Plotting/ScatterXY.ipynb`
 
 ## v0.64.0 | 31 Oct 2023
 

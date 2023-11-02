@@ -11,7 +11,7 @@ from uncertainties import ufloat
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.dfun.frames import df_between_two_dates
 from diive.core.plotting.plotfuncs import default_format, default_legend, nice_date_ticks
-from diive.core.plotting.scatter import Scatter
+from diive.core.plotting.scatter import ScatterXY
 
 
 # todo
@@ -177,7 +177,7 @@ class RandomUncertaintyPAS20:
         ax_orig.set_title(f"Measured {self.fluxcol} with METHOD 1 uncertainties")
 
         # Scatter (measured, method 1)
-        Scatter(x=_df[self.fluxcol], y=_df[self.randunccol]).plot(lw=0, ax=ax_scatter)
+        ScatterXY(x=_df[self.fluxcol], y=_df[self.randunccol]).plot(lw=0, ax=ax_scatter)
         ax_scatter.set_title(f"Measured {self.fluxcol} with METHOD 1 uncertainties")
 
         # Time series (gapfilled, method 1-4)
