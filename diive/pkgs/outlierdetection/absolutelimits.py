@@ -34,8 +34,8 @@ class AbsoluteLimitsDaytimeNighttime(FlagBase):
                  lat: float,
                  lon: float,
                  utc_offset: int,
-                 levelid: str = None):
-        super().__init__(series=series, flagid=self.flagid, levelid=levelid)
+                 idstr: str = None):
+        super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.showplot = False
         self.verbose = False
 
@@ -136,8 +136,8 @@ class AbsoluteLimits(FlagBase):
     """
     flagid = 'OUTLIER_ABSLIM'
 
-    def __init__(self, series: Series, levelid: str = None):
-        super().__init__(series=series, flagid=self.flagid, levelid=levelid)
+    def __init__(self, series: Series, idstr: str = None):
+        super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.showplot = False
         self.verbose = False
 
@@ -171,7 +171,7 @@ def example():
     tidx = pd.date_range('2019-01-01 00:30:00', periods=rows, freq='30T')
     series = pd.Series(data, index=tidx, name='TESTDATA')
 
-    al = AbsoluteLimits(series=series, levelid='99')
+    al = AbsoluteLimits(series=series, idstr='99')
     al.calc(min=16, max=84)
 
     print(series.describe())

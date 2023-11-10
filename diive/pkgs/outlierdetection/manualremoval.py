@@ -11,7 +11,7 @@ class ManualRemoval(FlagBase):
 
     flagid = 'OUTLIER_MANUAL'
 
-    def __init__(self, series: Series, levelid: str = None):
+    def __init__(self, series: Series, idstr: str = None):
         """
         Generate flag for data points that should be removed
         ...
@@ -27,7 +27,7 @@ class ManualRemoval(FlagBase):
                 Data with rejected values set to missing
 
         """
-        super().__init__(series=series, flagid=self.flagid, levelid=levelid)
+        super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.showplot = False
         self.verbose = False
 

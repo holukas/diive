@@ -6,7 +6,7 @@ from pandas import DataFrame
 from diive.core.io.files import loadfiles
 from diive.core.times.times import current_date_str_condensed
 from diive.core.times.times import insert_timestamp
-from diive.pkgs.fluxprocessingchain.level2_qualityflags import FluxQualityFlagsLevel2EddyPro
+from diive.pkgs.fluxprocessingchain.level2_qualityflags import FluxQualityFlagsEddyPro
 from diive.pkgs.outlierdetection.manualremoval import ManualRemoval
 from diive.pkgs.qaqc.qcf import FlagQCF
 
@@ -285,16 +285,16 @@ class FormatEddyProFluxnetFileForUpload:
         # Here, only the signal strength test is specifically needed, but the creation
         # of the overall quality flag QCF also requires the missing values test
         print(f"\nPerforming quality checks ...\n")
-        fluxqc = FluxQualityFlagsLevel2EddyPro(fluxcol=fluxcol, df=df, levelid=levelid)
+        fluxqc = FluxQualityFlagsEddyPro(fluxcol=fluxcol, dfin=df, idstr=levelid)
         fluxqc.missing_vals_test()
         fluxqc.signal_strength_test(signal_strength_col=signal_strength_col,
                                     method=method,
                                     threshold=threshold)
-        df = fluxqc.get()  # Dataframe with flag columns added
+        df = fluxqc.addflags()  # Dataframe with flag columns added
 
         # Calculate overall quality flag QCF
         print(f"\nGenerating overall quality flag QCF ...")
-        qcf = FlagQCF(series=df[f'{fluxcol}'], df=df, levelid=levelid, swinpot=df['SW_IN_POT'], nighttime_threshold=50)
+        qcf = FlagQCF(series=df[f'{fluxcol}'], df=df, idstr=levelid, swinpot=df['SW_IN_POT'], nighttime_threshold=50)
         qcf.calculate(daytime_accept_qcf_below=2, nighttimetime_accept_qcf_below=2)
         qcf.showplot_qcf_heatmaps(maxabsval=50)
         qcf.report_qcf_evolution()

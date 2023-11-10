@@ -8,21 +8,26 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from pandas import Series, DatetimeIndex
-from diive.core.plotting.plotfuncs import default_format, default_legend
+
 import diive.core.plotting.styles.LightTheme as theme
+from diive.core.funcs.funcs import validate_id_string
+from diive.core.plotting.plotfuncs import default_format, default_legend
 
-class FlagBase():
 
-    def __init__(self, series: Series, flagid: str, levelid: str = None):
+class FlagBase:
+
+    def __init__(self, series: Series, flagid: str, idstr: str = None, verbose: int = 1):
         self.series = series
         self._flagid = flagid
-        self._levelid = levelid
-        self._flagname = self._generate_flagname()
+        self._idstr = validate_id_string(idstr=idstr)
+        self.verbose = verbose
+
+        self.flagname = self._generate_flagname()
 
         self._filteredseries = None
         self._flag = None
 
-        print(f"Generating flag {self._flagname} for variable {self.series.name} ...")
+        print(f"Generating flag {self.flagname} for variable {self.series.name} ...")
 
     @property
     def flag(self) -> Series:
@@ -62,18 +67,20 @@ class FlagBase():
     def reset(self):
         self._filteredseries = self.series.copy()
         # Generate flag series with NaNs
-        self._flag = pd.Series(index=self.series.index, data=np.nan, name=self._flagname)
+        self._flag = pd.Series(index=self.series.index, data=np.nan, name=self.flagname)
 
     def _generate_flagname(self) -> str:
         """Generate standardized name for flag variable"""
         flagname = "FLAG"
-        if self._levelid: flagname += f"_L{self._levelid}"
+        if self._idstr:
+            flagname += f"{self._idstr}"
         flagname += f"_{self.series.name}"
-        if self._flagid: flagname += f"_{self._flagid}"
+        if self._flagid:
+            flagname += f"_{self._flagid}"
         flagname += f"_TEST"
         return flagname
 
-    def plot(self, ok:DatetimeIndex, rejected:DatetimeIndex, plottitle:str=""):
+    def plot(self, ok: DatetimeIndex, rejected: DatetimeIndex, plottitle: str = ""):
         """Basic plot that shows time series with and without outliers"""
         fig = plt.figure(facecolor='white', figsize=(16, 7))
         gs = gridspec.GridSpec(2, 1)  # rows, cols

@@ -33,7 +33,7 @@ class zScoreDaytimeNighttime(FlagBase):
                  lat: float,
                  lon: float,
                  utc_offset: int,
-                 levelid: str = None):
+                 idstr: str = None):
         """
 
         Args:
@@ -42,9 +42,9 @@ class zScoreDaytimeNighttime(FlagBase):
             lon: Longitude of location as float, e.g. 9.790639
             utc_offset: UTC offset of *timestamp_index*, e.g. 1 for UTC+01:00
                 The datetime index of the resulting Series will be in this timezone.
-            levelid: Identifier, added as suffix to output variable names
+            idstr: Identifier, added as suffix to output variable names
         """
-        super().__init__(series=series, flagid=self.flagid, levelid=levelid)
+        super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.showplot = False
         self.verbose = False
 
@@ -145,8 +145,8 @@ class zScore(FlagBase):
     """
     flagid = 'OUTLIER_ZSCORE'
 
-    def __init__(self, series: Series, levelid: str = None):
-        super().__init__(series=series, flagid=self.flagid, levelid=levelid)
+    def __init__(self, series: Series, idstr: str = None):
+        super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.showplot = False
         self.plottitle = None
         self.verbose = False

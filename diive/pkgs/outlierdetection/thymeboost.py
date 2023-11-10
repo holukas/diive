@@ -38,8 +38,8 @@ class ThymeBoostOutlier(FlagBase):
     """
     flagid = 'OUTLIER_THYME'
 
-    def __init__(self, series: Series, levelid: str = None):
-        super().__init__(series=series, flagid=self.flagid, levelid=levelid)
+    def __init__(self, series: Series, idstr: str = None):
+        super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.showplot = False
         self.maxiter = 1
 

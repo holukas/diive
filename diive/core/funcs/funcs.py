@@ -2,6 +2,38 @@ import numpy as np
 from pandas import Series
 
 
+def validate_id_string(idstr: str):
+    if idstr:
+        # idstr = idstr if idstr.endswith('_') else f'{idstr}_'
+        idstr = idstr if idstr.startswith('_') else f'_{idstr}'
+    return idstr
+
+
+def filter_strings_by_elements(list1: list[str], list2: list[str]) -> list[str]:
+    """Returns a list of strings from list1 that contain all of the elements in list2.
+
+    The function uses a set to keep track of the elements in list2, which makes it more
+    efficient than iterating over the list twice with this one-liner:
+        result = [s1 for s1 in list1 if all(s2 in str(s1) for s2 in list2)]
+
+    Args:
+        list1: A list of strings.
+        list2: A list of elements to check for in each string in list1.
+
+    Returns:
+        A list of strings from list1 that contain all of the elements in list2.
+    """
+    if not list1 or not list2:
+        return []
+
+    elements_in_other_list = set(list2)
+    result = []
+    for s1 in list1:
+        if all(s2 in str(s1) for s2 in elements_in_other_list):
+            result.append(s1)
+    return result
+
+
 def zscore(series: Series) -> Series:
     """Calculate the z-score of each record in *series*"""
     mean, std = np.mean(series), np.std(series)

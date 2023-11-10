@@ -56,8 +56,8 @@ class OutlierSTLRZ(FlagBase):
     flagid = 'OUTLIER_STLRZ'
 
     def __init__(self, series: Series, lat: float, lon: float,
-                 utc_offset: int, levelid: str = None):
-        super().__init__(series=series, flagid=self.flagid, levelid=levelid)
+                 utc_offset: int, idstr: str = None):
+        super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.showplot = False
         self.repeat = True
         self.lat = lat

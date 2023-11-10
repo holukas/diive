@@ -150,7 +150,7 @@ class StepwiseMeteoScreeningDb:
         # Each field gets its own sod object
         self.sod = {}
         for field in self.fields:
-            self.sod[field] = StepwiseOutlierDetection(dataframe=self.data_detailed[field].copy(),
+            self.sod[field] = StepwiseOutlierDetection(dfin=self.data_detailed[field].copy(),
                                                        col=field,
                                                        site_lat=self.site_lat,
                                                        site_lon=self.site_lon,
@@ -498,8 +498,8 @@ class StepwiseMeteoScreeningDb:
             series_orig = self._data_detailed[field][field].copy()
 
             qcf = FlagQCF(series=series_orig,
-                          df=self.sod[field].hires_flags,
-                          levelid='METSCR',
+                          df=self.sod[field].results,
+                          idstr='METSCR',
                           swinpot=None,
                           nighttime_threshold=50)
             qcf.calculate(daytime_accept_qcf_below=2, nighttimetime_accept_qcf_below=2)

@@ -2,6 +2,14 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.67.0 | X Nov 2023
+
+### New features
+
+- (`pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain`)
+- (`core.funcs.funcs.filter_strings_by_elements`)
+- (`pkgs.qaqc.eddyproflags.flag_steadiness_horizontal_wind_eddypro_test`)
+
 ## v0.66.0 | 2 Nov 2023
 
 ### New features

@@ -1,6 +1,7 @@
 import pandas as pd
 from pandas import Series, DataFrame
 
+from diive.core.funcs.funcs import validate_id_string
 from diive.core.plotting.timeseries import TimeSeries
 from diive.core.times.times import TimestampSanitizer
 from diive.pkgs.outlierdetection.absolutelimits import AbsoluteLimits, AbsoluteLimitsDaytimeNighttime
@@ -8,7 +9,6 @@ from diive.pkgs.outlierdetection.incremental import zScoreIncrements
 from diive.pkgs.outlierdetection.local3sd import LocalSD
 from diive.pkgs.outlierdetection.lof import LocalOutlierFactorDaytimeNighttime, LocalOutlierFactorAllData
 from diive.pkgs.outlierdetection.manualremoval import ManualRemoval
-from diive.pkgs.outlierdetection.missing import MissingValues
 from diive.pkgs.outlierdetection.seasonaltrend import OutlierSTLRZ
 from diive.pkgs.outlierdetection.thymeboost import ThymeBoostOutlier
 from diive.pkgs.outlierdetection.zscore import zScoreDaytimeNighttime, zScore
@@ -59,20 +59,23 @@ class StepwiseOutlierDetection:
 
     def __init__(
             self,
-            dataframe: DataFrame,
+            dfin: DataFrame,
             col: str,
             site_lat: float,
             site_lon: float,
-            utc_offset: int
+            utc_offset: int,
+            idstr: str = None
     ):
-        self._dataframe_orig = dataframe.copy()
-        self._series = self._dataframe_orig[col].copy()
+        self.dfin = dfin.copy()
+        self.col = col
+        self._series = self.dfin[self.col].copy()
         self.site_lat = site_lat
         self.site_lon = site_lon
         self.utc_offset = utc_offset
+        self.idstr = validate_id_string(idstr=idstr)
 
         # Setup
-        self._hires_flags, \
+        self._results, \
             self._series_hires_cleaned, \
             self._series_hires_orig = self._setup()
 
@@ -101,11 +104,11 @@ class StepwiseOutlierDetection:
         return self._series_hires_orig
 
     @property
-    def hires_flags(self) -> DataFrame:
-        """Return flag(s) as dict of Series"""
-        if not isinstance(self._hires_flags, DataFrame):
+    def results(self) -> DataFrame:
+        """Return flag(s) as dataframe"""
+        if not isinstance(self._results, DataFrame):
             raise Exception(f"No hires flags available.")
-        return self._hires_flags
+        return self._results
 
     def showplot_orig(self, interactive: bool = False):
         """Show original high-resolution data used as input"""
@@ -117,17 +120,10 @@ class StepwiseOutlierDetection:
         p = TimeSeries(series=self._series_hires_cleaned)
         p.plot() if not interactive else p.plot_interactive()
 
-    def flag_missingvals_test(self):
-        """Flag missing values"""
-        series_cleaned = self._series_hires_cleaned.copy()
-        results = MissingValues(series=series_cleaned)
-        results.calc()
-        self._last_results = results
-
     def flag_manualremoval_test(self, remove_dates: list, showplot: bool = False, verbose: bool = False):
         """Flag specified records for removal"""
         series_cleaned = self._series_hires_cleaned.copy()
-        results = ManualRemoval(series=series_cleaned)
+        results = ManualRemoval(series=series_cleaned, idstr=self.idstr)
         results.calc(remove_dates=remove_dates, showplot=showplot, verbose=verbose)
         self._last_results = results
 
@@ -135,14 +131,14 @@ class StepwiseOutlierDetection:
         """Flag outliers based on z-score, calculated separately for daytime and nighttime"""
         series_cleaned = self._series_hires_cleaned.copy()
         results = zScoreDaytimeNighttime(series=series_cleaned, lat=self.site_lat, lon=self.site_lon,
-                                         utc_offset=self.utc_offset)
+                                         utc_offset=self.utc_offset, idstr=self.idstr)
         results.calc(threshold=threshold, showplot=showplot, verbose=verbose)
         self._last_results = results
 
     def flag_outliers_increments_zcore_test(self, threshold: int = 30, showplot: bool = False, verbose: bool = False):
         """Identify outliers based on the z-score of record increments"""
         series_cleaned = self._series_hires_cleaned.copy()
-        results = zScoreIncrements(series=series_cleaned)
+        results = zScoreIncrements(series=series_cleaned, idstr=self.idstr)
         results.calc(threshold=threshold, showplot=showplot, verbose=verbose)
         self._last_results = results
 
@@ -150,14 +146,14 @@ class StepwiseOutlierDetection:
                                   plottitle: str = None):
         """Identify outliers based on the z-score of records"""
         series_cleaned = self._series_hires_cleaned.copy()
-        results = zScore(series=series_cleaned)
+        results = zScore(series=series_cleaned, idstr=self.idstr)
         results.calc(threshold=threshold, showplot=showplot, verbose=verbose, plottitle=plottitle)
         self._last_results = results
 
     def flag_outliers_thymeboost_test(self, showplot: bool = False, verbose: bool = False):
         """Identify outliers based on thymeboost"""
         series_cleaned = self._series_hires_cleaned.copy()
-        results = ThymeBoostOutlier(series=series_cleaned)
+        results = ThymeBoostOutlier(series=series_cleaned, idstr=self.idstr)
         results.calc(showplot=showplot)
         self._last_results = results
 
@@ -165,14 +161,14 @@ class StepwiseOutlierDetection:
                                    verbose: bool = False):
         """Identify outliers based on standard deviation in a rolling window"""
         series_cleaned = self._series_hires_cleaned.copy()
-        results = LocalSD(series=series_cleaned)
+        results = LocalSD(series=series_cleaned, idstr=self.idstr)
         results.calc(n_sd=n_sd, winsize=winsize, showplot=showplot)
         self._last_results = results
 
     def flag_outliers_abslim_test(self, minval: float, maxval: float, showplot: bool = False, verbose: bool = False):
         """Identify outliers based on absolute limits"""
         series_cleaned = self._series_hires_cleaned.copy()
-        results = AbsoluteLimits(series=series_cleaned)
+        results = AbsoluteLimits(series=series_cleaned, idstr=self.idstr)
         results.calc(min=minval, max=maxval, showplot=showplot)
         self._last_results = results
 
@@ -183,7 +179,7 @@ class StepwiseOutlierDetection:
         """Identify outliers based on absolute limits separately for daytime and nighttime"""
         series_cleaned = self._series_hires_cleaned.copy()
         results = AbsoluteLimitsDaytimeNighttime(series=series_cleaned, lat=self.site_lat, lon=self.site_lon,
-                                                 utc_offset=self.utc_offset)
+                                                 utc_offset=self.utc_offset, idstr=self.idstr)
         results.calc(daytime_minmax=daytime_minmax, nighttime_minmax=nighttime_minmax, showplot=showplot)
         self._last_results = results
 
@@ -192,7 +188,7 @@ class StepwiseOutlierDetection:
         """Identify outliers based on seasonal-trend decomposition and z-score calculations"""
         series_cleaned = self._series_hires_cleaned.copy()
         results = OutlierSTLRZ(series=series_cleaned, lat=self.site_lat, lon=self.site_lon,
-                               utc_offset=self.utc_offset)
+                               utc_offset=self.utc_offset, idstr=self.idstr)
         results.calc(zfactor=zfactor, decompose_downsampling_freq=decompose_downsampling_freq,
                      repeat=repeat, showplot=showplot)
         self._last_results = results
@@ -206,7 +202,7 @@ class StepwiseOutlierDetection:
         # Contamination is set automatically unless float is given
         contamination = contamination if isinstance(contamination, float) else 'auto'
         results = LocalOutlierFactorDaytimeNighttime(series=series_cleaned, lat=self.site_lat,
-                                                     lon=self.site_lon, utc_offset=self.utc_offset)
+                                                     lon=self.site_lon, utc_offset=self.utc_offset, idstr=self.idstr)
         results.calc(n_neighbors=n_neighbors, contamination=contamination, showplot=showplot, verbose=verbose)
         self._last_results = results
 
@@ -218,33 +214,17 @@ class StepwiseOutlierDetection:
         n_neighbors = int(len(series_cleaned.dropna()) / 100) if not n_neighbors else n_neighbors
         # Contamination is set automatically unless float is given
         contamination = contamination if isinstance(contamination, float) else 'auto'
-        results = LocalOutlierFactorAllData(series=series_cleaned)
+        results = LocalOutlierFactorAllData(series=series_cleaned, idstr=self.idstr)
         results.calc(n_neighbors=n_neighbors, contamination=contamination, showplot=showplot, verbose=verbose)
         self._last_results = results
-
-    def get(self) -> DataFrame:
-        """Add outlier flags to full dataframe"""
-        print("\nMerging flags with full dataframe:")
-        # Flag data
-        exportcols = self._hires_flags.columns
-        # Remove potentially already existing flag data in full dataframe
-        for col in exportcols:
-            if col in self._dataframe_orig.columns:
-                self._dataframe_orig = self._dataframe_orig.drop(columns=exportcols)
-        # exportcols = [col for col in self._hires_flags if col not in self._dataframe_orig.columns]
-        # Add flags to full dataframe
-        df = pd.concat([self._dataframe_orig, self._hires_flags[exportcols]], axis=1)
-        for col in self._hires_flags.columns:
-            print(f"++Added flag column {col} as new column to full dataframe")
-        return df
 
     def addflag(self):
         """Add flag of most recent test to data and update filtered series
         that will be used to continue with the next test"""
         flag = self._last_results.flag
         self._series_hires_cleaned = self._last_results.filteredseries
-        if flag.name not in self._hires_flags.columns:
-            self._hires_flags[flag.name] = flag
+        if flag.name not in self._results.columns:
+            self._results[flag.name] = flag
         else:
             pass  # todo check
         print(f"++Added flag column {flag.name} to flag data")
