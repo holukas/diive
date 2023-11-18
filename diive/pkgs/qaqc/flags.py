@@ -1,7 +1,7 @@
 from pandas import Series, DatetimeIndex
 
-from core.base.flagbase import FlagBase
-from core.utils.prints import ConsoleOutputDecorator
+from diive.core.base.flagbase import FlagBase
+from diive.core.utils.prints import ConsoleOutputDecorator
 
 
 @ConsoleOutputDecorator()

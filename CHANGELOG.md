@@ -9,6 +9,7 @@
 - (`pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain`)
 - (`core.funcs.funcs.filter_strings_by_elements`)
 - (`pkgs.qaqc.eddyproflags.flag_steadiness_horizontal_wind_eddypro_test`)
+- (`core.plotting.scatter.ScatterXY`)
 
 ## v0.66.0 | 2 Nov 2023
 

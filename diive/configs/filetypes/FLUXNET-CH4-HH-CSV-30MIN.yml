@@ -1,0 +1,22 @@
+GENERAL:
+  NAME: "FLUXNET-CH4-HH-CSV-30MIN"
+  DESCRIPTION: "The Data Product for the FLUXNET-CH4 Release."
+  TAGS: [ "FLUXNET" ]
+
+FILE:
+  EXTENSION: "*.csv"
+  COMPRESSION: "None"
+
+TIMESTAMP:
+  DESCRIPTION: "1 column with full timestamp with seconds"
+  INDEX_COLUMN: [ 'TIMESTAMP_END' ]
+  DATETIME_FORMAT: "%Y%m%d%H%M"
+  SHOWS_START_MIDDLE_OR_END_OF_RECORD: "end"
+
+DATA:
+  HEADER_SECTION_ROWS: [ 0, 1, 2 ]
+  SKIP_ROWS: [ 0, 1 ]
+  HEADER_ROWS: [ 0 ]
+  NA_VALUES: [ -9999 ]
+  FREQUENCY: "30T"
+  DELIMITER: ","

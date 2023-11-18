@@ -12,7 +12,7 @@ from diive.pkgs.fluxprocessingchain.level2_qualityflags import FluxQualityFlagsE
 from diive.pkgs.fluxprocessingchain.level31_storagecorrection import FluxStorageCorrectionSinglePointEddyPro
 from diive.pkgs.outlierdetection.stepwiseoutlierdetection import StepwiseOutlierDetection
 from diive.pkgs.qaqc.qcf import FlagQCF
-from pkgs.flux.common import detect_basevar
+from diive.pkgs.flux.common import detect_basevar
 
 
 class LoadEddyProOutputFiles:

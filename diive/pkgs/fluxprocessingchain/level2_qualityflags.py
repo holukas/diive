@@ -4,12 +4,13 @@ import pandas as pd
 from pandas import DataFrame
 
 from diive.core.funcs.funcs import validate_id_string
-from pkgs.qaqc.eddyproflags import (flags_vm97_eddypro_fulloutputfile_tests, \
-                                    flags_vm97_eddypro_fluxnetfile_tests, flag_gas_completeness_eddypro_test, \
-                                    flag_spectral_correction_factor_eddypro_test, flag_ssitc_eddypro_test,
-                                    flag_angle_of_attack_eddypro_test, flag_steadiness_horizontal_wind_eddypro_test,
-                                    flag_signal_strength_eddypro_test)
-from pkgs.qaqc.flags import MissingValues
+from diive.pkgs.qaqc.eddyproflags import (flags_vm97_eddypro_fulloutputfile_tests, \
+                                          flags_vm97_eddypro_fluxnetfile_tests, flag_gas_completeness_eddypro_test, \
+                                          flag_spectral_correction_factor_eddypro_test, flag_ssitc_eddypro_test,
+                                          flag_angle_of_attack_eddypro_test,
+                                          flag_steadiness_horizontal_wind_eddypro_test,
+                                          flag_signal_strength_eddypro_test)
+from diive.pkgs.qaqc.flags import MissingValues
 
 
 class FluxQualityFlagsEddyPro:
