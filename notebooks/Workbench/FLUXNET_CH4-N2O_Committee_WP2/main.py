@@ -55,97 +55,97 @@ fig.show()
 
 
 
-# foundfiles = search_files(searchdirs=[SOURCEDIR], pattern='*.parquet')
-# # foundfiles = foundfiles[10:20]
-# bdf = pd.DataFrame()
+foundfiles = search_files(searchdirs=[SOURCEDIR], pattern='*.parquet')
+# foundfiles = foundfiles[10:20]
+bdf = pd.DataFrame()
+
+
+
+n_files = len(foundfiles)
+plots_per_row = 5
+rows = int(np.ceil(n_files / plots_per_row))
+
+fig = plt.figure(facecolor='white', figsize=(plots_per_row*10, rows*10), dpi=72)
+gs = gridspec.GridSpec(rows, plots_per_row)  # rows, cols
+# gs.update(wspace=0.3, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
+
+axes_dict = {}
+current_row = 0
+col = 0
+
+# Prepare figure
+for ix, ff in enumerate(foundfiles):
+    if col > plots_per_row-1:
+        col = 0
+        current_row += 1
+    axes_dict[ix] = fig.add_subplot(gs[current_row, col])
+    col += 1
+
+for ix, ff in enumerate(foundfiles):
+    ax = axes_dict[ix]
+    df = load_parquet(ff)
+    site = ff.name.replace('AMF_', '').split('_')[0]
+    xcol = x1col if x1col in df.columns else x2col
+    ycol = y1col if y1col in df.columns else y2col
+    # sca = ScatterXY(x=df[xcol], y=df[ycol], nbins=50, title=site, binagg='mean')
+    sca = ScatterXY(x=df[xcol], y=df[ycol], nbins=20, title=site, binagg='median', ax=ax, ylim='auto')
+    # sca = ScatterXY(x=df[xcol], y=df[ycol], nbins=50, title=site, binagg='median')
+    sca.plot()
+
+    bx = sca.xy_df_binned[xcol]['median']
+    by = sca.xy_df_binned[ycol]['median']
+    bxmax = bx.max()
+    bymax = by.max()
+    bx = bx.divide(bxmax)
+    by = by.divide(bymax)
+
+    if bymax > 0:
+        frame = {'USTAR_NORM': bx,
+                 'FCH4_NORM': by}
+        incoming = pd.DataFrame.from_dict(frame)
+
+        if ix == 0:
+            bdf = incoming.copy()
+        else:
+            bdf = pd.concat([bdf, incoming], axis=0)
+    else:
+        print(bymax, by.max())
+
+# fig.tight_layout()
+# fig.show()
+
+bdf = bdf.sort_values(by='USTAR_NORM', ascending=True)
+# sca = ScatterXY(x=bdf['USTAR_NORM'], y=bdf['FCH4_NORM'], nbins=20)
+sca = ScatterXY(x=bdf['USTAR_NORM'], y=bdf['FCH4_NORM'], xlim=[0, 1], ylim=[-1.4, 1.4], nbins=20)
+# sca = ScatterXY(x=bdf['USTAR_NORM'], y=bdf['FCH4_NORM'], xlim=[0, 1], ylim=[0, 1], nbins=20)
+sca.plot()
+
+# # Convert to PARQUET files
+# didnotwork = []
+# foundfiles = search_files(searchdirs=[CSVDIR], pattern='*.csv')
+# for ff in foundfiles:
+#     try:
+#         d = ReadFileType(filepath=ff, filetype='FLUXNET-CH4-HH-CSV-30MIN', output_middle_timestamp=True)
+#         df, meta = d.get_filedata()
+#         save_parquet(filename=ff.name, data=df, outpath=PARQUETDIR)
+#     except:
+#         didnotwork.append(ff.name)
+# print(didnotwork)
+
+
+# [print(f) for f in foundfiles]
+
+# Read first file to get original order of columns
+
+# for ff in foundfiles:
+# d = ReadFileType(filepath=ff, filetype='FLUXNET-CH4-HH-CSV-30MIN', output_middle_timestamp=True)
+# df, meta = d.get_filedata()
 #
+# # # Keep daytime data
+# # _filter = _df['Rg_f'] > 50
+# # df = _df[_filter].copy()
 #
-#
-# n_files = len(foundfiles)
-# plots_per_row = 5
-# rows = int(np.ceil(n_files / plots_per_row))
-#
-# fig = plt.figure(facecolor='white', figsize=(plots_per_row*10, rows*10), dpi=72)
-# gs = gridspec.GridSpec(rows, plots_per_row)  # rows, cols
-# # gs.update(wspace=0.3, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
-#
-# axes_dict = {}
-# current_row = 0
-# col = 0
-#
-# # Prepare figure
-# for ix, ff in enumerate(foundfiles):
-#     if col > plots_per_row-1:
-#         col = 0
-#         current_row += 1
-#     axes_dict[ix] = fig.add_subplot(gs[current_row, col])
-#     col += 1
-#
-# for ix, ff in enumerate(foundfiles):
-#     ax = axes_dict[ix]
-#     df = load_parquet(ff)
-#     site = ff.name.replace('AMF_', '').split('_')[0]
-#     xcol = x1col if x1col in df.columns else x2col
-#     ycol = y1col if y1col in df.columns else y2col
-#     # sca = ScatterXY(x=df[xcol], y=df[ycol], nbins=50, title=site, binagg='mean')
-#     sca = ScatterXY(x=df[xcol], y=df[ycol], nbins=20, title=site, binagg='median', ax=ax, ylim='auto')
-#     # sca = ScatterXY(x=df[xcol], y=df[ycol], nbins=50, title=site, binagg='median')
-#     sca.plot()
-#
-#     bx = sca.xy_df_binned[xcol]['median']
-#     by = sca.xy_df_binned[ycol]['median']
-#     bxmax = bx.max()
-#     bymax = by.max()
-#     bx = bx.divide(bxmax)
-#     by = by.divide(bymax)
-#
-#     if bymax > 0:
-#         frame = {'USTAR_NORM': bx,
-#                  'FCH4_NORM': by}
-#         incoming = pd.DataFrame.from_dict(frame)
-#
-#         if ix == 0:
-#             bdf = incoming.copy()
-#         else:
-#             bdf = pd.concat([bdf, incoming], axis=0)
-#     else:
-#         print(bymax, by.max())
-#
-# # fig.tight_layout()
-# # fig.show()
-#
-# bdf = bdf.sort_values(by='USTAR_NORM', ascending=True)
-# # sca = ScatterXY(x=bdf['USTAR_NORM'], y=bdf['FCH4_NORM'], nbins=20)
-# sca = ScatterXY(x=bdf['USTAR_NORM'], y=bdf['FCH4_NORM'], xlim=[0, 1], ylim=[-1.4, 1.4], nbins=20)
-# # sca = ScatterXY(x=bdf['USTAR_NORM'], y=bdf['FCH4_NORM'], xlim=[0, 1], ylim=[0, 1], nbins=20)
-# sca.plot()
-#
-# # # Convert to PARQUET files
-# # didnotwork = []
-# # foundfiles = search_files(searchdirs=[CSVDIR], pattern='*.csv')
-# # for ff in foundfiles:
-# #     try:
-# #         d = ReadFileType(filepath=ff, filetype='FLUXNET-CH4-HH-CSV-30MIN', output_middle_timestamp=True)
-# #         df, meta = d.get_filedata()
-# #         save_parquet(filename=ff.name, data=df, outpath=PARQUETDIR)
-# #     except:
-# #         didnotwork.append(ff.name)
-# # print(didnotwork)
-#
-#
-# # [print(f) for f in foundfiles]
-#
-# # Read first file to get original order of columns
-#
-# # for ff in foundfiles:
-# # d = ReadFileType(filepath=ff, filetype='FLUXNET-CH4-HH-CSV-30MIN', output_middle_timestamp=True)
-# # df, meta = d.get_filedata()
-# #
-# # # # Keep daytime data
-# # # _filter = _df['Rg_f'] > 50
-# # # df = _df[_filter].copy()
-# #
-# # # Get variable data
-# # x = df[xcol].copy()
-# # y = df[ycol].copy()
-# # ScatterXY(x=x, y=y, nbins=20, xlim=[0, 1], ylim=[-100, 100], title="XXX").plot()
+# # Get variable data
+# x = df[xcol].copy()
+# y = df[ycol].copy()
+# ScatterXY(x=x, y=y, nbins=20, xlim=[0, 1], ylim=[-100, 100], title="XXX").plot()
