@@ -10,7 +10,6 @@ from diive.pkgs.outlierdetection.local3sd import LocalSD
 from diive.pkgs.outlierdetection.lof import LocalOutlierFactorDaytimeNighttime, LocalOutlierFactorAllData
 from diive.pkgs.outlierdetection.manualremoval import ManualRemoval
 from diive.pkgs.outlierdetection.seasonaltrend import OutlierSTLRZ
-from diive.pkgs.outlierdetection.thymeboost import ThymeBoostOutlier
 from diive.pkgs.outlierdetection.zscore import zScoreDaytimeNighttime, zScore
 
 
@@ -29,7 +28,6 @@ class StepwiseOutlierDetection:
     - `.flag_outliers_localsd_test()`: Identify outliers based on the local standard deviation from a running median
     - `.flag_manualremoval_test()`: Remove data points for range, time or point-by-point
     - `.flag_outliers_stl_rz_test()`: Identify outliers based on seasonal-trend decomposition and z-score calculations
-    - `.flag_outliers_thymeboost_test()`: Identify outliers based on [thymeboost](https://github.com/tblume1992/ThymeBoost)
     - `.flag_outliers_zscore_dtnt_test()`: Identify outliers based on the z-score, separately for daytime and nighttime
     - `.flag_outliers_zscore_test()`:  Identify outliers based on the z-score
     - `.flag_outliers_lof_dtnt_test()`: Identify outliers based on local outlier factor, daytime nighttime separately
@@ -80,10 +78,10 @@ class StepwiseOutlierDetection:
             self._series_hires_orig = self._setup()
 
         # Returned variables
-        self._last_results = None  # Results of most recent QC tests (objects)
+        self._last_results = pd.DataFrame()  # Results of most recent QC tests (objects)
 
     @property
-    def last_results(self) -> object:
+    def last_results(self) -> DataFrame:
         """Return high-resolution detailed data with tags as dict of objects"""
         if not isinstance(self._last_results, object):
             raise Exception(f"No recent results available.")
@@ -123,53 +121,28 @@ class StepwiseOutlierDetection:
     def flag_manualremoval_test(self, remove_dates: list, showplot: bool = False, verbose: bool = False):
         """Flag specified records for removal"""
         series_cleaned = self._series_hires_cleaned.copy()
-        results = ManualRemoval(series=series_cleaned, idstr=self.idstr)
-        results.calc(remove_dates=remove_dates, showplot=showplot, verbose=verbose)
+        results = ManualRemoval(series=series_cleaned, idstr=self.idstr, remove_dates=remove_dates,
+                                showplot=showplot, verbose=verbose, repeat=False)
+        # results.calc(remove_dates=remove_dates, showplot=showplot, verbose=verbose)
         self._last_results = results
 
-    def flag_outliers_zscore_dtnt_test(self, threshold: float = 4, showplot: bool = False, verbose: bool = False):
+    def flag_outliers_zscore_dtnt_test(self, thres_zscore: float = 4, showplot: bool = False, verbose: bool = False,
+                                       repeat: bool = True):
         """Flag outliers based on z-score, calculated separately for daytime and nighttime"""
         series_cleaned = self._series_hires_cleaned.copy()
         results = zScoreDaytimeNighttime(series=series_cleaned, lat=self.site_lat, lon=self.site_lon,
-                                         utc_offset=self.utc_offset, idstr=self.idstr)
-        results.calc(threshold=threshold, showplot=showplot, verbose=verbose)
-        self._last_results = results
-
-    def flag_outliers_increments_zcore_test(self, threshold: int = 30, showplot: bool = False, verbose: bool = False):
-        """Identify outliers based on the z-score of record increments"""
-        series_cleaned = self._series_hires_cleaned.copy()
-        results = zScoreIncrements(series=series_cleaned, idstr=self.idstr)
-        results.calc(threshold=threshold, showplot=showplot, verbose=verbose)
-        self._last_results = results
-
-    def flag_outliers_zscore_test(self, threshold: int = 4, showplot: bool = False, verbose: bool = False,
-                                  plottitle: str = None):
-        """Identify outliers based on the z-score of records"""
-        series_cleaned = self._series_hires_cleaned.copy()
-        results = zScore(series=series_cleaned, idstr=self.idstr)
-        results.calc(threshold=threshold, showplot=showplot, verbose=verbose, plottitle=plottitle)
-        self._last_results = results
-
-    def flag_outliers_thymeboost_test(self, showplot: bool = False, verbose: bool = False):
-        """Identify outliers based on thymeboost"""
-        series_cleaned = self._series_hires_cleaned.copy()
-        results = ThymeBoostOutlier(series=series_cleaned, idstr=self.idstr)
-        results.calc(showplot=showplot)
+                                         utc_offset=self.utc_offset, idstr=self.idstr, repeat=repeat,
+                                         thres_zscore=thres_zscore, showplot=showplot, verbose=verbose)
+        # results.calc(threshold=threshold, showplot=showplot, verbose=verbose)
         self._last_results = results
 
     def flag_outliers_localsd_test(self, n_sd: float = 7, winsize: int = None, showplot: bool = False,
-                                   verbose: bool = False):
+                                   verbose: bool = False, repeat: bool = True):
         """Identify outliers based on standard deviation in a rolling window"""
         series_cleaned = self._series_hires_cleaned.copy()
-        results = LocalSD(series=series_cleaned, idstr=self.idstr)
-        results.calc(n_sd=n_sd, winsize=winsize, showplot=showplot)
-        self._last_results = results
-
-    def flag_outliers_abslim_test(self, minval: float, maxval: float, showplot: bool = False, verbose: bool = False):
-        """Identify outliers based on absolute limits"""
-        series_cleaned = self._series_hires_cleaned.copy()
-        results = AbsoluteLimits(series=series_cleaned, idstr=self.idstr)
-        results.calc(min=minval, max=maxval, showplot=showplot)
+        results = LocalSD(series=series_cleaned, idstr=self.idstr, n_sd=n_sd, winsize=winsize,
+                          showplot=showplot, repeat=repeat, verbose=verbose)
+        # results.calc(n_sd=n_sd, winsize=winsize, showplot=showplot)
         self._last_results = results
 
     def flag_outliers_abslim_dtnt_test(self,
@@ -178,23 +151,57 @@ class StepwiseOutlierDetection:
                                        showplot: bool = False, verbose: bool = False):
         """Identify outliers based on absolute limits separately for daytime and nighttime"""
         series_cleaned = self._series_hires_cleaned.copy()
+        # For setting absolute limits no iteration is necessary, therefore always repeat=False
         results = AbsoluteLimitsDaytimeNighttime(series=series_cleaned, lat=self.site_lat, lon=self.site_lon,
-                                                 utc_offset=self.utc_offset, idstr=self.idstr)
-        results.calc(daytime_minmax=daytime_minmax, nighttime_minmax=nighttime_minmax, showplot=showplot)
+                                                 utc_offset=self.utc_offset, idstr=self.idstr,
+                                                 daytime_minmax=daytime_minmax, nighttime_minmax=nighttime_minmax,
+                                                 showplot=showplot, repeat=False)
+        # results.calc(daytime_minmax=daytime_minmax, nighttime_minmax=nighttime_minmax, showplot=showplot)
         self._last_results = results
 
-    def flag_outliers_stl_rz_test(self, zfactor: float = 4.5, decompose_downsampling_freq: str = '1H',
+    def flag_outliers_abslim_test(self, minval: float, maxval: float, showplot: bool = False, verbose: bool = False):
+        """Identify outliers based on absolute limits"""
+        series_cleaned = self._series_hires_cleaned.copy()
+        # For setting absolute limits no iteration is necessary, therefore always repeat=False
+        results = AbsoluteLimits(series=series_cleaned, idstr=self.idstr,
+                                 minval=minval, maxval=maxval, showplot=showplot,
+                                 repeat=False)
+        # results.calc(min=minval, max=maxval, showplot=showplot)
+        self._last_results = results
+
+    def flag_outliers_increments_zcore_test(self, thres_zscore: int = 30, showplot: bool = False, verbose: bool = False,
+                                            repeat: bool = True):
+        """Identify outliers based on the z-score of record increments"""
+        series_cleaned = self._series_hires_cleaned.copy()
+        results = zScoreIncrements(series=series_cleaned, idstr=self.idstr, thres_zscore=thres_zscore,
+                                   showplot=showplot, verbose=verbose, repeat=repeat)
+        # results.calc(threshold=threshold, showplot=showplot, verbose=verbose)
+        self._last_results = results
+
+    def flag_outliers_zscore_test(self, thres_zscore: int = 4, showplot: bool = False, verbose: bool = False,
+                                  plottitle: str = None, repeat: bool = True):
+        """Identify outliers based on the z-score of records"""
+        series_cleaned = self._series_hires_cleaned.copy()
+        results = zScore(series=series_cleaned, idstr=self.idstr, thres_zscore=thres_zscore, showplot=showplot,
+                         verbose=verbose, plottitle=plottitle, repeat=repeat)
+        # results.calc(threshold=threshold, showplot=showplot, verbose=verbose, plottitle=plottitle)
+        self._last_results = results
+
+    def flag_outliers_stl_rz_test(self, thres_zscore: float = 4.5, decompose_downsampling_freq: str = '1H',
                                   repeat: bool = False, showplot: bool = False):
         """Identify outliers based on seasonal-trend decomposition and z-score calculations"""
         series_cleaned = self._series_hires_cleaned.copy()
         results = OutlierSTLRZ(series=series_cleaned, lat=self.site_lat, lon=self.site_lon,
-                               utc_offset=self.utc_offset, idstr=self.idstr)
-        results.calc(zfactor=zfactor, decompose_downsampling_freq=decompose_downsampling_freq,
-                     repeat=repeat, showplot=showplot)
+                               utc_offset=self.utc_offset, idstr=self.idstr,
+                               thres_zscore=thres_zscore, decompose_downsampling_freq=decompose_downsampling_freq,
+                               repeat=repeat, showplot=showplot)
+        # results.calc(zfactor=zfactor, decompose_downsampling_freq=decompose_downsampling_freq,
+        #              repeat=repeat, showplot=showplot)
         self._last_results = results
 
-    def flag_outliers_lof_dtnt_test(self, n_neighbors: int = None, contamination: float = 'auto',
-                                    showplot: bool = False, verbose: bool = False):
+    def flag_outliers_lof_dtnt_test(self, n_neighbors: int = None, contamination: float = None,
+                                    showplot: bool = False, verbose: bool = False, repeat: bool=True,
+                                    n_jobs: int = 1):
         """Local outlier factor, separately for daytime and nighttime data"""
         series_cleaned = self._series_hires_cleaned.copy()
         # Number of neighbors is automatically calculated if not provided
@@ -202,32 +209,52 @@ class StepwiseOutlierDetection:
         # Contamination is set automatically unless float is given
         contamination = contamination if isinstance(contamination, float) else 'auto'
         results = LocalOutlierFactorDaytimeNighttime(series=series_cleaned, lat=self.site_lat,
-                                                     lon=self.site_lon, utc_offset=self.utc_offset, idstr=self.idstr)
-        results.calc(n_neighbors=n_neighbors, contamination=contamination, showplot=showplot, verbose=verbose)
+                                                     lon=self.site_lon, utc_offset=self.utc_offset, idstr=self.idstr,
+                                                     n_neighbors=n_neighbors, contamination=contamination,
+                                                     showplot=showplot, verbose=verbose, repeat=repeat, n_jobs=n_jobs)
+        # results.calc(n_neighbors=n_neighbors, contamination=contamination, showplot=showplot, verbose=verbose)
         self._last_results = results
 
-    def flag_outliers_lof_test(self, n_neighbors: int = None, contamination: float = 'auto',
-                               showplot: bool = False, verbose: bool = False):
+    def flag_outliers_lof_test(self, n_neighbors: int = None, contamination: float = None,
+                               showplot: bool = False, verbose: bool = False, repeat: bool=True, n_jobs: int=1):
         """Local outlier factor, across all data"""
         series_cleaned = self._series_hires_cleaned.copy()
         # Number of neighbors is automatically calculated if not provided
         n_neighbors = int(len(series_cleaned.dropna()) / 100) if not n_neighbors else n_neighbors
         # Contamination is set automatically unless float is given
         contamination = contamination if isinstance(contamination, float) else 'auto'
-        results = LocalOutlierFactorAllData(series=series_cleaned, idstr=self.idstr)
-        results.calc(n_neighbors=n_neighbors, contamination=contamination, showplot=showplot, verbose=verbose)
+        results = LocalOutlierFactorAllData(series=series_cleaned, idstr=self.idstr,
+                                            n_neighbors=n_neighbors, contamination=contamination,
+                                            showplot=showplot, verbose=verbose, repeat=repeat,
+                                            n_jobs=n_jobs)
+        # results.calc(n_neighbors=n_neighbors, contamination=contamination, showplot=showplot, verbose=verbose)
         self._last_results = results
 
     def addflag(self):
-        """Add flag of most recent test to data and update filtered series
-        that will be used to continue with the next test"""
-        flag = self._last_results.flag
-        self._series_hires_cleaned = self._last_results.filteredseries
-        if flag.name not in self._results.columns:
-            self._results[flag.name] = flag
-        else:
-            pass  # todo check
-        print(f"++Added flag column {flag.name} to flag data")
+        """Add flag(s) of most recent test to data and update filtered series
+        that will be used to continue with the next test."""
+
+        # Name of filtered series in last results is the same as the original name
+        self._series_hires_cleaned = self.last_results[self.series_hires_orig.name]
+
+        # Remove filtered series to keep only flag columns
+        flags_df = self.last_results.drop(self.series_hires_orig.name, axis=1).copy()
+
+        # Add flag columns to results data
+        for flag in flags_df.columns:
+            if flag not in self._results.columns:
+                self._results[flag] = flags_df[flag].copy()
+                print(f"++Added flag column {flag} to flag data")
+            else:
+                pass  # todo check(?)
+
+        # flag = self._last_results.flag
+        # # self._series_hires_cleaned = self._last_results.filteredseries
+        # if flag.name not in self._results.columns:
+        #     self._results[flag.name] = flag
+        # else:
+        #     pass
+        # print(f"++Added flag column {flag.name} to flag data")
 
     def _setup(self) -> tuple[DataFrame, Series, Series]:
         """Setup data for outlier detection"""

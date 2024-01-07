@@ -741,7 +741,7 @@ def add_continuous_record_number(df: DataFrame) -> DataFrame:
     newcol = '.RECORDNUMBER'
     data = range(1, len(df) + 1)
     df[newcol] = data
-    print(f"Added new column {newcol} with record numbers from {df[newcol][0]} to {df[newcol][-1]}.")
+    print(f"Added new column {newcol} with record numbers from {df[newcol].iloc[0]} to {df[newcol].iloc[-1]}.")
     return df
 
 

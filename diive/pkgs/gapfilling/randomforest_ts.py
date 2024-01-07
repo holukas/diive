@@ -930,7 +930,7 @@ class QuickFillRFTS:
 
     def fill(self):
         self.rfts.trainmodel(showplot_scores=False, showplot_importance=False)
-        self.rfts.fillgaps(showplot_scores=True, showplot_importance=True)
+        self.rfts.fillgaps(showplot_scores=False, showplot_importance=False)
 
     def gapfilling_df(self):
         return self.rfts.gapfilling_df_

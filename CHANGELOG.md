@@ -2,7 +2,7 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.67.0 | X Nov 2023
+## v0.67.0 | X Jan 2024
 
 ### New features
 
@@ -10,6 +10,25 @@
 - (`core.funcs.funcs.filter_strings_by_elements`)
 - (`pkgs.qaqc.eddyproflags.flag_steadiness_horizontal_wind_eddypro_test`)
 - (`core.plotting.scatter.ScatterXY`)
+- (`diive.pkgs.outlierdetection.repeater.repeater`)
+
+### Removed features
+
+- Removed class `ThymeBoostOutlier` for outlier detection. At the moment it was not possible to get it to work properly.
+
+### Changes
+
+- It appears that the kwarg `fmt` is used slightly differently for `plot_date` and `plot` in `matplotlib`. It seems it
+  is always defined for `plot_date`, while it is optional for `plot`. Now using `fmt` kwarg to avoid the warning:
+  > UserWarning: marker is redundantly defined by the 'marker' keyword argument and the fmt
+  > string "o" (-> marker='o'). The keyword argument will take precedence.
+
+  Therefore using 'fmt="X"' instead of 'marker="X"'. See
+  answer [here](https://stackoverflow.com/questions/69188540/userwarning-marker-is-redundantly-defined-by-the-marker-keyword-argument-when)
+
+### Environment
+
+- Removed `thymeboost`
 
 ## v0.66.0 | 2 Nov 2023
 

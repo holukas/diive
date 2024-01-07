@@ -567,14 +567,12 @@ def include_timestamp_as_cols(df,
     newcols.append(yearweek_col)
     df[yearweek_col] = (df[year_col].astype(str) + df[week_col].astype(str)).astype(int)
 
-
     # yearmonthweekdoy_col = '.YEARMONTHWEEKDOY'
 
     # yearmonthweek_col = '.YEARMONTHWEEK'
     # weekhour_col = '.WEEKHOUR'
 
     # Combined variables
-
 
     # Year and month and week: YEAR2023+MONTH8+WEEK15 = 2023815
     # df[yearmonthweek_col] = (df[year_col].astype(str) + df[month_col].astype(str) + df[week_col].astype(str)).astype(
@@ -644,7 +642,8 @@ class DetectFrequency:
         self._run()
 
     def _run(self):
-        if self.verbose: print(f"Detecting time resolution from timestamp {self.index.name} ...", end=" ")
+        if self.verbose:
+            print(f"Detecting time resolution from timestamp {self.index.name} ...", end=" ")
 
         freq_full, freqinfo_full = timestamp_infer_freq_from_fullset(timestamp_ix=self.index)
         freq_timedelta, freqinfo_timedelta = timestamp_infer_freq_from_timedelta(timestamp_ix=self.index)
@@ -677,6 +676,18 @@ class DetectFrequency:
                       f"       from timedelta = {freq_timedelta} / {freqinfo_timedelta} (not used)\n"
                       f"       from progressive = {freq_progressive} / {freqinfo_progressive} (not used)\n")
 
+        elif freq_timedelta:
+            # High certainty, freq found from most frequent timestep that
+            # occurred at least 90% of the time
+            self.freq = freq_timedelta
+            if self.verbose:
+                print(f"OK\n"
+                      f"   Detected {self.freq} time resolution with HIGH confidence.\n"
+                      f"   Resolution detected from most frequent timestep (timedelta):\n"
+                      f"       from full data = {freq_full} / {freqinfo_full} (not used)\n"
+                      f"       from timedelta = {freq_timedelta} / {freqinfo_timedelta} (OK)\n"
+                      f"       from progressive = {freq_progressive} / {freqinfo_progressive} (not used)\n")
+
         elif freq_progressive:
             # Medium certainty, freq found from start and end of dataset
             self.freq = freq_progressive
@@ -689,18 +700,6 @@ class DetectFrequency:
                       f"       from full data = {freq_full} / {freqinfo_full} (not used)\n"
                       f"       from timedelta = {freq_timedelta} / {freqinfo_timedelta} (not used)\n"
                       f"       from progressive = {freq_progressive} / {freqinfo_progressive} (OK)\n")
-
-        elif freq_timedelta:
-            # High certainty, freq found from most frequent timestep that
-            # occurred at least 90% of the time
-            self.freq = freq_timedelta
-            if self.verbose:
-                print(f"OK\n"
-                      f"   Detected {self.freq} time resolution with HIGH confidence.\n"
-                      f"   Resolution detected from most frequent timestep (timedelta):\n"
-                      f"       from full data = {freq_full} / {freqinfo_full} (not used)\n"
-                      f"       from timedelta = {freq_timedelta} / {freqinfo_timedelta} (OK)\n"
-                      f"       from progressive = {freq_progressive} / {freqinfo_progressive} (not used)\n")
 
         else:
             raise Exception("Frequency detection failed.")

@@ -8,11 +8,11 @@ from pandas import DataFrame, Series
 from diive.core.funcs.funcs import filter_strings_by_elements
 from diive.core.io.filereader import MultiDataFileReader, search_files
 from diive.pkgs.createvar.potentialradiation import potrad
+from diive.pkgs.flux.common import detect_basevar
 from diive.pkgs.fluxprocessingchain.level2_qualityflags import FluxQualityFlagsEddyPro
 from diive.pkgs.fluxprocessingchain.level31_storagecorrection import FluxStorageCorrectionSinglePointEddyPro
 from diive.pkgs.outlierdetection.stepwiseoutlierdetection import StepwiseOutlierDetection
 from diive.pkgs.qaqc.qcf import FlagQCF
-from diive.pkgs.flux.common import detect_basevar
 
 
 class LoadEddyProOutputFiles:
@@ -367,44 +367,46 @@ class FluxProcessingChain:
                                                 maxval=maxval,
                                                 showplot=showplot, verbose=verbose)
 
-    def level32_flag_outliers_zscore_dtnt_test(self, threshold: float = 4, showplot: bool = False,
-                                               verbose: bool = False):
-        self._level32.flag_outliers_zscore_dtnt_test(threshold=threshold, showplot=showplot, verbose=verbose)
+    def level32_flag_outliers_zscore_dtnt_test(self, thres_zscore: float = 4, showplot: bool = False,
+                                               verbose: bool = False, repeat: bool = True):
+        self._level32.flag_outliers_zscore_dtnt_test(thres_zscore=thres_zscore, showplot=showplot, verbose=verbose,
+                                                     repeat=repeat)
 
     def level32_flag_outliers_localsd_test(self, n_sd: float = 7, winsize: int = None, showplot: bool = False,
-                                           verbose: bool = False):
-        self._level32.flag_outliers_localsd_test(n_sd=n_sd, winsize=winsize, showplot=showplot, verbose=verbose)
+                                           verbose: bool = False, repeat: bool = True):
+        self._level32.flag_outliers_localsd_test(n_sd=n_sd, winsize=winsize, showplot=showplot, verbose=verbose,
+                                                 repeat=repeat)
 
     def level32_flag_manualremoval_test(self, remove_dates: list, showplot: bool = False, verbose: bool = False):
         self._level32.flag_manualremoval_test(remove_dates=remove_dates, showplot=showplot, verbose=verbose)
 
-    def level32_flag_outliers_increments_zcore_test(self, threshold: int = 30, showplot: bool = False,
-                                                    verbose: bool = False):
-        self._level32.flag_outliers_increments_zcore_test(threshold=threshold, showplot=showplot, verbose=verbose)
+    def level32_flag_outliers_increments_zcore_test(self, thres_zscore: int = 30, showplot: bool = False,
+                                                    verbose: bool = False, repeat: bool = True):
+        self._level32.flag_outliers_increments_zcore_test(thres_zscore=thres_zscore, showplot=showplot, verbose=verbose,
+                                                          repeat=repeat)
 
-    def level32_flag_outliers_zscore_test(self, threshold: int = 4, showplot: bool = False, verbose: bool = False,
-                                          plottitle: str = None):
-        self._level32.flag_outliers_zscore_test(threshold=threshold, showplot=showplot,
-                                                verbose=verbose, plottitle=plottitle)
+    def level32_flag_outliers_zscore_test(self, thres_zscore: int = 4, showplot: bool = False, verbose: bool = False,
+                                          plottitle: str = None, repeat: bool = True):
+        self._level32.flag_outliers_zscore_test(thres_zscore=thres_zscore, showplot=showplot,
+                                                verbose=verbose, plottitle=plottitle, repeat=repeat)
 
-    def level32_flag_outliers_stl_rz_test(self, zfactor: float = 4.5, decompose_downsampling_freq: str = '1H',
+    def level32_flag_outliers_stl_rz_test(self, thres_zscore: float = 4.5, decompose_downsampling_freq: str = '1H',
                                           repeat: bool = False, showplot: bool = False):
-        self._level32.flag_outliers_stl_rz_test(zfactor=zfactor,
+        self._level32.flag_outliers_stl_rz_test(thres_zscore=thres_zscore,
                                                 decompose_downsampling_freq=decompose_downsampling_freq,
                                                 repeat=repeat, showplot=showplot)
 
-    def level32_flag_outliers_thymeboost_test(self, showplot: bool = False, verbose: bool = False):
-        self._level32.flag_outliers_thymeboost_test(showplot=showplot, verbose=verbose)
-
-    def level32_flag_outliers_lof_test(self, n_neighbors: int = None, contamination: float = 'auto',
-                                       showplot: bool = False, verbose: bool = False):
+    def level32_flag_outliers_lof_test(self, n_neighbors: int = None, contamination: float = None,
+                                       showplot: bool = False, verbose: bool = False, repeat: bool = True,
+                                       n_jobs: int = 1):
         self._level32.flag_outliers_lof_test(n_neighbors=n_neighbors, contamination=contamination, showplot=showplot,
-                                             verbose=verbose)
+                                             verbose=verbose, repeat=repeat, n_jobs=n_jobs)
 
-    def level32_flag_outliers_lof_dtnt_test(self, n_neighbors: int = None, contamination: float = 'auto',
-                                            showplot: bool = False, verbose: bool = False):
+    def level32_flag_outliers_lof_dtnt_test(self, n_neighbors: int = None, contamination: float = None,
+                                            showplot: bool = False, verbose: bool = False, repeat: bool = True,
+                                            n_jobs: int = 1):
         self._level32.flag_outliers_lof_dtnt_test(n_neighbors=n_neighbors, contamination=contamination,
-                                                  showplot=showplot, verbose=verbose)
+                                                  showplot=showplot, verbose=verbose, repeat=repeat, n_jobs=n_jobs)
 
     def level32_addflag(self):
         """Add current Level-3.2 flag to results."""
@@ -412,102 +414,162 @@ class FluxProcessingChain:
 
 
 def example():
-    ep = LoadEddyProOutputFiles(sourcedir=r'L:\Sync\luhk_work\TMP\fru',
-                                filetype='EDDYPRO_FULL_OUTPUT_30MIN')
+    FLUXVAR = "co2_flux"  # Name of the flux variable
+    SOURCEDIRS = [r'F:\Sync\luhk_work\TMP\fru']  # Folders where the EddyPro output files are located
+    SITE_LAT = 47.115833  # Latitude of site
+    SITE_LON = 8.537778  # Longitude of site
+    FILETYPE = 'EDDYPRO_FULL_OUTPUT_30MIN'  # Filetype of EddyPro output files, can be 'EDDYPRO_FLUXNET_30MIN' or 'EDDYPRO_FULL_OUTPUT_30MIN'
+    UTC_OFFSET = 1  # Time stamp offset in relation to UTC, e.g. 1 for UTC+01:00 (CET), important for the calculation of potential radiation for detecting daytime and nighttime
+    NIGHTTIME_THRESHOLD = 50  # Threshold for potential radiation in W m-2, conditions below threshold are nighttime
+    DAYTIME_ACCEPT_QCF_BELOW = 2
+    NIGHTTIMETIME_ACCEPT_QCF_BELOW = 2
+
+    ep = LoadEddyProOutputFiles(sourcedir=SOURCEDIRS, filetype=FILETYPE)
     ep.searchfiles()
     ep.loadfiles()
     level1_df = ep.level1_df
     level1_metadata = ep.metadata
 
+    # from diive.core.io.files import save_parquet, load_parquet
+    # df_orig = load_parquet(filepath='df_level32_qcf.parquet')
+
+    level1_df.head()
+    from diive.core.dfun.stats import sstats  # Time series stats
+    sstats(level1_df[FLUXVAR])
+    # TimeSeries(series=level1_df[FLUXVAR]).plot_interactive()
+    # TimeSeries(series=level1_df[FLUXVAR]).plot()
+
     fpc = FluxProcessingChain(
         level1_df=level1_df,
-        # filetype='EDDYPRO_FLUXNET_30MIN',
-        filetype='EDDYPRO_FULL_OUTPUT_30MIN',
-        # fluxcol='FN2O',
-        fluxcol='co2_flux',
-        # fluxcol='n2o_flux',
-        site_lat=47.115833,
-        site_lon=8.537778,
-        utc_offset=1,
+        filetype=FILETYPE,
+        fluxcol=FLUXVAR,
+        site_lat=SITE_LAT,
+        site_lon=SITE_LON,
+        utc_offset=UTC_OFFSET,
         level1_metadata=level1_metadata
     )
 
-    fpc.level2_quality_flag_expansion(
-        # signal_strength=dict(signal_strength_col='CUSTOM_AGC_MEAN',
-        #                      method='discard above',
-        #                      threshold=90),
-        signal_strength=dict(signal_strength_col='agc_mean',
-                             method='discard above',
-                             threshold=90),
-        raw_data_screening_vm97=dict(spikes=True,
-                                     amplitude=True,
-                                     dropout=True,
-                                     abslim=False,
-                                     skewkurt_hf=False,
-                                     skewkurt_sf=False,
-                                     discont_hf=False,
-                                     discont_sf=False),
-        ssitc=True,
-        gas_completeness=True,
-        spectral_correction_factor=True,
-        angle_of_attack=True,
-        steadiness_of_horizontal_wind=True
-    )
+    # --------------------
+    # Level-2
+    # --------------------
+    TEST_SSITC = True  # Default True
+    TEST_GAS_COMPLETENESS = True  # Default True
+    TEST_SPECTRAL_CORRECTION_FACTOR = True  # Default True
 
-    fpc.finalize_level2(nighttime_threshold=50,
-                        daytime_accept_qcf_below=2,
-                        nighttimetime_accept_qcf_below=2)
+    # Signal strength
+    # SIGNAL_STRENGTH_COL = 'CUSTOM_AGC_MEAN'
+    TEST_SIGNAL_STRENGTH_COL = 'agc_mean'
+    TEST_SIGNAL_STRENGTH_METHOD = 'discard above'
+    TEST_SIGNAL_STRENGTH_THRESHOLD = 90
+    # TimeSeries(series=level1_df[TEST_SIGNAL_STRENGTH_COL]).plot()
 
-    fpc.filteredseries
-    fpc.level2.results
-    fpc.level2_qcf.showplot_qcf_heatmaps()
-    fpc.level2_qcf.showplot_qcf_timeseries()
-    fpc.level2_qcf.report_qcf_evolution()
-    fpc.level2_qcf.report_qcf_series()
-    fpc.level2_qcf.report_qcf_flags()
+    TEST_RAWDATA_SPIKES = True  # Default True
+    TEST_RAWDATA_AMPLITUDE = True  # Default True
+    TEST_RAWDATA_DROPOUT = True  # Default True
+    TEST_RAWDATA_ABSLIM = False  # Default False
+    TEST_RAWDATA_SKEWKURT_HF = False  # Default False
+    TEST_RAWDATA_SKEWKURT_SF = False  # Default False
+    TEST_RAWDATA_DISCONT_HF = False  # Default False
+    TEST_RAWDATA_DISCONT_SF = False  # Default False
 
+    TEST_RAWDATA_ANGLE_OF_ATTACK = False  # Default False
+
+    TEST_RAWDATA_STEADINESS_OF_HORIZONTAL_WIND = False  # Default False
+
+    LEVEL2_SETTINGS = {
+        'signal_strength': {'signal_strength_col': TEST_SIGNAL_STRENGTH_COL, 'method': TEST_SIGNAL_STRENGTH_METHOD,
+                            'threshold': TEST_SIGNAL_STRENGTH_THRESHOLD},
+        'raw_data_screening_vm97': {'spikes': TEST_RAWDATA_SPIKES, 'amplitude': TEST_RAWDATA_AMPLITUDE,
+                                    'dropout': TEST_RAWDATA_DROPOUT, 'abslim': TEST_RAWDATA_ABSLIM,
+                                    'skewkurt_hf': TEST_RAWDATA_SKEWKURT_HF, 'skewkurt_sf': TEST_RAWDATA_SKEWKURT_SF,
+                                    'discont_hf': TEST_RAWDATA_DISCONT_HF,
+                                    'discont_sf': TEST_RAWDATA_DISCONT_SF},
+        'ssitc': TEST_SSITC,
+        'gas_completeness': TEST_GAS_COMPLETENESS,
+        'spectral_correction_factor': TEST_SPECTRAL_CORRECTION_FACTOR,
+        'angle_of_attack': TEST_RAWDATA_ANGLE_OF_ATTACK,
+        'steadiness_of_horizontal_wind': TEST_RAWDATA_STEADINESS_OF_HORIZONTAL_WIND
+    }
+    fpc.level2_quality_flag_expansion(**LEVEL2_SETTINGS)
+    fpc.finalize_level2(nighttime_threshold=NIGHTTIME_THRESHOLD, daytime_accept_qcf_below=DAYTIME_ACCEPT_QCF_BELOW,
+                        nighttimetime_accept_qcf_below=NIGHTTIMETIME_ACCEPT_QCF_BELOW)
+
+    # fpc.fpc_df
+    # fpc.filteredseries
+    # fpc.level2.results
+    # [x for x in fpc.fpc_df.columns if 'L2' in x]
+
+
+    # --------------------
+    # Level-3.1
+    # --------------------
     fpc.level31_storage_correction(gapfill_storage_term=False)
     fpc.finalize_level31()
+    # fpc.level31.showplot(maxflux=50)
+    fpc.level31.report()
 
-    fpc.filteredseries
-    fpc.level31.results
+    # fpc.fpc_df
+    # fpc.filteredseries
+    # fpc.level31.results
+    # [x for x in fpc.fpc_df.columns if 'L3.1' in x]
 
+
+    # --------------------
+    # Level-3.2
+    # --------------------
     fpc.level32_stepwise_outlier_detection()
+
+    fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
+    fpc.level32_addflag()
+    # fpc.level32.results  # Stores Level-3.2 flags up to this point
+
+    fpc.level32_flag_outliers_localsd_test(n_sd=4, winsize=480, showplot=True, verbose=True, repeat=True)
+    fpc.level32_addflag()
+    # fpc.level32.results  # Stores Level-3.2 flags up to this point
+
+    fpc.level32_flag_outliers_stl_rz_test(thres_zscore=4, decompose_downsampling_freq='3H', repeat=True, showplot=True)
+    fpc.level32_addflag()
+
+    fpc.level32_flag_outliers_increments_zcore_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
+    fpc.level32_addflag()
+    # fpc.level32.results  # Stores Level-3.2 flags up to this point
+
+    fpc.level32_flag_outliers_zscore_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
+    fpc.level32_addflag()
+    # fpc.level32.results
+
+    fpc.level32_flag_manualremoval_test(
+        remove_dates=[
+            ['2020-05-05 19:45:00', '2020-06-05 19:45:00'],
+            '2020-12-12 12:45:00',
+            '2020-01-12 13:15:00',
+            ['2020-08-15', '2020-08-31']
+        ],
+        showplot=True, verbose=True)
+    fpc.level32_addflag()
 
     fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=[-50, 50], nighttime_minmax=[-10, 50],
                                                showplot=True, verbose=True)
     fpc.level32_addflag()
+    # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
     fpc.level32_flag_outliers_abslim_test(minval=-50, maxval=50, showplot=True, verbose=True)
     fpc.level32_addflag()
+    # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
-    # fpc.level32_flag_outliers_zscore_dtnt_test(threshold=4, showplot=True, verbose=True)
-    # fpc.level32_addflag()
-    #
-    # fpc.level32_flag_outliers_localsd_test(n_sd=4, winsize=480, showplot=True, verbose=True)
-    # fpc.level32_addflag()
-    #
-    # fpc.level32_flag_manualremoval_test(remove_dates=[['2023-03-05 19:45:00', '2023-04-05 19:45:00']],
-    #                                     showplot=True, verbose=True)
-    # fpc.level32_addflag()
-    #
-    # fpc.level32_flag_outliers_increments_zcore_test(threshold=8, showplot=True, verbose=True)
-    # fpc.level32_addflag()
-    #
-    # fpc.level32_flag_outliers_zscore_test(threshold=5, showplot=True, verbose=True)
-    # fpc.level32_addflag()
-    #
-    # fpc.level32_flag_outliers_stl_rz_test(zfactor=3, decompose_downsampling_freq='6H', repeat=False, showplot=True)
-    # fpc.level32_addflag()
-    #
-    # fpc.level32_flag_outliers_thymeboost_test(showplot=True, verbose=True)
-    # fpc.level32_addflag()
-    #
-    # fpc.level32_flag_outliers_lof_test(n_neighbors=None, contamination=0.005, showplot=True, verbose=True)
-    # fpc.level32_addflag()
-    #
-    # fpc.level32_flag_outliers_lof_dtnt_test(n_neighbors=None, contamination=0.0005, showplot=True, verbose=True)
-    # fpc.level32_addflag()
+
+    fpc.level32_flag_outliers_lof_test(n_neighbors=20, contamination=None, showplot=True, verbose=True,
+                                       repeat=True, n_jobs=-1)
+    fpc.level32_addflag()
+
+    fpc.level32_flag_outliers_lof_dtnt_test(n_neighbors=20, contamination=None, showplot=True,
+                                            verbose=True, repeat=True, n_jobs=-1)
+    fpc.level32_addflag()
+
+    # todo --- loop test until no more outliers ---
+
+
+
 
     fpc.finalize_level32(nighttime_threshold=50, daytime_accept_qcf_below=2, nighttimetime_accept_qcf_below=2)
 

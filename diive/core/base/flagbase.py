@@ -16,7 +16,7 @@ from diive.core.plotting.plotfuncs import default_format, default_legend
 
 class FlagBase:
 
-    def __init__(self, series: Series, flagid: str, idstr: str = None, verbose: int = 1):
+    def __init__(self, series: Series, flagid: str, idstr: str = None, verbose: bool = True):
         self.series = series
         self._flagid = flagid
         self._idstr = validate_id_string(idstr=idstr)
@@ -90,8 +90,8 @@ class FlagBase:
         ax_series.plot_date(self.series.index, self.series, label=f"{self.series.name}", color="#42A5F5",
                             alpha=.5, markersize=2, markeredgecolor='none')
         ax_series.plot_date(self.series[rejected].index, self.series[rejected],
-                            label="outlier (rejected)", color="#F44336", marker="X", alpha=1,
-                            markersize=8, markeredgecolor='none')
+                            label="outlier (rejected)", color="#F44336", alpha=1,
+                            markersize=8, markeredgecolor='none', fmt='X')
         ax_ok.plot_date(self.series[ok].index, self.series[ok], label=f"OK", color="#9CCC65", alpha=.5,
                         markersize=2, markeredgecolor='none')
         default_format(ax=ax_series)

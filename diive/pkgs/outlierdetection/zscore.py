@@ -7,9 +7,11 @@ from diive.core.base.flagbase import FlagBase
 from diive.core.times.times import DetectFrequency
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag
+from diive.pkgs.outlierdetection.repeater import repeater
 
 
 @ConsoleOutputDecorator()
+@repeater
 class zScoreDaytimeNighttime(FlagBase):
     """
     Identify outliers based on the z-score, separately for daytime and nighttime
@@ -33,7 +35,11 @@ class zScoreDaytimeNighttime(FlagBase):
                  lat: float,
                  lon: float,
                  utc_offset: int,
-                 idstr: str = None):
+                 idstr: str = None,
+                 thres_zscore: float = 4,
+                 showplot: bool = False,
+                 verbose: bool = False,
+                 repeat: bool = True):
         """
 
         Args:
@@ -47,6 +53,10 @@ class zScoreDaytimeNighttime(FlagBase):
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.showplot = False
         self.verbose = False
+        self.threshold = thres_zscore
+        self.showplot = showplot
+        self.verbose = verbose
+        self.repeat = repeat
 
         # Make sure time series has frequency
         # Freq is needed for the detection of daytime/nighttime from lat/lon
@@ -66,16 +76,14 @@ class zScoreDaytimeNighttime(FlagBase):
         self.is_daytime = daytime == 1  # Convert 0/1 flag to False/True flag
         self.is_nighttime = nighttime == 1  # Convert 0/1 flag to False/True flag
 
-    def calc(self, threshold: float = 4, showplot: bool = False, verbose: bool = False):
+    def calc(self):
         """Calculate flag"""
-        self.showplot = showplot
-        self.verbose = verbose
         self.reset()
-        ok, rejected = self._flagtests(threshold=threshold)
+        ok, rejected = self._flagtests()
         self.setflag(ok=ok, rejected=rejected)
         self.setfiltered(rejected=rejected)
 
-    def _flagtests(self, threshold: float = 4) -> tuple[DatetimeIndex, DatetimeIndex]:
+    def _flagtests(self) -> tuple[DatetimeIndex, DatetimeIndex]:
         """Perform tests required for this flag"""
 
         # Working data
@@ -85,17 +93,17 @@ class zScoreDaytimeNighttime(FlagBase):
         # Run for daytime (dt)
         _s_dt = s[self.is_daytime].copy()  # Daytime data
         _zscore_dt = funcs.zscore(series=_s_dt)
-        _ok_dt = _zscore_dt <= threshold
+        _ok_dt = _zscore_dt <= self.threshold
         _ok_dt = _ok_dt[_ok_dt].index
-        _rejected_dt = _zscore_dt > threshold
+        _rejected_dt = _zscore_dt > self.threshold
         _rejected_dt = _rejected_dt[_rejected_dt].index
 
         # Run for nighttime (nt)
         _s_nt = s[self.is_nighttime].copy()  # Daytime data
         _zscore_nt = funcs.zscore(series=_s_nt)
-        _ok_nt = _zscore_nt <= threshold
+        _ok_nt = _zscore_nt <= self.threshold
         _ok_nt = _ok_nt[_ok_nt].index
-        _rejected_nt = _zscore_nt > threshold
+        _rejected_nt = _zscore_nt > self.threshold
         _rejected_nt = _rejected_nt[_rejected_nt].index
 
         # Collect daytime and nighttime flags in one overall flag
@@ -125,6 +133,7 @@ class zScoreDaytimeNighttime(FlagBase):
 
 
 @ConsoleOutputDecorator()
+@repeater
 class zScore(FlagBase):
     """
     Identify outliers based on the z-score of records
@@ -145,23 +154,32 @@ class zScore(FlagBase):
     """
     flagid = 'OUTLIER_ZSCORE'
 
-    def __init__(self, series: Series, idstr: str = None):
+    def __init__(self,
+                 series: Series,
+                 idstr: str = None,
+                 thres_zscore: float = 4,
+                 showplot: bool = False,
+                 plottitle: str = None,
+                 verbose: bool = False,
+                 repeat: bool = True):
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.showplot = False
         self.plottitle = None
         self.verbose = False
-
-    def calc(self, threshold: float = 4, showplot: bool = False, plottitle: str = None, verbose: bool = False):
-        """Calculate flag"""
+        self.thres_zscore = thres_zscore
         self.showplot = showplot
         self.plottitle = plottitle
         self.verbose = verbose
+        self.repeat = repeat
+
+    def calc(self):
+        """Calculate flag"""
         self.reset()
-        ok, rejected = self._flagtests(threshold=threshold)
+        ok, rejected = self._flagtests()
         self.setflag(ok=ok, rejected=rejected)
         self.setfiltered(rejected=rejected)
 
-    def _flagtests(self, threshold: float = 4) -> tuple[DatetimeIndex, DatetimeIndex]:
+    def _flagtests(self) -> tuple[DatetimeIndex, DatetimeIndex]:
         """Perform tests required for this flag"""
 
         # Working data
@@ -169,12 +187,13 @@ class zScore(FlagBase):
 
         # Run with threshold
         zscores = funcs.zscore(series=s)
-        ok = zscores <= threshold
+        ok = zscores <= self.thres_zscore
         ok = ok[ok].index
-        rejected = zscores > threshold
+        rejected = zscores > self.thres_zscore
         rejected = rejected[rejected].index
 
-        if self.verbose: print(f"Total found outliers: {len(rejected)} values")
+        if self.verbose:
+            print(f"Total found outliers: {len(rejected)} values")
         # print(f"z-score of {threshold} corresponds to a prob of {100 * 2 * norm.sf(threshold):0.2f}%")
 
         if self.showplot:
@@ -312,6 +331,7 @@ class zScore(FlagBase):
 #                                f"(max z-value in IQR data multiplied by factor {factor})")
 #         return threshold
 
+
 def example():
     from diive.configs.exampledata import load_exampledata_parquet
     df = load_exampledata_parquet()
@@ -321,9 +341,13 @@ def example():
         series=series,
         lat=47.286417,
         lon=7.733750,
-        utc_offset=1)
+        utc_offset=1,
+        thres_zscore=2,
+        showplot=True,
+        verbose=True,
+        repeat=True)
 
-    zdn.calc(threshold=1.5, showplot=True, verbose=True)
+    # zdn.calc(threshold=1.5, showplot=False, verbose=True, repeat=True)
 
     from diive.core.plotting.heatmap_datetime import HeatmapDateTime
     HeatmapDateTime(series=zdn.filteredseries).show()

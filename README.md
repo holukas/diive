@@ -92,7 +92,6 @@ Fill gaps in time series with various methods
 - Missing values: Simply creates a flag that indicated available and missing data in a time series
 - Seasonal trend decomposition using LOESS, identify outliers based on seasonal-trend decomposition and
   z-score calculations
-- Thymeboost: Identify outliers based on [thymeboost](https://github.com/tblume1992/ThymeBoost)
 - z-score: Identify outliers based on the z-score across all time series data
 - z-score: Identify outliers based on the z-score, separately for daytime and nighttime
 - z-score: Identify outliers based on max z-scores in the interquartile range data

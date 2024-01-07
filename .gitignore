@@ -2,10 +2,8 @@
 
 # e.g.: /src
 /.idea/
-target/
-__manuscripts/
-__workbench/
-__todo/
+/__local_folders
+
 /notebooks/_scratch/
 /notebooks/Workbench/FLUXNET_CH4-N2O_Committee_WP2/data/
 
@@ -117,3 +115,5 @@ venv.bak/
 /notebooks/Workbench/example_n2o_outlier/
 /notebooks/Workbench/FLUXNET CH4 N2O Committee WP2/data/
 /notebooks/Workbench/FLUXNET_CH4-N2O_Committee_WP2/data/
+/__archived/
+/__local_folders/
