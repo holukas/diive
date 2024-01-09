@@ -7,6 +7,7 @@ from pandas import DataFrame, Series
 
 from diive.core.funcs.funcs import filter_strings_by_elements
 from diive.core.io.filereader import MultiDataFileReader, search_files
+from diive.pkgs.createvar.daynightflag import daytime_nighttime_flag_from_swinpot
 from diive.pkgs.createvar.potentialradiation import potrad
 from diive.pkgs.flux.common import detect_basevar
 from diive.pkgs.fluxprocessingchain.level2_qualityflags import FluxQualityFlagsEddyPro
@@ -15,101 +16,40 @@ from diive.pkgs.outlierdetection.stepwiseoutlierdetection import StepwiseOutlier
 from diive.pkgs.qaqc.qcf import FlagQCF
 
 
-class LoadEddyProOutputFiles:
-
-    def __init__(
-            self,
-            sourcedir: str or list,
-            filetype: Literal['EDDYPRO_FLUXNET_30MIN', 'EDDYPRO_FULL_OUTPUT_30MIN']
-    ):
-        self.sourcedir = sourcedir
-        self.filetype = filetype
-
-        self._level1_df = None
-        self._filepaths = None
-        self._metadata = None
-
-    @property
-    def level1_df(self) -> DataFrame:
-        """Return input dataframe."""
-        if not isinstance(self._level1_df, DataFrame):
-            raise Exception('No Level-1 data available, please run .loadfiles() first.')
-        return self._level1_df
-
-    @property
-    def filepaths(self) -> list:
-        """Return filepaths to found Level-1 files."""
-        if not isinstance(self._filepaths, list):
-            raise Exception('Filepaths not available, please run .searchfiles() first.')
-        return self._filepaths
-
-    @property
-    def metadata(self) -> DataFrame:
-        """Return input dataframe."""
-        if not isinstance(self._metadata, DataFrame):
-            raise Exception('No Level-1 metadata available, please run .loadfiles() first. '
-                            'Note that units are only available in _full_output_ files.')
-        return self._metadata
-
-    def searchfiles(self, extension: str = '*.csv'):
-        """Search CSV files in source folder and keep selected filetypes."""
-        fileids = self._init_filetype()
-        self._filepaths = search_files(self.sourcedir, extension)
-        self._filepaths = filter_strings_by_elements(list1=self.filepaths, list2=fileids)
-        print(f"Found {len(self.filepaths)} files with extension {extension} and file IDs {fileids}:")
-        [print(f" Found file #{ix + 1}: {f}") for ix, f in enumerate(self.filepaths)]
-
-    def loadfiles(self):
-        """Load data files"""
-        loaddatafile = MultiDataFileReader(filetype=self.filetype, filepaths=self.filepaths)
-        self._level1_df = loaddatafile.data_df
-        self._metadata = loaddatafile.metadata_df
-
-    def _init_filetype(self):
-        if self.filetype == 'EDDYPRO_FLUXNET_30MIN':
-            fileids = ['eddypro_', '_fluxnet_']
-        elif self.filetype == 'EDDYPRO_FULL_OUTPUT_30MIN':
-            fileids = ['eddypro_', '_full_output_']
-        else:
-            raise Exception("Filetype is unknown.")
-        return fileids
-
-
 class FluxProcessingChain:
 
     def __init__(
             self,
-            level1_df: DataFrame,
+            maindf: DataFrame,
             filetype: Literal['EDDYPRO_FLUXNET_30MIN', 'EDDYPRO_FULL_OUTPUT_30MIN'],
             fluxcol: str,
             site_lat: float,
             site_lon: float,
             utc_offset: int,
-            level1_metadata: DataFrame = None
+            metadata: DataFrame = None,
+            nighttime_threshold: float = 50
     ):
 
-        self.level1_df = level1_df
+        self.maindf = maindf
         self.fluxcol = fluxcol
         self.filetype = filetype
         self.site_lat = site_lat
         self.site_lon = site_lon
         self.utc_offset = utc_offset
+        self.nighttime_threshold = nighttime_threshold
 
         # Get units from metadata, later only needed for _full_output_ files (for VM97 quality flags)
-        self.level1_units = level1_metadata['UNITS'].copy()
-        self.level1_units = self.level1_units.to_dict()
+        self.units = metadata['UNITS'].copy()
+        self.units = self.units.to_dict()
 
         # Detect base variable that was used to produce this flux
         self.basevar = detect_basevar(fluxcol=fluxcol, filetype=self.filetype)
 
         # Collect all relevant variables for this flux in dataframe
-        self._fpc_df = self.level1_df[[fluxcol]].copy()
+        self._fpc_df = self.maindf[[fluxcol]].copy()
 
-        # Add potential radiation, used for detecting daytime/nighttime
-        swinpot = potrad(timestamp_index=self._fpc_df.index,
-                         lat=site_lat, lon=site_lon, utc_offset=utc_offset)
-        self.swinpot_col = swinpot.name
-        self._fpc_df[self.swinpot_col] = swinpot
+        # Add potential radiation and daytime and nighttime flags
+        self._fpc_df, self.swinpot_col = self._add_swinpot_dt_nt_flag(df=self._fpc_df)
 
         # Get the name of the base flux, used to assemble meaningful names for output variables
         if self.fluxcol == 'co2_flux' or self.fluxcol == 'FC':
@@ -122,7 +62,10 @@ class FluxProcessingChain:
         self._levelidstr = []  # ID strings used to tag the different flux levels
         self._metadata = None
         self._filteredseries = None
-        self._level1_df = None
+        self._filteredseries_level2_qcf = None
+        self._filteredseries_level31_qcf = None
+        self._filteredseries_level32_qcf = None
+        self._maindf = None
         self._level2 = None
         self._level31 = None
         self._level32 = None
@@ -136,6 +79,30 @@ class FluxProcessingChain:
             raise Exception(f'No filtered time series for {self.fluxcol} available, '
                             f'please run .level2_quality_flag_expansion() first.')
         return self._filteredseries
+
+    @property
+    def filteredseries_level2_qcf(self) -> Series:
+        """Return time series of quality-filtered flux after Level-2."""
+        if not isinstance(self._filteredseries_level2_qcf, Series):
+            raise Exception(f'No filtered time series for {self.fluxcol} available, '
+                            f'please run .level2_quality_flag_expansion() first.')
+        return self._filteredseries_level2_qcf
+
+    @property
+    def filteredseries_level31_qcf(self) -> Series:
+        """Return time series of quality-filtered flux after Level-3.1."""
+        if not isinstance(self._filteredseries_level31_qcf, Series):
+            raise Exception(f'No filtered time series for {self.fluxcol} available, '
+                            f'please run .level31_storage_correction() first.')
+        return self._filteredseries_level31_qcf
+
+    @property
+    def filteredseries_level32_qcf(self) -> Series:
+        """Return time series of quality-filtered flux after Level-3.2."""
+        if not isinstance(self._filteredseries_level32_qcf, Series):
+            raise Exception(f'No filtered time series for {self.fluxcol} available, '
+                            f'please run .level32_stepwise_outlier_detection() first.')
+        return self._filteredseries_level32_qcf
 
     @property
     def fpc_df(self) -> DataFrame:
@@ -186,6 +153,29 @@ class FluxProcessingChain:
             raise Exception('Level IDs not available, please run .level2_quality_flag_expansion() first.')
         return self._levelidstr
 
+    def _add_swinpot_dt_nt_flag(self, df: DataFrame) -> tuple[DataFrame, str]:
+        # Add potential radiation, used for detecting daytime/nighttime
+        swinpot = potrad(timestamp_index=df.index,
+                         lat=self.site_lat, lon=self.site_lon, utc_offset=self.utc_offset)
+        swinpot_col = str(swinpot.name)
+        print(f"Calculated potential radiation from latitude and longitude ({swinpot_col}) ... ")
+
+        # Add flags for daytime and nighttime data records
+        daytime_flag, nighttime_flag = daytime_nighttime_flag_from_swinpot(
+            swinpot=swinpot,
+            nighttime_threshold=self.nighttime_threshold,
+            daytime_col='DAYTIME',
+            nighttime_col='NIGHTTIME')
+        daytime_flag_col = str(daytime_flag.name)
+        nighttime_flag_col = str(nighttime_flag.name)
+        print(f"Calculated daytime flag {daytime_flag_col} and "
+              f"nighttime flag {nighttime_flag_col} from {swinpot_col} ...")
+        df[swinpot_col] = swinpot
+        df[daytime_flag_col] = daytime_flag.copy()
+        df[nighttime_flag_col] = nighttime_flag.copy()
+
+        return df, swinpot_col
+
     def level2_quality_flag_expansion(
             self,
             signal_strength: dict or False = False,
@@ -200,8 +190,8 @@ class FluxProcessingChain:
         idstr = 'L2'
         self._levelidstr.append(idstr)
         self._level2 = FluxQualityFlagsEddyPro(fluxcol=self.fluxcol,
-                                               dfin=self.level1_df,
-                                               units=self.level1_units,
+                                               dfin=self.maindf,
+                                               units=self.units,
                                                idstr=idstr,
                                                basevar=self.basevar,
                                                filetype=self.filetype)
@@ -287,6 +277,7 @@ class FluxProcessingChain:
             daytime_accept_qcf_below=daytime_accept_qcf_below,
             nighttimetime_accept_qcf_below=nighttimetime_accept_qcf_below
         )
+        self._filteredseries_level2_qcf = self.filteredseries.copy()  # Store filtered series as variable
 
     def finalize_level32(self,
                          nighttime_threshold: int = 50,
@@ -301,12 +292,13 @@ class FluxProcessingChain:
             daytime_accept_qcf_below=daytime_accept_qcf_below,
             nighttimetime_accept_qcf_below=nighttimetime_accept_qcf_below
         )
+        self._filteredseries_level32_qcf = self.filteredseries.copy()  # Store filtered series as variable
 
     def level31_storage_correction(self, gapfill_storage_term: bool = False):
         """Correct flux with storage term from single point measurement."""
         idstr = 'L3.1'
         self._levelidstr.append(idstr)
-        self._level31 = FluxStorageCorrectionSinglePointEddyPro(df=self.level1_df,
+        self._level31 = FluxStorageCorrectionSinglePointEddyPro(df=self.maindf,
                                                                 fluxcol=self.fluxcol,
                                                                 basevar=self.basevar,
                                                                 gapfill_storage_term=gapfill_storage_term,
@@ -342,6 +334,8 @@ class FluxProcessingChain:
         self._fpc_df = pd.concat([self._fpc_df, newcols], axis=1)
         [print(f"++Added new column {c} (Level-3.1 with applied quality flag from Level-2).") for c in frame.keys()]
         self._filteredseries = strg_corrected_flux_qcf.copy()
+
+        self._filteredseries_level31_qcf = self._filteredseries.copy()  # Store filtered series as variable
 
     def level32_stepwise_outlier_detection(self):
         idstr = 'L3.2'
@@ -413,9 +407,178 @@ class FluxProcessingChain:
         self._level32.addflag()
 
 
+class LoadEddyProOutputFiles:
+
+    def __init__(
+            self,
+            sourcedir: str or list,
+            filetype: Literal['EDDYPRO_FLUXNET_30MIN', 'EDDYPRO_FULL_OUTPUT_30MIN']
+    ):
+        self.sourcedir = sourcedir
+        self.filetype = filetype
+
+        self._maindf = None
+        self._filepaths = None
+        self._metadata = None
+
+    @property
+    def maindf(self) -> DataFrame:
+        """Return input dataframe."""
+        if not isinstance(self._maindf, DataFrame):
+            raise Exception('No Level-1 data available, please run .loadfiles() first.')
+        return self._maindf
+
+    @property
+    def filepaths(self) -> list:
+        """Return filepaths to found Level-1 files."""
+        if not isinstance(self._filepaths, list):
+            raise Exception('Filepaths not available, please run .searchfiles() first.')
+        return self._filepaths
+
+    @property
+    def metadata(self) -> DataFrame:
+        """Return input dataframe."""
+        if not isinstance(self._metadata, DataFrame):
+            raise Exception('No Level-1 metadata available, please run .loadfiles() first. '
+                            'Note that units are only available in _full_output_ files.')
+        return self._metadata
+
+    def searchfiles(self, extension: str = '*.csv'):
+        """Search CSV files in source folder and keep selected filetypes."""
+        fileids = self._init_filetype()
+        self._filepaths = search_files(self.sourcedir, extension)
+        self._filepaths = filter_strings_by_elements(list1=self.filepaths, list2=fileids)
+        print(f"Found {len(self.filepaths)} files with extension {extension} and file IDs {fileids}:")
+        [print(f" Found file #{ix + 1}: {f}") for ix, f in enumerate(self.filepaths)]
+
+    def loadfiles(self):
+        """Load data files"""
+        loaddatafile = MultiDataFileReader(filetype=self.filetype, filepaths=self.filepaths)
+        self._maindf = loaddatafile.data_df
+        self._metadata = loaddatafile.metadata_df
+
+    def _init_filetype(self):
+        if self.filetype == 'EDDYPRO_FLUXNET_30MIN':
+            fileids = ['eddypro_', '_fluxnet_']
+        elif self.filetype == 'EDDYPRO_FULL_OUTPUT_30MIN':
+            fileids = ['eddypro_', '_full_output_']
+        else:
+            raise Exception("Filetype is unknown.")
+        return fileids
+
+
+class QuickFluxProcessingChain:
+
+    def __init__(self,
+                 fluxvars: list,
+                 sourcedirs: list,
+                 site_lat: float,
+                 site_lon: float,
+                 filetype: str,
+                 utc_offset: int,
+                 nighttime_threshold: int = 50,
+                 daytime_accept_qcf_below: int = 2,
+                 nighttimetime_accept_qcf_below: int = 2):
+        self.fluxvars = fluxvars
+        self.sourcedirs = sourcedirs
+        self.site_lat = site_lat
+        self.site_lon = site_lon
+        self.filetype = filetype
+        self.utc_offset = utc_offset
+        self.nighttime_threshold = nighttime_threshold
+        self.daytime_accept_qcf_below = daytime_accept_qcf_below
+        self.nighttimetime_accept_qcf_below = nighttimetime_accept_qcf_below
+
+        self.fpc = None
+
+        self._run()
+
+    def _run(self):
+        self.maindf, self.metadata = self._load_data()
+
+        for fluxcol in self.fluxvars:
+            self.fpc = self._start_fpc(fluxcol=fluxcol)
+            self._run_level2()
+            self._run_level31()
+            self._run_level32()
+
+    def _run_level32(self):
+        self.fpc.level32_stepwise_outlier_detection()
+        self.fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
+        self.fpc.level32_addflag()
+        self.fpc.finalize_level32(nighttime_threshold=self.nighttime_threshold,
+                                  daytime_accept_qcf_below=self.daytime_accept_qcf_below,
+                                  nighttimetime_accept_qcf_below=self.nighttimetime_accept_qcf_below)
+
+        # self.fpc.filteredseries
+        # self.fpc.level32.results
+        self.fpc.level32_qcf.showplot_qcf_heatmaps()
+        # self.fpc.level32_qcf.showplot_qcf_timeseries()
+        # self.fpc.level32_qcf.report_qcf_flags()
+        self.fpc.level32_qcf.report_qcf_evolution()
+        self.fpc.level32_qcf.report_qcf_series()
+
+    def _run_level31(self):
+        self.fpc.level31_storage_correction(gapfill_storage_term=False)
+        self.fpc.finalize_level31()
+        # fpc.level31.showplot(maxflux=50)
+        self.fpc.level31.report()
+
+    def _run_level2(self):
+        LEVEL2_SETTINGS = {
+            'signal_strength': False,
+            'raw_data_screening_vm97': {'spikes': True, 'amplitude': False,
+                                        'dropout': False, 'abslim': False,
+                                        'skewkurt_hf': False, 'skewkurt_sf': False,
+                                        'discont_hf': False,
+                                        'discont_sf': False},
+            'ssitc': True,
+            'gas_completeness': False,
+            'spectral_correction_factor': True,
+            'angle_of_attack': False,
+            'steadiness_of_horizontal_wind': False
+        }
+        self.fpc.level2_quality_flag_expansion(**LEVEL2_SETTINGS)
+        self.fpc.finalize_level2(nighttime_threshold=self.nighttime_threshold,
+                                 daytime_accept_qcf_below=self.daytime_accept_qcf_below,
+                                 nighttimetime_accept_qcf_below=self.nighttimetime_accept_qcf_below)
+
+    def _start_fpc(self, fluxcol: str):
+        fpc = FluxProcessingChain(
+            maindf=self.maindf,
+            filetype=self.filetype,
+            fluxcol=fluxcol,
+            site_lat=self.site_lat,
+            site_lon=self.site_lon,
+            utc_offset=self.utc_offset,
+            metadata=self.metadata
+        )
+        return fpc
+
+    def _load_data(self):
+        ep = LoadEddyProOutputFiles(sourcedir=self.sourcedirs, filetype=self.filetype)
+        ep.searchfiles()
+        ep.loadfiles()
+        return ep.maindf, ep.metadata
+
+
+def example_simple():
+    QuickFluxProcessingChain(
+        fluxvars=['FC', 'LE', 'H'],
+        sourcedirs=[r'C:\Users\holukas\Desktop\FRU\fluxnet files'],
+        site_lat=47.115833,
+        site_lon=8.537778,
+        filetype='EDDYPRO_FLUXNET_30MIN',
+        utc_offset=1,
+        nighttime_threshold=50,
+        daytime_accept_qcf_below=2,
+        nighttimetime_accept_qcf_below=2
+    )
+
+
 def example():
     FLUXVAR = "co2_flux"  # Name of the flux variable
-    SOURCEDIRS = [r'F:\Sync\luhk_work\TMP\fru']  # Folders where the EddyPro output files are located
+    SOURCEDIRS = [r'L:\Sync\luhk_work\TMP\fru']  # Folders where the EddyPro output files are located
     SITE_LAT = 47.115833  # Latitude of site
     SITE_LON = 8.537778  # Longitude of site
     FILETYPE = 'EDDYPRO_FULL_OUTPUT_30MIN'  # Filetype of EddyPro output files, can be 'EDDYPRO_FLUXNET_30MIN' or 'EDDYPRO_FULL_OUTPUT_30MIN'
@@ -427,26 +590,26 @@ def example():
     ep = LoadEddyProOutputFiles(sourcedir=SOURCEDIRS, filetype=FILETYPE)
     ep.searchfiles()
     ep.loadfiles()
-    level1_df = ep.level1_df
-    level1_metadata = ep.metadata
+    maindf = ep.maindf
+    metadata = ep.metadata
 
     # from diive.core.io.files import save_parquet, load_parquet
     # df_orig = load_parquet(filepath='df_level32_qcf.parquet')
 
-    level1_df.head()
+    maindf.head()
     from diive.core.dfun.stats import sstats  # Time series stats
-    sstats(level1_df[FLUXVAR])
+    sstats(maindf[FLUXVAR])
     # TimeSeries(series=level1_df[FLUXVAR]).plot_interactive()
     # TimeSeries(series=level1_df[FLUXVAR]).plot()
 
     fpc = FluxProcessingChain(
-        level1_df=level1_df,
+        maindf=maindf,
         filetype=FILETYPE,
         fluxcol=FLUXVAR,
         site_lat=SITE_LAT,
         site_lon=SITE_LON,
         utc_offset=UTC_OFFSET,
-        level1_metadata=level1_metadata
+        metadata=metadata
     )
 
     # --------------------
@@ -461,7 +624,7 @@ def example():
     TEST_SIGNAL_STRENGTH_COL = 'agc_mean'
     TEST_SIGNAL_STRENGTH_METHOD = 'discard above'
     TEST_SIGNAL_STRENGTH_THRESHOLD = 90
-    # TimeSeries(series=level1_df[TEST_SIGNAL_STRENGTH_COL]).plot()
+    # TimeSeries(series=maindf[TEST_SIGNAL_STRENGTH_COL]).plot()
 
     TEST_RAWDATA_SPIKES = True  # Default True
     TEST_RAWDATA_AMPLITUDE = True  # Default True
@@ -499,7 +662,6 @@ def example():
     # fpc.level2.results
     # [x for x in fpc.fpc_df.columns if 'L2' in x]
 
-
     # --------------------
     # Level-3.1
     # --------------------
@@ -513,30 +675,10 @@ def example():
     # fpc.level31.results
     # [x for x in fpc.fpc_df.columns if 'L3.1' in x]
 
-
     # --------------------
     # Level-3.2
     # --------------------
     fpc.level32_stepwise_outlier_detection()
-
-    fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
-    fpc.level32_addflag()
-    # fpc.level32.results  # Stores Level-3.2 flags up to this point
-
-    fpc.level32_flag_outliers_localsd_test(n_sd=4, winsize=480, showplot=True, verbose=True, repeat=True)
-    fpc.level32_addflag()
-    # fpc.level32.results  # Stores Level-3.2 flags up to this point
-
-    fpc.level32_flag_outliers_stl_rz_test(thres_zscore=4, decompose_downsampling_freq='3H', repeat=True, showplot=True)
-    fpc.level32_addflag()
-
-    fpc.level32_flag_outliers_increments_zcore_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
-    fpc.level32_addflag()
-    # fpc.level32.results  # Stores Level-3.2 flags up to this point
-
-    fpc.level32_flag_outliers_zscore_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
-    fpc.level32_addflag()
-    # fpc.level32.results
 
     fpc.level32_flag_manualremoval_test(
         remove_dates=[
@@ -548,28 +690,41 @@ def example():
         showplot=True, verbose=True)
     fpc.level32_addflag()
 
-    fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=[-50, 50], nighttime_minmax=[-10, 50],
-                                               showplot=True, verbose=True)
+    fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
     fpc.level32_addflag()
     # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
-    fpc.level32_flag_outliers_abslim_test(minval=-50, maxval=50, showplot=True, verbose=True)
+    fpc.level32_flag_outliers_localsd_test(n_sd=4, winsize=480, showplot=True, verbose=True, repeat=True)
     fpc.level32_addflag()
     # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
+    fpc.level32_flag_outliers_increments_zcore_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
+    fpc.level32_addflag()
+    # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
-    fpc.level32_flag_outliers_lof_test(n_neighbors=20, contamination=None, showplot=True, verbose=True,
-                                       repeat=True, n_jobs=-1)
+    fpc.level32_flag_outliers_stl_rz_test(thres_zscore=4, decompose_downsampling_freq='3H', repeat=True, showplot=True)
     fpc.level32_addflag()
 
     fpc.level32_flag_outliers_lof_dtnt_test(n_neighbors=20, contamination=None, showplot=True,
                                             verbose=True, repeat=True, n_jobs=-1)
     fpc.level32_addflag()
 
-    # todo --- loop test until no more outliers ---
+    fpc.level32_flag_outliers_lof_test(n_neighbors=20, contamination=None, showplot=True, verbose=True,
+                                       repeat=True, n_jobs=-1)
+    fpc.level32_addflag()
 
+    fpc.level32_flag_outliers_zscore_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
+    fpc.level32_addflag()
+    # fpc.level32.results
 
+    fpc.level32_flag_outliers_abslim_test(minval=-50, maxval=50, showplot=True, verbose=True)
+    fpc.level32_addflag()
+    # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
+    fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=[-50, 50], nighttime_minmax=[-10, 50],
+                                               showplot=True, verbose=True)
+    fpc.level32_addflag()
+    # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
     fpc.finalize_level32(nighttime_threshold=50, daytime_accept_qcf_below=2, nighttimetime_accept_qcf_below=2)
 
@@ -581,6 +736,10 @@ def example():
     fpc.level32_qcf.report_qcf_evolution()
     fpc.level32_qcf.report_qcf_series()
     fpc.levelidstr
+
+    # fpc.filteredseries_level2_qcf
+    # fpc.filteredseries_level31_qcf
+    # fpc.filteredseries_level32_qcf
 
     # # https://fitter.readthedocs.io/en/latest/tuto.html
     # # https://medium.com/the-researchers-guide/finding-the-best-distribution-that-fits-your-data-using-pythons-fitter-library-319a5a0972e9
@@ -695,4 +854,5 @@ def example():
 
 
 if __name__ == '__main__':
-    example()
+    example_simple()
+    # example()

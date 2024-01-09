@@ -5,6 +5,7 @@ PRINTS
 Functions for printing info.
 
 """
+from functools import wraps
 
 
 class ConsoleOutputDecorator:
@@ -36,6 +37,10 @@ class ConsoleOutputDecorator:
             Function results
         """
 
+        # @wraps creates yet another wrapper around a decorated function that restores its type as a function
+        # while preserving the docstring.
+        # https://stackoverflow.com/questions/72492374/how-to-make-python-help-function-work-well-with-decorators
+        @wraps(func)
         def my_logic(*args, **kwargs):
             # Whatever logic the decorator is supposed to implement goes in here
             id = func.__name__

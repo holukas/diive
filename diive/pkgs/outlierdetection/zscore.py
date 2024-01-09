@@ -17,9 +17,6 @@ class zScoreDaytimeNighttime(FlagBase):
     Identify outliers based on the z-score, separately for daytime and nighttime
     ...
 
-    Methods:
-        calc(factor: float = 4): Calculates flag
-
     After running calc(), results can be accessed with:
         flag: Series
             Flag series where accepted (ok) values are indicated

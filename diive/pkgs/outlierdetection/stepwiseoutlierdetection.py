@@ -6,7 +6,7 @@ from diive.core.plotting.timeseries import TimeSeries
 from diive.core.times.times import TimestampSanitizer
 from diive.pkgs.outlierdetection.absolutelimits import AbsoluteLimits, AbsoluteLimitsDaytimeNighttime
 from diive.pkgs.outlierdetection.incremental import zScoreIncrements
-from diive.pkgs.outlierdetection.local3sd import LocalSD
+from diive.pkgs.outlierdetection.localsd import LocalSD
 from diive.pkgs.outlierdetection.lof import LocalOutlierFactorDaytimeNighttime, LocalOutlierFactorAllData
 from diive.pkgs.outlierdetection.manualremoval import ManualRemoval
 from diive.pkgs.outlierdetection.seasonaltrend import OutlierSTLRZ
