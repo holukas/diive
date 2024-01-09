@@ -1,8 +1,11 @@
+from typing import Literal
+
 import matplotlib.pyplot as plt
 import pandas as pd
 from pandas import Series
 
 import diive.core.plotting.plotfuncs as pf
+from diive.core.dfun.stats import q25, q75
 
 
 class ScatterXY:
@@ -15,8 +18,9 @@ class ScatterXY:
             title: str = None,
             ax: plt.Axes = None,
             nbins: int = 0,
+            binagg: Literal['mean', 'median'] = 'median',
             xlim: list = None,
-            ylim: list = None
+            ylim: list or Literal['auto'] = None
     ):
         """
 
@@ -29,8 +33,11 @@ class ScatterXY:
         self.yunits = yunits
         self.ax = ax
         self.nbins = nbins
+        self.binagg = binagg
         self.xlim = xlim
         self.ylim = ylim
+
+        self.binagg = None if self.nbins == 0 else self.binagg
 
         self.xy_df = pd.concat([x, y], axis=1)
         self.xy_df = self.xy_df.dropna()
@@ -46,7 +53,7 @@ class ScatterXY:
         group, bins = pd.qcut(self.xy_df[self.xname], q=self.nbins, retbins=True, duplicates='drop')
         groupcol = f'GROUP_{self.xname}'
         self.xy_df[groupcol] = group
-        self.xy_df_binned = self.xy_df.groupby(groupcol).agg({'mean', 'std', 'count'})
+        self.xy_df_binned = self.xy_df.groupby(groupcol).agg({'mean', 'median', 'std', 'count', q25, q75})
 
     def plot(self):
         """Generate plot"""
@@ -73,22 +80,31 @@ class ScatterXY:
                         label=label)
 
         if self.nbins > 0:
+
             _min = self.xy_df_binned[self.yname]['count'].min()
             _max = self.xy_df_binned[self.yname]['count'].max()
-            self.ax.scatter(x=self.xy_df_binned[self.xname]['mean'],
-                            y=self.xy_df_binned[self.yname]['mean'],
-                            c='none',
-                            s=80,
-                            marker='o',
-                            edgecolors='r',
-                            lw=2,
-                            label=f"binned data, mean±SD "
-                                  f"({_min}-{_max} values per bin)")
-            self.ax.errorbar(x=self.xy_df_binned[self.xname]['mean'],
-                             y=self.xy_df_binned[self.yname]['mean'],
-                             xerr=self.xy_df_binned[self.xname]['std'],
-                             yerr=self.xy_df_binned[self.yname]['std'],
-                             elinewidth=3, ecolor='red', alpha=.6, lw=0)
+            self.ax.plot(self.xy_df_binned[self.xname][self.binagg],
+                         self.xy_df_binned[self.yname][self.binagg],
+                         c='r', ms=10, marker='o', lw=2,
+                         # c='none', ms=80, marker='o', edgecolors='r', lw=2,
+                         label=f"binned data ({self.binagg}, {_min}-{_max} values per bin)")
+
+
+
+            if self.binagg == 'median':
+                self.ax.fill_between(self.xy_df_binned[self.xname][self.binagg],
+                                     self.xy_df_binned[self.yname]['q25'],
+                                     self.xy_df_binned[self.yname]['q75'],
+                                     alpha=.2, zorder=10, color='red',
+                                     label="interquartile range")
+
+            if self.binagg == 'mean':
+                self.ax.errorbar(x=self.xy_df_binned[self.xname][self.binagg],
+                                 y=self.xy_df_binned[self.yname][self.binagg],
+                                 xerr=self.xy_df_binned[self.xname]['std'],
+                                 yerr=self.xy_df_binned[self.yname]['std'],
+                                 elinewidth=3, ecolor='red', alpha=.6, lw=0,
+                                 label="standard deviation")
 
         self._apply_format()
         self.ax.locator_params(axis='x', nbins=nbins)
@@ -99,12 +115,31 @@ class ScatterXY:
         if self.xlim:
             xmin = self.xlim[0]
             xmax = self.xlim[1]
-            self.ax.set_xlim(xmin, xmax)
+        else:
+            xmin = self.xy_df[self.xname].quantile(0.01)
+            xmax = self.xy_df[self.xname].quantile(0.99)
+        self.ax.set_xlim(xmin, xmax)
 
-        if self.ylim:
+        if self.ylim == 'auto':
+            if self.binagg == 'median':
+                ymin = self.xy_df_binned[self.yname]['q25'].min()
+                ymax = self.xy_df_binned[self.yname]['q75'].max()
+            elif self.binagg == 'mean':
+                _lowery = self.xy_df_binned[self.yname]['mean'].sub(self.xy_df_binned[self.yname]['std'])
+                _uppery = self.xy_df_binned[self.yname]['mean'].add(self.xy_df_binned[self.yname]['std'])
+                ymin = _lowery.min()
+                ymax = _uppery.max()
+            else:
+                ymin = self.xy_df[self.yname].quantile(0.01)
+                ymax = self.xy_df[self.yname].quantile(0.99)
+        elif isinstance(self.ylim, list):
             ymin = self.ylim[0]
             ymax = self.ylim[1]
-            self.ax.set_ylim(ymin, ymax)
+        else:
+            ymin = self.xy_df[self.yname].min()
+            ymax = self.xy_df[self.yname].max()
+
+        self.ax.set_ylim(ymin, ymax)
 
         pf.add_zeroline_y(ax=self.ax, data=self.xy_df[self.yname])
 
@@ -117,6 +152,8 @@ class ScatterXY:
         pf.default_legend(ax=self.ax,
                           labelspacing=0.2,
                           ncol=1)
+
+        self.ax.set_title(self.title, size=20)
 
         # pf.nice_date_ticks(ax=self.ax, minticks=3, maxticks=20, which='x', locator='auto')
 

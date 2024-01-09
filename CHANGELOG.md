@@ -2,6 +2,53 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.67.0 | 9 Jan 2024
+
+### Updates to flux processing chain
+
+The flux processing chain was updated in an attempt to make processing more streamlined and easier to follow. One of the
+biggest changes is the implementation of the `repeat` keyword for outlier tests. With this keyword set to `True`, the
+respective test is repeated until no more outliers can be found. How the flux processing chain can be used is shown in
+the updated `FluxProcessingChain`notebook (`notebooks/FluxProcessingChain/FluxProcessingChain.ipynb`).
+
+### New features
+
+- Added new class `QuickFluxProcessingChain`, which allows to quickly execute a simplified version of the flux
+  processing chain. This quick version runs with a lot of default values and thus not a lot of user input is needed,
+  only some basic settings. (`diive.pkgs.fluxprocessingchain.fluxprocessingchain.QuickFluxProcessingChain`)
+- Added new repeater function for outlier detection: `repeater` is wrapper that allows to execute an outlier detection
+  method multiple times, where each iteration gets its own outlier flag. As an example: the simple z-score test is run
+  a first time and then repeated until no more outliers are found. Each iteration outputs a flag. This is now used in
+  the `StepwiseOutlierDetection` and thus the flux processing chain Level-3.2 (outlier detection) and the meteoscreening
+  in `StepwiseMeteoScreeningDb` (not yet checked in this update). To repeat an outlier method use the `repeat` keyword
+  arg (see the `FluxProcessingChain` notebook for examples).(`diive.pkgs.outlierdetection.repeater.repeater`)
+- Added new function `filter_strings_by_elements`: Returns a list of strings from list1 that contain all of the elements
+  in list2.(`core.funcs.funcs.filter_strings_by_elements`)
+- Added new function `flag_steadiness_horizontal_wind_eddypro_test`: Create flag for steadiness of horizontal wind u
+  from the sonic anemometer. Makes direct use of the EddyPro output files and converts the flag to a standardized 0/1
+  flag.(`pkgs.qaqc.eddyproflags.flag_steadiness_horizontal_wind_eddypro_test`)
+
+### Changes
+
+- Added automatic calculation of daytime and nighttime flags whenever the flux processing chain is started
+  flags (`diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain._add_swinpot_dt_nt_flag`)
+
+### Removed features
+
+- Removed class `ThymeBoostOutlier` for outlier detection. At the moment it was not possible to get it to work properly.
+
+### Changes
+
+- It appears that the kwarg `fmt` is used slightly differently for `plot_date` and `plot` in `matplotlib`. It seems it
+  is always defined for `plot_date`, while it is optional for `plot`. Now using `fmt` kwarg to avoid the warning:
+  *UserWarning: marker is redundantly defined by the 'marker' keyword argument and the fmt string "o" (-> marker='o').
+  The keyword argument will take precedence.* Therefore using 'fmt="X"' instead of 'marker="X"'. See also
+  answer [here](https://stackoverflow.com/questions/69188540/userwarning-marker-is-redundantly-defined-by-the-marker-keyword-argument-when)
+
+### Environment
+
+- Removed `thymeboost`
+
 ## v0.66.0 | 2 Nov 2023
 
 ### New features

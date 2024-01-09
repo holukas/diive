@@ -51,7 +51,6 @@ class StepwiseMeteoScreeningDb:
     - `.flag_outliers_localsd_test()`: Identify outliers based on the local standard deviation
     - `.flag_manualremoval_test()`: Remove data points for range, time or point-by-point
     - `.flag_outliers_stl_riqrz_test()`: Identify outliers based on seasonal-trend decomposition and z-score calculations
-    - `.flag_outliers_thymeboost_test()`: Identify outliers based on [thymeboost](https://github.com/tblume1992/ThymeBoost)
     - `.flag_outliers_zscore_dtnt_test()`: Identify outliers based on the z-score, separately for daytime and nighttime
     - `.flag_outliers_zscore_test()`:  Identify outliers based on the z-score
     - `.flag_outliers_zscoreiqr_test()`: Identify outliers based on max z-scores in the interquartile range data
@@ -150,7 +149,7 @@ class StepwiseMeteoScreeningDb:
         # Each field gets its own sod object
         self.sod = {}
         for field in self.fields:
-            self.sod[field] = StepwiseOutlierDetection(dataframe=self.data_detailed[field].copy(),
+            self.sod[field] = StepwiseOutlierDetection(dfin=self.data_detailed[field].copy(),
                                                        col=field,
                                                        site_lat=self.site_lat,
                                                        site_lon=self.site_lon,
@@ -318,7 +317,7 @@ class StepwiseMeteoScreeningDb:
     def flag_outliers_increments_zcore_test(self, threshold: int = 30, showplot: bool = False, verbose: bool = False):
         """Identify outliers based on the z-score of record increments"""
         for field in self.fields:
-            self.sod[field].flag_outliers_increments_zcore_test(threshold=threshold,
+            self.sod[field].flag_outliers_increments_zcore_test(thres_zscore=threshold,
                                                                 showplot=showplot,
                                                                 verbose=verbose)
 
@@ -326,16 +325,11 @@ class StepwiseMeteoScreeningDb:
                                   plottitle: str = None):
         """Identify outliers based on the z-score of records"""
         for field in self.fields:
-            self.sod[field].flag_outliers_zscore_test(threshold=threshold,
+            self.sod[field].flag_outliers_zscore_test(thres_zscore=threshold,
                                                       showplot=showplot,
                                                       verbose=verbose,
                                                       plottitle=plottitle)
 
-    def flag_outliers_thymeboost_test(self, showplot: bool = False, verbose: bool = False):
-        """Identify outliers based on thymeboost"""
-        for field in self.fields:
-            self.sod[field].flag_outliers_thymeboost_test(showplot=showplot,
-                                                          verbose=verbose)
 
     def flag_outliers_localsd_test(self, n_sd: float, winsize: int = None, showplot: bool = False,
                                    verbose: bool = False):
@@ -366,7 +360,7 @@ class StepwiseMeteoScreeningDb:
                                   repeat: bool = False, showplot: bool = False):
         """Identify outliers based on seasonal-trend decomposition and z-score calculations"""
         for field in self.fields:
-            self.sod[field].flag_outliers_stl_rz_test(zfactor=zfactor,
+            self.sod[field].flag_outliers_stl_rz_test(thres_zscore=zfactor,
                                                       decompose_downsampling_freq=decompose_downsampling_freq,
                                                       repeat=repeat,
                                                       showplot=showplot)
@@ -498,8 +492,8 @@ class StepwiseMeteoScreeningDb:
             series_orig = self._data_detailed[field][field].copy()
 
             qcf = FlagQCF(series=series_orig,
-                          df=self.sod[field].hires_flags,
-                          levelid='METSCR',
+                          df=self.sod[field].results,
+                          idstr='METSCR',
                           swinpot=None,
                           nighttime_threshold=50)
             qcf.calculate(daytime_accept_qcf_below=2, nighttimetime_accept_qcf_below=2)
@@ -889,9 +883,6 @@ def example():
     # mscr.flag_outliers_increments_zcore_test(threshold=50, showplot=True)
     # mscr.addflag()
 
-    # # Outlier detection: Thymeboost
-    # mscr.flag_outliers_thymeboost_test(showplot=True)
-    # mscr.addflag()
 
     # # Outlier detection: Local SD
     # mscr.flag_outliers_localsd_test(n_sd=5, winsize=None, showplot=True)

@@ -2,10 +2,12 @@ from pandas import Series, DatetimeIndex
 
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.prints import ConsoleOutputDecorator
+from diive.pkgs.outlierdetection.repeater import repeater
 from diive.pkgs.outlierdetection.zscore import zScore
 
 
 @ConsoleOutputDecorator()
+@repeater
 class zScoreIncrements(FlagBase):
     """
     Identify outliers based on the z-score of record increments
@@ -24,42 +26,59 @@ class zScoreIncrements(FlagBase):
     """
     flagid = 'OUTLIER_INCRZ'
 
-    def __init__(self, series: Series, levelid: str = None):
-        super().__init__(series=series, flagid=self.flagid, levelid=levelid)
+    def __init__(self,
+                 series: Series,
+                 idstr: str = None,
+                 thres_zscore: float = 4,
+                 showplot: bool = False,
+                 verbose: bool = False,
+                 repeat: bool = True):
+        super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.showplot = False
         self.verbose = False
-
-    def calc(self, threshold: float = 4, showplot: bool = False, verbose: bool = False):
-        """Calculate flag"""
+        self.thres_zscore = thres_zscore
         self.showplot = showplot
         self.verbose = verbose
+        self.repeat = repeat
+
+    def calc(self):
+        """Calculate flag"""
         self.reset()
-        ok, rejected = self._flagtests(threshold=threshold)
+        ok, rejected = self._flagtests()
         self.setflag(ok=ok, rejected=rejected)
         self.setfiltered(rejected=rejected)
 
-    def _flagtests(self, threshold: float = 4) -> tuple[DatetimeIndex, DatetimeIndex]:
+    def _flagtests(self) -> tuple[DatetimeIndex, DatetimeIndex]:
         """Perform tests required for this flag"""
 
         s = self.series.copy()
         shifted = s.shift(1)
         increment = s - shifted
         increment.name = 'INCREMENT'
-        _zsc = zScore(series=increment)
-        _zsc.calc(threshold=threshold, plottitle=f"z-score of {self.series.name} increments",
-                  showplot=True, verbose=True)
-        ok = _zsc.flag == 0
+
+        # Run simple z-score
+        # With repeat=False the results are a dataframe storing the filtered series and
+        # one single outlier flag (because repeat=False). The filtered series can be removed,
+        # the remaining dataframe then only contains the outlier flag.
+        results_df = zScore(series=increment, thres_zscore=self.thres_zscore,
+                            plottitle=f"z-score of {self.series.name} increments",
+                            showplot=True, verbose=True, repeat=False)
+        flag = results_df.drop(increment.name, axis=1)  # Remove filtered series, flag remains in dataframe
+        flag = flag.squeeze()  # Convert dataframe with the single flag column to series
+
+        ok = flag == 0
         ok = ok[ok].index
-        rejected = _zsc.flag == 2
+        rejected = flag == 2
         rejected = rejected[rejected].index
         total_outliers = len(rejected)
 
         if self.verbose:
             print(f"Total found outliers: {total_outliers} values (daytime+nighttime)")
 
-        if self.showplot: self.plot(ok=ok, rejected=rejected,
-                                    plottitle=f"Outlier detection based on z-score "
-                                              f"from {self.series.name} increments")
+        if self.showplot:
+            self.plot(ok=ok, rejected=rejected,
+                      plottitle=f"Outlier detection based on z-score "
+                                f"from {self.series.name} increments")
 
         return ok, rejected
 

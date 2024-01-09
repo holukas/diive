@@ -116,8 +116,8 @@ class TimeSeries:
         self.ax.plot_date(x=self.series.index,
                           y=self.series,
                           color=color_list[0], alpha=1,
-                          ls='-', lw=theme.WIDTH_LINE_DEFAULT,
-                          marker='', markeredgecolor='none', ms=0,
+                          lw=theme.WIDTH_LINE_DEFAULT,
+                          fmt='-', markeredgecolor='none', ms=0,
                           zorder=99, label=label)
         self._apply_format()
         if self.showplot:

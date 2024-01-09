@@ -27,10 +27,12 @@ from diive.core.base.flagbase import FlagBase
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag
 from diive.pkgs.gapfilling.randomforest_ts import QuickFillRFTS
+from diive.pkgs.outlierdetection.repeater import repeater
 from diive.pkgs.outlierdetection.zscore import zScoreDaytimeNighttime
 
 
 @ConsoleOutputDecorator()
+@repeater
 class OutlierSTLRZ(FlagBase):
     """
     Identify outliers based on seasonal-trend decomposition and z-score calculations
@@ -55,23 +57,31 @@ class OutlierSTLRZ(FlagBase):
     """
     flagid = 'OUTLIER_STLRZ'
 
-    def __init__(self, series: Series, lat: float, lon: float,
-                 utc_offset: int, levelid: str = None):
-        super().__init__(series=series, flagid=self.flagid, levelid=levelid)
-        self.showplot = False
+    def __init__(self,
+                 series: Series,
+                 lat: float,
+                 lon: float,
+                 utc_offset: int,
+                 idstr: str = None,
+                 thres_zscore: float = 4.5,
+                 decompose_downsampling_freq: str = '1H',
+                 repeat: bool = False,
+                 showplot: bool = False):
+        super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.repeat = True
         self.lat = lat
         self.lon = lon
         self.utc_offset = utc_offset
         self.is_nighttime = self._detect_nighttime()
-
-    def calc(self, zfactor: float = 4.5, decompose_downsampling_freq: str = '1H',
-             repeat: bool = False, showplot: bool = False):
-        """Calculate flag"""
+        self.thres_zscore = thres_zscore
+        self.decompose_downsampling_freq = decompose_downsampling_freq
+        self.repeat = repeat
         self.showplot = showplot
+
+    def calc(self):
+        """Calculate flag"""
         self.reset()
-        ok, rejected = self._flagtests(zfactor=zfactor, repeat=repeat,
-                                       decompose_downsampling_freq=decompose_downsampling_freq)
+        ok, rejected = self._flagtests()
         self.setflag(ok=ok, rejected=rejected)
         self.setfiltered(rejected=rejected)
 
@@ -93,67 +103,55 @@ class OutlierSTLRZ(FlagBase):
         nighttime_ix = nighttimeflag == 1
         return nighttime_ix
 
-    def _flagtests(self, zfactor: float = 4.5, repeat: bool = True,
-                   decompose_downsampling_freq: str = '1H') -> tuple[DatetimeIndex, DatetimeIndex]:
+    def _flagtests(self) -> tuple[DatetimeIndex, DatetimeIndex]:
         """Perform tests required for this flag"""
 
         # Work series
-        _series = self.series.copy()
-        n_available_prev = len(_series.dropna())
+        series = self.series.copy()
+        n_available_prev = len(series.dropna())
 
-        # Collect flags for good and bad data from all iterations
-        ok_coll = pd.Series(index=_series.index, data=False)  # Collects all good flags
-        rejected_coll = pd.Series(index=_series.index, data=False)  # Collected all bad flags
-        decompose_df = None
+        # Quick gap-fill for series, needed for decompose
+        series_gf, flag_isfilled = self._randomforest_quickfill(series=series)  # Adds suffix _gfRF to varname
 
-        # Repeat multiple times until all outliers removed (untile *outliers=False*)
-        outliers = True
-        while outliers:
+        # Decompose gap-filled series
+        decompose_df = self._decompose(series=series_gf, decompose_downsampling_freq=self.decompose_downsampling_freq)
 
-            # Quick gap-fill for series, needed for decompose
-            _series_gf, _flag_gf = self._randomforest_quickfill(series=_series)  # Adds suffix _gfRF to varname
+        # Detect residual outliers in gap-filled series
+        flag = self._detect_residual_outliers(series=decompose_df[f'RESIDUAL_{self.decompose_downsampling_freq}'])
 
-            # Decompose gap-filled series
-            decompose_df = self._decompose(series=_series_gf, decompose_downsampling_freq=decompose_downsampling_freq)
+        # Set flag for gap-filled locations to NaN
+        flag[flag_isfilled == 1] = np.nan
 
-            # Detect residual outliers in gap-filled series
-            _flag_thisstep = self._detect_residual_outliers(series=decompose_df['RESIDUAL'], zfactor=zfactor)
+        # Collect good and bad values
+        ok = flag == 0
+        ok = ok[ok].index
+        rejected = flag == 2
+        rejected = rejected[rejected].index
+        total_outliers = len(rejected)
 
-            # Set flag for gap-filled locations to NaN
-            _flag_thisstep[_flag_gf == 1] = np.nan
+        if self.showplot:
+            decompose_df[series.name] = series.copy()
+            decompose_df[flag.name] = flag.copy()
+            decompose_df[flag_isfilled.name] = flag_isfilled.copy()
+            decompose_df.plot(subplots=True)
+            plt.show()
 
-            # Collect good and bad values
-            _ok = _flag_thisstep.loc[_flag_thisstep == 0]
-            _ok = _ok.loc[_ok.index]
-            ok_coll.loc[_ok.index] = True
-            _rejected = _flag_thisstep.loc[_flag_thisstep == 2]
-            _rejected = _rejected.loc[_rejected.index]
-            rejected_coll.loc[_rejected.index] = True
+        return ok, rejected
 
-            _series.loc[rejected_coll] = np.nan  # Set rejected to missing
-
-            n_available = len(_series.dropna())  # Number of missing values
-            n_newoutliers = n_available_prev - n_available
-            if repeat:
-                outliers = True if n_newoutliers > 0 else False  # Continue while new outliers found
-            else:
-                outliers = False  # No repetition if *repeat=False*
-            n_available_prev = len(_series.dropna())  # Update number
-            print(f"New outliers: {n_newoutliers}")
-
-        # Convert to index
-        ok_coll = ok_coll[ok_coll].index
-        rejected_coll = rejected_coll[rejected_coll].index
-
-        return ok_coll, rejected_coll
-
-    def _detect_residual_outliers(self, series: Series, zfactor: float = 4.5):
+    def _detect_residual_outliers(self, series: Series):
         """Detect residual outliers separately for daytime and nighttime data"""
         print("Detecting residual outliers ...")
-        zscores = zScoreDaytimeNighttime(series=series, lat=self.lat, lon=self.lon,
-                                         utc_offset=self.utc_offset)
-        zscores.calc(threshold=zfactor, showplot=True, verbose=True)
-        return zscores.flag
+        # Run z-score for daytime and nighttime
+        # With repeat=False the results are a dataframe storing the filtered series and
+        # one single outlier flag (because repeat=False). The filtered series can be removed,
+        # the remaining dataframe then only contains the outlier flag.
+        results_df = zScoreDaytimeNighttime(series=series, lat=self.lat, lon=self.lon,
+                                            utc_offset=self.utc_offset, idstr=None, repeat=False,
+                                            thres_zscore=self.thres_zscore, showplot=self.showplot,
+                                            verbose=self.verbose)
+        flag = results_df.drop(series.name, axis=1)  # Remove filtered series, flag remains in dataframe
+        flag = flag.squeeze()  # Convert dataframe with the single flag column to series
+        return flag
 
     def _decompose(self, series: Series, decompose_downsampling_freq: str = '1H'):
         print("Decomposing timeseries ...")
@@ -189,16 +187,16 @@ class OutlierSTLRZ(FlagBase):
             low_pass_jump=low_pass_jump
         ).fit()
 
-        _frame = {'TREND': res.trend,
-                  'SEASONAL': res.seasonal,
-                  'RESIDUAL': res.resid}
+        _frame = {f'TREND_{decompose_downsampling_freq}': res.trend,
+                  f'SEASONAL_{decompose_downsampling_freq}': res.seasonal,
+                  f'RESIDUAL_{decompose_downsampling_freq}': res.resid}
         _frame = pd.DataFrame(_frame)
         _frame = _frame.reindex(series.index, method='nearest')
         # _frame['TREND+SEASONAL'] = _frame['TREND'].add(_frame['SEASONAL'])
-        _frame['SERIES'] = series.copy()
+        _frame[f'SERIES_GAPFILLED_{decompose_downsampling_freq}'] = series.copy()
         # _frame['RESIDUAL'] = _frame['SERIES'] - _frame['TREND+SEASONAL']
-        _frame.plot(subplots=True)
-        plt.show()
+        # _frame.plot(subplots=True)
+        # plt.show()
         decompose_df = pd.DataFrame(_frame)
 
         # todo prophet?
