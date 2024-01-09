@@ -1,7 +1,12 @@
 """
-SEASONAL TREND DECOMPOSITION (LOESS)
+OUTLIER DETECTION: SEASONAL TREND DECOMPOSITION (LOESS)
+=======================================================
 
+This module is part of the diive library:
+https://github.com/holukas/diive
 
+Kudos:
+    - kudos: https://www.analyticsvidhya.com/blog/2022/08/outliers-pruning-using-python/
     - https://www.statsmodels.org/dev/examples/notebooks/generated/stl_decomposition.html
     - https://www.statsmodels.org/devel/examples/notebooks/generated/stl_decomposition.html
     - https://www.statsmodels.org/dev/generated/statsmodels.tsa.seasonal.STL.html
@@ -34,25 +39,10 @@ from diive.pkgs.outlierdetection.zscore import zScoreDaytimeNighttime
 @ConsoleOutputDecorator()
 @repeater
 class OutlierSTLRZ(FlagBase):
-    """
-    Identify outliers based on seasonal-trend decomposition and z-score calculations
+    """Identify outliers based on seasonal-trend decomposition and z-score calculations.
 
     (S)easonal (T)rend decomposition using (L)OESS,
-    based on (R)esidual analysis using (Z)-scores
-
-    ...
-
-    Methods:
-        calc(): Calculates flag
-
-    After running calc, results can be accessed with:
-        flag: Series
-            Flag series where accepted (ok) values are indicated
-            with flag=0, rejected values are indicated with flag=2
-        filteredseries: Series
-            Data with rejected values set to missing
-
-    kudos: https://www.analyticsvidhya.com/blog/2022/08/outliers-pruning-using-python/
+    based on (R)esidual analysis using (Z)-scores.
 
     """
     flagid = 'OUTLIER_STLRZ'
@@ -67,6 +57,29 @@ class OutlierSTLRZ(FlagBase):
                  decompose_downsampling_freq: str = '1H',
                  repeat: bool = False,
                  showplot: bool = False):
+        """
+
+        Args:
+            series: Time series in which outliers are identified.
+            lat: Latitude of location as float, e.g. 46.583056
+            lon: Longitude of location as float, e.g. 9.790639
+            utc_offset: UTC offset of *timestamp_index*, e.g. 1 for UTC+01:00
+                The datetime index of the resulting Series will be in this timezone.
+            idstr: Identifier, added as suffix to output variable names.
+            thres_zscore: Threshold for z-score, scores above this value will be flagged
+                as outlier. NOTE that the z-scores are calculated based on the residuals
+                of *series* values. Residuals are obtained via the seasonal-trend decomposition.
+            decompose_downsampling_freq: Downsampling frequency to calculate the seasonal
+                and trend decomposition. Used to speed up processing time, especially useful
+                for very long (decades) time series.
+            repeat: Repeat until no more outliers can be found.
+            showplot: Show plot with results from the outlier detection.
+
+        Returns:
+            Results dataframe via the @repeater wrapper function, dataframe contains
+            the filtered time series and flags from all iterations.
+
+        """
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.repeat = True
         self.lat = lat
@@ -78,7 +91,7 @@ class OutlierSTLRZ(FlagBase):
         self.repeat = repeat
         self.showplot = showplot
 
-    def calc(self):
+    def _calc(self):
         """Calculate flag"""
         self.reset()
         ok, rejected = self._flagtests()
@@ -240,7 +253,7 @@ def example():
         lon=7.733750,
         utc_offset=1)
 
-    stl.calc(zfactor=1.5, decompose_downsampling_freq='6H')
+    stl._calc(zfactor=1.5, decompose_downsampling_freq='6H')
 
     from diive.core.plotting.heatmap_datetime import HeatmapDateTime
     HeatmapDateTime(series=stl.filteredseries).show()

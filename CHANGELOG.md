@@ -2,6 +2,10 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.67.1 | 10 Jan 2024
+
+- Updated: many docstrings.
+
 ## v0.67.0 | 9 Jan 2024
 
 ### Updates to flux processing chain

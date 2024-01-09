@@ -1,6 +1,11 @@
 """
-Local outlier factor
+OUTLIER DETECTION: LOCAL OUTLIER FACTOR
+=======================================
 
+This module is part of the diive library:
+https://github.com/holukas/diive
+
+Local outlier factor:
     "The anomaly score of each sample is called the Local Outlier Factor. It measures
     the local deviation of the density of a given sample with respect to its neighbors.
     It is local in that the anomaly score depends on how isolated the object is with
@@ -11,10 +16,14 @@ Local outlier factor
     These are considered outliers." - scikit-learn documentation, 6 Jan 2024
 
 Kudos:
-- https://scikit-learn.org/stable/modules/generated/sklearn.neighbors.LocalOutlierFactor.html
-- https://scikit-learn.org/stable/modules/outlier_detection.html
-- https://scikit-learn.org/stable/auto_examples/neighbors/plot_lof_outlier_detection.html#sphx-glr-auto-examples-neighbors-plot-lof-outlier-detection-py
-- https://www.datatechnotes.com/2020/04/anomaly-detection-with-local-outlier-factor-in-python.html
+    - https://scikit-learn.org/stable/modules/generated/sklearn.neighbors.LocalOutlierFactor.html
+    - https://scikit-learn.org/stable/modules/outlier_detection.html
+    - https://scikit-learn.org/stable/auto_examples/neighbors/plot_lof_outlier_detection.html#sphx-glr-auto-examples-neighbors-plot-lof-outlier-detection-py
+    - https://www.datatechnotes.com/2020/04/anomaly-detection-with-local-outlier-factor-in-python.html
+
+References:
+    [1] https://scikit-learn.org/stable/modules/generated/sklearn.neighbors.LocalOutlierFactor.html
+
 """
 
 import matplotlib.gridspec as gridspec
@@ -33,10 +42,13 @@ from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag
 from diive.pkgs.outlierdetection.repeater import repeater
 
 
-def lof(series: Series, n_neighbors: int = 20, contamination: float = 0.01, suffix: str = None, n_jobs: int = 1):
-    """Unsupervised Outlier Detection using the Local Outlier Factor (LOF).
+def lof(series: Series,
+        n_neighbors: int = 20,
+        contamination: float = 0.01,
+        suffix: str = None,
+        n_jobs: int = 1) -> DataFrame:
+    """Unsupervised Outlier Detection using the Local Outlier Factor (LOF)."""
 
-    """
     # Prepare data
     if not suffix:
         suffix = ""
@@ -81,23 +93,8 @@ def lof(series: Series, n_neighbors: int = 20, contamination: float = 0.01, suff
 @ConsoleOutputDecorator()
 @repeater
 class LocalOutlierFactorAllData(FlagBase):
-    """
-    Identify outliers based on the local outlier factor
-    ...
+    """Identify outliers based on the local outlier factor."""
 
-    Methods:
-        calc(factor: float = 4): Calculates flag
-
-    After running calc(), results can be accessed with:
-        flag: Series
-            Flag series where accepted (ok) values are indicated
-            with flag=0, rejected values are indicated with flag=2
-        filteredseries: Series
-            Data with rejected values set to missing
-
-
-
-    """
     flagid = 'OUTLIER_LOF'
 
     def __init__(self,
@@ -109,6 +106,32 @@ class LocalOutlierFactorAllData(FlagBase):
                  verbose: bool = False,
                  repeat: bool = True,
                  n_jobs: int = 1):
+        """
+
+        Args:
+            series: Time series in which outliers are identified.
+            idstr: Identifier, added as suffix to output variable names.
+            n_neighbors: Number of neighbors to use by default for kneighbors queries.
+                If n_neighbors is larger than the number of samples provided, all samples
+                will be used (description taken from scikit, ref [1])
+            contamination:The amount of contamination of the data set, i.e. the proportion
+                of outliers in the data set. When fitting this is used to define the threshold
+                 on the scores of the samples.
+                 - if ‘auto’, the threshold is determined as in the original paper,
+                 - if a float, the contamination should be in the range (0, 0.5].
+                (description taken from scikit, ref [1])
+            n_jobs: The number of parallel jobs to run for neighbors search. None means 1
+                unless in a joblib.parallel_backend context. -1 means using all processors.
+                (description taken from scikit, ref [1])
+            showplot: Show plot with results from the outlier detection.
+            verbose: Print more text output.
+            repeat: Repeat until no more outliers can be found.
+
+        Returns:
+            Results dataframe via the @repeater wrapper function, dataframe contains
+            the filtered time series and flags from all iterations.
+
+        """
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.showplot = False
         self.verbose = False
@@ -119,7 +142,7 @@ class LocalOutlierFactorAllData(FlagBase):
         self.repeat = repeat
         self.n_jobs = n_jobs
 
-    def calc(self):
+    def _calc(self):
         """Calculate flag"""
         self.reset()
         ok, rejected = self._flagtests()
@@ -204,27 +227,9 @@ class LocalOutlierFactorAllData(FlagBase):
 @ConsoleOutputDecorator()
 @repeater
 class LocalOutlierFactorDaytimeNighttime(FlagBase):
-    """
-    Identify outliers based on the local outlier factor, done separately for
-    daytime and nighttime data
-    ...
+    """Identify outliers based on the local outlier factor, done separately for
+    daytime and nighttime data."""
 
-    Methods:
-        calc(factor: float = 4): Calculates flag
-
-    After running calc(), results can be accessed with:
-        flag: Series
-            Flag series where accepted (ok) values are indicated
-            with flag=0, rejected values are indicated with flag=2
-        filteredseries: Series
-            Data with rejected values set to missing
-
-    Kudos:
-    - https://scikit-learn.org/stable/modules/outlier_detection.html
-    - https://scikit-learn.org/stable/auto_examples/neighbors/plot_lof_outlier_detection.html#sphx-glr-auto-examples-neighbors-plot-lof-outlier-detection-py
-    - https://www.datatechnotes.com/2020/04/anomaly-detection-with-local-outlier-factor-in-python.html
-
-    """
     flagid = 'OUTLIER_LOFDTNT'
 
     def __init__(self,
@@ -239,6 +244,35 @@ class LocalOutlierFactorDaytimeNighttime(FlagBase):
                  verbose: bool = False,
                  repeat: bool = True,
                  n_jobs: int = 1):
+        """
+
+        Args:
+            series: Time series in which outliers are identified.
+            lat: Latitude of location as float, e.g. 46.583056
+            lon: Longitude of location as float, e.g. 9.790639
+            utc_offset:
+            idstr: Identifier, added as suffix to output variable names.
+            n_neighbors: Number of neighbors to use by default for kneighbors queries.
+                If n_neighbors is larger than the number of samples provided, all samples
+                will be used (description taken from scikit, ref [1])
+            contamination:The amount of contamination of the data set, i.e. the proportion
+                of outliers in the data set. When fitting this is used to define the threshold
+                 on the scores of the samples.
+                 - if ‘auto’, the threshold is determined as in the original paper,
+                 - if a float, the contamination should be in the range (0, 0.5].
+                (description taken from scikit, ref [1])
+            showplot: Show plot with results from the outlier detection.
+            verbose: Print more text output.
+            repeat: Repeat until no more outliers can be found.
+            n_jobs: The number of parallel jobs to run for neighbors search. None means 1
+                unless in a joblib.parallel_backend context. -1 means using all processors.
+                (description taken from scikit, ref [1])
+
+        Returns:
+            Results dataframe via the @repeater wrapper function, dataframe contains
+            the filtered time series and flags from all iterations.
+
+        """
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.showplot = False
         self.verbose = False
@@ -261,7 +295,7 @@ class LocalOutlierFactorDaytimeNighttime(FlagBase):
         self.is_nighttime = nighttimeflag == 1  # Convert 0/1 flag to False/True flag
         self.is_daytime = daytimeflag == 1  # Convert 0/1 flag to False/True flag
 
-    def calc(self):
+    def _calc(self):
         """Calculate flag"""
         self.reset()
         ok, rejected = self._flagtests()

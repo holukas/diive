@@ -4,8 +4,8 @@ DATA FUNCTIONS: FITS
 
 # last update in: v0.23.0
 
-This module is part of DIIVE:
-https://gitlab.ethz.ch/holukas/diive
+This module is part of the diive library:
+https://github.com/holukas/diive
 
 """
 

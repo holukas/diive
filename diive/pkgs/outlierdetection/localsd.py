@@ -1,3 +1,11 @@
+"""
+OUTLIER DETECTION: LOCAL STANDARD DEVIATION
+===========================================
+
+This module is part of the diive library:
+https://github.com/holukas/diive
+
+"""
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 from pandas import DatetimeIndex, Series
@@ -12,21 +20,8 @@ from diive.pkgs.outlierdetection.repeater import repeater
 @ConsoleOutputDecorator()
 @repeater
 class LocalSD(FlagBase):
-    """
-    Identify outliers based on the local standard deviation
-    ...
+    """Identify outliers based on the local standard deviation."""
 
-    Methods:
-        calc(): Calculates flag
-
-    After running calc, results can be accessed with:
-        flag: Series
-            Flag series where accepted (ok) values are indicated
-            with flag=0, rejected values are indicated with flag=2
-        filteredseries: Series
-            Data with rejected values set to missing
-
-    """
     flagid = 'OUTLIER_LOCALSD'
 
     def __init__(self,
@@ -37,6 +32,24 @@ class LocalSD(FlagBase):
                  showplot: bool = False,
                  verbose: bool = False,
                  repeat: bool = True):
+        """
+
+        Args:
+            series: Time series in which outliers are identified.
+            idstr: Identifier, added as suffix to output variable names.
+            winsize: Window size. Is used to calculate the rolling median and
+                rolling standard deviation in a time window of size *winsize* records.
+            n_sd: Number of standard deviations. Records with sd outside this value
+                are flagged as outliers.
+            showplot: Show plot with removed data points.
+            verbose: More text output to console if *True*.
+            repeat: Repeat until no more outliers can be found.
+
+        Returns:
+            Results dataframe via the @repeater wrapper function, dataframe contains
+            the filtered time series and flags from all iterations.
+
+        """
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.showplot = False
         self.verbose = False
@@ -46,7 +59,7 @@ class LocalSD(FlagBase):
         self.verbose = verbose
         self.repeat = repeat
 
-    def calc(self):
+    def _calc(self):
         """Calculate flag"""
         self.reset()
         ok, rejected = self._flagtests()

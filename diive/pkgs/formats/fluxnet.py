@@ -154,7 +154,7 @@ class FormatEddyProFluxnetFileForUpload:
                 print(f"    REMOVING data for {var} time range between {d} (dates are inclusive)")
         series = self.merged_df[var].copy()
         mr = ManualRemoval(series=series)
-        mr.calc(remove_dates=remove_dates, showplot=showplot)
+        mr._calc(remove_dates=remove_dates, showplot=showplot)
         self._merged_df[var] = mr.filteredseries.copy()
         print(" Done.")
 

@@ -1,3 +1,15 @@
+"""
+OUTLIER DETECTION: Z-SCORE TESTS
+================================
+
+This module is part of the diive library:
+https://github.com/holukas/diive
+
+kudos:
+    - https://www.analyticsvidhya.com/blog/2022/08/outliers-pruning-using-python/
+
+"""
+
 import numpy as np
 import pandas as pd
 from pandas import Series, DatetimeIndex
@@ -13,18 +25,8 @@ from diive.pkgs.outlierdetection.repeater import repeater
 @ConsoleOutputDecorator()
 @repeater
 class zScoreDaytimeNighttime(FlagBase):
-    """
-    Identify outliers based on the z-score, separately for daytime and nighttime
-    ...
+    """Identify outliers based on the z-score or series records, separately for daytime and nighttime."""
 
-    After running calc(), results can be accessed with:
-        flag: Series
-            Flag series where accepted (ok) values are indicated
-            with flag=0, rejected values are indicated with flag=2
-        filteredseries: Series
-            Data with rejected values set to missing
-
-    """
     flagid = 'OUTLIER_ZSCOREDTNT'
 
     def __init__(self,
@@ -40,12 +42,21 @@ class zScoreDaytimeNighttime(FlagBase):
         """
 
         Args:
-            series: Time series
+            series: Time series in which outliers are identified.
             lat: Latitude of location as float, e.g. 46.583056
             lon: Longitude of location as float, e.g. 9.790639
             utc_offset: UTC offset of *timestamp_index*, e.g. 1 for UTC+01:00
                 The datetime index of the resulting Series will be in this timezone.
-            idstr: Identifier, added as suffix to output variable names
+            idstr: Identifier, added as suffix to output variable names.
+            thres_zscore: Threshold for z-score, scores above this value will be flagged as outlier.
+            showplot: Show plot with results from the outlier detection.
+            verbose: Print more text output.
+            repeat: Repeat until no more outliers can be found.
+
+        Returns:
+            Results dataframe via the @repeater wrapper function, dataframe contains
+            the filtered time series and flags from all iterations.
+
         """
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.showplot = False
@@ -73,8 +84,8 @@ class zScoreDaytimeNighttime(FlagBase):
         self.is_daytime = daytime == 1  # Convert 0/1 flag to False/True flag
         self.is_nighttime = nighttime == 1  # Convert 0/1 flag to False/True flag
 
-    def calc(self):
-        """Calculate flag"""
+    def _calc(self):
+        """Calculate flag."""
         self.reset()
         ok, rejected = self._flagtests()
         self.setflag(ok=ok, rejected=rejected)
@@ -132,23 +143,8 @@ class zScoreDaytimeNighttime(FlagBase):
 @ConsoleOutputDecorator()
 @repeater
 class zScore(FlagBase):
-    """
-    Identify outliers based on the z-score of records
-    ...
+    """Identify outliers based on the z-score of records."""
 
-    Methods:
-        calc(factor: float = 4): Calculates flag
-
-    After running calc(), results can be accessed with:
-        flag: Series
-            Flag series where accepted (ok) values are indicated
-            with flag=0, rejected values are indicated with flag=2
-        filteredseries: Series
-            Data with rejected values set to missing
-
-    kudos: https://www.analyticsvidhya.com/blog/2022/08/outliers-pruning-using-python/
-
-    """
     flagid = 'OUTLIER_ZSCORE'
 
     def __init__(self,
@@ -159,6 +155,22 @@ class zScore(FlagBase):
                  plottitle: str = None,
                  verbose: bool = False,
                  repeat: bool = True):
+        """
+
+        Args:
+            series: Time series in which outliers are identified.
+            idstr: Identifier, added as suffix to output variable names.
+            thres_zscore: Threshold for z-score, scores above this value will be flagged as outlier.
+            showplot: Show plot with results from the outlier detection.
+            plottitle: Title string for the plot.
+            verbose: Print more text output.
+            repeat: Repeat until no more outliers can be found.
+
+        Returns:
+            Results dataframe via the @repeater wrapper function, dataframe contains
+            the filtered time series and flags from all iterations.
+
+        """
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.showplot = False
         self.plottitle = None
@@ -169,7 +181,7 @@ class zScore(FlagBase):
         self.verbose = verbose
         self.repeat = repeat
 
-    def calc(self):
+    def _calc(self):
         """Calculate flag"""
         self.reset()
         ok, rejected = self._flagtests()
@@ -342,14 +354,14 @@ def example():
         thres_zscore=2,
         showplot=True,
         verbose=True,
-        repeat=True)
-
-    # zdn.calc(threshold=1.5, showplot=False, verbose=True, repeat=True)
+        repeat=False)
 
     from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-    HeatmapDateTime(series=zdn.filteredseries).show()
-    HeatmapDateTime(series=zdn.flag).show()
+    HeatmapDateTime(series=zdn['Tair_f']).show()
+    HeatmapDateTime(series=zdn['FLAG_Tair_f_OUTLIER_ZSCOREDTNT_ITER1_TEST']).show()
 
 
 if __name__ == '__main__':
     example()
+    # help(zScoreDaytimeNighttime)
+    # help(zScoreDaytimeNighttime.__init__)

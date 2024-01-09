@@ -1,3 +1,11 @@
+"""
+OUTLIER DETECTION: STEP-WISE OUTLIER DETECTION
+==============================================
+
+This module is part of the diive library:
+https://github.com/holukas/diive
+
+"""
 import pandas as pd
 from pandas import Series, DataFrame
 
@@ -200,7 +208,7 @@ class StepwiseOutlierDetection:
         self._last_results = results
 
     def flag_outliers_lof_dtnt_test(self, n_neighbors: int = None, contamination: float = None,
-                                    showplot: bool = False, verbose: bool = False, repeat: bool=True,
+                                    showplot: bool = False, verbose: bool = False, repeat: bool = True,
                                     n_jobs: int = 1):
         """Local outlier factor, separately for daytime and nighttime data"""
         series_cleaned = self._series_hires_cleaned.copy()
@@ -216,7 +224,7 @@ class StepwiseOutlierDetection:
         self._last_results = results
 
     def flag_outliers_lof_test(self, n_neighbors: int = None, contamination: float = None,
-                               showplot: bool = False, verbose: bool = False, repeat: bool=True, n_jobs: int=1):
+                               showplot: bool = False, verbose: bool = False, repeat: bool = True, n_jobs: int = 1):
         """Local outlier factor, across all data"""
         series_cleaned = self._series_hires_cleaned.copy()
         # Number of neighbors is automatically calculated if not provided

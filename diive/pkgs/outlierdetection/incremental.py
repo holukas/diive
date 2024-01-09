@@ -1,3 +1,11 @@
+"""
+OUTLIER DETECTION: INCREMENTAL
+==============================
+
+This module is part of the diive library:
+https://github.com/holukas/diive
+
+"""
 from pandas import Series, DatetimeIndex
 
 from diive.core.base.flagbase import FlagBase
@@ -9,21 +17,8 @@ from diive.pkgs.outlierdetection.zscore import zScore
 @ConsoleOutputDecorator()
 @repeater
 class zScoreIncrements(FlagBase):
-    """
-    Identify outliers based on the z-score of record increments
-    ...
+    """Identify outliers based on the z-score of record increments."""
 
-    Methods:
-        calc(threshold: float = 4): Calculates flag
-
-    After running calc(), results can be accessed with:
-        flag: Series
-            Flag series where accepted (ok) values are indicated
-            with flag=0, rejected values are indicated with flag=2
-        filteredseries: Series
-            Data with rejected values set to missing
-
-    """
     flagid = 'OUTLIER_INCRZ'
 
     def __init__(self,
@@ -33,6 +28,25 @@ class zScoreIncrements(FlagBase):
                  showplot: bool = False,
                  verbose: bool = False,
                  repeat: bool = True):
+        """
+
+        Args:
+            series: Time series in which outliers are identified.
+            idstr: Identifier, added as suffix to output variable names.
+            thres_zscore: Threshold for z-score, scores above this value will
+                be flagged as outlier. NOTE that in this case the z-scores are
+                calculated from the increments between data records in *series*,
+                whereby the increment at a point in time t is simply calculated as:
+                increment(t) = value(t) - value(t-1).
+            showplot: Show plot with results from the outlier detection.
+            verbose: Print more text output.
+            repeat: Repeat until no more outliers can be found.
+
+        Returns:
+            Results dataframe via the @repeater wrapper function, dataframe contains
+            the filtered time series and flags from all iterations.
+
+        """
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.showplot = False
         self.verbose = False

@@ -1,3 +1,11 @@
+"""
+OUTLIER DETECTION: MANUAL REMOVAL
+=================================
+
+This module is part of the diive library:
+https://github.com/holukas/diive
+
+"""
 import numpy as np
 import pandas as pd
 from pandas import Series, DatetimeIndex
@@ -10,6 +18,8 @@ from diive.pkgs.outlierdetection.repeater import repeater
 @ConsoleOutputDecorator()
 @repeater  # Repeater called for consistency with other methods, ManualRemoval does not require iterations
 class ManualRemoval(FlagBase):
+    """Generate flag for data points that should be removed."""
+
     flagid = 'OUTLIER_MANUAL'
 
     def __init__(self,
@@ -20,29 +30,26 @@ class ManualRemoval(FlagBase):
                  idstr: str = None,
                  repeat: bool = False):
         """
-        Generate flag for data points that should be removed
-        ...
 
-        Methods:
-            calc(): Calculates flag
-
-        After running calc, results can be accessed with:
-            flag: Series
-                Flag series where accepted (ok) values are indicated
-                with flag=0, rejected values are indicated with flag=2
-            filteredseries: Series
-                Data with rejected values set to missing
-            verbose: more text output to console if *True*
-            showplot: show plot with removed data points
+        Args:
+            series: Time series in which outliers are identified.
             remove_dates: list, can be given as a mix of strings and lists that
-                contain the date(times) of records that should be removed
+                contain the date(times) of records that should be removed.
                 Example:
                     * remove_dates=['2022-06-30 23:58:30', ['2022-06-05 00:00:30', '2022-06-07 14:30:00']]*
                     will remove the record for '2022-06-30 23:58:30' and all records between
                     '2022-06-05 00:00:30' (inclusive) and '2022-06-07 14:30:00' (inclusive).
                     * This also works when providing only the date, e.g.
-                      removed_dates=['2006-05-01', '2006-07-18'] will remove all data points between
-                      2006-05-01 and 2006-07-18.
+                    removed_dates=['2006-05-01', '2006-07-18'] will remove all data points between
+                    2006-05-01 and 2006-07-18.
+            showplot: Show plot with removed data points.
+            verbose: More text output to console if *True*.
+            idstr: Identifier, added as suffix to output variable names.
+            repeat: Repeat until no more outliers can be found.
+
+        Returns:
+            Results dataframe via the @repeater wrapper function, dataframe contains
+            the filtered time series and flags from all iterations.
 
         """
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
@@ -53,7 +60,7 @@ class ManualRemoval(FlagBase):
         self.verbose = verbose
         self.repeat = repeat
 
-    def calc(self):
+    def _calc(self):
         """Calculate flag."""
         self.reset()
         ok, rejected = self._flagtests()

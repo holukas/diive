@@ -1,3 +1,11 @@
+"""
+OUTLIER DETECTION: ABSOLUTE LIMITS
+==================================
+
+This module is part of the diive library:
+https://github.com/holukas/diive
+
+"""
 import numpy as np
 import pandas as pd
 from pandas import Series, DatetimeIndex
@@ -12,22 +20,10 @@ from diive.pkgs.outlierdetection.repeater import repeater
 @ConsoleOutputDecorator()
 @repeater  # Repeater called for consistency with other methods, absolute limits do not require iterations
 class AbsoluteLimitsDaytimeNighttime(FlagBase):
-    """
-    Generate flag that indicates if values in data are outside
+    """Generate flag that indicates if values in data are outside
     the specified range, defined by providing allowed minimum and
-    maximum, separately for daytime and nighttime data
+    maximum values, separately for daytime and nighttime data."""
 
-    Methods:
-        calc(self, daytime_minmax: float, nighttime_minmax: float): Calculates flag
-
-    After running calc, results can be accessed with:
-        flag: Series
-            Flag series where accepted (ok) values are indicated
-            with flag=0, rejected values are indicated with flag=2
-        filteredseries: Series
-            Data with rejected values set to missing
-
-    """
     flagid = 'OUTLIER_ABSLIM_DTNT'
 
     def __init__(self,
@@ -40,8 +36,27 @@ class AbsoluteLimitsDaytimeNighttime(FlagBase):
                  idstr: str = None,
                  showplot: bool = False,
                  verbose: bool = False,
-                 repeat: bool = False
-                 ):
+                 repeat: bool = False):
+        """
+
+        Args:
+            series: Time series in which outliers are identified.
+            lat: Latitude of location as float, e.g. 46.583056
+            lon: Longitude of location as float, e.g. 9.790639
+            utc_offset: UTC offset of *timestamp_index*, e.g. 1 for UTC+01:00
+                The datetime index of the resulting Series will be in this timezone.
+            daytime_minmax: Allowed minimum and maximum values in *series* during daytime, e.g. [-50, 50].
+            nighttime_minmax: Allowed minimum and maximum values in *series* during nighttime, e.g. [-5, 50].
+            idstr: Identifier, added as suffix to output variable names.
+            showplot: Show plot with removed data points.
+            verbose: More text output to console if *True*.
+            repeat: Repeat until no more outliers can be found.
+
+        Returns:
+            Results dataframe via the @repeater wrapper function, dataframe contains
+            the filtered time series and flags from all iterations.
+
+        """
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.showplot = False
         self.verbose = False
@@ -69,7 +84,7 @@ class AbsoluteLimitsDaytimeNighttime(FlagBase):
         self.is_nighttime = nighttimeflag == 1  # Convert 0/1 flag to False/True flag
         self.is_daytime = daytimeflag == 1  # Convert 0/1 flag to False/True flag
 
-    def calc(self):
+    def _calc(self):
         """Calculate flag"""
         self.reset()
         ok, rejected = self._flagtests()
@@ -128,22 +143,10 @@ class AbsoluteLimitsDaytimeNighttime(FlagBase):
 @ConsoleOutputDecorator()
 @repeater
 class AbsoluteLimits(FlagBase):
-    """
-    Generate flag that indicates if values in data are outside
-    the specified range, defined by providing min, max in method
-    ...
+    """Generate flag that indicates if values in data are outside
+    the specified range, defined by providing the allowed minimum and
+    maximum for values in *series*."""
 
-    Methods:
-        calc(self, min: float, max: float): Calculates flag
-
-    After running calc, results can be accessed with:
-        flag: Series
-            Flag series where accepted (ok) values are indicated
-            with flag=0, rejected values are indicated with flag=2
-        filteredseries: Series
-            Data with rejected values set to missing
-
-    """
     flagid = 'OUTLIER_ABSLIM'
 
     def __init__(self,
@@ -154,6 +157,22 @@ class AbsoluteLimits(FlagBase):
                  showplot: bool = False,
                  verbose: bool = False,
                  repeat: bool = False):
+        """
+
+        Args:
+            series: Time series in which outliers are identified.
+            minval: Allowed minimum values in *series*, e.g. -20.
+            maxval: Allowed maximum values in *series*, e.g. 20.
+            idstr: Identifier, added as suffix to output variable names.
+            showplot: Show plot with removed data points.
+            verbose: More text output to console if *True*.
+            repeat: Repeat until no more outliers can be found.
+
+        Returns:
+            Results dataframe via the @repeater wrapper function, dataframe contains
+            the filtered time series and flags from all iterations.
+
+        """
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.showplot = False
         self.verbose = False
@@ -163,7 +182,7 @@ class AbsoluteLimits(FlagBase):
         self.verbose = verbose
         self.repeat = repeat
 
-    def calc(self):
+    def _calc(self):
         """Calculate flag"""
         self.reset()
         ok, rejected = self._flagtests()
@@ -178,8 +197,8 @@ class AbsoluteLimits(FlagBase):
         rejected = rejected[rejected].index
         if self.showplot:
             self.plot(ok=ok, rejected=rejected,
-                                    plottitle=f"Outlier detection based on "
-                                              f"absolute limits for {self.series.name}")
+                      plottitle=f"Outlier detection based on "
+                                f"absolute limits for {self.series.name}")
         return ok, rejected
 
 
@@ -193,7 +212,7 @@ def example():
     series = pd.Series(data, index=tidx, name='TESTDATA')
 
     al = AbsoluteLimits(series=series, idstr='99')
-    al.calc(min=16, max=84)
+    al._calc(min=16, max=84)
 
     print(series.describe())
     filteredseries = al.filteredseries

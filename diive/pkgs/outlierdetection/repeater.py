@@ -1,3 +1,11 @@
+"""
+OUTLIER DETECTION: repeater wrapper
+===================================
+
+This module is part of the diive library:
+https://github.com/holukas/diive
+
+"""
 from functools import wraps
 
 import pandas as pd
@@ -24,7 +32,7 @@ def repeater(cls):
         while n_outliers > 0:
             iterr += 1
             results = cls(*args, **kwargs)  # Init outlier class
-            results.calc()  # Calculate flag
+            results._calc()  # Calculate flag
             results_df = _add_iterdata(df=results_df, results=results, iterr=iterr)
             n_outliers = results.flag.sum()  # Count how many times flag = 1 (flagged outlier)
 
@@ -40,8 +48,26 @@ def repeater(cls):
     return wrapper
 
 
-def _add_iterdata(df: pd.DataFrame, results, iterr) -> pd.DataFrame:
-    """Add filtered series and flag for current iteration."""
+def _add_iterdata(df: pd.DataFrame, results, iterr: int) -> pd.DataFrame:
+    """"Add flag and filtered series for current iteration.
+
+    Args:
+        df: dataframe that collects the output (flags and filtered series) from
+            all iterations and all outlier methods that were selected. Note that
+            e.g. the class `StepwiseOutlierDetection` applies multiple outlier
+            detection methods in sequence, and each method is run multiple times
+            via the  @repeater wrapper.
+        results: class property of the respective outlier method that stores the
+            outlier flag in results.flag and the correspondingly filtered time series
+             in results.filteredseries. The flag stores accepted (ok) values with flag=0,
+             rejected values are indicated with flag=2. The filtered series contains
+             data of the original (unfiltered) time series with rejected values set to missing.
+        iterr: current iteration
+
+    Returns:
+        dataframe with new results from this iteration added
+
+    """
     df[results.filteredseries.name] = results.filteredseries
     flagname = results.flag.name
     addflagname = flagname.replace('_TEST', f'_ITER{iterr}_TEST')

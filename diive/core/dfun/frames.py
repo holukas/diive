@@ -2,8 +2,8 @@
 DATA FUNCTIONS: FRAMES
 ======================
 
-This module is part of DIIVE:
-https://gitlab.ethz.ch/holukas/diive
+This module is part of the diive library:
+https://github.com/holukas/diive
 
 """
 from pathlib import Path
