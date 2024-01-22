@@ -74,7 +74,7 @@ class LocalSD(FlagBase):
         s = s.dropna()
 
         if not self.winsize:
-            winsize = int(len(s) / 20)
+            self.winsize = int(len(s) / 20)
 
         rmedian = s.rolling(window=self.winsize, center=True, min_periods=3).median()
         rsd = s.rolling(window=self.winsize, center=True, min_periods=3).std()

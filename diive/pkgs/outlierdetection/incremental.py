@@ -55,7 +55,7 @@ class zScoreIncrements(FlagBase):
         self.verbose = verbose
         self.repeat = repeat
 
-    def calc(self):
+    def _calc(self):
         """Calculate flag"""
         self.reset()
         ok, rejected = self._flagtests()

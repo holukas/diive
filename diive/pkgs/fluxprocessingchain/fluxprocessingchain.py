@@ -106,7 +106,7 @@ class FluxProcessingChain:
 
     @property
     def fpc_df(self) -> DataFrame:
-        """Return fluxes and flags from each levels."""
+        """Return fluxes and flags from each level."""
         if not isinstance(self._fpc_df, DataFrame):
             raise Exception('No flux data available.')
         return self._fpc_df

@@ -307,38 +307,43 @@ class StepwiseMeteoScreeningDb:
                                                     showplot=showplot,
                                                     verbose=verbose)
 
-    def flag_outliers_zscore_dtnt_test(self, threshold: float = 4, showplot: bool = False, verbose: bool = False):
+    def flag_outliers_zscore_dtnt_test(self, thres_zscore: float = 4, showplot: bool = False, verbose: bool = False,
+                                       repeat: bool = True):
         """z-score, calculated separately for daytime and nighttime"""
         for field in self.fields:
-            self.sod[field].flag_outliers_zscore_dtnt_test(threshold=threshold,
+            self.sod[field].flag_outliers_zscore_dtnt_test(thres_zscore=thres_zscore,
                                                            showplot=showplot,
-                                                           verbose=verbose)
+                                                           verbose=verbose,
+                                                           repeat=repeat)
 
-    def flag_outliers_increments_zcore_test(self, threshold: int = 30, showplot: bool = False, verbose: bool = False):
+    def flag_outliers_increments_zcore_test(self, thres_zscore: int = 30, showplot: bool = False,
+                                            verbose: bool = False, repeat: bool = True):
         """Identify outliers based on the z-score of record increments"""
         for field in self.fields:
-            self.sod[field].flag_outliers_increments_zcore_test(thres_zscore=threshold,
+            self.sod[field].flag_outliers_increments_zcore_test(thres_zscore=thres_zscore,
                                                                 showplot=showplot,
-                                                                verbose=verbose)
+                                                                verbose=verbose,
+                                                                repeat=repeat)
 
-    def flag_outliers_zscore_test(self, threshold: int = 4, showplot: bool = False, verbose: bool = False,
-                                  plottitle: str = None):
+    def flag_outliers_zscore_test(self, thres_zscore: int = 4, showplot: bool = False, verbose: bool = False,
+                                  plottitle: str = None, repeat: bool=True):
         """Identify outliers based on the z-score of records"""
         for field in self.fields:
-            self.sod[field].flag_outliers_zscore_test(thres_zscore=threshold,
+            self.sod[field].flag_outliers_zscore_test(thres_zscore=thres_zscore,
                                                       showplot=showplot,
                                                       verbose=verbose,
-                                                      plottitle=plottitle)
-
+                                                      plottitle=plottitle,
+                                                      repeat=repeat)
 
     def flag_outliers_localsd_test(self, n_sd: float, winsize: int = None, showplot: bool = False,
-                                   verbose: bool = False):
+                                   verbose: bool = False, repeat: bool = True):
         """Identify outliers based on standard deviation in a rolling window"""
         for field in self.fields:
             self.sod[field].flag_outliers_localsd_test(n_sd=n_sd,
                                                        winsize=winsize,
                                                        showplot=showplot,
-                                                       verbose=verbose)
+                                                       verbose=verbose,
+                                                       repeat=repeat)
 
     def flag_outliers_abslim_test(self, minval: float, maxval: float, showplot: bool = False, verbose: bool = False):
         """Identify outliers based on absolute limits"""
@@ -356,34 +361,40 @@ class StepwiseMeteoScreeningDb:
                                                            nighttime_minmax=nighttime_minmax,
                                                            showplot=showplot)
 
-    def flag_outliers_stl_rz_test(self, zfactor: float = 4.5, decompose_downsampling_freq: str = '1H',
+    def flag_outliers_stl_rz_test(self, thres_zscore: float = 4.5, decompose_downsampling_freq: str = '1H',
                                   repeat: bool = False, showplot: bool = False):
         """Identify outliers based on seasonal-trend decomposition and z-score calculations"""
         for field in self.fields:
-            self.sod[field].flag_outliers_stl_rz_test(thres_zscore=zfactor,
+            self.sod[field].flag_outliers_stl_rz_test(thres_zscore=thres_zscore,
                                                       decompose_downsampling_freq=decompose_downsampling_freq,
                                                       repeat=repeat,
                                                       showplot=showplot)
 
     def flag_outliers_lof_dtnt_test(self, n_neighbors: int = None, contamination: float = 'auto',
-                                    showplot: bool = False, verbose: bool = False):
+                                    showplot: bool = False, verbose: bool = False, n_jobs: int = 1,
+                                    repeat: bool = True):
         """Local outlier factor, separately for daytime and nighttime data"""
 
         for field in self.fields:
             self.sod[field].flag_outliers_lof_dtnt_test(n_neighbors=n_neighbors,
                                                         contamination=contamination,
                                                         showplot=showplot,
-                                                        verbose=verbose)
+                                                        verbose=verbose,
+                                                        repeat=repeat,
+                                                        n_jobs=n_jobs)
 
     def flag_outliers_lof_test(self, n_neighbors: int = None, contamination: float = 'auto',
-                               showplot: bool = False, verbose: bool = False):
+                               showplot: bool = False, verbose: bool = False, repeat: bool = True,
+                               n_jobs: int = 1):
         """Local outlier factor, across all data"""
 
         for field in self.fields:
             self.sod[field].flag_outliers_lof_test(n_neighbors=n_neighbors,
                                                    contamination=contamination,
                                                    showplot=showplot,
-                                                   verbose=verbose)
+                                                   verbose=verbose,
+                                                   repeat=repeat,
+                                                   n_jobs=n_jobs)
 
     def correction_remove_radiation_zero_offset(self):
         """Remove nighttime offset from all radiation data and set nighttime to zero"""
@@ -745,29 +756,29 @@ class StepwiseMeteoScreeningDb:
 def example():
     from pathlib import Path
 
-    TESTDIR = Path(r"F:\Sync\luhk_work\TMP")
+    TESTDIR = Path(r"F:\TMP")
 
     # User settings, site
-    SITE = 'ch-cha'
-    SITE_LAT = 47.210222
-    SITE_LON = 8.410444
+    SITE = 'ch-fru'
+    SITE_LAT = 47.115833
+    SITE_LON = 8.537778
 
     # User settings, variables to screen
-    # FIELDS = ['TS_GF1_0.05_1']
-    FIELDS = ['PREC_RAIN_TOT_GF1_0.5_1']
-    MEASUREMENT = 'PREC'
+    FIELDS = ['TA_T1_2_1']
+    MEASUREMENT = 'TA'
 
     # User settings, time range to screen
-    START = '2022-01-01 00:00:01'
-    STOP = '2023-01-01 00:00:01'
+    START = '2023-06-01 00:00:01'
+    STOP = '2023-07-01 00:00:01'
 
     # Auto-settings, data settings
     DATA_VERSION = 'raw'
     TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
     RESAMPLING_FREQ = '30T'  # During MeteoScreening the screened high-res data will be resampled to this frequency; '30T' = 30-minute time resolution
-    RESAMPLING_AGG = 'sum'  # The resampling of the high-res data will be done using this aggregation methos; e.g., 'mean'
+    RESAMPLING_AGG = 'mean'  # The resampling of the high-res data will be done using this aggregation methos; e.g., 'mean'
+    # RESAMPLING_AGG = 'sum'  # The resampling of the high-res data will be done using this aggregation methos; e.g., 'mean'
     # DIRCONF = r'P:\Flux\RDS_calculations\_scripts\_configs\configs'  # Location of configuration files, needed e.g. for connection to database
-    DIRCONF = r'F:\Sync\luhk_work\20 - CODING\22 - POET\configs'
+    DIRCONF = r'L:\Sync\luhk_work\20 - CODING\22 - POET\configs'
 
     # Auto-settings, imports
     from datetime import datetime
@@ -787,9 +798,9 @@ def example():
     print(f"Bucket containing raw data (source bucket): {BUCKET_RAW}")
     print(f"Bucket containing processed data (destination bucket): {BUCKET_PROCESSING}")
 
-    # Download data from database with "dbc-influxdb"
-    from dbc_influxdb import dbcInflux
-    dbc = dbcInflux(dirconf=DIRCONF)  # Instantiate class
+    # # Download data from database with "dbc-influxdb"
+    # from dbc_influxdb import dbcInflux
+    # dbc = dbcInflux(dirconf=DIRCONF)  # Instantiate class
 
     # data_simple, data_detailed, assigned_measurements = \
     #     dbc.download(bucket=BUCKET_RAW,
@@ -802,7 +813,7 @@ def example():
     # import matplotlib.pyplot as plt
     # data_simple.plot()
     # plt.show()
-    #
+
     # # Export data to pickle and parquet for fast testing
     # from diive.core.io.files import save_parquet, save_as_pickle
     # save_parquet(filename="meteodata_simple", data=data_simple, outpath=TESTDIR)
@@ -840,63 +851,74 @@ def example():
                                     utc_offset=1)
 
     # Plot data
-    mscr.showplot_orig()
+    # mscr.showplot_orig()
     # mscr.showplot_cleaned()
 
-    # Missing values test
-    mscr.flag_missingvals_test()
-    mscr.addflag()
+    # todo hier weiter ---
 
     # # Manual removal
     # REMOVE_DATES = [
-    #     ['2005-12-30 13:00:00', '2005-12-30 16:00:00'],  # delete, bad data, CNR1 covered by snow/ice
-    #     ['2006-07-21 16:00:00', '2006-07-21 16:00:00'],  # delete, bad data,
+    #     ['2023-05-05 19:45:00', '2023-06-05 19:45:00'],
+    #     '2023-12-12 12:45:00',
+    #     '2023-01-12 13:15:00',
+    #     ['2023-08-15', '2023-08-31']
     # ]
     # mscr.flag_manualremoval_test(remove_dates=REMOVE_DATES,
     #                              showplot=True, verbose=True)
     # mscr.addflag()
     # mscr.showplot_cleaned()
-
-    # # Outlier detection: Absolute limits
-    # mscr.flag_outliers_abslim_test(minval=-50, maxval=1000, showplot=True)
-    # mscr.addflag()
-    # mscr.showplot_cleaned()
-
-    # # Outlier detection: Absolute limits, separate for daytime and nighttime
-    # mscr.flag_outliers_abslim_dtnt_test(daytime_minmax=[-50, 2000], nighttime_minmax=[-50, 2000], showplot=True)
-    # mscr.addflag()
-    # mscr.showplot_cleaned()
-
-    # # Outlier detection: Absolute limits, separate for daytime and nighttime
-    # mscr.flag_outliers_stl_rz_test(zfactor=4.5, decompose_downsampling_freq='6H', repeat=False, showplot=True)
-    # mscr.addflag()
-
-    # # Outlier detection: z-score over all data
-    # mscr.flag_outliers_zscore_test(threshold=4, showplot=True, verbose=True)
-    # mscr.addflag()
-
+    #
     # # Outlier detection: z-score over all data, separate for daytime and nighttime
-    # mscr.flag_outliers_zscore_dtnt_test(threshold=5, showplot=True, verbose=True)
+    # mscr.flag_outliers_zscore_dtnt_test(thres_zscore=3, showplot=True, verbose=True, repeat=True)
+    # mscr.addflag()
+    #
+    # # Outlier detection: Local SD
+    # mscr.flag_outliers_localsd_test(n_sd=3, winsize=480, showplot=True, verbose=True, repeat=True)
     # mscr.addflag()
 
     # # Outlier detection: Increments z-score
-    # mscr.flag_outliers_increments_zcore_test(threshold=50, showplot=True)
+    # mscr.flag_outliers_increments_zcore_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
     # mscr.addflag()
-
-
-    # # Outlier detection: Local SD
-    # mscr.flag_outliers_localsd_test(n_sd=5, winsize=None, showplot=True)
-    # mscr.addflag()
-
-    # # Outlier detection: Local outlier factor, across all data
-    # # todo hires data problematic, and reduce njobs
-    # mscr.flag_outliers_lof_test(n_neighbors=None, showplot=True, verbose=True)
+    #
+    # # Outlier detection: Absolute limits, separate for daytime and nighttime
+    # mscr.flag_outliers_stl_rz_test(thres_zscore=4, decompose_downsampling_freq='3H', repeat=True, showplot=True)
     # mscr.addflag()
 
     # # Outlier detection: Local outlier factor, daytime nighttime
     # # todo hires data problematic
-    # mscr.flag_outliers_lof_dtnt_test(n_neighbors=None, showplot=True, verbose=True)
+    # mscr.flag_outliers_lof_dtnt_test(n_neighbors=20, contamination=None, showplot=True,
+    #                                  verbose=True, repeat=True, n_jobs=-1)
     # mscr.addflag()
+    #
+    # # Outlier detection: Local outlier factor, across all data
+    # # todo hires data problematic, and reduce njobs
+    # mscr.flag_outliers_lof_test(n_neighbors=20, contamination=None, showplot=True,
+    #                             verbose=True, repeat=True, n_jobs=-1)
+    # mscr.addflag()
+
+    # # Outlier detection: z-score over all data
+    # mscr.flag_outliers_zscore_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
+    # mscr.addflag()
+
+    # Outlier detection: Absolute limits
+    mscr.flag_outliers_abslim_test(minval=-20, maxval=20, showplot=True)
+    mscr.addflag()
+    mscr.showplot_cleaned()
+
+    # Outlier detection: Absolute limits, separate for daytime and nighttime
+    mscr.flag_outliers_abslim_dtnt_test(daytime_minmax=[-15, 15], nighttime_minmax=[-2, 2], showplot=True)
+    mscr.addflag()
+    mscr.showplot_cleaned()
+
+
+
+    # # todo Missing values test
+    # mscr.flag_missingvals_test()
+    # mscr.addflag()
+
+
+
+
 
     # After all QC flags generated, calculate overall flag QCF
     mscr.calc_qcf()
