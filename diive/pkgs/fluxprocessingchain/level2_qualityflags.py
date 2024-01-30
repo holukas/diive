@@ -116,7 +116,7 @@ class FluxQualityFlagsEddyPro:
 
     def missing_vals_test(self):
         results = MissingValues(series=self.dfin[self.fluxcol].copy(), idstr=self.idstr)
-        results.calc()
+        results.repeat()
         self._results[results.flag.name] = results.flag
 
     def ssitc_test(self):

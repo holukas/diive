@@ -39,7 +39,6 @@ from diive.core.base.flagbase import FlagBase
 from diive.core.plotting.plotfuncs import default_format, default_legend
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag
-from diive.pkgs.outlierdetection.repeater import repeater
 
 
 def lof(series: Series,
@@ -91,9 +90,7 @@ def lof(series: Series,
 
 
 @ConsoleOutputDecorator()
-@repeater
 class LocalOutlierFactorAllData(FlagBase):
-    """Identify outliers based on the local outlier factor."""
 
     flagid = 'OUTLIER_LOF'
 
@@ -104,9 +101,8 @@ class LocalOutlierFactorAllData(FlagBase):
                  contamination: float = 0.01,
                  showplot: bool = False,
                  verbose: bool = False,
-                 repeat: bool = True,
                  n_jobs: int = 1):
-        """
+        """Identify outliers based on the local outlier factor.
 
         Args:
             series: Time series in which outliers are identified.
@@ -125,7 +121,6 @@ class LocalOutlierFactorAllData(FlagBase):
                 (description taken from scikit, ref [1])
             showplot: Show plot with results from the outlier detection.
             verbose: Print more text output.
-            repeat: Repeat until no more outliers can be found.
 
         Returns:
             Results dataframe via the @repeater wrapper function, dataframe contains
@@ -139,40 +134,45 @@ class LocalOutlierFactorAllData(FlagBase):
         self.contamination = contamination
         self.showplot = showplot
         self.verbose = verbose
-        self.repeat = repeat
         self.n_jobs = n_jobs
 
-    def _calc(self):
-        """Calculate flag"""
-        self.reset()
-        ok, rejected = self._flagtests()
-        self.setflag(ok=ok, rejected=rejected)
-        self.setfiltered(rejected=rejected)
+    def calc(self, repeat: bool = True):
+        """Calculate overall flag, based on individual flags from multiple iterations.
 
-    def _flagtests(self) -> tuple[DatetimeIndex, DatetimeIndex]:
+        Args:
+            repeat: If *True*, the outlier detection is repeated until all
+                outliers are removed.
+
+        """
+
+        self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=repeat)
+        if self.showplot:
+            self.defaultplot(n_iterations=n_iterations)
+
+    def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Perform tests required for this flag"""
 
-        flag = pd.Series(index=self.series.index, data=np.nan)
+        flag = pd.Series(index=self.filteredseries.index, data=np.nan)
 
-        s = self.series.copy()
+        s = self.filteredseries.copy()
         _df = lof(series=s, n_neighbors=self.n_neighbors,
                   contamination=self.contamination, suffix="", n_jobs=self.n_jobs)
         ok = _df['NOT_OUTLIER_'].dropna().index
         rejected = _df['OUTLIER_'].dropna().index
 
-        # Collect daytime and nighttime flags in one overall flag
+        # Create flag
         flag.loc[ok] = 0
         flag.loc[rejected] = 2
 
         # Collect data in dataframe
-        df = pd.DataFrame(self.series)
+        df = pd.DataFrame(self.filteredseries)
         df = pd.concat([df, _df], axis=1)
         df['FLAG'] = flag
 
-        df['CLEANED'] = df[self.series.name].copy()
+        df['CLEANED'] = df[self.filteredseries.name].copy()
         df['CLEANED'].loc[df['FLAG'] > 0] = np.nan
 
-        total_outliers = (flag == 2).sum()
+        n_outliers = (flag == 2).sum()
 
         ok = (flag == 0)
         ok = ok[ok].index
@@ -180,13 +180,12 @@ class LocalOutlierFactorAllData(FlagBase):
         rejected = rejected[rejected].index
 
         if self.verbose:
-            print(f"Total found outliers: {len(rejected)} values (daytime)")
-            print(f"Total found outliers: {total_outliers} values (daytime+nighttime)")
+            print(f"ITERATION#{iteration}: Total found outliers: {n_outliers} values (daytime+nighttime)")
 
         if self.showplot:
             self._plot(df=df)
 
-        return ok, rejected
+        return ok, rejected, n_outliers
 
     def _plot(self, df: DataFrame):
         fig = plt.figure(facecolor='white', figsize=(12, 16))
@@ -196,16 +195,16 @@ class LocalOutlierFactorAllData(FlagBase):
         ax2 = fig.add_subplot(gs[1, 0], sharex=ax1)
         ax3 = fig.add_subplot(gs[2, 0], sharex=ax1)
 
-        ax1.plot_date(x=df.index, y=df[self.series.name], fmt='o', mec='none',
+        ax1.plot_date(x=df.index, y=df[self.filteredseries.name], fmt='o', mec='none',
                       alpha=.5, color='black', label="series")
 
         ax2.plot_date(x=df.index, y=df['CLEANED'], fmt='o', mec='none',
                       alpha=.5, label="cleaned series")
 
         ax3.plot_date(x=df.index, y=df['NOT_OUTLIER_'], fmt='o', mec='none',
-                      alpha=.5, label="OK daytime")
+                      alpha=.5, label="OK")
         ax3.plot_date(x=df.index, y=df['OUTLIER_'], fmt='o', mec='none',
-                      alpha=.5, color='red', label="outlier daytime")
+                      alpha=.5, color='red', label="outlier")
 
         default_format(ax=ax1)
         default_format(ax=ax2)
@@ -225,10 +224,7 @@ class LocalOutlierFactorAllData(FlagBase):
 
 
 @ConsoleOutputDecorator()
-@repeater
 class LocalOutlierFactorDaytimeNighttime(FlagBase):
-    """Identify outliers based on the local outlier factor, done separately for
-    daytime and nighttime data."""
 
     flagid = 'OUTLIER_LOFDTNT'
 
@@ -242,9 +238,9 @@ class LocalOutlierFactorDaytimeNighttime(FlagBase):
                  contamination: float = 0.01,
                  showplot: bool = False,
                  verbose: bool = False,
-                 repeat: bool = True,
                  n_jobs: int = 1):
-        """
+        """Identify outliers based on the local outlier factor, done separately for
+        daytime and nighttime data.
 
         Args:
             series: Time series in which outliers are identified.
@@ -263,7 +259,6 @@ class LocalOutlierFactorDaytimeNighttime(FlagBase):
                 (description taken from scikit, ref [1])
             showplot: Show plot with results from the outlier detection.
             verbose: Print more text output.
-            repeat: Repeat until no more outliers can be found.
             n_jobs: The number of parallel jobs to run for neighbors search. None means 1
                 unless in a joblib.parallel_backend context. -1 means using all processors.
                 (description taken from scikit, ref [1])
@@ -280,7 +275,6 @@ class LocalOutlierFactorDaytimeNighttime(FlagBase):
         self.contamination = contamination
         self.showplot = showplot
         self.verbose = verbose
-        self.repeat = repeat
         self.n_jobs = n_jobs
 
         # Detect daytime and nighttime
@@ -295,27 +289,33 @@ class LocalOutlierFactorDaytimeNighttime(FlagBase):
         self.is_nighttime = nighttimeflag == 1  # Convert 0/1 flag to False/True flag
         self.is_daytime = daytimeflag == 1  # Convert 0/1 flag to False/True flag
 
-    def _calc(self):
-        """Calculate flag"""
-        self.reset()
-        ok, rejected = self._flagtests()
-        self.setflag(ok=ok, rejected=rejected)
-        self.setfiltered(rejected=rejected)
+    def calc(self, repeat: bool = True):
+        """Calculate overall flag, based on individual flags from multiple iterations.
 
-    def _flagtests(self) -> tuple[DatetimeIndex, DatetimeIndex]:
+        Args:
+            repeat: If *True*, the outlier detection is repeated until all
+                outliers are removed.
+
+        """
+
+        self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=repeat)
+        if self.showplot:
+            self.defaultplot(n_iterations=n_iterations)
+
+    def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Perform tests required for this flag"""
 
-        flag = pd.Series(index=self.series.index, data=np.nan)
+        flag = pd.Series(index=self.filteredseries.index, data=np.nan)
 
         # Daytime
-        s_daytime = self.series[self.is_daytime].copy()
+        s_daytime = self.filteredseries[self.is_daytime].copy()
         daytime_df = lof(series=s_daytime, n_neighbors=self.n_neighbors,
                          contamination=self.contamination, suffix="DAYTIME", n_jobs=self.n_jobs)
         ok_daytime = daytime_df['NOT_OUTLIER_DAYTIME'].dropna().index
         rejected_daytime = daytime_df['OUTLIER_DAYTIME'].dropna().index
 
         # Nighttime
-        s_nighttime = self.series[self.is_nighttime].copy()
+        s_nighttime = self.filteredseries[self.is_nighttime].copy()
         nighttime_df = lof(series=s_nighttime, n_neighbors=self.n_neighbors,
                            contamination=self.contamination, suffix="NIGHTTIME")
         ok_nighttime = nighttime_df['NOT_OUTLIER_NIGHTTIME'].dropna().index
@@ -328,14 +328,14 @@ class LocalOutlierFactorDaytimeNighttime(FlagBase):
         flag.loc[rejected_nighttime] = 2
 
         # Collect data in dataframe
-        df = pd.DataFrame(self.series)
+        df = pd.DataFrame(self.filteredseries)
         df = pd.concat([df, daytime_df, nighttime_df], axis=1)
         df['FLAG'] = flag
 
-        df['CLEANED'] = df[self.series.name].copy()
+        df['CLEANED'] = df[self.filteredseries.name].copy()
         df['CLEANED'].loc[df['FLAG'] > 0] = np.nan
 
-        total_outliers = (flag == 2).sum()
+        n_outliers = (flag == 2).sum()
 
         ok = (flag == 0)
         ok = ok[ok].index
@@ -343,14 +343,15 @@ class LocalOutlierFactorDaytimeNighttime(FlagBase):
         rejected = rejected[rejected].index
 
         if self.verbose:
+            print(f"ITERATION#{iteration}")
             print(f"Total found outliers: {len(rejected_daytime)} values (daytime)")
             print(f"Total found outliers: {len(rejected_nighttime)} values (nighttime)")
-            print(f"Total found outliers: {total_outliers} values (daytime+nighttime)")
+            print(f"Total found outliers: {n_outliers} values (daytime+nighttime)")
 
         if self.showplot:
             self._plot(df=df)
 
-        return ok, rejected
+        return ok, rejected, n_outliers
 
     def _plot(self, df: DataFrame):
         fig = plt.figure(facecolor='white', figsize=(12, 16))
@@ -363,7 +364,7 @@ class LocalOutlierFactorDaytimeNighttime(FlagBase):
         ax_daytime = fig.add_subplot(gs[4, 0], sharex=ax_series)
         ax_nighttime = fig.add_subplot(gs[5, 0], sharex=ax_series)
 
-        ax_series.plot_date(x=df.index, y=df[self.series.name], fmt='o', mec='none',
+        ax_series.plot_date(x=df.index, y=df[self.filteredseries.name], fmt='o', mec='none',
                             alpha=.5, color='black', label="series")
 
         ax_cleaned.plot_date(x=df.index, y=df['CLEANED'], fmt='o', mec='none',

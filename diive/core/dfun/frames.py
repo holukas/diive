@@ -22,6 +22,18 @@ pd.set_option('display.max_columns', 30)
 pd.set_option('display.max_rows', 50)
 
 
+def detect_new_columns(df: DataFrame, other: DataFrame) -> list:
+    """Detect columns in *df* that do not exist in other."""
+    duplicatecols = [c for c in df.columns if c in other.columns]
+    for col in df[duplicatecols]:
+        if not df[col].equals(other[col]):
+            raise Exception(f"Column {col} was identified as duplicate, but is not identical.")
+
+    newcols = [c for c in df.columns if c not in other.columns]
+
+    return newcols
+
+
 def aggregated_as_hires(aggregate_series: Series,
                         hires_timestamp,
                         to_freq: str = 'D',

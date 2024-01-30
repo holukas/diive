@@ -2,6 +2,29 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.68.0 | 30 Jan 2024
+
+### Updates to stepwise outlier detection
+
+Harmonized the way outlier flags are calculated. Outlier flags are all based on the same base
+class `diive.core.base.flagbase.FlagBase` like before, but the base class now includes more code that
+is shared by the different outlier detection methods. For example, `FlagBase` includes a method that
+enables repeated execution of a single outlier detection method multiple times until all outliers 
+are removed. Results from all iterations are then combined into one single flag. 
+
+The class `StepwiseMeteoScreeningDb` that makes direct use of the stepwise outlier detection was 
+adjusted accordingly.
+
+### Notebooks
+
+- Updated notebook `StepwiseMeteoScreeningFromDatabase.ipynb`
+
+### Removed features
+
+- Removed outlier test based on seasonal-trend decomposition and z-score calculations (`OutlierSTLRZ`).
+  The test worked in principle, but at the moment it is unclear how to set reliable parameters. In addition
+  the test is slow when used with multiple years of high-resolution data. De-activated for the moment.
+
 ## v0.67.1 | 10 Jan 2024
 
 - Updated: many docstrings.

@@ -10,15 +10,11 @@ from pandas import Series, DatetimeIndex
 
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.pkgs.outlierdetection.repeater import repeater
 from diive.pkgs.outlierdetection.zscore import zScore
 
 
 @ConsoleOutputDecorator()
-@repeater
 class zScoreIncrements(FlagBase):
-    """Identify outliers based on the z-score of record increments."""
-
     flagid = 'OUTLIER_INCRZ'
 
     def __init__(self,
@@ -26,9 +22,8 @@ class zScoreIncrements(FlagBase):
                  idstr: str = None,
                  thres_zscore: float = 4,
                  showplot: bool = False,
-                 verbose: bool = False,
-                 repeat: bool = True):
-        """
+                 verbose: bool = False):
+        """Identify outliers based on the z-score of record increments.
 
         Args:
             series: Time series in which outliers are identified.
@@ -40,79 +35,54 @@ class zScoreIncrements(FlagBase):
                 increment(t) = value(t) - value(t-1).
             showplot: Show plot with results from the outlier detection.
             verbose: Print more text output.
-            repeat: Repeat until no more outliers can be found.
 
         Returns:
-            Results dataframe via the @repeater wrapper function, dataframe contains
-            the filtered time series and flags from all iterations.
+            Flag series that combines flags from all iterations in one single flag.
 
         """
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
-        self.showplot = False
         self.verbose = False
         self.thres_zscore = thres_zscore
         self.showplot = showplot
         self.verbose = verbose
-        self.repeat = repeat
 
-    def _calc(self):
-        """Calculate flag"""
-        self.reset()
-        ok, rejected = self._flagtests()
-        self.setflag(ok=ok, rejected=rejected)
-        self.setfiltered(rejected=rejected)
+    def calc(self, repeat: bool = True):
+        """Calculate overall flag, based on individual flags from multiple iterations.
 
-    def _flagtests(self) -> tuple[DatetimeIndex, DatetimeIndex]:
+        Args:
+            repeat: If *True*, the outlier detection is repeated until all
+                outliers are removed.
+
+        """
+
+        self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=repeat)
+        if self.showplot:
+            self.defaultplot(n_iterations=n_iterations)
+
+    def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Perform tests required for this flag"""
 
-        s = self.series.copy()
+        s = self.filteredseries.copy()
         shifted = s.shift(1)
         increment = s - shifted
         increment.name = 'INCREMENT'
+        # increment = increment.abs()
 
-        # Run simple z-score
-        # With repeat=False the results are a dataframe storing the filtered series and
-        # one single outlier flag (because repeat=False). The filtered series can be removed,
-        # the remaining dataframe then only contains the outlier flag.
-        results_df = zScore(series=increment, thres_zscore=self.thres_zscore,
-                            plottitle=f"z-score of {self.series.name} increments",
-                            showplot=True, verbose=True, repeat=False)
-        flag = results_df.drop(increment.name, axis=1)  # Remove filtered series, flag remains in dataframe
-        flag = flag.squeeze()  # Convert dataframe with the single flag column to series
+        # Run z-score test on increments and get resulting flag
+        flagtest_zscore = zScore(series=increment, thres_zscore=self.thres_zscore,
+                                 plottitle=f"z-score of {self.series.name} increments",
+                                 showplot=False, verbose=False)
+        flagtest_zscore.calc(repeat=False)
+        flag_zscore = flagtest_zscore.get_flag()
 
-        ok = flag == 0
+        ok = flag_zscore == 0
         ok = ok[ok].index
-        rejected = flag == 2
+        rejected = flag_zscore == 2
         rejected = rejected[rejected].index
-        total_outliers = len(rejected)
+        n_outliers = len(rejected)
 
         if self.verbose:
-            print(f"Total found outliers: {total_outliers} values (daytime+nighttime)")
+            print(
+                f"ITERATION#{iteration}: Total found {increment.name} outliers: {n_outliers} values (daytime+nighttime)")
 
-        if self.showplot:
-            self.plot(ok=ok, rejected=rejected,
-                      plottitle=f"Outlier detection based on z-score "
-                                f"from {self.series.name} increments")
-
-        return ok, rejected
-
-    # def _plot(self, ok:DatetimeIndex, rejected:DatetimeIndex, plottitle:str=""):
-    #     fig = plt.figure(facecolor='white', figsize=(16, 7))
-    #     gs = gridspec.GridSpec(2, 1)  # rows, cols
-    #     gs.update(wspace=0.3, hspace=0.1, left=0.03, right=0.97, top=0.95, bottom=0.05)
-    #     ax_series = fig.add_subplot(gs[0, 0])
-    #     ax_ok = fig.add_subplot(gs[1, 0], sharex=ax_series)
-    #     ax_series.plot_date(self.series.index, self.series, label=f"{self.series.name}", color="#42A5F5",
-    #                         alpha=.5, markersize=2, markeredgecolor='none')
-    #     ax_series.plot_date(self.series[rejected].index, self.series[rejected],
-    #                         label="outlier (rejected)", color="#F44336", marker="X", alpha=1,
-    #                         markersize=8, markeredgecolor='none')
-    #     ax_ok.plot_date(self.series[ok].index, self.series[ok], label=f"OK", color="#9CCC65", alpha=.5,
-    #                     markersize=2, markeredgecolor='none')
-    #     default_format(ax=ax_series)
-    #     default_format(ax=ax_ok)
-    #     default_legend(ax=ax_series)
-    #     default_legend(ax=ax_ok)
-    #     plt.setp(ax_series.get_xticklabels(), visible=False)
-    #     fig.suptitle(plottitle, fontsize=theme.FIGHEADER_FONTSIZE)
-    #     fig.show()
+        return ok, rejected, n_outliers
