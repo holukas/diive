@@ -14,11 +14,9 @@ from diive.core.base.flagbase import FlagBase
 from diive.core.times.times import DetectFrequency
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag
-from diive.pkgs.outlierdetection.repeater import repeater
 
 
 @ConsoleOutputDecorator()
-@repeater  # Repeater called for consistency with other methods, absolute limits do not require iterations
 class AbsoluteLimitsDaytimeNighttime(FlagBase):
     """Generate flag that indicates if values in data are outside
     the specified range, defined by providing allowed minimum and
@@ -35,8 +33,7 @@ class AbsoluteLimitsDaytimeNighttime(FlagBase):
                  nighttime_minmax: list[float, float],
                  idstr: str = None,
                  showplot: bool = False,
-                 verbose: bool = False,
-                 repeat: bool = False):
+                 verbose: bool = False):
         """
 
         Args:
@@ -50,7 +47,6 @@ class AbsoluteLimitsDaytimeNighttime(FlagBase):
             idstr: Identifier, added as suffix to output variable names.
             showplot: Show plot with removed data points.
             verbose: More text output to console if *True*.
-            repeat: Repeat until no more outliers can be found.
 
         Returns:
             Results dataframe via the @repeater wrapper function, dataframe contains
@@ -64,7 +60,6 @@ class AbsoluteLimitsDaytimeNighttime(FlagBase):
         self.nighttime_minmax = nighttime_minmax
         self.showplot = showplot
         self.verbose = verbose
-        self.repeat = repeat
 
         # Make sure time series has frequency
         # Freq is needed for the detection of daytime/nighttime from lat/lon
@@ -84,14 +79,19 @@ class AbsoluteLimitsDaytimeNighttime(FlagBase):
         self.is_nighttime = nighttimeflag == 1  # Convert 0/1 flag to False/True flag
         self.is_daytime = daytimeflag == 1  # Convert 0/1 flag to False/True flag
 
-    def _calc(self):
-        """Calculate flag"""
-        self.reset()
-        ok, rejected = self._flagtests()
-        self.setflag(ok=ok, rejected=rejected)
-        self.setfiltered(rejected=rejected)
+    def calc(self, repeat: bool = False):
+        """Calculate overall flag, based on individual flags from multiple iterations.
 
-    def _flagtests(self) -> tuple[DatetimeIndex, DatetimeIndex]:
+        Args:
+            repeat: If *True*, the outlier detection is repeated until all
+                outliers are removed.
+
+        """
+        self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=repeat)
+        if self.showplot:
+            self.defaultplot(n_iterations=n_iterations)
+
+    def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Perform tests required for this flag"""
 
         # Working data
@@ -119,7 +119,7 @@ class AbsoluteLimitsDaytimeNighttime(FlagBase):
         flag.loc[_ok_nt] = 0
         flag.loc[_rejected_nt] = 2
 
-        total_outliers = (flag == 2).sum()
+        n_outliers = (flag == 2).sum()
 
         ok = (flag == 0)
         ok = ok[ok].index
@@ -129,19 +129,12 @@ class AbsoluteLimitsDaytimeNighttime(FlagBase):
         if self.verbose:
             print(f"Total found outliers: {len(_rejected_dt)} values (daytime)")
             print(f"Total found outliers: {len(_rejected_nt)} values (nighttime)")
-            print(f"Total found outliers: {total_outliers} values (daytime+nighttime)")
+            print(f"Total found outliers: {n_outliers} values (daytime+nighttime)")
 
-        if self.showplot:
-            self.plot(ok, rejected,
-                      plottitle=f"Outlier detection based on absolute limits for "
-                                f"daytime {self.daytime_minmax} and nighttime {self.nighttime_minmax} "
-                                f"absolute limits of {self.series.name}")
-
-        return ok, rejected
+        return ok, rejected, n_outliers
 
 
 @ConsoleOutputDecorator()
-@repeater
 class AbsoluteLimits(FlagBase):
     """Generate flag that indicates if values in data are outside
     the specified range, defined by providing the allowed minimum and
@@ -155,8 +148,7 @@ class AbsoluteLimits(FlagBase):
                  maxval: float,
                  idstr: str = None,
                  showplot: bool = False,
-                 verbose: bool = False,
-                 repeat: bool = False):
+                 verbose: bool = False):
         """
 
         Args:
@@ -166,7 +158,6 @@ class AbsoluteLimits(FlagBase):
             idstr: Identifier, added as suffix to output variable names.
             showplot: Show plot with removed data points.
             verbose: More text output to console if *True*.
-            repeat: Repeat until no more outliers can be found.
 
         Returns:
             Results dataframe via the @repeater wrapper function, dataframe contains
@@ -180,26 +171,27 @@ class AbsoluteLimits(FlagBase):
         self.maxval = maxval
         self.showplot = showplot
         self.verbose = verbose
-        self.repeat = repeat
 
-    def _calc(self):
-        """Calculate flag"""
-        self.reset()
-        ok, rejected = self._flagtests()
-        self.setflag(ok=ok, rejected=rejected)
-        self.setfiltered(rejected=rejected)
+    def calc(self, repeat: bool = True):
+        """Calculate overall flag, based on individual flags from multiple iterations.
 
-    def _flagtests(self) -> tuple[DatetimeIndex, DatetimeIndex]:
+        Args:
+            repeat: If *True*, the outlier detection is repeated until all
+                outliers are removed.
+
+        """
+        self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=repeat)
+        if self.showplot:
+            self.defaultplot(n_iterations=n_iterations)
+
+    def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Perform tests required for this flag"""
         ok = (self.series >= self.minval) | (self.series <= self.maxval)
         ok = ok[ok].index
         rejected = (self.series < self.minval) | (self.series > self.maxval)
         rejected = rejected[rejected].index
-        if self.showplot:
-            self.plot(ok=ok, rejected=rejected,
-                      plottitle=f"Outlier detection based on "
-                                f"absolute limits for {self.series.name}")
-        return ok, rejected
+        n_outliers = len(rejected)
+        return ok, rejected, n_outliers
 
 
 def example():

@@ -14,7 +14,7 @@ from diive.pkgs.fluxprocessingchain.level2_qualityflags import FluxQualityFlagsE
 from diive.pkgs.fluxprocessingchain.level31_storagecorrection import FluxStorageCorrectionSinglePointEddyPro
 from diive.pkgs.outlierdetection.stepwiseoutlierdetection import StepwiseOutlierDetection
 from diive.pkgs.qaqc.qcf import FlagQCF
-
+from diive.core.dfun.frames import detect_new_columns
 
 class FluxProcessingChain:
 
@@ -226,17 +226,6 @@ class FluxProcessingChain:
         if steadiness_of_horizontal_wind:
             self._level2.steadiness_of_horizontal_wind()
 
-    def _detect_new_columns(self, level_df: DataFrame) -> list:
-        # Before export, check for already existing columns
-        existcols = [c for c in level_df.columns if c in self.fpc_df.columns]
-        for c in level_df[existcols]:
-            if not level_df[c].equals(self.fpc_df[c]):
-                raise Exception(f"Column {c} was identified as duplicate, but is not identical.")
-
-        # Add new columns to processing chain dataframe
-        newcols = [c for c in level_df.columns if c not in self.fpc_df.columns]
-        [print(f"++Added new column {col}.") for col in newcols]
-        return newcols
 
     def _finalize_level(self,
                         run_qcf_on_col: str,
@@ -247,8 +236,9 @@ class FluxProcessingChain:
                         nighttimetime_accept_qcf_below: int = 2) -> FlagQCF:
 
         # Detect new columns
-        newcols = self._detect_new_columns(level_df=level_df)
+        newcols = detect_new_columns(df=level_df, other=self.fpc_df)
         self._fpc_df = pd.concat([self.fpc_df, level_df[newcols]], axis=1)
+        [print(f"++Added new column {col}.") for col in newcols]
 
         # Calculate overall quality flag QCF
         qcf = FlagQCF(series=self.fpc_df[run_qcf_on_col],
@@ -287,7 +277,7 @@ class FluxProcessingChain:
         self._level32_qcf = self._finalize_level(
             run_qcf_on_col=self.level31.flux_corrected_col,
             idstr='L3.2',
-            level_df=self.level32.results,
+            level_df=self.level32.flags,
             nighttime_threshold=nighttime_threshold,
             daytime_accept_qcf_below=daytime_accept_qcf_below,
             nighttimetime_accept_qcf_below=nighttimetime_accept_qcf_below
@@ -308,8 +298,9 @@ class FluxProcessingChain:
 
     def finalize_level31(self):
 
-        newcols = self._detect_new_columns(level_df=self.level31.results)
+        newcols = detect_new_columns(df=self.level31.results, other=self.fpc_df)
         self._fpc_df = pd.concat([self.fpc_df, self.level31.results[newcols]], axis=1)
+        [print(f"++Added new column {col}.") for col in newcols]
 
         # Apply QCF also to Level-3.1 flux output
         self._apply_level2_qcf_to_level31_flux()
@@ -383,12 +374,6 @@ class FluxProcessingChain:
                                           plottitle: str = None, repeat: bool = True):
         self._level32.flag_outliers_zscore_test(thres_zscore=thres_zscore, showplot=showplot,
                                                 verbose=verbose, plottitle=plottitle, repeat=repeat)
-
-    def level32_flag_outliers_stl_rz_test(self, thres_zscore: float = 4.5, decompose_downsampling_freq: str = '1H',
-                                          repeat: bool = False, showplot: bool = False):
-        self._level32.flag_outliers_stl_rz_test(thres_zscore=thres_zscore,
-                                                decompose_downsampling_freq=decompose_downsampling_freq,
-                                                repeat=repeat, showplot=showplot)
 
     def level32_flag_outliers_lof_test(self, n_neighbors: int = None, contamination: float = None,
                                        showplot: bool = False, verbose: bool = False, repeat: bool = True,
@@ -729,7 +714,7 @@ def example():
     fpc.finalize_level32(nighttime_threshold=50, daytime_accept_qcf_below=2, nighttimetime_accept_qcf_below=2)
 
     fpc.filteredseries
-    fpc.level32.results
+    fpc.level32.flags
     fpc.level32_qcf.showplot_qcf_heatmaps()
     fpc.level32_qcf.showplot_qcf_timeseries()
     fpc.level32_qcf.report_qcf_flags()
@@ -854,5 +839,5 @@ def example():
 
 
 if __name__ == '__main__':
-    example_simple()
-    # example()
+    # example_simple()
+    example()

@@ -23,26 +23,29 @@ class MissingValues(FlagBase):
     """
     flagid = 'MISSING'
 
-    def __init__(self, series: Series, verbose: int = 1, idstr: str = None):
-        super().__init__(series=series, flagid=self.flagid, idstr=idstr, verbose=verbose)
+    def __init__(self, series: Series, idstr: str = None, verbose: bool = False):
+        super().__init__(series=series, flagid=self.flagid, idstr=idstr)
+        self.verbose = verbose
 
-    def calc(self):
-        """Calculate flag"""
-        self.reset()
-        ok, rejected = self._flagtests()
-        self.setflag(ok=ok, rejected=rejected)
-        self.setfiltered(rejected=rejected)
+    def calc(self, repeat: bool = False):
+        """Calculate overall flag, based on individual flags from multiple iterations.
 
-        if self.verbose > 0:
-            self.report()
+        Args:
+            repeat: If *True*, the outlier detection is repeated until all
+                outliers are removed.
 
-    def report(self):
-        print(f"MISSING VALUES TEST: Generated new flag variable {self.flagname}, "
-              f"newly calculated from variable {self.series.name},"
-              f"with flag 0 (good values) where {self.series.name} is available, "
-              f"flag 2 (bad values) where {self.series.name} is missing.")
+        """
+        self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=False)
+        # if self.showplot:
+        #     self.defaultplot(n_iterations=n_iterations)
 
-    def _flagtests(self) -> tuple[DatetimeIndex, DatetimeIndex]:
+        if self.verbose:
+            print(f"MISSING VALUES TEST: Generated new flag variable {self.overall_flag.name}, "
+                  f"newly calculated from variable {self.series.name},"
+                  f"with flag 0 (good values) where {self.series.name} is available, "
+                  f"flag 2 (bad values) where {self.series.name} is missing.")
+
+    def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Perform tests required for this flag"""
         # Maybe check this alternative method:
         # missing_values_flag = np.where(df[var].isnull(), 2, 0)
@@ -55,4 +58,10 @@ class MissingValues(FlagBase):
             ok = ~rejected
             rejected = rejected[rejected].index
             ok = ok[ok].index
-        return ok, rejected
+
+        # No outliers are detected in this test, only already missing values are flagged
+        n_outliers = 0
+
+
+
+        return ok, rejected, n_outliers

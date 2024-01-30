@@ -63,14 +63,15 @@ class PrintID:
         if self.spacing:
             print("")
             print("")
-        self.str(txt=f"{'=' * 40}")
+        # self.str(txt=f"{'=' * 40}")
         self.str(txt=f"{self.id}")
-        self.str(txt=f"{'=' * 40}")
+        # self.str(txt=f"{'=' * 40}")
 
     def str(self, txt: str):
         # print(f"{txt}")
         print(f"[{self.id}]  {txt}")
 
     def done(self):
-        print(f"[{self.id}]  Done.")
-        print(f"[{self.id}]  {'_' * 40}")
+        pass
+        # print(f"[{self.id}]  Done.")
+        # print(f"[{self.id}]  {'_' * 40}")

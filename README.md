@@ -90,8 +90,6 @@ Fill gaps in time series with various methods
 - Local outlier factor: Identify outliers based on local outlier factor, daytime nighttime separately
 - Manual removal: Remove time periods (from-to) or single records from time series
 - Missing values: Simply creates a flag that indicated available and missing data in a time series
-- Seasonal trend decomposition using LOESS, identify outliers based on seasonal-trend decomposition and
-  z-score calculations
 - z-score: Identify outliers based on the z-score across all time series data
 - z-score: Identify outliers based on the z-score, separately for daytime and nighttime
 - z-score: Identify outliers based on max z-scores in the interquartile range data

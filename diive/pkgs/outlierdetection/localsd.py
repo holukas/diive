@@ -8,20 +8,17 @@ https://github.com/holukas/diive
 """
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
+import numpy as np
 from pandas import DatetimeIndex, Series
 
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.base.flagbase import FlagBase
-from diive.core.plotting.plotfuncs import default_format, default_legend
+from diive.core.plotting.plotfuncs import default_format
 from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.pkgs.outlierdetection.repeater import repeater
 
 
 @ConsoleOutputDecorator()
-@repeater
 class LocalSD(FlagBase):
-    """Identify outliers based on the local standard deviation."""
-
     flagid = 'OUTLIER_LOCALSD'
 
     def __init__(self,
@@ -30,9 +27,8 @@ class LocalSD(FlagBase):
                  n_sd: float = 7,
                  winsize: int = None,
                  showplot: bool = False,
-                 verbose: bool = False,
-                 repeat: bool = True):
-        """
+                 verbose: bool = False):
+        """Identify outliers based on the local standard deviation.
 
         Args:
             series: Time series in which outliers are identified.
@@ -43,11 +39,9 @@ class LocalSD(FlagBase):
                 are flagged as outliers.
             showplot: Show plot with removed data points.
             verbose: More text output to console if *True*.
-            repeat: Repeat until no more outliers can be found.
 
         Returns:
-            Results dataframe via the @repeater wrapper function, dataframe contains
-            the filtered time series and flags from all iterations.
+            Flag series that combines flags from all iterations in one single flag.
 
         """
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
@@ -57,20 +51,30 @@ class LocalSD(FlagBase):
         self.winsize = winsize
         self.showplot = showplot
         self.verbose = verbose
-        self.repeat = repeat
 
-    def _calc(self):
-        """Calculate flag"""
-        self.reset()
-        ok, rejected = self._flagtests()
-        self.setflag(ok=ok, rejected=rejected)
-        self.setfiltered(rejected=rejected)
+        if self.showplot:
+            self.fig, self.ax, self.ax2 = self._plot_init()
 
-    def _flagtests(self) -> tuple[DatetimeIndex, DatetimeIndex]:
+    def calc(self, repeat: bool = True):
+        """Calculate overall flag, based on individual flags from multiple iterations.
+
+        Args:
+            repeat: If *True*, the outlier detection is repeated until all
+                outliers are removed.
+
+        """
+
+        self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=repeat)
+        if self.showplot:
+            # Default plot for outlier tests, showing rejected values
+            self.defaultplot(n_iterations=n_iterations)
+            self._plot_finalize(n_iterations=n_iterations)
+
+    def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Perform tests required for this flag"""
 
         # Working data
-        s = self.series.copy()
+        s = self.filteredseries.copy()
         s = s.dropna()
 
         if not self.winsize:
@@ -86,29 +90,60 @@ class LocalSD(FlagBase):
         rejected = (s > upper_limit) | (s < lower_limit)
         rejected = rejected[rejected].index
 
+        n_outliers = len(rejected)
+
         if self.verbose:
             if self.verbose:
-                print(f"Total found outliers: {len(rejected)} values")
+                print(f"ITERATION#{iteration}: Total found outliers: {len(rejected)} values")
         if self.showplot:
-            plottitle = f"Outlier detection based on the standard deviation in a rolling window for {self.series.name}"
-            self._plot(s, rmedian, upper_limit, lower_limit, plottitle)
-            self.plot(ok, rejected, plottitle=plottitle)
-        return ok, rejected
+            self._plot_add_iteration(rmedian, upper_limit, lower_limit, iteration)
 
-    def _plot(self, series, rmedian, upper_limit, lower_limit, plottitle):
-        fig = plt.figure(facecolor='white', figsize=(16, 7))
-        gs = gridspec.GridSpec(1, 1)  # rows, cols
+        return ok, rejected, n_outliers
+
+    @staticmethod
+    def _plot_init():
+        """Initialize plot that collects iteration data."""
+        fig = plt.figure(facecolor='white', figsize=(16, 12))
+        gs = gridspec.GridSpec(2, 1)  # rows, cols
         # gs.update(wspace=0.3, hspace=0.1, left=0.03, right=0.97, top=0.95, bottom=0.05)
         ax = fig.add_subplot(gs[0, 0])
-        ax.plot_date(series.index, series, label=f"{self.series.name}", color="#42A5F5",
-                     alpha=.5, markersize=2, markeredgecolor='none')
-        ax.plot_date(rmedian.index, rmedian, label=f"rolling median", color="#FFA726",
-                     alpha=.5, markersize=2, markeredgecolor='none')
-        ax.plot_date(upper_limit.index, upper_limit, label=f"upper limit", color="#EF5350",
-                     alpha=.5, markersize=2, markeredgecolor='none')
-        ax.plot_date(lower_limit.index, lower_limit, label=f"lower limit", color="#AB47BC",
-                     alpha=.5, markersize=2, markeredgecolor='none')
-        default_format(ax=ax)
-        default_legend(ax=ax, ncol=2, markerscale=5)
-        fig.suptitle(plottitle, fontsize=theme.FIGHEADER_FONTSIZE)
-        fig.show()
+        ax2 = fig.add_subplot(gs[1, 0], sharex=ax)
+        return fig, ax, ax2
+
+    def _plot_add_iteration(self, rmedian, upper_limit, lower_limit, iteration):
+        """Add iteration data to plot, but do not show plot yet."""
+        if iteration == 1:
+            self.ax.plot_date(self.series.index, self.series, label=f"{self.series.name}", color='none',
+                              alpha=1, markersize=4, markeredgecolor='black', markeredgewidth=1, zorder=1)
+        # self._filteredseries.loc[rejected] = np.nan
+        self.ax.plot_date(rmedian.index, rmedian, label=f"rolling median", color="#FFA726",
+                          alpha=1, markersize=0, markeredgecolor='none', ls='-', lw=2, zorder=3)
+        self.ax.plot_date(upper_limit.index, upper_limit, label=f"upper limit", color="#7E57C2",
+                          alpha=1, markersize=0, markeredgecolor='none', ls='--', lw=1, zorder=4)
+        self.ax.plot_date(lower_limit.index, lower_limit, label=f"lower limit", color="#26C6DA",
+                          alpha=1, markersize=0, markeredgecolor='none', ls='--', lw=1, zorder=4)
+
+    def _plot_finalize(self, n_iterations):
+        """Finalize and show plot."""
+        rejected = self.overall_flag == 2
+        n_outliers = rejected.sum()
+
+        outliers_only = self.series.copy()
+        outliers_only = outliers_only[rejected].copy()
+        self.ax.plot_date(outliers_only.index, outliers_only,
+                          label=f"filtered series", color='#F44336', zorder=2,
+                          alpha=1, markersize=12, markeredgecolor='none', fmt='X')
+
+        filtered = self.series.copy()
+        filtered.loc[rejected] = np.nan
+        self.ax2.plot_date(filtered.index, filtered,
+                           label=f"filtered series", color='none',
+                           alpha=1, markersize=4, markeredgecolor='black', markeredgewidth=1)
+        default_format(ax=self.ax)
+        default_format(ax=self.ax2)
+        # default_legend(ax=self.ax, ncol=2, markerscale=5)
+        plottitle = (
+            f"Outlier detection based on the standard deviation in a rolling window for {self.series.name}\n"
+            f"n_iterations = {n_iterations}, n_outliers = {n_outliers}")
+        self.fig.suptitle(plottitle, fontsize=theme.FIGHEADER_FONTSIZE)
+        self.fig.show()

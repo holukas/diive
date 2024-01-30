@@ -12,11 +12,9 @@ from pandas import Series, DatetimeIndex
 
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.pkgs.outlierdetection.repeater import repeater
 
 
 @ConsoleOutputDecorator()
-@repeater  # Repeater called for consistency with other methods, ManualRemoval does not require iterations
 class ManualRemoval(FlagBase):
     """Generate flag for data points that should be removed."""
 
@@ -27,8 +25,7 @@ class ManualRemoval(FlagBase):
                  remove_dates: list,
                  showplot: bool = False,
                  verbose: bool = False,
-                 idstr: str = None,
-                 repeat: bool = False):
+                 idstr: str = None):
         """
 
         Args:
@@ -45,7 +42,6 @@ class ManualRemoval(FlagBase):
             showplot: Show plot with removed data points.
             verbose: More text output to console if *True*.
             idstr: Identifier, added as suffix to output variable names.
-            repeat: Repeat until no more outliers can be found.
 
         Returns:
             Results dataframe via the @repeater wrapper function, dataframe contains
@@ -58,19 +54,24 @@ class ManualRemoval(FlagBase):
         self.remove_dates = remove_dates
         self.showplot = showplot
         self.verbose = verbose
-        self.repeat = repeat
 
-    def _calc(self):
-        """Calculate flag."""
-        self.reset()
-        ok, rejected = self._flagtests()
-        self.setflag(ok=ok, rejected=rejected)
-        self.setfiltered(rejected=rejected)
+    def calc(self, repeat: bool = False):
+        """Calculate overall flag, based on individual flags from multiple iterations.
 
-    def _flagtests(self) -> tuple[DatetimeIndex, DatetimeIndex]:
+        Args:
+            repeat: If *True*, the outlier detection is repeated until all
+                outliers are removed.
+
+        """
+
+        self._overall_flag, n_iterations = self.repeat(func=self.run_flagtests, repeat=False)
+        if self.showplot:
+            self.defaultplot(n_iterations=n_iterations)
+
+    def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Perform tests required for this flag"""
 
-        flag = pd.Series(index=self.series.index, data=np.nan)
+        flag = pd.Series(index=self.filteredseries.index, data=np.nan)
 
         # Location of rejected records
         for date in self.remove_dates:
@@ -87,16 +88,15 @@ class ManualRemoval(FlagBase):
         rejected = flag == 2
         rejected = rejected[rejected]
 
+        n_outliers = len(rejected)
+
         # Index of rejected records
         rejected = rejected.index
 
         # All records that were not rejected are OK
         ok = flag.index.difference(rejected)
 
-        if self.showplot:
-            self.plot(ok=ok, rejected=rejected)
-
-        return ok, rejected
+        return ok, rejected, n_outliers
 
 
 def example():
