@@ -115,9 +115,10 @@ class FluxQualityFlagsEddyPro:
         self._results[flag.name] = flag
 
     def missing_vals_test(self):
-        results = MissingValues(series=self.dfin[self.fluxcol].copy(), idstr=self.idstr)
-        results.repeat()
-        self._results[results.flag.name] = results.flag
+        flagtest = MissingValues(series=self.dfin[self.fluxcol].copy(), idstr=self.idstr)
+        flagtest.calc(repeat=False)
+        flag = flagtest.get_flag()
+        self._results[flag.name] = flag
 
     def ssitc_test(self):
         flag = flag_ssitc_eddypro_test(df=self.dfin, flux=self.fluxcol, filetype=self.filetype, idstr=self.idstr)

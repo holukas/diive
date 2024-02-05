@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from pandas import DataFrame, Series
 
+from diive.core.dfun.frames import detect_new_columns
 from diive.core.funcs.funcs import filter_strings_by_elements
 from diive.core.io.filereader import MultiDataFileReader, search_files
 from diive.pkgs.createvar.daynightflag import daytime_nighttime_flag_from_swinpot
@@ -14,7 +15,7 @@ from diive.pkgs.fluxprocessingchain.level2_qualityflags import FluxQualityFlagsE
 from diive.pkgs.fluxprocessingchain.level31_storagecorrection import FluxStorageCorrectionSinglePointEddyPro
 from diive.pkgs.outlierdetection.stepwiseoutlierdetection import StepwiseOutlierDetection
 from diive.pkgs.qaqc.qcf import FlagQCF
-from diive.core.dfun.frames import detect_new_columns
+
 
 class FluxProcessingChain:
 
@@ -225,7 +226,6 @@ class FluxProcessingChain:
 
         if steadiness_of_horizontal_wind:
             self._level2.steadiness_of_horizontal_wind()
-
 
     def _finalize_level(self,
                         run_qcf_on_col: str,
@@ -547,10 +547,10 @@ class QuickFluxProcessingChain:
         return ep.maindf, ep.metadata
 
 
-def example_simple():
+def example_quick():
     QuickFluxProcessingChain(
         fluxvars=['FC', 'LE', 'H'],
-        sourcedirs=[r'C:\Users\holukas\Desktop\FRU\fluxnet files'],
+        sourcedirs=[r'L:\Sync\luhk_work\CURRENT\fru\Level-1_results_fluxnet_2022'],
         site_lat=47.115833,
         site_lon=8.537778,
         filetype='EDDYPRO_FLUXNET_30MIN',
@@ -562,11 +562,12 @@ def example_simple():
 
 
 def example():
-    FLUXVAR = "co2_flux"  # Name of the flux variable
-    SOURCEDIRS = [r'L:\Sync\luhk_work\TMP\fru']  # Folders where the EddyPro output files are located
+    FLUXVAR = "FC"  # Name of the flux variable
+    SOURCEDIRS = [
+        r'L:\Sync\luhk_work\CURRENT\fru\Level-1_results_fluxnet_2022']  # Folders where the EddyPro output files are located
     SITE_LAT = 47.115833  # Latitude of site
     SITE_LON = 8.537778  # Longitude of site
-    FILETYPE = 'EDDYPRO_FULL_OUTPUT_30MIN'  # Filetype of EddyPro output files, can be 'EDDYPRO_FLUXNET_30MIN' or 'EDDYPRO_FULL_OUTPUT_30MIN'
+    FILETYPE = 'EDDYPRO_FLUXNET_30MIN'  # Filetype of EddyPro output files, can be 'EDDYPRO_FLUXNET_30MIN' or 'EDDYPRO_FULL_OUTPUT_30MIN'
     UTC_OFFSET = 1  # Time stamp offset in relation to UTC, e.g. 1 for UTC+01:00 (CET), important for the calculation of potential radiation for detecting daytime and nighttime
     NIGHTTIME_THRESHOLD = 50  # Threshold for potential radiation in W m-2, conditions below threshold are nighttime
     DAYTIME_ACCEPT_QCF_BELOW = 2
@@ -605,8 +606,8 @@ def example():
     TEST_SPECTRAL_CORRECTION_FACTOR = True  # Default True
 
     # Signal strength
-    # SIGNAL_STRENGTH_COL = 'CUSTOM_AGC_MEAN'
-    TEST_SIGNAL_STRENGTH_COL = 'agc_mean'
+    TEST_SIGNAL_STRENGTH_COL = 'CUSTOM_AGC_MEAN'
+    # TEST_SIGNAL_STRENGTH_COL = 'agc_mean'
     TEST_SIGNAL_STRENGTH_METHOD = 'discard above'
     TEST_SIGNAL_STRENGTH_THRESHOLD = 90
     # TimeSeries(series=maindf[TEST_SIGNAL_STRENGTH_COL]).plot()
@@ -667,10 +668,10 @@ def example():
 
     fpc.level32_flag_manualremoval_test(
         remove_dates=[
-            ['2020-05-05 19:45:00', '2020-06-05 19:45:00'],
-            '2020-12-12 12:45:00',
-            '2020-01-12 13:15:00',
-            ['2020-08-15', '2020-08-31']
+            ['2022-05-05 19:45:00', '2022-06-05 19:45:00'],
+            '2022-12-12 12:45:00',
+            '2022-01-12 13:15:00',
+            ['2022-08-15', '2022-08-31']
         ],
         showplot=True, verbose=True)
     fpc.level32_addflag()
@@ -687,22 +688,19 @@ def example():
     fpc.level32_addflag()
     # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
-    fpc.level32_flag_outliers_stl_rz_test(thres_zscore=4, decompose_downsampling_freq='3H', repeat=True, showplot=True)
-    fpc.level32_addflag()
-
     fpc.level32_flag_outliers_lof_dtnt_test(n_neighbors=20, contamination=None, showplot=True,
-                                            verbose=True, repeat=True, n_jobs=-1)
+                                            verbose=True, repeat=False, n_jobs=-1)
     fpc.level32_addflag()
 
     fpc.level32_flag_outliers_lof_test(n_neighbors=20, contamination=None, showplot=True, verbose=True,
-                                       repeat=True, n_jobs=-1)
+                                       repeat=False, n_jobs=-1)
     fpc.level32_addflag()
 
-    fpc.level32_flag_outliers_zscore_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
+    fpc.level32_flag_outliers_zscore_test(thres_zscore=3, showplot=True, verbose=True, repeat=True)
     fpc.level32_addflag()
     # fpc.level32.results
 
-    fpc.level32_flag_outliers_abslim_test(minval=-50, maxval=50, showplot=True, verbose=True)
+    fpc.level32_flag_outliers_abslim_test(minval=-20, maxval=10, showplot=True, verbose=True)
     fpc.level32_addflag()
     # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
@@ -839,5 +837,5 @@ def example():
 
 
 if __name__ == '__main__':
-    # example_simple()
-    example()
+    example_quick()
+    # example()
