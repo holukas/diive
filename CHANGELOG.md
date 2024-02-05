@@ -2,6 +2,11 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.68.1 | 5 Feb 2024
+
+- Fixed bugs in `FluxProcessingChain`, flag creation for missing values did not work because of the missing `repeat`
+  keyword (`diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain`)
+
 ## v0.68.0 | 30 Jan 2024
 
 ### Updates to stepwise outlier detection
@@ -9,10 +14,10 @@
 Harmonized the way outlier flags are calculated. Outlier flags are all based on the same base
 class `diive.core.base.flagbase.FlagBase` like before, but the base class now includes more code that
 is shared by the different outlier detection methods. For example, `FlagBase` includes a method that
-enables repeated execution of a single outlier detection method multiple times until all outliers 
-are removed. Results from all iterations are then combined into one single flag. 
+enables repeated execution of a single outlier detection method multiple times until all outliers
+are removed. Results from all iterations are then combined into one single flag.
 
-The class `StepwiseMeteoScreeningDb` that makes direct use of the stepwise outlier detection was 
+The class `StepwiseMeteoScreeningDb` that makes direct use of the stepwise outlier detection was
 adjusted accordingly.
 
 ### Notebooks

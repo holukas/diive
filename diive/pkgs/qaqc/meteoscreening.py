@@ -869,8 +869,8 @@ def example():
     # mscr.flag_outliers_abslim_dtnt_test(daytime_minmax=[200, 800], nighttime_minmax=[-2, 20], showplot=True)
     # mscr.addflag()
     #
-    # # (9) Flag missing values
-    # mscr.flag_missingvals_test(verbose=True)
+    # (9) Flag missing values
+    mscr.flag_missingvals_test(verbose=True)
 
     # # After all QC flags generated, calculate overall flag QCF
     # mscr.finalize_outlier_detection()
