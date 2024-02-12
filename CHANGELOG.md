@@ -2,6 +2,12 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.69.0 | X Feb 2024
+
+- TODO Added new filetype `RECORD_DAT_20HZ` (`diive/configs/filetypes/RECORD_DAT_20HZ.yml`) for eddy covariance
+  high-resolution (20Hz) raw data files recorded by the ETH `rECord` logging script.
+- (`diive.pkgs.binary.extract.get_encoded_value_from_int`)
+
 ## v0.68.1 | 5 Feb 2024
 
 - Fixed bugs in `FluxProcessingChain`, flag creation for missing values did not work because of the missing `repeat`
