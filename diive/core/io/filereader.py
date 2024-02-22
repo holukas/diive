@@ -86,13 +86,19 @@ def validate_filetype_config(config: dict):
     # TIMESTAMP
     config['TIMESTAMP']['DESCRIPTION'] = str(config['TIMESTAMP']['DESCRIPTION'])
 
-    config['TIMESTAMP']['INDEX_COLUMN'] = list(config['TIMESTAMP']['INDEX_COLUMN'])
-    config['TIMESTAMP']['INDEX_COLUMN'] = \
-        _convert_timestamp_idx_col(var=config['TIMESTAMP']['INDEX_COLUMN'])
+    if config['TIMESTAMP']['INDEX_COLUMN'] == '-not-available-':
+        config['TIMESTAMP']['INDEX_COLUMN'] = None
+    else:
+        config['TIMESTAMP']['INDEX_COLUMN'] = list(config['TIMESTAMP']['INDEX_COLUMN'])
+        config['TIMESTAMP']['INDEX_COLUMN'] = \
+            _convert_timestamp_idx_col(var=config['TIMESTAMP']['INDEX_COLUMN'])
 
-    config['TIMESTAMP']['DATETIME_FORMAT'] = str(config['TIMESTAMP']['DATETIME_FORMAT'])
-    config['TIMESTAMP']['SHOWS_START_MIDDLE_OR_END_OF_RECORD'] = str(
-        config['TIMESTAMP']['SHOWS_START_MIDDLE_OR_END_OF_RECORD'])
+    if config['TIMESTAMP']['DATETIME_FORMAT'] == '-not-available-':
+        config['TIMESTAMP']['DATETIME_FORMAT'] = None
+    else:
+        config['TIMESTAMP']['DATETIME_FORMAT'] = str(config['TIMESTAMP']['DATETIME_FORMAT'])
+        config['TIMESTAMP']['SHOWS_START_MIDDLE_OR_END_OF_RECORD'] = str(
+            config['TIMESTAMP']['SHOWS_START_MIDDLE_OR_END_OF_RECORD'])
 
     # DATA
     config['DATA']['HEADER_SECTION_ROWS'] = list(config['DATA']['HEADER_SECTION_ROWS'])
@@ -365,8 +371,9 @@ class DataFileReader:
     def _read(self):
         headercols_list, self.generated_missing_header_cols_list = self._compare_len_header_vs_data()
         self.data_df = self._parse_file(headercols_list=headercols_list)
-        self.data_df = TimestampSanitizer(data=self.data_df,
-                                          output_middle_timestamp=self.output_middle_timestamp).get()
+        if self.timestamp_idx_col:
+            self.data_df = TimestampSanitizer(data=self.data_df,
+                                              output_middle_timestamp=self.output_middle_timestamp).get()
         self._clean_data()
         if len(self.data_headerrows) == 1:
             self.data_df = self._add_second_header_row(df=self.data_df)
@@ -466,10 +473,8 @@ class DataFileReader:
         # todo at some point, the string columns should also be considered
         self.data_df = self.data_df.apply(pd.to_numeric, errors='coerce')
 
-    def _parse_file(self, headercols_list):
-        """Parse data file without header"""
-
-        # Column settings for parsing dates / times correctly
+    def _configure_timestamp_parsing(self):
+        """Configure column settings for parsing dates / times correctly."""
 
         # Check filetype settings info about timestamp
         # Column name for timestamp index
@@ -487,6 +492,20 @@ class DataFileReader:
         parse_dates = {_temp_parsed_index_col: parse_dates}
         # date_parser = lambda x: dt.datetime.strptime(x, self.timestamp_datetime_format)
         # date_parser = lambda x: pd.to_datetime(x, format=self.timestamp_datetime_format, errors='coerce')
+        return parse_dates
+
+
+    def _parse_file(self, headercols_list):
+        """Parse data file without header"""
+
+        parse_dates = None
+        parsed_index_col = None
+        _temp_parsed_index_col = None
+
+
+        if self.timestamp_idx_col:
+            parse_dates = self._configure_timestamp_parsing()
+
 
         data_df = pd.read_csv(
             self.filepath,
@@ -509,12 +528,13 @@ class DataFileReader:
             compression=self.compression
         )
 
-        # Rename temporary column name for parsed index to correct name (v0.41.0)
-        data_df = dfun.frames.rename_cols(df=data_df, renaming_dict={_temp_parsed_index_col: parsed_index_col})
-        # if parsed_index_col in headercols_list:
-        #     headercols_list = [item.replace(parsed_index_col, f"{parsed_index_col}_ORIGINAL") for item in headercols_list]
+        if self.timestamp_idx_col:
+            # Rename temporary column name for parsed index to correct name (v0.41.0)
+            data_df = dfun.frames.rename_cols(df=data_df, renaming_dict={_temp_parsed_index_col: parsed_index_col})
+            # if parsed_index_col in headercols_list:
+            #     headercols_list = [item.replace(parsed_index_col, f"{parsed_index_col}_ORIGINAL") for item in headercols_list]
 
-        data_df.set_index(parsed_index_col, inplace=True)
+            data_df.set_index(parsed_index_col, inplace=True)
 
         return data_df
 

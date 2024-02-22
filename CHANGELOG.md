@@ -2,6 +2,17 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.69.0 | 23 Feb 2024
+
+### New features
+
+- Added new functions to extract info from a binary that was stored as
+  integer. These functions convert a subrange of bits from an integer or an integer series to floats with an
+  optional gain applied. See docstring of the respective functions for more
+  info. (`diive.pkgs.binary.extract.get_encoded_value_from_int`) (`diive.pkgs.binary.extract.get_encoded_value_series`)
+- Added new filetype `RECORD_DAT_20HZ` (`diive/configs/filetypes/RECORD_DAT_20HZ.yml`) for eddy covariance
+  high-resolution (20Hz) raw data files recorded by the ETH `rECord` logging script.
+
 ## v0.68.1 | 5 Feb 2024
 
 - Fixed bugs in `FluxProcessingChain`, flag creation for missing values did not work because of the missing `repeat`
