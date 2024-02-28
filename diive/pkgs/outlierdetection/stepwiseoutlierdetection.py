@@ -239,7 +239,20 @@ class StepwiseOutlierDetection:
             self._flags[flag.name] = flag.copy()
             print(f"++Added flag column {flag.name} to flag data")
         else:
-            pass  # todo check(?)
+            # It is possible to re-run an outlier method, which produces a flag
+            # with the same name as for the first (original) run. In this case
+            # an integer is added to the flag name. For example, if the test
+            # z-score daytime/nighttime is run the first time, it produces the flag with the name
+            # FLAG_TA_T1_2_1_OUTLIER_ZSCOREDTNT_TEST. When the test is run again
+            # (e.g. with different settings) then the name of the flag of this second
+            # run is FLAG_TA_T1_2_1_OUTLIER_ZSCOREDTNT_2_TEST, etc ...
+            new_flagname = flag.name
+            rerun = 1
+            while new_flagname in self.flags.columns:
+                rerun += 1
+                new_flagname = flag.name.replace('_TEST', f'_{rerun}_TEST')
+            self._flags[new_flagname] = flag.copy()
+            print(f"++Added flag column {new_flagname} to flag data")
 
         # # Name of filtered series in last results is the same as the original name
         # self._series_hires_cleaned = self.last_flag[self.series_hires_orig.name]

@@ -9,6 +9,16 @@ from pandas import DataFrame, Series, DatetimeIndex
 from pandas.tseries.frequencies import to_offset
 
 
+def format_timestamp_to_fluxnet_format(df: DataFrame, timestamp_col: str) -> Series:
+    """Apply FLUXNET timestamp format (YYYYMMDDhhmm) to timestamp columns (not index).
+
+    Timestamp must be available as data column.
+    """
+    print(f"\nFormatting timestamp column {timestamp_col} to %Y%m%d%H%M ...")
+    timestamp = df[timestamp_col].dt.strftime('%Y%m%d%H%M')
+    return timestamp
+
+
 def detect_freq_groups(index: DatetimeIndex) -> Series:
     """
     Analyze timestamp for records where the time resolution is absolutely certain

@@ -492,8 +492,7 @@ class DataFileReader:
         parse_dates = {_temp_parsed_index_col: parse_dates}
         # date_parser = lambda x: dt.datetime.strptime(x, self.timestamp_datetime_format)
         # date_parser = lambda x: pd.to_datetime(x, format=self.timestamp_datetime_format, errors='coerce')
-        return parse_dates
-
+        return parse_dates, parsed_index_col, _temp_parsed_index_col
 
     def _parse_file(self, headercols_list):
         """Parse data file without header"""
@@ -502,10 +501,8 @@ class DataFileReader:
         parsed_index_col = None
         _temp_parsed_index_col = None
 
-
         if self.timestamp_idx_col:
-            parse_dates = self._configure_timestamp_parsing()
-
+            parse_dates, parsed_index_col, _temp_parsed_index_col = self._configure_timestamp_parsing()
 
         data_df = pd.read_csv(
             self.filepath,
@@ -577,15 +574,41 @@ def example_icosfile():
 
 
 def example_ep_fluxnet():
-    FOLDER = r"Z:\CH-FRU_Fruebuel\20_ec_fluxes\2023\Level-0"
+    from diive.core.times.times import insert_timestamp, format_timestamp_to_fluxnet_format
+
+    FOLDER = r"L:\Sync\luhk_work\CURRENT\fru_prep"
+    OUTDIR = r"L:\Sync\luhk_work\CURRENT\fru_prep"
+
     filepaths = search_files(FOLDER, "*.csv")
-    filepaths = [fp for fp in filepaths
-                 if fp.stem.startswith("eddypro_")
-                 and "_fluxnet_" in fp.stem
-                 and fp.stem.endswith("_adv")]
+    # filepaths = [fp for fp in filepaths
+    #              if fp.stem.startswith("eddypro_")
+    #              and "_fluxnet_" in fp.stem
+    #              and fp.stem.endswith("_adv")]
     print(filepaths)
 
     loaddatafile = MultiDataFileReader(filetype='EDDYPRO_FLUXNET_30MIN', filepaths=filepaths)
+    df = loaddatafile.data_df
+
+    # # Store original column order
+    # orig_col_order = df.columns
+
+    # Set all missing values to -9999 as required by FLUXNET
+    df = df.fillna(-9999)
+
+    # Add timestamp column TIMESTAMP_END
+    df = insert_timestamp(data=df, convention='end', insert_as_first_col=True, verbose=True)
+    # Add timestamp column TIMESTAMP_START
+    df = insert_timestamp(data=df, convention='start', insert_as_first_col=True, verbose=True)
+
+    print("\nAdjusting timestamp formats of TIMESTAMP_START and TIMESTAMP_END to %Y%m%d%H%M ...")
+    df['TIMESTAMP_END'] = format_timestamp_to_fluxnet_format(df=df, timestamp_col='TIMESTAMP_END')
+    df['TIMESTAMP_START'] = format_timestamp_to_fluxnet_format(df=df, timestamp_col='TIMESTAMP_START')
+
+    # # Restore original column order
+    # df = df[orig_col_order].copy()
+
+    outpath = Path(OUTDIR) / 'merged.csv'
+    df.to_csv(outpath, index=False)
 
 
 def example_toa5():
@@ -617,6 +640,6 @@ def example_toa5():
 
 
 if __name__ == '__main__':
-    # example_ep_fluxnet()
+    example_ep_fluxnet()
     # example_icosfile()
-    example_toa5()
+    # example_toa5()
