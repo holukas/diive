@@ -2,6 +2,41 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.70.0 | 28 Feb 2024
+
+`diive.core.io.filereader.example_ep_fluxnet`
+
+### New features
+
+- In `StepwiseOutlierDetection`, it is now possible to re-run an outlier detection method. The re-run(s)
+  would produce flag(s) with the same name(s) as for the first (original) run. Therefore, an integer is added
+  to the flag name. For example, if the test z-score daytime/nighttime is run the first time, it produces the
+  flag with the name `FLAG_TA_T1_2_1_OUTLIER_ZSCOREDTNT_TEST`. When the test is run again (e.g. with different
+  settings) then the name of the flag of this second run is `FLAG_TA_T1_2_1_OUTLIER_ZSCOREDTNT_2_TEST`,
+  etc ... The script now checks whether a flag of the same name was already created, in which case an
+  integer is added to the flag name. These re-runs are now available in addition to the `repeat=True` keyword.
+  (`diive.pkgs.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection.addflag`)
+  Example:
+    - `METHOD` with `SETTINGS` is applied with `repeat=True` and therefore repeated until no more outliers
+      were found with these settings. The name of the flag produced is `TEST_METHOD_FLAG`.
+    - Next, `METHOD` is applied again with `repeat=True`, but this time with different `SETTINGS`. Like before,
+      the test is repeated until no more outliers were found with the new settings. The name of the flag produced
+      is `TEST_METHOD_2_FLAG`.
+    - `METHOD` can be re-run any number of times, each time producing a new
+      flag: `TEST_METHOD_3_FLAG`, `TEST_METHOD_4_FLAG`, ...
+- Added new function to format timestamps to FLUXNET ISO
+  format (`YYYYMMDDhhmm`) (`diive.core.times.times.format_timestamp_to_fluxnet_format`)
+
+### Bugfixes
+
+- Refactored and fixed class to reformat data for FLUXNET
+  upload (`diive.pkgs.formats.fluxnet.FormatEddyProFluxnetFileForUpload`)
+- Fixed `None` error when reading data files (`diive.core.io.filereader.DataFileReader._parse_file`)
+
+### Notebooks
+
+- Updated notebook `FormatEddyProFluxnetFileForUpload.ipynb`
+
 ## v0.69.0 | 23 Feb 2024
 
 ### New features

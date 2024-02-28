@@ -1,14 +1,15 @@
 import re
 from pathlib import Path
 
+import numpy as np
 from pandas import DataFrame
 
 from diive.core.io.files import loadfiles
 from diive.core.times.times import current_date_str_condensed
+from diive.core.times.times import format_timestamp_to_fluxnet_format
 from diive.core.times.times import insert_timestamp
-from diive.pkgs.fluxprocessingchain.level2_qualityflags import FluxQualityFlagsEddyPro
 from diive.pkgs.outlierdetection.manualremoval import ManualRemoval
-from diive.pkgs.qaqc.qcf import FlagQCF
+from diive.pkgs.qaqc.eddyproflags import flag_signal_strength_eddypro_test
 
 # Names of variables in the EddyPro _fluxnet_ output file
 VARS_CO2 = ['FC', 'FC_SSITC_TEST', 'SC_SINGLE', 'CO2']
@@ -153,10 +154,28 @@ class FormatEddyProFluxnetFileForUpload:
             elif isinstance(d, list):
                 print(f"    REMOVING data for {var} time range between {d} (dates are inclusive)")
         series = self.merged_df[var].copy()
-        mr = ManualRemoval(series=series)
-        mr._calc(remove_dates=remove_dates, showplot=showplot)
-        self._merged_df[var] = mr.filteredseries.copy()
-        print(" Done.")
+        n_vals_before = series.dropna().count()
+        flagtest = ManualRemoval(series=series, remove_dates=remove_dates,
+                                 showplot=showplot, verbose=True)
+        flagtest.calc(repeat=False)
+        flag = flagtest.get_flag()
+
+        # Locations where flag is > 0
+        reject = flag > 0
+
+        # Remove rejected series values from series (i.e., set to missing values)
+        series.loc[reject] = np.nan
+
+        # Insert filtered series in dataset
+        self._merged_df[var] = series.copy()
+
+        # Info number of rejected values
+        n_vals_after = self.merged_df[var].dropna().count()
+        n_rejected = reject.sum()
+        print(f"Manual removal rejected {n_rejected} values of {var}, all rejected "
+              f"value were removed from the dataset.")
+        print(f"\nAvailable values of {var} before removing fluxes: {n_vals_before}")
+        print(f"Available values of {var} after removing fluxes: {n_vals_after}")
 
     def apply_fluxnet_format(self):
         self._subset_fluxnet = self._make_subset(df=self.merged_df)
@@ -164,7 +183,10 @@ class FormatEddyProFluxnetFileForUpload:
         self._subset_fluxnet = self._rename_to_variable_codes(df=self._subset_fluxnet)
         self._subset_fluxnet = self._rename_add_suffix(df=self._subset_fluxnet)
         self._subset_fluxnet = self._insert_timestamp_columns(df=self._subset_fluxnet)
-        self._subset_fluxnet = self._adjust_timestamp_formats(df=self._subset_fluxnet)
+        self._subset_fluxnet['TIMESTAMP_END'] = \
+            format_timestamp_to_fluxnet_format(df=self._subset_fluxnet, timestamp_col='TIMESTAMP_END')
+        self._subset_fluxnet['TIMESTAMP_START'] = \
+            format_timestamp_to_fluxnet_format(df=self._subset_fluxnet, timestamp_col='TIMESTAMP_START')
 
     def export_yearly_files(self):
         """Create one file per year"""
@@ -191,14 +213,6 @@ class FormatEddyProFluxnetFileForUpload:
         """Set all missing values to -9999 as required by FLUXNET"""
         print("\nSetting all missing values to -9999 ...")
         return df.fillna(-9999)
-
-    @staticmethod
-    def _adjust_timestamp_formats(df: DataFrame):
-        """Apply FLUXNET timestamp format (YYYYMMDDhhmm) to timestamp columns (not index)"""
-        print("\nAdjusting timestamp formats of TIMESTAMP_START and TIMESTAMP_END to %Y%m%d%H%M ...")
-        df['TIMESTAMP_END'] = df['TIMESTAMP_END'].dt.strftime('%Y%m%d%H%M')
-        df['TIMESTAMP_START'] = df['TIMESTAMP_START'].dt.strftime('%Y%m%d%H%M')
-        return df
 
     @staticmethod
     def _insert_timestamp_columns(df: DataFrame):
@@ -278,39 +292,26 @@ class FormatEddyProFluxnetFileForUpload:
         levelid = 'L2'  # ID to identify newly created columns
         df = self.merged_df.copy()
         keepcols = df.columns.copy()  # Original columns in df, used to keep only original variable names
-
         n_vals_before = df[fluxcol].dropna().count()
 
-        # Perform quality tests
-        # Here, only the signal strength test is specifically needed, but the creation
-        # of the overall quality flag QCF also requires the missing values test
-        print(f"\nPerforming quality checks ...\n")
-        fluxqc = FluxQualityFlagsEddyPro(fluxcol=fluxcol, dfin=df, idstr=levelid)
-        fluxqc.missing_vals_test()
-        fluxqc.signal_strength_test(signal_strength_col=signal_strength_col,
-                                    method=method,
-                                    threshold=threshold)
-        df = fluxqc.addflags()  # Dataframe with flag columns added
+        print(f"\nPerforming signal strength / AGC quality check ...\n")
+        flag = flag_signal_strength_eddypro_test(df=df,
+                                                 signal_strength_col=signal_strength_col,
+                                                 var_col=fluxcol,
+                                                 method=method,
+                                                 threshold=threshold,
+                                                 idstr=levelid)
+        # Locations where flag is > 0
+        reject = flag > 0
 
-        # Calculate overall quality flag QCF
-        print(f"\nGenerating overall quality flag QCF ...")
-        qcf = FlagQCF(series=df[f'{fluxcol}'], df=df, idstr=levelid, swinpot=df['SW_IN_POT'], nighttime_threshold=50)
-        qcf.calculate(daytime_accept_qcf_below=2, nighttimetime_accept_qcf_below=2)
-        qcf.showplot_qcf_heatmaps(maxabsval=50)
-        qcf.report_qcf_evolution()
-        # qcf.report_qcf_flags()
-        qcf.report_qcf_series()
-        # qcf.showplot_qcf_timeseries()
-        df = qcf.get()
+        # Remove rejected fluxcol values from dataset (i.e., set to missing values)
+        df.loc[reject, fluxcol] = np.nan
 
-        # Overwrite the original flux data with the quality-controlled flux data
-        fluxcolqcf = f'{fluxcol}_L2_QCF'  # Name of the quality-controlled flux variable, with bad values removed
-        print(f"\nReplacing values of original flux variable {fluxcol} "
-              f"with quality-controlled {fluxcolqcf} (bad values removed) data ... ")
-        df[fluxcol] = df[fluxcolqcf].copy()
-
+        # Info number of rejected values
         n_vals_after = df[fluxcol].dropna().count()
-
+        n_rejected = reject.sum()
+        print(f"{signal_strength_col} rejected {n_rejected} values of {fluxcol}, all rejected "
+              f"value were removed from the dataset.")
         print(f"\nAvailable values of {fluxcol} before removing low signal fluxes: {n_vals_before}")
         print(f"Available values of {fluxcol} after removing low signal fluxes: {n_vals_after}")
 
@@ -325,8 +326,8 @@ def example():
     # data_df, metadata_df = load_exampledata_eddypro_fluxnet_CSV_30MIN()
 
     # Setup
-    SOURCE = r"F:\Sync\luhk_work\CURRENT\fru\Level-1_results_fluxnet\0-eddypro_fluxnet_files"
-    OUTDIR = r"F:\Sync\luhk_work\CURRENT\fru\Level-1_results_fluxnet\1-formatted_for_upload"
+    SOURCE = r"F:\Sync\luhk_work\CURRENT\fru\Level-1_results_fluxnet_2023\0-eddypro_fluxnet_files"  # This is the folder where datafiles are searched
+    OUTDIR = r"F:\Sync\luhk_work\CURRENT\fru\Level-1_results_fluxnet_2023\1-formatted_for_upload"  # Output yearly CSV to this folder
 
     # Imports
     import importlib.metadata
@@ -364,9 +365,9 @@ def example():
     # Remove problematic time periods
     fxn.remove_erroneous_data(var='FC',
                               remove_dates=[
-                                  '2005-11-01 23:58:15',
-                                  ['2005-11-05 00:00:15', '2005-12-07 14:15:00'],
-                                  ['2005-06-01', '2005-08-15']
+                                  '2023-11-01 23:58:15',
+                                  ['2023-11-05 00:00:15', '2023-12-07 14:15:00'],
+                                  ['2023-06-01', '2023-08-15']
                               ],
                               showplot=True)
 

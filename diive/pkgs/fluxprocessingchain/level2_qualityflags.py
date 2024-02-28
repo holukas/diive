@@ -14,28 +14,34 @@ from diive.pkgs.qaqc.flags import MissingValues
 
 
 class FluxQualityFlagsEddyPro:
-    """
-    XXX
-    """
 
     def __init__(self,
                  dfin: DataFrame,
-                 units: dict,
                  fluxcol: str,
                  basevar: str,
                  filetype: Literal['EDDYPRO_FLUXNET_30MIN', 'EDDYPRO_FULL_OUTPUT_30MIN'],
-                 idstr: str = None):
+                 idstr: str = None,
+                 units: dict = None):
         """
         Create QCF (quality-control flag) for selected flags, calculated
-        from EddyPro's _fluxnet_ output files
+        from EddyPro's _fluxnet_ or _full_output_ results files.
 
         Args:
-            dfin: Dataframe containing data from EddyPro's _fluxnet_ file
-            fluxcol: Name of the flux variable in *df*
-            idstr: Suffix added to output variable names
+            dfin: Dataframe containing EddyPro flux calculation results.
+            fluxcol: Name of the flux variable in *dfin*.
+            idstr: Suffix added to output variable names.
+            filetype: Filetype of the input file.
+            basevar: Name of the variable that was used to calculate the flux, e.g. 'CO2_CONC' for CO2 flux.
+            units: Dictionary of columns names and their units, only needed
+                when *filetype='EDDYPRO_FULL_OUTPUT_30MIN'*.
         """
         self.fluxcol = fluxcol
         self.dfin = dfin.copy()
+
+        if not units and filetype == 'EDDYPRO_FULL_OUTPUT_30MIN':
+            raise Exception("ERROR: No units found. Units are needed when working "
+                            "with filetype EDDYPRO_FULL_OUTPUT_30MIN.")
+
         self.units = units
         self.idstr = validate_id_string(idstr=idstr)
         self.basevar = basevar

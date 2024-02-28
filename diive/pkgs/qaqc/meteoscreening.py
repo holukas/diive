@@ -730,12 +730,12 @@ def example():
     SITE_LON = 8.537778
 
     # User settings, variables to screen
-    FIELDS = ['SW_IN_T1_1_1']
-    MEASUREMENT = 'SW'
+    FIELDS = ['TA_T1_2_1']
+    MEASUREMENT = 'TA'
 
     # User settings, time range to screen
-    START = '2023-01-01 00:00:01'
-    STOP = '2024-01-01 00:00:01'
+    START = '2008-01-01 00:00:01'
+    STOP = '2009-01-01 00:00:01'
 
     # Auto-settings, data settings
     DATA_VERSION = 'raw'
@@ -764,9 +764,9 @@ def example():
     print(f"Bucket containing raw data (source bucket): {BUCKET_RAW}")
     print(f"Bucket containing processed data (destination bucket): {BUCKET_PROCESSING}")
 
-    # Download data from database with "dbc-influxdb"
-    from dbc_influxdb import dbcInflux
-    dbc = dbcInflux(dirconf=DIRCONF)  # Instantiate class
+    # # Download data from database with "dbc-influxdb"
+    # from dbc_influxdb import dbcInflux
+    # dbc = dbcInflux(dirconf=DIRCONF)  # Instantiate class
 
     # data_simple, data_detailed, assigned_measurements = \
     #     dbc.download(bucket=BUCKET_RAW,
@@ -816,7 +816,7 @@ def example():
                                     site_lon=SITE_LON,
                                     utc_offset=1)
 
-    # mscr.start_outlier_detection()
+    mscr.start_outlier_detection()
 
     # # Plot data
     # mscr.showplot_orig()
@@ -835,14 +835,26 @@ def example():
     #
     # mscr.showplot_outlier_detection_cleaned()
 
-    # # (1) Outlier detection: z-score over all data, separate for daytime and nighttime
-    # mscr.flag_outliers_zscore_dtnt_test(thres_zscore=2, showplot=True, verbose=True, repeat=True)
-    # mscr.addflag()
-    #
-    # # (2) Outlier detection: Local SD
-    # mscr.flag_outliers_localsd_test(n_sd=3, winsize=999, showplot=True, verbose=True, repeat=True)
-    # mscr.addflag()
-    #
+    # (1) Outlier detection: z-score over all data, separate for daytime and nighttime
+    mscr.flag_outliers_zscore_dtnt_test(thres_zscore=5, showplot=True, verbose=True, repeat=True)
+    mscr.addflag()
+
+    mscr.flag_outliers_zscore_dtnt_test(thres_zscore=2.8, showplot=True, verbose=True, repeat=True)
+    mscr.addflag()
+    mscr.addflag()
+    mscr.addflag()
+
+    # todo implement in notebook
+    # for key, val in mscr.outlier_detection.items():
+    #     val.showplot_cleaned()
+    #     # mscr.outlier_detection['TA_T1_2_1'].showplot_cleaned()
+    # mscr.showplot_cleaned()
+
+
+    # (2) Outlier detection: Local SD
+    mscr.flag_outliers_localsd_test(n_sd=3.4, winsize=48*7, showplot=True, verbose=True, repeat=True)
+    mscr.addflag()
+
     # (3) Outlier detection: Increments z-score
     mscr.flag_outliers_increments_zcore_test(thres_zscore=8, showplot=True, verbose=True, repeat=True)
     mscr.addflag()
@@ -872,19 +884,19 @@ def example():
     # (9) Flag missing values
     mscr.flag_missingvals_test(verbose=True)
 
-    # # After all QC flags generated, calculate overall flag QCF
-    # mscr.finalize_outlier_detection()
-    #
-    # # QCF reports & plots
-    # mscr.report_outlier_detection_qcf_evolution()
-    # mscr.report_outlier_detection_qcf_flags()
-    # mscr.report_outlier_detection_qcf_series()
-    # mscr.showplot_outlier_detection_qcf_heatmaps()
-    # mscr.showplot_outlier_detection_qcf_timeseries()
+    # After all QC flags generated, calculate overall flag QCF
+    mscr.finalize_outlier_detection()
 
-    # # Show current time series plots
-    # mscr.showplot_orig()
-    # mscr.showplot_cleaned()
+    # QCF reports & plots
+    mscr.report_outlier_detection_qcf_evolution()
+    mscr.report_outlier_detection_qcf_flags()
+    mscr.report_outlier_detection_qcf_series()
+    mscr.showplot_outlier_detection_qcf_heatmaps()
+    mscr.showplot_outlier_detection_qcf_timeseries()
+
+    # Show current time series plots
+    mscr.showplot_orig()
+    mscr.showplot_cleaned()
 
     # Apply corrections
 
