@@ -12,12 +12,6 @@ import diive.core.plotting.styles.LightTheme as theme
 output_notebook()
 
 
-# TODO
-# TODO
-# TODO
-# TODO
-# TODO
-
 class TimeSeries:
     def __init__(self,
                  series: Series,
@@ -55,10 +49,13 @@ class TimeSeries:
                    width=width,
                    title=f"{self.series.name} ({self.series.index.name})",
                    tools=[
-                       HoverTool(tooltips=[('Date', '@date{%F %T}'),
-                                           ('Value', '@value')],
-                                 formatters={'@date': 'datetime'},
-                                 mode='mouse'),
+                       HoverTool(
+                           tooltips=[('Date', '@date{%F %T}'),
+                                     ('Value', '@value')],
+                           formatters={'@date': 'datetime'},
+                           # mode='vline'
+                           mode='mouse'
+                       ),
                        BoxZoomTool(),
                        ResetTool(),
                        PanTool(),
@@ -76,6 +73,21 @@ class TimeSeries:
         p.circle(x='date', y='value', size=5, source=source, color='#455A64')
 
         p.yaxis.axis_label = self.series.name
+
+        # # https://stackoverflow.com/questions/61340741/get-bokehs-selection-in-notebook
+        # from bokeh.models import CustomJS
+        # # make a custom javascript callback that exports the indices of the selected points to the Jupyter notebook
+        # callback = CustomJS(args=dict(s=source),
+        #                     code="""
+        #                          console.log('Running CustomJS callback now.');
+        #                          var indices = s.selected.indices;
+        #                          var kernel = IPython.notebook.kernel;
+        #                          kernel.execute("selected_indices = " + indices)
+        #                          """)
+        #
+        # # set the callback to run when a selection geometry event occurs in the figure
+        # p.js_on_event('selectiongeometry', callback)
+        # selected_indices
 
         # # Add hover tooltip
         # hover = HoverTool(

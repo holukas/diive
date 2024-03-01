@@ -2,9 +2,11 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.70.0 | 28 Feb 2024
+## v0.70.1 | 1 Mar 2024
 
-`diive.core.io.filereader.example_ep_fluxnet`
+- Updated (and cleaned) notebook `StepwiseMeteoScreeningFromDatabase.ipynb`
+
+## v0.70.0 | 28 Feb 2024
 
 ### New features
 
