@@ -178,6 +178,7 @@ class RandomUncertaintyPAS20:
 
         # Scatter (measured, method 1)
         ScatterXY(x=_df[self.fluxcol], y=_df[self.randunccol]).plot(lw=0, ax=ax_scatter)
+        # ScatterXY(x=_df[self.fluxcol], y=_df[self.randunccol]).plot(lw=0, ax=ax_scatter)
         ax_scatter.set_title(f"Measured {self.fluxcol} with METHOD 1 uncertainties")
 
         # Time series (gapfilled, method 1-4)
@@ -470,7 +471,7 @@ def example():
     randunc.report_cumulative_uncertainty_propagation()
 
     # Plots
-    randunc.showplot_random_uncertainty()
+    randunc.showplot_random_uncertainty()  # todo bugfix
     randunc.showplot_cumulative_uncertainty_propagation()
 
     # # Save results as pickle

@@ -2,6 +2,11 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.71.0 | X Mar 2024
+
+- timesince
+- cross comparison precip
+
 ## v0.70.1 | 1 Mar 2024
 
 - Updated (and cleaned) notebook `StepwiseMeteoScreeningFromDatabase.ipynb`

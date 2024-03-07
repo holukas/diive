@@ -767,7 +767,7 @@ def example():
     # # Download data from database with "dbc-influxdb"
     # from dbc_influxdb import dbcInflux
     # dbc = dbcInflux(dirconf=DIRCONF)  # Instantiate class
-
+    #
     # data_simple, data_detailed, assigned_measurements = \
     #     dbc.download(bucket=BUCKET_RAW,
     #                  measurements=[MEASUREMENT],
@@ -816,7 +816,7 @@ def example():
                                     site_lon=SITE_LON,
                                     utc_offset=1)
 
-    mscr.start_outlier_detection()
+    # mscr.start_outlier_detection()
 
     # # Plot data
     # mscr.showplot_orig()
@@ -835,14 +835,14 @@ def example():
     #
     # mscr.showplot_outlier_detection_cleaned()
 
-    # (1) Outlier detection: z-score over all data, separate for daytime and nighttime
-    mscr.flag_outliers_zscore_dtnt_test(thres_zscore=5, showplot=True, verbose=True, repeat=True)
-    mscr.addflag()
-
-    mscr.flag_outliers_zscore_dtnt_test(thres_zscore=2.8, showplot=True, verbose=True, repeat=True)
-    mscr.addflag()
-    mscr.addflag()
-    mscr.addflag()
+    # # (1) Outlier detection: z-score over all data, separate for daytime and nighttime
+    # mscr.flag_outliers_zscore_dtnt_test(thres_zscore=5, showplot=True, verbose=True, repeat=True)
+    # mscr.addflag()
+    #
+    # mscr.flag_outliers_zscore_dtnt_test(thres_zscore=2.8, showplot=True, verbose=True, repeat=True)
+    # mscr.addflag()
+    # mscr.addflag()
+    # mscr.addflag()
 
     # todo implement in notebook
     # for key, val in mscr.outlier_detection.items():
@@ -851,13 +851,13 @@ def example():
     # mscr.showplot_cleaned()
 
 
-    # (2) Outlier detection: Local SD
-    mscr.flag_outliers_localsd_test(n_sd=3.4, winsize=48*7, showplot=True, verbose=True, repeat=True)
-    mscr.addflag()
+    # # (2) Outlier detection: Local SD
+    # mscr.flag_outliers_localsd_test(n_sd=3.4, winsize=48*7, showplot=True, verbose=True, repeat=True)
+    # mscr.addflag()
 
-    # (3) Outlier detection: Increments z-score
-    mscr.flag_outliers_increments_zcore_test(thres_zscore=8, showplot=True, verbose=True, repeat=True)
-    mscr.addflag()
+    # # (3) Outlier detection: Increments z-score
+    # mscr.flag_outliers_increments_zcore_test(thres_zscore=8, showplot=True, verbose=True, repeat=True)
+    # mscr.addflag()
     #
     # # (4) Outlier detection: z-score over all data
     # mscr.flag_outliers_zscore_test(thres_zscore=6, showplot=True, verbose=True, repeat=True)
@@ -881,28 +881,28 @@ def example():
     # mscr.flag_outliers_abslim_dtnt_test(daytime_minmax=[200, 800], nighttime_minmax=[-2, 20], showplot=True)
     # mscr.addflag()
     #
-    # (9) Flag missing values
-    mscr.flag_missingvals_test(verbose=True)
+    # # (9) Flag missing values
+    # mscr.flag_missingvals_test(verbose=True)
 
-    # After all QC flags generated, calculate overall flag QCF
-    mscr.finalize_outlier_detection()
+    # # After all QC flags generated, calculate overall flag QCF
+    # mscr.finalize_outlier_detection()
 
-    # QCF reports & plots
-    mscr.report_outlier_detection_qcf_evolution()
-    mscr.report_outlier_detection_qcf_flags()
-    mscr.report_outlier_detection_qcf_series()
-    mscr.showplot_outlier_detection_qcf_heatmaps()
-    mscr.showplot_outlier_detection_qcf_timeseries()
+    # # QCF reports & plots
+    # mscr.report_outlier_detection_qcf_evolution()
+    # mscr.report_outlier_detection_qcf_flags()
+    # mscr.report_outlier_detection_qcf_series()
+    # mscr.showplot_outlier_detection_qcf_heatmaps()
+    # mscr.showplot_outlier_detection_qcf_timeseries()
 
     # Show current time series plots
     mscr.showplot_orig()
-    mscr.showplot_cleaned()
+    # mscr.showplot_cleaned()
 
     # Apply corrections
 
-    # Radiation zero offset
-    mscr.correction_remove_radiation_zero_offset()
-    mscr.showplot_cleaned()
+    # # Radiation zero offset
+    # mscr.correction_remove_radiation_zero_offset()
+    # mscr.showplot_cleaned()
     #
     # # Set to max
     # mscr.correction_setto_max_threshold(threshold=1000)
@@ -912,22 +912,23 @@ def example():
     # mscr.correction_setto_min_threshold(threshold=10)
     # mscr.showplot_cleaned()
     #
-    # # Set to value
-    # DATES = [
-    #     ['2023-06-03 00:00:01', '2023-06-09 00:00:01'],
-    #     ['2023-06-25 00:00:01', '2023-06-29 00:00:01']
-    # ]
-    # mscr.correction_setto_value(dates=DATES, value=50, verbose=1)
-    # mscr.showplot_cleaned()
+    # Set to value
+    DATES = [
+        ['2008-05-03', '2008-06-09']
+        # ['2008-05-03 00:00:01', '2008-06-09 00:00:01']
+        # ['2023-06-25 00:00:01', '2023-06-29 00:00:01']
+    ]
+    mscr.correction_setto_value(dates=DATES, value=-9999, verbose=1)
+    mscr.showplot_cleaned()
 
     # todo mscr.correction_remove_relativehumidity_offset()
     # mscr.showplot_cleaned()
 
-    # Potential radiation correlation
-    mscr.analysis_potential_radiation_correlation(utc_offset=1,
-                                                  mincorr=0.7,
-                                                  showplot=True)
-    mscr.showplot_cleaned()
+    # # Potential radiation correlation
+    # mscr.analysis_potential_radiation_correlation(utc_offset=1,
+    #                                               mincorr=0.7,
+    #                                               showplot=True)
+    # mscr.showplot_cleaned()
 
     # todo Resampling
     mscr.resample(to_freqstr='30T', agg=RESAMPLING_AGG, mincounts_perc=.25)
