@@ -1,10 +1,10 @@
 GENERAL:
-  NAME: "TOA5_CSV_10MIN"
-  DESCRIPTION: "TOA5 format with 4-row header including variable name and units row, and 1-column full timestamp."
+  NAME: "TOA5-DAT-1MIN-EMPTYUNITS"
+  DESCRIPTION: "TOA5 format with 4-row header including variable name and *empty* units row, and 1-column full timestamp."
   TAGS: [ "TOA5" ]
 
 FILE:
-  EXTENSION: "*.csv"
+  EXTENSION: "*.dat"
   COMPRESSION: "None"
 
 TIMESTAMP:
@@ -15,8 +15,8 @@ TIMESTAMP:
 
 DATA:
   HEADER_SECTION_ROWS: [ 0, 1, 2, 3 ]
-  SKIP_ROWS: [ 0, 3 ]
-  HEADER_ROWS: [ 0, 1 ]
+  SKIP_ROWS: [ 0, 2, 3 ]
+  HEADER_ROWS: [ 0 ]
   NA_VALUES: [ -9999 ]
-  FREQUENCY: "10T"
+  FREQUENCY: "1T"
   DELIMITER: ","

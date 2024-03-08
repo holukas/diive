@@ -1,5 +1,5 @@
 GENERAL:
-  NAME: "ICOS_CSV_1MIN"
+  NAME: "ICOS-CSV-1MIN"
   DESCRIPTION: "Uncompressed (not zipped) ICOS format with 1-row header and ISO timestamp."
   TAGS: [ "ICOS" ]
 

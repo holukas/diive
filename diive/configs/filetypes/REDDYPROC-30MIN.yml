@@ -1,5 +1,5 @@
 GENERAL:
-  NAME: "REDDYPROC_30MIN"
+  NAME: "REDDYPROC-30MIN"
   DESCRIPTION: "Output file from ReddyProc."
   TAGS: [ "REDDYPROC" ]
 

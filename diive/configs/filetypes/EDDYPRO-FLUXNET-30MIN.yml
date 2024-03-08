@@ -1,5 +1,5 @@
 GENERAL:
-  NAME: "EDDYPRO_FLUXNET_30MIN"
+  NAME: "EDDYPRO-FLUXNET-30MIN"
   DESCRIPTION: "The *_fluxnet_* file from EddyPro."
   TAGS: [ "EDDYPRO" ]
 

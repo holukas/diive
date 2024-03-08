@@ -1,5 +1,5 @@
 GENERAL:
-  NAME: "ICOS_H1R_CSVZIP_1MIN"
+  NAME: "ICOS-H1R-CSVZIP-1MIN"
   DESCRIPTION: "Compressed (zipped) ICOS format with 1-row header (variable names) and ISO timestamp."
   TAGS: [ "ICOS" ]
 

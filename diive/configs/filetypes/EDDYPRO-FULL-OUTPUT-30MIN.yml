@@ -1,5 +1,5 @@
 GENERAL:
-  NAME: "EDDYPRO_FULL_OUTPUT_30MIN"
+  NAME: "EDDYPRO-FULL-OUTPUT-30MIN"
   DESCRIPTION: "The *_full_output_* file from EddyPro."
   TAGS: [ "EDDYPRO" ]
 

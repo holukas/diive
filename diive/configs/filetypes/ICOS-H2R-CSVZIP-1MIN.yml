@@ -1,6 +1,6 @@
 GENERAL:
-  NAME: "ICOS_H2R_CSVZIP_10S"
-  DESCRIPTION: "Compressed (zipped) ICOS format with 2-row header (variables, units) and ISO timestamp."
+  NAME: "ICOS-H2R-CSVZIP-1MIN"
+  DESCRIPTION: "Compressed (zipped) ICOS format with 2-row header (variable names and units) and ISO timestamp."
   TAGS: [ "ICOS" ]
 
 FILE:
@@ -18,5 +18,5 @@ DATA:
   SKIP_ROWS: [  ]
   HEADER_ROWS: [ 0, 1 ]
   NA_VALUES: [ -9999 ]
-  FREQUENCY: "10S"
+  FREQUENCY: "1MIN"
   DELIMITER: ","

@@ -1,5 +1,5 @@
 GENERAL:
-  NAME: "TOA5_DAT_1MIN"
+  NAME: "TOA5-DAT-1MIN"
   DESCRIPTION: "TOA5 format with 4-row header including variable name and units row, and 1-column full timestamp."
   TAGS: [ "TOA5" ]
 
