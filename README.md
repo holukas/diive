@@ -93,7 +93,6 @@ Fill gaps in time series with various methods
 - Missing values: Simply creates a flag that indicated available and missing data in a time series
 - z-score: Identify outliers based on the z-score across all time series data
 - z-score: Identify outliers based on the z-score, separately for daytime and nighttime
-- z-score: Identify outliers based on max z-scores in the interquartile range data
 
 ### Plotting
 
