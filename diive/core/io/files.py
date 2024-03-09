@@ -10,6 +10,7 @@ from diive.core.io.filereader import MultiDataFileReader
 from diive.core.times.times import TimestampSanitizer
 
 
+
 def set_outpath(outpath: str or None, filename: str, fileextension: str):
     if outpath:
         outpath = Path(outpath)

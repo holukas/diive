@@ -7,6 +7,7 @@
 ### New features
 
 - Added class to find the maximum covariance between two variables (`diive.pkgs.echires.lag.MaxCovariance`)
+- Added class to detect expected and unexpected files from a list of files (`diive.core.io.filesdetector.FilesDetector`)
 
 ### Additions
 
