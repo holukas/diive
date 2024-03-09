@@ -2,6 +2,22 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.71.0 | X Mar 2024
+
+### New features
+
+- Added class to find the maximum covariance between two variables (`diive.pkgs.echires.lag.MaxCovariance`)
+
+### Additions
+
+- Added new filetype `ETH-SONICREAD-BICO-CSVGZ-20HZ`
+
+### Changes
+
+- Renamed class `TurbFlux` to `WindRotation2D` (`diive.pkgs.echires.windrotation.WindRotation2D`)
+- Renamed filetypes: all filetypes now use the dash instead of an underscore
+- Renamed filetype to `ETH-RECORD-DAT-20HZ`
+
 ## v0.70.1 | 1 Mar 2024
 
 - Updated (and cleaned) notebook `StepwiseMeteoScreeningFromDatabase.ipynb`

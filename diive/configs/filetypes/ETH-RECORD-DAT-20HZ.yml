@@ -1,7 +1,7 @@
 GENERAL:
-  NAME: "ETH-SONICREAD-BICO-CSV-GZ-20HZ"
+  NAME: "ETH-RECORD-DAT-20HZ"
   DESCRIPTION: "TOA5 format with 4-row header including variable name and units row, and no timestamp."
-  TAGS: [ "sonicread", "bico" ]
+  TAGS: [ "TOA5" ]
 
 FILE:
   EXTENSION: "*.dat"

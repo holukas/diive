@@ -639,7 +639,25 @@ def example_toa5():
             print(f"{'#' * 40}")
 
 
+def example_hires():
+    # Settings
+    SOURCEFILE = r"F:\Sync\luhk_work\20 - CODING\27 - VARIOUS\dyco\_testdata\CH-DAS_202308281300.csv.gz"
+    U = 'U_[R350-B]'
+    V = 'V_[R350-B]'
+    W = 'W_[R350-B]'
+    C = 'CH4_DRY_[QCL-C2]'
+
+    # Read file
+    df, meta = ReadFileType(filepath=SOURCEFILE,
+                            filetype='ETH-SONICREAD-BICO-CSVGZ-20HZ',
+                            data_nrows=10000,
+                            output_middle_timestamp=True).get_filedata()
+
+    print(df, meta)
+
+
 if __name__ == '__main__':
-    example_ep_fluxnet()
+    # example_ep_fluxnet()
     # example_icosfile()
     # example_toa5()
+    example_hires()
