@@ -12,7 +12,7 @@ pd.set_option('display.max_columns', 15)
 pd.set_option('display.width', 1000)
 
 
-class FilesDetector:
+class FileDetector:
 
     def __init__(self,
                  filelist: list,
@@ -181,109 +181,32 @@ def read_segments_file(filepath):
     return found_lags_df
 
 
-def read_raw_data(filepath, nrows):
-    header_rows_list = [0]
-    skip_rows_list = []
-    header_section_rows = [0]
-
-    num_data_cols = \
-        length_data_cols(filepath=filepath,
-                         header_rows_list=header_rows_list,
-                         skip_rows_list=skip_rows_list)
-
-    num_header_cols, header_cols_df = \
-        length_header_cols(filepath=filepath,
-                           header_rows_list=header_rows_list,
-                           skip_rows_list=skip_rows_list)
-
-    more_data_cols_than_header_cols, num_missing_header_cols = \
-        data_vs_header(num_data_cols=num_data_cols,
-                       num_header_cols=num_header_cols)
-
-    header_cols_list = \
-        generate_missing_cols(header_cols_df=header_cols_df,
-                              more_data_cols_than_header_cols=more_data_cols_than_header_cols,
-                              num_missing_header_cols=num_missing_header_cols)
-
-    start_time = time.time()
-    data_df = pd.read_csv(filepath,
-                          skiprows=header_section_rows,
-                          header=None,
-                          names=header_cols_list,
-                          na_values=-9999,
-                          encoding='utf-8',
-                          delimiter=',',
-                          mangle_dupe_cols=True,
-                          keep_date_col=False,
-                          parse_dates=False,
-                          date_parser=None,
-                          index_col=None,
-                          dtype=None,
-                          engine='c',
-                          nrows=nrows)
-    print(f"    Finished reading file '{filepath.name}' in {time.time() - start_time:.3f}s")
-
-    return data_df
 
 
-def insert_datetime_index(df, file_info_row, data_nominal_res):
-    """Insert true timestamp based on number of records in the file and the
-    file duration.
-
-    Files measured at a given time resolution may still produce
-    more or less than the expected number of records.
-
-    For example, a six-hour file with data recorded at 20Hz is expected to have
-    432 000 records, but may in reality produce slightly more or less than that
-    due to small inaccuracies in the measurements instrument's internal clock.
-    This in turn would mean that the defined time resolution of 20Hz is not
-    completely accurate with the true frequency being slightly higher or lower.
-
-    This causes a (minor) issue when merging mutliple data files due to overlapping
-    record timestamps, i.e. the last timestamp in file #1 is the same as the first
-    timestamp in file #2, resulting in duplicate entries in the timestamp index column
-    during merging of files #1 and #2.
-
-    In addition, sometimes more than one timestamp can overlap, resulting in more
-    overlapping timestamps and therefore more data loss. Although this data loss is
-    minor (e.g. 3 records per 432 000 records), missing records are not desirable when
-    calculating covariances between times series. The time series must be as complete
-    and without missing records as possible to avoid errors.
-    """
-    num_records = len(df)
-    ratio = num_records / file_info_row['expected_records']
-    if (ratio > 0.999) and (ratio < 1.001):
-        file_complete = True
-        true_resolution = np.float64(file_info_row['expected_duration'] / num_records)
-    else:
-        file_complete = False
-        true_resolution = data_nominal_res
-
-    df['sec'] = df.index * true_resolution
-    df['file_start_dt'] = file_info_row['start']
-    df['TIMESTAMP'] = pd.to_datetime(df['file_start_dt'], unit='us') \
-                      + pd.to_timedelta(df['sec'], unit='s')
-    df['TIMESTAMP'] = df['TIMESTAMP'].astype('datetime64[us]')  # Reduce timestamp precision to microseconds
-    df.drop(['sec', 'file_start_dt'], axis=1, inplace=True)
-    df.set_index('TIMESTAMP', inplace=True)
-
-    # pd.to_datetime(df.index, unit='us')
-
-    return df, true_resolution
 
 
-def add_data_stats(df, true_resolution, filename, files_overview_df, found_records):
+
+def add_data_stats(df, true_resolution, filename, found_records) -> DataFrame:
     # Detect overall frequency
+    cols = [
+        'first_record',
+        'last_record',
+        'file_duration',
+        'found_records',
+        'data_freq'
+    ]
+    filestats_df = DataFrame(columns=cols)
+
     data_duration = found_records * true_resolution
     data_freq = np.float64(found_records / data_duration)
 
-    files_overview_df.loc[filename, 'first_record'] = df.index[0]
-    files_overview_df.loc[filename, 'last_record'] = df.index[-1]
-    files_overview_df.loc[filename, 'file_duration'] = (df.index[-1] - df.index[0]).total_seconds()
-    files_overview_df.loc[filename, 'found_records'] = found_records
-    files_overview_df.loc[filename, 'data_freq'] = data_freq
+    filestats_df.loc[filename, 'first_record'] = df.index[0]
+    filestats_df.loc[filename, 'last_record'] = df.index[-1]
+    filestats_df.loc[filename, 'file_duration'] = (df.index[-1] - df.index[0]).total_seconds()
+    filestats_df.loc[filename, 'found_records'] = found_records
+    filestats_df.loc[filename, 'data_freq'] = data_freq
 
-    return files_overview_df
+    return filestats_df
 
 
 def generate_missing_cols(header_cols_df, more_data_cols_than_header_cols, num_missing_header_cols):
@@ -332,35 +255,7 @@ def data_vs_header(num_data_cols, num_header_cols):
     return more_data_cols_than_header_cols, num_missing_header_cols
 
 
-def setup_output_dirs(outdir='output', del_previous_results=False):
-    """Make output directories."""
-    new_dirs = ['stats', 'splits']
-    outdirs = {}
 
-    # Store keys and full paths in dict
-    for nd in new_dirs:
-        # outdirs[nd] = Path(outdir)
-        outdirs[nd] = outdir / Path(nd)
-
-    # Make dirs
-    for key, path in outdirs.items():
-        if not Path.is_dir(path):
-            print(f"Creating folder {path} ...")
-            os.makedirs(path)
-        else:
-            if del_previous_results:
-                for filename in os.listdir(path):
-                    filepath = os.path.join(path, filename)
-                    try:
-                        if os.path.isfile(filepath) or os.path.islink(filepath):
-                            print(f"Deleting file {filepath} ...")
-                            os.unlink(filepath)
-                        # elif os.path.isdir(filepath):
-                        #     shutil.rmtree(filepath)
-                    except Exception as e:
-                        print('Failed to delete %s. Reason: %s' % (filepath, e))
-
-    return outdirs
 
 
 def example():
@@ -370,11 +265,11 @@ def example():
     from diive.core.io.filereader import search_files
     foundfiles = search_files(searchdirs=SEARCHDIRS, pattern=PATTERN)
 
-    fd = FilesDetector(filelist=foundfiles,
-                       file_date_format='CH-DAS_%Y%m%d%H%M.csv.gz',
-                       file_generation_res='6h',
-                       data_res=0.05,
-                       files_how_many=3)
+    fd = FileDetector(filelist=foundfiles,
+                      file_date_format='CH-DAS_%Y%m%d%H%M.csv.gz',
+                      file_generation_res='6h',
+                      data_res=0.05,
+                      files_how_many=3)
 
     fd.run()
 

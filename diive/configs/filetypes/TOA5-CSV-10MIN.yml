@@ -17,6 +17,6 @@ DATA:
   HEADER_SECTION_ROWS: [ 0, 1, 2, 3 ]
   SKIP_ROWS: [ 0, 3 ]
   HEADER_ROWS: [ 0, 1 ]
-  NA_VALUES: [ -9999 ]
+  NA_VALUES: [ -9999, -6999, -999, "nan", "NaN", "NAN", "NA", "inf", "-inf", "-" ]
   FREQUENCY: "10T"
   DELIMITER: ","

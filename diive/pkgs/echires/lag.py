@@ -6,18 +6,16 @@ from matplotlib.collections import LineCollection
 from pandas import DataFrame
 from scipy.signal import find_peaks
 
+from diive.core.plotting.plotfuncs import default_format
+
 
 # todo logger: setup_dyco
 
 class MaxCovariance:
-    """
-    Determine the time lag for each file by calculating covariances
-    and finding covariance peaks
-    """
 
     def __init__(
             self,
-            segment_df: DataFrame,
+            df: DataFrame,
             var_reference: str,
             var_lagged: str,
             lgs_winsize_from: int = -1000,
@@ -25,8 +23,20 @@ class MaxCovariance:
             shift_stepsize: int = 1,
             segment_name: str = "segment_name_here",
     ):
+        """ Determine the time lag between two variables by finding the maximum
+         covariance.
 
-        self.segment_df = segment_df
+        Args:
+            df:
+            var_reference:
+            var_lagged:
+            lgs_winsize_from:
+            lgs_winsize_to:
+            shift_stepsize:
+            segment_name:
+        """
+
+        self.segment_df = df
         self.var_reference = var_reference
         self.var_lagged = var_lagged
         self.lgs_winsize_from = lgs_winsize_from
@@ -279,12 +289,11 @@ class MaxCovariance:
                 transform=ax.transAxes, size=10, color='black', backgroundcolor='none', zorder=100)
 
         # Format & legend
-        default_format(ax=ax, label_color='black', fontsize=12,
-                       txt_xlabel='lag [records]', txt_ylabel='covariance', txt_ylabel_units='-')
+        default_format(ax=ax, ax_labels_fontcolor='black', ax_labels_fontsize=12,
+                       ax_xlabel_txt='lag [records]', ax_ylabel_txt='covariance', txt_ylabel_units='-')
         ax.legend(frameon=False, loc='upper right').set_zorder(100)
 
         fig.show()
-
 
     def z_as_colored_lines(self, fig, ax, x, y, z):
         """
@@ -413,78 +422,88 @@ class MaxCovariance:
         return txt_info
 
 
-
-
-def default_format(ax, fontsize=12, label_color='black',
-                   txt_xlabel='', txt_ylabel='', txt_ylabel_units='',
-                   width=1, length=5, direction='in', colors='black', facecolor='white'):
-    """Apply default format to plot."""
-    ax.set_facecolor(facecolor)
-    ax.tick_params(axis='x', width=width, length=length, direction=direction, colors=colors, labelsize=fontsize,
-                   top=True)
-    ax.tick_params(axis='y', width=width, length=length, direction=direction, colors=colors, labelsize=fontsize,
-                   right=True)
-    format_spines(ax=ax, color=colors, lw=1)
-    if txt_xlabel:
-        ax.set_xlabel(txt_xlabel, color=label_color, fontsize=fontsize, fontweight='bold')
-    if txt_ylabel and txt_ylabel_units:
-        ax.set_ylabel(f'{txt_ylabel}  {txt_ylabel_units}', color=label_color, fontsize=fontsize, fontweight='bold')
-    if txt_ylabel and not txt_ylabel_units:
-        ax.set_ylabel(f'{txt_ylabel}', color=label_color, fontsize=fontsize, fontweight='bold')
-
-
-def format_spines(ax, color, lw):
-    """Set color and linewidth of axis spines"""
-    spines = ['top', 'bottom', 'left', 'right']
-    for spine in spines:
-        ax.spines[spine].set_color(color)
-        ax.spines[spine].set_linewidth(lw)
-
-
 def example():
+    from pathlib import Path
     from diive.pkgs.echires.windrotation import WindRotation2D
     from diive.core.io.filereader import ReadFileType
 
+    from diive.core.io.filereader import search_files
+
+    OUTDIR = r'F:\TMP\das_filesplitter'
+
+    # SEARCHDIRS = [r'L:\Sync\luhk_work\20 - CODING\27 - VARIOUS\dyco\_testdata']
+    # PATTERN = 'CH-DAS_*.csv.gz'
+    # FILEDATEFORMAT = 'CH-DAS_%Y%m%d%H%M.csv.gz'
+    # FILE_GENERATION_RES = '6h'
+    # DATA_NOMINAL_RES = 0.05
+    # FILES_HOW_MANY = 1
+    # FILETYPE = 'ETH-SONICREAD-BICO-CSVGZ-20HZ'
+    # DATA_SPLIT_DURATION = '30min'
+    # DATA_SPLIT_OUTFILE_PREFIX = 'CH-DAS_'
+    # DATA_SPLIT_OUTFILE_SUFFIX = '_30MIN-SPLIT'
+    #
+    # from diive.core.io.filesplitter import FileSplitterMulti
+    # fsm = FileSplitterMulti(
+    #     outdir=OUTDIR,
+    #     searchdirs=SEARCHDIRS,
+    #     pattern=PATTERN,
+    #     file_date_format=FILEDATEFORMAT,
+    #     file_generation_res=FILE_GENERATION_RES,
+    #     data_res=DATA_NOMINAL_RES,
+    #     files_how_many=FILES_HOW_MANY,
+    #     filetype=FILETYPE,
+    #     data_split_duration=DATA_SPLIT_DURATION,
+    #     data_split_outfile_prefix=DATA_SPLIT_OUTFILE_PREFIX,
+    #     data_split_outfile_suffix=DATA_SPLIT_OUTFILE_SUFFIX
+    # )
+    # fsm.run()
+
+
+    filelist = search_files(searchdirs=r'F:\TMP\das_filesplitter\splits', pattern='CH-DAS_*.csv')
+
     # Settings
-    SOURCEFILE = r"F:\Sync\luhk_work\20 - CODING\27 - VARIOUS\dyco\_testdata\CH-DAS_202308281300.csv.gz"
     U = 'U_[R350-B]'
     V = 'V_[R350-B]'
     W = 'W_[R350-B]'
     C = 'CH4_DRY_[QCL-C2]'
 
-    # Read file
-    df, meta = ReadFileType(filepath=SOURCEFILE,
-                            filetype='ETH-SONICREAD-BICO-CSVGZ-20HZ',
-                            data_nrows=None,
-                            output_middle_timestamp=True).get_filedata()
+    for filepath in filelist:
 
-    # Wind rotation for turbulent fluctuations
-    u = df[U].copy()
-    v = df[V].copy()
-    w = df[W].copy()
-    c = df[C].copy()
-    wr = WindRotation2D(u=u, v=v, w=w, c=c)
-    w_prime, c_prime = wr.get_wc_primes()
+        # Read file
+        df, meta = ReadFileType(filepath=filepath,
+                                filetype='GENERIC-CSV-HEADER-1ROW-TS-MIDDLE-FULL-NS-30MIN',
+                                data_nrows=None,
+                                output_middle_timestamp=True).get_filedata()
 
-    subset = pd.concat([w_prime, c_prime], ignore_index=False, axis=1)
+        # Wind rotation for turbulent fluctuations
+        u = df[U].copy()
+        v = df[V].copy()
+        w = df[W].copy()
+        c = df[C].copy()
+        wr = WindRotation2D(u=u, v=v, w=w, c=c)
+        w_prime, c_prime = wr.get_wc_primes()
 
-    mc = MaxCovariance(
-        segment_df=subset,
-        var_reference=str(w_prime.name),
-        var_lagged=str(c_prime.name),
-        lgs_winsize_from=-1000,
-        lgs_winsize_to=1000,
-        shift_stepsize=1,
-        segment_name="test"
-    )
+        newdf = df.copy()
+        newdf[w_prime.name] = w_prime.copy()
+        newdf[c_prime.name] = c_prime.copy()
+        # subset = pd.concat([w_prime, c_prime], ignore_index=False, axis=1)
 
-    mc.run()
+        mc = MaxCovariance(
+            df=newdf,
+            var_reference=str(w_prime.name),
+            var_lagged=str(c_prime.name),
+            lgs_winsize_from=-1000,
+            lgs_winsize_to=1000,
+            shift_stepsize=1,
+            segment_name="test"
+        )
 
-    mc.plot()
+        mc.run()
 
-    cov_df, props_peak_auto = mc.get()
+        mc.plot()
 
-    print(w_prime, c_prime)
+        cov_df, props_peak_auto = mc.get()
+
 
 
 if __name__ == '__main__':

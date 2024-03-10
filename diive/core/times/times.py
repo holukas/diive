@@ -1138,6 +1138,90 @@ def doy_mean_cumulative(cumulatives_per_year_df: DataFrame,
     return df
 
 
+def calc_true_resolution(num_records: int,
+                         data_nominal_res: float,
+                         expected_records: int,
+                         expected_duration: int):
+    """
+    Calculate the true resolution of the raw data
+
+    Parameters
+    ----------
+    num_records: Number of raw data records.
+    data_nominal_res: Nominal time resolution of the raw data, e.g. 0.05 for 20 Hz data
+        (one measurement every 0.05 seconds)
+    expected_records: Expected number of records in the raw data file, based on the nominal
+        time resolution of the raw data.
+    expected_duration: Expected duration of the raw data file in seconds.
+
+    Returns
+    -------
+    float that gives the true resolution in seconds, e.g. 0.05s for 20 Hz (1/20 = 0.05)
+    """
+    ratio = num_records / expected_records
+    if (ratio > 0.999) and (ratio < 1.001):
+        # file_complete = True
+        true_resolution = np.float64(expected_duration / num_records)
+    else:
+        # file_complete = False
+        true_resolution = data_nominal_res
+    return true_resolution
+
+
+def create_timestamp(df, file_start, data_nominal_res, expected_duration):
+    """Calculate the timestamp for each row record if not available.
+
+    Insert true timestamp based on number of records in the file and the
+    file duration.
+
+    Files measured at a given time resolution may still produce
+    more or less than the expected number of records.
+
+    For example, a six-hour file with data recorded at 20Hz is expected to have
+    432 000 records, but may in reality produce slightly more or less than that
+    due to small inaccuracies in the measurements instrument's internal clock.
+    This in turn would mean that the defined time resolution of 20Hz is not
+    completely accurate with the true frequency being slightly higher or lower.
+
+    This causes a (minor) issue when merging mutliple data files due to overlapping
+    record timestamps, i.e. the last timestamp in file #1 is the same as the first
+    timestamp in file #2, resulting in duplicate entries in the timestamp index column
+    during merging of files #1 and #2.
+
+    In addition, sometimes more than one timestamp can overlap, resulting in more
+    overlapping timestamps and therefore more data loss. Although this data loss is
+    minor (e.g. 3 records per 432 000 records), missing records are not desirable when
+    calculating covariances between times series. The time series must be as complete
+    and without missing records as possible to avoid errors.
+
+    Args:
+        df: Raw data without timestamp. In case data already have a timestamp, it
+            will be overwritten.
+        file_start: Start time of the file.
+        data_nominal_res: Nominal time resolution of the raw data, e.g. 0.05 (one measurement every
+            0.05 seconds, 20 Hz).
+        expected_duration: Expected duration of the raw data file in seconds, e.g. 1800 for a
+            30-minute file.
+
+    Returns:
+        df: pandas DataFrame with timestamp index
+        true_resolution: time resolution of raw data measurements
+
+    """
+    n_records = len(df)
+    expected_records = int(expected_duration / data_nominal_res, )
+    true_resolution = calc_true_resolution(num_records=n_records, data_nominal_res=data_nominal_res,
+                                           expected_records=expected_records, expected_duration=expected_duration)
+    df['sec'] = df.index * true_resolution
+    df['file_start_dt'] = file_start
+    df['TIMESTAMP'] = pd.to_datetime(df['file_start_dt']) \
+                      + pd.to_timedelta(df['sec'], unit='s')
+    df.drop(['sec', 'file_start_dt'], axis=1, inplace=True)
+    df.set_index('TIMESTAMP', inplace=True)
+    df.index = df.index.round(freq='50ms')  # Round to 50 ms accuracy
+    return df, true_resolution
+
+
 if __name__ == '__main__':
     pass
 

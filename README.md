@@ -2,7 +2,8 @@
 
 # Time series data processing
 
-`diive` is a Python library for time series processing.
+`diive` is a Python library for time series processing, in particular ecosystem data. Originally developed
+for [Swiss FluxNet](https://www.swissfluxnet.ethz.ch/) by the [ETH Grassland Sciences group](https://gl.ethz.ch/).
 
 Recent updates: [CHANGELOG](CHANGELOG.md)   
 Recent releases: [Releases](https://github.com/holukas/diive/releases)
