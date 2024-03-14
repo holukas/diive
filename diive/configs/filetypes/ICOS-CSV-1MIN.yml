@@ -1,5 +1,5 @@
 GENERAL:
-  NAME: "ICOS_CSV_1MIN"
+  NAME: "ICOS-CSV-1MIN"
   DESCRIPTION: "Uncompressed (not zipped) ICOS format with 1-row header and ISO timestamp."
   TAGS: [ "ICOS" ]
 
@@ -17,6 +17,6 @@ DATA:
   HEADER_SECTION_ROWS: [ 0 ]
   SKIP_ROWS: [  ]
   HEADER_ROWS: [ 0 ]
-  NA_VALUES: [ -9999 ]
+  NA_VALUES: [ -9999, -6999, -999, "nan", "NaN", "NAN", "NA", "inf", "-inf", "-" ]
   FREQUENCY: "1T"
   DELIMITER: ","

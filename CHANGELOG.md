@@ -2,6 +2,62 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.71.0 | 14 Mar 2024
+
+### High-resolution update
+
+This update focuses on the implementation of several classes that work with high-resolution (20 Hz) data.
+
+The main motivation behind these implementations is the upcoming new version of another
+script, [dyco](https://github.com/holukas/dyco), which will make direct use of these new classes. `dyco` allows
+to detect and remove time lags from time series data and can also handle drifting lags, i.e., lags that
+are not constant over time. This is especially useful for eddy covariance data, where the detection of
+accurate time lags is of high importance for the calculation of ecosystem fluxes.
+
+![DIIVE](images/lagMaxCovariance_diive_v0.71.0.png)
+*Plot showing the covariance between the turbulent departures of vertical wind and CO2 measurements.
+Maximum (absolute) covariance was found at record -26, which means that the CO2 signal has to be shifted
+by 26 records in relation to the wind data to obtain the maximum covariance between the two variables.
+Since the covariance was calculated on 20 Hz data, this corresponds to a time lag of 1.3 seconds
+between CO2 and wind (20 Hz = measurement every 0.05 seconds, 26 * 0.05 = 1.3), or, to put it
+another way, the CO2 signal arrived 1.3 seconds later at the sensor than the wind signal. Maximum
+covariance was calculated using the `MaxCovariance` class.*
+
+### New features
+
+- Added new class `MaxCovariance` to find the maximum covariance between two
+  variables (`diive.pkgs.echires.lag.MaxCovariance`)
+- Added new class `FileDetector` to detect expected and unexpected files from a list of
+  files (`diive.core.io.filesdetector.FileDetector`)
+- Added new class `FileSplitter` to split file into multiple smaller parts and export them as multiple CSV
+  files. (`diive.core.io.filesplitter.FileSplitter`)
+- Added new class `FileSplitterMulti` to split multiple files into multiple smaller parts
+  and save them as CSV or compressed CSV files. (`diive.core.io.filesplitter.FileSplitterMulti`)
+- Added new function `create_timestamp` that calculates the timestamp for each record in a dataframe,
+  based on number of records in the file and the file duration. (`diive.core.times.times.create_timestamp`)
+
+### Additions
+
+- Added new filetype `ETH-SONICREAD-BICO-CSVGZ-20HZ`, these files contain data that were originally logged
+  by the `sonicread` script which is in use in the [ETH Grassland Sciences group](https://gl.ethz.ch/) since the early
+  2000s to record eddy covariance data within the [Swiss FluxNet](https://www.swissfluxnet.ethz.ch/). Data were
+  then converted to a regular format using the Python script [bico](https://github.com/holukas/bico), which
+  also compressed the resulting CSV files to `gz` files (`gzipped`).
+- Added new filetype `GENERIC-CSV-HEADER-1ROW-TS-MIDDLE-FULL-NS-30MIN`, which corresponds to a CSV file with
+  one header row with variable names, a timestamp that describes the middle of the averaging period, whereby
+  the timestamp also includes nanoseconds. Time resolution of the file is 30MIN.
+
+### Changes
+
+- Renamed class `TurbFlux` to `WindRotation2D` and updated code a bit, e.g., now it is possible to get
+  rotated values for all three wind components (`u'`, `v'`, `w'`) in addition to the rotated
+  scalar `c'`. (`diive.pkgs.echires.windrotation.WindRotation2D`)
+- Renamed filetypes: all filetypes now use the dash instead of an underscore
+- Renamed filetype to `ETH-RECORD-DAT-20HZ`: this filetype originates from the new eddy covariance real-time
+  logging script `rECord` (currently not open source)
+- Missing values are now defined for all files
+  as: `NA_VALUES: [ -9999, -6999, -999, "nan", "NaN", "NAN", "NA", "inf", "-inf", "-" ]`
+
 ## v0.70.1 | 1 Mar 2024
 
 - Updated (and cleaned) notebook `StepwiseMeteoScreeningFromDatabase.ipynb`

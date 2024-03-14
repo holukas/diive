@@ -1,5 +1,5 @@
 GENERAL:
-  NAME: "CSV_10MIN"
+  NAME: "CSV-10MIN"
   DESCRIPTION: "Generic CSV format with 1-row header containing variable names and 1-column full timestamp."
   TAGS: [ "GENERIC-CSV" ]
 
@@ -17,6 +17,7 @@ DATA:
   HEADER_SECTION_ROWS: [ 0 ]
   SKIP_ROWS: [ ]
   HEADER_ROWS: [ 0 ]
-  NA_VALUES: [ -9999, nan, NaN, NAN, -6999, '-' ]
+  NA_VALUES: [ -9999, -6999, -999, "nan", "NaN", "NAN", "NA", "inf", "-inf", "-" ]
   FREQUENCY: "10T"
   DELIMITER: ","
+

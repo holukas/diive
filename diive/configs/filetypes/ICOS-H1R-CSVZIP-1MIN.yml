@@ -1,5 +1,5 @@
 GENERAL:
-  NAME: "ICOS_H1R_CSVZIP_1MIN"
+  NAME: "ICOS-H1R-CSVZIP-1MIN"
   DESCRIPTION: "Compressed (zipped) ICOS format with 1-row header (variable names) and ISO timestamp."
   TAGS: [ "ICOS" ]
 
@@ -17,6 +17,6 @@ DATA:
   HEADER_SECTION_ROWS: [ 0 ]
   SKIP_ROWS: [  ]
   HEADER_ROWS: [ 0 ]
-  NA_VALUES: [ -9999 ]
+  NA_VALUES: [ -9999, -6999, -999, "nan", "NaN", "NAN", "NA", "inf", "-inf", "-" ]
   FREQUENCY: "1MIN"
   DELIMITER: ","

@@ -1,5 +1,5 @@
 GENERAL:
-  NAME: "EDDYPRO_FLUXNET_30MIN"
+  NAME: "EDDYPRO-FLUXNET-30MIN"
   DESCRIPTION: "The *_fluxnet_* file from EddyPro."
   TAGS: [ "EDDYPRO" ]
 
@@ -17,6 +17,6 @@ DATA:
   HEADER_SECTION_ROWS: [ 0 ]
   SKIP_ROWS: [ ]
   HEADER_ROWS: [ 0 ]
-  NA_VALUES: [ -9999 ]
+  NA_VALUES: [ -9999, -6999, -999, "nan", "NaN", "NAN", "NA", "inf", "-inf", "-" ]
   FREQUENCY: "30T"
   DELIMITER: ","

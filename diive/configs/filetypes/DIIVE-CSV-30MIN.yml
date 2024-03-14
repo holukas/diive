@@ -1,5 +1,5 @@
 GENERAL:
-  NAME: "DIIVE_CSV_30MIN"
+  NAME: "DIIVE-CSV-30MIN"
   DESCRIPTION: "Default DIIVE format with 2-row header (variable name, units) and 1-column full timestamp."
   TAGS: [ "DIIVE" ]
 
@@ -17,6 +17,6 @@ DATA:
   HEADER_SECTION_ROWS: [ 0, 1 ]
   SKIP_ROWS: [ ]
   HEADER_ROWS: [ 0, 1 ]
-  NA_VALUES: [ -9999 ]
+  NA_VALUES: [ -9999, -6999, -999, "nan", "NaN", "NAN", "NA", "inf", "-inf", "-" ]
   FREQUENCY: "30T"
   DELIMITER: ","
