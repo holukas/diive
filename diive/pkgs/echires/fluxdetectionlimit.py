@@ -114,7 +114,7 @@ class FluxDetectionLimit:
 
     def _turbulent_fluctuations(self):
         r = WindRotation2D(u=self.u, v=self.v, w=self.w, c=self.c)
-        w_prime, c_prime = r.get_wc_primes()
+        w_prime, c_prime = r.get_primes()
         return w_prime, c_prime
 
     def _crosscovariance(self) -> DataFrame:

@@ -9,7 +9,7 @@ from pandas import Series
 import diive.core.plotting.plotfuncs as pf
 import diive.core.plotting.styles.LightTheme as theme
 
-output_notebook()
+# output_notebook()
 
 
 class TimeSeries:

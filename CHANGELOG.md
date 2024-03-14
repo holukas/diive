@@ -14,17 +14,23 @@ to detect and remove time lags from time series data and can also handle driftin
 are not constant over time. This is especially useful for eddy covariance data, where the detection of
 accurate time lags is of high importance for the calculation of ecosystem fluxes.
 
-- `FileDetector` allows to
-- `FileSplitter`
-- `WindRotation2D`
-- `MaxCovariance` allows to calculate the maximum covariance between two variables
+![DIIVE](images/lagMaxCovariance_diive_v0.71.0.png)
+*Plot showing the covariance between the turbulent departures of vertical wind and CO2 measurements.
+Maximum (absolute) covariance was found at record -26, which means that the CO2 signal has to be shifted
+by 26 records in relation to the wind data to obtain the maximum covariance between the two variables.
+Since the covariance was calculated on 20 Hz data, this corresponds to a time lag of 1.3 seconds 
+between CO2 and wind (20 Hz = measurement every 0.05 seconds, 26 * 0.05 = 1.3), or, to put it
+another way, the CO2 signal arrived 1.3 seconds later at the sensor than the wind signal. Maximum
+covariance was calculated using the `MaxCovariance` class.*
 
 ### New features
 
-- Added class to find the maximum covariance between two variables (`diive.pkgs.echires.lag.MaxCovariance`)
-- Added class to detect expected and unexpected files from a list of files (`diive.core.io.filesdetector.FileDetector`)
-- (`diive.core.io.filesplitter.FileSplitter`)
-- (`diive.core.times.times.create_timestamp`)
+- Added new class `MaxCovariance` to find the maximum covariance between two
+  variables (`diive.pkgs.echires.lag.MaxCovariance`)
+- Added new class `FileDetector` to detect expected and unexpected files from a list of
+  files (`diive.core.io.filesdetector.FileDetector`)
+- Added new class `FileSplitter` XXX (`diive.core.io.filesplitter.FileSplitter`)
+- Added new function `create_timestamp` XXX (`diive.core.times.times.create_timestamp`)
 
 ### Additions
 
@@ -39,7 +45,9 @@ accurate time lags is of high importance for the calculation of ecosystem fluxes
 
 ### Changes
 
-- Renamed class `TurbFlux` to `WindRotation2D` (`diive.pkgs.echires.windrotation.WindRotation2D`)
+- Renamed class `TurbFlux` to `WindRotation2D` and updated code a bit, e.g., now it is possible to get
+  rotated values for all three wind components (`u'`, `v'`, `w'`) in addition to the rotated
+  scalar `c'`. (`diive.pkgs.echires.windrotation.WindRotation2D`)
 - Renamed filetypes: all filetypes now use the dash instead of an underscore
 - Renamed filetype to `ETH-RECORD-DAT-20HZ`: this filetype originates from the new eddy covariance real-time
   logging script `rECord` (currently not open source)

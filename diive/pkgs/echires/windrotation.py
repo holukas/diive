@@ -7,8 +7,7 @@ from pandas import Series
 class WindRotation2D:
 
     def __init__(self, u: Series, v: Series, w: Series, c: Series):
-        """
-        Corrdinate rotation and calculation of turbulent fluctuations
+        """Coordinate rotation and calculation of turbulent fluctuations.
 
         Args:
             u: Horizontal wind component in x direction (m s-1)
@@ -22,15 +21,40 @@ class WindRotation2D:
         self.w = w
         self.c = c
 
+        self._primes_df = pd.DataFrame
+
+        self._run()
+
+    @property
+    def primes_df(self) -> pd.DataFrame:
+        """Overall flag, calculated from individual flags from multiple iterations."""
+        if not isinstance(self._primes_df, pd.DataFrame):
+            raise Exception(f'No overall flag available.')
+        return self._primes_df
+
+    def get_primes(self) -> pd.DataFrame:
+        """Return turbulent fluctuations of all wind components and scalar."""
+        return self.primes_df
+
+    def _run(self):
         self.angle_r1, self.angle_r2 = self.rot_angles_from_mean_wind()
         self.u_rot, self.v_rot, self.w_rot = self.rotate_wind()
         self.u_prime, self.v_prime, self.w_prime, self.c_prime = self.turbulent_fluctuations()
         self._assign_names()
+        self._collect_primes()
 
-    def get_wc_primes(self) -> tuple[Series, Series]:
-        return self.w_prime, self.c_prime
+    def _collect_primes(self):
+        frame = {
+            self.u_prime.name: self.u_prime,
+            self.v_prime.name: self.v_prime,
+            self.w_prime.name: self.w_prime,
+            self.c_prime.name: self.c_prime,
+        }
+        self._primes_df = pd.DataFrame.from_dict(frame)
 
     def _assign_names(self):
+        self.u_prime.name = f'{self.u.name}_TURB'
+        self.v_prime.name = f'{self.v.name}_TURB'
         self.w_prime.name = f'{self.w.name}_TURB'
         self.c_prime.name = f'{self.c.name}_TURB'
 
@@ -108,3 +132,71 @@ class WindRotation2D:
         w_rot = -u_temp * math.sin(self.angle_r2) + w_temp * math.cos(self.angle_r2)
 
         return u_rot, v_rot, w_rot
+
+
+def example():
+    # from diive.pkgs.echires.windrotation import WindRotation2D
+    from diive.core.io.filereader import ReadFileType
+
+    from diive.core.io.filereader import search_files
+
+    OUTDIR = r'F:\TMP\das_filesplitter'
+
+    # SEARCHDIRS = [r'L:\Sync\luhk_work\20 - CODING\27 - VARIOUS\dyco\_testdata']
+    # PATTERN = 'CH-DAS_*.csv.gz'
+    # FILEDATEFORMAT = 'CH-DAS_%Y%m%d%H%M.csv.gz'
+    # FILE_GENERATION_RES = '6h'
+    # DATA_NOMINAL_RES = 0.05
+    # FILES_HOW_MANY = 1
+    # FILETYPE = 'ETH-SONICREAD-BICO-CSVGZ-20HZ'
+    # DATA_SPLIT_DURATION = '30min'
+    # DATA_SPLIT_OUTFILE_PREFIX = 'CH-DAS_'
+    # DATA_SPLIT_OUTFILE_SUFFIX = '_30MIN-SPLIT'
+    #
+    # from diive.core.io.filesplitter import FileSplitterMulti
+    # fsm = FileSplitterMulti(
+    #     outdir=OUTDIR,
+    #     searchdirs=SEARCHDIRS,
+    #     pattern=PATTERN,
+    #     file_date_format=FILEDATEFORMAT,
+    #     file_generation_res=FILE_GENERATION_RES,
+    #     data_res=DATA_NOMINAL_RES,
+    #     files_how_many=FILES_HOW_MANY,
+    #     filetype=FILETYPE,
+    #     data_split_duration=DATA_SPLIT_DURATION,
+    #     data_split_outfile_prefix=DATA_SPLIT_OUTFILE_PREFIX,
+    #     data_split_outfile_suffix=DATA_SPLIT_OUTFILE_SUFFIX
+    # )
+    # fsm.run()
+
+    filelist = search_files(searchdirs=r'F:\TMP\das_filesplitter\splits', pattern='CH-DAS_*.csv')
+
+    # Settings
+    U = 'U_[R350-B]'
+    V = 'V_[R350-B]'
+    W = 'W_[R350-B]'
+    C = 'CH4_DRY_[QCL-C2]'
+
+    for filepath in filelist:
+        # Read file
+        df, meta = ReadFileType(filepath=filepath,
+                                filetype='GENERIC-CSV-HEADER-1ROW-TS-MIDDLE-FULL-NS-30MIN',
+                                data_nrows=None,
+                                output_middle_timestamp=True).get_filedata()
+
+        # Wind rotation for turbulent fluctuations
+        u = df[U].copy()
+        v = df[V].copy()
+        w = df[W].copy()
+        c = df[C].copy()
+        wr = WindRotation2D(u=u, v=v, w=w, c=c)
+        w_prime, c_prime = wr.get_primes()
+
+        newdf = df.copy()
+        newdf[w_prime.name] = w_prime.copy()
+        newdf[c_prime.name] = c_prime.copy()
+        # subset = pd.concat([w_prime, c_prime], ignore_index=False, axis=1)
+
+
+if __name__ == '__main__':
+    example()

@@ -1,12 +1,13 @@
+import time
+
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from diive.core.plotting.plotfuncs import default_format
 from matplotlib.collections import LineCollection
 from pandas import DataFrame
 from scipy.signal import find_peaks
-
-from diive.core.plotting.plotfuncs import default_format
 
 
 # todo logger: setup_dyco
@@ -85,10 +86,6 @@ class MaxCovariance:
             self.get_peak_idx(cov_df=self.cov_df, flag_col='flag_peak_auto')
         self.idx_instantaneous_default_lag = \
             self.get_peak_idx(cov_df=self.cov_df, flag_col='flag_instantaneous_default_lag')
-
-    def plot(self):
-        # todo Plot covariance
-        self.make_scatter_cov()
 
     def _setup_lagsearch_df(self) -> DataFrame:
         """
@@ -177,27 +174,50 @@ class MaxCovariance:
 
         cov_df = self.cov_df.copy()
 
-        _segment_df = self.segment_df.copy()
-        _segment_df['index'] = _segment_df.index
+        _index = self.segment_df.index.copy()
+        _var_lagged = self.segment_df[self.var_lagged].copy()
+        _var_reference = self.segment_df[self.var_reference].copy()
 
         # Check if data column is empty
-        if _segment_df[self.var_lagged].dropna().empty:
+        if _var_lagged.dropna().empty:
             pass
 
         else:
+
+            start_time = time.time()
+
             for ix, row in cov_df.iterrows():
                 shift = int(row['shift'])
                 try:
                     if shift < 0:
-                        index_shifted = _segment_df['index'].iloc[-shift]  # Note the negative sign
+                        index_shifted = _index[-shift]  # Note the negative sign
+                        # index_shifted = _index.iloc[-shift]  # Note the negative sign
                         # index_shifted = str(_segment_df['index'].iloc[-shift])  # Note the negative sign
                         # index_shifted = str(_segment_df['index'][-shift])  # Note the negative sign
                     else:
                         # todo why time?
                         index_shifted = pd.NaT
-                    scalar_data_shifted = _segment_df[self.var_lagged].shift(shift)
-                    # cov = _segment_df[ref_sig].corr(scalar_data_shifted)
-                    cov = _segment_df[self.var_reference].cov(scalar_data_shifted)
+
+                    # print(index_shifted)
+
+                    # # Shift and calculate covariance (pandas)
+                    _scalar_data_shifted = _var_lagged.shift(shift)
+                    cov = _var_reference.cov(_scalar_data_shifted)
+
+                    # # Shift and calculate covariance (numpy)
+                    # # As an alternative, covariance can be calculated using numpy. While
+                    # # this approach might be faster in many cases, it is slower here, I
+                    # # assume because of the presence of NaNs in the data that have to be
+                    # # masked first.
+                    # # Requires masking the NaN values in _scalar_data_shifted_array.
+                    # _scalar_data_shifted = _var_lagged.shift(shift)
+                    # _var_reference_array = _var_reference.values
+                    # _scalar_data_shifted_array = _scalar_data_shifted.values
+                    # _masked_scalar_data_shifted_array = (
+                    #     np.ma.array(_scalar_data_shifted_array, mask=np.isnan(_scalar_data_shifted_array)))
+                    # # Calculating the covariance, extract from covariance matrix
+                    # cov = np.ma.cov(_var_reference_array, _masked_scalar_data_shifted_array)[0,1]
+
                     cov_df.loc[cov_df['shift'] == row['shift'], 'cov'] = cov
                     cov_df.loc[cov_df['shift'] == row['shift'], 'index'] = index_shifted
 
@@ -207,6 +227,12 @@ class MaxCovariance:
                     # segments in each file, when there is no more data available
                     # at the end.
                     continue
+
+
+            # # Timing (for testing)
+            # end_time = time.time()
+            # execution_time = end_time - start_time
+            # print(f"Function execution time: {execution_time:.6f} seconds")
 
             # Results
             cov_df['cov_abs'] = cov_df['cov'].abs()
@@ -238,14 +264,18 @@ class MaxCovariance:
             idx = False
         return idx
 
-    def make_scatter_cov(self):
+    def plot_scatter_cov(self, title: str = None, txt_info: str = "", outpath: str = None, outname: str = None):
         """Make scatter plot with z-values as colors and display found max covariance."""
 
         # Setup figure
         fig = plt.figure(facecolor='white', figsize=(16, 9))
         gs = gridspec.GridSpec(1, 1)  # rows, cols
-        gs.update(wspace=0.3, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
+        # gs.update(wspace=0.1, hspace=0.1, left=0.1, right=0, top=0.9, bottom=0.1)
         ax = fig.add_subplot(gs[0, 0])
+
+        if title:
+            font = {'family': 'sans-serif', 'color': 'black', 'weight': 'bold', 'size': 20, 'alpha': 1, }
+            ax.set_title(title, fontdict=font)
 
         # Covariance and shift data
         x_shift = self.cov_df.loc[:, 'shift']
@@ -263,21 +293,6 @@ class MaxCovariance:
                                 y=y_cov,
                                 z=z_cov_abs)
 
-        # txt_info = \
-        #     # f"PHASE: {self.phase}\n" \
-        #     # f"Iteration: {self.iteration}\n" \
-        #     f"Time lag search window: from {self.lgs_winsize_from} to {self.lgs_winsize_to} records\n" \
-        #     f"Segment name: {self.segment_name}\n" \
-        #     # f"Segment start: {self.segment_start}\n" \
-        #     # f"Segment end: {self.segment_end}\n" \
-        #     # f"File: {self.filename} - File date: {self.file_idx}\n" \
-        #     f"Lag search step size: {self.shift_stepsize} records\n"
-
-        txt_info = \
-            f"Time lag search window: from {self.lgs_winsize_from} to {self.lgs_winsize_to} records\n" \
-            f"Segment name: {self.segment_name}\n" \
-            f"Lag search step size: {self.shift_stepsize} records\n"
-
         # Markers for points of interest, e.g. peaks
         txt_info = self.mark_max_cov_abs_peak(ax=ax, txt_info=txt_info)
         txt_info = self.mark_auto_detected_peak(ax=ax, txt_info=txt_info)
@@ -290,10 +305,33 @@ class MaxCovariance:
 
         # Format & legend
         default_format(ax=ax, ax_labels_fontcolor='black', ax_labels_fontsize=12,
-                       ax_xlabel_txt='lag [records]', ax_ylabel_txt='covariance', txt_ylabel_units='-')
+                       ax_xlabel_txt='lag [records]', ax_ylabel_txt='covariance', txt_ylabel_units='')
         ax.legend(frameon=False, loc='upper right').set_zorder(100)
 
-        fig.show()
+        fig.tight_layout()
+
+        if outpath:
+            self._save_cov_plot(fig=fig, outpath=outpath, outname=outname)
+        else:
+            fig.show()
+
+    def _save_cov_plot(self, fig, outpath, outname):
+        """
+        Save covariance plot for segment to png
+
+        Parameters
+        ----------
+        fig: Figure
+            The plot that is saved
+
+        Returns
+        -------
+        None
+        """
+        outpath = outpath / outname
+        fig.savefig(f"{outpath}", format='png', bbox_inches='tight', facecolor='w',
+                    transparent=True, dpi=100)
+        return
 
     def z_as_colored_lines(self, fig, ax, x, y, z):
         """
@@ -328,7 +366,7 @@ class MaxCovariance:
         lc.set_array(z)
         lc.set_linewidth(2)
         line = ax.add_collection(lc)
-        cbar = fig.colorbar(line, ax=ax)
+        cbar = fig.colorbar(line, ax=ax, location='right', pad=0.03)
         cbar.set_label('absolute covariance', rotation=90)
 
     def mark_max_cov_abs_peak(self, ax, txt_info):
@@ -423,14 +461,12 @@ class MaxCovariance:
 
 
 def example():
-    from pathlib import Path
-    from diive.pkgs.echires.windrotation import WindRotation2D
-    from diive.core.io.filereader import ReadFileType
 
+    from pathlib import Path
+    from diive.core.io.filereader import ReadFileType
     from diive.core.io.filereader import search_files
 
-    OUTDIR = r'F:\TMP\das_filesplitter'
-
+    # OUTDIR = r'F:\TMP\das_filesplitter'
     # SEARCHDIRS = [r'L:\Sync\luhk_work\20 - CODING\27 - VARIOUS\dyco\_testdata']
     # PATTERN = 'CH-DAS_*.csv.gz'
     # FILEDATEFORMAT = 'CH-DAS_%Y%m%d%H%M.csv.gz'
@@ -458,52 +494,50 @@ def example():
     # )
     # fsm.run()
 
-
-    filelist = search_files(searchdirs=r'F:\TMP\das_filesplitter\splits', pattern='CH-DAS_*.csv')
+    filelist = search_files(searchdirs=r'L:\Sync\luhk_work\CURRENT\testdata_dyco\1-splits\splits',
+                            pattern='CH-AWS_*.csv')
 
     # Settings
-    U = 'U_[R350-B]'
-    V = 'V_[R350-B]'
-    W = 'W_[R350-B]'
-    C = 'CH4_DRY_[QCL-C2]'
+    U = 'U_[HS50-A]'  # Name of the horizontal wind component measured in x-direction, measured in units of m s-1
+    V = 'V_[HS50-A]'  # Name of the horizontal wind component measured in y-direction, measured in units of m s-1
+    W = 'W_[HS50-A]'  # Name of the vertical wind component measured in z-direction, measured in units of m s-1
+    C = 'CO2_DRY_[IRGA72-A]'  # Name of the measured dry mole fraction, here in umol CO2 mol-1
 
     for filepath in filelist:
-
         # Read file
         df, meta = ReadFileType(filepath=filepath,
                                 filetype='GENERIC-CSV-HEADER-1ROW-TS-MIDDLE-FULL-NS-30MIN',
                                 data_nrows=None,
                                 output_middle_timestamp=True).get_filedata()
 
-        # Wind rotation for turbulent fluctuations
-        u = df[U].copy()
-        v = df[V].copy()
-        w = df[W].copy()
-        c = df[C].copy()
-        wr = WindRotation2D(u=u, v=v, w=w, c=c)
-        w_prime, c_prime = wr.get_wc_primes()
+        # # Already done in input files:
+        # from diive.pkgs.echires.windrotation import WindRotation2D
+        # # Wind rotation for turbulent fluctuations
+        # u = df[U].copy()
+        # v = df[V].copy()
+        # w = df[W].copy()
+        # c = df[C].copy()
+        # wr = WindRotation2D(u=u, v=v, w=w, c=c)
+        # primes_df = wr.get_primes()
+        #
+        # # Add turbulent fluctuations to file data
+        # merged_df = pd.concat([primes_df, df], axis=1)
 
-        newdf = df.copy()
-        newdf[w_prime.name] = w_prime.copy()
-        newdf[c_prime.name] = c_prime.copy()
-        # subset = pd.concat([w_prime, c_prime], ignore_index=False, axis=1)
-
+        # Find maximum covariance
         mc = MaxCovariance(
-            df=newdf,
-            var_reference=str(w_prime.name),
-            var_lagged=str(c_prime.name),
-            lgs_winsize_from=-1000,
-            lgs_winsize_to=1000,
+            df=df,
+            var_reference='W_[HS50-A]_TURB',
+            var_lagged='CO2_DRY_[IRGA72-A]_TURB',
+            lgs_winsize_from=-300,
+            lgs_winsize_to=300,
             shift_stepsize=1,
             segment_name="test"
         )
 
         mc.run()
 
-        mc.plot()
-
+        mc.plot_scatter_cov(title=str(Path(filepath.name)))
         cov_df, props_peak_auto = mc.get()
-
 
 
 if __name__ == '__main__':

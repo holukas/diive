@@ -1216,8 +1216,8 @@ def create_timestamp(df, file_start, data_nominal_res, expected_duration):
     df['file_start_dt'] = file_start
     df['TIMESTAMP'] = pd.to_datetime(df['file_start_dt']) \
                       + pd.to_timedelta(df['sec'], unit='s')
-    df.drop(['sec', 'file_start_dt'], axis=1, inplace=True)
-    df.set_index('TIMESTAMP', inplace=True)
+    df = df.drop(['sec', 'file_start_dt'], axis=1, inplace=False)
+    df = df.set_index('TIMESTAMP', inplace=False)
     df.index = df.index.round(freq='50ms')  # Round to 50 ms accuracy
     return df, true_resolution
 
