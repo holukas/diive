@@ -1169,7 +1169,7 @@ def calc_true_resolution(num_records: int,
 
 
 def create_timestamp(df, file_start, data_nominal_res, expected_duration):
-    """Calculate the timestamp for each row record if not available.
+    """Calculate the timestamp for each record in a dataframe.
 
     Insert true timestamp based on number of records in the file and the
     file duration.

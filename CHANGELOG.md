@@ -2,7 +2,7 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.71.0 | X Mar 2024
+## v0.71.0 | 15 Mar 2024
 
 ### High-resolution update
 
@@ -18,7 +18,7 @@ accurate time lags is of high importance for the calculation of ecosystem fluxes
 *Plot showing the covariance between the turbulent departures of vertical wind and CO2 measurements.
 Maximum (absolute) covariance was found at record -26, which means that the CO2 signal has to be shifted
 by 26 records in relation to the wind data to obtain the maximum covariance between the two variables.
-Since the covariance was calculated on 20 Hz data, this corresponds to a time lag of 1.3 seconds 
+Since the covariance was calculated on 20 Hz data, this corresponds to a time lag of 1.3 seconds
 between CO2 and wind (20 Hz = measurement every 0.05 seconds, 26 * 0.05 = 1.3), or, to put it
 another way, the CO2 signal arrived 1.3 seconds later at the sensor than the wind signal. Maximum
 covariance was calculated using the `MaxCovariance` class.*
@@ -29,8 +29,12 @@ covariance was calculated using the `MaxCovariance` class.*
   variables (`diive.pkgs.echires.lag.MaxCovariance`)
 - Added new class `FileDetector` to detect expected and unexpected files from a list of
   files (`diive.core.io.filesdetector.FileDetector`)
-- Added new class `FileSplitter` XXX (`diive.core.io.filesplitter.FileSplitter`)
-- Added new function `create_timestamp` XXX (`diive.core.times.times.create_timestamp`)
+- Added new class `FileSplitter` to split file into multiple smaller parts and export them as multiple CSV
+  files. (`diive.core.io.filesplitter.FileSplitter`)
+- Added new class `FileSplitterMulti` to split multiple files into multiple smaller parts
+  and save them as CSV or compressed CSV files. (`diive.core.io.filesplitter.FileSplitterMulti`)
+- Added new function `create_timestamp` that calculates the timestamp for each record in a dataframe,
+  based on number of records in the file and the file duration. (`diive.core.times.times.create_timestamp`)
 
 ### Additions
 
