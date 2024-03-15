@@ -23,7 +23,7 @@ def example():
     SOURCEFILE = r"F:\Downloads\_temp2\wsl_19256_data_10min.csv"
 
     # Read data from precip files to dataframe
-    rft = ReadFileType(filepath=SOURCEFILE, filetype='TOA5_CSV_10MIN', output_middle_timestamp=True)
+    rft = ReadFileType(filepath=SOURCEFILE, filetype='TOA5-CSV-10MIN', output_middle_timestamp=True)
     df = rft.data_df
 
     d = df[['ghi_Avg']].copy()

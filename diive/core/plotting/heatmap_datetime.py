@@ -211,7 +211,7 @@ def example():
     # Load file
     from diive.core.io.filereader import ReadFileType
     loaddatafile = ReadFileType(
-        filetype='GENERIC-CSV_HEADER-1ROW_TS-END-FULL_1MIN',
+        filetype='GENERIC-CSV-HEADER-1ROW-TS-END-FULL-1MIN',
         # filepath=r"M:\Downloads\_temp\orig.csv",
         filepath=r"M:\Downloads\_temp\db.csv",
         data_nrows=None)

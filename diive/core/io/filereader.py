@@ -564,11 +564,11 @@ class DataFileReader:
 
 def example_icosfile():
     FILE = r"L:\Sync\luhk_work\20 - CODING\21 - DIIVE\diive\diive\configs\exampledata\CH-Dav_BM_20230328_L02_F03.zip"
-    rft = ReadFileType(filepath=FILE, filetype='ICOS_H2R_CSVZIP_10S', output_middle_timestamp=True)
+    rft = ReadFileType(filepath=FILE, filetype='ICOS-H2R-CSVZIP-10S', output_middle_timestamp=True)
     df, meta = rft.get_filedata()
 
     # # Read all original data files to dataframe, convert timestamp index to show TIMESTAMP_MIDDLE
-    # orig = MultiDataFileReader(filepaths=origfiles, filetype='ICOS_H2R_CSVZIP_10S', output_middle_timestamp=True)
+    # orig = MultiDataFileReader(filepaths=origfiles, filetype='ICOS-H2R-CSVZIP-10S', output_middle_timestamp=True)
     # origdf = orig.data_df
     # origmeta = orig.metadata_df
 
@@ -586,7 +586,7 @@ def example_ep_fluxnet():
     #              and fp.stem.endswith("_adv")]
     print(filepaths)
 
-    loaddatafile = MultiDataFileReader(filetype='EDDYPRO_FLUXNET_30MIN', filepaths=filepaths)
+    loaddatafile = MultiDataFileReader(filetype='EDDYPRO-FLUXNET-30MIN', filepaths=filepaths)
     df = loaddatafile.data_df
 
     # # Store original column order
@@ -615,9 +615,9 @@ def example_toa5():
     corrected = r"C:\Users\holukas\Downloads\corrected_files\c-CH-OE2_iDL_BOX1_0_1_TBL1_20220629-1714.dat"
     uncorrected = r"C:\Users\holukas\Downloads\corrected_files\CH-OE2_iDL_BOX1_0_1_TBL1_20220629-1714.dat"
 
-    corr_df, corr_meta = ReadFileType(filepath=corrected, filetype='TOA5_DAT_1MIN',
+    corr_df, corr_meta = ReadFileType(filepath=corrected, filetype='TOA5-DAT-1MIN',
                                       output_middle_timestamp=True).get_filedata()
-    uncorr_df, uncorr_meta = ReadFileType(filepath=uncorrected, filetype='TOA5_DAT_1MIN',
+    uncorr_df, uncorr_meta = ReadFileType(filepath=uncorrected, filetype='TOA5-DAT-1MIN',
                                           output_middle_timestamp=True).get_filedata()
 
     corr_descr = corr_df.describe()

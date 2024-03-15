@@ -145,7 +145,7 @@ def example():
     # filepaths = search_files(FOLDER, "*.csv")
     # filepaths = [fp for fp in filepaths if "_fluxnet_" in fp.stem and fp.stem.endswith("_adv")]
     # print(filepaths)
-    # fr = MultiDataFileReader(filetype='EDDYPRO_FLUXNET_30MIN', filepaths=filepaths)
+    # fr = MultiDataFileReader(filetype='EDDYPRO-FLUXNET-30MIN', filepaths=filepaths)
     # df = fr.data_df
     # from diive.core.io.files import save_parquet
     # save_parquet(outpath=FOLDER, filename="data", data=df)

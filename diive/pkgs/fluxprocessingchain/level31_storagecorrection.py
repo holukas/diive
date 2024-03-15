@@ -21,7 +21,7 @@ class FluxStorageCorrectionSinglePointEddyPro:
                  df: DataFrame,
                  fluxcol: str,
                  basevar: str,
-                 filetype: Literal['EDDYPRO_FLUXNET_30MIN', 'EDDYPRO_FULL_OUTPUT_30MIN'],
+                 filetype: Literal['EDDYPRO-FLUXNET-30MIN', 'EDDYPRO-FULL-OUTPUT-30MIN'],
                  gapfill_storage_term: bool = False,
                  idstr: str = 'L3.1'):
         self.df = df.copy()
@@ -156,7 +156,7 @@ class FluxStorageCorrectionSinglePointEddyPro:
 
         flux_corrected_col = None
 
-        if self.filetype == 'EDDYPRO_FLUXNET_30MIN':
+        if self.filetype == 'EDDYPRO-FLUXNET-30MIN':
             options = {
                 'FC': 'SC_SINGLE',
                 'FH2O': 'SH2O_SINGLE',
@@ -169,7 +169,7 @@ class FluxStorageCorrectionSinglePointEddyPro:
             if self.fluxcol == 'FC':
                 flux_corrected_col = f'NEE{self.idstr}'
 
-        elif self.filetype == 'EDDYPRO_FULL_OUTPUT_30MIN':
+        elif self.filetype == 'EDDYPRO-FULL-OUTPUT-30MIN':
             options = {
                 'co2_flux': 'co2_strg',
                 'h2o_flux': 'h2o_strg',

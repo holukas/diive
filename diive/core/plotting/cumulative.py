@@ -145,7 +145,7 @@ def example():
     # # Test data
     # from diive.core.io.filereader import ReadFileType
     # loaddatafile = ReadFileType(
-    #     filetype='DIIVE_CSV_30MIN',
+    #     filetype='DIIVE-CSV-30MIN',
     #     filepath=r"M:\Downloads\_temp\CH_LAE_FP2021_2004-2020_ID20210607205711.diive.csv",
     #     # filepath=r"F:\Dropbox\luhk_work\_current\fp2022\7-14__IRGA627572__addingQCF0\CH-DAV_FP2022.1_1997-2022.08_ID20220826234456_30MIN.diive.csv",
     #     data_nrows=None)
