@@ -19,7 +19,7 @@ More notebooks are added constantly.
 - Decoupling
 - Detect time resolution from data ([notebook example](notebooks/TimeStamps/Detect_time_resolution.ipynb))
 - Find data gaps ([notebook example](notebooks/Analyses/GapFinder.ipynb))
-- Histogram
+- Histogram ([notebook example](notebooks/Analyses/Histogram.ipynb))
 - Optimum range
 - Quantiles
 
@@ -39,12 +39,13 @@ More notebooks are added constantly.
 ### Eddy covariance high-resolution
 
 - Flux detection limit from high-resolution data
+- Find maximum covariance between turbulent wind and scalar
+- Wind rotation to calculate turbulent departures of wind components and scalar (e.g. CO2)
 
-### Formats
+### Files
 
-- Convert EddyPro fluxnet output files for upload to FLUXNET
-  database ([notebook example](notebooks/Formats/FormatEddyProFluxnetFileForUpload.ipynb))
-- Load and save parquet files ([notebook example](notebooks/Formats/LoadSaveParquetFile.ipynb))
+- Detect expected and unexpected (irregular) files in a list of files
+- Split multiple files into smaller parts and export them as (compressed) CSV files
 
 ### Fits
 
@@ -71,8 +72,9 @@ see [here](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux
 
 Format data to specific formats
 
-- Format EddyPro _fluxnet_ output file for upload to FLUXNET
+- Convert EddyPro fluxnet output files for upload to FLUXNET
   database ([notebook example](notebooks/Formats/FormatEddyProFluxnetFileForUpload.ipynb))
+- Load and save parquet files ([notebook example](notebooks/Formats/LoadSaveParquetFile.ipynb))
 
 ### Gap-filling
 
@@ -110,6 +112,11 @@ Fill gaps in time series with various methods
 ### Stats
 
 - Time series stats ([notebook example](notebooks/Stats/TimeSeriesStats.ipynb))
+
+### Timestamps
+
+- Create continuous timestamp based on number of records in the file and the file duration
+- Insert additional timestamps in various formats
 
 ## Installation
 

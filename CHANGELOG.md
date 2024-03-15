@@ -2,6 +2,17 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.71.2 | XX Mar 2024
+
+### Notebooks
+
+- Added new notebook for `Histogram` class (`notebooks/Analyses/Histogram.ipynb`)
+
+### Bugfixes & changes
+
+- Updated README
+- Environment: Added [ruff](https://github.com/astral-sh/ruff) to dev dependencies for linting
+
 ## v0.71.1 | 15 Mar 2024
 
 ### Bugfixes & changes
