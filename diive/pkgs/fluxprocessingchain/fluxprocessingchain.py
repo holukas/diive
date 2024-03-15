@@ -22,7 +22,7 @@ class FluxProcessingChain:
     def __init__(
             self,
             maindf: DataFrame,
-            filetype: Literal['EDDYPRO_FLUXNET_30MIN', 'EDDYPRO_FULL_OUTPUT_30MIN'],
+            filetype: Literal['EDDYPRO-FLUXNET-30MIN', 'EDDYPRO-FULL-OUTPUT-30MIN'],
             fluxcol: str,
             site_lat: float,
             site_lon: float,
@@ -397,7 +397,7 @@ class LoadEddyProOutputFiles:
     def __init__(
             self,
             sourcedir: str or list,
-            filetype: Literal['EDDYPRO_FLUXNET_30MIN', 'EDDYPRO_FULL_OUTPUT_30MIN']
+            filetype: Literal['EDDYPRO-FLUXNET-30MIN', 'EDDYPRO-FULL-OUTPUT-30MIN']
     ):
         self.sourcedir = sourcedir
         self.filetype = filetype
@@ -443,9 +443,9 @@ class LoadEddyProOutputFiles:
         self._metadata = loaddatafile.metadata_df
 
     def _init_filetype(self):
-        if self.filetype == 'EDDYPRO_FLUXNET_30MIN':
+        if self.filetype == 'EDDYPRO-FLUXNET-30MIN':
             fileids = ['eddypro_', '_fluxnet_']
-        elif self.filetype == 'EDDYPRO_FULL_OUTPUT_30MIN':
+        elif self.filetype == 'EDDYPRO-FULL-OUTPUT-30MIN':
             fileids = ['eddypro_', '_full_output_']
         else:
             raise Exception("Filetype is unknown.")
@@ -553,7 +553,7 @@ def example_quick():
         sourcedirs=[r'L:\Sync\luhk_work\CURRENT\fru\Level-1_results_fluxnet_2022'],
         site_lat=47.115833,
         site_lon=8.537778,
-        filetype='EDDYPRO_FLUXNET_30MIN',
+        filetype='EDDYPRO-FLUXNET-30MIN',
         utc_offset=1,
         nighttime_threshold=50,
         daytime_accept_qcf_below=2,
@@ -567,7 +567,7 @@ def example():
         r'L:\Sync\luhk_work\CURRENT\fru\Level-1_results_fluxnet_2022']  # Folders where the EddyPro output files are located
     SITE_LAT = 47.115833  # Latitude of site
     SITE_LON = 8.537778  # Longitude of site
-    FILETYPE = 'EDDYPRO_FLUXNET_30MIN'  # Filetype of EddyPro output files, can be 'EDDYPRO_FLUXNET_30MIN' or 'EDDYPRO_FULL_OUTPUT_30MIN'
+    FILETYPE = 'EDDYPRO-FLUXNET-30MIN'  # Filetype of EddyPro output files, can be 'EDDYPRO-FLUXNET-30MIN' or 'EDDYPRO-FULL-OUTPUT-30MIN'
     UTC_OFFSET = 1  # Time stamp offset in relation to UTC, e.g. 1 for UTC+01:00 (CET), important for the calculation of potential radiation for detecting daytime and nighttime
     NIGHTTIME_THRESHOLD = 50  # Threshold for potential radiation in W m-2, conditions below threshold are nighttime
     DAYTIME_ACCEPT_QCF_BELOW = 2

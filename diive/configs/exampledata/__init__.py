@@ -18,7 +18,7 @@ def load_exampledata_parquet() -> DataFrame:
 
 def load_exampledata_DIIVE_CSV_30MIN():
     filepath = Path(DIR_PATH) / 'exampledata_CH-DAV_FP2022.5_2022.07_ID20230206154316_30MIN.diive.csv'
-    loaddatafile = ReadFileType(filetype='DIIVE_CSV_30MIN',
+    loaddatafile = ReadFileType(filetype='DIIVE-CSV-30MIN',
                                 filepath=filepath,
                                 data_nrows=None)
     data_df, metadata_df = loaddatafile.get_filedata()
@@ -28,7 +28,7 @@ def load_exampledata_DIIVE_CSV_30MIN():
 def load_exampledata_eddypro_fluxnet_CSV_30MIN():
     filepath = Path(
         DIR_PATH) / 'exampledata_CH-AWS_2022.07_FR-20220127-164245_eddypro_fluxnet_2022-01-28T112538_adv.csv'
-    loaddatafile = ReadFileType(filetype='EDDYPRO_FLUXNET_30MIN',
+    loaddatafile = ReadFileType(filetype='EDDYPRO-FLUXNET-30MIN',
                                 filepath=filepath,
                                 data_nrows=None)
     data_df, metadata_df = loaddatafile.get_filedata()

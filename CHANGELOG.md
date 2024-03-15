@@ -2,6 +2,18 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.71.1 | XX Mar 2024
+
+### Bugfixes
+
+- Replaced all references to old filetypes using the underscore to their respective new filetype names,
+  e.g. all occurrences of `EDDYPRO_FLUXNET_30MIN` were replaced with the new name `EDDYPRO-FLUXNET-30MIN`.
+
+### Enviroment
+
+- Python 3.11 is now allowed in `pyproject.toml`: `python = ">=3.9,<3.12"`
+- Removed `fitter` library from dependencies, was not used.
+
 ## v0.71.0 | 14 Mar 2024
 
 ### High-resolution update

@@ -62,7 +62,7 @@ def flag_signal_strength_eddypro_test(df: DataFrame,
 def flag_steadiness_horizontal_wind_eddypro_test(df: DataFrame,
                                                  flux: str,
                                                  filetype: Literal[
-                                                     'EDDYPRO_FLUXNET_30MIN', 'EDDYPRO_FULL_OUTPUT_30MIN'],
+                                                     'EDDYPRO-FLUXNET-30MIN', 'EDDYPRO-FULL-OUTPUT-30MIN'],
                                                  idstr: str = None) -> Series:
     """Create flag for steadiness of horizontal wind u from the sonic anemometer.
 
@@ -81,9 +81,9 @@ def flag_steadiness_horizontal_wind_eddypro_test(df: DataFrame,
     idstr = validate_id_string(idstr=idstr)
     flagname_out = f"FLAG{idstr}_{flux}_VM97_NSHW_HF_TEST"
 
-    if filetype == 'EDDYPRO_FLUXNET_30MIN':
+    if filetype == 'EDDYPRO-FLUXNET-30MIN':
         nshw_flag = df['VM97_NSHW_HF'].copy()  # Name of the flag in EddyPro output file
-    elif filetype == 'EDDYPRO_FULL_OUTPUT_30MIN':
+    elif filetype == 'EDDYPRO-FULL-OUTPUT-30MIN':
         nshw_flag = df['non_steady_wind_hf'].copy()
     else:
         raise Exception(f"{flag_steadiness_horizontal_wind_eddypro_test.__name__} failed, filetype {filetype} unknown.")
@@ -107,7 +107,7 @@ def flag_steadiness_horizontal_wind_eddypro_test(df: DataFrame,
 
 def flag_angle_of_attack_eddypro_test(df: DataFrame,
                                       flux: str,
-                                      filetype: Literal['EDDYPRO_FLUXNET_30MIN', 'EDDYPRO_FULL_OUTPUT_30MIN'],
+                                      filetype: Literal['EDDYPRO-FLUXNET-30MIN', 'EDDYPRO-FULL-OUTPUT-30MIN'],
                                       idstr: str = None) -> Series:
     """Flag from EddyPro output files is an integer and looks like this, e.g.: 81.
     The integer contains angle-of-attack test results for the sonic anemometer.
@@ -126,9 +126,9 @@ def flag_angle_of_attack_eddypro_test(df: DataFrame,
     """
     flagname_out = f"FLAG{idstr}_{flux}_VM97_AOA_HF_TEST"
 
-    if filetype == 'EDDYPRO_FLUXNET_30MIN':
+    if filetype == 'EDDYPRO-FLUXNET-30MIN':
         aoa_flag = df['VM97_AOA_HF'].copy()  # Name of the flag in EddyPro output file
-    elif filetype == 'EDDYPRO_FULL_OUTPUT_30MIN':
+    elif filetype == 'EDDYPRO-FULL-OUTPUT-30MIN':
         aoa_flag = df['attack_angle_hf'].copy()
     else:
         raise Exception(f"{flag_angle_of_attack_eddypro_test.__name__} failed, filetype {filetype} unknown.")
@@ -354,7 +354,7 @@ def flags_vm97_eddypro_fluxnetfile_tests(
 
 
 def flag_gas_completeness_eddypro_test(df: DataFrame, flux: str, gas: str,
-                                       filetype: Literal['EDDYPRO_FLUXNET_30MIN', 'EDDYPRO_FULL_OUTPUT_30MIN'],
+                                       filetype: Literal['EDDYPRO-FLUXNET-30MIN', 'EDDYPRO-FULL-OUTPUT-30MIN'],
                                        thres_good: float = 0.99,
                                        thres_ok: float = 0.97,
                                        idstr: str = None) -> Series:
@@ -364,7 +364,7 @@ def flag_gas_completeness_eddypro_test(df: DataFrame, flux: str, gas: str,
         df: A DataFrame containing EddyPro data from the _fluxnet_ or _full_output_ file.
         flux: The name of the flux variable for which the completeness info is available in *df*.
         gas: The name of the gas variable that was used to calculate *flux* in EddyPro.
-        filetype: The EddyPro file type, either 'EDDYPRO_FLUXNET_30MIN' or 'EDDYPRO_FULL_OUTPUT_30MIN'.
+        filetype: The EddyPro file type, either 'EDDYPRO-FLUXNET-30MIN' or 'EDDYPRO-FULL-OUTPUT-30MIN'.
         thres_good: The threshold for a good flag (default: 0.99, corresponds to 99%, meaning that
             99% of potential records of *gas* were available to calculate *flux*).
         thres_ok: The threshold for an ok flag (default: 0.97, corresponds to 97%).
@@ -377,10 +377,10 @@ def flag_gas_completeness_eddypro_test(df: DataFrame, flux: str, gas: str,
     idstr = validate_id_string(idstr=idstr)
     flagname_out = f'FLAG{idstr}_{flux}_COMPLETENESS_TEST'
 
-    if filetype == 'EDDYPRO_FLUXNET_30MIN':
+    if filetype == 'EDDYPRO-FLUXNET-30MIN':
         expected_n_records = df['EXPECT_NR'].copy()
         gas_n_records = df[f'{gas}_NR'].copy()
-    elif filetype == 'EDDYPRO_FULL_OUTPUT_30MIN':
+    elif filetype == 'EDDYPRO-FULL-OUTPUT-30MIN':
         expected_n_records = 36000  # 30MIN time resolution @20Hz
         gas_n_records = df['used_records'].copy()
     else:
@@ -408,16 +408,16 @@ def flag_spectral_correction_factor_eddypro_test(
         df: DataFrame,
         flux: str,
         gas: str,
-        filetype: Literal['EDDYPRO_FLUXNET_30MIN', 'EDDYPRO_FULL_OUTPUT_30MIN'],
+        filetype: Literal['EDDYPRO-FLUXNET-30MIN', 'EDDYPRO-FULL-OUTPUT-30MIN'],
         thres_good: int = 2,
         thres_ok: int = 4,
         idstr: str = None):
     idstr = validate_id_string(idstr=idstr)
     flagname_out = f'FLAG{idstr}_{flux}_SCF_TEST'
 
-    if filetype == 'EDDYPRO_FLUXNET_30MIN':
+    if filetype == 'EDDYPRO-FLUXNET-30MIN':
         scf = df[f'{flux}_SCF'].copy()
-    elif filetype == 'EDDYPRO_FULL_OUTPUT_30MIN':
+    elif filetype == 'EDDYPRO-FULL-OUTPUT-30MIN':
         scfcol = _exception_full_output_scf(flux=flux, gas=gas)
         scf = df[scfcol].copy()
     else:
@@ -453,7 +453,7 @@ def _exception_full_output_scf(flux: str, gas: str):
 
 
 def flag_ssitc_eddypro_test(df: DataFrame, flux: str,
-                            filetype: Literal['EDDYPRO_FLUXNET_30MIN', 'EDDYPRO_FULL_OUTPUT_30MIN'],
+                            filetype: Literal['EDDYPRO-FLUXNET-30MIN', 'EDDYPRO-FULL-OUTPUT-30MIN'],
                             idstr: str = None) -> Series:
     """Create series based on the SSITC test flag variable from an EddyPro output file.
 
@@ -461,7 +461,7 @@ def flag_ssitc_eddypro_test(df: DataFrame, flux: str,
         df: A DataFrame containing EddyPro data from the _fluxnet_ or _full_output_ file.
         flux: The name of the flux variable for which the SSITC test was performed. The name of the
             SSITC test variable will be detected based on this variable.
-        filetype: The EddyPro file type, either 'EDDYPRO_FLUXNET_30MIN' or 'EDDYPRO_FULL_OUTPUT_30MIN'.
+        filetype: The EddyPro file type, either 'EDDYPRO-FLUXNET-30MIN' or 'EDDYPRO-FULL-OUTPUT-30MIN'.
         idstr: An optional identifier string to append to the flag name.
 
     Returns:
@@ -470,8 +470,8 @@ def flag_ssitc_eddypro_test(df: DataFrame, flux: str,
     idstr = validate_id_string(idstr=idstr)
     flagname_out = f'FLAG{idstr}_{flux}_SSITC_TEST'
 
-    flagnames = {'EDDYPRO_FLUXNET_30MIN': f'{flux}_SSITC_TEST',
-                 'EDDYPRO_FULL_OUTPUT_30MIN': f'qc_{flux}'}
+    flagnames = {'EDDYPRO-FLUXNET-30MIN': f'{flux}_SSITC_TEST',
+                 'EDDYPRO-FULL-OUTPUT-30MIN': f'qc_{flux}'}
 
     ssitc_flag = Series(index=df.index, data=df[flagnames[filetype]], name=flagname_out)
 

@@ -128,7 +128,7 @@ class Histogram:
 def example():
     # # from diive.core.io.filereader import ReadFileType
     # # SOURCE = r"F:\01-NEW\FF202303\FRU\Level-0_OPENLAG_results_2005-2022\OUT_DIIVE-20230410-020904\winddir_Dataset_DIIVE-20230410-020904_Original-30T.diive.csv"
-    # # loaddatafile = ReadFileType(filetype='DIIVE_CSV_30MIN', filepath=SOURCE, data_nrows=None)
+    # # loaddatafile = ReadFileType(filetype='DIIVE-CSV-30MIN', filepath=SOURCE, data_nrows=None)
     # # data_df, metadata_df = loaddatafile.get_filedata()
     #
     # # from diive.core.io.files import load_pickle, save_as_pickle
