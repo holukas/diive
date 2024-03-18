@@ -16,6 +16,7 @@ More notebooks are added constantly.
 
 ### Analyses
 
+- Daily correlation ([notebook example](notebooks/Analyses/DailyCorrelation.ipynb))
 - Decoupling
 - Detect time resolution from data ([notebook example](notebooks/TimeStamps/Detect_time_resolution.ipynb))
 - Find data gaps ([notebook example](notebooks/Analyses/GapFinder.ipynb))
