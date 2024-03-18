@@ -2,6 +2,10 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.71.3 | XX Mar 2024
+
+- https://pypi.org/project/diive/
+
 ## v0.71.2 | 18 Mar 2024
 
 ### Notebooks
