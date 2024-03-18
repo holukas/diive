@@ -9,7 +9,7 @@ def daily_correlation(s1: Series,
                       s2: Series,
                       mincorr: float = 0.8,
                       showplot: bool = False) -> Series:
-    """ Calculate daily correlation between two time series
+    """Calculate daily correlation between two time series.
 
     Args:
         s1: any time series, timestamp must overlap with *s2*
@@ -22,6 +22,9 @@ def daily_correlation(s1: Series,
 
     Returns:
         series with correlations for each day
+
+    - Example notebook available in:
+        notebooks/Analyses/DailyCorrelation.ipynb
     """
     if -1 <= mincorr <= 1:
         # Use absolute value for mincorr
@@ -43,10 +46,13 @@ def daily_correlation(s1: Series,
     daycorrs_index = groups.count().index
     daycorrs = pd.Series(index=daycorrs_index, name='daycorrs')
 
-    # Calculate correlation between measured and potential for each day
+    # Calculate correlation for each day
     for day, day_df in groups:
         corr = day_df[s1.name].corr(day_df[s2.name])
         daycorrs.loc[day] = corr
+
+    daycorrs.index = pd.to_datetime(daycorrs.index)
+    daycorrs = daycorrs.asfreq('1d')
 
     if showplot:
         _plot_daily_correlation(daycorrs=daycorrs, mincorr=mincorr,
@@ -75,7 +81,7 @@ def _plot_daily_correlation(daycorrs, mincorr, df, s1, s2):
     lowestcorrs = lowestcorrs.index.astype(str).to_list()
     lowestdays = df['DATE'].isin(lowestcorrs)
 
-    fig = plt.figure(facecolor='white', figsize=(9, 12), dpi=150)
+    fig = plt.figure(facecolor='white', figsize=(8, 12), dpi=100)
     gs = gridspec.GridSpec(4, 3)  # rows, cols
     gs.update(wspace=0.3, hspace=0.4, left=0.05, right=0.97, top=0.9, bottom=0.1)
     ax1 = fig.add_subplot(gs[0, 0:])

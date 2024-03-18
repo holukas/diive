@@ -30,7 +30,7 @@ class FlagBase:
     def overall_flag(self) -> Series:
         """Overall flag, calculated from individual flags from multiple iterations."""
         if not isinstance(self._overall_flag, Series):
-            raise Exception(f'No overall flag available.')
+            raise Exception('No overall flag available.')
         return self._overall_flag
 
     def get_flag(self):
@@ -112,7 +112,7 @@ class FlagBase:
         if iteration:
             flagname += f'_ITER{iteration}_TEST'
         else:
-            flagname += f'_TEST'
+            flagname += '_TEST'
         return flagname
 
     def generate_iteration_filtered_variable_name(self, iteration: int):
@@ -167,7 +167,7 @@ class FlagBase:
                             label="outlier (rejected)", color="#F44336", alpha=1,
                             markersize=12, markeredgecolor='none', fmt='X')
         ax_ok.plot_date(self.series[ok].index, self.series[ok],
-                        label=f"filtered series", alpha=.5,
+                        label="filtered series", alpha=.5,
                         markersize=8, markeredgecolor='none')
         default_format(ax=ax_series)
         default_format(ax=ax_ok)

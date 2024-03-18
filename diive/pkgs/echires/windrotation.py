@@ -29,7 +29,7 @@ class WindRotation2D:
     def primes_df(self) -> pd.DataFrame:
         """Overall flag, calculated from individual flags from multiple iterations."""
         if not isinstance(self._primes_df, pd.DataFrame):
-            raise Exception(f'No overall flag available.')
+            raise Exception('No overall flag available.')
         return self._primes_df
 
     def get_primes(self) -> pd.DataFrame:
@@ -98,7 +98,7 @@ class WindRotation2D:
         # Perform first rotation of coordinate system for mean wind
         # Make v component of mean wind zero --> v_temp becomes zero
         u_temp = u_mean * math.cos(angle_r1) + v_mean * math.sin(angle_r1)
-        v_temp = -u_mean * math.sin(angle_r1) + v_mean * math.cos(angle_r1)
+        # v_temp = -u_mean * math.sin(angle_r1) + v_mean * math.cos(angle_r1)
         w_temp = w_mean
 
         # Second rotation angle, in radians
@@ -140,7 +140,7 @@ def example():
 
     from diive.core.io.filereader import search_files
 
-    OUTDIR = r'F:\TMP\das_filesplitter'
+    # OUTDIR = r'F:\TMP\das_filesplitter'
 
     # SEARCHDIRS = [r'L:\Sync\luhk_work\20 - CODING\27 - VARIOUS\dyco\_testdata']
     # PATTERN = 'CH-DAS_*.csv.gz'

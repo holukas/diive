@@ -1,13 +1,12 @@
-import time
-
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from diive.core.plotting.plotfuncs import default_format
 from matplotlib.collections import LineCollection
 from pandas import DataFrame
 from scipy.signal import find_peaks
+
+from diive.core.plotting.plotfuncs import default_format
 
 
 # todo logger: setup_dyco
@@ -56,7 +55,7 @@ class MaxCovariance:
     def cov_df(self) -> DataFrame:
         """Overall flag, calculated from individual flags from multiple iterations."""
         if not isinstance(self._cov_df, DataFrame):
-            raise Exception(f'No covariance results available.')
+            raise Exception('No covariance results available.')
         return self._cov_df
 
     def get(self):
@@ -184,7 +183,7 @@ class MaxCovariance:
 
         else:
 
-            start_time = time.time()
+            # start_time = time.time()
 
             for ix, row in cov_df.iterrows():
                 shift = int(row['shift'])
@@ -227,7 +226,6 @@ class MaxCovariance:
                     # segments in each file, when there is no more data available
                     # at the end.
                     continue
-
 
             # # Timing (for testing)
             # end_time = time.time()
@@ -393,8 +391,7 @@ class MaxCovariance:
                 f"    cov {self.cov_df.iloc[self.idx_peak_cov_abs_max]['cov']:.3f}\n" \
                 f"    record {self.cov_df.iloc[self.idx_peak_cov_abs_max]['shift']}\n"
         else:
-            txt_info += \
-                f"\n(!)NO PEAK MAX ABS COV FOUND\n"
+            txt_info += "\n(!)NO PEAK MAX ABS COV FOUND\n"
         return txt_info
 
     def mark_instantaneous_default_lag(self, ax, txt_info):
@@ -455,13 +452,11 @@ class MaxCovariance:
                 f"    width {self.props_peak_auto['widths']:.0f}\n" \
                 f"    width_height {self.props_peak_auto['width_heights']:.0f}\n"
         else:
-            txt_info += \
-                f"\n(!)NO AUTO-PEAK FOUND\n"
+            txt_info += "\n(!)NO AUTO-PEAK FOUND\n"
         return txt_info
 
 
 def example():
-
     from pathlib import Path
     from diive.core.io.filereader import ReadFileType
     from diive.core.io.filereader import search_files
@@ -497,11 +492,11 @@ def example():
     filelist = search_files(searchdirs=r'L:\Sync\luhk_work\CURRENT\testdata_dyco\1-splits\splits',
                             pattern='CH-AWS_*.csv')
 
-    # Settings
-    U = 'U_[HS50-A]'  # Name of the horizontal wind component measured in x-direction, measured in units of m s-1
-    V = 'V_[HS50-A]'  # Name of the horizontal wind component measured in y-direction, measured in units of m s-1
-    W = 'W_[HS50-A]'  # Name of the vertical wind component measured in z-direction, measured in units of m s-1
-    C = 'CO2_DRY_[IRGA72-A]'  # Name of the measured dry mole fraction, here in umol CO2 mol-1
+    # # Settings
+    # U = 'U_[HS50-A]'  # Name of the horizontal wind component measured in x-direction, measured in units of m s-1
+    # V = 'V_[HS50-A]'  # Name of the horizontal wind component measured in y-direction, measured in units of m s-1
+    # W = 'W_[HS50-A]'  # Name of the vertical wind component measured in z-direction, measured in units of m s-1
+    # C = 'CO2_DRY_[IRGA72-A]'  # Name of the measured dry mole fraction, here in umol CO2 mol-1
 
     for filepath in filelist:
         # Read file

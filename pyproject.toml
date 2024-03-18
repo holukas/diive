@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "diive"
-version = "0.71.1"
+version = "0.71.2"
 description = "Time series processing"
 authors = ["holukas <holukas@ethz.ch>"]
 readme = "README.md"
@@ -32,6 +32,7 @@ sphinx = "^7.2.6"
 sphinxcontrib-napoleon = "^0.7"
 sphinx-rtd-theme = "^2.0.0"
 ipywidgets = "^8.1.1"
+ruff = "^0.3.2"
 
 [build-system]
 requires = ["poetry-core"]
