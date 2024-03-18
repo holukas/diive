@@ -163,35 +163,35 @@ class StepwiseMeteoScreeningDb:
     def data_detailed(self) -> dict:
         """Return high-resolution detailed data with tags as dict of DataFrames."""
         if not isinstance(self._data_detailed, dict):
-            raise Exception(f"No high-resolution detailed data with tags available.")
+            raise Exception("No high-resolution detailed data with tags available.")
         return self._data_detailed
 
     @property
     def outlier_detection(self) -> dict:
         """Return results from stepwise outlier detection as dict of instances."""
         if not isinstance(self._outlier_detection, dict):
-            raise Exception(f"No results from stepwise outlier detection available.")
+            raise Exception("No results from stepwise outlier detection available.")
         return self._outlier_detection
 
     @property
     def outlier_detection_qcf(self) -> dict:
         """Return results from stepwise outlier detection overall quality flag as dict of instances."""
         if not isinstance(self._outlier_detection_qcf, dict):
-            raise Exception(f"No results for overall quality flag QCF from stepwise outlier detection available.")
+            raise Exception("No results for overall quality flag QCF from stepwise outlier detection available.")
         return self._outlier_detection_qcf
 
     @property
     def series_hires_cleaned(self) -> dict:
         """Return cleaned time series of field(s) as dict of Series"""
         if not isinstance(self._series_hires_cleaned, dict):
-            raise Exception(f"No hires quality-controlled data available.")
+            raise Exception("No hires quality-controlled data available.")
         return self._series_hires_cleaned
 
     @property
     def series_hires_orig(self) -> dict:
         """Return original time series of field(s) as dict of Series"""
         if not isinstance(self._series_hires_orig, dict):
-            raise Exception(f"No hires original data available.")
+            raise Exception("No hires original data available.")
         return self._series_hires_orig
 
     def start_outlier_detection(self):
@@ -210,14 +210,14 @@ class StepwiseMeteoScreeningDb:
     def resampled_detailed(self) -> dict:
         """Return flag(s) as dict of Series"""
         if not isinstance(self._resampled_detailed, dict):
-            raise Exception(f"No resampled data available.")
+            raise Exception("No resampled data available.")
         return self._resampled_detailed
 
     @property
     def tags(self) -> dict:
         """Return tags as dict of Series"""
         if not isinstance(self._tags, dict):
-            raise Exception(f"No tags available.")
+            raise Exception("No tags available.")
         return self._tags
 
     def showplot_outlier_detection_cleaned(self, interactive: bool = False):
@@ -254,11 +254,11 @@ class StepwiseMeteoScreeningDb:
             # Time series
             ax_orig.plot_date(series_orig.index, series_orig, label=f"{series_orig.name}", color="#78909C",
                               alpha=.5, markersize=2, markeredgecolor='none')
-            ax_resampled.plot_date(series_resampled.index, series_resampled, label=f"resampled",
+            ax_resampled.plot_date(series_resampled.index, series_resampled, label="resampled",
                                    color="#FFA726", alpha=1, markersize=3, markeredgecolor='none')
             ax_both.plot_date(series_orig.index, series_orig, label=f"{series_orig.name}", color="#78909C",
                               alpha=.5, markersize=2, markeredgecolor='none')
-            ax_both.plot_date(series_resampled.index, series_resampled, label=f"resampled",
+            ax_both.plot_date(series_resampled.index, series_resampled, label="resampled",
                               color="#FFA726", alpha=1, markersize=3, markeredgecolor='none')
 
             # Heatmaps
@@ -657,18 +657,18 @@ class StepwiseMeteoScreeningDb:
         """Check if units are the same for all records"""
         unique_units = list(set(data_detailed['units']))
         if len(unique_units) > 1:
-            raise Exception(f"More than one type of units in column 'units', "
-                            f"but only one allowed. All data records must be "
-                            f"in same units.")
+            raise Exception("More than one type of units in column 'units', "
+                            "but only one allowed. All data records must be "
+                            "in same units.")
 
     @staticmethod
     def _check_fields(data_detailed):
         """Check if really only one field in data"""
         unique_fields = list(set(data_detailed['varname']))
         if len(unique_fields) > 1:
-            raise Exception(f"More than one variable name in column 'varname', "
-                            f"but only one allowed. All data records must be "
-                            f"for same variable.")
+            raise Exception("More than one variable name in column 'varname', "
+                            "but only one allowed. All data records must be "
+                            "for same variable.")
 
     @staticmethod
     def _make_timeres_groups(data_detailed):

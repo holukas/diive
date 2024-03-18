@@ -293,11 +293,13 @@ def validate_timestamp_naming(data: Series or DataFrame, verbose: bool = False) 
     """
     timestamp_name = data.index.name
     allowed_timestamp_names = ['TIMESTAMP_END', 'TIMESTAMP_START', 'TIMESTAMP_MIDDLE']
-    if verbose: print(f"Validating timestamp naming of timestamp column {timestamp_name} ...", end=" ")
+    if verbose:
+        print(f"Validating timestamp naming of timestamp column {timestamp_name} ...", end=" ")
 
     # First check if timestamp already has one of the required names
     if any(fnmatch.fnmatch(timestamp_name, allowed_name) for allowed_name in allowed_timestamp_names):
-        if verbose: print("Timestamp name OK.")
+        if verbose:
+            print("Timestamp name OK.")
         return timestamp_name
 
     else:

@@ -6,10 +6,13 @@
 
 ### Notebooks
 
+- Added new notebook for `daily_correlation` function (`notebooks/Analyses/DailyCorrelation.ipynb`)
 - Added new notebook for `Histogram` class (`notebooks/Analyses/Histogram.ipynb`)
 
 ### Bugfixes & changes
 
+- Daily correlations are now returned with daily (`1d`) timestamp
+  index (`diive.pkgs.analyses.correlation.daily_correlation`)
 - Updated README
 - Environment: Added [ruff](https://github.com/astral-sh/ruff) to dev dependencies for linting
 
