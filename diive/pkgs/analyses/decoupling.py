@@ -34,18 +34,21 @@ class SortingBinsMethod:
                  n_bins_var1: int = 48,
                  n_subbins_var2: int = 2,
                  convert_to_percentiles: bool = False):
-        """Investigate binned aggregates of a variable z in binned classes of x and y.
+        """Investigate binned aggregates (median) of a variable z in binned classes of x and y.
 
-        For example: show mean GPP (y) in 5 classes of VPD (x), separate for 10 classes
+        For example: show median GPP (y) in 5 classes of VPD (x), separate for 10 classes
         of air temperature (z).
 
         Args:
-            df:
-            var1_col:
-            var2_col:
-            var3_col:
-            n_bins_var1:
-            n_subbins_var2:
+            df: Dataframe with variables
+            var1_col: Name of the first binning variable, will be shown as colors (z) in the plot.
+            var2_col: Name of the second binning variable, will be shown on the x-axis (x) in the plot.
+            var3_col: Name of the variable of interest, will be shown on the y-axis (y) in the plot.
+            n_bins_var1: Number of bins for variable *var1_col*.
+            n_subbins_var2: Number of bins for variable *var2_col*.
+
+        Returns:
+            Dict with results stored as dataframes for each bin of *var1_col*.
 
         - Example notebook available in:
             notebooks/Analyses/DecouplingSortingBins.ipynb

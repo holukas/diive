@@ -12,8 +12,19 @@ class LongtermAnomaliesYear:
                  reference_start_year: int,
                  reference_end_year: int,
                  series_label: str = None,
-                 series_units: str = None,
-                 ):
+                 series_units: str = None):
+        """Calculate and plot long-term anomaly for a variable, per year, compared to a reference period.
+
+        Args:
+            series: Time series for anomalies with one value per year.
+            reference_start_year: First year of the reference period.
+            reference_end_year: Last year of the reference period.
+            series_label: Label for *series* on the y-axis of the plot.
+            series_units: Units for *series* on the y-axis of the plot.
+
+        - Example notebook available in:
+            notebooks/Plotting/LongTermAnomalies.ipynb
+        """
         self.series = series
         self.series_units = series_units
         self.series_label = series_label
