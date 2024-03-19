@@ -2,6 +2,18 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.71.4 | 20 Mar 2024
+
+### Changes
+
+- Refactored class `LongtermAnomaliesYear` (`diive.core.plotting.bar.LongtermAnomaliesYear`)
+
+![DIIVE](images/plotBarLongtermAnomaliesYear_diive_v0.71.4.png)
+
+### Notebooks
+
+- Added new notebook for `LongtermAnomaliesYear` (`notebooks/Plotting/LongTermAnomalies.ipynb`)
+
 ## v0.71.3 | 19 Mar 2024
 
 ### Changes

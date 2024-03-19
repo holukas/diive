@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "diive"
-version = "0.71.3"
+version = "0.71.4"
 description = "Time series processing"
 authors = ["holukas <holukas@ethz.ch>"]
 readme = "README.md"
