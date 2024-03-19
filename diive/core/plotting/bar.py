@@ -9,11 +9,14 @@ class LongtermAnomaliesYear:
 
     def __init__(self,
                  series: Series,
-                 series_units: str,
                  reference_start_year: int,
-                 reference_end_year: int):
+                 reference_end_year: int,
+                 series_label: str = None,
+                 series_units: str = None,
+                 ):
         self.series = series
         self.series_units = series_units
+        self.series_label = series_label
         self.reference_start_year = reference_start_year
         self.reference_end_year = reference_end_year
 
@@ -27,7 +30,7 @@ class LongtermAnomaliesYear:
         self.anomalies_df = self._calc_reference()
 
     def _apply_format(self):
-        title = f"Anomaly per year ({self.data_first_year}-{self.data_last_year})"
+        title = f"{self.series_label} anomaly per year ({self.data_first_year}-{self.data_last_year})"
         self.fig.suptitle(title, fontsize=theme.FIGHEADER_FONTSIZE)
 
         ref_mean = self.anomalies_df['reference_mean'].iloc[-1]
@@ -47,7 +50,7 @@ class LongtermAnomaliesYear:
         self.ax.locator_params(axis='x', nbins=nbins)
         pf.default_format(ax=self.ax,
                           ax_xlabel_txt='Year',
-                          ax_ylabel_txt=self.series.name,
+                          ax_ylabel_txt=f"{self.series_label} anomaly",
                           txt_ylabel_units=self.series_units,
                           showgrid=False)
         self.ax.axhline(0, lw=1, color='black')
@@ -74,8 +77,10 @@ class LongtermAnomaliesYear:
 
     def plot(self, showplot: bool = True):
         # ax1.plot(ta_longterm.index.values, ta_longterm['diff'].values)
-        self.anomalies_df['anomaly_above'].plot.bar(color='#F44336', ax=self.ax, legend=False)
-        self.anomalies_df['anomaly_below'].plot.bar(color='#2196F3', ax=self.ax, legend=False)
+        self.anomalies_df['anomaly_above'].plot.bar(color='#EF5350', ax=self.ax, legend=False, width=.7)
+        # self.anomalies_df['anomaly_above'].plot.bar(color='#F44336', ax=self.ax, legend=False)
+        self.anomalies_df['anomaly_below'].plot.bar(color='#42A5F5', ax=self.ax, legend=False, width=.7)
+        # self.anomalies_df['anomaly_below'].plot.bar(color='#2196F3', ax=self.ax, legend=False)
         # ta_longterm_anomalies.plot.bar(x='year', y='Temperature', color='#2196F3', ax=ax1)
         # ta_longterm_anomalies_above.plot.bar(x='year', y='Temperature', color='red', ax=ax1)
         # ta_longterm_anomalies_below.plot.bar(x='year', y='Temperature', color='blue', ax=ax1)
@@ -89,15 +94,19 @@ class LongtermAnomaliesYear:
 def example():
     ## Long-term TA
     ## space-separated data
-    data_longterm_TA = r"F:\Dropbox\luhk_work\_current\CH-DAV_1864-2021_TA-YEARLY_Meteoswiss_order_105469_data.txt"
-    ta_longterm = pd.read_csv(data_longterm_TA, header=0, encoding='utf-8', delimiter=';',
-                              keep_date_col=False, index_col='time', dtype=None,
-                              engine='python')
-    ta_longterm = ta_longterm['tre200y0'].copy()
-    LongtermAnomaliesYear(series=ta_longterm,
+    data_longterm_TA = r"L:\Sync\luhk_work\80 - SITES\CH-DAV\Data\Datasets\MeteoSwiss\CH-DAV_1864-2023_TA-YEARLY_Meteoswiss_order_120443_data.txt"
+    df = pd.read_csv(data_longterm_TA, header=0, encoding='utf-8', delimiter=';',
+                     keep_date_col=False, index_col='time', dtype=None,
+                     engine='python')
+
+    series = df['tre200y0'].copy()
+    series_label = "Air temperature"
+    LongtermAnomaliesYear(series=series,
+                          series_label=series_label,
                           series_units='(°C)',
                           reference_start_year=1864,
                           reference_end_year=1913).plot()
+
 
 if __name__ == '__main__':
     example()

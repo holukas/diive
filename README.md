@@ -109,6 +109,7 @@ Fill gaps in time series with various methods
 
 ### Plotting
 
+- Long-term anomalies per year ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/LongTermAnomalies.ipynb))
 - Simple (interactive) time series
   plot ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/TimeSeries.ipynb))
 - ScatterXY plot ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/ScatterXY.ipynb))

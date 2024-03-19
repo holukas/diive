@@ -509,7 +509,7 @@ def save_fig(fig,
 
 
 def create_ax(facecolor: str = 'white',
-              figsize: tuple = (8, 4.5),
+              figsize: tuple = (14, 8),
               dpi: int = 100):
     """Create figure and axis"""
     # Figure setup
