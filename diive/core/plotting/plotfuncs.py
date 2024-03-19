@@ -305,7 +305,8 @@ def default_legend(ax,
                    from_line_collection=False,
                    line_collection=None,
                    textsize: int = theme.FONTSIZE_TXT_LEGEND,
-                   markerscale: float = None):
+                   markerscale: float = None,
+                   title: str = None):
     # fontP = FontProperties()
     # fontP.set_size('x-large')
     if from_line_collection:
@@ -322,8 +323,13 @@ def default_legend(ax,
                            labelspacing=labelspacing, prop={'size': textsize},
                            markerscale=markerscale)
 
+    if title:
+        legend.set_title(title=title, prop={'size': textsize})
+
     for text in legend.get_texts():
         text.set_color(textcolor)
+
+
 
 
 def default_grid(ax):

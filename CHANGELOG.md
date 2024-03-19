@@ -2,6 +2,31 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.71.3 | 19 Mar 2024
+
+### Changes
+
+- Refactored class `SortingBinsMethod`: Allows to investigate binned aggregates of a variable z in binned classes of x
+  and y (see plot below). All bins now show medians and interquartile
+  ranges. (`diive.pkgs.analyses.decoupling.SortingBinsMethod`)
+
+![DIIVE](images/analysesDecoupling_sortingBinsMethod_diive_v0.71.3.png)
+*Plot showing net ecosystem productivity (y) in 2 classes of VPD (x), separate for 48 classes of air
+temperature (z). All values shown are medians of the respective variable. The shaded errorbars refer to the
+interquartile range for the respective class. Plot was generated using the class `SortingBinsMethod`.*
+
+### Notebooks
+
+- Added new notebook for `SortingBinsMethod`
+
+### Bugfixes
+
+- Added absolute links to example notebooks in `README.md`
+
+### Other
+
+- From now on, `diive` is officially published on [pypi](https://pypi.org/project/diive/)
+
 ## v0.71.2 | 18 Mar 2024
 
 ### Notebooks

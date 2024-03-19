@@ -16,11 +16,12 @@ More notebooks are added constantly.
 
 ### Analyses
 
-- Daily correlation ([notebook example](notebooks/Analyses/DailyCorrelation.ipynb))
-- Decoupling
-- Detect time resolution from data ([notebook example](notebooks/TimeStamps/Detect_time_resolution.ipynb))
-- Find data gaps ([notebook example](notebooks/Analyses/GapFinder.ipynb))
-- Histogram ([notebook example](notebooks/Analyses/Histogram.ipynb))
+- Daily
+  correlation ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/DailyCorrelation.ipynb))
+- Decoupling: Sorting bins
+  method ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/DecouplingSortingBins.ipynb))
+- Find data gaps ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/GapFinder.ipynb))
+- Histogram ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/Histogram.ipynb))
 - Optimum range
 - Quantiles
 
@@ -28,14 +29,16 @@ More notebooks are added constantly.
 
 - Offset correction
 - Set to threshold
-- Wind direction offset detection and correction ([notebook example](notebooks/Corrections/WindDirectionOffset.ipynb))
+- Wind direction offset detection and
+  correction ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Corrections/WindDirectionOffset.ipynb))
 
 ### Create variable
 
 - Calculate daytime flag, nighttime flag and potential radiation from latitude and
-  longitude ([notebook example](notebooks/CalculateVariable/Daytime_and_nighttime_flag.ipynb))
+  longitude ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/CalculateVariable/Daytime_and_nighttime_flag.ipynb))
 - Day/night flag from sun angle
-- VPD from air temperature and RH ([notebook example](notebooks/CalculateVariable/Calculate_VPD_from_TA_and_RH.ipynb))
+- VPD from air temperature and
+  RH ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/CalculateVariable/Calculate_VPD_from_TA_and_RH.ipynb))
 
 ### Eddy covariance high-resolution
 
@@ -63,27 +66,33 @@ More notebooks are added constantly.
 For info about the Swiss FluxNet flux levels,
 see [here](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/).
 
-- Flux processing chain ([notebook example](notebooks/FluxProcessingChain/FluxProcessingChain.ipynb))
+- Flux processing
+  chain ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/FluxProcessingChain/FluxProcessingChain.ipynb))
     - The notebook example shows the application of:
         - Level-2 quality flags
         - Level-3.1 storage correction
         - Level-3.2 outlier removal
+- Quick flux processing
+  chain ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/FluxProcessingChain/QuickFluxProcessingChain.ipynb))
 
 ### Formats
 
 Format data to specific formats
 
 - Convert EddyPro fluxnet output files for upload to FLUXNET
-  database ([notebook example](notebooks/Formats/FormatEddyProFluxnetFileForUpload.ipynb))
-- Load and save parquet files ([notebook example](notebooks/Formats/LoadSaveParquetFile.ipynb))
+  database ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Formats/FormatEddyProFluxnetFileForUpload.ipynb))
+- Load and save parquet
+  files ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Formats/LoadSaveParquetFile.ipynb))
 
 ### Gap-filling
 
 Fill gaps in time series with various methods
 
 - Interpolate
-- RandomForestTS ([notebook example](notebooks/GapFilling/RandomForestGapFilling.ipynb))
-- Quick random forest gap-filling ([notebook example](notebooks/GapFilling/QuickRandomForestGapFilling.ipynb))
+-
+RandomForestTS ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/RandomForestGapFilling.ipynb))
+- Quick random forest
+  gap-filling ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/QuickRandomForestGapFilling.ipynb))
 
 ### Outlier Detection
 
@@ -101,14 +110,15 @@ Fill gaps in time series with various methods
 
 ### Plotting
 
-- Simple (interactive) time series plot ([notebook example](notebooks/Plotting/TimeSeries.ipynb))
-- ScatterXY plot ([notebook example](notebooks/Plotting/ScatterXY.ipynb))
+- Simple (interactive) time series
+  plot ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/TimeSeries.ipynb))
+- ScatterXY plot ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/ScatterXY.ipynb))
 - Various classes to generate heatmaps, bar plots, time series plots and scatter plots, among others
 
 ### Quality control
 
 - Stepwise MeteoScreening from
-  database ([notebook example](notebooks/MeteoScreening/StepwiseMeteoScreeningFromDatabase.ipynb))
+  database ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/MeteoScreening/StepwiseMeteoScreeningFromDatabase.ipynb))
 
 ### Stats
 
@@ -117,6 +127,8 @@ Fill gaps in time series with various methods
 ### Timestamps
 
 - Create continuous timestamp based on number of records in the file and the file duration
+- Detect time resolution from
+  data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/TimeStamps/Detect_time_resolution.ipynb))
 - Insert additional timestamps in various formats
 
 ## Installation
