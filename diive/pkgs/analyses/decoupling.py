@@ -81,7 +81,7 @@ class SortingBinsMethod:
             raise Exception('No binned means available, try to run .calcbins() first.')
         return self._binmedians
 
-    def get_binmeans(self) -> dict:
+    def get_binmedians(self) -> dict:
         """Return dict of dataframes with variable 1 group as key"""
         return self.binmedians
 
@@ -272,7 +272,7 @@ def example():
     sbm.calcbins()
     sbm.showplot_decoupling_sbm(marker='o', emphasize_lines=True)
 
-    binmedians = sbm.get_binmeans()
+    binmedians = sbm.get_binmedians()
     first = next(iter(binmedians))
     print(binmedians[first])
 
