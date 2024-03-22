@@ -92,10 +92,7 @@ Fill gaps in time series with various methods
 
 - Linear
   interpolation ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/LinearInterpolation.ipynb))
--
-
-RandomForestTS ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/RandomForestGapFilling.ipynb))
-
+- RandomForestTS ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/RandomForestGapFilling.ipynb))
 - Quick random forest
   gap-filling ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/QuickRandomForestGapFilling.ipynb))
 
