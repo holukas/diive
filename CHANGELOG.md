@@ -2,6 +2,17 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.71.5 | 22 Mar 2024
+
+### Changes
+
+- Updated notebook for `SortingBinsMethod` (`diive.pkgs.analyses.decoupling.SortingBinsMethod`)
+
+![DIIVE](images/analysesDecoupling_sortingBinsMethod_diive_v0.71.5.png)
+*Plot showing vapor pressure deficit (y) in 10 classes of short-wave incoming radiation (x), separate for 5 classes of
+air temperature (z). All values shown are medians of the respective variable. The shaded errorbars refer to the
+interquartile range for the respective class. Plot was generated using the class `SortingBinsMethod`.*
+
 ## v0.71.4 | 20 Mar 2024
 
 ### Changes
@@ -19,13 +30,8 @@
 ### Changes
 
 - Refactored class `SortingBinsMethod`: Allows to investigate binned aggregates of a variable z in binned classes of x
-  and y (see plot below). All bins now show medians and interquartile
+  and y. All bins now show medians and interquartile
   ranges. (`diive.pkgs.analyses.decoupling.SortingBinsMethod`)
-
-![DIIVE](images/analysesDecoupling_sortingBinsMethod_diive_v0.71.3.png)
-*Plot showing net ecosystem productivity (y) in 2 classes of VPD (x), separate for 48 classes of air
-temperature (z). All values shown are medians of the respective variable. The shaded errorbars refer to the
-interquartile range for the respective class. Plot was generated using the class `SortingBinsMethod`.*
 
 ### Notebooks
 
