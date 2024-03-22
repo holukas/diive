@@ -5,7 +5,7 @@
 `diive` is a Python library for time series processing, in particular ecosystem data. Originally developed
 for [Swiss FluxNet](https://www.swissfluxnet.ethz.ch/) by the [ETH Grassland Sciences group](https://gl.ethz.ch/).
 
-Recent updates: [CHANGELOG](CHANGELOG.md)   
+Recent updates: [CHANGELOG](https://github.com/holukas/diive/blob/main/CHANGELOG.md)   
 Recent releases: [Releases](https://github.com/holukas/diive/releases)
 
 First example notebooks can be found in the folder `notebooks`.
@@ -16,6 +16,8 @@ More notebooks are added constantly.
 
 ### Analyses
 
+- Calculate z-aggregates in quantiles (classes) of x and
+  y ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/CalculateZaggregatesInQuantileClassesOfXY.ipynb))
 - Daily
   correlation ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/DailyCorrelation.ipynb))
 - Decoupling: Sorting bins
@@ -23,7 +25,7 @@ More notebooks are added constantly.
 - Find data gaps ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/GapFinder.ipynb))
 - Histogram ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/Histogram.ipynb))
 - Optimum range
-- Quantiles
+- Percentiles ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/Percentiles.ipynb))
 
 ### Corrections
 
@@ -88,8 +90,12 @@ Format data to specific formats
 
 Fill gaps in time series with various methods
 
-- Interpolate
-- RandomForestTS ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/RandomForestGapFilling.ipynb))
+- Linear
+  interpolation ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/LinearInterpolation.ipynb))
+-
+
+RandomForestTS ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/RandomForestGapFilling.ipynb))
+
 - Quick random forest
   gap-filling ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/QuickRandomForestGapFilling.ipynb))
 
@@ -109,7 +115,8 @@ Fill gaps in time series with various methods
 
 ### Plotting
 
-- Long-term anomalies per year ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/LongTermAnomalies.ipynb))
+- Long-term anomalies per
+  year ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/LongTermAnomalies.ipynb))
 - Simple (interactive) time series
   plot ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/TimeSeries.ipynb))
 - ScatterXY plot ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/ScatterXY.ipynb))
@@ -122,7 +129,8 @@ Fill gaps in time series with various methods
 
 ### Stats
 
-- Time series stats ([notebook example](notebooks/Stats/TimeSeriesStats.ipynb))
+- Time series
+  stats ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Stats/TimeSeriesStats.ipynb))
 
 ### Timestamps
 

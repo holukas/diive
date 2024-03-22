@@ -16,9 +16,6 @@ from diive.pkgs.createvar.potentialradiation import potrad
 
 
 class DaytimeNighttimeFlag:
-    """
-    Create flags to identify daytime and nighttime data
-    """
 
     swinpot_col = 'SW_IN_POT'
     daytime_col = 'DAYTIME'
@@ -30,7 +27,7 @@ class DaytimeNighttimeFlag:
                  lat: float,
                  lon: float,
                  nighttime_threshold: float = 50):
-        """
+        """Calculate flags to identify daytime and nighttime data from potential radiation.
 
         Args:
             timestamp_index: Time series index, flags and potential radiation
@@ -41,6 +38,8 @@ class DaytimeNighttimeFlag:
             nighttime_threshold: Threshold for potential radiation below which data
                 are flagged as nighttime (W m-2)
 
+        - Example notebook available in:
+            notebooks/CalculateVariable/DaytimeNighttimeFlag.ipynb
         """
 
         self.timestamp_index = timestamp_index
@@ -62,6 +61,10 @@ class DaytimeNighttimeFlag:
         if not isinstance(self._df, DataFrame):
             raise Exception('Data empty.')
         return self._df
+
+    def get_results(self) -> DataFrame:
+        """Return dataframe with results"""
+        return self.df
 
     def get_daytime_flag(self) -> Series:
         """Return daytime flag where 1=daytime, 0=nighttime"""
@@ -142,14 +145,17 @@ def example():
         lon=7.733750,
         utc_offset=1)
 
+    results = dnf.get_results()
+    print(results)
+
     # dnf.get_daytime_flag()
     # dnf.get_nighttime_flag()
     # dnf.get_swinpot()
 
     from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-    HeatmapDateTime(series=dnf.df['DAYTIME']).show()
-    HeatmapDateTime(series=dnf.df['NIGHTTIME']).show()
-    HeatmapDateTime(series=dnf.df['SW_IN_POT']).show()
+    HeatmapDateTime(series=results['DAYTIME']).show()
+    HeatmapDateTime(series=results['NIGHTTIME']).show()
+    HeatmapDateTime(series=results['SW_IN_POT']).show()
 
 
 if __name__ == '__main__':

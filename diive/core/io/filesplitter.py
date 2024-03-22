@@ -118,9 +118,9 @@ class FileSplitter:
 
         # Add timestamp to each record
         file_df, true_resolution = create_timestamp(df=file_df,
-                                               file_start=self.file_start,
-                                               data_nominal_res=self.data_nominal_res,
-                                               expected_duration=self.expected_duration)
+                                                    file_start=self.file_start,
+                                                    data_nominal_res=self.data_nominal_res,
+                                                    expected_duration=self.expected_duration)
 
         # Collect file data stats
         self._filestats_df = fd.add_data_stats(df=file_df,
@@ -178,7 +178,8 @@ class FileSplitter:
             compression = 'gzip' if self.compress_splits else None
 
             if self.outfile_limit_n_rows:
-                split_df = split_df.iloc[0:self.outfile_limit_n_rows]  # Limit number of exported records, useful for testing
+                split_df = split_df.iloc[
+                           0:self.outfile_limit_n_rows]  # Limit number of exported records, useful for testing
 
             split_df.to_csv(split_filepath, compression=compression)
 
@@ -409,25 +410,26 @@ class FileSplitterMulti:
 
 
 def example():
-    OUTDIR = r'F:\TMP\del'
-    SEARCHDIRS = [r'L:\Sync\luhk_work\CURRENT\testdata_dyco\0-raw_data_ascii']
-    PATTERN = 'CH-AWS_*.csv.gz'
-    FILEDATEFORMAT = 'CH-AWS_%Y%m%d%H%M.csv.gz'
+
+    OUTDIR = r'F:\TMP\das\1-filesplitter_1'
+    SEARCHDIRS = [r'F:\TMP\das\0-raw_data_ascii_filtered_CH4/1']
+    PATTERN = 'CH-DAS_*.csv.gz'
+    FILEDATEFORMAT = 'CH-DAS_%Y%m%d%H%M.csv.gz'
     FILE_GENERATION_RES = '6h'
     DATA_NOMINAL_RES = 0.05
     FILES_HOW_MANY = None
     FILETYPE = 'ETH-SONICREAD-BICO-CSVGZ-20HZ'
     DATA_SPLIT_DURATION = '30min'
-    DATA_SPLIT_OUTFILE_PREFIX = 'CH-AWS_'
+    DATA_SPLIT_OUTFILE_PREFIX = 'CH-DAS_'
     DATA_SPLIT_OUTFILE_SUFFIX = '_30MIN-SPLIT'
     COMPRESS_SPLITS = False
     ROTATION = True
-    U = 'U_[HS50-A]'
-    V = 'V_[HS50-A]'
-    W = 'W_[HS50-A]'
-    # C = 'CH4_DRY_[QCL-C2]'
-    C = 'CO2_DRY_[IRGA72-A]'
-    OUTFILE_LIMIT_N_ROWS = 2000  # int or None, for testing
+    U = 'U_[R350-B]'
+    V = 'V_[R350-B]'
+    W = 'W_[R350-B]'
+    C = 'CH4_DRY_[QCL-C2]'
+    # C = 'CO2_DRY_[IRGA72-A]'
+    OUTFILE_LIMIT_N_ROWS = None  # int or None, for testing
 
     fsm = FileSplitterMulti(
         outdir=OUTDIR,
