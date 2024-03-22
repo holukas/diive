@@ -21,6 +21,7 @@
 - Updated notebook for `SortingBinsMethod` (`diive.pkgs.analyses.decoupling.SortingBinsMethod`)
 
 ![DIIVE](images/analysesDecoupling_sortingBinsMethod_diive_v0.71.5.png)
+
 *Plot showing vapor pressure deficit (y) in 10 classes of short-wave incoming radiation (x), separate for 5 classes of
 air temperature (z). All values shown are medians of the respective variable. The shaded errorbars refer to the
 interquartile range for the respective class. Plot was generated using the class `SortingBinsMethod`.*
