@@ -16,6 +16,8 @@ More notebooks are added constantly.
 
 ### Analyses
 
+- Calculate z-aggregates in quantiles (classes) of x and
+  y ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/CalculateZaggregatesInQuantileClassesOfXY.ipynb))
 - Daily
   correlation ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/DailyCorrelation.ipynb))
 - Decoupling: Sorting bins
@@ -88,9 +90,12 @@ Format data to specific formats
 
 Fill gaps in time series with various methods
 
-- Linear interpolation ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/LinearInterpolation.ipynb))
+- Linear
+  interpolation ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/LinearInterpolation.ipynb))
 -
+
 RandomForestTS ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/RandomForestGapFilling.ipynb))
+
 - Quick random forest
   gap-filling ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/QuickRandomForestGapFilling.ipynb))
 
