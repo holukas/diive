@@ -2,11 +2,12 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.71.5 | 21 Mar 2024
+## v0.71.6 | 23 Mar 2024
 
 ### Notebooks
 
 - Added new notebook for `Percentiles` (`notebooks/Analyses/Percentiles.ipynb`)
+- Updated notebook for `DaytimeNighttimeFlag` (`notebooks/CalculateVariable/DaytimeNighttimeFlag.ipynb`)
 
 ## v0.71.4 | 20 Mar 2024
 

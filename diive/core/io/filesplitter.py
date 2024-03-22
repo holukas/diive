@@ -410,24 +410,25 @@ class FileSplitterMulti:
 
 
 def example():
-    OUTDIR = r'F:\TMP\testdata_dyco\1-splits'
-    SEARCHDIRS = [r'F:\TMP\testdata_dyco\0-raw_data_ascii']
-    PATTERN = 'CH-DAV_*.csv.gz'
-    FILEDATEFORMAT = 'CH-DAV_%Y%m%d%H%M.csv.gz'
+
+    OUTDIR = r'F:\TMP\das\1-filesplitter_1'
+    SEARCHDIRS = [r'F:\TMP\das\0-raw_data_ascii_filtered_CH4/1']
+    PATTERN = 'CH-DAS_*.csv.gz'
+    FILEDATEFORMAT = 'CH-DAS_%Y%m%d%H%M.csv.gz'
     FILE_GENERATION_RES = '6h'
     DATA_NOMINAL_RES = 0.05
     FILES_HOW_MANY = None
     FILETYPE = 'ETH-SONICREAD-BICO-CSVGZ-20HZ'
     DATA_SPLIT_DURATION = '30min'
-    DATA_SPLIT_OUTFILE_PREFIX = 'CH-DAV_'
+    DATA_SPLIT_OUTFILE_PREFIX = 'CH-DAS_'
     DATA_SPLIT_OUTFILE_SUFFIX = '_30MIN-SPLIT'
     COMPRESS_SPLITS = False
     ROTATION = True
-    U = 'U_[HS50-A]'
-    V = 'V_[HS50-A]'
-    W = 'W_[HS50-A]'
-    # C = 'CH4_DRY_[QCL-C2]'
-    C = 'CO2_DRY_[IRGA72-A]'
+    U = 'U_[R350-B]'
+    V = 'V_[R350-B]'
+    W = 'W_[R350-B]'
+    C = 'CH4_DRY_[QCL-C2]'
+    # C = 'CO2_DRY_[IRGA72-A]'
     OUTFILE_LIMIT_N_ROWS = None  # int or None, for testing
 
     fsm = FileSplitterMulti(

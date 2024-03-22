@@ -5,8 +5,8 @@ from pandas import Series, DataFrame
 from diive.core.plotting.scatter import ScatterXY
 
 
-def percentiles(series: Series, showplot: bool = True, verbose: bool = True) -> DataFrame:
-    """Show percentiles 0-100 for series.
+def percentiles101(series: Series, showplot: bool = True, verbose: bool = True) -> DataFrame:
+    """Calculate percentiles 0-100 for series.
 
     Args:
         series: Input series.
@@ -37,20 +37,14 @@ def percentiles(series: Series, showplot: bool = True, verbose: bool = True) -> 
                             title=f"Percentile values: {series.name}")
         scatter.plot()
 
-    # plt.plot(percentiles_df['PERCENTILE'], percentiles_df['VALUE'],
-    #          color='black', alpha=0.9, ls='-', lw=theme.WIDTH_LINE_DEFAULT,
-    #          marker='o', markeredgecolor='none', ms=theme.SIZE_MARKER_DEFAULT, zorder=99, label='value')
-    # plt.show()
-
     return percentiles_df
 
 
 def example():
     from diive.configs.exampledata import load_exampledata_parquet
     df = load_exampledata_parquet()
-    percentiles_df = percentiles(series=df['Tair_f'])
+    percentiles_df = percentiles101(series=df['Tair_f'], showplot=True, verbose=True)
     print(percentiles_df)
-
 
 
 if __name__ == "__main__":

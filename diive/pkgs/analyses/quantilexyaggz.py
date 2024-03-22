@@ -6,7 +6,6 @@ from pandas import Series, DataFrame
 
 
 class QuantileXYAggZ:
-
     """
     Calculate z-aggregates in quantiles (classes) of x and y
 
@@ -96,34 +95,9 @@ class QuantileXYAggZ:
         ok_bin = ok_bin[ok_bin]  # Filter (True/False) indicating if bin has enough values
         ok_binlist = list(ok_bin.index)  # List of bins with enough values
 
-        # todo missing in nchds
-        # 04.07.2006
-        # 19.06.2007
-        # 05.07.2017
-        # 29.08.2017
-        # 05.06.2022
-
-        # todo checking
-        _check_longformdf = longformdf.copy()
-        _check_longformdf['DATE'] = pd.to_datetime(_check_longformdf['DATE'])
-        _check_longformdf.set_index('DATE', inplace=True)
-        _check_longformdf.loc['2006-07-04']
-        _check_longformdf.loc['2007-06-19']
-        _check_longformdf.loc['2017-07-05']
-        _check_longformdf.loc['2017-08-29']
-        _check_longformdf.loc['2022-06-05']
-        # todo checking
-
         # Keep data rows where the respective bin has enough values
         ok_row = longformdf['BINS_COMBINED_STR'].isin(ok_binlist)
         longformdf = longformdf[ok_row]
-
-        # todo checking
-        _check_longformdf2 = longformdf.copy()
-        _check_longformdf2['DATE'] = pd.to_datetime(_check_longformdf2['DATE'])
-        _check_longformdf2.set_index('DATE', inplace=True)
-        _check_longformdf2.loc['2017-07-05']
-        # todo checking
 
         _counts = pd.pivot_table(longformdf, index=self.ybinname, columns=self.xbinname, values=self.zname,
                                  aggfunc=np.count_nonzero)
@@ -141,7 +115,9 @@ class QuantileXYAggZ:
                               q=self.n_quantiles,
                               labels=labels,
                               retbins=True,
-                              duplicates='raise')
+                              # duplicates='raise',
+                              duplicates='drop'
+                              )
         # group, bins = pd.cut(df[self.xname],
         #                      bins=self.n_quantiles,
         #                      labels=labels,
@@ -152,7 +128,9 @@ class QuantileXYAggZ:
                               q=self.n_quantiles,
                               labels=labels,
                               retbins=True,
-                              duplicates='raise')
+                              # duplicates='raise',
+                              duplicates='drop'
+                              )
         # group, bins = pd.cut(df[self.yname],
         #                      bins=self.n_xybins,
         #                      labels=range(1, self.n_xybins + 1),
@@ -163,55 +141,65 @@ class QuantileXYAggZ:
 
 
 def example():
-    from diive.core.io.files import load_pickle
+    from diive.configs.exampledata import load_exampledata_parquet
+    from diive.core.plotting.heatmap_xyz import HeatmapPivotXYZ
 
     vpd_col = 'VPD_f'
-    nee_col = 'NEE_CUT_REF_f'
     ta_col = 'Tair_f'
-    gpp_col = 'GPP_DT_CUT_REF'
-    reco_col = 'Reco_DT_CUT_REF'
-    rh_col = 'RH'
     swin_col = 'Rg_f'
 
-    # Load data, using pickle for fast loading
-    source_file = r"F:\Sync\luhk_work\20 - CODING\21 - DIIVE\diive\__manuscripts\11.01_NEP-Penalty_CH-DAV_1997-2022 (2023)\data\CH-DAV_FP2022.5_1997-2022_ID20230206154316_30MIN.diive.csv.pickle"
-    df_orig = load_pickle(filepath=source_file)
-    # df_orig = df_orig.loc[df_orig.index.year >= 2019].copy()
+    df = load_exampledata_parquet()
 
     # Data between May and Sep
-    # df_orig = df_orig.loc[(df_orig.index.month >= 5) & (df_orig.index.month <= 9)].copy()
+    df = df.loc[(df.index.month >= 5) & (df.index.month <= 9)].copy()
 
     # Subset
-    df = df_orig[[nee_col, vpd_col, ta_col, gpp_col, reco_col, swin_col]].copy()
+    df = df[[vpd_col, ta_col, swin_col]].copy()
 
-    # # Daytime, warm data, HH
-    # daytime_locs = (df[swin_col] > 50) & (df[ta_col] > 10)
-    # df = df[daytime_locs].copy()
-    # df = df.dropna()
+    # Daytime
+    daytime_locs = (df[swin_col] > 0)
+    df = df[daytime_locs].copy()
+    df = df.dropna()
 
-    # Aggregation to daily values
-    df = df.groupby(df.index.date).agg(
-        {
-            ta_col: ['min', 'max'],
-            vpd_col: ['min', 'max'],
-            nee_col: 'mean'
-        }
-    )
-
-    # from diive.core.dfun.frames import flatten_multiindex_all_df_cols
+    # # Aggregation to daily values
+    # df = df.groupby(df.index.date).agg({ta_col: ['min', 'max'],
+    #                                     vpd_col: ['min', 'max'],
+    #                                     nee_col: 'mean'})
+    #
     # df = flatten_multiindex_all_df_cols(df=df)
     # x = f"{ta_col}_max"
     # y = f"{vpd_col}_max"
-    # z = f"{nee_col}_sum"
+    # z = f"{nee_col}_mean"
 
-    res = QuantileXYAggZ(x=df[ta_col],
-                         y=df[vpd_col],
-                         z=df[nee_col],
-                         n_quantiles=20,
-                         min_n_vals_per_bin=10,
-                         binagg_z='count').get()
+    q = QuantileXYAggZ(
+        # x=df[x],
+        # y=df[y],
+        # z=df[z],
+        x=df[swin_col],
+        y=df[ta_col],
+        z=df[vpd_col],
+        n_quantiles=10,
+        min_n_vals_per_bin=3,
+        binagg_z='mean'
+    )
+    q.run()
 
-    print(res)
+    pivotdf = q.pivotdf.copy()
+    print(pivotdf)
+    # print(q.longformdf)
+
+    hm = HeatmapPivotXYZ(pivotdf=pivotdf)
+    hm.plot(cb_digits_after_comma=0,
+            xlabel=r'Short-wave incoming radiation ($\mathrm{percentile}$)',
+            ylabel=r'Air temperature ($\mathrm{percentile}$)',
+            # ylabel=r'Percentile of TA ($\mathrm{°C}$)',
+            zlabel=r'Vapor pressure deficit (counts)',
+            # zlabel=r'Vapor pressure deficit ($\mathrm{gCO_{2}\ m^{-2}\ d^{-1}}$)',
+            # tickpos=[16, 25, 50, 75, 84],
+            # ticklabels=['16', '25', '50', '75', '84']
+            )
+
+    # print(res)
 
 
 if __name__ == '__main__':

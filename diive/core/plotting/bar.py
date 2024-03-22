@@ -115,8 +115,8 @@ def example():
     LongtermAnomaliesYear(series=series,
                           series_label=series_label,
                           series_units='(°C)',
-                          reference_start_year=1864,
-                          reference_end_year=1913).plot()
+                          reference_start_year=1961,
+                          reference_end_year=1990).plot()
 
 
 if __name__ == '__main__':

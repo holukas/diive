@@ -27,12 +27,13 @@ class MaxCovariance:
          covariance.
 
         Args:
-            df:
-            var_reference:
-            var_lagged:
-            lgs_winsize_from:
-            lgs_winsize_to:
-            shift_stepsize:
+            df: Input data.
+            var_reference: Name of reference variable in *df*. Lag of *var_lagged* will be determined in
+                relation to this reference.
+            var_lagged: Name of lagged variable in *df*. Lag will be determined in relation *var_reference*.
+            lgs_winsize_from: Start of lag search time window (in number of records).
+            lgs_winsize_to: End of lag search time window (in number of records).
+            shift_stepsize: Step-size for lag search (in number of records).
             segment_name:
         """
 

@@ -56,8 +56,8 @@ class HeatmapBase:
         return fig, ax
 
     def format(self, ax, plot, xlabel: str, ylabel: str, zlabel: str,
-               tickpos: list, ticklabels:list, cb_digits_after_comma: int = 2,
-               labelsize:float = None):
+               tickpos: list, ticklabels: list, cb_digits_after_comma: int = 2,
+               labelsize: float = None):
         # title = self.title if self.title else f"{self.series.name} in {self.series.index.freqstr} time resolution"
         # self.ax.set_title(title, color='black')
         # self.ax.set_title(self.title, color='black', size=theme.FONTSIZE_HEADER_AXIS)
@@ -82,6 +82,9 @@ class HeatmapBase:
                        ticks_length=8,
                        ticks_width=2,
                        ticks_labels_fontsize=labelsize)
+
+        from diive.core.plotting.plotfuncs import format_spines
+        format_spines(ax=ax, color='black', lw=2)
 
     @staticmethod
     def _set_cmap(cmap, color_bad, z):
@@ -125,23 +128,40 @@ class HeatmapPivotXYZ(HeatmapBase):
              tickpos: list = None,
              ticklabels: list = None,
              cb_digits_after_comma: int = 2):
-        ax = ax if ax else self.ax
+
+        if not ax:
+            ax = self.ax
+            showplot = True
+        else:
+            showplot = False
+
+        xlabel = xlabel if xlabel else self.pivotdf.columns.name
+        ylabel = ylabel if ylabel else self.pivotdf.index.name
+        zlabel = zlabel if zlabel else "Value"
+        if not tickpos:
+            tickpos = list(self.x)
+        if not ticklabels:
+            ticklabels = list(self.x)
+
         cmap = cmap if cmap else self.cmap
         cmap, z = self._set_cmap(cmap=cmap, color_bad=self.color_bad, z=self.z)
         vmin = np.nanmin(z)
         vmax = np.nanmax(z)
+
         p = ax.pcolormesh(self.x, self.y, z,
                           linewidths=1, cmap=cmap,
                           vmin=vmin, vmax=vmax,
                           zorder=99)
-        xlabel = xlabel if xlabel else self.pivotdf.columns.name
-        ylabel = ylabel if ylabel else self.pivotdf.index.name
-        zlabel = zlabel if zlabel else ""
+
+
+
         self.format(ax=ax, plot=p,
                     xlabel=xlabel, ylabel=ylabel, zlabel=zlabel,
                     tickpos=tickpos, ticklabels=ticklabels,
                     cb_digits_after_comma=cb_digits_after_comma,
                     labelsize=20)
+        if showplot:
+            self.fig.show()
 
     def _setdata(self):
         x = self.pivotdf.columns.values
@@ -214,15 +234,12 @@ def example():
     print(pivotdf)
 
     hm = HeatmapPivotXYZ(pivotdf=pivotdf)
-    hm.plot(showplot=True,
-            cb_digits_after_comma=0,
-            xlabel=r'Percentile of daily maximum TA ($\mathrm{°C}$)',
-            ylabel=r'Percentile of daily maximum VPD ($\mathrm{kPa}$)',
-            zlabel=r'Net ecosystem productivity ($\mathrm{gCO_{2}\ m^{-2}\ d^{-1}}$)')
-
-
-# TA daily max >= 23.367
-# VPD daily max >= 19.938000
+    hm.plot(
+        cb_digits_after_comma=0,
+        # xlabel=r'Percentile of daily maximum TA ($\mathrm{°C}$)',
+        # ylabel=r'Percentile of daily maximum VPD ($\mathrm{kPa}$)',
+        # zlabel=r'Net ecosystem productivity ($\mathrm{gCO_{2}\ m^{-2}\ d^{-1}}$)'
+    )
 
 
 if __name__ == '__main__':
