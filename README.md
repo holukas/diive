@@ -88,7 +88,7 @@ Format data to specific formats
 
 Fill gaps in time series with various methods
 
-- Interpolate
+- Linear interpolation ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/LinearInterpolation.ipynb))
 -
 RandomForestTS ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/RandomForestGapFilling.ipynb))
 - Quick random forest
