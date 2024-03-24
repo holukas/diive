@@ -3,7 +3,8 @@ HEATMAP
 =======
 """
 import copy
-import diive.core.plotting.styles.LightTheme as theme
+import datetime
+
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,8 +13,9 @@ from pandas import Series
 from pandas.plotting import register_matplotlib_converters
 
 import diive.core.plotting.styles.LightTheme as theme
-from diive.core.plotting.plotfuncs import nice_date_ticks, default_format, format_spines
+from diive.core.plotting.plotfuncs import default_format, format_spines, nice_date_ticks
 from diive.core.times.times import TimestampSanitizer
+from diive.core.times.times import insert_timestamp
 
 
 # @ConsoleOutputDecorator(spacing=False)
@@ -34,8 +36,8 @@ class HeatmapDateTime:
                  maxyticks: int = 10,
                  cmap: str = 'RdYlBu_r',
                  color_bad: str = 'grey',
-                 display_type: str = 'Time & Date',
-                 figsize: tuple = (9, 16),
+                 display_type: str = 'time_date',
+                 figsize: tuple = (6, 10.7),
                  verbose: bool = False):
         """
         Plot heatmap of time series data with date on y-axis and time on x-axis
@@ -49,15 +51,37 @@ class HeatmapDateTime:
             cb_digits_after_comma: How many digits after the comma are shown in the colorbar legend.
             cmap: Matplotlib colormap
             color_bad: Color of missing values
-            display_type: Currently only option is 'Time & Date'
+            display_type: Only one option at the moment: 'time_date'.
+                Planned: 'month_year', 'year_doy' and 'week_year'
 
         """
         self.series = series.copy()
         self.verbose = verbose
 
-        if self.verbose: print(f"Plotting heatmap  ...")
-        if self.verbose: print("Preparing timestamp for heatmap plotting ...")
+        if self.verbose:
+            print("Plotting heatmap  ...")
+        if self.verbose:
+            print("Preparing timestamp for heatmap plotting ...")
+
+        # Sanitize timestamp
+        # TimestampSanitizer output TIMESTAMP_MIDDLE.
         self.series = TimestampSanitizer(data=self.series, verbose=self.verbose).get()
+
+        # Heatmap works best with TIMESTAMP_START, convert timestamp index if needed
+        # Working with a timestamp that shows the start of the averaging period means
+        # that e.g. the ticks on the x-axis for hours is shown before the corresponding
+        # data between e.g. 1:00 and 1:59.
+        if self.series.index.name != 'TIMESTAMP_START':
+            _series_df = insert_timestamp(data=self.series, convention='start', set_as_index=True)
+            self.series = _series_df[self.series.name].copy()
+
+        # # todo setting for different series time resolutions
+        # if display_type == 'time_date':
+        #     self.series = self.series.resample('30min').mean()
+        # elif display_type == 'month_year':
+        #     self.series = self.series.resample('1MS').mean()
+        # elif display_type == 'week_year':
+        #     self.series = self.series.resample('1WS').mean()
 
         self.title = title
         self.cmap = cmap
@@ -84,17 +108,8 @@ class HeatmapDateTime:
                                     columns=['z'],
                                     data=self.series.values)
 
-        # # # This is not applicable, because the dataframe is pivoted:
-        # # Add frequency property
-        # # Creating a new dataframe with the series.index above
-        # # loses the .freq property of the series, i.e., the dataframe
-        # # does not have a defined frequency after this step and
-        # # needs to be added manually.
-        # self.plot_df = self.plot_df.asfreq(self.series.index.freq)
-
         # Transform data for plotting
-        self.x, self.y, self.z = \
-            self._transform_data()
+        self.x, self.y, self.z = self._transform_data()
 
     def get_ax(self):
         """Return axis in which plot was generated"""
@@ -136,12 +151,39 @@ class HeatmapDateTime:
         # plt.setp(cbytick_obj, color='black', fontsize=FONTSIZE_HEADER_AXIS)
 
         # Ticks
-        self.ax.set_xticks(['3:00', '6:00', '9:00', '12:00', '15:00', '18:00', '21:00'])
-        self.ax.set_xticklabels([3, 6, 9, 12, 15, 18, 21])
-        nice_date_ticks(ax=self.ax, minticks=self.minyticks, maxticks=self.maxyticks, which='y')
+        ax_xlabel_txt = ""
+        ax_ylabel_txt = ""
+        if self.display_type == 'time_date':
+            ax_xlabel_txt = 'Time (hours)'
+            ax_ylabel_txt = 'Date'
+
+            # found_hours = []
+            # for t in self.x:
+            #     found_hours.append(t.hour)
+            # uniq_found_hours = list(set(found_hours))
+            # xticks = [f"{str(x).zfill(2)}:00" for x in uniq_found_hours]
+            # xticklabels = [f"{x}" for x in uniq_found_hours]
+            # self.ax.set_xticks(xticks)
+            # self.ax.set_xticklabels(xticklabels)
+            self.ax.set_xticks(['3:00', '6:00', '9:00', '12:00', '15:00', '18:00', '21:00'])
+            self.ax.set_xticklabels([3, 6, 9, 12, 15, 18, 21])
+
+            # # matplotlib's HourLocator did not work
+            # nice_date_ticks(ax=self.ax, minticks=1, maxticks=24, which='x', locator='hour')
+
+            # For the y-axis AutoDateLocator worked
+            nice_date_ticks(ax=self.ax, minticks=self.minyticks, maxticks=self.maxyticks, which='y')
+
+        # TODO elif self.display_type == 'month_year':
+        #     ticks = list(range(1, 13, 1))
+        #     # https://matplotlib.org/3.1.1/gallery/images_contours_and_fields/pcolormesh_levels.html#sphx-glr-gallery-images-contours-and-fields-pcolormesh-levels-py
+        #     self.ax.set_xticks(ticks)
+        #     self.ax.set_xticklabels([str(t) for t in ticks])
+        #     ax_xlabel_txt = 'Month'
+        #     ax_ylabel_txt = 'Year'
 
         # Format
-        default_format(ax=self.ax, ax_xlabel_txt='Time (hours)', ax_ylabel_txt='Date',
+        default_format(ax=self.ax, ax_xlabel_txt=ax_xlabel_txt, ax_ylabel_txt=ax_ylabel_txt,
                        ticks_direction='out', ticks_length=8, ticks_width=2,
                        ax_labels_fontsize=self.axlabels_fontsize,
                        ticks_labels_fontsize=self.ticks_labelsize)
@@ -156,7 +198,7 @@ class HeatmapDateTime:
         self.plot_df['x_vals'] = xaxis_vals
         self.plot_df.reset_index(drop=True, inplace=True)
 
-        # if display_type == 'Year & Day of Year':
+        # if display_type == 'month_year':
         #     plot_df = plot_df.resample('1D').mean()
         #     plot_df['y_vals'] = plot_df.index.dayofyear
         #     plot_df['x_vals'] = plot_df.index.year
@@ -168,15 +210,30 @@ class HeatmapDateTime:
         y = plot_df_pivot.index.values
         z = plot_df_pivot.values
 
-        if self.display_type == 'Time & Date':
-            x = np.append(x, x[-1])
-            y = np.append(y, y[-1])
+        # x and y are bounds, so z should be the value *inside* those bounds.
+        # Therefore, extend x and y by one value (last_x, last_y).
 
-        # if display_type == 'Year & Day of Year':
-        #     x = np.append(x, 'end')
-        #     # y = np.append(y, y[-1])
+        if self.display_type == 'time_date':
 
-        # if self.display_type == 'Year & Day of Year':
+            # Add last entry for x (datetime)
+            # x-axis shows hours 0, 1, 2 ... 23
+            last_x = x[-1]
+            last_x = last_x.replace(hour=23, minute=59)
+            x = np.append(x, last_x)
+
+            # Add last entry for y (datetime)
+            # y-axis shows years
+            last_y = y[-1]
+            last_y = last_y + datetime.timedelta(days=1)
+            y = np.append(y, last_y)
+
+        elif self.display_type == 'month_year':
+            x = np.append(x, x[-1] + 1)
+            # x = np.append(x[0], x)
+            y = np.append(y, y[-1] + 1)
+            # y = np.append(y[0], y)
+
+        # if self.display_type == 'month_year':
         #     # x = [str(xx) for xx in x]
         #     # x needs to be extended by 1 value, otherwise the plot cuts off the last year
         #     x = np.append(x, 'end')
@@ -184,13 +241,13 @@ class HeatmapDateTime:
         return x, y, z
 
     def _set_xy_axes_type(self):
-        if self.display_type == 'Time & Date':
+        if self.display_type == 'time_date':
             xaxis_vals = self.plot_df.index.time
             yaxis_vals = self.plot_df.index.date
             register_matplotlib_converters()  # Needed for time plotting
-        elif self.display_type == 'Year & Day of Year':
-            xaxis_vals = self.plot_df.index.year
-            yaxis_vals = self.plot_df.index.date
+        elif self.display_type == 'month_year':
+            xaxis_vals = self.plot_df.index.month
+            yaxis_vals = self.plot_df.index.year
         else:
             xaxis_vals = self.plot_df.index.time  # Fallback
             yaxis_vals = self.plot_df.index.date
@@ -206,60 +263,29 @@ class HeatmapDateTime:
 
 
 def example():
-    # Example with random data
+    from diive.configs.exampledata import load_exampledata_parquet
+    df = load_exampledata_parquet()
+    series = df['Tair_f'].copy()
 
-    # Load file
-    from diive.core.io.filereader import ReadFileType
-    loaddatafile = ReadFileType(
-        filetype='GENERIC-CSV-HEADER-1ROW-TS-END-FULL-1MIN',
-        # filepath=r"M:\Downloads\_temp\orig.csv",
-        filepath=r"M:\Downloads\_temp\db.csv",
-        data_nrows=None)
-    data_df, metadata_df = loaddatafile.get_filedata()
-    # series = data_df['SW_IN_T1_1_1_Avg'].copy()
-    series = data_df['SW_IN_T1_1_1'].copy()
+    # series = series.resample('2MS').mean()
+    series = series.resample('4h', label='left').mean()
+    series.index.name = 'TIMESTAMP_START'
+    # series = series[series.index.month > 10].copy()
+    # series = series[series.index.year > 2018].copy()
 
-    # # Create example data
-    # date_rng = pd.date_range(start='2018-01-01 03:30', end='2018-01-05 00:00:00', freq='30T')
-    # df = pd.DataFrame(date_rng, columns=['TIMESTAMP_END'])
-    # df['DATA'] = np.random.randint(0, 10, size=(len(date_rng)))
-    # df = df.set_index('TIMESTAMP_END')
-    # df = df.asfreq('30T')
-    # df.head()
-    # series = df['DATA'].copy()
+    hm = HeatmapDateTime(
+        series=series,
+        title="test",
+        # vmin=-0,
+        # vmax=1000,
+        # todo display_type='month_year'
+        display_type='time_date'
+        # todo display_type='week_year'
+        # todo display_type='year_doy'
+    )
 
-    hm = HeatmapDateTime(series=series, title="from database",
-                         vmin=-0, vmax=1000, figsize=(9, 24))
     hm.show()
     print(hm.get_ax())
-
-    # # Example with download from database
-    # from dbc_influxdb import dbcInflux
-    #
-    # # Download settings
-    # BUCKET = 'ch-dav_raw'
-    # MEASUREMENTS = ['TA']
-    # FIELDS = ['TA_PRF_T1_35_1']
-    # START = '2022-01-01 00:00:10'
-    # STOP = '2022-01-15 00:00:10'
-    # TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # We need returned timestamps in CET (winter time), which is UTC + 1 hour
-    # DATA_VERSION = 'raw'
-    # DIRCONF = r'F:\Dropbox\luhk_work\20 - CODING\22 - POET\configs'
-    # dbc = dbcInflux(dirconf=DIRCONF)
-    #
-    # # Download data
-    # data_simple, data_detailed, assigned_measurements = \
-    #     dbc.download(
-    #         bucket=BUCKET,
-    #         measurements=MEASUREMENTS,
-    #         fields=FIELDS,
-    #         start=START,
-    #         stop=STOP,
-    #         timezone_offset_to_utc_hours=TIMEZONE_OFFSET_TO_UTC_HOURS,
-    #         data_version=DATA_VERSION
-    #     )
-    #
-    # HeatmapDateTime(series=data_simple['TA_PRF_T1_35_1']).show()
 
 
 if __name__ == '__main__':

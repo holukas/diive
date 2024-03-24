@@ -850,10 +850,11 @@ def continuous_timestamp_freq(data: Series or DataFrame, freq: str, verbose: boo
 
 
 def insert_timestamp(
-        data: DataFrame,
+        data: DataFrame or Series,
         convention: Literal['start', 'middle', 'end'],
         insert_as_first_col: bool = True,
-        verbose: bool = False) -> DataFrame:
+        verbose: bool = False,
+        set_as_index: bool = False) -> DataFrame:
     """
     Insert timestamp column that shows the START, END or MIDDLE time of the averaging interval
 
@@ -872,6 +873,7 @@ def insert_timestamp(
         insert_as_first_col: If *True*, the new timestamp column is
             added as the first column to *data*. If *False*, the new
             timestamp column is added as the last column to *data*.
+        set_as_index: Sets the new timestamp column as dataframe index.
         verbose: If *True*, gives additional text output
 
     Returns:
@@ -879,6 +881,9 @@ def insert_timestamp(
 
     Added in: v0.52.0
     """
+    if isinstance(data, pd.Series):
+        data = pd.DataFrame(data)
+
     # Current index timestamp name
     timestamp_index_name = data.index.name
 
@@ -953,6 +958,9 @@ def insert_timestamp(
         print(f"    The timestamp index was not changed:\n"
               f"        first date: {data.index[0]}\n"
               f"        last date:  {data.index[-1]}")
+
+    if set_as_index:
+        data = data.set_index(new_timestamp_col)
 
     return data
 

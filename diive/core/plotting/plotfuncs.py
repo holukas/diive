@@ -229,6 +229,8 @@ def nice_date_ticks(ax, minticks: int = 3, maxticks: int = 9, which: Literal['x'
         locator = mdates.MonthLocator()
         formatter = mdates.DateFormatter('%b')
     elif locator == 'hour':
+        # locator = mdates.AutoDateLocator(minticks=minticks, maxticks=maxticks)
+        # locator = mdates.HourLocator()
         locator = mdates.HourLocator(byhour=[6, 12, 18])
         formatter = mdates.DateFormatter('%H')
     elif locator == 'auto':
