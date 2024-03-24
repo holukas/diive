@@ -2,6 +2,10 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.71.7 | XX Mar 2024
+
+- (`diive.core.plotting.heatmap_datetime.HeatmapDateTime`)
+
 ## v0.71.6 | 23 Mar 2024
 
 ![DIIVE](images/analysesZaggregatesInQuantileClassesOfXY_diive_v0.71.6.png)
