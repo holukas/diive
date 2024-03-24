@@ -2,9 +2,10 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.71.7 | XX Mar 2024
+## v0.71.7 | 24 Mar 2024
 
-- (`diive.core.plotting.heatmap_datetime.HeatmapDateTime`)
+- Refactored code for class `HeatmapDateTime` (`diive.core.plotting.heatmap_datetime.HeatmapDateTime`)
+- Fixed bug in `HeatmapDateTime` where the last record of each day was not shown
 
 ## v0.71.6 | 23 Mar 2024
 
