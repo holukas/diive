@@ -904,6 +904,7 @@ def insert_timestamp(
 
     # Get time resolution of data
     timestamp_freq = data.index.freq
+    timestamp_freqstr = data.index.freqstr
 
     if verbose:
         print(f"\nAdding new timestamp column {new_timestamp_col} "
