@@ -532,6 +532,7 @@ class DataFileReader:
             #     headercols_list = [item.replace(parsed_index_col, f"{parsed_index_col}_ORIGINAL") for item in headercols_list]
 
             data_df.set_index(parsed_index_col, inplace=True)
+            data_df = data_df.asfreq(self.data_freq)
 
         return data_df
 
