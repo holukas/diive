@@ -2,6 +2,10 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.72.1 | XX Mar 2024
+
+- Added badges in `README.md`
+
 ## v0.72.0 | 25 Mar 2024
 
 ## New feature

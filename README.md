@@ -1,5 +1,9 @@
 ![](images/logo_diive1_512px.png)
 
+![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
+![PyPI - Version](https://img.shields.io/pypi/v/diive?style=for-the-badge&color=%23EF6C00&link=https%3A%2F%2Fpypi.org%2Fproject%2Fdiive%2F)
+![GitHub License](https://img.shields.io/github/license/holukas/diive?style=for-the-badge&color=%237CB342)
+
 # Time series data processing
 
 `diive` is a Python library for time series processing, in particular ecosystem data. Originally developed
@@ -92,7 +96,8 @@ Fill gaps in time series with various methods
 
 - Linear
   interpolation ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/LinearInterpolation.ipynb))
-- RandomForestTS ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/RandomForestGapFilling.ipynb))
+-
+RandomForestTS ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/RandomForestGapFilling.ipynb))
 - Quick random forest
   gap-filling ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/QuickRandomForestGapFilling.ipynb))
 
@@ -112,8 +117,10 @@ Fill gaps in time series with various methods
 
 ### Plotting
 
-- Heatmap showing values (z) of time series as date (y) vs time (x) ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/HeatmapDateTime.ipynb))
-- Heatmap showing values (z) of time series as year (y) vs month (x) ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/HeatmapYearMonth.ipynb))
+- Heatmap showing values (z) of time series as date (y) vs time (
+  x) ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/HeatmapDateTime.ipynb))
+- Heatmap showing values (z) of time series as year (y) vs month (
+  x) ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/HeatmapYearMonth.ipynb))
 - Long-term anomalies per
   year ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/LongTermAnomalies.ipynb))
 - Simple (interactive) time series
