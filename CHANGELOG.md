@@ -2,9 +2,28 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.71.7 | 24 Mar 2024
+## v0.72.0 | 25 Mar 2024
+
+## New feature
+
+- Added new heatmap plotting class `HeatmapYearMonth` that allows to plot a variable in year/month
+  classes(`diive.core.plotting.heatmap_datetime.HeatmapYearMonth`)
+
+![DIIVE](images/plotHeatmapYearMonth_diive_v0.72.0.png)
+
+## Changes
 
 - Refactored code for class `HeatmapDateTime` (`diive.core.plotting.heatmap_datetime.HeatmapDateTime`)
+- Added new base class `HeatmapBase` for heatmap plots. Currently used by `HeatmapYearMonth`
+  and `HeatmapDateTime` (`diive.core.plotting.heatmap_base.HeatmapBase`)
+
+## Notebooks
+
+- Added new notebook for `HeatmapDateTime` (`notebooks/Plotting/HeatmapDateTime.ipynb`)
+- Added new notebook for `HeatmapYearMonth` (`notebooks/Plotting/HeatmapYearMonth.ipynb`)
+
+## Bugfixes
+
 - Fixed bug in `HeatmapDateTime` where the last record of each day was not shown
 
 ## v0.71.6 | 23 Mar 2024
