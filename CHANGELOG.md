@@ -2,9 +2,12 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.72.1 | XX Mar 2024
+## v0.72.1 | 26 Mar 2024
 
+- `pyproject.toml` now uses the inequality syntax `>=` instead of caret syntax `^` because the version capping is
+  restrictive and prevents compatibility in conda installations. See [#74](https://github.com/holukas/diive/pull/74)
 - Added badges in `README.md`
+- Smaller `diive` logo in `README.md`
 
 ## v0.72.0 | 25 Mar 2024
 
