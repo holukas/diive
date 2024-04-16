@@ -1,5 +1,5 @@
 GENERAL:
-  NAME: "GENERIC-CSV-HEADER-1ROW-TS-MIDDLE-FULL-NS-30MIN"
+  NAME: "GENERIC-CSV-HEADER-1ROW-TS-MIDDLE-FULL-NS-20HZ"
   DESCRIPTION: "Generic CSV format with 1-row header containing variable names and 1-column full timestamp with nanoseconds."
   TAGS: [ "GENERIC-CSV" ]
 
