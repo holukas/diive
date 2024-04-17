@@ -10,7 +10,6 @@ from diive.core.io.filereader import MultiDataFileReader
 from diive.core.times.times import TimestampSanitizer
 
 
-
 def set_outpath(outpath: str or None, filename: str, fileextension: str):
     if outpath:
         outpath = Path(outpath)
@@ -123,3 +122,9 @@ def loadfiles(sourcedir: str, fileext: str, filetype: str,
         filepaths = filepaths[0:limit_n_files]
     mergedfiledata = MultiDataFileReader(filetype=filetype, filepaths=filepaths)
     return mergedfiledata.data_df
+
+
+def verify_dir(path: str) -> None:
+    """ Create dir if it does not exist. """
+    Path(path).mkdir(parents=True, exist_ok=True)
+    return None

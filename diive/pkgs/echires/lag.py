@@ -330,6 +330,7 @@ class MaxCovariance:
         outpath = outpath / outname
         fig.savefig(f"{outpath}", format='png', bbox_inches='tight', facecolor='w',
                     transparent=True, dpi=100)
+        plt.close(fig)
         return
 
     def z_as_colored_lines(self, fig, ax, x, y, z):
@@ -502,7 +503,7 @@ def example():
     for filepath in filelist:
         # Read file
         df, meta = ReadFileType(filepath=filepath,
-                                filetype='GENERIC-CSV-HEADER-1ROW-TS-MIDDLE-FULL-NS-30MIN',
+                                filetype='GENERIC-CSV-HEADER-1ROW-TS-MIDDLE-FULL-NS-20HZ',
                                 data_nrows=None,
                                 output_middle_timestamp=True).get_filedata()
 

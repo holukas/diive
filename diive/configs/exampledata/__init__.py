@@ -35,6 +35,16 @@ def load_exampledata_eddypro_fluxnet_CSV_30MIN():
     return data_df, metadata_df
 
 
+def load_exampledata_eddypro_full_output_CSV_30MIN():
+    filepath = Path(
+        DIR_PATH) / 'exampledata_eddypro_CH-FRU_FR-20240408-101506_full_output_2024-04-08T101558_adv.csv'
+    loaddatafile = ReadFileType(filetype='EDDYPRO-FULL-OUTPUT-30MIN',
+                                filepath=filepath,
+                                data_nrows=None)
+    data_df, metadata_df = loaddatafile.get_filedata()
+    return data_df, metadata_df
+
+
 def load_exampledata_pickle():
     """Load pickled dataframe"""
     filepath = Path(DIR_PATH) / 'exampledata_CH-DAV_FP2022.5_2022_ID20230206154316_30MIN.diive.csv.pickle'
@@ -47,12 +57,3 @@ def load_exampledata_winddir():
     filepath = Path(DIR_PATH) / 'exampledata_CH-FRU_2005-2022_winddirection_degrees.pickle'
     data_df = load_pickle(filepath=str(filepath))
     return data_df
-
-
-def example():
-    df = load_exampledata_parquet()
-    print(df)
-
-
-if __name__ == '__main__':
-    example()

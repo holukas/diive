@@ -22,6 +22,39 @@ pd.set_option('display.max_columns', 30)
 pd.set_option('display.max_rows', 50)
 
 
+def trim_frame(df: DataFrame, var: str) -> DataFrame:
+    """Trim start and end of dataframe, based on the first and last
+    record of a specific variable.
+
+    Only start and end of the dataframe are trimmed, other missing values
+    of *var* are ignored.
+
+    Example:
+        If *df* contains multiple variables with data between 05:00 and
+        06:00, but *var* is only available between 05:20 and 05:50, then
+        *df* is trimmed: all data before 05:20 and after 05:50 are removed
+        and the returned dataframe is thus shorter.
+
+    Args:
+        df: Dataframe that contains *var*.
+        var: Name of the variable in *df* that is used to trim *df*.
+
+    Returns:
+        Trimmed dataframe.
+
+    """
+    records = df[var].copy()
+    records = records.dropna()
+    if records.empty:
+        df = pd.DataFrame()
+    else:
+        first_record = records.index[0]
+        last_record = records.index[-1]
+        keep = (df.index >= first_record) & (df.index <= last_record)
+        df = df[keep].copy()
+    return df
+
+
 def detect_new_columns(df: DataFrame, other: DataFrame) -> list:
     """Detect columns in *df* that do not exist in other."""
     duplicatecols = [c for c in df.columns if c in other.columns]
@@ -318,79 +351,6 @@ def insert_drop_timestamp_col(df, timestamp_colname):
         pass
     _df.insert(0, timestamp_colname, value=_df.index)  ## index col to normal data col
     return _df
-
-
-def resample_df(df, freq_str, agg, mincounts_perc: float, to_freq=None):
-    """Resample data to selected frequency
-
-    Input data must have timestamp showing the MIDDLE of the time period.
-
-    Using the selected aggregation method
-    and while also considering the minimum required values in the aggregation
-    time window.
-
-
-    Note regarding .resample:
-    https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.resample.html
-        closed : {‘right’, ‘left’}, default None
-            Which side of bin interval is closed. The default is ‘left’ for all frequency offsets
-            except for ‘M’, ‘A’, ‘Q’, ‘BM’, ‘BA’, ‘BQ’, and ‘W’ which all have a default of ‘right’.
-
-        label : {‘right’, ‘left’}, default None
-            Which bin edge label to label bucket with. The default is ‘left’ for all frequency offsets
-            except for ‘M’, ‘A’, ‘Q’, ‘BM’, ‘BA’, ‘BQ’, and ‘W’ which all have a default of ‘right’.
-
-    By default, for weekly aggregation the first day of the week in pandas is Sunday, but diive uses Monday.
-
-    https://stackoverflow.com/questions/48340463/how-to-understand-closed-and-label-arguments-in-pandas-resample-method
-        closed='right' =>  ( 3:00, 6:00 ]  or  3:00 <  x <= 6:00
-        closed='left'  =>  [ 3:00, 6:00 )  or  3:00 <= x <  6:00
-
-    """
-
-    _df = df.copy()
-
-    if to_freq in ['W', 'M', 'A']:
-        label = 'right'
-        closed = 'right'
-        timestamp_shows_start = False
-    elif to_freq in ['T', 'H', 'D']:
-        label = 'left'
-        closed = 'left'
-        timestamp_shows_start = True
-    else:
-        label = closed = timestamp_shows_start = '-not-defined-'
-
-    # Timestamp must be regular
-    if not _df.index.freq:
-        raise NotImplementedError("Error during resampling: Irregular timestamps are not supported.")
-
-    # Check maximum number of counts per aggregation interval
-    # Needed to calculate the required minimum number of counts from
-    # 'mincounts_perc', which is a relative threshold.
-    maxcounts = pd.Series(index=_df.index, data=1)  # Dummy series of 1s
-    maxcounts = maxcounts.resample(freq_str, label=label, closed=closed)
-    maxcounts = maxcounts.count().max()
-    mincounts = int(maxcounts * mincounts_perc)
-
-    # Aggregation
-    resampled_df = _df.resample(freq_str, label=label, closed=closed)
-    agg_counts_df = resampled_df.count()  # Count aggregated values, always needed
-    agg_df = resampled_df.agg(agg)
-
-    # Keep aggregates with enough values
-    filter_min = agg_counts_df >= mincounts
-    agg_df = agg_df[filter_min]
-
-    # TIMESTAMP CONVENTION
-    # --------------------
-    agg_df, timestamp_info_df = timestamp_convention(df=agg_df,
-                                                     timestamp_shows_start=timestamp_shows_start,
-                                                     out_timestamp_convention='Middle of Record')
-
-    agg_df.index = pd.to_datetime(agg_df.index)
-
-    return agg_df, timestamp_info_df
 
 
 def timestamp_convention(df, timestamp_shows_start, out_timestamp_convention):

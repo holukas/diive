@@ -200,11 +200,11 @@ def example():
     np.random.seed(100)
     rows = 1000
     data = np.random.rand(rows) * 100  # Random numbers b/w 0 and 100
-    tidx = pd.date_range('2019-01-01 00:30:00', periods=rows, freq='30T')
+    tidx = pd.date_range('2019-01-01 00:30:00', periods=rows, freq='30min')
     series = pd.Series(data, index=tidx, name='TESTDATA')
 
     al = AbsoluteLimits(series=series, idstr='99')
-    al._calc(min=16, max=84)
+    al.calc(min=16, max=84)
 
     print(series.describe())
     filteredseries = al.filteredseries

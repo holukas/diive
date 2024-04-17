@@ -386,53 +386,56 @@ def make_run_id(prefix: str = False) -> str:
     return run_id
 
 
-def timedelta_to_string(timedelta):
-    """
-    Converts a pandas.Timedelta to a frequency string representation
-    compatible with pandas.Timedelta constructor format
-    https://stackoverflow.com/questions/46429736/pandas-resampling-how-to-generate-offset-rules-string-from-timedelta
-    https://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
-
-    - Example notebook available in:
-        notebooks/TimeFunctions/times.ipynb
-    """
-    c = timedelta.components
-    format = ''
-    if c.days != 0:
-        format += '%dD' % c.days
-    if c.hours > 0:
-        format += '%dH' % c.hours
-    if c.minutes > 0:
-        format += '%dT' % c.minutes
-    if c.seconds > 0:
-        format += '%dS' % c.seconds
-    if c.milliseconds > 0:
-        format += '%dL' % c.milliseconds
-    if c.microseconds > 0:
-        format += '%dU' % c.microseconds
-    if c.nanoseconds > 0:
-        format += '%dN' % c.nanoseconds
-
-    # Remove leading `1` to represent e.g. daily resolution
-    # This is in line with how pandas handles frequency strings,
-    # e.g., 1-minute time resolution is represented by `T` and
-    # not by `1T`.
-    if format == '1D':
-        format = 'D'
-    elif format == '1H':
-        format = 'H'
-    elif format == '1T':
-        format = 'T'
-    elif format == '1S':
-        format = 'S'
-    elif format == '1L':
-        format = 'L'
-    elif format == '1U':
-        format = 'U'
-    elif format == '1N':
-        format = 'N'
-
-    return format
+# def timedelta_to_string(timedelta):
+#     """
+#     Converts a pandas.Timedelta to a frequency string representation
+#     compatible with pandas.Timedelta constructor format
+#     https://stackoverflow.com/questions/46429736/pandas-resampling-how-to-generate-offset-rules-string-from-timedelta
+#     https://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
+#
+#     This function is part of diive v0.67.0.
+#
+#     """
+#     c = timedelta.components
+#     format = ''
+#     if c.days != 0:
+#         format += '%dD' % c.days
+#     if c.hours > 0:
+#         format += '%dh' % c.hours
+#     if c.minutes > 0:
+#         format += '%dmin' % c.minutes
+#     if c.seconds > 0:
+#         format += '%ds' % c.seconds
+#     if c.milliseconds > 0:
+#         format += '%dms' % c.milliseconds
+#         # old format: format += '%dL' % c.milliseconds
+#     if c.microseconds > 0:
+#         format += '%dus' % c.microseconds
+#         # old format: format += '%dU' % c.microseconds
+#     if c.nanoseconds > 0:
+#         format += '%dns' % c.nanoseconds
+#         # old format: format += '%dN' % c.nanoseconds
+#
+#     # Remove leading `1` to represent e.g. daily resolution
+#     # This is in line with how pandas handles frequency strings,
+#     # e.g., 1-minute time resolution is represented by `min` and
+#     # not by `1min`.
+#     if format == '1D':
+#         format = 'D'
+#     elif format == '1h':
+#         format = 'h'
+#     elif format == '1min':
+#         format = 'min'
+#     elif format == '1s':
+#         format = 's'
+#     elif format == '1ms':
+#         format = 'ms'
+#     elif format == '1us':
+#         format = 'us'
+#     elif format == '1ns':
+#         format = 'ns'
+#
+#     return format
 
 
 def generate_freq_timedelta_from_freq(to_duration, to_freq):
@@ -463,46 +466,12 @@ def generate_freq_timedelta_from_freq(to_duration, to_freq):
     return timedelta
 
 
-def generate_freq_str(to_freq):
-    """
-
-    Time / date components in pandas:
-        https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#time-date-components
-
-    :param to_freq:
-    :return:
-    """
-    # Allowed expressions
-    minutes = ['Minute(s)']
-    hours = ['Hourly', 'Hour(s)']
-    days = ['Daily', 'Day(s)']
-    weeks = ['Weekly', 'Week(s)']
-    months = ['Monthly', 'Month(s)']
-    years = ['Yearly', 'Year(s)']
-
-    if to_freq in minutes:
-        freq_str = 'T'
-    elif to_freq in hours:
-        freq_str = 'H'
-    elif to_freq in days:
-        freq_str = 'D'
-    elif to_freq in weeks:
-        freq_str = 'W'  # Anchor to Sunday as last day of the week
-    elif to_freq in months:
-        freq_str = 'M'
-    elif to_freq in years:
-        freq_str = 'A'
-    else:
-        freq_str = 'Original'
-    return freq_str
-
-
 def build_timestamp_range(start_dt, df_len, freq):
     """ Builds timestamp column starting with start date and
         the given frequency.
 
     :param df_len: int (number of rows)
-    :param freq: pandas freq string (e.g. '1S' for 1 second steps)
+    :param freq: pandas freq string (e.g. '1s' for 1 second steps)
     :return:
     """
 
@@ -661,7 +630,14 @@ class DetectFrequency:
         freq_timedelta, freqinfo_timedelta = timestamp_infer_freq_from_timedelta(timestamp_ix=self.index)
         freq_progressive, freqinfo_progressive = timestamp_infer_freq_progressively(timestamp_ix=self.index)
 
-        if all(f for f in [freq_full, freq_timedelta, freq_progressive]):
+        # Harmonize frequency strings
+        freq_full = to_offset(pd.Timedelta(freq_full)).freqstr
+        freq_timedelta = to_offset(pd.Timedelta(freq_timedelta)).freqstr
+        freq_progressive = to_offset(pd.Timedelta(freq_progressive)).freqstr
+
+        list_of_found_freqs = [freq_full, freq_timedelta, freq_progressive]
+        if all(i == list_of_found_freqs[0] for i in list_of_found_freqs):
+            # if all(f for f in [freq_full, freq_timedelta, freq_progressive]):
 
             # List of {Set of detected freqs}
             freq_list = list({freq_timedelta, freq_full, freq_progressive})
@@ -792,7 +768,9 @@ def timestamp_infer_freq_from_timedelta(timestamp_ix: pd.DatetimeIndex) -> tuple
     most_frequent_delta_perc = most_frequent_delta_counts / n_rows  # Fraction
     # Check whether the most frequent delta appears in >99% of all data rows
     if most_frequent_delta_perc > 0.90:
-        inferred_freq = timedelta_to_string(most_frequent_delta)
+        inferred_freq = to_offset(most_frequent_delta)
+        inferred_freq = inferred_freq.freqstr
+        # inferred_freq = timedelta_to_string(most_frequent_delta)
         freqinfo = '>90% occurrence'
         # most_frequent_delta = pd.to_timedelta(most_frequent_delta)
         return inferred_freq, freqinfo
@@ -1028,7 +1006,6 @@ def convert_series_timestamp_to_middle(data: Series or DataFrame, verbose: bool 
     if timestamp_name_before == 'TIMESTAMP_MIDDLE':
         pass
     else:
-        to_offset('T')
         timedelta = pd.to_timedelta(timestamp_freq) / 2
         if timestamp_name_before == 'TIMESTAMP_END':
             data.index = data.index - pd.Timedelta(timedelta)
@@ -1235,23 +1212,3 @@ def create_timestamp(df, file_start, data_nominal_res, expected_duration):
 
 if __name__ == '__main__':
     pass
-
-    # # Test code
-    # filepath = r'F:\Dropbox\luhk_work\20 - CODING\21 - DIIVE\diive\tests\testdata\testfile_ch-dav_2020.diive.csv'
-    # df = pd.read_csv(filepath, index_col=0, parse_dates=True, skiprows=[1])
-    #
-    # # Remove index duplicates
-    # df = remove_index_duplicates(df=df, keep='last')
-    #
-    # # Detect time resolution from data
-    # freq = DetectFrequency(index=df.index, freq_expected='30T').get()
-    #
-    # df = continuous_timestamp_freq(df=df, freq=freq)
-    #
-    # df = convert_timestamp_to_middle(df=df)
-    #
-    # from diive.core.times.resampling import resample_df_T_H
-    # resample_df_T_H(df=df, to_freqstr='2H', agg='mean', mincounts_perc=.9)
-    #
-    #
-    # print(freq)

@@ -1,3 +1,16 @@
+"""
+For more info on wind rotation / tilt correction see:
+
+References:
+    References:
+
+    (WIL01) Wilczak, J. M., Oncley, S. P., & Stage, S. A. (2001). Sonic Anemometer Tilt
+        Correction Algorithms. Boundary-Layer Meteorology, 99(1), 127–150. https://doi.org/10.1023/A:1018966204465
+
+    - Tilt correction in EddyPro_ https://www.licor.com/env/support/EddyPro/topics/anemometer-tilt-correction.html
+
+"""
+
 import math
 
 import pandas as pd
@@ -37,8 +50,8 @@ class WindRotation2D:
         return self.primes_df
 
     def _run(self):
-        self.angle_r1, self.angle_r2 = self.rot_angles_from_mean_wind()
-        self.u_rot, self.v_rot, self.w_rot = self.rotate_wind()
+        self.theta, self.phi = self.rot_angles_from_mean_wind()
+        self.u2, self.v2, self.w2 = self.rotate_wind()
         self.u_prime, self.v_prime, self.w_prime, self.c_prime = self.turbulent_fluctuations()
         self._assign_names()
         self._collect_primes()
@@ -60,12 +73,12 @@ class WindRotation2D:
 
     def turbulent_fluctuations(self):
         """Reynold's decomposition """
-        u_rot_mean = self.u_rot.mean()
-        u_prime = self.u_rot - u_rot_mean
-        v_rot_mean = self.v_rot.mean()
-        v_prime = self.v_rot - v_rot_mean
-        w_rot_mean = self.w_rot.mean()
-        w_prime = self.w_rot - w_rot_mean
+        u_rot_mean = self.u2.mean()
+        u_prime = self.u2 - u_rot_mean
+        v_rot_mean = self.v2.mean()
+        v_prime = self.v2 - v_rot_mean
+        w_rot_mean = self.w2.mean()
+        w_prime = self.w2 - w_rot_mean
         c_mean = self.c.mean()
         c_prime = self.c - c_mean
         return u_prime, v_prime, w_prime, c_prime
@@ -81,7 +94,7 @@ class WindRotation2D:
         Note that rotation angles are given in radians.
 
         First rotation angle:
-            thita = tan-1 (v_mean / u_mean)
+            theta = tan-1 (v_mean / u_mean)
 
         Second rotation angle:
             phi = tan-1 (w_temp / u_temp)
@@ -92,46 +105,52 @@ class WindRotation2D:
         v_mean = self.v.mean()
         w_mean = self.w.mean()
 
-        # First rotation angle, in radians
-        angle_r1 = math.atan(v_mean / u_mean)
+        # First rotation angle Theta, in radians
+        # (WIL01)   0 = tan-1 * ( mean(v) / mean(u) )
+        theta = math.atan(v_mean / u_mean)
 
         # Perform first rotation of coordinate system for mean wind
         # Make v component of mean wind zero --> v_temp becomes zero
-        u_temp = u_mean * math.cos(angle_r1) + v_mean * math.sin(angle_r1)
+        u1 = u_mean * math.cos(theta) + v_mean * math.sin(theta)
         # v_temp = -u_mean * math.sin(angle_r1) + v_mean * math.cos(angle_r1)
-        w_temp = w_mean
+        w1 = w_mean
 
-        # Second rotation angle, in radians
-        angle_r2 = math.atan(w_temp / u_temp)
+        # Second rotation angle Phi, in radians
+        # (WIL01)    Q = tan-1 * ( mean(w1) / mean(u1) )
+        phi = math.atan(w1 / u1)
 
-        # For calculating the rotation angles, it is not necessary to perform the second
-        # rotation of the coordinate system for mean wind
-        # Make v component zero, vm = 0
-        # u_rot = u_temp * math.degrees(math.cos(angle_r2)) + w_temp * math.degrees(math.sin(angle_r2))
-        # v_rot = v_temp
-        # w_rot = -u_temp * math.degrees(math.sin(angle_r2)) + w_temp * math.degrees(math.cos(angle_r2))
-
-        return angle_r1, angle_r2
+        return theta, phi
 
     def rotate_wind(self):
-        """
-        Use rotation angles from mean wind to perform double rotation
-        on high-resolution wind data
+        """Use rotation angles from mean wind to perform double rotation
+        on high-resolution wind data.
         """
 
         # Perform first rotation of coordinate system
         # Make v component zero --> mean of high-res v_temp_col becomes zero (or very close to)
-        u_temp = self.u * math.cos(self.angle_r1) + self.v * math.sin(self.angle_r1)
-        v_temp = -self.u * math.sin(self.angle_r1) + self.v * math.cos(self.angle_r1)
-        w_temp = self.w
+        # From Wilczak et al. (2001):
+        # *Note that 0 is used as symbol for Theta (rotation angle)*
+        #   0 = tan-1 * ( mean(v) / mean(u) )
+        #   u1 = u * cos 0 + v * sin 0
+        #   v1 = -u * sin 0 + v * cos 0
+        #   w1 = w
+        u1 = self.u * math.cos(self.theta) + self.v * math.sin(self.theta)
+        v1 = -self.u * math.sin(self.theta) + self.v * math.cos(self.theta)
+        w1 = self.w
 
         # Perform second rotation of coordinate system
         # Make w component zero --> mean of high-res w_rot_col becomes zero (or very close to)
-        u_rot = u_temp * math.cos(self.angle_r2) + w_temp * math.sin(self.angle_r2)
-        v_rot = v_temp
-        w_rot = -u_temp * math.sin(self.angle_r2) + w_temp * math.cos(self.angle_r2)
+        # From Wilczak et al. (2001):
+        # *Note that Q is used as symbol for Phi (rotation angle)*
+        #   Q = tan-1 * ( mean(w1) / mean(u1) )
+        #   u2 = u1 * cos Q + w1 * sin Q
+        #   v2 = v1
+        #   w2 = -u1 * sin Q + w1 * cos Q
+        u2 = u1 * math.cos(self.phi) + w1 * math.sin(self.phi)
+        v2 = v1
+        w2 = -u1 * math.sin(self.phi) + w1 * math.cos(self.phi)
 
-        return u_rot, v_rot, w_rot
+        return u2, v2, w2
 
 
 def example():
@@ -139,35 +158,6 @@ def example():
     from diive.core.io.filereader import ReadFileType
 
     from diive.core.io.filereader import search_files
-
-    # OUTDIR = r'F:\TMP\das_filesplitter'
-
-    # SEARCHDIRS = [r'L:\Sync\luhk_work\20 - CODING\27 - VARIOUS\dyco\_testdata']
-    # PATTERN = 'CH-DAS_*.csv.gz'
-    # FILEDATEFORMAT = 'CH-DAS_%Y%m%d%H%M.csv.gz'
-    # FILE_GENERATION_RES = '6h'
-    # DATA_NOMINAL_RES = 0.05
-    # FILES_HOW_MANY = 1
-    # FILETYPE = 'ETH-SONICREAD-BICO-CSVGZ-20HZ'
-    # DATA_SPLIT_DURATION = '30min'
-    # DATA_SPLIT_OUTFILE_PREFIX = 'CH-DAS_'
-    # DATA_SPLIT_OUTFILE_SUFFIX = '_30MIN-SPLIT'
-    #
-    # from diive.core.io.filesplitter import FileSplitterMulti
-    # fsm = FileSplitterMulti(
-    #     outdir=OUTDIR,
-    #     searchdirs=SEARCHDIRS,
-    #     pattern=PATTERN,
-    #     file_date_format=FILEDATEFORMAT,
-    #     file_generation_res=FILE_GENERATION_RES,
-    #     data_res=DATA_NOMINAL_RES,
-    #     files_how_many=FILES_HOW_MANY,
-    #     filetype=FILETYPE,
-    #     data_split_duration=DATA_SPLIT_DURATION,
-    #     data_split_outfile_prefix=DATA_SPLIT_OUTFILE_PREFIX,
-    #     data_split_outfile_suffix=DATA_SPLIT_OUTFILE_SUFFIX
-    # )
-    # fsm.run()
 
     filelist = search_files(searchdirs=r'F:\TMP\das_filesplitter\splits', pattern='CH-DAS_*.csv')
 
@@ -180,7 +170,7 @@ def example():
     for filepath in filelist:
         # Read file
         df, meta = ReadFileType(filepath=filepath,
-                                filetype='GENERIC-CSV-HEADER-1ROW-TS-MIDDLE-FULL-NS-30MIN',
+                                filetype='GENERIC-CSV-HEADER-1ROW-TS-MIDDLE-FULL-NS-20HZ',
                                 data_nrows=None,
                                 output_middle_timestamp=True).get_filedata()
 

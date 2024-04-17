@@ -8,12 +8,28 @@ from matplotlib import pyplot as plt, _pylab_helpers, dates as mdates
 from matplotlib.text import Text
 from pandas import DataFrame, Series
 
-# from modboxes.plots.styles.LightTheme import *
-# from modboxes.plots.styles.LightTheme import FONTSIZE_LABELS_AXIS, COLOR_TXT_LEGEND
 import diive.core.plotting.styles.LightTheme as theme
-# from modboxes.plots.styles.LightTheme import *
 from diive.core.plotting.styles.LightTheme import *
 from diive.core.times.times import current_datetime
+
+
+def make_patch_spines_invisible(ax):
+    ax.set_frame_on(True)
+    ax.patch.set_visible(False)
+    for sp in ax.spines.values():
+        sp.set_visible(False)
+
+
+def hide_ticks_and_ticklabels(ax):
+    ax.tick_params(left=False, right=False, top=False, bottom=False,
+                   labelleft=False, labelright=False, labeltop=False, labelbottom=False)
+
+
+def hide_xaxis_yaxis(ax):
+    x_axis = ax.axes.get_xaxis()
+    x_axis.set_visible(False)
+    y_axis = ax.axes.get_yaxis()
+    y_axis.set_visible(False)
 
 
 def remove_prev_lines(ax):
@@ -119,25 +135,6 @@ def format_spines(ax, color, lw):
         ax.spines[spine].set_color(color)
         ax.spines[spine].set_linewidth(lw)
     return None
-
-
-def make_patch_spines_invisible(ax):
-    ax.set_frame_on(True)
-    ax.patch.set_visible(False)
-    for sp in ax.spines.values():
-        sp.set_visible(False)
-
-
-def hide_ticks_and_ticklabels(ax):
-    ax.tick_params(left=False, right=False, top=False, bottom=False,
-                   labelleft=False, labelright=False, labeltop=False, labelbottom=False)
-
-
-def hide_xaxis_yaxis(ax):
-    x_axis = ax.axes.get_xaxis()
-    x_axis.set_visible(False)
-    y_axis = ax.axes.get_yaxis()
-    y_axis.set_visible(False)
 
 
 def non_numeric_error(ax):
@@ -330,8 +327,6 @@ def default_legend(ax,
 
     for text in legend.get_texts():
         text.set_color(textcolor)
-
-
 
 
 def default_grid(ax):

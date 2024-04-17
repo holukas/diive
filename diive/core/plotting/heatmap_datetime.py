@@ -230,14 +230,18 @@ class HeatmapYearMonth(HeatmapBase):
 def example_heatmap_datetime():
     from diive.configs.exampledata import load_exampledata_parquet
     df = load_exampledata_parquet()
-    series = df['Tair_f'].copy()
+    series = df['VPD_f'].copy()
 
-    series = series.resample('3h', label='left').mean()
+    # series = series.resample('3h', label='left').mean()
+    series = series.loc[series.index.year == 2021]
     series.index.name = 'TIMESTAMP_START'
 
     hm = HeatmapDateTime(series=series, title="test")
 
     hm.show()
+
+    hm.export_borderless_heatmap(outpath=r"F:\TMP\heightmap_blender")
+
     print(hm.get_ax())
     print(hm.get_plot_data())
 
@@ -245,10 +249,11 @@ def example_heatmap_datetime():
 def example_heatmap_yearmonth():
     from diive.configs.exampledata import load_exampledata_parquet
     df = load_exampledata_parquet()
-    series = df['Tair_f'].copy()
+    series = df['GPP_DT_CUT_REF'].copy()
+    # series = df['Tair_f'].copy()
 
-    # series = series.resample('1MS', label='left').mean()
-    series = series.resample('1MS', label='left').agg(np.ptp)
+    series = series.resample('1MS', label='left').mean()
+    # series = series.resample('1MS', label='left').agg(np.ptp)
     series.index.name = 'TIMESTAMP_START'
 
     hm = HeatmapYearMonth(
@@ -260,10 +265,11 @@ def example_heatmap_yearmonth():
     )
 
     hm.show()
+    hm.export_borderless_heatmap(outpath=r"F:\TMP\heightmap_blender")
     print(hm.get_ax())
     print(hm.get_plot_data())
 
 
 if __name__ == '__main__':
-    example_heatmap_datetime()
-    # example_heatmap_yearmonth()
+    # example_heatmap_datetime()
+    example_heatmap_yearmonth()

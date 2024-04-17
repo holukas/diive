@@ -21,6 +21,23 @@ from diive.core import dfun
 from diive.core.times.times import continuous_timestamp_freq, TimestampSanitizer
 
 
+def search_folders(searchdirs: str or list) -> list:
+    """ Search files and store their filename and the path to the file in dictionary. """
+    foundfolders = []
+    if isinstance(searchdirs, str):
+        searchdirs = [searchdirs]  # Use str as list
+    for searchdir in searchdirs:
+        for root, dirs, files in os.walk(searchdir):
+            # print(root)
+            foundfolders.append(root)
+            # for idx, settings_file_name in enumerate(files):
+            #     if fnmatch.fnmatch(settings_file_name, pattern):
+            #         filepath = Path(root) / settings_file_name
+            #         found_files_dict[settings_file_name] = filepath
+    # foundfolders.sort()
+    return foundfolders
+
+
 def search_files(searchdirs: str or list, pattern: str) -> list:
     """ Search files and store their filename and the path to the file in dictionary. """
     # found_files_dict = {}
@@ -505,33 +522,32 @@ class DataFileReader:
             parse_dates, parsed_index_col, _temp_parsed_index_col = self._configure_timestamp_parsing()
 
         data_df = pd.read_csv(
-            self.filepath,
+            filepath_or_buffer=self.filepath,
             skiprows=self.data_headersection_rows,
             header=None,
-            names=headercols_list,
             na_values=self.data_na_vals,
             encoding='utf-8',
             delimiter=self.data_delimiter,
-            # mangle_dupe_cols=True,  # deprecated since pandas 2.0
             keep_date_col=False,
             parse_dates=parse_dates,
-            # date_parser=date_parser,  # deprecated since pandas 2.0
             date_format=self.timestamp_datetime_format,
             index_col=None,
-            dtype=None,
-            skip_blank_lines=True,
-            nrows=self.data_nrows,
             engine='python',  # todo 'python', 'c'
-            compression=self.compression
+            nrows=self.data_nrows,
+            compression=self.compression,
+            on_bad_lines='warn',
+            names=headercols_list,
+            skip_blank_lines=True,
+            dtype=None
+            # usecols=None,
+            # mangle_dupe_cols=True,  # deprecated since pandas 2.0
+            # date_parser=date_parser,  # deprecated since pandas 2.0
         )
 
         if self.timestamp_idx_col:
-            # Rename temporary column name for parsed index to correct name (v0.41.0)
+            # Rename temporary column name for parsed index to correct name
             data_df = dfun.frames.rename_cols(df=data_df, renaming_dict={_temp_parsed_index_col: parsed_index_col})
-            # if parsed_index_col in headercols_list:
-            #     headercols_list = [item.replace(parsed_index_col, f"{parsed_index_col}_ORIGINAL") for item in headercols_list]
-
-            data_df.set_index(parsed_index_col, inplace=True)
+            data_df = data_df.set_index(parsed_index_col, inplace=False)
 
         return data_df
 
@@ -641,7 +657,7 @@ def example_toa5():
 
 def example_hires():
     # Settings
-    SOURCEFILE = r"F:\Sync\luhk_work\20 - CODING\27 - VARIOUS\dyco\_testdata\CH-DAS_202308281300.csv.gz"
+    SOURCEFILE = r"Z:\CH-FRU_Fruebuel\20_ec_fluxes\2023\raw_data_ascii\2023_1b_BICO-20240121-135313\raw_data_ascii\CH-FRU_202307050841.csv.gz"
     U = 'U_[R350-B]'
     V = 'V_[R350-B]'
     W = 'W_[R350-B]'
