@@ -1,7 +1,7 @@
 GENERAL:
   NAME: "ETH-RECORD-DAT-20HZ"
   DESCRIPTION: "TOA5 format with 4-row header including variable name and units row, and no timestamp."
-  TAGS: [ "TOA5" ]
+  TAGS: [ "TOA5", "rECord" ]
 
 FILE:
   EXTENSION: "*.dat"

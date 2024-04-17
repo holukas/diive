@@ -3,6 +3,7 @@ HEATMAP
 =======
 """
 import copy
+from pathlib import Path
 
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
@@ -11,7 +12,9 @@ import pandas as pd
 from pandas import Series
 
 import diive.core.plotting.styles.LightTheme as theme
-from diive.core.plotting.plotfuncs import default_format, format_spines
+from diive.core.io.files import verify_dir
+from diive.core.plotting.plotfuncs import default_format, format_spines, hide_xaxis_yaxis, hide_ticks_and_ticklabels, \
+    make_patch_spines_invisible
 
 
 class HeatmapBase:
@@ -87,6 +90,80 @@ class HeatmapBase:
         self.plot()
         plt.tight_layout()
         self.fig.show()
+
+    def export_borderless_heatmap(self, outpath: str):
+        # TODO----------
+        """Save borderless plots (b/w heightmap and texture) for Blender render."""
+        # https://www.youtube.com/watch?v=BXDSfrzR0zI
+
+        # First, check if output directory exists
+        verify_dir(path=outpath)
+
+        # # todo? Smooth z with rolling mean
+        # # _plot_df = self.plot_df.copy()
+        # plot_df['z_rolling_median'] = plot_df['z'].copy()
+        # vmin = plot_df['z_rolling_median'].quantile(0.01)
+        # vmax = plot_df['z_rolling_median'].quantile(0.99)
+        # # _plot_df['z_rolling_median'] = self.plot_df['z'].rolling(window=3, center=True, min_periods=2).mean()
+        # # _plot_df['z_rolling_median'] = _plot_df['z_rolling_median'].rolling(window=12, center=True, min_periods=3).mean()
+
+        plots_list = ['heightmap_bw', 'heightmap_bw_r', 'texture_color', 'texture_color_r']  # _r is reverse cmap
+
+        cmap = None
+        filename = None
+        for plottype in plots_list:
+            # if plot == 'normal':
+            #     cmap = 'jet'
+            #     str = 'NORMAL'
+            # if plot == 'normal_r':
+            #     cmap = 'jet_r'
+            #     str = 'NORMAL_REVERSE'
+            if plottype == 'heightmap_bw':
+                cmap = 'Greys'
+                filename = 'HEIGHTMAP'
+            elif plottype == 'heightmap_bw_r':
+                cmap = 'Greys_r'
+                filename = 'HEIGHTMAP_REVERSE'
+            elif plottype == 'texture_color':
+                cmap = 'jet'
+                filename = 'TEXTURE'
+            elif plottype == 'texture_color_r':
+                cmap = 'jet_r'
+                filename = 'TEXTURE_REVERSE'
+
+            # Figure without borders for rendering, b/w used as heightmap, colored used as texture
+            fig_render_bw = plt.figure(figsize=(12, 12), frameon=False)  # frameon False = borderless
+            ax_render_bw = fig_render_bw.add_axes((0, 0, 1, 1))  # left, bottom, width, height
+
+            p = ax_render_bw.pcolormesh(self.x, self.y, self.z,
+                                        linewidths=0, cmap=cmap, antialiased=False,
+                                        vmin=self.vmin, vmax=self.vmax,
+                                        shading='flat', zorder=98, edgecolor='none')
+
+            # For heightmap and texture, hide all ticks, labels etc, only plot is needed
+            make_patch_spines_invisible(ax=ax_render_bw)
+            hide_ticks_and_ticklabels(ax=ax_render_bw)
+            hide_xaxis_yaxis(ax=ax_render_bw)
+
+            # todo? if 'normal' in plot:
+            #     # For normal plot, output also colorbar
+            #     cb = plt.colorbar(p, ax=ax_render_bw, format=f"%.{int(self.drp_digits_after_comma.currentText())}f")
+            #     cb.ax.tick_params(labelsize=theme.FONTSIZE_LABELS_AXIS * 2)
+            #     # cbytick_obj = plt.getp(cb.axes_dict, 'yticklabels')  # Set y tick label color
+            #     # plt.setp(cbytick_obj, color='#999c9f', fontsize=12)
+
+            # Save to file
+            filename_out = f"heatmap_{plottype}_{self.series.name}.png"
+            filepath_out = Path(outpath) / filename_out
+            fig_render_bw.savefig(filepath_out,
+                                  format='png',
+                                  # bbox_inches='tight',
+                                  # facecolor='w',
+                                  # edgecolor='red',
+                                  transparent=True,
+                                  dpi=300)
+
+            fig_render_bw.show()
 
     def setup(self):
 

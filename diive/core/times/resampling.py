@@ -11,7 +11,7 @@ from diive.core.utils.prints import ConsoleOutputDecorator
 
 @ConsoleOutputDecorator()
 def resample_series_to_30MIN(series: Series,
-                             to_freqstr: Literal['30T'] = '30T',
+                             to_freqstr: Literal['30T', '30min'] = '30min',
                              agg: Literal['mean', 'sum'] = 'mean',
                              mincounts_perc: float = .9,
                              output_timestamp_shows: Literal['middle', 'end'] = 'end') -> Series:
@@ -47,8 +47,8 @@ def resample_series_to_30MIN(series: Series,
     requested_freq = to_offset(to_freqstr)
 
     # Resampling only 30MIN time resolution
-    if not any(chr in to_freqstr for chr in ['30T']):
-        raise NotImplementedError("Error during resampling: Only resampling to 30 minutes (30T) allowed.")
+    if not any(chr in to_freqstr for chr in ['30T', '30min']):
+        raise NotImplementedError("Error during resampling: Only resampling to 30 minutes (30min) allowed.")
 
     # Timestamp must be regular
     if not series.index.freq:
@@ -99,34 +99,11 @@ def resample_series_to_30MIN(series: Series,
     # Re-assign 30MIN resolution as freq
     agg_ser = agg_ser.asfreq(to_freqstr)
 
-    # elif current_freq == requested_freq:
-    #     # Requested frequency must be different from data freq
-    #     # 'to_offset' allows comparison of frequencies (larger, smaller, equal)
-    #     print(f"No resampling needed, data freq {current_freq} "
-    #           f"is already in requested freq {requested_freq} ...")
-    #     agg_ser = _series.copy()
-
     # Sanitize resampled timestamp index
     if not agg_ser.empty:
         if output_timestamp_shows == 'middle':
             agg_ser = TimestampSanitizer(data=agg_ser).get()
         elif output_timestamp_shows == 'end':
             agg_ser = TimestampSanitizer(data=agg_ser, output_middle_timestamp=False).get()
-
-    # agg_df = sanitize_timestamp_index(data=agg_df, freq='30T')
-
-    # # Insert additional timestamps
-    # timestamp_freq = agg_df.index.freq
-    # timedelta = pd.to_timedelta(timestamp_freq)
-    # agg_df['TIMESTAMP_END'] = agg_df.index + pd.Timedelta(timedelta)
-    # agg_df['TIMESTAMP_MIDDLE'] = agg_df.index + pd.Timedelta(timedelta / 2)
-
-    # print(agg_df)
-    # # # TIMESTAMP CONVENTION
-    # # # --------------------
-    # agg_df, timestamp_info_df = timestamp_convention(df=agg_df,
-    #                                                  timestamp_shows_start=timestamp_shows_start,
-    #                                                  out_timestamp_convention='Middle of Record')
-    # agg_df.index = pd.to_datetime(agg_df.index)
 
     return agg_ser

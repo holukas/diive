@@ -5,6 +5,7 @@ import pandas as pd
 from pandas import DataFrame
 
 import diive.core.io.filedetector as fd
+from diive.core.dfun.frames import trim_frame
 from diive.core.io.filereader import ReadFileType
 from diive.core.io.filereader import search_files
 from diive.core.times.times import create_timestamp
@@ -33,7 +34,10 @@ class FileSplitter:
             v_var: str = None,
             w_var: str = None,
             c_var: str = None,
-            outfile_limit_n_rows: int = None
+            outfile_limit_n_rows: int = None,
+            split_trim: bool = False,
+            split_trim_var: str = None
+
     ):
         """Split file into multiple smaller parts and export them as multiple CSV files.
 
@@ -64,6 +68,10 @@ class FileSplitter:
             c_var: Name of the scalar for which turbulent fluctuation is calculated
             outfile_limit_n_rows: Limit splits to this number of rows. Mainly implemented
                 for faster testing.
+            split_trim: Remove all split data before the first available record and after the last available
+                record for *trim_start_end_var*.
+            split_trim_var: Variable used to trim start and end of split data. Required if *split_trim* is True,
+                otherwise ignored.
         """
         self.filepath = Path(filepath) if isinstance(filepath, str) else filepath
         self.filename_pattern = filename_pattern
@@ -84,6 +92,8 @@ class FileSplitter:
         self.w_col = w_var
         self.c_col = c_var
         self.outfile_limit_n_rows = outfile_limit_n_rows
+        self.split_trim = split_trim
+        self.split_trim_var = split_trim_var
 
         # Init new vars
         self._filestats_df = DataFrame()
@@ -147,6 +157,9 @@ class FileSplitter:
         if self.rotation:
             self.data_split_outfile_suffix = f"{self.data_split_outfile_suffix}_ROT"
 
+        if self.split_trim:
+            self.data_split_outfile_suffix = f"{self.data_split_outfile_suffix}_TRIM"
+
         if self.compress_splits:
             file_extension = '.csv.gz'
         else:
@@ -163,12 +176,20 @@ class FileSplitter:
             if self.rotation:
                 split_df = self._rotate_split(split_df=split_df)
 
-            split_df = split_df.fillna(-9999, inplace=False)
-
             # Name for split file
             split_name = (f"{self.data_split_outfile_prefix}"
                           f"{split_start.strftime('%Y%m%d%H%M%S')}"
                           f"{self.data_split_outfile_suffix}{file_extension}")
+
+            # Trim dataframe: remove start and end records where col is empty
+            if self.split_trim:
+                split_df = trim_frame(df=split_df, var=self.split_trim_var)
+                if len(split_df.index) == 0:
+                    print(f"    Skipping split {split_name} because {self.split_trim_var} "
+                          f"is empty.")
+                    continue
+
+            split_df = split_df.fillna(-9999, inplace=False)
 
             # Export
             print(f"    Saving split {split_name} | n_records: {len(split_df.index)} "
@@ -255,7 +276,10 @@ class FileSplitterMulti:
             v_var: str = None,
             w_var: str = None,
             c_var: str = None,
-            outfile_limit_n_rows: int = None
+            outfile_limit_n_rows: int = None,
+            split_trim: bool = False,
+            split_trim_var: str = None
+
     ):
         """Split multiple files into multiple smaller parts 
         and save them as CSV or compressed CSV.
@@ -286,12 +310,20 @@ class FileSplitterMulti:
             rotation: If *True*, the wind components *u*, *v*, *w* and the scalar *c* are rotated, using 
                 2-D wind rotation, i.e., the turbulent departures of wind and scalar are calcualted
                 using Reynold's averaging.
-            u_var: Name of the horizontal wind component in x direction (m s-1)
-            v_var: Name of the horizontal wind component in y direction (m s-1)
-            w_var: Name of the vertical wind component in z direction (m s-1)
-            c_var: Name of the scalar for which turbulent fluctuation is calculated
+            u_var: Name of the horizontal wind component in x direction (m s-1),
+                required if *rotation* is True, otherwise ignored.
+            v_var: Name of the horizontal wind component in y direction (m s-1),
+                required if *rotation* is True, otherwise ignored.
+            w_var: Name of the vertical wind component in z direction (m s-1),
+                required if *rotation* is False, otherwise ignored.
+            c_var: Name of the scalar for which turbulent fluctuation is calculated,
+                required if *rotation* is True, otherwise ignored.
             outfile_limit_n_rows: Limit splits to this number of rows. Mainly implemented
-                for faster testing. 
+                for faster testing.
+            split_trim: Remove all split data before the first available record and after the last available
+                record for *trim_start_end_var*.
+            split_trim_var: Variable used to trim start and end of split data. Required if *split_trim* is True,
+                otherwise ignored.
         """
 
         self.outdir = outdir
@@ -308,8 +340,10 @@ class FileSplitterMulti:
         self.compress_splits = compress_splits
         self.rotation = rotation
         self.outfile_limit_n_rows = outfile_limit_n_rows
+        self.split_trim = split_trim
+        self.split_trim_var = split_trim_var
 
-        if rotation:
+        if self.rotation:
             self.u_var = u_var
             self.v_var = v_var
             self.w_var = w_var
@@ -359,7 +393,9 @@ class FileSplitterMulti:
                 w_var=self.w_var,
                 c_var=self.c_var,
                 compress_splits=self.compress_splits,
-                outfile_limit_n_rows=self.outfile_limit_n_rows
+                outfile_limit_n_rows=self.outfile_limit_n_rows,
+                split_trim=True,
+                split_trim_var=self.split_trim_var
             )
             fs.run()
             filestats_df, splitstats_df = fs.get_stats()
@@ -410,9 +446,8 @@ class FileSplitterMulti:
 
 
 def example():
-
-    OUTDIR = r'F:\TMP\das\1-filesplitter_1'
-    SEARCHDIRS = [r'F:\TMP\das\0-raw_data_ascii_filtered_CH4/1']
+    SEARCHDIRS = [r'F:\CURRENT\DAS\0-filtered_CH4_4']
+    OUTDIR = r'F:\CURRENT\DAS\1-filtered_CH4_ROT_TRIM_4'
     PATTERN = 'CH-DAS_*.csv.gz'
     FILEDATEFORMAT = 'CH-DAS_%Y%m%d%H%M.csv.gz'
     FILE_GENERATION_RES = '6h'
@@ -423,13 +458,15 @@ def example():
     DATA_SPLIT_OUTFILE_PREFIX = 'CH-DAS_'
     DATA_SPLIT_OUTFILE_SUFFIX = '_30MIN-SPLIT'
     COMPRESS_SPLITS = False
+    # ROTATION = False
     ROTATION = True
     U = 'U_[R350-B]'
     V = 'V_[R350-B]'
     W = 'W_[R350-B]'
     C = 'CH4_DRY_[QCL-C2]'
-    # C = 'CO2_DRY_[IRGA72-A]'
     OUTFILE_LIMIT_N_ROWS = None  # int or None, for testing
+    SPLIT_TRIM = True
+    SPLIT_TRIM_VAR = C
 
     fsm = FileSplitterMulti(
         outdir=OUTDIR,
@@ -449,7 +486,9 @@ def example():
         w_var=W,
         c_var=C,
         compress_splits=COMPRESS_SPLITS,
-        outfile_limit_n_rows=OUTFILE_LIMIT_N_ROWS
+        outfile_limit_n_rows=OUTFILE_LIMIT_N_ROWS,
+        split_trim=SPLIT_TRIM,
+        split_trim_var=SPLIT_TRIM_VAR
     )
     fsm.run()
 

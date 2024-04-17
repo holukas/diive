@@ -2,6 +2,53 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.73.0 | 17 Apr 2024
+
+### New features
+
+- Added new function `trim_frame` that allows to trim the start and end of a dataframe based on available records of a
+  variable (`diive.core.dfun.frames.trim_frame`)
+- Added new option to export borderless
+  heatmaps (`diive.core.plotting.heatmap_base.HeatmapBase.export_borderless_heatmap`)
+
+### Additions
+
+- Added more info in comments of class `WindRotation2D` (`diive.pkgs.echires.windrotation.WindRotation2D`)
+- Added example data for EddyPro full_output
+  files (`diive.configs.exampledata.load_exampledata_eddypro_full_output_CSV_30MIN`)
+- Added code in an attempt to harmonize frequency detection from data: in class `DetectFrequency` the detected
+  frequency strings are now converted from `Timedelta` (pandas) to `offset` (pandas) to `.freqstr`. This will yield
+  the frequency string as seen by (the current version of) pandas. The idea is to harmonize between different
+  representations e.g. `T` or `min` for minutes. Currently it seems that pandas is not consistent with e.g. the
+  represenation of minutes, using `T` in `.infer_freq()` but `min`
+  for `Timedelta` (
+  see [here](https://pandas.pydata.org/docs/reference/api/pandas.Timedelta.html)). (`diive.core.times.times.DetectFrequency`)
+
+### Changes
+
+- Updated class `DataFileReader` to comply with new `pandas` kwargs when
+  using `.read_csv()` (`diive.core.io.filereader.DataFileReader._parse_file`)
+- Environment: updated `pandas` to v2.2.2 and `pyarrow` to v15.0.2
+- Updated date offsets in config filetypes to be compliant with `pandas` version 2.2+ (
+  see [here](https://pandas.pydata.org/docs/reference/api/pandas.Timedelta.html)
+  and [here](https://pandas.pydata.org/docs/user_guide/timeseries.html#dateoffset-objects)), e.g., `30T` was changed
+  to `30min`. This seems to work without raising a warning, however, if frequency is inferred from available data,
+  the resulting frequency string shows e.g. `30T`, i.e. still showing `T` for minutes instead
+  of `min`. (`diive/configs/filetypes`)
+- Changed variable names in `WindRotation2D` to be in line with the variable names given in the paper by Wilczak et
+  al. (2001) https://doi.org/10.1023/A:1018966204465
+
+### Removals
+
+- Removed function `timedelta_to_string` because this can be done with pandas `to_offset().freqstr`
+- Removed function `generate_freq_str` (unused)
+
+### Tests
+
+- Added test case for reading EddyPro full_output
+  files (`tests.test_loaddata.TestLoadFiletypes.test_load_exampledata_eddypro_full_output_CSV_30MIN`)
+- Updated test for frequency detection (`tests.test_timestamps.TestTime.test_detect_freq`)
+
 ## v0.72.1 | 26 Mar 2024
 
 - `pyproject.toml` now uses the inequality syntax `>=` instead of caret syntax `^` because the version capping is
@@ -155,9 +202,9 @@ covariance was calculated using the `MaxCovariance` class.*
   2000s to record eddy covariance data within the [Swiss FluxNet](https://www.swissfluxnet.ethz.ch/). Data were
   then converted to a regular format using the Python script [bico](https://github.com/holukas/bico), which
   also compressed the resulting CSV files to `gz` files (`gzipped`).
-- Added new filetype `GENERIC-CSV-HEADER-1ROW-TS-MIDDLE-FULL-NS-30MIN`, which corresponds to a CSV file with
+- Added new filetype `GENERIC-CSV-HEADER-1ROW-TS-MIDDLE-FULL-NS-20HZ`, which corresponds to a CSV file with
   one header row with variable names, a timestamp that describes the middle of the averaging period, whereby
-  the timestamp also includes nanoseconds. Time resolution of the file is 30MIN.
+  the timestamp also includes nanoseconds. Time resolution of the file is 20 Hz.
 
 ### Changes
 

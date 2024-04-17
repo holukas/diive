@@ -91,9 +91,11 @@ class FileDetector:
         expected_index_dt = pd.date_range(first_file_dt, expected_end_dt, freq=self.file_generation_res)
         files_df = pd.DataFrame(index=expected_index_dt)
 
+        # n_files = len(self.filelist)
         for file_idx, filepath in enumerate(self.filelist):
             filename = filepath.name
             file_start_dt = dt.datetime.strptime(filename, self.file_date_format)
+            # print(f"{file_idx} of {n_files}")
 
             if file_start_dt in files_df.index:
                 files_df.loc[file_start_dt, 'file_available'] = 1

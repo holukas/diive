@@ -18,5 +18,5 @@ DATA:
   SKIP_ROWS: [  ]
   HEADER_ROWS: [ 0 ]
   NA_VALUES: [ -9999, -6999, -999, "nan", "NaN", "NAN", "NA", "inf", "-inf", "-" ]
-  FREQUENCY: "1MIN"
+  FREQUENCY: "min"
   DELIMITER: ","
