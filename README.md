@@ -151,6 +151,8 @@ Fill gaps in time series with various methods
 
 `diive` is currently developed under Python 3.9.7, but newer (and many older) versions should also work.
 
+`diive` can be installed using conda with `conda intall -c conda-forge diive`
+
 One way to install and use `diive` with a specific Python version on a local machine:
 
 - Install [miniconda](https://docs.conda.io/en/latest/miniconda.html)
