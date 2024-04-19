@@ -17,6 +17,8 @@ DATA:
   HEADER_SECTION_ROWS: [ 0, 1 ]
   SKIP_ROWS: [ ]
   HEADER_ROWS: [ 0, 1 ]
+  VARNAMES_ROW: 0
+  VARUNITS_ROW: 1
   NA_VALUES: [ -9999, -6999, -999, "nan", "NaN", "NAN", "NA", "inf", "-inf", "-" ]
   FREQUENCY: "30min"
   DELIMITER: ","

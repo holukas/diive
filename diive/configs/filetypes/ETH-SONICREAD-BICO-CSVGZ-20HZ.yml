@@ -1,6 +1,6 @@
 GENERAL:
   NAME: "ETH-SONICREAD-BICO-CSVGZ-20HZ"
-  DESCRIPTION: "TOA5 format with 4-row header including variable name and units row, and no timestamp."
+  DESCRIPTION: "Format with 3-row header including variable name and units row, and no timestamp. Originates from the ETH eddy covariance logging script sonicread, converted to ASCII format using the script bico."
   TAGS: [ "sonicread", "bico" ]
 
 FILE:
@@ -17,6 +17,8 @@ DATA:
   HEADER_SECTION_ROWS: [ 0, 1, 2 ]
   SKIP_ROWS: [ 2 ]
   HEADER_ROWS: [ 0, 1 ]
+  VARNAMES_ROW: 0
+  VARUNITS_ROW: 1
   NA_VALUES: [ -9999, -6999, -999, "nan", "NaN", "NAN", "NA", "inf", "-inf", "-" ]
   FREQUENCY: "50ms"
   DELIMITER: ","
