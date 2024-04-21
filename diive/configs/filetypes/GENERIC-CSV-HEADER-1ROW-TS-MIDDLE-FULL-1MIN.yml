@@ -1,0 +1,24 @@
+GENERAL:
+  NAME: "GENERIC-CSV-HEADER-1ROW-TS-MIDDLE-FULL-1MIN"
+  DESCRIPTION: "Generic CSV format with 1-row header containing variable names and 1-column full middle timestamp."
+  TAGS: [ "GENERIC-CSV" ]
+
+FILE:
+  EXTENSION: "*.csv"
+  COMPRESSION: "None"
+
+TIMESTAMP:
+  DESCRIPTION: "1 column with full timestamp with seconds."
+  INDEX_COLUMN: [ 'TIMESTAMP_MIDDLE' ]
+  DATETIME_FORMAT: "%Y-%m-%d %H:%M:%S"
+  SHOWS_START_MIDDLE_OR_END_OF_RECORD: "middle"
+
+DATA:
+  HEADER_SECTION_ROWS: [ 0 ]
+  SKIP_ROWS: [ ]
+  HEADER_ROWS: [ 0 ]
+  VARNAMES_ROW: 0
+  VARUNITS_ROW: "-not-available-"
+  NA_VALUES: [ -9999, -6999, -999, "nan", "NaN", "NAN", "NA", "inf", "-inf", "-" ]
+  FREQUENCY: "min"
+  DELIMITER: ","
