@@ -3,9 +3,8 @@ from pathlib import Path
 
 from pandas import DataFrame
 
-from diive.core.io.filereader import ReadFileType
+from diive.core.io.filereader import ReadFileType, MultiDataFileReader, search_files, DataFileReader
 from diive.core.io.files import load_parquet, load_pickle
-
 
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))  # Dir of this file
 
@@ -53,6 +52,18 @@ def load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN():
     return data_df, metadata_df
 
 
+def load_exampledata_multiple_EDDYPRO_FLUXNET_CSV_30MIN():
+    filepaths = search_files(
+        searchdirs=DIR_PATH,
+        pattern='exampledata_EDDYPRO-FLUXNET-CSV-30MIN_*_eddypro_CH-FRU_FR-*_fluxnet_*_adv.csv')
+    loaddatafile = MultiDataFileReader(filetype='EDDYPRO-FLUXNET-CSV-30MIN',
+                                       filepaths=filepaths,
+                                       output_middle_timestamp=True)
+    data_df = loaddatafile.data_df
+    metadata_df = loaddatafile.metadata_df
+    return data_df, metadata_df
+
+
 def load_exampledata_EDDYPRO_FULL_OUTPUT_CSV_30MIN():
     filepath = Path(
         DIR_PATH) / 'exampledata_EDDYPRO-FULL-OUTPUT-CSV-30MIN_eddypro_CH-FRU_FR-20240408-101506_full_output_2024-04-08T101558_adv.csv'
@@ -92,6 +103,15 @@ def load_exampledata_TOA5_DAT_1MIN():
     data_df, metadata_df = loaddatafile.get_filedata()
     return data_df, metadata_df
 
+def load_exampledata_GENERIC_CSV_HEADER_1ROW_TS_MIDDLE_FULL_1MIN_long():
+    filepath = Path(
+        DIR_PATH) / 'exampledata_GENERIC-CSV-HEADER-1ROW-TS-MIDDLE-FULL-1MIN_CH-FRU_iDL_BOX1_0_1_TBL1_20240401-0000.dat.csv'
+    loaddatafile = ReadFileType(filetype='GENERIC-CSV-HEADER-1ROW-TS-MIDDLE-FULL-1MIN',
+                                filepath=filepath,
+                                data_nrows=None)
+    data_df, metadata_df = loaddatafile.get_filedata()
+    return data_df, metadata_df
+
 
 def load_exampledata_GENERIC_CSV_HEADER_1ROW_TS_MIDDLE_FULL_NS_20HZ():
     filepath = Path(
@@ -101,6 +121,29 @@ def load_exampledata_GENERIC_CSV_HEADER_1ROW_TS_MIDDLE_FULL_NS_20HZ():
                                 data_nrows=None)
     data_df, metadata_df = loaddatafile.get_filedata()
     return data_df, metadata_df
+
+
+def load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN_with_datafilereader_parameters():
+    filepath = Path(
+        DIR_PATH) / 'exampledata_EDDYPRO-FLUXNET-CSV-30MIN_CH-AWS_2022.07_FR-20220127-164245_eddypro_fluxnet_2022-01-28T112538_adv.csv'
+    dfr = DataFileReader(filepath=filepath,
+                         data_header_section_rows=[0],  # Header section (before data) comprises 1 row
+                         data_skip_rows=[],  # Skip no rows
+                         data_header_rows=[0], # Header with variable names and units, in this case only variable names in first row of header
+                         data_varnames_row=0,  # Variable names are in first row of header
+                         data_varunits_row=None,  # Header does not contain any variable units
+                         data_na_vals=[-9999], # List of values interpreted as missing values, EddyPro uses -9999 for missing values in ouput file
+                         data_freq="30min",  # Time resolution of the data is 30-minutes
+                         data_delimiter=",",  # This csv file uses the comma as delimiter
+                         data_nrows=None, # How many data rows to read from files, mainly used for testing, in this case None to read all rows in file
+                         timestamp_idx_col=["TIMESTAMP_END"],  # Name of the column that is used for the timestamp index
+                         timestamp_datetime_format="%Y%m%d%H%M",  # Timestamp in the files looks like this: 202107010300
+                         timestamp_start_middle_end="end", # Timestamp in the file defined in *timestamp_idx_col* refers to the END of the averaging interval
+                         output_middle_timestamp=True, # Timestamp in output dataframe (after reading the file) refers to the MIDDLE of the averaging interval
+                         compression=None)  # File is not compressed (not zipped)
+    data_df, metadata_df = dfr.get_data()
+    return data_df, metadata_df
+
 
 def load_exampledata_pickle():
     """Load pickled dataframe"""
