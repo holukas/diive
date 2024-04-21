@@ -24,12 +24,12 @@ basevars_fulloutputfile = {
 
 
 def detect_basevar(fluxcol: str,
-                   filetype: Literal['EDDYPRO-FLUXNET-30MIN', 'EDDYPRO-FULL-OUTPUT-30MIN']) -> str:
+                   filetype: Literal['EDDYPRO-FLUXNET-CSV-30MIN', 'EDDYPRO-FULL-OUTPUT-CSV-30MIN']) -> str:
     """Detect name of base variable that was used to calculate
     the respective flux."""
-    if filetype == 'EDDYPRO-FLUXNET-30MIN':
+    if filetype == 'EDDYPRO-FLUXNET-CSV-30MIN':
         basevar = basevars_fluxnetfile[fluxcol]
-    elif filetype == 'EDDYPRO-FULL-OUTPUT-30MIN':
+    elif filetype == 'EDDYPRO-FULL-OUTPUT-CSV-30MIN':
         basevar = basevars_fulloutputfile[fluxcol]
     else:
         raise Exception(f"(!) Filetype {filetype} is not defined. No basevar could be detected for {fluxcol}.")

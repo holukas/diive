@@ -19,7 +19,7 @@ class FluxQualityFlagsEddyPro:
                  dfin: DataFrame,
                  fluxcol: str,
                  basevar: str,
-                 filetype: Literal['EDDYPRO-FLUXNET-30MIN', 'EDDYPRO-FULL-OUTPUT-30MIN'],
+                 filetype: Literal['EDDYPRO-FLUXNET-CSV-30MIN', 'EDDYPRO-FULL-OUTPUT-CSV-30MIN'],
                  idstr: str = None,
                  units: dict = None):
         """
@@ -33,14 +33,14 @@ class FluxQualityFlagsEddyPro:
             filetype: Filetype of the input file.
             basevar: Name of the variable that was used to calculate the flux, e.g. 'CO2_CONC' for CO2 flux.
             units: Dictionary of columns names and their units, only needed
-                when *filetype='EDDYPRO-FULL-OUTPUT-30MIN'*.
+                when *filetype='EDDYPRO-FULL-OUTPUT-CSV-30MIN'*.
         """
         self.fluxcol = fluxcol
         self.dfin = dfin.copy()
 
-        if not units and filetype == 'EDDYPRO-FULL-OUTPUT-30MIN':
+        if not units and filetype == 'EDDYPRO-FULL-OUTPUT-CSV-30MIN':
             raise Exception("ERROR: No units found. Units are needed when working "
-                            "with filetype EDDYPRO-FULL-OUTPUT-30MIN.")
+                            "with filetype EDDYPRO-FULL-OUTPUT-CSV-30MIN.")
 
         self.units = units
         self.idstr = validate_id_string(idstr=idstr)
@@ -93,9 +93,9 @@ class FluxQualityFlagsEddyPro:
             discont_hf=discont_hf,
             discont_sf=discont_sf,
         )
-        if self.filetype == 'EDDYPRO-FLUXNET-30MIN':
+        if self.filetype == 'EDDYPRO-FLUXNET-CSV-30MIN':
             flags = flags_vm97_eddypro_fluxnetfile_tests(**kwargs)
-        elif self.filetype == 'EDDYPRO-FULL-OUTPUT-30MIN':
+        elif self.filetype == 'EDDYPRO-FULL-OUTPUT-CSV-30MIN':
             flags = flags_vm97_eddypro_fulloutputfile_tests(**kwargs)
         else:
             raise Exception(f"Filetype {self.filetype.__name__} unkown.")

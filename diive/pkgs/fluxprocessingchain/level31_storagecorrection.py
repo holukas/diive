@@ -21,7 +21,7 @@ class FluxStorageCorrectionSinglePointEddyPro:
                  df: DataFrame,
                  fluxcol: str,
                  basevar: str,
-                 filetype: Literal['EDDYPRO-FLUXNET-30MIN', 'EDDYPRO-FULL-OUTPUT-30MIN'],
+                 filetype: Literal['EDDYPRO-FLUXNET-CSV-30MIN', 'EDDYPRO-FULL-OUTPUT-CSV-30MIN'],
                  gapfill_storage_term: bool = False,
                  idstr: str = 'L3.1'):
         self.df = df.copy()
@@ -156,7 +156,7 @@ class FluxStorageCorrectionSinglePointEddyPro:
 
         flux_corrected_col = None
 
-        if self.filetype == 'EDDYPRO-FLUXNET-30MIN':
+        if self.filetype == 'EDDYPRO-FLUXNET-CSV-30MIN':
             options = {
                 'FC': 'SC_SINGLE',
                 'FH2O': 'SH2O_SINGLE',
@@ -169,7 +169,7 @@ class FluxStorageCorrectionSinglePointEddyPro:
             if self.fluxcol == 'FC':
                 flux_corrected_col = f'NEE{self.idstr}'
 
-        elif self.filetype == 'EDDYPRO-FULL-OUTPUT-30MIN':
+        elif self.filetype == 'EDDYPRO-FULL-OUTPUT-CSV-30MIN':
             options = {
                 'co2_flux': 'co2_strg',
                 'h2o_flux': 'h2o_strg',
@@ -218,8 +218,8 @@ class FluxStorageCorrectionSinglePointEddyPro:
 
 def example():
     # Load data from pickle (much faster loading)
-    from diive.configs.exampledata import load_exampledata_eddypro_fluxnet_CSV_30MIN
-    df, _ = load_exampledata_eddypro_fluxnet_CSV_30MIN()
+    from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
+    df, _ = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
     s = FluxStorageCorrectionSinglePointEddyPro(df=df, fluxcol='FC')
     s.storage_correction()
     # s.showplot(maxflux=20)

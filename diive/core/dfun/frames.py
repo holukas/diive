@@ -14,12 +14,44 @@ from pandas import DataFrame, MultiIndex
 from pandas import Series
 from pandas._libs.tslibs import to_offset
 
+from diive.core.times.times import current_time_microseconds_str
 # from diive.core.times.times import timedelta_to_string
 from diive.pkgs.gapfilling.interpolate import linear_interpolation
 
 pd.set_option('display.width', 1500)
 pd.set_option('display.max_columns', 30)
 pd.set_option('display.max_rows', 50)
+
+
+def compare_len_header_vs_data(n_cols_data: int, n_cols_header: int, varnames_list: list, varunits_list: list):
+    """
+    Check whether there are more data columns than given in the header
+
+    If not checked, this would results in an error when reading the csv file
+    with .read_csv, because the method expects an equal number of header and
+    data columns. If this check is True, then the difference between the length
+    of the first data row and the length of the header row(s) can be used to
+    automatically generate names for the missing header columns.
+    """
+
+    # Check if there are more data columns than header columns
+    more_data_cols_than_header_cols = False
+    num_missing_header_cols = 0
+    if n_cols_data > n_cols_header:
+        more_data_cols_than_header_cols = True
+        num_missing_header_cols = n_cols_data - n_cols_header
+
+    # Generate missing header columns if necessary
+    generated_missing_header_cols_list = []
+    sfx = current_time_microseconds_str()
+    if more_data_cols_than_header_cols:
+        for m in list(range(1, num_missing_header_cols + 1)):
+            missing_col = f'unknown-{m}-{sfx}'
+            generated_missing_header_cols_list.append(missing_col)
+            varnames_list.append(missing_col)
+            varunits_list.append('[-unknown-]')
+
+    return varnames_list, varunits_list, generated_missing_header_cols_list
 
 
 def trim_frame(df: DataFrame, var: str) -> DataFrame:
@@ -177,7 +209,7 @@ def rename_cols(df: DataFrame, renaming_dict: dict) -> DataFrame:
     if isinstance(df.columns, MultiIndex):  # Convert MultiIndex to flat index (tuples)
         df.columns = df.columns.to_flat_index()
         multiindex = True
-    df.rename(columns=renaming_dict, inplace=True)
+    df = df.rename(columns=renaming_dict, inplace=False)
     if multiindex:
         df.columns = pd.MultiIndex.from_tuples(df.columns)  # Restore column MultiIndex
     return df
@@ -246,6 +278,19 @@ def create_random_gaps(series: pd.Series, frac: float = 0.1):
     return series_with_gaps
 
 
+def convert_data_to_numeric(df: pd.DataFrame) -> pd.DataFrame:
+    """Sanitize time series"""
+    # Sanitize time series, numeric data is needed
+    # After this conversion, all columns are of float64 type, strings will be substituted
+    # by NaN. This means columns that contain only strings, e.g. the columns 'date' or
+    # 'filename' in the EddyPro full_output file, contain only NaNs after this step.
+    # Not too problematic in case of 'date', b/c the index contains the datetime info.
+    # todo For now, columns that contain only NaNs are still in the df.
+    # todo at some point, the string columns should also be considered
+    df = df.apply(pd.to_numeric, errors='coerce')
+    return df
+
+
 def get_len_data(filepath: Path,
                  skiprows: list = None,
                  headerrows: list = None):
@@ -258,17 +303,49 @@ def get_len_data(filepath: Path,
     return first_data_row_df.columns.size
 
 
-def get_len_header(filepath: Path,
-                   skiprows: list = None,
-                   headerrows: list = None):
-    """Check number of columns of the header part"""
-    headercols_df = pd.read_csv(filepath,
-                                skiprows=skiprows,
-                                header=headerrows,
-                                nrows=0)
-    num_headercols = headercols_df.columns.size
-    header_cols_list = headercols_df.columns.to_list()
-    return num_headercols, header_cols_list
+def parse_header(filepath: Path,
+                 varnames_row: int,
+                 varunits_row: int = None,
+                 skiprows: list = None,
+                 headerrows: list = None) -> tuple[list, list, int]:
+    """Read variable names and units from a csv file.
+
+    Units are optional since they are not included in all data files.
+
+    Example:
+        In a file, if data start in row 7 and variable names are in row 2 with
+        variable units in row 3 the settings are:
+            skiprows=[0, 1, 4, 5, 6]
+            varnames_row=0
+            varnames_units=1
+
+    Args:
+        filepath: Path to the csv file.
+        varnames_row: Row index of variable names after considering *skiprows*.
+        varunits_row: Row index of variable units after considering *skiprows*.
+        skiprows: Ignored rows at start of file.
+            For example: [0, 1, 2] would ignore the first 3 rows of the file.
+        headerrows: (deprecated)
+
+    Returns:
+        Lists of variable names and units, and integer of number of rows.
+    """
+    df = pd.read_csv(filepath,
+                     # skiprows=[0, 1],
+                     skiprows=skiprows,
+                     # header=headerrows,
+                     # index_col=False,
+                     header=None,
+                     nrows=2)
+    varnames_list = df.loc[varnames_row].copy().tolist()
+    if varunits_row is not None:
+        varunits_list = df.loc[varunits_row].copy().tolist()
+    else:
+        varunits_list = ['-no-units-'] * len(varnames_list)
+    n_cols_header = len(varnames_list)
+    # num_headercols = df.columns.size
+    # header_cols_list = df.columns.to_list()
+    return varnames_list, varunits_list, n_cols_header
 
 
 def df_unique_values(df):

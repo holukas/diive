@@ -35,6 +35,9 @@ def resample_series_to_30MIN(series: Series,
             Which bin edge label to label bucket with. The default is ‘left’ for all frequency offsets
             except for ‘M’, ‘A’, ‘Q’, ‘BM’, ‘BA’, ‘BQ’, and ‘W’ which all have a default of ‘right’.
 
+    See here for a table of updated date offsets in pandas 2.2+:
+    https://pandas.pydata.org/docs/user_guide/timeseries.html#dateoffset-objects
+
     By default, for weekly aggregation the first day of the week in pandas is Sunday, but diive uses Monday.
 
     https://stackoverflow.com/questions/48340463/how-to-understand-closed-and-label-arguments-in-pandas-resample-method
@@ -94,7 +97,7 @@ def resample_series_to_30MIN(series: Series,
 
     # Keep aggregates with enough values
     filter_min = agg_counts_ser >= mincounts
-    agg_ser = agg_ser[filter_min]
+    agg_ser = agg_ser[filter_min].copy()
 
     # Re-assign 30MIN resolution as freq
     agg_ser = agg_ser.asfreq(to_freqstr)

@@ -480,7 +480,7 @@ class StepwiseMeteoScreeningDb:
         return daily_correlations
 
     def resample(self,
-                 to_freqstr: Literal['30T'] = '30T',
+                 to_freqstr: Literal['30T', '30min'] = '30min',
                  agg: Literal['mean', 'sum'] = 'mean',
                  mincounts_perc: float = .25):
 
@@ -493,7 +493,7 @@ class StepwiseMeteoScreeningDb:
                                                         mincounts_perc=mincounts_perc)
 
             # Update tags with resampling info
-            self._tags[field]['freq'] = '30T'
+            self._tags[field]['freq'] = '30min'
             self._tags[field]['data_version'] = 'meteoscreening'
 
             # Create df that includes the resampled series and its tags
@@ -734,17 +734,17 @@ def example():
     MEASUREMENT = 'TA'
 
     # User settings, time range to screen
-    START = '2008-01-01 00:00:01'
-    STOP = '2009-01-01 00:00:01'
+    START = '2022-01-01 00:00:01'
+    STOP = '2022-03-01 00:00:01'
 
     # Auto-settings, data settings
     DATA_VERSION = 'raw'
     TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
-    RESAMPLING_FREQ = '30T'  # During MeteoScreening the screened high-res data will be resampled to this frequency; '30T' = 30-minute time resolution
+    RESAMPLING_FREQ = '30min'  # During MeteoScreening the screened high-res data will be resampled to this frequency; '30min' = 30-minute time resolution
     RESAMPLING_AGG = 'mean'  # The resampling of the high-res data will be done using this aggregation methos; e.g., 'mean'
     # RESAMPLING_AGG = 'sum'  # The resampling of the high-res data will be done using this aggregation methos; e.g., 'mean'
     # DIRCONF = r'P:\Flux\RDS_calculations\_scripts\_configs\configs'  # Location of configuration files, needed e.g. for connection to database
-    DIRCONF = r'L:\Sync\luhk_work\20 - CODING\22 - POET\configs'
+    DIRCONF = r'F:\Sync\luhk_work\20 - CODING\22 - POET\configs'
 
     # Auto-settings, imports
     from datetime import datetime
@@ -767,7 +767,7 @@ def example():
     # # Download data from database with "dbc-influxdb"
     # from dbc_influxdb import dbcInflux
     # dbc = dbcInflux(dirconf=DIRCONF)  # Instantiate class
-
+    #
     # data_simple, data_detailed, assigned_measurements = \
     #     dbc.download(bucket=BUCKET_RAW,
     #                  measurements=[MEASUREMENT],
@@ -779,7 +779,7 @@ def example():
     # import matplotlib.pyplot as plt
     # data_simple.plot()
     # plt.show()
-
+    #
     # # Export data to pickle and parquet for fast testing
     # from diive.core.io.files import save_parquet, save_as_pickle
     # save_parquet(filename="meteodata_simple", data=data_simple, outpath=TESTDIR)
@@ -835,14 +835,14 @@ def example():
     #
     # mscr.showplot_outlier_detection_cleaned()
 
-    # (1) Outlier detection: z-score over all data, separate for daytime and nighttime
-    mscr.flag_outliers_zscore_dtnt_test(thres_zscore=5, showplot=True, verbose=True, repeat=True)
-    mscr.addflag()
-
-    mscr.flag_outliers_zscore_dtnt_test(thres_zscore=2.8, showplot=True, verbose=True, repeat=True)
-    mscr.addflag()
-    mscr.addflag()
-    mscr.addflag()
+    # # (1) Outlier detection: z-score over all data, separate for daytime and nighttime
+    # mscr.flag_outliers_zscore_dtnt_test(thres_zscore=5, showplot=True, verbose=True, repeat=True)
+    # mscr.addflag()
+    #
+    # mscr.flag_outliers_zscore_dtnt_test(thres_zscore=2.8, showplot=True, verbose=True, repeat=True)
+    # mscr.addflag()
+    # mscr.addflag()
+    # mscr.addflag()
 
     # todo implement in notebook
     # for key, val in mscr.outlier_detection.items():
@@ -851,13 +851,13 @@ def example():
     # mscr.showplot_cleaned()
 
 
-    # (2) Outlier detection: Local SD
-    mscr.flag_outliers_localsd_test(n_sd=3.4, winsize=48*7, showplot=True, verbose=True, repeat=True)
-    mscr.addflag()
-
-    # (3) Outlier detection: Increments z-score
-    mscr.flag_outliers_increments_zcore_test(thres_zscore=8, showplot=True, verbose=True, repeat=True)
-    mscr.addflag()
+    # # (2) Outlier detection: Local SD
+    # mscr.flag_outliers_localsd_test(n_sd=3.4, winsize=48*7, showplot=True, verbose=True, repeat=True)
+    # mscr.addflag()
+    #
+    # # (3) Outlier detection: Increments z-score
+    # mscr.flag_outliers_increments_zcore_test(thres_zscore=8, showplot=True, verbose=True, repeat=True)
+    # mscr.addflag()
     #
     # # (4) Outlier detection: z-score over all data
     # mscr.flag_outliers_zscore_test(thres_zscore=6, showplot=True, verbose=True, repeat=True)
@@ -892,17 +892,17 @@ def example():
     mscr.report_outlier_detection_qcf_flags()
     mscr.report_outlier_detection_qcf_series()
     mscr.showplot_outlier_detection_qcf_heatmaps()
-    mscr.showplot_outlier_detection_qcf_timeseries()
+    # mscr.showplot_outlier_detection_qcf_timeseries()
 
-    # Show current time series plots
-    mscr.showplot_orig()
-    mscr.showplot_cleaned()
+    # # Show current time series plots
+    # mscr.showplot_orig()
+    # mscr.showplot_cleaned()
 
     # Apply corrections
 
-    # Radiation zero offset
-    mscr.correction_remove_radiation_zero_offset()
-    mscr.showplot_cleaned()
+    # # Radiation zero offset
+    # mscr.correction_remove_radiation_zero_offset()
+    # mscr.showplot_cleaned()
     #
     # # Set to max
     # mscr.correction_setto_max_threshold(threshold=1000)
@@ -923,14 +923,14 @@ def example():
     # todo mscr.correction_remove_relativehumidity_offset()
     # mscr.showplot_cleaned()
 
-    # Potential radiation correlation
-    mscr.analysis_potential_radiation_correlation(utc_offset=1,
-                                                  mincorr=0.7,
-                                                  showplot=True)
-    mscr.showplot_cleaned()
+    # # Potential radiation correlation
+    # mscr.analysis_potential_radiation_correlation(utc_offset=1,
+    #                                               mincorr=0.7,
+    #                                               showplot=True)
+    # mscr.showplot_cleaned()
 
     # todo Resampling
-    mscr.resample(to_freqstr='30T', agg=RESAMPLING_AGG, mincounts_perc=.25)
+    mscr.resample(to_freqstr='30min', agg=RESAMPLING_AGG, mincounts_perc=.25)
     mscr.showplot_resampled()
 
     for v in mscr.resampled_detailed.keys():
