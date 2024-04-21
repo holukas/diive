@@ -2,6 +2,70 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.74.0 | 21 Apr 2024
+
+### Additions
+
+- **Added**: new function to remove rows that do not have timestamp
+  info (`NaT`) (`diive.core.times.times.remove_rows_nat` and `diive.core.times.times.TimestampSanitizer`)
+- **Added**: new settings `VARNAMES_ROW` and `VARUNITS_ROW` in filetypes YAML files, allows better and more specific
+  configuration when reading data files (`diive/configs/filetypes`)
+- **Added**: many (small) example data files for various filetypes, e.g. `ETH-RECORD-TOA5-CSVGZ-20HZ`
+- **Added**: new optional check in `TimestampSanitizer` that compares the detected time resolution of a time series with
+  the nominal (expected) time resolution. Runs automatically when reading files with `ReadFileType`, in which case
+  the `FREQUENCY` from the filetype configs is used as the nominal time
+  resolution. (`diive.core.times.times.TimestampSanitizer`, `diive.core.io.filereader.ReadFileType`)
+- **Added**: application of `TimestampSanitizer` after inserting a timestamp and setting it as index with
+  function `insert_timestamp`, this makes sure the freq/freqstr info is available for the new timestamp
+  index (`diive.core.times.times.insert_timestamp`)
+
+### Notebooks
+
+- General: Ran all notebook examples to make sure they work with this version of `diive`
+- **Added**: new notebook for reading EddyPro _fluxnet_ output file with `DataFileReader`
+  parameters (`notebooks/ReadFiles/Read_single_EddyPro_fluxnet_output_file_with_DataFileReader.ipynb`)
+- **Added**: new notebook for reading EddyPro _fluxnet_ output file with `ReadFileType` and pre-defined
+  filetype `EDDYPRO-FLUXNET-CSV-30MIN` (`notebooks/ReadFiles/Read_single_EddyPro_fluxnet_output_file_with_ReadFileType.ipynb`)
+- **Added**: new notebook for reading multiple EddyPro _fluxnet_ output files with `MultiDataFileReader` and pre-defined
+  filetype `EDDYPRO-FLUXNET-CSV-30MIN` (`notebooks/ReadFiles/Read_multiple_EddyPro_fluxnet_output_files_with_MultiDataFileReader.ipynb`)
+
+### Changes
+
+- **Renamed**: function `get_len_header` to `parse_header`(`diive.core.dfun.frames.parse_header`)
+- **Renamed**: exampledata files (`diive/configs/exampledata`)
+- **Renamed**: filetypes YAML files to always include the file extension in the file name (`diive/configs/filetypes`)
+- **Reduced**: file size for most example data files
+
+### Tests
+
+- **Added**: various test cases for loading filetypes (`tests/test_loaddata.py`)
+- **Added**: test case for loading and merging multiple
+  files (`tests.test_loaddata.TestLoadFiletypes.test_load_exampledata_multiple_EDDYPRO_FLUXNET_CSV_30MIN`)
+- **Added**: test case for reading EddyPro _fluxnet_ output file with `DataFileReader`
+  parameters (`tests.test_loaddata.TestLoadFiletypes.test_load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN_datafilereader_parameters`)
+- **Added**: test case for resampling series to 30MIN time
+  resolution (`tests.test_time.TestTime.test_resampling_to_30MIN`)
+- **Added**: test case for inserting timestamp with a different convention (middle, start,
+  end) (`tests.test_time.TestTime.test_insert_timestamp`)
+- **Added**: test case for inserting timestamp as index (`tests.test_time.TestTime.test_insert_timestamp_as_index`)
+
+### Bugfixes
+
+- **Fixed**: bug in class `DetectFrequency` when inferred frequency is `None` (`diive.core.times.times.DetectFrequency`)
+- **Fixed**: bug in class `DetectFrequency` where `pd.Timedelta()` would crash if the input frequency does not have a
+  number. `Timedelta` does not accept e.g. the frequency string `min` for minutely time resolution, even though
+  e.g. `pd.infer_freq()` outputs `min` for data in 1-minute time resolution. `TimeDelta` requires a number, in this
+  case `1min`. Results from `infer_freq()` are now checked if they contain a number and if not, `1` is added at the
+  beginning of the frequency string. (`diive.core.times.times.DetectFrequency`)
+- **Fixed**: bug in notebook `WindDirectionOffset`, related to frequency detection during heatmap plotting
+- **Fixed**: bug in `TimestampSanitizer` where the script would crash if the timestamp contained an element that could
+  not be
+  converted to datetime, e.g., when there is a string mixed in with the regular timestamps. Data rows with invalid
+  timestamps are now parsed as `NaT` by using `errors='coerce'`
+  in `pd.to_datetime(data.index, errors='coerce')`.  (`diive.core.times.times.convert_timestamp_to_datetime`
+  and `diive.core.times.times.TimestampSanitizer`)
+- **Fixed**: bug when plotting heatmap (`diive.core.plotting.heatmap_datetime.HeatmapDateTime`)
+
 ## v0.73.0 | 17 Apr 2024
 
 ### New features
@@ -19,9 +83,7 @@
 - Added code in an attempt to harmonize frequency detection from data: in class `DetectFrequency` the detected
   frequency strings are now converted from `Timedelta` (pandas) to `offset` (pandas) to `.freqstr`. This will yield
   the frequency string as seen by (the current version of) pandas. The idea is to harmonize between different
-  representations e.g. `T` or `min` for minutes. Currently it seems that pandas is not consistent with e.g. the
-  represenation of minutes, using `T` in `.infer_freq()` but `min`
-  for `Timedelta` (
+  representations e.g. `T` or `min` for minutes (
   see [here](https://pandas.pydata.org/docs/reference/api/pandas.Timedelta.html)). (`diive.core.times.times.DetectFrequency`)
 
 ### Changes
@@ -155,7 +217,7 @@ interquartile range for the respective class. Plot was generated using the class
 ### Bugfixes & changes
 
 - Fixed: Replaced all references to old filetypes using the underscore to their respective new filetype names,
-  e.g. all occurrences of `EDDYPRO_FLUXNET_30MIN` were replaced with the new name `EDDYPRO-FLUXNET-30MIN`.
+  e.g. all occurrences of `EDDYPRO_FLUXNET_30MIN` were replaced with the new name `EDDYPRO-FLUXNET-CSV-30MIN`.
 - Environment: Python 3.11 is now allowed in `pyproject.toml`: `python = ">=3.9,<3.12"`
 - Environment: Removed `fitter` library from dependencies, was not used.
 - Docs: Testing documentation generation using [Sphinx](https://www.sphinx-doc.org/en/master/), although it looks very
