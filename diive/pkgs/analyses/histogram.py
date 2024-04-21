@@ -129,8 +129,8 @@ class Histogram:
 
 
 def example():
-    from diive.configs.exampledata import load_exampledata_eddypro_fluxnet_CSV_30MIN
-    data_df, metadata_df = load_exampledata_eddypro_fluxnet_CSV_30MIN()
+    from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
+    data_df, metadata_df = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
     print(data_df.head())
 
     series = data_df['CO2_TLAG_ACTUAL'].copy()

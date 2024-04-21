@@ -1,0 +1,24 @@
+GENERAL:
+  NAME: "EDDYPRO-FULL-OUTPUT-CSV-30MIN"
+  DESCRIPTION: "The *_full_output_* file from EddyPro."
+  TAGS: [ "EDDYPRO" ]
+
+FILE:
+  EXTENSION: "*.csv"
+  COMPRESSION: "None"
+
+TIMESTAMP:
+  DESCRIPTION: "2 columns, date and time in separate columns, time without seconds"
+  INDEX_COLUMN: [ 'date', 'time' ]
+  DATETIME_FORMAT: "%Y-%m-%d %H:%M"
+  SHOWS_START_MIDDLE_OR_END_OF_RECORD: "end"
+
+DATA:
+  HEADER_SECTION_ROWS: [ 0, 1, 2 ]
+  SKIP_ROWS: [ 0 ]
+  HEADER_ROWS: [ 0, 1 ]
+  VARNAMES_ROW: 0
+  VARUNITS_ROW: 1
+  NA_VALUES: [ -9999, -6999, -999, "nan", "NaN", "NAN", "NA", "inf", "-inf", "-" ]
+  FREQUENCY: "30min"
+  DELIMITER: ","

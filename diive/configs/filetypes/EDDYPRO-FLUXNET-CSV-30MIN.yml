@@ -1,0 +1,24 @@
+GENERAL:
+  NAME: "EDDYPRO-FLUXNET-CSV-30MIN"
+  DESCRIPTION: "The *_fluxnet_* file from EddyPro."
+  TAGS: [ "EDDYPRO" ]
+
+FILE:
+  EXTENSION: "*.csv"
+  COMPRESSION: "None"
+
+TIMESTAMP:
+  DESCRIPTION: "1 column with date and time in ISO format, no seconds"
+  INDEX_COLUMN: [ 'TIMESTAMP_END' ]
+  DATETIME_FORMAT: "%Y%m%d%H%M"
+  SHOWS_START_MIDDLE_OR_END_OF_RECORD: "end"
+
+DATA:
+  HEADER_SECTION_ROWS: [ 0 ]
+  SKIP_ROWS: [ ]
+  HEADER_ROWS: [ 0 ]
+  VARNAMES_ROW: 0
+  VARUNITS_ROW: "-not-available-"
+  NA_VALUES: [ -9999, -6999, -999, "nan", "NaN", "NAN", "NA", "inf", "-inf", "-" ]
+  FREQUENCY: "30min"
+  DELIMITER: ","

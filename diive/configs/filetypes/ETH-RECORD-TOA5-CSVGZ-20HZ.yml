@@ -1,0 +1,24 @@
+GENERAL:
+  NAME: "ETH-RECORD-TOA5-CSVGZ-20HZ"
+  DESCRIPTION: "TOA5 format with 4-row header including variable name and units row, and no timestamp. Originates from the ETH eddy covariance logging script rECord."
+  TAGS: [ "TOA5", "rECord" ]
+
+FILE:
+  EXTENSION: "*.csv"
+  COMPRESSION: "gzip"
+
+TIMESTAMP:
+  DESCRIPTION: "No timestamp in files."
+  INDEX_COLUMN: "-not-available-"
+  DATETIME_FORMAT: "-not-available-"
+  SHOWS_START_MIDDLE_OR_END_OF_RECORD: "-not-available-"
+
+DATA:
+  HEADER_SECTION_ROWS: [ 0, 1, 2, 3 ]
+  SKIP_ROWS: [ 0, 3 ]
+  HEADER_ROWS: [ 0, 1 ]
+  VARNAMES_ROW: 0
+  VARUNITS_ROW: 1
+  NA_VALUES: [ -9999, -6999, -999, "nan", "NaN", "NAN", "NA", "inf", "-inf", "-" ]
+  FREQUENCY: "50ms"
+  DELIMITER: ","

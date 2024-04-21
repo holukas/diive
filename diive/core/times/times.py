@@ -152,9 +152,11 @@ class TimestampSanitizer:
                  output_middle_timestamp: bool = True,
                  validate_naming: bool = True,
                  convert_to_datetime: bool = True,
+                 remove_index_nat: bool = True,
                  sort_ascending: bool = True,
                  remove_duplicates: bool = True,
                  regularize: bool = True,
+                 nominal_freq: str = None,
                  verbose: bool = False):
         """
         Validate and prepare timestamps for further processing
@@ -165,6 +167,8 @@ class TimestampSanitizer:
         - Sort timestamp ascending
         - Remove duplicates from timestamp index
         - Detect time resolution from timestamp
+        - Compare nominal (expected) frequency with detected frequency (optional,
+            only if *nominal_freq* is given).
         - Make timestamp continuous without date gaps
         - Convert timestamp to show the middle of the averaging period (optional)
 
@@ -173,21 +177,22 @@ class TimestampSanitizer:
 
         Args:
             data:
-            output_middle_timestamp:
-                Convert the timestamp index to show middle of averaging period
-            validate_naming:
-                Check if timestamp is correctly named, allowed names are 'TIMESTAMP_END',
+            output_middle_timestamp: Convert the timestamp index to show middle of averaging period
+            validate_naming: Check if timestamp is correctly named, allowed names are 'TIMESTAMP_END',
                 'TIMESTAMP_START', and 'TIMESTAMP_MIDDLE'.
-            convert_to_datetime:
-                Convert timestamp index to datetime format
-            sort_ascending:
-                Sort timestamp in ascending order
-            remove_duplicates:
-                Remove duplicates in the timestamp index (keep last)
-            regularize:
-                Generate continuous timestamp of given frequency between first and last date of index
-            verbose:
-                Generate more text output if *True*
+            convert_to_datetime: Convert timestamp index to datetime format
+            remove_index_nat: Remove rows that do not have a timestamp index (NaT)
+            sort_ascending: Sort timestamp in ascending order
+            remove_duplicates: Remove duplicates in the timestamp index (keep last)
+            regularize: Generate continuous timestamp of given frequency between first and last date of index
+            nominal_freq: Expected time resolution of *data* timestamp index.
+                If given, the inferred frequency is compared to the nominal frequency. Both must
+                be equal, otherwise raises ValueError. See pandas DateOffset objects for allowed abbreviations.
+                Examples:
+                    '10s', '5s' etc. for seconds, but 's' for 1-second time resolution (no number)
+                    '30min', '5min' etc. for minutes, but 'min' for 1-minute time resolution (no number)
+                    '1h', '3h' etc. for hours, but 'h' for 1-hour time resolution (no number)
+            verbose: Generate more text output if *True*
 
         For more info please refer to the docstring of the respective function.
 
@@ -199,12 +204,18 @@ class TimestampSanitizer:
         self.output_middle_timestamp = output_middle_timestamp
         self.validate_naming = validate_naming
         self.convert_to_datetime = convert_to_datetime
+        self.remove_index_nat = remove_index_nat
         self.sort_ascending = sort_ascending
         self.remove_duplicates = remove_duplicates
         self.regularize = regularize
+        self.nominal_freq = nominal_freq
         self.verbose = verbose
 
-        self.inferred_freq = None if not data.index.freq else data.index.freq
+        # TODO hier nominal freq compare
+        try:
+            self.inferred_freq = None if not data.index.freq else data.index.freq
+        except AttributeError:
+            self.inferred_freq = None
 
         self._run()
 
@@ -223,6 +234,10 @@ class TimestampSanitizer:
         if self.convert_to_datetime:
             self.data = convert_timestamp_to_datetime(self.data, verbose=self.verbose)
 
+        # Remove rows that do not have a timestamp
+        if self.remove_index_nat:
+            self.data = remove_rows_nat(df=self.data, verbose=self.verbose)
+
         # Sort timestamp index ascending
         if self.sort_ascending:
             self.data = sort_timestamp_ascending(self.data, verbose=self.verbose)
@@ -234,6 +249,12 @@ class TimestampSanitizer:
         # Detect time resolution from data
         if not self.inferred_freq:
             self.inferred_freq = DetectFrequency(index=self.data.index, verbose=self.verbose).get()
+
+        # Compare nominal with detected time resolution
+        if self.nominal_freq:
+            if self.inferred_freq != self.nominal_freq:
+                raise ValueError(f"Inferred frequency {self.inferred_freq} does not match "
+                                 f"nominal frequency {self.nominal_freq}.")
 
         # Make timestamp continuous w/o date gaps
         if self.regularize:
@@ -250,6 +271,21 @@ def sort_timestamp_ascending(data: Series or DataFrame, verbose: bool = False) -
         print(f"Sorting timestamp {data.index.name} ascending ...", end=" ")
     data = data.sort_index()
     return data
+
+
+def remove_rows_nat(df: DataFrame, verbose: bool = False) -> DataFrame:
+    """Remove rows that do not have a timestamp (NaT)."""
+    no_date = df.index.isnull()
+    n_rows = no_date.sum()
+    if n_rows > 0:
+        df = df.loc[df.index[~no_date]]
+        if verbose:
+            print(f"Removed {n_rows} rows without timestamp from {df.index.name}.")
+    else:
+        if verbose:
+            print(f"All rows have timestamp {df.index.name}, no rows removed.")
+        pass
+    return df
 
 
 def convert_timestamp_to_datetime(data: Series or DataFrame, verbose: bool = False) -> Series or DataFrame:
@@ -269,7 +305,7 @@ def convert_timestamp_to_datetime(data: Series or DataFrame, verbose: bool = Fal
     if verbose:
         print(f"Converting timestamp {data.index.name} to datetime ...", end=" ")
     try:
-        data.index = pd.to_datetime(data.index)
+        data.index = pd.to_datetime(data.index, errors='coerce')
         if verbose:
             print("OK")
     except:
@@ -630,10 +666,32 @@ class DetectFrequency:
         freq_timedelta, freqinfo_timedelta = timestamp_infer_freq_from_timedelta(timestamp_ix=self.index)
         freq_progressive, freqinfo_progressive = timestamp_infer_freq_progressively(timestamp_ix=self.index)
 
+        # Add number to frequency string, needed for Timedelta: e.g. 'min' --> '1min'
+        # Check if frequency strings contain a number, b/c Timedelta explicitely needs a number,
+        # e.g. '1min' for data in 1-minute time resolution.
+        # Note that .infer_freq() that is used in the functions above outputs frequency strings
+        # for data with e.g. 1-minute time resolution as `min` (no number), while for higher
+        # minute-time resolutions the frequency string contains a number, e.g. '30min'.
+        # Same is true for hourly etc... data.
+        if freq_full:
+            freq_full = f'1{freq_full}' if not any(digit.isdigit() for digit in freq_full) else freq_full
+        if freq_timedelta:
+            freq_timedelta = f'1{freq_timedelta}' if not any(
+                digit.isdigit() for digit in freq_timedelta) else freq_timedelta
+        if freq_progressive:
+            freq_progressive = f'1{freq_progressive}' if not any(
+                digit.isdigit() for digit in freq_progressive) else freq_progressive
+
         # Harmonize frequency strings
-        freq_full = to_offset(pd.Timedelta(freq_full)).freqstr
-        freq_timedelta = to_offset(pd.Timedelta(freq_timedelta)).freqstr
-        freq_progressive = to_offset(pd.Timedelta(freq_progressive)).freqstr
+        # This also removes the number in case of e.g. 1-minute time resolution: '1min' --> 'min'.
+        # This will yield the frequency string as seen by (the current version of) pandas. The idea
+        # is to harmonize between different representations e.g. `T` or `min` for minutes.
+        if freq_full:
+            freq_full = to_offset(pd.Timedelta(freq_full)).freqstr
+        if freq_timedelta:
+            freq_timedelta = to_offset(pd.Timedelta(freq_timedelta)).freqstr
+        if freq_progressive:
+            freq_progressive = to_offset(pd.Timedelta(freq_progressive)).freqstr
 
         list_of_found_freqs = [freq_full, freq_timedelta, freq_progressive]
         if all(i == list_of_found_freqs[0] for i in list_of_found_freqs):
@@ -939,7 +997,13 @@ def insert_timestamp(
               f"        last date:  {data.index[-1]}")
 
     if set_as_index:
+        # This loses freq/freqstr info for timestamp index
         data = data.set_index(new_timestamp_col)
+
+        # Make sure timestamp index has freq/freqstr info
+        data = TimestampSanitizer(data=data,
+                                  output_middle_timestamp=False,
+                                  nominal_freq=timestamp_freqstr).get()
 
     return data
 

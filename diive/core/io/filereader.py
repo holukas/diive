@@ -15,9 +15,9 @@ import pandas.errors
 import yaml
 from pandas import DataFrame
 
-from diive import core
 from diive.configs.filetypes import get_filetypes
-from diive.core import dfun
+from diive.core.dfun.frames import compare_len_header_vs_data, parse_header, get_len_data, \
+    sort_multiindex_columns_names, rename_cols, convert_data_to_numeric
 from diive.core.times.times import continuous_timestamp_freq, TimestampSanitizer
 
 
@@ -121,6 +121,11 @@ def validate_filetype_config(config: dict):
     config['DATA']['HEADER_SECTION_ROWS'] = list(config['DATA']['HEADER_SECTION_ROWS'])
     config['DATA']['SKIP_ROWS'] = list(config['DATA']['SKIP_ROWS'])
     config['DATA']['HEADER_ROWS'] = list(config['DATA']['HEADER_ROWS'])
+    config['DATA']['VARNAMES_ROW'] = int(config['DATA']['VARNAMES_ROW'])
+    if config['DATA']['VARUNITS_ROW'] == '-not-available-':
+        config['DATA']['VARUNITS_ROW'] = None
+    else:
+        config['DATA']['VARUNITS_ROW'] = int(config['DATA']['VARUNITS_ROW'])
     config['DATA']['NA_VALUES'] = list(config['DATA']['NA_VALUES'])
     config['DATA']['FREQUENCY'] = str(config['DATA']['FREQUENCY'])
     config['DATA']['DELIMITER'] = str(config['DATA']['DELIMITER'])
@@ -274,7 +279,7 @@ class MultiDataFileReader:
                                               incoming_metadata_df=incoming_metadata_df, metadata_df=metadata_df)
             except pandas.errors.EmptyDataError:
                 continue
-        data_df = dfun.frames.sort_multiindex_columns_names(df=data_df, priority_vars=None)
+        data_df = sort_multiindex_columns_names(df=data_df, priority_vars=None)
         return data_df, metadata_df
 
     def _merge_with_existing(self,
@@ -328,9 +333,11 @@ class ReadFileType:
         print(f"Reading file {self.filepath.name} ...")
         datafilereader = DataFileReader(
             filepath=self.filepath,
-            data_skiprows=self.filetypeconfig['DATA']['SKIP_ROWS'],
-            data_headerrows=self.filetypeconfig['DATA']['HEADER_ROWS'],
-            data_headersection_rows=self.filetypeconfig['DATA']['HEADER_SECTION_ROWS'],
+            data_skip_rows=self.filetypeconfig['DATA']['SKIP_ROWS'],
+            data_header_rows=self.filetypeconfig['DATA']['HEADER_ROWS'],
+            data_header_section_rows=self.filetypeconfig['DATA']['HEADER_SECTION_ROWS'],
+            data_varnames_row=self.filetypeconfig['DATA']['VARNAMES_ROW'],
+            data_varunits_row=self.filetypeconfig['DATA']['VARUNITS_ROW'],
             data_na_vals=self.filetypeconfig['DATA']['NA_VALUES'],
             data_delimiter=self.filetypeconfig['DATA']['DELIMITER'],
             data_freq=self.filetypeconfig['DATA']['FREQUENCY'],
@@ -350,10 +357,12 @@ class DataFileReader:
 
     def __init__(
             self,
-            filepath: Path,
-            data_skiprows: list = None,
-            data_headerrows: list = None,
-            data_headersection_rows: list = None,
+            filepath: Path or str,
+            data_header_section_rows: list = None,
+            data_skip_rows: list = None,
+            data_header_rows: list = None,
+            data_varnames_row: int = None,
+            data_varunits_row: int = None,
             data_na_vals: list = None,
             data_delimiter: str = None,
             data_freq: str = None,
@@ -365,14 +374,18 @@ class DataFileReader:
             compression: str = None
     ):
 
-        self.filepath = filepath
-        self.data_skiprows = data_skiprows
-        self.data_headerrows = data_headerrows
-        self.data_headersection_rows = data_headersection_rows
+        self.filepath = filepath if isinstance(filepath, Path) else Path(filepath)
+
+        self.data_header_section_rows = data_header_section_rows
+        self.data_skip_rows = data_skip_rows
+        self.data_header_rows = data_header_rows
+        self.data_varnames_row = data_varnames_row
+        self.data_varunits_row = data_varunits_row
         self.data_na_vals = data_na_vals
-        self.data_delimiter = data_delimiter
         self.data_freq = data_freq
+        self.data_delimiter = data_delimiter
         self.data_nrows = data_nrows
+
         self.timestamp_datetime_format = timestamp_datetime_format
         self.timestamp_start_middle_end = timestamp_start_middle_end
         self.timestamp_idx_col = timestamp_idx_col
@@ -386,34 +399,62 @@ class DataFileReader:
         self._read()
 
     def _read(self):
-        headercols_list, self.generated_missing_header_cols_list = self._compare_len_header_vs_data()
-        self.data_df = self._parse_file(headercols_list=headercols_list)
+
+        # Parse variable names and units, get number of columns for header
+        varnames_list, varunits_list, n_cols_header = parse_header(
+            filepath=self.filepath,
+            skiprows=self.data_skip_rows,
+            headerrows=self.data_header_rows,
+            varnames_row=self.data_varnames_row,
+            varunits_row=self.data_varunits_row)
+
+        # Get number of columns for data
+        n_cols_data = get_len_data(
+            filepath=self.filepath,
+            skiprows=self.data_skip_rows,
+            headerrows=self.data_header_rows)
+
+        # Check for missing header columns (in case there are more data cols than header cols)
+        varnames_list, varunits_list, self.generated_missing_header_cols_list = compare_len_header_vs_data(
+            n_cols_data=n_cols_data,
+            n_cols_header=n_cols_header,
+            varnames_list=varnames_list,
+            varunits_list=varunits_list
+        )
+
+        # Parse file
+        self.data_df = self._parse_file(varnames_list=varnames_list)
+
+        # Sanitize timestamp
         if self.timestamp_idx_col:
             self.data_df = TimestampSanitizer(data=self.data_df,
-                                              output_middle_timestamp=self.output_middle_timestamp).get()
-        self._clean_data()
-        if len(self.data_headerrows) == 1:
-            self.data_df = self._add_second_header_row(df=self.data_df)
-        self.metadata_df = self._get_metadata()
-        self.data_df = dfun.frames.flatten_multiindex_all_df_cols(df=self.data_df, keep_first_row_only=True)
+                                              output_middle_timestamp=self.output_middle_timestamp,
+                                              nominal_freq=self.data_freq).get()
+
+        # Make data numeric
+        self.data_df = convert_data_to_numeric(df=self.data_df)
+
+        # Get metadata, info about variables, units and more
+        self.metadata_df = self._get_metadata(varnames_list=varnames_list, varunits_list=varunits_list)
+
+        # self.data_df = flatten_multiindex_all_df_cols(df=self.data_df, keep_first_row_only=True)
 
         self.data_df = ColumnNamesSanitizer(df=self.data_df).get()
 
-    def _get_metadata(self):
+    def _get_metadata(self, varnames_list, varunits_list) -> DataFrame:
         """Create separate dataframe collecting metadata for each variable
         Metadata contains units, tags and time added.
         """
-        _flatcols = [col[0] for col in self.data_df.columns]
+        # _flatcols = [col[0] for col in self.data_df.columns]
         index = ['UNITS', 'TAGS', 'ADDED']
-        data_metadata_df = pd.DataFrame(columns=_flatcols, index=index)
+        data_metadata_df = pd.DataFrame(columns=varnames_list, index=index)
         addtime = datetime.datetime.now()  # Datetime of when var was added
-        for ix, col in enumerate(self.data_df.columns):
-            var = col[0]
-            data_metadata_df.loc['UNITS', var] = col[1]
-            data_metadata_df.loc['TAGS', var] = ["#orig"]
-            data_metadata_df.loc['ADDED', var] = addtime
-            data_metadata_df.loc['VARINDEX', var] = ix
-        data_metadata_df = data_metadata_df.T
+        for varix, varname in enumerate(self.data_df.columns):
+            data_metadata_df.loc['UNITS', varname] = varunits_list[varix]
+            data_metadata_df.loc['TAGS', varname] = ["#orig"]
+            data_metadata_df.loc['ADDED', varname] = addtime
+            data_metadata_df.loc['VARINDEX', varname] = varix
+        data_metadata_df = data_metadata_df.transpose()
         return data_metadata_df
 
     def get_data(self) -> tuple[DataFrame, DataFrame]:
@@ -436,60 +477,6 @@ class DataFileReader:
                 new[idx] = (c[0], c[1])
         return new
 
-    def _add_second_header_row(self, df):
-        """Check if there is only one header row, if yes, then add second row (standardization)"""
-        lst_for_empty_units = []
-        for e in range(len(df.columns)):  ## generate entry for all cols in df
-            lst_for_empty_units.append('-no-units-')
-        df.columns = [df.columns, lst_for_empty_units]  ## conv column index to multiindex
-        return df
-
-    def _compare_len_header_vs_data(self):
-        """
-        Check whether there are more data columns than given in the header
-
-        If not checked, this would results in an error when reading the csv file
-        with .read_csv, because the method expects an equal number of header and
-        data columns. If this check is True, then the difference between the length
-        of the first data row and the length of the header row(s) can be used to
-        automatically generate names for the missing header columns.
-        """
-        num_headercols, headercols_list = dfun.frames.get_len_header(filepath=self.filepath,
-                                                                     skiprows=self.data_skiprows,
-                                                                     headerrows=self.data_headerrows)
-        num_datacols = dfun.frames.get_len_data(filepath=self.filepath,
-                                                skiprows=self.data_skiprows,
-                                                headerrows=self.data_headerrows)
-
-        # Check if there are more data columns than header columns
-        more_data_cols_than_header_cols = False
-        num_missing_header_cols = 0
-        if num_datacols > num_headercols:
-            more_data_cols_than_header_cols = True
-            num_missing_header_cols = num_datacols - num_headercols
-
-        # Generate missing header columns if necessary
-        generated_missing_header_cols_list = []
-        sfx = core.times.times.current_time_microseconds_str()
-        if more_data_cols_than_header_cols:
-            for m in list(range(1, num_missing_header_cols + 1)):
-                missing_col = (f'unknown-{m}-{sfx}', '[-unknown-]')
-                generated_missing_header_cols_list.append(missing_col)
-                headercols_list.append(missing_col)
-
-        return headercols_list, generated_missing_header_cols_list
-
-    def _clean_data(self):
-        """Sanitize time series"""
-        # Sanitize time series, numeric data is needed
-        # After this conversion, all columns are of float64 type, strings will be substituted
-        # by NaN. This means columns that contain only strings, e.g. the columns 'date' or
-        # 'filename' in the EddyPro full_output file, contain only NaNs after this step.
-        # Not too problematic in case of 'date', b/c the index contains the datetime info.
-        # todo For now, columns that contain only NaNs are still in the df.
-        # todo at some point, the string columns should also be considered
-        self.data_df = self.data_df.apply(pd.to_numeric, errors='coerce')
-
     def _configure_timestamp_parsing(self):
         """Configure column settings for parsing dates / times correctly."""
 
@@ -511,88 +498,90 @@ class DataFileReader:
         # date_parser = lambda x: pd.to_datetime(x, format=self.timestamp_datetime_format, errors='coerce')
         return parse_dates, parsed_index_col, _temp_parsed_index_col
 
-    def _parse_file(self, headercols_list):
-        """Parse data file without header"""
+    def _parse_file(self, varnames_list):
+        """Parse data file without parsing the header, columns names are given in *names* kwarg."""
 
-        parse_dates = None
-        parsed_index_col = None
-        _temp_parsed_index_col = None
+        # if self.timestamp_idx_col:
+        #     parse_dates, parsed_index_col, _temp_parsed_index_col = self._configure_timestamp_parsing()
 
-        if self.timestamp_idx_col:
-            parse_dates, parsed_index_col, _temp_parsed_index_col = self._configure_timestamp_parsing()
-
-        data_df = pd.read_csv(
+        # TODO hier
+        df = pd.read_csv(
             filepath_or_buffer=self.filepath,
-            skiprows=self.data_headersection_rows,
+            skiprows=self.data_header_section_rows,
             header=None,
             na_values=self.data_na_vals,
             encoding='utf-8',
             delimiter=self.data_delimiter,
-            keep_date_col=False,
-            parse_dates=parse_dates,
-            date_format=self.timestamp_datetime_format,
             index_col=None,
             engine='python',  # todo 'python', 'c'
             nrows=self.data_nrows,
             compression=self.compression,
             on_bad_lines='warn',
-            names=headercols_list,
+            names=varnames_list,
             skip_blank_lines=True,
             dtype=None
+            # date_format=self.timestamp_datetime_format,
+            # parse_dates=self.timestamp_idx_col,
+            # parse_dates=parse_dates,
+            # keep_date_col=False,
             # usecols=None,
             # mangle_dupe_cols=True,  # deprecated since pandas 2.0
             # date_parser=date_parser,  # deprecated since pandas 2.0
         )
 
         if self.timestamp_idx_col:
-            # Rename temporary column name for parsed index to correct name
-            data_df = dfun.frames.rename_cols(df=data_df, renaming_dict={_temp_parsed_index_col: parsed_index_col})
-            data_df = data_df.set_index(parsed_index_col, inplace=False)
+            df = self._parse_timestamp_index(df=df)
 
-        return data_df
+        return df
 
-    # def _standardize_timestamp_index(self):
-    #     """Standardize timestamp index column"""
-    #
-    #     # Index name is now the same for all filetypes w/ timestamp in data
-    #     self.data_df.set_index([('index', '[parsed]')], inplace=True)
-    #     self.data_df.index.name = ('TIMESTAMP', '[yyyy-mm-dd HH:MM:SS]')
-    #
-    #     # Make sure the index is datetime
-    #     self.data_df.index = pd.to_datetime(self.data_df.index)
-    #
-    #     # Make continuous timestamp at current frequency, from first to last datetime
-    #     self.data_df = continuous_timestamp_freq(data=self.data_df, freq=self.data_freq)
-    #
-    #     # TODO? additional check: validate inferred freq from data like in `dataflow` script
-    #
-    #     # Timestamp convention
-    #     # Shift timestamp by half-frequency, if needed
-    #     if self.timestamp_start_middle_end == 'middle':
-    #         pass
-    #     else:
-    #         timedelta = pd.to_timedelta(self.data_freq) / 2
-    #         if self.timestamp_start_middle_end == 'end':
-    #             self.data_df.index = self.data_df.index - pd.Timedelta(timedelta)
-    #         elif self.timestamp_start_middle_end == 'start':
-    #             self.data_df.index = self.data_df.index + pd.Timedelta(timedelta)
+    def _parse_timestamp_index(self, df: DataFrame) -> DataFrame:
+        # Column name for timestamp index
+        parsed_index_col = f"TIMESTAMP_{self.timestamp_start_middle_end.upper()}"
 
+        # Create temporary column name for parsed index
+        # This solves the issue that a column named *parsed_index_col* might already be
+        # present in the dataset. In that case, parsing would not work and the code would
+        # raise an exception (e.g., "ValueError: Date column TIMESTAMP_END already in dict").
+        # The temporary column name will be changed to the correct name after data were
+        # read (see below).
+        _temp_parsed_index_col = f"_temp_{parsed_index_col}"
 
-def example_icosfile():
-    FILE = r"L:\Sync\luhk_work\20 - CODING\21 - DIIVE\diive\diive\configs\exampledata\CH-Dav_BM_20230328_L02_F03.zip"
-    rft = ReadFileType(filepath=FILE, filetype='ICOS-H2R-CSVZIP-10S', output_middle_timestamp=True)
-    df, meta = rft.get_filedata()
+        # Construct timestamp as string
+        df[_temp_parsed_index_col] = ''
+        for col in self.timestamp_idx_col:
 
-    # # Read all original data files to dataframe, convert timestamp index to show TIMESTAMP_MIDDLE
-    # orig = MultiDataFileReader(filepaths=origfiles, filetype='ICOS-H2R-CSVZIP-10S', output_middle_timestamp=True)
-    # origdf = orig.data_df
-    # origmeta = orig.metadata_df
+            # Column can be given as string or integer
+            if isinstance(col, str):
+                tscol = df[col].astype(str)
+            elif isinstance(col, int):
+                tscol = df.iloc[:, col].astype(str)
+            else:
+                raise TypeError(f"Error: unable to parse timestamp column with setting INDEX_COLUMN: {col}.")
+
+            df[_temp_parsed_index_col] = df[_temp_parsed_index_col] + tscol
+            df = df.drop(tscol.name, axis=1, inplace=False)  # Remove col from df
+
+            if col != self.timestamp_idx_col[-1]:
+                df[_temp_parsed_index_col] += ' '
+
+        # Convert parsed timestamp string to datetime
+        df[_temp_parsed_index_col] = pd.to_datetime(df[_temp_parsed_index_col],
+                                                    format=self.timestamp_datetime_format, errors='coerce')
+
+        # Check if column with the same name as *parsed_index_col* exists and drop
+        if parsed_index_col in df.columns:
+            df = df.drop(parsed_index_col, axis=1)
+
+        # Rename temporary column name for parsed index to correct name
+        df = rename_cols(df=df, renaming_dict={_temp_parsed_index_col: parsed_index_col})
+        df = df.set_index(parsed_index_col, inplace=False)
+        return df
 
 
 def example_ep_fluxnet():
     from diive.core.times.times import insert_timestamp, format_timestamp_to_fluxnet_format
 
-    FOLDER = r"L:\Sync\luhk_work\CURRENT\fru_prep"
+    FOLDER = r"F:\TMP\FRU\Level-1_FF-202303_FF-202401_2005-2023\Level-1_results_fluxnet"
     OUTDIR = r"L:\Sync\luhk_work\CURRENT\fru_prep"
 
     filepaths = search_files(FOLDER, "*.csv")
@@ -602,7 +591,7 @@ def example_ep_fluxnet():
     #              and fp.stem.endswith("_adv")]
     print(filepaths)
 
-    loaddatafile = MultiDataFileReader(filetype='EDDYPRO-FLUXNET-30MIN', filepaths=filepaths)
+    loaddatafile = MultiDataFileReader(filetype='EDDYPRO-FLUXNET-CSV-30MIN', filepaths=filepaths)
     df = loaddatafile.data_df
 
     # # Store original column order
@@ -655,25 +644,6 @@ def example_toa5():
             print(f"{'#' * 40}")
 
 
-def example_hires():
-    # Settings
-    SOURCEFILE = r"Z:\CH-FRU_Fruebuel\20_ec_fluxes\2023\raw_data_ascii\2023_1b_BICO-20240121-135313\raw_data_ascii\CH-FRU_202307050841.csv.gz"
-    U = 'U_[R350-B]'
-    V = 'V_[R350-B]'
-    W = 'W_[R350-B]'
-    C = 'CH4_DRY_[QCL-C2]'
-
-    # Read file
-    df, meta = ReadFileType(filepath=SOURCEFILE,
-                            filetype='ETH-SONICREAD-BICO-CSVGZ-20HZ',
-                            data_nrows=10000,
-                            output_middle_timestamp=True).get_filedata()
-
-    print(df, meta)
-
-
 if __name__ == '__main__':
-    # example_ep_fluxnet()
-    # example_icosfile()
+    example_ep_fluxnet()
     # example_toa5()
-    example_hires()

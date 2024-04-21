@@ -142,29 +142,21 @@ class WindDirOffset:
 
 
 def example():
-    # # Load example data
-    # from diive.core.io.filereader import ReadFileType
-    # SOURCE = r"F:\01-NEW\FF202303\FRU\Level-0_OPENLAG_results_2005-2022\OUT_DIIVE-20230410-020904\winddir_Dataset_DIIVE-20230410-020904_Original-30T.diive.csv"
-    # loaddatafile = ReadFileType(filetype='DIIVE-CSV-30MIN', filepath=SOURCE, data_nrows=None)
-    # data_df, metadata_df = loaddatafile.get_filedata()
 
-    # # Save data as pickle for faster loading
-    # from diive.core.io.files import load_pickle, save_as_pickle
-    # pickle_ = save_as_pickle(data=data_df, outpath='F:\_temp', filename='temp')
+    from diive.configs.exampledata import load_exampledata_winddir
 
-    # Load data from pickle for faster loading
-    from diive.core.io.files import load_pickle
-    data_df = load_pickle(filepath=r"L:\Sync\luhk_work\_temp\temp.pickle")
+    # Load example data
+    df = load_exampledata_winddir()
 
     # Get wind direction time series as series
     col = 'wind_dir'
-    s = data_df[col].copy()
+    s = df[col].copy()
 
     # Prepare input data
-    s = s.loc[s.index.year <= 2022]
+    s = s.loc[s.index.year <= 2009]
     s = s.dropna()
 
-    wds = WindDirOffset(winddir=s, offset_start=-50, offset_end=50, hist_ref_years=[2021, 2022], hist_n_bins=360)
+    wds = WindDirOffset(winddir=s, offset_start=-50, offset_end=50, hist_ref_years=[2008, 2009], hist_n_bins=360)
     yearlyoffsets_df = wds.get_yearly_offsets()
     s_corrected = wds.get_corrected_wind_directions()
     print(yearlyoffsets_df)

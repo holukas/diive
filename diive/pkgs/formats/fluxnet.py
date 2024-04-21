@@ -128,7 +128,7 @@ class FormatEddyProFluxnetFileForUpload:
         return self._subset_fluxnet
 
     def mergefiles(self, limit_n_files: int = None):
-        self._merged_df = loadfiles(filetype='EDDYPRO-FLUXNET-30MIN',
+        self._merged_df = loadfiles(filetype='EDDYPRO-FLUXNET-CSV-30MIN',
                                     sourcedir=self.sourcedir,
                                     limit_n_files=limit_n_files,
                                     fileext='.csv',
