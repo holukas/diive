@@ -211,7 +211,6 @@ class TimestampSanitizer:
         self.nominal_freq = nominal_freq
         self.verbose = verbose
 
-        # TODO hier nominal freq compare
         try:
             self.inferred_freq = None if not data.index.freq else data.index.freq
         except AttributeError:
@@ -278,7 +277,7 @@ def remove_rows_nat(df: DataFrame, verbose: bool = False) -> DataFrame:
     no_date = df.index.isnull()
     n_rows = no_date.sum()
     if n_rows > 0:
-        df = df.loc[df.index[~no_date]]
+        df = df.loc[df.index[~no_date]].copy()
         if verbose:
             print(f"Removed {n_rows} rows without timestamp from {df.index.name}.")
     else:

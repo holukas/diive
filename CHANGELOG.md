@@ -59,9 +59,8 @@
   beginning of the frequency string. (`diive.core.times.times.DetectFrequency`)
 - **Fixed**: bug in notebook `WindDirectionOffset`, related to frequency detection during heatmap plotting
 - **Fixed**: bug in `TimestampSanitizer` where the script would crash if the timestamp contained an element that could
-  not be
-  converted to datetime, e.g., when there is a string mixed in with the regular timestamps. Data rows with invalid
-  timestamps are now parsed as `NaT` by using `errors='coerce'`
+  not be converted to datetime, e.g., when there is a string mixed in with the regular timestamps. Data rows with
+  invalid timestamps are now parsed as `NaT` by using `errors='coerce'`
   in `pd.to_datetime(data.index, errors='coerce')`.  (`diive.core.times.times.convert_timestamp_to_datetime`
   and `diive.core.times.times.TimestampSanitizer`)
 - **Fixed**: bug when plotting heatmap (`diive.core.plotting.heatmap_datetime.HeatmapDateTime`)
