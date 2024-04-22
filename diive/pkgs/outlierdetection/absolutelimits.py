@@ -172,7 +172,7 @@ class AbsoluteLimits(FlagBase):
         self.showplot = showplot
         self.verbose = verbose
 
-    def calc(self, repeat: bool = True):
+    def calc(self, repeat: bool = False):
         """Calculate overall flag, based on individual flags from multiple iterations.
 
         Args:
