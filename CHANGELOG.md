@@ -2,7 +2,16 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.74.1 | XX Apr 2024
+## v0.74.1 | 23 Apr 2024
+
+This update adds the first notebooks (and tests) for outlier detection methods. Only two tests are included so far and
+both tests are relatively simple, but both notebooks already show in principle how outlier removal is handled. An
+important aspect is that `diive` single outlier methods do not remove outliers by default, but instead a flag is created
+that shows where the outliers are located. The flag can then be used to remove the data points.
+This update also includes the addition of a small function that creates artificial spikes in time series data and is
+therefore very useful for testing outlier detection methods.
+More outlier removal notebooks will be added in the future, including a notebook that shows how to combine results from
+multiple outlier tests into one single overall outlier flag.
 
 ### New features
 

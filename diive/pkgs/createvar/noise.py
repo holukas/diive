@@ -14,10 +14,12 @@ def add_impulse_noise(
         https://medium.com/@ms_somanna/guide-to-adding-noise-to-your-data-using-python-and-numpy-c8be815df524
 
     Args:
-        series:
-        factor_low:
-        factor_high:
-        contamination:
+        series: time series
+        factor_low: Low factor for noise creation, defines the lower bound of the noise,
+            calculated as factor_low * min(series).
+        factor_high: High factor for noise creation, defines the upper bound of the noise,
+            calculated as factor_high * max(series).
+        contamination: Fraction of *series* to add noise to.
 
     Returns:
         Series with added noise
