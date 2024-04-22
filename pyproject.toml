@@ -23,6 +23,7 @@ yellowbrick = ">=1.5"
 shap = ">=0.42.1"
 eli5 = ">=0.13.0"
 xgboost = ">=2.0.0"
+numpy = ">=1.20.0"
 
 [tool.poetry.group.dev.dependencies]
 dbc-influxdb = { path = "../../22 - POET/dbc-influxdb", develop = true }
