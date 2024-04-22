@@ -9,14 +9,12 @@
 # Time series data processing
 
 `diive` is a Python library for time series processing, in particular ecosystem data. Originally developed
-for [Swiss FluxNet](https://www.swissfluxnet.ethz.ch/) by the [ETH Grassland Sciences group](https://gl.ethz.ch/).
+by the [ETH Grassland Sciences group](https://gl.ethz.ch/) for [Swiss FluxNet](https://www.swissfluxnet.ethz.ch/).
 
 Recent updates: [CHANGELOG](https://github.com/holukas/diive/blob/main/CHANGELOG.md)   
 Recent releases: [Releases](https://github.com/holukas/diive/releases)
 
-First example notebooks can be found in the folder `notebooks`.
-
-More notebooks are added constantly.
+Example notebooks can be found in the folder `notebooks`. More notebooks are added constantly.
 
 ## Current Features
 
@@ -65,8 +63,6 @@ More notebooks are added constantly.
 - Read multiple data files with pre-defined
   filetype ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/ReadFiles/Read_multiple_EddyPro_fluxnet_output_files_with_MultiDataFileReader.ipynb))
 
-
-
 ### Fits
 
 - Bin fitter
@@ -113,7 +109,15 @@ RandomForestTS ([notebook example](https://github.com/holukas/diive/blob/main/no
 
 ### Outlier Detection
 
-- Absolute limits
+Single outlier tests create a flag where `0=OK` and `2=outlier`.  
+
+#### Multiple tests combined
+
+- Step-wise outlier detection
+
+#### Single tests
+
+- Absolute limits ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/AbsoluteLimits.ipynb))
 - Absolute limits, separately defined for daytime and nighttime data
 - Incremental z-score: Identify outliers based on the z-score of increments
 - Local standard deviation: Identify outliers based on the local standard deviation from a running median

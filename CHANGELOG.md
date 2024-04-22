@@ -2,6 +2,21 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.74.1 | XX Apr 2024
+
+### New features
+
+- **Added**: new function to add impulse noise to time series (`diive.pkgs.createvar.noise.impulse`)
+
+### Notebooks
+
+- **Added**: new notebook for outlier detection: absolute limits (`notebooks/OutlierDetection/AbsoluteLimits.ipynb`)
+
+### Tests
+
+- **Added**: test case for outlier detection: absolute
+  limits (`tests.test_outlierdetection.TestOutlierDetection.test_absolute_limits`)
+
 ## v0.74.0 | 21 Apr 2024
 
 ### Additions
