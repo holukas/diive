@@ -10,10 +10,14 @@
 
 ### Notebooks
 
+- **Added**: new notebook for outlier detection: absolute limits, separately for daytime and nighttime
+  data (`notebooks/OutlierDetection/AbsoluteLimitsDaytimeNighttime.ipynb`)
 - **Added**: new notebook for outlier detection: absolute limits (`notebooks/OutlierDetection/AbsoluteLimits.ipynb`)
 
 ### Tests
 
+- **Added**: test case for outlier detection: absolute limits, separately for daytime and
+  nighttime data (`tests.test_outlierdetection.TestOutlierDetection.test_absolute_limits`)
 - **Added**: test case for outlier detection: absolute
   limits (`tests.test_outlierdetection.TestOutlierDetection.test_absolute_limits`)
 

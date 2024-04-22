@@ -118,7 +118,7 @@ Single outlier tests create a flag where `0=OK` and `2=outlier`.
 #### Single tests
 
 - Absolute limits ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/AbsoluteLimits.ipynb))
-- Absolute limits, separately defined for daytime and nighttime data
+- Absolute limits, separately defined for daytime and nighttime data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/AbsoluteLimitsDaytimeNighttime.ipynb))
 - Incremental z-score: Identify outliers based on the z-score of increments
 - Local standard deviation: Identify outliers based on the local standard deviation from a running median
 - Local outlier factor: Identify outliers based on local outlier factor, across all data
