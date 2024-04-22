@@ -2,6 +2,34 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.74.1 | 23 Apr 2024
+
+This update adds the first notebooks (and tests) for outlier detection methods. Only two tests are included so far and
+both tests are relatively simple, but both notebooks already show in principle how outlier removal is handled. An
+important aspect is that `diive` single outlier methods do not remove outliers by default, but instead a flag is created
+that shows where the outliers are located. The flag can then be used to remove the data points.
+This update also includes the addition of a small function that creates artificial spikes in time series data and is
+therefore very useful for testing outlier detection methods.
+More outlier removal notebooks will be added in the future, including a notebook that shows how to combine results from
+multiple outlier tests into one single overall outlier flag.
+
+### New features
+
+- **Added**: new function to add impulse noise to time series (`diive.pkgs.createvar.noise.impulse`)
+
+### Notebooks
+
+- **Added**: new notebook for outlier detection: absolute limits, separately for daytime and nighttime
+  data (`notebooks/OutlierDetection/AbsoluteLimitsDaytimeNighttime.ipynb`)
+- **Added**: new notebook for outlier detection: absolute limits (`notebooks/OutlierDetection/AbsoluteLimits.ipynb`)
+
+### Tests
+
+- **Added**: test case for outlier detection: absolute limits, separately for daytime and
+  nighttime data (`tests.test_outlierdetection.TestOutlierDetection.test_absolute_limits`)
+- **Added**: test case for outlier detection: absolute
+  limits (`tests.test_outlierdetection.TestOutlierDetection.test_absolute_limits`)
+
 ## v0.74.0 | 21 Apr 2024
 
 ### Additions
@@ -59,9 +87,8 @@
   beginning of the frequency string. (`diive.core.times.times.DetectFrequency`)
 - **Fixed**: bug in notebook `WindDirectionOffset`, related to frequency detection during heatmap plotting
 - **Fixed**: bug in `TimestampSanitizer` where the script would crash if the timestamp contained an element that could
-  not be
-  converted to datetime, e.g., when there is a string mixed in with the regular timestamps. Data rows with invalid
-  timestamps are now parsed as `NaT` by using `errors='coerce'`
+  not be converted to datetime, e.g., when there is a string mixed in with the regular timestamps. Data rows with
+  invalid timestamps are now parsed as `NaT` by using `errors='coerce'`
   in `pd.to_datetime(data.index, errors='coerce')`.  (`diive.core.times.times.convert_timestamp_to_datetime`
   and `diive.core.times.times.TimestampSanitizer`)
 - **Fixed**: bug when plotting heatmap (`diive.core.plotting.heatmap_datetime.HeatmapDateTime`)

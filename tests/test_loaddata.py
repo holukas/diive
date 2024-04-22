@@ -6,7 +6,6 @@ from pandas import DataFrame
 import diive.configs.exampledata as ed
 
 
-
 class TestLoadFiletypes(unittest.TestCase):
 
     def test_load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN(self):
