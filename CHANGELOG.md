@@ -2,6 +2,30 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.75.0 | XX XXX 2024
+
+### New features
+
+- Added gap-filling class `XGBoostTS` for time series data,
+  using [XGBoost](https://xgboost.readthedocs.io/en/stable/index.html) (`diive.pkgs.gapfilling.xgboost_ts.XGBoostTS`)
+- Added new class `TimeSince`: counts number of records (inceremental number / counter) since the last time a time
+  series was inside a specified range, useful for e.g. counting the time since last precipitation, since last freezing
+  temperature, etc. (`diive.pkgs.createvar.timesince.TimeSince`)
+
+### Additions
+
+- Added base class for machine learning regressors, which is basically the code shared between the different
+  methods. At the moment used by `RandomForestTS` and `XGBoostTS`. (`diive.core.ml.common.MlRegressorGapFillingBase`)
+- Added option to change line color directly in `TimeSeries` plots (`diive.core.plotting.timeseries.TimeSeries.plot`)
+
+### Tests
+
+- Added test case for XGBoost gap-filling (`tests.test_gapfilling.TestGapFilling.test_gapfilling_xgboost`)
+- Updated test case for random forest gap-filling (`tests.test_gapfilling.TestGapFilling.test_gapfilling_randomforest`)
+- Harmonized test case for XGBoostTS with test case of RandomForestTS
+- TODO Added test case for quick random forest
+  gap-filling (`tests.test_gapfilling.TestGapFilling.test_random_forest_quickfill`)
+
 ## v0.74.1 | 23 Apr 2024
 
 This update adds the first notebooks (and tests) for outlier detection methods. Only two tests are included so far and

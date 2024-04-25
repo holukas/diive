@@ -111,7 +111,7 @@ class TimeSeries:
         # Show plot
         show(p)
 
-    def plot(self):
+    def plot(self, color: str = None):
         """Plot data using matplotlib"""
         # Create axis
         if self.ax:
@@ -123,17 +123,17 @@ class TimeSeries:
             # If no ax is given, create fig and ax and then show the plot
             self.fig, self.ax = pf.create_ax()
             self.showplot = True
-        color_list = theme.colorwheel_36()  # get some colors
+
+        color = color if color else theme.colorwheel_36()[0]
+        # color_list = theme.colorwheel_36()  # get some colors
         label = self.series.name
         self.ax.plot_date(x=self.series.index,
                           y=self.series,
-                          color=color_list[0], alpha=1,
+                          color=color, alpha=1,
                           lw=theme.WIDTH_LINE_DEFAULT,
                           fmt='-', markeredgecolor='none', ms=0,
                           zorder=99, label=label)
         self._apply_format()
-        if self.showplot:
-            self.fig.show()
 
     def _apply_format(self):
         """Format matplotlib plot"""
