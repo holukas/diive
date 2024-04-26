@@ -98,7 +98,7 @@ Format data to specific formats
 
 Fill gaps in time series with various methods
 
-- XGBoostTS ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/XGBoostGapFilling.ipynb))
+- XGBoostTS ([notebook example (minimal)](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/XGBoostGapFillingMinimal.ipynb), [notebook example (more extensive)](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/XGBoostGapFillingExtensive.ipynb))
 - RandomForestTS ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/RandomForestGapFilling.ipynb))
 - Linear interpolation ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/LinearInterpolation.ipynb))
 - Quick random forest gap-filling ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/QuickRandomForestGapFilling.ipynb))

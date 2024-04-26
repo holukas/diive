@@ -135,6 +135,9 @@ class TimeSeries:
                           zorder=99, label=label)
         self._apply_format()
 
+        if self.showplot:
+            self.fig.show()
+
     def _apply_format(self):
         """Format matplotlib plot"""
 

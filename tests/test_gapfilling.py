@@ -118,9 +118,8 @@ class TestGapFilling(unittest.TestCase):
         self.assertAlmostEqual(scores['mae'], 1.2650862351023513, places=3)
         self.assertAlmostEqual(scores['r2'], 0.8622005478022436, places=3)
         self.assertAlmostEqual(scores['mse'], 3.7510484134745607, places=2)
-        self.assertAlmostEqual(gfdf['NEE_CUT_REF_orig_gfRF'].sum(), -1621.1198972031475, places=0)
+        self.assertAlmostEqual(gfdf['NEE_CUT_REF_orig_gfXG'].sum(), -1621.1198972031475, places=0)
         self.assertAlmostEqual(fi['PERM_IMPORTANCE']['Rg_f'], 1.101849758841488, places=2)
-
 
 
 if __name__ == '__main__':

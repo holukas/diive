@@ -2,7 +2,27 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.75.0 | XX XXX 2024
+## v0.75.0 | 26 Apr 2024
+
+### XGBoost gap-filling
+
+[XGBoost](https://xgboost.readthedocs.io/en/stable/index.html) can now be used to fill gaps in time series data.
+In `diive`, `XGBoost` is implemented in class `XGBoostTS`, which adds additional options for easily including e.g.
+lagged variants of feature variables, timestamp info (DOY, month, ...) and a continuous record number. It also allows
+direct feature reduction by including a purely random feature (consisting of completely random numbers) and calculating
+the 'permutation importance'. All features where the permutation importance is lower than for the random feature can
+then be removed from the dataset, i.e., the list of features, before building the final model.
+
+`XGBoostTS` and `RandomForestTS` both use the same base class `MlRegressorGapFillingBase`. This base class will also
+facilitate the implementation of other gap-filling algorithms in the future.
+
+Another fun (for me) addition is the new class `TimeSince`. It allows to calculate the time since the last occurrence of
+specific conditions. One example where this class can be useful is the calculation of 'time since last precipitation',
+expressed as number of records, which can be helpful in identifying dry conditions. More examples: 'time since freezing
+conditions' based on air temperature; 'time since management' based on management info, e.g. fertilization events.
+Please see the notebook for some illustrative examples.
+
+**Please note that `diive` is still under developement and bugs can be expected.**
 
 ### New features
 
@@ -18,13 +38,18 @@
   methods. At the moment used by `RandomForestTS` and `XGBoostTS`. (`diive.core.ml.common.MlRegressorGapFillingBase`)
 - Added option to change line color directly in `TimeSeries` plots (`diive.core.plotting.timeseries.TimeSeries.plot`)
 
+### Notebooks
+
+- Added new notebook for gap-filling using `XGBoostTS` with mininmal settings (`notebooks/GapFilling/XGBoostGapFillingMinimal.ipynb`)
+- Added new notebook for gap-filling using `XGBoostTS` with more extensive settings (`notebooks/GapFilling/XGBoostGapFillingExtensive.ipynb`)
+- Added new notebook for creating `TimeSince` variables (`notebooks/CalculateVariable/TimeSince.ipynb`)
+
 ### Tests
 
 - Added test case for XGBoost gap-filling (`tests.test_gapfilling.TestGapFilling.test_gapfilling_xgboost`)
 - Updated test case for random forest gap-filling (`tests.test_gapfilling.TestGapFilling.test_gapfilling_randomforest`)
 - Harmonized test case for XGBoostTS with test case of RandomForestTS
-- TODO Added test case for quick random forest
-  gap-filling (`tests.test_gapfilling.TestGapFilling.test_random_forest_quickfill`)
+- Added test case for `TimeSince` variable creation (`tests.test_createvar.TestCreateVar.test_timesince`)
 
 ## v0.74.1 | 23 Apr 2024
 

@@ -69,16 +69,16 @@ class TimeSince:
         df[self.series.name] = self.series.copy()
 
         # Upper limit
-        if self.upper_lim:
-            df[self.upper_lim_col] = self.upper_lim
-        else:
+        if self.upper_lim is None:
             df[self.upper_lim_col] = self.series.max()
+        else:
+            df[self.upper_lim_col] = self.upper_lim
 
         # Lower limit
-        if self.lower_lim:
-            df[self.lower_lim_col] = self.lower_lim
-        else:
+        if self.lower_lim is None:
             df[self.lower_lim_col] = self.series.min()
+        else:
+            df[self.lower_lim_col] = self.lower_lim
 
         df[self.flag_col] = pd.NA
         return df

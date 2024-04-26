@@ -27,9 +27,10 @@ from diive.core.ml.common import MlRegressorGapFillingBase
 
 class XGBoostTS(MlRegressorGapFillingBase):
 
-    def __init__(self, input_df: DataFrame, target_col: str or tuple, verbose: int = 0, perm_n_repeats: int = 10,
-                 test_size: float = 0.25, features_lag: list = None, include_timestamp_as_features: bool = False,
-                 add_continuous_record_number: bool = False, sanitize_timestamp: bool = False, **kwargs):
+    def __init__(self, input_df: DataFrame, target_col: str or tuple, verbose: int = 0, perm_n_repeats: int = 3,
+                 test_size: float = 0.25, features_lag: list = None, features_lag_exclude_cols: list = None,
+                 include_timestamp_as_features: bool = False, add_continuous_record_number: bool = False,
+                 sanitize_timestamp: bool = False, **kwargs):
         """
         Gap-fill timeseries with predictions from random forest model
 
@@ -42,6 +43,7 @@ class XGBoostTS(MlRegressorGapFillingBase):
 
             perm_n_repeats:
                 Number of repeats for calculating permutation feature importance.
+                Must be greater than 0.
 
             test_size:
                 Proportion of the dataset to include in the test split,
@@ -59,6 +61,10 @@ class XGBoostTS(MlRegressorGapFillingBase):
                     TA-1  = [NaN,   5,   6, 7  ]  --> each TA record is paired with the preceding record TA-1
                     TA+1  = [  6,   7,   8, NaN]  --> each TA record is paired with the next record TA+1
                     TA+2  = [  7,   8, NaN, NaN]
+
+            features_lag_exclude_cols:
+                List of predictors for which no lagged variants are added.
+                Example: with ['A', 'B'] no lagged variants for variables 'A' and 'B' are added.
 
             include_timestamp_as_features:
                 Include timestamp info as integer data: year, season, month, week, doy, hour
@@ -90,6 +96,7 @@ class XGBoostTS(MlRegressorGapFillingBase):
             perm_n_repeats=perm_n_repeats,
             test_size=test_size,
             features_lag=features_lag,
+            features_lag_exclude_cols=features_lag_exclude_cols,
             include_timestamp_as_features=include_timestamp_as_features,
             add_continuous_record_number=add_continuous_record_number,
             sanitize_timestamp=sanitize_timestamp,
@@ -101,7 +108,7 @@ def example_xgbts():
     # Setup, user settings
     # TARGET_COL = 'LE_orig'
     TARGET_COL = 'NEE_CUT_REF_orig'
-    subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
+    subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f', 'SWC_FF0_0.15_1', 'PPFD']
 
     # Example data
     from diive.configs.exampledata import load_exampledata_parquet
@@ -113,15 +120,42 @@ def example_xgbts():
     # df = df[remove].copy()
 
     # Subset
+    keep = df_orig.index.year >= 2000
     # keep = df_orig.index.year >= 2021
-    # df = df_orig[keep].copy()
-    df = df_orig.copy()
+    df = df_orig[keep].copy()
+    df_orig = df_orig[keep].copy()
+    # df = df_orig.copy()
 
     # Subset with target and features
     # Only High-quality (QCF=0) measured NEE used for model training in this example
     lowquality = df["QCF_NEE"] > 0
     df.loc[lowquality, TARGET_COL] = np.nan
     df = df[subsetcols].copy()
+
+    # Calculate additional features
+    from diive.pkgs.createvar.timesince import TimeSince
+    ts = TimeSince(df['Tair_f'], upper_lim=0, include_lim=True)
+    ts.calc()
+    ts_series = ts.get_timesince()
+    # xxx = ts.get_full_results()
+    df['TA>0'] = ts_series
+
+    ts = TimeSince(df['Tair_f'], lower_lim=20, include_lim=True)
+    ts.calc()
+    ts_series = ts.get_timesince()
+    # xxx = ts.get_full_results()
+    df['TA>20'] = ts_series
+
+    from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag
+    dnf = DaytimeNighttimeFlag(
+        timestamp_index=df.index,
+        nighttime_threshold=50,
+        lat=46.815333,
+        lon=9.855972,
+        utc_offset=1)
+    results = dnf.get_results()
+    df['DAYTIME'] = results['DAYTIME'].copy()
+    df['NIGHTTIME'] = results['NIGHTTIME'].copy()
 
     # from diive.core.plotting.timeseries import TimeSeries  # For simple (interactive) time series plotting
     # TimeSeries(series=df[TARGET_COL]).plot()
@@ -137,13 +171,15 @@ def example_xgbts():
         verbose=1,
         # features_lag=None,
         features_lag=[-1, -1],
+        features_lag_exclude_cols=['Rg_f', 'TA>0', 'TA>20', 'DAYTIME', 'NIGHTTIME'],
         # include_timestamp_as_features=False,
         include_timestamp_as_features=True,
         # add_continuous_record_number=False,
         add_continuous_record_number=True,
         sanitize_timestamp=True,
         perm_n_repeats=9,
-        n_estimators=99,
+        n_estimators=199,
+        # n_estimators=99,
         random_state=42,
         # booster='gbtree',  # gbtree (default), gblinear, dart
         # device='cpu',
@@ -161,7 +197,7 @@ def example_xgbts():
         # colsample_bynode=1,
         # reg_lambda=1,
         # reg_alpha=0,
-        tree_method='hist',  # auto, hist, approx, exact
+        tree_method='auto',  # auto, hist, approx, exact
         # scale_pos_weight=1,
         # grow_policy='depthwise',  # depthwise, lossguide
         # max_leaves=0,
@@ -203,15 +239,15 @@ def example_xgbts():
 
     # mds = df_orig['NEE_CUT_REF_f'].copy()
     # mds = mds[mds.index.year >= 2016]
-    import matplotlib.pyplot as plt
+    from diive.core.plotting.timeseries import TimeSeries
     # # rfts.gapfilling_df_['.PREDICTIONS_FALLBACK'].cumsum().plot()
     # # rfts.gapfilling_df_['.PREDICTIONS_FULLMODEL'].cumsum().plot()
     # # rfts.gapfilling_df_['.PREDICTIONS'].cumsum().plot()
-    xgbts.get_gapfilled_target().cumsum().plot()
-    df_orig['NEE_CUT_REF_f'].cumsum().plot()
+    TimeSeries(series=xgbts.get_gapfilled_target().cumsum()).plot()
+    TimeSeries(df_orig['NEE_CUT_REF_f'].cumsum()).plot()
     # mds.cumsum().plot()
     # plt.legend()
-    plt.show()
+    # plt.show()
 
     # from diive.core.plotting.timeseries import TimeSeries  # For simple (interactive) time series plotting
     # TimeSeries(series=df[TARGET_COL]).plot()

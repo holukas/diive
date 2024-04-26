@@ -31,6 +31,7 @@ class MlRegressorGapFillingBase:
             perm_n_repeats: int = 10,
             test_size: float = 0.25,
             features_lag: list = None,
+            features_lag_exclude_cols: list = None,
             include_timestamp_as_features: bool = False,
             add_continuous_record_number: bool = False,
             sanitize_timestamp: bool = False,
@@ -66,6 +67,10 @@ class MlRegressorGapFillingBase:
                     TA+1  = [  6,   7,   8, NaN]  --> each TA record is paired with the next record TA+1
                     TA+2  = [  7,   8, NaN, NaN]
 
+            features_lag_exclude_cols:
+                List of predictors for which no lagged variants are added.
+                Example: with ['A', 'B'] no lagged variants for variables 'A' and 'B' are added.
+
             include_timestamp_as_features:
                 Include timestamp info as integer data: year, season, month, week, doy, hour
 
@@ -89,13 +94,21 @@ class MlRegressorGapFillingBase:
         self.model_df = input_df.copy()
         self.target_col = target_col
         self.kwargs = kwargs
-        self.perm_n_repeats = perm_n_repeats
+        self.perm_n_repeats = perm_n_repeats if perm_n_repeats > 0 else 1
         self.test_size = test_size
         self.features_lag = features_lag
+        self.features_lag_exclude_cols = features_lag_exclude_cols
         self.verbose = verbose
 
+        if self.regressor == RandomForestRegressor:
+            self.gfsuffix = '_gfRF'
+        elif self.regressor == XGBRegressor:
+            self.gfsuffix = '_gfXG'
+        else:
+            self.gfsuffix = '_gf'
+
         if self.features_lag and (len(self.model_df.columns) > 1):
-            self.model_df = self._lag_features()
+            self.model_df = self._lag_features(features_lag_exclude_cols=features_lag_exclude_cols)
 
         if include_timestamp_as_features:
             self.model_df = include_timestamp_as_cols(df=self.model_df, txt="")
@@ -603,12 +616,15 @@ class MlRegressorGapFillingBase:
         # df[random_col] = np.random.rand(df.shape[0], 1)
         return df, random_col
 
-    def _lag_features(self):
+    def _lag_features(self, features_lag_exclude_cols):
         """Add lagged variants of variables as new features"""
+        exclude_cols = [self.target_col]
+        if features_lag_exclude_cols:
+            exclude_cols += features_lag_exclude_cols
         return fr.lagged_variants(df=self.model_df,
                                   stepsize=1,
                                   lag=self.features_lag,
-                                  exclude_cols=[self.target_col])
+                                  exclude_cols=exclude_cols)
 
     def _check_n_cols(self):
         """Check number of columns"""
@@ -781,7 +797,7 @@ class MlRegressorGapFillingBase:
         self.pred_fullmodel_col = ".PREDICTIONS_FULLMODEL"
         self.pred_fallback_col = ".PREDICTIONS_FALLBACK"
         self.pred_gaps_col = ".GAP_PREDICTIONS"
-        self.target_gapfilled_col = f"{self.target_col}_gfRF"
+        self.target_gapfilled_col = f"{self.target_col}{self.gfsuffix}"
         self.target_gapfilled_flag_col = f"FLAG_{self.target_gapfilled_col}_ISFILLED"  # "[0=measured]"
         self.target_gapfilled_cumu_col = ".GAPFILLED_CUMULATIVE"
 
