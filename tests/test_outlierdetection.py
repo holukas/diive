@@ -5,7 +5,7 @@ import pandas as pd
 import diive.configs.exampledata as ed
 from diive.pkgs.createvar.noise import add_impulse_noise
 from diive.pkgs.outlierdetection.absolutelimits import AbsoluteLimits, AbsoluteLimitsDaytimeNighttime
-from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag
+
 
 # kudos https://medium.com/@ms_somanna/guide-to-adding-noise-to-your-data-using-python-and-numpy-c8be815df524
 
@@ -68,7 +68,8 @@ class TestOutlierDetection(unittest.TestCase):
         )
         al.calc(repeat=False)
         flag = al.get_flag()
-        frame = {'s': s, 's_noise': s_noise, 'flag': flag, 'is_daytime': al.is_daytime.astype(int), 'is_nighttime': al.is_nighttime.astype(int)}
+        frame = {'s': s, 's_noise': s_noise, 'flag': flag, 'is_daytime': al.is_daytime.astype(int),
+                 'is_nighttime': al.is_nighttime.astype(int)}
         checkdf = pd.DataFrame.from_dict(frame)
 
         nt_min_s = checkdf.loc[checkdf['is_nighttime'] == 1]['s'].min()

@@ -31,7 +31,7 @@ def add_impulse_noise(
     maximum_noise = factor_high * max(series)
     contamination_noise = int(contamination * len(series))
 
-    # Generate noise sample with values that are higer or lower than a randomly selected values in the original data
+    # Generate noise sample with values that are higer or lower than a randomly selected value in the original data
     noise_impulse_sample = np.random.default_rng().uniform(minimum_noise, maximum_noise, contamination_noise)
 
     # Generate an array of zeros with a size that is the difference of the sizes of the original data an the noise sample

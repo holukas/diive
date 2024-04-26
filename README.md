@@ -22,8 +22,7 @@ Example notebooks can be found in the folder `notebooks`. More notebooks are add
 
 - Calculate z-aggregates in quantiles (classes) of x and
   y ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/CalculateZaggregatesInQuantileClassesOfXY.ipynb))
-- Daily
-  correlation ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/DailyCorrelation.ipynb))
+- Daily correlation ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/DailyCorrelation.ipynb))
 - Decoupling: Sorting bins
   method ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/DecouplingSortingBins.ipynb))
 - Find data gaps ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/GapFinder.ipynb))
@@ -40,6 +39,7 @@ Example notebooks can be found in the folder `notebooks`. More notebooks are add
 
 ### Create variable
 
+- Calculate time since last occurrence, e.g. since last precipitation ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/CalculateVariable/TimeSince.ipynb))
 - Calculate daytime flag, nighttime flag and potential radiation from latitude and
   longitude ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/CalculateVariable/Daytime_and_nighttime_flag.ipynb))
 - Day/night flag from sun angle
@@ -75,11 +75,9 @@ Example notebooks can be found in the folder `notebooks`. More notebooks are add
 
 ### Flux processing chain
 
-For info about the Swiss FluxNet flux levels,
-see [here](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/).
+For info about the Swiss FluxNet flux levels, see [here](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/).
 
-- Flux processing
-  chain ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/FluxProcessingChain/FluxProcessingChain.ipynb))
+- Flux processing chain ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/FluxProcessingChain/FluxProcessingChain.ipynb))
     - The notebook example shows the application of:
         - Level-2 quality flags
         - Level-3.1 storage correction
@@ -100,12 +98,10 @@ Format data to specific formats
 
 Fill gaps in time series with various methods
 
-- Linear
-  interpolation ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/LinearInterpolation.ipynb))
--
-RandomForestTS ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/RandomForestGapFilling.ipynb))
-- Quick random forest
-  gap-filling ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/QuickRandomForestGapFilling.ipynb))
+- XGBoostTS ([notebook example (minimal)](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/XGBoostGapFillingMinimal.ipynb), [notebook example (more extensive)](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/XGBoostGapFillingExtensive.ipynb))
+- RandomForestTS ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/RandomForestGapFilling.ipynb))
+- Linear interpolation ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/LinearInterpolation.ipynb))
+- Quick random forest gap-filling ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/QuickRandomForestGapFilling.ipynb))
 
 ### Outlier Detection
 
