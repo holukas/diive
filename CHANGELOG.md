@@ -2,6 +2,13 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.76.0 | XX May 2024
+
+### Diel cycle plot
+
+- (`diive.core.plotting.dielcycle.DielCycle`) 
+- (`diive.core.times.resampling.diel_cycle`) 
+
 ## v0.75.0 | 26 Apr 2024
 
 ### XGBoost gap-filling

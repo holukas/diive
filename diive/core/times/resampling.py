@@ -1,3 +1,4 @@
+import numpy as np
 from typing import Literal
 
 import pandas as pd
@@ -110,3 +111,47 @@ def resample_series_to_30MIN(series: Series,
             agg_ser = TimestampSanitizer(data=agg_ser, output_middle_timestamp=False).get()
 
     return agg_ser
+
+
+def diel_cycle(series: Series,
+               mincounts: int = 1,
+               mean: bool = True,
+               std: bool = True,
+               median: bool = False,
+               each_month: bool = False,
+               ) -> pd.DataFrame:
+    """Calculate diel cycles grouped by time"""
+
+    # Build list with agg strings
+    aggstr = ['count']  # Available values always counted
+    aggstr.append('mean') if mean else aggstr
+    aggstr.append('std') if std else aggstr
+    aggstr.append('median') if median else aggstr
+
+    if each_month:
+        aggs = series.groupby([series.index.month, series.index.time]).agg(aggstr)
+        aggs = aggs.unstack()
+        aggs = aggs.transpose()
+    else:
+        aggs = series.groupby([series.index.time]).agg(aggstr)
+
+    if mean and std:
+        aggs['mean+sd'] = aggs['mean']+aggs['std']
+        aggs['mean-sd'] = aggs['mean']-aggs['std']
+
+    if median and std:
+        aggs['median+sd'] = aggs['median']+aggs['std']
+        aggs['median-sd'] = aggs['median']-aggs['std']
+
+    remove = aggs['count'] < mincounts
+    aggs[remove] = np.nan
+
+
+    # df = pd.DataFrame(series)
+    # df['TIME'] = df.index.time
+    # df = df.groupby('TIME').agg(
+    #     MEAN=(series.name, 'mean'),
+    #     SD=(series.name, 'std')
+    # )
+
+    return aggs
