@@ -17,7 +17,7 @@ Recent releases: [Releases](https://github.com/holukas/diive/releases)
 ## Overview of example notebooks
 
 - For many examples see notebooks here: [Notebook overview](https://github.com/holukas/diive/blob/main/notebooks/OVERVIEW.ipynb)
-- More notebooks are added constantly.
+- More notebooks are added constantly...
 
 ## Current Features
 
