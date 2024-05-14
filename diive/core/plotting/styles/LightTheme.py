@@ -135,6 +135,23 @@ def colors_12(shade):
     return list_12colors
 
 
+def colors_12_months():
+    """Create list of 12 colors."""
+    list_12colors = [lightblue(400),
+                     blue(900),
+                     teal(500),
+                     green(600),
+                     yellow(800),  # May
+                     deeporange(500),  # June
+                     pink(600),  # July
+                     red(900),  # August
+                     deeppurple(400),  # September
+                     bluegray(400),
+                     lime(600),
+                     cyan(700)]
+    return list_12colors
+
+
 def colors_24():
     """Create list of 24 colors that should be more or less distinguishable."""
     list_24colors = [amber(300), deeppurple(400), indigo(300), blue(400), lightblue(300), cyan(300),

@@ -8,6 +8,9 @@
 
 - (`diive.core.plotting.dielcycle.DielCycle`) 
 - (`diive.core.times.resampling.diel_cycle`) 
+- (`diive.core.plotting.styles.LightTheme.colors_12_months`) 
+- (`tests.test_resampling.TestResampling.test_diel_cycle`) 
+- (`notebooks/Plotting/DielCycle.ipynb`) 
 
 ## v0.75.0 | 26 Apr 2024
 

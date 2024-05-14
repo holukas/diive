@@ -1,6 +1,6 @@
-import numpy as np
 from typing import Literal
 
+import numpy as np
 import pandas as pd
 from pandas import Series
 from pandas.tseries.frequencies import to_offset
@@ -130,22 +130,21 @@ def diel_cycle(series: Series,
 
     if each_month:
         aggs = series.groupby([series.index.month, series.index.time]).agg(aggstr)
-        aggs = aggs.unstack()
-        aggs = aggs.transpose()
+        # aggs = aggs.unstack()
+        # aggs = aggs.transpose()
     else:
         aggs = series.groupby([series.index.time]).agg(aggstr)
 
     if mean and std:
-        aggs['mean+sd'] = aggs['mean']+aggs['std']
-        aggs['mean-sd'] = aggs['mean']-aggs['std']
+        aggs['mean+sd'] = aggs['mean'] + aggs['std']
+        aggs['mean-sd'] = aggs['mean'] - aggs['std']
 
     if median and std:
-        aggs['median+sd'] = aggs['median']+aggs['std']
-        aggs['median-sd'] = aggs['median']-aggs['std']
+        aggs['median+sd'] = aggs['median'] + aggs['std']
+        aggs['median-sd'] = aggs['median'] - aggs['std']
 
     remove = aggs['count'] < mincounts
     aggs[remove] = np.nan
-
 
     # df = pd.DataFrame(series)
     # df['TIME'] = df.index.time
@@ -153,5 +152,12 @@ def diel_cycle(series: Series,
     #     MEAN=(series.name, 'mean'),
     #     SD=(series.name, 'std')
     # )
+
+    if each_month:
+        # If aggregated for each month, aggs contains a MultiIndex
+        pass
+    else:
+        # If *not* aggregated for each month, convert to MultiIndex to keep consistent
+        aggs = pd.concat({'ALL_MONTHS': aggs}, names=[series.index.name])
 
     return aggs
