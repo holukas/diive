@@ -142,30 +142,45 @@ class WindDirOffset:
 
 
 def example():
+    # from diive.configs.exampledata import load_exampledata_winddir
+    #
+    # # Load example data
+    # df = load_exampledata_winddir()
+    #
+    # # Get wind direction time series as series
+    # col = 'wind_dir'
+    # s = df[col].copy()
 
-    from diive.configs.exampledata import load_exampledata_winddir
+    # from diive.core.io.filereader import MultiDataFileReader, search_files
+    # filepaths = search_files(searchdirs=r'F:\CURRENT\CHA\FP2024.1\0-Level-0_fluxnet_2005-2023',
+    #                          pattern='*.csv')
+    # df = MultiDataFileReader(filepaths=filepaths, filetype='EDDYPRO-FLUXNET-CSV-30MIN', output_middle_timestamp=True)
+    # df = df.data_df
+    # from diive.core.io.files import save_parquet
+    # filepath = save_parquet(filename='Level-0_fluxnet_2005-2023', data=df,
+    #                         outpath=r"F:\CURRENT\CHA\FP2024.1\0-Level-0_fluxnet_2005-2023")
 
-    # Load example data
-    df = load_exampledata_winddir()
+    filepath = r"F:\CURRENT\CHA\FP2024.1\0-Level-0_fluxnet_2005-2023\Level-0_fluxnet_2005-2023.parquet"
+    from diive.core.io.files import load_parquet
+    df = load_parquet(filepath=filepath)
 
-    # Get wind direction time series as series
-    col = 'wind_dir'
-    s = df[col].copy()
+    col = 'WD'
+    wd = df[col].copy()
 
-    # Prepare input data
-    s = s.loc[s.index.year <= 2009]
-    s = s.dropna()
+    # # Prepare input data
+    # wd = wd.loc[wd.index.year <= 2009]
+    # wd = wd.dropna()
 
-    wds = WindDirOffset(winddir=s, offset_start=-50, offset_end=50, hist_ref_years=[2008, 2009], hist_n_bins=360)
+    wds = WindDirOffset(winddir=wd, offset_start=-50, offset_end=50, hist_ref_years=[2006, 2009], hist_n_bins=360)
     yearlyoffsets_df = wds.get_yearly_offsets()
     s_corrected = wds.get_corrected_wind_directions()
     print(yearlyoffsets_df)
     print(s_corrected)
-    print(s)
+    print(wd)
 
     from diive.core.plotting.heatmap_datetime import HeatmapDateTime
     HeatmapDateTime(series=s_corrected).show()
-    HeatmapDateTime(series=s).show()
+    HeatmapDateTime(series=wd).show()
 
 
 if __name__ == '__main__':

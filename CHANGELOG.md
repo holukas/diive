@@ -2,6 +2,37 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.76.0 | 14 May 2024
+
+### Diel cycle plot
+
+The new class `DielCycle` allows to plot diel cycles per month or across all data for time series data. At the moment,
+it plots the (monthly) diel cycles as means (+/- standard deviation). It makes use of the time info contained in the
+datetime timestamp index of the data. All aggregates are calculated by grouping data by time and (optional) separately
+for each month. The diel cycles have the same time resolution as the time component of the timestamp index, e.g. hourly.
+
+![DIIVE](images/plotDielCycle_diive_v0.76.0.png)
+
+### New features
+
+- Added new class `DielCycle` for plotting diel cycles per month (`diive.core.plotting.dielcycle.DielCycle`)
+- Added new function `diel_cycle` for calculating diel cycles per month. This function is also used by the plotting
+  class `DielCycle` (`diive.core.times.resampling.diel_cycle`)
+
+### Additions
+
+- Added color scheme that contains 12 colors, one for each month. Not perfect, but better than
+  before. (`diive.core.plotting.styles.LightTheme.colors_12_months`)
+
+### Notebooks
+
+- Added new notebook for plotting diel cycles (per month) (`notebooks/Plotting/DielCycle.ipynb`)
+- Added new notebook for calculating diel cycles (per month) (`notebooks/Resampling/ResamplingDielCycle.ipynb`)
+
+### Tests
+
+- Added test case for new function `diel_cycle` (`tests.test_resampling.TestResampling.test_diel_cycle`)
+
 ## v0.75.0 | 26 Apr 2024
 
 ### XGBoost gap-filling
@@ -40,8 +71,10 @@ Please see the notebook for some illustrative examples.
 
 ### Notebooks
 
-- Added new notebook for gap-filling using `XGBoostTS` with mininmal settings (`notebooks/GapFilling/XGBoostGapFillingMinimal.ipynb`)
-- Added new notebook for gap-filling using `XGBoostTS` with more extensive settings (`notebooks/GapFilling/XGBoostGapFillingExtensive.ipynb`)
+- Added new notebook for gap-filling using `XGBoostTS` with mininmal
+  settings (`notebooks/GapFilling/XGBoostGapFillingMinimal.ipynb`)
+- Added new notebook for gap-filling using `XGBoostTS` with more extensive
+  settings (`notebooks/GapFilling/XGBoostGapFillingExtensive.ipynb`)
 - Added new notebook for creating `TimeSince` variables (`notebooks/CalculateVariable/TimeSince.ipynb`)
 
 ### Tests

@@ -13,6 +13,20 @@ from diive.core.plotting.styles.LightTheme import *
 from diive.core.times.times import current_datetime
 
 
+# TODO generalize for other classes
+def set_fig(ax: plt.Axes):
+    if ax:
+        # If ax is given, plot directly to ax, no fig needed
+        fig = None
+        # self.ax = self.ax
+        showplot = False
+    else:
+        # If no ax is given, create fig and ax and then show the plot
+        fig, ax = create_ax()
+        showplot = True
+    return fig, ax, showplot
+
+
 def make_patch_spines_invisible(ax):
     ax.set_frame_on(True)
     ax.patch.set_visible(False)
