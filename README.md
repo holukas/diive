@@ -14,7 +14,10 @@ by the [ETH Grassland Sciences group](https://gl.ethz.ch/) for [Swiss FluxNet](h
 Recent updates: [CHANGELOG](https://github.com/holukas/diive/blob/main/CHANGELOG.md)   
 Recent releases: [Releases](https://github.com/holukas/diive/releases)
 
-Example notebooks can be found in the folder `notebooks`. More notebooks are added constantly.
+## Overview of example notebooks
+
+- For many examples see notebooks here: [Notebook overview](https://github.com/holukas/diive/blob/main/notebooks/OVERVIEW.ipynb)
+- More notebooks are added constantly.
 
 ## Current Features
 
@@ -105,13 +108,13 @@ Fill gaps in time series with various methods
 
 ### Outlier Detection
 
-Single outlier tests create a flag where `0=OK` and `2=outlier`.  
-
 #### Multiple tests combined
 
 - Step-wise outlier detection
 
 #### Single tests
+
+Single outlier tests create a flag where `0=OK` and `2=outlier`.
 
 - Absolute limits ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/AbsoluteLimits.ipynb))
 - Absolute limits, separately defined for daytime and nighttime data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/AbsoluteLimitsDaytimeNighttime.ipynb))
@@ -143,6 +146,9 @@ Single outlier tests create a flag where `0=OK` and `2=outlier`.
 
 - Stepwise MeteoScreening from
   database ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/MeteoScreening/StepwiseMeteoScreeningFromDatabase.ipynb))
+
+### Resampling
+- Calculate diel cycle per month ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Resampling/ResamplingDielCycle.ipynb))
 
 ### Stats
 

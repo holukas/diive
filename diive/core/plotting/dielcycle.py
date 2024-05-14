@@ -129,7 +129,7 @@ def example():
     title = r'$\mathrm{Mean\ CO_2\ flux\ (2013-2024)}$'
     units = r'($\mathrm{µmol\ CO_2\ m^{-2}\ s^{-1}}$)'
     dc.plot(ax=None, title=title, txt_ylabel_units=units,
-            each_month=True)
+            each_month=True, legend_n_col=2)
 
     # from diive.core.io.filereader import search_files, MultiDataFileReader
     # filepaths = search_files(searchdirs=fr"F:\CURRENT\HON\2-FLUXRUN\out", pattern='*.csv')
