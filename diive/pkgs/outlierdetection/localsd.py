@@ -147,3 +147,37 @@ class LocalSD(FlagBase):
             f"n_iterations = {n_iterations}, n_outliers = {n_outliers}")
         self.fig.suptitle(plottitle, fontsize=theme.FIGHEADER_FONTSIZE)
         self.fig.show()
+
+def example():
+    import importlib.metadata
+    import diive.configs.exampledata as ed
+    from diive.pkgs.createvar.noise import add_impulse_noise
+    from diive.core.plotting.timeseries import TimeSeries
+    import warnings
+    warnings.filterwarnings('ignore')
+    version_diive = importlib.metadata.version("diive")
+    print(f"diive version: v{version_diive}")
+    df = ed.load_exampledata_parquet()
+    s = df['Tair_f'].copy()
+    s = s.loc[s.index.year == 2018].copy()
+    s = s.loc[s.index.month == 7].copy()
+    s_noise = add_impulse_noise(series=s,
+                                factor_low=-10,
+                                factor_high=3,
+                                contamination=0.04)  # Add impulse noise (spikes)
+    s_noise.name = f"{s.name}+noise"
+    TimeSeries(s_noise).plot()
+
+    lsd = LocalSD(
+        series=s_noise,
+        n_sd=4,
+        winsize=48 * 10,
+        showplot=True,
+        verbose=True
+    )
+
+    lsd.calc(repeat=True)
+
+
+if __name__ == '__main__':
+    example()

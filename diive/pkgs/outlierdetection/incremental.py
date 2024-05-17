@@ -31,8 +31,11 @@ class zScoreIncrements(FlagBase):
             thres_zscore: Threshold for z-score, scores above this value will
                 be flagged as outlier. NOTE that in this case the z-scores are
                 calculated from the increments between data records in *series*,
-                whereby the increment at a point in time t is simply calculated as:
-                increment(t) = value(t) - value(t-1).
+                whereby the increment at a point in time t is calculated as:
+                (1) increment1(t) = absolute( value(t) - value(t-1) )
+                (2) increment2(t) = absolute( value(t) - value(t+1) )
+                (3) increment(t) = increment1(t) + increment2(t)
+                (4) z-scores are calculated from increment(t)
             showplot: Show plot with results from the outlier detection.
             verbose: Print more text output.
 
@@ -63,10 +66,14 @@ class zScoreIncrements(FlagBase):
         """Perform tests required for this flag"""
 
         s = self.filteredseries.copy()
-        shifted = s.shift(1)
-        increment = s - shifted
+        shifted_prev = s.shift(1)
+        increment_to_prev = s - shifted_prev
+        shifted_next = s.shift(-1)
+        increment_to_next = s - shifted_next
+
+        increment = increment_to_prev.abs() + increment_to_next.abs()
+
         increment.name = 'INCREMENT'
-        # increment = increment.abs()
 
         # Run z-score test on increments and get resulting flag
         flagtest_zscore = zScore(series=increment, thres_zscore=self.thres_zscore,
@@ -74,6 +81,22 @@ class zScoreIncrements(FlagBase):
                                  showplot=False, verbose=False)
         flagtest_zscore.calc(repeat=False)
         flag_zscore = flagtest_zscore.get_flag()
+
+        # import pandas as pd
+        # import matplotlib.pyplot as plt
+        # df = pd.DataFrame(
+        #     {
+        #         'series': s,
+        #         # 'shifted_prev': shifted_prev,
+        #         'increment_to_prev': increment_to_prev,
+        #         # 'shifted_next': shifted_next,
+        #         'increment_to_next': increment_to_next,
+        #         'increment': increment,
+        #         'flag_zscore': flag_zscore,
+        #     }
+        # )
+        # df.plot(subplots=True)
+        # plt.show()
 
         ok = flag_zscore == 0
         ok = ok[ok].index
@@ -86,3 +109,37 @@ class zScoreIncrements(FlagBase):
                 f"ITERATION#{iteration}: Total found {increment.name} outliers: {n_outliers} values (daytime+nighttime)")
 
         return ok, rejected, n_outliers
+
+
+def example():
+    import importlib.metadata
+    import diive.configs.exampledata as ed
+    from diive.pkgs.createvar.noise import add_impulse_noise
+    from diive.core.plotting.timeseries import TimeSeries
+    import warnings
+    warnings.filterwarnings('ignore')
+    version_diive = importlib.metadata.version("diive")
+    print(f"diive version: v{version_diive}")
+    df = ed.load_exampledata_parquet()
+    s = df['Tair_f'].copy()
+    s = s.loc[s.index.year == 2018].copy()
+    s = s.loc[s.index.month == 7].copy()
+    s_noise = add_impulse_noise(series=s,
+                                factor_low=-10,
+                                factor_high=3,
+                                contamination=0.04)  # Add impulse noise (spikes)
+    s_noise.name = f"{s.name}+noise"
+    TimeSeries(s_noise).plot()
+
+    zsi = zScoreIncrements(
+        series=s_noise,
+        thres_zscore=4.5,
+        showplot=True,
+        verbose=False
+    )
+
+    zsi.calc(repeat=True)
+
+
+if __name__ == '__main__':
+    example()
