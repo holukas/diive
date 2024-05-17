@@ -5,11 +5,91 @@ import pandas as pd
 import diive.configs.exampledata as ed
 from diive.pkgs.createvar.noise import add_impulse_noise
 from diive.pkgs.outlierdetection.absolutelimits import AbsoluteLimits, AbsoluteLimitsDaytimeNighttime
+from diive.pkgs.outlierdetection.incremental import zScoreIncrements
+from diive.pkgs.outlierdetection.localsd import LocalSD
 
 
 # kudos https://medium.com/@ms_somanna/guide-to-adding-noise-to-your-data-using-python-and-numpy-c8be815df524
 
 class TestOutlierDetection(unittest.TestCase):
+
+    def test_localsd(self):
+        df = ed.load_exampledata_parquet()
+        s = df['Tair_f'].copy()
+        s = s.loc[s.index.year == 2018].copy()
+        s = s.loc[s.index.month == 7].copy()
+        s_noise = add_impulse_noise(series=s,
+                                    factor_low=-10,
+                                    factor_high=3,
+                                    contamination=0.04,
+                                    seed=42)  # Add impulse noise (spikes)
+        lsd = LocalSD(series=s_noise,
+                      n_sd=4,
+                      winsize=48 * 10,
+                      showplot=False,
+                      verbose=False)
+        lsd.calc(repeat=True)
+        flag = lsd.get_flag()
+        frame = {'s_noise': s_noise, 'flag': flag}
+        checkdf = pd.DataFrame.from_dict(frame)
+
+        # Checks on bad data
+        baddata_stats = checkdf.loc[checkdf.flag == 2].describe()
+        self.assertEqual(baddata_stats.loc['max']['s_noise'], 79.16756136930726)
+        self.assertEqual(baddata_stats.loc['min']['s_noise'], -30.530597715816295)
+        self.assertEqual(baddata_stats.loc['count']['flag'], 44)
+        self.assertEqual(baddata_stats.loc['max']['flag'], 2)
+        self.assertEqual(baddata_stats.loc['count']['s_noise'], 44)
+
+        # Checks on good data
+        gooddata_stats = checkdf.loc[checkdf.flag == 0].describe()
+        self.assertEqual(gooddata_stats.loc['max']['s_noise'], 31.43947292041035)
+        self.assertEqual(gooddata_stats.loc['min']['s_noise'], -2.1888477232075214)
+        self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
+        self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
+        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1444)
+
+
+    def test_zscore_increments(self):
+        df = ed.load_exampledata_parquet()
+        s = df['Tair_f'].copy()
+        s = s.loc[s.index.year == 2018].copy()
+        s = s.loc[s.index.month == 7].copy()
+        s_noise = add_impulse_noise(series=s,
+                                    factor_low=-20,
+                                    factor_high=5,
+                                    contamination=0.04,
+                                    seed=42)  # Add impulse noise (spikes)
+
+        # Checks on noise data, make sure we have outliers, i.e., greater or less than the specified limits
+        self.assertGreater(s_noise.max(), 22)
+        self.assertLess(s_noise.min(), 10)
+
+        zsi = zScoreIncrements(series=s_noise,
+                               thres_zscore=4.5,
+                               showplot=False,
+                               verbose=False)
+
+        zsi.calc(repeat=True)
+        flag = zsi.get_flag()
+        frame = {'s_noise': s_noise, 'flag': flag}
+        checkdf = pd.DataFrame.from_dict(frame)
+
+        # Checks on bad data
+        baddata_stats = checkdf.loc[checkdf.flag == 2].describe()
+        self.assertEqual(baddata_stats.loc['max']['s_noise'], 124.94945003274493)
+        self.assertEqual(baddata_stats.loc['min']['s_noise'], -80.29042252645108)
+        self.assertEqual(baddata_stats.loc['count']['flag'], 73)
+        self.assertEqual(baddata_stats.loc['max']['flag'], 2)
+        self.assertEqual(baddata_stats.loc['count']['s_noise'], 73)
+
+        # Checks on good data
+        gooddata_stats = checkdf.loc[checkdf.flag == 0].describe()
+        self.assertEqual(gooddata_stats.loc['max']['s_noise'], 56.90266168448383)
+        self.assertEqual(gooddata_stats.loc['min']['s_noise'], 5.049)
+        self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
+        self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
+        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1415)
 
     def test_absolute_limits(self):
         df = ed.load_exampledata_parquet()
@@ -19,7 +99,8 @@ class TestOutlierDetection(unittest.TestCase):
         s_noise = add_impulse_noise(series=s,
                                     factor_low=-20,
                                     factor_high=5,
-                                    contamination=0.04)  # Add impulse noise (spikes)
+                                    contamination=0.04,
+                                    seed=42)  # Add impulse noise (spikes)
 
         # Checks on noise data, make sure we have outliers, i.e., greater or less than the specified limits
         self.assertGreater(s_noise.max(), 22)
@@ -33,13 +114,13 @@ class TestOutlierDetection(unittest.TestCase):
 
         # Checks on bad data
         baddata_stats = checkdf.loc[checkdf.flag == 2].describe()
-        self.assertGreater(baddata_stats.loc['max']['s_noise'], 22)
-        self.assertLess(baddata_stats.loc['min']['s_noise'], 10)
+        self.assertEqual(baddata_stats.loc['max']['s_noise'], 124.94945003274493)
+        self.assertEqual(baddata_stats.loc['min']['s_noise'], -80.29042252645108)
 
         # Checks on good data
         gooddata_stats = checkdf.loc[checkdf.flag == 0].describe()
-        self.assertGreaterEqual(gooddata_stats.loc['min']['s_noise'], 10)
-        self.assertLessEqual(gooddata_stats.loc['max']['s_noise'], 22)
+        self.assertEqual(gooddata_stats.loc['min']['s_noise'], 10)
+        self.assertEqual(gooddata_stats.loc['max']['s_noise'], 22)
 
     def test_absolute_limits_dt_nt(self):
         """Load EddyPro _fluxnet_ file"""
@@ -50,7 +131,8 @@ class TestOutlierDetection(unittest.TestCase):
         s_noise = add_impulse_noise(series=s,
                                     factor_low=-20,
                                     factor_high=5,
-                                    contamination=0.08)  # Add impulse noise (spikes)
+                                    contamination=0.08,
+                                    seed=42)  # Add impulse noise (spikes)
 
         # Checks on noise data, make sure we have outliers, i.e., greater or less than the specified limits
         self.assertGreater(s_noise.max(), 22)

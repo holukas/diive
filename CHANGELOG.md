@@ -2,6 +2,32 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.76.1 | 17 May 2024
+
+### Additions
+
+- It is now possible to set a fixed random seed when creating impulse
+  noise (`diive.pkgs.createvar.noise.add_impulse_noise`)
+
+### Changes
+
+- In class `zScoreIncrements`, outliers are now detected by calculating the sum of the absolute differences between a
+  data point and its respective preceding and next data point. Before, only the non-absolute difference of the preceding
+  data point was considered. The sum of absolute differences is then used to calculate the z-score and in further
+  consequence to flag outliers. (`diive.pkgs.outlierdetection.incremental.zScoreIncrements`)
+
+### Notebooks
+
+- Added new notebook for outlier detection using
+  class `zScoreIncrements` (`notebooks/OutlierDetection/zScoreIncremental.ipynb`)
+- Added new notebook for outlier detection using
+  class `LocalSD` (`notebooks/OutlierDetection/LocalSD.ipynb`)
+
+### Tests
+
+- Added new test case for `zScoreIncrements` (`tests.test_outlierdetection.TestOutlierDetection.test_zscore_increments`)
+- Added new test case for `LocalSD` (`tests.test_outlierdetection.TestOutlierDetection.test_localsd`)
+
 ## v0.76.0 | 14 May 2024
 
 ### Diel cycle plot

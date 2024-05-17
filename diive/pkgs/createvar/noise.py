@@ -6,7 +6,8 @@ def add_impulse_noise(
         series: pd.Series,
         factor_low: float = -10,
         factor_high: float = 10,
-        contamination: float = 0.04
+        contamination: float = 0.04,
+        seed: int = None
 ):
     """Create impulse noise based on series
 
@@ -20,6 +21,7 @@ def add_impulse_noise(
         factor_high: High factor for noise creation, defines the upper bound of the noise,
             calculated as factor_high * max(series).
         contamination: Fraction of *series* to add noise to.
+        seed: Random seed.
 
     Returns:
         Series with added noise
@@ -32,7 +34,7 @@ def add_impulse_noise(
     contamination_noise = int(contamination * len(series))
 
     # Generate noise sample with values that are higer or lower than a randomly selected value in the original data
-    noise_impulse_sample = np.random.default_rng().uniform(minimum_noise, maximum_noise, contamination_noise)
+    noise_impulse_sample = np.random.default_rng(seed=seed).uniform(minimum_noise, maximum_noise, contamination_noise)
 
     # Generate an array of zeros with a size that is the difference of the sizes of the original data an the noise sample
     zeros = np.zeros(len(series) - len(noise_impulse_sample))
@@ -41,6 +43,7 @@ def add_impulse_noise(
     noise_impulse = np.concatenate([noise_impulse_sample, zeros])
 
     # Shuffle the values in the noise to make sure the values are randomly placed.
+    np.random.seed(seed=seed)
     np.random.shuffle(noise_impulse)
 
     # Add impulse noise to original data (addition)

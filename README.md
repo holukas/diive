@@ -17,7 +17,7 @@ Recent releases: [Releases](https://github.com/holukas/diive/releases)
 ## Overview of example notebooks
 
 - For many examples see notebooks here: [Notebook overview](https://github.com/holukas/diive/blob/main/notebooks/OVERVIEW.ipynb)
-- More notebooks are added constantly...
+- More notebooks are added constantly.
 
 ## Current Features
 
@@ -118,8 +118,8 @@ Single outlier tests create a flag where `0=OK` and `2=outlier`.
 
 - Absolute limits ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/AbsoluteLimits.ipynb))
 - Absolute limits, separately defined for daytime and nighttime data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/AbsoluteLimitsDaytimeNighttime.ipynb))
-- Incremental z-score: Identify outliers based on the z-score of increments
-- Local standard deviation: Identify outliers based on the local standard deviation from a running median
+- Incremental z-score: Identify outliers based on the z-score of double increments ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/zScoreIncremental.ipynb))
+- Local standard deviation: Identify outliers based on the local standard deviation from a running median ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/LocalSD.ipynb))
 - Local outlier factor: Identify outliers based on local outlier factor, across all data
 - Local outlier factor: Identify outliers based on local outlier factor, daytime nighttime separately
 - Manual removal: Remove time periods (from-to) or single records from time series
@@ -152,8 +152,7 @@ Single outlier tests create a flag where `0=OK` and `2=outlier`.
 
 ### Stats
 
-- Time series
-  stats ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Stats/TimeSeriesStats.ipynb))
+- Time series stats ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Stats/TimeSeriesStats.ipynb))
 
 ### Timestamps
 
