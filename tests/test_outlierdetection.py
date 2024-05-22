@@ -7,11 +7,50 @@ from diive.pkgs.createvar.noise import add_impulse_noise
 from diive.pkgs.outlierdetection.absolutelimits import AbsoluteLimits, AbsoluteLimitsDaytimeNighttime
 from diive.pkgs.outlierdetection.incremental import zScoreIncrements
 from diive.pkgs.outlierdetection.localsd import LocalSD
+from diive.pkgs.outlierdetection.lof import LocalOutlierFactorAllData
 
 
 # kudos https://medium.com/@ms_somanna/guide-to-adding-noise-to-your-data-using-python-and-numpy-c8be815df524
 
 class TestOutlierDetection(unittest.TestCase):
+
+    def test_lof_alldata(self):
+        df = ed.load_exampledata_parquet()
+        s = df['Tair_f'].copy()
+        s = s.loc[s.index.year == 2018].copy()
+        s = s.loc[s.index.month == 7].copy()
+        s_noise = add_impulse_noise(series=s,
+                                    factor_low=-10,
+                                    factor_high=3,
+                                    contamination=0.04,
+                                    seed=42)  # Add impulse noise (spikes)
+        lofa = LocalOutlierFactorAllData(
+            series=s_noise,
+            n_neighbors=1200,
+            contamination='auto',
+            showplot=False,
+            n_jobs=-1
+        )
+        lofa.calc(repeat=True)
+        flag = lofa.get_flag()
+        frame = {'s_noise': s_noise, 'flag': flag}
+        checkdf = pd.DataFrame.from_dict(frame)
+
+        # Checks on bad data
+        baddata_stats = checkdf.loc[checkdf.flag == 2].describe()
+        self.assertEqual(baddata_stats.loc['max']['s_noise'], 79.16756136930726)
+        self.assertEqual(baddata_stats.loc['min']['s_noise'], -30.530597715816295)
+        self.assertEqual(baddata_stats.loc['count']['flag'], 47)
+        self.assertEqual(baddata_stats.loc['max']['flag'], 2)
+        self.assertEqual(baddata_stats.loc['count']['s_noise'], 47)
+
+        # Checks on good data
+        gooddata_stats = checkdf.loc[checkdf.flag == 0].describe()
+        self.assertEqual(gooddata_stats.loc['max']['s_noise'], 24.344)
+        self.assertEqual(gooddata_stats.loc['min']['s_noise'], 2.8838640536716156)
+        self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
+        self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
+        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1441)
 
     def test_localsd(self):
         df = ed.load_exampledata_parquet()
