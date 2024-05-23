@@ -2,6 +2,33 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.76.2 | 23 May 2024
+
+### Additions
+
+- Added function to calculate absolute double differences of a time series, which is the sum of absolute differences
+  between a data record and its preceding and next record. Used in class `zScoreIncrements` for finding (isolated)
+  outliers that are distant from neighboring records. (`diive.core.dfun.stats.double_diff_absolute`)
+- Added small function to calculate z-score stats of a time series (`diive.core.dfun.stats.sstats_zscore`)
+- Added small function to calculate stats for absolute double differences of a time
+  series (`diive.core.dfun.stats.sstats_doublediff_abs`)
+
+### Changes
+
+- Changed the algorithm for outlier detection when using `zScoreIncrements`. Data points are now flagged as outliers if
+  the z-scores of three absolute differences (previous record, next record and the sum of both) all exceed a specified
+  threshold.  (`diive.pkgs.outlierdetection.incremental.zScoreIncrements`)
+
+### Notebooks
+
+- Added new notebook for outlier detection using
+  class `LocalOutlierFactorAllData` (`notebooks/OutlierDetection/LocalOutlierFactorAllData.ipynb`)
+
+### Tests
+
+- Added new test case
+  for `LocalOutlierFactorAllData` (`tests.test_outlierdetection.TestOutlierDetection.test_lof_alldata`)
+
 ## v0.76.1 | 17 May 2024
 
 ### Additions
