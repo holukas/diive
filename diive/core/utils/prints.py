@@ -61,10 +61,11 @@ class PrintID:
 
     def section(self):
         if self.spacing:
-            print("")
-            print("")
+            pass
+            # print("")
+            # print("")
         # self.str(txt=f"{'=' * 40}")
-        self.str(txt=f"{self.id}")
+        self.str(txt=f"running {self.id} ...")
         # self.str(txt=f"{'=' * 40}")
 
     def str(self, txt: str):

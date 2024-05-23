@@ -1,7 +1,9 @@
 # import diive.pkgs.dfun
 # from stats.boxes import insert_statsboxes_txt
-from pandas import Series, DataFrame
 import pandas as pd
+from pandas import Series, DataFrame
+
+from diive.core.funcs.funcs import zscore
 
 
 def q75(x):
@@ -84,6 +86,7 @@ def sstats(s: Series) -> DataFrame:
     df.loc['MISSING', col] = series_numvals_missing(s)
     df.loc['MISSING_PERC', col] = series_perc_missing(s)
     df.loc['MEAN', col] = s.mean()
+    df.loc['MEDIAN', col] = s.quantile(q=0.50)
     df.loc['SD', col] = s.std()
     df.loc['VAR', col] = s.var()
     df.loc['SD/MEAN'] = series_sd_over_mean(s)
@@ -91,7 +94,6 @@ def sstats(s: Series) -> DataFrame:
     # df.loc['CUMSUM_MIN', col] = s.cummin().iloc[-1]
     # df.loc['CUMSUM_MAX', col] = s.cummax().iloc[-1]
     df.loc['SUM', col] = s.sum()
-    df.loc['MEDIAN', col] = s.quantile(q=0.50)
     df.loc['MIN', col] = s.min()
     df.loc['MAX', col] = s.max()
     df.loc['P01', col] = s.quantile(q=0.01)
@@ -103,11 +105,40 @@ def sstats(s: Series) -> DataFrame:
     return df
 
 
+def sstats_doublediff_abs(s: Series) -> DataFrame:
+    """Calculate stats for absolute double difference of series."""
+    doublediff_abs, diff_to_prev_abs, diff_to_next_abs = double_diff_absolute(s=s)
+    df = sstats(s=doublediff_abs)
+    return df
+
+
+def sstats_zscore(s: Series) -> DataFrame:
+    """Calculate stats for z-scores of series."""
+    z = zscore(series=s)
+    df = sstats(s=z)
+    return df
+
+
+def double_diff_absolute(s: Series) -> tuple[Series, Series, Series]:
+    """Calculate the absolute sum of differences between a data point and
+    the respective preceding and next value."""
+    shifted_prev = s.shift(1)
+    diff_to_prev = s - shifted_prev
+    diff_to_prev_abs = diff_to_prev.abs()
+    shifted_next = s.shift(-1)
+    diff_to_next = s - shifted_next
+    diff_to_next_abs = diff_to_next.abs()
+    doublediff_abs = diff_to_prev_abs + diff_to_next_abs
+    # dd_abs = dd_abs ** 2
+    doublediff_abs.name = 'DOUBLE_DIFF_ABS'
+    return doublediff_abs, diff_to_prev_abs, diff_to_next_abs
+
+
 def example():
-    from diive.configs.exampledata import load_exampledata_pickle
-    df = load_exampledata_pickle()
-    series = df['NEE_CUT_REF_orig'].copy()
-    stats = sstats(series)
+    from diive.configs.exampledata import load_exampledata_parquet
+    df = load_exampledata_parquet()
+    series = df['NEE_CUT_REF_f'].copy()
+    stats = sstats_doublediff_abs(series)
     print(stats)
 
 
