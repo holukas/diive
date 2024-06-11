@@ -50,21 +50,27 @@ def remove_relativehumidity_offset(series: Series,
     #       (RH must not be larger than 100% but 130% were measured)
     #       130 - (+30) = 100
     # Corrected RH is most likely not *exactly* 100%, but closer to it.
-    series_corr = series.sub(_offset)
+    _series_corr = series.sub(_offset)
+
+    # Set maximum to 100
+    series_corr_max100 = _series_corr.copy()
+    still_above_100_locs = series_corr_max100 > 100
+    series_corr_max100.loc[still_above_100_locs] = 100
+    series_corr_max100.rename("corrected_by_offset_and_max100", inplace=True)
 
     # Plot
     if showplot:
         from diive.core.plotting.plotfuncs import quickplot
         quickplot([series, _series_exceeds,
-                   _daily_mean_above_100, _offset, series_corr],
+                   _daily_mean_above_100, _offset, _series_corr, series_corr_max100],
                   subplots=True,
                   showplot=showplot, hline=100,
                   title=f"Remove RH offset from {outname}")
 
     # Rename for output
-    series_corr.rename(outname, inplace=True)
+    series_corr_max100.rename(outname, inplace=True)
 
-    return series_corr
+    return series_corr_max100
 
 
 @ConsoleOutputDecorator()

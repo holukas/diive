@@ -5,6 +5,7 @@
 /__local_folders
 /notebooks/_scratch/
 /notebooks/Workbench/FLUXNET_CH4-N2O_Committee_WP2/data/
+/diive/configs/exampledata/local
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

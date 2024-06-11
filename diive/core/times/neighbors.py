@@ -3,10 +3,9 @@ from pandas import DataFrame
 from diive.core.funcs.funcs import find_nearest_val
 
 
-def neighboring_years(df: DataFrame) -> dict:
+def neighboring_years(df: DataFrame, verbose: bool = False) -> dict:
     """Collect data for year and its two neighboring years"""
 
-    print("\nCollecting data from neighboring years ...")
     uniq_years = list(df.index.year.unique())
     yearpools_dict = {}
 
@@ -31,14 +30,16 @@ def neighboring_years(df: DataFrame) -> dict:
         poolyears = sorted(poolyears)
 
         yearpools_dict[str(year)]['poolyears'] = poolyears
-        print(f"Assigned {poolyears} to data pool for {year}.")
+
+        if verbose:
+            print(f"[{neighboring_years.__name__}] Assigned {poolyears} to data pool for {year}.")
 
         yearpools_dict[str(year)]['df'] = _limit_yearpool_data(df=df, poolyears=poolyears)
 
     return yearpools_dict
 
 
-def _limit_yearpool_data(df:DataFrame, poolyears: list) -> DataFrame:
+def _limit_yearpool_data(df: DataFrame, poolyears: list) -> DataFrame:
     """Get data for poolyears"""
     firstyear = min(poolyears)
     lastyear = max(poolyears)

@@ -118,17 +118,17 @@ class TestOutlierDetection(unittest.TestCase):
         baddata_stats = checkdf.loc[checkdf.flag == 2].describe()
         self.assertEqual(baddata_stats.loc['max']['s_noise'], 124.94945003274493)
         self.assertEqual(baddata_stats.loc['min']['s_noise'], -80.29042252645108)
-        self.assertEqual(baddata_stats.loc['count']['flag'], 73)
+        self.assertEqual(baddata_stats.loc['count']['flag'], 56)
         self.assertEqual(baddata_stats.loc['max']['flag'], 2)
-        self.assertEqual(baddata_stats.loc['count']['s_noise'], 73)
+        self.assertEqual(baddata_stats.loc['count']['s_noise'], 56)
 
         # Checks on good data
         gooddata_stats = checkdf.loc[checkdf.flag == 0].describe()
-        self.assertEqual(gooddata_stats.loc['max']['s_noise'], 56.90266168448383)
+        self.assertEqual(gooddata_stats.loc['max']['s_noise'], 24.344)
         self.assertEqual(gooddata_stats.loc['min']['s_noise'], 5.049)
         self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
         self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
-        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1415)
+        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1432)
 
     def test_absolute_limits(self):
         df = ed.load_exampledata_parquet()

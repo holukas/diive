@@ -2,6 +2,52 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.77.0 | 11 Jun 2024
+
+### Additions
+
+- Plotting cumulatives with `CumulativeYear` now also shows the cumulative for the reference, i.e. for the mean over the
+  reference years (`diive.core.plotting.cumulative.CumulativeYear`)
+- Plotting `DielCycle` now accepts `ylim` parameter (`diive.core.plotting.dielcycle.DielCycle`)
+- Added long-term dataset for local testing purposes (internal
+  only) (`diive.configs.exampledata.load_exampledata_parquet_long`)
+- Added several classes in preparation for long-term gap-filling for a future update
+
+### Changes
+
+- Several updates and changes to the base class for regressor decision
+  trees (`diive.core.ml.common.MlRegressorGapFillingBase`):
+    - The data are now split into training set and test set at the very start of regressor setup. This test set is used
+      to evaluate models on unseen data. The default split is 80% training and 20% test data.
+    - Plotting (scores, importances etc.) is now generally separated from the method where they are calculated.
+    - the same `random_state` is now used for all processing steps
+    - refactored code
+    - beautified console output
+- When correcting for relative humidity values above 100%, the maximum of the corrected time series is now set to 100,
+  after the (daily) offset was removed (`diive.pkgs.corrections.offsetcorrection.remove_relativehumidity_offset`)
+- During feature reduction in machine learning regressors, features with permutation importance < 0 are now always
+  removed (`diive.core.ml.common.MlRegressorGapFillingBase._remove_rejected_features`)
+- Changed default parameters for quick random forest gap-filling (`diive.pkgs.gapfilling.randomforest_ts.QuickFillRFTS`)
+- I tried to improve the console output (clarity) for several functions and methods
+
+### Environment
+
+- Added package [dtreeviz](https://github.com/parrt/dtreeviz?tab=readme-ov-file) to visualize decision trees
+
+### Notebooks
+
+- Updated notebook (`notebooks/GapFilling/RandomForestGapFilling.ipynb`)
+- Updated notebook (`notebooks/GapFilling/LinearInterpolation.ipynb`)
+- Updated notebook (`notebooks/GapFilling/XGBoostGapFillingExtensive.ipynb`)
+- Updated notebook (`notebooks/GapFilling/XGBoostGapFillingMinimal.ipynb`)
+- Updated notebook (`notebooks/GapFilling/RandomForestParamOptimization.ipynb`)
+- Updated notebook (`notebooks/GapFilling/QuickRandomForestGapFilling.ipynb`)
+
+### Tests
+
+- Updated and fixed test case (`tests.test_outlierdetection.TestOutlierDetection.test_zscore_increments`)
+- Updated and fixed test case (`tests.test_gapfilling.TestGapFilling.test_gapfilling_randomforest`)
+
 ## v0.76.2 | 23 May 2024
 
 ### Additions

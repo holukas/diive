@@ -267,7 +267,7 @@ class TimestampSanitizer:
 def sort_timestamp_ascending(data: Series or DataFrame, verbose: bool = False) -> Series or DataFrame:
     """Sort timestamp in ascending order"""
     if verbose:
-        print(f"Sorting timestamp {data.index.name} ascending ...", end=" ")
+        print(f">>> Sorting timestamp {data.index.name} ascending ...")
     data = data.sort_index()
     return data
 
@@ -279,10 +279,10 @@ def remove_rows_nat(df: DataFrame, verbose: bool = False) -> DataFrame:
     if n_rows > 0:
         df = df.loc[df.index[~no_date]].copy()
         if verbose:
-            print(f"Removed {n_rows} rows without timestamp from {df.index.name}.")
+            print(f">>> Removed {n_rows} rows without timestamp from {df.index.name}.")
     else:
         if verbose:
-            print(f"All rows have timestamp {df.index.name}, no rows removed.")
+            print(f">>> All rows have timestamp {df.index.name}, no rows removed.")
         pass
     return df
 
@@ -302,7 +302,7 @@ def convert_timestamp_to_datetime(data: Series or DataFrame, verbose: bool = Fal
 
     """
     if verbose:
-        print(f"Converting timestamp {data.index.name} to datetime ...", end=" ")
+        print(f">>> Converting timestamp {data.index.name} to datetime ...", end=" ")
     try:
         data.index = pd.to_datetime(data.index, errors='coerce')
         if verbose:
@@ -329,7 +329,7 @@ def validate_timestamp_naming(data: Series or DataFrame, verbose: bool = False) 
     timestamp_name = data.index.name
     allowed_timestamp_names = ['TIMESTAMP_END', 'TIMESTAMP_START', 'TIMESTAMP_MIDDLE']
     if verbose:
-        print(f"Validating timestamp naming of timestamp column {timestamp_name} ...", end=" ")
+        print(f">>> Validating timestamp naming of timestamp column {timestamp_name} ...", end=" ")
 
     # First check if timestamp already has one of the required names
     if any(fnmatch.fnmatch(timestamp_name, allowed_name) for allowed_name in allowed_timestamp_names):
@@ -533,8 +533,6 @@ def include_timestamp_as_cols(df,
     - https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.OneHotEncoder.html
 
     """
-    print("\nAdding timestamp as data columns ...")
-
     df = df.copy()
     newcols = []
 
@@ -598,7 +596,7 @@ def include_timestamp_as_cols(df,
     # df[weekhour_col] = (df[week_col].astype(str) + df[hour_col].astype(str)).astype(int)
 
     if verbose > 0:
-        print(f"Added timestamp as columns: {newcols} {txt}")
+        print(f"++ Added new columns with timestamp info: {newcols} {txt}")
 
     return df
 
@@ -841,7 +839,7 @@ def remove_index_duplicates(data: Series or DataFrame,
                             verbose: bool = False) -> Series or DataFrame:
     """Remove index duplicates"""
     if verbose:
-        print("Removing data records with duplicate indexes ...", end=" ")
+        print(">>> Removing data records with duplicate indexes ...", end=" ")
     n_duplicates = data.index.duplicated().sum()
     if n_duplicates > 0:
         # Duplicates found
@@ -865,8 +863,8 @@ def continuous_timestamp_freq(data: Series or DataFrame, freq: str, verbose: boo
     last_date = data.index[-1]
 
     if verbose:
-        print(f"Creating continuous {freq} timestamp index for timestamp {data.index.name} "
-              f"between {first_date} and {last_date} ...", end=" ")
+        print(f">>> Creating continuous {freq} timestamp index for timestamp {data.index.name} "
+              f"between {first_date} and {last_date} ...")
 
     # Original timestamp name
     idx_name = data.index.name
@@ -1061,7 +1059,8 @@ def convert_series_timestamp_to_middle(data: Series or DataFrame, verbose: bool 
 
     timestamp_freq = data.index.freq
 
-    if verbose: print(f"Converting timestamp index {timestamp_name_before} to show middle of averaging period ...")
+    if verbose:
+        print(f">>> Converting timestamp index {timestamp_name_before} to show middle of averaging period ...")
 
     first_timestamp_before = data.index[0]
     last_timestamp_before = data.index[-1]
