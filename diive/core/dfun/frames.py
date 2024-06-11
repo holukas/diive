@@ -786,11 +786,10 @@ def rolling_variants(df, records: int, aggtypes: list, exclude_cols: list = None
 
 def add_continuous_record_number(df: DataFrame) -> DataFrame:
     """Add continuous record number as new column"""
-    print("\nAdding continuous record number ...")
     newcol = '.RECORDNUMBER'
     data = range(1, len(df) + 1)
     df[newcol] = data
-    print(f"Added new column {newcol} with record numbers from {df[newcol].iloc[0]} to {df[newcol].iloc[-1]}.")
+    print(f"++ Added new column {newcol} with record numbers from {df[newcol].iloc[0]} to {df[newcol].iloc[-1]}.")
     return df
 
 
@@ -830,7 +829,7 @@ def lagged_variants(df: DataFrame,
     Example:
 
     """
-    print(f"\nCreating lagged variants ...")
+
     if len(df.columns) == 1:
         if df.columns[0] in exclude_cols:
             raise Exception(f"(!) No lagged variants can be created "
@@ -881,9 +880,8 @@ def lagged_variants(df: DataFrame,
             _included.append(col)
 
     if verbose:
-        print(f"Created lagged variants for: {_included} (lags between {lag[0]} and {lag[1]} "
-              f"with stepsize {stepsize})\n"
-              f"No lagged variants for: {_excluded}")
+        print(f"++ Added new columns with lagged variants for: {_included} (lags between {lag[0]} and {lag[1]} "
+              f"with stepsize {stepsize}), no lagged variants for: {_excluded}.")
     return df
 
 

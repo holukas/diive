@@ -29,7 +29,6 @@ from sklearn.model_selection import train_test_split, TimeSeriesSplit, GridSearc
 import diive.core.dfun.frames as fr
 from diive.core.ml.common import MlRegressorGapFillingBase
 from diive.core.ml.common import prediction_scores_regr
-from diive.core.times.neighbors import neighboring_years
 
 pd.set_option('display.max_rows', 50)
 pd.set_option('display.max_columns', 12)
@@ -148,16 +147,13 @@ class OptimizeParamsRFTS:
 
         # Stats
         self._scores = prediction_scores_regr(predictions=grid_predictions,
-                                              targets=y_test,
-                                              infotxt=f"trained on training set, "
-                                                      f"tested on test set",
-                                              showplot=True)
+                                              targets=y_test)
 
 
 class RandomForestTS(MlRegressorGapFillingBase):
 
-    def __init__(self, input_df: DataFrame, target_col: str or tuple, verbose: int = 0, perm_n_repeats: int = 10,
-                 test_size: float = 0.25, features_lag: list = None, include_timestamp_as_features: bool = False,
+    def __init__(self, input_df: DataFrame, target_col: str or tuple, verbose: bool = True, perm_n_repeats: int = 10,
+                 test_size: float = 0.20, features_lag: list = None, include_timestamp_as_features: bool = False,
                  add_continuous_record_number: bool = False, sanitize_timestamp: bool = False, **kwargs):
         """
         Gap-fill timeseries with predictions from random forest model
@@ -240,15 +236,16 @@ class QuickFillRFTS:
         self.rfts = RandomForestTS(
             input_df=self.df,
             target_col=self.target_col,
-            verbose=1,
+            verbose=True,
             features_lag=[-1, -1],
             include_timestamp_as_features=True,
             add_continuous_record_number=True,
             sanitize_timestamp=True,
-            n_estimators=20,
+            n_estimators=99,
             random_state=42,
-            min_samples_split=2,
-            min_samples_leaf=1,
+            min_samples_split=10,
+            min_samples_leaf=5,
+            max_depth=None,
             perm_n_repeats=9,
             n_jobs=-1
         )
@@ -268,154 +265,6 @@ class QuickFillRFTS:
 
     def get_flag(self) -> Series:
         return self.rfts.get_flag()
-
-
-class LongTermRandomForestTS:
-
-    def __init__(self,
-                 input_df: DataFrame,
-                 target_col: str or tuple,
-                 verbose: int = 0,
-                 perm_n_repeats: int = 10,
-                 test_size: float = 0.25,
-                 features_lag: list = None,
-                 features_lagmax: int = None,
-                 include_timestamp_as_features: bool = False,
-                 add_continuous_record_number: bool = False,
-                 sanitize_timestamp: bool = False,
-                 **kwargs
-                 ):
-        """
-        Gap-fill each year based on data from the respective year and the two closest neighboring years
-
-        Example:
-            Given a long-term time series comprising data between 2013-2017:
-                - for 2013, the model is built from 2013, 2014 and 2015 data
-                - for 2014, the model is built from 2013, 2014 and 2015 data
-                - for 2015, the model is built from 2014, 2015 and 2016 data
-                - for 2016, the model is built from 2015, 2016 and 2017 data
-                - for 2017, the model is built from 2015, 2016 and 2017 data
-
-        Args:
-            See docstring for pkgs.gapfilling.randomforest_ts.RandomForestTS
-
-        Attributes:
-            gapfilling_df_: dataframe, gapfilling results from all years in one dataframe
-            gapfilled_: series, gap-filled target series from all years in one time series
-            results_yearly_: dict, detailed results for each year
-            scores_: dict, scoring results for each year
-            feature_importances_: dict, feature importances for each year
-        """
-        self.input_df = input_df
-        self.target_col = target_col
-        self.verbose = verbose
-        self.perm_n_repeats = perm_n_repeats
-        self.test_size = test_size
-        self.features_lag = features_lag
-        self.features_lagmax = features_lagmax
-        self.include_timestamp_as_features = include_timestamp_as_features
-        self.add_continuous_record_number = add_continuous_record_number
-        self.sanitize_timestamp = sanitize_timestamp
-        self.kwargs = kwargs
-
-        self.yearpools_dict = None
-        self._results_yearly = {}
-        self._gapfilling_df = pd.DataFrame()
-        self._scores = {}
-        self._feature_importances = {}
-        self._gapfilled = pd.Series()
-
-    @property
-    def gapfilling_df_(self) -> DataFrame:
-        """Return gapfilling results from all years in one dataframe"""
-        if not isinstance(self._gapfilling_df, DataFrame):
-            raise Exception(f'Not available: collected gap-filled data for all years.')
-        return self._gapfilling_df
-
-    @property
-    def gapfilled_(self) -> Series:
-        """Return gap-filled target series from all years in one time series"""
-        if not isinstance(self._gapfilled, Series):
-            raise Exception(f'Not available: collected gap-filled data for all years.')
-        return self._gapfilled
-
-    @property
-    def results_yearly_(self) -> dict:
-        """Return detailed results for each year"""
-        if not self._results_yearly:
-            raise Exception(f'Not available: yearly model results.')
-        return self._results_yearly
-
-    @property
-    def scores_(self) -> dict:
-        """Return scoring results for each year"""
-        if not self._scores:
-            raise Exception(f'Not available: collected scores.')
-        return self._scores
-
-    @property
-    def feature_importances_(self) -> dict:
-        """Return feature importances for each year"""
-        if not self._feature_importances:
-            raise Exception(f'Not available: collected scores.')
-        return self._feature_importances
-
-    def run(self):
-        self.yearpools_dict = self._create_yearpools()
-        self._initialize_models()
-        self._trainmodels()
-        self._fillgaps()
-        self._collect()
-
-    def _create_yearpools(self):
-        """For each year create a dataset comprising the respective year
-        and the neighboring years"""
-        yearpools_dict = neighboring_years(df=self.input_df)
-        return yearpools_dict
-
-    def _initialize_models(self):
-        """Initialize model for each year"""
-        for year, _df in self.yearpools_dict.items():
-            print(f"Initializing model for {year} ...")
-            df = _df['df'].copy()
-            # Random forest
-            rfts = RandomForestTS(
-                input_df=df,
-                target_col=self.target_col,
-                verbose=self.verbose,
-                features_lag=self.features_lag,
-                include_timestamp_as_features=self.include_timestamp_as_features,
-                add_continuous_record_number=self.add_continuous_record_number,
-                sanitize_timestamp=self.sanitize_timestamp,
-                **self.kwargs
-            )
-            self._results_yearly[year] = rfts
-
-    def _trainmodels(self):
-        """Train model for each year"""
-        for year, _df in self.yearpools_dict.items():
-            print(f"Training model for {year} ...")
-            rfts = self.results_yearly_[year]
-            rfts.trainmodel(showplot_predictions=False, showplot_importance=False, verbose=0)
-
-    def _fillgaps(self):
-        """Gap-fill each year with the respective model"""
-        for year, _df in self.yearpools_dict.items():
-            print(f"Gap-filling {year} ...")
-            rfts = self.results_yearly_[year]
-            rfts.fillgaps(showplot_scores=True, showplot_importance=True, verbose=0)
-
-    def _collect(self):
-        """Collect results"""
-        for year, _df in self.yearpools_dict.items():
-            print(f"Collecting results for {year} ...")
-            rfts = self.results_yearly_[year]
-            keepyear = rfts.gapfilling_df_.index.year == int(year)
-            self._gapfilling_df = pd.concat([self._gapfilling_df, rfts.gapfilling_df_[keepyear]], axis=0)
-            self._scores[year] = rfts.scores_
-            self._feature_importances[year] = rfts.feature_importances_
-            gapfilled = rfts.get_gapfilled_target()
-            self._gapfilled = pd.concat([self._gapfilled, gapfilled[keepyear]])
 
 
 def example_quickfill():
@@ -465,56 +314,15 @@ def example_quickfill():
     HeatmapDateTime(series=gapfilled).show()
 
 
-def example_longterm_rfts():
-    # Setup, user settings
-    TARGET_COL = 'NEE_CUT_REF_orig'
-    subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
-
-    # Example data
-    from diive.configs.exampledata import load_exampledata_parquet
-    df = load_exampledata_parquet()
-
-    # # Subset
-    # keep = df.index.year <= 2016
-    # df = df[keep].copy()
-
-    # Subset with target and features
-    # Only High-quality (QCF=0) measured NEE used for model training in this example
-    lowquality = df["QCF_NEE"] > 0
-    df.loc[lowquality, TARGET_COL] = np.nan
-    df = df[subsetcols].copy()
-
-    ltrf = LongTermRandomForestTS(
-        input_df=df,
-        target_col=TARGET_COL,
-        verbose=0,
-        features_lag=[-1, -1],
-        include_timestamp_as_features=True,
-        add_continuous_record_number=True,
-        sanitize_timestamp=True,
-        n_estimators=200,
-        random_state=42,
-        min_samples_split=10,
-        min_samples_leaf=5,
-        perm_n_repeats=11,
-        n_jobs=-1
-    )
-
-    ltrf.run()
-
-    for year, s in ltrf.scores_.items():
-        print(f"{year}: r2 = {s['r2']}  MAE = {s['mae']}")
-
-
 def example_rfts():
     # Setup, user settings
-    # TARGET_COL = 'LE_orig'
     TARGET_COL = 'NEE_CUT_REF_orig'
     subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
 
     # Example data
-    from diive.configs.exampledata import load_exampledata_parquet
-    df_orig = load_exampledata_parquet()
+    from diive.configs.exampledata import load_exampledata_parquet_long
+    df_orig = load_exampledata_parquet_long()
+    # df_orig = load_exampledata_parquet()
 
     # # Create a large gap
     # remove = df.index.year != 2014
@@ -522,9 +330,48 @@ def example_rfts():
     # df = df[remove].copy()
 
     # Subset
-    # keep = df_orig.index.year <= 2015
+
+    # keep = (df_orig.index.year >= 2016) & (df_orig.index.year <= 2018)
+    # keep = df_orig.index.year >= 2022
     # df = df_orig[keep].copy()
     df = df_orig.copy()
+
+    # Checking nighttime
+    nt_locs = df['Rg_f'] < 50
+    nt = df[nt_locs].groupby(df[nt_locs].index.year).agg(['mean'])
+    means_nt = nt['NEE_CUT_REF_f']['mean']
+    # import matplotlib.pyplot as plt
+    # means_nt.plot()
+    # plt.show()
+    mean_nt_9704 = means_nt.loc[1997:2004].mean()
+    mean_nt_0613 = means_nt.loc[2006:2013].mean()
+    corr_nt = mean_nt_0613 / mean_nt_9704
+
+    nt_locs_9704 = (nt_locs.index.year >= 1997) & (nt_locs.index.year <= 2004)
+    df.loc[nt_locs_9704, TARGET_COL] = df.loc[nt_locs_9704, TARGET_COL].multiply(corr_nt)
+    # df.loc[nt_locs_9704, TARGET_COL].describe()
+    # df[TARGET_COL].describe()
+
+    # # Checking daytime
+    # dt = df['Rg_f'] > 50
+    # dt = df[dt].groupby(df[dt].index.year).agg(['mean'])
+    # means_dt = dt['NEE_CUT_REF_f']['mean']
+    # import matplotlib.pyplot as plt
+    # means_dt.plot()
+    # plt.show()
+    # mean_dt_9704 = means_dt.loc[1997:2004].mean()
+    # mean_dt_0613 = means_dt.loc[2006:2013].mean()
+    # corr_dt = mean_dt_0613 / mean_dt_9704
+
+    nee_mds = df['NEE_CUT_REF_f'].copy()
+
+    # from diive.core.plotting.timeseries import TimeSeries
+    # import matplotlib.pyplot as plt
+    # fig, ax = plt.subplots()
+    # TimeSeries(series=nee_mds.multiply(0.02161926).cumsum(), ax=ax).plot(color='orange')
+    # ax.set_ylim(-2000, 200)
+    # fig.suptitle(f'NEE MDS', fontsize=16)
+    # fig.show()
 
     # Subset with target and features
     # Only High-quality (QCF=0) measured NEE used for model training in this example
@@ -532,73 +379,114 @@ def example_rfts():
     df.loc[lowquality, TARGET_COL] = np.nan
     df = df[subsetcols].copy()
 
+    # # Testing rolling stats
+    # df['test'] = df['Tair_f'].rolling(window=6, closed='left').mean()
+    # df['test2'] = df['SWC_FF0_0.15_1'].rolling(window=6, closed='left').mean()
+
     # from diive.core.plotting.timeseries import TimeSeries  # For simple (interactive) time series plotting
     # TimeSeries(series=df[TARGET_COL]).plot()
+
+    N_ESTIMATORS = 9
+    MAX_DEPTH = None
+    MIN_SAMPLES_SPLIT = 2
+    MIN_SAMPLES_LEAF = 1
+    CRITERION = 'squared_error'  # “squared_error”, “absolute_error”, “friedman_mse”, “poisson”
 
     # Random forest
     rfts = RandomForestTS(
         input_df=df,
         target_col=TARGET_COL,
-        verbose=1,
+        verbose=True,
         # features_lag=None,
         features_lag=[-1, -1],
+        # features_lag_exclude_cols=['test', 'test2'],
         # include_timestamp_as_features=False,
         include_timestamp_as_features=True,
         # add_continuous_record_number=False,
         add_continuous_record_number=True,
         sanitize_timestamp=True,
-        perm_n_repeats=9,
-        n_estimators=9,
+        perm_n_repeats=3,
+        n_estimators=N_ESTIMATORS,
         random_state=42,
-        min_samples_split=2,
-        min_samples_leaf=1,
+        # random_state=None,
+        max_depth=MAX_DEPTH,
+        min_samples_split=MIN_SAMPLES_SPLIT,
+        min_samples_leaf=MIN_SAMPLES_LEAF,
+        criterion=CRITERION,
+        test_size=0.2,
         n_jobs=-1
     )
-    rfts.reduce_features()
-    rfts.report_feature_reduction()
+    # rfts.reduce_features()
+    # rfts.report_feature_reduction()
 
-    rfts.trainmodel(showplot_scores=True, showplot_importance=True)
+    rfts.trainmodel(showplot_scores=False, showplot_importance=False)
     rfts.report_traintest()
 
-    rfts.fillgaps(showplot_scores=True, showplot_importance=True)
+    rfts.fillgaps(showplot_scores=False, showplot_importance=False)
     rfts.report_gapfilling()
 
     observed = df[TARGET_COL]
     gapfilled = rfts.get_gapfilled_target()
+
+    frame = {
+        nee_mds.name: nee_mds,
+        gapfilled.name: gapfilled,
+    }
+    checkdf = pd.DataFrame.from_dict(frame, orient='columns')
+    checkdf = checkdf.groupby(checkdf.index.year).agg('sum')
+    checkdf['diff'] = checkdf[gapfilled.name].subtract(checkdf[nee_mds.name])
+    checkdf = checkdf.multiply(0.02161926)
+    print(checkdf)
+    print(checkdf.sum())
+
     # rfts.feature_importances
     # rfts.scores
     # rfts.gapfilling_df
 
-    # # https://www.datacamp.com/tutorial/introduction-to-shap-values-machine-learning-interpretability
-    # import shap
-    # explainer = shap.TreeExplainer(rfts.model_)
-    # xtest = rfts.traintest_details_['X_test']
-    # shap_values = explainer.shap_values(xtest)
-    # shap.summary_plot(shap_values, xtest)
-    # # shap.summary_plot(shap_values[0], xtest)
-    # shap.dependence_plot("Feature 12", shap_values, xtest, interaction_index="Feature 11")
+    # # # https://www.datacamp.com/tutorial/introduction-to-shap-values-machine-learning-interpretability
+    # # import shap
+    # # explainer = shap.TreeExplainer(rfts.model_)
+    # # xtest = rfts.traintest_details_['X_test']
+    # # shap_values = explainer.shap_values(xtest)
+    # # shap.summary_plot(shap_values, xtest)
+    # # # shap.summary_plot(shap_values[0], xtest)
+    # # shap.dependence_plot("Feature 12", shap_values, xtest, interaction_index="Feature 11")
 
     # Plot
-    from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-    HeatmapDateTime(series=observed).show()
-    HeatmapDateTime(series=gapfilled).show()
-
-    # mds = df_orig['NEE_CUT_REF_f'].copy()
-    # mds = mds[mds.index.year >= 2016]
+    title = (
+        f"N_ESTIMATORS: {N_ESTIMATORS} "
+        f"/ MAX_DEPTH: {MAX_DEPTH} "
+        f"/ CRITERION: {CRITERION} "
+        f"\nMIN_SAMPLES_SPLIT: {MIN_SAMPLES_SPLIT} "
+        f"/ MIN_SAMPLES_LEAF: {MIN_SAMPLES_LEAF}  "
+    )
+    from diive.core.plotting.timeseries import TimeSeries
     import matplotlib.pyplot as plt
-    # # rfts.gapfilling_df_['.PREDICTIONS_FALLBACK'].cumsum().plot()
-    # # rfts.gapfilling_df_['.PREDICTIONS_FULLMODEL'].cumsum().plot()
-    # # rfts.gapfilling_df_['.PREDICTIONS'].cumsum().plot()
-    rfts.get_gapfilled_target().cumsum().plot()
-    # mds.cumsum().plot()
-    # plt.legend()
-    plt.show()
+    fig, ax = plt.subplots()
+    TimeSeries(series=gapfilled.multiply(0.02161926).cumsum(), ax=ax).plot(color='blue')
+    TimeSeries(series=nee_mds.multiply(0.02161926).cumsum(), ax=ax).plot(color='orange')
+    fig.suptitle(f'{title}', fontsize=16)
+    # ax.set_ylim(-2000, 200)
+    fig.show()
 
-    # d = rfts.gapfilling_df['NEE_CUT_REF_orig'] - rfts.gapfilling_df['.PREDICTIONS']
-    # d.plot()
+    # from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+    # HeatmapDateTime(series=observed).show()
+    # HeatmapDateTime(series=nee_mds).show()
+    # HeatmapDateTime(series=gapfilled).show()
+    # diff = gapfilled.subtract(nee_mds)
+    # diff.name = "diff"
+    # HeatmapDateTime(series=diff).show()
+
+    # # mds = df_orig['NEE_CUT_REF_f'].copy()
+    # # mds = mds[mds.index.year >= 2016]
+    # import matplotlib.pyplot as plt
+    # # # rfts.gapfilling_df_['.PREDICTIONS_FALLBACK'].cumsum().plot()
+    # # # rfts.gapfilling_df_['.PREDICTIONS_FULLMODEL'].cumsum().plot()
+    # # # rfts.gapfilling_df_['.PREDICTIONS'].cumsum().plot()
+    # rfts.get_gapfilled_target().cumsum().plot()
+    # # mds.cumsum().plot()
+    # # plt.legend()
     # plt.show()
-    # d = abs(d)
-    # d.mean()  # MAE
 
     print("Finished.")
 
@@ -613,16 +501,20 @@ def example_optimize():
     # Example data
     df = load_exampledata_parquet()
     subset = df[subsetcols].copy()
-    _subset = df.index.year == 2019
+    _subset = df.index.year >= 2020
     subset = subset[_subset].copy()
 
     # Random forest parameters
     rf_params = {
-        'n_estimators': list(range(2, 12, 2)),
+        'n_estimators': [10],
+        # 'n_estimators': list(range(100, 12, 2)),
         'criterion': ['squared_error'],
-        'max_depth': [None],
-        'min_samples_split': list(range(2, 12, 2)),
-        'min_samples_leaf': list(range(1, 6, 1))
+        'max_depth': [6],
+        'min_samples_split': [10],
+        # 'min_samples_split': list(range(2, 12, 2)),
+        'min_samples_leaf': [5],
+
+        # 'min_samples_leaf': list(range(1, 6, 1))
     }
 
     # Optimization
@@ -642,7 +534,6 @@ def example_optimize():
 
 
 if __name__ == '__main__':
-    example_quickfill()
-    # example_longterm_rfts()
+    # example_quickfill()
     # example_rfts()
-    # example_optimize()
+    example_optimize()

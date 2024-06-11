@@ -15,6 +15,12 @@ def load_exampledata_parquet() -> DataFrame:
     return data_df
 
 
+def load_exampledata_parquet_long() -> DataFrame:
+    filepath = Path(DIR_PATH) / 'local/exampledata_PARQUET_CH-DAV_FP2022.5_1997-2022_ID20230206154316_30MIN.parquet'
+    data_df = load_parquet(filepath=filepath)
+    return data_df
+
+
 def load_exampledata_DIIVE_CSV_30MIN():
     filepath = Path(DIR_PATH) / 'exampledata_DIIVE-CSV-30MIN_CH-DAV_FP2022.5_2022.07_ID20230206154316_30MIN.diive.csv'
     loaddatafile = ReadFileType(filetype='DIIVE-CSV-30MIN',
@@ -103,6 +109,7 @@ def load_exampledata_TOA5_DAT_1MIN():
     data_df, metadata_df = loaddatafile.get_filedata()
     return data_df, metadata_df
 
+
 def load_exampledata_GENERIC_CSV_HEADER_1ROW_TS_MIDDLE_FULL_1MIN_long():
     filepath = Path(
         DIR_PATH) / 'exampledata_GENERIC-CSV-HEADER-1ROW-TS-MIDDLE-FULL-1MIN_CH-FRU_iDL_BOX1_0_1_TBL1_20240401-0000.dat.csv'
@@ -129,17 +136,22 @@ def load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN_with_datafilereader_parameters():
     dfr = DataFileReader(filepath=filepath,
                          data_header_section_rows=[0],  # Header section (before data) comprises 1 row
                          data_skip_rows=[],  # Skip no rows
-                         data_header_rows=[0], # Header with variable names and units, in this case only variable names in first row of header
+                         data_header_rows=[0],
+                         # Header with variable names and units, in this case only variable names in first row of header
                          data_varnames_row=0,  # Variable names are in first row of header
                          data_varunits_row=None,  # Header does not contain any variable units
-                         data_na_vals=[-9999], # List of values interpreted as missing values, EddyPro uses -9999 for missing values in ouput file
+                         data_na_vals=[-9999],
+                         # List of values interpreted as missing values, EddyPro uses -9999 for missing values in ouput file
                          data_freq="30min",  # Time resolution of the data is 30-minutes
                          data_delimiter=",",  # This csv file uses the comma as delimiter
-                         data_nrows=None, # How many data rows to read from files, mainly used for testing, in this case None to read all rows in file
+                         data_nrows=None,
+                         # How many data rows to read from files, mainly used for testing, in this case None to read all rows in file
                          timestamp_idx_col=["TIMESTAMP_END"],  # Name of the column that is used for the timestamp index
                          timestamp_datetime_format="%Y%m%d%H%M",  # Timestamp in the files looks like this: 202107010300
-                         timestamp_start_middle_end="end", # Timestamp in the file defined in *timestamp_idx_col* refers to the END of the averaging interval
-                         output_middle_timestamp=True, # Timestamp in output dataframe (after reading the file) refers to the MIDDLE of the averaging interval
+                         timestamp_start_middle_end="end",
+                         # Timestamp in the file defined in *timestamp_idx_col* refers to the END of the averaging interval
+                         output_middle_timestamp=True,
+                         # Timestamp in output dataframe (after reading the file) refers to the MIDDLE of the averaging interval
                          compression=None)  # File is not compressed (not zipped)
     data_df, metadata_df = dfr.get_data()
     return data_df, metadata_df

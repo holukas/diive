@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "diive"
-version = "0.76.2"
+version = "0.77.0"
 description = "Time series processing"
 authors = ["holukas <holukas@ethz.ch>"]
 readme = "README.md"
@@ -24,6 +24,7 @@ shap = ">=0.42.1"
 eli5 = ">=0.13.0"
 xgboost = ">=2.0.0"
 numpy = ">=1.20.0"
+dtreeviz = "^2.2.2"
 
 [tool.poetry.group.dev.dependencies]
 dbc-influxdb = { path = "../../22 - POET/dbc-influxdb", develop = true }
