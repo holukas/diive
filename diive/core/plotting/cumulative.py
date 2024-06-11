@@ -61,19 +61,20 @@ class CumulativeYear:
         # Create axis
         self.fig, self.ax = pf.create_ax()
 
-    def _add_reference(self):
+    def _add_reference(self, digits_after_comma):
 
         # Calculate reference
         self.mean_doy_cumulative_df = doy_mean_cumulative(cumulatives_per_year_df=self.cumulatives_per_year_df,
                                                           excl_years_from_reference=self.excl_years_from_reference)
 
         # label = f"{year}: {cumulative_df[year].dropna().iloc[-1]:.2f}"
+        mean_end = self.mean_doy_cumulative_df['MEAN_DOY_TIME'].iloc[-1]
         self.ax.plot_date(x=self.mean_doy_cumulative_df.index.values,
                           y=self.mean_doy_cumulative_df['MEAN_DOY_TIME'].values,
                           color='black', alpha=1,
                           ls='-', lw=theme.WIDTH_LINE_WIDER,
                           marker='', markeredgecolor='none', ms=0,
-                          zorder=99, label='mean')
+                          zorder=99, label=f'mean {mean_end:.{digits_after_comma}f}')
         # self.ax.fill_between(mean_cumulative_df.index.values,
         #                      mean_cumulative_df['MEAN+1.96_SD'].values,
         #                      mean_cumulative_df['MEAN-1.96_SD'].values,
@@ -115,12 +116,12 @@ class CumulativeYear:
         """Return axis"""
         return self.ax
 
-    def plot(self, showplot: bool = True):
+    def plot(self, showplot: bool = True, digits_after_comma: int = 2):
         color_list = theme.colorwheel_36()  # get some colors
 
         # Plot yearly cumulatives
         for ix, year in enumerate(self.cumulatives_per_year_df.columns):
-            label = f"{year}: {self.cumulatives_per_year_df[year].dropna().iloc[-1]:.2f}"
+            label = f"{year}: {self.cumulatives_per_year_df[year].dropna().iloc[-1]:.{digits_after_comma}f}"
             lw = theme.WIDTH_LINE_WIDER if year == self.highlight_year else theme.WIDTH_LINE_DEFAULT
             color = self.highlight_year_color if year == self.highlight_year else color_list[ix]
 
@@ -133,7 +134,7 @@ class CumulativeYear:
 
         # Show reference
         if self.show_reference:
-            self._add_reference()
+            self._add_reference(digits_after_comma=digits_after_comma)
 
         self._apply_format()
 
