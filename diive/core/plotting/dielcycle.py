@@ -47,6 +47,7 @@ class DielCycle:
              std: bool = True,
              each_month: bool = False,
              legend_n_col: int = 1,
+             ylim: list = None,
              **kwargs):
 
         self.title = title
@@ -93,12 +94,12 @@ class DielCycle:
                                  alpha=alpha, zorder=0, color=color, edgecolor='none',
                                  label=label)
 
-        self._format(title=title, legend_n_col=legend_n_col)
+        self._format(title=title, legend_n_col=legend_n_col, ylim=ylim)
 
         if self.showplot:
             self.fig.show()
 
-    def _format(self, title, legend_n_col):
+    def _format(self, title, legend_n_col, ylim):
         # title = self.title if self.title else f"{self.series.name} in {self.series.index.freqstr} time resolution"
         from diive.core.plotting.plotfuncs import default_format, format_spines, default_legend, add_zeroline_y
         if title:
@@ -117,6 +118,7 @@ class DielCycle:
         # self.ax.set_xticklabels(['3:00', '6:00', '9:00', '12:00', '15:00', '18:00', '21:00'])
         self.ax.set_xticklabels([3, 6, 9, 12, 15, 18, 21])
         self.ax.set_xlim(['0:00', '23:59:59'])
+        self.ax.set_ylim(ylim)
         if self.showplot:
             self.fig.tight_layout()
 
