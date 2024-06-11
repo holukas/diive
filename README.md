@@ -16,7 +16,8 @@ Recent releases: [Releases](https://github.com/holukas/diive/releases)
 
 ## Overview of example notebooks
 
-- For many examples see notebooks here: [Notebook overview](https://github.com/holukas/diive/blob/main/notebooks/OVERVIEW.ipynb)
+- For many examples see notebooks
+  here: [Notebook overview](https://github.com/holukas/diive/blob/main/notebooks/OVERVIEW.ipynb)
 - More notebooks are added constantly.
 
 ## Current Features
@@ -25,7 +26,8 @@ Recent releases: [Releases](https://github.com/holukas/diive/releases)
 
 - Calculate z-aggregates in quantiles (classes) of x and
   y ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/CalculateZaggregatesInQuantileClassesOfXY.ipynb))
-- Daily correlation ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/DailyCorrelation.ipynb))
+- Daily
+  correlation ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/DailyCorrelation.ipynb))
 - Decoupling: Sorting bins
   method ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/DecouplingSortingBins.ipynb))
 - Find data gaps ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/GapFinder.ipynb))
@@ -42,7 +44,8 @@ Recent releases: [Releases](https://github.com/holukas/diive/releases)
 
 ### Create variable
 
-- Calculate time since last occurrence, e.g. since last precipitation ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/CalculateVariable/TimeSince.ipynb))
+- Calculate time since last occurrence, e.g. since last
+  precipitation ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/CalculateVariable/TimeSince.ipynb))
 - Calculate daytime flag, nighttime flag and potential radiation from latitude and
   longitude ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/CalculateVariable/Daytime_and_nighttime_flag.ipynb))
 - Day/night flag from sun angle
@@ -78,9 +81,11 @@ Recent releases: [Releases](https://github.com/holukas/diive/releases)
 
 ### Flux processing chain
 
-For info about the Swiss FluxNet flux levels, see [here](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/).
+For info about the Swiss FluxNet flux levels,
+see [here](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/).
 
-- Flux processing chain ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/FluxProcessingChain/FluxProcessingChain.ipynb))
+- Flux processing
+  chain ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/FluxProcessingChain/FluxProcessingChain.ipynb))
     - The notebook example shows the application of:
         - Level-2 quality flags
         - Level-3.1 storage correction
@@ -101,10 +106,14 @@ Format data to specific formats
 
 Fill gaps in time series with various methods
 
-- XGBoostTS ([notebook example (minimal)](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/XGBoostGapFillingMinimal.ipynb), [notebook example (more extensive)](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/XGBoostGapFillingExtensive.ipynb))
-- RandomForestTS ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/RandomForestGapFilling.ipynb))
-- Linear interpolation ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/LinearInterpolation.ipynb))
-- Quick random forest gap-filling ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/QuickRandomForestGapFilling.ipynb))
+-
+XGBoostTS ([notebook example (minimal)](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/XGBoostGapFillingMinimal.ipynb), [notebook example (more extensive)](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/XGBoostGapFillingExtensive.ipynb))
+-
+RandomForestTS ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/RandomForestGapFilling.ipynb))
+- Linear
+  interpolation ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/LinearInterpolation.ipynb))
+- Quick random forest
+  gap-filling ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/QuickRandomForestGapFilling.ipynb))
 
 ### Outlier Detection
 
@@ -116,10 +125,14 @@ Fill gaps in time series with various methods
 
 Single outlier tests create a flag where `0=OK` and `2=outlier`.
 
-- Absolute limits ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/AbsoluteLimits.ipynb))
-- Absolute limits, separately defined for daytime and nighttime data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/AbsoluteLimitsDaytimeNighttime.ipynb))
-- Incremental z-score: Identify outliers based on the z-score of double increments ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/zScoreIncremental.ipynb))
-- Local standard deviation: Identify outliers based on the local standard deviation from a running median ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/LocalSD.ipynb))
+- Absolute
+  limits ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/AbsoluteLimits.ipynb))
+- Absolute limits, separately defined for daytime and nighttime
+  data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/AbsoluteLimitsDaytimeNighttime.ipynb))
+- Incremental z-score: Identify outliers based on the z-score of double
+  increments ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/zScoreIncremental.ipynb))
+- Local standard deviation: Identify outliers based on the local standard deviation from a running
+  median ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/LocalSD.ipynb))
 - Local outlier factor: Identify outliers based on local outlier factor, across all data
 - Local outlier factor: Identify outliers based on local outlier factor, daytime nighttime separately
 - Manual removal: Remove time periods (from-to) or single records from time series
@@ -130,7 +143,8 @@ Single outlier tests create a flag where `0=OK` and `2=outlier`.
 
 ### Plotting
 
-- Diel cycle per month ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/DielCycle.ipynb))
+- Diel cycle per
+  month ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/DielCycle.ipynb))
 - Heatmap showing values (z) of time series as date (y) vs time (
   x) ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/HeatmapDateTime.ipynb))
 - Heatmap showing values (z) of time series as year (y) vs month (
@@ -148,11 +162,14 @@ Single outlier tests create a flag where `0=OK` and `2=outlier`.
   database ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/MeteoScreening/StepwiseMeteoScreeningFromDatabase.ipynb))
 
 ### Resampling
-- Calculate diel cycle per month ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Resampling/ResamplingDielCycle.ipynb))
+
+- Calculate diel cycle per
+  month ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Resampling/ResamplingDielCycle.ipynb))
 
 ### Stats
 
-- Time series stats ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Stats/TimeSeriesStats.ipynb))
+- Time series
+  stats ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Stats/TimeSeriesStats.ipynb))
 
 ### Timestamps
 
@@ -163,22 +180,35 @@ Single outlier tests create a flag where `0=OK` and `2=outlier`.
 
 ## Installation
 
-`diive` can be installed from source code, e.g. using [`poetry`](https://python-poetry.org/) for dependencies.
-
 `diive` is currently developed under Python 3.9.7, but newer (and many older) versions should also work.
 
-`diive` can be installed using conda with `conda intall -c conda-forge diive`
+### Using pip
+
+`pip install diive`
+
+### Using poetry
+
+`poetry add diive`
+
+### Using conda
+
+`conda intall -c conda-forge diive`
+
+### From source
+
+Directly use .tar.gz file of the desired version.
+
+`pip install https://github.com/holukas/diive/archive/refs/tags/v0.76.2.tar.gz`
+
+### Create and use a conda environment for diive
 
 One way to install and use `diive` with a specific Python version on a local machine:
 
 - Install [miniconda](https://docs.conda.io/en/latest/miniconda.html)
 - Start `miniconda` prompt
-- Create a environment named `diive-env` that contains Python 3.9.7:
-  `conda create --name diive-env python=3.9.7`
+- Create a environment named `diive-env` that contains Python 3.9.7: `conda create --name diive-env python=3.9.7`
 - Activate the new environment: `conda activate diive-env`
-- Install `diive` version directly from source code:
-  `pip install https://github.com/holukas/diive/archive/refs/tags/v0.63.1.tar.gz` (select .tar.gz file of the desired
-  version)
+- Install `diive` using pip: `pip install diive`
 - If you want to use `diive` in Jupyter notebooks, you can install Jupyterlab.
   In this example Jupyterlab is installed from the `conda` distribution channel `conda-forge`:
   `conda install -c conda-forge jupyterlab`

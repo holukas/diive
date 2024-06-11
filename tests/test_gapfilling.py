@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 
 import diive.configs.exampledata as ed
-from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
+from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS, QuickFillRFTS
 from diive.pkgs.gapfilling.xgboost_ts import XGBoostTS
 
 
@@ -32,7 +32,7 @@ class TestGapFilling(unittest.TestCase):
         rfts = RandomForestTS(
             input_df=df,
             target_col=TARGET_COL,
-            verbose=1,
+            verbose=True,
             features_lag=[-1, -1],
             include_timestamp_as_features=True,
             add_continuous_record_number=True,
@@ -54,18 +54,23 @@ class TestGapFilling(unittest.TestCase):
         fi = rfts.feature_importances_
         scores = rfts.scores_
         gfdf = rfts.gapfilling_df_
+        gapfilled = rfts.get_gapfilled_target()
 
         # # Plot
+        # import matplotlib.pyplot as plt
+        # from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+        # observed = df[TARGET_COL].copy()
         # HeatmapDateTime(series=observed).show()
         # HeatmapDateTime(series=gapfilled).show()
         # gapfilled.cumsum().plot()
         # plt.show()
 
-        self.assertAlmostEqual(scores['mae'], 1.7365506630864758, places=3)
-        self.assertAlmostEqual(scores['r2'], 0.7857703550515713, places=3)
-        self.assertAlmostEqual(scores['mse'], 5.831559973473582, places=2)
-        self.assertAlmostEqual(gfdf['NEE_CUT_REF_orig_gfRF'].sum(), -849.1973213459336, places=0)
-        self.assertAlmostEqual(fi['PERM_IMPORTANCE']['Rg_f'], 1.3790763951467193, places=2)
+        self.assertAlmostEqual(scores['mae'], 1.681033504987219, places=5)
+        self.assertAlmostEqual(scores['r2'], 0.7932199707457357, places=5)
+        self.assertAlmostEqual(scores['mse'], 5.628773469718195, places=5)
+        self.assertAlmostEqual(gfdf['NEE_CUT_REF_orig_gfRF'].sum(), -612.8457792882542, places=5)
+        self.assertEqual(gfdf['NEE_CUT_REF_orig_gfRF'].sum(), gapfilled.sum())
+        self.assertAlmostEqual(fi['PERM_IMPORTANCE']['Rg_f'], 1.2153029844335206, places=5)
 
     def test_gapfilling_xgboost(self):
         """Fill gaps using XGBoost"""
@@ -94,7 +99,7 @@ class TestGapFilling(unittest.TestCase):
             perm_n_repeats=3,
             validate_parameters=True,
             early_stopping_rounds=10,
-            max_depth=0,
+            max_depth=6,
             learning_rate=0.3,
             n_jobs=-1
         )
@@ -108,18 +113,23 @@ class TestGapFilling(unittest.TestCase):
         fi = xgbts.feature_importances_
         scores = xgbts.scores_
         gfdf = xgbts.gapfilling_df_
+        gapfilled = xgbts.get_gapfilled_target()
 
         # # Plot
+        # import matplotlib.pyplot as plt
+        # from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+        # observed = df[TARGET_COL].copy()
         # HeatmapDateTime(series=observed).show()
         # HeatmapDateTime(series=gapfilled).show()
         # gapfilled.cumsum().plot()
         # plt.show()
 
-        self.assertAlmostEqual(scores['mae'], 1.2650862351023513, places=3)
-        self.assertAlmostEqual(scores['r2'], 0.8622005478022436, places=3)
-        self.assertAlmostEqual(scores['mse'], 3.7510484134745607, places=2)
-        self.assertAlmostEqual(gfdf['NEE_CUT_REF_orig_gfXG'].sum(), -1621.1198972031475, places=0)
-        self.assertAlmostEqual(fi['PERM_IMPORTANCE']['Rg_f'], 1.101849758841488, places=2)
+        self.assertAlmostEqual(scores['mae'], 1.474872398011102, places=5)
+        self.assertAlmostEqual(scores['r2'], 0.8472293439937181, places=5)
+        self.assertAlmostEqual(scores['mse'], 4.158580587210508, places=5)
+        self.assertAlmostEqual(gfdf['NEE_CUT_REF_orig_gfXG'].sum(), -1364.7255991041661, places=5)
+        self.assertEqual(gfdf['NEE_CUT_REF_orig_gfXG'].sum(), gapfilled.sum())
+        self.assertAlmostEqual(fi['PERM_IMPORTANCE']['Rg_f'], 1.1121007247659092, places=5)
 
 
 if __name__ == '__main__':
