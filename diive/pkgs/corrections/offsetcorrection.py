@@ -107,7 +107,7 @@ def remove_radiation_zero_offset(series: Series,
     # Detect nighttime
     dnf = DaytimeNighttimeFlag(
         timestamp_index=series.index,
-        nighttime_threshold=50,
+        nighttime_threshold=0.001,
         lat=lat,
         lon=lon,
         utc_offset=utc_offset)
@@ -127,10 +127,16 @@ def remove_radiation_zero_offset(series: Series,
                                          hires_timestamp=series.index,
                                          interpolate_missing_vals=True)
 
+
+    # from diive.core.plotting.timeseries import TimeSeries
+    # TimeSeries(series=_offset).plot()
+
+
     # Gap-fill offset values
     _offset = _offset.fillna(_offset.median())
     # offset = offset.interpolate().ffill().bfill()
     _offset.rename("offset", inplace=True)
+
 
     # Subtract offset from radiation column (rad_col - offset)
     # Offset examples assuming measured radiation is 120:

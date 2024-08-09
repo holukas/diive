@@ -107,9 +107,11 @@ Format data to specific formats
 Fill gaps in time series with various methods
 
 -
+
 XGBoostTS ([notebook example (minimal)](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/XGBoostGapFillingMinimal.ipynb), [notebook example (more extensive)](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/XGBoostGapFillingExtensive.ipynb))
 -
 RandomForestTS ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/RandomForestGapFilling.ipynb))
+
 - Linear
   interpolation ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/LinearInterpolation.ipynb))
 - Quick random forest
@@ -137,8 +139,10 @@ Single outlier tests create a flag where `0=OK` and `2=outlier`.
 - Local outlier factor: Identify outliers based on local outlier factor, daytime nighttime separately
 - Manual removal: Remove time periods (from-to) or single records from time series
 - Missing values: Simply creates a flag that indicated available and missing data in a time series
-- z-score: Identify outliers based on the z-score across all time series data
-- z-score: Identify outliers based on the z-score, separately for daytime and nighttime
+- z-score: Identify outliers based on the z-score across all time series data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/zScore.ipynb))
+- z-score: Identify outliers based on the z-score, separately for daytime and
+  nighttime ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/zScoreDaytimeNighttime.ipynb))
+- z-score: Identify outliers based on the rolling z-score
 - z-score: Identify outliers based on max z-scores in the interquartile range data
 
 ### Plotting

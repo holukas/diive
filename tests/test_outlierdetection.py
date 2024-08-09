@@ -8,11 +8,99 @@ from diive.pkgs.outlierdetection.absolutelimits import AbsoluteLimits, AbsoluteL
 from diive.pkgs.outlierdetection.incremental import zScoreIncrements
 from diive.pkgs.outlierdetection.localsd import LocalSD
 from diive.pkgs.outlierdetection.lof import LocalOutlierFactorAllData
+from diive.pkgs.outlierdetection.zscore import zScore, zScoreDaytimeNighttime
 
 
 # kudos https://medium.com/@ms_somanna/guide-to-adding-noise-to-your-data-using-python-and-numpy-c8be815df524
 
 class TestOutlierDetection(unittest.TestCase):
+
+    def test_zscore(self):
+        df = ed.load_exampledata_parquet()
+        s = df['Tair_f'].copy()
+        s = s.loc[s.index.year == 2018].copy()
+        s = s.loc[s.index.month == 7].copy()
+        s_noise = add_impulse_noise(series=s,
+                                    factor_low=-15,
+                                    factor_high=26,
+                                    contamination=0.04,
+                                    seed=42)  # Add impulse noise (spikes)
+
+        # Checks on noise data, make sure we have outliers, i.e., greater or less than the specified limits
+        self.assertGreater(s_noise.max(), 22)
+        self.assertLess(s_noise.min(), 10)
+
+        zsc = zScore(
+            series=s_noise,
+            thres_zscore=4,
+            showplot=False,
+            verbose=False)
+
+        zsc.calc(repeat=True)
+        flag = zsc.get_flag()
+        frame = {'s_noise': s_noise, 'flag': flag}
+        checkdf = pd.DataFrame.from_dict(frame)
+
+        # Checks on bad data
+        baddata_stats = checkdf.loc[checkdf.flag == 2].describe()
+        self.assertEqual(baddata_stats.loc['max']['s_noise'], 623.9300725355847)
+        self.assertEqual(baddata_stats.loc['min']['s_noise'], -51.46751403512717)
+        self.assertEqual(baddata_stats.loc['count']['flag'], 57)
+        self.assertEqual(baddata_stats.loc['max']['flag'], 2)
+        self.assertEqual(baddata_stats.loc['count']['s_noise'], 57)
+
+        # Checks on good data
+        gooddata_stats = checkdf.loc[checkdf.flag == 0].describe()
+        self.assertEqual(gooddata_stats.loc['max']['s_noise'], 25.723642479636727)
+        self.assertEqual(gooddata_stats.loc['min']['s_noise'], 1.187508723671586)
+        self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
+        self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
+        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1431)
+
+    def test_zscore_daytime_nighttime(self):
+        df = ed.load_exampledata_parquet()
+        s = df['Tair_f'].copy()
+        s = s.loc[s.index.year == 2018].copy()
+        s = s.loc[s.index.month == 7].copy()
+        s_noise = add_impulse_noise(series=s,
+                                    factor_low=-19,
+                                    factor_high=6,
+                                    contamination=0.02,
+                                    seed=42)  # Add impulse noise (spikes)
+
+        # Checks on noise data, make sure we have outliers, i.e., greater or less than the specified limits
+        self.assertGreater(s_noise.max(), 22)
+        self.assertLess(s_noise.min(), 10)
+
+        zdn = zScoreDaytimeNighttime(
+            series=s_noise,
+            lat=47.286417,
+            lon=7.733750,
+            utc_offset=1,
+            thres_zscore=4,
+            showplot=False,
+            verbose=False)
+
+        zdn.calc(repeat=True)
+        flag = zdn.get_flag()
+        frame = {'s_noise': s_noise, 'flag': flag}
+        checkdf = pd.DataFrame.from_dict(frame)
+
+        # Checks on bad data
+        baddata_stats = checkdf.loc[checkdf.flag == 2].describe()
+        self.assertEqual(baddata_stats.loc['max']['s_noise'], 148.72806841344465)
+        self.assertEqual(baddata_stats.loc['min']['s_noise'], -68.17770769831958)
+        self.assertEqual(baddata_stats.loc['count']['flag'], 26)
+        self.assertEqual(baddata_stats.loc['max']['flag'], 2)
+        self.assertEqual(baddata_stats.loc['count']['s_noise'], 26)
+
+        # Checks on good data
+        gooddata_stats = checkdf.loc[checkdf.flag == 0].describe()
+        self.assertEqual(gooddata_stats.loc['max']['s_noise'], 27.376145041037773)
+        self.assertEqual(gooddata_stats.loc['min']['s_noise'], 2.810267874163495)
+        self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
+        self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
+        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1462)
 
     def test_lof_alldata(self):
         df = ed.load_exampledata_parquet()

@@ -2,6 +2,38 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.78.0 | XX Jul 2024
+
+### New features
+
+- Added new class for outlier removal, based on the rolling z-score. It can also be used in step-wise outlier detection
+  and during meteoscreening from the
+  database. (`diive.pkgs.outlierdetection.zscore.zScoreRolling`, `diive.pkgs.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection`, `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb`).
+
+### Changes
+
+- Removing the radiation offset now uses `0.001` (W m-2) instead of `50` as the threshold value to flag nighttime values
+  for the correction (`diive.pkgs.corrections.offsetcorrection.remove_radiation_zero_offset`)
+- The database tag for meteo data screened with `diive` is
+  now `meteoscreening_diive` (`diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.resample`)
+
+### Notebooks
+
+- Added new notebook for outlier detection using class `zScore` (`notebooks/OutlierDetection/zScore.ipynb`)
+- Added new notebook for outlier detection using class `zScoreDaytimeNighttime` (`notebooks/OutlierDetection/zScoreDaytimeNighttime.ipynb`)
+- Updated notebook (`notebooks/MeteoScreening/StepwiseMeteoScreeningFromDatabase_v7.0.ipynb`)
+- When uploading screened meteo data to the database using the notebook `StepwiseMeteoScreeningFromDatabase`, variables
+  with the same name, measurement and data version as the screened variable(s) are now deleted from the database before
+  the new data are uploaded. Implemented in the Python package `dbc-influxdb` to avoid duplicates in the database. Such
+  duplicates can occur when one of the tags of an otherwise identical variable changed, e.g., when one of the tags of
+  the originally uploaded data was wrong and needed correction. The database `InfluxDB` stores a new time series
+  alongside the previous time series when one of the tags is different in an otherwise identical time series.
+
+### Tests
+
+- Added new test case for `zScore` (`tests.test_outlierdetection.TestOutlierDetection.test_zscore`)
+- Added new test case for `zScoreDaytimeNighttime` (`tests.test_outlierdetection.TestOutlierDetection.test_zscore_daytime_nighttime`)
+
 ## v0.77.0 | 11 Jun 2024
 
 ### Additions

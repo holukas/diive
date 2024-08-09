@@ -9,7 +9,6 @@ kudos:
     - https://www.analyticsvidhya.com/blog/2022/08/outliers-pruning-using-python/
 
 """
-
 import numpy as np
 import pandas as pd
 from pandas import Series, DatetimeIndex
@@ -34,7 +33,10 @@ class zScoreDaytimeNighttime(FlagBase):
                  thres_zscore: float = 4,
                  showplot: bool = False,
                  verbose: bool = False):
-        """Identify outliers based on the z-score or series records, separately for daytime and nighttime.
+        """Identify outliers based on the z-score of series records, whereby the z-score
+        is calculated separately for daytime and nighttime records.
+
+        Records with a z-score larger than the given threshold are flagged as outliers.
 
         Args:
             series: Time series in which outliers are identified.
@@ -204,13 +206,93 @@ class zScore(FlagBase):
         return ok, rejected, n_outliers
 
 
-def example():
+@ConsoleOutputDecorator()
+class zScoreRolling(FlagBase):
+    flagid = 'OUTLIER_ZSCOREROLLING'
+
+    def __init__(self,
+                 series: Series,
+                 idstr: str = None,
+                 thres_zscore: float = 4,
+                 winsize: int = None,
+                 showplot: bool = False,
+                 plottitle: str = None,
+                 verbose: bool = False):
+        """Identify outliers based on the rolling z-score of records.
+
+        For each record, the rolling z-score is calculated from the rolling
+        mean and rolling standard deviation, centered on the respective value.
+
+        Args:
+            series: Time series in which outliers are identified.
+            idstr: Identifier, added as suffix to output variable names.
+            thres_zscore: Threshold for z-score, scores above this value will be flagged as outlier.
+            winsize: Size of time window in number of records to calculate the rolling z-score.
+            showplot: Show plot with results from the outlier detection.
+            plottitle: Title string for the plot.
+            verbose: Print more text output.
+
+        Returns:
+            Flag series that combines flags from all iterations in one single flag.
+
+        """
+        super().__init__(series=series, flagid=self.flagid, idstr=idstr)
+        self.showplot = False
+        self.plottitle = None
+        self.verbose = False
+        self.thres_zscore = thres_zscore
+        self.winsize = winsize
+        self.showplot = showplot
+        self.plottitle = plottitle
+        self.verbose = verbose
+
+    def calc(self, repeat: bool = True):
+        """Calculate overall flag, based on individual flags from multiple iterations.
+
+        Args:
+            repeat: If *True*, the outlier detection is repeated until all
+                outliers are removed.
+
+        """
+        self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=repeat)
+        if self.showplot:
+            self.defaultplot(n_iterations=n_iterations)
+
+    def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
+        """Perform tests required for this flag"""
+
+        # Working data
+        s = self.filteredseries.copy().dropna()
+
+        if not self.winsize:
+            self.winsize = int(len(s) / 20)
+
+        # Rolling mean and SD, centered on value
+        rmean = s.rolling(window=self.winsize, center=True, min_periods=3).mean()
+        rsd = s.rolling(window=self.winsize, center=True, min_periods=3).std()
+
+        # Rolling z-score
+        rzscore = np.abs((s - rmean) / rsd)
+
+        # Run with threshold
+        # zscores = funcs.zscore(series=s)
+        ok = rzscore <= self.thres_zscore
+        ok = ok[ok].index
+        rejected = rzscore > self.thres_zscore
+        rejected = rejected[rejected].index
+
+        n_outliers = len(rejected)
+
+        if self.verbose:
+            print(f"ITERATION#{iteration}: Total found outliers: {len(rejected)} values")
+
+        return ok, rejected, n_outliers
+
+
+def example_zscore_daytime_nighttime():
     from diive.configs.exampledata import load_exampledata_parquet
     df = load_exampledata_parquet()
     series = df['Tair_f'].copy()
-
-    # series = series.iloc[0:1000].copy()
-
     zdn = zScoreDaytimeNighttime(
         series=series,
         lat=47.286417,
@@ -219,18 +301,24 @@ def example():
         thres_zscore=2.5,
         showplot=True,
         verbose=True)
-
     zdn.calc(repeat=True)
-    iterations_df = zdn.get_flag()
-    iterations_df.to_csv(r"C:\Users\nopan\Desktop\temp.csv")
-    print("XXX")
+    flag = zdn.get_flag()
 
-    # from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-    # HeatmapDateTime(series=zdn['Tair_f']).show()
-    # HeatmapDateTime(series=zdn['FLAG_Tair_f_OUTLIER_ZSCOREDTNT_ITER1_TEST']).show()
+
+def example_zscore():
+    from diive.configs.exampledata import load_exampledata_parquet
+    df = load_exampledata_parquet()
+    series = df['Tair_f'].copy()
+    zsc = zScore(
+        series=series,
+        thres_zscore=2,
+        showplot=True,
+        plottitle="z-score",
+        verbose=True)
+    zsc.calc(repeat=True)
+    flag = zsc.get_flag()
 
 
 if __name__ == '__main__':
-    example()
-    # help(zScoreDaytimeNighttime)
-    # help(zScoreDaytimeNighttime.__init__)
+    example_zscore()
+    # example_zscore_daytime_nighttime()
