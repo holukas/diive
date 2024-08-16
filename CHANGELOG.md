@@ -2,7 +2,24 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.78.0 | XX Jul 2024
+## v0.78.0 | XX Aug 2024
+
+- Flux processing chain:
+    - Several changes to the flux processing chain to make sure it can also work with data files not directly output by
+      EddyPro. The class `FluxProcessingChain` can now handle files that have a different format than the two EddyPro
+      output files `EDDYPRO-FLUXNET-CSV-30MIN` and `EDDYPRO-FULL-OUTPUT-CSV-30MIN`. See following notes.
+    - Removed option to process EddyPro `_full_output_` files, since it as an older format and its variables do not
+      follow FLUXNET conventions.
+    - Removed keyword `filetype` in class `FluxProcessingChain`. It is now assumed that the variable names follow the
+      FLUXNET convention. Variables used in FLUXNET are
+      listed [here](https://fluxnet.org/data/fluxnet2015-dataset/fullset-data-product/) (`diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain`)
+    - When detecting the base variable from which a flux variable was calculated, the variables defined for
+      filetype `EDDYPRO-FLUXNET-CSV-30MIN` are now assumed by default. (`diive.pkgs.flux.common.detect_basevar`)
+    - Renamed function that detects the base variable that was used to calculate the respective
+      flux  (`diive.pkgs.flux.common.detect_fluxbasevar`)
+    - Renamed `gas` in functions related to completeness tests to `fluxbasevar` to better reflect that the completeness
+      test does not necessarily require a gas (e.g. `T_SONIC` is used to calculate the completeness for sensible heat
+      flux) (`flag_fluxbasevar_completeness_eddypro_test`)
 
 ### New features
 
@@ -20,7 +37,8 @@
 ### Notebooks
 
 - Added new notebook for outlier detection using class `zScore` (`notebooks/OutlierDetection/zScore.ipynb`)
-- Added new notebook for outlier detection using class `zScoreDaytimeNighttime` (`notebooks/OutlierDetection/zScoreDaytimeNighttime.ipynb`)
+- Added new notebook for outlier detection using
+  class `zScoreDaytimeNighttime` (`notebooks/OutlierDetection/zScoreDaytimeNighttime.ipynb`)
 - Updated notebook (`notebooks/MeteoScreening/StepwiseMeteoScreeningFromDatabase_v7.0.ipynb`)
 - When uploading screened meteo data to the database using the notebook `StepwiseMeteoScreeningFromDatabase`, variables
   with the same name, measurement and data version as the screened variable(s) are now deleted from the database before
@@ -32,7 +50,8 @@
 ### Tests
 
 - Added new test case for `zScore` (`tests.test_outlierdetection.TestOutlierDetection.test_zscore`)
-- Added new test case for `zScoreDaytimeNighttime` (`tests.test_outlierdetection.TestOutlierDetection.test_zscore_daytime_nighttime`)
+- Added new test case
+  for `zScoreDaytimeNighttime` (`tests.test_outlierdetection.TestOutlierDetection.test_zscore_daytime_nighttime`)
 
 ## v0.77.0 | 11 Jun 2024
 

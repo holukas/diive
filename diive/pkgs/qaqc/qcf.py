@@ -109,10 +109,13 @@ class FlagQCF:
         """Create quality-checked time series"""
         # Accepted-quality fluxes
         self._flags_df[self.filteredseriescol] = self._flags_df[self.series.name].copy()
-        self._flags_df[self.filteredseriescol].loc[self._flags_df[self.flagqcfcol] == 2] = np.nan
+        ix = self._flags_df[self.flagqcfcol] == 2
+        self._flags_df.loc[ix, self.filteredseriescol] = np.nan
+
         # Highest-quality fluxes
         self._flags_df[self.filteredseriescol_hq] = self._flags_df[self.series.name].copy()
-        self._flags_df[self.filteredseriescol_hq].loc[self._flags_df[self.flagqcfcol] > 0] = np.nan
+        ix = self._flags_df[self.flagqcfcol] > 0
+        self._flags_df.loc[ix, self.filteredseriescol_hq] = np.nan
 
     def report_qcf_flags(self):
 
@@ -245,39 +248,39 @@ class FlagQCF:
         df[self.flagqcfcol] = np.nan
 
         # QCF is 0 if all flags show zero
-        df[self.flagqcfcol].loc[df[self.sumflagscol] == 0] = 0
-
-        # tests[QCF].loc[tests['SUM_FLAGS'] == 1] = 1
+        ix = df[self.sumflagscol] == 0
+        df.loc[ix, self.flagqcfcol] = 0
 
         # QCF is 2 if more than three soft flags were raised
-        df[self.flagqcfcol].loc[df[self.sumsoftflagscol] > 3] = 2
+        ix = df[self.sumsoftflagscol] > 3
+        df.loc[ix, self.flagqcfcol] = 2
 
         # QCF is 2 if at least one hard flag was raised
-        df[self.flagqcfcol].loc[df[self.sumhardflagscol] >= 2] = 2
+        ix = df[self.sumhardflagscol] >= 2
+        df.loc[ix, self.flagqcfcol] = 2
 
         # QCF is 1 if no hard flag and max. three soft flags and
         # min. one soft flag were raised
-        df[self.flagqcfcol].loc[(df[self.sumsoftflagscol] <= 3)
-                                & (df[self.sumsoftflagscol] >= 1)
-                                & (df[self.sumhardflagscol] == 0)] = 1
+        ix = (df[self.sumsoftflagscol] <= 3) & (df[self.sumsoftflagscol] >= 1) & (df[self.sumhardflagscol] == 0)
+        df.loc[ix, self.flagqcfcol] = 1
 
         # Flag daytime values based on param
         if isinstance(self.daytime, Series):
-            df[self.flagqcfcol].loc[(df[self.flagqcfcol] >= self.daytime_accept_qcf_below)
-                                    & (self.daytime == 1)] = 2
+            ix = (df[self.flagqcfcol] >= self.daytime_accept_qcf_below) & (self.daytime == 1)
+            df.loc[ix, self.flagqcfcol] = 2
 
         # Flag nighttime values based on param
         if isinstance(self.nighttime, Series):
-            df[self.flagqcfcol].loc[(df[self.flagqcfcol] >= self.nighttimetime_accept_qcf_below)
-                                    & (self.nighttime == 1)] = 2
+            ix = (df[self.flagqcfcol] >= self.nighttimetime_accept_qcf_below) & (self.nighttime == 1)
+            df.loc[ix, self.flagqcfcol] = 2
 
         # Daytime and nighttime flags are only calculated when swinpot is provided.
         # This means that if both do not exist, no separation into daytime and nighttime
         # was done. In that case, all records where QCF = 2 are rejected.
-        if not isinstance(self.daytime, Series) \
-                and not isinstance(self.nighttime, Series):
+        if not isinstance(self.daytime, Series) and not isinstance(self.nighttime, Series):
             default_accept_qcf_below = 2
-            df[self.flagqcfcol].loc[(df[self.flagqcfcol] >= default_accept_qcf_below)] = 2
+            ix = (df[self.flagqcfcol] >= default_accept_qcf_below)
+            df.loc[ix, self.flagqcfcol] = 2
 
         return df
 
