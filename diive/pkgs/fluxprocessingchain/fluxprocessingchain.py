@@ -360,6 +360,22 @@ class FluxProcessingChain:
         self._level32.flag_outliers_increments_zcore_test(thres_zscore=thres_zscore, showplot=showplot, verbose=verbose,
                                                           repeat=repeat)
 
+    def level32_flag_outliers_hampel_test(self, window_length: int = 10, n_sigma: float = 5, k: float = 1.4826,
+                                          showplot: bool = False, verbose: bool = False, repeat: bool = True):
+        self._level32.flag_outliers_hampel_test(window_length=window_length, n_sigma=n_sigma, k=k,
+                                                showplot=showplot, verbose=verbose, repeat=repeat)
+
+    def level32_flag_outliers_hampel_dtnt_test(self, window_length: int = 10, n_sigma: float = 5, k: float = 1.4826,
+                                               showplot: bool = False, verbose: bool = False, repeat: bool = True):
+        self._level32.flag_outliers_hampel_dtnt_test(window_length=window_length, n_sigma=n_sigma, k=k,
+                                                     showplot=showplot, verbose=verbose, repeat=repeat)
+
+    def level32_flag_outliers_zscore_rolling_test(self, thres_zscore: int = 4, showplot: bool = False,
+                                                  verbose: bool = False, plottitle: str = None,
+                                                  repeat: bool = True, winsize: int = None):
+        self._level32.flag_outliers_zscore_rolling_test(thres_zscore=thres_zscore, showplot=showplot, verbose=verbose,
+                                                        plottitle=plottitle, winsize=winsize, repeat=repeat)
+
     def level32_flag_outliers_zscore_test(self, thres_zscore: int = 4, showplot: bool = False, verbose: bool = False,
                                           plottitle: str = None, repeat: bool = True):
         self._level32.flag_outliers_zscore_test(thres_zscore=thres_zscore, showplot=showplot,
