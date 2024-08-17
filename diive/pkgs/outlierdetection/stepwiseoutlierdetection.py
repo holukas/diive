@@ -14,6 +14,7 @@ from diive.core.funcs.funcs import validate_id_string
 from diive.core.plotting.timeseries import TimeSeries
 from diive.core.times.times import TimestampSanitizer
 from diive.pkgs.outlierdetection.absolutelimits import AbsoluteLimits, AbsoluteLimitsDaytimeNighttime
+from diive.pkgs.outlierdetection.hampel import Hampel, HampelDaytimeNighttime
 from diive.pkgs.outlierdetection.incremental import zScoreIncrements
 from diive.pkgs.outlierdetection.localsd import LocalSD
 from diive.pkgs.outlierdetection.lof import LocalOutlierFactorDaytimeNighttime, LocalOutlierFactorAllData
@@ -41,6 +42,8 @@ class StepwiseOutlierDetection:
     - `.flag_outliers_zscore_test()`:  Identify outliers based on the z-score
     - `.flag_outliers_lof_dtnt_test()`: Identify outliers based on local outlier factor, daytime nighttime separately
     - `.flag_outliers_lof_test()`: Identify outliers based on local outlier factor, across all data
+    - `.flag_outliers_hampel_test()`: Identify outliers in a sliding window based on the Hampel filter
+    - `.flag_outliers_hampel_dtnt_test()`: Identify based on the Hampel filter, daytime nighttime separately
 
     The class is optimized to work in Jupyter notebooks. Various outlier detection
     methods can be called on-demand. Outlier results are displayed and the user can
@@ -160,6 +163,27 @@ class StepwiseOutlierDetection:
         series_cleaned = self._series_hires_cleaned.copy()
         flagtest = zScoreIncrements(series=series_cleaned, idstr=self.idstr, thres_zscore=thres_zscore,
                                     showplot=showplot, verbose=verbose)
+        flagtest.calc(repeat=repeat)
+        self._last_flag = flagtest.get_flag()
+
+    def flag_outliers_hampel_test(self, window_length: int = 10, n_sigma: float = 5, k: float = 1.4826,
+                                  showplot: bool = False, verbose: bool = False, repeat: bool = True):
+        """Identify outliers in a sliding window based on the Hampel filter"""
+        series_cleaned = self._series_hires_cleaned.copy()
+        flagtest = Hampel(series=series_cleaned, idstr=self.idstr,
+                          window_length=window_length, n_sigma=n_sigma, k=k,
+                          showplot=showplot, verbose=verbose)
+        flagtest.calc(repeat=repeat)
+        self._last_flag = flagtest.get_flag()
+
+    def flag_outliers_hampel_dtnt_test(self, window_length: int = 10, n_sigma: float = 5, k: float = 1.4826,
+                                       showplot: bool = False, verbose: bool = False, repeat: bool = True):
+        """Identify outliers in a sliding window based on the Hampel filter for daytime/nighttime"""
+        series_cleaned = self._series_hires_cleaned.copy()
+        flagtest = HampelDaytimeNighttime(series=series_cleaned, idstr=self.idstr,
+                                          lat=self.site_lat, lon=self.site_lon, utc_offset=self.utc_offset,
+                                          window_length=window_length, n_sigma=n_sigma, k=k,
+                                          showplot=showplot, verbose=verbose)
         flagtest.calc(repeat=repeat)
         self._last_flag = flagtest.get_flag()
 
