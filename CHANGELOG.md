@@ -53,6 +53,11 @@
 - Added new test case
   for `zScoreDaytimeNighttime` (`tests.test_outlierdetection.TestOutlierDetection.test_zscore_daytime_nighttime`)
 
+### Environment
+
+- Added package [sktime](https://www.sktime.net/en/stable/index.html), a unified framework for machine learning with
+  time series.
+
 ## v0.77.0 | 11 Jun 2024
 
 ### Additions
