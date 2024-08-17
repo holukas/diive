@@ -35,8 +35,8 @@ class TestOutlierDetection(unittest.TestCase):
             series=s_noise,
             n_sigma=4,
             window_length=48 * 9,
-            showplot=True,
-            verbose=True
+            showplot=False,
+            verbose=False
         )
         ham.calc(repeat=True)
         flag = ham.get_flag()

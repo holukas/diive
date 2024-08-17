@@ -4,7 +4,7 @@
 
 ## v0.78.0 | XX Aug 2024
 
-- Added Hampel filter for outlier removal (`diive.pkgs.outlierdetection.hampel.Hampel`)
+`diive.core.plotting.outlier_dtnt.outlier_daytime_nighttime`
 
 - Flux processing chain:
     - Several changes to the flux processing chain to make sure it can also work with data files not directly output by
@@ -28,7 +28,9 @@
 - Added new class for outlier removal, based on the rolling z-score. It can also be used in step-wise outlier detection
   and during meteoscreening from the
   database. (`diive.pkgs.outlierdetection.zscore.zScoreRolling`, `diive.pkgs.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection`, `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb`).
-
+- Added Hampel filter for outlier removal (`diive.pkgs.outlierdetection.hampel.Hampel`)
+- Added Hampel filter (separate daytime, nighttime) for outlier
+  removal (`diive.pkgs.outlierdetection.hampel.HampelDaytimeNighttime`)
 
 ### Changes
 
