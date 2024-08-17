@@ -107,6 +107,8 @@ Single outlier tests create a flag where `0=OK` and `2=outlier`.
 
 - Absolute limits ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/AbsoluteLimits.ipynb))
 - Absolute limits, separately defined for daytime and nighttime data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/AbsoluteLimitsDaytimeNighttime.ipynb))
+- Hampel filter: based on Median Absolute Deviation (MAD) in a moving window ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/Hampel.ipynb))
+- Hampel filter, separately for daytime and nighttime data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/HampelDaytimeNighttime.ipynb))
 - Incremental z-score: Identify outliers based on the z-score of double increments ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/zScoreIncremental.ipynb))
 - Local standard deviation: Identify outliers based on the local standard deviation from a running median ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/LocalSD.ipynb))
 - Local outlier factor: Identify outliers based on local outlier factor, across all data
