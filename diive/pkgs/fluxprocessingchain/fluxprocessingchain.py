@@ -360,6 +360,12 @@ class FluxProcessingChain:
         self._level32.flag_outliers_increments_zcore_test(thres_zscore=thres_zscore, showplot=showplot, verbose=verbose,
                                                           repeat=repeat)
 
+    def level32_flag_outliers_trim_low_test(self, trim_daytime: bool = False, trim_nighttime: bool = False,
+                                            lower_limit: float = None, showplot: bool = False, verbose: bool = False):
+        self._level32.flag_outliers_trim_low_test(trim_daytime=trim_daytime, trim_nighttime=trim_nighttime,
+                                                  lower_limit=lower_limit,
+                                                  showplot=showplot, verbose=verbose)
+
     def level32_flag_outliers_hampel_test(self, window_length: int = 10, n_sigma: float = 5, k: float = 1.4826,
                                           showplot: bool = False, verbose: bool = False, repeat: bool = True):
         self._level32.flag_outliers_hampel_test(window_length=window_length, n_sigma=n_sigma, k=k,
@@ -571,10 +577,11 @@ def example():
     # Source data
     from pathlib import Path
     from diive.core.io.files import load_parquet
-    SOURCEDIR = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\cha_fp2024.1_2005-2023\0_data\RESULTS-IRGA-Level-1_fluxnet_2005-2023"
+    SOURCEDIR = r"L:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\cha_fp2024.1_2005-2023\0_data\RESULTS-IRGA-Level-1_fluxnet_2005-2023"
     FILENAME = r"CH-CHA_IRGA_Level-1_eddypro_fluxnet_2005-2023_availableVars.parquet"
     FILEPATH = Path(SOURCEDIR) / FILENAME
     maindf = load_parquet(filepath=FILEPATH)
+    maindf = maindf.loc[maindf.index.year == 2023, :].copy()
     metadata = None
     print(maindf)
 
@@ -676,11 +683,22 @@ def example():
     #     showplot=True, verbose=True)
     # fpc.level32_addflag()
 
+    fpc.level32_flag_outliers_hampel_test(window_length=48 * 9, n_sigma=5, showplot=True, verbose=True, repeat=True)
+    fpc.level32_addflag()
+
+    fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 9, n_sigma=7, showplot=True, verbose=True,
+                                               repeat=True)
+    fpc.level32_addflag()
+
+    fpc.level32_flag_outliers_zscore_rolling_test(winsize=48 * 9, thres_zscore=5, showplot=True, verbose=True,
+                                                  repeat=True)
+    fpc.level32_addflag()
+
     fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
     fpc.level32_addflag()
     # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
-    fpc.level32_flag_outliers_localsd_test(n_sd=4, winsize=480, showplot=True, verbose=True, repeat=True)
+    fpc.level32_flag_outliers_localsd_test(n_sd=3, winsize=480, showplot=True, verbose=True, repeat=True)
     fpc.level32_addflag()
     # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
@@ -705,10 +723,13 @@ def example():
     # fpc.level32_addflag()
     # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
-    # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=[-50, 50], nighttime_minmax=[-10, 50],
-    #                                            showplot=True, verbose=True)
-    # fpc.level32_addflag()
+    fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=[-50, 50], nighttime_minmax=[-10, 50], showplot=True,
+                                               verbose=True)
+    fpc.level32_addflag()
     # fpc.level32.results  # Stores Level-3.2 flags up to this point
+
+    fpc.level32_flag_outliers_trim_low_test(trim_nighttime=True, lower_limit=-20, showplot=True, verbose=True)
+    fpc.level32_addflag()
 
     fpc.finalize_level32(nighttime_threshold=50, daytime_accept_qcf_below=2, nighttimetime_accept_qcf_below=2)
 

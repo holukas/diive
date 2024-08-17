@@ -19,6 +19,7 @@ from diive.pkgs.outlierdetection.incremental import zScoreIncrements
 from diive.pkgs.outlierdetection.localsd import LocalSD
 from diive.pkgs.outlierdetection.lof import LocalOutlierFactorDaytimeNighttime, LocalOutlierFactorAllData
 from diive.pkgs.outlierdetection.manualremoval import ManualRemoval
+from diive.pkgs.outlierdetection.trim import TrimLow
 from diive.pkgs.outlierdetection.zscore import zScoreDaytimeNighttime, zScore, zScoreRolling
 
 
@@ -164,6 +165,17 @@ class StepwiseOutlierDetection:
         flagtest = zScoreIncrements(series=series_cleaned, idstr=self.idstr, thres_zscore=thres_zscore,
                                     showplot=showplot, verbose=verbose)
         flagtest.calc(repeat=repeat)
+        self._last_flag = flagtest.get_flag()
+
+    def flag_outliers_trim_low_test(self, trim_daytime: bool = False, trim_nighttime: bool = False,
+                                    lower_limit: float = None, showplot: bool = False, verbose: bool = False):
+        """XXX"""
+        series_cleaned = self._series_hires_cleaned.copy()
+        flagtest = TrimLow(series=series_cleaned, idstr=self.idstr,
+                           trim_daytime=trim_daytime, trim_nighttime=trim_nighttime,
+                           lat=self.site_lat, lon=self.site_lon, utc_offset=self.utc_offset,
+                           lower_limit=lower_limit, showplot=showplot, verbose=verbose)
+        flagtest.calc()
         self._last_flag = flagtest.get_flag()
 
     def flag_outliers_hampel_test(self, window_length: int = 10, n_sigma: float = 5, k: float = 1.4826,
