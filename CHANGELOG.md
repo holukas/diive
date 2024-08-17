@@ -4,7 +4,18 @@
 
 ## v0.78.0 | XX Aug 2024
 
-`diive.core.plotting.outlier_dtnt.outlier_daytime_nighttime`
+### New features
+
+- Added new class for outlier removal, based on the rolling z-score. It can also be used in step-wise outlier detection
+  and during meteoscreening from the
+  database. (`diive.pkgs.outlierdetection.zscore.zScoreRolling`, `diive.pkgs.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection`, `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb`).
+- Added Hampel filter for outlier removal (`diive.pkgs.outlierdetection.hampel.Hampel`)
+- Added Hampel filter (separate daytime, nighttime) for outlier
+  removal (`diive.pkgs.outlierdetection.hampel.HampelDaytimeNighttime`)
+- Added function to plot daytime and nighttime outliers during outlier
+  tests (`diive.core.plotting.outlier_dtnt.outlier_daytime_nighttime`)
+
+### Changes
 
 - Flux processing chain:
     - Several changes to the flux processing chain to make sure it can also work with data files not directly output by
@@ -22,18 +33,6 @@
     - Renamed `gas` in functions related to completeness tests to `fluxbasevar` to better reflect that the completeness
       test does not necessarily require a gas (e.g. `T_SONIC` is used to calculate the completeness for sensible heat
       flux) (`flag_fluxbasevar_completeness_eddypro_test`)
-
-### New features
-
-- Added new class for outlier removal, based on the rolling z-score. It can also be used in step-wise outlier detection
-  and during meteoscreening from the
-  database. (`diive.pkgs.outlierdetection.zscore.zScoreRolling`, `diive.pkgs.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection`, `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb`).
-- Added Hampel filter for outlier removal (`diive.pkgs.outlierdetection.hampel.Hampel`)
-- Added Hampel filter (separate daytime, nighttime) for outlier
-  removal (`diive.pkgs.outlierdetection.hampel.HampelDaytimeNighttime`)
-
-### Changes
-
 - Removing the radiation offset now uses `0.001` (W m-2) instead of `50` as the threshold value to flag nighttime values
   for the correction (`diive.pkgs.corrections.offsetcorrection.remove_radiation_zero_offset`)
 - The database tag for meteo data screened with `diive` is
@@ -55,6 +54,8 @@
 ### Tests
 
 - Added test case for `Hampel` filter (`tests.test_outlierdetection.TestOutlierDetection.test_hampel_filter`)
+- Added test case for `HampelDaytimeNighttime`
+  filter (`tests.test_outlierdetection.TestOutlierDetection.test_hampel_filter_daytime_nighttime`)
 - Added test case for `zScore` (`tests.test_outlierdetection.TestOutlierDetection.test_zscore`)
 - Added test case
   for `zScoreDaytimeNighttime` (`tests.test_outlierdetection.TestOutlierDetection.test_zscore_daytime_nighttime`)

@@ -329,7 +329,7 @@ def example_dtnt():
                                 seed=42)  # Add impulse noise (spikes)
     s_noise.name = f"{s.name}+noise"
     TimeSeries(s_noise).plot()
-    lsd = HampelDaytimeNighttime(
+    ham = HampelDaytimeNighttime(
         series=s_noise,
         n_sigma=4,
         window_length=48 * 9,
@@ -339,7 +339,7 @@ def example_dtnt():
         lon=7.733750,
         utc_offset=1
     )
-    lsd.calc(repeat=True)
+    ham.calc(repeat=True)
 
 
 if __name__ == '__main__':
