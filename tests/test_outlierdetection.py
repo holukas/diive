@@ -9,11 +9,56 @@ from diive.pkgs.outlierdetection.incremental import zScoreIncrements
 from diive.pkgs.outlierdetection.localsd import LocalSD
 from diive.pkgs.outlierdetection.lof import LocalOutlierFactorAllData
 from diive.pkgs.outlierdetection.zscore import zScore, zScoreDaytimeNighttime
+from diive.pkgs.outlierdetection.hampel import Hampel
 
 
 # kudos https://medium.com/@ms_somanna/guide-to-adding-noise-to-your-data-using-python-and-numpy-c8be815df524
 
 class TestOutlierDetection(unittest.TestCase):
+
+    def test_hampel_filter(self):
+        df = ed.load_exampledata_parquet()
+        s = df['Tair_f'].copy()
+        s = s.loc[s.index.year == 2018].copy()
+        s = s.loc[s.index.month == 7].copy()
+        s_noise = add_impulse_noise(series=s,
+                                    factor_low=-14,
+                                    factor_high=19,
+                                    contamination=0.06,
+                                    seed=42)  # Add impulse noise (spikes)
+
+        # Checks on noise data, make sure we have outliers, i.e., greater or less than the specified limits
+        self.assertGreater(s_noise.max(), 22)
+        self.assertLess(s_noise.min(), 10)
+
+        ham = Hampel(
+            series=s_noise,
+            n_sigma=4,
+            window_length=48 * 9,
+            showplot=True,
+            verbose=True
+        )
+        ham.calc(repeat=True)
+        flag = ham.get_flag()
+        frame = {'s_noise': s_noise, 'flag': flag}
+        checkdf = pd.DataFrame.from_dict(frame)
+
+        # Checks on bad data
+        baddata_stats = checkdf.loc[checkdf.flag == 2].describe()
+        self.assertEqual(baddata_stats.loc['max']['s_noise'], 457.7993015844542)
+        self.assertEqual(baddata_stats.loc['min']['s_noise'], -47.71027579882934)
+        self.assertEqual(baddata_stats.loc['count']['flag'], 82)
+        self.assertEqual(baddata_stats.loc['min']['flag'], 2)
+        self.assertEqual(baddata_stats.loc['max']['flag'], 2)
+        self.assertEqual(baddata_stats.loc['count']['s_noise'], 82)
+
+        # Checks on good data
+        gooddata_stats = checkdf.loc[checkdf.flag == 0].describe()
+        self.assertEqual(gooddata_stats.loc['max']['s_noise'], 25.201551539241972)
+        self.assertEqual(gooddata_stats.loc['min']['s_noise'], 3.65795487099882)
+        self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
+        self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
+        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1406)
 
     def test_zscore(self):
         df = ed.load_exampledata_parquet()

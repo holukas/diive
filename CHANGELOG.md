@@ -4,6 +4,8 @@
 
 ## v0.78.0 | XX Aug 2024
 
+- Added Hampel filter for outlier removal (`diive.pkgs.outlierdetection.hampel.Hampel`)
+
 - Flux processing chain:
     - Several changes to the flux processing chain to make sure it can also work with data files not directly output by
       EddyPro. The class `FluxProcessingChain` can now handle files that have a different format than the two EddyPro
@@ -27,6 +29,7 @@
   and during meteoscreening from the
   database. (`diive.pkgs.outlierdetection.zscore.zScoreRolling`, `diive.pkgs.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection`, `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb`).
 
+
 ### Changes
 
 - Removing the radiation offset now uses `0.001` (W m-2) instead of `50` as the threshold value to flag nighttime values
@@ -49,8 +52,9 @@
 
 ### Tests
 
-- Added new test case for `zScore` (`tests.test_outlierdetection.TestOutlierDetection.test_zscore`)
-- Added new test case
+- Added test case for `Hampel` filter (`tests.test_outlierdetection.TestOutlierDetection.test_hampel_filter`)
+- Added test case for `zScore` (`tests.test_outlierdetection.TestOutlierDetection.test_zscore`)
+- Added test case
   for `zScoreDaytimeNighttime` (`tests.test_outlierdetection.TestOutlierDetection.test_zscore_daytime_nighttime`)
 
 ### Environment
