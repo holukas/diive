@@ -2,7 +2,7 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.78.0 | XX Aug 2024
+## v0.78.0 | 18 Aug 2024
 
 ### New features
 
