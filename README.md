@@ -83,7 +83,7 @@ For info about the Swiss FluxNet flux levels, see [here](https://www.swissfluxne
 
 Format data to specific formats
 
-- Convert EddyPro fluxnet output files for upload to FLUXNET database ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Formats/FormatEddyProFluxnetFileForUpload.ipynb))
+ - Convert EddyPro fluxnet output files for upload to FLUXNET database ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Formats/FormatEddyProFluxnetFileForUpload.ipynb))
 - Load and save parquet files ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Formats/LoadSaveParquetFile.ipynb))
 
 ### Gap-filling
@@ -115,6 +115,7 @@ Single outlier tests create a flag where `0=OK` and `2=outlier`.
 - Local outlier factor: Identify outliers based on local outlier factor, daytime nighttime separately
 - Manual removal: Remove time periods (from-to) or single records from time series
 - Missing values: Simply creates a flag that indicated available and missing data in a time series
+- Trimming: Remove values below threshold and remove an equal amount of records from high end of data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/TrimLow.ipynb))
 - z-score: Identify outliers based on the z-score across all time series data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/zScore.ipynb))
 - z-score: Identify outliers based on the z-score, separately for daytime and nighttime ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/zScoreDaytimeNighttime.ipynb))
 - z-score: Identify outliers based on the rolling z-score

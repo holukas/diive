@@ -37,12 +37,15 @@
   for the correction (`diive.pkgs.corrections.offsetcorrection.remove_radiation_zero_offset`)
 - The database tag for meteo data screened with `diive` is
   now `meteoscreening_diive` (`diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.resample`)
+- During noise generation, function now uses the absolute values of the min/max of a series to calculate minimum noise
+  and maximum noise (`diive.pkgs.createvar.noise.add_impulse_noise`)
 
 ### Notebooks
 
 - Added new notebook for outlier detection using class `zScore` (`notebooks/OutlierDetection/zScore.ipynb`)
 - Added new notebook for outlier detection using
   class `zScoreDaytimeNighttime` (`notebooks/OutlierDetection/zScoreDaytimeNighttime.ipynb`)
+- Added new notebook for outlier removal using trimming (`notebooks/OutlierDetection/TrimLow.ipynb`)
 - Updated notebook (`notebooks/MeteoScreening/StepwiseMeteoScreeningFromDatabase_v7.0.ipynb`)
 - When uploading screened meteo data to the database using the notebook `StepwiseMeteoScreeningFromDatabase`, variables
   with the same name, measurement and data version as the screened variable(s) are now deleted from the database before
@@ -57,8 +60,10 @@
 - Added test case for `HampelDaytimeNighttime`
   filter (`tests.test_outlierdetection.TestOutlierDetection.test_hampel_filter_daytime_nighttime`)
 - Added test case for `zScore` (`tests.test_outlierdetection.TestOutlierDetection.test_zscore`)
+- Added test case for `TrimLow` (`tests.test_outlierdetection.TestOutlierDetection.test_trim_low_nt`)
 - Added test case
   for `zScoreDaytimeNighttime` (`tests.test_outlierdetection.TestOutlierDetection.test_zscore_daytime_nighttime`)
+- 33/33 unittests ran successfully
 
 ### Environment
 
