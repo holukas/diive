@@ -10,7 +10,7 @@ from diive.core.funcs.funcs import filter_strings_by_elements
 from diive.core.io.filereader import MultiDataFileReader, search_files
 from diive.pkgs.createvar.daynightflag import daytime_nighttime_flag_from_swinpot
 from diive.pkgs.createvar.potentialradiation import potrad
-from diive.pkgs.flux.common import detect_basevar
+from diive.pkgs.flux.common import detect_fluxbasevar
 from diive.pkgs.fluxprocessingchain.level2_qualityflags import FluxQualityFlagsEddyPro
 from diive.pkgs.fluxprocessingchain.level31_storagecorrection import FluxStorageCorrectionSinglePointEddyPro
 from diive.pkgs.outlierdetection.stepwiseoutlierdetection import StepwiseOutlierDetection
@@ -22,29 +22,22 @@ class FluxProcessingChain:
     def __init__(
             self,
             maindf: DataFrame,
-            filetype: Literal['EDDYPRO-FLUXNET-CSV-30MIN', 'EDDYPRO-FULL-OUTPUT-CSV-30MIN'],
             fluxcol: str,
             site_lat: float,
             site_lon: float,
             utc_offset: int,
-            metadata: DataFrame = None,
             nighttime_threshold: float = 50
     ):
 
         self.maindf = maindf
         self.fluxcol = fluxcol
-        self.filetype = filetype
         self.site_lat = site_lat
         self.site_lon = site_lon
         self.utc_offset = utc_offset
         self.nighttime_threshold = nighttime_threshold
 
-        # Get units from metadata, later only needed for _full_output_ files (for VM97 quality flags)
-        self.units = metadata['UNITS'].copy()
-        self.units = self.units.to_dict()
-
         # Detect base variable that was used to produce this flux
-        self.basevar = detect_basevar(fluxcol=fluxcol, filetype=self.filetype)
+        self.fluxbasevar = detect_fluxbasevar(fluxcol=fluxcol)
 
         # Collect all relevant variables for this flux in dataframe
         self._fpc_df = self.maindf[[fluxcol]].copy()
@@ -53,7 +46,7 @@ class FluxProcessingChain:
         self._fpc_df, self.swinpot_col = self._add_swinpot_dt_nt_flag(df=self._fpc_df)
 
         # Get the name of the base flux, used to assemble meaningful names for output variables
-        if self.fluxcol == 'co2_flux' or self.fluxcol == 'FC':
+        if self.fluxcol == 'FC':
             # CO2 flux changes to NEE during processing (in Level-3.1)
             self.outname = 'NEE'
         else:
@@ -192,10 +185,8 @@ class FluxProcessingChain:
         self._levelidstr.append(idstr)
         self._level2 = FluxQualityFlagsEddyPro(fluxcol=self.fluxcol,
                                                dfin=self.maindf,
-                                               units=self.units,
                                                idstr=idstr,
-                                               basevar=self.basevar,
-                                               filetype=self.filetype)
+                                               fluxbasevar=self.fluxbasevar)
         self._level2.missing_vals_test()
 
         if ssitc:
@@ -290,9 +281,8 @@ class FluxProcessingChain:
         self._levelidstr.append(idstr)
         self._level31 = FluxStorageCorrectionSinglePointEddyPro(df=self.maindf,
                                                                 fluxcol=self.fluxcol,
-                                                                basevar=self.basevar,
+                                                                basevar=self.fluxbasevar,
                                                                 gapfill_storage_term=gapfill_storage_term,
-                                                                filetype=self.filetype,
                                                                 idstr=idstr)
         self._level31.storage_correction()
 
@@ -369,6 +359,28 @@ class FluxProcessingChain:
                                                     verbose: bool = False, repeat: bool = True):
         self._level32.flag_outliers_increments_zcore_test(thres_zscore=thres_zscore, showplot=showplot, verbose=verbose,
                                                           repeat=repeat)
+
+    def level32_flag_outliers_trim_low_test(self, trim_daytime: bool = False, trim_nighttime: bool = False,
+                                            lower_limit: float = None, showplot: bool = False, verbose: bool = False):
+        self._level32.flag_outliers_trim_low_test(trim_daytime=trim_daytime, trim_nighttime=trim_nighttime,
+                                                  lower_limit=lower_limit,
+                                                  showplot=showplot, verbose=verbose)
+
+    def level32_flag_outliers_hampel_test(self, window_length: int = 10, n_sigma: float = 5, k: float = 1.4826,
+                                          showplot: bool = False, verbose: bool = False, repeat: bool = True):
+        self._level32.flag_outliers_hampel_test(window_length=window_length, n_sigma=n_sigma, k=k,
+                                                showplot=showplot, verbose=verbose, repeat=repeat)
+
+    def level32_flag_outliers_hampel_dtnt_test(self, window_length: int = 10, n_sigma: float = 5, k: float = 1.4826,
+                                               showplot: bool = False, verbose: bool = False, repeat: bool = True):
+        self._level32.flag_outliers_hampel_dtnt_test(window_length=window_length, n_sigma=n_sigma, k=k,
+                                                     showplot=showplot, verbose=verbose, repeat=repeat)
+
+    def level32_flag_outliers_zscore_rolling_test(self, thres_zscore: int = 4, showplot: bool = False,
+                                                  verbose: bool = False, plottitle: str = None,
+                                                  repeat: bool = True, winsize: int = None):
+        self._level32.flag_outliers_zscore_rolling_test(thres_zscore=thres_zscore, showplot=showplot, verbose=verbose,
+                                                        plottitle=plottitle, winsize=winsize, repeat=repeat)
 
     def level32_flag_outliers_zscore_test(self, thres_zscore: int = 4, showplot: bool = False, verbose: bool = False,
                                           plottitle: str = None, repeat: bool = True):
@@ -562,40 +574,36 @@ def example_quick():
 
 
 def example():
-    FLUXVAR = "FC"  # Name of the flux variable
-    SOURCEDIRS = [
-        r'L:\Sync\luhk_work\CURRENT\fru\Level-1_results_fluxnet_2022']  # Folders where the EddyPro output files are located
-    SITE_LAT = 47.115833  # Latitude of site
-    SITE_LON = 8.537778  # Longitude of site
-    FILETYPE = 'EDDYPRO-FLUXNET-CSV-30MIN'  # Filetype of EddyPro output files, can be 'EDDYPRO-FLUXNET-CSV-30MIN' or 'EDDYPRO-FULL-OUTPUT-CSV-30MIN'
-    UTC_OFFSET = 1  # Time stamp offset in relation to UTC, e.g. 1 for UTC+01:00 (CET), important for the calculation of potential radiation for detecting daytime and nighttime
+    # Source data
+    from pathlib import Path
+    from diive.core.io.files import load_parquet
+    SOURCEDIR = r"L:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\cha_fp2024.1_2005-2023\0_data\RESULTS-IRGA-Level-1_fluxnet_2005-2023"
+    FILENAME = r"CH-CHA_IRGA_Level-1_eddypro_fluxnet_2005-2023_availableVars.parquet"
+    FILEPATH = Path(SOURCEDIR) / FILENAME
+    maindf = load_parquet(filepath=FILEPATH)
+    maindf = maindf.loc[maindf.index.year == 2023, :].copy()
+    metadata = None
+    print(maindf)
+
+    # Flux processing chain settings
+    FLUXVAR = "FC"
+    SITE_LAT = 47.210227
+    SITE_LON = 8.410645
+    UTC_OFFSET = 1
     NIGHTTIME_THRESHOLD = 50  # Threshold for potential radiation in W m-2, conditions below threshold are nighttime
     DAYTIME_ACCEPT_QCF_BELOW = 2
     NIGHTTIMETIME_ACCEPT_QCF_BELOW = 2
 
-    ep = LoadEddyProOutputFiles(sourcedir=SOURCEDIRS, filetype=FILETYPE)
-    ep.searchfiles()
-    ep.loadfiles()
-    maindf = ep.maindf
-    metadata = ep.metadata
-
-    # from diive.core.io.files import save_parquet, load_parquet
-    # df_orig = load_parquet(filepath='df_level32_qcf.parquet')
-
-    maindf.head()
     from diive.core.dfun.stats import sstats  # Time series stats
     sstats(maindf[FLUXVAR])
-    # TimeSeries(series=level1_df[FLUXVAR]).plot_interactive()
     # TimeSeries(series=level1_df[FLUXVAR]).plot()
 
     fpc = FluxProcessingChain(
         maindf=maindf,
-        filetype=FILETYPE,
         fluxcol=FLUXVAR,
         site_lat=SITE_LAT,
         site_lon=SITE_LON,
-        utc_offset=UTC_OFFSET,
-        metadata=metadata
+        utc_offset=UTC_OFFSET
     )
 
     # --------------------
@@ -607,7 +615,6 @@ def example():
 
     # Signal strength
     TEST_SIGNAL_STRENGTH_COL = 'CUSTOM_AGC_MEAN'
-    # TEST_SIGNAL_STRENGTH_COL = 'agc_mean'
     TEST_SIGNAL_STRENGTH_METHOD = 'discard above'
     TEST_SIGNAL_STRENGTH_THRESHOLD = 90
     # TimeSeries(series=maindf[TEST_SIGNAL_STRENGTH_COL]).plot()
@@ -642,10 +649,11 @@ def example():
     fpc.level2_quality_flag_expansion(**LEVEL2_SETTINGS)
     fpc.finalize_level2(nighttime_threshold=NIGHTTIME_THRESHOLD, daytime_accept_qcf_below=DAYTIME_ACCEPT_QCF_BELOW,
                         nighttimetime_accept_qcf_below=NIGHTTIMETIME_ACCEPT_QCF_BELOW)
-
+    fpc.level2_qcf.report_qcf_evolution()
+    # fpc.level2_qcf.report_qcf_flags()
+    # fpc.level2.results
     # fpc.fpc_df
     # fpc.filteredseries
-    # fpc.level2.results
     # [x for x in fpc.fpc_df.columns if 'L2' in x]
 
     # --------------------
@@ -655,7 +663,6 @@ def example():
     fpc.finalize_level31()
     # fpc.level31.showplot(maxflux=50)
     fpc.level31.report()
-
     # fpc.fpc_df
     # fpc.filteredseries
     # fpc.level31.results
@@ -666,59 +673,74 @@ def example():
     # --------------------
     fpc.level32_stepwise_outlier_detection()
 
-    fpc.level32_flag_manualremoval_test(
-        remove_dates=[
-            ['2022-05-05 19:45:00', '2022-06-05 19:45:00'],
-            '2022-12-12 12:45:00',
-            '2022-01-12 13:15:00',
-            ['2022-08-15', '2022-08-31']
-        ],
-        showplot=True, verbose=True)
+    # fpc.level32_flag_manualremoval_test(
+    #     remove_dates=[
+    #         ['2022-05-05 19:45:00', '2022-06-05 19:45:00'],
+    #         '2022-12-12 12:45:00',
+    #         '2022-01-12 13:15:00',
+    #         ['2022-08-15', '2022-08-31']
+    #     ],
+    #     showplot=True, verbose=True)
+    # fpc.level32_addflag()
+
+    fpc.level32_flag_outliers_hampel_test(window_length=48 * 9, n_sigma=5, showplot=True, verbose=True, repeat=True)
+    fpc.level32_addflag()
+
+    fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 9, n_sigma=7, showplot=True, verbose=True,
+                                               repeat=True)
+    fpc.level32_addflag()
+
+    fpc.level32_flag_outliers_zscore_rolling_test(winsize=48 * 9, thres_zscore=5, showplot=True, verbose=True,
+                                                  repeat=True)
     fpc.level32_addflag()
 
     fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
     fpc.level32_addflag()
     # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
-    fpc.level32_flag_outliers_localsd_test(n_sd=4, winsize=480, showplot=True, verbose=True, repeat=True)
+    fpc.level32_flag_outliers_localsd_test(n_sd=3, winsize=480, showplot=True, verbose=True, repeat=True)
     fpc.level32_addflag()
     # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
     fpc.level32_flag_outliers_increments_zcore_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
     fpc.level32_addflag()
+    fpc.level32.showplot_cleaned()
     # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
-    fpc.level32_flag_outliers_lof_dtnt_test(n_neighbors=20, contamination=None, showplot=True,
-                                            verbose=True, repeat=False, n_jobs=-1)
-    fpc.level32_addflag()
+    # fpc.level32_flag_outliers_lof_dtnt_test(n_neighbors=20, contamination=None, showplot=True,
+    #                                         verbose=True, repeat=False, n_jobs=-1)
+    # fpc.level32_addflag()
 
-    fpc.level32_flag_outliers_lof_test(n_neighbors=20, contamination=None, showplot=True, verbose=True,
-                                       repeat=False, n_jobs=-1)
-    fpc.level32_addflag()
+    # fpc.level32_flag_outliers_lof_test(n_neighbors=20, contamination=None, showplot=True, verbose=True,
+    #                                    repeat=False, n_jobs=-1)
+    # fpc.level32_addflag()
 
-    fpc.level32_flag_outliers_zscore_test(thres_zscore=3, showplot=True, verbose=True, repeat=True)
-    fpc.level32_addflag()
+    # fpc.level32_flag_outliers_zscore_test(thres_zscore=3, showplot=True, verbose=True, repeat=True)
+    # fpc.level32_addflag()
     # fpc.level32.results
 
-    fpc.level32_flag_outliers_abslim_test(minval=-20, maxval=10, showplot=True, verbose=True)
+    # fpc.level32_flag_outliers_abslim_test(minval=-20, maxval=10, showplot=True, verbose=True)
+    # fpc.level32_addflag()
+    # fpc.level32.results  # Stores Level-3.2 flags up to this point
+
+    fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=[-50, 50], nighttime_minmax=[-10, 50], showplot=True,
+                                               verbose=True)
     fpc.level32_addflag()
     # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
-    fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=[-50, 50], nighttime_minmax=[-10, 50],
-                                               showplot=True, verbose=True)
+    fpc.level32_flag_outliers_trim_low_test(trim_nighttime=True, lower_limit=-20, showplot=True, verbose=True)
     fpc.level32_addflag()
-    # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
     fpc.finalize_level32(nighttime_threshold=50, daytime_accept_qcf_below=2, nighttimetime_accept_qcf_below=2)
 
-    fpc.filteredseries
-    fpc.level32.flags
+    # fpc.filteredseries
+    # fpc.level32.flags
     fpc.level32_qcf.showplot_qcf_heatmaps()
-    fpc.level32_qcf.showplot_qcf_timeseries()
-    fpc.level32_qcf.report_qcf_flags()
+    # fpc.level32_qcf.showplot_qcf_timeseries()
+    # fpc.level32_qcf.report_qcf_flags()
     fpc.level32_qcf.report_qcf_evolution()
-    fpc.level32_qcf.report_qcf_series()
-    fpc.levelidstr
+    # fpc.level32_qcf.report_qcf_series()
+    # fpc.levelidstr
 
     # fpc.filteredseries_level2_qcf
     # fpc.filteredseries_level31_qcf
@@ -837,5 +859,5 @@ def example():
 
 
 if __name__ == '__main__':
-    example_quick()
-    # example()
+    # example_quick()
+    example()

@@ -21,16 +21,13 @@ class FluxStorageCorrectionSinglePointEddyPro:
                  df: DataFrame,
                  fluxcol: str,
                  basevar: str,
-                 filetype: Literal['EDDYPRO-FLUXNET-CSV-30MIN', 'EDDYPRO-FULL-OUTPUT-CSV-30MIN'],
                  gapfill_storage_term: bool = False,
                  idstr: str = 'L3.1'):
         self.df = df.copy()
         self.fluxcol = fluxcol
         self.basevar = basevar
-        self.filetype = filetype
         self.gapfill_storage_term = gapfill_storage_term
         self.idstr = validate_id_string(idstr=idstr)
-
         self.flux_corrected_col, self.strgcol = self._detect_storage_var()
         self.flagname = f'FLAG{self.idstr}_{self.fluxcol}_{self.strgcol}-MISSING_TEST'
 
@@ -156,38 +153,33 @@ class FluxStorageCorrectionSinglePointEddyPro:
 
         flux_corrected_col = None
 
-        if self.filetype == 'EDDYPRO-FLUXNET-CSV-30MIN':
-            options = {
-                'FC': 'SC_SINGLE',
-                'FH2O': 'SH2O_SINGLE',
-                'LE': 'SLE_SINGLE',
-                'ET': 'SET_SINGLE',
-                'FN2O': 'SN2O_SINGLE',
-                'FCH4': 'SCH4_SINGLE',
-                'H': 'SH_SINGLE'
-            }
-            if self.fluxcol == 'FC':
-                flux_corrected_col = f'NEE{self.idstr}'
+        options = {
+            'FC': 'SC_SINGLE',
+            'FH2O': 'SH2O_SINGLE',
+            'LE': 'SLE_SINGLE',
+            'ET': 'SET_SINGLE',
+            'FN2O': 'SN2O_SINGLE',
+            'FCH4': 'SCH4_SINGLE',
+            'H': 'SH_SINGLE'
+        }
+        if self.fluxcol == 'FC':
+            flux_corrected_col = f'NEE{self.idstr}'
 
-        elif self.filetype == 'EDDYPRO-FULL-OUTPUT-CSV-30MIN':
-            options = {
-                'co2_flux': 'co2_strg',
-                'h2o_flux': 'h2o_strg',
-                'LE': 'LE_strg',
-                'n2o_flux': 'n2o_strg',
-                'ch4_flux': 'ch4_strg',
-                'H': 'H_strg'
-            }
-            if self.fluxcol == 'co2_flux':
-                flux_corrected_col = f'NEE{self.idstr}'
-        else:
-            raise Exception(f"Filetype {self.filetype} unknown.")
+        # elif self.filetype == 'EDDYPRO-FULL-OUTPUT-CSV-30MIN':
+        #     options = {
+        #         'co2_flux': 'co2_strg',
+        #         'h2o_flux': 'h2o_strg',
+        #         'LE': 'LE_strg',
+        #         'n2o_flux': 'n2o_strg',
+        #         'ch4_flux': 'ch4_strg',
+        #         'H': 'H_strg'
+        #     }
+        #     if self.fluxcol == 'co2_flux':
+        #         flux_corrected_col = f'NEE{self.idstr}'
 
         strgcol = options[self.fluxcol]
-
         if not flux_corrected_col:
             flux_corrected_col = f"{self.fluxcol}{self.idstr}"
-
         print(f"Detected storage variable {strgcol} for {self.fluxcol}.")
         return flux_corrected_col, strgcol
 

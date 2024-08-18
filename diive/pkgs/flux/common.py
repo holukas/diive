@@ -1,8 +1,6 @@
-from typing import Literal
-
 # Names of flux variables and their base variable in EddyPro,
 # names are different depending on output file (_full_output_ or _fluxnet_)
-basevars_fluxnetfile = {
+fluxbasevars_fluxnetfile = {
     'FC': 'CO2',
     'FH2O': 'H2O',
     'LE': 'H2O',
@@ -12,7 +10,7 @@ basevars_fluxnetfile = {
     'FCH4': 'CH4',
 }
 
-basevars_fulloutputfile = {
+fluxbasevars_fulloutputfile = {
     'co2_flux': 'co2',
     'h2o_flux': 'h2o',
     'LE': 'h2o',
@@ -23,15 +21,12 @@ basevars_fulloutputfile = {
 }
 
 
-def detect_basevar(fluxcol: str,
-                   filetype: Literal['EDDYPRO-FLUXNET-CSV-30MIN', 'EDDYPRO-FULL-OUTPUT-CSV-30MIN']) -> str:
+def detect_fluxbasevar(fluxcol: str) -> str:
     """Detect name of base variable that was used to calculate
     the respective flux."""
-    if filetype == 'EDDYPRO-FLUXNET-CSV-30MIN':
-        basevar = basevars_fluxnetfile[fluxcol]
-    elif filetype == 'EDDYPRO-FULL-OUTPUT-CSV-30MIN':
-        basevar = basevars_fulloutputfile[fluxcol]
-    else:
-        raise Exception(f"(!) Filetype {filetype} is not defined. No basevar could be detected for {fluxcol}.")
-    print(f"Detected base variable {basevar} for {fluxcol}.")
-    return basevar
+    fluxbasevar = fluxbasevars_fluxnetfile[fluxcol]
+    if not fluxbasevar:
+        raise KeyError(f'No base variable for {fluxcol} could be detected.')
+    print(f"Detected base variable {fluxbasevar} for {fluxcol}. "
+          f"({fluxbasevar} was used to calculate {fluxcol}.)")
+    return fluxbasevar

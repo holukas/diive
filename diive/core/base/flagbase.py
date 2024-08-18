@@ -179,3 +179,5 @@ class FlagBase:
                      f"n_outliers = {n_outliers}")
         fig.suptitle(plottitle, fontsize=theme.FIGHEADER_FONTSIZE)
         fig.show()
+
+

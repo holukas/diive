@@ -509,7 +509,7 @@ class DataFileReader:
             filepath_or_buffer=self.filepath,
             skiprows=self.data_header_section_rows,
             header=None,
-            na_values=self.data_na_vals,
+            na_values=self.data_na_vals,  # warning
             encoding='utf-8',
             delimiter=self.data_delimiter,
             index_col=None,

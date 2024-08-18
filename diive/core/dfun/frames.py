@@ -112,6 +112,7 @@ def aggregated_as_hires(aggregate_series: Series,
     """
     # Aggregate series
     lowres_df = pd.DataFrame(aggregate_series.resample(to_freq).agg(to_agg))
+    # lowres_df = lowres_df.rolling(window=5, center=True).mean()  # Testing
     agghires_col = f".{aggregate_series.name}_{to_freq}_{to_agg}"
     lowres_df = rename_cols(df=lowres_df, renaming_dict={aggregate_series.name: agghires_col})
 
@@ -121,6 +122,10 @@ def aggregated_as_hires(aggregate_series: Series,
             and interpolation_lim:
         lowres_df[agghires_col] = linear_interpolation(series=lowres_df[agghires_col],
                                                        limit=interpolation_lim)
+
+    # Testing:
+    # lowres_df = lowres_df.backfill()
+    # lowres_df = lowres_df.ffill()
 
         # lowres_df.interpolate(limit=1)
     # todo here linear interpolation with gap length limit

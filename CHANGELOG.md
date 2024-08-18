@@ -2,6 +2,74 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.78.0 | 18 Aug 2024
+
+### New features
+
+- Added new class for outlier removal, based on the rolling z-score. It can also be used in step-wise outlier detection
+  and during meteoscreening from the
+  database. (`diive.pkgs.outlierdetection.zscore.zScoreRolling`, `diive.pkgs.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection`, `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb`).
+- Added Hampel filter for outlier removal (`diive.pkgs.outlierdetection.hampel.Hampel`)
+- Added Hampel filter (separate daytime, nighttime) for outlier
+  removal (`diive.pkgs.outlierdetection.hampel.HampelDaytimeNighttime`)
+- Added function to plot daytime and nighttime outliers during outlier
+  tests (`diive.core.plotting.outlier_dtnt.outlier_daytime_nighttime`)
+
+### Changes
+
+- Flux processing chain:
+    - Several changes to the flux processing chain to make sure it can also work with data files not directly output by
+      EddyPro. The class `FluxProcessingChain` can now handle files that have a different format than the two EddyPro
+      output files `EDDYPRO-FLUXNET-CSV-30MIN` and `EDDYPRO-FULL-OUTPUT-CSV-30MIN`. See following notes.
+    - Removed option to process EddyPro `_full_output_` files, since it as an older format and its variables do not
+      follow FLUXNET conventions.
+    - Removed keyword `filetype` in class `FluxProcessingChain`. It is now assumed that the variable names follow the
+      FLUXNET convention. Variables used in FLUXNET are
+      listed [here](https://fluxnet.org/data/fluxnet2015-dataset/fullset-data-product/) (`diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain`)
+    - When detecting the base variable from which a flux variable was calculated, the variables defined for
+      filetype `EDDYPRO-FLUXNET-CSV-30MIN` are now assumed by default. (`diive.pkgs.flux.common.detect_basevar`)
+    - Renamed function that detects the base variable that was used to calculate the respective
+      flux  (`diive.pkgs.flux.common.detect_fluxbasevar`)
+    - Renamed `gas` in functions related to completeness tests to `fluxbasevar` to better reflect that the completeness
+      test does not necessarily require a gas (e.g. `T_SONIC` is used to calculate the completeness for sensible heat
+      flux) (`flag_fluxbasevar_completeness_eddypro_test`)
+- Removing the radiation offset now uses `0.001` (W m-2) instead of `50` as the threshold value to flag nighttime values
+  for the correction (`diive.pkgs.corrections.offsetcorrection.remove_radiation_zero_offset`)
+- The database tag for meteo data screened with `diive` is
+  now `meteoscreening_diive` (`diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.resample`)
+- During noise generation, function now uses the absolute values of the min/max of a series to calculate minimum noise
+  and maximum noise (`diive.pkgs.createvar.noise.add_impulse_noise`)
+
+### Notebooks
+
+- Added new notebook for outlier detection using class `zScore` (`notebooks/OutlierDetection/zScore.ipynb`)
+- Added new notebook for outlier detection using
+  class `zScoreDaytimeNighttime` (`notebooks/OutlierDetection/zScoreDaytimeNighttime.ipynb`)
+- Added new notebook for outlier removal using trimming (`notebooks/OutlierDetection/TrimLow.ipynb`)
+- Updated notebook (`notebooks/MeteoScreening/StepwiseMeteoScreeningFromDatabase_v7.0.ipynb`)
+- When uploading screened meteo data to the database using the notebook `StepwiseMeteoScreeningFromDatabase`, variables
+  with the same name, measurement and data version as the screened variable(s) are now deleted from the database before
+  the new data are uploaded. Implemented in the Python package `dbc-influxdb` to avoid duplicates in the database. Such
+  duplicates can occur when one of the tags of an otherwise identical variable changed, e.g., when one of the tags of
+  the originally uploaded data was wrong and needed correction. The database `InfluxDB` stores a new time series
+  alongside the previous time series when one of the tags is different in an otherwise identical time series.
+
+### Tests
+
+- Added test case for `Hampel` filter (`tests.test_outlierdetection.TestOutlierDetection.test_hampel_filter`)
+- Added test case for `HampelDaytimeNighttime`
+  filter (`tests.test_outlierdetection.TestOutlierDetection.test_hampel_filter_daytime_nighttime`)
+- Added test case for `zScore` (`tests.test_outlierdetection.TestOutlierDetection.test_zscore`)
+- Added test case for `TrimLow` (`tests.test_outlierdetection.TestOutlierDetection.test_trim_low_nt`)
+- Added test case
+  for `zScoreDaytimeNighttime` (`tests.test_outlierdetection.TestOutlierDetection.test_zscore_daytime_nighttime`)
+- 33/33 unittests ran successfully
+
+### Environment
+
+- Added package [sktime](https://www.sktime.net/en/stable/index.html), a unified framework for machine learning with
+  time series.
+
 ## v0.77.0 | 11 Jun 2024
 
 ### Additions

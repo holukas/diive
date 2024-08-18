@@ -29,8 +29,8 @@ def add_impulse_noise(
     """
 
     # Set parameters
-    minimum_noise = factor_low * min(series)
-    maximum_noise = factor_high * max(series)
+    minimum_noise = factor_low * abs(min(series))
+    maximum_noise = factor_high * abs(max(series))
     contamination_noise = int(contamination * len(series))
 
     # Generate noise sample with values that are higer or lower than a randomly selected value in the original data
