@@ -34,11 +34,21 @@ def filter_strings_by_elements(list1: list[str], list2: list[str]) -> list[str]:
     return result
 
 
-def zscore(series: Series) -> Series:
-    """Calculate the z-score of each record in *series*"""
+def zscore(series: Series, absolute: bool = True) -> Series:
+    """Calculate the z-score (absolute) of each record in *series*"""
     mean, std = np.mean(series), np.std(series)
-    z_score = np.abs((series - mean) / std)
+    if absolute:
+        z_score = np.abs((series - mean) / std)
+    else:
+        z_score = (series - mean) / std
     return z_score
+
+
+def val_from_zscore(series: Series, zscore: float, absolute: bool = True) -> Series:
+    """Calculate the value for a specific z-score"""
+    mean, std = np.mean(series), np.std(series)
+    value = (zscore * std) + mean  # from: z_score = (series - mean) / std
+    return value
 
 
 def find_nearest_val(array, value):
