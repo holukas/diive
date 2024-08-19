@@ -28,7 +28,8 @@ class HampelDaytimeNighttime(FlagBase):
                  lon: float,
                  utc_offset: int,
                  window_length: int = 10,
-                 n_sigma: float = 5,
+                 n_sigma_dt: float = 5,
+                 n_sigma_nt: float = 2,
                  k: float = 1.4826,
                  idstr: str = None,
                  showplot: bool = False,
@@ -39,8 +40,10 @@ class HampelDaytimeNighttime(FlagBase):
         Args:
             series: Time series in which outliers are identified.
             window_length: Size of sliding window.
-            n_sigma: Number of standard deviations. Records with sd outside this value
-                are flagged as outliers.
+            n_sigma_dt: Number of standard deviations allowed for daytime data.
+                Daytime records with sd outside this value are flagged as outliers.
+            n_sigma_nt: Number of standard deviations allowed for nighttime data.
+                Nighttime records with sd outside this value are flagged as outliers.
             k: constant scale factor, for Gaussian it is approximately 1.4826.
             lat: Latitude of location as float, e.g. 46.583056
             lon: Longitude of location as float, e.g. 9.790639
@@ -60,7 +63,8 @@ class HampelDaytimeNighttime(FlagBase):
         self.showplot = showplot
         self.verbose = verbose
         self.window_length = window_length
-        self.n_sigma = n_sigma
+        self.n_sigma_dt = n_sigma_dt
+        self.n_sigma_nt = n_sigma_nt
         self.k = k
 
         # Make sure time series has frequency
@@ -123,7 +127,7 @@ class HampelDaytimeNighttime(FlagBase):
         # Run for daytime (dt)
         _s_dt = s[self.is_daytime].copy()
         transformer = HampelFilter(window_length=self.window_length,
-                                   n_sigma=self.n_sigma,
+                                   n_sigma=self.n_sigma_dt,
                                    k=self.k,
                                    return_bool=True)
         is_outlier = transformer.fit_transform(_s_dt)
@@ -131,16 +135,11 @@ class HampelDaytimeNighttime(FlagBase):
         _ok_dt = _ok_dt[_ok_dt].index
         _rejected_dt = is_outlier == True
         _rejected_dt = _rejected_dt[_rejected_dt].index
-        # _zscore_dt = funcs.zscore(series=_s_dt)
-        # _ok_dt = _zscore_dt <= self.thres_zscore
-        # _ok_dt = _ok_dt[_ok_dt].index
-        # _rejected_dt = _zscore_dt > self.thres_zscore
-        # _rejected_dt = _rejected_dt[_rejected_dt].index
 
         # Run for nighttime (nt)
         _s_nt = s[self.is_nighttime].copy()
         transformer = HampelFilter(window_length=self.window_length,
-                                   n_sigma=self.n_sigma,
+                                   n_sigma=self.n_sigma_nt,
                                    k=self.k,
                                    return_bool=True)
         is_outlier = transformer.fit_transform(_s_nt)
@@ -148,12 +147,6 @@ class HampelDaytimeNighttime(FlagBase):
         _ok_nt = _ok_nt[_ok_nt].index
         _rejected_nt = is_outlier == True
         _rejected_nt = _rejected_nt[_rejected_nt].index
-        # _s_nt = s[self.is_nighttime].copy()  # Daytime data
-        # _zscore_nt = funcs.zscore(series=_s_nt)
-        # _ok_nt = _zscore_nt <= self.thres_zscore
-        # _ok_nt = _ok_nt[_ok_nt].index
-        # _rejected_nt = _zscore_nt > self.thres_zscore
-        # _rejected_nt = _rejected_nt[_rejected_nt].index
 
         # Collect daytime and nighttime flags in one overall flag
         flag.loc[_ok_dt] = 0
@@ -331,8 +324,9 @@ def example_dtnt():
     TimeSeries(s_noise).plot()
     ham = HampelDaytimeNighttime(
         series=s_noise,
-        n_sigma=4,
-        window_length=48 * 9,
+        n_sigma_dt=4,
+        n_sigma_nt=2,
+        window_length=48 * 7,
         showplot=True,
         verbose=True,
         lat=47.286417,

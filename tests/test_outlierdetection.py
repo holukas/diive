@@ -37,8 +37,8 @@ class TestOutlierDetection(unittest.TestCase):
             trim_daytime=False,
             trim_nighttime=True,
             lower_limit=10,
-            showplot=True,
-            verbose=True,
+            showplot=False,
+            verbose=False,
             lat=47.286417,
             lon=7.733750,
             utc_offset=1
@@ -86,7 +86,8 @@ class TestOutlierDetection(unittest.TestCase):
 
         ham = HampelDaytimeNighttime(
             series=s_noise,
-            n_sigma=4,
+            n_sigma_dt=4,
+            n_sigma_nt=3,
             window_length=48 * 9,
             showplot=False,
             verbose=False,
@@ -103,10 +104,10 @@ class TestOutlierDetection(unittest.TestCase):
         baddata_stats = checkdf.loc[checkdf.flag == 2].describe()
         self.assertEqual(baddata_stats.loc['max']['s_noise'], 420.37816376334473)
         self.assertEqual(baddata_stats.loc['min']['s_noise'], -38.04507418841196)
-        self.assertEqual(baddata_stats.loc['count']['flag'], 96)
+        self.assertEqual(baddata_stats.loc['count']['flag'], 102)
         self.assertEqual(baddata_stats.loc['min']['flag'], 2)
         self.assertEqual(baddata_stats.loc['max']['flag'], 2)
-        self.assertEqual(baddata_stats.loc['count']['s_noise'], 96)
+        self.assertEqual(baddata_stats.loc['count']['s_noise'], 102)
 
         # Checks on good data
         gooddata_stats = checkdf.loc[checkdf.flag == 0].describe()
@@ -114,7 +115,7 @@ class TestOutlierDetection(unittest.TestCase):
         self.assertEqual(gooddata_stats.loc['min']['s_noise'], 5.049)
         self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
         self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
-        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1392)
+        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1386)
 
     def test_hampel_filter(self):
         df = ed.load_exampledata_parquet()
