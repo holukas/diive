@@ -2,6 +2,24 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.78.1 | 19 Aug 2024
+
+### Changes
+
+- Added option to set different `n_sigma` for daytime and nightime data
+  in `HampelDaytimeNighttime` (`diive.pkgs.outlierdetection.hampel.HampelDaytimeNighttime`)
+- Updated `flag_outliers_hampel_dtnt_test` in step-wise outlier detection
+- Updated `level32_flag_outliers_hampel_dtnt_test` in flux processing chain
+
+### Notebooks
+
+- Updated notebook `HampelDaytimeNighttime`
+- Updated notebook `FluxProcessingChain`
+
+### Tests
+
+- Updated unittest `test_hampel_filter_daytime_nighttime`
+
 ## v0.78.0 | 18 Aug 2024
 
 ### New features
