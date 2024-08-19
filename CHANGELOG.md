@@ -2,6 +2,12 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.78.1.1 | 19 Aug 2024
+
+### Additions
+
+- Added CITATIONS file
+
 ## v0.78.1 | 19 Aug 2024
 
 ### Changes
