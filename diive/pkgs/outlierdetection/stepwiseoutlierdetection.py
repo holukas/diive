@@ -188,14 +188,15 @@ class StepwiseOutlierDetection:
         flagtest.calc(repeat=repeat)
         self._last_flag = flagtest.get_flag()
 
-    def flag_outliers_hampel_dtnt_test(self, window_length: int = 10, n_sigma: float = 5, k: float = 1.4826,
+    def flag_outliers_hampel_dtnt_test(self, window_length: int = 10, n_sigma_dt: float = 5,
+                                       n_sigma_nt: float = 5, k: float = 1.4826,
                                        showplot: bool = False, verbose: bool = False, repeat: bool = True):
         """Identify outliers in a sliding window based on the Hampel filter for daytime/nighttime"""
         series_cleaned = self._series_hires_cleaned.copy()
         flagtest = HampelDaytimeNighttime(series=series_cleaned, idstr=self.idstr,
                                           lat=self.site_lat, lon=self.site_lon, utc_offset=self.utc_offset,
-                                          window_length=window_length, n_sigma=n_sigma, k=k,
-                                          showplot=showplot, verbose=verbose)
+                                          window_length=window_length, n_sigma_dt=n_sigma_dt, n_sigma_nt=n_sigma_nt,
+                                          k=k, showplot=showplot, verbose=verbose)
         flagtest.calc(repeat=repeat)
         self._last_flag = flagtest.get_flag()
 

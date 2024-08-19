@@ -371,9 +371,11 @@ class FluxProcessingChain:
         self._level32.flag_outliers_hampel_test(window_length=window_length, n_sigma=n_sigma, k=k,
                                                 showplot=showplot, verbose=verbose, repeat=repeat)
 
-    def level32_flag_outliers_hampel_dtnt_test(self, window_length: int = 10, n_sigma: float = 5, k: float = 1.4826,
+    def level32_flag_outliers_hampel_dtnt_test(self, window_length: int = 10, n_sigma_dt: float = 5,
+                                               n_sigma_nt: float = 5, k: float = 1.4826,
                                                showplot: bool = False, verbose: bool = False, repeat: bool = True):
-        self._level32.flag_outliers_hampel_dtnt_test(window_length=window_length, n_sigma=n_sigma, k=k,
+        self._level32.flag_outliers_hampel_dtnt_test(window_length=window_length, n_sigma_dt=n_sigma_dt,
+                                                     n_sigma_nt=n_sigma_nt, k=k,
                                                      showplot=showplot, verbose=verbose, repeat=repeat)
 
     def level32_flag_outliers_zscore_rolling_test(self, thres_zscore: int = 4, showplot: bool = False,
