@@ -44,7 +44,7 @@ def zscore(series: Series, absolute: bool = True) -> Series:
     return z_score
 
 
-def val_from_zscore(series: Series, zscore: float, absolute: bool = True) -> Series:
+def val_from_zscore(series: Series, zscore: float, absolute: bool = True) -> float:
     """Calculate the value for a specific z-score"""
     mean, std = np.mean(series), np.std(series)
     value = (zscore * std) + mean  # from: z_score = (series - mean) / std
