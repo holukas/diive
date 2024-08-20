@@ -89,7 +89,7 @@ class HistogramPlot:
                 val = val_from_zscore(series=self.s, zscore=z)
                 self.ax.axvline(val, ls='--', color='#0D47A1')
                 trans_ax = transforms.blended_transform_factory(self.ax.transData, self.ax.transAxes)
-                self.ax.text(val, 0.8, f"  {z}\n{val:.02f}",
+                self.ax.text(val, 0.8, f"  {z}\n  {val:.02f}",
                              size=16, color="#0D47A1", backgroundcolor='None', transform=trans_ax,
                              alpha=1, horizontalalignment='left', verticalalignment='top', zorder=999)
 
@@ -102,9 +102,9 @@ class HistogramPlot:
 
 
 def example():
-    from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
-    data_df, metadata_df = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
-    series = data_df['FC'].copy()
+    from diive.configs.exampledata import load_exampledata_parquet
+    data_df = load_exampledata_parquet()
+    series = data_df['NEE_CUT_REF_f'].copy()
 
     hist = HistogramPlot(
         s=series,
@@ -121,6 +121,29 @@ def example():
     # hist.results
     # hist.peakbins
 
+def example_per_year():
+    from diive.configs.exampledata import load_exampledata_parquet
+    data_df = load_exampledata_parquet()
+    years = data_df.index.year.unique()
+
+    for y in years:
+        series = data_df.loc[data_df.index.year == y, 'NEE_CUT_REF_f'].copy()
+        hist = HistogramPlot(
+            s=series,
+            method='n_bins',
+            n_bins=[-10, 0, 10, 20],
+            ignore_fringe_bins=None,
+            xlabel='flux',
+            highlight_peak=True,
+            show_zscores=True,
+            show_info=True
+            # ignore_fringe_bins=[1, 1]
+        )
+        hist.plot()
+        # hist.results
+        # hist.peakbins
+
 
 if __name__ == '__main__':
-    example()
+    example_per_year()
+    # example()

@@ -6,7 +6,8 @@
 
 ### New features
 
-- Added new class `HistogramPlot`for plotting histograms (`diive.core.plotting.histogram.HistogramPlot`)
+- Added new class `HistogramPlot`for plotting histograms, based on the Matplotlib
+  implementation (`diive.core.plotting.histogram.HistogramPlot`)
 - Added function to calculate the value for a specific z-score, e.g., based on a time series it calculates the value
   where z-score = `3` etc. (`diive.core.funcs.funcs.val_from_zscore`)
 
@@ -17,6 +18,7 @@
 ### Tests
 
 - Added unittest for plotting histograms (`tests.test_plots.TestPlots.test_histogram`)
+- Added unittest for calculating histograms (without plotting) (`tests.test_analyses.TestCreateVar.test_histogram`)
 
 ## v0.78.1.1 | 19 Aug 2024
 
