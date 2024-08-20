@@ -2,6 +2,18 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.79.0 | XX Aug 2024
+
+### New features
+
+- Added new class `HistogramPlot`for plotting histograms (`diive.core.plotting.histogram.HistogramPlot`)
+- Added function to calculate the value for a specific z-score, e.g., based on a time series it calculates the value
+  where z-score = `3` etc. (`diive.core.funcs.funcs.val_from_zscore`)
+
+### Additions
+
+- Added option to calculate the z-score with sign instead of absolute (`diive.core.funcs.funcs.zscore`)
+
 ## v0.78.1.1 | 19 Aug 2024
 
 ### Additions
