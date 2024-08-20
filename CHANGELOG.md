@@ -4,6 +4,9 @@
 
 ## v0.79.0 | XX Aug 2024
 
+![DIIVE](images/plotHistogram_diive_v0.79.0.png)
+*Histogram plot of half-hourly air temperature measurements at the ICOS Class 1 ecosystem station [Davos](https://www.swissfluxnet.ethz.ch/index.php/sites/site-info-ch-dav/).* 
+
 ### New features
 
 - Added new class `HistogramPlot`for plotting histograms, based on the Matplotlib
@@ -14,6 +17,10 @@
 ### Additions
 
 - Added option to calculate the z-score with sign instead of absolute (`diive.core.funcs.funcs.zscore`)
+
+### Notebooks
+
+- Added notebook for plotting histograms (`notebooks/Plotting/Histogram.ipynb`)
 
 ### Tests
 

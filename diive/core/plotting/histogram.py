@@ -17,7 +17,7 @@ from pandas import Series
 
 class HistogramPlot:
 
-    def __init__(self, s: Series, method, n_bins, ignore_fringe_bins,
+    def __init__(self, s: Series, method, n_bins: int = 10, ignore_fringe_bins: list = False,
                  highlight_peak: bool = True, xlabel: str = None, show_zscores: bool = True,
                  show_info: bool = True, show_counts: bool = True):
 
@@ -110,7 +110,6 @@ def example():
         s=series,
         method='n_bins',
         n_bins=20,
-        ignore_fringe_bins=None,
         xlabel='flux',
         highlight_peak=True,
         show_zscores=True,
