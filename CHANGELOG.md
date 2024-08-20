@@ -7,9 +7,9 @@
 ![DIIVE](images/plotHistogram_diive_v0.79.0.png)
 
 *Histogram plot of half-hourly air temperature measurements at the ICOS Class 1 ecosystem
-station [Davos](https://www.swissfluxnet.ethz.ch/index.php/sites/site-info-ch-dav/) between 2013 and 2022. The dashed
-vertical lines show the z-score and the corresponding value from the time series. The bin with the peak distribution is
-highlighted red.*
+station [Davos](https://www.swissfluxnet.ethz.ch/index.php/sites/site-info-ch-dav/) between 2013 and 2022, displayed in
+20 equally-spaced bins. The dashed vertical lines show the z-score and the corresponding value from the time series. The
+bin with the peak distribution is highlighted red.*
 
 ### New features
 
