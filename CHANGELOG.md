@@ -14,6 +14,10 @@
 
 - Added option to calculate the z-score with sign instead of absolute (`diive.core.funcs.funcs.zscore`)
 
+### Tests
+
+- Added unittest for plotting histograms (`tests.test_plots.TestPlots.test_histogram`)
+
 ## v0.78.1.1 | 19 Aug 2024
 
 ### Additions

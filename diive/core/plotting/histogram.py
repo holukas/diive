@@ -3,7 +3,7 @@ import math
 import matplotlib.transforms as transforms
 import pandas as pd
 
-import plotfuncs as pf
+import diive.core.plotting.plotfuncs as pf
 from diive.core.funcs.funcs import zscore, val_from_zscore
 from diive.core.plotting.plotfuncs import default_format
 
@@ -35,6 +35,8 @@ class HistogramPlot:
 
         self.fig = None
         self.ax = None
+        self.counts = None
+        self.edges = None
 
     def get_fig(self):
         return self.fig
@@ -49,18 +51,18 @@ class HistogramPlot:
         self.fig, self.ax, showplot = pf.setup_figax(ax=self.ax, figsize=(16, 9))
 
         # Plot histogram
-        counts, edges, bars = self.ax.hist(
+        self.counts, self.edges, bars = self.ax.hist(
             x=self.s,
             bins=self.n_bins,
             rwidth=0.95,
             color="#78909c"
         )
-        self.ax.set_xticks(edges)
+        self.ax.set_xticks(self.edges)
         title = f"{self.s.name} (between {self.first_date} and {self.last_date})"
         self.ax.set_title(title, fontsize=24, weight='bold')
         xlabel = self.xlabel if self.xlabel else ""
 
-        ix_max = counts.argmax()
+        ix_max = self.counts.argmax()
 
         # Show counts for each bar
         if self.show_counts:
@@ -74,7 +76,7 @@ class HistogramPlot:
             info_txt = f"method: {self.method}"
             info_txt += f"\nn_bins: {self.n_bins}" if self.method == 'n_bins' else info_txt
             if self.highlight_peak:
-                info_txt += f"\nPEAK between {edges[ix_max]:.02f} and {edges[ix_max + 1]:.02f}" if self.method == 'n_bins' else info_txt
+                info_txt += f"\nPEAK between {self.edges[ix_max]:.02f} and {self.edges[ix_max + 1]:.02f}" if self.method == 'n_bins' else info_txt
 
             self.ax.text(0.05, 0.95, info_txt,
                          size=16, color="black", backgroundcolor='None', transform=self.ax.transAxes,
