@@ -473,7 +473,6 @@ class QuickFluxProcessingChain:
                  sourcedirs: list,
                  site_lat: float,
                  site_lon: float,
-                 filetype: str,
                  utc_offset: int,
                  nighttime_threshold: int = 50,
                  daytime_accept_qcf_below: int = 2,
@@ -482,7 +481,6 @@ class QuickFluxProcessingChain:
         self.sourcedirs = sourcedirs
         self.site_lat = site_lat
         self.site_lon = site_lon
-        self.filetype = filetype
         self.utc_offset = utc_offset
         self.nighttime_threshold = nighttime_threshold
         self.daytime_accept_qcf_below = daytime_accept_qcf_below
@@ -545,17 +543,15 @@ class QuickFluxProcessingChain:
     def _start_fpc(self, fluxcol: str):
         fpc = FluxProcessingChain(
             maindf=self.maindf,
-            filetype=self.filetype,
             fluxcol=fluxcol,
             site_lat=self.site_lat,
             site_lon=self.site_lon,
-            utc_offset=self.utc_offset,
-            metadata=self.metadata
+            utc_offset=self.utc_offset
         )
         return fpc
 
     def _load_data(self):
-        ep = LoadEddyProOutputFiles(sourcedir=self.sourcedirs, filetype=self.filetype)
+        ep = LoadEddyProOutputFiles(sourcedir=self.sourcedirs, filetype='EDDYPRO-FLUXNET-CSV-30MIN')
         ep.searchfiles()
         ep.loadfiles()
         return ep.maindf, ep.metadata
@@ -567,7 +563,6 @@ def example_quick():
         sourcedirs=[r'L:\Sync\luhk_work\CURRENT\fru\Level-1_results_fluxnet_2022'],
         site_lat=47.115833,
         site_lon=8.537778,
-        filetype='EDDYPRO-FLUXNET-CSV-30MIN',
         utc_offset=1,
         nighttime_threshold=50,
         daytime_accept_qcf_below=2,
@@ -688,8 +683,8 @@ def example():
     fpc.level32_flag_outliers_hampel_test(window_length=48 * 9, n_sigma=5, showplot=True, verbose=True, repeat=True)
     fpc.level32_addflag()
 
-    fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 9, n_sigma=7, showplot=True, verbose=True,
-                                               repeat=True)
+    fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 9, n_sigma_dt=7, n_sigma_nt=5,
+                                               showplot=True, verbose=True, repeat=True)
     fpc.level32_addflag()
 
     fpc.level32_flag_outliers_zscore_rolling_test(winsize=48 * 9, thres_zscore=5, showplot=True, verbose=True,
