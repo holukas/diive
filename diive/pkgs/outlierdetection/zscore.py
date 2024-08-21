@@ -73,10 +73,10 @@ class zScoreDaytimeNighttime(FlagBase):
             lat=lat,
             lon=lon,
             utc_offset=utc_offset)
-        daytime = dnf.get_daytime_flag()
-        nighttime = dnf.get_nighttime_flag()
-        self.is_daytime = daytime == 1  # Convert 0/1 flag to False/True flag
-        self.is_nighttime = nighttime == 1  # Convert 0/1 flag to False/True flag
+        self.flag_daytime = dnf.get_daytime_flag()  # 0/1 flag needed outside init
+        flag_nighttime = dnf.get_nighttime_flag()
+        self.is_daytime = self.flag_daytime == 1  # Convert 0/1 flag to False/True flag
+        self.is_nighttime = flag_nighttime == 1  # Convert 0/1 flag to False/True flag
 
     def calc(self, repeat: bool = True):
         """Calculate overall flag, based on individual flags from multiple iterations.
@@ -90,6 +90,11 @@ class zScoreDaytimeNighttime(FlagBase):
         self._overall_flag, n_iterations = self.repeat(func=self.run_flagtests, repeat=repeat)
         if self.showplot:
             self.defaultplot(n_iterations=n_iterations)
+            title = (f"z-score filter daytime/nighttime: {self.series.name}, "
+                     f"n_iterations = {n_iterations}, "
+                     f"n_outliers = {self.series[self.overall_flag == 2].count()}")
+            self.plot_outlier_daytime_nighttime(series=self.series, flag_daytime=self.flag_daytime,
+                                                flag_quality=self.overall_flag, title=title)
 
     def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Perform tests required for this flag"""
@@ -311,7 +316,7 @@ def example_zscore():
     series = df['Tair_f'].copy()
     zsc = zScore(
         series=series,
-        thres_zscore=2,
+        thres_zscore=4,
         showplot=True,
         plottitle="z-score",
         verbose=True)
@@ -320,5 +325,5 @@ def example_zscore():
 
 
 if __name__ == '__main__':
-    example_zscore()
-    # example_zscore_daytime_nighttime()
+    # example_zscore()
+    example_zscore_daytime_nighttime()

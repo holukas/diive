@@ -84,14 +84,13 @@ def lof(series: Series,
              f'OUTLIER_{suffix}': series_outliers}
     df = pd.DataFrame(frame)
     df[f'NOT_OUTLIER_{suffix}'] = df[f'SERIES_{suffix}'].copy()
-    df[f'NOT_OUTLIER_{suffix}'].loc[series_outliers.index] = np.nan
+    df.loc[series_outliers.index, f'NOT_OUTLIER_{suffix}'] = np.nan
 
     return df
 
 
 @ConsoleOutputDecorator()
 class LocalOutlierFactorAllData(FlagBase):
-
     flagid = 'OUTLIER_LOF'
 
     def __init__(self,
@@ -225,7 +224,6 @@ class LocalOutlierFactorAllData(FlagBase):
 
 @ConsoleOutputDecorator()
 class LocalOutlierFactorDaytimeNighttime(FlagBase):
-
     flagid = 'OUTLIER_LOFDTNT'
 
     def __init__(self,
@@ -284,10 +282,10 @@ class LocalOutlierFactorDaytimeNighttime(FlagBase):
             lat=lat,
             lon=lon,
             utc_offset=utc_offset)
-        nighttimeflag = dnf.get_nighttime_flag()
-        daytimeflag = dnf.get_daytime_flag()
-        self.is_nighttime = nighttimeflag == 1  # Convert 0/1 flag to False/True flag
-        self.is_daytime = daytimeflag == 1  # Convert 0/1 flag to False/True flag
+        flag_nighttime = dnf.get_nighttime_flag()  # 0/1 flag needed outside init
+        self.flag_daytime = dnf.get_daytime_flag()
+        self.is_nighttime = flag_nighttime == 1  # Convert 0/1 flag to False/True flag
+        self.is_daytime = self.flag_daytime == 1  # Convert 0/1 flag to False/True flag
 
     def calc(self, repeat: bool = True):
         """Calculate overall flag, based on individual flags from multiple iterations.
@@ -301,6 +299,11 @@ class LocalOutlierFactorDaytimeNighttime(FlagBase):
         self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=repeat)
         if self.showplot:
             self.defaultplot(n_iterations=n_iterations)
+            title = (f"Local outlier factor filter daytime/nighttime: {self.series.name}, "
+                     f"n_iterations = {n_iterations}, "
+                     f"n_outliers = {self.series[self.overall_flag == 2].count()}")
+            self.plot_outlier_daytime_nighttime(series=self.series, flag_daytime=self.flag_daytime,
+                                                flag_quality=self.overall_flag, title=title)
 
     def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Perform tests required for this flag"""
@@ -333,7 +336,7 @@ class LocalOutlierFactorDaytimeNighttime(FlagBase):
         df['FLAG'] = flag
 
         df['CLEANED'] = df[self.filteredseries.name].copy()
-        df['CLEANED'].loc[df['FLAG'] > 0] = np.nan
+        df.loc[df['FLAG'] > 0, 'CLEANED'] = np.nan
 
         n_outliers = (flag == 2).sum()
 
@@ -410,15 +413,11 @@ class LocalOutlierFactorDaytimeNighttime(FlagBase):
         fig.suptitle(title, fontsize=theme.FIGHEADER_FONTSIZE)
         fig.show()
 
+
 def example():
-    import importlib.metadata
     import diive.configs.exampledata as ed
     from diive.pkgs.createvar.noise import add_impulse_noise
     from diive.core.plotting.timeseries import TimeSeries
-    import warnings
-    warnings.filterwarnings('ignore')
-    version_diive = importlib.metadata.version("diive")
-    print(f"diive version: v{version_diive}")
     df = ed.load_exampledata_parquet()
     s = df['Tair_f'].copy()
     s = s.loc[s.index.year == 2018].copy()
@@ -430,14 +429,19 @@ def example():
     s_noise.name = f"{s.name}+noise"
     TimeSeries(s_noise).plot()
 
-    lofa = LocalOutlierFactorAllData(
+    lofa = LocalOutlierFactorDaytimeNighttime(
         series=s_noise,
-        n_neighbors=200,
-        contamination='auto',
-        showplot=True
+        n_neighbors=20,
+        contamination=0.05,
+        lat=47.286417,
+        lon=7.733750,
+        utc_offset=1,
+        showplot=True,
+        verbose=True,
+        n_jobs=-1
     )
 
-    lofa.calc(repeat=True)
+    lofa.calc(repeat=False)
 
 
 if __name__ == '__main__':
