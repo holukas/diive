@@ -12,7 +12,6 @@ from pandas import DatetimeIndex, Series
 from sktime.transformations.series.outlier_detection import HampelFilter
 
 from diive.core.base.flagbase import FlagBase
-from diive.core.plotting.outlier_dtnt import plot_outlier_daytime_nighttime
 from diive.core.times.times import DetectFrequency
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag
@@ -98,13 +97,11 @@ class HampelDaytimeNighttime(FlagBase):
         if self.showplot:
             # Default plot for outlier tests, showing rejected values
             self.defaultplot(n_iterations=n_iterations)
-
-
             title = (f"Hampel filter daytime/nighttime: {self.series.name}, "
                      f"n_iterations = {n_iterations}, "
                      f"n_outliers = {self.series[self.overall_flag == 2].count()}")
-            plot_outlier_daytime_nighttime(series=self.series, flag_daytime=self.flag_daytime,
-                                           flag_quality=self.overall_flag, title=title)
+            self.plot_outlier_daytime_nighttime(series=self.series, flag_daytime=self.flag_daytime,
+                                                flag_quality=self.overall_flag, title=title)
 
     def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Perform tests required for this flag"""

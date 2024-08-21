@@ -57,6 +57,7 @@ time series. The bin with most counts is highlighted orange.*
 ### Tests
 
 - Updated unittest `test_hampel_filter_daytime_nighttime`
+- 35/35 unittests ran successfully
 
 ## v0.78.0 | 18 Aug 2024
 

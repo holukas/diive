@@ -11,7 +11,6 @@ import pandas as pd
 from pandas import DatetimeIndex, Series
 
 from diive.core.base.flagbase import FlagBase
-from diive.core.plotting.outlier_dtnt import plot_outlier_daytime_nighttime
 from diive.core.times.times import DetectFrequency
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag
@@ -83,9 +82,9 @@ class TrimLow(FlagBase):
             lat=lat,
             lon=lon,
             utc_offset=utc_offset)
-        daytime = dnf.get_daytime_flag()
+        self.flag_daytime = dnf.get_daytime_flag()
         nighttime = dnf.get_nighttime_flag()
-        self.is_daytime = daytime == 1  # Convert 0/1 flag to False/True flag
+        self.is_daytime = self.flag_daytime == 1  # Convert 0/1 flag to False/True flag
         self.is_nighttime = nighttime == 1  # Convert 0/1 flag to False/True flag
 
     def calc(self):
@@ -101,22 +100,11 @@ class TrimLow(FlagBase):
         if self.showplot:
             # Default plot for outlier tests, showing rejected values
             self.defaultplot(n_iterations=n_iterations)
-
-            # Collect in dataframe for outlier daytime/nighttime plot
-            frame = {
-                'UNFILTERED': self.series,
-                'CLEANED': self.series[self.overall_flag == 0],
-                'OUTLIER': self.series[self.overall_flag == 2],
-                'OUTLIER_DAYTIME': self.series[(self.overall_flag == 2) & (self.is_daytime == 1)],
-                'OUTLIER_NIGHTTIME': self.series[(self.overall_flag == 2) & (self.is_nighttime == 1)],
-                'NOT_OUTLIER_DAYTIME': self.series[(self.overall_flag == 0) & (self.is_daytime == 1)],
-                'NOT_OUTLIER_NIGHTTIME': self.series[(self.overall_flag == 0) & (self.is_nighttime == 1)],
-            }
-            df = pd.DataFrame(frame)
             title = (f"Hampel filter daytime/nighttime: {self.series.name}, "
                      f"n_iterations = {n_iterations}, "
                      f"n_outliers = {self.series[self.overall_flag == 2].count()}")
-            plot_outlier_daytime_nighttime(df=df, title=title)
+            self.plot_outlier_daytime_nighttime(series=self.series, flag_daytime=self.flag_daytime,
+                                                flag_quality=self.overall_flag, title=title)
 
     def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Perform tests required for this flag"""
