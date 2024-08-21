@@ -138,6 +138,8 @@ def default_format(ax,
     # Grid
     if showgrid:
         default_grid(ax=ax)
+    else:
+        ax.grid(False)
 
 
 def format_ticks(ax, width, length, direction, color, labelsize):

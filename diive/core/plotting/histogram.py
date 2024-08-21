@@ -17,9 +17,10 @@ from pandas import Series
 
 class HistogramPlot:
 
-    def __init__(self, s: Series, method, n_bins: int = 10, ignore_fringe_bins: list = False,
+    def __init__(self, s: Series, method, n_bins: int or list = None, ignore_fringe_bins: list = False,
                  highlight_peak: bool = True, xlabel: str = None, show_zscores: bool = True,
-                 show_info: bool = True, show_counts: bool = True):
+                 show_zscore_values: bool = True, show_info: bool = True, show_counts: bool = True,
+                 show_title: bool = True, show_grid: bool = True):
 
         self.s = s
         self.method = method
@@ -28,8 +29,11 @@ class HistogramPlot:
         self.highlight_peak = highlight_peak
         self.xlabel = xlabel
         self.show_zscores = show_zscores
+        self.show_zscore_values = show_zscore_values
         self.show_info = show_info
         self.show_counts = show_counts
+        self.show_title = show_title
+        self.show_grid = show_grid
         self.first_date = s.index[0]
         self.last_date = s.index[-1]
 
@@ -58,8 +62,14 @@ class HistogramPlot:
             color="#78909c"
         )
         self.ax.set_xticks(self.edges)
-        title = f"{self.s.name} (between {self.first_date} and {self.last_date})"
-        self.ax.set_title(title, fontsize=24, weight='bold')
+
+        if self.show_title:
+            title = f"{self.s.name} (between {self.first_date} and {self.last_date})"
+            ypos = 1
+            ypos = 1.05 if self.show_zscores and not self.show_zscore_values else ypos
+            ypos = 1.08 if self.show_zscores and self.show_zscore_values else ypos
+            self.ax.set_title(title, fontsize=24, weight='bold', y=ypos)
+
         xlabel = self.xlabel if self.xlabel else ""
 
         ix_max = self.counts.argmax()
@@ -70,7 +80,7 @@ class HistogramPlot:
 
         # Peak: highlight bin with most counts
         if self.highlight_peak:
-            bars[ix_max].set_fc('#EF5350')
+            bars[ix_max].set_fc('#FFA726')
 
         if self.show_info:
             info_txt = f"method: {self.method}"
@@ -87,18 +97,25 @@ class HistogramPlot:
             zscores = zscore(series=self.s, absolute=False)
             for z in range(int(math.floor(zscores.min())), int(math.ceil(zscores.max()))):
                 val = val_from_zscore(series=self.s, zscore=z)
-                self.ax.axvline(val, ls='--', color='#0D47A1')
+                self.ax.axvline(val, ls=':', color='#AB47BC', alpha=.9)
                 trans_ax = transforms.blended_transform_factory(self.ax.transData, self.ax.transAxes)
-                self.ax.text(val, 0.8, f"  {z}\n  {val:.02f}",
-                             size=16, color="#0D47A1", backgroundcolor='None', transform=trans_ax,
-                             alpha=1, horizontalalignment='left', verticalalignment='top', zorder=999)
+                if self.show_zscore_values:
+                    self.ax.text(val, 1.07, f"{z}\n{val:.02f}",
+                                 size=16, color="#AB47BC", backgroundcolor='None', transform=trans_ax,
+                                 alpha=1, horizontalalignment='center', verticalalignment='top', zorder=999)
+                else:
+                    self.ax.text(val, 1.04, f"{z}",
+                                 size=16, color="#AB47BC", backgroundcolor='None', transform=trans_ax,
+                                 alpha=1, horizontalalignment='center', verticalalignment='top', zorder=999)
 
         default_format(ax=self.ax, ax_xlabel_txt=xlabel, ax_ylabel_txt="counts",
                        ticks_width=2, ticks_length=6, ticks_direction='in',
-                       spines_lw=1)
+                       spines_lw=1, showgrid=self.show_grid)
 
-        self.ax.locator_params(axis='both', nbins=20)
-        self.fig.show()
+        self.ax.locator_params(axis='both', nbins=10)
+
+        if showplot:
+            self.fig.show()
 
 
 def example():
@@ -113,12 +130,14 @@ def example():
         xlabel='flux',
         highlight_peak=True,
         show_zscores=True,
+        show_zscore_values=True,
         show_info=True
         # ignore_fringe_bins=[1, 1]
     )
     hist.plot()
     # hist.results
     # hist.peakbins
+
 
 def example_per_year():
     from diive.configs.exampledata import load_exampledata_parquet
@@ -130,8 +149,7 @@ def example_per_year():
         hist = HistogramPlot(
             s=series,
             method='n_bins',
-            n_bins=[-10, 0, 10, 20],
-            ignore_fringe_bins=None,
+            n_bins=50,
             xlabel='flux',
             highlight_peak=True,
             show_zscores=True,
@@ -144,5 +162,5 @@ def example_per_year():
 
 
 if __name__ == '__main__':
-    example_per_year()
-    # example()
+    # example_per_year()
+    example()

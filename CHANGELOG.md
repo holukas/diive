@@ -4,15 +4,15 @@
 
 ## v0.79.0 | XX Aug 2024
 
-![DIIVE](images/plotHistogram_diive_v0.79.0.png)
-
 This version introduces a histogram plot that has the option to display z-score as vertical lines superimposed on the
 distribution, which helps in assessing z-score settings used by some outlier removal functions.
 
+![DIIVE](images/plotHistogram_diive_v0.79.0.png)
+
 *Histogram plot of half-hourly air temperature measurements at the ICOS Class 1 ecosystem
 station [Davos](https://www.swissfluxnet.ethz.ch/index.php/sites/site-info-ch-dav/) between 2013 and 2022, displayed in
-20 equally-spaced bins. The dashed vertical lines show the z-score and the corresponding value from the time series. The
-bin with the peak distribution is highlighted red.*
+20 equally-spaced bins. The dashed vertical lines show the z-score and the corresponding value calculated based on the
+time series. The bin with most counts is highlighted orange.*
 
 ### New features
 

@@ -14,12 +14,10 @@ class TestPlots(unittest.TestCase):
             s=series,
             method='n_bins',
             n_bins=20,
-            ignore_fringe_bins=None,
             xlabel='flux',
             highlight_peak=True,
             show_zscores=True,
             show_info=True
-            # ignore_fringe_bins=[1, 1]
         )
         hist.plot()
 
