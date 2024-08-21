@@ -80,10 +80,10 @@ class HampelDaytimeNighttime(FlagBase):
             lat=lat,
             lon=lon,
             utc_offset=utc_offset)
-        daytime = dnf.get_daytime_flag()
-        nighttime = dnf.get_nighttime_flag()
-        self.is_daytime = daytime == 1  # Convert 0/1 flag to False/True flag
-        self.is_nighttime = nighttime == 1  # Convert 0/1 flag to False/True flag
+        self.flag_daytime = dnf.get_daytime_flag()  # 0/1 flag needed outside init
+        flag_nighttime = dnf.get_nighttime_flag()
+        self.is_daytime = self.flag_daytime == 1  # Convert 0/1 flag to False/True flag
+        self.is_nighttime = flag_nighttime == 1  # Convert 0/1 flag to False/True flag
 
     def calc(self, repeat: bool = True):
         """Calculate overall flag, based on individual flags from multiple iterations.
@@ -99,24 +99,12 @@ class HampelDaytimeNighttime(FlagBase):
             # Default plot for outlier tests, showing rejected values
             self.defaultplot(n_iterations=n_iterations)
 
-            # Collect in dataframe for outlier daytime/nighttime plot
-            frame = {
-                'UNFILTERED': self.series,
-                'UNFILTERED_DT': self.series[self.is_daytime == 1],
-                'UNFILTERED_NT': self.series[self.is_nighttime == 1],
-                'CLEANED': self.series[self.overall_flag == 0],
-                'CLEANED_DT': self.series[(self.overall_flag == 0) & (self.is_daytime == 1)],
-                'CLEANED_NT': self.series[(self.overall_flag == 0) & (self.is_nighttime == 1)],
-                'OUTLIER': self.series[self.overall_flag == 2],
-                'OUTLIER_DT': self.series[(self.overall_flag == 2) & (self.is_daytime == 1)],
-                'OUTLIER_NT': self.series[(self.overall_flag == 2) & (self.is_nighttime == 1)],
 
-            }
-            df = pd.DataFrame(frame)
             title = (f"Hampel filter daytime/nighttime: {self.series.name}, "
                      f"n_iterations = {n_iterations}, "
                      f"n_outliers = {self.series[self.overall_flag == 2].count()}")
-            plot_outlier_daytime_nighttime(df=df, title=title)
+            plot_outlier_daytime_nighttime(series=self.series, flag_daytime=self.flag_daytime,
+                                           flag_quality=self.overall_flag, title=title)
 
     def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Perform tests required for this flag"""
@@ -349,7 +337,7 @@ def example_cha():
     maindf = load_parquet(filepath=FILEPATH)
     series = maindf['FC'].copy()
     series = series[series.index.year == 2023].copy()
-    # series = series[series.index.month == 6].copy()
+    series = series[series.index.month == 6].copy()
     ham = HampelDaytimeNighttime(
         series=series,
         n_sigma_dt=5,
@@ -366,5 +354,5 @@ def example_cha():
 
 if __name__ == '__main__':
     # example()
-    example_dtnt()
-    # example_cha()
+    # example_dtnt()
+    example_cha()

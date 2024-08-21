@@ -65,10 +65,7 @@ class HistogramPlot:
 
         if self.show_title:
             title = f"{self.s.name} (between {self.first_date} and {self.last_date})"
-            ypos = 1
-            ypos = 1.05 if self.show_zscores and not self.show_zscore_values else ypos
-            ypos = 1.08 if self.show_zscores and self.show_zscore_values else ypos
-            self.ax.set_title(title, fontsize=24, weight='bold', y=ypos)
+            self.ax.set_title(title, fontsize=24, weight='bold')
 
         xlabel = self.xlabel if self.xlabel else ""
 
@@ -95,18 +92,36 @@ class HistogramPlot:
         # z-scores
         if self.show_zscores:
             zscores = zscore(series=self.s, absolute=False)
+            self.axx = self.ax.twiny()
+            self.axx.set_xlim(self.ax.get_xlim()[0], self.ax.get_xlim()[1])
+            self.axx.grid(False)
+            self.axx.xaxis.set_label_position('top')
+            axx_zscores = []
+            axx_ticks_pos = []
             for z in range(int(math.floor(zscores.min())), int(math.ceil(zscores.max()))):
                 val = val_from_zscore(series=self.s, zscore=z)
-                self.ax.axvline(val, ls=':', color='#AB47BC', alpha=.9)
-                trans_ax = transforms.blended_transform_factory(self.ax.transData, self.ax.transAxes)
-                if self.show_zscore_values:
-                    self.ax.text(val, 1.07, f"{z}\n{val:.02f}",
-                                 size=16, color="#AB47BC", backgroundcolor='None', transform=trans_ax,
-                                 alpha=1, horizontalalignment='center', verticalalignment='top', zorder=999)
-                else:
-                    self.ax.text(val, 1.04, f"{z}",
-                                 size=16, color="#AB47BC", backgroundcolor='None', transform=trans_ax,
-                                 alpha=1, horizontalalignment='center', verticalalignment='top', zorder=999)
+                self.axx.axvline(val, ls=':', color='#AB47BC', alpha=.9)
+                # self.ax.axvline(val, ls=':', color='#AB47BC', alpha=.9)
+                # trans_ax = transforms.blended_transform_factory(self.ax.transData, self.ax.transAxes)
+                # if self.show_zscore_values:
+                #     self.ax.text(val, 1.07, f"{z}\n{val:.02f}",
+                #                  size=16, color="#AB47BC", backgroundcolor='None', transform=trans_ax,
+                #                  alpha=1, horizontalalignment='center', verticalalignment='top', zorder=999)
+                # else:
+                #     self.ax.text(val, 1.04, f"{z}",
+                #                  size=16, color="#AB47BC", backgroundcolor='None', transform=trans_ax,
+                #                  alpha=1, horizontalalignment='center', verticalalignment='top', zorder=999)
+                axx_zscores.append(z)
+                axx_ticks_pos.append(val)
+            self.axx.set_xticks(axx_ticks_pos)
+            if self.show_zscore_values:
+                axx_zscores = [f"{z}\n{v:.01f}" for z, v in zip(axx_zscores, axx_ticks_pos)]
+                self.axx.set_xticklabels(axx_zscores)
+            else:
+                self.axx.set_xticklabels(axx_zscores)
+            # self.axx.set_xlabel(color='#AB47BC', fontsize=20)
+            self.axx.tick_params(axis='x', colors='#AB47BC', labelsize=16)
+            self.axx.set_xlabel("z-score", color='#AB47BC', fontsize=16)
 
         default_format(ax=self.ax, ax_xlabel_txt=xlabel, ax_ylabel_txt="counts",
                        ticks_width=2, ticks_length=6, ticks_direction='in',

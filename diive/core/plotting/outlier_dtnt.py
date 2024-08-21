@@ -1,19 +1,35 @@
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
-from pandas import DataFrame
+import pandas as pd
+from pandas import Series
 
-import diive.core.plotting.styles.LightTheme as theme
 from diive.core.plotting.histogram import HistogramPlot
 from diive.core.plotting.plotfuncs import default_format, default_legend, nice_date_ticks
 
 
-def plot_outlier_daytime_nighttime(df: DataFrame, title: str):
+def plot_outlier_daytime_nighttime(series: Series, flag_daytime: Series, flag_quality: Series, title: str = None):
     """Plot outlier and non-outlier time series for daytime and nighttime data."""
+    # Collect in dataframe for outlier daytime/nighttime plot
+    frame = {
+        'UNFILTERED': series,
+        'UNFILTERED_DT': series[flag_daytime == 1],
+        'UNFILTERED_NT': series[flag_daytime == 0],
+        'CLEANED': series[flag_quality == 0],
+        'CLEANED_DT': series[(flag_quality == 0) & (flag_daytime == 1)],
+        'CLEANED_NT': series[(flag_quality == 0) & (flag_daytime == 0)],
+        'OUTLIER': series[flag_quality == 2],
+        'OUTLIER_DT': series[(flag_quality == 2) & (flag_daytime == 1)],
+        'OUTLIER_NT': series[(flag_quality == 2) & (flag_daytime == 0)],
+    }
+    df = pd.DataFrame(frame)
+
     fig = plt.figure(facecolor='white', figsize=(24, 12))
     gs = gridspec.GridSpec(3, 4)  # rows, cols
     # gs.update(wspace=0.15, hspace=0.1, left=0.05, right=0.95, top=0.95, bottom=0.05)
-    gs.update(left=0.05, right=0.95, top=0.92, bottom=0.05)
-    fig.suptitle(title, fontsize=24, fontweight='bold')
+    # gs.update(left=0.05, right=0.95, top=0.92, bottom=0.05, hspace=0.5)
+
+    if title:
+        fig.suptitle(title, fontsize=24, fontweight='bold')
 
     ax_series = fig.add_subplot(gs[0, 0])
     ax_series_hist = fig.add_subplot(gs[0, 1])
