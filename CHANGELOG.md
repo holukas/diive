@@ -2,7 +2,7 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.79.0 | XX Aug 2024
+## v0.79.0 | 22 Aug 2024
 
 This version introduces a histogram plot that has the option to display z-score as vertical lines superimposed on the
 distribution, which helps in assessing z-score settings used by some outlier removal functions.
