@@ -111,8 +111,8 @@ Single outlier tests create a flag where `0=OK` and `2=outlier`.
 - Hampel filter, separately for daytime and nighttime data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/HampelDaytimeNighttime.ipynb))
 - Incremental z-score: Identify outliers based on the z-score of double increments ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/zScoreIncremental.ipynb))
 - Local standard deviation: Identify outliers based on the local standard deviation from a running median ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/LocalSD.ipynb))
-- Local outlier factor: Identify outliers based on local outlier factor, across all data
-- Local outlier factor: Identify outliers based on local outlier factor, daytime nighttime separately
+- Local outlier factor: Identify outliers based on local outlier factor, across all data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/LocalSD.ipynb))
+- Local outlier factor: Identify outliers based on local outlier factor, daytime nighttime separately ([notebook example](notebooks/OutlierDetection/LocalOutlierFactorDaytimeNighttime.ipynb))
 - Manual removal: Remove time periods (from-to) or single records from time series
 - Missing values: Simply creates a flag that indicated available and missing data in a time series
 - Trimming: Remove values below threshold and remove an equal amount of records from high end of data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/TrimLow.ipynb))

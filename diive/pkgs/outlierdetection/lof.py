@@ -26,17 +26,13 @@ References:
 
 """
 
-import matplotlib.gridspec as gridspec
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from numpy import where
 from pandas import Series, DatetimeIndex, DataFrame
 from sklearn.neighbors import LocalOutlierFactor
 
-import diive.core.plotting.styles.LightTheme as theme
 from diive.core.base.flagbase import FlagBase
-from diive.core.plotting.plotfuncs import default_format, default_legend
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag
 
@@ -181,45 +177,7 @@ class LocalOutlierFactorAllData(FlagBase):
         if self.verbose:
             print(f"ITERATION#{iteration}: Total found outliers: {n_outliers} values (daytime+nighttime)")
 
-        if self.showplot:
-            self._plot(df=df)
-
         return ok, rejected, n_outliers
-
-    def _plot(self, df: DataFrame):
-        fig = plt.figure(facecolor='white', figsize=(12, 16))
-        gs = gridspec.GridSpec(3, 1)  # rows, cols
-        gs.update(wspace=0.3, hspace=0.1, left=0.05, right=0.95, top=0.95, bottom=0.05)
-        ax1 = fig.add_subplot(gs[0, 0])
-        ax2 = fig.add_subplot(gs[1, 0], sharex=ax1)
-        ax3 = fig.add_subplot(gs[2, 0], sharex=ax1)
-
-        ax1.plot_date(x=df.index, y=df[self.filteredseries.name], fmt='o', mec='none',
-                      alpha=.5, color='black', label="series")
-
-        ax2.plot_date(x=df.index, y=df['CLEANED'], fmt='o', mec='none',
-                      alpha=.5, label="cleaned series")
-
-        ax3.plot_date(x=df.index, y=df['NOT_OUTLIER_'], fmt='o', mec='none',
-                      alpha=.5, label="OK")
-        ax3.plot_date(x=df.index, y=df['OUTLIER_'], fmt='o', mec='none',
-                      alpha=.5, color='red', label="outlier")
-
-        default_format(ax=ax1)
-        default_format(ax=ax2)
-        default_format(ax=ax3)
-
-        default_legend(ax=ax1)
-        default_legend(ax=ax2)
-        default_legend(ax=ax3)
-
-        plt.setp(ax1.get_xticklabels(), visible=False)
-        plt.setp(ax2.get_xticklabels(), visible=False)
-        plt.setp(ax3.get_xticklabels(), visible=False)
-
-        title = f"Outlier detection - local outlier factor"
-        fig.suptitle(title, fontsize=theme.FIGHEADER_FONTSIZE)
-        fig.show()
 
 
 @ConsoleOutputDecorator()
@@ -351,67 +309,7 @@ class LocalOutlierFactorDaytimeNighttime(FlagBase):
             print(f"Total found outliers: {len(rejected_nighttime)} values (nighttime)")
             print(f"Total found outliers: {n_outliers} values (daytime+nighttime)")
 
-        if self.showplot:
-            self._plot(df=df)
-
         return ok, rejected, n_outliers
-
-    def _plot(self, df: DataFrame):
-        fig = plt.figure(facecolor='white', figsize=(12, 16))
-        gs = gridspec.GridSpec(6, 1)  # rows, cols
-        gs.update(wspace=0.3, hspace=0.1, left=0.05, right=0.95, top=0.95, bottom=0.05)
-        ax_series = fig.add_subplot(gs[0, 0])
-        ax_cleaned = fig.add_subplot(gs[1, 0], sharex=ax_series)
-        ax_cleaned_daytime = fig.add_subplot(gs[2, 0], sharex=ax_series)
-        ax_cleaned_nighttime = fig.add_subplot(gs[3, 0], sharex=ax_series)
-        ax_daytime = fig.add_subplot(gs[4, 0], sharex=ax_series)
-        ax_nighttime = fig.add_subplot(gs[5, 0], sharex=ax_series)
-
-        ax_series.plot_date(x=df.index, y=df[self.filteredseries.name], fmt='o', mec='none',
-                            alpha=.5, color='black', label="series")
-
-        ax_cleaned.plot_date(x=df.index, y=df['CLEANED'], fmt='o', mec='none',
-                             alpha=.5, label="cleaned series")
-
-        ax_cleaned_daytime.plot_date(x=df.index, y=df['NOT_OUTLIER_DAYTIME'], fmt='o', mec='none',
-                                     alpha=.5, label="cleaned daytime")
-
-        ax_cleaned_nighttime.plot_date(x=df.index, y=df['NOT_OUTLIER_NIGHTTIME'], fmt='o', mec='none',
-                                       alpha=.5, label="cleaned nighttime")
-
-        ax_daytime.plot_date(x=df.index, y=df['NOT_OUTLIER_DAYTIME'], fmt='o', mec='none',
-                             alpha=.5, label="OK daytime")
-        ax_daytime.plot_date(x=df.index, y=df['OUTLIER_DAYTIME'], fmt='o', mec='none',
-                             alpha=.5, color='red', label="outlier daytime")
-
-        ax_nighttime.plot_date(x=df.index, y=df['NOT_OUTLIER_NIGHTTIME'], fmt='o', mec='none',
-                               alpha=.5, label="OK nighttime")
-        ax_nighttime.plot_date(x=df.index, y=df['OUTLIER_NIGHTTIME'], fmt='o', mec='none',
-                               alpha=.5, color='red', label="outlier nighttime")
-
-        default_format(ax=ax_series)
-        default_format(ax=ax_cleaned)
-        default_format(ax=ax_cleaned_daytime)
-        default_format(ax=ax_cleaned_nighttime)
-        default_format(ax=ax_daytime)
-        default_format(ax=ax_nighttime)
-
-        default_legend(ax=ax_series)
-        default_legend(ax=ax_cleaned)
-        default_legend(ax=ax_cleaned_daytime)
-        default_legend(ax=ax_cleaned_nighttime)
-        default_legend(ax=ax_daytime)
-        default_legend(ax=ax_nighttime)
-
-        plt.setp(ax_series.get_xticklabels(), visible=False)
-        plt.setp(ax_cleaned.get_xticklabels(), visible=False)
-        plt.setp(ax_cleaned_daytime.get_xticklabels(), visible=False)
-        plt.setp(ax_cleaned_nighttime.get_xticklabels(), visible=False)
-        plt.setp(ax_daytime.get_xticklabels(), visible=False)
-
-        title = f"Outlier detection - local outlier factor"
-        fig.suptitle(title, fontsize=theme.FIGHEADER_FONTSIZE)
-        fig.show()
 
 
 def example():
