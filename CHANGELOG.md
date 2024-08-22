@@ -2,6 +2,56 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.79.0 | XX Aug 2024
+
+This version introduces a histogram plot that has the option to display z-score as vertical lines superimposed on the
+distribution, which helps in assessing z-score settings used by some outlier removal functions.
+
+![DIIVE](images/plotHistogram_diive_v0.79.0.png)
+
+*Histogram plot of half-hourly air temperature measurements at the ICOS Class 1 ecosystem
+station [Davos](https://www.swissfluxnet.ethz.ch/index.php/sites/site-info-ch-dav/) between 2013 and 2022, displayed in
+20 equally-spaced bins. The dashed vertical lines show the z-score and the corresponding value calculated based on the
+time series. The bin with most counts is highlighted orange.*
+
+### New features
+
+- Added new class `HistogramPlot`for plotting histograms, based on the Matplotlib
+  implementation (`diive.core.plotting.histogram.HistogramPlot`)
+- Added function to calculate the value for a specific z-score, e.g., based on a time series it calculates the value
+  where z-score = `3` etc. (`diive.core.funcs.funcs.val_from_zscore`)
+
+### Additions
+
+- Added histogram plots to `FlagBase`, histograms are now shown for all outlier methods (`diive.core.base.flagbase.FlagBase.defaultplot`)
+- Added daytime/nighttime histogram plots to (`diive.pkgs.outlierdetection.hampel.HampelDaytimeNighttime`)
+- Added daytime/nighttime histogram plots to (`diive.pkgs.outlierdetection.zscore.zScoreDaytimeNighttime`)
+- Added daytime/nighttime histogram plots to (`diive.pkgs.outlierdetection.lof.LocalOutlierFactorDaytimeNighttime`)
+- Added daytime/nighttime histogram plots to (
+  `diive.pkgs.outlierdetection.absolutelimits.AbsoluteLimitsDaytimeNighttime`)
+- Added option to calculate the z-score with sign instead of absolute (`diive.core.funcs.funcs.zscore`)
+
+### Changes
+
+- Improved daytime/nighttime outlier plot used by various outlier removal classes (
+  `diive.core.base.flagbase.FlagBase.plot_outlier_daytime_nighttime`)
+
+### Notebooks
+
+- Added notebook for plotting histograms (`notebooks/Plotting/Histogram.ipynb`)
+- Added notebook for manual removal of data points (`notebooks/OutlierDetection/ManualRemoval.ipynb`)
+- Added notebook for outlier detection using local outlier factor, separately during daytime and nighttime (
+  `notebooks/OutlierDetection/LocalOutlierFactorDaytimeNighttime.ipynb`)
+- Updated notebook (`notebooks/OutlierDetection/HampelDaytimeNighttime.ipynb`)
+- Updated notebook (`notebooks/OutlierDetection/AbsoluteLimitsDaytimeNighttime.ipynb`)
+- Updated notebook (`notebooks/OutlierDetection/zScoreDaytimeNighttime.ipynb`)
+- Updated notebook (`notebooks/OutlierDetection/LocalOutlierFactorAllData.ipynb`)
+
+### Tests
+
+- Added unittest for plotting histograms (`tests.test_plots.TestPlots.test_histogram`)
+- Added unittest for calculating histograms (without plotting) (`tests.test_analyses.TestCreateVar.test_histogram`)
+
 ## v0.78.1.1 | 19 Aug 2024
 
 ### Additions
@@ -25,6 +75,7 @@
 ### Tests
 
 - Updated unittest `test_hampel_filter_daytime_nighttime`
+- 35/35 unittests ran successfully
 
 ## v0.78.0 | 18 Aug 2024
 
@@ -32,7 +83,9 @@
 
 - Added new class for outlier removal, based on the rolling z-score. It can also be used in step-wise outlier detection
   and during meteoscreening from the
-  database. (`diive.pkgs.outlierdetection.zscore.zScoreRolling`, `diive.pkgs.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection`, `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb`).
+  database. (`diive.pkgs.outlierdetection.zscore.zScoreRolling`,
+  `diive.pkgs.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection`,
+  `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb`).
 - Added Hampel filter for outlier removal (`diive.pkgs.outlierdetection.hampel.Hampel`)
 - Added Hampel filter (separate daytime, nighttime) for outlier
   removal (`diive.pkgs.outlierdetection.hampel.HampelDaytimeNighttime`)
@@ -49,7 +102,8 @@
       follow FLUXNET conventions.
     - Removed keyword `filetype` in class `FluxProcessingChain`. It is now assumed that the variable names follow the
       FLUXNET convention. Variables used in FLUXNET are
-      listed [here](https://fluxnet.org/data/fluxnet2015-dataset/fullset-data-product/) (`diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain`)
+      listed [here](https://fluxnet.org/data/fluxnet2015-dataset/fullset-data-product/) (
+      `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain`)
     - When detecting the base variable from which a flux variable was calculated, the variables defined for
       filetype `EDDYPRO-FLUXNET-CSV-30MIN` are now assumed by default. (`diive.pkgs.flux.common.detect_basevar`)
     - Renamed function that detects the base variable that was used to calculate the respective
@@ -326,9 +380,11 @@ multiple outlier tests into one single overall outlier flag.
 - **Added**: new notebook for reading EddyPro _fluxnet_ output file with `DataFileReader`
   parameters (`notebooks/ReadFiles/Read_single_EddyPro_fluxnet_output_file_with_DataFileReader.ipynb`)
 - **Added**: new notebook for reading EddyPro _fluxnet_ output file with `ReadFileType` and pre-defined
-  filetype `EDDYPRO-FLUXNET-CSV-30MIN` (`notebooks/ReadFiles/Read_single_EddyPro_fluxnet_output_file_with_ReadFileType.ipynb`)
+  filetype `EDDYPRO-FLUXNET-CSV-30MIN` (
+  `notebooks/ReadFiles/Read_single_EddyPro_fluxnet_output_file_with_ReadFileType.ipynb`)
 - **Added**: new notebook for reading multiple EddyPro _fluxnet_ output files with `MultiDataFileReader` and pre-defined
-  filetype `EDDYPRO-FLUXNET-CSV-30MIN` (`notebooks/ReadFiles/Read_multiple_EddyPro_fluxnet_output_files_with_MultiDataFileReader.ipynb`)
+  filetype `EDDYPRO-FLUXNET-CSV-30MIN` (
+  `notebooks/ReadFiles/Read_multiple_EddyPro_fluxnet_output_files_with_MultiDataFileReader.ipynb`)
 
 ### Changes
 
@@ -343,7 +399,8 @@ multiple outlier tests into one single overall outlier flag.
 - **Added**: test case for loading and merging multiple
   files (`tests.test_loaddata.TestLoadFiletypes.test_load_exampledata_multiple_EDDYPRO_FLUXNET_CSV_30MIN`)
 - **Added**: test case for reading EddyPro _fluxnet_ output file with `DataFileReader`
-  parameters (`tests.test_loaddata.TestLoadFiletypes.test_load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN_datafilereader_parameters`)
+  parameters (
+  `tests.test_loaddata.TestLoadFiletypes.test_load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN_datafilereader_parameters`)
 - **Added**: test case for resampling series to 30MIN time
   resolution (`tests.test_time.TestTime.test_resampling_to_30MIN`)
 - **Added**: test case for inserting timestamp with a different convention (middle, start,
@@ -384,7 +441,8 @@ multiple outlier tests into one single overall outlier flag.
   frequency strings are now converted from `Timedelta` (pandas) to `offset` (pandas) to `.freqstr`. This will yield
   the frequency string as seen by (the current version of) pandas. The idea is to harmonize between different
   representations e.g. `T` or `min` for minutes (
-  see [here](https://pandas.pydata.org/docs/reference/api/pandas.Timedelta.html)). (`diive.core.times.times.DetectFrequency`)
+  see [here](https://pandas.pydata.org/docs/reference/api/pandas.Timedelta.html)). (
+  `diive.core.times.times.DetectFrequency`)
 
 ### Changes
 
@@ -1072,7 +1130,8 @@ quality flags, the flux storage correction and the creation of the overall quali
 - Renamed class `FluxQualityFlagsLevel2` to `FluxQualityFlagsLevel2EddyPro` because it is directly based
   on the EddyPro output (`pkgs.fluxprocessingchain.level2_qualityflags.FluxQualityFlagsLevel2EddyPro`)
 - Renamed class `FluxStorageCorrectionSinglePoint`
-  to `FluxStorageCorrectionSinglePointEddyPro` (`pkgs.fluxprocessingchain.level31_storagecorrection.FluxStorageCorrectionSinglePointEddyPro`)
+  to `FluxStorageCorrectionSinglePointEddyPro` (
+  `pkgs.fluxprocessingchain.level31_storagecorrection.FluxStorageCorrectionSinglePointEddyPro`)
 - Refactored creation of flux quality
   flags (`pkgs.fluxprocessingchain.level2_qualityflags.FluxQualityFlagsLevel2EddyPro`)
 - **Missing storage correction terms** are now gap-filled using random forest before the storage terms are

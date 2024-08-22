@@ -8,7 +8,7 @@ from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag
 @ConsoleOutputDecorator()
 def remove_relativehumidity_offset(series: Series,
                                    showplot: bool = False) -> Series:
-    """Remove relative humidity offset
+    """Correct relative humidity offset > 100%
 
     Works for relative humidity data where maximum values should not exceed 100%.
 
@@ -79,7 +79,7 @@ def remove_radiation_zero_offset(series: Series,
                                  lon: float,
                                  utc_offset: int,
                                  showplot: bool = False) -> Series:
-    """Remove nighttime offset from all radiation data and set nighttime to zero
+    """Correct nighttime offset from all radiation data and set nighttime to zero
 
     Works for radiation data where radiation should be zero during nighttime.
 

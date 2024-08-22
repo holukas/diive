@@ -37,7 +37,6 @@ class StepwiseOutlierDetection:
     - `.flag_outliers_increments_zcore_test()`: Identify outliers based on the z-score of increments
     - `.flag_outliers_localsd_test()`: Identify outliers based on the local standard deviation from a running median
     - `.flag_manualremoval_test()`: Remove data points for range, time or point-by-point
-    - `.flag_outliers_stl_rz_test()`: Identify outliers based on seasonal-trend decomposition and z-score calculations
     - `.flag_outliers_zscore_dtnt_test()`: Identify outliers based on the z-score, separately for daytime and nighttime
     - `.flag_outliers_zscore_rolling_test()`: Identify outliers based on the rolling z-score
     - `.flag_outliers_zscore_test()`:  Identify outliers based on the z-score
@@ -45,6 +44,7 @@ class StepwiseOutlierDetection:
     - `.flag_outliers_lof_test()`: Identify outliers based on local outlier factor, across all data
     - `.flag_outliers_hampel_test()`: Identify outliers in a sliding window based on the Hampel filter
     - `.flag_outliers_hampel_dtnt_test()`: Identify based on the Hampel filter, daytime nighttime separately
+    - `.flag_outliers_trim_low_test()`: Remove values below threshold and remove an equal amount of records from high end of data
 
     The class is optimized to work in Jupyter notebooks. Various outlier detection
     methods can be called on-demand. Outlier results are displayed and the user can
@@ -136,7 +136,7 @@ class StepwiseOutlierDetection:
         series_cleaned = self._series_hires_cleaned.copy()
         flagtest = ManualRemoval(series=series_cleaned, idstr=self.idstr, remove_dates=remove_dates,
                                  showplot=showplot, verbose=verbose)
-        flagtest.calc(repeat=False)
+        flagtest.calc()
         self._last_flag = flagtest.get_flag()
 
     def flag_outliers_zscore_dtnt_test(self, thres_zscore: float = 4, showplot: bool = False,
@@ -269,7 +269,7 @@ class StepwiseOutlierDetection:
         # For setting absolute limits no iteration is necessary, therefore always repeat=False
         flagtest = AbsoluteLimits(series=series_cleaned, idstr=self.idstr,
                                   minval=minval, maxval=maxval, showplot=showplot)
-        flagtest.calc(repeat=False)
+        flagtest.calc()
         self._last_flag = flagtest.get_flag()
 
     def addflag(self):

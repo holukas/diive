@@ -12,7 +12,6 @@ from pandas import DatetimeIndex, Series
 from sktime.transformations.series.outlier_detection import HampelFilter
 
 from diive.core.base.flagbase import FlagBase
-from diive.core.plotting.outlier_dtnt import plot_outlier_daytime_nighttime
 from diive.core.times.times import DetectFrequency
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag
@@ -80,10 +79,10 @@ class HampelDaytimeNighttime(FlagBase):
             lat=lat,
             lon=lon,
             utc_offset=utc_offset)
-        daytime = dnf.get_daytime_flag()
-        nighttime = dnf.get_nighttime_flag()
-        self.is_daytime = daytime == 1  # Convert 0/1 flag to False/True flag
-        self.is_nighttime = nighttime == 1  # Convert 0/1 flag to False/True flag
+        self.flag_daytime = dnf.get_daytime_flag()  # 0/1 flag needed outside init
+        flag_nighttime = dnf.get_nighttime_flag()
+        self.is_daytime = self.flag_daytime == 1  # Convert 0/1 flag to False/True flag
+        self.is_nighttime = flag_nighttime == 1  # Convert 0/1 flag to False/True flag
 
     def calc(self, repeat: bool = True):
         """Calculate overall flag, based on individual flags from multiple iterations.
@@ -98,22 +97,11 @@ class HampelDaytimeNighttime(FlagBase):
         if self.showplot:
             # Default plot for outlier tests, showing rejected values
             self.defaultplot(n_iterations=n_iterations)
-
-            # Collect in dataframe for outlier daytime/nighttime plot
-            frame = {
-                'UNFILTERED': self.series,
-                'CLEANED': self.series[self.overall_flag == 0],
-                'OUTLIER': self.series[self.overall_flag == 2],
-                'OUTLIER_DAYTIME': self.series[(self.overall_flag == 2) & (self.is_daytime == 1)],
-                'OUTLIER_NIGHTTIME': self.series[(self.overall_flag == 2) & (self.is_nighttime == 1)],
-                'NOT_OUTLIER_DAYTIME': self.series[(self.overall_flag == 0) & (self.is_daytime == 1)],
-                'NOT_OUTLIER_NIGHTTIME': self.series[(self.overall_flag == 0) & (self.is_nighttime == 1)],
-            }
-            df = pd.DataFrame(frame)
             title = (f"Hampel filter daytime/nighttime: {self.series.name}, "
                      f"n_iterations = {n_iterations}, "
                      f"n_outliers = {self.series[self.overall_flag == 2].count()}")
-            plot_outlier_daytime_nighttime(df=df, title=title)
+            self.plot_outlier_daytime_nighttime(series=self.series, flag_daytime=self.flag_daytime,
+                                                flag_quality=self.overall_flag, title=title)
 
     def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Perform tests required for this flag"""
@@ -314,7 +302,7 @@ def example_dtnt():
     df = ed.load_exampledata_parquet()
     s = df['Tair_f'].copy()
     s = s.loc[s.index.year == 2018].copy()
-    s = s.loc[s.index.month == 7].copy()
+    # s = s.loc[s.index.month == 7].copy()
     s_noise = add_impulse_noise(series=s,
                                 factor_low=-10,
                                 factor_high=4,
@@ -333,9 +321,35 @@ def example_dtnt():
         lon=7.733750,
         utc_offset=1
     )
-    ham.calc(repeat=True)
+    ham.calc(repeat=False)
+
+
+def example_cha():
+    SOURCEDIR = r"F:\Sync\luhk_work\20 - CODING\21 - DIIVE\diive\__local_folders\__datasets\cha_fp2024.1_2005-2023\0_data\RESULTS-IRGA-Level-1_fluxnet_2005-2023"
+    FILENAME = r"CH-CHA_IRGA_Level-1_eddypro_fluxnet_2005-2023_availableVars.parquet"
+    from pathlib import Path
+    FILEPATH = Path(SOURCEDIR) / FILENAME
+    print(f"Data will be loaded from the following file:\n{FILEPATH}")
+    from diive.core.io.files import load_parquet
+    maindf = load_parquet(filepath=FILEPATH)
+    series = maindf['FC'].copy()
+    series = series[series.index.year == 2023].copy()
+    series = series[series.index.month == 6].copy()
+    ham = HampelDaytimeNighttime(
+        series=series,
+        n_sigma_dt=5,
+        n_sigma_nt=4,
+        window_length=48 * 5,
+        showplot=True,
+        verbose=True,
+        lat=47.286417,
+        lon=7.733750,
+        utc_offset=1
+    )
+    ham.calc(repeat=False)
 
 
 if __name__ == '__main__':
     # example()
-    example_dtnt()
+    # example_dtnt()
+    example_cha()

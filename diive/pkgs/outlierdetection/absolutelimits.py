@@ -74,10 +74,10 @@ class AbsoluteLimitsDaytimeNighttime(FlagBase):
             lat=lat,
             lon=lon,
             utc_offset=utc_offset)
-        nighttimeflag = dnf.get_nighttime_flag()
-        daytimeflag = dnf.get_daytime_flag()
-        self.is_nighttime = nighttimeflag == 1  # Convert 0/1 flag to False/True flag
-        self.is_daytime = daytimeflag == 1  # Convert 0/1 flag to False/True flag
+        flag_nighttime = dnf.get_nighttime_flag()  # 0/1 flag needed outside init
+        self.flag_daytime = dnf.get_daytime_flag()
+        self.is_nighttime = flag_nighttime == 1  # Convert 0/1 flag to False/True flag
+        self.is_daytime = self.flag_daytime == 1  # Convert 0/1 flag to False/True flag
 
     def calc(self, repeat: bool = False):
         """Calculate overall flag, based on individual flags from multiple iterations.
@@ -90,6 +90,11 @@ class AbsoluteLimitsDaytimeNighttime(FlagBase):
         self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=repeat)
         if self.showplot:
             self.defaultplot(n_iterations=n_iterations)
+            title = (f"Absolute limits filter daytime/nighttime: {self.series.name}, "
+                     f"n_iterations = {n_iterations}, "
+                     f"n_outliers = {self.series[self.overall_flag == 2].count()}")
+            self.plot_outlier_daytime_nighttime(series=self.series, flag_daytime=self.flag_daytime,
+                                                flag_quality=self.overall_flag, title=title)
 
     def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Perform tests required for this flag"""
@@ -172,15 +177,11 @@ class AbsoluteLimits(FlagBase):
         self.showplot = showplot
         self.verbose = verbose
 
-    def calc(self, repeat: bool = False):
+    def calc(self):
         """Calculate overall flag, based on individual flags from multiple iterations.
 
-        Args:
-            repeat: If *True*, the outlier detection is repeated until all
-                outliers are removed.
-
         """
-        self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=repeat)
+        self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=False)
         if self.showplot:
             self.defaultplot(n_iterations=n_iterations)
 
@@ -202,10 +203,34 @@ def example():
     data = np.random.rand(rows) * 100  # Random numbers b/w 0 and 100
     tidx = pd.date_range('2019-01-01 00:30:00', periods=rows, freq='30min')
     series = pd.Series(data, index=tidx, name='TESTDATA')
+    al = AbsoluteLimits(series=series, minval=6, maxval=74, idstr='99', showplot=True, verbose=True)
+    al.calc()
+    print(series.describe())
+    filteredseries = al.filteredseries
+    print(filteredseries.describe())
+    flag = al.flag
+    print(flag.describe())
 
-    al = AbsoluteLimits(series=series, idstr='99')
-    al.calc(min=16, max=84)
 
+def example_daytime_nighttime():
+    import numpy as np
+    import pandas as pd
+    np.random.seed(100)
+    rows = 1000
+    data = np.random.rand(rows) * 100  # Random numbers b/w 0 and 100
+    tidx = pd.date_range('2019-01-01 00:30:00', periods=rows, freq='30min')
+    series = pd.Series(data, index=tidx, name='TESTDATA')
+    al = AbsoluteLimitsDaytimeNighttime(
+        series=series,
+        daytime_minmax=[6.2, 74.9],
+        nighttime_minmax=[29.5, 47.4],
+        idstr='99',
+        lat=47.286417,
+        lon=7.733750,
+        utc_offset=1,
+        showplot=True,
+        verbose=True)
+    al.calc()
     print(series.describe())
     filteredseries = al.filteredseries
     print(filteredseries.describe())
@@ -214,4 +239,5 @@ def example():
 
 
 if __name__ == '__main__':
-    example()
+    example_daytime_nighttime()
+    # example()

@@ -148,6 +148,7 @@ class LocalSD(FlagBase):
         self.fig.suptitle(plottitle, fontsize=theme.FIGHEADER_FONTSIZE)
         self.fig.show()
 
+
 def example():
     import importlib.metadata
     import diive.configs.exampledata as ed

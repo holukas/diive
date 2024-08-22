@@ -34,6 +34,10 @@ def make_patch_spines_invisible(ax):
         sp.set_visible(False)
 
 
+def show_ticks_on_all_spines(ax):
+    ax.tick_params(left=True, right=True, top=True, bottom=True)
+
+
 def hide_ticks_and_ticklabels(ax):
     ax.tick_params(left=False, right=False, top=False, bottom=False,
                    labelleft=False, labelright=False, labeltop=False, labelbottom=False)
@@ -99,6 +103,7 @@ def default_format(ax,
                    ax_labels_fontweight=theme.AX_LABELS_FONTWEIGHT,
                    ax_xlabel_txt=False,
                    ax_ylabel_txt=False,
+                   spines_lw: float = None,
                    txt_ylabel_units=False,
                    ticks_width=theme.TICKS_WIDTH,
                    ticks_length=theme.TICKS_LENGTH,
@@ -113,10 +118,11 @@ def default_format(ax,
 
     # Ticks
     format_ticks(ax=ax, width=ticks_width, length=ticks_length,
-                 direction=ticks_direction, color=color, labelsize=ticks_labels_fontsize)
+                 direction=ticks_direction, color=color,
+                 labelsize=ticks_labels_fontsize)
 
     # Spines
-    format_spines(ax=ax, color=color, lw=theme.LINEWIDTH_SPINES)
+    format_spines(ax=ax, color=color, lw=spines_lw)
 
     # Labels
     if ax_xlabel_txt:
@@ -132,6 +138,8 @@ def default_format(ax,
     # Grid
     if showgrid:
         default_grid(ax=ax)
+    else:
+        ax.grid(False)
 
 
 def format_ticks(ax, width, length, direction, color, labelsize):
@@ -139,11 +147,13 @@ def format_ticks(ax, width, length, direction, color, labelsize):
                    colors=color, labelsize=labelsize)
     ax.tick_params(axis='y', width=width, length=length, direction=direction,
                    colors=color, labelsize=labelsize)
+    show_ticks_on_all_spines(ax)
     # from matplotlib.ticker import (MultipleLocator, AutoMinorLocator)
     # ax.xaxis.set_minor_locator(AutoMinorLocator())
 
 
 def format_spines(ax, color, lw):
+    lw = theme.LINEWIDTH_SPINES if not lw else lw
     spines = ['top', 'bottom', 'left', 'right']
     for spine in spines:
         ax.spines[spine].set_color(color)
@@ -520,15 +530,28 @@ def save_fig(fig,
 
 
 def create_ax(facecolor: str = 'white',
-              figsize: tuple = (14, 8),
+              figsize: tuple[float, float] = (14, 8),
               dpi: int = 100):
     """Create figure and axis"""
     # Figure setup
-    fig = plt.figure(facecolor=facecolor, figsize=figsize, dpi=dpi)
-    gs = gridspec.GridSpec(1, 1)  # rows, cols
+    fig = plt.figure(facecolor=facecolor, figsize=figsize, dpi=dpi, layout='constrained')
+    gs = gridspec.GridSpec(1, 1, figure=fig)  # rows, cols
     # gs.update(wspace=0.3, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
     ax = fig.add_subplot(gs[0, 0])
     return fig, ax
+
+def setup_figax(ax, figsize):
+    # Create axis
+    if ax:
+        # If ax is given, plot directly to ax, no fig needed
+        fig = None
+        # self.ax = self.ax
+        showplot = False
+    else:
+        # If no ax is given, create fig and ax and then show the plot
+        fig, ax = create_ax(figsize=figsize)
+        showplot = True
+    return fig, ax, showplot
 
 
 def n_legend_cols(n_legend_entries: int) -> int:
