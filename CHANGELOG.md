@@ -32,12 +32,13 @@ time series. The bin with most counts is highlighted orange.*
 
 ### Changes
 
-- Improved daytime/nighttime outlier plot for outlier removal
-  classes (`diive.core.base.flagbase.FlagBase.plot_outlier_daytime_nighttime`)
+- Improved daytime/nighttime outlier plot used by various outlier removal classes (
+  `diive.core.base.flagbase.FlagBase.plot_outlier_daytime_nighttime`)
 
 ### Notebooks
 
 - Added notebook for plotting histograms (`notebooks/Plotting/Histogram.ipynb`)
+- Added notebook for manual removal of data points (`notebooks/OutlierDetection/ManualRemoval.ipynb`)
 - Added notebook for outlier detection using local outlier factor, separately during daytime and nighttime (
   `notebooks/OutlierDetection/LocalOutlierFactorDaytimeNighttime.ipynb`)
 - Updated notebook (`notebooks/OutlierDetection/HampelDaytimeNighttime.ipynb`)

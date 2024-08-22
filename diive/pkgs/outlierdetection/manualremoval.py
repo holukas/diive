@@ -55,7 +55,7 @@ class ManualRemoval(FlagBase):
         self.showplot = showplot
         self.verbose = verbose
 
-    def calc(self, repeat: bool = False):
+    def calc(self):
         """Calculate overall flag, based on individual flags from multiple iterations.
 
         Args:
