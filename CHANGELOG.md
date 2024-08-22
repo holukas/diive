@@ -23,19 +23,12 @@ time series. The bin with most counts is highlighted orange.*
 
 ### Additions
 
+- Added histogram plots to `FlagBase`, histograms are now shown for all outlier methods (`diive.core.base.flagbase.FlagBase.defaultplot`)
 - Added daytime/nighttime histogram plots to (`diive.pkgs.outlierdetection.hampel.HampelDaytimeNighttime`)
 - Added daytime/nighttime histogram plots to (`diive.pkgs.outlierdetection.zscore.zScoreDaytimeNighttime`)
 - Added daytime/nighttime histogram plots to (`diive.pkgs.outlierdetection.lof.LocalOutlierFactorDaytimeNighttime`)
 - Added daytime/nighttime histogram plots to (
   `diive.pkgs.outlierdetection.absolutelimits.AbsoluteLimitsDaytimeNighttime`)
-- Added histogram plots to (`XXX`)
-- Added histogram plots to (`XXX`)
-- Added histogram plots to (`XXX`)
-- Added histogram plots to (`XXX`)
-- Added histogram plots to (`XXX`)
-- Added histogram plots to (`XXX`)
-- Added histogram plots to (`XXX`)
-- Added histogram plots to (`XXX`)
 - Added option to calculate the z-score with sign instead of absolute (`diive.core.funcs.funcs.zscore`)
 
 ### Changes

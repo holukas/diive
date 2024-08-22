@@ -380,7 +380,7 @@ class TestOutlierDetection(unittest.TestCase):
         self.assertLess(s_noise.min(), 10)
 
         al = AbsoluteLimits(series=s_noise, minval=10, maxval=22)
-        al.calc(repeat=False)
+        al.calc()
         flag = al.get_flag()
         frame = {'s_noise': s_noise, 'flag': flag}
         checkdf = pd.DataFrame.from_dict(frame)

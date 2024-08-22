@@ -269,7 +269,7 @@ class StepwiseOutlierDetection:
         # For setting absolute limits no iteration is necessary, therefore always repeat=False
         flagtest = AbsoluteLimits(series=series_cleaned, idstr=self.idstr,
                                   minval=minval, maxval=maxval, showplot=showplot)
-        flagtest.calc(repeat=False)
+        flagtest.calc()
         self._last_flag = flagtest.get_flag()
 
     def addflag(self):
