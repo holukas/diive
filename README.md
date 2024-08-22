@@ -105,21 +105,20 @@ Fill gaps in time series with various methods
 
 Single outlier tests create a flag where `0=OK` and `2=outlier`.
 
-- Absolute limits ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/AbsoluteLimits.ipynb))
-- Absolute limits, separately defined for daytime and nighttime data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/AbsoluteLimitsDaytimeNighttime.ipynb))
-- Hampel filter: based on Median Absolute Deviation (MAD) in a moving window ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/Hampel.ipynb))
-- Hampel filter, separately for daytime and nighttime data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/HampelDaytimeNighttime.ipynb))
-- Incremental z-score: Identify outliers based on the z-score of double increments ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/zScoreIncremental.ipynb))
-- Local standard deviation: Identify outliers based on the local standard deviation from a running median ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/LocalSD.ipynb))
-- Local outlier factor: Identify outliers based on local outlier factor, across all data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/LocalSD.ipynb))
-- Local outlier factor: Identify outliers based on local outlier factor, daytime nighttime separately ([notebook example](notebooks/OutlierDetection/LocalOutlierFactorDaytimeNighttime.ipynb))
-- Manual removal: Remove time periods (from-to) or single records from time series ([notebook example](notebooks/OutlierDetection/ManualRemoval.ipynb))
-- Missing values: Simply creates a flag that indicated available and missing data in a time series
-- Trimming: Remove values below threshold and remove an equal amount of records from high end of data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/TrimLow.ipynb))
-- z-score: Identify outliers based on the z-score across all time series data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/zScore.ipynb))
-- z-score: Identify outliers based on the z-score, separately for daytime and nighttime ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/zScoreDaytimeNighttime.ipynb))
-- z-score: Identify outliers based on the rolling z-score
-- z-score: Identify outliers based on max z-scores in the interquartile range data
+- **Absolute limits** ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/AbsoluteLimits.ipynb))
+- **Absolute limits daytime/nighttime**, separately defined for daytime and nighttime data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/AbsoluteLimitsDaytimeNighttime.ipynb))
+- **Hampel filter**: based on Median Absolute Deviation (MAD) in a moving window ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/Hampel.ipynb))
+- **Hampel filter daytime/nighttime**, separately for daytime and nighttime data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/HampelDaytimeNighttime.ipynb))
+- **Local standard deviation**: Identify outliers based on the local standard deviation from a running median ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/LocalSD.ipynb))
+- **Local outlier factor**: Identify outliers based on local outlier factor, across all data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/LocalSD.ipynb))
+- **Local outlier factor daytime/nighttime**: Identify outliers based on local outlier factor, daytime nighttime separately ([notebook example](notebooks/OutlierDetection/LocalOutlierFactorDaytimeNighttime.ipynb))
+- **Manual removal**: Remove time periods (from-to) or single records from time series ([notebook example](notebooks/OutlierDetection/ManualRemoval.ipynb))
+- **Missing values**: Simply creates a flag that indicated available and missing data in a time series
+- **Trimming**: Remove values below threshold and remove an equal amount of records from high end of data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/TrimLow.ipynb))
+- **z-score**: Identify outliers based on the z-score across all time series data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/zScore.ipynb))
+- **z-score increments daytime/nighttime**: Identify outliers based on the z-score of double increments ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/zScoreIncremental.ipynb))
+- **z-score daytime/nighttime**: Identify outliers based on the z-score, separately for daytime and nighttime ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/zScoreDaytimeNighttime.ipynb))
+- **z-score rolling**: Identify outliers based on the rolling z-score
 
 ### Plotting
 
