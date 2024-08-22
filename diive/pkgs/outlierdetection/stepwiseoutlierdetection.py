@@ -136,7 +136,7 @@ class StepwiseOutlierDetection:
         series_cleaned = self._series_hires_cleaned.copy()
         flagtest = ManualRemoval(series=series_cleaned, idstr=self.idstr, remove_dates=remove_dates,
                                  showplot=showplot, verbose=verbose)
-        flagtest.calc(repeat=False)
+        flagtest.calc()
         self._last_flag = flagtest.get_flag()
 
     def flag_outliers_zscore_dtnt_test(self, thres_zscore: float = 4, showplot: bool = False,

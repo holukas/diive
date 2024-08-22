@@ -157,7 +157,7 @@ class FormatEddyProFluxnetFileForUpload:
         n_vals_before = series.dropna().count()
         flagtest = ManualRemoval(series=series, remove_dates=remove_dates,
                                  showplot=showplot, verbose=True)
-        flagtest.calc(repeat=False)
+        flagtest.calc()
         flag = flagtest.get_flag()
 
         # Locations where flag is > 0
