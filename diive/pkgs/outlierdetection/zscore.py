@@ -316,14 +316,14 @@ def example_zscore():
     series = df['Tair_f'].copy()
     zsc = zScore(
         series=series,
-        thres_zscore=4,
+        thres_zscore=2,
         showplot=True,
         plottitle="z-score",
         verbose=True)
-    zsc.calc(repeat=True)
+    zsc.calc(repeat=False)
     flag = zsc.get_flag()
 
 
 if __name__ == '__main__':
-    # example_zscore()
-    example_zscore_daytime_nighttime()
+    example_zscore()
+    # example_zscore_daytime_nighttime()

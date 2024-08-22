@@ -28,6 +28,14 @@ time series. The bin with most counts is highlighted orange.*
 - Added daytime/nighttime histogram plots to (`diive.pkgs.outlierdetection.lof.LocalOutlierFactorDaytimeNighttime`)
 - Added daytime/nighttime histogram plots to (
   `diive.pkgs.outlierdetection.absolutelimits.AbsoluteLimitsDaytimeNighttime`)
+- Added histogram plots to (`XXX`)
+- Added histogram plots to (`XXX`)
+- Added histogram plots to (`XXX`)
+- Added histogram plots to (`XXX`)
+- Added histogram plots to (`XXX`)
+- Added histogram plots to (`XXX`)
+- Added histogram plots to (`XXX`)
+- Added histogram plots to (`XXX`)
 - Added option to calculate the z-score with sign instead of absolute (`diive.core.funcs.funcs.zscore`)
 
 ### Changes

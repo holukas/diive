@@ -177,15 +177,11 @@ class AbsoluteLimits(FlagBase):
         self.showplot = showplot
         self.verbose = verbose
 
-    def calc(self, repeat: bool = False):
+    def calc(self):
         """Calculate overall flag, based on individual flags from multiple iterations.
 
-        Args:
-            repeat: If *True*, the outlier detection is repeated until all
-                outliers are removed.
-
         """
-        self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=repeat)
+        self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=False)
         if self.showplot:
             self.defaultplot(n_iterations=n_iterations)
 

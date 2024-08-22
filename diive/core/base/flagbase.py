@@ -158,19 +158,28 @@ class FlagBase:
         n_outliers = rejected.sum()
 
         fig = plt.figure(facecolor='white', figsize=(16, 7))
-        gs = gridspec.GridSpec(2, 1)  # rows, cols
-        gs.update(wspace=0.3, hspace=0.1, left=0.03, right=0.97, top=0.95, bottom=0.05)
+        gs = gridspec.GridSpec(2, 2)  # rows, cols
+        # gs.update(wspace=0.3, hspace=0.1, left=0.03, right=0.97, top=0.95, bottom=0.05)
         ax_series = fig.add_subplot(gs[0, 0])
+        ax_series_hist = fig.add_subplot(gs[0, 1])
         ax_ok = fig.add_subplot(gs[1, 0], sharex=ax_series)
+        ax_ok_hist = fig.add_subplot(gs[1, 1])
+
         ax_series.plot_date(self.series.index, self.series,
                             label=f"{self.series.name}", color="#607D8B",
                             alpha=.5, markersize=8, markeredgecolor='none')
         ax_series.plot_date(self.series[rejected].index, self.series[rejected],
                             label="outlier (rejected)", color="#F44336", alpha=1,
                             markersize=12, markeredgecolor='none', fmt='X')
+        hist_kwargs = dict(method='n_bins', n_bins=None, highlight_peak=True, show_zscores=True, show_info=False,
+                           show_title=False, show_zscore_values=False, show_grid=False)
+        HistogramPlot(self.series, **hist_kwargs).plot(ax=ax_series_hist)
+
         ax_ok.plot_date(self.series[ok].index, self.series[ok],
                         label="filtered series", alpha=.5,
                         markersize=8, markeredgecolor='none')
+        HistogramPlot(self.series[ok], **hist_kwargs).plot(ax=ax_ok_hist)
+
         default_format(ax=ax_series)
         default_format(ax=ax_ok)
         default_legend(ax=ax_series)
@@ -179,7 +188,10 @@ class FlagBase:
         plottitle = (f"{self.series.name} filtered by {self.overall_flag.name}, "
                      f"n_iterations = {n_iterations}, "
                      f"n_outliers = {n_outliers}")
+        nice_date_ticks(ax=ax_series)
+        nice_date_ticks(ax=ax_ok)
         fig.suptitle(plottitle, fontsize=theme.FIGHEADER_FONTSIZE)
+        fig.tight_layout()
         fig.show()
 
     def plot_outlier_daytime_nighttime(self, series: Series, flag_daytime: Series,
