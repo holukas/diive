@@ -177,7 +177,7 @@ class FluxProcessingChain:
             ssitc: bool = True,
             gas_completeness: bool = False,
             spectral_correction_factor: bool = True,
-            angle_of_attack: bool = False,
+            angle_of_attack: dict or False = False,
             steadiness_of_horizontal_wind: bool = False
     ):
         """Expand flux quality flag based on EddyPro output"""
@@ -198,12 +198,12 @@ class FluxProcessingChain:
         if spectral_correction_factor:
             self._level2.spectral_correction_factor_test()
 
-        if signal_strength:
+        if signal_strength['test_signal_strength']:
             self._level2.signal_strength_test(signal_strength_col=signal_strength['signal_strength_col'],
                                               method=signal_strength['method'],
                                               threshold=signal_strength['threshold'])
 
-        if raw_data_screening_vm97:
+        if raw_data_screening_vm97['raw_data_screening_vm97']:
             self._level2.raw_data_screening_vm97_tests(spikes=raw_data_screening_vm97['spikes'],
                                                        amplitude=raw_data_screening_vm97['amplitude'],
                                                        dropout=raw_data_screening_vm97['dropout'],
@@ -212,8 +212,10 @@ class FluxProcessingChain:
                                                        skewkurt_sf=raw_data_screening_vm97['skewkurt_sf'],
                                                        discont_hf=raw_data_screening_vm97['discont_hf'],
                                                        discont_sf=raw_data_screening_vm97['discont_sf'])
-        if angle_of_attack:
-            self._level2.angle_of_attack_test()
+        if angle_of_attack['test_rawdata_angle_of_attack']:
+            self._level2.angle_of_attack_test(
+                application_dates=angle_of_attack['test_rawdata_angle_of_attack_application_dates']
+            )
 
         if steadiness_of_horizontal_wind:
             self._level2.steadiness_of_horizontal_wind()
@@ -574,7 +576,7 @@ def example():
     # Source data
     from pathlib import Path
     from diive.core.io.files import load_parquet
-    SOURCEDIR = r"L:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\cha_fp2024.1_2005-2023\0_data\RESULTS-IRGA-Level-1_fluxnet_2005-2023"
+    SOURCEDIR = r"L:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_cha_fp2024_2005-2023\0_data\RESULTS-IRGA-Level-1_fluxnet_2005-2023"
     FILENAME = r"CH-CHA_IRGA_Level-1_eddypro_fluxnet_2005-2023_availableVars.parquet"
     FILEPATH = Path(SOURCEDIR) / FILENAME
     maindf = load_parquet(filepath=FILEPATH)
@@ -606,69 +608,84 @@ def example():
     # --------------------
     # Level-2
     # --------------------
-    TEST_SSITC = True  # Default True
-    TEST_GAS_COMPLETENESS = True  # Default True
-    TEST_SPECTRAL_CORRECTION_FACTOR = True  # Default True
+    TEST_SSITC = False  # Default True
+    TEST_GAS_COMPLETENESS = False  # Default True
+    TEST_SPECTRAL_CORRECTION_FACTOR = False  # Default True
 
     # Signal strength
+    TEST_SIGNAL_STRENGTH = False
     TEST_SIGNAL_STRENGTH_COL = 'CUSTOM_AGC_MEAN'
     TEST_SIGNAL_STRENGTH_METHOD = 'discard above'
     TEST_SIGNAL_STRENGTH_THRESHOLD = 90
     # TimeSeries(series=maindf[TEST_SIGNAL_STRENGTH_COL]).plot()
 
+    TEST_RAWDATA = True  # Default True
     TEST_RAWDATA_SPIKES = True  # Default True
     TEST_RAWDATA_AMPLITUDE = True  # Default True
     TEST_RAWDATA_DROPOUT = True  # Default True
-    TEST_RAWDATA_ABSLIM = False  # Default False
-    TEST_RAWDATA_SKEWKURT_HF = False  # Default False
-    TEST_RAWDATA_SKEWKURT_SF = False  # Default False
-    TEST_RAWDATA_DISCONT_HF = False  # Default False
-    TEST_RAWDATA_DISCONT_SF = False  # Default False
+    TEST_RAWDATA_ABSLIM = True  # Default False
+    TEST_RAWDATA_SKEWKURT_HF = True  # Default False
+    TEST_RAWDATA_SKEWKURT_SF = True  # Default False
+    TEST_RAWDATA_DISCONT_HF = True  # Default False
+    TEST_RAWDATA_DISCONT_SF = True  # Default False
 
     TEST_RAWDATA_ANGLE_OF_ATTACK = False  # Default False
+    # TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES = [['2023-07-01', '2023-09-01']]  # Default False
+    TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES = False  # Default False
 
     TEST_RAWDATA_STEADINESS_OF_HORIZONTAL_WIND = False  # Default False
 
     LEVEL2_SETTINGS = {
-        'signal_strength': {'signal_strength_col': TEST_SIGNAL_STRENGTH_COL, 'method': TEST_SIGNAL_STRENGTH_METHOD,
-                            'threshold': TEST_SIGNAL_STRENGTH_THRESHOLD},
-        'raw_data_screening_vm97': {'spikes': TEST_RAWDATA_SPIKES, 'amplitude': TEST_RAWDATA_AMPLITUDE,
-                                    'dropout': TEST_RAWDATA_DROPOUT, 'abslim': TEST_RAWDATA_ABSLIM,
-                                    'skewkurt_hf': TEST_RAWDATA_SKEWKURT_HF, 'skewkurt_sf': TEST_RAWDATA_SKEWKURT_SF,
-                                    'discont_hf': TEST_RAWDATA_DISCONT_HF,
-                                    'discont_sf': TEST_RAWDATA_DISCONT_SF},
+        'signal_strength': {
+            'test_signal_strength': TEST_SIGNAL_STRENGTH,
+            'signal_strength_col': TEST_SIGNAL_STRENGTH_COL,
+            'method': TEST_SIGNAL_STRENGTH_METHOD,
+            'threshold': TEST_SIGNAL_STRENGTH_THRESHOLD},
+        'raw_data_screening_vm97': {
+            'raw_data_screening_vm97': TEST_RAWDATA,
+            'spikes': TEST_RAWDATA_SPIKES,
+            'amplitude': TEST_RAWDATA_AMPLITUDE,
+            'dropout': TEST_RAWDATA_DROPOUT,
+            'abslim': TEST_RAWDATA_ABSLIM,
+            'skewkurt_hf': TEST_RAWDATA_SKEWKURT_HF,
+            'skewkurt_sf': TEST_RAWDATA_SKEWKURT_SF,
+            'discont_hf': TEST_RAWDATA_DISCONT_HF,
+            'discont_sf': TEST_RAWDATA_DISCONT_SF},
         'ssitc': TEST_SSITC,
         'gas_completeness': TEST_GAS_COMPLETENESS,
         'spectral_correction_factor': TEST_SPECTRAL_CORRECTION_FACTOR,
-        'angle_of_attack': TEST_RAWDATA_ANGLE_OF_ATTACK,
+        'angle_of_attack': {
+            'test_rawdata_angle_of_attack': TEST_RAWDATA_ANGLE_OF_ATTACK,
+            'test_rawdata_angle_of_attack_application_dates': TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES},
         'steadiness_of_horizontal_wind': TEST_RAWDATA_STEADINESS_OF_HORIZONTAL_WIND
     }
     fpc.level2_quality_flag_expansion(**LEVEL2_SETTINGS)
     fpc.finalize_level2(nighttime_threshold=NIGHTTIME_THRESHOLD, daytime_accept_qcf_below=DAYTIME_ACCEPT_QCF_BELOW,
                         nighttimetime_accept_qcf_below=NIGHTTIMETIME_ACCEPT_QCF_BELOW)
-    fpc.level2_qcf.report_qcf_evolution()
+    fpc.level2_qcf.showplot_qcf_heatmaps()
+    # fpc.level2_qcf.report_qcf_evolution()
     # fpc.level2_qcf.report_qcf_flags()
     # fpc.level2.results
     # fpc.fpc_df
     # fpc.filteredseries
     # [x for x in fpc.fpc_df.columns if 'L2' in x]
 
-    # --------------------
-    # Level-3.1
-    # --------------------
-    fpc.level31_storage_correction(gapfill_storage_term=False)
-    fpc.finalize_level31()
-    # fpc.level31.showplot(maxflux=50)
-    fpc.level31.report()
-    # fpc.fpc_df
-    # fpc.filteredseries
-    # fpc.level31.results
-    # [x for x in fpc.fpc_df.columns if 'L3.1' in x]
+    # # --------------------
+    # # Level-3.1
+    # # --------------------
+    # fpc.level31_storage_correction(gapfill_storage_term=False)
+    # fpc.finalize_level31()
+    # # fpc.level31.showplot(maxflux=50)
+    # fpc.level31.report()
+    # # fpc.fpc_df
+    # # fpc.filteredseries
+    # # fpc.level31.results
+    # # [x for x in fpc.fpc_df.columns if 'L3.1' in x]
 
     # --------------------
     # Level-3.2
     # --------------------
-    fpc.level32_stepwise_outlier_detection()
+    # fpc.level32_stepwise_outlier_detection()
 
     # fpc.level32_flag_manualremoval_test(
     #     remove_dates=[
@@ -680,28 +697,28 @@ def example():
     #     showplot=True, verbose=True)
     # fpc.level32_addflag()
 
-    fpc.level32_flag_outliers_hampel_test(window_length=48 * 9, n_sigma=5, showplot=True, verbose=True, repeat=True)
-    fpc.level32_addflag()
+    # fpc.level32_flag_outliers_hampel_test(window_length=48 * 9, n_sigma=5, showplot=True, verbose=True, repeat=True)
+    # fpc.level32_addflag()
 
-    fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 9, n_sigma_dt=7, n_sigma_nt=5,
-                                               showplot=True, verbose=True, repeat=True)
-    fpc.level32_addflag()
+    # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 9, n_sigma_dt=7, n_sigma_nt=5,
+    #                                            showplot=True, verbose=True, repeat=True)
+    # fpc.level32_addflag()
 
-    fpc.level32_flag_outliers_zscore_rolling_test(winsize=48 * 9, thres_zscore=5, showplot=True, verbose=True,
-                                                  repeat=True)
-    fpc.level32_addflag()
+    # fpc.level32_flag_outliers_zscore_rolling_test(winsize=48 * 9, thres_zscore=5, showplot=True, verbose=True,
+    #                                               repeat=True)
+    # fpc.level32_addflag()
 
-    fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
-    fpc.level32_addflag()
+    # fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
+    # fpc.level32_addflag()
     # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
-    fpc.level32_flag_outliers_localsd_test(n_sd=3, winsize=480, showplot=True, verbose=True, repeat=True)
-    fpc.level32_addflag()
+    # fpc.level32_flag_outliers_localsd_test(n_sd=3, winsize=480, showplot=True, verbose=True, repeat=True)
+    # fpc.level32_addflag()
     # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
-    fpc.level32_flag_outliers_increments_zcore_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
-    fpc.level32_addflag()
-    fpc.level32.showplot_cleaned()
+    # fpc.level32_flag_outliers_increments_zcore_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
+    # fpc.level32_addflag()
+    # fpc.level32.showplot_cleaned()
     # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
     # fpc.level32_flag_outliers_lof_dtnt_test(n_neighbors=20, contamination=None, showplot=True,
@@ -720,24 +737,24 @@ def example():
     # fpc.level32_addflag()
     # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
-    fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=[-50, 50], nighttime_minmax=[-10, 50], showplot=True,
-                                               verbose=True)
-    fpc.level32_addflag()
+    # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=[-50, 50], nighttime_minmax=[-10, 50], showplot=True,
+    #                                            verbose=True)
+    # fpc.level32_addflag()
     # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
-    fpc.level32_flag_outliers_trim_low_test(trim_nighttime=True, lower_limit=-20, showplot=True, verbose=True)
-    fpc.level32_addflag()
+    # fpc.level32_flag_outliers_trim_low_test(trim_nighttime=True, lower_limit=-20, showplot=True, verbose=True)
+    # fpc.level32_addflag()
 
-    fpc.finalize_level32(nighttime_threshold=50, daytime_accept_qcf_below=2, nighttimetime_accept_qcf_below=2)
+    # fpc.finalize_level32(nighttime_threshold=50, daytime_accept_qcf_below=2, nighttimetime_accept_qcf_below=2)
 
-    # fpc.filteredseries
-    # fpc.level32.flags
-    fpc.level32_qcf.showplot_qcf_heatmaps()
-    # fpc.level32_qcf.showplot_qcf_timeseries()
-    # fpc.level32_qcf.report_qcf_flags()
-    fpc.level32_qcf.report_qcf_evolution()
-    # fpc.level32_qcf.report_qcf_series()
-    # fpc.levelidstr
+    # # fpc.filteredseries
+    # # fpc.level32.flags
+    # fpc.level32_qcf.showplot_qcf_heatmaps()
+    # # fpc.level32_qcf.showplot_qcf_timeseries()
+    # # fpc.level32_qcf.report_qcf_flags()
+    # fpc.level32_qcf.report_qcf_evolution()
+    # # fpc.level32_qcf.report_qcf_series()
+    # # fpc.levelidstr
 
     # fpc.filteredseries_level2_qcf
     # fpc.filteredseries_level31_qcf

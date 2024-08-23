@@ -2,6 +2,10 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.79.1 | XX Aug 2024
+
+- 
+
 ## v0.79.0 | 22 Aug 2024
 
 This version introduces a histogram plot that has the option to display z-score as vertical lines superimposed on the

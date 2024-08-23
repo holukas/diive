@@ -2,11 +2,10 @@
 Quality flags that depend on EddyPro output files.
 """
 
-from typing import Literal
-
 import numpy as np
 import pandas as pd
 from pandas import DataFrame, Series
+
 from diive.core.funcs.funcs import validate_id_string
 
 
@@ -98,7 +97,8 @@ def flag_steadiness_horizontal_wind_eddypro_test(df: DataFrame,
 
 def flag_angle_of_attack_eddypro_test(df: DataFrame,
                                       flux: str,
-                                      idstr: str = None) -> Series:
+                                      idstr: str = None,
+                                      application_dates: list or None = None) -> Series:
     """Flag from EddyPro output files is an integer and looks like this, e.g.: 81.
     The integer contains angle-of-attack test results for the sonic anemometer.
 
@@ -123,13 +123,31 @@ def flag_angle_of_attack_eddypro_test(df: DataFrame,
     aoa_flag = aoa_flag.astype(float)
     aoa_flag = aoa_flag.replace(9, np.nan)
     aoa_flag = aoa_flag.replace(1, 2)  # Hard flag 1 corresponds to bad value
-    aoa_flag.name = flagname_out
+
+    # Apply flag only during certain time periods
+    infotxt = ""
+    if application_dates:
+        orig_aoa_flag = aoa_flag.copy()
+        aoa_flag = pd.Series(index=orig_aoa_flag.index, data=np.nan)
+        print(f"ANGLE OF ATTACK TEST: will be applied on the following dates: {application_dates}")
+        for date in application_dates:
+
+            if isinstance(date, str):
+                # Neat solution: even though here only data for a single datetime
+                # is removed, the >= and <= comparators are used to avoid an error
+                # in case the datetime is not found in the flag.index
+                dates = (aoa_flag.index >= date) & (aoa_flag.index <= date)
+                aoa_flag.loc[dates] = orig_aoa_flag.loc[dates].copy()
+            elif isinstance(date, list):
+                dates = (aoa_flag.index >= date[0]) & (aoa_flag.index <= date[1])
+                aoa_flag.loc[dates] = orig_aoa_flag.loc[dates].copy()
 
     print(f"ANGLE OF ATTACK TEST: Generated new flag variable {flagname_out}, "
           f"values taken from output variable {aoa_flag.name}, with "
           f"flag 0 (good values) where test passed, "
           f"flag 2 (bad values) where test failed ...")
 
+    aoa_flag.name = flagname_out
     return aoa_flag
 
 
