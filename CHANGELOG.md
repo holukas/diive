@@ -4,7 +4,17 @@
 
 ## v0.79.1 | XX Aug 2024
 
-- 
+### Additions
+
+- Added to option to restrict the application of the angle-of-attack flag to certain time periods (
+  `diive.pkgs.fluxprocessingchain.level2_qualityflags.FluxQualityFlagsEddyPro.angle_of_attack_test`)
+
+### Changes
+
+- Test options in `FluxProcessingChain` are now always passed as dict. This has the advantage that in addition to run
+  the test by setting the dict key `apply` to `True`, various other test settings can be passed, for example the new
+  parameter `application dates` for the angle-of-attack flag. (
+  `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain`)
 
 ## v0.79.0 | 22 Aug 2024
 
@@ -27,7 +37,8 @@ time series. The bin with most counts is highlighted orange.*
 
 ### Additions
 
-- Added histogram plots to `FlagBase`, histograms are now shown for all outlier methods (`diive.core.base.flagbase.FlagBase.defaultplot`)
+- Added histogram plots to `FlagBase`, histograms are now shown for all outlier methods (
+  `diive.core.base.flagbase.FlagBase.defaultplot`)
 - Added daytime/nighttime histogram plots to (`diive.pkgs.outlierdetection.hampel.HampelDaytimeNighttime`)
 - Added daytime/nighttime histogram plots to (`diive.pkgs.outlierdetection.zscore.zScoreDaytimeNighttime`)
 - Added daytime/nighttime histogram plots to (`diive.pkgs.outlierdetection.lof.LocalOutlierFactorDaytimeNighttime`)

@@ -673,22 +673,22 @@ def example():
     # fpc.filteredseries
     # [x for x in fpc.fpc_df.columns if 'L2' in x]
 
-    # # --------------------
-    # # Level-3.1
-    # # --------------------
-    # fpc.level31_storage_correction(gapfill_storage_term=False)
-    # fpc.finalize_level31()
-    # # fpc.level31.showplot(maxflux=50)
-    # fpc.level31.report()
-    # # fpc.fpc_df
-    # # fpc.filteredseries
-    # # fpc.level31.results
-    # # [x for x in fpc.fpc_df.columns if 'L3.1' in x]
+    # --------------------
+    # Level-3.1
+    # --------------------
+    fpc.level31_storage_correction(gapfill_storage_term=True)
+    fpc.finalize_level31()
+    # fpc.level31.showplot(maxflux=50)
+    fpc.level31.report()
+    # fpc.fpc_df
+    # fpc.filteredseries
+    # fpc.level31.results
+    # [x for x in fpc.fpc_df.columns if 'L3.1' in x]
 
     # --------------------
     # Level-3.2
     # --------------------
-    # fpc.level32_stepwise_outlier_detection()
+    fpc.level32_stepwise_outlier_detection()
 
     # fpc.level32_flag_manualremoval_test(
     #     remove_dates=[
