@@ -174,11 +174,11 @@ class FluxProcessingChain:
             self,
             signal_strength: dict or False = False,
             raw_data_screening_vm97: dict or False = False,
-            ssitc: bool = True,
-            gas_completeness: bool = False,
-            spectral_correction_factor: bool = True,
+            ssitc: dict or False = False,
+            gas_completeness: dict or False = False,
+            spectral_correction_factor: dict or False = False,
             angle_of_attack: dict or False = False,
-            steadiness_of_horizontal_wind: bool = False
+            steadiness_of_horizontal_wind: dict or False = False
     ):
         """Expand flux quality flag based on EddyPro output"""
         idstr = 'L2'
@@ -189,21 +189,21 @@ class FluxProcessingChain:
                                                fluxbasevar=self.fluxbasevar)
         self._level2.missing_vals_test()
 
-        if ssitc:
+        if ssitc['apply']:
             self._level2.ssitc_test()
 
-        if gas_completeness:
+        if gas_completeness['apply']:
             self._level2.gas_completeness_test()
 
-        if spectral_correction_factor:
+        if spectral_correction_factor['apply']:
             self._level2.spectral_correction_factor_test()
 
-        if signal_strength['test_signal_strength']:
+        if signal_strength['apply']:
             self._level2.signal_strength_test(signal_strength_col=signal_strength['signal_strength_col'],
                                               method=signal_strength['method'],
                                               threshold=signal_strength['threshold'])
 
-        if raw_data_screening_vm97['raw_data_screening_vm97']:
+        if raw_data_screening_vm97['apply']:
             self._level2.raw_data_screening_vm97_tests(spikes=raw_data_screening_vm97['spikes'],
                                                        amplitude=raw_data_screening_vm97['amplitude'],
                                                        dropout=raw_data_screening_vm97['dropout'],
@@ -212,12 +212,12 @@ class FluxProcessingChain:
                                                        skewkurt_sf=raw_data_screening_vm97['skewkurt_sf'],
                                                        discont_hf=raw_data_screening_vm97['discont_hf'],
                                                        discont_sf=raw_data_screening_vm97['discont_sf'])
-        if angle_of_attack['test_rawdata_angle_of_attack']:
+        if angle_of_attack['apply']:
             self._level2.angle_of_attack_test(
-                application_dates=angle_of_attack['test_rawdata_angle_of_attack_application_dates']
+                application_dates=angle_of_attack['application_dates']
             )
 
-        if steadiness_of_horizontal_wind:
+        if steadiness_of_horizontal_wind['apply']:
             self._level2.steadiness_of_horizontal_wind()
 
     def _finalize_level(self,
@@ -289,7 +289,6 @@ class FluxProcessingChain:
         self._level31.storage_correction()
 
     def finalize_level31(self):
-
         newcols = detect_new_columns(df=self.level31.results, other=self.fpc_df)
         self._fpc_df = pd.concat([self.fpc_df, self.level31.results[newcols]], axis=1)
         [print(f"++Added new column {col}.") for col in newcols]
@@ -608,12 +607,12 @@ def example():
     # --------------------
     # Level-2
     # --------------------
-    TEST_SSITC = False  # Default True
-    TEST_GAS_COMPLETENESS = False  # Default True
-    TEST_SPECTRAL_CORRECTION_FACTOR = False  # Default True
+    TEST_SSITC = True  # Default True
+    TEST_GAS_COMPLETENESS = True  # Default True
+    TEST_SPECTRAL_CORRECTION_FACTOR = True  # Default True
 
     # Signal strength
-    TEST_SIGNAL_STRENGTH = False
+    TEST_SIGNAL_STRENGTH = True
     TEST_SIGNAL_STRENGTH_COL = 'CUSTOM_AGC_MEAN'
     TEST_SIGNAL_STRENGTH_METHOD = 'discard above'
     TEST_SIGNAL_STRENGTH_THRESHOLD = 90
@@ -623,26 +622,26 @@ def example():
     TEST_RAWDATA_SPIKES = True  # Default True
     TEST_RAWDATA_AMPLITUDE = True  # Default True
     TEST_RAWDATA_DROPOUT = True  # Default True
-    TEST_RAWDATA_ABSLIM = True  # Default False
-    TEST_RAWDATA_SKEWKURT_HF = True  # Default False
-    TEST_RAWDATA_SKEWKURT_SF = True  # Default False
-    TEST_RAWDATA_DISCONT_HF = True  # Default False
-    TEST_RAWDATA_DISCONT_SF = True  # Default False
+    TEST_RAWDATA_ABSLIM = False  # Default False
+    TEST_RAWDATA_SKEWKURT_HF = False  # Default False
+    TEST_RAWDATA_SKEWKURT_SF = False  # Default False
+    TEST_RAWDATA_DISCONT_HF = False  # Default False
+    TEST_RAWDATA_DISCONT_SF = False  # Default False
 
-    TEST_RAWDATA_ANGLE_OF_ATTACK = False  # Default False
-    # TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES = [['2023-07-01', '2023-09-01']]  # Default False
-    TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES = False  # Default False
+    TEST_RAWDATA_ANGLE_OF_ATTACK = True  # Default False
+    TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES = [['2023-07-01', '2023-09-01']]  # Default False
+    # TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES = False  # Default False
 
     TEST_RAWDATA_STEADINESS_OF_HORIZONTAL_WIND = False  # Default False
 
     LEVEL2_SETTINGS = {
         'signal_strength': {
-            'test_signal_strength': TEST_SIGNAL_STRENGTH,
+            'apply': TEST_SIGNAL_STRENGTH,
             'signal_strength_col': TEST_SIGNAL_STRENGTH_COL,
             'method': TEST_SIGNAL_STRENGTH_METHOD,
             'threshold': TEST_SIGNAL_STRENGTH_THRESHOLD},
         'raw_data_screening_vm97': {
-            'raw_data_screening_vm97': TEST_RAWDATA,
+            'apply': TEST_RAWDATA,
             'spikes': TEST_RAWDATA_SPIKES,
             'amplitude': TEST_RAWDATA_AMPLITUDE,
             'dropout': TEST_RAWDATA_DROPOUT,
@@ -651,19 +650,23 @@ def example():
             'skewkurt_sf': TEST_RAWDATA_SKEWKURT_SF,
             'discont_hf': TEST_RAWDATA_DISCONT_HF,
             'discont_sf': TEST_RAWDATA_DISCONT_SF},
-        'ssitc': TEST_SSITC,
-        'gas_completeness': TEST_GAS_COMPLETENESS,
-        'spectral_correction_factor': TEST_SPECTRAL_CORRECTION_FACTOR,
+        'ssitc': {
+            'apply': TEST_SSITC},
+        'gas_completeness': {
+            'apply': TEST_GAS_COMPLETENESS},
+        'spectral_correction_factor': {
+            'apply': TEST_SPECTRAL_CORRECTION_FACTOR},
         'angle_of_attack': {
-            'test_rawdata_angle_of_attack': TEST_RAWDATA_ANGLE_OF_ATTACK,
-            'test_rawdata_angle_of_attack_application_dates': TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES},
-        'steadiness_of_horizontal_wind': TEST_RAWDATA_STEADINESS_OF_HORIZONTAL_WIND
+            'apply': TEST_RAWDATA_ANGLE_OF_ATTACK,
+            'application_dates': TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES},
+        'steadiness_of_horizontal_wind': {
+            'apply': TEST_RAWDATA_STEADINESS_OF_HORIZONTAL_WIND}
     }
     fpc.level2_quality_flag_expansion(**LEVEL2_SETTINGS)
     fpc.finalize_level2(nighttime_threshold=NIGHTTIME_THRESHOLD, daytime_accept_qcf_below=DAYTIME_ACCEPT_QCF_BELOW,
                         nighttimetime_accept_qcf_below=NIGHTTIMETIME_ACCEPT_QCF_BELOW)
     fpc.level2_qcf.showplot_qcf_heatmaps()
-    # fpc.level2_qcf.report_qcf_evolution()
+    fpc.level2_qcf.report_qcf_evolution()
     # fpc.level2_qcf.report_qcf_flags()
     # fpc.level2.results
     # fpc.fpc_df
