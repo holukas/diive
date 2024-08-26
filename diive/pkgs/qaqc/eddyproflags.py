@@ -1,13 +1,12 @@
 """
 Quality flags that depend on EddyPro output files.
 """
-
-from typing import Literal
-
 import numpy as np
 import pandas as pd
 from pandas import DataFrame, Series
+
 from diive.core.funcs.funcs import validate_id_string
+from diive.pkgs.qaqc.flags import restrict_application
 
 
 def flag_signal_strength_eddypro_test(df: DataFrame,
@@ -98,7 +97,8 @@ def flag_steadiness_horizontal_wind_eddypro_test(df: DataFrame,
 
 def flag_angle_of_attack_eddypro_test(df: DataFrame,
                                       flux: str,
-                                      idstr: str = None) -> Series:
+                                      idstr: str = None,
+                                      application_dates: list or None = None) -> Series:
     """Flag from EddyPro output files is an integer and looks like this, e.g.: 81.
     The integer contains angle-of-attack test results for the sonic anemometer.
 
@@ -123,13 +123,21 @@ def flag_angle_of_attack_eddypro_test(df: DataFrame,
     aoa_flag = aoa_flag.astype(float)
     aoa_flag = aoa_flag.replace(9, np.nan)
     aoa_flag = aoa_flag.replace(1, 2)  # Hard flag 1 corresponds to bad value
-    aoa_flag.name = flagname_out
+
+    # Apply flag only during certain time periods
+    if application_dates:
+        aoa_flag = restrict_application(flag=aoa_flag,
+                                        flagname="ANGLE OF ATTACK TEST",
+                                        application_dates=application_dates,
+                                        verbose=True,
+                                        fill_value=np.nan)
 
     print(f"ANGLE OF ATTACK TEST: Generated new flag variable {flagname_out}, "
           f"values taken from output variable {aoa_flag.name}, with "
           f"flag 0 (good values) where test passed, "
           f"flag 2 (bad values) where test failed ...")
 
+    aoa_flag.name = flagname_out
     return aoa_flag
 
 

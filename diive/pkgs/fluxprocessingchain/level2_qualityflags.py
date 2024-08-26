@@ -45,9 +45,12 @@ class FluxQualityFlagsEddyPro:
             raise Exception('Results for flux flags are empty')
         return self._results
 
-    def angle_of_attack_test(self):
+    def angle_of_attack_test(
+            self,
+            application_dates: list or None = None
+    ):
         flag = flag_angle_of_attack_eddypro_test(df=self.dfin, flux=self.fluxcol,
-                                                 idstr=self.idstr)
+                                                 idstr=self.idstr, application_dates=application_dates)
         self._results[flag.name] = flag
 
     def steadiness_of_horizontal_wind(self):
