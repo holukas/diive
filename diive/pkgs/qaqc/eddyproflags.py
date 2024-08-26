@@ -1,12 +1,12 @@
 """
 Quality flags that depend on EddyPro output files.
 """
-
 import numpy as np
 import pandas as pd
 from pandas import DataFrame, Series
 
 from diive.core.funcs.funcs import validate_id_string
+from diive.pkgs.qaqc.flags import restrict_application
 
 
 def flag_signal_strength_eddypro_test(df: DataFrame,
@@ -125,22 +125,12 @@ def flag_angle_of_attack_eddypro_test(df: DataFrame,
     aoa_flag = aoa_flag.replace(1, 2)  # Hard flag 1 corresponds to bad value
 
     # Apply flag only during certain time periods
-    infotxt = ""
     if application_dates:
-        orig_aoa_flag = aoa_flag.copy()
-        aoa_flag = pd.Series(index=orig_aoa_flag.index, data=np.nan)
-        print(f"ANGLE OF ATTACK TEST: will be applied on the following dates: {application_dates}")
-        for date in application_dates:
-
-            if isinstance(date, str):
-                # Neat solution: even though here only data for a single datetime
-                # is removed, the >= and <= comparators are used to avoid an error
-                # in case the datetime is not found in the flag.index
-                dates = (aoa_flag.index >= date) & (aoa_flag.index <= date)
-                aoa_flag.loc[dates] = orig_aoa_flag.loc[dates].copy()
-            elif isinstance(date, list):
-                dates = (aoa_flag.index >= date[0]) & (aoa_flag.index <= date[1])
-                aoa_flag.loc[dates] = orig_aoa_flag.loc[dates].copy()
+        aoa_flag = restrict_application(flag=aoa_flag,
+                                        flagname="ANGLE OF ATTACK TEST",
+                                        application_dates=application_dates,
+                                        verbose=True,
+                                        fill_value=np.nan)
 
     print(f"ANGLE OF ATTACK TEST: Generated new flag variable {flagname_out}, "
           f"values taken from output variable {aoa_flag.name}, with "

@@ -213,9 +213,7 @@ class FluxProcessingChain:
                                                        discont_hf=raw_data_screening_vm97['discont_hf'],
                                                        discont_sf=raw_data_screening_vm97['discont_sf'])
         if angle_of_attack['apply']:
-            self._level2.angle_of_attack_test(
-                application_dates=angle_of_attack['application_dates']
-            )
+            self._level2.angle_of_attack_test(application_dates=angle_of_attack['application_dates'])
 
         if steadiness_of_horizontal_wind['apply']:
             self._level2.steadiness_of_horizontal_wind()
@@ -607,18 +605,18 @@ def example():
     # --------------------
     # Level-2
     # --------------------
-    TEST_SSITC = True  # Default True
-    TEST_GAS_COMPLETENESS = True  # Default True
-    TEST_SPECTRAL_CORRECTION_FACTOR = True  # Default True
+    TEST_SSITC = False  # Default True
+    TEST_GAS_COMPLETENESS = False  # Default True
+    TEST_SPECTRAL_CORRECTION_FACTOR = False  # Default True
 
     # Signal strength
-    TEST_SIGNAL_STRENGTH = True
+    TEST_SIGNAL_STRENGTH = False
     TEST_SIGNAL_STRENGTH_COL = 'CUSTOM_AGC_MEAN'
     TEST_SIGNAL_STRENGTH_METHOD = 'discard above'
     TEST_SIGNAL_STRENGTH_THRESHOLD = 90
     # TimeSeries(series=maindf[TEST_SIGNAL_STRENGTH_COL]).plot()
 
-    TEST_RAWDATA = True  # Default True
+    TEST_RAWDATA = False  # Default True
     TEST_RAWDATA_SPIKES = True  # Default True
     TEST_RAWDATA_AMPLITUDE = True  # Default True
     TEST_RAWDATA_DROPOUT = True  # Default True
@@ -628,9 +626,10 @@ def example():
     TEST_RAWDATA_DISCONT_HF = False  # Default False
     TEST_RAWDATA_DISCONT_SF = False  # Default False
 
-    TEST_RAWDATA_ANGLE_OF_ATTACK = True  # Default False
-    TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES = [['2023-07-01', '2023-09-01']]  # Default False
-    # TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES = False  # Default False
+    TEST_RAWDATA_ANGLE_OF_ATTACK = False  # Default False
+    # TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES = [['2023-01-01', '2023-07-01']]  # Default False
+    # TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES = [['2023-07-01', '2023-09-01']]  # Default False
+    TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES = False  # Default False
 
     TEST_RAWDATA_STEADINESS_OF_HORIZONTAL_WIND = False  # Default False
 
@@ -673,22 +672,22 @@ def example():
     # fpc.filteredseries
     # [x for x in fpc.fpc_df.columns if 'L2' in x]
 
-    # --------------------
-    # Level-3.1
-    # --------------------
-    fpc.level31_storage_correction(gapfill_storage_term=True)
-    fpc.finalize_level31()
-    # fpc.level31.showplot(maxflux=50)
-    fpc.level31.report()
-    # fpc.fpc_df
-    # fpc.filteredseries
-    # fpc.level31.results
-    # [x for x in fpc.fpc_df.columns if 'L3.1' in x]
+    # # --------------------
+    # # Level-3.1
+    # # --------------------
+    # fpc.level31_storage_correction(gapfill_storage_term=True)
+    # fpc.finalize_level31()
+    # # fpc.level31.showplot(maxflux=50)
+    # fpc.level31.report()
+    # # fpc.fpc_df
+    # # fpc.filteredseries
+    # # fpc.level31.results
+    # # [x for x in fpc.fpc_df.columns if 'L3.1' in x]
 
     # --------------------
     # Level-3.2
     # --------------------
-    fpc.level32_stepwise_outlier_detection()
+    # fpc.level32_stepwise_outlier_detection()
 
     # fpc.level32_flag_manualremoval_test(
     #     remove_dates=[
