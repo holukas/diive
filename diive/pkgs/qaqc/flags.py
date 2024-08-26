@@ -1,7 +1,43 @@
+import numpy as np
+import pandas as pd
 from pandas import Series, DatetimeIndex
 
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.prints import ConsoleOutputDecorator
+
+
+def restrict_application(flag: Series, flagname: str, application_dates: list or None = None,
+                         verbose: bool = True, fill_value: float = np.nan):
+    """Apply flag during certain time periods only.
+
+    Args:
+        flag: Pandas Series containing the flag values.
+        flagname: Name of the flag.
+        application_dates: List of dates or date ranges (as lists) when the flag should be applied.
+        verbose: Whether to print information about the application dates.
+        fill_value: Value to fill in for periods outside the application dates.
+
+    Returns:
+        Pandas Series containing the restricted flag.
+    """
+    infotxt = ""
+    orig_flag = flag.copy()
+    restricted_flag = pd.Series(index=orig_flag.index, data=fill_value)
+    if verbose:
+        print(f"{flagname}: will be applied on the following dates only: {application_dates}")
+
+    for date in application_dates:
+        if isinstance(date, str):
+            # Neat solution: even though here only data for a single datetime
+            # is removed, the >= and <= comparators are used to avoid an error
+            # in case the datetime is not found in the flag.index
+            dates = (restricted_flag.index >= date) & (restricted_flag.index <= date)
+            restricted_flag.loc[dates] = orig_flag.loc[dates].copy()
+        elif isinstance(date, list):
+            dates = (restricted_flag.index >= date[0]) & (restricted_flag.index <= date[1])
+            restricted_flag.loc[dates] = orig_flag.loc[dates].copy()
+
+    return restricted_flag
 
 
 @ConsoleOutputDecorator()
@@ -61,7 +97,5 @@ class MissingValues(FlagBase):
 
         # No outliers are detected in this test, only already missing values are flagged
         n_outliers = 0
-
-
 
         return ok, rejected, n_outliers
