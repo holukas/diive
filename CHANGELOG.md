@@ -2,10 +2,11 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.79.1 | XX Aug 2024
+## v0.79.1 | 26 Aug 2024
 
 ### Additions
 
+- Added new function to apply quality flags to certain time periods only (`diive.pkgs.qaqc.flags.restrict_application`)
 - Added to option to restrict the application of the angle-of-attack flag to certain time periods (
   `diive.pkgs.fluxprocessingchain.level2_qualityflags.FluxQualityFlagsEddyPro.angle_of_attack_test`)
 
@@ -15,6 +16,12 @@
   the test by setting the dict key `apply` to `True`, various other test settings can be passed, for example the new
   parameter `application dates` for the angle-of-attack flag. (
   `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain`)
+
+### Tests
+
+- Added unittest for Flux Processing Chain up to Level-2 (
+  `tests.test_fluxprocessingchain.TestFluxProcessingChain.test_fluxprocessingchain_level2`)
+- 36/36 unittests ran successfully
 
 ## v0.79.0 | 22 Aug 2024
 
