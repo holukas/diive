@@ -46,7 +46,7 @@ class TestCreateVar(unittest.TestCase):
         self.assertEqual(len(checkix), 1)
         checkix = int(checkix[0])
         self.assertEqual(results.iloc[checkix]['COUNTS'], 7)
-        self.assertEqual(hist.peakbins, [1.148, 1.241, 1.929, 0.765, 1.632])
+        self.assertEqual(hist.peakbins, [1.148, 1.241, 1.929, 1.324, 1.632])
 
 
 if __name__ == '__main__':

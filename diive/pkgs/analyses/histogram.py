@@ -83,7 +83,7 @@ class Histogram:
         """Returns the five bins with the most counts in decreasing order"""
         ix_maxcounts = self.results['COUNTS'].sort_values(ascending=False).head(5).index
         peakbins = self.results['BIN_START_INCL'].iloc[ix_maxcounts]
-        return list(peakbins.values)
+        return peakbins.values.tolist()
         # Find bin with maximum counts
         # idx_maxcounts = self.results['COUNTS'].idxmax()
         # return self.results['BIN_START_INCL'].iloc[idx_maxcounts]
