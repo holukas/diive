@@ -55,7 +55,6 @@ class StepwiseMeteoScreeningDb:
     - `.flag_outliers_zscore_dtnt_test()`: Identify outliers based on the z-score, separately for daytime and nighttime
     - `.flag_outliers_zscore_rolling_test()`: Identify outliers based on the rolling z-score
     - `.flag_outliers_zscore_test()`:  Identify outliers based on the z-score
-    - `.flag_outliers_zscoreiqr_test()`: Identify outliers based on max z-scores in the interquartile range data
     - `.flag_outliers_lof_dtnt_test()`: Identify outliers based on local outlier factor, daytime nighttime separately
     - `.flag_outliers_lof_test()`: Identify outliers based on local outlier factor, across all data
 
@@ -373,6 +372,42 @@ class StepwiseMeteoScreeningDb:
                                                                             plottitle=plottitle,
                                                                             repeat=repeat,
                                                                             winsize=winsize)
+
+    def flag_outliers_hampel_test(self, window_length: int = 10, n_sigma: float = 5, k: float = 1.4826,
+                                  showplot: bool = False, verbose: bool = False, repeat: bool = True):
+        """Identify outliers in a sliding window based on the Hampel filter."""
+        for field in self.fields:
+            self.outlier_detection[field].flag_outliers_hampel_test(window_length=window_length,
+                                                                    n_sigma=n_sigma,
+                                                                    k=k,
+                                                                    showplot=showplot,
+                                                                    verbose=verbose,
+                                                                    repeat=repeat)
+
+    def flag_outliers_hampel_dtnt_test(self, window_length: int = 10, n_sigma_dt: float = 5,
+                                       n_sigma_nt: float = 5, k: float = 1.4826,
+                                       showplot: bool = False, verbose: bool = False, repeat: bool = True):
+        """Identify outliers in a sliding window based on the Hampel filter,
+        separately for daytime and nighttime data."""
+        for field in self.fields:
+            self.outlier_detection[field].flag_outliers_hampel_dtnt_test(window_length=window_length,
+                                                                         n_sigma_dt=n_sigma_dt,
+                                                                         n_sigma_nt=n_sigma_nt,
+                                                                         k=k,
+                                                                         showplot=showplot,
+                                                                         verbose=verbose,
+                                                                         repeat=repeat)
+
+    def flag_outliers_trim_low_test(self, trim_daytime: bool = False, trim_nighttime: bool = False,
+                                    lower_limit: float = None, showplot: bool = False, verbose: bool = False):
+        """Flag values below a given absolute limit as outliers, then flag an
+        equal number of datapoints at the high end as outliers."""
+        for field in self.fields:
+            self.outlier_detection[field].flag_outliers_trim_low_test(trim_daytime=trim_daytime,
+                                                                      trim_nighttime=trim_nighttime,
+                                                                      lower_limit=lower_limit,
+                                                                      showplot=showplot,
+                                                                      verbose=verbose)
 
     def flag_outliers_abslim_test(self, minval: float, maxval: float, showplot: bool = False, verbose: bool = False):
         """Identify outliers based on absolute limits"""
@@ -750,28 +785,28 @@ def example():
     TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
     RESAMPLING_FREQ = '30min'  # During MeteoScreening the screened high-res data will be resampled to this frequency; '30min' = 30-minute time resolution
     # DIRCONF = r'P:\Flux\RDS_calculations\_scripts\_configs\configs'  # Location of configuration files, needed e.g. for connection to database
-    DIRCONF = r'L:\Sync\luhk_work\20 - CODING\22 - POET\configs'
+    DIRCONF = r'F:\Sync\luhk_work\20 - CODING\22 - POET\configs'
     BUCKET_RAW = f'{SITE}_raw'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_raw' contains all raw data for CH-LAE
     BUCKET_PROCESSED = f'a'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_processed' contains all processed data for CH-LAE
     # BUCKET_PROCESSED = f'{SITE}_processed'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_processed' contains all processed data for CH-LAE
 
-    # from dbc_influxdb import dbcInflux
-    # dbc = dbcInflux(dirconf=DIRCONF)
-    # data_simple, data_detailed, assigned_measurements = dbc.download(
-    #     bucket=BUCKET_RAW,
-    #     measurements=[MEASUREMENT],
-    #     fields=FIELDS,
-    #     start=START,
-    #     stop=STOP,
-    #     timezone_offset_to_utc_hours=TIMEZONE_OFFSET_TO_UTC_HOURS,
-    #     data_version=DATA_VERSION
-    # )
-    # print(data_simple)
-    # print(data_detailed)
-    # print(assigned_measurements)
-    # import matplotlib.pyplot as plt
-    # data_simple.plot()
-    # plt.show()
+    from dbc_influxdb import dbcInflux
+    dbc = dbcInflux(dirconf=DIRCONF)
+    data_simple, data_detailed, assigned_measurements = dbc.download(
+        bucket=BUCKET_RAW,
+        measurements=[MEASUREMENT],
+        fields=FIELDS,
+        start=START,
+        stop=STOP,
+        timezone_offset_to_utc_hours=TIMEZONE_OFFSET_TO_UTC_HOURS,
+        data_version=DATA_VERSION
+    )
+    print(data_simple)
+    print(data_detailed)
+    print(assigned_measurements)
+    import matplotlib.pyplot as plt
+    data_simple.plot()
+    plt.show()
 
     # print(f"Data available for: {data_detailed.keys()}\n")
     # vars_not_available = [v for v in FIELDS if v not in data_detailed.keys()]
@@ -813,11 +848,10 @@ def example():
     # mscr.showplot_orig()
     mscr.showplot_cleaned()
 
-
-    # # -----------------
-    # # OUTLIER DETECTION
-    # # -----------------
-    # mscr.start_outlier_detection()  # If needed
+    # -----------------
+    # OUTLIER DETECTION
+    # -----------------
+    mscr.start_outlier_detection()  # If needed
     # REMOVE_DATES = [
     #     ['2010-12-24 07:15:00', '2011-01-01 00:00:15'],  # Remove time range
     #     # '2022-08-23 11:45:00',  # Remove data point
@@ -825,6 +859,13 @@ def example():
     # ]
     # mscr.flag_manualremoval_test(remove_dates=REMOVE_DATES, showplot=True, verbose=True)
     # mscr.flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
+    mscr.flag_outliers_hampel_test(window_length=48 * 7, n_sigma=5.5, showplot=True, verbose=True, repeat=True)
+    mscr.flag_outliers_hampel_dtnt_test(window_length=48 * 7, n_sigma_dt=5.5, n_sigma_nt=4.5, showplot=True,
+                                        verbose=True, repeat=True)
+    mscr.addflag()
+    mscr.flag_outliers_trim_low_test(trim_daytime=False, trim_nighttime=True, lower_limit=10,
+                                     showplot=True, verbose=True)
+    mscr.addflag()
     # mscr.flag_outliers_zscore_rolling_test(thres_zscore=3, winsize=48, showplot=True, verbose=True, repeat=True)
     # mscr.flag_outliers_localsd_test(n_sd=2.5, winsize=24, showplot=True, verbose=True, repeat=False)
     # mscr.flag_outliers_increments_zcore_test(thres_zscore=9, showplot=True, verbose=True, repeat=True)
