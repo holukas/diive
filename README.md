@@ -130,7 +130,7 @@ _Create single outlier flags where `0=OK` and `2=outlier`._
 - **Diel cycle per month** ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/DielCycle.ipynb))
 - **Heatmap date/time**: showing values (z) of time series as date (y) vs time (x) ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/HeatmapDateTime.ipynb))
 - **Heatmap year/month**: showing values (z) of time series as year (y) vs month (x) ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/HeatmapYearMonth.ipynb))
-- **Histogram**: includes options to show z-score limits and to highlight the peak distribution bin ([notebook example](notebooks/Plotting/Histogram.ipynb))
+- **Histogram**: includes options to show z-score limits and to highlight the peak distribution bin ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/Histogram.ipynb))
 - **Long-term anomalies**: calculate and plot long-term anomaly for a variable, per year, compared to a reference period. ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/LongTermAnomalies.ipynb))
 - **Time series plot**: Simple (interactive) time series plot ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/TimeSeries.ipynb))
 - **ScatterXY plot** ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/ScatterXY.ipynb))
