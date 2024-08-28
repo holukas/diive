@@ -18,7 +18,6 @@ Kudos:
     - XXX
 
 """
-import numpy as np
 import xgboost as xgb
 from pandas import DataFrame
 
@@ -114,7 +113,7 @@ def example_xgbts():
     # subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f', 'SWC_FF0_0.15_1', 'PPFD']
 
     # Example data
-    from diive.configs.exampledata import load_exampledata_parquet, load_exampledata_parquet_long
+    from diive.configs.exampledata import load_exampledata_parquet_long
     df_orig = load_exampledata_parquet_long()
 
     # # Create a large gap
@@ -123,14 +122,12 @@ def example_xgbts():
     # df = df[remove].copy()
 
     # Subset
-    # keep = (df_orig.index.year >= 1997) & (df_orig.index.year <= 2001)
-    # df = df_orig[keep].copy()
-    df = df_orig.copy()
-
-
+    keep = (df_orig.index.year >= 1997) & (df_orig.index.year <= 2001)
+    df = df_orig[keep].copy()
+    # df = df_orig.copy()
 
     # Checking nighttime
-    nt_locs = df['Rg_f'] < 50
+    # nt_locs = df['Rg_f'] < 50
     # nt = df[nt_locs].groupby(df[nt_locs].index.year).agg(['mean'])
     # means_nt = nt[TARGET]['mean']
     # # import matplotlib.pyplot as plt
@@ -140,16 +137,16 @@ def example_xgbts():
     # mean_nt_0613 = means_nt.loc[2006:2013].mean()
     # corr_nt = mean_nt_0613 / mean_nt_9704
 
-    # corr_nt = 100
-    # corr_nt = 1.19
-    corr_nt = 0.7759670068746911
-    corr_df = df[['Rg_f', 'NEE_CUT_REF_orig']].copy()
-    corr_df['gain'] = 1
-    # nt_locs_9704 = (df.index.year >= 1997) & (df.index.year <= 2004)
-    nt_locs_9704 = (df.index.year >= 1997) & (df.index.year <= 2004) & (df['Rg_f'] < 50)
-    corr_df.loc[nt_locs_9704, 'gain'] = corr_nt
-    corr_df['NEE_CUT_REF_orig'] = corr_df['NEE_CUT_REF_orig'].multiply(corr_df['gain'])
-    df[TARGET_COL] = corr_df[TARGET_COL].copy()
+    # # corr_nt = 100
+    # # corr_nt = 1.19
+    # corr_nt = 0.7759670068746911
+    # corr_df = df[['Rg_f', 'NEE_CUT_REF_orig']].copy()
+    # corr_df['gain'] = 1
+    # # nt_locs_9704 = (df.index.year >= 1997) & (df.index.year <= 2004)
+    # nt_locs_9704 = (df.index.year >= 1997) & (df.index.year <= 2004) & (df['Rg_f'] < 50)
+    # corr_df.loc[nt_locs_9704, 'gain'] = corr_nt
+    # corr_df['NEE_CUT_REF_orig'] = corr_df['NEE_CUT_REF_orig'].multiply(corr_df['gain'])
+    # df[TARGET_COL] = corr_df[TARGET_COL].copy()
 
     # df[nt_locs].groupby(df[nt_locs].index.year).agg(['mean'])['NEE_CUT_REF_orig']
     # df[~nt_locs].groupby(df[~nt_locs].index.year).agg(['mean'])['NEE_CUT_REF_orig']
@@ -262,26 +259,26 @@ def example_xgbts():
     # xgbts.reduce_features()
     # xgbts.report_feature_reduction()
 
-    xgbts.trainmodel(showplot_scores=False, showplot_importance=False)
-    xgbts.report_traintest()
+    # xgbts.trainmodel(showplot_scores=False, showplot_importance=False)
+    # xgbts.report_traintest()
+    #
+    # xgbts.fillgaps(showplot_scores=False, showplot_importance=False)
+    # xgbts.report_gapfilling()
 
-    xgbts.fillgaps(showplot_scores=False, showplot_importance=False)
-    xgbts.report_gapfilling()
+    # observed = df[TARGET_COL]
+    # gapfilled = xgbts.get_gapfilled_target()
 
-    observed = df[TARGET_COL]
-    gapfilled = xgbts.get_gapfilled_target()
-
-    frame = {
-        nee_mds.name: nee_mds,
-        gapfilled.name: gapfilled,
-    }
-    import pandas as pd
-    checkdf = pd.DataFrame.from_dict(frame, orient='columns')
-    checkdf = checkdf.groupby(checkdf.index.year).agg('sum')
-    checkdf['diff'] = checkdf[gapfilled.name].subtract(checkdf[nee_mds.name])
-    checkdf = checkdf.multiply(0.02161926)
-    print(checkdf)
-    print(checkdf.sum())
+    # frame = {
+    #     nee_mds.name: nee_mds,
+    #     gapfilled.name: gapfilled,
+    # }
+    # import pandas as pd
+    # checkdf = pd.DataFrame.from_dict(frame, orient='columns')
+    # checkdf = checkdf.groupby(checkdf.index.year).agg('sum')
+    # checkdf['diff'] = checkdf[gapfilled.name].subtract(checkdf[nee_mds.name])
+    # checkdf = checkdf.multiply(0.02161926)
+    # print(checkdf)
+    # print(checkdf.sum())
 
     # rfts.feature_importances
     # rfts.scores
@@ -304,15 +301,15 @@ def example_xgbts():
     #     f"\nMIN_SAMPLES_SPLIT: {MIN_SAMPLES_SPLIT} "
     #     f"/ MIN_SAMPLES_LEAF: {MIN_SAMPLES_LEAF}  "
     # )
-    title="title"
-    from diive.core.plotting.timeseries import TimeSeries
-    import matplotlib.pyplot as plt
-    fig, ax = plt.subplots()
-    TimeSeries(series=gapfilled.multiply(0.02161926).cumsum(), ax=ax).plot(color='blue')
-    TimeSeries(series=nee_mds.multiply(0.02161926).cumsum(), ax=ax).plot(color='orange')
-    fig.suptitle(f'{title}', fontsize=16)
-    # ax.set_ylim(-2000, 200)
-    fig.show()
+    # title = "title"
+    # from diive.core.plotting.timeseries import TimeSeries
+    # import matplotlib.pyplot as plt
+    # fig, ax = plt.subplots()
+    # TimeSeries(series=gapfilled.multiply(0.02161926).cumsum(), ax=ax).plot(color='blue')
+    # TimeSeries(series=nee_mds.multiply(0.02161926).cumsum(), ax=ax).plot(color='orange')
+    # fig.suptitle(f'{title}', fontsize=16)
+    # # ax.set_ylim(-2000, 200)
+    # fig.show()
 
     # from diive.core.plotting.heatmap_datetime import HeatmapDateTime
     # HeatmapDateTime(series=observed).show()
@@ -333,19 +330,19 @@ def example_xgbts():
     # # plt.legend()
     # plt.show()
 
-    from diive.core.plotting.cumulative import CumulativeYear
-    CumulativeYear(
-        series=gapfilled.multiply(0.02161926),
-        series_units="units",
-        yearly_end_date=None,
-        # yearly_end_date='08-11',
-        start_year=1997,
-        end_year=2022,
-        show_reference=True,
-        excl_years_from_reference=None,
-        # excl_years_from_reference=[2022],
-        # highlight_year=2022,
-        highlight_year_color='#F44336').plot(digits_after_comma=0)
+    # from diive.core.plotting.cumulative import CumulativeYear
+    # CumulativeYear(
+    #     series=gapfilled.multiply(0.02161926),
+    #     series_units="units",
+    #     yearly_end_date=None,
+    #     # yearly_end_date='08-11',
+    #     start_year=1997,
+    #     end_year=2022,
+    #     show_reference=True,
+    #     excl_years_from_reference=None,
+    #     # excl_years_from_reference=[2022],
+    #     # highlight_year=2022,
+    #     highlight_year_color='#F44336').plot(digits_after_comma=0)
     # CumulativeYear(
     #     series=nee_mds.multiply(0.02161926),
     #     series_units="units",
@@ -368,6 +365,27 @@ def example_xgbts():
     #     dc.plot(ax=None, title=str(yr), txt_ylabel_units="units",
     #             each_month=True, legend_n_col=2, ylim=[-0.4, 0.2])
     #     # d = dc.get_data()
+
+    from yellowbrick.model_selection import ValidationCurve, validation_curve
+    import numpy as np
+    # viz = ValidationCurve(
+    #     xgbts.model_, param_name="max_depth",
+    #     param_range=np.arange(3, 10), cv=10, scoring="r2"
+    # )
+    y = df[TARGET_COL]
+    X = df[['Tair_f', 'VPD_f', 'Rg_f']]
+
+    viz = validation_curve(
+        xgbts.model_, X, y, param_name="n_estimators",
+        param_range=np.arange(10, 20), cv=10, scoring="r2",
+    )
+
+    # Fit and show the visualizer
+    viz.fit(X, y)
+    viz.show()
+
+    # from yellowbrick.datasets import load_energy
+    # x,y = load_energy()
 
 
     print("Finished.")
