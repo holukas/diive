@@ -63,17 +63,10 @@ class MissingValues(FlagBase):
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.verbose = verbose
 
-    def calc(self, repeat: bool = False):
-        """Calculate overall flag, based on individual flags from multiple iterations.
-
-        Args:
-            repeat: If *True*, the outlier detection is repeated until all
-                outliers are removed.
-
-        """
+    def calc(self):
         self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=False)
         # if self.showplot:
-        #     self.defaultplot(n_iterations=n_iterations)
+        #     self.defaultplot(n_iterations=1)
 
         if self.verbose:
             print(f"MISSING VALUES TEST: Generated new flag variable {self.overall_flag.name}, "
