@@ -63,7 +63,7 @@ class MissingValues(FlagBase):
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.verbose = verbose
 
-    def calc(self):
+    def calc(self, repeat=False):
         self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=False)
         # if self.showplot:
         #     self.defaultplot(n_iterations=1)
