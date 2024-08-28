@@ -1,21 +1,41 @@
 import unittest
 
+import numpy as np
 import pandas as pd
 
 import diive.configs.exampledata as ed
 from diive.pkgs.createvar.noise import add_impulse_noise
 from diive.pkgs.outlierdetection.absolutelimits import AbsoluteLimits, AbsoluteLimitsDaytimeNighttime
+from diive.pkgs.outlierdetection.hampel import Hampel, HampelDaytimeNighttime
 from diive.pkgs.outlierdetection.incremental import zScoreIncrements
 from diive.pkgs.outlierdetection.localsd import LocalSD
 from diive.pkgs.outlierdetection.lof import LocalOutlierFactorAllData
-from diive.pkgs.outlierdetection.zscore import zScore, zScoreDaytimeNighttime
-from diive.pkgs.outlierdetection.hampel import Hampel, HampelDaytimeNighttime
 from diive.pkgs.outlierdetection.trim import TrimLow
+from diive.pkgs.outlierdetection.zscore import zScore, zScoreDaytimeNighttime
+from diive.pkgs.qaqc.flags import MissingValues
 
 
 # kudos https://medium.com/@ms_somanna/guide-to-adding-noise-to-your-data-using-python-and-numpy-c8be815df524
 
 class TestOutlierDetection(unittest.TestCase):
+
+    def test_missing_values(self):
+        df = ed.load_exampledata_parquet()
+        s = df['Tair_f'].copy()
+        s = s.loc[s.index.year == 2018].copy()
+        s = s.loc[s.index.month == 7].copy()
+        # Delete some data points
+        s.iloc[500:600] = np.nan
+        s.iloc[721:791] = np.nan
+        mv = MissingValues(series=s)
+        mv.calc()
+        flag = mv.get_flag()
+        n_missing_vals = int(flag.loc[flag == 2].count())
+        n_available_vals = int(flag.loc[flag == 0].count())
+        n_total_vals = n_available_vals + n_missing_vals
+        self.assertEqual(n_missing_vals, int(s.isnull().sum()))
+        self.assertEqual(n_available_vals, int(s.count()))
+        self.assertEqual(n_total_vals, len(s))
 
     def test_trim_low_nt(self):
         df = ed.load_exampledata_parquet()
@@ -321,7 +341,6 @@ class TestOutlierDetection(unittest.TestCase):
         self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
         self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
         self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1444)
-
 
     def test_zscore_increments(self):
         df = ed.load_exampledata_parquet()

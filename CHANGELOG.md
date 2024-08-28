@@ -2,6 +2,37 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.80.0 | 28 Aug 2024
+
+### Additions
+
+- Added outlier tests to step-wise meteoscreening from database: `Hampel`, `HampelDaytimeNighttime` and `TrimLow` (
+  `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb`)
+- Added parameter to control whether or not to output the middle timestamp when loading parquet files with
+  `load_parquet()`. By default, `output_middle_timestamp=True`. (`diive.core.io.files.load_parquet`)
+
+### Environment
+
+- Re-created environment and created new `lock` file
+- Currently using Python 3.9.19
+
+### Notebooks
+
+- Added new notebook for creating a flag that indicates missing values (`notebooks/OutlierDetection/MissingValues.ipynb`)
+- Updated notebook for meteoscreening from database (
+  `notebooks/MeteoScreening/StepwiseMeteoScreeningFromDatabase.ipynb`)
+- Updated notebook for loading and saving parquet files (`notebooks/Formats/LoadSaveParquetFile.ipynb`)
+
+### Tests
+
+- Added unittest for flagging missing values (`tests.test_outlierdetection.TestOutlierDetection.test_missing_values`)
+- 37/37 unittests ran successfully
+
+### Bugfixes
+
+- Fixed links in README, needed absolute links to notebooks
+- Fixed issue with return list in (`diive.pkgs.analyses.histogram.Histogram.peakbins`)
+
 ## v0.79.1 | 26 Aug 2024
 
 ### Additions
@@ -500,25 +531,25 @@ multiple outlier tests into one single overall outlier flag.
 
 ## v0.72.0 | 25 Mar 2024
 
-## New feature
+### New feature
 
 - Added new heatmap plotting class `HeatmapYearMonth` that allows to plot a variable in year/month
   classes(`diive.core.plotting.heatmap_datetime.HeatmapYearMonth`)
 
 ![DIIVE](images/plotHeatmapYearMonth_diive_v0.72.0.png)
 
-## Changes
+### Changes
 
 - Refactored code for class `HeatmapDateTime` (`diive.core.plotting.heatmap_datetime.HeatmapDateTime`)
 - Added new base class `HeatmapBase` for heatmap plots. Currently used by `HeatmapYearMonth`
   and `HeatmapDateTime` (`diive.core.plotting.heatmap_base.HeatmapBase`)
 
-## Notebooks
+### Notebooks
 
 - Added new notebook for `HeatmapDateTime` (`notebooks/Plotting/HeatmapDateTime.ipynb`)
 - Added new notebook for `HeatmapYearMonth` (`notebooks/Plotting/HeatmapYearMonth.ipynb`)
 
-## Bugfixes
+### Bugfixes
 
 - Fixed bug in `HeatmapDateTime` where the last record of each day was not shown
 
@@ -1318,7 +1349,7 @@ to `diive`. From now on, new example notebooks will be added regularly.
 
 ## v0.52.3 | 10 Mar 2023
 
-## Additions
+### Additions
 
 - Added plotting library `bokeh` to dependencies
 

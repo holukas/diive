@@ -169,7 +169,8 @@ class StepwiseOutlierDetection:
 
     def flag_outliers_trim_low_test(self, trim_daytime: bool = False, trim_nighttime: bool = False,
                                     lower_limit: float = None, showplot: bool = False, verbose: bool = False):
-        """XXX"""
+        """Flag values below a given absolute limit as outliers, then flag an
+        equal number of datapoints at the high end as outliers."""
         series_cleaned = self._series_hires_cleaned.copy()
         flagtest = TrimLow(series=series_cleaned, idstr=self.idstr,
                            trim_daytime=trim_daytime, trim_nighttime=trim_nighttime,

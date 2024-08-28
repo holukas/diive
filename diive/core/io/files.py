@@ -42,13 +42,15 @@ def save_parquet(filename: str, data: DataFrame or Series, outpath: str or None 
     return str(filepath)
 
 
-def load_parquet(filepath: str or Path) -> DataFrame:
+def load_parquet(filepath: str or Path, output_middle_timestamp: bool = True) -> DataFrame:
     """
     Load data from Parquet file to pandas DataFrame
 
     Args:
         filepath: str
             filepath to parquet file
+        output_middle_timestamp: Converts the timestamp to show the middle
+            of the averaging interval.
 
     Returns:
         pandas DataFrame, data from Parquet file as pandas DataFrame
@@ -57,7 +59,7 @@ def load_parquet(filepath: str or Path) -> DataFrame:
     df = read_parquet(filepath)
     toc = time.time() - tic
     # Check timestamp, also detects frequency of time series, this info was lost when saving to the parquet file
-    df = TimestampSanitizer(data=df).get()
+    df = TimestampSanitizer(data=df, output_middle_timestamp=output_middle_timestamp).get()
     print(f"Loaded .parquet file {filepath} ({toc:.3f} seconds). "
           f"Detected time resolution of {df.index.freq} / {df.index.freqstr} ")
     return df
