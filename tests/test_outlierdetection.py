@@ -306,6 +306,43 @@ class TestOutlierDetection(unittest.TestCase):
         self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
         self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1441)
 
+    def test_localsd_with_constantsd(self):
+        df = ed.load_exampledata_parquet()
+        s = df['Tair_f'].copy()
+        s = s.loc[s.index.year == 2018].copy()
+        s = s.loc[s.index.month == 7].copy()
+        s_noise = add_impulse_noise(series=s,
+                                    factor_low=-11,
+                                    factor_high=9,
+                                    contamination=0.2,
+                                    seed=42)  # Add impulse noise (spikes)
+        lsd = LocalSD(series=s_noise,
+                      n_sd=2,
+                      winsize=48 * 10,
+                      constant_sd=True,
+                      showplot=False,
+                      verbose=False)
+        lsd.calc(repeat=True)
+        flag = lsd.get_flag()
+        frame = {'s_noise': s_noise, 'flag': flag}
+        checkdf = pd.DataFrame.from_dict(frame)
+
+        # Checks on bad data
+        baddata_stats = checkdf.loc[checkdf.flag == 2].describe()
+        self.assertEqual(baddata_stats.loc['max']['s_noise'], 231.78475439289213)
+        self.assertEqual(baddata_stats.loc['min']['s_noise'], -38.52634400343396)
+        self.assertEqual(baddata_stats.loc['count']['flag'], 715)
+        self.assertEqual(baddata_stats.loc['max']['flag'], 2)
+        self.assertEqual(baddata_stats.loc['count']['s_noise'], 715)
+
+        # Checks on good data
+        gooddata_stats = checkdf.loc[checkdf.flag == 0].describe()
+        self.assertEqual(gooddata_stats.loc['max']['s_noise'], 16.276)
+        self.assertEqual(gooddata_stats.loc['min']['s_noise'], 6.315)
+        self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
+        self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
+        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 773)
+
     def test_localsd(self):
         df = ed.load_exampledata_parquet()
         s = df['Tair_f'].copy()
@@ -319,6 +356,7 @@ class TestOutlierDetection(unittest.TestCase):
         lsd = LocalSD(series=s_noise,
                       n_sd=4,
                       winsize=48 * 10,
+                      constant_sd=False,
                       showplot=False,
                       verbose=False)
         lsd.calc(repeat=True)
