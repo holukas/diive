@@ -150,11 +150,11 @@ class StepwiseOutlierDetection:
         self._last_flag = flagtest.get_flag()
 
     def flag_outliers_localsd_test(self, n_sd: float = 7, winsize: int = None, showplot: bool = False,
-                                   verbose: bool = False, repeat: bool = True):
+                                   constant_sd: bool = False, verbose: bool = False, repeat: bool = True):
         """Identify outliers based on standard deviation in a rolling window"""
         series_cleaned = self._series_hires_cleaned.copy()
         flagtest = LocalSD(series=series_cleaned, idstr=self.idstr, n_sd=n_sd, winsize=winsize,
-                           showplot=showplot, verbose=verbose)
+                           constant_sd=constant_sd, showplot=showplot, verbose=verbose)
         flagtest.calc(repeat=repeat)
         self._last_flag = flagtest.get_flag()
 

@@ -334,11 +334,12 @@ class StepwiseMeteoScreeningDb:
                                                                          repeat=repeat)
 
     def flag_outliers_localsd_test(self, n_sd: float, winsize: int = None, showplot: bool = False,
-                                   verbose: bool = False, repeat: bool = True):
+                                   constant_sd: bool = False, verbose: bool = False, repeat: bool = True):
         """Identify outliers based on standard deviation in a rolling window"""
         for field in self.fields:
             self.outlier_detection[field].flag_outliers_localsd_test(n_sd=n_sd,
                                                                      winsize=winsize,
+                                                                     constant_sd=constant_sd,
                                                                      showplot=showplot,
                                                                      verbose=verbose,
                                                                      repeat=repeat)
@@ -868,6 +869,7 @@ def example():
     mscr.addflag()
     # mscr.flag_outliers_zscore_rolling_test(thres_zscore=3, winsize=48, showplot=True, verbose=True, repeat=True)
     # mscr.flag_outliers_localsd_test(n_sd=2.5, winsize=24, showplot=True, verbose=True, repeat=False)
+    mscr.flag_outliers_localsd_test(n_sd=2.5, winsize=24, showplot=True, verbose=True, repeat=False)
     # mscr.flag_outliers_increments_zcore_test(thres_zscore=9, showplot=True, verbose=True, repeat=True)
     # mscr.flag_outliers_zscore_test(thres_zscore=15, showplot=True, verbose=True, repeat=True)
     # mscr.flag_outliers_lof_dtnt_test(n_neighbors=3, contamination=0.00001, showplot=True,
@@ -895,7 +897,7 @@ def example():
     # # -----------
     # mscr.showplot_orig()
     # mscr.showplot_cleaned()
-    # mscr.correction_remove_radiation_zero_offset()  # Remove radiation zero offset
+    mscr.correction_remove_radiation_zero_offset()  # Remove radiation zero offset
     # mscr.correction_remove_relativehumidity_offset()  # Remove relative humidity offset
     # mscr.correction_setto_max_threshold(threshold=30)  # Set to max threshold
     # mscr.correction_setto_min_threshold(threshold=-5)  # Set to min threshold

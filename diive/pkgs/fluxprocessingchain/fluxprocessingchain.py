@@ -347,9 +347,9 @@ class FluxProcessingChain:
                                                      repeat=repeat)
 
     def level32_flag_outliers_localsd_test(self, n_sd: float = 7, winsize: int = None, showplot: bool = False,
-                                           verbose: bool = False, repeat: bool = True):
+                                           constant_sd: bool = False, verbose: bool = False, repeat: bool = True):
         self._level32.flag_outliers_localsd_test(n_sd=n_sd, winsize=winsize, showplot=showplot, verbose=verbose,
-                                                 repeat=repeat)
+                                                 constant_sd=constant_sd, repeat=repeat)
 
     def level32_flag_manualremoval_test(self, remove_dates: list, showplot: bool = False, verbose: bool = False):
         self._level32.flag_manualremoval_test(remove_dates=remove_dates, showplot=showplot, verbose=verbose)
@@ -714,9 +714,13 @@ def example():
     # fpc.level32_addflag()
     # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
-    # fpc.level32_flag_outliers_localsd_test(n_sd=3, winsize=480, showplot=True, verbose=True, repeat=True)
-    # fpc.level32_addflag()
-    # fpc.level32.results  # Stores Level-3.2 flags up to this point
+    fpc.level32_flag_outliers_localsd_test(n_sd=3, winsize=480, constant_sd=False,
+                                           showplot=True, verbose=True, repeat=True)
+    fpc.level32_addflag()
+    fpc.level32.results  # Stores Level-3.2 flags up to this point
+
+    fpc.level32_flag_outliers_localsd_test(n_sd=3, winsize=480, constant_sd=True, showplot=True, verbose=True, repeat=True)
+    fpc.level32_addflag()
 
     # fpc.level32_flag_outliers_increments_zcore_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
     # fpc.level32_addflag()
