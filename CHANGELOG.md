@@ -2,6 +2,30 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.81.0 | XX Sep 2024
+
+### Additions
+
+- `LocalSD` outlier detection can now use a constant SD:
+    - Added parameter to use standard deviation across all data (constant) instead of the rolling SD to calculate the
+      upper and lower limits that define outliers in the median rolling window (
+      `diive.pkgs.outlierdetection.localsd.LocalSD`)
+    - Added to step-wise outlier detection (
+      `diive.pkgs.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection.flag_outliers_localsd_test`)
+    - Added to meteoscreening from database (
+      `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.flag_outliers_localsd_test`)
+    - Added to flux processing chain (
+      `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain.level32_flag_outliers_localsd_test`)
+
+### Changes
+
+- Replaced `.plot_date()` from the Matplotlib library with `.plot()` due to deprecation
+
+### Tests
+
+- Added unittest for `LocalSD` using constant SD (`)
+- Improved check if figure and axis were created in (`tests.test_plots.TestPlots.test_histogram`)
+
 ## v0.80.0 | 28 Aug 2024
 
 ### Additions
@@ -18,7 +42,8 @@
 
 ### Notebooks
 
-- Added new notebook for creating a flag that indicates missing values (`notebooks/OutlierDetection/MissingValues.ipynb`)
+- Added new notebook for creating a flag that indicates missing values (
+  `notebooks/OutlierDetection/MissingValues.ipynb`)
 - Updated notebook for meteoscreening from database (
   `notebooks/MeteoScreening/StepwiseMeteoScreeningFromDatabase.ipynb`)
 - Updated notebook for loading and saving parquet files (`notebooks/Formats/LoadSaveParquetFile.ipynb`)

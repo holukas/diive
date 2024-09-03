@@ -3,11 +3,11 @@ from bokeh.models import BoxZoomTool, PanTool, ResetTool, WheelZoomTool, WheelPa
     RedoTool, SaveTool, HoverTool, BoxSelectTool
 from bokeh.models import ColumnDataSource
 from bokeh.plotting import figure, show
-from bokeh.plotting import output_notebook
 from pandas import Series
 
 import diive.core.plotting.plotfuncs as pf
 import diive.core.plotting.styles.LightTheme as theme
+
 
 # output_notebook()
 
@@ -122,17 +122,18 @@ class TimeSeries:
         else:
             # If no ax is given, create fig and ax and then show the plot
             self.fig, self.ax = pf.create_ax()
+            self.ax.xaxis.axis_date()
             self.showplot = True
 
         color = color if color else theme.colorwheel_36()[0]
         # color_list = theme.colorwheel_36()  # get some colors
         label = self.series.name
-        self.ax.plot_date(x=self.series.index,
-                          y=self.series,
-                          color=color, alpha=1,
-                          lw=theme.WIDTH_LINE_DEFAULT,
-                          fmt='-', markeredgecolor='none', ms=0,
-                          zorder=99, label=label)
+        self.ax.plot(self.series.index,
+                     self.series,
+                     color=color, alpha=1,
+                     lw=theme.WIDTH_LINE_DEFAULT,
+                     linestyle='-', markeredgecolor='none', ms=0,
+                     zorder=99, label=label)
         self._apply_format()
 
         if self.showplot:
@@ -181,8 +182,9 @@ def example():
 
     # Plot interactive
     from bokeh.plotting import output_file
-    output_file(filename=r"F:\Downloads\_temp\bokeh.html", title="Static HTML file")
-    TimeSeries(series=data_df['NEE_CUT_REF_f']).plot_interactive()
+    # output_file(filename=r"F:\Downloads\_temp\bokeh.html", title="Static HTML file")
+    # TimeSeries(series=data_df['NEE_CUT_REF_f']).plot_interactive()
+    TimeSeries(series=data_df['NEE_CUT_REF_f']).plot()
 
 
 if __name__ == '__main__':

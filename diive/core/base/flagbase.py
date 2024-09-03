@@ -165,19 +165,19 @@ class FlagBase:
         ax_ok = fig.add_subplot(gs[1, 0], sharex=ax_series)
         ax_ok_hist = fig.add_subplot(gs[1, 1])
 
-        ax_series.plot_date(self.series.index, self.series,
-                            label=f"{self.series.name}", color="#607D8B",
-                            alpha=.5, markersize=8, markeredgecolor='none')
-        ax_series.plot_date(self.series[rejected].index, self.series[rejected],
-                            label="outlier (rejected)", color="#F44336", alpha=1,
-                            markersize=12, markeredgecolor='none', fmt='X')
+        ax_series.plot(self.series.index, self.series,
+                       label=f"{self.series.name}", color="#607D8B", linestyle='none', markeredgewidth=1,
+                       marker='o', alpha=.5, markersize=6, markeredgecolor="#607D8B", fillstyle='none')
+        ax_series.plot(self.series[rejected].index, self.series[rejected],
+                       label="outlier (rejected)", color="#F44336", alpha=1, linestyle='none',
+                       markersize=12, markeredgecolor='none', marker='X')
         hist_kwargs = dict(method='n_bins', n_bins=None, highlight_peak=True, show_zscores=True, show_info=False,
                            show_title=False, show_zscore_values=False, show_grid=False)
         HistogramPlot(self.series, **hist_kwargs).plot(ax=ax_series_hist)
 
-        ax_ok.plot_date(self.series[ok].index, self.series[ok],
-                        label="filtered series", alpha=.5,
-                        markersize=8, markeredgecolor='none')
+        ax_ok.plot(self.series[ok].index, self.series[ok],
+                   label="filtered series", alpha=.5, linestyle='none', markeredgewidth=1,
+                   marker='o', markersize=6, markeredgecolor="#607D8B", fillstyle='none')
         HistogramPlot(self.series[ok], **hist_kwargs).plot(ax=ax_ok_hist)
 
         default_format(ax=ax_series)
@@ -220,18 +220,24 @@ class FlagBase:
             fig.suptitle(title, fontsize=24, fontweight='bold')
 
         ax_series = fig.add_subplot(gs[0, 0])
+        ax_series.xaxis.axis_date()
         ax_series_hist = fig.add_subplot(gs[0, 1])
         ax_cleaned = fig.add_subplot(gs[0, 2], sharex=ax_series)
+        ax_cleaned.xaxis.axis_date()
         ax_cleaned_hist = fig.add_subplot(gs[0, 3])
 
         ax_series_dt = fig.add_subplot(gs[1, 0])
+        ax_series_dt.xaxis.axis_date()
         ax_series_dt_hist = fig.add_subplot(gs[1, 1])
         ax_cleaned_dt = fig.add_subplot(gs[1, 2], sharex=ax_series)
+        ax_cleaned_dt.xaxis.axis_date()
         ax_cleaned_dt_hist = fig.add_subplot(gs[1, 3])
 
         ax_series_nt = fig.add_subplot(gs[2, 0], sharex=ax_series)
+        ax_series_nt.xaxis.axis_date()
         ax_series_nt_hist = fig.add_subplot(gs[2, 1])
         ax_cleaned_nt = fig.add_subplot(gs[2, 2], sharex=ax_series)
+        ax_cleaned_nt.xaxis.axis_date()
         ax_cleaned_nt_hist = fig.add_subplot(gs[2, 3])
 
         axes_series = [ax_series, ax_cleaned, ax_series_dt, ax_cleaned_dt, ax_series_nt, ax_cleaned_nt]
@@ -242,19 +248,19 @@ class FlagBase:
         series_kwargs = dict(x=df.index, fmt='o', mec='none', alpha=.2, color='black')
 
         # Column 0
-        ax_series.plot_date(
+        ax_series.plot(
             y=df['CLEANED'], label=f"OK ({df['CLEANED'].count()} values)", **series_kwargs)
-        ax_series.plot_date(
+        ax_series.plot(
             x=df.index, y=df['OUTLIER'], fmt='X', ms=10, mec='none',
             alpha=.9, color='red', label=f"outlier ({df['OUTLIER'].count()} values)")
-        ax_series_dt.plot_date(
+        ax_series_dt.plot(
             y=df['UNFILTERED_DT'], label=f"series ({df['UNFILTERED_DT'].count()} values)", **series_kwargs)
-        ax_series_dt.plot_date(
+        ax_series_dt.plot(
             x=df.index, y=df['OUTLIER_DT'], fmt='X', ms=10, mec='none',
             alpha=.9, color='red', label=f"outlier ({df['OUTLIER_DT'].count()} values)")
-        ax_series_nt.plot_date(
+        ax_series_nt.plot(
             y=df['UNFILTERED_NT'], label=f"series ({df['UNFILTERED_NT'].count()} values)", **series_kwargs)
-        ax_series_nt.plot_date(
+        ax_series_nt.plot(
             x=df.index, y=df['OUTLIER_NT'], fmt='X', ms=10, mec='none',
             alpha=.9, color='red', label=f"outlier ({df['OUTLIER_NT'].count()} values)")
 
@@ -264,12 +270,11 @@ class FlagBase:
         HistogramPlot(s=df['UNFILTERED_NT'], **hist_kwargs).plot(ax=ax_series_nt_hist)
 
         # Column 2
-        ax_cleaned.plot_date(
-            y=df['CLEANED'], label=f"cleaned ({df['CLEANED'].count()} values)", **series_kwargs)
-        ax_cleaned_dt.plot_date(
-            y=df['CLEANED_DT'], label=f"cleaned daytime ({df['CLEANED_DT'].count()} values)", **series_kwargs)
-        ax_cleaned_nt.plot_date(
-            y=df['CLEANED_NT'], label=f"cleaned nighttime ({df['CLEANED_NT'].count()} values)", **series_kwargs)
+        ax_cleaned.plot(y=df['CLEANED'], label=f"cleaned ({df['CLEANED'].count()} values)", **series_kwargs)
+        ax_cleaned_dt.plot(y=df['CLEANED_DT'], label=f"cleaned daytime ({df['CLEANED_DT'].count()} values)",
+                           **series_kwargs)
+        ax_cleaned_nt.plot(y=df['CLEANED_NT'], label=f"cleaned nighttime ({df['CLEANED_NT'].count()} values)",
+                           **series_kwargs)
 
         # Column 3
         HistogramPlot(s=df['CLEANED'], **hist_kwargs).plot(ax=ax_cleaned_hist)

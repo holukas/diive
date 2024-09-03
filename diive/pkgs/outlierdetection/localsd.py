@@ -17,9 +17,6 @@ from diive.core.plotting.plotfuncs import default_format
 from diive.core.utils.prints import ConsoleOutputDecorator
 
 
-
-
-
 @ConsoleOutputDecorator()
 class LocalSD(FlagBase):
     flagid = 'OUTLIER_LOCALSD'
@@ -120,20 +117,23 @@ class LocalSD(FlagBase):
         # gs.update(wspace=0.3, hspace=0.1, left=0.03, right=0.97, top=0.95, bottom=0.05)
         ax = fig.add_subplot(gs[0, 0])
         ax2 = fig.add_subplot(gs[1, 0], sharex=ax)
+        ax.xaxis.axis_date()
+        ax2.xaxis.axis_date()
         return fig, ax, ax2
 
     def _plot_add_iteration(self, rmedian, upper_limit, lower_limit, iteration):
         """Add iteration data to plot, but do not show plot yet."""
         if iteration == 1:
-            self.ax.plot_date(self.series.index, self.series, label=f"{self.series.name}", color='none',
-                              alpha=1, markersize=4, markeredgecolor='black', markeredgewidth=1, zorder=1)
+            self.ax.plot(self.series.index, self.series, label=f"{self.series.name}", color='black',
+                         marker='o', fillstyle='none', alpha=.9, markersize=4, linestyle='none',
+                         markeredgecolor='black', markeredgewidth=1, zorder=1)
         # self._filteredseries.loc[rejected] = np.nan
-        self.ax.plot_date(rmedian.index, rmedian, label=f"rolling median", color="#FFA726",
-                          alpha=1, markersize=0, markeredgecolor='none', ls='-', lw=2, zorder=3)
-        self.ax.plot_date(upper_limit.index, upper_limit, label=f"upper limit", color="#7E57C2",
-                          alpha=1, markersize=0, markeredgecolor='none', ls='--', lw=1, zorder=4)
-        self.ax.plot_date(lower_limit.index, lower_limit, label=f"lower limit", color="#26C6DA",
-                          alpha=1, markersize=0, markeredgecolor='none', ls='--', lw=1, zorder=4)
+        self.ax.plot(rmedian.index, rmedian, label=f"rolling median", color="#FFA726",
+                     alpha=1, markersize=0, markeredgecolor='none', ls='-', lw=2, zorder=3)
+        self.ax.plot(upper_limit.index, upper_limit, label=f"upper limit", color="#7E57C2",
+                     alpha=1, markersize=0, markeredgecolor='none', ls='--', lw=1, zorder=4)
+        self.ax.plot(lower_limit.index, lower_limit, label=f"lower limit", color="#26C6DA",
+                     alpha=1, markersize=0, markeredgecolor='none', ls='--', lw=1, zorder=4)
 
     def _plot_finalize(self, n_iterations):
         """Finalize and show plot."""
@@ -142,15 +142,15 @@ class LocalSD(FlagBase):
 
         outliers_only = self.series.copy()
         outliers_only = outliers_only[rejected].copy()
-        self.ax.plot_date(outliers_only.index, outliers_only,
-                          label=f"filtered series", color='#F44336', zorder=2,
-                          alpha=1, markersize=12, markeredgecolor='none', fmt='X')
+        self.ax.plot(outliers_only.index, outliers_only,
+                     label=f"outlier", color='#F44336', zorder=2, ls='None',
+                     alpha=1, markersize=12, markeredgecolor='none', marker='X')
 
         filtered = self.series.copy()
         filtered.loc[rejected] = np.nan
-        self.ax2.plot_date(filtered.index, filtered,
-                           label=f"filtered series", color='none',
-                           alpha=1, markersize=4, markeredgecolor='black', markeredgewidth=1)
+        self.ax2.plot(filtered.index, filtered,
+                      label=f"filtered series", color='black', marker='o', fillstyle='none',
+                      linestyle='none', alpha=.9, markersize=4, markeredgecolor='black', markeredgewidth=1)
         default_format(ax=self.ax)
         default_format(ax=self.ax2)
         # default_legend(ax=self.ax, ncol=2, markerscale=5)
@@ -165,7 +165,6 @@ def example():
     import importlib.metadata
     import diive.configs.exampledata as ed
     from diive.pkgs.createvar.noise import add_impulse_noise
-    from diive.core.plotting.timeseries import TimeSeries
     import warnings
     warnings.filterwarnings('ignore')
     version_diive = importlib.metadata.version("diive")
@@ -179,12 +178,12 @@ def example():
                                 factor_high=3,
                                 contamination=0.4)  # Add impulse noise (spikes)
     s_noise.name = f"{s.name}+noise"
-    TimeSeries(s_noise).plot()
+    # TimeSeries(s_noise).plot()
 
     lsd = LocalSD(
         series=s_noise,
-        n_sd=2,
-        winsize=24,
+        n_sd=2.1,
+        winsize=48 * 2,
         constant_sd=True,
         showplot=True,
         verbose=True

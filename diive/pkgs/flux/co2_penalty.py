@@ -646,9 +646,9 @@ class CO2penalty:
         # Original data as measured and gap-filled
         x = cumulative_orig.index
         y = cumulative_orig
-        ax.plot_date(x=x, y=y, color=COLOR_NEP, alpha=0.9, ls='-', lw=3, marker='',
-                     markeredgecolor='none', ms=0, zorder=99, label='observed NEP')
-        ax.plot_date(x[-1], y[-1], ms=10, zorder=100, color=COLOR_NEP)
+        ax.plot(x, y, color=COLOR_NEP, alpha=0.9, ls='-', lw=3, marker='',
+                markeredgecolor='none', ms=0, zorder=99, label='observed NEP')
+        ax.plot(x[-1], y[-1], ms=10, zorder=100, color=COLOR_NEP)
         ax.text(x[-1], y[-1], f"    {cumulative_orig[-1]:.0f}", size=20,
                 color=COLOR_NEP, backgroundcolor='none', alpha=1,
                 horizontalalignment='left', verticalalignment='center')
@@ -667,9 +667,9 @@ class CO2penalty:
             label = None
         x = cumulative_model.index
         y = cumulative_model
-        ax.plot_date(x=x, y=y, color=COLOR_RECO, alpha=0.9, ls=linestyle, lw=3, marker='',
-                     markeredgecolor='none', ms=0, zorder=98, label=label)
-        ax.plot_date(x[-1], y[-1], ms=marksersize, zorder=100, color=COLOR_RECO)
+        ax.plot(x, y, color=COLOR_RECO, alpha=0.9, ls=linestyle, lw=3, marker='',
+                markeredgecolor='none', ms=0, zorder=98, label=label)
+        ax.plot(x[-1], y[-1], ms=marksersize, zorder=100, color=COLOR_RECO)
         ax.text(x[-1], y[-1], f"    {cumulative_model[-1]:.0f}", size=txtsize, color=COLOR_RECO,
                 backgroundcolor='none', alpha=1, horizontalalignment='left',
                 verticalalignment='center')
@@ -746,48 +746,48 @@ class CO2penalty:
         props = dict(ls='-')
 
         # Observed NEP
-        ax_nep.plot_date(x=x, y=subset[self.nep_col],
-                         label="on critical days", color=COLOR_NEP, lw=2, ms=6, **props)
+        ax_nep.plot(x, subset[self.nep_col],
+                    label="on critical days", color=COLOR_NEP, lw=2, ms=6, **props)
 
         # Modeled NEP
         lw = 2 if showline_nep_modeled else 0
         ms = 6 if showline_nep_modeled else 0
         label = "modeled" if showline_nep_modeled else None
-        ax_nep.plot_date(x=x, y=subset[self.nep_col_limited_gf],
-                         label=label, color=COLOR_RECO, lw=lw, ms=ms, **props)
+        ax_nep.plot(x, subset[self.nep_col_limited_gf],
+                    label=label, color=COLOR_RECO, lw=lw, ms=ms, **props)
 
         # Observed TA
-        ax_ta.plot_date(x=x, y=subset[self.ta_col],
-                        label="on critical days", color=COLOR_NEP, lw=2, ms=6, **props)
+        ax_ta.plot(x, subset[self.ta_col],
+                   label="on critical days", color=COLOR_NEP, lw=2, ms=6, **props)
 
         # Modeled TA
         lw = 2 if showline_ta_modeled else 0
         ms = 6 if showline_ta_modeled else 0
         label = "on near-critical days" if showline_ta_modeled else None
-        ax_ta.plot_date(x=x, y=subset[self.ta_col_limited],
-                        label=label, color=COLOR_RECO, lw=lw, ms=ms, **props)
+        ax_ta.plot(x, subset[self.ta_col_limited],
+                   label=label, color=COLOR_RECO, lw=lw, ms=ms, **props)
 
         # Observed VPD
-        ax_vpd.plot_date(x=x, y=subset[self.vpd_col],
-                         label="on critical days", color=COLOR_NEP, lw=2, ms=6, **props)
+        ax_vpd.plot(x, subset[self.vpd_col],
+                    label="on critical days", color=COLOR_NEP, lw=2, ms=6, **props)
 
         # Newly calculated VPD
         lw = 2 if showline_vpd_modeled else 0
         ms = 6 if showline_vpd_modeled else 0
         label = "newly calculated" if showline_vpd_modeled else None
-        ax_vpd.plot_date(x=x, y=subset[self.vpd_col_limited_gapfilled], color=COLOR_RECO,
-                         label=label, lw=lw, ms=ms, **props)
+        ax_vpd.plot(x, subset[self.vpd_col_limited_gapfilled], color=COLOR_RECO,
+                    label=label, lw=lw, ms=ms, **props)
 
         # Observed SW_IN
-        ax_swin.plot_date(x=x, y=subset[self.swin_col],
-                          label="on critical days", color=COLOR_NEP, lw=2, ms=6, **props)
+        ax_swin.plot(x, subset[self.swin_col],
+                     label="on critical days", color=COLOR_NEP, lw=2, ms=6, **props)
 
         # SW_IN from random forest
         lw = 2 if showline_swin_modeled else 0
         ms = 6 if showline_swin_modeled else 0
         label = "modeled" if showline_swin_modeled else None
-        ax_swin.plot_date(x=x, y=subset[self.swin_col_limited_gapfilled], color=COLOR_RECO,
-                          label=label, lw=lw, ms=ms, **props)
+        ax_swin.plot(x, subset[self.swin_col_limited_gapfilled], color=COLOR_RECO,
+                     label=label, lw=lw, ms=ms, **props)
 
         # Fill area penalty
         if showfill_penalty:
@@ -848,6 +848,10 @@ class CO2penalty:
         ax_ta = fig.add_subplot(gs[0, 1])
         ax_vpd = fig.add_subplot(gs[0, 2])
         ax_swin = fig.add_subplot(gs[0, 3])
+        ax_nep.xaxis.axis_date()
+        ax_ta.xaxis.axis_date()
+        ax_vpd.xaxis.axis_date()
+        ax_swin.xaxis.axis_date()
         self.plot_day_example(ax_nep=ax_nep, ax_ta=ax_ta,
                               ax_vpd=ax_vpd, ax_swin=ax_swin, **kwargs)
         fig.tight_layout()
@@ -865,6 +869,7 @@ class CO2penalty:
         gs = gridspec.GridSpec(1, 1)  # rows, cols
         # gs.update(wspace=0, hspace=0, left=.2, right=.8, top=.8, bottom=.2)
         ax = fig.add_subplot(gs[0, 0])
+        ax.xaxis.axis_date()
         self.plot_cumulatives(ax=ax, **kwargs)
         fig.tight_layout()
         fig.show()

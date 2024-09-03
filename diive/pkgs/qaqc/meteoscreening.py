@@ -248,18 +248,23 @@ class StepwiseMeteoScreeningDb:
             ax_orig = fig.add_subplot(gs[0, 0:3])
             ax_resampled = fig.add_subplot(gs[1, 0:3], sharex=ax_orig)
             ax_both = fig.add_subplot(gs[2, 0:3], sharex=ax_orig)
+
+            ax_orig.xaxis.axis_date()
+            ax_resampled.xaxis.axis_date()
+            ax_both.xaxis.axis_date()
+
             ax_heatmap_hires_before = fig.add_subplot(gs[0:3, 3])
             ax_heatmap_resampled_after = fig.add_subplot(gs[0:3, 4], sharey=ax_heatmap_hires_before)
 
             # Time series
-            ax_orig.plot_date(series_orig.index, series_orig, label=f"{series_orig.name}", color="#78909C",
-                              alpha=.5, markersize=2, markeredgecolor='none')
-            ax_resampled.plot_date(series_resampled.index, series_resampled, label="resampled",
-                                   color="#FFA726", alpha=1, markersize=3, markeredgecolor='none')
-            ax_both.plot_date(series_orig.index, series_orig, label=f"{series_orig.name}", color="#78909C",
-                              alpha=.5, markersize=2, markeredgecolor='none')
-            ax_both.plot_date(series_resampled.index, series_resampled, label="resampled",
+            ax_orig.plot(series_orig.index, series_orig, label=f"{series_orig.name}", color="#78909C",
+                         alpha=.5, markersize=2, markeredgecolor='none')
+            ax_resampled.plot(series_resampled.index, series_resampled, label="resampled",
                               color="#FFA726", alpha=1, markersize=3, markeredgecolor='none')
+            ax_both.plot(series_orig.index, series_orig, label=f"{series_orig.name}", color="#78909C",
+                         alpha=.5, markersize=2, markeredgecolor='none')
+            ax_both.plot(series_resampled.index, series_resampled, label="resampled",
+                         color="#FFA726", alpha=1, markersize=3, markeredgecolor='none')
 
             # Heatmaps
             kwargs_heatmap = dict(cb_labelsize=10, axlabels_fontsize=10, ticks_labelsize=10,

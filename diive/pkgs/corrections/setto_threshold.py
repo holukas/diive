@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from pandas import Series
 
+from diive.core.plotting.plotfuncs import quickplot
 from diive.core.utils.prints import ConsoleOutputDecorator
 
 
@@ -23,13 +24,6 @@ def setto_threshold(series: Series,
     Returns:
         Corrected series
     """
-    # caller = inspect.stack()[0].function
-    # section = HeatmapDateTime.__name__
-    # id = f"{caller}->{section}"
-    # id = setto_threshold.__name__
-    # printid = PrintID(id=id)
-    # printid.str(f"Set {series.name} to {type} threshold {threshold}  ...")
-
     outname = series.name
     series.name = "input_data"
 
@@ -66,7 +60,6 @@ def setto_threshold(series: Series,
 
     # Plot
     if showplot:
-        from diive.core.plotting.plotfuncs import quickplot
         quickplot([series, series_corr], subplots=True, showplot=showplot,
                   title=f"Set {series.name} to {type} threshold {threshold}")
 

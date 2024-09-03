@@ -1,6 +1,7 @@
 from pandas import Series
 
 import diive.core.dfun.frames as frames
+from diive.core.plotting.plotfuncs import quickplot
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag
 
@@ -60,7 +61,6 @@ def remove_relativehumidity_offset(series: Series,
 
     # Plot
     if showplot:
-        from diive.core.plotting.plotfuncs import quickplot
         quickplot([series, _series_exceeds,
                    _daily_mean_above_100, _offset, _series_corr, series_corr_max100],
                   subplots=True,
@@ -127,16 +127,13 @@ def remove_radiation_zero_offset(series: Series,
                                          hires_timestamp=series.index,
                                          interpolate_missing_vals=True)
 
-
     # from diive.core.plotting.timeseries import TimeSeries
     # TimeSeries(series=_offset).plot()
-
 
     # Gap-fill offset values
     _offset = _offset.fillna(_offset.median())
     # offset = offset.interpolate().ffill().bfill()
     _offset.rename("offset", inplace=True)
-
 
     # Subtract offset from radiation column (rad_col - offset)
     # Offset examples assuming measured radiation is 120:
@@ -159,7 +156,6 @@ def remove_radiation_zero_offset(series: Series,
 
     # Plot
     if showplot:
-        from diive.core.plotting.plotfuncs import quickplot
         quickplot([series, _series_corr,
                    series_corr_settozero, _offset],
                   subplots=True,
