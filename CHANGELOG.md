@@ -26,6 +26,11 @@
 - Added unittest for `LocalSD` using constant SD (`)
 - Improved check if figure and axis were created in (`tests.test_plots.TestPlots.test_histogram`)
 
+### Environment
+
+- Added new package `scikit-optimize`
+- Added new package `category_encoders`
+
 ## v0.80.0 | 28 Aug 2024
 
 ### Additions
