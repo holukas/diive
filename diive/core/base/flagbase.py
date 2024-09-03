@@ -245,24 +245,20 @@ class FlagBase:
                      ax_cleaned_dt_hist, ax_series_nt_hist, ax_cleaned_nt_hist]
         hist_kwargs = dict(method='n_bins', n_bins=None, highlight_peak=True, show_zscores=True, show_info=False,
                            show_title=False, show_zscore_values=False, show_grid=False)
-        series_kwargs = dict(x=df.index, fmt='o', mec='none', alpha=.2, color='black')
+        series_kwargs = dict(marker='o', mec='black', markeredgewidth=1, alpha=.2, fillstyle='none', linestyle='none')
 
         # Column 0
-        ax_series.plot(
-            y=df['CLEANED'], label=f"OK ({df['CLEANED'].count()} values)", **series_kwargs)
-        ax_series.plot(
-            x=df.index, y=df['OUTLIER'], fmt='X', ms=10, mec='none',
-            alpha=.9, color='red', label=f"outlier ({df['OUTLIER'].count()} values)")
-        ax_series_dt.plot(
-            y=df['UNFILTERED_DT'], label=f"series ({df['UNFILTERED_DT'].count()} values)", **series_kwargs)
-        ax_series_dt.plot(
-            x=df.index, y=df['OUTLIER_DT'], fmt='X', ms=10, mec='none',
-            alpha=.9, color='red', label=f"outlier ({df['OUTLIER_DT'].count()} values)")
-        ax_series_nt.plot(
-            y=df['UNFILTERED_NT'], label=f"series ({df['UNFILTERED_NT'].count()} values)", **series_kwargs)
-        ax_series_nt.plot(
-            x=df.index, y=df['OUTLIER_NT'], fmt='X', ms=10, mec='none',
-            alpha=.9, color='red', label=f"outlier ({df['OUTLIER_NT'].count()} values)")
+        ax_series.plot(df.index, df['CLEANED'], label=f"OK ({df['CLEANED'].count()} values)", **series_kwargs)
+        ax_series.plot(df.index, df['OUTLIER'], marker='X', ms=10, mec='none', linestyle='none',
+                       alpha=.9, color='red', label=f"outlier ({df['OUTLIER'].count()} values)")
+        ax_series_dt.plot(df.index, df['UNFILTERED_DT'], label=f"series ({df['UNFILTERED_DT'].count()} values)",
+                          **series_kwargs)
+        ax_series_dt.plot(df.index, df['OUTLIER_DT'], marker='X', ms=10, mec='none', linestyle='none',
+                          alpha=.9, color='red', label=f"outlier ({df['OUTLIER_DT'].count()} values)")
+        ax_series_nt.plot(df.index, df['UNFILTERED_NT'], label=f"series ({df['UNFILTERED_NT'].count()} values)",
+                          **series_kwargs)
+        ax_series_nt.plot(df.index, df['OUTLIER_NT'], marker='X', ms=10, mec='none', linestyle='none',
+                          alpha=.9, color='red', label=f"outlier ({df['OUTLIER_NT'].count()} values)")
 
         # Column 1
         HistogramPlot(s=df['UNFILTERED'], **hist_kwargs).plot(ax=ax_series_hist)
@@ -270,10 +266,10 @@ class FlagBase:
         HistogramPlot(s=df['UNFILTERED_NT'], **hist_kwargs).plot(ax=ax_series_nt_hist)
 
         # Column 2
-        ax_cleaned.plot(y=df['CLEANED'], label=f"cleaned ({df['CLEANED'].count()} values)", **series_kwargs)
-        ax_cleaned_dt.plot(y=df['CLEANED_DT'], label=f"cleaned daytime ({df['CLEANED_DT'].count()} values)",
+        ax_cleaned.plot(df.index, df['CLEANED'], label=f"cleaned ({df['CLEANED'].count()} values)", **series_kwargs)
+        ax_cleaned_dt.plot(df.index, df['CLEANED_DT'], label=f"cleaned daytime ({df['CLEANED_DT'].count()} values)",
                            **series_kwargs)
-        ax_cleaned_nt.plot(y=df['CLEANED_NT'], label=f"cleaned nighttime ({df['CLEANED_NT'].count()} values)",
+        ax_cleaned_nt.plot(df.index, df['CLEANED_NT'], label=f"cleaned nighttime ({df['CLEANED_NT'].count()} values)",
                            **series_kwargs)
 
         # Column 3
