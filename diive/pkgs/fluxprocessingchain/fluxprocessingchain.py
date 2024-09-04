@@ -4,6 +4,7 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 from pandas import DataFrame, Series
+from sklearn.model_selection import train_test_split
 
 from diive.core.dfun.frames import detect_new_columns
 from diive.core.funcs.funcs import filter_strings_by_elements
@@ -573,11 +574,11 @@ def example():
     # Source data
     from pathlib import Path
     from diive.core.io.files import load_parquet
-    SOURCEDIR = r"L:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_cha_fp2024_2005-2023\0_data\RESULTS-IRGA-Level-1_fluxnet_2005-2023"
-    FILENAME = r"CH-CHA_IRGA_Level-1_eddypro_fluxnet_2005-2023_availableVars.parquet"
+    SOURCEDIR = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_cha_fp2024_2005-2023\20_FLUXES_L1_IRGA_preparation"
+    FILENAME = r"23.1_CH-CHA_IRGA_Level-1_eddypro_fluxnet_2005-2023_availableVars_meteo7.parquet"
     FILEPATH = Path(SOURCEDIR) / FILENAME
     maindf = load_parquet(filepath=FILEPATH)
-    maindf = maindf.loc[maindf.index.year == 2023, :].copy()
+    maindf = maindf.loc[maindf.index.year >= 2005, :].copy()
     metadata = None
     print(maindf)
 
@@ -590,8 +591,8 @@ def example():
     DAYTIME_ACCEPT_QCF_BELOW = 2
     NIGHTTIMETIME_ACCEPT_QCF_BELOW = 2
 
-    from diive.core.dfun.stats import sstats  # Time series stats
-    sstats(maindf[FLUXVAR])
+    # from diive.core.dfun.stats import sstats  # Time series stats
+    # sstats(maindf[FLUXVAR])
     # TimeSeries(series=level1_df[FLUXVAR]).plot()
 
     fpc = FluxProcessingChain(
@@ -605,32 +606,26 @@ def example():
     # --------------------
     # Level-2
     # --------------------
-    TEST_SSITC = False  # Default True
-    TEST_GAS_COMPLETENESS = False  # Default True
-    TEST_SPECTRAL_CORRECTION_FACTOR = False  # Default True
-
-    # Signal strength
-    TEST_SIGNAL_STRENGTH = False
+    TEST_SSITC = True  # Default True
+    TEST_GAS_COMPLETENESS = True  # Default True
+    TEST_SPECTRAL_CORRECTION_FACTOR = True  # Default True
+    TEST_SIGNAL_STRENGTH = True
     TEST_SIGNAL_STRENGTH_COL = 'CUSTOM_AGC_MEAN'
     TEST_SIGNAL_STRENGTH_METHOD = 'discard above'
     TEST_SIGNAL_STRENGTH_THRESHOLD = 90
     # TimeSeries(series=maindf[TEST_SIGNAL_STRENGTH_COL]).plot()
-
-    TEST_RAWDATA = False  # Default True
+    TEST_RAWDATA = True  # Default True
     TEST_RAWDATA_SPIKES = True  # Default True
-    TEST_RAWDATA_AMPLITUDE = True  # Default True
+    TEST_RAWDATA_AMPLITUDE = False  # Default True
     TEST_RAWDATA_DROPOUT = True  # Default True
     TEST_RAWDATA_ABSLIM = False  # Default False
     TEST_RAWDATA_SKEWKURT_HF = False  # Default False
     TEST_RAWDATA_SKEWKURT_SF = False  # Default False
     TEST_RAWDATA_DISCONT_HF = False  # Default False
     TEST_RAWDATA_DISCONT_SF = False  # Default False
-
     TEST_RAWDATA_ANGLE_OF_ATTACK = False  # Default False
     # TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES = [['2023-01-01', '2023-07-01']]  # Default False
-    # TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES = [['2023-07-01', '2023-09-01']]  # Default False
     TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES = False  # Default False
-
     TEST_RAWDATA_STEADINESS_OF_HORIZONTAL_WIND = False  # Default False
 
     LEVEL2_SETTINGS = {
@@ -664,25 +659,27 @@ def example():
     fpc.level2_quality_flag_expansion(**LEVEL2_SETTINGS)
     fpc.finalize_level2(nighttime_threshold=NIGHTTIME_THRESHOLD, daytime_accept_qcf_below=DAYTIME_ACCEPT_QCF_BELOW,
                         nighttimetime_accept_qcf_below=NIGHTTIMETIME_ACCEPT_QCF_BELOW)
-    fpc.level2_qcf.showplot_qcf_heatmaps()
-    fpc.level2_qcf.report_qcf_evolution()
+    # fpc.level2_qcf.showplot_qcf_heatmaps()
+    # fpc.level2_qcf.report_qcf_evolution()
+    fpc.level2_qcf.report_highest_quality()
+
     # fpc.level2_qcf.report_qcf_flags()
     # fpc.level2.results
     # fpc.fpc_df
     # fpc.filteredseries
     # [x for x in fpc.fpc_df.columns if 'L2' in x]
 
-    # # --------------------
-    # # Level-3.1
-    # # --------------------
-    # fpc.level31_storage_correction(gapfill_storage_term=True)
+    # --------------------
+    # Level-3.1
+    # --------------------
+    # fpc.level31_storage_correction(gapfill_storage_term=False)
     # fpc.finalize_level31()
-    # # fpc.level31.showplot(maxflux=50)
     # fpc.level31.report()
-    # # fpc.fpc_df
-    # # fpc.filteredseries
-    # # fpc.level31.results
-    # # [x for x in fpc.fpc_df.columns if 'L3.1' in x]
+    # fpc.level31.showplot(maxflux=50)
+    # fpc.fpc_df
+    # fpc.filteredseries
+    # fpc.level31.results
+    # [x for x in fpc.fpc_df.columns if 'L3.1' in x]
 
     # --------------------
     # Level-3.2
@@ -710,17 +707,17 @@ def example():
     #                                               repeat=True)
     # fpc.level32_addflag()
 
-    # fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
+    # fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=3.5, showplot=False, verbose=False, repeat=True)
     # fpc.level32_addflag()
     # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
-    fpc.level32_flag_outliers_localsd_test(n_sd=3, winsize=480, constant_sd=False,
-                                           showplot=True, verbose=True, repeat=True)
-    fpc.level32_addflag()
-    fpc.level32.results  # Stores Level-3.2 flags up to this point
+    # fpc.level32_flag_outliers_localsd_test(n_sd=3, winsize=480, constant_sd=False,
+    #                                        showplot=True, verbose=True, repeat=True)
+    # fpc.level32_addflag()
+    # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
-    fpc.level32_flag_outliers_localsd_test(n_sd=3, winsize=480, constant_sd=True, showplot=True, verbose=True, repeat=True)
-    fpc.level32_addflag()
+    # fpc.level32_flag_outliers_localsd_test(n_sd=3, winsize=480, constant_sd=True, showplot=True, verbose=True, repeat=True)
+    # fpc.level32_addflag()
 
     # fpc.level32_flag_outliers_increments_zcore_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
     # fpc.level32_addflag()
@@ -761,10 +758,173 @@ def example():
     # fpc.level32_qcf.report_qcf_evolution()
     # # fpc.level32_qcf.report_qcf_series()
     # # fpc.levelidstr
-
     # fpc.filteredseries_level2_qcf
     # fpc.filteredseries_level31_qcf
     # fpc.filteredseries_level32_qcf
+
+    # # USTAR
+    # FLUXVAR32QCF = fpc.filteredseries_level32_qcf.name
+    # newcols = [c for c in fpc.fpc_df.columns if c not in maindf.columns]
+    # maindf = pd.concat([maindf, fpc.fpc_df[newcols]], axis=1)
+    # df2 = maindf[[FLUXVAR32QCF, "TA_T1_2_1", "SW_IN_T1_2_1", "VPD_T1_2_1", "USTAR"]].copy()
+    # keeprecords = df2['USTAR'] > 0.0709217
+    # df2.loc[~keeprecords, FLUXVAR32QCF] = np.nan
+    # # df2.plot(subplots=True, x_compat=True, title="After USTAR Threshold", figsize=(12, 4.5))
+    # # import matplotlib.pyplot as plt
+    # # plt.show()
+    #
+    # df2 = df2.dropna()
+    # y = df2[FLUXVAR32QCF].copy()
+    #
+    # X = df2[["TA_T1_2_1", "SW_IN_T1_2_1", "VPD_T1_2_1"]].copy()
+    #
+    #
+    # # https://www.youtube.com/watch?v=aLOQD66Sj0g
+    # # https://github.com/liannewriting/YouTube-videos-public/blob/main/xgboost-python-tutorial-example/xgboost_python.ipynb
+    #
+    # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    # X_train = X_train.to_numpy()
+    # X_test = X_test.to_numpy()
+    # y_train = y_train.to_numpy()
+    # y_test = y_test.to_numpy()
+    #
+    # from sklearn.pipeline import Pipeline
+    # from category_encoders.target_encoder import TargetEncoder
+    # from xgboost import XGBRegressor
+    # estimators = [
+    #     ('encoder', TargetEncoder()),
+    #     ('clf', XGBRegressor(random_state=42))  # can customize objective function with the objective parameter
+    # ]
+    # pipe = Pipeline(steps=estimators)
+    # print(pipe)
+    #
+    # from skopt import BayesSearchCV
+    # from skopt.space import Real, Categorical, Integer
+    #
+    # search_space = {
+    #     'clf__max_depth': Integer(2, 8),
+    #     'clf__learning_rate': Real(0.001, 1.0, prior='log-uniform'),
+    #     'clf__subsample': Real(0.5, 1.0),
+    #     'clf__colsample_bytree': Real(0.5, 1.0),
+    #     'clf__colsample_bylevel': Real(0.5, 1.0),
+    #     'clf__colsample_bynode': Real(0.5, 1.0),
+    #     'clf__reg_alpha': Real(0.0, 10.0),
+    #     'clf__reg_lambda': Real(0.0, 10.0),
+    #     'clf__gamma': Real(0.0, 10.0),
+    #     'clf__n_estimators': Integer(2, 99)
+    # }
+    #
+    # # opt = BayesSearchCV(pipe, search_space, cv=5, n_iter=20, scoring='neg_mean_absolute_error', random_state=42)
+    # opt = BayesSearchCV(pipe, search_space, cv=5, n_iter=20, scoring='r2', random_state=42)
+    # # opt = BayesSearchCV(pipe, search_space, cv=3, n_iter=10, scoring='roc_auc', random_state=42)
+    #
+    # opt.fit(X_train, y_train)
+    #
+    # print(opt.best_estimator_)
+    # print(opt.best_score_)
+    # # print(opt.score(X_test, y_test))
+    # # print(opt.predict(X_test))
+    # # print(opt.predict_proba(X_test))
+
+
+
+
+    # # GAP-FILLING
+    # use_gapfilling = 2
+    #
+    # N_ESTIMATORS = 999
+    #
+    # if use_gapfilling == 1:
+    #     # Random forest
+    #     from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
+    #     MAX_DEPTH = None
+    #     MIN_SAMPLES_SPLIT = 2
+    #     MIN_SAMPLES_LEAF = 1
+    #     CRITERION = 'squared_error'  # “squared_error”, “absolute_error”, “friedman_mse”, “poisson”
+    #     rfts = RandomForestTS(
+    #         input_df=df2,
+    #         target_col=FLUXVAR32QCF,
+    #         verbose=True,
+    #         # features_lag=None,
+    #         features_lag=[-1, -1],
+    #         # features_lag_exclude_cols=['test', 'test2'],
+    #         # include_timestamp_as_features=False,
+    #         include_timestamp_as_features=True,
+    #         # add_continuous_record_number=False,
+    #         add_continuous_record_number=True,
+    #         sanitize_timestamp=True,
+    #         perm_n_repeats=3,
+    #         n_estimators=N_ESTIMATORS,
+    #         random_state=42,
+    #         # random_state=None,
+    #         max_depth=MAX_DEPTH,
+    #         min_samples_split=MIN_SAMPLES_SPLIT,
+    #         min_samples_leaf=MIN_SAMPLES_LEAF,
+    #         criterion=CRITERION,
+    #         test_size=0.2,
+    #         n_jobs=-1
+    #     )
+    #     # rfts.reduce_features()
+    #     # rfts.report_feature_reduction()
+    #     rfts.trainmodel(showplot_scores=False, showplot_importance=False)
+    #     # rfts.report_traintest()
+    #     rfts.fillgaps(showplot_scores=False, showplot_importance=False)
+    #     rfts.report_gapfilling()
+    #
+    # elif use_gapfilling == 2:
+    #     # XGBoost
+    #     from diive.pkgs.gapfilling.xgboost_ts import XGBoostTS
+    #     xgbts = XGBoostTS(
+    #         input_df=df2,
+    #         target_col=FLUXVAR32QCF,
+    #         verbose=1,
+    #         # features_lag=None,
+    #         features_lag=[-1, -1],
+    #         # features_lag_exclude_cols=['TIMESINCE_PREC_TOT_T1_25+20_1'],
+    #         # features_lag_exclude_cols=['Rg_f', 'TA>0', 'TA>20', 'DAYTIME', 'NIGHTTIME'],
+    #         # include_timestamp_as_features=False,
+    #         include_timestamp_as_features=True,
+    #         add_continuous_record_number=True,
+    #         # add_continuous_record_number=True,
+    #         sanitize_timestamp=True,
+    #         perm_n_repeats=3,
+    #         n_estimators=N_ESTIMATORS,
+    #         random_state=42,
+    #         # booster='gbtree',  # gbtree (default), gblinear, dart
+    #         # device='cpu',
+    #         # validate_parameters=True,
+    #         # disable_default_eval_metric=False,
+    #         early_stopping_rounds=50,
+    #         # learning_rate=0.1,
+    #         max_depth=6,
+    #         # max_delta_step=0,
+    #         # subsample=1,
+    #         # min_split_loss=0,
+    #         # min_child_weight=1,
+    #         # colsample_bytree=1,
+    #         # colsample_bylevel=1,
+    #         # colsample_bynode=1,
+    #         # reg_lambda=1,
+    #         # reg_alpha=0,
+    #         # tree_method='auto',  # auto, hist, approx, exact
+    #         # scale_pos_weight=1,
+    #         # grow_policy='depthwise',  # depthwise, lossguide
+    #         # max_leaves=0,
+    #         # max_bin=256,
+    #         # num_parallel_tree=1,
+    #         n_jobs=-1
+    #     )
+    #     # xgbts.reduce_features()
+    #     # xgbts.report_feature_reduction()
+    #     xgbts.trainmodel(showplot_scores=False, showplot_importance=False)
+    #     # xgbts.report_traintest()
+    #     xgbts.fillgaps(showplot_scores=False, showplot_importance=False)
+    #     xgbts.report_gapfilling()
+
+
+
+
+
 
     # # https://fitter.readthedocs.io/en/latest/tuto.html
     # # https://medium.com/the-researchers-guide/finding-the-best-distribution-that-fits-your-data-using-pythons-fitter-library-319a5a0972e9

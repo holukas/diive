@@ -54,7 +54,7 @@ class OptimizeParamsRFTS:
                 provided as lists, e.g.
                     rf_params = {
                         'n_estimators': list(range(2, 12, 2)),
-                        'criterion': ['squared_error'],
+                        'criterion': ['root_mean_squared_error'],
                         'max_depth': [None],
                         'min_samples_split': list(range(2, 12, 2)),
                         'min_samples_leaf': [1, 3, 6]
@@ -506,13 +506,13 @@ def example_optimize():
 
     # Random forest parameters
     rf_params = {
-        'n_estimators': [10],
+        'n_estimators': list(range(10, 20, 2)),
         # 'n_estimators': list(range(100, 12, 2)),
         'criterion': ['squared_error'],
-        'max_depth': [6],
-        'min_samples_split': [10],
+        'max_depth': [None],
+        'min_samples_split': [2, 4, 8, 16],
         # 'min_samples_split': list(range(2, 12, 2)),
-        'min_samples_leaf': [5],
+        'min_samples_leaf': [1, 2, 4, 8],
 
         # 'min_samples_leaf': list(range(1, 6, 1))
     }
@@ -527,10 +527,16 @@ def example_optimize():
     opt.optimize()
 
     print(opt.best_params)
-    print(opt.scores)
-    print(opt.cv_results)
-    print(opt.best_score)
-    print(opt.cv_n_splits)
+    print(opt.scores['r2'])
+    # print(opt.cv_results)
+
+    best = opt.cv_results.copy()
+    best = best.sort_values(by='rank_test_score')
+    print(best)
+    # print(best.iloc[0].T)
+
+    # print(opt.best_score)
+    # print(opt.cv_n_splits)
 
 
 if __name__ == '__main__':

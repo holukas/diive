@@ -14,6 +14,8 @@ import numpy as np
 import pandas as pd
 from pandas import DataFrame, Series
 
+
+
 from diive.core.base.identify import identify_flagcols
 from diive.core.funcs.funcs import validate_id_string
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
@@ -101,6 +103,8 @@ class FlagQCF:
         self._flags_df = self._calculate_flag_qcf(df=self._flags_df)
         self._add_series()
         self._calculate_series_qcf()
+
+
 
     def _add_series(self):
         self._flags_df[self.series.name] = self.series.copy()
@@ -201,6 +205,171 @@ class FlagQCF:
         # print(f"\n| Note that this is not the final QC step. More values need to be \n"
         #       f"| rejected after storage correction (Level-3.1) during outlier\n"
         #       f"| removal (Level-3.2) and USTAR filtering (Level-3.3).")
+
+
+    def report_highest_quality(self):
+        from diive.core.dfun.stats import sstats
+        hq_dt = self.flags.loc[self.daytime == 1, self.filteredseriescol_hq].copy()
+        hq_nt = self.flags.loc[self.nighttime == 1, self.filteredseriescol_hq].copy()
+        # stats_dt = sstats(s=hq_dt)
+        # stats_nt = sstats(s=hq_nt)
+        #
+        # stats = pd.concat([stats_dt, stats_nt], axis=1, keys=['DAYTIME', 'NIGHTTIME'])
+        #
+        # winsize = int(hq_dt.count() / 10)
+        # rmean_nt = hq_nt.rolling(window=winsize, center=True, min_periods=1).mean()
+        # upper_nt = hq_nt.rolling(window=winsize, center=True, min_periods=1).std()
+        # upper_nt = rmean_nt.add(upper_nt)
+        # lower_nt = hq_nt.rolling(window=winsize, center=True, min_periods=1).std()
+        # lower_nt = rmean_nt.sub(lower_nt)
+        # upper_nt = hq_nt.rolling(window=winsize, center=True, min_periods=1).quantile(0.99)
+        # lower_nt = hq_nt.rolling(window=winsize, center=True, min_periods=1).quantile(0.01)
+        # hq_nt.plot()
+        # rmean_nt.plot()
+        # upper_nt.plot()
+        # lower_nt.plot()
+        # plt.show()
+
+        # upper_nt.max()
+        # lower_nt.min()
+
+
+        from diive.core.plotting.histogram import HistogramPlot
+        import matplotlib.pyplot as plt
+        fig = plt.figure(facecolor='white', figsize=(16, 7))
+        gs = gridspec.GridSpec(1, 1)  # rows, cols
+        # gs.update(wspace=0.3, hspace=0.1, left=0.03, right=0.97, top=0.95, bottom=0.05)
+        ax_series = fig.add_subplot(gs[0, 0])
+        # ax_series_hist = fig.add_subplot(gs[0, 1])
+
+        ax_series.plot(hq_nt.index, hq_nt,
+                       label=f"{self.series.name}", color="#607D8B", linestyle='none', markeredgewidth=1,
+                       marker='o', alpha=.5, markersize=6, markeredgecolor="#607D8B", fillstyle='none')
+        ax_series.set_ylim(-10, 20)
+        ax_series.axhline(hq_nt.quantile(0.03))
+
+        hist_kwargs = dict(method='n_bins', n_bins=None, highlight_peak=True, show_zscores=True, show_info=False,
+                           show_title=False, show_zscore_values=False, show_grid=False)
+        # HistogramPlot(s=hq_nt, **hist_kwargs).plot(ax=ax_series_hist)
+
+        fig.suptitle("Highest-quality nighttime flux after Level-2 (CH-CHA), zoomed in", fontsize=16)
+        fig.tight_layout()
+        fig.show()
+
+
+
+        # todo hier weiter
+        from diive.pkgs.outlierdetection.zscore import zScoreRolling
+        zsc = zScoreRolling(series=hq_nt, thres_zscore=3, winsize=int(hq_nt.dropna().count() / 100),
+                            showplot=True)
+        zsc.calc(repeat=True)
+
+        from diive.pkgs.outlierdetection.zscore import zScoreDaytimeNighttime
+        zdn = zScoreDaytimeNighttime(
+            series=hq_nt,
+            lat=47.286417,
+            lon=7.733750,
+            utc_offset=1,
+            thres_zscore=5.5,
+            showplot=True,
+            verbose=True)
+        zdn.calc(repeat=True)
+
+
+
+        from diive.pkgs.outlierdetection.lof import LocalOutlierFactorAllData
+        n_neighbors = int(hq_nt.dropna().count() / 100)
+        lofa = LocalOutlierFactorAllData(
+            series=hq_nt,
+            n_neighbors=n_neighbors,
+            contamination='auto',
+            showplot=True,
+            verbose=True,
+            n_jobs=-1
+        )
+
+        lofa.calc(repeat=True)
+        print(f"--------------------------- n_neighbors: {n_neighbors}")
+
+
+
+
+        # # todo isolation forest
+        # from sklearn.ensemble import IsolationForest
+        # # Create an Isolation Forest model
+        # iso_forest = IsolationForest(contamination=0.05)  # Adjust contamination based on your dataset
+        # # Fit the model to your data
+        # X = hq_dt.dropna().to_numpy().reshape(-1, 1)
+        # iso_forest.fit(X)
+        # # Predict outliers
+        # outliers = iso_forest.predict(X)
+        #
+        # import matplotlib.pyplot as plt
+        #
+        # from sklearn.inspection import DecisionBoundaryDisplay
+        #
+        # disp = DecisionBoundaryDisplay.from_estimator(
+        #     iso_forest,
+        #     X,
+        #     response_method="predict",
+        #     alpha=0.5,
+        # )
+        # disp.ax_.scatter(X[:, 0], X[:, 1], c=y, s=20, edgecolor="k")
+        # disp.ax_.set_title("Binary decision boundary \nof IsolationForest")
+        # plt.axis("square")
+        # plt.legend(handles=handles, labels=["outliers", "inliers"], title="true class")
+        # plt.show()
+
+        # # https://www.geeksforgeeks.org/anomaly-detection-using-isolation-forest/
+        # from sklearn.ensemble import IsolationForest
+        # from sklearn.model_selection import train_test_split
+        # from sklearn.datasets import load_iris
+        # import matplotlib.pyplot as plt
+        # iris = load_iris()
+        # X = iris.data
+        # y = iris.target
+        # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+        # # initialize and fit the model
+        # clf = IsolationForest(contamination=0.1)
+        # clf.fit(X_train)
+        # # predict the anomalies in the data
+        # y_pred_train = clf.predict(X_train)
+        # y_pred_test = clf.predict(X_test)
+        # print(y_pred_train)
+        # print(y_pred_test)
+        # def create_scatter_plots(X1, y1, title1, X2, y2, title2):
+        #     fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+        #     # Scatter plot for the first set of data
+        #     axes[0].scatter(X1[y1 == 1, 0], X1[y1 == 1, 1], color='green', label='Normal')
+        #     axes[0].scatter(X1[y1 == -1, 0], X1[y1 == -1, 1], color='red', label='Anomaly')
+        #     axes[0].set_title(title1)
+        #     axes[0].legend()
+        #
+        #     # Scatter plot for the second set of data
+        #     axes[1].scatter(X2[y2 == 1, 0], X2[y2 == 1, 1], color='green', label='Normal')
+        #     axes[1].scatter(X2[y2 == -1, 0], X2[y2 == -1, 1], color='red', label='Anomaly')
+        #     axes[1].set_title(title2)
+        #     axes[1].legend()
+        #
+        #     plt.tight_layout()
+        #     plt.show()
+        #
+        # # scatter plots
+        # create_scatter_plots(X_train, y_pred_train, 'Training Data', X_test, y_pred_test, 'Test Data')
+        #
+        # range = np.arange(0, 1, 0.001)
+        # test = pd.Series(index=range)
+        # for x in range:
+        #     q = hq_nt.quantile(x)
+        #     test.loc[x] = q
+        # test.plot()
+        # plt.show()
+
+
+
+        # self.flags.loc[self.nighttime == 1, self.filteredseriescol_hq].describe()
+        # self.flags.loc[self.daytime == 1, self.filteredseriescol_hq].plot()
+        # self.flags.loc[self.nighttime == 1, self.filteredseriescol_hq].plot()
 
     def _flagstats(self, flag: Series, prefix: str):
         n_values = len(flag)
