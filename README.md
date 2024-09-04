@@ -6,6 +6,8 @@
 
 [![DOI](https://zenodo.org/badge/708559210.svg)](https://zenodo.org/doi/10.5281/zenodo.10884017)
 
+*`diive` is currently under active developement with frequent updates.*
+
 # Time series data processing
 
 `diive` is a Python library for time series processing, in particular ecosystem data. Originally developed
