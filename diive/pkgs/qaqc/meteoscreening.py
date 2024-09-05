@@ -368,7 +368,7 @@ class StepwiseMeteoScreeningDb:
                                                                     plottitle=plottitle,
                                                                     repeat=repeat)
 
-    def flag_outliers_zscore_rolling_test(self, thres_zscore: int = 4, showplot: bool = False, verbose: bool = False,
+    def flag_outliers_zscore_rolling_test(self, thres_zscore: float = 4, showplot: bool = False, verbose: bool = False,
                                           plottitle: str = None, repeat: bool = True, winsize: int = None):
         """Identify outliers based on the z-score of records"""
         for field in self.fields:

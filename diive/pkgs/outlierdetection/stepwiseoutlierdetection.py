@@ -210,7 +210,7 @@ class StepwiseOutlierDetection:
         flagtest.calc(repeat=repeat)
         self._last_flag = flagtest.get_flag()
 
-    def flag_outliers_zscore_rolling_test(self, thres_zscore: int = 4, showplot: bool = False, verbose: bool = False,
+    def flag_outliers_zscore_rolling_test(self, thres_zscore: float = 4, showplot: bool = False, verbose: bool = False,
                                           plottitle: str = None, repeat: bool = True, winsize: int = None):
         """Identify outliers based on the z-score of records"""
         series_cleaned = self._series_hires_cleaned.copy()
