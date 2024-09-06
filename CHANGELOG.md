@@ -4,6 +4,10 @@
 
 ## v0.81.0 | XX Sep 2024
 
+## New features
+
+- (`diive.pkgs.flux.hqflux.analyze_highest_quality_flux`)
+
 ### Additions
 
 - `LocalSD` outlier detection can now use a constant SD:
@@ -20,6 +24,12 @@
 ### Changes
 
 - Replaced `.plot_date()` from the Matplotlib library with `.plot()` due to deprecation
+
+### Bugfixes
+
+- Fixed bug when saving a pandas Series to parquet (`diive.core.io.files.save_parquet`)
+- Fixed bug when plotting `doy_mean_cumulative`: no longer crashes when years defined in parameter
+  `excl_years_from_reference` are not in dataset (`diive.core.times.times.doy_mean_cumulative`)
 
 ### Tests
 
