@@ -5,6 +5,7 @@ from typing import Literal
 
 import numpy as np
 import pandas as pd
+from jinja2.nodes import Keyword
 from pandas import DataFrame, Series, DatetimeIndex
 from pandas.tseries.frequencies import to_offset
 
@@ -1176,7 +1177,11 @@ def doy_mean_cumulative(cumulatives_per_year_df: DataFrame,
                         excl_years_from_reference: list = None) -> DataFrame:
     reference_years_df = cumulatives_per_year_df.copy()
     if excl_years_from_reference:
-        reference_years_df.drop(excl_years_from_reference, axis=1, inplace=True)
+        for yr in excl_years_from_reference:
+            try:
+                reference_years_df.drop(yr, axis=1, inplace=True)
+            except KeyError:
+                pass
     df = pd.DataFrame()
     df['MEAN_DOY_TIME'] = reference_years_df.mean(axis=1)
     df['SD_DOY_TIME'] = reference_years_df.std(axis=1)
