@@ -129,6 +129,7 @@ _Create single outlier flags where `0=OK` and `2=outlier`._
 
 ### Plotting
 
+- **Cumulatives per year** ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/CumulativesPerYear.ipynb))
 - **Diel cycle per month** ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/DielCycle.ipynb))
 - **Heatmap date/time**: showing values (z) of time series as date (y) vs time (x) ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/HeatmapDateTime.ipynb))
 - **Heatmap year/month**: showing values (z) of time series as year (y) vs month (x) ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/HeatmapYearMonth.ipynb))
