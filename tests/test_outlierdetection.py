@@ -11,13 +11,61 @@ from diive.pkgs.outlierdetection.incremental import zScoreIncrements
 from diive.pkgs.outlierdetection.localsd import LocalSD
 from diive.pkgs.outlierdetection.lof import LocalOutlierFactorAllData
 from diive.pkgs.outlierdetection.trim import TrimLow
-from diive.pkgs.outlierdetection.zscore import zScore, zScoreDaytimeNighttime
+from diive.pkgs.outlierdetection.zscore import zScore, zScoreDaytimeNighttime, zScoreRolling
 from diive.pkgs.qaqc.flags import MissingValues
 
 
 # kudos https://medium.com/@ms_somanna/guide-to-adding-noise-to-your-data-using-python-and-numpy-c8be815df524
 
 class TestOutlierDetection(unittest.TestCase):
+
+    def test_zscore_rolling(self):
+        df = ed.load_exampledata_parquet()
+        s = df['Tair_f'].copy()
+        s = s.loc[s.index.year == 2018].copy()
+        s = s.loc[s.index.month == 7].copy()
+        s_noise = add_impulse_noise(series=s,
+                                    factor_low=-15,
+                                    factor_high=14,
+                                    contamination=0.03,
+                                    seed=42)  # Add impulse noise (spikes)
+
+        # Checks on noise data, make sure we have outliers, i.e., greater or less than the specified limits
+        self.assertGreater(s_noise.max(), 22)
+        self.assertLess(s_noise.min(), 10)
+
+        zsr = zScoreRolling(
+            series=s_noise,
+            thres_zscore=4,
+            winsize=50,
+            showplot=True,
+            verbose=False
+        )
+        zsr.calc()
+        flag = zsr.get_flag()
+        frame = {'s_noise': s_noise, 'flag': flag}
+        checkdf = pd.DataFrame.from_dict(frame)
+
+        # Checks on bad data
+        badmean = checkdf.loc[checkdf.flag == 2, 's_noise'].mean()
+        self.assertEqual(badmean, 176.562204534145)
+        baddata_stats = checkdf.loc[checkdf.flag == 2].describe()
+        self.assertEqual(baddata_stats.loc['max']['s_noise'], 338.9234661966423)
+        self.assertEqual(baddata_stats.loc['min']['s_noise'], -40.33549755756406)
+        self.assertEqual(baddata_stats.loc['count']['flag'], 40)
+        self.assertEqual(baddata_stats.loc['min']['flag'], 2)
+        self.assertEqual(baddata_stats.loc['max']['flag'], 2)
+        self.assertEqual(baddata_stats.loc['count']['s_noise'], 40)
+
+        # Checks on good data
+        goodmean = checkdf.loc[checkdf.flag == 0, 's_noise'].mean()
+        self.assertEqual(goodmean, 13.98556573961263)
+        gooddata_stats = checkdf.loc[checkdf.flag == 0].describe()
+        self.assertEqual(gooddata_stats.loc['max']['s_noise'], 28.472316256494835)
+        self.assertEqual(gooddata_stats.loc['min']['s_noise'], 2.151442210229117)
+        self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
+        self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
+        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1448)
 
     def test_missing_values(self):
         df = ed.load_exampledata_parquet()
