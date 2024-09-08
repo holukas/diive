@@ -70,7 +70,8 @@ class TimeSeries:
                    x_axis_type='datetime')
 
         p.line(x='date', y='value', line_width=2, source=source, color='#455A64')
-        p.circle(x='date', y='value', size=5, source=source, color='#455A64')
+        # p.circle(x='date', y='value', size=5, source=source, color='#455A64')
+        p.scatter(x='date', y='value', size=5, source=source, color='#455A64')
 
         p.yaxis.axis_label = self.series.name
 
