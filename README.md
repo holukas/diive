@@ -125,7 +125,7 @@ _Create single outlier flags where `0=OK` and `2=outlier`._
 - **z-score**: Identify outliers based on the z-score across all time series data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/zScore.ipynb))
 - **z-score increments daytime/nighttime**: Identify outliers based on the z-score of double increments ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/zScoreIncremental.ipynb))
 - **z-score daytime/nighttime**: Identify outliers based on the z-score, separately for daytime and nighttime ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/zScoreDaytimeNighttime.ipynb))
-- **z-score rolling**: Identify outliers based on the rolling z-score
+- **z-score rolling**: Identify outliers based on the rolling z-score ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/zScoreRolling.ipynb))
 
 ### Plotting
 
