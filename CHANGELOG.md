@@ -4,9 +4,11 @@
 
 ## v0.81.0 | XX Sep 2024
 
-## New features
+(`diive.pkgs.flux.ustarthreshold.UstarDetectionMPT`)
 
-- (`diive.pkgs.flux.hqflux.analyze_highest_quality_flux`)
+### New features
+
+- Added function to analyze high-quality ecosystem fluxes (`diive.pkgs.flux.hqflux.analyze_highest_quality_flux`)
 
 ### Additions
 
@@ -25,16 +27,27 @@
 
 - Replaced `.plot_date()` from the Matplotlib library with `.plot()` due to deprecation
 
+### Notebooks
+
+- Added notebook for plotting cumulative sums per year (`notebooks/Plotting/CumulativesPerYear.ipynb`)
+- Added notebook for removing outliers based on the z-score in rolling time window (
+  `notebooks/OutlierDetection/zScoreRolling.ipynb`)
+
 ### Bugfixes
 
 - Fixed bug when saving a pandas Series to parquet (`diive.core.io.files.save_parquet`)
 - Fixed bug when plotting `doy_mean_cumulative`: no longer crashes when years defined in parameter
   `excl_years_from_reference` are not in dataset (`diive.core.times.times.doy_mean_cumulative`)
+- Fixed deprecation warning when plotting in `bokeh` (interactive plots)
 
 ### Tests
 
-- Added unittest for `LocalSD` using constant SD (`)
+- Added unittest for `LocalSD` using constant SD (
+  `tests.test_outlierdetection.TestOutlierDetection.test_localsd_with_constantsd`)
+- Added unittest for rolling z-score outlier removal (
+  `tests.test_outlierdetection.TestOutlierDetection.test_zscore_rolling`)
 - Improved check if figure and axis were created in (`tests.test_plots.TestPlots.test_histogram`)
+- 39/39 unittests ran successfully
 
 ### Environment
 
