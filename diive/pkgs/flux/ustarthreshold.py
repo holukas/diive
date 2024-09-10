@@ -1,21 +1,62 @@
-from pandas import Series, DatetimeIndex
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from pandas import DatetimeIndex
 from pandas import Series, DataFrame
-from diive.core.base.flagbase import FlagBase
+
 import diive.core.plotting.plotfuncs as pf
 import diive.core.plotting.styles.LightTheme as theme
+from diive.core.base.flagbase import FlagBase
 from diive.core.times.times import insert_season
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.pkgs.createvar.daynightflag import daytime_nighttime_flag_from_swinpot
 from diive.pkgs.createvar.potentialradiation import potrad
 
 
+class FlagMultipleConstantUstarThresholds:
+
+    def __init__(self, series, ustar, thresholds, threshold_labels,
+                 showplot: bool = True, verbose: bool = True, idstr: str = None):
+        self.series = series
+        self.ustar = ustar
+        self.thresholds = thresholds
+        self.threshold_labels = threshold_labels
+        self.showplot = showplot
+        self.verbose = verbose
+        self.idstr = idstr
+
+        self._results = pd.concat([self.series, self.ustar], axis=1).copy()
+
+    @property
+    def results(self) -> DataFrame:
+        """Return high-resolution detailed data with tags as dict of DataFrames."""
+        if not isinstance(self._results, DataFrame):
+            raise Exception("No USTAR flags available.")
+        return self._results
+
+    def get_results(self) -> DataFrame:
+        return self.results
+
+    def calc(self):
+        for ix, threshold in enumerate(self.thresholds):
+            idstr = f"{self.idstr}_{self.threshold_labels[ix]}" if self.idstr else f"{self.threshold_labels[ix]}"
+            ust = FlagSingleConstantUstarThreshold(
+                series=self.results[self.series.name],
+                ustar=self.results[self.ustar.name],
+                threshold=threshold,
+                idstr=idstr,
+                showplot=self.showplot,
+                verbose=self.verbose
+            )
+            ust.calc()
+            flag = ust.get_flag()
+            self._results[flag.name] = flag.copy()
+
+
 @ConsoleOutputDecorator()
-class FlagConstantUstarThreshold(FlagBase):
-    flagid = 'OUTLIER_USTAR'
+class FlagSingleConstantUstarThreshold(FlagBase):
+    flagid = 'USTAR'
 
     def __init__(self,
                  series: Series,
@@ -61,13 +102,9 @@ class FlagConstantUstarThreshold(FlagBase):
 
         if self.verbose:
             if self.verbose:
-                print(f"Total found outliers: {len(rejected)} values")
+                print(f"Total found outliers for USTAR threshold {self._idstr} {self.threshold}: {len(rejected)} values")
 
         return ok, rejected, n_outliers
-
-
-
-
 
 
 @ConsoleOutputDecorator()
@@ -1023,20 +1060,30 @@ def example_flag_constant_ustar_threshold():
     df = df.loc[locs].copy()
     # [print(c) for c in df.columns if "TA" in c]
 
-    NEE_COL = "NEE_L3.1_L3.2_QCF"
+    NEE_COL = "NEE_L3.1"
     USTAR_COL = "USTAR"
     SERIES = df[NEE_COL].copy()
     USTAR = df[USTAR_COL].copy()
     # [0.0532449, 0.0709217, 0.0949867],
 
-    ust = FlagConstantUstarThreshold(
+    ust = FlagMultipleConstantUstarThresholds(
         series=SERIES,
         ustar=USTAR,
-        threshold=0.0709217,
-        idstr="CUT_50",
+        thresholds=[0.0532449, 0.0709217, 0.0949867],
+        threshold_labels=['CUT_16', 'CUT_50', 'CUT_84'],
         showplot=True,
         verbose=True
     )
+    ust.calc()
+
+    # ust = FlagSingleConstantUstarThreshold(
+    #     series=SERIES,
+    #     ustar=USTAR,
+    #     threshold=0.0532449,  # 0.0532449, 0.0709217, 0.0949867
+    #     idstr="CUT_50",
+    #     showplot=True,
+    #     verbose=True
+    # )
     ust.calc()
     filteredseries = ust.filteredseries
     flag = ust.get_flag()
@@ -1054,8 +1101,6 @@ def example_flag_constant_ustar_threshold():
     #               nighttimetime_accept_qcf_below=1)
     # qcf.get()
     # qcf.report_qcf_evolution()
-
-
 
     print("END")
 
