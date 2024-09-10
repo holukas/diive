@@ -60,7 +60,7 @@ def analyze_highest_quality_flux(flux: Series, nighttime_flag: Series, showplot:
             rmediancol = f'ROLLING_MEDIAN_{t}'
             sdcol = f'SD_{t}'
             t_ax.plot(hqdf.index, hqdf[fluxcol],
-                      label=f"DAYTIME flux", color="#607D8B", linestyle='none', markeredgewidth=1,
+                      label=f"{t} flux", color="#607D8B", linestyle='none', markeredgewidth=1,
                       marker='o', alpha=.5, markersize=6, markeredgecolor="#607D8B", fillstyle='none')
             t_ax.plot(hqdf.index, hqdf[rmediancol],
                       label=f"rolling median", color="#FF6F00", linestyle='solid',
