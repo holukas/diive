@@ -1,15 +1,73 @@
+from pandas import Series, DatetimeIndex
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from pandas import Series, DataFrame
-
+from diive.core.base.flagbase import FlagBase
 import diive.core.plotting.plotfuncs as pf
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.times.times import insert_season
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.pkgs.createvar.daynightflag import daytime_nighttime_flag_from_swinpot
 from diive.pkgs.createvar.potentialradiation import potrad
+
+
+@ConsoleOutputDecorator()
+class FlagConstantUstarThreshold(FlagBase):
+    flagid = 'OUTLIER_USTAR'
+
+    def __init__(self,
+                 series: Series,
+                 ustar: Series,
+                 threshold: float,
+                 idstr: str = None,
+                 showplot: bool = False,
+                 verbose: bool = False):
+        """xxx"""
+        super().__init__(series=series, flagid=self.flagid, idstr=idstr)
+        self.ustar = ustar
+        self.threshold = threshold
+        self.showplot = False
+        self.verbose = False
+        self.showplot = showplot
+        self.verbose = verbose
+
+        # if self.showplot:
+        #     self.fig, self.ax, self.ax2 = self._plot_init()
+
+    def calc(self):
+        """Calculate overall flag, based on individual flags from multiple iterations.
+
+        Args:
+            repeat: If *True*, the outlier detection is repeated until all
+                outliers are removed.
+
+        """
+
+        self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=False)
+        if self.showplot:
+            # Default plot for outlier tests, showing rejected values
+            self.defaultplot(n_iterations=n_iterations)
+
+    def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
+        """Perform tests required for this flag"""
+
+        ok = (self.ustar >= self.threshold)
+        ok = ok[ok].index
+        rejected = (self.ustar < self.threshold)
+        rejected = rejected[rejected].index
+        n_outliers = len(rejected)
+
+        if self.verbose:
+            if self.verbose:
+                print(f"Total found outliers: {len(rejected)} values")
+
+        return ok, rejected, n_outliers
+
+
+
+
 
 
 @ConsoleOutputDecorator()
@@ -957,6 +1015,52 @@ def example_scenarios():
     ust.calc(ustarthresholds=[0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4], showplot=True, verbose=True)
 
 
+def example_flag_constant_ustar_threshold():
+    from diive.core.io.files import load_parquet
+    filepath = r"L:\Sync\luhk_work\TMP\FluxProcessingChain_L3.2.parquet"
+    df = load_parquet(filepath=filepath)
+    locs = (df.index.year >= 2022) & (df.index.year <= 2022)
+    df = df.loc[locs].copy()
+    # [print(c) for c in df.columns if "TA" in c]
+
+    NEE_COL = "NEE_L3.1_L3.2_QCF"
+    USTAR_COL = "USTAR"
+    SERIES = df[NEE_COL].copy()
+    USTAR = df[USTAR_COL].copy()
+    # [0.0532449, 0.0709217, 0.0949867],
+
+    ust = FlagConstantUstarThreshold(
+        series=SERIES,
+        ustar=USTAR,
+        threshold=0.0709217,
+        idstr="CUT_50",
+        showplot=True,
+        verbose=True
+    )
+    ust.calc()
+    filteredseries = ust.filteredseries
+    flag = ust.get_flag()
+
+    # df[flag.name] = flag
+    #
+    # # Calculate overall quality flag QCF
+    # from diive.pkgs.qaqc.qcf import FlagQCF
+    # qcf = FlagQCF(series=df[NEE_COL],
+    #               df=df,
+    #               idstr="L3.3",
+    #               swinpot=df['SW_IN_POT'],
+    #               nighttime_threshold=50)
+    # qcf.calculate(daytime_accept_qcf_below=1,
+    #               nighttimetime_accept_qcf_below=1)
+    # qcf.get()
+    # qcf.report_qcf_evolution()
+
+
+
+    print("END")
+
+
 if __name__ == '__main__':
-    example()
+    example_flag_constant_ustar_threshold()
+    # example()
     # example_scenarios()
