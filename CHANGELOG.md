@@ -4,11 +4,41 @@
 
 ## v0.81.0 | XX Sep 2024
 
-(`diive.pkgs.flux.ustarthreshold.UstarDetectionMPT`)
+## Expanding Flux Processing Capabilities
+
+This update brings advancements for post-processing eddy covariance data in the context of the `FluxProcessingChain`.
+The goal is to offer a complete chain for post-processing ecosystem flux data, specifically designed to work seamlessly
+with the standardized `_fluxnet` output file from the
+widely-used [EddyPro](https://www.licor.com/env/products/eddy-covariance/eddypro) software.
+
+Now, diive offers the option for USTAR filtering based on *known* constant thresholds across the entire dataset (similar
+to the `CUT` scenarios in FLUXNET data). While seasonal (DJF, MAM, JJA, SON) thresholds are calculated internally,
+applying them on a seasonal basis or using variable thresholds per year (like FLUXNET's `VUT` scenarios) isn't yet
+implemented.
+
+With this update, the `FluxProcessingChain` class can handle various data processing steps:
+
+- Level-2: Quality flag expansion
+- Level-3.1: Storage correction
+- Level-3.2: Outlier removal
+- Level-3.3: (new) USTAR filtering (with constant thresholds for now)
+- (upcoming) Level-4.1: long-term gap-filling using random forest and XGBoost
+- For info about the different flux levels
+  see [Swiss FluxNet flux processing chain](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/)
 
 ### New features
 
-- Added function to analyze high-quality ecosystem fluxes (`diive.pkgs.flux.hqflux.analyze_highest_quality_flux`)
+- Added class to apply multiple known constant USTAR (friction velocity) thresholds, creating flags that indicate time
+  periods characterized by low turbulence for multiple USTAR scenarios. The constant thresholds must be known
+  beforehand, e.g., from an earlier USTAR detection run, or from results from FLUXNET (
+  `diive.pkgs.flux.ustarthreshold.FlagMultipleConstantUstarThresholds`)
+- Added class to apply one single known constant USTAR thresholds (
+  `diive.pkgs.flux.ustarthreshold.FlagSingleConstantUstarThreshold`)
+- Added `FlagMultipleConstantUstarThresholds` to the flux processing chain (
+  `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain.level33_constant_ustar`)
+- Added USTAR detection algorithm based on Papale et al., 2006 (`diive.pkgs.flux.ustarthreshold.UstarDetectionMPT`)
+- Added function to analyze high-quality ecosystem fluxes that helps in understanding the range of highest-quality data(
+  `diive.pkgs.flux.hqflux.analyze_highest_quality_flux`)
 
 ### Additions
 
@@ -2101,17 +2131,17 @@ which allows the calculation of the flux detection limit following Langford et a
 
 - None
 
-#### **REFERENCES**
-
-Langford, B., Acton, W., Ammann, C., Valach, A., & Nemitz, E. (2015). Eddy-covariance data with low signal-to-noise
-ratio: Time-lag determination, uncertainties and limit of detection. Atmospheric Measurement Techniques, 8(10),
-4197–4213. https://doi.org/10.5194/amt-8-4197-2015
-
-# References
+## **REFERENCES**
 
 - Hollinger, D. Y., & Richardson, A. D. (2005). Uncertainty in eddy covariance measurements
   and its application to physiological models. Tree Physiology, 25(7),
   873–885. https://doi.org/10.1093/treephys/25.7.873
+- Langford, B., Acton, W., Ammann, C., Valach, A., & Nemitz, E. (2015). Eddy-covariance data with low signal-to-noise
+  ratio: Time-lag determination, uncertainties and limit of detection. Atmospheric Measurement Techniques, 8(10),
+  4197–4213. https://doi.org/10.5194/amt-8-4197-2015
+- Papale, D., Reichstein, M., Aubinet, M., Canfora, E., Bernhofer, C., Kutsch, W., Longdoz, B., Rambal, S., Valentini,
+  R., Vesala, T., & Yakir, D. (2006). Towards a standardized processing of Net Ecosystem Exchange measured with eddy
+  covariance technique: Algorithms and uncertainty estimation. Biogeosciences, 3(4),
+  571–583. https://doi.org/10.5194/bg-3-571-2006
 - Pastorello, G. et al. (2020). The FLUXNET2015 dataset and the ONEFlux processing pipeline
   for eddy covariance data. 27. https://doi.org/10.1038/s41597-020-0534-3
-
