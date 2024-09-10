@@ -1,12 +1,9 @@
 #  TODO NEEDS FLOW CHECK
 from typing import Literal
 
-from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-from diive.pkgs.flux.hqflux import analyze_highest_quality_flux
 import numpy as np
 import pandas as pd
 from pandas import DataFrame, Series
-from sklearn.model_selection import train_test_split
 
 from diive.core.dfun.frames import detect_new_columns
 from diive.core.funcs.funcs import filter_strings_by_elements
@@ -14,6 +11,8 @@ from diive.core.io.filereader import MultiDataFileReader, search_files
 from diive.pkgs.createvar.daynightflag import daytime_nighttime_flag_from_swinpot
 from diive.pkgs.createvar.potentialradiation import potrad
 from diive.pkgs.flux.common import detect_fluxbasevar
+from diive.pkgs.flux.hqflux import analyze_highest_quality_flux
+from diive.pkgs.flux.ustarthreshold import FlagMultipleConstantUstarThresholds
 from diive.pkgs.fluxprocessingchain.level2_qualityflags import FluxQualityFlagsEddyPro
 from diive.pkgs.fluxprocessingchain.level31_storagecorrection import FluxStorageCorrectionSinglePointEddyPro
 from diive.pkgs.outlierdetection.stepwiseoutlierdetection import StepwiseOutlierDetection
@@ -43,7 +42,9 @@ class FluxProcessingChain:
         self.fluxbasevar = detect_fluxbasevar(fluxcol=fluxcol)
 
         # Collect all relevant variables for this flux in dataframe
-        self._fpc_df = self.maindf[[fluxcol]].copy()
+        self.ustarcol = 'USTAR'
+        requiredcols = [self.fluxcol, self.ustarcol]
+        self._fpc_df = self.maindf[requiredcols].copy()
 
         # Add potential radiation and daytime and nighttime flags
         self._fpc_df, self.swinpot_col = self._add_swinpot_dt_nt_flag(df=self._fpc_df)
@@ -62,12 +63,15 @@ class FluxProcessingChain:
         self._filteredseries_level2_qcf = None
         self._filteredseries_level31_qcf = None
         self._filteredseries_level32_qcf = None
+        self._filteredseries_level33_qcf = dict()  # dict because there can be multiple USTAR scenarios
         self._maindf = None
         self._level2 = None
         self._level31 = None
         self._level32 = None
+        self._level33 = None
         self._level2_qcf = None
         self._level32_qcf = None
+        self._level33_qcf = dict()  # dict because there can be multiple USTAR scenarios
 
     @property
     def filteredseries(self) -> Series:
@@ -110,6 +114,14 @@ class FluxProcessingChain:
         return self._filteredseries_level32_qcf
 
     @property
+    def filteredseries_level33_qcf(self) -> dict:
+        """Return time series of quality-filtered flux after Level-3.3."""
+        if not isinstance(self._filteredseries_level33_qcf, dict):
+            raise Exception(f'No filtered time series for {self.fluxcol} available, '
+                            f'please run .level33...() first.')
+        return self._filteredseries_level33_qcf
+
+    @property
     def fpc_df(self) -> DataFrame:
         """Return fluxes and flags from each level."""
         if not isinstance(self._fpc_df, DataFrame):
@@ -131,6 +143,13 @@ class FluxProcessingChain:
         return self._level32_qcf
 
     @property
+    def level33_qcf(self) -> dict:
+        """Return instance of Level-3.3 QCF creation."""
+        if not isinstance(self._level33_qcf, dict):
+            raise Exception('No Level-3.3 data available.')
+        return self._level33_qcf
+
+    @property
     def level2(self) -> FluxQualityFlagsEddyPro:
         """Return instance of Level-2 flag creation."""
         if not isinstance(self._level2, FluxQualityFlagsEddyPro):
@@ -150,6 +169,13 @@ class FluxProcessingChain:
         if not isinstance(self._level32, StepwiseOutlierDetection):
             raise Exception('No Level-3.2 data available, please run .level32_stepwise_outlier_detection() first.')
         return self._level32
+
+    @property
+    def level33(self) -> FlagMultipleConstantUstarThresholds:
+        """Return instance of Level-3.3 ustar."""
+        if not isinstance(self._level33, FlagMultipleConstantUstarThresholds):
+            raise Exception('No Level-3.3 data available, please run .level32_stepwise_outlier_detection() first.')
+        return self._level33
 
     @property
     def levelidstr(self) -> list:
@@ -286,6 +312,47 @@ class FluxProcessingChain:
         )
         self._filteredseries_level32_qcf = self.filteredseries.copy()  # Store filtered series as variable
 
+    def finalize_level33(self,
+                         nighttime_threshold: int = 50,
+                         daytime_accept_qcf_below: int = 2,
+                         nighttimetime_accept_qcf_below: int = 2):
+        """Calculate overall quality flag QCF after Level-3.3"""
+
+        ustar_scenarios = self.level33.threshold_labels
+
+        for u in ustar_scenarios:
+
+            print(f"Calculating overall quality flag QCF for USTAR scenario {u}...")
+
+            flagcol = [c for c in self.level33.results if u in c]
+            flagcol = flagcol[0] if len(flagcol) == 1 else None
+            udf = self.level33.results[[self.level31.flux_corrected_col, self.ustarcol, flagcol]].copy()
+
+            # Calculate QCF for all USTAR scenarios and store in dict
+            self._level33_qcf[u] = self._finalize_level(
+                run_qcf_on_col=self.level31.flux_corrected_col,
+                idstr=f'L3.3_{u}',
+                level_df=udf,
+                nighttime_threshold=nighttime_threshold,
+                daytime_accept_qcf_below=daytime_accept_qcf_below,
+                nighttimetime_accept_qcf_below=nighttimetime_accept_qcf_below
+            )
+            self._filteredseries_level33_qcf[u] = self.filteredseries.copy()  # Store filtered series as variable
+
+    def level33_constant_ustar(self, thresholds: list, threshold_labels: list,
+                               showplot: bool = True, verbose: bool = True):
+        """Create flag to indicate time periods of low turbulence using
+        one or more known constant USTAR thresholds."""
+        idstr = 'L3.3'
+        self._levelidstr.append(idstr)
+        self._level33 = FlagMultipleConstantUstarThresholds(series=self.fpc_df[self.level31.flux_corrected_col],
+                                                            ustar=self.fpc_df[self.ustarcol],
+                                                            thresholds=thresholds,
+                                                            threshold_labels=threshold_labels,
+                                                            idstr=idstr,
+                                                            showplot=showplot)
+        self._level33.calc()
+
     def level31_storage_correction(self, gapfill_storage_term: bool = False):
         """Correct flux with storage term from single point measurement."""
         idstr = 'L3.1'
@@ -409,6 +476,12 @@ class FluxProcessingChain:
     def level32_flag_outliers_lof_dtnt_test(self, n_neighbors: int = None, contamination: float = None,
                                             showplot: bool = False, verbose: bool = False, repeat: bool = True,
                                             n_jobs: int = 1):
+        self._level32.flag_outliers_lof_dtnt_test(n_neighbors=n_neighbors, contamination=contamination,
+                                                  showplot=showplot, verbose=verbose, repeat=repeat, n_jobs=n_jobs)
+
+    def level33_flag_constant_ustar_test(self, n_neighbors: int = None, contamination: float = None,
+                                         showplot: bool = False, verbose: bool = False, repeat: bool = True,
+                                         n_jobs: int = 1):
         self._level32.flag_outliers_lof_dtnt_test(n_neighbors=n_neighbors, contamination=contamination,
                                                   showplot=showplot, verbose=verbose, repeat=repeat, n_jobs=n_jobs)
 
@@ -590,11 +663,11 @@ def example():
     # Source data
     from pathlib import Path
     from diive.core.io.files import load_parquet
-    SOURCEDIR = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_cha_fp2024_2005-2023\20_FLUXES_L1_IRGA_preparation"
+    SOURCEDIR = r"L:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_cha_fp2024_2005-2023\20_FLUXES_L1_IRGA_preparation"
     FILENAME = r"23.1_CH-CHA_IRGA_Level-1_eddypro_fluxnet_2005-2023_availableVars_meteo7.parquet"
     FILEPATH = Path(SOURCEDIR) / FILENAME
     maindf = load_parquet(filepath=FILEPATH)
-    locs = (maindf.index.year >= 2011) & (maindf.index.year <= 2013)
+    locs = (maindf.index.year >= 2023) & (maindf.index.year <= 2023)
     # locs = (maindf.index.year >= 2021) & (maindf.index.year <= 2023)
     maindf = maindf.loc[locs, :].copy()
     metadata = None
@@ -662,7 +735,8 @@ def example():
     TEST_RAWDATA_DISCONT_HF = False  # Default False
     TEST_RAWDATA_DISCONT_SF = False  # Default False
     TEST_RAWDATA_ANGLE_OF_ATTACK = True  # Default False
-    TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES = [['2008-01-01', '2010-01-01'], ['2016-03-01', '2016-05-01']]  # Default False
+    TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES = [['2008-01-01', '2010-01-01'],
+                                                      ['2016-03-01', '2016-05-01']]  # Default False
     # TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES = False  # Default False
     TEST_RAWDATA_STEADINESS_OF_HORIZONTAL_WIND = False  # Default False
 
@@ -701,9 +775,6 @@ def example():
     # fpc.level2_qcf.report_qcf_evolution()
     # fpc.level2_qcf.analyze_highest_quality_flux()
 
-
-
-
     # fpc.level2_qcf.report_qcf_flags()
     # fpc.level2.results
     # fpc.fpc_df
@@ -722,93 +793,13 @@ def example():
     # fpc.level31.results
     # [x for x in fpc.fpc_df.columns if 'L3.1' in x]
 
-    # ANALYZE
-    fpc.analyze_highest_quality_flux(showplot=True)
-
-    print("X")
+    # # ANALYZE
+    # fpc.analyze_highest_quality_flux(showplot=True)
 
     # --------------------
     # Level-3.2
     # --------------------
     fpc.level32_stepwise_outlier_detection()
-
-    # todo check if USTAR was included in these tests, this makes less records available for gap-filling
-
-    # # todo interesting results XGB
-    # # MedAE:  0.8161431225402832 (median absolute error)
-    # # R2:  0.9250442799074093
-    # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=[-50, 50], nighttime_minmax=[-30, 30], showplot=False, verbose=True)
-    # fpc.level32_addflag()
-    # fpc.level32_flag_outliers_localsd_test(n_sd=3, winsize=48 * 3, constant_sd=True, showplot=True, verbose=True, repeat=True)
-    # fpc.level32_addflag()
-
-    # # todo interesting results XGB
-    # # MedAE:  0.7728033069763178 (median absolute error)
-    # # R2:  0.9367094718921016
-    # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=[-50, 50], nighttime_minmax=[-20, 20], showplot=False, verbose=True)
-    # fpc.level32_addflag()
-    # fpc.level32_flag_outliers_localsd_test(n_sd=3, winsize=48 * 3, constant_sd=True, showplot=True, verbose=True, repeat=True)
-    # fpc.level32_addflag()
-
-    # # todo interesting results XGB
-    # # MedAE:  0.7043368580068969 (median absolute error)
-    # # R2:  0.9467665106166212
-    # fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=3, showplot=True, verbose=False, repeat=True)
-    # fpc.level32_addflag()
-
-    # # todo interesting results XGB
-    # # MedAE:  0.7015506063232442 (median absolute error)
-    # # R2:  0.9505763133853906
-    # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=[-50, 50], nighttime_minmax=[-30, 30], showplot=False, verbose=True)
-    # fpc.level32_addflag()
-    # fpc.level32_flag_outliers_lof_dtnt_test(n_neighbors=48 * 5, contamination=None, showplot=True, verbose=True, repeat=False, n_jobs=-1)
-    # fpc.level32_addflag()
-
-    # # todo interesting results XGB
-    # # MedAE:  0.5426265618515014 (median absolute error)
-    # # R2:  0.9624282284506912
-    # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=[-50, 50], nighttime_minmax=[-50, 50], showplot=False, verbose=True)
-    # fpc.level32_addflag()
-    # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 7, n_sigma_dt=4, n_sigma_nt=4,
-    #                                            showplot=True, verbose=True, repeat=False)
-    # fpc.level32_addflag()
-
-    # # todo interesting results XGB
-    # # MedAE:  0.7019609910034179 (median absolute error)
-    # # R2:  0.950432571262271
-    # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5,
-    #                                            showplot=True, verbose=True, repeat=False)
-    # fpc.level32_addflag()
-
-    # # todo interesting results XGB
-    # # MedAE:  0.5881434722900387 (median absolute error)
-    # # R2:  0.9593574500208515
-    # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 5, n_sigma_dt=3.5, n_sigma_nt=3.5,
-    #                                            showplot=True, verbose=True, repeat=False)
-    # fpc.level32_addflag()
-
-    # # todo interesting results XGB, high uptake budget -200 (solo 2018)
-    # # MedAE:  0.672752167892456 (median absolute error)
-    # # R2:  0.9562511097492526
-    # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 5, n_sigma_dt=3, n_sigma_nt=3,
-    #                                            showplot=True, verbose=True, repeat=False)
-    # fpc.level32_addflag()
-    # use_gapfilling = 2
-
-    # # todo interesting results RF, high uptake budgets
-    # # MedAE:  0.46672088797979583 (median absolute error)
-    # # R2:  0.9717917168178425
-    # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 5, n_sigma_dt=3, n_sigma_nt=3,
-    #                                            showplot=True, verbose=True, repeat=False)
-    # fpc.level32_addflag()
-    # use_gapfilling = 1
-
-    # # todo interesting results RF, high uptake budgets
-    # # MedAE:  0.46534315904040646 (median absolute error)
-    # # R2:  0.972499105894384
-    # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3, n_sigma_nt=3, showplot=True, verbose=True, repeat=False)
-    # fpc.level32_addflag()
-    # use_gapfilling = 1
 
     # todo interesting results RF
     # MedAE:  0.4563022463131315 (median absolute error)
@@ -824,43 +815,39 @@ def example():
     # fpc.level32_addflag()
     # use_gapfilling = 2
 
-
-    use_gapfilling = 1
-
-    fpc.level32_flag_manualremoval_test(
-        remove_dates=[
-            ['2016-03-18 12:15:00', '2016-05-03 06:45:00'],
-            # '2022-12-12 12:45:00',
-        ],
-        showplot=True, verbose=True)
-    fpc.level32_addflag()
-
-    # DAYTIME_MINMAX = [-50, 50]
-    # NIGHTTIME_MINMAX = [-50, 50]
-    # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX, showplot=True, verbose=True)
+    # fpc.level32_flag_manualremoval_test(
+    #     remove_dates=[
+    #         ['2016-03-18 12:15:00', '2016-05-03 06:45:00'],
+    #         # '2022-12-12 12:45:00',
+    #     ],
+    #     showplot=True, verbose=True)
     # fpc.level32_addflag()
-    # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
-    fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=False, repeat=True)
+    DAYTIME_MINMAX = [-50, 50]
+    NIGHTTIME_MINMAX = [-50, 50]
+    fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX,
+                                               showplot=False, verbose=False)
+    # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX, showplot=True, verbose=True)
     fpc.level32_addflag()
     # fpc.level32.results  # Stores Level-3.2 flags up to this point
+
+    # fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=False, repeat=True)
+    # fpc.level32_addflag()
 
     # fpc.level32_flag_outliers_hampel_test(window_length=48 * 7, n_sigma=5, showplot=True, verbose=True, repeat=False)
     # fpc.level32_addflag()
 
-    fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=True, verbose=True, repeat=True)
-    fpc.level32_addflag()
+    # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=False, verbose=False, repeat=False)
+    # # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=True, verbose=True, repeat=True)
+    # fpc.level32_addflag()
 
-    # fpc.level32_flag_outliers_zscore_rolling_test(winsize=48 * 7, thres_zscore=4, showplot=True, verbose=True,
+    # fpc.level32_flag_outliers_zscore_rolling_test(winsize=48 * 7, thres_zscore=4, showplot=False, verbose=True,
     #                                               repeat=True)
     # fpc.level32_addflag()
 
-
-
-    # fpc.level32_flag_outliers_localsd_test(n_sd=6, winsize=48 * 13, constant_sd=False,
-    #                                        showplot=True, verbose=True, repeat=True)
+    # fpc.level32_flag_outliers_localsd_test(n_sd=5, winsize=48 * 13, constant_sd=False, showplot=False, verbose=True,
+    #                                        repeat=True)
     # fpc.level32_addflag()
-    # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
     # fpc.level32_flag_outliers_localsd_test(n_sd=3, winsize=48 * 3, constant_sd=True, showplot=True, verbose=True, repeat=True)
     # fpc.level32_addflag()
@@ -903,17 +890,45 @@ def example():
     # # fpc.filteredseries_level31_qcf
     # # fpc.filteredseries_level32_qcf
 
-    # USTAR
-    FLUXVAR32QCF = fpc.filteredseries_level32_qcf.name
+    # --------------------
+    # Level-3.3
+    # --------------------
+    # 0.0532449, 0.0709217, 0.0949867
+    ustar_scenarios = ['CUT_16', 'CUT_50', 'CUT_84']
+    ustar_thresholds = [0.0532449, 0.0709217, 0.0949867]
+    fpc.level33_constant_ustar(thresholds=ustar_thresholds,
+                               threshold_labels=ustar_scenarios,
+                               showplot=False)
+    # Finalize: stores results for each USTAR scenario in a dict
+    fpc.finalize_level33(nighttime_threshold=50, daytime_accept_qcf_below=DAYTIME_ACCEPT_QCF_BELOW,
+                         nighttimetime_accept_qcf_below=NIGHTTIMETIME_ACCEPT_QCF_BELOW)
+
+    # for ustar_scenario in ustar_scenarios:
+    #     fpc.level33_qcf[ustar_scenario].showplot_qcf_heatmaps()
+    #     fpc.level33_qcf[ustar_scenario].report_qcf_evolution()
+    #     # fpc.filteredseries
+    #     # fpc.level33
+    #     # fpc.level33_qcf.showplot_qcf_timeseries()
+    #     # fpc.level33_qcf.report_qcf_flags()
+    #     # fpc.level33_qcf.report_qcf_series()
+    #     # fpc.levelidstr
+    #     # fpc.filteredseries_level2_qcf
+    #     # fpc.filteredseries_level31_qcf
+    #     # fpc.filteredseries_level32_qcf
+    #     # fpc.filteredseries_level33_qcf
+
+    # # check
+    # checkdf = fpc.fpc_df[['NEE_L3.1', 'NEE_L3.1_L3.3_QCF', 'USTAR']].copy()
+    # locs = checkdf['NEE_L3.1'].dropna().index
+    # checkdf = checkdf.loc[locs].copy()
+    # locs = checkdf['NEE_L3.1_L3.3_QCF'].dropna().index
+    # checkdf = checkdf.loc[locs]
+    # checkdf.describe()
+
     newcols = [c for c in fpc.fpc_df.columns if c not in maindf.columns]
     maindf2 = pd.concat([maindf, fpc.fpc_df[newcols]], axis=1)
-    maindf2 = maindf2[[FLUXVAR32QCF, "TA_T1_2_1", "SW_IN_T1_2_1", "VPD_T1_2_1", "USTAR"]].copy()
-    # keeprecords = maindf2['USTAR'] > 0.09
-    keeprecords = maindf2['USTAR'] > 0.0709217
-    maindf2.loc[~keeprecords, FLUXVAR32QCF] = np.nan
-
-    # todo test drop USTAR
-    maindf2 = maindf2[[FLUXVAR32QCF, "TA_T1_2_1", "SW_IN_T1_2_1", "VPD_T1_2_1"]].copy()
+    FLUXVAR33QCF = fpc.filteredseries_level33_qcf.name
+    maindf2 = maindf2[[FLUXVAR33QCF, "TA_T1_2_1", "SW_IN_T1_2_1", "VPD_T1_2_1"]].copy()
 
     # import matplotlib.pyplot as plt
     # maindf2.plot(subplots=True, x_compat=True, title="After USTAR Threshold", figsize=(12, 4.5))
@@ -972,140 +987,134 @@ def example():
     # # print(opt.predict(X_test))
     # # print(opt.predict_proba(X_test))
 
-
-
-
-    # GAP-FILLING
+    # # -----
+    # # GAP-FILLING
     # use_gapfilling = 1
+    # N_ESTIMATORS = 99
+    #
+    # if use_gapfilling == 1:
+    #     # Random forest
+    #     from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
+    #     MAX_DEPTH = None
+    #     MIN_SAMPLES_SPLIT = 2
+    #     MIN_SAMPLES_LEAF = 1
+    #     CRITERION = 'squared_error'  # “squared_error”, “absolute_error”, “friedman_mse”, “poisson”
+    #     gf = RandomForestTS(
+    #         input_df=maindf2,
+    #         target_col=FLUXVAR33QCF,
+    #         verbose=True,
+    #         # features_lag=None,
+    #         features_lag=[-1, -1],
+    #         # features_lag_exclude_cols=['test', 'test2'],
+    #         # include_timestamp_as_features=False,
+    #         include_timestamp_as_features=True,
+    #         # add_continuous_record_number=False,
+    #         add_continuous_record_number=True,
+    #         sanitize_timestamp=True,
+    #         perm_n_repeats=3,
+    #         n_estimators=N_ESTIMATORS,
+    #         random_state=42,
+    #         # random_state=None,
+    #         max_depth=MAX_DEPTH,
+    #         min_samples_split=MIN_SAMPLES_SPLIT,
+    #         min_samples_leaf=MIN_SAMPLES_LEAF,
+    #         criterion=CRITERION,
+    #         test_size=0.2,
+    #         n_jobs=-1
+    #     )
+    #     # rfts.reduce_features()
+    #     # rfts.report_feature_reduction()
+    #     gf.trainmodel(showplot_scores=False, showplot_importance=False)
+    #     # rfts.report_traintest()
+    #     gf.fillgaps(showplot_scores=False, showplot_importance=False)
+    #     gf.report_gapfilling()
+    #
+    #     # c = gf.gapfilling_df_['LE_L3.1_L3.3_QCF_gfRF'].copy()
+    #     c = gf.gapfilling_df_['NEE_L3.1_L3.3_QCF_gfRF'].copy()
+    #
+    # elif use_gapfilling == 2:
+    #     # XGBoost
+    #     from diive.pkgs.gapfilling.xgboost_ts import XGBoostTS
+    #     gf = XGBoostTS(
+    #         input_df=maindf2,
+    #         target_col=FLUXVAR33QCF,
+    #         verbose=1,
+    #         # features_lag=None,
+    #         features_lag=[-1, -1],
+    #         # features_lag_exclude_cols=['TIMESINCE_PREC_TOT_T1_25+20_1'],
+    #         # features_lag_exclude_cols=['Rg_f', 'TA>0', 'TA>20', 'DAYTIME', 'NIGHTTIME'],
+    #         # include_timestamp_as_features=False,
+    #         include_timestamp_as_features=True,
+    #         # add_continuous_record_number=False,
+    #         add_continuous_record_number=True,
+    #         sanitize_timestamp=True,
+    #         perm_n_repeats=3,
+    #         n_estimators=N_ESTIMATORS,
+    #         random_state=42,
+    #         # booster='gbtree',  # gbtree (default), gblinear, dart
+    #         # device='cpu',
+    #         # validate_parameters=True,
+    #         # disable_default_eval_metric=False,
+    #         early_stopping_rounds=10,
+    #         # learning_rate=0.1,
+    #         max_depth=6,
+    #         # max_delta_step=0,
+    #         # subsample=1,
+    #         # min_split_loss=0,
+    #         # min_child_weight=1,
+    #         # colsample_bytree=1,
+    #         # colsample_bylevel=1,
+    #         # colsample_bynode=1,
+    #         # reg_lambda=1,
+    #         # reg_alpha=0,
+    #         # tree_method='auto',  # auto, hist, approx, exact
+    #         # scale_pos_weight=1,
+    #         # grow_policy='depthwise',  # depthwise, lossguide
+    #         # max_leaves=0,
+    #         # max_bin=256,
+    #         # num_parallel_tree=1,
+    #         n_jobs=-1
+    #     )
+    #     # xgbts.reduce_features()
+    #     # xgbts.report_feature_reduction()
+    #     gf.trainmodel(showplot_scores=False, showplot_importance=False)
+    #     # xgbts.report_traintest()
+    #     gf.fillgaps(showplot_scores=False, showplot_importance=False)
+    #     gf.report_gapfilling()
+    #
+    #     c = gf.gapfilling_df_['NEE_L3.1_L3.3_QCF_gfXG'].copy()
+    #
+    # # import matplotlib.pyplot as plt
+    # # rfts.gapfilling_df_['.GAPFILLED_CUMULATIVE'].plot(x_compat=True)
+    # # rfts.gapfilling_df_['NEE_L3.1_L3.2_QCF_gfRF'].plot(x_compat=True)
+    # # plt.show()
+    #
+    # c = c.multiply(0.02161926)
+    # # from diive.core.io.files import save_parquet, load_parquet
+    # # save_parquet(data=c.to_frame(), filename="test", outpath=r"F:\TMP")
+    # # c = load_parquet(filepath=r"F:\TMP\test.parquet")
+    # # c = c.loc[c.index.year < 2024].copy()
+    # from diive.core.plotting.cumulative import CumulativeYear
+    # CumulativeYear(
+    #     series=c,
+    #     series_units="X",
+    #     yearly_end_date=None,
+    #     # yearly_end_date='08-11',
+    #     start_year=2006,
+    #     end_year=2023,
+    #     show_reference=True,
+    #     excl_years_from_reference=[2008, 2009],
+    #     # excl_years_from_reference=[2022],
+    #     highlight_year=2023,
+    #     highlight_year_color='#F44336').plot()
+    # ---
 
-    N_ESTIMATORS = 99
-
-    if use_gapfilling == 1:
-        # Random forest
-        from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
-        MAX_DEPTH = None
-        MIN_SAMPLES_SPLIT = 2
-        MIN_SAMPLES_LEAF = 1
-        CRITERION = 'squared_error'  # “squared_error”, “absolute_error”, “friedman_mse”, “poisson”
-        gf = RandomForestTS(
-            input_df=maindf2,
-            target_col=FLUXVAR32QCF,
-            verbose=True,
-            # features_lag=None,
-            features_lag=[-1, -1],
-            # features_lag_exclude_cols=['test', 'test2'],
-            # include_timestamp_as_features=False,
-            include_timestamp_as_features=True,
-            # add_continuous_record_number=False,
-            add_continuous_record_number=True,
-            sanitize_timestamp=True,
-            perm_n_repeats=3,
-            n_estimators=N_ESTIMATORS,
-            random_state=42,
-            # random_state=None,
-            max_depth=MAX_DEPTH,
-            min_samples_split=MIN_SAMPLES_SPLIT,
-            min_samples_leaf=MIN_SAMPLES_LEAF,
-            criterion=CRITERION,
-            test_size=0.2,
-            n_jobs=-1
-        )
-        # rfts.reduce_features()
-        # rfts.report_feature_reduction()
-        gf.trainmodel(showplot_scores=False, showplot_importance=False)
-        # rfts.report_traintest()
-        gf.fillgaps(showplot_scores=False, showplot_importance=False)
-        gf.report_gapfilling()
-
-        # c = gf.gapfilling_df_['LE_L3.1_L3.2_QCF_gfRF'].copy()
-        c = gf.gapfilling_df_['NEE_L3.1_L3.2_QCF_gfRF'].copy()
-
-    elif use_gapfilling == 2:
-        # XGBoost
-        from diive.pkgs.gapfilling.xgboost_ts import XGBoostTS
-        gf = XGBoostTS(
-            input_df=maindf2,
-            target_col=FLUXVAR32QCF,
-            verbose=1,
-            # features_lag=None,
-            features_lag=[-1, -1],
-            # features_lag_exclude_cols=['TIMESINCE_PREC_TOT_T1_25+20_1'],
-            # features_lag_exclude_cols=['Rg_f', 'TA>0', 'TA>20', 'DAYTIME', 'NIGHTTIME'],
-            # include_timestamp_as_features=False,
-            include_timestamp_as_features=True,
-            # add_continuous_record_number=False,
-            add_continuous_record_number=True,
-            sanitize_timestamp=True,
-            perm_n_repeats=3,
-            n_estimators=N_ESTIMATORS,
-            random_state=42,
-            # booster='gbtree',  # gbtree (default), gblinear, dart
-            # device='cpu',
-            # validate_parameters=True,
-            # disable_default_eval_metric=False,
-            early_stopping_rounds=10,
-            # learning_rate=0.1,
-            max_depth=6,
-            # max_delta_step=0,
-            # subsample=1,
-            # min_split_loss=0,
-            # min_child_weight=1,
-            # colsample_bytree=1,
-            # colsample_bylevel=1,
-            # colsample_bynode=1,
-            # reg_lambda=1,
-            # reg_alpha=0,
-            # tree_method='auto',  # auto, hist, approx, exact
-            # scale_pos_weight=1,
-            # grow_policy='depthwise',  # depthwise, lossguide
-            # max_leaves=0,
-            # max_bin=256,
-            # num_parallel_tree=1,
-            n_jobs=-1
-        )
-        # xgbts.reduce_features()
-        # xgbts.report_feature_reduction()
-        gf.trainmodel(showplot_scores=False, showplot_importance=False)
-        # xgbts.report_traintest()
-        gf.fillgaps(showplot_scores=False, showplot_importance=False)
-        gf.report_gapfilling()
-
-        c = gf.gapfilling_df_['NEE_L3.1_L3.2_QCF_gfXG'].copy()
-
-# import matplotlib.pyplot as plt
-# rfts.gapfilling_df_['.GAPFILLED_CUMULATIVE'].plot(x_compat=True)
-# rfts.gapfilling_df_['NEE_L3.1_L3.2_QCF_gfRF'].plot(x_compat=True)
-# plt.show()
-
-
-    c = c.multiply(0.02161926)
-    # from diive.core.io.files import save_parquet, load_parquet
-    # save_parquet(data=c.to_frame(), filename="test", outpath=r"F:\TMP")
-    # c = load_parquet(filepath=r"F:\TMP\test.parquet")
-    # c = c.loc[c.index.year < 2024].copy()
-    from diive.core.plotting.cumulative import CumulativeYear
-    CumulativeYear(
-        series=c,
-        series_units="X",
-        yearly_end_date=None,
-        # yearly_end_date='08-11',
-        start_year=2006,
-        end_year=2023,
-        show_reference=True,
-        excl_years_from_reference=[2008, 2009],
-        # excl_years_from_reference=[2022],
-        highlight_year=2023,
-        highlight_year_color='#F44336').plot()
-
-    col = 'NEE_L3.1_L3.2_QCF_gfRF' if use_gapfilling == 1 else 'NEE_L3.1_L3.2_QCF_gfXG'
-    from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-    hm = HeatmapDateTime(series=gf.gapfilling_df_[col])
-    hm.show()
-    # hm = HeatmapDateTime(series=gf.gapfilling_df_['NEE_L3.1_L3.2_QCF'])
+    # col = 'NEE_L3.1_L3.3_QCF_gfRF' if use_gapfilling == 1 else 'NEE_L3.1_L3.3_QCF_gfXG'
+    # from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+    # hm = HeatmapDateTime(series=gf.gapfilling_df_[col])
     # hm.show()
-
-
-
+    # # hm = HeatmapDateTime(series=gf.gapfilling_df_['NEE_L3.1_L3.3_QCF'])
+    # # hm.show()
 
     # # https://fitter.readthedocs.io/en/latest/tuto.html
     # # https://medium.com/the-researchers-guide/finding-the-best-distribution-that-fits-your-data-using-pythons-fitter-library-319a5a0972e9
@@ -1218,8 +1227,9 @@ def example():
     #
     # print("X")
 
+
 def example_cumu():
-    from diive.core.io.files import load_parquet, save_parquet
+    from diive.core.io.files import load_parquet
     c = load_parquet(filepath=r"F:\TMP\test.parquet")
 
     # from diive.core.io.files import save_parquet, load_parquet
