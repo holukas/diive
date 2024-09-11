@@ -2,7 +2,7 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.81.0 | XX Sep 2024
+## v0.81.0 | 11 Sep 2024
 
 ## Expanding Flux Processing Capabilities
 
