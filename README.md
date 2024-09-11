@@ -6,6 +6,8 @@
 
 [![DOI](https://zenodo.org/badge/708559210.svg)](https://zenodo.org/doi/10.5281/zenodo.10884017)
 
+*`diive` is currently under active developement with frequent updates.*
+
 # Time series data processing
 
 `diive` is a Python library for time series processing, in particular ecosystem data. Originally developed
@@ -123,10 +125,11 @@ _Create single outlier flags where `0=OK` and `2=outlier`._
 - **z-score**: Identify outliers based on the z-score across all time series data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/zScore.ipynb))
 - **z-score increments daytime/nighttime**: Identify outliers based on the z-score of double increments ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/zScoreIncremental.ipynb))
 - **z-score daytime/nighttime**: Identify outliers based on the z-score, separately for daytime and nighttime ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/zScoreDaytimeNighttime.ipynb))
-- **z-score rolling**: Identify outliers based on the rolling z-score
+- **z-score rolling**: Identify outliers based on the rolling z-score ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/zScoreRolling.ipynb))
 
 ### Plotting
 
+- **Cumulatives per year** ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/CumulativesPerYear.ipynb))
 - **Diel cycle per month** ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/DielCycle.ipynb))
 - **Heatmap date/time**: showing values (z) of time series as date (y) vs time (x) ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/HeatmapDateTime.ipynb))
 - **Heatmap year/month**: showing values (z) of time series as year (y) vs month (x) ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/HeatmapYearMonth.ipynb))

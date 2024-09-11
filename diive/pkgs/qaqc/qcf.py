@@ -7,7 +7,6 @@ QCF - OVERALL QUALITY CONTROL FLAG
 Combine multiple flags in one single QCF flag.
 
 """
-
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np

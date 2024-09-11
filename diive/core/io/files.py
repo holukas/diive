@@ -36,6 +36,8 @@ def save_parquet(filename: str, data: DataFrame or Series, outpath: str or None 
     """
     filepath = set_outpath(outpath=outpath, filename=filename, fileextension='parquet')
     tic = time.time()
+    if isinstance(data, Series):
+        data = data.to_frame()
     data.to_parquet(filepath)
     toc = time.time() - tic
     print(f"Saved file {filepath} ({toc:.3f} seconds).")

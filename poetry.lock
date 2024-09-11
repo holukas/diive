@@ -247,6 +247,25 @@ tornado = ">=6.2"
 xyzservices = ">=2021.09.1"
 
 [[package]]
+name = "category-encoders"
+version = "2.6.3"
+description = "A collection of sklearn transformers to encode categorical variables as numeric"
+optional = false
+python-versions = "*"
+files = [
+    {file = "category_encoders-2.6.3-py2.py3-none-any.whl", hash = "sha256:117775f1775e53a67c9e91842ac9100bc364cddc9f4058188796532bc5b11f1c"},
+    {file = "category_encoders-2.6.3.tar.gz", hash = "sha256:d9f14705ed4b536eaf9cfc81b76d67a50b2f16f8f3eda498c57d7da19655530c"},
+]
+
+[package.dependencies]
+numpy = ">=1.14.0"
+pandas = ">=1.0.5"
+patsy = ">=0.5.1"
+scikit-learn = ">=0.20.0"
+scipy = ">=1.0.0"
+statsmodels = ">=0.9.0"
+
+[[package]]
 name = "certifi"
 version = "2024.7.4"
 description = "Python package for providing Mozilla's CA Bundle."
@@ -2391,6 +2410,23 @@ files = [
 tests = ["pytest"]
 
 [[package]]
+name = "pyaml"
+version = "24.7.0"
+description = "PyYAML-based module to produce a bit more pretty and readable YAML-serialized data"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "pyaml-24.7.0-py3-none-any.whl", hash = "sha256:6b06596cb5ac438a3fad1e1bf5775088c4d3afb927e2b03a29305d334835deb2"},
+    {file = "pyaml-24.7.0.tar.gz", hash = "sha256:5d0fdf9e681036fb263a783d0298fc3af580a6e2a6cf1a3314ffc48dc3d91ccb"},
+]
+
+[package.dependencies]
+PyYAML = "*"
+
+[package.extras]
+anchors = ["unidecode"]
+
+[[package]]
 name = "pyarrow"
 version = "17.0.0"
 description = "Python library for Apache Arrow"
@@ -3051,6 +3087,30 @@ examples = ["matplotlib (>=3.3.4)", "pandas (>=1.1.5)", "plotly (>=5.14.0)", "po
 install = ["joblib (>=1.2.0)", "numpy (>=1.19.5)", "scipy (>=1.6.0)", "threadpoolctl (>=3.1.0)"]
 maintenance = ["conda-lock (==2.5.6)"]
 tests = ["black (>=24.3.0)", "matplotlib (>=3.3.4)", "mypy (>=1.9)", "numpydoc (>=1.2.0)", "pandas (>=1.1.5)", "polars (>=0.20.23)", "pooch (>=1.6.0)", "pyamg (>=4.0.0)", "pyarrow (>=12.0.0)", "pytest (>=7.1.2)", "pytest-cov (>=2.9.0)", "ruff (>=0.2.1)", "scikit-image (>=0.17.2)"]
+
+[[package]]
+name = "scikit-optimize"
+version = "0.10.2"
+description = "Sequential model-based optimization toolbox."
+optional = false
+python-versions = "*"
+files = [
+    {file = "scikit_optimize-0.10.2-py2.py3-none-any.whl", hash = "sha256:45bc7e879b086133984721f2f6735a86c085073f6c481c2ec665b5c67b44d723"},
+    {file = "scikit_optimize-0.10.2.tar.gz", hash = "sha256:00a3d91bf9015e292b6e7aaefe7e6cb95e8d25ce19adafd2cd88849e1a0b0da0"},
+]
+
+[package.dependencies]
+joblib = ">=0.11"
+numpy = ">=1.20.3"
+packaging = ">=21.3"
+pyaml = ">=16.9"
+scikit-learn = ">=1.0.0"
+scipy = ">=1.1.0"
+
+[package.extras]
+dev = ["flake8", "pandas", "pytest", "pytest-cov", "pytest-xdist"]
+doc = ["memory-profiler", "numpydoc", "pydata-sphinx-theme", "sphinx", "sphinx-gallery (>=0.6)"]
+plots = ["matplotlib (>=2.0.0)"]
 
 [[package]]
 name = "scipy"
@@ -3917,4 +3977,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<3.12"
-content-hash = "bb31438c189b29d8cd4e682e8f1882268011a4e357067e9c9b8a18998a1ac06e"
+content-hash = "a3f50388ec1d54211a946f8112e74ebae286ffe760fdb0f2ad372fef5ecf64e5"

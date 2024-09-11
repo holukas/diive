@@ -2,6 +2,88 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.81.0 | 11 Sep 2024
+
+## Expanding Flux Processing Capabilities
+
+This update brings advancements for post-processing eddy covariance data in the context of the `FluxProcessingChain`.
+The goal is to offer a complete chain for post-processing ecosystem flux data, specifically designed to work seamlessly
+with the standardized `_fluxnet` output file from the
+widely-used [EddyPro](https://www.licor.com/env/products/eddy-covariance/eddypro) software.
+
+Now, diive offers the option for USTAR filtering based on *known* constant thresholds across the entire dataset (similar
+to the `CUT` scenarios in FLUXNET data). While seasonal (DJF, MAM, JJA, SON) thresholds are calculated internally,
+applying them on a seasonal basis or using variable thresholds per year (like FLUXNET's `VUT` scenarios) isn't yet
+implemented.
+
+With this update, the `FluxProcessingChain` class can handle various data processing steps:
+
+- Level-2: Quality flag expansion
+- Level-3.1: Storage correction
+- Level-3.2: Outlier removal
+- Level-3.3: (new) USTAR filtering (with constant thresholds for now)
+- (upcoming) Level-4.1: long-term gap-filling using random forest and XGBoost
+- For info about the different flux levels
+  see [Swiss FluxNet flux processing chain](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/)
+
+### New features
+
+- Added class to apply multiple known constant USTAR (friction velocity) thresholds, creating flags that indicate time
+  periods characterized by low turbulence for multiple USTAR scenarios. The constant thresholds must be known
+  beforehand, e.g., from an earlier USTAR detection run, or from results from FLUXNET (
+  `diive.pkgs.flux.ustarthreshold.FlagMultipleConstantUstarThresholds`)
+- Added class to apply one single known constant USTAR thresholds (
+  `diive.pkgs.flux.ustarthreshold.FlagSingleConstantUstarThreshold`)
+- Added `FlagMultipleConstantUstarThresholds` to the flux processing chain (
+  `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain.level33_constant_ustar`)
+- Added USTAR detection algorithm based on Papale et al., 2006 (`diive.pkgs.flux.ustarthreshold.UstarDetectionMPT`)
+- Added function to analyze high-quality ecosystem fluxes that helps in understanding the range of highest-quality data(
+  `diive.pkgs.flux.hqflux.analyze_highest_quality_flux`)
+
+### Additions
+
+- `LocalSD` outlier detection can now use a constant SD:
+    - Added parameter to use standard deviation across all data (constant) instead of the rolling SD to calculate the
+      upper and lower limits that define outliers in the median rolling window (
+      `diive.pkgs.outlierdetection.localsd.LocalSD`)
+    - Added to step-wise outlier detection (
+      `diive.pkgs.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection.flag_outliers_localsd_test`)
+    - Added to meteoscreening from database (
+      `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.flag_outliers_localsd_test`)
+    - Added to flux processing chain (
+      `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain.level32_flag_outliers_localsd_test`)
+
+### Changes
+
+- Replaced `.plot_date()` from the Matplotlib library with `.plot()` due to deprecation
+
+### Notebooks
+
+- Added notebook for plotting cumulative sums per year (`notebooks/Plotting/CumulativesPerYear.ipynb`)
+- Added notebook for removing outliers based on the z-score in rolling time window (
+  `notebooks/OutlierDetection/zScoreRolling.ipynb`)
+
+### Bugfixes
+
+- Fixed bug when saving a pandas Series to parquet (`diive.core.io.files.save_parquet`)
+- Fixed bug when plotting `doy_mean_cumulative`: no longer crashes when years defined in parameter
+  `excl_years_from_reference` are not in dataset (`diive.core.times.times.doy_mean_cumulative`)
+- Fixed deprecation warning when plotting in `bokeh` (interactive plots)
+
+### Tests
+
+- Added unittest for `LocalSD` using constant SD (
+  `tests.test_outlierdetection.TestOutlierDetection.test_localsd_with_constantsd`)
+- Added unittest for rolling z-score outlier removal (
+  `tests.test_outlierdetection.TestOutlierDetection.test_zscore_rolling`)
+- Improved check if figure and axis were created in (`tests.test_plots.TestPlots.test_histogram`)
+- 39/39 unittests ran successfully
+
+### Environment
+
+- Added new package `scikit-optimize`
+- Added new package `category_encoders`
+
 ## v0.80.0 | 28 Aug 2024
 
 ### Additions
@@ -18,7 +100,8 @@
 
 ### Notebooks
 
-- Added new notebook for creating a flag that indicates missing values (`notebooks/OutlierDetection/MissingValues.ipynb`)
+- Added new notebook for creating a flag that indicates missing values (
+  `notebooks/OutlierDetection/MissingValues.ipynb`)
 - Updated notebook for meteoscreening from database (
   `notebooks/MeteoScreening/StepwiseMeteoScreeningFromDatabase.ipynb`)
 - Updated notebook for loading and saving parquet files (`notebooks/Formats/LoadSaveParquetFile.ipynb`)
@@ -2048,17 +2131,17 @@ which allows the calculation of the flux detection limit following Langford et a
 
 - None
 
-#### **REFERENCES**
-
-Langford, B., Acton, W., Ammann, C., Valach, A., & Nemitz, E. (2015). Eddy-covariance data with low signal-to-noise
-ratio: Time-lag determination, uncertainties and limit of detection. Atmospheric Measurement Techniques, 8(10),
-4197–4213. https://doi.org/10.5194/amt-8-4197-2015
-
-# References
+## **REFERENCES**
 
 - Hollinger, D. Y., & Richardson, A. D. (2005). Uncertainty in eddy covariance measurements
   and its application to physiological models. Tree Physiology, 25(7),
   873–885. https://doi.org/10.1093/treephys/25.7.873
+- Langford, B., Acton, W., Ammann, C., Valach, A., & Nemitz, E. (2015). Eddy-covariance data with low signal-to-noise
+  ratio: Time-lag determination, uncertainties and limit of detection. Atmospheric Measurement Techniques, 8(10),
+  4197–4213. https://doi.org/10.5194/amt-8-4197-2015
+- Papale, D., Reichstein, M., Aubinet, M., Canfora, E., Bernhofer, C., Kutsch, W., Longdoz, B., Rambal, S., Valentini,
+  R., Vesala, T., & Yakir, D. (2006). Towards a standardized processing of Net Ecosystem Exchange measured with eddy
+  covariance technique: Algorithms and uncertainty estimation. Biogeosciences, 3(4),
+  571–583. https://doi.org/10.5194/bg-3-571-2006
 - Pastorello, G. et al. (2020). The FLUXNET2015 dataset and the ONEFlux processing pipeline
   for eddy covariance data. 27. https://doi.org/10.1038/s41597-020-0534-3
-

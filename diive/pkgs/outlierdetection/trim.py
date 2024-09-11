@@ -100,7 +100,7 @@ class TrimLow(FlagBase):
         if self.showplot:
             # Default plot for outlier tests, showing rejected values
             self.defaultplot(n_iterations=n_iterations)
-            title = (f"Hampel filter daytime/nighttime: {self.series.name}, "
+            title = (f"TrimLow filter daytime/nighttime: {self.series.name}, "
                      f"n_iterations = {n_iterations}, "
                      f"n_outliers = {self.series[self.overall_flag == 2].count()}")
             self.plot_outlier_daytime_nighttime(series=self.series, flag_daytime=self.flag_daytime,

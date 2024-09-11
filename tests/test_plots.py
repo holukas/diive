@@ -27,6 +27,11 @@ class TestPlots(unittest.TestCase):
         self.assertEqual(edges.mean(), -2.679900000000003)
         self.assertEqual(counts[5], 58)
 
+        from matplotlib.axes._axes import Axes
+        self.assertEqual(type(hist.get_ax()), Axes)
+        from matplotlib.figure import Figure
+        self.assertEqual(type(hist.get_fig()), Figure)
+
 
 if __name__ == '__main__':
     unittest.main()

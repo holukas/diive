@@ -5,7 +5,6 @@ from typing import Literal
 import matplotlib.gridspec as gridspec
 import pandas as pd
 from matplotlib import pyplot as plt, _pylab_helpers, dates as mdates
-from matplotlib.text import Text
 from pandas import DataFrame, Series
 
 import diive.core.plotting.styles.LightTheme as theme
@@ -268,54 +267,6 @@ def nice_date_ticks(ax, minticks: int = 3, maxticks: int = 9, which: Literal['x'
     return None
 
 
-def show_txt_in_ax_bad_values(fig, ax, df, sum_for_col):
-    """ Show number of bad values / marked values as text """
-    ax.text(0.02, 0.98, '{} bad values'.format(df[sum_for_col].sum()),
-            size=theme.AX_LABELS_FONTSIZE, color='#eab839', backgroundcolor='none', transform=ax.transAxes,
-            alpha=0.8, horizontalalignment='left', verticalalignment='top')
-    fig.canvas.draw()
-    fig.canvas.flush_events()
-    return None
-
-
-def add_to_existing_ax_with_values(fig, add_to_ax, x, y, counts, ms, color, marker, linestyle, linewidth):
-    # Adds plot to existing axis with focus time focus_series plot
-
-    line = add_to_ax.plot_date(x=x, y=y, color=color, alpha=1, ls=linestyle, lw=linewidth,
-                               marker=marker, markeredgecolor='none', ms=ms, zorder=99)
-
-    # for x, y, counts in zip(x, y, counts):
-    #     # text_in_ax = add_to_ax.text(x, y, '{}'.format(int(counts)), color='white', fontsize='large', weight='bold',
-    #     #                horizontalalignment='center', verticalalignment='center', zorder=100)
-    #
-
-    # https://stackoverflow.com/questions/11067368/annotate-time-series-plot-in-matplotlib
-    #     text_in_ax = \
-    #         add_to_ax.annotate('{}'.format(int(counts)), (mdates.date2num(x), y), xytext=(0, 0), color='white',
-    #                            weight='bold', fontsize='large', textcoords='offset points',
-    #                            arrowprops=dict(arrowstyle='-|>'), zorder=100)
-
-    # Good solution, x needs conversion w/ date2num to work
-    # https://stackoverflow.com/questions/48387480/in-matplotlib-ax-texts-container-is-empty-why
-    for x, y, counts in zip(x, y, counts):
-        txt1 = Text(text='{}'.format(int(counts)), x=mdates.date2num(x), y=y, color='white', fontsize='large',
-                    weight='bold',
-                    horizontalalignment='center', verticalalignment='center', zorder=100)
-
-        # with this method texts in the axis can be accessed w/ axis.texts, needed for removal
-        add_to_ax._add_text(txt1)
-
-        # add_to_ax._set_artist_props(txt1)
-        # add_to_ax.texts.append(txt1)
-        # txt1._remove_method = lambda h: add_to_ax.texts.remove(h)
-        # add_to_ax.stale = True
-
-    fig.canvas.draw()  # update plot
-    pause(0.001)
-
-    return line
-
-
 def default_legend(ax,
                    loc: int or str = 0,
                    facecolor='None',
@@ -390,61 +341,12 @@ def remove_line(line):
         line.remove()
 
 
-def plotdate_limit(series, ax, prevline, label_txt):
-    remove_line(prevline)
-    line, = ax.plot_date(x=series.index,
-                         y=series,
-                         color=COLOR_LINE_LIMIT, alpha=1, ls='-',
-                         marker='None', lw=WIDTH_LINE_DEFAULT,
-                         markeredgecolor='none', ms=0, zorder=98, label=label_txt)
-    return line
-
-
-def plotdate_markers(series, ax, prevline, label_txt):
-    remove_line(prevline)
-    label_txt = series.name[0] if not label_txt else label_txt
-    _numvals = series.dropna().count()
-    line, = ax.plot_date(x=series.index,
-                         y=series,
-                         color=COLOR_LINE_LIMIT, alpha=.8, ls='None',
-                         marker='o', lw=0,
-                         markeredgecolor='red', ms=5, zorder=98,
-                         label=f"{label_txt} ({_numvals} values)")
-    return line
-
-
-# def plotdate_main(series, ax, label_txt: str = None):
-#     label_txt = series.name[0] if not label_txt else label_txt
-#     _numvals = series.dropna().count()
-#     line, = ax.plot_date(x=series.index,
-#                          y=series,
-#                          color=COLOR_LINE_DEFAULT, alpha=1, ls='-',
-#                          marker='o', lw=WIDTH_LINE_DEFAULT,
-#                          markeredgecolor='none', ms=4, zorder=98,
-#                          label=f"{label_txt} ({_numvals} values)")
-#     plot_title_ref = add_ax_title_inside(txt=f"{series.name[0]}", ax=ax)
-#     add_zeroline_y(series=series, ax=ax)
-#     set_xylim(ax=ax, series=series)
-#     return line, plot_title_ref
-
-
 def set_xylim(ax, series):
     try:
         ax.set_xlim(series.index.min(), series.index.max())
         ax.set_ylim(series.min(), series.max())
     except ValueError:
         pass
-
-
-# def update_plotdate_main(series, ax, prevline, plot_title_ref):
-#     # kudos: https://www.pythonguis.com/tutorials/plotting-matplotlib/
-#     prevline.set_xdata(series.index)
-#     prevline.set_ydata(series)
-#     plot_title_ref.remove()
-#     plot_title_ref = add_ax_title_inside(txt=f"{series.name[0]}", ax=ax)
-#     add_zeroline_y(series=series, ax=ax)
-#     set_xylim(ax=ax, series=series)
-#     return plot_title_ref
 
 
 def quickplot(data: DataFrame or Series, hline: None or float = None, subplots: bool = True,
@@ -478,10 +380,11 @@ def quickplot(data: DataFrame or Series, hline: None or float = None, subplots: 
         std = data[col].std()
         max = data[col].max()
         min = data[col].min()
-        ax.plot_date(x=data.index, y=data[col], color=colors[ix],
-                     label=f"{col}\n"
-                           f"mean: {mean:.2f}±{std:.2f}\n"
-                           f"min: {min:.2f}  |  max: {max:.2f}")
+        ax.plot(data.index, data[col],
+                color=colors[ix], marker='o', markersize=6, markeredgecolor=colors[ix],
+                label=f"{col}\n"
+                      f"mean: {mean:.2f}±{std:.2f}\n"
+                      f"min: {min:.2f}  |  max: {max:.2f}")
         ax.text(0.02, 0.98, title,
                 size=theme.AX_LABELS_FONTSIZE, color='black', backgroundcolor='none', transform=ax.transAxes,
                 alpha=1, horizontalalignment='left', verticalalignment='top')
@@ -489,16 +392,12 @@ def quickplot(data: DataFrame or Series, hline: None or float = None, subplots: 
         if hline:
             ax.axhline(hline, label=f"value: {hline}", ls='--')
 
-    # ax = fig.add_subplot(gs[0, 0])
-    # _axes = data.plot(subplots=subplots, ax=ax, title=title, lw=2)
-
     if saveplot:
         save_fig(fig=fig, path=saveplot, title=title)
 
     if showplot:
-        # pass
+        fig.tight_layout()
         fig.show()
-    # plt.close(fig)
 
 
 def save_fig(fig,
@@ -540,6 +439,7 @@ def create_ax(facecolor: str = 'white',
     ax = fig.add_subplot(gs[0, 0])
     return fig, ax
 
+
 def setup_figax(ax, figsize):
     # Create axis
     if ax:
@@ -563,3 +463,15 @@ def n_legend_cols(n_legend_entries: int) -> int:
     else:
         n_legend_cols = 3
     return n_legend_cols
+
+
+def example_quickplot():
+    from diive.configs.exampledata import load_exampledata_parquet
+    df = load_exampledata_parquet()
+    df = df.loc[df.index.year == 2021].copy()
+    series = df['VPD_f'].copy()
+    quickplot(data=series, showplot=True)
+
+
+if __name__ == '__main__':
+    example_quickplot()

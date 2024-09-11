@@ -11,6 +11,8 @@ from diive.core.io.filereader import MultiDataFileReader, search_files
 from diive.pkgs.createvar.daynightflag import daytime_nighttime_flag_from_swinpot
 from diive.pkgs.createvar.potentialradiation import potrad
 from diive.pkgs.flux.common import detect_fluxbasevar
+from diive.pkgs.flux.hqflux import analyze_highest_quality_flux
+from diive.pkgs.flux.ustarthreshold import FlagMultipleConstantUstarThresholds
 from diive.pkgs.fluxprocessingchain.level2_qualityflags import FluxQualityFlagsEddyPro
 from diive.pkgs.fluxprocessingchain.level31_storagecorrection import FluxStorageCorrectionSinglePointEddyPro
 from diive.pkgs.outlierdetection.stepwiseoutlierdetection import StepwiseOutlierDetection
@@ -40,7 +42,9 @@ class FluxProcessingChain:
         self.fluxbasevar = detect_fluxbasevar(fluxcol=fluxcol)
 
         # Collect all relevant variables for this flux in dataframe
-        self._fpc_df = self.maindf[[fluxcol]].copy()
+        self.ustarcol = 'USTAR'
+        requiredcols = [self.fluxcol, self.ustarcol]
+        self._fpc_df = self.maindf[requiredcols].copy()
 
         # Add potential radiation and daytime and nighttime flags
         self._fpc_df, self.swinpot_col = self._add_swinpot_dt_nt_flag(df=self._fpc_df)
@@ -59,12 +63,15 @@ class FluxProcessingChain:
         self._filteredseries_level2_qcf = None
         self._filteredseries_level31_qcf = None
         self._filteredseries_level32_qcf = None
+        self._filteredseries_level33_qcf = dict()  # dict because there can be multiple USTAR scenarios
         self._maindf = None
         self._level2 = None
         self._level31 = None
         self._level32 = None
+        self._level33 = None
         self._level2_qcf = None
         self._level32_qcf = None
+        self._level33_qcf = dict()  # dict because there can be multiple USTAR scenarios
 
     @property
     def filteredseries(self) -> Series:
@@ -73,6 +80,14 @@ class FluxProcessingChain:
             raise Exception(f'No filtered time series for {self.fluxcol} available, '
                             f'please run .level2_quality_flag_expansion() first.')
         return self._filteredseries
+
+    @property
+    def filteredseries_hq(self) -> Series:
+        """Return time series of highest-quality flux, filtered by all available QCF checks."""
+        if not isinstance(self._filteredseries_hq, Series):
+            raise Exception(f'No filtered time series for {self.fluxcol} available, '
+                            f'please run .level2_quality_flag_expansion() first.')
+        return self._filteredseries_hq
 
     @property
     def filteredseries_level2_qcf(self) -> Series:
@@ -99,6 +114,14 @@ class FluxProcessingChain:
         return self._filteredseries_level32_qcf
 
     @property
+    def filteredseries_level33_qcf(self) -> dict:
+        """Return time series of quality-filtered flux after Level-3.3."""
+        if not isinstance(self._filteredseries_level33_qcf, dict):
+            raise Exception(f'No filtered time series for {self.fluxcol} available, '
+                            f'please run .level33...() first.')
+        return self._filteredseries_level33_qcf
+
+    @property
     def fpc_df(self) -> DataFrame:
         """Return fluxes and flags from each level."""
         if not isinstance(self._fpc_df, DataFrame):
@@ -120,6 +143,13 @@ class FluxProcessingChain:
         return self._level32_qcf
 
     @property
+    def level33_qcf(self) -> dict:
+        """Return instance of Level-3.3 QCF creation."""
+        if not isinstance(self._level33_qcf, dict):
+            raise Exception('No Level-3.3 data available.')
+        return self._level33_qcf
+
+    @property
     def level2(self) -> FluxQualityFlagsEddyPro:
         """Return instance of Level-2 flag creation."""
         if not isinstance(self._level2, FluxQualityFlagsEddyPro):
@@ -139,6 +169,13 @@ class FluxProcessingChain:
         if not isinstance(self._level32, StepwiseOutlierDetection):
             raise Exception('No Level-3.2 data available, please run .level32_stepwise_outlier_detection() first.')
         return self._level32
+
+    @property
+    def level33(self) -> FlagMultipleConstantUstarThresholds:
+        """Return instance of Level-3.3 ustar."""
+        if not isinstance(self._level33, FlagMultipleConstantUstarThresholds):
+            raise Exception('No Level-3.3 data available, please run .level32_stepwise_outlier_detection() first.')
+        return self._level33
 
     @property
     def levelidstr(self) -> list:
@@ -275,6 +312,47 @@ class FluxProcessingChain:
         )
         self._filteredseries_level32_qcf = self.filteredseries.copy()  # Store filtered series as variable
 
+    def finalize_level33(self,
+                         nighttime_threshold: int = 50,
+                         daytime_accept_qcf_below: int = 2,
+                         nighttimetime_accept_qcf_below: int = 2):
+        """Calculate overall quality flag QCF after Level-3.3"""
+
+        ustar_scenarios = self.level33.threshold_labels
+
+        for u in ustar_scenarios:
+
+            print(f"Calculating overall quality flag QCF for USTAR scenario {u}...")
+
+            flagcol = [c for c in self.level33.results if u in c]
+            flagcol = flagcol[0] if len(flagcol) == 1 else None
+            udf = self.level33.results[[self.level31.flux_corrected_col, self.ustarcol, flagcol]].copy()
+
+            # Calculate QCF for all USTAR scenarios and store in dict
+            self._level33_qcf[u] = self._finalize_level(
+                run_qcf_on_col=self.level31.flux_corrected_col,
+                idstr=f'L3.3_{u}',
+                level_df=udf,
+                nighttime_threshold=nighttime_threshold,
+                daytime_accept_qcf_below=daytime_accept_qcf_below,
+                nighttimetime_accept_qcf_below=nighttimetime_accept_qcf_below
+            )
+            self._filteredseries_level33_qcf[u] = self.filteredseries.copy()  # Store filtered series as variable
+
+    def level33_constant_ustar(self, thresholds: list, threshold_labels: list,
+                               showplot: bool = True, verbose: bool = True):
+        """Create flag to indicate time periods of low turbulence using
+        one or more known constant USTAR thresholds."""
+        idstr = 'L3.3'
+        self._levelidstr.append(idstr)
+        self._level33 = FlagMultipleConstantUstarThresholds(series=self.fpc_df[self.level31.flux_corrected_col],
+                                                            ustar=self.fpc_df[self.ustarcol],
+                                                            thresholds=thresholds,
+                                                            threshold_labels=threshold_labels,
+                                                            idstr=idstr,
+                                                            showplot=showplot)
+        self._level33.calc()
+
     def level31_storage_correction(self, gapfill_storage_term: bool = False):
         """Correct flux with storage term from single point measurement."""
         idstr = 'L3.1'
@@ -314,6 +392,7 @@ class FluxProcessingChain:
         self._fpc_df = pd.concat([self._fpc_df, newcols], axis=1)
         [print(f"++Added new column {c} (Level-3.1 with applied quality flag from Level-2).") for c in frame.keys()]
         self._filteredseries = strg_corrected_flux_qcf.copy()
+        self._filteredseries_hq = strg_corrected_flux_qcf0.copy()
 
         self._filteredseries_level31_qcf = self._filteredseries.copy()  # Store filtered series as variable
 
@@ -347,9 +426,9 @@ class FluxProcessingChain:
                                                      repeat=repeat)
 
     def level32_flag_outliers_localsd_test(self, n_sd: float = 7, winsize: int = None, showplot: bool = False,
-                                           verbose: bool = False, repeat: bool = True):
+                                           constant_sd: bool = False, verbose: bool = False, repeat: bool = True):
         self._level32.flag_outliers_localsd_test(n_sd=n_sd, winsize=winsize, showplot=showplot, verbose=verbose,
-                                                 repeat=repeat)
+                                                 constant_sd=constant_sd, repeat=repeat)
 
     def level32_flag_manualremoval_test(self, remove_dates: list, showplot: bool = False, verbose: bool = False):
         self._level32.flag_manualremoval_test(remove_dates=remove_dates, showplot=showplot, verbose=verbose)
@@ -377,7 +456,7 @@ class FluxProcessingChain:
                                                      n_sigma_nt=n_sigma_nt, k=k,
                                                      showplot=showplot, verbose=verbose, repeat=repeat)
 
-    def level32_flag_outliers_zscore_rolling_test(self, thres_zscore: int = 4, showplot: bool = False,
+    def level32_flag_outliers_zscore_rolling_test(self, thres_zscore: float = 4, showplot: bool = False,
                                                   verbose: bool = False, plottitle: str = None,
                                                   repeat: bool = True, winsize: int = None):
         self._level32.flag_outliers_zscore_rolling_test(thres_zscore=thres_zscore, showplot=showplot, verbose=verbose,
@@ -400,9 +479,20 @@ class FluxProcessingChain:
         self._level32.flag_outliers_lof_dtnt_test(n_neighbors=n_neighbors, contamination=contamination,
                                                   showplot=showplot, verbose=verbose, repeat=repeat, n_jobs=n_jobs)
 
+    def level33_flag_constant_ustar_test(self, n_neighbors: int = None, contamination: float = None,
+                                         showplot: bool = False, verbose: bool = False, repeat: bool = True,
+                                         n_jobs: int = 1):
+        self._level32.flag_outliers_lof_dtnt_test(n_neighbors=n_neighbors, contamination=contamination,
+                                                  showplot=showplot, verbose=verbose, repeat=repeat, n_jobs=n_jobs)
+
     def level32_addflag(self):
         """Add current Level-3.2 flag to results."""
         self._level32.addflag()
+
+    def analyze_highest_quality_flux(self, showplot: bool = True):
+        analyze_highest_quality_flux(flux=self.fpc_df[self.filteredseries_hq.name],
+                                     nighttime_flag=self.fpc_df['NIGHTTIME'],
+                                     showplot=showplot)
 
 
 class LoadEddyProOutputFiles:
@@ -573,13 +663,35 @@ def example():
     # Source data
     from pathlib import Path
     from diive.core.io.files import load_parquet
-    SOURCEDIR = r"L:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_cha_fp2024_2005-2023\0_data\RESULTS-IRGA-Level-1_fluxnet_2005-2023"
-    FILENAME = r"CH-CHA_IRGA_Level-1_eddypro_fluxnet_2005-2023_availableVars.parquet"
+    SOURCEDIR = r"L:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_cha_fp2024_2005-2023\20_FLUXES_L1_IRGA_preparation"
+    FILENAME = r"23.1_CH-CHA_IRGA_Level-1_eddypro_fluxnet_2005-2023_availableVars_meteo7.parquet"
     FILEPATH = Path(SOURCEDIR) / FILENAME
     maindf = load_parquet(filepath=FILEPATH)
-    maindf = maindf.loc[maindf.index.year == 2023, :].copy()
+    locs = (maindf.index.year >= 2023) & (maindf.index.year <= 2023)
+    # locs = (maindf.index.year >= 2021) & (maindf.index.year <= 2023)
+    maindf = maindf.loc[locs, :].copy()
     metadata = None
     print(maindf)
+
+    # import matplotlib.pyplot as plt
+    # locs = (maindf.index.year >= 2008) & (maindf.index.year <= 2009)
+    # maindf.loc[locs, 'FC'].plot(x_compat=True)
+    # plt.show()
+    # plt.show()
+
+    # RANDOM UNCERTAINTY
+    # [print(c) for c in maindf.columns if "SSITC" in c]
+    # import matplotlib.pyplot as plt
+    # maindf['FC_RANDUNC_HF'].plot(x_compat=True)
+    # locs = (
+    #         (maindf['FC'] < 50)
+    #         & (maindf['FC'] > -50)
+    #         & (maindf['NIGHT'] == 1)
+    #         & (maindf['FC_RANDUNC_HF'] < maindf['FC'].abs())
+    #         & (maindf['FC_SSITC_TEST'] == 0)
+    # )
+    # plt.scatter(maindf.loc[locs, 'FC'], maindf.loc[locs, 'FC_RANDUNC_HF'])
+    # plt.show()
 
     # Flux processing chain settings
     FLUXVAR = "FC"
@@ -587,11 +699,11 @@ def example():
     SITE_LON = 8.410645
     UTC_OFFSET = 1
     NIGHTTIME_THRESHOLD = 50  # Threshold for potential radiation in W m-2, conditions below threshold are nighttime
-    DAYTIME_ACCEPT_QCF_BELOW = 2
-    NIGHTTIMETIME_ACCEPT_QCF_BELOW = 2
+    DAYTIME_ACCEPT_QCF_BELOW = 1
+    NIGHTTIMETIME_ACCEPT_QCF_BELOW = 1
 
-    from diive.core.dfun.stats import sstats  # Time series stats
-    sstats(maindf[FLUXVAR])
+    # from diive.core.dfun.stats import sstats  # Time series stats
+    # sstats(maindf[FLUXVAR])
     # TimeSeries(series=level1_df[FLUXVAR]).plot()
 
     fpc = FluxProcessingChain(
@@ -605,32 +717,27 @@ def example():
     # --------------------
     # Level-2
     # --------------------
-    TEST_SSITC = False  # Default True
-    TEST_GAS_COMPLETENESS = False  # Default True
-    TEST_SPECTRAL_CORRECTION_FACTOR = False  # Default True
-
-    # Signal strength
-    TEST_SIGNAL_STRENGTH = False
+    TEST_SSITC = True  # Default True
+    TEST_GAS_COMPLETENESS = True  # Default True
+    TEST_SPECTRAL_CORRECTION_FACTOR = True  # Default True
+    TEST_SIGNAL_STRENGTH = True
     TEST_SIGNAL_STRENGTH_COL = 'CUSTOM_AGC_MEAN'
     TEST_SIGNAL_STRENGTH_METHOD = 'discard above'
     TEST_SIGNAL_STRENGTH_THRESHOLD = 90
     # TimeSeries(series=maindf[TEST_SIGNAL_STRENGTH_COL]).plot()
-
-    TEST_RAWDATA = False  # Default True
+    TEST_RAWDATA = True  # Default True
     TEST_RAWDATA_SPIKES = True  # Default True
-    TEST_RAWDATA_AMPLITUDE = True  # Default True
+    TEST_RAWDATA_AMPLITUDE = False  # Default True
     TEST_RAWDATA_DROPOUT = True  # Default True
     TEST_RAWDATA_ABSLIM = False  # Default False
     TEST_RAWDATA_SKEWKURT_HF = False  # Default False
     TEST_RAWDATA_SKEWKURT_SF = False  # Default False
     TEST_RAWDATA_DISCONT_HF = False  # Default False
     TEST_RAWDATA_DISCONT_SF = False  # Default False
-
-    TEST_RAWDATA_ANGLE_OF_ATTACK = False  # Default False
-    # TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES = [['2023-01-01', '2023-07-01']]  # Default False
-    # TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES = [['2023-07-01', '2023-09-01']]  # Default False
-    TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES = False  # Default False
-
+    TEST_RAWDATA_ANGLE_OF_ATTACK = True  # Default False
+    TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES = [['2008-01-01', '2010-01-01'],
+                                                      ['2016-03-01', '2016-05-01']]  # Default False
+    # TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES = False  # Default False
     TEST_RAWDATA_STEADINESS_OF_HORIZONTAL_WIND = False  # Default False
 
     LEVEL2_SETTINGS = {
@@ -664,67 +771,93 @@ def example():
     fpc.level2_quality_flag_expansion(**LEVEL2_SETTINGS)
     fpc.finalize_level2(nighttime_threshold=NIGHTTIME_THRESHOLD, daytime_accept_qcf_below=DAYTIME_ACCEPT_QCF_BELOW,
                         nighttimetime_accept_qcf_below=NIGHTTIMETIME_ACCEPT_QCF_BELOW)
-    fpc.level2_qcf.showplot_qcf_heatmaps()
-    fpc.level2_qcf.report_qcf_evolution()
+    # fpc.level2_qcf.showplot_qcf_heatmaps()
+    # fpc.level2_qcf.report_qcf_evolution()
+    # fpc.level2_qcf.analyze_highest_quality_flux()
+
     # fpc.level2_qcf.report_qcf_flags()
     # fpc.level2.results
     # fpc.fpc_df
     # fpc.filteredseries
     # [x for x in fpc.fpc_df.columns if 'L2' in x]
 
-    # # --------------------
-    # # Level-3.1
-    # # --------------------
-    # fpc.level31_storage_correction(gapfill_storage_term=True)
-    # fpc.finalize_level31()
-    # # fpc.level31.showplot(maxflux=50)
-    # fpc.level31.report()
-    # # fpc.fpc_df
-    # # fpc.filteredseries
-    # # fpc.level31.results
-    # # [x for x in fpc.fpc_df.columns if 'L3.1' in x]
+    # --------------------
+    # Level-3.1
+    # --------------------
+    fpc.level31_storage_correction(gapfill_storage_term=False)
+    fpc.finalize_level31()
+    fpc.level31.report()
+    # fpc.level31.showplot(maxflux=50)
+    # fpc.fpc_df
+    # fpc.filteredseries
+    # fpc.level31.results
+    # [x for x in fpc.fpc_df.columns if 'L3.1' in x]
+
+    # # ANALYZE
+    # fpc.analyze_highest_quality_flux(showplot=True)
 
     # --------------------
     # Level-3.2
     # --------------------
-    # fpc.level32_stepwise_outlier_detection()
+    fpc.level32_stepwise_outlier_detection()
+
+    # todo interesting results RF
+    # MedAE:  0.4563022463131315 (median absolute error)
+    # R2:  0.9728854018654111
+    # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3, n_sigma_nt=3, showplot=True, verbose=True, repeat=False)
+    # fpc.level32_addflag()
+    # use_gapfilling = 1
+
+    # # todo interesting results XGB (same as previous, but with XGB, much worse)
+    # # MedAE:  0.9604272683090209 (median absolute error)
+    # # R2:  0.934033601945007
+    # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3, n_sigma_nt=3, showplot=True, verbose=True, repeat=True)
+    # fpc.level32_addflag()
+    # use_gapfilling = 2
 
     # fpc.level32_flag_manualremoval_test(
     #     remove_dates=[
-    #         ['2022-05-05 19:45:00', '2022-06-05 19:45:00'],
-    #         '2022-12-12 12:45:00',
-    #         '2022-01-12 13:15:00',
-    #         ['2022-08-15', '2022-08-31']
+    #         ['2016-03-18 12:15:00', '2016-05-03 06:45:00'],
+    #         # '2022-12-12 12:45:00',
     #     ],
     #     showplot=True, verbose=True)
     # fpc.level32_addflag()
 
-    # fpc.level32_flag_outliers_hampel_test(window_length=48 * 9, n_sigma=5, showplot=True, verbose=True, repeat=True)
+    DAYTIME_MINMAX = [-50, 50]
+    NIGHTTIME_MINMAX = [-50, 50]
+    fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX,
+                                               showplot=False, verbose=False)
+    # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX, showplot=True, verbose=True)
+    fpc.level32_addflag()
+    # fpc.level32.results  # Stores Level-3.2 flags up to this point
+
+    # fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=False, repeat=True)
     # fpc.level32_addflag()
 
-    # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 9, n_sigma_dt=7, n_sigma_nt=5,
-    #                                            showplot=True, verbose=True, repeat=True)
+    # fpc.level32_flag_outliers_hampel_test(window_length=48 * 7, n_sigma=5, showplot=True, verbose=True, repeat=False)
     # fpc.level32_addflag()
 
-    # fpc.level32_flag_outliers_zscore_rolling_test(winsize=48 * 9, thres_zscore=5, showplot=True, verbose=True,
+    # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=False, verbose=False, repeat=False)
+    # # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=True, verbose=True, repeat=True)
+    # fpc.level32_addflag()
+
+    # fpc.level32_flag_outliers_zscore_rolling_test(winsize=48 * 7, thres_zscore=4, showplot=False, verbose=True,
     #                                               repeat=True)
     # fpc.level32_addflag()
 
-    # fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
+    # fpc.level32_flag_outliers_localsd_test(n_sd=5, winsize=48 * 13, constant_sd=False, showplot=False, verbose=True,
+    #                                        repeat=True)
     # fpc.level32_addflag()
-    # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
-    # fpc.level32_flag_outliers_localsd_test(n_sd=3, winsize=480, showplot=True, verbose=True, repeat=True)
+    # fpc.level32_flag_outliers_localsd_test(n_sd=3, winsize=48 * 3, constant_sd=True, showplot=True, verbose=True, repeat=True)
     # fpc.level32_addflag()
-    # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
     # fpc.level32_flag_outliers_increments_zcore_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
     # fpc.level32_addflag()
     # fpc.level32.showplot_cleaned()
     # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
-    # fpc.level32_flag_outliers_lof_dtnt_test(n_neighbors=20, contamination=None, showplot=True,
-    #                                         verbose=True, repeat=False, n_jobs=-1)
+    # fpc.level32_flag_outliers_lof_dtnt_test(n_neighbors=48 * 5, contamination=None, showplot=True, verbose=True, repeat=True, n_jobs=-1)
     # fpc.level32_addflag()
 
     # fpc.level32_flag_outliers_lof_test(n_neighbors=20, contamination=None, showplot=True, verbose=True,
@@ -735,19 +868,15 @@ def example():
     # fpc.level32_addflag()
     # fpc.level32.results
 
-    # fpc.level32_flag_outliers_abslim_test(minval=-20, maxval=10, showplot=True, verbose=True)
+    # fpc.level32_flag_outliers_abslim_test(minval=-50, maxval=50, showplot=False, verbose=True)
     # fpc.level32_addflag()
     # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
-    # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=[-50, 50], nighttime_minmax=[-10, 50], showplot=True,
-    #                                            verbose=True)
-    # fpc.level32_addflag()
-    # fpc.level32.results  # Stores Level-3.2 flags up to this point
-
-    # fpc.level32_flag_outliers_trim_low_test(trim_nighttime=True, lower_limit=-20, showplot=True, verbose=True)
+    # fpc.level32_flag_outliers_trim_low_test(trim_nighttime=True, lower_limit=-10, showplot=True, verbose=True)
     # fpc.level32_addflag()
 
-    # fpc.finalize_level32(nighttime_threshold=50, daytime_accept_qcf_below=2, nighttimetime_accept_qcf_below=2)
+    fpc.finalize_level32(nighttime_threshold=50, daytime_accept_qcf_below=DAYTIME_ACCEPT_QCF_BELOW,
+                         nighttimetime_accept_qcf_below=NIGHTTIMETIME_ACCEPT_QCF_BELOW)
 
     # # fpc.filteredseries
     # # fpc.level32.flags
@@ -757,10 +886,235 @@ def example():
     # fpc.level32_qcf.report_qcf_evolution()
     # # fpc.level32_qcf.report_qcf_series()
     # # fpc.levelidstr
+    # # fpc.filteredseries_level2_qcf
+    # # fpc.filteredseries_level31_qcf
+    # # fpc.filteredseries_level32_qcf
 
-    # fpc.filteredseries_level2_qcf
-    # fpc.filteredseries_level31_qcf
-    # fpc.filteredseries_level32_qcf
+    # --------------------
+    # Level-3.3
+    # --------------------
+    # 0.0532449, 0.0709217, 0.0949867
+    ustar_scenarios = ['CUT_16', 'CUT_50', 'CUT_84']
+    ustar_thresholds = [0.0532449, 0.0709217, 0.0949867]
+    fpc.level33_constant_ustar(thresholds=ustar_thresholds,
+                               threshold_labels=ustar_scenarios,
+                               showplot=False)
+    # Finalize: stores results for each USTAR scenario in a dict
+    fpc.finalize_level33(nighttime_threshold=50, daytime_accept_qcf_below=DAYTIME_ACCEPT_QCF_BELOW,
+                         nighttimetime_accept_qcf_below=NIGHTTIMETIME_ACCEPT_QCF_BELOW)
+
+    # for ustar_scenario in ustar_scenarios:
+    #     fpc.level33_qcf[ustar_scenario].showplot_qcf_heatmaps()
+    #     fpc.level33_qcf[ustar_scenario].report_qcf_evolution()
+    #     # fpc.filteredseries
+    #     # fpc.level33
+    #     # fpc.level33_qcf.showplot_qcf_timeseries()
+    #     # fpc.level33_qcf.report_qcf_flags()
+    #     # fpc.level33_qcf.report_qcf_series()
+    #     # fpc.levelidstr
+    #     # fpc.filteredseries_level2_qcf
+    #     # fpc.filteredseries_level31_qcf
+    #     # fpc.filteredseries_level32_qcf
+    #     # fpc.filteredseries_level33_qcf
+
+    # # check
+    # checkdf = fpc.fpc_df[['NEE_L3.1', 'NEE_L3.1_L3.3_QCF', 'USTAR']].copy()
+    # locs = checkdf['NEE_L3.1'].dropna().index
+    # checkdf = checkdf.loc[locs].copy()
+    # locs = checkdf['NEE_L3.1_L3.3_QCF'].dropna().index
+    # checkdf = checkdf.loc[locs]
+    # checkdf.describe()
+
+    newcols = [c for c in fpc.fpc_df.columns if c not in maindf.columns]
+    maindf2 = pd.concat([maindf, fpc.fpc_df[newcols]], axis=1)
+    FLUXVAR33QCF = fpc.filteredseries_level33_qcf.name
+    maindf2 = maindf2[[FLUXVAR33QCF, "TA_T1_2_1", "SW_IN_T1_2_1", "VPD_T1_2_1"]].copy()
+
+    # import matplotlib.pyplot as plt
+    # maindf2.plot(subplots=True, x_compat=True, title="After USTAR Threshold", figsize=(12, 4.5))
+    # plt.show()
+
+    # df2 = df2.dropna()
+    # y = df2[FLUXVAR32QCF].copy()
+    #
+    # X = df2[["TA_T1_2_1", "SW_IN_T1_2_1", "VPD_T1_2_1"]].copy()
+    #
+    #
+    # # https://www.youtube.com/watch?v=aLOQD66Sj0g
+    # # https://github.com/liannewriting/YouTube-videos-public/blob/main/xgboost-python-tutorial-example/xgboost_python.ipynb
+    #
+    # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    # X_train = X_train.to_numpy()
+    # X_test = X_test.to_numpy()
+    # y_train = y_train.to_numpy()
+    # y_test = y_test.to_numpy()
+    #
+    # from sklearn.pipeline import Pipeline
+    # from category_encoders.target_encoder import TargetEncoder
+    # from xgboost import XGBRegressor
+    # estimators = [
+    #     ('encoder', TargetEncoder()),
+    #     ('clf', XGBRegressor(random_state=42))  # can customize objective function with the objective parameter
+    # ]
+    # pipe = Pipeline(steps=estimators)
+    # print(pipe)
+    #
+    # from skopt import BayesSearchCV
+    # from skopt.space import Real, Categorical, Integer
+    #
+    # search_space = {
+    #     'clf__max_depth': Integer(2, 8),
+    #     'clf__learning_rate': Real(0.001, 1.0, prior='log-uniform'),
+    #     'clf__subsample': Real(0.5, 1.0),
+    #     'clf__colsample_bytree': Real(0.5, 1.0),
+    #     'clf__colsample_bylevel': Real(0.5, 1.0),
+    #     'clf__colsample_bynode': Real(0.5, 1.0),
+    #     'clf__reg_alpha': Real(0.0, 10.0),
+    #     'clf__reg_lambda': Real(0.0, 10.0),
+    #     'clf__gamma': Real(0.0, 10.0),
+    #     'clf__n_estimators': Integer(2, 99)
+    # }
+    #
+    # # opt = BayesSearchCV(pipe, search_space, cv=5, n_iter=20, scoring='neg_mean_absolute_error', random_state=42)
+    # opt = BayesSearchCV(pipe, search_space, cv=5, n_iter=20, scoring='r2', random_state=42)
+    # # opt = BayesSearchCV(pipe, search_space, cv=3, n_iter=10, scoring='roc_auc', random_state=42)
+    #
+    # opt.fit(X_train, y_train)
+    #
+    # print(opt.best_estimator_)
+    # print(opt.best_score_)
+    # # print(opt.score(X_test, y_test))
+    # # print(opt.predict(X_test))
+    # # print(opt.predict_proba(X_test))
+
+    # # -----
+    # # GAP-FILLING
+    # use_gapfilling = 1
+    # N_ESTIMATORS = 99
+    #
+    # if use_gapfilling == 1:
+    #     # Random forest
+    #     from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
+    #     MAX_DEPTH = None
+    #     MIN_SAMPLES_SPLIT = 2
+    #     MIN_SAMPLES_LEAF = 1
+    #     CRITERION = 'squared_error'  # “squared_error”, “absolute_error”, “friedman_mse”, “poisson”
+    #     gf = RandomForestTS(
+    #         input_df=maindf2,
+    #         target_col=FLUXVAR33QCF,
+    #         verbose=True,
+    #         # features_lag=None,
+    #         features_lag=[-1, -1],
+    #         # features_lag_exclude_cols=['test', 'test2'],
+    #         # include_timestamp_as_features=False,
+    #         include_timestamp_as_features=True,
+    #         # add_continuous_record_number=False,
+    #         add_continuous_record_number=True,
+    #         sanitize_timestamp=True,
+    #         perm_n_repeats=3,
+    #         n_estimators=N_ESTIMATORS,
+    #         random_state=42,
+    #         # random_state=None,
+    #         max_depth=MAX_DEPTH,
+    #         min_samples_split=MIN_SAMPLES_SPLIT,
+    #         min_samples_leaf=MIN_SAMPLES_LEAF,
+    #         criterion=CRITERION,
+    #         test_size=0.2,
+    #         n_jobs=-1
+    #     )
+    #     # rfts.reduce_features()
+    #     # rfts.report_feature_reduction()
+    #     gf.trainmodel(showplot_scores=False, showplot_importance=False)
+    #     # rfts.report_traintest()
+    #     gf.fillgaps(showplot_scores=False, showplot_importance=False)
+    #     gf.report_gapfilling()
+    #
+    #     # c = gf.gapfilling_df_['LE_L3.1_L3.3_QCF_gfRF'].copy()
+    #     c = gf.gapfilling_df_['NEE_L3.1_L3.3_QCF_gfRF'].copy()
+    #
+    # elif use_gapfilling == 2:
+    #     # XGBoost
+    #     from diive.pkgs.gapfilling.xgboost_ts import XGBoostTS
+    #     gf = XGBoostTS(
+    #         input_df=maindf2,
+    #         target_col=FLUXVAR33QCF,
+    #         verbose=1,
+    #         # features_lag=None,
+    #         features_lag=[-1, -1],
+    #         # features_lag_exclude_cols=['TIMESINCE_PREC_TOT_T1_25+20_1'],
+    #         # features_lag_exclude_cols=['Rg_f', 'TA>0', 'TA>20', 'DAYTIME', 'NIGHTTIME'],
+    #         # include_timestamp_as_features=False,
+    #         include_timestamp_as_features=True,
+    #         # add_continuous_record_number=False,
+    #         add_continuous_record_number=True,
+    #         sanitize_timestamp=True,
+    #         perm_n_repeats=3,
+    #         n_estimators=N_ESTIMATORS,
+    #         random_state=42,
+    #         # booster='gbtree',  # gbtree (default), gblinear, dart
+    #         # device='cpu',
+    #         # validate_parameters=True,
+    #         # disable_default_eval_metric=False,
+    #         early_stopping_rounds=10,
+    #         # learning_rate=0.1,
+    #         max_depth=6,
+    #         # max_delta_step=0,
+    #         # subsample=1,
+    #         # min_split_loss=0,
+    #         # min_child_weight=1,
+    #         # colsample_bytree=1,
+    #         # colsample_bylevel=1,
+    #         # colsample_bynode=1,
+    #         # reg_lambda=1,
+    #         # reg_alpha=0,
+    #         # tree_method='auto',  # auto, hist, approx, exact
+    #         # scale_pos_weight=1,
+    #         # grow_policy='depthwise',  # depthwise, lossguide
+    #         # max_leaves=0,
+    #         # max_bin=256,
+    #         # num_parallel_tree=1,
+    #         n_jobs=-1
+    #     )
+    #     # xgbts.reduce_features()
+    #     # xgbts.report_feature_reduction()
+    #     gf.trainmodel(showplot_scores=False, showplot_importance=False)
+    #     # xgbts.report_traintest()
+    #     gf.fillgaps(showplot_scores=False, showplot_importance=False)
+    #     gf.report_gapfilling()
+    #
+    #     c = gf.gapfilling_df_['NEE_L3.1_L3.3_QCF_gfXG'].copy()
+    #
+    # # import matplotlib.pyplot as plt
+    # # rfts.gapfilling_df_['.GAPFILLED_CUMULATIVE'].plot(x_compat=True)
+    # # rfts.gapfilling_df_['NEE_L3.1_L3.2_QCF_gfRF'].plot(x_compat=True)
+    # # plt.show()
+    #
+    # c = c.multiply(0.02161926)
+    # # from diive.core.io.files import save_parquet, load_parquet
+    # # save_parquet(data=c.to_frame(), filename="test", outpath=r"F:\TMP")
+    # # c = load_parquet(filepath=r"F:\TMP\test.parquet")
+    # # c = c.loc[c.index.year < 2024].copy()
+    # from diive.core.plotting.cumulative import CumulativeYear
+    # CumulativeYear(
+    #     series=c,
+    #     series_units="X",
+    #     yearly_end_date=None,
+    #     # yearly_end_date='08-11',
+    #     start_year=2006,
+    #     end_year=2023,
+    #     show_reference=True,
+    #     excl_years_from_reference=[2008, 2009],
+    #     # excl_years_from_reference=[2022],
+    #     highlight_year=2023,
+    #     highlight_year_color='#F44336').plot()
+    # ---
+
+    # col = 'NEE_L3.1_L3.3_QCF_gfRF' if use_gapfilling == 1 else 'NEE_L3.1_L3.3_QCF_gfXG'
+    # from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+    # hm = HeatmapDateTime(series=gf.gapfilling_df_[col])
+    # hm.show()
+    # # hm = HeatmapDateTime(series=gf.gapfilling_df_['NEE_L3.1_L3.3_QCF'])
+    # # hm.show()
 
     # # https://fitter.readthedocs.io/en/latest/tuto.html
     # # https://medium.com/the-researchers-guide/finding-the-best-distribution-that-fits-your-data-using-pythons-fitter-library-319a5a0972e9
@@ -874,6 +1228,29 @@ def example():
     # print("X")
 
 
+def example_cumu():
+    from diive.core.io.files import load_parquet
+    c = load_parquet(filepath=r"F:\TMP\test.parquet")
+
+    # from diive.core.io.files import save_parquet, load_parquet
+    # save_parquet(data=c['NEE_L3.1_L3.2_QCF_gfRF'], filename="test", outpath=r"F:\TMP")
+
+    from diive.core.plotting.cumulative import CumulativeYear
+    CumulativeYear(
+        series=c['NEE_L3.1_L3.2_QCF_gfRF'],
+        series_units="X",
+        yearly_end_date=None,
+        # yearly_end_date='08-11',
+        start_year=2018,
+        end_year=2020,
+        show_reference=True,
+        excl_years_from_reference=None,
+        # excl_years_from_reference=[2022],
+        # highlight_year=2022,
+        highlight_year_color='#F44336').plot()
+
+
 if __name__ == '__main__':
     # example_quick()
     example()
+    # example_cumu()

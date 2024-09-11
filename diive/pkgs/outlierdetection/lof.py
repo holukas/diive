@@ -165,7 +165,8 @@ class LocalOutlierFactorAllData(FlagBase):
         df['FLAG'] = flag
 
         df['CLEANED'] = df[self.filteredseries.name].copy()
-        df['CLEANED'].loc[df['FLAG'] > 0] = np.nan
+        # df['CLEANED'].loc[df['FLAG'] > 0] = np.nan
+        df.loc[df['FLAG'] > 0, 'CLEANED'] = np.nan
 
         n_outliers = (flag == 2).sum()
 

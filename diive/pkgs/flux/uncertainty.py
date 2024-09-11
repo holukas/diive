@@ -170,22 +170,22 @@ class RandomUncertaintyPAS20:
         _df = self.randunc_results[[self.fluxcol, self.randunccol, 'WINDOW_N_VALS_METHOD1']].copy()
         _df = _df.loc[_df['WINDOW_N_VALS_METHOD1'] >= 5]
         _df = _df.dropna()
-        ax_orig.plot_date(_df.index, _df[self.fluxcol], label=f"measured {self.fluxcol}", color="black",
-                          alpha=1, markersize=5, markeredgecolor="black", mfc='none')
+        ax_orig.plot(_df.index, _df[self.fluxcol], label=f"measured {self.fluxcol}", color="black",
+                     alpha=1, markersize=5, markeredgecolor="black", mfc='none')
         ax_orig.errorbar(_df.index.values, _df[self.fluxcol], _df[self.randunccol],
                          elinewidth=5, ecolor='red', alpha=.2)
         ax_orig.set_title(f"Measured {self.fluxcol} with METHOD 1 uncertainties")
 
         # Scatter (measured, method 1)
-        ScatterXY(x=_df[self.fluxcol], y=_df[self.randunccol]).plot(lw=0, ax=ax_scatter)
+        ScatterXY(x=_df[self.fluxcol], y=_df[self.randunccol], ax=ax_scatter).plot()
         ax_scatter.set_title(f"Measured {self.fluxcol} with METHOD 1 uncertainties")
 
         # Time series (gapfilled, method 1-4)
         _df = self.randunc_results[[self.fluxgapfilledcol, self.randunccol]].copy()
         _df = _df.dropna()
-        ax_gapfilled.plot_date(_df.index, _df[self.fluxgapfilledcol], label=f"gap-filled {self.fluxgapfilledcol}",
-                               color="black",
-                               alpha=1, markersize=5, markeredgecolor="black", mfc='none')
+        ax_gapfilled.plot(_df.index, _df[self.fluxgapfilledcol], label=f"gap-filled {self.fluxgapfilledcol}",
+                          color="black",
+                          alpha=1, markersize=5, markeredgecolor="black", mfc='none')
         ax_gapfilled.errorbar(_df.index.values, _df[self.fluxgapfilledcol], _df[self.randunccol],
                               elinewidth=5, ecolor='red', alpha=.2)
         ax_gapfilled.set_title(f"Gap-filled {self.fluxgapfilledcol} with METHOD 1-4 uncertainties")
@@ -433,12 +433,12 @@ class RandomUncertaintyPAS20:
 
 def example():
     # Test: Load test data, using pickle for fast loading
-    from diive.configs.exampledata import load_exampledata_pickle
-    data_df = load_exampledata_pickle()
+    from diive.configs.exampledata import load_exampledata_parquet
+    data_df = load_exampledata_parquet()
 
     # Restrict data for testing
     from diive.core.dfun.frames import df_between_two_dates
-    data_df = df_between_two_dates(df=data_df, start_date='2022-06-01', end_date='2022-06-30').copy()
+    data_df = df_between_two_dates(df=data_df, start_date='2022-06-01', end_date='2022-12-03').copy()
 
     # Subset
     subset = data_df[['NEE_CUT_REF_orig', 'NEE_CUT_REF_f', 'NEE_CUT_16_f', 'NEE_CUT_84_f',

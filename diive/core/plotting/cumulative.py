@@ -60,6 +60,7 @@ class CumulativeYear:
 
         # Create axis
         self.fig, self.ax = pf.create_ax()
+        self.ax.xaxis.axis_date()
 
     def _add_reference(self, digits_after_comma):
 
@@ -69,12 +70,12 @@ class CumulativeYear:
 
         # label = f"{year}: {cumulative_df[year].dropna().iloc[-1]:.2f}"
         mean_end = self.mean_doy_cumulative_df['MEAN_DOY_TIME'].iloc[-1]
-        self.ax.plot_date(x=self.mean_doy_cumulative_df.index.values,
-                          y=self.mean_doy_cumulative_df['MEAN_DOY_TIME'].values,
-                          color='black', alpha=1,
-                          ls='-', lw=theme.WIDTH_LINE_WIDER,
-                          marker='', markeredgecolor='none', ms=0,
-                          zorder=99, label=f'mean {mean_end:.{digits_after_comma}f}')
+        self.ax.plot(self.mean_doy_cumulative_df.index.values,
+                     self.mean_doy_cumulative_df['MEAN_DOY_TIME'].values,
+                     color='black', alpha=1,
+                     ls='-', lw=theme.WIDTH_LINE_WIDER,
+                     marker='', markeredgecolor='none', ms=0,
+                     zorder=99, label=f'mean {mean_end:.{digits_after_comma}f}')
         # self.ax.fill_between(mean_cumulative_df.index.values,
         #                      mean_cumulative_df['MEAN+1.96_SD'].values,
         #                      mean_cumulative_df['MEAN-1.96_SD'].values,
@@ -125,12 +126,12 @@ class CumulativeYear:
             lw = theme.WIDTH_LINE_WIDER if year == self.highlight_year else theme.WIDTH_LINE_DEFAULT
             color = self.highlight_year_color if year == self.highlight_year else color_list[ix]
 
-            self.ax.plot_date(x=self.cumulatives_per_year_df.index,
-                              y=self.cumulatives_per_year_df[year],
-                              color=color, alpha=1,
-                              ls='-', lw=lw,
-                              marker='', markeredgecolor='none', ms=0,
-                              zorder=99, label=label)
+            self.ax.plot(self.cumulatives_per_year_df.index,
+                         self.cumulatives_per_year_df[year],
+                         color=color, alpha=1,
+                         ls='-', lw=lw,
+                         marker='', markeredgecolor='none', ms=0,
+                         zorder=99, label=label)
 
         # Show reference
         if self.show_reference:
@@ -143,29 +144,9 @@ class CumulativeYear:
 
 
 def example():
-    # # Test data
-    # from diive.core.io.filereader import ReadFileType
-    # loaddatafile = ReadFileType(
-    #     filetype='DIIVE-CSV-30MIN',
-    #     filepath=r"M:\Downloads\_temp\CH_LAE_FP2021_2004-2020_ID20210607205711.diive.csv",
-    #     # filepath=r"F:\Dropbox\luhk_work\_current\fp2022\7-14__IRGA627572__addingQCF0\CH-DAV_FP2022.1_1997-2022.08_ID20220826234456_30MIN.diive.csv",
-    #     data_nrows=None)
-    # data_df, metadata_df = loaddatafile.get_filedata()
-    #
-    # from diive.core.io.files import save_as_pickle
-    # filepath = save_as_pickle(
-    #     outpath=r"M:\Downloads\_temp",
-    #     # outpath=r'F:\Dropbox\luhk_work\_current\fp2022\7-14__IRGA627572__addingQCF0',
-    #     filename='CH_LAE_FP2021_2004-2020_ID20210607205711.diive.csv',
-    #     # filename='CH-DAV_FP2022.1_1997-2022.08_ID20220826234456_30MIN.diive.csv',
-    #     data=data_df)
-
     # Test data
-    from diive.core.io.files import load_pickle
-    df_orig = load_pickle(
-        filepath=r"M:\Downloads\_temp\CH_LAE_FP2021_2004-2020_ID20210607205711.diive.csv.pickle"
-        # filepath=r'F:\Dropbox\luhk_work\_current\fp2022\7-14__IRGA627572__addingQCF0\CH-DAV_FP2022.1_1997-2022.08_ID20220826234456_30MIN.diive.csv.pickle'
-    )
+    from diive.configs.exampledata import load_exampledata_parquet
+    df_orig = load_exampledata_parquet()
 
     df = df_orig.copy()
 
@@ -190,7 +171,7 @@ def example():
     # series.index = pd.to_datetime(series.index)
     # series = series.groupby(series.index.year).mean()  # yearly mean
 
-    series = df['NEE_f'].copy()
+    series = df['NEE_CUT_REF_f'].copy()
     # series = df['NEE_CUT_REF_f'].copy()
     series = series.multiply(0.02161926)  # umol CO2 m-2 s-1 --> g C m-2 30min-1
     series_units = r'($\mathrm{gC\ m^{-2}}$)'
