@@ -1,9 +1,116 @@
-from pandas import Series
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from pandas import Series, DataFrame
 
 import diive.core.dfun.frames as frames
 from diive.core.plotting.plotfuncs import quickplot
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag
+
+
+class MeasurementOffsetFromReplicate:
+    """
+    Compare yearly measurement histograms to reference, detect
+    offset and gain in comparison to reference and correct measurement
+    for offset and gain per year
+
+    - Example notebook available in:
+        notebooks/Corrections/WindDirectionOffset.ipynb
+    """
+
+    def __init__(self,
+                 measurement: Series,
+                 replicate: Series,
+                 offset_start: int = -100,
+                 offset_end: int = 100,
+                 offset_stepsize: float = 0.1):
+        """
+        Build histogram of wind directions for each year and compare to reference
+        histogram built from data in reference years
+
+        (1) Build reference histogram of wind directions from reference years
+        (2) For each year:
+            2a: Add constant offset to wind directions, starting with *offset_start*
+            2b: Build histogram of wind directions
+            2c: Calculate absolute correlation between 2b and reference
+            2d: Continue with next offset, ending with *offset_end*
+            2e: Detect offset that yielded maximum absolute correlation with reference
+
+        Args:
+            measurement: Time series of wind directions in degrees
+            hist_ref_years: List of years for building reference histogram, e.g. "[2021, 2022]"
+            offset_start: Minimum offset in degrees to shift *s*
+            offset_end: Maximum offset in degrees to shift *s*
+            hist_n_bins: Number of bins for building histograms
+        """
+        self.measurement = measurement
+        self.replicate = replicate
+        self.offset_start = offset_start
+        self.offset_end = offset_end
+        self.offset_stepsize = offset_stepsize
+
+        # Wind directions shifted by offset that yielded maximum absolute
+        # correlation with reference
+        self.measurement_shifted = self.measurement.copy()
+
+        # Find offset per year and store results in dict
+        self.offset = self._calc_shift_correlations()
+
+        # Correct wind directions
+        self.replicate_corrected = self._correct_measurement()
+
+        # self.showplots()
+
+    def get_corrected_replicate(self):
+        return self.replicate_corrected
+
+    def get_offset(self):
+        return self.offset
+
+    def _correct_measurement(self):
+        """Correct wind directions by yearly offsets"""
+        replicate_corrected = self.replicate.add(self.offset)
+        return replicate_corrected
+
+    def _calc_shift_correlations(self):
+        """ """
+        m = self.measurement.copy()
+        r = self.replicate.copy()
+        offsets_df = pd.DataFrame(columns=['OFFSET', 'ABS_DIFF'])
+        counter = 0
+        for offset in np.arange(self.offset_start, self.offset_end, self.offset_stepsize):
+
+            counter += 1
+            r_shifted = r.copy()
+            r_shifted += offset
+            abs_diff = r_shifted.sub(m)
+            abs_diff = abs_diff.abs()
+            abs_diff = abs_diff.sum()
+            abs_diff = float(abs_diff)
+            offsets_df.loc[len(offsets_df)] = [offset, abs_diff]
+
+            print(f"#{counter}  {offset} {abs_diff}")
+            # fig = plt.figure()
+            # m.plot(x_compat=True)
+            # r_shifted.plot(x_compat=True, label=f"corrected by offset")
+            # plt.title(f"OFFSET: {offset}  /  SUM_ABS_DIFF: {abs_diff}")
+            # plt.legend(loc='upper right')
+            # path = rf"C:\Users\nopan\Desktop\temp\{counter}.png"
+            # fig.tight_layout()
+            # fig.savefig(path)
+
+        offsets_df = offsets_df.sort_values(by='ABS_DIFF', ascending=True)
+        min_ix = offsets_df['ABS_DIFF'] == offsets_df['ABS_DIFF'].min()
+        offset = offsets_df.loc[min_ix]['OFFSET'].iloc[0]
+        return offset
+
+    # def showplots(self):
+    #     """Plot absolute correlations for each year"""
+    #     for key, val in self.shiftdict.items():
+    #         shiftdf = val.set_index(keys='SHIFT', drop=True)
+    #         shiftdf.plot()
+    #         plt.show()
 
 
 @ConsoleOutputDecorator()
@@ -166,3 +273,72 @@ def remove_radiation_zero_offset(series: Series,
     series_corr_settozero.rename(outname, inplace=True)
 
     return series_corr_settozero
+
+
+def example():
+    # from dbc_influxdb import dbcInflux
+    # SITE = 'ch-cha'
+    # MEASUREMENTS = ['TS']
+    # FIELDS = ['TS_GF1_0.05_1', 'TS_LOWRES_GF1_0.05_3']
+    # DIRCONF = r'L:\Sync\luhk_work\20 - CODING\22 - POET\configs'
+    # BUCKET_RAW = f'{SITE}_processed'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_raw' contains all raw data for CH-LAE
+    # dbc = dbcInflux(dirconf=DIRCONF)
+    # data_simple, data_detailed, assigned_measurements = dbc.download(
+    #     bucket=BUCKET_RAW,
+    #     measurements=MEASUREMENTS,
+    #     fields=FIELDS,
+    #     start='2022-01-01 00:00:01',
+    #     stop='2023-01-01 00:00:01',
+    #     timezone_offset_to_utc_hours=1,
+    #     data_version='meteoscreening_diive'
+    # )
+    # print(data_simple)
+    # print(data_detailed)
+    # print(assigned_measurements)
+    # # Export data to parquet for fast testing
+    # from diive.core.io.files import save_parquet
+    # filepath = save_parquet(filename="meteodata_simple", data=data_simple, outpath=r"F:\TMP")
+
+    from diive.core.io.files import load_parquet
+    df = load_parquet(filepath=r"F:\TMP\meteodata_simple.parquet")
+    df = df.dropna()
+    import matplotlib.pyplot as plt
+    # df.plot(x_compat=True)
+    # plt.show()
+    df.plot(x_compat=True)
+    plt.show()
+
+    off = MeasurementOffsetFromReplicate(measurement=df['TS_GF1_0.05_1'],
+                                         replicate=df['TS_LOWRES_GF1_0.05_3'],
+                                         offset_start=-10, offset_end=10, offset_stepsize=.01)
+    corrected = off.get_corrected_replicate()
+    offset = off.get_offset()
+
+    print(f"The offset with minimum absolute difference between data points is {offset}")
+
+    df['TS_GF1_0.05_1'].plot(x_compat=True)
+    corrected.plot(x_compat=True, label=f"corrected by offset {offset}")
+    plt.legend(loc='upper right')
+    plt.show()
+
+    # col = 'WD'
+    # wd = df[col].copy()
+    #
+    # # # Prepare input data
+    # # wd = wd.loc[wd.index.year <= 2009]
+    # # wd = wd.dropna()
+    #
+    # wds = WindDirOffset(winddir=wd, offset_start=-50, offset_end=50, hist_ref_years=[2006, 2009], hist_n_bins=360)
+    # yearlyoffsets_df = wds.get_yearly_offsets()
+    # s_corrected = wds.get_corrected_wind_directions()
+    # print(yearlyoffsets_df)
+    # print(s_corrected)
+    # print(wd)
+    #
+    # from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+    # HeatmapDateTime(series=s_corrected).show()
+    # HeatmapDateTime(series=wd).show()
+
+
+if __name__ == '__main__':
+    example()
