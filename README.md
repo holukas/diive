@@ -1,10 +1,8 @@
 ![](images/logo_diive1_256px.png)
 
 ![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
-![PyPI - Version](https://img.shields.io/pypi/v/diive?style=for-the-badge&color=%23EF6C00&link=https%3A%2F%2Fpypi.org%2Fproject%2Fdiive%2F)
-![GitHub License](https://img.shields.io/github/license/holukas/diive?style=for-the-badge&color=%237CB342)
-
 [![PyPI - Version](https://img.shields.io/pypi/v/diive?style=for-the-badge&color=%23EF6C00&link=https%3A%2F%2Fpypi.org%2Fproject%2Fdiive%2F)](https://pypi.org/project/diive/)
+![GitHub License](https://img.shields.io/github/license/holukas/diive?style=for-the-badge&color=%237CB342)
 
 [![DOI](https://zenodo.org/badge/708559210.svg)](https://zenodo.org/doi/10.5281/zenodo.10884017)
 
