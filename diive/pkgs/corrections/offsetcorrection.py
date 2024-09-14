@@ -62,7 +62,7 @@ class MeasurementOffsetFromReplicate:
 
         # self.showplots()
 
-    def get_corrected_replicate(self):
+    def get_corrected_measurement(self):
         return self.replicate_corrected
 
     def get_offset(self):
@@ -70,8 +70,8 @@ class MeasurementOffsetFromReplicate:
 
     def _correct_measurement(self):
         """Correct wind directions by yearly offsets"""
-        replicate_corrected = self.replicate.add(self.offset)
-        return replicate_corrected
+        measurement_corrected = self.measurement.add(self.offset)
+        return measurement_corrected
 
     def _calc_shift_correlations(self):
         """ """
@@ -82,23 +82,24 @@ class MeasurementOffsetFromReplicate:
         for offset in np.arange(self.offset_start, self.offset_end, self.offset_stepsize):
 
             counter += 1
-            r_shifted = r.copy()
-            r_shifted += offset
-            abs_diff = r_shifted.sub(m)
+            m_shifted = m.copy()
+            m_shifted += offset
+            abs_diff = m_shifted.sub(r)
             abs_diff = abs_diff.abs()
             abs_diff = abs_diff.sum()
             abs_diff = float(abs_diff)
             offsets_df.loc[len(offsets_df)] = [offset, abs_diff]
 
             print(f"#{counter}  {offset} {abs_diff}")
-            # fig = plt.figure()
-            # m.plot(x_compat=True)
-            # r_shifted.plot(x_compat=True, label=f"corrected by offset")
-            # plt.title(f"OFFSET: {offset}  /  SUM_ABS_DIFF: {abs_diff}")
-            # plt.legend(loc='upper right')
-            # path = rf"C:\Users\nopan\Desktop\temp\{counter}.png"
-            # fig.tight_layout()
-            # fig.savefig(path)
+            fig = plt.figure()
+            r.plot(x_compat=True, label="true measurement")
+            m_shifted.plot(x_compat=True, label=f"corrected by offset")
+            plt.title(f"OFFSET: {offset}  /  SUM_ABS_DIFF: {abs_diff}")
+            plt.legend(loc='upper right')
+            path = rf"C:\Users\nopan\Desktop\temp\{counter}.png"
+            fig.tight_layout()
+            # fig.show()
+            fig.savefig(path)
 
         offsets_df = offsets_df.sort_values(by='ABS_DIFF', ascending=True)
         min_ix = offsets_df['ABS_DIFF'] == offsets_df['ABS_DIFF'].min()
@@ -288,7 +289,7 @@ def example():
     #     measurements=MEASUREMENTS,
     #     fields=FIELDS,
     #     start='2022-01-01 00:00:01',
-    #     stop='2023-01-01 00:00:01',
+    #     stop='2025-01-01 00:00:01',
     #     timezone_offset_to_utc_hours=1,
     #     data_version='meteoscreening_diive'
     # )
@@ -310,16 +311,16 @@ def example():
 
     off = MeasurementOffsetFromReplicate(measurement=df['TS_GF1_0.05_1'],
                                          replicate=df['TS_LOWRES_GF1_0.05_3'],
-                                         offset_start=-10, offset_end=10, offset_stepsize=.01)
-    corrected = off.get_corrected_replicate()
+                                         offset_start=-10, offset_end=0, offset_stepsize=.1)
+    corrected = off.get_corrected_measurement()
     offset = off.get_offset()
 
     print(f"The offset with minimum absolute difference between data points is {offset}")
 
-    df['TS_GF1_0.05_1'].plot(x_compat=True)
-    corrected.plot(x_compat=True, label=f"corrected by offset {offset}")
-    plt.legend(loc='upper right')
-    plt.show()
+    # corrected.plot(x_compat=True, label=f"TS_GF1_0.05_1 corrected by offset {offset:.2f}")
+    # df['TS_LOWRES_GF1_0.05_3'].plot(x_compat=True, label="TS_LOWRES_GF1_0.05_3 (replicate)")
+    # plt.legend(loc='upper right')
+    # plt.show()
 
     # col = 'WD'
     # wd = df[col].copy()
