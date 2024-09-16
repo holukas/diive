@@ -181,7 +181,7 @@ class Cumulative:
         self.ax.set_ylim(ymin, ymax)
         pf.add_zeroline_y(ax=self.ax, data=self.cumulative)
         pf.default_format(ax=self.ax,
-                          ax_xlabel_txt="Month",
+                          ax_xlabel_txt="Date",
                           ax_ylabel_txt="Cumulative",
                           txt_ylabel_units=self.units)
         n_legend_cols = pf.n_legend_cols(n_legend_entries=len(self.cumulative.columns))
@@ -192,13 +192,11 @@ class Cumulative:
 
         self.fig.tight_layout()
 
-
-    def get(self):
+    def get_ax(self):
         """Return axis"""
         return self.ax
 
-
-    def plot(self, showplot: bool = True, digits_after_comma: int = 2):
+    def plot(self, showplot: bool = True, digits_after_comma: int = 0):
         color_list = theme.colorwheel_36()  # get some colors
 
         # Plot yearly cumulatives
@@ -213,6 +211,16 @@ class Cumulative:
                          ls='-', lw=lw,
                          marker='', markeredgecolor='none', ms=0,
                          zorder=99, label=label)
+
+            x = series.index[-1]
+            y = series.iloc[-1]
+
+            self.ax.plot(x, y, color=color, alpha=1, marker="o", markeredgecolor=color, ms=10)
+
+            self.ax.text(x, y, f"  {y:.{digits_after_comma}f}",
+                         size=12, color=color,
+                         backgroundcolor='none', alpha=1,
+                         horizontalalignment='left', verticalalignment='center', zorder=99)
 
         self._apply_format()
 
@@ -230,8 +238,8 @@ def example_cum_overall():
     Cumulative(
         df=df,
         units=series_units,
-        start_year=2005,
-        end_year=2020).plot()
+        start_year=2015,
+        end_year=2019).plot()
 
 
 def example_cum_year():
