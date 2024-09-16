@@ -1,4 +1,5 @@
 from pandas import Series
+from pandas.core.interchange.dataframe_protocol import DataFrame
 
 import diive.core.plotting.plotfuncs as pf
 import diive.core.plotting.styles.LightTheme as theme
@@ -143,7 +144,97 @@ class CumulativeYear:
             self.fig.show()
 
 
-def example():
+class Cumulative:
+
+    def __init__(self,
+                 df: DataFrame,
+                 units: str = None,
+                 start_year: int = None,
+                 end_year: int = None):
+        """Plot cumulative sums across all data.
+
+        Args:
+            df: Dataframe, cumulatives are plotted for each column.
+            units: Units shown in plot, LaTeX format is supported.
+            start_year: Start year of shown data.
+            end_year: End year of shown data.
+        """
+        self.df = df
+        self.units = units
+        self.start_year = start_year
+        self.end_year = end_year
+
+        if self.start_year | self.end_year:
+            self.df = keep_years(data=self.df, start_year=self.start_year, end_year=self.end_year)
+
+        self.cumulative = self.df.cumsum()
+
+        # Create axis
+        self.fig, self.ax = pf.create_ax()
+        self.ax.xaxis.axis_date()
+
+    def _apply_format(self):
+        title = f"Cumulatives ({self.cumulative.index.min()}-{self.cumulative.index.max()})"
+        self.fig.suptitle(title, fontsize=theme.FIGHEADER_FONTSIZE)
+        ymin = self.cumulative.min().min()
+        ymax = self.cumulative.max().max()
+        self.ax.set_ylim(ymin, ymax)
+        pf.add_zeroline_y(ax=self.ax, data=self.cumulative)
+        pf.default_format(ax=self.ax,
+                          ax_xlabel_txt="Month",
+                          ax_ylabel_txt="Cumulative",
+                          txt_ylabel_units=self.units)
+        n_legend_cols = pf.n_legend_cols(n_legend_entries=len(self.cumulative.columns))
+        pf.default_legend(ax=self.ax,
+                          labelspacing=0.2,
+                          ncol=n_legend_cols)
+        pf.nice_date_ticks(ax=self.ax, minticks=3, maxticks=20, which='x', locator='auto')
+
+        self.fig.tight_layout()
+
+
+    def get(self):
+        """Return axis"""
+        return self.ax
+
+
+    def plot(self, showplot: bool = True, digits_after_comma: int = 2):
+        color_list = theme.colorwheel_36()  # get some colors
+
+        # Plot yearly cumulatives
+        for ix, col in enumerate(self.cumulative):
+            series = self.cumulative[col]
+            label = f"{col}: {series.dropna().iloc[-1]:.{digits_after_comma}f}"
+            lw = theme.WIDTH_LINE_DEFAULT
+            color = color_list[ix]
+
+            self.ax.plot(series.index, series,
+                         color=color, alpha=1,
+                         ls='-', lw=lw,
+                         marker='', markeredgecolor='none', ms=0,
+                         zorder=99, label=label)
+
+        self._apply_format()
+
+        if showplot:
+            self.fig.show()
+
+
+def example_cum_overall():
+    # Test data
+    from diive.configs.exampledata import load_exampledata_parquet
+    df_orig = load_exampledata_parquet()
+    df = df_orig[['NEE_CUT_16_f', 'NEE_CUT_REF_f', 'NEE_CUT_84_f']].copy()
+    df = df.multiply(0.02161926)  # umol CO2 m-2 s-1 --> g C m-2 30min-1
+    series_units = r'($\mathrm{gC\ m^{-2}}$)'
+    Cumulative(
+        df=df,
+        units=series_units,
+        start_year=2005,
+        end_year=2020).plot()
+
+
+def example_cum_year():
     # Test data
     from diive.configs.exampledata import load_exampledata_parquet
     df_orig = load_exampledata_parquet()
@@ -195,4 +286,5 @@ def example():
 
 
 if __name__ == '__main__':
-    example()
+    example_cum_overall()
+    # example_cum_year()
