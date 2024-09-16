@@ -10,7 +10,7 @@ from pandas import DataFrame
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.inspection import permutation_importance
 from sklearn.metrics import PredictionErrorDisplay, max_error, median_absolute_error, mean_absolute_error, \
-    mean_absolute_percentage_error, r2_score, mean_squared_error
+    mean_absolute_percentage_error, r2_score, mean_squared_error, root_mean_squared_error
 from sklearn.model_selection import train_test_split
 from xgboost import XGBRegressor
 from yellowbrick.regressor import PredictionError, ResidualsPlot
@@ -1110,7 +1110,7 @@ def prediction_scores_regr(predictions: np.array,
         'mae': mean_absolute_error(targets, predictions),
         'medae': median_absolute_error(targets, predictions),
         'mse': mean_squared_error(targets, predictions),
-        'rmse': mean_squared_error(targets, predictions, squared=False),  # root mean squared error
+        'rmse': root_mean_squared_error(targets, predictions),
         'mape': mean_absolute_percentage_error(targets, predictions),
         'maxe': max_error(targets, predictions),
         'r2': r2_score(targets, predictions)
