@@ -88,7 +88,7 @@ def trim_frame(df: DataFrame, var: str) -> DataFrame:
 
 
 def detect_new_columns(df: DataFrame, other: DataFrame) -> list:
-    """Detect columns in *df* that do not exist in other."""
+    """Detect columns in *df* that do not exist in *other*."""
     duplicatecols = [c for c in df.columns if c in other.columns]
     for col in df[duplicatecols]:
         if not df[col].equals(other[col]):
@@ -802,7 +802,7 @@ def lagged_variants(df: DataFrame,
                     lag: list[int, int],
                     stepsize: int = 1,
                     exclude_cols: list = None,
-                    verbose: bool = True) -> DataFrame:
+                    verbose: int = 0) -> DataFrame:
     """
     Create lagged variants of variables
 
@@ -881,12 +881,22 @@ def lagged_variants(df: DataFrame,
                 else:
                     # skip if lagstep = 0
                     continue
+
+                # Shifting data creates NaNs in time series, which can cause issues
+                # with some machine learning algorithms
+                # To handle this, the new gap(s) is/are filled with the nearest value
+                n_missing_vals_before = int(df[col].isnull().sum())
                 df[stepname] = df[col].shift(_shift)
+                n_missing_vals_after = int(df[stepname].isnull().sum())
+                if n_missing_vals_before == 0 and n_missing_vals_after > 0:
+                    df[stepname] = df[stepname].bfill(limit=n_missing_vals_after)
+                    df[stepname] = df[stepname].ffill(limit=n_missing_vals_after)
             _included.append(col)
 
     if verbose:
         print(f"++ Added new columns with lagged variants for: {_included} (lags between {lag[0]} and {lag[1]} "
-              f"with stepsize {stepsize}), no lagged variants for: {_excluded}.")
+              f"with stepsize {stepsize}), no lagged variants for: {_excluded}. "
+              f"Shifting the time series created gaps which were then filled with the nearest value.")
     return df
 
 
