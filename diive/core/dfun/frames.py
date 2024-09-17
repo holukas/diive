@@ -92,7 +92,10 @@ def detect_new_columns(df: DataFrame, other: DataFrame) -> list:
     duplicatecols = [c for c in df.columns if c in other.columns]
     for col in df[duplicatecols]:
         if not df[col].equals(other[col]):
-            raise Exception(f"Column {col} was identified as duplicate, but is not identical.")
+            raise Exception(
+                f"Column {col} was identified as duplicate, but is not identical. "
+                f"This error can occur e.g. when features used in machine learning models "
+                f"have gaps.")
 
     newcols = [c for c in df.columns if c not in other.columns]
 
