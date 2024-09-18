@@ -2,6 +2,77 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.82.0 | 19 Sep 2024
+
+## Long-term gap-filling
+
+It is now possible to gap-fill multi-year datasets using the class `LongTermGapFillingRandomForestTS`. In this approach,
+data from neighboring years are pooled together before training the random forest model for gap-filling a specific year.
+This is especially useful for long-term, multi-year datasets where environmental conditions and drivers might change
+over years and decades.
+
+Why random forest? Because it performed well and to me it looks like the first choice for gap-filling ecosystem fluxes,
+at least at the moment.
+
+Long-term gap-filling using random forest is now also built into the flux processing chain (Level-4.1). This allows to
+quickly gap-fill the different USTAR scenarios and to create some useful plots (I
+hope). [See the flux processing chain notebook for how this looks like](https://github.com/holukas/diive/blob/main/notebooks/FluxProcessingChain/FluxProcessingChain.ipynb).
+
+In a future update it will be possible to either directly switch to `XGBoost` for gap-filling, or to use it (and other
+machine-learning models) in combination with random forest in the flux processing chain.
+
+### Example
+
+Here is an example for a dataset containing CO2 flux (`NEE`) measurements from 2005 to 2023:
+
+- for gap-filling the year 2005, the model is trained on data from 2005, 2006 and 2007 (*2005 has no previous year*)
+- for gap-filling the year 2006, the model is trained on data from 2005, 2006 and 2007 (same model as for 2005)
+- for gap-filling the year 2007, the model is trained on data from 2006, 2007 and 2008
+- ...
+- for gap-filling the year 2012, the model is trained on data from 2011, 2012 and 2013
+- for gap-filling the year 2013, the model is trained on data from 2012, 2013 and 2014
+- for gap-filling the year 2014, the model is trained on data from 2013, 2014 and 2015
+- ...
+- for gap-filling the year 2021, the model is trained on data from 2020, 2021 and 2022
+- for gap-filling the year 2022, the model is trained on data from 2021, 2022 and 2023 (same model as for 2023)
+- for gap-filling the year 2023, the model is trained on data from 2021, 2022 and 2023 (*2023 has no next year*)
+
+### New features
+
+- Added new method for long-term (multiple years) gap-filling using random forest to flux processing chain (
+  `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain.level41_gapfilling_longterm`)
+- Added new class for long-term (multiple years) gap-filling using random forest (
+  `diive.pkgs.gapfilling.longterm.LongTermGapFillingRandomForestTS`)
+- Added class for plotting cumulative sums across all data, for multiple columns (
+  `diive.core.plotting.cumulative.Cumulative`)
+- Added class to detect a constant offset between two measurements (
+  `diive.pkgs.corrections.measurementoffset.MeasurementOffset`)
+
+### Changes
+
+- Creating lagged variants creates gaps which then leads to incomplete features in machine learning models. Now, gaps
+  are filled using simple forward and backward filling, limited to the number of values defined in *lag*. For example,
+  if variable TA is lagged by -2 value this creates two missing values for this variant at the start of the time series,
+  which then are then gap-filled using the simple backwards fill with `limit=2`. (
+  `diive.core.dfun.frames.lagged_variants`)
+
+### Notebooks
+
+- Updated flux processing chain notebook to include long-term gap-filling using random forest (
+  `notebooks/FluxProcessingChain/FluxProcessingChain.ipynb`)
+- Added new notebook for plotting cumulative sums across all data, for multiple columns (
+  `notebooks/Plotting/Cumulative.ipynb`)
+
+### Tests
+
+- Unittest for flux processing chain now includes many more methods (
+  `tests.test_fluxprocessingchain.TestFluxProcessingChain.test_fluxprocessingchain`)
+- 39/39 unittests ran successfully
+
+### Bugfixes
+
+- Fixed deprecation warning in (`diive.core.ml.common.prediction_scores_regr`)
+
 ## v0.81.0 | 11 Sep 2024
 
 ## Expanding Flux Processing Capabilities

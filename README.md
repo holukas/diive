@@ -84,6 +84,8 @@ _For info about the Swiss FluxNet flux levels, see [here](https://www.swissfluxn
         - Level-2 quality flags
         - Level-3.1 storage correction
         - Level-3.2 outlier removal
+        - Level-3.3: USTAR filtering using constant thresholds
+        - Level-4.1: gap-filling using long-term random forest
 - Quick flux processing chain ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/FluxProcessingChain/QuickFluxProcessingChain.ipynb))
 
 ### Formats

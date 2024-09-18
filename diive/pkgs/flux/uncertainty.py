@@ -432,7 +432,7 @@ class RandomUncertaintyPAS20:
 
 
 def example():
-    # Test: Load test data, using pickle for fast loading
+    # Test: Load test data, using parquet for fast loading
     from diive.configs.exampledata import load_exampledata_parquet
     data_df = load_exampledata_parquet()
 
