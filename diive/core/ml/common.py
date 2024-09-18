@@ -1,8 +1,6 @@
 """
 kudos: https://datascience.stackexchange.com/questions/15135/train-test-validation-set-splitting-in-sklearn
 """
-from sklearn.feature_selection import RFECV
-from sklearn.model_selection import KFold
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -10,7 +8,7 @@ from pandas import DataFrame
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.inspection import permutation_importance
 from sklearn.metrics import PredictionErrorDisplay, max_error, median_absolute_error, mean_absolute_error, \
-    mean_absolute_percentage_error, r2_score, mean_squared_error
+    mean_absolute_percentage_error, r2_score, mean_squared_error, root_mean_squared_error
 from sklearn.model_selection import train_test_split
 from xgboost import XGBRegressor
 from yellowbrick.regressor import PredictionError, ResidualsPlot
@@ -31,10 +29,10 @@ class MlRegressorGapFillingBase:
             regressor,
             input_df: DataFrame,
             target_col: str or tuple,
-            verbose: bool = True,
+            verbose: int = 0,
             perm_n_repeats: int = 10,
             test_size: float = 0.20,
-            features_lag: list = None,
+            features_lag: list[int, int] = None,
             features_lag_exclude_cols: list = None,
             include_timestamp_as_features: bool = False,
             add_continuous_record_number: bool = False,
@@ -128,6 +126,17 @@ class MlRegressorGapFillingBase:
         self._check_n_cols()
 
         self.original_input_features = self.model_df.drop(columns=self.target_col).columns.tolist()
+
+        # Check if features complete
+        n_vals_index = len(self.model_df.index)
+        fstats = self.model_df[self.original_input_features].describe()
+        not_complete = fstats.loc['count'] < n_vals_index
+        not_complete = not_complete[not_complete].index.tolist()
+        if len(not_complete) > 0:
+            print(f"(!)Some features are incomplete and have less than {n_vals_index} values:")
+            for nc in not_complete:
+                print(f"    --> {nc} ({fstats[nc]['count'].astype(int)} values)")
+            print(f"This means that not all target values can be predicted based on the full model.")
 
         # Create training (80%) and testing dataset (20%)
         # Sort index to keep original order
@@ -245,7 +254,7 @@ class MlRegressorGapFillingBase:
         fi_df = fi_df.mean(axis=1)
         return fi_df
 
-    def _remove_rejected_features(self, factor: float =1) -> list:
+    def _remove_rejected_features(self, factor: float = 1) -> list:
         """Remove features below importance threshold from model dataframe.
         The updated model dataframe will then be used for the next (final) model.
         """
@@ -428,7 +437,7 @@ class MlRegressorGapFillingBase:
         self._fillgaps_fallback()
         self._fillgaps_combinepredictions()
 
-    def reduce_features(self, factor:float=1):
+    def reduce_features(self, factor: float = 1):
         """Reduce number of features using permutation importance
 
         A random variable is added to features and the permutation importances
@@ -459,7 +468,6 @@ class MlRegressorGapFillingBase:
         # https://mljar.com/blog/visualize-tree-from-random-forest/
         # todo from dtreeviz.trees import dtreeviz  # will be used for tree visualization
         # _ = tree.plot_tree(rf.estimators_[0], feature_names=X.columns, filled=True)
-
 
         # Calculate permutation importance for all data
         print(f">>> Calculating feature importances (permutation importance, {self.perm_n_repeats} repeats) ...")
@@ -1110,7 +1118,7 @@ def prediction_scores_regr(predictions: np.array,
         'mae': mean_absolute_error(targets, predictions),
         'medae': median_absolute_error(targets, predictions),
         'mse': mean_squared_error(targets, predictions),
-        'rmse': mean_squared_error(targets, predictions, squared=False),  # root mean squared error
+        'rmse': root_mean_squared_error(targets, predictions),
         'mape': mean_absolute_percentage_error(targets, predictions),
         'maxe': max_error(targets, predictions),
         'r2': r2_score(targets, predictions)

@@ -65,12 +65,12 @@ class TestGapFilling(unittest.TestCase):
         # gapfilled.cumsum().plot()
         # plt.show()
 
-        self.assertAlmostEqual(scores['mae'], 1.681033504987219, places=5)
-        self.assertAlmostEqual(scores['r2'], 0.7932199707457357, places=5)
-        self.assertAlmostEqual(scores['mse'], 5.628773469718195, places=5)
-        self.assertAlmostEqual(gfdf['NEE_CUT_REF_orig_gfRF'].sum(), -612.8457792882542, places=5)
+        self.assertEqual(scores['mae'], 1.681033504987219)
+        self.assertEqual(scores['r2'], 0.7932199707457357)
+        self.assertEqual(scores['mse'], 5.628773469718195)
+        self.assertAlmostEqual(gfdf['NEE_CUT_REF_orig_gfRF'].sum(), -612.7853333778166, places=5)
         self.assertEqual(gfdf['NEE_CUT_REF_orig_gfRF'].sum(), gapfilled.sum())
-        self.assertAlmostEqual(fi['PERM_IMPORTANCE']['Rg_f'], 1.2153029844335206, places=5)
+        self.assertEqual(fi['PERM_IMPORTANCE']['Rg_f'], 1.2153029844335206)
 
     def test_gapfilling_xgboost(self):
         """Fill gaps using XGBoost"""
@@ -124,12 +124,12 @@ class TestGapFilling(unittest.TestCase):
         # gapfilled.cumsum().plot()
         # plt.show()
 
-        self.assertAlmostEqual(scores['mae'], 1.474872398011102, places=5)
-        self.assertAlmostEqual(scores['r2'], 0.8472293439937181, places=5)
-        self.assertAlmostEqual(scores['mse'], 4.158580587210508, places=5)
-        self.assertAlmostEqual(gfdf['NEE_CUT_REF_orig_gfXG'].sum(), -1364.7255991041661, places=5)
+        self.assertEqual(scores['mae'], 1.474872398011102)
+        self.assertEqual(scores['r2'], 0.8472293439937181)
+        self.assertEqual(scores['mse'], 4.158580587210508)
+        self.assertEqual(gfdf['NEE_CUT_REF_orig_gfXG'].sum(), -1364.7877804577352)
         self.assertEqual(gfdf['NEE_CUT_REF_orig_gfXG'].sum(), gapfilled.sum())
-        self.assertAlmostEqual(fi['PERM_IMPORTANCE']['Rg_f'], 1.1121007247659092, places=5)
+        self.assertEqual(fi['PERM_IMPORTANCE']['Rg_f'], 1.1121007247659092)
 
 
 if __name__ == '__main__':

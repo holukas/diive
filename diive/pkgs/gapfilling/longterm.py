@@ -75,7 +75,6 @@ class LongTermGapFillingBase:
 
         self._init_input_df()
 
-
     @property
     def gapfilling_df_(self) -> DataFrame:
         """Return gapfilling results from all years in one dataframe"""
@@ -140,7 +139,6 @@ class LongTermGapFillingBase:
         return self._feature_importance_per_year
 
     def _init_input_df(self):
-        # todo
         # Add additional variables across all years
         temp = MlRegressorGapFillingBase(
             regressor=self.regressor,
@@ -172,18 +170,6 @@ class LongTermGapFillingBase:
         for year, _df in self._yearpools.items():
             print(f"Initializing model for {year} ...")
             df = _df['df'].copy()
-            # Random forest
-            # model = RandomForestTS(
-            #     input_df=df,
-            #     target_col=self.target_col,
-            #     verbose=self.verbose,
-            #     perm_n_repeats=self.perm_n_repeats,
-            #     # features_lag=False,
-            #     include_timestamp_as_features=False,
-            #     add_continuous_record_number=False,
-            #     sanitize_timestamp=False,
-            #     **self.kwargs
-            # )
 
             model = MlRegressorGapFillingBase(
                 regressor=self.regressor,
@@ -197,20 +183,6 @@ class LongTermGapFillingBase:
                 sanitize_timestamp=False,
                 **self.kwargs
             )
-
-            # super().__init__(
-            #     regressor=RandomForestRegressor,
-            #     input_df=input_df,
-            #     target_col=target_col,
-            #     verbose=verbose,
-            #     perm_n_repeats=perm_n_repeats,
-            #     test_size=test_size,
-            #     features_lag=features_lag,
-            #     include_timestamp_as_features=include_timestamp_as_features,
-            #     add_continuous_record_number=add_continuous_record_number,
-            #     sanitize_timestamp=sanitize_timestamp,
-            #     **kwargs
-            # )
 
             self._results_yearly[year] = model
 
@@ -250,7 +222,7 @@ class LongTermGapFillingBase:
             rfts.fillgaps(showplot_scores=False, showplot_importance=False)
         self._collect()
 
-    def showplot_feature_ranks_per_year(self):
+    def showplot_feature_ranks_per_year(self, title: str = None, subtitle: str = None):
 
         # kudos: https://stackoverflow.com/questions/68095438/how-to-make-a-bump-chart
         # kudos: https://stackoverflow.com/questions/57923198/way-to-change-only-the-width-of-marker-in-scatterplot-but-not-height
@@ -258,13 +230,18 @@ class LongTermGapFillingBase:
         height = 1
         verts = list(zip([-width, width, width, -width], [-height, -height, height, height]))
         colors = colorwheel_36_wider()
-        fig, ax = plt.subplots(figsize=(8, 5), subplot_kw=dict(ylim=(0.5, 0.5 + len(self.feature_ranks_per_year))))
+        fig, ax = plt.subplots(figsize=(8, 5), subplot_kw=dict(ylim=(0.5, 0.5 + len(self.feature_ranks_per_year))),
+                               layout='constrained')
         color = -1
+        # _marker = ['o', 's']
+        # _marker_ix = -1
         for ix, row in self.feature_ranks_per_year.iterrows():
             color += 1
-            ax.plot(row.index, row.values, "o", marker=verts, ms=20, color=colors[color], zorder=99)
+            # _marker_ix = _marker_ix + 1 if (_marker_ix + 1) < len(_marker) else 0
+            ax.plot(row.index, row.values, "o", marker=verts, ms=20,
+                    color=colors[color], zorder=99)
             ax.plot(row.index, row.values, "-", marker='none', ms=20, color=colors[color], zorder=1,
-                    alpha=0.5)
+                    alpha=0.6)
         # ax.xaxis.set_major_locator(MultipleLocator(1))
         # ax.yaxis.set_major_locator(MultipleLocator(1))
         firstcol_name = self.feature_ranks_per_year.iloc[:, 0].name
@@ -276,11 +253,17 @@ class LongTermGapFillingBase:
         yax2.yaxis.set_major_formatter(FixedFormatter(self.feature_ranks_per_year.index.to_list()))
         ax.grid(axis="y")
         ax.invert_yaxis()
+        if title:
+            fig.suptitle(f"Feature ranks: {title}", fontsize=16)
+        if subtitle:
+            ax.set_title(f"{subtitle}", fontsize=8, wrap=True)
         fig.show()
 
     def _collect(self):
         """Collect results"""
+        counter = 0
         for year, _df in self._yearpools.items():
+            counter += 1
             print(f"Collecting results for {year} ...")
             rfts = self.results_yearly_[year]
             keepyear = rfts.gapfilling_df_.index.year == int(year)
@@ -288,7 +271,10 @@ class LongTermGapFillingBase:
             self._scores[year] = rfts.scores_
             self._feature_importances_yearly[year] = rfts.feature_importances_
             gapfilled = rfts.get_gapfilled_target()
-            self._gapfilled = pd.concat([self._gapfilled, gapfilled[keepyear]])
+            if counter == 1:
+                self._gapfilled = gapfilled[keepyear].copy()
+            else:
+                self._gapfilled = pd.concat([self._gapfilled, gapfilled[keepyear]])
 
         idf = pd.DataFrame()
         for year, f in self.feature_importances_yearly_.items():
@@ -320,7 +306,6 @@ class LongTermGapFillingRandomForestTS(LongTermGapFillingBase):
                  add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False,
                  **kwargs):
-
         super().__init__(
             regressor=RandomForestRegressor,
             input_df=input_df,
@@ -347,7 +332,6 @@ class LongTermGapFillingXGBoostTS(LongTermGapFillingBase):
                  add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False,
                  **kwargs):
-
         super().__init__(
             regressor=XGBRegressor,
             input_df=input_df,
@@ -363,41 +347,37 @@ class LongTermGapFillingXGBoostTS(LongTermGapFillingBase):
 
 
 def example_longterm_rfts():
-    # Setup, user settings
-    TARGET_COL = 'NEE_CUT_REF_orig'
-    subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
-
-    # Example data
-    from diive.configs.exampledata import load_exampledata_parquet
-    df = load_exampledata_parquet()
-
-    nee_mds = df['NEE_CUT_REF_f'].copy()
+    from diive.core.io.files import load_parquet
+    origdf = load_parquet(
+        filepath=r"L:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_cha_fp2024_2005-2023\50_FluxProcessingChain\51.1_NEE_L3.3.parquet")
+    locs = (origdf.index.year >= 2019)
+    origdf = origdf[locs].copy()
+    [print(c) for c in origdf.columns if "PPFD" in c]
+    TARGET_COL = 'NEE_L3.1_L3.3_CUT_50_QCF'
+    subsetcols = [TARGET_COL]
+    # subsetcols = [TARGET_COL, 'TA_T1_2_1', 'VPD_T1_2_1', 'SW_IN_T1_2_1', 'PPFD_IN_T1_2_2']
+    df = origdf[subsetcols].copy()
 
     # Subset
     # keep = df.index.year <= 2016
     # df = df[keep].copy()
 
-    # Subset with target and features
-    # Only High-quality (QCF=0) measured NEE used for model training in this example
-    lowquality = df["QCF_NEE"] > 0
-    import numpy as np
-    df.loc[lowquality, TARGET_COL] = np.nan
-    df = df[subsetcols].copy()
-
-    ltrf = LongTermGapFillingRandomForestTS(
+    gf = LongTermGapFillingRandomForestTS(
         input_df=df,
         target_col=TARGET_COL,
-        verbose=0,
+        verbose=2,
         features_lag=[-1, -1],
         # features_lag=None,
         include_timestamp_as_features=True,
+        # include_timestamp_as_features=False,
         add_continuous_record_number=True,
+        # add_continuous_record_number=False,
         sanitize_timestamp=True,
-        perm_n_repeats=3,
-        n_estimators=9,
+        perm_n_repeats=1,
+        n_estimators=5,
         random_state=42,
-        # min_samples_split=4,
-        # min_samples_leaf=2,
+        min_samples_split=2,
+        min_samples_leaf=1,
         n_jobs=-1
     )
 
@@ -440,43 +420,58 @@ def example_longterm_rfts():
     # )
 
     # Assign model data
-    ltrf.create_yearpools()
-    # print(ltrf.yearpools)
-    ltrf.initialize_yearly_models()
+    gf.create_yearpools()
+    # print(gf.yearpools)
+    gf.initialize_yearly_models()
 
     # # Feature reduction
     # ltrf.reduce_features_across_years()
 
     # Train model and fill gaps
-    ltrf.fillgaps()
+    gf.fillgaps()
 
     # ltrf.showplot_feature_ranks_per_year()
 
-    gapfilled_ = ltrf.gapfilled_
-    gapfilling_df_ = ltrf.gapfilling_df_
-    results_yearly_ = ltrf.results_yearly_
-    scores_ = ltrf.scores_
-    fi = ltrf.feature_importances_yearly_
+    gapfilled_ = gf.gapfilled_
+    # gapfilling_df_ = gf.gapfilling_df_
+    # results_yearly_ = gf.results_yearly_
+    # scores_ = gf.scores_
+    # fi = gf.feature_importances_yearly_
     # features_reduced_across_years = ltrf.features_reduced_across_years
-    feature_ranks_per_year = ltrf.feature_ranks_per_year
-    feature_importance_per_year = ltrf.feature_importance_per_year
+    # feature_ranks_per_year = gf.feature_ranks_per_year
+    # feature_importance_per_year = gf.feature_importance_per_year
+    gf.showplot_feature_ranks_per_year()
 
     # ltrf.run()
 
     scores = []
-    for year, s in ltrf.scores_.items():
+    for year, s in gf.scores_.items():
         print(f"{year}: r2 = {s['r2']}  MAE = {s['mae']}")
         scores.append(s['mae'])
-    from statistics import mean
-    print(mean(scores))
+    # from statistics import mean
+    # print(mean(scores))
 
-    from diive.core.plotting.timeseries import TimeSeries
-    TimeSeries(series=gapfilled_.cumsum()).plot()
-    # TimeSeries(series=nee_mds.cumsum()).plot()
+    # from diive.core.plotting.timeseries import TimeSeries
+    # TimeSeries(series=gapfilled_.cumsum().multiply(0.02161926)).plot()
+    # # TimeSeries(series=nee_mds.cumsum()).plot()
 
-    from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-    HeatmapDateTime(series=gapfilled_).show()
-    # HeatmapDateTime(series=nee_mds).show()
+    # from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+    # HeatmapDateTime(series=gapfilled_).show()
+    # # HeatmapDateTime(series=nee_mds).show()
+
+    from diive.core.plotting.cumulative import CumulativeYear
+    CumulativeYear(
+        series=gapfilled_.multiply(0.02161926),
+        series_units="X",
+        yearly_end_date=None,
+        # yearly_end_date='08-11',
+        start_year=2005,
+        end_year=2023,
+        show_reference=True,
+        # excl_years_from_reference=None,
+        excl_years_from_reference=[2008, 2009],
+        # highlight_year=2022,
+        highlight_year_color='#F44336').plot()
 
 
 if __name__ == '__main__':

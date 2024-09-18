@@ -1,8 +1,8 @@
 ![](images/logo_diive1_256px.png)
 
-![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
-![PyPI - Version](https://img.shields.io/pypi/v/diive?style=for-the-badge&color=%23EF6C00&link=https%3A%2F%2Fpypi.org%2Fproject%2Fdiive%2F)
-![GitHub License](https://img.shields.io/github/license/holukas/diive?style=for-the-badge&color=%237CB342)
+[![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)](https://www.python.org/)
+[![PyPI - Version](https://img.shields.io/pypi/v/diive?style=for-the-badge&color=%23EF6C00&link=https%3A%2F%2Fpypi.org%2Fproject%2Fdiive%2F)](https://pypi.org/project/diive/)
+[![GitHub License](https://img.shields.io/github/license/holukas/diive?style=for-the-badge&color=%237CB342)](https://github.com/holukas/diive/blob/indev/LICENSE)
 
 [![DOI](https://zenodo.org/badge/708559210.svg)](https://zenodo.org/doi/10.5281/zenodo.10884017)
 
@@ -84,6 +84,8 @@ _For info about the Swiss FluxNet flux levels, see [here](https://www.swissfluxn
         - Level-2 quality flags
         - Level-3.1 storage correction
         - Level-3.2 outlier removal
+        - Level-3.3: USTAR filtering using constant thresholds
+        - Level-4.1: gap-filling using long-term random forest
 - Quick flux processing chain ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/FluxProcessingChain/QuickFluxProcessingChain.ipynb))
 
 ### Formats
@@ -129,6 +131,7 @@ _Create single outlier flags where `0=OK` and `2=outlier`._
 
 ### Plotting
 
+- **Cumulatives across all years for multiple variables** ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/Cumulative.ipynb))
 - **Cumulatives per year** ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/CumulativesPerYear.ipynb))
 - **Diel cycle per month** ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/DielCycle.ipynb))
 - **Heatmap date/time**: showing values (z) of time series as date (y) vs time (x) ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/HeatmapDateTime.ipynb))

@@ -1,6 +1,8 @@
 #  TODO NEEDS FLOW CHECK
 from typing import Literal
 
+import matplotlib.gridspec as gridspec
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from pandas import DataFrame, Series
@@ -8,6 +10,9 @@ from pandas import DataFrame, Series
 from diive.core.dfun.frames import detect_new_columns
 from diive.core.funcs.funcs import filter_strings_by_elements
 from diive.core.io.filereader import MultiDataFileReader, search_files
+from diive.core.io.files import load_pickle
+from diive.core.plotting.cumulative import Cumulative, CumulativeYear
+from diive.core.plotting.heatmap_datetime import HeatmapDateTime
 from diive.pkgs.createvar.daynightflag import daytime_nighttime_flag_from_swinpot
 from diive.pkgs.createvar.potentialradiation import potrad
 from diive.pkgs.flux.common import detect_fluxbasevar
@@ -15,6 +20,7 @@ from diive.pkgs.flux.hqflux import analyze_highest_quality_flux
 from diive.pkgs.flux.ustarthreshold import FlagMultipleConstantUstarThresholds
 from diive.pkgs.fluxprocessingchain.level2_qualityflags import FluxQualityFlagsEddyPro
 from diive.pkgs.fluxprocessingchain.level31_storagecorrection import FluxStorageCorrectionSinglePointEddyPro
+from diive.pkgs.gapfilling.longterm import LongTermGapFillingRandomForestTS
 from diive.pkgs.outlierdetection.stepwiseoutlierdetection import StepwiseOutlierDetection
 from diive.pkgs.qaqc.qcf import FlagQCF
 
@@ -23,20 +29,24 @@ class FluxProcessingChain:
 
     def __init__(
             self,
-            maindf: DataFrame,
+            df: DataFrame,
             fluxcol: str,
             site_lat: float,
             site_lon: float,
             utc_offset: int,
-            nighttime_threshold: float = 50
+            nighttime_threshold: float = 20,
+            daytime_accept_qcf_below: int = 1,
+            nighttimetime_accept_qcf_below: int = 1
     ):
 
-        self.maindf = maindf
+        self._df = df.copy()
         self.fluxcol = fluxcol
         self.site_lat = site_lat
         self.site_lon = site_lon
         self.utc_offset = utc_offset
         self.nighttime_threshold = nighttime_threshold
+        self.daytime_accept_qcf_below = daytime_accept_qcf_below
+        self.nighttimetime_accept_qcf_below = nighttimetime_accept_qcf_below
 
         # Detect base variable that was used to produce this flux
         self.fluxbasevar = detect_fluxbasevar(fluxcol=fluxcol)
@@ -44,7 +54,7 @@ class FluxProcessingChain:
         # Collect all relevant variables for this flux in dataframe
         self.ustarcol = 'USTAR'
         requiredcols = [self.fluxcol, self.ustarcol]
-        self._fpc_df = self.maindf[requiredcols].copy()
+        self._fpc_df = self.df[requiredcols].copy()
 
         # Add potential radiation and daytime and nighttime flags
         self._fpc_df, self.swinpot_col = self._add_swinpot_dt_nt_flag(df=self._fpc_df)
@@ -69,9 +79,104 @@ class FluxProcessingChain:
         self._level31 = None
         self._level32 = None
         self._level33 = None
+        self._level41 = dict()  # dict because there can be multiple USTAR scenarios
         self._level2_qcf = None
         self._level32_qcf = None
         self._level33_qcf = dict()  # dict because there can be multiple USTAR scenarios
+
+    def get_data(self):
+        """Return dataframe containing all input data and results."""
+        return self.df
+
+    def get_gapfilled_names(self) -> list:
+        """Return names of gap-filled variables."""
+        gapfilled_vars = []
+        for ustar_scen, ustar_flux in self.filteredseries_level33_qcf.items():
+            gapfilled_vars.append(self.level41[ustar_scen].gapfilled_.name)
+        return gapfilled_vars
+
+    def get_nongapfilled_names(self) -> list:
+        """Return names of variables that were usedbefore gap-filling."""
+        nongapfilled_vars = []
+        for ustar_scen, ustar_flux in self.filteredseries_level33_qcf.items():
+            nongapfilled_vars.append(ustar_flux.name)
+        return nongapfilled_vars
+
+    def get_gapfilled_variables(self) -> DataFrame:
+        """Return data of gap-filled and non-gap-filled variables."""
+        gapfilled_vars = self.get_gapfilled_names()
+        nongapfilled_vars = self.get_nongapfilled_names()
+        gfvars = gapfilled_vars + nongapfilled_vars
+        return self.fpc_df[gfvars].copy()
+
+    def showplot_feature_ranks_per_year(self):
+        gapfilled_vars = self.get_gapfilled_names()
+        nongapfilled_vars = self.get_nongapfilled_names()
+        gfvars = self.get_gapfilled_variables()
+        for ustar_scen, ustar_flux in self.filteredseries_level33_qcf.items():
+            gfname = self._level41[ustar_scen].gapfilled_.name
+            first_key = next(iter(self._level41[ustar_scen].results_yearly_))
+            used_model = self._level41[ustar_scen].results_yearly_[first_key].model_
+            model_params = self._level41[ustar_scen].results_yearly_[first_key].model_.get_params()
+            txt = f"MODEL: {used_model} / PARAMS: {model_params}"
+            self._level41[ustar_scen].showplot_feature_ranks_per_year(title=f"{gfname}", subtitle=f"{txt}")
+
+
+
+
+            # self._level41[ustar_scen].results_yearly_['2021'].model_.get_params()
+
+    def showplot_gapfilled_heatmap(self):
+        """Show heatmap plot for gap-filled and non-gap-filled data in each USTAR scenario."""
+        gapfilled_vars = self.get_gapfilled_names()
+        nongapfilled_vars = self.get_nongapfilled_names()
+        gfvars = self.get_gapfilled_variables()
+        for ix, g in enumerate(gapfilled_vars):
+            fig = plt.figure(figsize=(9, 9), dpi=100)
+            gs = gridspec.GridSpec(1, 2)  # rows, cols
+            # gs.update(wspace=.2, hspace=1, left=.1, right=.9, top=.85, bottom=.1)
+            ax_ngf = fig.add_subplot(gs[0, 0])
+            ax_gf = fig.add_subplot(gs[0, 1])
+            hm = HeatmapDateTime(ax=ax_ngf, series=gfvars[nongapfilled_vars[ix]]).plot()
+            hm = HeatmapDateTime(ax=ax_gf, series=gfvars[g]).plot()
+            fig.tight_layout()
+            fig.show()
+
+    def showplot_gapfilled_cumulative(self, gain: float = 1, units: str = "", per_year: bool = True,
+                                      start_year: int = None, end_year: int = None):
+        """Show cumulative plot for gap-filled data in each USTAR scenario."""
+        gapfilled_vars = self.get_gapfilled_names()
+        gfvars = self.get_gapfilled_variables()[gapfilled_vars]
+        if per_year:
+            for g in gfvars:
+                CumulativeYear(
+                    series=gfvars[g].multiply(gain),
+                    series_units=units,
+                    yearly_end_date=None,
+                    # yearly_end_date='08-11',
+                    start_year=start_year,
+                    end_year=end_year,
+                    show_reference=True,
+                    # excl_years_from_reference=[2005, 2008, 2009, 2010, 2021, 2022, 2023],
+                    excl_years_from_reference=None,
+                    highlight_year=None,
+                    highlight_year_color='#F44336').plot()
+        else:
+            df = gfvars[gapfilled_vars].copy()
+            df = df.multiply(gain)
+            series_units = r'($\mathrm{gC\ m^{-2}}$)'
+            Cumulative(
+                df=df,
+                units=series_units,
+                start_year=start_year,
+                end_year=end_year).plot()
+
+    @property
+    def df(self) -> DataFrame:
+        """Dataframe containing all input data and results."""
+        if not isinstance(self._df, DataFrame):
+            raise Exception(f'No dataframe available.')
+        return self._df
 
     @property
     def filteredseries(self) -> Series:
@@ -178,6 +283,13 @@ class FluxProcessingChain:
         return self._level33
 
     @property
+    def level41(self) -> dict:
+        """Return instance of Level-4.1 gap-filling."""
+        if not isinstance(self._level41, dict):
+            raise Exception('No Level-4.1 data available, please run .level33...() first.')
+        return self._level41
+
+    @property
     def levelidstr(self) -> list:
         """Return strings that were used to tag the different flux levels."""
         if not isinstance(self._levelidstr, list):
@@ -221,7 +333,7 @@ class FluxProcessingChain:
         idstr = 'L2'
         self._levelidstr.append(idstr)
         self._level2 = FluxQualityFlagsEddyPro(fluxcol=self.fluxcol,
-                                               dfin=self.maindf,
+                                               dfin=self.df,
                                                idstr=idstr,
                                                fluxbasevar=self.fluxbasevar)
         self._level2.missing_vals_test()
@@ -259,7 +371,6 @@ class FluxProcessingChain:
                         run_qcf_on_col: str,
                         idstr: str,
                         level_df: DataFrame,
-                        nighttime_threshold: int = 50,
                         daytime_accept_qcf_below: int = 2,
                         nighttimetime_accept_qcf_below: int = 2) -> FlagQCF:
 
@@ -272,8 +383,8 @@ class FluxProcessingChain:
         qcf = FlagQCF(series=self.fpc_df[run_qcf_on_col],
                       df=self.fpc_df,
                       idstr=idstr,
-                      swinpot=self.fpc_df['SW_IN_POT'],
-                      nighttime_threshold=nighttime_threshold)
+                      swinpot=self.fpc_df['SW_IN_POT'],  # Calculated during init
+                      nighttime_threshold=self.nighttime_threshold)
         qcf.calculate(daytime_accept_qcf_below=daytime_accept_qcf_below,
                       nighttimetime_accept_qcf_below=nighttimetime_accept_qcf_below)
         self._fpc_df = qcf.get()
@@ -282,62 +393,27 @@ class FluxProcessingChain:
 
         return qcf
 
-    def finalize_level2(self,
-                        nighttime_threshold: int = 50,
-                        daytime_accept_qcf_below: int = 2,
-                        nighttimetime_accept_qcf_below: int = 2):
+    def finalize_level2(self):
         """Calculate overall quality flag QCF after Level-2"""
         self._level2_qcf = self._finalize_level(
             run_qcf_on_col=self.fluxcol,
             idstr='L2',
             level_df=self.level2.results,
-            nighttime_threshold=nighttime_threshold,
-            daytime_accept_qcf_below=daytime_accept_qcf_below,
-            nighttimetime_accept_qcf_below=nighttimetime_accept_qcf_below
+            daytime_accept_qcf_below=self.daytime_accept_qcf_below,
+            nighttimetime_accept_qcf_below=self.nighttimetime_accept_qcf_below
         )
         self._filteredseries_level2_qcf = self.filteredseries.copy()  # Store filtered series as variable
 
-    def finalize_level32(self,
-                         nighttime_threshold: int = 50,
-                         daytime_accept_qcf_below: int = 2,
-                         nighttimetime_accept_qcf_below: int = 2):
+    def finalize_level32(self):
         """Calculate overall quality flag QCF after Level-3.2"""
         self._level32_qcf = self._finalize_level(
             run_qcf_on_col=self.level31.flux_corrected_col,
             idstr='L3.2',
             level_df=self.level32.flags,
-            nighttime_threshold=nighttime_threshold,
-            daytime_accept_qcf_below=daytime_accept_qcf_below,
-            nighttimetime_accept_qcf_below=nighttimetime_accept_qcf_below
+            daytime_accept_qcf_below=self.daytime_accept_qcf_below,
+            nighttimetime_accept_qcf_below=self.nighttimetime_accept_qcf_below
         )
         self._filteredseries_level32_qcf = self.filteredseries.copy()  # Store filtered series as variable
-
-    def finalize_level33(self,
-                         nighttime_threshold: int = 50,
-                         daytime_accept_qcf_below: int = 2,
-                         nighttimetime_accept_qcf_below: int = 2):
-        """Calculate overall quality flag QCF after Level-3.3"""
-
-        ustar_scenarios = self.level33.threshold_labels
-
-        for u in ustar_scenarios:
-
-            print(f"Calculating overall quality flag QCF for USTAR scenario {u}...")
-
-            flagcol = [c for c in self.level33.results if u in c]
-            flagcol = flagcol[0] if len(flagcol) == 1 else None
-            udf = self.level33.results[[self.level31.flux_corrected_col, self.ustarcol, flagcol]].copy()
-
-            # Calculate QCF for all USTAR scenarios and store in dict
-            self._level33_qcf[u] = self._finalize_level(
-                run_qcf_on_col=self.level31.flux_corrected_col,
-                idstr=f'L3.3_{u}',
-                level_df=udf,
-                nighttime_threshold=nighttime_threshold,
-                daytime_accept_qcf_below=daytime_accept_qcf_below,
-                nighttimetime_accept_qcf_below=nighttimetime_accept_qcf_below
-            )
-            self._filteredseries_level33_qcf[u] = self.filteredseries.copy()  # Store filtered series as variable
 
     def level33_constant_ustar(self, thresholds: list, threshold_labels: list,
                                showplot: bool = True, verbose: bool = True):
@@ -353,11 +429,133 @@ class FluxProcessingChain:
                                                             showplot=showplot)
         self._level33.calc()
 
+    def finalize_level33(self):
+        """Calculate overall quality flag QCF after Level-3.3"""
+
+        ustar_scenarios = self.level33.threshold_labels
+
+        for u in ustar_scenarios:
+            print(f"Calculating overall quality flag QCF for USTAR scenario {u}...")
+
+            flagcol = [c for c in self.level33.results if u in c]
+            flagcol = flagcol[0] if len(flagcol) == 1 else None
+            udf = self.level33.results[[self.level31.flux_corrected_col, self.ustarcol, flagcol]].copy()
+
+            # Calculate QCF for all USTAR scenarios and store in dict
+            self._level33_qcf[u] = self._finalize_level(
+                run_qcf_on_col=self.level31.flux_corrected_col,
+                idstr=f'L3.3_{u}',
+                level_df=udf,
+                daytime_accept_qcf_below=self.daytime_accept_qcf_below,
+                nighttimetime_accept_qcf_below=self.nighttimetime_accept_qcf_below
+            )
+            self._filteredseries_level33_qcf[u] = self.filteredseries.copy()  # Store filtered series as variable
+
+    def level41_gapfilling_longterm(
+            self,
+            features: list,
+            random_forest: bool = True,
+            features_lag: list or None = None,
+            reduce_features: bool = False,
+            include_timestamp_as_features: bool = False,
+            add_continuous_record_number: bool = False,
+            sanitize_timestamp: bool = True,
+            perm_n_repeats: int = 10,
+            rf_kwargs: dict = None,
+            verbose: int = 0,
+
+    ):
+        idstr = 'L4.1'
+        self._levelidstr.append(idstr)
+
+        if not isinstance(rf_kwargs, dict):
+            rf_kwargs = {
+                'n_estimators': 200,
+                'random_state': 42,
+                'min_samples_split': 2,
+                'min_samples_leaf': 1,
+                'n_jobs': -1
+            }
+
+        # Update main data, add results so far because data from the input dataframe
+        # is needed during gap-filling, e.g. when using air temperature etc.
+        newcols = [c for c in self.fpc_df.columns if c not in self.df.columns]
+        self._df = pd.concat([self.df, self.fpc_df[newcols]], axis=1)
+
+        # Collect data for each USTAR scenario for gapfilling
+        for ustar_scen, ustar_flux in self.filteredseries_level33_qcf.items():
+            # Assemble list of needed variables: target and features
+            usecols = [ustar_flux.name]
+            usecols = usecols + features
+            ust_scen_df = self.df[usecols].copy()
+            # self.level33.flux_corrected_col
+
+            general_kwargs = dict(
+                input_df=ust_scen_df,
+                target_col=ustar_flux.name,
+                include_timestamp_as_features=include_timestamp_as_features,
+                add_continuous_record_number=add_continuous_record_number,
+                features_lag=features_lag,
+                verbose=verbose,
+                sanitize_timestamp=sanitize_timestamp,
+                perm_n_repeats=perm_n_repeats
+            )
+
+            if random_forest:
+                self._level41[ustar_scen] = LongTermGapFillingRandomForestTS(**general_kwargs, **rf_kwargs)
+
+            # Assign model data
+            self._level41[ustar_scen].create_yearpools()
+
+            # Init models
+            self._level41[ustar_scen].initialize_yearly_models()
+
+            # Feature reduction across all years (not per year)
+            if reduce_features:
+                self._level41[ustar_scen].reduce_features_across_years()
+
+            # Train model and fill gaps
+            self._level41[ustar_scen].fillgaps()
+
+            # Add gap-filled flux and gap-filling flag to main data
+            fluxdata = self.level41[ustar_scen].gapfilled_.copy()
+            gapfilling_df_ = self.level41[ustar_scen].gapfilling_df_.copy()
+            flagname = [c for c in gapfilling_df_ if str(c).startswith("FLAG_") and str(c).endswith("_ISFILLED")]
+            flagname = flagname[0] if len(flagname) == 1 else None
+            flagdata = self.level41[ustar_scen].gapfilling_df_[flagname].copy()
+            self._df = pd.concat([self.df, fluxdata, flagdata], axis=1)
+
+            # Detect new columns and add to flux processing chain dataframe
+            # It is also required to add a suffix to the column names, to make clear
+            # from which USTAR scenario the results are
+            renamedcols = [c if ustar_scen in c else f"{c}_{ustar_scen}" for c in gapfilling_df_.columns]
+            gapfilling_df_.columns = renamedcols
+            newcols = detect_new_columns(df=gapfilling_df_, other=self.fpc_df)
+            self._fpc_df = pd.concat([self.fpc_df, gapfilling_df_[newcols]], axis=1)
+
+            # Collect results for USTAR scenario
+            # fluxname = self.level41[ustar_scen].gapfilled_.name
+            # gapfilled_ = self.level41[ustar_scen].gapfilled_
+            # results_yearly_ = self.level41[ustar_scen].results_yearly_
+            # scores_ = self.level41[ustar_scen].scores_
+            # fi = self.level41[ustar_scen].feature_importances_yearly_
+            # feature_ranks_per_year = self.level41[ustar_scen].feature_ranks_per_year
+            # feature_importance_per_year = self.level41[ustar_scen].feature_importance_per_year
+            # features_reduced_across_years = self.level41[ustar_scen].features_reduced_across_years
+            # self.level41[ustar_scen].showplot_feature_ranks_per_year(title=f"{ustar_scen}")
+
+        # scores = []
+        # for year, s in self.level41.scores_.items():
+        #     print(f"{year}: r2 = {s['r2']}  MAE = {s['mae']}")
+        #     scores.append(s['mae'])
+        # from statistics import mean
+        # print(mean(scores))
+
     def level31_storage_correction(self, gapfill_storage_term: bool = False):
         """Correct flux with storage term from single point measurement."""
         idstr = 'L3.1'
         self._levelidstr.append(idstr)
-        self._level31 = FluxStorageCorrectionSinglePointEddyPro(df=self.maindf,
+        self._level31 = FluxStorageCorrectionSinglePointEddyPro(df=self.df,
                                                                 fluxcol=self.fluxcol,
                                                                 basevar=self.fluxbasevar,
                                                                 gapfill_storage_term=gapfill_storage_term,
@@ -592,9 +790,7 @@ class QuickFluxProcessingChain:
         self.fpc.level32_stepwise_outlier_detection()
         self.fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
         self.fpc.level32_addflag()
-        self.fpc.finalize_level32(nighttime_threshold=self.nighttime_threshold,
-                                  daytime_accept_qcf_below=self.daytime_accept_qcf_below,
-                                  nighttimetime_accept_qcf_below=self.nighttimetime_accept_qcf_below)
+        self.fpc.finalize_level32()
 
         # self.fpc.filteredseries
         # self.fpc.level32.results
@@ -611,27 +807,62 @@ class QuickFluxProcessingChain:
         self.fpc.level31.report()
 
     def _run_level2(self):
+        TEST_SSITC = True  # Default True
+        TEST_GAS_COMPLETENESS = True  # Default True
+        TEST_SPECTRAL_CORRECTION_FACTOR = True  # Default True
+        TEST_SIGNAL_STRENGTH = True
+        TEST_SIGNAL_STRENGTH_COL = 'CUSTOM_AGC_MEAN'
+        TEST_SIGNAL_STRENGTH_METHOD = 'discard above'
+        TEST_SIGNAL_STRENGTH_THRESHOLD = 90
+        # TimeSeries(series=maindf[TEST_SIGNAL_STRENGTH_COL]).plot()
+        TEST_RAWDATA = True  # Default True
+        TEST_RAWDATA_SPIKES = True  # Default True
+        TEST_RAWDATA_AMPLITUDE = False  # Default True
+        TEST_RAWDATA_DROPOUT = True  # Default True
+        TEST_RAWDATA_ABSLIM = False  # Default False
+        TEST_RAWDATA_SKEWKURT_HF = False  # Default False
+        TEST_RAWDATA_SKEWKURT_SF = False  # Default False
+        TEST_RAWDATA_DISCONT_HF = False  # Default False
+        TEST_RAWDATA_DISCONT_SF = False  # Default False
+        TEST_RAWDATA_ANGLE_OF_ATTACK = False  # Default False
+        # TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES = [['2008-01-01', '2010-01-01'],
+        #                                                   ['2016-03-01', '2016-05-01']]  # Default False
+        TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES = False  # Default False
+        TEST_RAWDATA_STEADINESS_OF_HORIZONTAL_WIND = False  # Default False
         LEVEL2_SETTINGS = {
-            'signal_strength': False,
-            'raw_data_screening_vm97': {'spikes': True, 'amplitude': False,
-                                        'dropout': False, 'abslim': False,
-                                        'skewkurt_hf': False, 'skewkurt_sf': False,
-                                        'discont_hf': False,
-                                        'discont_sf': False},
-            'ssitc': True,
-            'gas_completeness': False,
-            'spectral_correction_factor': True,
-            'angle_of_attack': False,
-            'steadiness_of_horizontal_wind': False
+            'signal_strength': {
+                'apply': TEST_SIGNAL_STRENGTH,
+                'signal_strength_col': TEST_SIGNAL_STRENGTH_COL,
+                'method': TEST_SIGNAL_STRENGTH_METHOD,
+                'threshold': TEST_SIGNAL_STRENGTH_THRESHOLD},
+            'raw_data_screening_vm97': {
+                'apply': TEST_RAWDATA,
+                'spikes': TEST_RAWDATA_SPIKES,
+                'amplitude': TEST_RAWDATA_AMPLITUDE,
+                'dropout': TEST_RAWDATA_DROPOUT,
+                'abslim': TEST_RAWDATA_ABSLIM,
+                'skewkurt_hf': TEST_RAWDATA_SKEWKURT_HF,
+                'skewkurt_sf': TEST_RAWDATA_SKEWKURT_SF,
+                'discont_hf': TEST_RAWDATA_DISCONT_HF,
+                'discont_sf': TEST_RAWDATA_DISCONT_SF},
+            'ssitc': {
+                'apply': TEST_SSITC},
+            'gas_completeness': {
+                'apply': TEST_GAS_COMPLETENESS},
+            'spectral_correction_factor': {
+                'apply': TEST_SPECTRAL_CORRECTION_FACTOR},
+            'angle_of_attack': {
+                'apply': TEST_RAWDATA_ANGLE_OF_ATTACK,
+                'application_dates': TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES},
+            'steadiness_of_horizontal_wind': {
+                'apply': TEST_RAWDATA_STEADINESS_OF_HORIZONTAL_WIND}
         }
         self.fpc.level2_quality_flag_expansion(**LEVEL2_SETTINGS)
-        self.fpc.finalize_level2(nighttime_threshold=self.nighttime_threshold,
-                                 daytime_accept_qcf_below=self.daytime_accept_qcf_below,
-                                 nighttimetime_accept_qcf_below=self.nighttimetime_accept_qcf_below)
+        self.fpc.finalize_level2()
 
     def _start_fpc(self, fluxcol: str):
         fpc = FluxProcessingChain(
-            maindf=self.maindf,
+            df=self.maindf,
             fluxcol=fluxcol,
             site_lat=self.site_lat,
             site_lon=self.site_lon,
@@ -667,11 +898,11 @@ def example():
     FILENAME = r"23.1_CH-CHA_IRGA_Level-1_eddypro_fluxnet_2005-2023_availableVars_meteo7.parquet"
     FILEPATH = Path(SOURCEDIR) / FILENAME
     maindf = load_parquet(filepath=FILEPATH)
-    locs = (maindf.index.year >= 2023) & (maindf.index.year <= 2023)
+    locs = (maindf.index.year >= 2015) & (maindf.index.year <= 2017)
     # locs = (maindf.index.year >= 2021) & (maindf.index.year <= 2023)
     maindf = maindf.loc[locs, :].copy()
     metadata = None
-    print(maindf)
+    # print(maindf)
 
     # import matplotlib.pyplot as plt
     # locs = (maindf.index.year >= 2008) & (maindf.index.year <= 2009)
@@ -698,7 +929,7 @@ def example():
     SITE_LAT = 47.210227
     SITE_LON = 8.410645
     UTC_OFFSET = 1
-    NIGHTTIME_THRESHOLD = 50  # Threshold for potential radiation in W m-2, conditions below threshold are nighttime
+    NIGHTTIME_THRESHOLD = 20  # Threshold for potential radiation in W m-2, conditions below threshold are nighttime
     DAYTIME_ACCEPT_QCF_BELOW = 1
     NIGHTTIMETIME_ACCEPT_QCF_BELOW = 1
 
@@ -707,11 +938,14 @@ def example():
     # TimeSeries(series=level1_df[FLUXVAR]).plot()
 
     fpc = FluxProcessingChain(
-        maindf=maindf,
+        df=maindf,
         fluxcol=FLUXVAR,
         site_lat=SITE_LAT,
         site_lon=SITE_LON,
-        utc_offset=UTC_OFFSET
+        utc_offset=UTC_OFFSET,
+        nighttime_threshold=NIGHTTIME_THRESHOLD,
+        daytime_accept_qcf_below=DAYTIME_ACCEPT_QCF_BELOW,
+        nighttimetime_accept_qcf_below=NIGHTTIMETIME_ACCEPT_QCF_BELOW
     )
 
     # --------------------
@@ -769,10 +1003,9 @@ def example():
             'apply': TEST_RAWDATA_STEADINESS_OF_HORIZONTAL_WIND}
     }
     fpc.level2_quality_flag_expansion(**LEVEL2_SETTINGS)
-    fpc.finalize_level2(nighttime_threshold=NIGHTTIME_THRESHOLD, daytime_accept_qcf_below=DAYTIME_ACCEPT_QCF_BELOW,
-                        nighttimetime_accept_qcf_below=NIGHTTIMETIME_ACCEPT_QCF_BELOW)
+    fpc.finalize_level2()
     # fpc.level2_qcf.showplot_qcf_heatmaps()
-    # fpc.level2_qcf.report_qcf_evolution()
+    fpc.level2_qcf.report_qcf_evolution()
     # fpc.level2_qcf.analyze_highest_quality_flux()
 
     # fpc.level2_qcf.report_qcf_flags()
@@ -792,6 +1025,7 @@ def example():
     # fpc.filteredseries
     # fpc.level31.results
     # [x for x in fpc.fpc_df.columns if 'L3.1' in x]
+    # -------------------------------------------------------------------------
 
     # # ANALYZE
     # fpc.analyze_highest_quality_flux(showplot=True)
@@ -837,9 +1071,11 @@ def example():
     # fpc.level32_flag_outliers_hampel_test(window_length=48 * 7, n_sigma=5, showplot=True, verbose=True, repeat=False)
     # fpc.level32_addflag()
 
-    # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=False, verbose=False, repeat=False)
-    # # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=True, verbose=True, repeat=True)
+    # # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=False, verbose=False, repeat=False)
+    # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=True, verbose=True, repeat=True)
     # fpc.level32_addflag()
+
+
 
     # fpc.level32_flag_outliers_zscore_rolling_test(winsize=48 * 7, thres_zscore=4, showplot=False, verbose=True,
     #                                               repeat=True)
@@ -875,8 +1111,7 @@ def example():
     # fpc.level32_flag_outliers_trim_low_test(trim_nighttime=True, lower_limit=-10, showplot=True, verbose=True)
     # fpc.level32_addflag()
 
-    fpc.finalize_level32(nighttime_threshold=50, daytime_accept_qcf_below=DAYTIME_ACCEPT_QCF_BELOW,
-                         nighttimetime_accept_qcf_below=NIGHTTIMETIME_ACCEPT_QCF_BELOW)
+    fpc.finalize_level32()
 
     # # fpc.filteredseries
     # # fpc.level32.flags
@@ -885,23 +1120,30 @@ def example():
     # # fpc.level32_qcf.report_qcf_flags()
     # fpc.level32_qcf.report_qcf_evolution()
     # # fpc.level32_qcf.report_qcf_series()
-    # # fpc.levelidstr
-    # # fpc.filteredseries_level2_qcf
-    # # fpc.filteredseries_level31_qcf
-    # # fpc.filteredseries_level32_qcf
+    # -------------------------------------------------------------------------
+
 
     # --------------------
     # Level-3.3
     # --------------------
     # 0.0532449, 0.0709217, 0.0949867
+    # ustar_scenarios = ['CUT_50']
+    # ustar_scenarios = ['CUT_50', 'CUT_84']
     ustar_scenarios = ['CUT_16', 'CUT_50', 'CUT_84']
+    # ustar_thresholds = [0.0709217]
+    # ustar_thresholds = [0.0709217, 0.0949867]
     ustar_thresholds = [0.0532449, 0.0709217, 0.0949867]
     fpc.level33_constant_ustar(thresholds=ustar_thresholds,
                                threshold_labels=ustar_scenarios,
                                showplot=False)
     # Finalize: stores results for each USTAR scenario in a dict
-    fpc.finalize_level33(nighttime_threshold=50, daytime_accept_qcf_below=DAYTIME_ACCEPT_QCF_BELOW,
-                         nighttimetime_accept_qcf_below=NIGHTTIMETIME_ACCEPT_QCF_BELOW)
+    fpc.finalize_level33()
+
+    # # Save current instance to pickle for faster testing
+    # from diive.core.io.files import save_as_pickle
+    # save_as_pickle(outpath=r"F:\TMP", filename="test", data=fpc)
+    # fpc = load_pickle(filepath=r"F:\TMP\test.pickle")
+
 
     # for ustar_scenario in ustar_scenarios:
     #     fpc.level33_qcf[ustar_scenario].showplot_qcf_heatmaps()
@@ -917,18 +1159,49 @@ def example():
     #     # fpc.filteredseries_level32_qcf
     #     # fpc.filteredseries_level33_qcf
 
-    # # check
-    # checkdf = fpc.fpc_df[['NEE_L3.1', 'NEE_L3.1_L3.3_QCF', 'USTAR']].copy()
-    # locs = checkdf['NEE_L3.1'].dropna().index
-    # checkdf = checkdf.loc[locs].copy()
-    # locs = checkdf['NEE_L3.1_L3.3_QCF'].dropna().index
-    # checkdf = checkdf.loc[locs]
-    # checkdf.describe()
+    # --------------------
+    # Level-4.1
+    # --------------------
 
-    newcols = [c for c in fpc.fpc_df.columns if c not in maindf.columns]
-    maindf2 = pd.concat([maindf, fpc.fpc_df[newcols]], axis=1)
-    FLUXVAR33QCF = fpc.filteredseries_level33_qcf.name
-    maindf2 = maindf2[[FLUXVAR33QCF, "TA_T1_2_1", "SW_IN_T1_2_1", "VPD_T1_2_1"]].copy()
+    fpc.level41_gapfilling_longterm(
+        random_forest=True,
+        features=["TA_T1_2_1", "SW_IN_T1_2_1", "VPD_T1_2_1"],
+        features_lag=[-1, -1],
+        # reduce_features=False,
+        include_timestamp_as_features=True,
+        # add_continuous_record_number=True,
+        verbose=True,
+        perm_n_repeats=1,
+        rf_kwargs={
+            'n_estimators': 5,
+            'random_state': 42,
+            'min_samples_split': 2,
+            'min_samples_leaf': 1,
+            'n_jobs': -1
+        }
+    )
+
+    # results = fpc.get_data()
+    # gapfilled_names = fpc.get_gapfilled_names()
+    # gapfilled_vars = fpc.get_gapfilled_variables()
+    fpc.showplot_gapfilled_heatmap()
+    fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{µmol\ CO_2\ m^{-2}}$)', per_year=True)
+    fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{µmol\ CO_2\ m^{-2}}$)', per_year=False)
+    fpc.showplot_feature_ranks_per_year()
+
+    # TODO heatmap of used model data pools
+
+    print("X")
+
+    # newcols = [c for c in fpc.fpc_df.columns if c not in maindf.columns]
+    # maindf2 = pd.concat([maindf, fpc.fpc_df[newcols]], axis=1)
+    # # FLUXVAR33QCF = fpc.filteredseries_level33_qcf.name
+    # # maindf2 = maindf2[[FLUXVAR33QCF, "TA_T1_2_1", "SW_IN_T1_2_1", "VPD_T1_2_1"]].copy()
+
+    # # Collect data for each scenario for gapfilling
+    # ust_scen = {}
+    # for key, value in fpc.filteredseries_level33_qcf.items():
+    #     ust_scen[value.name] = maindf2[[value.name, "TA_T1_2_1", "SW_IN_T1_2_1", "VPD_T1_2_1"]].copy()
 
     # import matplotlib.pyplot as plt
     # maindf2.plot(subplots=True, x_compat=True, title="After USTAR Threshold", figsize=(12, 4.5))
@@ -987,41 +1260,92 @@ def example():
     # # print(opt.predict(X_test))
     # # print(opt.predict_proba(X_test))
 
-    # # -----
-    # # GAP-FILLING
+    # -----
+    # GAP-FILLING
     # use_gapfilling = 1
     # N_ESTIMATORS = 99
+    # gf = None
+    # results = pd.DataFrame()
     #
-    # if use_gapfilling == 1:
-    #     # Random forest
-    #     from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
-    #     MAX_DEPTH = None
-    #     MIN_SAMPLES_SPLIT = 2
-    #     MIN_SAMPLES_LEAF = 1
-    #     CRITERION = 'squared_error'  # “squared_error”, “absolute_error”, “friedman_mse”, “poisson”
-    #     gf = RandomForestTS(
-    #         input_df=maindf2,
-    #         target_col=FLUXVAR33QCF,
-    #         verbose=True,
-    #         # features_lag=None,
-    #         features_lag=[-1, -1],
-    #         # features_lag_exclude_cols=['test', 'test2'],
-    #         # include_timestamp_as_features=False,
-    #         include_timestamp_as_features=True,
-    #         # add_continuous_record_number=False,
-    #         add_continuous_record_number=True,
-    #         sanitize_timestamp=True,
-    #         perm_n_repeats=3,
-    #         n_estimators=N_ESTIMATORS,
-    #         random_state=42,
-    #         # random_state=None,
-    #         max_depth=MAX_DEPTH,
-    #         min_samples_split=MIN_SAMPLES_SPLIT,
-    #         min_samples_leaf=MIN_SAMPLES_LEAF,
-    #         criterion=CRITERION,
-    #         test_size=0.2,
-    #         n_jobs=-1
-    #     )
+    # for key, value in ust_scen.items():
+    #
+    #     if use_gapfilling == 1:
+    #         # Random forest
+    #         from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
+    #         MAX_DEPTH = None
+    #         MIN_SAMPLES_SPLIT = 2
+    #         MIN_SAMPLES_LEAF = 1
+    #         CRITERION = 'squared_error'  # “squared_error”, “absolute_error”, “friedman_mse”, “poisson”
+    #         gf = RandomForestTS(
+    #             input_df=ust_scen[key],
+    #             target_col=key,
+    #             verbose=True,
+    #             # features_lag=None,
+    #             features_lag=[-1, -1],
+    #             # features_lag_exclude_cols=['test', 'test2'],
+    #             # include_timestamp_as_features=False,
+    #             include_timestamp_as_features=True,
+    #             # add_continuous_record_number=False,
+    #             add_continuous_record_number=True,
+    #             sanitize_timestamp=True,
+    #             perm_n_repeats=3,
+    #             n_estimators=N_ESTIMATORS,
+    #             random_state=42,
+    #             # random_state=None,
+    #             max_depth=MAX_DEPTH,
+    #             min_samples_split=MIN_SAMPLES_SPLIT,
+    #             min_samples_leaf=MIN_SAMPLES_LEAF,
+    #             criterion=CRITERION,
+    #             test_size=0.2,
+    #             n_jobs=-1
+    #         )
+    #
+    #     elif use_gapfilling == 2:
+    #         # XGBoost
+    #         from diive.pkgs.gapfilling.xgboost_ts import XGBoostTS
+    #         gf = XGBoostTS(
+    #             input_df=maindf2,
+    #             target_col=FLUXVAR33QCF,
+    #             verbose=1,
+    #             # features_lag=None,
+    #             features_lag=[-1, -1],
+    #             # features_lag_exclude_cols=['TIMESINCE_PREC_TOT_T1_25+20_1'],
+    #             # features_lag_exclude_cols=['Rg_f', 'TA>0', 'TA>20', 'DAYTIME', 'NIGHTTIME'],
+    #             # include_timestamp_as_features=False,
+    #             include_timestamp_as_features=True,
+    #             # add_continuous_record_number=False,
+    #             add_continuous_record_number=True,
+    #             sanitize_timestamp=True,
+    #             perm_n_repeats=3,
+    #             n_estimators=N_ESTIMATORS,
+    #             random_state=42,
+    #             # booster='gbtree',  # gbtree (default), gblinear, dart
+    #             # device='cpu',
+    #             # validate_parameters=True,
+    #             # disable_default_eval_metric=False,
+    #             early_stopping_rounds=10,
+    #             # learning_rate=0.1,
+    #             max_depth=6,
+    #             # max_delta_step=0,
+    #             # subsample=1,
+    #             # min_split_loss=0,
+    #             # min_child_weight=1,
+    #             # colsample_bytree=1,
+    #             # colsample_bylevel=1,
+    #             # colsample_bynode=1,
+    #             # reg_lambda=1,
+    #             # reg_alpha=0,
+    #             # tree_method='auto',  # auto, hist, approx, exact
+    #             # scale_pos_weight=1,
+    #             # grow_policy='depthwise',  # depthwise, lossguide
+    #             # max_leaves=0,
+    #             # max_bin=256,
+    #             # num_parallel_tree=1,
+    #             n_jobs=-1
+    #         )
+    #
+    #     # c = gf.gapfilling_df_['NEE_L3.1_L3.3_QCF_gfXG'].copy()
+    #
     #     # rfts.reduce_features()
     #     # rfts.report_feature_reduction()
     #     gf.trainmodel(showplot_scores=False, showplot_importance=False)
@@ -1030,91 +1354,43 @@ def example():
     #     gf.report_gapfilling()
     #
     #     # c = gf.gapfilling_df_['LE_L3.1_L3.3_QCF_gfRF'].copy()
-    #     c = gf.gapfilling_df_['NEE_L3.1_L3.3_QCF_gfRF'].copy()
+    #     c = gf.gapfilling_df_[f"{key}_gfRF"].copy()
+    #     results[c.name] = c.multiply(0.02161926).copy()  # Save NEE in g C m-2 30min-1
     #
-    # elif use_gapfilling == 2:
-    #     # XGBoost
-    #     from diive.pkgs.gapfilling.xgboost_ts import XGBoostTS
-    #     gf = XGBoostTS(
-    #         input_df=maindf2,
-    #         target_col=FLUXVAR33QCF,
-    #         verbose=1,
-    #         # features_lag=None,
-    #         features_lag=[-1, -1],
-    #         # features_lag_exclude_cols=['TIMESINCE_PREC_TOT_T1_25+20_1'],
-    #         # features_lag_exclude_cols=['Rg_f', 'TA>0', 'TA>20', 'DAYTIME', 'NIGHTTIME'],
-    #         # include_timestamp_as_features=False,
-    #         include_timestamp_as_features=True,
-    #         # add_continuous_record_number=False,
-    #         add_continuous_record_number=True,
-    #         sanitize_timestamp=True,
-    #         perm_n_repeats=3,
-    #         n_estimators=N_ESTIMATORS,
-    #         random_state=42,
-    #         # booster='gbtree',  # gbtree (default), gblinear, dart
-    #         # device='cpu',
-    #         # validate_parameters=True,
-    #         # disable_default_eval_metric=False,
-    #         early_stopping_rounds=10,
-    #         # learning_rate=0.1,
-    #         max_depth=6,
-    #         # max_delta_step=0,
-    #         # subsample=1,
-    #         # min_split_loss=0,
-    #         # min_child_weight=1,
-    #         # colsample_bytree=1,
-    #         # colsample_bylevel=1,
-    #         # colsample_bynode=1,
-    #         # reg_lambda=1,
-    #         # reg_alpha=0,
-    #         # tree_method='auto',  # auto, hist, approx, exact
-    #         # scale_pos_weight=1,
-    #         # grow_policy='depthwise',  # depthwise, lossguide
-    #         # max_leaves=0,
-    #         # max_bin=256,
-    #         # num_parallel_tree=1,
-    #         n_jobs=-1
-    #     )
-    #     # xgbts.reduce_features()
-    #     # xgbts.report_feature_reduction()
-    #     gf.trainmodel(showplot_scores=False, showplot_importance=False)
-    #     # xgbts.report_traintest()
-    #     gf.fillgaps(showplot_scores=False, showplot_importance=False)
-    #     gf.report_gapfilling()
-    #
-    #     c = gf.gapfilling_df_['NEE_L3.1_L3.3_QCF_gfXG'].copy()
-    #
-    # # import matplotlib.pyplot as plt
-    # # rfts.gapfilling_df_['.GAPFILLED_CUMULATIVE'].plot(x_compat=True)
-    # # rfts.gapfilling_df_['NEE_L3.1_L3.2_QCF_gfRF'].plot(x_compat=True)
-    # # plt.show()
-    #
-    # c = c.multiply(0.02161926)
-    # # from diive.core.io.files import save_parquet, load_parquet
-    # # save_parquet(data=c.to_frame(), filename="test", outpath=r"F:\TMP")
-    # # c = load_parquet(filepath=r"F:\TMP\test.parquet")
-    # # c = c.loc[c.index.year < 2024].copy()
-    # from diive.core.plotting.cumulative import CumulativeYear
-    # CumulativeYear(
-    #     series=c,
-    #     series_units="X",
-    #     yearly_end_date=None,
-    #     # yearly_end_date='08-11',
-    #     start_year=2006,
-    #     end_year=2023,
-    #     show_reference=True,
-    #     excl_years_from_reference=[2008, 2009],
-    #     # excl_years_from_reference=[2022],
-    #     highlight_year=2023,
-    #     highlight_year_color='#F44336').plot()
-    # ---
+    # print(f"Sum in gC:\n{results.sum()}")
 
-    # col = 'NEE_L3.1_L3.3_QCF_gfRF' if use_gapfilling == 1 else 'NEE_L3.1_L3.3_QCF_gfXG'
-    # from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-    # hm = HeatmapDateTime(series=gf.gapfilling_df_[col])
-    # hm.show()
-    # # hm = HeatmapDateTime(series=gf.gapfilling_df_['NEE_L3.1_L3.3_QCF'])
-    # # hm.show()
+    # import matplotlib.pyplot as plt
+    # rfts.gapfilling_df_['.GAPFILLED_CUMULATIVE'].plot(x_compat=True)
+    # rfts.gapfilling_df_['NEE_L3.1_L3.2_QCF_gfRF'].plot(x_compat=True)
+    # plt.show()
+
+    # c = c.multiply(0.02161926)
+    # from diive.core.io.files import save_parquet, load_parquet
+    # save_parquet(data=c.to_frame(), filename="test", outpath=r"F:\TMP")
+    # c = load_parquet(filepath=r"F:\TMP\test.parquet")
+    # c = c.loc[c.index.year < 2024].copy()
+
+    # import matplotlib.pyplot as plt
+    # for g in gapfilled_vars:
+    #     gapfilled_vars[g].cumsum().plot(x_compat=True)
+    # plt.legend()
+    # plt.show()
+
+    # from diive.core.plotting.cumulative import CumulativeYear
+    # for g in gapfilled_vars:
+    #     CumulativeYear(
+    #         series=gapfilled_vars[g],
+    #         series_units="X",
+    #         yearly_end_date=None,
+    #         # yearly_end_date='08-11',
+    #         start_year=2006,
+    #         end_year=2023,
+    #         show_reference=True,
+    #         # excl_years_from_reference=[2005, 2008, 2009, 2010, 2021, 2022, 2023],
+    #         excl_years_from_reference=None,
+    #         highlight_year=2023,
+    #         highlight_year_color='#F44336').plot()
+    # ---
 
     # # https://fitter.readthedocs.io/en/latest/tuto.html
     # # https://medium.com/the-researchers-guide/finding-the-best-distribution-that-fits-your-data-using-pythons-fitter-library-319a5a0972e9

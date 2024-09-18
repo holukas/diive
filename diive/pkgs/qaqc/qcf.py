@@ -28,7 +28,7 @@ class FlagQCF:
                  outname: str = None,
                  swinpot: Series = None,
                  idstr: str = None,
-                 nighttime_threshold: int = 50
+                 nighttime_threshold: float = 50
                  ):
         self.df = df.copy()  # Original data
         self.series = series.copy()
