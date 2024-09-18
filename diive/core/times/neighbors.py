@@ -19,12 +19,12 @@ def neighboring_years(df: DataFrame, verbose: bool = False) -> dict:
         poolyears.append(year)
 
         if _uniq_years:
-            nearest_1 = find_nearest_val(array=_uniq_years, value=year)
+            nearest_1 = int(find_nearest_val(array=_uniq_years, value=year))
             _uniq_years.remove(nearest_1)
             poolyears.append(nearest_1)
 
             if _uniq_years:
-                nearest_2 = find_nearest_val(array=_uniq_years, value=year)
+                nearest_2 = int(find_nearest_val(array=_uniq_years, value=year))
                 poolyears.append(nearest_2)
 
         poolyears = sorted(poolyears)

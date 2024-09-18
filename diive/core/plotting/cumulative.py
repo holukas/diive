@@ -34,8 +34,8 @@ class CumulativeYear:
         self.series = series.copy()
         self.series_units = series_units
         self.varname = series.name
-        self.start_year = start_year
-        self.end_year = end_year
+        self.start_year = start_year if start_year else self.series.index.year.min()
+        self.end_year = end_year if end_year else self.series.index.year.max()
         self.yearly_end_date = yearly_end_date
         self.show_reference = show_reference
         self.excl_years_from_reference = excl_years_from_reference
@@ -45,8 +45,7 @@ class CumulativeYear:
         self.series = self.series.dropna()
         # self.series_full = self.series.copy()
 
-        if (self.start_year) | (self.end_year):
-            self.series = keep_years(data=self.series, start_year=self.start_year, end_year=self.end_year)
+        self.series = keep_years(data=self.series, start_year=self.start_year, end_year=self.end_year)
 
         if self.yearly_end_date:
             self.series = remove_after_date(data=self.series, yearly_end_date=yearly_end_date)
@@ -63,8 +62,8 @@ class CumulativeYear:
         self.fig, self.ax = pf.create_ax()
         self.ax.xaxis.axis_date()
 
-    def _add_reference(self, digits_after_comma):
 
+    def _add_reference(self, digits_after_comma):
         # Calculate reference
         self.mean_doy_cumulative_df = doy_mean_cumulative(cumulatives_per_year_df=self.cumulatives_per_year_df,
                                                           excl_years_from_reference=self.excl_years_from_reference)
@@ -88,8 +87,8 @@ class CumulativeYear:
                              alpha=.1, zorder=0, color='black', edgecolor='none',
                              label="mean±1sd")
 
-    def _apply_format(self):
 
+    def _apply_format(self):
         title = f"Cumulatives per year ({self.uniq_years.min()}-{self.uniq_years.max()}), " \
                 f"until DOY {int(self.cumulatives_per_year_df.index[-1])}"
         self.fig.suptitle(title, fontsize=theme.FIGHEADER_FONTSIZE)
@@ -112,11 +111,13 @@ class CumulativeYear:
 
         pf.nice_date_ticks(ax=self.ax, minticks=3, maxticks=20, which='x', locator='month')
 
-        self.fig.tight_layout()
+        # self.fig.tight_layout()
+
 
     def get(self):
         """Return axis"""
         return self.ax
+
 
     def plot(self, showplot: bool = True, digits_after_comma: int = 2):
         color_list = theme.colorwheel_36()  # get some colors
@@ -161,8 +162,8 @@ class Cumulative:
         """
         self.df = df
         self.units = units
-        self.start_year = start_year
-        self.end_year = end_year
+        self.start_year = start_year if start_year else self.df.index.year.min()
+        self.end_year = end_year if end_year else self.df.index.year.max()
 
         if self.start_year | self.end_year:
             self.df = keep_years(data=self.df, start_year=self.start_year, end_year=self.end_year)
@@ -190,7 +191,7 @@ class Cumulative:
                           ncol=n_legend_cols)
         pf.nice_date_ticks(ax=self.ax, minticks=3, maxticks=20, which='x', locator='auto')
 
-        self.fig.tight_layout()
+        # self.fig.tight_layout()
 
     def get_ax(self):
         """Return axis"""
