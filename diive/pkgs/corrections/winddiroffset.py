@@ -126,7 +126,7 @@ class WindDirOffset:
 
     def _correct_degrees(self, s: Series):
         """Correct degree values that go below zero or above 360"""
-        _locs_above360 = s > 360
+        _locs_above360 = s >= 360
         s[_locs_above360] -= 360
         _locs_belowzero = s < 0
         s[_locs_belowzero] += 360
