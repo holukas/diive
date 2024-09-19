@@ -5,6 +5,73 @@ from diive.pkgs.analyses.histogram import Histogram
 
 class TestAnalyses(unittest.TestCase):
 
+    def test_percentiles(self):
+        from diive.configs.exampledata import load_exampledata_parquet
+        from diive.pkgs.analyses.quantiles import percentiles101
+        df = load_exampledata_parquet()
+        percentiles_df = percentiles101(series=df['Tair_f'], showplot=False, verbose=True)
+        self.assertEqual(len(percentiles_df.columns), 2)
+        self.assertEqual(len(percentiles_df.index), 101)
+        self.assertEqual(percentiles_df.sum().sum(), 5521.9898)
+
+    def test_gapfinder(self):
+        from diive.configs.exampledata import load_exampledata_parquet
+        from diive.pkgs.analyses.gapfinder import GapFinder
+        data_df = load_exampledata_parquet()
+        series = data_df['NEE_CUT_REF_orig']
+        gf = GapFinder(series=series, limit=None, sort_results=True)
+        gapfinder_df = gf.get_results()
+        self.assertEqual(len(gapfinder_df.columns), 3)
+        self.assertEqual(len(gapfinder_df.index), 15602)
+        self.assertEqual(gapfinder_df.iloc[0]['GAP_LENGTH'], 2633)
+        self.assertEqual(gapfinder_df.iloc[1]['GAP_LENGTH'], 468)
+        self.assertEqual(gapfinder_df.iloc[-1]['GAP_LENGTH'], 1)
+        self.assertEqual(gapfinder_df['GAP_LENGTH'].sum(), 117099)
+
+    def test_sorting_bins_method(self):
+        from diive.configs.exampledata import load_exampledata_parquet
+        from diive.pkgs.analyses.decoupling import SortingBinsMethod
+        vpd_col = 'VPD_f'  # Vapor pressure deficit
+        ta_col = 'Tair_f'  # Air temperature
+        swin_col = 'Rg_f'  # Radiation used to detect daytime data
+        # Load 10-year dataset of half-hourly measurements
+        df = load_exampledata_parquet()
+        # Keep data between June and September
+        df = df.loc[(df.index.month >= 6) & (df.index.month <= 9)].copy()
+        # Keep daytime data (radiation > 50 W m-2) and data when air temperatures was > 5°C
+        daytime_locs = (df[swin_col] > 50) & (df[ta_col] > 0)
+        df = df[daytime_locs].copy()
+        # Rename variables
+        rename_dict = {
+            ta_col: 'air_temperature',
+            vpd_col: 'vapor_pressure_deficit',
+            swin_col: 'short-wave_incoming_radiation'
+        }
+        df = df.rename(columns=rename_dict, inplace=False)
+        # Use new column names
+        ta_col = 'air_temperature'
+        vpd_col = 'vapor_pressure_deficit'
+        swin_col = 'short-wave_incoming_radiation'
+        # Make subset
+        df = df[[ta_col, vpd_col, swin_col]].copy()
+        sbm = SortingBinsMethod(df=df,
+                                var1_col=ta_col,
+                                var2_col=swin_col,
+                                var3_col=vpd_col,
+                                n_bins_var1=5,
+                                n_subbins_var2=10,
+                                convert_to_percentiles=False)
+        sbm.calcbins()
+        binmedians = sbm.get_binmedians()
+        keys = []
+        for group_key, group_df in binmedians.items():
+            keys.append(group_key)
+        self.assertEqual(len(keys), 5)
+        self.assertEqual(len(binmedians['21.3'].columns), 12)
+        self.assertEqual(len(binmedians['21.3'].index), 10)
+        self.assertEqual(binmedians['21.3'].drop('group_short-wave_incoming_radiation', axis=1).sum().sum(),
+                         20226.767999999996)
+
     def test_daily_correlation(self):
         from diive.configs.exampledata import load_exampledata_parquet
         from diive.pkgs.analyses.correlation import daily_correlation
