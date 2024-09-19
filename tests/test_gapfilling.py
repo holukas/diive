@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 
 import diive.configs.exampledata as ed
-from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS, QuickFillRFTS
+from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
 from diive.pkgs.gapfilling.xgboost_ts import XGBoostTS
 
 
@@ -14,6 +14,16 @@ class TestGapFilling(unittest.TestCase):
 
     def test_quickfill(self):
         pass
+
+    def test_linear_interpolation(self):
+        from diive.configs.exampledata import load_exampledata_parquet
+        from diive.pkgs.gapfilling.interpolate import linear_interpolation
+        df = load_exampledata_parquet()
+        df = df.loc[df.index.year == 2022].copy()
+        series = df['NEE_CUT_REF_orig'].copy()
+        series_gapfilled = linear_interpolation(series=series, limit=10)
+        self.assertEqual(series_gapfilled.isnull().sum(), 7856)
+        self.assertEqual(series.isnull().sum(), 11412)
 
     def test_gapfilling_randomforest(self):
         """Fill gaps using random forest"""
