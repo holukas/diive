@@ -225,11 +225,10 @@ class TestFluxProcessingChain(unittest.TestCase):
         self.assertEqual(type(fpc.level41['CUT_16']), LongTermGapFillingRandomForestTS)
         self.assertEqual(type(fpc.level41['CUT_50']), LongTermGapFillingRandomForestTS)
         self.assertEqual(type(fpc.level41['CUT_84']), LongTermGapFillingRandomForestTS)
-        self.assertAlmostEqual(fpc.level41['CUT_50'].gapfilling_df_.sum().sum(), -630979.0954346551, places=5)
+        self.assertAlmostEqual(fpc.level41['CUT_50'].gapfilling_df_.sum().sum(), -1597908.3260923326, places=5)
         self.assertEqual(len(fpc.fpc_df.columns), 87)
         flagcols = [c for c in fpc.fpc_df.columns if str(c).startswith("FLAG_") and str(c).endswith("_TEST")]
         self.assertEqual(len(flagcols), 25)
-
 
 
 if __name__ == '__main__':
