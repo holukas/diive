@@ -2,6 +2,32 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.82.1 | XX Sep 2024
+
+## Notebooks
+
+- Added notebook showing an example for `LongTermGapFillingRandomForestTS` (
+  `notebooks/GapFilling/LongTermRandomForestGapFilling.ipynb`)
+
+## Tests
+
+- Added unittest for `LongTermGapFillingRandomForestTS` (
+  `tests.test_gapfilling.TestGapFilling.test_gapfilling_longterm_randomforest`)
+- Added unittest for `WindDirOffset` (`tests.test_corrections.TestCorrections.test_winddiroffset`)
+- Added unittest for `DaytimeNighttimeFlag` (`tests.test_createvar.TestCreateVar.test_daytime_nighttime_flag`)
+- Added unittest for `calc_vpd_from_ta_rh` (`tests.test_createvar.TestCreateVar.test_calc_vpd`)
+- Added unittest for `percentiles101` (`tests.test_analyses.TestAnalyses.test_percentiles`)
+- Added unittest for `GapFinder` (`tests.test_analyses.TestAnalyses.test_gapfinder`)
+- Added unittest for `SortingBinsMethod` (`tests.test_analyses.TestAnalyses.test_sorting_bins_method`)
+- Added unittest for `daily_correlation` (`tests.test_analyses.TestAnalyses.test_daily_correlation`)
+- Added unittest for `QuantileXYAggZ` (`tests.test_analyses.TestCreateVar.test_quantilexyaggz`)
+- 47/47 unittests ran successfully
+
+### Bugfixes
+
+- Corrected wind direction could be 360°, but will now be 0° (
+  `diive.pkgs.corrections.winddiroffset.WindDirOffset._correct_degrees`)
+
 ## v0.82.0 | 19 Sep 2024
 
 ## Long-term gap-filling
