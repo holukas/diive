@@ -26,7 +26,7 @@ from diive.core.ml.common import MlRegressorGapFillingBase
 
 class XGBoostTS(MlRegressorGapFillingBase):
 
-    def __init__(self, input_df: DataFrame, target_col: str or tuple, verbose: int = 0, perm_n_repeats: int = 3,
+    def __init__(self, input_df: DataFrame, target_col: str or tuple, verbose: int = 0, perm_n_repeats: int = 10,
                  test_size: float = 0.25, features_lag: list = None, features_lag_exclude_cols: list = None,
                  include_timestamp_as_features: bool = False, add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False, **kwargs):

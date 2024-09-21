@@ -101,6 +101,7 @@ _Fill gaps in time series with various methods._
 
 - **XGBoostTS** ([notebook example (minimal)](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/XGBoostGapFillingMinimal.ipynb), [notebook example (more extensive)](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/XGBoostGapFillingExtensive.ipynb))
 - **RandomForestTS** ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/RandomForestGapFilling.ipynb))
+- **Long-term gap-filling using RandomForestTS** ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/LongTermRandomForestGapFilling.ipynb))
 - **Linear interpolation** ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/LinearInterpolation.ipynb))
 - **Quick random forest gap-filling** ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/QuickRandomForestGapFilling.ipynb))
 
