@@ -1,9 +1,11 @@
 import unittest
 
 import numpy as np
+from numpy import mean
 
 import diive.configs.exampledata as ed
-from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS, QuickFillRFTS
+from diive.core.ml.common import MlRegressorGapFillingBase
+from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
 from diive.pkgs.gapfilling.xgboost_ts import XGBoostTS
 
 
@@ -14,6 +16,80 @@ class TestGapFilling(unittest.TestCase):
 
     def test_quickfill(self):
         pass
+
+    def test_gapfilling_longterm_randomforest(self):
+        from diive.configs.exampledata import load_exampledata_parquet
+        from diive.pkgs.gapfilling.longterm import LongTermGapFillingRandomForestTS
+        TARGET_COL = 'NEE_CUT_REF_orig'
+        subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
+        source_df = load_exampledata_parquet()
+        df = source_df.copy()
+        locs = (df.index.year >= 2014) & (df.index.year <= 2018)
+        df = df.loc[locs].copy()
+        # This example uses NEE flux data, only records where the quality flag QCF is 0 (highest quality) are retained
+        lowquality = df["QCF_NEE"] > 0
+        df.loc[lowquality, TARGET_COL] = np.nan  # Set fluxes of lower quality to missing
+        df = df[subsetcols].copy()  # Keep subset columns only
+        gf = LongTermGapFillingRandomForestTS(
+            input_df=df,
+            target_col=TARGET_COL,
+            verbose=2,
+            features_lag=[-1, -1],
+            features_lag_exclude_cols=None,
+            include_timestamp_as_features=True,
+            add_continuous_record_number=True,
+            sanitize_timestamp=True,
+            perm_n_repeats=3,
+            test_size=0.25,
+            n_estimators=9,
+            random_state=42,
+            min_samples_split=2,
+            min_samples_leaf=1,
+            n_jobs=-1
+        )
+        gf.create_yearpools()
+        gf.initialize_yearly_models()
+        gf.reduce_features_across_years()
+        gf.fillgaps()
+
+        results = gf.gapfilling_df_
+        self.assertEqual(len(results), 87648)
+        self.assertEqual(len(results.columns), 8)
+        self.assertEqual(results[gf.gapfilled_.name].sum(), gf.gapfilled_.sum())
+        self.assertEqual(results[TARGET_COL].isnull().sum(), 67444)
+        self.assertEqual(results[gf.gapfilled_.name].isnull().sum(), 0)
+        self.assertAlmostEqual(results[gf.gapfilled_.name].sum(), -39072.126777777776, places=5)
+        self.assertEqual(results['FLAG_NEE_CUT_REF_orig_gfRF_ISFILLED'].sum(), 67444)
+        self.assertEqual(len(gf.features_reduced_across_years), 11)
+        self.assertEqual(gf.feature_ranks_per_year.min().min(), 1)
+        self.assertEqual(gf.feature_ranks_per_year.max().max(), 11)
+        self.assertEqual(len(gf.feature_importances_yearly_.keys()), 5)
+        self.assertAlmostEqual(gf.feature_importances_yearly_['2017']['PERM_IMPORTANCE']['Rg_f'], 1.1685750257993892, places=5)
+        scores = []
+        r2s = []
+        for year, s in gf.scores_.items():
+            scores.append(s['mae'])
+            r2s.append(s['r2'])
+        self.assertEqual(len(scores), 5)
+        self.assertAlmostEqual(mean(scores), 1.3502779449542526, places=5)
+        self.assertAlmostEqual(mean(r2s), 0.8878948369317223, places=5)
+        self.assertEqual(type(gf.results_yearly_['2017']), MlRegressorGapFillingBase)
+        self.assertAlmostEqual(gf.results_yearly_['2014'].scores_['rmse'], 2.169915773456053, places=5)
+        self.assertEqual(gf.yearpools['2014']['poolyears'], [2014, 2015, 2016])
+        self.assertEqual(gf.yearpools['2018']['poolyears'], [2016, 2017, 2018])
+        self.assertEqual(gf.yearpools['2016']['poolyears'], [2015, 2016, 2017])
+        self.assertAlmostEqual(gf.yearpools['2017']['df'].sum().sum(), 83261338263.81297, places=5)
+        self.assertAlmostEqual(gf.feature_importance_per_year.sum().sum(), 11.707053647511076, places=5)
+
+    def test_linear_interpolation(self):
+        from diive.configs.exampledata import load_exampledata_parquet
+        from diive.pkgs.gapfilling.interpolate import linear_interpolation
+        df = load_exampledata_parquet()
+        df = df.loc[df.index.year == 2022].copy()
+        series = df['NEE_CUT_REF_orig'].copy()
+        series_gapfilled = linear_interpolation(series=series, limit=10)
+        self.assertEqual(series_gapfilled.isnull().sum(), 7856)
+        self.assertEqual(series.isnull().sum(), 11412)
 
     def test_gapfilling_randomforest(self):
         """Fill gaps using random forest"""
@@ -65,12 +141,12 @@ class TestGapFilling(unittest.TestCase):
         # gapfilled.cumsum().plot()
         # plt.show()
 
-        self.assertEqual(scores['mae'], 1.681033504987219)
-        self.assertEqual(scores['r2'], 0.7932199707457357)
-        self.assertEqual(scores['mse'], 5.628773469718195)
-        self.assertAlmostEqual(gfdf['NEE_CUT_REF_orig_gfRF'].sum(), -612.7853333778166, places=5)
+        self.assertAlmostEqual(scores['mae'], 1.7173094522108192, places=5)
+        self.assertEqual(scores['r2'], 0.7942644518782538)
+        self.assertEqual(scores['mse'], 5.600341576611584)
+        self.assertAlmostEqual(gfdf['NEE_CUT_REF_orig_gfRF'].sum(), -706.6381230007763, places=5)
         self.assertEqual(gfdf['NEE_CUT_REF_orig_gfRF'].sum(), gapfilled.sum())
-        self.assertEqual(fi['PERM_IMPORTANCE']['Rg_f'], 1.2153029844335206)
+        self.assertEqual(fi['PERM_IMPORTANCE']['Rg_f'], 1.1749124161423874)
 
     def test_gapfilling_xgboost(self):
         """Fill gaps using XGBoost"""

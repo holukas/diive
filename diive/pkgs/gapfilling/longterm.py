@@ -17,15 +17,14 @@ class LongTermGapFillingBase:
                  input_df: DataFrame,
                  target_col: str or tuple,
                  verbose: int = 0,
-                 perm_n_repeats: int = 10,
-                 test_size: float = 0.25,
                  features_lag: list = None,
-                 features_lagmax: int = None,
+                 features_lag_exclude_cols: list = None,
                  include_timestamp_as_features: bool = False,
                  add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False,
-                 **kwargs
-                 ):
+                 perm_n_repeats: int = 10,
+                 test_size: float = 0.25,
+                 **kwargs):
         """
         Gap-fill each year based on data from the respective year and the two closest neighboring years
 
@@ -54,7 +53,7 @@ class LongTermGapFillingBase:
         self.perm_n_repeats = perm_n_repeats
         self.test_size = test_size
         self.features_lag = features_lag
-        self.features_lagmax = features_lagmax
+        self.features_lag_exclude_cols = features_lag_exclude_cols
         self.include_timestamp_as_features = include_timestamp_as_features
         self.add_continuous_record_number = add_continuous_record_number
         self.sanitize_timestamp = sanitize_timestamp
@@ -146,9 +145,13 @@ class LongTermGapFillingBase:
             target_col=self.target_col,
             verbose=self.verbose,
             features_lag=self.features_lag,
+            features_lag_exclude_cols=self.features_lag_exclude_cols,
             include_timestamp_as_features=self.include_timestamp_as_features,
             add_continuous_record_number=self.add_continuous_record_number,
-            sanitize_timestamp=self.sanitize_timestamp
+            sanitize_timestamp=self.sanitize_timestamp,
+            perm_n_repeats=self.perm_n_repeats,
+            test_size=self.test_size,
+            **self.kwargs
         )
 
         # Update input data with added variables
@@ -167,6 +170,7 @@ class LongTermGapFillingBase:
         # Initialize a separate model for each year
         # Since additional variables were already added in the previous step,
         # the respective kwargs can be set to False.
+        self._results_yearly = {}
         for year, _df in self._yearpools.items():
             print(f"Initializing model for {year} ...")
             df = _df['df'].copy()
@@ -177,13 +181,14 @@ class LongTermGapFillingBase:
                 target_col=self.target_col,
                 verbose=self.verbose,
                 perm_n_repeats=self.perm_n_repeats,
-                # features_lag=False,
-                include_timestamp_as_features=False,
-                add_continuous_record_number=False,
-                sanitize_timestamp=False,
+                features_lag=None,  # Already considered across all years
+                features_lag_exclude_cols=None,  # Already considered across all years
+                include_timestamp_as_features=False,  # Already considered across all years
+                add_continuous_record_number=False,  # Already considered across all years
+                sanitize_timestamp=False,  # Already considered across all years
+                test_size=self.test_size,
                 **self.kwargs
             )
-
             self._results_yearly[year] = model
 
     def reduce_features_across_years(self):
@@ -194,9 +199,13 @@ class LongTermGapFillingBase:
             rfts = self.results_yearly_[year]
             rfts.reduce_features()
             features_reduced_across_years.append(rfts.accepted_features_)
+
         # Flatten common_features (list of lists)
         features_reduced_across_years = [item for sublist in features_reduced_across_years for item in sublist]
+
         self._features_reduced_across_years = list(set(features_reduced_across_years))
+        self._features_reduced_across_years.sort()  # Important! For consistency when using random_state!
+
         print(f"---")
         print(f"Finished reducing features based on permutation importance for all years.")
         print(f"List of features after reduction: {self.features_reduced_across_years}.")
@@ -216,7 +225,7 @@ class LongTermGapFillingBase:
         """Train model for each year"""
         for year, _df in self._yearpools.items():
             print(f"Training model for {year} ...")
-            rfts = self.results_yearly_[year]
+            rfts = self.results_yearly_[year]  # Get instance with model from dict
             rfts.trainmodel(showplot_scores=False, showplot_importance=False)
             print(f"Gap-filling {year} ...")
             rfts.fillgaps(showplot_scores=False, showplot_importance=False)
@@ -300,11 +309,13 @@ class LongTermGapFillingRandomForestTS(LongTermGapFillingBase):
                  input_df: DataFrame,
                  target_col: str or tuple,
                  verbose: int = 0,
-                 perm_n_repeats: int = 10,
                  features_lag: list = None,
+                 features_lag_exclude_cols: list = None,
                  include_timestamp_as_features: bool = False,
                  add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False,
+                 perm_n_repeats: int = 10,
+                 test_size: float = 0.25,
                  **kwargs):
         super().__init__(
             regressor=RandomForestRegressor,
@@ -312,10 +323,12 @@ class LongTermGapFillingRandomForestTS(LongTermGapFillingBase):
             target_col=target_col,
             verbose=verbose,
             features_lag=features_lag,
+            features_lag_exclude_cols=features_lag_exclude_cols,
             include_timestamp_as_features=include_timestamp_as_features,
             add_continuous_record_number=add_continuous_record_number,
             sanitize_timestamp=sanitize_timestamp,
             perm_n_repeats=perm_n_repeats,
+            test_size=test_size,
             **kwargs
         )
 
@@ -374,7 +387,7 @@ def example_longterm_rfts():
         # add_continuous_record_number=False,
         sanitize_timestamp=True,
         perm_n_repeats=1,
-        n_estimators=5,
+        n_estimators=99,
         random_state=42,
         min_samples_split=2,
         min_samples_leaf=1,

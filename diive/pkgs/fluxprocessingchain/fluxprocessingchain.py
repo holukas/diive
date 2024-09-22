@@ -164,10 +164,9 @@ class FluxProcessingChain:
         else:
             df = gfvars[gapfilled_vars].copy()
             df = df.multiply(gain)
-            series_units = r'($\mathrm{gC\ m^{-2}}$)'
             Cumulative(
                 df=df,
-                units=series_units,
+                units=units,
                 start_year=start_year,
                 end_year=end_year).plot()
 

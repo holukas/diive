@@ -152,9 +152,18 @@ class OptimizeParamsRFTS:
 
 class RandomForestTS(MlRegressorGapFillingBase):
 
-    def __init__(self, input_df: DataFrame, target_col: str or tuple, verbose: bool = True, perm_n_repeats: int = 10,
-                 test_size: float = 0.20, features_lag: list = None, include_timestamp_as_features: bool = False,
-                 add_continuous_record_number: bool = False, sanitize_timestamp: bool = False, **kwargs):
+    def __init__(self,
+                 input_df: DataFrame,
+                 target_col: str or tuple,
+                 verbose: bool = True,
+                 perm_n_repeats: int = 10,
+                 test_size: float = 0.25,
+                 features_lag: list = None,
+                 features_lag_exclude_cols: list = None,
+                 include_timestamp_as_features: bool = False,
+                 add_continuous_record_number: bool = False,
+                 sanitize_timestamp: bool = False,
+                 **kwargs):
         """
         Gap-fill timeseries with predictions from random forest model
 
@@ -212,6 +221,7 @@ class RandomForestTS(MlRegressorGapFillingBase):
             perm_n_repeats=perm_n_repeats,
             test_size=test_size,
             features_lag=features_lag,
+            features_lag_exclude_cols=features_lag_exclude_cols,
             include_timestamp_as_features=include_timestamp_as_features,
             add_continuous_record_number=add_continuous_record_number,
             sanitize_timestamp=sanitize_timestamp,

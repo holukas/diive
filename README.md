@@ -35,6 +35,7 @@ Recent releases: [Releases](https://github.com/holukas/diive/releases)
 
 ### Corrections
 
+- **Offset correction for measurement**: correct measurement by offset in comparison to replicate ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Corrections/MeasurementOffset.ipynb))
 - **Offset correction radiation**: correct nighttime offset of radiation data and set nighttime to zero
 - **Offset correction relative humidity**: correct RH values > 100%
 - **Offset correction wind direction**: correct wind directions by offset, calculated based on reference time period ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Corrections/WindDirectionOffset.ipynb))
@@ -101,6 +102,7 @@ _Fill gaps in time series with various methods._
 
 - **XGBoostTS** ([notebook example (minimal)](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/XGBoostGapFillingMinimal.ipynb), [notebook example (more extensive)](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/XGBoostGapFillingExtensive.ipynb))
 - **RandomForestTS** ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/RandomForestGapFilling.ipynb))
+- **Long-term gap-filling using RandomForestTS** ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/LongTermRandomForestGapFilling.ipynb))
 - **Linear interpolation** ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/LinearInterpolation.ipynb))
 - **Quick random forest gap-filling** ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/QuickRandomForestGapFilling.ipynb))
 

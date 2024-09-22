@@ -1,6 +1,7 @@
 """
 kudos: https://datascience.stackexchange.com/questions/15135/train-test-validation-set-splitting-in-sklearn
 """
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -24,22 +25,19 @@ pd.set_option('display.width', 1000)
 
 class MlRegressorGapFillingBase:
 
-    def __init__(
-            self,
-            regressor,
-            input_df: DataFrame,
-            target_col: str or tuple,
-            verbose: int = 0,
-            perm_n_repeats: int = 10,
-            test_size: float = 0.20,
-            features_lag: list[int, int] = None,
-            features_lag_exclude_cols: list = None,
-            include_timestamp_as_features: bool = False,
-            add_continuous_record_number: bool = False,
-            sanitize_timestamp: bool = False,
-            random_state: int = None,
-            **kwargs
-    ):
+    def __init__(self,
+                 regressor,
+                 input_df: DataFrame,
+                 target_col: str or tuple,
+                 verbose: int = 0,
+                 features_lag: list = None,
+                 features_lag_exclude_cols: list = None,
+                 include_timestamp_as_features: bool = False,
+                 add_continuous_record_number: bool = False,
+                 sanitize_timestamp: bool = False,
+                 perm_n_repeats: int = 10,
+                 test_size: float = 0.25,
+                 **kwargs):
         """
         Gap-fill timeseries with predictions from random forest model
 
@@ -104,14 +102,9 @@ class MlRegressorGapFillingBase:
         self.include_timestamp_as_features = include_timestamp_as_features
         self.add_continuous_record_number = add_continuous_record_number
         self.sanitize_timestamp = sanitize_timestamp
-        self.random_state = random_state
         self.kwargs = kwargs
 
-        # Update model kwargs with random state
-        if self.random_state:
-            self.kwargs['random_state'] = self.random_state
-        else:
-            self.kwargs['random_state'] = None
+        self._random_state = self.kwargs['random_state'] if 'random_state' in self.kwargs else None
 
         if self.regressor == RandomForestRegressor:
             self.gfsuffix = '_gfRF'
@@ -138,11 +131,13 @@ class MlRegressorGapFillingBase:
                 print(f"    --> {nc} ({fstats[nc]['count'].astype(int)} values)")
             print(f"This means that not all target values can be predicted based on the full model.")
 
-        # Create training (80%) and testing dataset (20%)
+        # Create training (75%) and testing dataset (25%)
         # Sort index to keep original order
         _temp_df = self.model_df.copy().dropna()
+
         self.train_df, self.test_df = train_test_split(_temp_df, test_size=self.test_size,
-                                                       random_state=self.random_state, shuffle=True)
+                                                       random_state=self._random_state, shuffle=True)
+
         self.train_df = self.train_df.sort_index()
         self.test_df = self.test_df.sort_index()
 
@@ -161,7 +156,7 @@ class MlRegressorGapFillingBase:
         self._scores = dict()
         self._scores_traintest = dict()
         self._accepted_features = []
-        self._rejected_features = "None."
+        self._rejected_features = []
 
         self.n_timeseriessplits = None
 
@@ -309,7 +304,8 @@ class MlRegressorGapFillingBase:
         idtxt = f"TRAIN & TEST "
 
         # Set training and testing data
-        y_train = np.array(self.train_df[self.target_col])
+        train_df = self.train_df.copy()
+        y_train = np.array(train_df[self.target_col])
         X_train = np.array(self.train_df.drop(self.target_col, axis=1))
         X_test = np.array(self.test_df.drop(self.target_col, axis=1))
         y_test = np.array(self.test_df[self.target_col])
@@ -346,7 +342,8 @@ class MlRegressorGapFillingBase:
             plot_observed_predicted(predictions=pred_y_test,
                                     targets=y_test,
                                     scores=self.scores_traintest_,
-                                    infotxt=f"{idtxt} trained on training set, tested on test set")
+                                    infotxt=f"{idtxt} trained on training set, tested on test set",
+                                    random_state=self._random_state)
 
             print(f">>> Plotting residuals and prediction error ...")
             plot_prediction_residuals_error_regr(
@@ -461,6 +458,8 @@ class MlRegressorGapFillingBase:
 
         # Instantiate model with params
         model = self.regressor(**self.kwargs)
+
+        model.get_params()
 
         # Fit model to training data
         model = self._fitmodel(model=model, X_train=X, y_train=y, X_test=X, y_test=y)
@@ -746,10 +745,11 @@ class MlRegressorGapFillingBase:
         """Calculate permutation importance"""
 
         # https://scikit-learn.org/stable/modules/permutation_importance.html#permutation-feature-importance
+
         fi = permutation_importance(estimator=model,
                                     X=X, y=y,
                                     n_repeats=self.perm_n_repeats,
-                                    random_state=self.random_state,
+                                    random_state=self._random_state,
                                     scoring='r2',
                                     n_jobs=-1)
 
@@ -765,7 +765,7 @@ class MlRegressorGapFillingBase:
     def _add_random_variable(self, df: DataFrame) -> tuple[DataFrame, str]:
         # Add random variable as benchmark for relevant feature importances
         random_col = '.RANDOM'  # Random variable as benchmark for relevant importances
-        df[random_col] = np.random.RandomState(self.kwargs['random_state']).randn(df.shape[0], 1)
+        df[random_col] = np.random.RandomState(self._random_state).randn(df.shape[0], 1)
         # df[random_col] = np.random.rand(df.shape[0], 1)
         return df, random_col
 
@@ -827,7 +827,8 @@ class MlRegressorGapFillingBase:
             plot_observed_predicted(predictions=pred_y,
                                     targets=y,
                                     scores=self.scores_,
-                                    infotxt=f"trained on training set, tested on FULL set")
+                                    infotxt=f"trained on training set, tested on FULL set",
+                                    random_state=self._random_state)
 
             # print(f">>> Plotting residuals and prediction error based on all data ...")
             # plot_prediction_residuals_error_regr(
