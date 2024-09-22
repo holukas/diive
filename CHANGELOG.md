@@ -8,6 +8,7 @@
 
 - Added notebook showing an example for `LongTermGapFillingRandomForestTS` (
   `notebooks/GapFilling/LongTermRandomForestGapFilling.ipynb`)
+- Added notebook example for `MeasurementOffset` (`notebooks/Corrections/MeasurementOffset.ipynb`)
 
 ## Tests
 

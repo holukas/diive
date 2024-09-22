@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from pandas import Series, DataFrame
-
+import decimal
 import diive.core.dfun.frames as frames
 from diive.core.plotting.plotfuncs import quickplot
 from diive.core.utils.prints import ConsoleOutputDecorator
@@ -50,6 +50,9 @@ class MeasurementOffsetFromReplicate:
         self.offset_end = offset_end
         self.offset_stepsize = offset_stepsize
 
+        d = decimal.Decimal(str(offset_stepsize))
+        self.n_digits_after_comma = abs(d.as_tuple().exponent)
+
         # Wind directions shifted by offset that yielded maximum absolute
         # correlation with reference
         self.measurement_shifted = self.measurement.copy()
@@ -59,8 +62,6 @@ class MeasurementOffsetFromReplicate:
 
         # Correct wind directions
         self.replicate_corrected = self._correct_measurement()
-
-        # self.showplots()
 
     def get_corrected_measurement(self):
         return self.replicate_corrected
@@ -90,16 +91,17 @@ class MeasurementOffsetFromReplicate:
             abs_diff = float(abs_diff)
             offsets_df.loc[len(offsets_df)] = [offset, abs_diff]
 
-            print(f"#{counter}  {offset} {abs_diff}")
-            fig = plt.figure()
-            r.plot(x_compat=True, label="true measurement")
-            m_shifted.plot(x_compat=True, label=f"corrected by offset")
-            plt.title(f"OFFSET: {offset}  /  SUM_ABS_DIFF: {abs_diff}")
-            plt.legend(loc='upper right')
-            path = rf"C:\Users\nopan\Desktop\temp\{counter}.png"
-            fig.tight_layout()
-            # fig.show()
-            fig.savefig(path)
+            print(f"#{counter}   trying with offset: {offset:.{self.n_digits_after_comma}f}   "
+                  f"found absolute difference: {abs_diff}")
+            # fig = plt.figure()
+            # r.plot(x_compat=True, label="true measurement")
+            # m_shifted.plot(x_compat=True, label=f"corrected by offset")
+            # plt.title(f"OFFSET: {offset}  /  SUM_ABS_DIFF: {abs_diff}")
+            # plt.legend(loc='upper right')
+            # path = rf"C:\Users\nopan\Desktop\temp\{counter}.png"
+            # fig.tight_layout()
+            # # fig.show()
+            # fig.savefig(path)
 
         offsets_df = offsets_df.sort_values(by='ABS_DIFF', ascending=True)
         min_ix = offsets_df['ABS_DIFF'] == offsets_df['ABS_DIFF'].min()

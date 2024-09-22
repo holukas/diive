@@ -35,6 +35,7 @@ Recent releases: [Releases](https://github.com/holukas/diive/releases)
 
 ### Corrections
 
+- **Offset correction for measurement**: correct measurement by offset in comparison to replicate ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Corrections/MeasurementOffset.ipynb))
 - **Offset correction radiation**: correct nighttime offset of radiation data and set nighttime to zero
 - **Offset correction relative humidity**: correct RH values > 100%
 - **Offset correction wind direction**: correct wind directions by offset, calculated based on reference time period ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Corrections/WindDirectionOffset.ipynb))
