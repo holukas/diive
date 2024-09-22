@@ -387,7 +387,7 @@ def example_longterm_rfts():
         # add_continuous_record_number=False,
         sanitize_timestamp=True,
         perm_n_repeats=1,
-        n_estimators=5,
+        n_estimators=99,
         random_state=42,
         min_samples_split=2,
         min_samples_leaf=1,

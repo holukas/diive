@@ -21,10 +21,20 @@
 - Added unittest for `SortingBinsMethod` (`tests.test_analyses.TestAnalyses.test_sorting_bins_method`)
 - Added unittest for `daily_correlation` (`tests.test_analyses.TestAnalyses.test_daily_correlation`)
 - Added unittest for `QuantileXYAggZ` (`tests.test_analyses.TestCreateVar.test_quantilexyaggz`)
-- 47/47 unittests ran successfully
+- 49/49 unittests ran successfully
 
 ### Bugfixes
 
+- Fixed bug that caused results from long-term gap-filling to be inconsistent *despite* using a fixed random state. I
+  found the following: when reducing features across years, the removal of duplicate features from a list of found
+  features created a list where the order of elements changed each run. This in turn produced slightly different
+  gap-filling results each time the long-term gap-filling was executed. Used Python version where this issue occurred
+  was `3.9.19`.
+    - Here is a simplified example, where `input_list` is a list of elements with some duplicate elements:
+    - Running `output_list = list(set(input_list))` generates `output_list` where the elements would have a different
+      output order each run. The elements were otherwise the same, only their order changed.
+    - To keep the order of elements consistent it was necessary to `output_list.sort()`.
+    - (`diive.pkgs.gapfilling.longterm.LongTermGapFillingBase.reduce_features_across_years`)
 - Corrected wind direction could be 360°, but will now be 0° (
   `diive.pkgs.corrections.winddiroffset.WindDirOffset._correct_degrees`)
 
