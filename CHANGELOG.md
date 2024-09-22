@@ -2,7 +2,7 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.82.1 | XX Sep 2024
+## v0.82.1 | 22 Sep 2024
 
 ## Notebooks
 
