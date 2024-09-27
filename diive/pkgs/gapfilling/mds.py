@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from pandas import DataFrame
-import matplotlib.pyplot as plt
+
 
 class FluxMDS:
 
@@ -38,6 +38,8 @@ class FluxMDS:
 
         self._add_newcols()
 
+        self.workdf = DataFrame()
+
     @property
     def df(self) -> DataFrame:
         """Dataframe containing all data."""
@@ -45,10 +47,7 @@ class FluxMDS:
             raise Exception('No overall flag available.')
         return self._df
 
-    def _a1(self, row):
-        """A1: SWIN, TA, VPD, NEE available within 7 days (highest quality gap-filling).
-        Select rows for gap-filling a specific record.
-        """
+    def _a_1_2(self, row):
         locs = (
                 (self.df.index >= row['.START'])
                 & (self.df.index <= row['.END'])
@@ -59,50 +58,114 @@ class FluxMDS:
                 & (self.df[f'.{self.vpd}_UPPERLIM'] > row[self.vpd])
                 & (self.df[f'.{self.vpd}_LOWERLIM'] < row[self.vpd])
         )
-        avg = np.nanmean(self.df.loc[locs, self.flux].to_numpy())
+        _array = self.df.loc[locs, self.flux].to_numpy()
+        n_vals = len(_array[~np.isnan(_array)])
+        if n_vals > 0:
+            avg = np.nanmean(_array)
+        else:
+            avg = np.nan
+
         return avg
 
-    def _run_a1(self):
-        offset = pd.DateOffset(days=7)
-        self._df['.START'] = pd.to_datetime(self.df.index) - offset
-        self._df['.END'] = pd.to_datetime(self.df.index) + offset
-        self._df['.PREDICTIONS'] = self.df.apply(self._a1, axis=1)
-        self._df['.PREDICTIONS_QUALITY'] = 1
-        return self.df
+    def _a3(self, row):
+        locs = (
+                (self.df.index >= row['.START'])
+                & (self.df.index <= row['.END'])
+                & (self.df[f'.{self.swin}_UPPERLIM'] > row[self.swin])
+                & (self.df[f'.{self.swin}_LOWERLIM'] < row[self.swin])
+        )
+        _array = self.df.loc[locs, self.flux].to_numpy()
+        n_vals = len(_array[~np.isnan(_array)])
+        if n_vals > 0:
+            avg = np.nanmean(_array)
+        else:
+            avg = np.nan
 
+        return avg
+
+    def _fill_predictions(self, _df, workdf) -> DataFrame:
+        _df['.PREDICTIONS'] = _df['.PREDICTIONS'].fillna(workdf['.PREDICTIONS'])
+        _df['.START'] = _df['.START'].fillna(pd.to_datetime(workdf['.START'])).infer_objects(copy=False)
+        _df['.END'] = _df['.END'].fillna(workdf['.END'])
+        _df['.PREDICTIONS_QUALITY'] = _df['.PREDICTIONS_QUALITY'].fillna(workdf['.PREDICTIONS_QUALITY'])
+        return _df
+
+    def _run_two_available(self, days: int, quality: int):
+        print(f"Gap-filling quality {quality} ...")
+        _df = self.df.copy()
+        workdf = self.workdf.copy()
+
+        offset = pd.DateOffset(days=days)
+        workdf['.START'] = pd.to_datetime(workdf.index) - offset
+        workdf['.END'] = pd.to_datetime(workdf.index) + offset
+        workdf['.PREDICTIONS'] = workdf.apply(self._a3, axis=1)
+        workdf['.PREDICTIONS_QUALITY'] = quality
+
+        _df = self._fill_predictions(_df, workdf)
+
+        locs_missing = workdf['.PREDICTIONS'].isnull()  # Still missing values after gap-filling
+        workdf = workdf[locs_missing].copy()  # Prepare dataframe for next gap-filling
+        return workdf, _df
+
+    def _run_all_available(self, days: int, quality: int):
+        print(f"Gap-filling quality {quality} ...")
+        _df = self.df.copy()
+        workdf = self.workdf.copy()
+
+        offset = pd.DateOffset(days=days)
+        workdf['.START'] = pd.to_datetime(workdf.index) - offset
+        workdf['.END'] = pd.to_datetime(workdf.index) + offset
+        workdf['.PREDICTIONS'] = workdf.apply(self._a_1_2, axis=1)
+        workdf['.PREDICTIONS_QUALITY'] = quality
+
+        if quality == 1:
+            _df['.PREDICTIONS'] = workdf['.PREDICTIONS'].copy()
+            _df['.START'] = workdf['.START'].copy()
+            _df['.END'] = workdf['.END'].copy()
+            _df['.PREDICTIONS_QUALITY'] = workdf['.PREDICTIONS_QUALITY'].copy()
+        else:
+            _df = self._fill_predictions(_df, workdf)
+
+        locs_missing = workdf['.PREDICTIONS'].isnull()  # Still missing values after gap-filling
+        workdf = workdf[locs_missing].copy()  # Prepare dataframe for next gap-filling
+        return workdf, _df
 
     def run(self):
         # https://www.geeksforgeeks.org/apply-function-to-every-row-in-a-pandas-dataframe/
         # https://labs.quansight.org/blog/unlocking-c-level-performance-in-df-apply
 
-        self._df = self._run_a1()
+        self._df = self.df.copy()
+        locs_missing = self.df['.PREDICTIONS'].isnull()
+        self.workdf = self._df[locs_missing].copy()
+
+        # A1: SWIN, TA, VPD, NEE available within 7 days (highest quality gap-filling).
+        self.workdf, self._df = self._run_all_available(days=7, quality=1)
+
+        # A2: SWIN, TA, VPD, NEE available within 14 days
+        self.workdf, self._df = self._run_all_available(days=14, quality=2)
+
+        # A3: SWIN, NEE available within 7 days
+        self.workdf, self._df = self._run_two_available(days=7, quality=3)
+
+        # A4: NEE available within |dt| <= 1h on same day
+        pass
+
+        # B1: same hour NEE available within |dt| <= 1 day
+        pass
+
+        # B2: SWIN, TA, VPD, NEE available within 21 days
+        self.workdf, self._df = self._run_all_available(days=21, quality=6)
+
+        # B3: SWIN, TA, VPD, NEE available within 28 days
+        self.workdf, self._df = self._run_all_available(days=28, quality=7)
 
         print(len(self.df['.PREDICTIONS']))
-        print(self.df['.PREDICTIONS'])
+        print(self.df['.PREDICTIONS'].sum())
+        import matplotlib.pyplot as plt
         self.df['.PREDICTIONS'].plot(label="predictions")
         self.df[self.flux].plot()
         plt.legend()
         plt.show()
-
-    # def _a1(self, row) -> tuple[bool, int]:
-    #     """A1: SWIN, TA, VPD, NEE available within 7 days (highest quality gap-filling).
-    #     Select rows for gap-filling a specific record.
-    #     """
-    #     quality = 1  # 1 = Highest gap-filling quality
-    #     offset = pd.DateOffset(days=7)
-    #     start = pd.to_datetime(row.name) - offset
-    #     end = pd.to_datetime(row.name) + offset
-    #     locs = (
-    #             (self.df.index >= start)
-    #             & (self.df.index <= end)
-    #             & (self.df[f'.{self.ta}_UPPERLIM'] > row[self.ta])
-    #             & (self.df[f'.{self.ta}_LOWERLIM'] < row[self.ta])
-    #             & (self.df[f'.{self.swin}_UPPERLIM'] > row[self.swin])
-    #             & (self.df[f'.{self.swin}_LOWERLIM'] < row[self.swin])
-    #             & (self.df[f'.{self.vpd}_UPPERLIM'] > row[self.vpd])
-    #             & (self.df[f'.{self.vpd}_LOWERLIM'] < row[self.vpd])
-    #     )
-    #     return locs, quality
 
     def _add_newcols(self):
         self._df['.TIMESTAMP'] = self.df.index
@@ -110,6 +173,8 @@ class FluxMDS:
         self._df['.PREDICTIONS_SD'] = np.nan
         self._df['.PREDICTIONS_COUNTS'] = np.nan
         self._df['.PREDICTIONS_QUALITY'] = np.nan
+        self._df['.START'] = np.nan
+        self._df['.END'] = np.nan
         self._df[f'.{self.swin}_LOWERLIM'] = self.df[self.swin].sub(self.swin_class)
         self._df[f'.{self.swin}_UPPERLIM'] = self.df[self.swin].add(self.swin_class)
         self._df[f'.{self.ta}_LOWERLIM'] = self.df[self.ta].sub(self.ta_class)
@@ -121,7 +186,7 @@ class FluxMDS:
 def example():
     from diive.core.io.files import load_parquet
 
-    SOURCEDIR = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_cha_fp2024_2005-2023\40_FLUXES_L1_IRGA+QCL+LGR_mergeData"
+    SOURCEDIR = r"L:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_cha_fp2024_2005-2023\40_FLUXES_L1_IRGA+QCL+LGR_mergeData"
     FILENAME = r"41.1_CH-CHA_IRGA_LGR+QCL_Level-1_eddypro_fluxnet_2005-2023_meteo7.parquet"
     FILEPATH = Path(SOURCEDIR) / FILENAME
     df = load_parquet(filepath=FILEPATH)
