@@ -67,6 +67,20 @@ class FluxMDS:
 
         return avg
 
+    def _a4(self, row):
+        locs = (
+                (self.df.index >= row['.START'])
+                & (self.df.index <= row['.END'])
+        )
+        _array = self.df.loc[locs, self.flux].to_numpy()
+        n_vals = len(_array[~np.isnan(_array)])
+        if n_vals > 0:
+            avg = np.nanmean(_array)
+        else:
+            avg = np.nan
+
+        return avg
+
     def _a3(self, row):
         locs = (
                 (self.df.index >= row['.START'])
@@ -84,16 +98,64 @@ class FluxMDS:
         return avg
 
     def _fill_predictions(self, _df, workdf) -> DataFrame:
-        _df['.PREDICTIONS'] = _df['.PREDICTIONS'].fillna(workdf['.PREDICTIONS'])
-        _df['.START'] = _df['.START'].fillna(pd.to_datetime(workdf['.START'])).infer_objects(copy=False)
-        _df['.END'] = _df['.END'].fillna(workdf['.END'])
-        _df['.PREDICTIONS_QUALITY'] = _df['.PREDICTIONS_QUALITY'].fillna(workdf['.PREDICTIONS_QUALITY'])
+
+        # Check where no new predictions are available
+        locs_not_available_fills = workdf['.PREDICTIONS'].isnull()
+        # The inverse are locations where predictions are available
+        locs_available_fills = ~locs_not_available_fills
+        # Check where predictions are still needed
+        locs_need_fill = _df['.PREDICTIONS'].isnull()
+        # Locations where new predictions are available and still needed (both locs_ must be True)
+        locs = locs_available_fills & locs_need_fill
+
+        _df.loc[locs, '.PREDICTIONS'] = workdf.loc[locs, '.PREDICTIONS']
+        _df.loc[locs, '.PREDICTIONS_QUALITY'] = workdf.loc[locs, '.PREDICTIONS_QUALITY']
+        _df.loc[locs, '.START'] = workdf.loc[locs, '.START']
+        _df.loc[locs, '.END'] = workdf.loc[locs, '.END']
+
+        # _df['.PREDICTIONS'] = _df['.PREDICTIONS'].fillna(workdf['.PREDICTIONS'])
+        # _df['.START'] = _df['.START'].fillna(pd.to_datetime(workdf['.START'])).infer_objects(copy=False)
+        # _df['.END'] = _df['.END'].fillna(workdf['.END'])
+        # _df['.PREDICTIONS_QUALITY'] = _df['.PREDICTIONS_QUALITY'].fillna(workdf['.PREDICTIONS_QUALITY'])
         return _df
+
+    def _run_mdc(self, days: int, hours: int, quality: int):
+        print(f"Gap-filling quality {quality} ...")
+        _df = self.df.copy()
+        workdf = self.workdf.copy()
+        if workdf.empty:
+            return workdf, _df
+
+        # # A4: NEE available within |dt| <= 1h on same day
+        # locs = (
+        #         (df.index >= row['START_A4'])
+        #         & (df.index <= row['END_A4'])
+        # )
+        # curdf = df.loc[locs]
+        # avg = curdf[flux].mean()
+        # # sd = curdf[flux].std()
+        # df.loc[ix, "filled_A4"] = avg
+
+        # df.index - pd.DateOffset(hours=1)
+
+        offset = pd.DateOffset(hours=hours)
+        workdf['.START'] = pd.to_datetime(workdf.index) - offset
+        workdf['.END'] = pd.to_datetime(workdf.index) + offset
+        workdf['.PREDICTIONS'] = workdf.apply(self._a3, axis=1)
+        workdf['.PREDICTIONS_QUALITY'] = quality
+
+        _df = self._fill_predictions(_df, workdf)
+
+        locs_missing = workdf['.PREDICTIONS'].isnull()  # Still missing values after gap-filling
+        workdf = workdf[locs_missing].copy()  # Prepare dataframe for next gap-filling
+        return workdf, _df
 
     def _run_two_available(self, days: int, quality: int):
         print(f"Gap-filling quality {quality} ...")
         _df = self.df.copy()
         workdf = self.workdf.copy()
+        if workdf.empty:
+            return workdf, _df
 
         offset = pd.DateOffset(days=days)
         workdf['.START'] = pd.to_datetime(workdf.index) - offset
@@ -111,6 +173,8 @@ class FluxMDS:
         print(f"Gap-filling quality {quality} ...")
         _df = self.df.copy()
         workdf = self.workdf.copy()
+        if workdf.empty:
+            return workdf, _df
 
         offset = pd.DateOffset(days=days)
         workdf['.START'] = pd.to_datetime(workdf.index) - offset
@@ -139,31 +203,42 @@ class FluxMDS:
         self.workdf = self._df[locs_missing].copy()
 
         # A1: SWIN, TA, VPD, NEE available within 7 days (highest quality gap-filling).
-        self.workdf, self._df = self._run_all_available(days=7, quality=1)
+        # self.workdf, self._df = self._run_all_available(days=7, quality=1)
 
         # A2: SWIN, TA, VPD, NEE available within 14 days
         self.workdf, self._df = self._run_all_available(days=14, quality=2)
 
         # A3: SWIN, NEE available within 7 days
         self.workdf, self._df = self._run_two_available(days=7, quality=3)
+        #
+        # # A4: NEE available within |dt| <= 1h on same day
+        # self.workdf, self._df = self._run_mdc(days=0, hours=1, quality=4)
 
-        # A4: NEE available within |dt| <= 1h on same day
-        pass
+
+        #
+        # # B1: same hour NEE available within |dt| <= 1 day
+        # locs = (
+        #         (df.index >= row['START_B1'])
+        #         & (df.index <= row['END_B1'])
+        #         & (df.index.hour == row.name.hour)
+        # )
 
         # B1: same hour NEE available within |dt| <= 1 day
         pass
 
-        # B2: SWIN, TA, VPD, NEE available within 21 days
-        self.workdf, self._df = self._run_all_available(days=21, quality=6)
+        # # B2: SWIN, TA, VPD, NEE available within 21 days
+        # self.workdf, self._df = self._run_all_available(days=21, quality=6)
+        #
+        # # B3: SWIN, TA, VPD, NEE available within 28 days
+        # self.workdf, self._df = self._run_all_available(days=28, quality=7)
 
-        # B3: SWIN, TA, VPD, NEE available within 28 days
-        self.workdf, self._df = self._run_all_available(days=28, quality=7)
-
-        print(len(self.df['.PREDICTIONS']))
-        print(self.df['.PREDICTIONS'].sum())
+        print(f"predictions length: {len(self.df['.PREDICTIONS'])}")
+        print(f"gaps: {self.df['.PREDICTIONS'].isnull().sum()}")
+        print(f"sum: {self.df['.PREDICTIONS'].sum()}")
+        print(f"quality: {self.df['.PREDICTIONS_QUALITY'].mean()}")
         import matplotlib.pyplot as plt
-        self.df['.PREDICTIONS'].plot(label="predictions")
-        self.df[self.flux].plot()
+        self.df['.PREDICTIONS'].plot(label="predictions", ls='none', markersize=4, marker="o")
+        self.df[self.flux].plot(ls='none', markersize=4, marker="o")
         plt.legend()
         plt.show()
 
@@ -201,8 +276,12 @@ def example():
     ta_class = 2.5  # °C
     vpd_class = 0.5  # kPa; 5 hPa is default for reference
 
-    locs = (df.index.year >= 2021) & (df.index.year <= 2021) & (df.index.month >= 9) & (
-            df.index.month <= 9)
+    locs = (
+            (df.index.year >= 2021)
+            & (df.index.year <= 2021)
+            & (df.index.month >= 9)
+            & (df.index.month <= 9)
+    )
     subsetcols = [flux, swin, ta, vpd, ustar, ssitc]
     subsetdf = df.loc[locs, subsetcols].copy()
     good = (subsetdf[flux] > -50) & (subsetdf[flux] < 50) & (subsetdf[ustar] > 0.1) & (subsetdf[ssitc] < 1)
