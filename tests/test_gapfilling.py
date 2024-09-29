@@ -17,6 +17,44 @@ class TestGapFilling(unittest.TestCase):
     def test_quickfill(self):
         pass
 
+    def test_fluxmds(self):
+        from collections import Counter
+        from diive.configs.exampledata import load_exampledata_parquet
+        from diive.pkgs.gapfilling.mds import FluxMDS
+        df = load_exampledata_parquet()
+        locs = (df.index.year >= 2022) & (df.index.year <= 2022)
+        df = df.loc[locs].copy()
+        mds = FluxMDS(
+            df=df,
+            flux='NEE_CUT_REF_orig',
+            ta='Tair_f',
+            swin='Rg_f',
+            vpd='VPD_f',
+            swin_class=50,
+            ta_class=2.5,
+            vpd_class=0.5  # kPa; 5 hPa is default for reference
+        )
+        mds.run()
+        # mds.report()
+        # mds.showplot()
+
+        results = mds.gapfilling_df_
+        self.assertEqual(len(results), 17520)
+        self.assertEqual(mds.scores_['r2'], 0.8242001112906766)
+        self.assertEqual(mds.scores_['medae'], 0.8888333333333329)
+        self.assertEqual(results[mds.target_gapfilled].isnull().sum(), 0)
+        self.assertEqual(results[mds.target_gapfilled_flag].sum(), 13573)
+        counts = Counter(results[mds.target_gapfilled_flag])
+        # Missing in measured as indicated by flag > 0
+        a = results[mds.target_gapfilled_flag][results[mds.target_gapfilled_flag] > 0].count()
+        # Missing in measured
+        b = results[mds.flux].isnull().sum()
+        self.assertEqual(a, 11412)
+        self.assertEqual(b, 11412)
+        self.assertEqual(counts[0], 6108)
+        self.assertEqual(counts[1], 9919)
+
+
     def test_gapfilling_longterm_randomforest(self):
         from diive.configs.exampledata import load_exampledata_parquet
         from diive.pkgs.gapfilling.longterm import LongTermGapFillingRandomForestTS
