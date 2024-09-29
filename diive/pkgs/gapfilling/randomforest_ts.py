@@ -28,7 +28,7 @@ from sklearn.model_selection import train_test_split, TimeSeriesSplit, GridSearc
 
 import diive.core.dfun.frames as fr
 from diive.core.ml.common import MlRegressorGapFillingBase
-from diive.core.ml.common import prediction_scores_regr
+from diive.pkgs.gapfilling.scores import prediction_scores
 
 pd.set_option('display.max_rows', 50)
 pd.set_option('display.max_columns', 12)
@@ -146,8 +146,8 @@ class OptimizeParamsRFTS:
         grid_predictions = grid.predict(X_test)
 
         # Stats
-        self._scores = prediction_scores_regr(predictions=grid_predictions,
-                                              targets=y_test)
+        self._scores = prediction_scores(predictions=grid_predictions,
+                                         targets=y_test)
 
 
 class RandomForestTS(MlRegressorGapFillingBase):

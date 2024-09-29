@@ -6,12 +6,19 @@ Gap-filling after Reichstein et al (2005)
 Reference: https://doi.org/10.1111/j.1365-2486.2005.001002.x
 
 """
-
+from collections import Counter
 from pathlib import Path
 
+import matplotlib.gridspec as gridspec
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from pandas import DataFrame
+
+import diive.core.plotting.styles.LightTheme as theme
+from diive.core.plotting.plotfuncs import default_format, default_legend
+from diive.core.plotting.styles.LightTheme import colorwheel_36, generate_plot_marker_list
+from diive.pkgs.gapfilling.scores import prediction_scores
 
 
 class FluxMDS:
@@ -37,6 +44,8 @@ class FluxMDS:
         self.vpd_class = vpd_class
         self.verbose = verbose
 
+        self._scores = dict()
+
         self.target_gapfilled = f"{self.flux}{self.gfsuffix}"
         self.target_gapfilled_flag = f"FLAG_{self.flux}{self.gfsuffix}_ISFILLED"
 
@@ -44,19 +53,104 @@ class FluxMDS:
 
         self.workdf = DataFrame()
 
+    def get_gapfilled_target(self):
+        """Gap-filled target time series"""
+        return self.gapfilling_df_[self.target_gapfilled]
+
+    def get_flag(self):
+        """Gap-filling flag, where 0=observed, 1+=gap-filled"""
+        return self.gapfilling_df_[self.target_gapfilled_flag]
+
     @property
-    def df(self) -> DataFrame:
+    def gapfilling_df_(self) -> DataFrame:
         """Dataframe containing all data."""
         if not isinstance(self._df, DataFrame):
             raise Exception('No overall flag available.')
         return self._df
 
+    @property
+    def scores_(self) -> dict:
+        """Return scores for model used in gap-filling"""
+        if not self._scores:
+            raise Exception(f'Not available: model scores for gap-filling.')
+        return self._scores
+
+    def showplot(self):
+        fig = plt.figure(facecolor='white', figsize=(16, 9), dpi=100, layout='constrained')
+        gs = gridspec.GridSpec(2, 1, figure=fig)  # rows, cols
+        # gs.update(wspace=0.3, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
+        ax = fig.add_subplot(gs[0, 0])
+        ax_flag = fig.add_subplot(gs[1, 0], sharex=ax)
+        flag = self.gapfilling_df_[self.target_gapfilled_flag]
+        uniqueflags = list(flag.unique())
+        uniqueflags.sort()
+        colors = colorwheel_36()
+        maxcolors = len(colors)
+        markers = generate_plot_marker_list()
+        maxmarker = len(markers)
+        for ix, uf in enumerate(uniqueflags):
+            locs = flag == uf
+            data = self.gapfilling_df_.loc[locs, :]
+            label = f"measured ({self.flux})" if uf == 0 else f"gap-filled quality {uf}"
+            n_vals = data[self.target_gapfilled].count()
+            color = colors[35] if ix > (maxcolors - 1) else colors[ix]
+            marker = markers[3] if ix > (maxmarker - 1) else markers[ix]
+            ax.plot(data.index, data[self.target_gapfilled],
+                    label=f"{label} ({n_vals} values)", color=color, linestyle='none', markeredgewidth=1,
+                    marker=marker, alpha=1, markersize=6, markeredgecolor=color, fillstyle='full')
+            ax_flag.plot(data.index, data[self.target_gapfilled_flag],
+                         label=f"{label} ({n_vals} values)", color=color, linestyle='none', markeredgewidth=1,
+                         marker=marker, alpha=1, markersize=6, markeredgecolor=color, fillstyle='full')
+        fig.suptitle(f"Variable {self.flux} gap-filled using MDS: {self.target_gapfilled}",
+                     fontsize=theme.FIGHEADER_FONTSIZE)
+        default_format(ax=ax)
+        ax.tick_params(labelbottom=False)
+        default_format(ax=ax_flag)
+        default_legend(ax=ax_flag)
+        # default_legend(ax=ax)
+        fig.show()
+
+    def report(self):
+
+        potential_vals = len(self.gapfilling_df_.index)
+        n_vals_before = self.gapfilling_df_[self.flux].count()
+        n_vals_missing_before = self.gapfilling_df_[self.flux].isnull().sum()
+        n_vals_after = self.gapfilling_df_[self.target_gapfilled].count()
+        n_vals_missing_after = self.gapfilling_df_[self.target_gapfilled].isnull().sum()
+        predictionsmeanquality = self.gapfilling_df_['.PREDICTIONS_QUALITY'].mean()
+        flagcounts = Counter(self.gapfilling_df_[self.target_gapfilled_flag])
+
+        print(f"{self.flux} before gap-filling:\n"
+              f"    {potential_vals} potential values\n"
+              f"    {n_vals_before} available values\n"
+              f"    {n_vals_missing_before} missing values")
+
+        print(f"\n{self.flux} after gap-filling ({self.target_gapfilled}):\n"
+              f"    {potential_vals} potential values\n"
+              f"    {n_vals_after} available values\n"
+              f"    {n_vals_missing_after} missing values\n"
+              f"    {predictionsmeanquality:.3f} predictions mean quality (1=best)")
+
+        print(f"\nGap-filling quality flags ({self.target_gapfilled_flag}):")
+        for key, value in flagcounts.items():
+            if key == 0:
+                print(f"    Directly measured: {value} values (flag=0)")
+            else:
+                print(f"    Gap-filling quality {key}: {value} values (flag={key})")
+
+        self.report_scores()
+
+    def report_scores(self):
+        print("\nMDS gap-filling scores:")
+        for score, val in self.scores_.items():
+            print(f'    {score}: {val:.3f}')
+
     def run(self):
         # https://www.geeksforgeeks.org/apply-function-to-every-row-in-a-pandas-dataframe/
         # https://labs.quansight.org/blog/unlocking-c-level-performance-in-df-apply
 
-        self._df = self.df.copy()
-        locs_missing = self.df['.PREDICTIONS'].isnull()
+        self._df = self.gapfilling_df_.copy()
+        locs_missing = self.gapfilling_df_['.PREDICTIONS'].isnull()
         self.workdf = self._df[locs_missing].copy()
 
         # A1: SWIN, TA, VPD, NEE available within 7 days (highest quality gap-filling).
@@ -101,19 +195,20 @@ class FluxMDS:
             quality += 1
             self.workdf, self._df = self._run_mdc(days=d, hours=1, quality=quality)
 
-        print(self.df)
+        print(self.gapfilling_df_)
 
         # Gap-filled measurement time series
-        self.df[self.target_gapfilled] = self.df[self.flux].fillna(self.df['.PREDICTIONS'])
+        self.gapfilling_df_[self.target_gapfilled] = self.gapfilling_df_[self.flux].fillna(
+            self.gapfilling_df_['.PREDICTIONS'])
 
         # Gap-filling flag is 0 where measurement available
-        locs_measured_missing = self.df[self.flux].isnull()
+        locs_measured_missing = self.gapfilling_df_[self.flux].isnull()
         locs_measured_available = ~locs_measured_missing
-        self.df.loc[locs_measured_available, self.target_gapfilled_flag] = 0
+        self.gapfilling_df_.loc[locs_measured_available, self.target_gapfilled_flag] = 0
 
         # Gap-filling flag is equal to prediction quality where measurement was gap-filled
-        self.df[self.target_gapfilled_flag] = self.df[self.target_gapfilled_flag].fillna(
-            self.df['.PREDICTIONS_QUALITY'])
+        self.gapfilling_df_[self.target_gapfilled_flag] = self.gapfilling_df_[self.target_gapfilled_flag].fillna(
+            self.gapfilling_df_['.PREDICTIONS_QUALITY'])
 
         # # Flag
         # # Make flag column that indicates where predictions for
@@ -126,29 +221,22 @@ class FluxMDS:
         #     self.target_gapfilled_flag_col].astype(
         #     int)
 
-        print(f"predictions length: {len(self.df['.PREDICTIONS'])}")
-        print(f"gaps: {self.df['.PREDICTIONS'].isnull().sum()}")
-        print(f"gaps in gapfilled: {self.df[self.target_gapfilled].isnull().sum()}")
-        print(f"sum: {self.df['.PREDICTIONS'].sum()}")
-        print(f"quality: {self.df['.PREDICTIONS_QUALITY'].mean()}")
-        import matplotlib.pyplot as plt
-        # self.df[self.target_gapfilled_flag].plot(label="gapfilled", ls='none', markersize=4, marker="o")
-        # self.df[self.target_gapfilled].plot(label="gapfilled", ls='none', markersize=4, marker="o")
-        self.df['.PREDICTIONS'].plot(label="predictions", ls='none', markersize=4, marker="o")
-        self.df[self.flux].plot(ls='none', markersize=4, marker="o")
-        plt.legend()
-        plt.show()
+        # import matplotlib.pyplot as plt
+        # # self.df[self.target_gapfilled_flag].plot(label="gapfilled", ls='none', markersize=4, marker="o")
+        # # self.df[self.target_gapfilled].plot(label="gapfilled", ls='none', markersize=4, marker="o")
+        # self.gapfilling_df_['.PREDICTIONS'].plot(label="predictions", ls='none', markersize=4, marker="o")
+        # self.gapfilling_df_[self.flux].plot(ls='none', markersize=4, marker="o")
+        # plt.legend()
+        # plt.show()
 
-        from diive.pkgs.gapfilling.scores import prediction_scores
-        scoredf = self.df[['.PREDICTIONS', self.flux]].copy()
+        # Calculate scores
+        scoredf = self.gapfilling_df_[['.PREDICTIONS', self.flux]].copy()
         scoredf = scoredf.dropna()
-        scores = prediction_scores(predictions=scoredf['.PREDICTIONS'], targets=scoredf[self.flux])
-        print(scores)
+        self._scores = prediction_scores(predictions=scoredf['.PREDICTIONS'], targets=scoredf[self.flux])
 
     def _run_all_available(self, days: int, quality: int):
 
-        _df = self.df.copy()
-        workdf = self.workdf.copy()
+        _df, workdf = self._prepare_dataframes()
         if workdf.empty:
             return workdf, _df
 
@@ -172,10 +260,14 @@ class FluxMDS:
         workdf = workdf[locs_missing].copy()  # Prepare dataframe for next gap-filling
         return workdf, _df
 
+    def _prepare_dataframes(self) -> tuple[DataFrame, DataFrame]:
+        _df = self.gapfilling_df_.copy()
+        workdf = self.workdf.copy()
+        return _df, workdf
+
     def _run_two_available(self, days: int, quality: int):
 
-        _df = self.df.copy()
-        workdf = self.workdf.copy()
+        _df, workdf = self._prepare_dataframes()
         if workdf.empty:
             return workdf, _df
 
@@ -195,8 +287,7 @@ class FluxMDS:
 
     def _run_mdc(self, days: int, hours: int, quality: int):
 
-        _df = self.df.copy()
-        workdf = self.workdf.copy()
+        _df, workdf = self._prepare_dataframes()
         if workdf.empty:
             return workdf, _df
 
@@ -237,47 +328,47 @@ class FluxMDS:
 
     def _a_1_2(self, row):
         locs = (
-                (self.df.index >= row['.START'])
-                & (self.df.index <= row['.END'])
-                & (self.df[f'.{self.ta}_UPPERLIM'] > row[self.ta])
-                & (self.df[f'.{self.ta}_LOWERLIM'] < row[self.ta])
-                & (self.df[f'.{self.swin}_UPPERLIM'] > row[self.swin])
-                & (self.df[f'.{self.swin}_LOWERLIM'] < row[self.swin])
-                & (self.df[f'.{self.vpd}_UPPERLIM'] > row[self.vpd])
-                & (self.df[f'.{self.vpd}_LOWERLIM'] < row[self.vpd])
+                (self.gapfilling_df_.index >= row['.START'])
+                & (self.gapfilling_df_.index <= row['.END'])
+                & (self.gapfilling_df_[f'.{self.ta}_UPPERLIM'] > row[self.ta])
+                & (self.gapfilling_df_[f'.{self.ta}_LOWERLIM'] < row[self.ta])
+                & (self.gapfilling_df_[f'.{self.swin}_UPPERLIM'] > row[self.swin])
+                & (self.gapfilling_df_[f'.{self.swin}_LOWERLIM'] < row[self.swin])
+                & (self.gapfilling_df_[f'.{self.vpd}_UPPERLIM'] > row[self.vpd])
+                & (self.gapfilling_df_[f'.{self.vpd}_LOWERLIM'] < row[self.vpd])
         )
         avg = self._calc_avg(locs=locs)
         return avg
 
     def _a3(self, row):
         locs = (
-                (self.df.index >= row['.START'])
-                & (self.df.index <= row['.END'])
-                & (self.df[f'.{self.swin}_UPPERLIM'] > row[self.swin])
-                & (self.df[f'.{self.swin}_LOWERLIM'] < row[self.swin])
+                (self.gapfilling_df_.index >= row['.START'])
+                & (self.gapfilling_df_.index <= row['.END'])
+                & (self.gapfilling_df_[f'.{self.swin}_UPPERLIM'] > row[self.swin])
+                & (self.gapfilling_df_[f'.{self.swin}_LOWERLIM'] < row[self.swin])
         )
         avg = self._calc_avg(locs=locs)
         return avg
 
     def _a4(self, row):
         locs = (
-                (self.df.index >= row['.START'])
-                & (self.df.index <= row['.END'])
+                (self.gapfilling_df_.index >= row['.START'])
+                & (self.gapfilling_df_.index <= row['.END'])
         )
         avg = self._calc_avg(locs=locs)
         return avg
 
     def _b1(self, row):
         locs = (
-                (self.df.index >= row['.START'])
-                & (self.df.index <= row['.END'])
-                & (self.df.index.hour == row.name.hour)
+                (self.gapfilling_df_.index >= row['.START'])
+                & (self.gapfilling_df_.index <= row['.END'])
+                & (self.gapfilling_df_.index.hour == row.name.hour)
         )
         avg = self._calc_avg(locs=locs)
         return avg
 
     def _calc_avg(self, locs: bool) -> float:
-        _array = self.df.loc[locs, self.flux].to_numpy()
+        _array = self.gapfilling_df_.loc[locs, self.flux].to_numpy()
         n_vals = len(_array[~np.isnan(_array)])
         if n_vals > 0:
             avg = np.nanmean(_array)
@@ -286,21 +377,21 @@ class FluxMDS:
         return avg
 
     def _add_newcols(self):
-        self._df['.TIMESTAMP'] = self.df.index
-        self.df[self.target_gapfilled] = np.nan  # Gap-filling measurement
-        self.df[self.target_gapfilled_flag] = np.nan  # Gap-filling flag
+        self._df['.TIMESTAMP'] = self.gapfilling_df_.index
+        self.gapfilling_df_[self.target_gapfilled] = np.nan  # Gap-filling measurement
+        self.gapfilling_df_[self.target_gapfilled_flag] = np.nan  # Gap-filling flag
         self._df['.PREDICTIONS'] = np.nan
         self._df['.PREDICTIONS_SD'] = np.nan
         self._df['.PREDICTIONS_COUNTS'] = np.nan
         self._df['.PREDICTIONS_QUALITY'] = np.nan
         self._df['.START'] = np.nan
         self._df['.END'] = np.nan
-        self._df[f'.{self.swin}_LOWERLIM'] = self.df[self.swin].sub(self.swin_class)
-        self._df[f'.{self.swin}_UPPERLIM'] = self.df[self.swin].add(self.swin_class)
-        self._df[f'.{self.ta}_LOWERLIM'] = self.df[self.ta].sub(self.ta_class)
-        self._df[f'.{self.ta}_UPPERLIM'] = self.df[self.ta].add(self.ta_class)
-        self._df[f'.{self.vpd}_LOWERLIM'] = self.df[self.vpd].sub(self.vpd_class)
-        self._df[f'.{self.vpd}_UPPERLIM'] = self.df[self.vpd].add(self.vpd_class)
+        self._df[f'.{self.swin}_LOWERLIM'] = self.gapfilling_df_[self.swin].sub(self.swin_class)
+        self._df[f'.{self.swin}_UPPERLIM'] = self.gapfilling_df_[self.swin].add(self.swin_class)
+        self._df[f'.{self.ta}_LOWERLIM'] = self.gapfilling_df_[self.ta].sub(self.ta_class)
+        self._df[f'.{self.ta}_UPPERLIM'] = self.gapfilling_df_[self.ta].add(self.ta_class)
+        self._df[f'.{self.vpd}_LOWERLIM'] = self.gapfilling_df_[self.vpd].sub(self.vpd_class)
+        self._df[f'.{self.vpd}_UPPERLIM'] = self.gapfilling_df_[self.vpd].add(self.vpd_class)
 
 
 def example():
@@ -322,8 +413,8 @@ def example():
     vpd_class = 0.5  # kPa; 5 hPa is default for reference
 
     locs = (
-            (df.index.year >= 2019)
-            & (df.index.year <= 2021)
+            (df.index.year >= 2020)
+            & (df.index.year <= 2023)
             & (df.index.month >= 1)
             & (df.index.month <= 12)
     )
@@ -346,6 +437,8 @@ def example():
         vpd_class=vpd_class  # kPa; 5 hPa is default for reference
     )
     mds.run()
+    mds.report()
+    mds.showplot()
     b = time.perf_counter()
     print(f"Duration: {b - a}")
 
