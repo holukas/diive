@@ -205,7 +205,7 @@ class TestFluxProcessingChain(unittest.TestCase):
         # --------------------
 
         fpc.level41_gapfilling_longterm(
-            random_forest=True,
+            run_random_forest=True,
             features=["TA_1_1_1", "SW_IN_1_1_1", "VPD_EP"],
             features_lag=[-1, -1],
             # reduce_features=False,
@@ -222,11 +222,11 @@ class TestFluxProcessingChain(unittest.TestCase):
             }
         )
         from diive.pkgs.gapfilling.longterm import LongTermGapFillingRandomForestTS
-        self.assertEqual(type(fpc.level41['CUT_16']), LongTermGapFillingRandomForestTS)
-        self.assertEqual(type(fpc.level41['CUT_50']), LongTermGapFillingRandomForestTS)
-        self.assertEqual(type(fpc.level41['CUT_84']), LongTermGapFillingRandomForestTS)
-        self.assertAlmostEqual(fpc.level41['CUT_50'].gapfilling_df_.sum().sum(), -1597908.3260923326, places=5)
-        self.assertEqual(len(fpc.fpc_df.columns), 87)
+        self.assertEqual(type(fpc.level41['random_forest']['CUT_16']), LongTermGapFillingRandomForestTS)
+        self.assertEqual(type(fpc.level41['random_forest']['CUT_50']), LongTermGapFillingRandomForestTS)
+        self.assertEqual(type(fpc.level41['random_forest']['CUT_84']), LongTermGapFillingRandomForestTS)
+        self.assertAlmostEqual(fpc.level41['random_forest']['CUT_50'].gapfilling_df_.sum().sum(), -1597908.3260923326, places=5)
+        self.assertEqual(len(fpc.fpc_df.columns), 72)
         flagcols = [c for c in fpc.fpc_df.columns if str(c).startswith("FLAG_") and str(c).endswith("_TEST")]
         self.assertEqual(len(flagcols), 25)
 
