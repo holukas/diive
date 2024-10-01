@@ -85,7 +85,10 @@ class FluxProcessingChain:
 
     def get_data(self):
         """Return dataframe containing all input data and results."""
-        return self.df
+        # newcols = detect_new_columns(df=self.fpc_df, other=self.df)
+        full_data_df = pd.concat([self.df, self.fpc_df], axis=1)
+        # [print(f"++Added column {col}.") for col in self.fpc_df.columns]
+        return full_data_df
 
     def get_gapfilled_names(self) -> list:
         """Return names of gap-filled variables."""
@@ -944,7 +947,8 @@ def example():
     # plt.show()
 
     # Flux processing chain settings
-    FLUXVAR = "FC"
+    FLUXVAR = "ET"
+    # FLUXVAR = "FC"
     SITE_LAT = 47.210227
     SITE_LON = 8.410645
     UTC_OFFSET = 1
@@ -1036,7 +1040,7 @@ def example():
     # --------------------
     # Level-3.1
     # --------------------
-    fpc.level31_storage_correction(gapfill_storage_term=False)
+    fpc.level31_storage_correction(gapfill_storage_term=True)
     fpc.finalize_level31()
     fpc.level31.report()
     # fpc.level31.showplot(maxflux=50)
@@ -1076,13 +1080,13 @@ def example():
     #     showplot=True, verbose=True)
     # fpc.level32_addflag()
 
-    DAYTIME_MINMAX = [-50, 50]
-    NIGHTTIME_MINMAX = [-50, 50]
-    fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX,
-                                               showplot=False, verbose=False)
-    # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX, showplot=True, verbose=True)
-    fpc.level32_addflag()
-    # fpc.level32.results  # Stores Level-3.2 flags up to this point
+    # DAYTIME_MINMAX = [-50, 50]
+    # NIGHTTIME_MINMAX = [-50, 50]
+    # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX,
+    #                                            showplot=False, verbose=False)
+    # # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX, showplot=True, verbose=True)
+    # fpc.level32_addflag()
+    # # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
     # fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=False, repeat=True)
     # fpc.level32_addflag()
@@ -1090,10 +1094,10 @@ def example():
     # fpc.level32_flag_outliers_hampel_test(window_length=48 * 7, n_sigma=5, showplot=True, verbose=True, repeat=False)
     # fpc.level32_addflag()
 
-    # # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=False, verbose=False, repeat=False)
-    # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=True,
-    #                                            verbose=True, repeat=True)
-    # fpc.level32_addflag()
+    # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=False, verbose=False, repeat=False)
+    fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=True,
+                                               verbose=True, repeat=True)
+    fpc.level32_addflag()
 
     # fpc.level32_flag_outliers_zscore_rolling_test(winsize=48 * 7, thres_zscore=4, showplot=False, verbose=True,
     #                                               repeat=True)
@@ -1144,11 +1148,13 @@ def example():
     # Level-3.3
     # --------------------
     # 0.0532449, 0.0709217, 0.0949867
+    ustar_scenarios = ['NO_USTAR']
+    ustar_thresholds = [-9999]
     # ustar_scenarios = ['CUT_50']
-    ustar_scenarios = ['CUT_50', 'CUT_84']
-    # ustar_scenarios = ['CUT_16', 'CUT_50', 'CUT_84']
     # ustar_thresholds = [0.0709217]
-    ustar_thresholds = [0.0709217, 0.0949867]
+    # ustar_scenarios = ['CUT_50', 'CUT_84']
+    # ustar_thresholds = [0.0709217, 0.0949867]
+    # ustar_scenarios = ['CUT_16', 'CUT_50', 'CUT_84']
     # ustar_thresholds = [0.0532449, 0.0709217, 0.0949867]
     fpc.level33_constant_ustar(thresholds=ustar_thresholds,
                                threshold_labels=ustar_scenarios,
@@ -1161,19 +1167,19 @@ def example():
     # save_as_pickle(outpath=r"F:\TMP", filename="test", data=fpc)
     # fpc = load_pickle(filepath=r"F:\TMP\test.pickle")
 
-    # for ustar_scenario in ustar_scenarios:
-    #     fpc.level33_qcf[ustar_scenario].showplot_qcf_heatmaps()
-    #     fpc.level33_qcf[ustar_scenario].report_qcf_evolution()
-    #     # fpc.filteredseries
-    #     # fpc.level33
-    #     # fpc.level33_qcf.showplot_qcf_timeseries()
-    #     # fpc.level33_qcf.report_qcf_flags()
-    #     # fpc.level33_qcf.report_qcf_series()
-    #     # fpc.levelidstr
-    #     # fpc.filteredseries_level2_qcf
-    #     # fpc.filteredseries_level31_qcf
-    #     # fpc.filteredseries_level32_qcf
-    #     # fpc.filteredseries_level33_qcf
+    for ustar_scenario in ustar_scenarios:
+        fpc.level33_qcf[ustar_scenario].showplot_qcf_heatmaps()
+        fpc.level33_qcf[ustar_scenario].report_qcf_evolution()
+        # fpc.filteredseries
+        # fpc.level33
+        # fpc.level33_qcf.showplot_qcf_timeseries()
+        # fpc.level33_qcf.report_qcf_flags()
+        # fpc.level33_qcf.report_qcf_series()
+        # fpc.levelidstr
+        # fpc.filteredseries_level2_qcf
+        # fpc.filteredseries_level31_qcf
+        # fpc.filteredseries_level32_qcf
+        # fpc.filteredseries_level33_qcf
 
     # --------------------
     # Level-4.1
@@ -1190,7 +1196,7 @@ def example():
         verbose=True,
         perm_n_repeats=1,
         rf_kwargs={
-            'n_estimators': 3,
+            'n_estimators': 99,
             'random_state': 42,
             'min_samples_split': 2,
             'min_samples_leaf': 1,
