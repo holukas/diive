@@ -34,6 +34,19 @@ class FluxMDS:
                  ta_class: float = 2.5,
                  vpd_class: float = 0.5,
                  verbose: int = 1):
+        """MDS gap-filling for ecosystem fluxes.
+
+        Args:
+            df:
+            flux:
+            swin:
+            ta:
+            vpd:
+            swin_class: (W m-2)
+            ta_class: (°C)
+            vpd_class: (kPa)
+            verbose:
+        """
         self._df = df[[flux, swin, ta, vpd]].copy()
         self.flux = flux
         self.swin = swin
@@ -195,7 +208,7 @@ class FluxMDS:
             quality += 1
             self.workdf, self._df = self._run_mdc(days=d, hours=1, quality=quality)
 
-        print(self.gapfilling_df_)
+        # print(self.gapfilling_df_)
 
         # Gap-filled measurement time series
         self.gapfilling_df_[self.target_gapfilled] = self.gapfilling_df_[self.flux].fillna(
@@ -233,6 +246,8 @@ class FluxMDS:
         scoredf = self.gapfilling_df_[['.PREDICTIONS', self.flux]].copy()
         scoredf = scoredf.dropna()
         self._scores = prediction_scores(predictions=scoredf['.PREDICTIONS'], targets=scoredf[self.flux])
+
+        print("Done.")
 
     def _run_all_available(self, days: int, quality: int):
 
