@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from pandas import DataFrame, Series
-
+from collections import Counter
 from diive.core.base.identify import identify_flagcols
 from diive.core.funcs.funcs import validate_id_string
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
@@ -177,7 +177,9 @@ class FlagQCF:
               f"when test flags are applied sequentially to the variable {self.series.name}.")
 
         flagcols = identify_flagcols(df=self.flags, seriescol=str(self.series.name))
+        flagcols = [c for c in flagcols if str(c).startswith('FLAG_') and (str(c).endswith('_TEST'))]
         allflags_df = self.flags[flagcols].copy()
+
         ix_missing_vals = self.df[self.series.name].isnull()
         allflags_df = allflags_df[~ix_missing_vals].copy()  # Ignore missing values
 
@@ -185,6 +187,8 @@ class FlagQCF:
         ix_first_test = 0
         n_vals_total_rejected = 0
         n_flag2 = 0
+        n_flag1 = 0
+        n_flag0 = 0
         perc_flag2 = 0
         n_vals = len(allflags_df)
         print(f"\nNumber of {self.series.name} records before QC: {n_vals}")
@@ -216,12 +220,23 @@ class FlagQCF:
 
             n_vals_total_rejected = n_flag2
 
+        # Compare last overall flag from evolution with previously calculated overall flag
+        countflags = dict(Counter(self.flags[self.flagqcfcol]))
+        n_missing = self.series.isnull().sum()
+        c = True if (countflags[2] - n_missing) == n_flag2 else False
+        b = True if countflags[1] == n_flag1 else False
+        a = True if countflags[0] == n_flag0 else False
+        if not all([a, b, c]):
+            raise ValueError("(!)Results from QCF evolution are different from the previously "
+                             "calculated overall flag.")
+
+        # # Test output containing flags from progressive evolution flag and previous overall
+        # pd.concat([self.flags, prog_df.add_suffix("_PROG")], axis=1).to_csv(r"F:\TMP\test.csv")
+
         print(f"\nIn total, {n_flag2} ({perc_flag2:.2f}%) of the available records were rejected in this step.")
         print(f"INFO Rejected DAYTIME records where QCF flag >= {self.daytime_accept_qcf_below}")
         print(f"INFO Rejected NIGHTTIME records where QCF flag >= {self.nighttimetime_accept_qcf_below}")
-        # print(f"\n| Note that this is not the final QC step. More values need to be \n"
-        #       f"| rejected after storage correction (Level-3.1) during outlier\n"
-        #       f"| removal (Level-3.2) and USTAR filtering (Level-3.3).")
+
 
     def _flagstats(self, flag: Series, prefix: str):
         n_values = len(flag)
@@ -308,7 +323,7 @@ class FlagQCF:
     def _calculate_flagsums(self, df: DataFrame) -> DataFrame:
         """Calculate sums of all individual flags"""
 
-        # Get variables that contain flag data (quality test results)
+        # Get variables that contain flag data (individual quality test results)
         onlyflagtests = [c for c in df.columns if str(c).startswith('FLAG_') and str(c).endswith('_TEST')]
         onlyflagtests_df = df[onlyflagtests].copy()
 
