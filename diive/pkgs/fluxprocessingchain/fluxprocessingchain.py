@@ -83,10 +83,15 @@ class FluxProcessingChain:
         self._level32_qcf = None
         self._level33_qcf = dict()  # dict because there can be multiple USTAR scenarios
 
-    def get_data(self):
+    def get_data(self, verbose: int = 1):
         """Return dataframe containing all input data and results."""
         # newcols = detect_new_columns(df=self.fpc_df, other=self.df)
-        full_data_df = pd.concat([self.df, self.fpc_df], axis=1)
+        newcols = [c for c in self.fpc_df.columns if c not in self.df.columns]
+        if verbose:
+            print("NEW VARIABLES FROM FLUX PROCESSING CHAIN:")
+            [print(f"++ {c}") for c in newcols]
+            print("No variables in input data were overwritten, only new variables added.")
+        full_data_df = pd.concat([self.df, self.fpc_df[newcols]], axis=1)
         # [print(f"++Added column {col}.") for col in self.fpc_df.columns]
         return full_data_df
 
@@ -394,7 +399,8 @@ class FluxProcessingChain:
                         idstr: str,
                         level_df: DataFrame,
                         daytime_accept_qcf_below: int = 2,
-                        nighttimetime_accept_qcf_below: int = 2) -> FlagQCF:
+                        nighttimetime_accept_qcf_below: int = 2,
+                        ustar_scenarios: list = None) -> FlagQCF:
 
         # Detect new columns
         newcols = detect_new_columns(df=level_df, other=self.fpc_df)
@@ -406,7 +412,9 @@ class FluxProcessingChain:
                       df=self.fpc_df,
                       idstr=idstr,
                       swinpot=self.fpc_df['SW_IN_POT'],  # Calculated during init
-                      nighttime_threshold=self.nighttime_threshold)
+                      nighttime_threshold=self.nighttime_threshold,
+                      ustar_scenarios=ustar_scenarios  # Required to get correct USTAR FLAG_ columns for each scenario
+                      )
         qcf.calculate(daytime_accept_qcf_below=daytime_accept_qcf_below,
                       nighttimetime_accept_qcf_below=nighttimetime_accept_qcf_below)
         self._fpc_df = qcf.get()
@@ -469,7 +477,8 @@ class FluxProcessingChain:
                 idstr=f'L3.3_{u}',
                 level_df=udf,
                 daytime_accept_qcf_below=self.daytime_accept_qcf_below,
-                nighttimetime_accept_qcf_below=self.nighttimetime_accept_qcf_below
+                nighttimetime_accept_qcf_below=self.nighttimetime_accept_qcf_below,
+                ustar_scenarios=ustar_scenarios  # Required to get the correct USTAR FLAG_ columns for each scenario
             )
             self._filteredseries_level33_qcf[u] = self.filteredseries.copy()  # Store filtered series as variable
 
@@ -573,7 +582,7 @@ class FluxProcessingChain:
         #     print(feature_importance_per_year)
         #     print(features_reduced_across_years)
 
-    def level31_storage_correction(self, gapfill_storage_term: bool = False):
+    def level31_storage_correction(self, gapfill_storage_term: bool = True):
         """Correct flux with storage term from single point measurement."""
         idstr = 'L3.1'
         self._levelidstr.append(idstr)
@@ -916,7 +925,7 @@ def example():
     # Source data
     from pathlib import Path
     from diive.core.io.files import load_parquet
-    SOURCEDIR = r"L:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_cha_fp2024_2005-2023\40_FLUXES_L1_IRGA+QCL+LGR_mergeData"
+    SOURCEDIR = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_cha_fp2024_2005-2023\40_FLUXES_L1_IRGA+QCL+LGR_mergeData"
     FILENAME = r"41.1_CH-CHA_IRGA_LGR+QCL_Level-1_eddypro_fluxnet_2005-2023_meteo7.parquet"
     FILEPATH = Path(SOURCEDIR) / FILENAME
     maindf = load_parquet(filepath=FILEPATH)
@@ -947,8 +956,8 @@ def example():
     # plt.show()
 
     # Flux processing chain settings
-    FLUXVAR = "ET"
-    # FLUXVAR = "FC"
+    # FLUXVAR = "H"
+    FLUXVAR = "FC"
     SITE_LAT = 47.210227
     SITE_LON = 8.410645
     UTC_OFFSET = 1
@@ -1043,34 +1052,23 @@ def example():
     fpc.level31_storage_correction(gapfill_storage_term=True)
     fpc.finalize_level31()
     fpc.level31.report()
-    # fpc.level31.showplot(maxflux=50)
+    fpc.level31.showplot()
     # fpc.fpc_df
     # fpc.filteredseries
     # fpc.level31.results
     # [x for x in fpc.fpc_df.columns if 'L3.1' in x]
     # -------------------------------------------------------------------------
 
-    # # ANALYZE
-    # fpc.analyze_highest_quality_flux(showplot=True)
+    # --------------------
+    # (OPTIONAL) ANALYZE
+    # --------------------
+    fpc.analyze_highest_quality_flux(showplot=True)
+    # -------------------------------------------------------------------------
 
     # --------------------
     # Level-3.2
     # --------------------
     fpc.level32_stepwise_outlier_detection()
-
-    # todo interesting results RF
-    # MedAE:  0.4563022463131315 (median absolute error)
-    # R2:  0.9728854018654111
-    # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3, n_sigma_nt=3, showplot=True, verbose=True, repeat=False)
-    # fpc.level32_addflag()
-    # use_gapfilling = 1
-
-    # # todo interesting results XGB (same as previous, but with XGB, much worse)
-    # # MedAE:  0.9604272683090209 (median absolute error)
-    # # R2:  0.934033601945007
-    # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3, n_sigma_nt=3, showplot=True, verbose=True, repeat=True)
-    # fpc.level32_addflag()
-    # use_gapfilling = 2
 
     # fpc.level32_flag_manualremoval_test(
     #     remove_dates=[
@@ -1080,13 +1078,13 @@ def example():
     #     showplot=True, verbose=True)
     # fpc.level32_addflag()
 
-    # DAYTIME_MINMAX = [-50, 50]
-    # NIGHTTIME_MINMAX = [-50, 50]
-    # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX,
-    #                                            showplot=False, verbose=False)
-    # # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX, showplot=True, verbose=True)
-    # fpc.level32_addflag()
-    # # fpc.level32.results  # Stores Level-3.2 flags up to this point
+    DAYTIME_MINMAX = [-50, 50]
+    NIGHTTIME_MINMAX = [-50, 50]
+    fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX,
+                                               showplot=False, verbose=False)
+    # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX, showplot=True, verbose=True)
+    fpc.level32_addflag()
+    # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
     # fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=False, repeat=True)
     # fpc.level32_addflag()
@@ -1148,12 +1146,13 @@ def example():
     # Level-3.3
     # --------------------
     # 0.0532449, 0.0709217, 0.0949867
-    ustar_scenarios = ['NO_USTAR']
-    ustar_thresholds = [-9999]
-    # ustar_scenarios = ['CUT_50']
-    # ustar_thresholds = [0.0709217]
+    # ustar_scenarios = ['NO_USTAR']
+    # ustar_thresholds = [-9999]
+    ustar_scenarios = ['CUT_50']
+    ustar_thresholds = [0.0709217]
     # ustar_scenarios = ['CUT_50', 'CUT_84']
     # ustar_thresholds = [0.0709217, 0.0949867]
+    # TODO check flag issue during finalizing
     # ustar_scenarios = ['CUT_16', 'CUT_50', 'CUT_84']
     # ustar_thresholds = [0.0532449, 0.0709217, 0.0949867]
     fpc.level33_constant_ustar(thresholds=ustar_thresholds,
@@ -1194,7 +1193,7 @@ def example():
         include_timestamp_as_features=False,
         add_continuous_record_number=False,
         verbose=True,
-        perm_n_repeats=1,
+        perm_n_repeats=3,
         rf_kwargs={
             'n_estimators': 99,
             'random_state': 42,
@@ -1221,7 +1220,11 @@ def example():
 
     # TODO heatmap of used model data pools
 
-    print("X")
+    print("XXX")
+    print("XXX")
+    print("XXX")
+    print("XXX")
+    print("XXX")
 
     # newcols = [c for c in fpc.fpc_df.columns if c not in maindf.columns]
     # maindf2 = pd.concat([maindf, fpc.fpc_df[newcols]], axis=1)
