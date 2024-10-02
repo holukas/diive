@@ -28,17 +28,39 @@ class FlagQCF:
                  outname: str = None,
                  swinpot: Series = None,
                  idstr: str = None,
-                 nighttime_threshold: float = 50
+                 nighttime_threshold: float = 50,
+                 ustar_scenarios: list = None
                  ):
         self.df = df.copy()  # Original data
         self.series = series.copy()
+        self.ustar_scenarios = ustar_scenarios  # Required to get the correct USTAR FLAG_ columns for each scenario
 
         self.outname = outname if outname else series.name
 
         self.idstr = validate_id_string(idstr=idstr)
 
         # Identify FLAG columns
-        flagcols = identify_flagcols(df=df, seriescol=str(series.name))
+        # If there are different USTAR scenarios, all flag columns that are not relevant for
+        # the current scenario must be removed.
+
+        # First check if there are USTAR scenarios
+        if ustar_scenarios:
+            # Get ID of USTAR scenario, e.g. 'CUT_50'. Info about the scenario is in the ID string.
+            # Therefore, here we can check if any USTAR scenario string appears in the ID string.
+            current_ustar_scenario = [u for u in self.ustar_scenarios if u in self.idstr]
+            # Make sure there is only one detected scenario
+            if len(current_ustar_scenario) == 1:
+                current_ustar_scenario = str(current_ustar_scenario[0])
+            else:
+                raise ValueError(f"(!)More than one USTAR scenario detected: "
+                                 f"current_ustar_scenario={current_ustar_scenario}.")
+            exclude_ustar_ids = self.ustar_scenarios.copy()
+            exclude_ustar_ids.remove(current_ustar_scenario)
+        else:
+            exclude_ustar_ids = None
+            # current_ustar_scenario = None
+
+        flagcols = identify_flagcols(df=df, seriescol=str(series.name), exclude_ustar_ids=exclude_ustar_ids)
         self._flags_df = df[flagcols].copy()
 
         # Detect daytime and nighttime

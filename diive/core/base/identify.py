@@ -33,7 +33,7 @@ def identify_relevants(seriescol: str) -> list:
     return relevant
 
 
-def identify_flagcols(df: DataFrame, seriescol: str) -> list:
+def identify_flagcols(df: DataFrame, seriescol: str, exclude_ustar_ids: list = None) -> list:
     """Identify flag columns."""
     flagcols = [c for c in df.columns
                 if str(c).startswith('FLAG_')
@@ -42,5 +42,11 @@ def identify_flagcols(df: DataFrame, seriescol: str) -> list:
     # Collect columns relevant for this flux
     relevant = identify_relevants(seriescol=seriescol)
     flagcols = [f for f in flagcols if any(n in f for n in relevant)]
+
+    # Use USTAR ID strings to remove flags from other USTAR scenarios (Level-3.3).
+    # This keeps flags for the current USTAR scenario by excluding all other scenarios.
+    # Searching for the string of the current scenario would not work
+    if exclude_ustar_ids:
+        flagcols = [f for f in flagcols if not any(n in f for n in exclude_ustar_ids)]
 
     return flagcols
