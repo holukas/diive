@@ -307,9 +307,17 @@ class FlagQCF:
 
     def _calculate_flagsums(self, df: DataFrame) -> DataFrame:
         """Calculate sums of all individual flags"""
-        sumhardflags = df[df == 2].sum(axis=1)  # The sum of all flags that show 2
-        sumsoftflags = df[df == 1].sum(axis=1)  # The sum of all flags that show 1
+
+        # Get variables that contain flag data (quality test results)
+        onlyflagtests = [c for c in df.columns if str(c).startswith('FLAG_') and str(c).endswith('_TEST')]
+        onlyflagtests_df = df[onlyflagtests].copy()
+
+        # Build flag sums from flag data
+        sumhardflags = onlyflagtests_df[onlyflagtests_df == 2].sum(axis=1)  # The sum of all flags that show 2
+        sumsoftflags = onlyflagtests_df[onlyflagtests_df == 1].sum(axis=1)  # The sum of all flags that show 1
         sumflags = sumhardflags.add(sumsoftflags)  # Sum of all flags
+
+        # Add flag sums to overall flag dataframe
         df[self.sumhardflagscol] = sumhardflags
         df[self.sumsoftflagscol] = sumsoftflags
         df[self.sumflagscol] = sumflags
