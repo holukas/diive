@@ -2,6 +2,76 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.83.0 | 4 Oct 2024
+
+## MDS gap-filling
+
+Finally it is possible to use the `MDS` (`marginal distribution sampling`) gap-filling method in `diive`. This method is
+the current default and widely used gap-filling method for eddy covariance ecosystem fluxes. For a detailed description
+of the method see Reichstein et al. (2005) and Pastorello et al. (2020; full references given below).
+
+The implementation of `MDS` in `diive` (`FluxMDS`) follows the description in Reichstein et al. (2005) and should
+therefore yield results similar to other implementations of this algorithm. `FluxMDS` can also easily output model
+scores, such as r2 and error values.
+
+At the moment it is not yet possible to use `FluxMDS` in the flux processing chain, but during the preparation of this
+update the flux processing chain code was already refactored and prepared to include `FluxMDS` in one of the next
+updates.
+
+At the moment, `FluxMDS` is specifically tailored to gap-fill ecosystem fluxes, a more general implementation (e.g., to
+gap-fill meteorological data) will follow.
+
+## New features
+
+- Added new gap-filling class `FluxMDS`:
+    - `MDS` stands for `marginal distribution sampling`. The method uses a time window to first identify meteorological
+      conditions (short-wave incoming radiation, air temperature and VPD) similar to those when the missing data
+      occurred. Gaps are then filled with the mean flux in the time window.
+    - `FluxMDS` cannot be used in the flux processing chain, but will be implemented soon.
+    - (`diive.pkgs.gapfilling.mds.FluxMDS`)
+
+### Changes
+
+- **Storage correction**: By default, values missing in the storage term are now filled with a rolling mean in an
+  expanding
+  time window. Testing showed that the (single point) storage term is missing for between 2-3% of the data, which I
+  think is reason enough to make filling these gaps the default option. Previously, it was optional to fill the gaps
+  using random forest, however, results were not great since only the timestamp info was used as model features. Plots
+  generated during Level-3.1 were also updated, now better showing the storage terms (gap-filled and non-gap-filled) and
+  the flag indicating filled values (
+  `diive.pkgs.fluxprocessingchain.level31_storagecorrection.FluxStorageCorrectionSinglePointEddyPro`)
+
+### Notebooks
+
+- Added notebook example for `FluxMDS` (`notebooks/GapFilling/FluxMDSGapFilling.ipynb`)
+
+### Tests
+
+- Added test case for `FluxMDS` (`tests.test_gapfilling.TestGapFilling.test_fluxmds`)
+- 50/50 unittests ran successfully
+
+### Bugfixes
+
+- Fixed bug: overall quality flag `QCF` was not created correctly for the different USTAR scenarios (
+  `diive.core.base.identify.identify_flagcols`) (`diive.pkgs.qaqc.qcf.FlagQCF`)
+- Fixed bug: calculation of `QCF` flag sums is now strictly done on flag columns. Before, sums were calculated across
+  all columns in the flags dataframe, which resulted in erroneous overall flags after USTAR filtering (
+  `diive.pkgs.qaqc.qcf.FlagQCF._calculate_flagsums`)
+
+### Environment
+
+- Added [polars](https://pola.rs/)
+
+### References
+
+- Pastorello, G. et al. (2020). The FLUXNET2015 dataset and the ONEFlux processing pipeline
+  for eddy covariance data. 27. https://doi.org/10.1038/s41597-020-0534-3
+- Reichstein, M., Falge, E., Baldocchi, D., Papale, D., Aubinet, M., Berbigier, P., Bernhofer, C., Buchmann, N.,
+  Gilmanov, T., Granier, A., Grunwald, T., Havrankova, K., Ilvesniemi, H., Janous, D., Knohl, A., Laurila, T., Lohila,
+  A., Loustau, D., Matteucci, G., … Valentini, R. (2005). On the separation of net ecosystem exchange into assimilation
+  and ecosystem respiration: Review and improved algorithm. Global Change Biology, 11(9),
+  1424–1439. https://doi.org/10.1111/j.1365-2486.2005.001002.x
+
 ## v0.82.1 | 22 Sep 2024
 
 ## Notebooks
@@ -2253,3 +2323,9 @@ which allows the calculation of the flux detection limit following Langford et a
   571–583. https://doi.org/10.5194/bg-3-571-2006
 - Pastorello, G. et al. (2020). The FLUXNET2015 dataset and the ONEFlux processing pipeline
   for eddy covariance data. 27. https://doi.org/10.1038/s41597-020-0534-3
+- Reichstein, M., Falge, E., Baldocchi, D., Papale, D., Aubinet, M., Berbigier, P., Bernhofer, C., Buchmann, N.,
+  Gilmanov, T., Granier, A., Grunwald, T., Havrankova, K., Ilvesniemi, H., Janous, D., Knohl, A., Laurila, T., Lohila,
+  A., Loustau, D., Matteucci, G., … Valentini, R. (2005). On the separation of net ecosystem exchange into assimilation
+  and ecosystem respiration: Review and improved algorithm. Global Change Biology, 11(9),
+  1424–1439. https://doi.org/10.1111/j.1365-2486.2005.001002.x
+
