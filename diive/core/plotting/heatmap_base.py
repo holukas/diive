@@ -223,7 +223,7 @@ class HeatmapBase:
         return cmap, z
 
     def format(self, ax_xlabel_txt, ax_ylabel_txt, plot):
-        title = self.title if self.title else f"{self.series.name} in {self.series.index.freqstr} time resolution"
+        title = self.title if self.title else f"{self.series.name} ({self.series.index.freqstr})"
         self.ax.set_title(title, color='black')
         # Colorbar
         cb = plt.colorbar(plot, ax=self.ax, format=f"%.{int(self.cb_digits_after_comma)}f",
@@ -231,7 +231,7 @@ class HeatmapBase:
         cb.set_label(label=self.zlabel, size=self.axlabels_fontsize)
         cb.ax.tick_params(labelsize=self.cb_labelsize)
         default_format(ax=self.ax, ax_xlabel_txt=ax_xlabel_txt, ax_ylabel_txt=ax_ylabel_txt,
-                       ticks_direction='out', ticks_length=8, ticks_width=2,
+                       ticks_direction='out', ticks_length=4, ticks_width=2,
                        ax_labels_fontsize=self.axlabels_fontsize,
                        ticks_labels_fontsize=self.ticks_labelsize)
         format_spines(ax=self.ax, color='black', lw=2)

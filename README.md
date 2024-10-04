@@ -105,6 +105,7 @@ _Fill gaps in time series with various methods._
 - **Long-term gap-filling using RandomForestTS** ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/LongTermRandomForestGapFilling.ipynb))
 - **Linear interpolation** ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/LinearInterpolation.ipynb))
 - **Quick random forest gap-filling** ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/QuickRandomForestGapFilling.ipynb))
+- **MDS gap-filling of ecosystem fluxes** ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/FluxMDSGapFilling.ipynb)), approach by [Reichstein et al., 2005](https://onlinelibrary.wiley.com/doi/10.1111/j.1365-2486.2005.001002.x)
 
 ### Outlier Detection
 

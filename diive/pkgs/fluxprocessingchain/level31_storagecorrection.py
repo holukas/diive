@@ -1,5 +1,3 @@
-from typing import Literal
-
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -8,7 +6,6 @@ from pandas import DataFrame
 from diive.core.dfun.stats import sstats  # Time series stats
 from diive.core.funcs.funcs import validate_id_string
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-from diive.pkgs.gapfilling.randomforest_ts import QuickFillRFTS
 
 
 class FluxStorageCorrectionSinglePointEddyPro:
@@ -94,33 +91,40 @@ class FluxStorageCorrectionSinglePointEddyPro:
         else:
             print(f"\nFor this run, gap-filling of {self.strgcol} was - NOT SELECTED -.")
 
-
-
     def _gapfill_storage_term(self) -> DataFrame:
-        """
-        Gap-fill storage term using random forest
+        """Gap-fill storage term using rolling mean in expanding window.
 
         The storage term can be missing for quite a few records,
         which means that we lose measured flux data.
         """
-        # Assemble dataframe for gapfilling
-        gfcols = [self.strgcol]
-        gf_df = self.df[gfcols].copy()
 
-        # Run random forest
-        qf = QuickFillRFTS(df=gf_df, target_col=self.strgcol)
-        qf.fill()
-        print(qf.report())
-        series = qf.get_gapfilled_target()
-        flag = qf.get_flag()
-        d = {series.name: series, flag.name: flag}
-        gapfilled_df = pd.DataFrame.from_dict(d)
+        # New columns
+        self.gapfilled_strgcol = f"{self.strgcol}_gfRMEAN{self.idstr}"
+        self.flag_isgapfilled = f"FLAG_{self.gapfilled_strgcol}_ISFILLED"
 
-        # Add Level-ID to gapfilling results
-        renamedcols = [f"{c}{self.idstr}" for c in gapfilled_df.columns]
-        gapfilled_df.columns = renamedcols
-        self.gapfilled_strgcol = f"{series.name}{self.idstr}"
-        self.flag_isgapfilled = f"{flag.name}{self.idstr}"
+        # Generate temporary subset where all flux values are available and check for missing storage
+        gapfilled_df = pd.concat([self.results[self.fluxcol], self.results[self.strgcol]], axis=1)
+        gapfilled_df[self.gapfilled_strgcol] = self.results[self.strgcol].copy()
+        gapfilled_df[self.flag_isgapfilled] = 0
+        gapfilled_df = gapfilled_df.dropna(subset=[self.fluxcol])
+        n_still_missing_strg = gapfilled_df[self.gapfilled_strgcol].isnull().sum()
+        print(f"Missing values for storage term {self.gapfilled_strgcol}: {n_still_missing_strg}")
+
+        # Fill gaps with rolling mean in expanding time window
+        window_size = 0
+        while n_still_missing_strg > 0:
+            window_size = 3 if window_size == 0 else window_size + 2
+            rmean = self.results[self.strgcol].rolling(window=window_size, center=True, min_periods=3).mean()
+            locs = gapfilled_df[self.gapfilled_strgcol].isnull()
+            gapfilled_df.loc[locs, self.gapfilled_strgcol] = rmean
+            gapfilled_df.loc[locs, self.flag_isgapfilled] = 1
+            n_still_missing_strg = gapfilled_df[self.gapfilled_strgcol].isnull().sum()
+            print(f"Gap-filling storage-term {self.strgcol} "
+                  f"with rolling mean (window size = {window_size} records) ...")
+            print(f"Missing values for storage term {self.gapfilled_strgcol}: {n_still_missing_strg}")
+
+        gapfilled_df = gapfilled_df[[self.gapfilled_strgcol, self.flag_isgapfilled]].copy()
+
         return gapfilled_df
 
     def storage_correction(self):
@@ -139,7 +143,7 @@ class FluxStorageCorrectionSinglePointEddyPro:
             self._results[self.flux_corrected_col] = self._results[self.fluxcol].add(
                 self._results[self.gapfilled_strgcol])
         else:
-            # Add original (non-gapfilled) storage term to flux
+            # Add original (non-gapfilled) storage term to flux, this can result in NaNs
             self._results[self.flux_corrected_col] = self._results[self.fluxcol].add(self._results[self.strgcol])
 
     def _detect_storage_var(self) -> tuple[str, str]:
@@ -183,27 +187,43 @@ class FluxStorageCorrectionSinglePointEddyPro:
         print(f"Detected storage variable {strgcol} for {self.fluxcol}.")
         return flux_corrected_col, strgcol
 
-    def showplot(self, maxflux: float):
+    def showplot(self, maxflux: float = None):
 
-        fig = plt.figure(facecolor='white', figsize=(16, 9))
-        gs = gridspec.GridSpec(1, 3)  # rows, cols
+        fig = plt.figure(facecolor='white', figsize=(20, 9))
+        gs = gridspec.GridSpec(1, 5)  # rows, cols
         gs.update(wspace=0.3, hspace=0.3, left=0.06, right=0.94, top=0.9, bottom=0.1)
         ax_flux = fig.add_subplot(gs[0, 0])
         ax_flux_storage_corrected = fig.add_subplot(gs[0, 1], sharey=ax_flux)
         ax_storage_term = fig.add_subplot(gs[0, 2], sharey=ax_flux)
+        ax_storage_term_gf = fig.add_subplot(gs[0, 3], sharey=ax_flux)
+        ax_storage_term_flag = fig.add_subplot(gs[0, 4], sharey=ax_flux)
+
+        if not maxflux:
+            maxflux = self.results[self.fluxcol].abs().quantile(.95)
+            maxstrg = self.results[self.strgcol].abs().quantile(.95)
+        else:
+            maxstrg = maxflux
 
         HeatmapDateTime(ax=ax_flux, series=self.results[self.fluxcol], vmin=-maxflux, vmax=maxflux,
                         cb_digits_after_comma=0).plot()
         HeatmapDateTime(ax=ax_flux_storage_corrected, series=self.results[self.flux_corrected_col], vmin=-maxflux,
                         vmax=maxflux, cb_digits_after_comma=0).plot()
-        HeatmapDateTime(ax=ax_storage_term, series=self.results[self.strgcol], vmin=-maxflux, vmax=maxflux,
+        HeatmapDateTime(ax=ax_storage_term, series=self.results[self.strgcol], vmin=-maxstrg, vmax=maxstrg,
+                        cb_digits_after_comma=1).plot()
+        HeatmapDateTime(ax=ax_storage_term_gf, series=self.results[self.gapfilled_strgcol], vmin=-maxstrg, vmax=maxstrg,
+                        cb_digits_after_comma=1).plot()
+        HeatmapDateTime(ax=ax_storage_term_flag, series=self.results[self.flag_isgapfilled],
                         cb_digits_after_comma=0).plot()
 
         plt.setp(ax_flux_storage_corrected.get_yticklabels(), visible=False)
         plt.setp(ax_storage_term.get_yticklabels(), visible=False)
+        plt.setp(ax_storage_term_gf.get_yticklabels(), visible=False)
+        plt.setp(ax_storage_term_flag.get_yticklabels(), visible=False)
 
         ax_flux_storage_corrected.axes.get_yaxis().get_label().set_visible(False)
         ax_storage_term.axes.get_yaxis().get_label().set_visible(False)
+        ax_storage_term_gf.axes.get_yaxis().get_label().set_visible(False)
+        ax_storage_term_flag.axes.get_yaxis().get_label().set_visible(False)
 
         fig.show()
 

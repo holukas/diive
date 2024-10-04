@@ -8,8 +8,7 @@ import pandas as pd
 from pandas import DataFrame
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.inspection import permutation_importance
-from sklearn.metrics import PredictionErrorDisplay, max_error, median_absolute_error, mean_absolute_error, \
-    mean_absolute_percentage_error, r2_score, mean_squared_error, root_mean_squared_error
+from sklearn.metrics import PredictionErrorDisplay
 from sklearn.model_selection import train_test_split
 from xgboost import XGBRegressor
 from yellowbrick.regressor import PredictionError, ResidualsPlot
@@ -17,6 +16,7 @@ from yellowbrick.regressor import PredictionError, ResidualsPlot
 import diive.core.dfun.frames as fr
 from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import include_timestamp_as_cols
+from diive.pkgs.gapfilling.scores import prediction_scores
 
 pd.set_option('display.max_rows', 50)
 pd.set_option('display.max_columns', 12)
@@ -335,7 +335,7 @@ class MlRegressorGapFillingBase:
 
         # Scores
         print(f">>> Calculating prediction scores based on predicting unseen test data of {self.target_col} ...")
-        self._scores_traintest = prediction_scores_regr(predictions=pred_y_test, targets=y_test)
+        self._scores_traintest = prediction_scores(predictions=pred_y_test, targets=y_test)
 
         if showplot_scores:
             print(f">>> Plotting observed and predicted values ...")
@@ -820,7 +820,7 @@ class MlRegressorGapFillingBase:
 
         # Scores, using all targets
         print(f">>> Calculating prediction scores based on all data predicting {self.target_col} ...")
-        self._scores = prediction_scores_regr(predictions=pred_y, targets=y)
+        self._scores = prediction_scores(predictions=pred_y, targets=y)
 
         if showplot_scores:
             print(f">>> Plotting observed and predicted values based on all data ...")
@@ -1103,28 +1103,6 @@ class MlRegressorGapFillingBase:
 #     }
 #
 #     return importances
-
-
-def prediction_scores_regr(predictions: np.array,
-                           targets: np.array) -> dict:
-    """
-    Calculate prediction scores for regression estimator
-
-    See:
-    - https://scikit-learn.org/stable/modules/model_evaluation.html#regression-metrics
-    """
-
-    # Calculate stats
-    scores = {
-        'mae': mean_absolute_error(targets, predictions),
-        'medae': median_absolute_error(targets, predictions),
-        'mse': mean_squared_error(targets, predictions),
-        'rmse': root_mean_squared_error(targets, predictions),
-        'mape': mean_absolute_percentage_error(targets, predictions),
-        'maxe': max_error(targets, predictions),
-        'r2': r2_score(targets, predictions)
-    }
-    return scores
 
 
 def plot_feature_importance(feature_importances: pd.DataFrame, n_perm_repeats: int):
