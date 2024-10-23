@@ -123,7 +123,7 @@ class TestFluxProcessingChain(unittest.TestCase):
         fpc.finalize_level31()
         from diive.pkgs.fluxprocessingchain.level31_storagecorrection import FluxStorageCorrectionSinglePointEddyPro
         self.assertEqual(type(fpc.level31), FluxStorageCorrectionSinglePointEddyPro)
-        self.assertEqual(fpc.level31.gapfilled_strgcol, "SC_SINGLE_gfRMEAN_L3.1")
+        self.assertEqual(fpc.level31.gapfilled_strgcol, "SC_SINGLE_gfRMED_L3.1")
         self.assertEqual(fpc.filteredseries.dropna().count(), 778)
         self.assertEqual(fpc.filteredseries.name, "NEE_L3.1_QCF")
         self.assertEqual(len(fpc.fpc_df.columns), 25)
@@ -227,7 +227,7 @@ class TestFluxProcessingChain(unittest.TestCase):
         self.assertEqual(type(fpc.level41['random_forest']['CUT_16']), LongTermGapFillingRandomForestTS)
         self.assertEqual(type(fpc.level41['random_forest']['CUT_50']), LongTermGapFillingRandomForestTS)
         self.assertEqual(type(fpc.level41['random_forest']['CUT_84']), LongTermGapFillingRandomForestTS)
-        self.assertAlmostEqual(fpc.level41['random_forest']['CUT_50'].gapfilling_df_.sum().sum(), 659262.0255138128, places=5)
+        self.assertAlmostEqual(fpc.level41['random_forest']['CUT_50'].gapfilling_df_.sum().sum(), 598498.6040326376, places=5)
         self.assertEqual(len(fpc.fpc_df.columns), 72)
         flagcols = [c for c in fpc.fpc_df.columns if str(c).startswith("FLAG_") and str(c).endswith("_TEST")]
         self.assertEqual(len(flagcols), 25)

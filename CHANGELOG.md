@@ -2,6 +2,29 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.83.1 | 23 Oct 2024
+
+## Changes
+
+- When detecting the frequency from the time delta of records, the inferred frequency is accepted if the most frequent
+  timedelta was found for more than 50% of records (`diive.core.times.times.timestamp_infer_freq_from_timedelta`)
+- Storage terms are now gap-filled using the rolling median in an expanding time window (
+  `FluxStorageCorrectionSinglePointEddyPro._gapfill_storage_term`)
+
+## Notebooks
+
+- Added notebook example for using the flux processing chain for CH4 flux from a subcanopy eddy covariance station (
+  `notebooks/Workbench/CH-DAS_2023_FluxProcessingChain/FluxProcessingChain_NEE_CH-DAS_2023.ipynb`)
+
+## Bugfixes
+
+- Fixed info for storage term correction report to account for cases when more storage terms than flux records are
+  available (`FluxStorageCorrectionSinglePointEddyPro.report`)
+
+### Tests
+
+- 50/50 unittests ran successfully
+
 ## v0.83.0 | 4 Oct 2024
 
 ## MDS gap-filling
@@ -33,12 +56,11 @@ gap-fill meteorological data) will follow.
 ### Changes
 
 - **Storage correction**: By default, values missing in the storage term are now filled with a rolling mean in an
-  expanding
-  time window. Testing showed that the (single point) storage term is missing for between 2-3% of the data, which I
-  think is reason enough to make filling these gaps the default option. Previously, it was optional to fill the gaps
-  using random forest, however, results were not great since only the timestamp info was used as model features. Plots
-  generated during Level-3.1 were also updated, now better showing the storage terms (gap-filled and non-gap-filled) and
-  the flag indicating filled values (
+  expanding time window. Testing showed that the (single point) storage term is missing for between 2-3% of the data,
+  which I think is reason enough to make filling these gaps the default option. Previously, it was optional to fill the
+  gaps using random forest, however, results were not great since only the timestamp info was used as model features.
+  Plots generated during Level-3.1 were also updated, now better showing the storage terms (gap-filled and
+  non-gap-filled) and the flag indicating filled values (
   `diive.pkgs.fluxprocessingchain.level31_storagecorrection.FluxStorageCorrectionSinglePointEddyPro`)
 
 ### Notebooks
