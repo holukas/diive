@@ -12,6 +12,14 @@ diive.pkgs.outlierdetection.absolutelimits module
    :undoc-members:
    :show-inheritance:
 
+diive.pkgs.outlierdetection.hampel module
+-----------------------------------------
+
+.. automodule:: diive.pkgs.outlierdetection.hampel
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 diive.pkgs.outlierdetection.incremental module
 ----------------------------------------------
 
@@ -48,6 +56,14 @@ diive.pkgs.outlierdetection.stepwiseoutlierdetection module
 -----------------------------------------------------------
 
 .. automodule:: diive.pkgs.outlierdetection.stepwiseoutlierdetection
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+diive.pkgs.outlierdetection.trim module
+---------------------------------------
+
+.. automodule:: diive.pkgs.outlierdetection.trim
    :members:
    :undoc-members:
    :show-inheritance:

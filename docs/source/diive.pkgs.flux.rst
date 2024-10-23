@@ -36,18 +36,18 @@ diive.pkgs.flux.criticalheatdays module
    :undoc-members:
    :show-inheritance:
 
-diive.pkgs.flux.uncertainty module
-----------------------------------
+diive.pkgs.flux.hqflux module
+-----------------------------
 
-.. automodule:: diive.pkgs.flux.uncertainty
+.. automodule:: diive.pkgs.flux.hqflux
    :members:
    :undoc-members:
    :show-inheritance:
 
-diive.pkgs.flux.ustar\_detection module
----------------------------------------
+diive.pkgs.flux.uncertainty module
+----------------------------------
 
-.. automodule:: diive.pkgs.flux.ustar_detection
+.. automodule:: diive.pkgs.flux.uncertainty
    :members:
    :undoc-members:
    :show-inheritance:

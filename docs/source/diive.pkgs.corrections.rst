@@ -4,6 +4,14 @@ diive.pkgs.corrections package
 Submodules
 ----------
 
+diive.pkgs.corrections.measurementoffset module
+-----------------------------------------------
+
+.. automodule:: diive.pkgs.corrections.measurementoffset
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 diive.pkgs.corrections.offsetcorrection module
 ----------------------------------------------
 

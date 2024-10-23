@@ -28,10 +28,26 @@ diive.core.plotting.cumulative module
    :undoc-members:
    :show-inheritance:
 
+diive.core.plotting.dielcycle module
+------------------------------------
+
+.. automodule:: diive.core.plotting.dielcycle
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 diive.core.plotting.fitplot module
 ----------------------------------
 
 .. automodule:: diive.core.plotting.fitplot
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+diive.core.plotting.heatmap\_base module
+----------------------------------------
+
+.. automodule:: diive.core.plotting.heatmap_base
    :members:
    :undoc-members:
    :show-inheritance:
@@ -48,6 +64,22 @@ diive.core.plotting.heatmap\_xyz module
 ---------------------------------------
 
 .. automodule:: diive.core.plotting.heatmap_xyz
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+diive.core.plotting.histogram module
+------------------------------------
+
+.. automodule:: diive.core.plotting.histogram
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+diive.core.plotting.outlier\_dtnt module
+----------------------------------------
+
+.. automodule:: diive.core.plotting.outlier_dtnt
    :members:
    :undoc-members:
    :show-inheritance:
