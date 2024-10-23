@@ -4,22 +4,6 @@ diive.core.utils package
 Submodules
 ----------
 
-diive.core.utils.dirs module
-----------------------------
-
-.. automodule:: diive.core.utils.dirs
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-diive.core.utils.insert module
-------------------------------
-
-.. automodule:: diive.core.utils.insert
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 diive.core.utils.prints module
 ------------------------------
 

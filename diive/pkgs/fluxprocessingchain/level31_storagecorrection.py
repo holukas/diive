@@ -57,11 +57,20 @@ class FluxStorageCorrectionSinglePointEddyPro:
         print(f"The original, non-gapfilled storage term was available for "
               f"{n_storageterm} records ({self.strgcol}).")
 
-        n_missing = n_flux - n_storageterm
-        print(f"This means that the storage term {self.strgcol} is missing for "
-              f"{n_missing} measured flux ({self.fluxcol}) records.")
-        print(f"Without gap-filling the storage term {self.strgcol}, "
-              f"{n_missing} measured flux records ({self.fluxcol}) are lost.")
+        # Generate temporary subset where all flux values are available and check for missing storage
+        _subset = pd.concat([self.results[self.fluxcol], self.results[self.strgcol]], axis=1)
+        _subset = _subset.dropna(subset=[self.fluxcol])
+        n_orig_missing_strg = _subset[self.strgcol].isnull().sum()
+        print(f"The original storage term {self.strgcol} was missing for {n_orig_missing_strg} "
+              f"flux records.")
+        print(f"Without gap-filling the storage term ({self.strgcol}), "
+              f"{n_orig_missing_strg} measured flux records ({self.fluxcol}) are lost.")
+
+        if (n_storageterm > n_flux) & (n_orig_missing_strg > 0):
+            print(f"NOTE: There were more values available for storage term {self.strgcol} "
+                  f"than for flux {self.fluxcol}.\n"
+                  f"However, for {n_orig_missing_strg} flux records "
+                  f"no concurrent storage terms were available.")
 
         if self.gapfilled_strgcol:
             print(f"\nFor this run, gap-filling of {self.strgcol} was * SELECTED *.")
@@ -69,16 +78,18 @@ class FluxStorageCorrectionSinglePointEddyPro:
             locs_fluxmissing = self.results[self.fluxcol].isnull()
             fluxavailable = self.results[~locs_fluxmissing].copy()
             locs_isfilled = fluxavailable[self.flag_isgapfilled] == 1
+            locs_isorig = fluxavailable[self.flag_isgapfilled] == 0
             n_isfilled = len(fluxavailable[locs_isfilled])  # Filled storage terms for available fluxes
+            n_isorig = len(fluxavailable[locs_isorig])  # Filled storage terms for available fluxes
             print(f"After gap-filling the storage term, it was available for an additional "
                   f"{n_isfilled} records ({self.gapfilled_strgcol}).")
 
-            perc1 = (n_storageterm / n_flux) * 100
-            perc2 = (n_missing / n_flux) * 100
+            perc1 = (n_isorig / n_flux) * 100
+            perc2 = (n_orig_missing_strg / n_flux) * 100
             n_flux_corrected = self.results[self.flux_corrected_col].dropna().count()
             print(f"\nIn the storage-corrected flux {self.flux_corrected_col} with {n_flux_corrected} records, "
                   f"\n  - {perc1:.1f}% ({n_storageterm} records) of used storage terms come from originally calculated data ({self.strgcol})"
-                  f"\n  - {perc2:.1f}% ({n_missing} records) of used storage terms come from gap-filled data ({self.gapfilled_strgcol})")
+                  f"\n  - {perc2:.1f}% ({n_orig_missing_strg} records) of used storage terms come from gap-filled data ({self.gapfilled_strgcol})")
 
             filledstats = sstats(fluxavailable[locs_isfilled][self.gapfilled_strgcol])
             print(f"\nStats for gap-filled storage terms:"
@@ -99,7 +110,7 @@ class FluxStorageCorrectionSinglePointEddyPro:
         """
 
         # New columns
-        self.gapfilled_strgcol = f"{self.strgcol}_gfRMEAN{self.idstr}"
+        self.gapfilled_strgcol = f"{self.strgcol}_gfRMED{self.idstr}"
         self.flag_isgapfilled = f"FLAG_{self.gapfilled_strgcol}_ISFILLED"
 
         # Generate temporary subset where all flux values are available and check for missing storage
@@ -114,13 +125,13 @@ class FluxStorageCorrectionSinglePointEddyPro:
         window_size = 0
         while n_still_missing_strg > 0:
             window_size = 3 if window_size == 0 else window_size + 2
-            rmean = self.results[self.strgcol].rolling(window=window_size, center=True, min_periods=3).mean()
+            rmedian = self.results[self.strgcol].rolling(window=window_size, center=True, min_periods=3).median()
             locs = gapfilled_df[self.gapfilled_strgcol].isnull()
-            gapfilled_df.loc[locs, self.gapfilled_strgcol] = rmean
+            gapfilled_df.loc[locs, self.gapfilled_strgcol] = rmedian
             gapfilled_df.loc[locs, self.flag_isgapfilled] = 1
             n_still_missing_strg = gapfilled_df[self.gapfilled_strgcol].isnull().sum()
             print(f"Gap-filling storage-term {self.strgcol} "
-                  f"with rolling mean (window size = {window_size} records) ...")
+                  f"with rolling median (window size = {window_size} records) ...")
             print(f"Missing values for storage term {self.gapfilled_strgcol}: {n_still_missing_strg}")
 
         gapfilled_df = gapfilled_df[[self.gapfilled_strgcol, self.flag_isgapfilled]].copy()
@@ -229,18 +240,17 @@ class FluxStorageCorrectionSinglePointEddyPro:
 
 
 def example():
-    # Load data from pickle (much faster loading)
-    from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
-    df, _ = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
-    s = FluxStorageCorrectionSinglePointEddyPro(df=df, fluxcol='FC')
-    s.storage_correction()
-    # s.showplot(maxflux=20)
-    # print(s.storage)
-    s.report()
-
-    df = s.addresults()
-
-    # [print(c) for c in df.columns if "TAU" in c]
+    pass
+    # # Load data from pickle (much faster loading)
+    # from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
+    # df, _ = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
+    # s = FluxStorageCorrectionSinglePointEddyPro(df=df, fluxcol='FC')
+    # s.storage_correction()
+    # # s.showplot(maxflux=20)
+    # # print(s.storage)
+    # s.report()
+    # # df = s.addresults()
+    # # [print(c) for c in df.columns if "TAU" in c]
 
 
 if __name__ == '__main__':

@@ -438,7 +438,8 @@ def example():
 
     # Restrict data for testing
     from diive.core.dfun.frames import df_between_two_dates
-    data_df = df_between_two_dates(df=data_df, start_date='2022-06-01', end_date='2022-12-03').copy()
+    data_df = df_between_two_dates(df=data_df, start_date='2022-06-01', end_date='2022-07-01').copy()
+    # data_df = df_between_two_dates(df=data_df, start_date='2022-06-01', end_date='2022-12-03').copy()
 
     # Subset
     subset = data_df[['NEE_CUT_REF_orig', 'NEE_CUT_REF_f', 'NEE_CUT_16_f', 'NEE_CUT_84_f',

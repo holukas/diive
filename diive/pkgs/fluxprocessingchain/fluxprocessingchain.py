@@ -925,14 +925,21 @@ def example():
     # Source data
     from pathlib import Path
     from diive.core.io.files import load_parquet
-    SOURCEDIR = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_cha_fp2024_2005-2023\40_FLUXES_L1_IRGA+QCL+LGR_mergeData"
-    FILENAME = r"41.1_CH-CHA_IRGA_LGR+QCL_Level-1_eddypro_fluxnet_2005-2023_meteo7.parquet"
-    FILEPATH = Path(SOURCEDIR) / FILENAME
-    maindf = load_parquet(filepath=FILEPATH)
-    locs = (maindf.index.year >= 2019) & (maindf.index.year <= 2023)
+    # SOURCEDIR = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_cha_fp2024_2005-2023\50_FluxProcessingChain"
+    # FILENAME = r"51.1_FluxProcessingChain_after-L3.3_NEE.parquet"
+    # FILEPATH = Path(SOURCEDIR) / FILENAME
+    # maindf = load_parquet(filepath=FILEPATH)
+    SOURCEDIRS = [r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_das_2023"]
+    ep = LoadEddyProOutputFiles(sourcedir=SOURCEDIRS, filetype='EDDYPRO-FLUXNET-CSV-30MIN')
+    ep.searchfiles()
+    ep.loadfiles()
+    maindf = ep.maindf
+    metadata = ep.metadata
+
+    # locs = (maindf.index.year >= 2019) & (maindf.index.year <= 2023)
     # locs = (maindf.index.year >= 2021) & (maindf.index.year <= 2023)
-    maindf = maindf.loc[locs, :].copy()
-    metadata = None
+    # maindf = maindf.loc[locs, :].copy()
+    # metadata = None
     # print(maindf)
 
     # import matplotlib.pyplot as plt
@@ -956,8 +963,9 @@ def example():
     # plt.show()
 
     # Flux processing chain settings
+    FLUXVAR = "LE"
     # FLUXVAR = "H"
-    FLUXVAR = "FC"
+    # FLUXVAR = "FC"
     SITE_LAT = 47.210227
     SITE_LON = 8.410645
     UTC_OFFSET = 1
@@ -1037,9 +1045,8 @@ def example():
     fpc.level2_quality_flag_expansion(**LEVEL2_SETTINGS)
     fpc.finalize_level2()
     # fpc.level2_qcf.showplot_qcf_heatmaps()
-    fpc.level2_qcf.report_qcf_evolution()
+    # fpc.level2_qcf.report_qcf_evolution()
     # fpc.level2_qcf.analyze_highest_quality_flux()
-
     # fpc.level2_qcf.report_qcf_flags()
     # fpc.level2.results
     # fpc.fpc_df
