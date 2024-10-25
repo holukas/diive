@@ -2,6 +2,34 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.83.2 | 25 Oct 2024
+
+From now on Python version `3.11.10` is used for developing Python (up to now, version `3.9` was used). All unittests
+were successfully executed with this new Python version. In addition, all notebooks were re-run, all looked good.
+
+[JupyterLab](https://jupyterlab.readthedocs.io/en/4.2.x/index.html) is now included in the environment, which makes it
+easier to quickly install `diive` (`pip install diive`) in an environment and directly use its notebooks, without the
+need to install JupyterLab separately.
+
+### Environment
+
+- `diive` will now be developed using Python version `3.11.10`
+- Added [JupyterLab](https://jupyterlab.readthedocs.io/en/4.2.x/index.html)
+- Added [jupyter bokeh](https://github.com/bokeh/jupyter_bokeh)
+
+## Notebooks
+
+- All notebooks were re-run and updated using Python version `3.11.10`
+
+## Tests
+
+- 50/50 unittests ran successfully with Python version `3.11.10`
+
+## Changes
+
+- Adjusted flags check in QCF flag report, the progressive flag must be the same as the previously calculated overall
+  flag (`diive.pkgs.qaqc.qcf.FlagQCF.report_qcf_evolution`)
+
 ## v0.83.1 | 23 Oct 2024
 
 ## Changes

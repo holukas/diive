@@ -191,11 +191,7 @@ One way to install and use `diive` with a specific Python version on a local mac
 
 - Install [miniconda](https://docs.conda.io/en/latest/miniconda.html)
 - Start `miniconda` prompt
-- Create a environment named `diive-env` that contains Python 3.9.7: `conda create --name diive-env python=3.9.7`
+- Create a environment named `diive-env` that contains Python 3.11: `conda create --name diive-env python=3.11`
 - Activate the new environment: `conda activate diive-env`
 - Install `diive` using pip: `pip install diive`
-- If you want to use `diive` in Jupyter notebooks, you can install Jupyterlab.
-  In this example Jupyterlab is installed from the `conda` distribution channel `conda-forge`:
-  `conda install -c conda-forge jupyterlab`
-- If used in Jupyter notebooks, `diive` can generate dynamic plots. This requires the installation of:
-  `conda install -c bokeh jupyter_bokeh`
+- To start JupyterLab type `jupyter lab` in the prompt
