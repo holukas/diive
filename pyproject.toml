@@ -29,8 +29,8 @@ sktime = ">=0.32.1"
 category-encoders = ">=2.6.3"
 scikit-optimize = ">=0.10.2"
 polars = ">=1.8.1"
-jupyterlab = "^4.2.5"
-jupyter-bokeh = "^4.0.5"
+jupyterlab = ">=4.2.5"
+jupyter-bokeh = ">=4.0.5"
 
 [tool.poetry.group.dev.dependencies]
 dbc-influxdb = { path = "../../22 - POET/dbc-influxdb", develop = true }
