@@ -7,6 +7,8 @@ QCF - OVERALL QUALITY CONTROL FLAG
 Combine multiple flags in one single QCF flag.
 
 """
+from cmath import isnan
+
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
@@ -191,6 +193,7 @@ class FlagQCF:
         n_flag0 = 0
         perc_flag2 = 0
         n_vals = len(allflags_df)
+        prog_df = pd.DataFrame()
         print(f"\nNumber of {self.series.name} records before QC: {n_vals}")
         for ix_last_test in range(1, n_tests):
             prog_testcols = flagcols[ix_first_test:ix_last_test]
@@ -204,6 +207,7 @@ class FlagQCF:
             n_flag0 = prog_df[self.flagqcfcol].loc[prog_df[self.flagqcfcol] == 0].count()
             n_flag1 = prog_df[self.flagqcfcol].loc[prog_df[self.flagqcfcol] == 1].count()
             n_flag2 = prog_df[self.flagqcfcol].loc[prog_df[self.flagqcfcol] == 2].count()
+
 
             # Calculate some flag stats
             n_vals_test_rejected = n_flag2 - n_vals_total_rejected
@@ -221,11 +225,20 @@ class FlagQCF:
             n_vals_total_rejected = n_flag2
 
         # Compare last overall flag from evolution with previously calculated overall flag
-        countflags = dict(Counter(self.flags[self.flagqcfcol]))
-        n_missing = self.series.isnull().sum()
-        c = True if (countflags[2] - n_missing) == n_flag2 else False
-        b = True if countflags[1] == n_flag1 else False
-        a = True if countflags[0] == n_flag0 else False
+        # Progressive flag must be the same as previously calculated overall flag
+        _is_equal = prog_df[self.flagqcfcol].equals(self.flags[self.flagqcfcol][~ix_missing_vals])
+        _checkdf = self.flags[self.flagqcfcol][~ix_missing_vals]
+        _n_flag0 = _checkdf.loc[_checkdf == 0].count()
+        _n_flag1 = _checkdf.loc[_checkdf == 1].count()
+        _n_flag2 = _checkdf.loc[_checkdf == 2].count()
+        a = True if n_flag0 == _n_flag0 else False
+        b = True if n_flag1 == _n_flag1 else False
+        c = True if n_flag2 == _n_flag2 else False
+        # countflags = dict(Counter(self.flags[self.flagqcfcol]))
+        # n_missing = self.series.isnull().sum()
+        # c = True if (countflags[2] - n_missing) == n_flag2 else False
+        # b = True if countflags[1] == n_flag1 else False
+        # a = True if countflags[0] == n_flag0 else False
         if not all([a, b, c]):
             raise ValueError("(!)Results from QCF evolution are different from the previously "
                              "calculated overall flag.")
