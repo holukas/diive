@@ -832,7 +832,7 @@ class QuickFluxProcessingChain:
         self.fpc.level32_qcf.report_qcf_series()
 
     def _run_level31(self):
-        self.fpc.level31_storage_correction(gapfill_storage_term=False)
+        self.fpc.level31_storage_correction(gapfill_storage_term=True)
         self.fpc.finalize_level31()
         # fpc.level31.showplot(maxflux=50)
         self.fpc.level31.report()
@@ -911,7 +911,7 @@ class QuickFluxProcessingChain:
 def example_quick():
     QuickFluxProcessingChain(
         fluxvars=['FC', 'LE', 'H'],
-        sourcedirs=[r'L:\Sync\luhk_work\CURRENT\fru\Level-1_results_fluxnet_2022'],
+        sourcedirs=[r'L:\Sync\luhk_work\TMP'],
         site_lat=47.115833,
         site_lon=8.537778,
         utc_offset=1,
@@ -1567,6 +1567,6 @@ def example_cumu():
 
 
 if __name__ == '__main__':
-    # example_quick()
-    example()
+    example_quick()
+    # example()
     # example_cumu()
