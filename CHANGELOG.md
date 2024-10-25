@@ -17,15 +17,15 @@ need to install JupyterLab separately.
 - Added [JupyterLab](https://jupyterlab.readthedocs.io/en/4.2.x/index.html)
 - Added [jupyter bokeh](https://github.com/bokeh/jupyter_bokeh)
 
-## Notebooks
+### Notebooks
 
 - All notebooks were re-run and updated using Python version `3.11.10`
 
-## Tests
+### Tests
 
 - 50/50 unittests ran successfully with Python version `3.11.10`
 
-## Changes
+### Changes
 
 - Adjusted flags check in QCF flag report, the progressive flag must be the same as the previously calculated overall
   flag (`diive.pkgs.qaqc.qcf.FlagQCF.report_qcf_evolution`)
