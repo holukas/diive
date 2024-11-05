@@ -2,6 +2,11 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.84.0 | XX Nov 2024
+
+- (`diive.pkgs.fits.fitter.BinFitterCP`)
+- (`diive.pkgs.analyses.optimumrange.FindOptimumRange`)
+
 ## v0.83.2 | 25 Oct 2024
 
 From now on Python version `3.11.10` is used for developing Python (up to now, version `3.9` was used). All unittests

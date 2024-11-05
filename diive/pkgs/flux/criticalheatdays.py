@@ -13,7 +13,7 @@ from diive.core.plotting.heatmap_xyz import HeatmapPivotXYZ
 from diive.core.plotting.plotfuncs import default_format, save_fig
 from diive.core.plotting.styles.LightTheme import COLOR_NEP, FONTSIZE_LEGEND
 from diive.pkgs.analyses.quantilexyaggz import QuantileXYAggZ
-from diive.pkgs.fits.fitter import QuadraticFit
+from diive.pkgs.fits._fitter import QuadraticFit
 
 
 class FluxCriticalHeatDaysP95:
