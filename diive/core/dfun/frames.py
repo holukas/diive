@@ -14,6 +14,7 @@ from pandas import DataFrame, MultiIndex
 from pandas import Series
 from pandas._libs.tslibs import to_offset
 
+from diive.core.funcs.funcs import find_duplicates_in_list
 from diive.core.times.times import current_time_microseconds_str
 # from diive.core.times.times import timedelta_to_string
 from diive.pkgs.gapfilling.interpolate import linear_interpolation
@@ -50,6 +51,16 @@ def compare_len_header_vs_data(n_cols_data: int, n_cols_header: int, varnames_li
             generated_missing_header_cols_list.append(missing_col)
             varnames_list.append(missing_col)
             varunits_list.append('[-unknown-]')
+
+    # Check column names for duplicates, add suffix if necessary
+    duplicate_varnames = find_duplicates_in_list(varnames_list)
+    if len(duplicate_varnames) > 0:
+        new_varnames_list = []
+        for i, v in enumerate(varnames_list):
+            totalcount = varnames_list.count(v)
+            count = varnames_list[:i].count(v)
+            new_varnames_list.append(f"{v}_{str(count + 1)}" if totalcount > 1 else v)
+        varnames_list = new_varnames_list.copy()
 
     return varnames_list, varunits_list, generated_missing_header_cols_list
 
@@ -130,7 +141,7 @@ def aggregated_as_hires(aggregate_series: Series,
     # lowres_df = lowres_df.backfill()
     # lowres_df = lowres_df.ffill()
 
-        # lowres_df.interpolate(limit=1)
+    # lowres_df.interpolate(limit=1)
     # todo here linear interpolation with gap length limit
 
     # Input data
