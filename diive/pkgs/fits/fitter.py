@@ -1,19 +1,3 @@
-"""
-Fit with CI and PI
-
-CI ... confidence interval
-PI ... prediction interval
-
-- https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.PolynomialFeatures.html
-- https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.Polynomial.fit.html#numpy.polynomial.polynomial.Polynomial.fit
-- https://numpy.org/doc/stable/reference/generated/numpy.polyfit.html
-- https://towardsdatascience.com/calculating-confidence-interval-with-bootstrapping-872c657c058d
-- https://lmfit.github.io/lmfit-py/
-- **https://apmonitor.com/che263/index.php/Main/PythonRegressionStatistics**
-- https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.curve_fit.html
-
-"""
-from pathlib import Path
 from typing import Literal
 
 import matplotlib.gridspec as gridspec
@@ -21,243 +5,68 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import uncertainties as unc
-import uncertainties.unumpy as unp
-from matplotlib.legend_handler import HandlerTuple
-from pandas import DataFrame
 from scipy import stats
 from scipy.optimize import curve_fit
+from uncertainties import unumpy as unp
 
-from diive.core.dfun.stats import q25, q75
-from diive.core.plotting.plotfuncs import save_fig, default_format, add_zeroline_y
-from diive.core.plotting.styles.LightTheme import FONTSIZE_LEGEND
-
-
-
-class PlotBinFitterBTS:
-
-    def __init__(self,
-                 fit_results: dict,
-                 ax,
-                 xlabel: str = None,
-                 ylabel: str = None,
-                 highlight_year: int = None,
-                 color: str = 'none',
-                 color_fitline: str = '#4CAF50',
-                 label: str = 'label',
-                 edgecolor: str = '#B0BEC5',
-                 marker: str = 'o',
-                 alpha: float = .9,
-                 showfit: bool = True,
-                 show_prediction_interval: bool = True,
-                 size_scatter: int = 60,
-                 fit_type: str = 'quadratic'
-                 ):
-        self.fit_results = fit_results
-        self.ax = ax
-        self.xlabel = xlabel
-        self.ylabel = ylabel
-        self.highlight_year = highlight_year
-        self.color = color
-        self.color_fitline = color_fitline
-        self.label = label
-        self.edgecolor = edgecolor
-        self.marker = marker
-        self.alpha = alpha
-        self.showfit = showfit
-        self.show_prediction_interval = show_prediction_interval
-        self.size_scatter = size_scatter
-        self.fit_type = fit_type
-
-    def plot_binfitter(self):
-        # Data
-        xdata = self.fit_results['x']
-        ydata = self.fit_results['y']
-
-        # Plot data
-        _label = self._plot_setlabel(label=self.label)
-        line_xy = self.ax.scatter(xdata, ydata,
-                                  edgecolor=self.edgecolor, color=self.color, alpha=self.alpha,
-                                  s=self.size_scatter, label=_label, zorder=1, marker=self.marker)
-
-        # Highlight year
-        line_highlight = None
-        if self.highlight_year:
-            line_highlight = self._plot_highlight_year(ax=self.ax, highlight_year=self.highlight_year,
-                                                       marker=self.marker,
-                                                       label=self.label)
-
-        # Fit and confidence intervals
-        line_fit = line_fit_ci = None
-        line_fit_pb = None
-        if self.showfit:
-            line_fit = self._plot_fit(ax=self.ax, fit_type=self.fit_type, color_fitline=self.color_fitline)
-            line_fit_ci = self._plot_fit_ci(ax=self.ax, color_fitline=self.color_fitline)
-
-        # Prediction bands
-        if self.show_prediction_interval:
-            line_fit_pb = self._plot_fit_pi(ax=self.ax, color_fitline=self.color_fitline)
-
-        # Format
-        default_format(ax=self.ax, ax_xlabel_txt=self.xlabel, ax_ylabel_txt=self.ylabel)
-        add_zeroline_y(ax=self.ax, data=ydata)
-
-        # return line_xy, line_fit, line_fit_ci, line_fit_pb, line_highlight
-
-        # def _plot_custom_legend(self, ax, ):
-        # Custom legend
-        # Assign two of the handles to the same legend entry by putting them in a tuple
-        # and using a generic handler map (which would be used for any additional
-        # tuples of handles like (p1, p3)).
-        # https://matplotlib.org/stable/gallery/text_labels_and_annotations/legend_demo.html
-        l = self.ax.legend(
-            [
-                # line_crd_vertical if showline_crd else None,
-                # range_bts_netzeroflux if showrange_crd else None,
-                # line_xcrd_vertical if showline_xcrd else None,
-                line_xy,
-                line_highlight if line_highlight else None,
-                line_fit if self.showfit else None,
-                line_fit_ci if self.showfit else None,
-                line_fit_pb if self.show_prediction_interval else None
-            ],
-            [
-                # line_crd_vertical.get_label() if showline_crd else None,
-                # range_bts_netzeroflux.get_label() if showrange_crd else None,
-                # line_xcrd_vertical.get_label() if showline_xcrd else None,
-                line_xy.get_label(),
-                line_highlight.get_label() if line_highlight else None,
-                line_fit.get_label() if self.showfit else None,
-                line_fit_ci.get_label() if self.showfit else None,
-                line_fit_pb.get_label() if self.show_prediction_interval else None
-            ],
-            bbox_to_anchor=(0, 1),
-            frameon=False,
-            fontsize=FONTSIZE_LEGEND,
-            loc="lower left",
-            ncol=2,
-            scatterpoints=1,
-            numpoints=1,
-            handler_map={tuple: HandlerTuple(ndivide=None)})
-
-        return self.ax, line_xy, line_highlight, line_fit, line_fit_ci, line_fit_pb
-
-    def _plot_highlight_year(self, ax, highlight_year, label, marker):
-        _subset_year = pd.DataFrame()
-        _subset_year['x'] = self.fit_results['x']
-        _subset_year['y'] = self.fit_results['y']
-        _subset_year.index = pd.to_datetime(_subset_year.index)
-        _subset_year = _subset_year.loc[_subset_year.index.year == highlight_year, :]
-        _numvals_y = len(_subset_year['y'])
-        line_highlight = ax.scatter(_subset_year['x'],
-                                    _subset_year['y'],
-                                    edgecolor='#455A64', color='#FFD54F',  # amber 300
-                                    alpha=1, s=100,
-                                    label=f"{label} {highlight_year} ({_numvals_y} values)",
-                                    zorder=98, marker=marker)
-        return line_highlight
-
-    def _plot_setlabel(self, label):
-        # x/y
-        _numvals_y = len(self.fit_results['y'])
-        try:
-            # Add year info to label, if available
-            _startyear_y = self.fit_results['y'].index.year[0]
-            _endyear_y = self.fit_results['y'].index.year[-1]
-            label = f"{label} {_startyear_y}-{_endyear_y} ({_numvals_y} values)"
-        except AttributeError:
-            label = label
-        return label
-
-    def _plot_fit_ci(self, ax, color_fitline):
-        # Fit confidence region
-        # Uncertainty lines (95% confidence)
-        line_fit_ci = ax.fill_between(self.fit_results['fit_df']['fit_x'],
-                                      self.fit_results['fit_df']['nom_lower_ci95'],
-                                      self.fit_results['fit_df']['nom_upper_ci95'],
-                                      alpha=.2, color=color_fitline, zorder=97,
-                                      label="95% confidence region")
-        return line_fit_ci
-
-    def _plot_fit_pi(self, ax, color_fitline):
-        # Fit prediction interval
-        # Lower prediction band (95% confidence)
-        ax.plot(self.fit_results['fit_df']['fit_x'],
-                self.fit_results['fit_df']['lower_predband'],
-                color=color_fitline, ls='--', zorder=97, lw=2,
-                label="95% prediction interval")
-        ax.fill_between(self.fit_results['fit_df']['fit_x'],
-                        self.fit_results['fit_df']['bts_lower_predband_Q97.5'],
-                        self.fit_results['fit_df']['bts_lower_predband_Q02.5'],
-                        alpha=.2, color=color_fitline, zorder=97,
-                        label="95% confidence region")
-        # Upper prediction band (95% confidence)
-        line_fit_pb, = ax.plot(self.fit_results['fit_df']['fit_x'],
-                               self.fit_results['fit_df']['upper_predband'],
-                               color=color_fitline, ls='--', zorder=96, lw=2,
-                               label="95% prediction interval")
-        ax.fill_between(self.fit_results['fit_df']['fit_x'],
-                        self.fit_results['fit_df']['bts_upper_predband_Q97.5'],
-                        self.fit_results['fit_df']['bts_upper_predband_Q02.5'],
-                        alpha=.2, color=color_fitline, zorder=97,
-                        label="95% confidence region")
-        return line_fit_pb
-
-    def _plot_fit(self, ax, fit_type, color_fitline):
-        a = self.fit_results['fit_params_opt'][0]
-        b = self.fit_results['fit_params_opt'][1]
-        operator1 = "+" if b > 0 else ""
-        label_fit = None
-        if fit_type == 'linear':
-            label_fit = rf"$y = {a:.4f}x{operator1}{b:.4f}$"
-        elif fit_type == 'quadratic':
-            c = self.fit_results['fit_params_opt'][2]
-            operator2 = "+" if c > 0 else ""
-            label_fit = rf"$y = {a:.4f}x^2{operator1}{b:.4f}x{operator2}{c:.4f}$"
-        line_fit, = ax.plot(self.fit_results['fit_df']['fit_x'],
-                            self.fit_results['fit_df']['nom'],
-                            c=color_fitline, lw=3, zorder=99, alpha=1, label=label_fit)
-        return line_fit
+from diive.core.dfun.fits import groupagg
+from diive.core.plotting.plotfuncs import default_legend, default_format, add_zeroline_y
 
 
-class QuadraticFit:
-    """Fit function to (binned) data and give CI and bootstrapped PI"""
+class BinFitterCP:
 
-    def __init__(self,
-                 df: pd.DataFrame,
-                 xcol: str or tuple,
-                 ycol: str or tuple,
-                 predict_max_x: float = None,
-                 predict_min_x: float = None,
-                 n_predictions: int = None,
-                 ):
-        self.df = df[[xcol, ycol]].copy().dropna()  # Remove NaNs, working data
+    def __init__(
+            self,
+            df: pd.DataFrame,
+            xcol: str or tuple,
+            ycol: str or tuple,
+            predict_max_x: float = None,
+            predict_min_x: float = None,
+            n_predictions: int = 1000,
+            n_bins_x: int = 10,
+            bins_y_agg: Literal['mean', 'median'] = 'mean',
+            fit_type: Literal['linear', 'quadratic_offset', 'quadratic', 'cubic'] = 'quadratic_offset'
+    ):
+        """Fit function to binned data and give CI and bootstrapped PI.
+
+        Args:
+            df: Dataframe with data for variables *xcol* and *ycol*.
+            xcol: Variable name in *df*, will be used for creating *n_bins_x* number of bins.
+            ycol: Variable name in *df*, will be aggregated in x-bins using method *bins_y_agg*.
+            predict_max_x: Maximum x to predict y.
+            predict_min_x: Minimum x to predict y.
+            n_predictions: Number of predictions, e.g. 1000 means y will be predicted for 1000 x-values.
+            n_bins_x: Number of bins for y-aggregation. Bins are equally-sized, based on variable defined in *xcol*.
+            bins_y_agg: Aggregation type for y in each x-bin. Options: 'mean', 'median'
+            fit_type: Fit type to fit to the bins. Options: 'linear', 'quadratic_offset', 'quadratic', 'cubic'
+        """
+        self.df = df[[xcol, ycol]].dropna()  # Remove NaNs, working data
         self.xcol = xcol
         self.ycol = ycol
-        self.x = self.df[self.xcol].copy()
-        self.y = self.df[self.ycol].copy()
+        self.x = self.df[self.xcol]
+        self.y = self.df[self.ycol]
+        self.len_y = len(self.y)
+        self.bins_y_agg = bins_y_agg
         self.n_predictions = n_predictions
-        self.fit_x_max = predict_max_x if isinstance(predict_max_x, float) else self.x.max()
-        self.fit_x_min = predict_min_x if isinstance(predict_min_x, float) else self.x.min()
+        self.usebins = n_bins_x if n_bins_x >= 0 else 0  # Must be positive
+        # self.fit_x_max = predict_max_x if isinstance(predict_max_x, float) else self.x.max()
+        # self.fit_x_min = predict_min_x if isinstance(predict_min_x, float) else self.x.min()
         self.n_predictions = n_predictions if isinstance(n_predictions, int) else len(self.x)
         self.n_predictions = 2 if self.n_predictions < 2 else self.n_predictions
 
-        self.equation = self._fit_quadratic
+        self.equation = self._set_fit_equation(eqtype=fit_type)
+        self.fit_type = fit_type
 
-        self._fit_results = {}  # Stores fit results
+        self.fit_results = {}  # Stores fit results
 
-    @property
-    def fit_results(self) -> dict:
-        if not self._fit_results:
-            raise Exception('Fit results not available.')
-        return self._fit_results
-
-    def fit(self):
-        self._fit_results = self._fit(df=self.df.copy())
+    def run(self):
+        self.fit_results = self._fit()
 
     def get_results(self):
-        return self._fit_results
+        return self.fit_results
 
-    def _predband(self, px, x, y, params_opt, func, conf=0.95):
+    @staticmethod
+    def _predband(px, x, y, params_opt, func, conf=0.95):
         """Prediction band"""
         # px = requested points, x = x data, y = y data, params_opt = parameters, func = function name
         alpha = 1.0 - conf  # significance
@@ -272,48 +81,110 @@ class QuadraticFit:
         lpb, upb = yp - dy, yp + dy  # Upper & lower prediction bands.
         return lpb, upb
 
-    @staticmethod
-    def _fit_quadratic(x, a, b, c):
+    def _set_fit_equation(self, eqtype: str = 'quadratic_offset'):
+        if eqtype == 'quadratic_offset':
+            equation = self._fit_quadratic_offset
+        elif eqtype == 'quadratic':
+            equation = self._fit_quadratic
+        elif eqtype == 'cubic':
+            equation = self._fit_cubic
+        elif eqtype == 'linear':
+            equation = self._fit_linear
+        else:
+            equation = self._fit_quadratic_offset
+        return equation
+
+    def _fit_linear(self, x, a, b):
+        """Linear fit"""
+        return a * x + b
+
+    def _fit_quadratic_offset(self, x, a, b, c):
         """Quadratic equation"""
         return a * x ** 2 + b * x + c
 
+    def _fit_cubic(self, x, a, b, c, d):
+        """Cubic equation"""
+        # ax3+bx2+cx+d = 0
+        return a * x ** 3 + b * x ** 2 + c * x + d
+
+    def _fit_quadratic(self, x, a, b):
+        """Quadratic equation"""
+        return a * x ** 2 + b * x
+
     def _set_fit_data(self, df):
         # Bin data
-        _df = df.copy()
-        x = self.x
-        y = self.y
-        return _df, x, y
+        n_vals_per_bin = {}
+        if self.usebins == 0:
+            _df = df.copy()
+            x = self.x
+            y = self.y
+            len_y = len(y)
+            n_vals_per_bin['min'] = len_y
+            n_vals_per_bin['max'] = len_y
+        else:
+            _df = groupagg(df=df, num_bins=self.usebins, bin_col=self.xcol)
+            x = _df[self.xcol][self.bins_y_agg]
+            y = _df[self.ycol][self.bins_y_agg]
+            len_y = len(self.y)
+            n_vals_per_bin = \
+                _df[self.ycol]['count'].describe()[['min', 'max']].to_dict()
+        return _df, x, y, len_y, n_vals_per_bin
 
-    def _fit(self, df):
+    def _fit(self):
         """Calculate curve fit, confidence intervals and prediction bands
 
         kudos: https://apmonitor.com/che263/index.php/Main/PythonRegressionStatistics
         """
 
-        df, x, y = self._set_fit_data(df=df)
+        df, x, y, len_y, n_vals_per_bin = self._set_fit_data(df=self.df)
 
         # Fit function f to data
         fit_params_opt, fit_params_cov = curve_fit(self.equation, x, y)
 
-        # Retrieve parameter values
         a = fit_params_opt[0]
         b = fit_params_opt[1]
-        c = fit_params_opt[2]
+        operator1 = "+" if b > 0 else ""
+
+        fit_equation_str = None
+        kwargs = None
+        fit_x = np.linspace(x.min(), x.max(), self.n_predictions)
+        fit_y = None
+
+        if self.fit_type == 'linear':
+            fit_equation_str = rf"y = {a:.4f}x{operator1}{b:.4f}"
+            kwargs = dict(x=x, a=a, b=b)
+            a, b = unc.correlated_values(fit_params_opt, fit_params_cov)
+            fit_y = a * fit_x + b
+
+        elif self.fit_type == 'quadratic_offset':
+            c = fit_params_opt[2]
+            operator2 = "+" if c > 0 else ""
+            fit_equation_str = rf"y = {a:.4f}x^2{operator1}{b:.4f}x{operator2}{c:.4f}"
+            kwargs = dict(x=x, a=a, b=b, c=c)
+            a, b, c = unc.correlated_values(fit_params_opt, fit_params_cov)
+            fit_y = a * fit_x ** 2 + b * fit_x + c
+
+        elif self.fit_type == 'cubic':
+            c = fit_params_opt[2]
+            d = fit_params_opt[3]
+            operator2 = "+" if c > 0 else ""
+            operator3 = "+" if d > 0 else ""
+            fit_equation_str = rf"y = {a:.4f}x^3{operator1}{b:.4f}x^2{operator2}{c:.4f}x{operator3}{d:.4f}"
+            kwargs = dict(x=x, a=a, b=b, c=c, d=d)
+            a, b, c, d = unc.correlated_values(fit_params_opt, fit_params_cov)
+            fit_y = a * fit_x ** 3 + b * fit_x ** 2 + c * fit_x + d
+
+        elif self.fit_type == 'quadratic':
+            fit_equation_str = rf"y = {a:.4f}x^2{operator1}{b:.4f}x"
+            kwargs = dict(x=x, a=a, b=b)
+            a, b = unc.correlated_values(fit_params_opt, fit_params_cov)
+            fit_y = a * fit_x ** 2 + b * fit_x
 
         # Calc r2
-
-        kwargs = dict(x=x, a=a, b=b, c=c)
-        len_y = len(y)
         fit_r2 = 1.0 - (sum((y - self.equation(**kwargs)) ** 2) / ((len_y - 1.0) * np.var(y, ddof=1)))
 
         # Calculate parameter confidence interval
-        c = None
-        a, b, c = unc.correlated_values(fit_params_opt, fit_params_cov)
-
         # Calculate regression confidence interval
-        fit_x = np.linspace(self.fit_x_min, self.fit_x_max, self.n_predictions)
-
-        fit_y = a * fit_x ** 2 + b * fit_x + c
 
         nom = unp.nominal_values(fit_y)
         std = unp.std_devs(fit_y)
@@ -322,11 +193,8 @@ class QuadraticFit:
         lower_predband, upper_predband = \
             self._predband(px=fit_x, x=x, y=y,
                            params_opt=fit_params_opt, func=self.equation, conf=0.95)
-        # lower_predband, upper_predband = \
-        #     self._predband(px=fit_x, x=x, y=y,
-        #                    params_opt=fit_params_opt, func=self._func, conf=0.95)
 
-        # Fit data
+        # Collect fit data (time series)
         fit_df = pd.DataFrame()
         fit_df['fit_x'] = fit_x
         fit_df['fit_y'] = fit_y
@@ -334,65 +202,222 @@ class QuadraticFit:
         fit_df['nom'] = nom
         fit_df['lower_predband'] = lower_predband
         fit_df['upper_predband'] = upper_predband
-        ## Calc 95% confidence region of fit
+
+        # Calc 95% confidence region of fit, confidence interval
         fit_df['nom_lower_ci95'] = fit_df['nom'] - 1.96 * fit_df['std']
         fit_df['nom_upper_ci95'] = fit_df['nom'] + 1.96 * fit_df['std']
 
         # Collect results in dict
-        fit_results = dict(fit_df=fit_df,
+        fit_results = dict(input_df=self.df,
+                           xvar=self.xcol,
+                           yvar=self.ycol,
+                           fit_df=fit_df,
+                           fit_equation=self.equation,
+                           fit_equation_str=fit_equation_str,
+                           fit_type=self.fit_type,
                            fit_params_opt=fit_params_opt,
                            fit_params_cov=fit_params_cov,
                            fit_r2=fit_r2,
-                           x=x,
-                           y=y,
-                           xvar=self.xcol,
-                           yvar=self.ycol,
-                           fit_equation=self.equation)
+                           bin_df=df.copy(),
+                           bins_x=x,
+                           bins_y=y,
+                           n_vals_per_bin=n_vals_per_bin)
 
         return fit_results
 
+    def showplot(self,
+                 ax=None,
+                 show_unbinned_data: bool = True,
+                 show_bin_variation: bool = True,
+                 highlight_year: int = None,
+                 bin_size: int = 90,
+                 bin_color: str = 'black',
+                 bin_edgecolor: str = 'none',
+                 bin_marker: str = 'o',
+                 bin_alpha: float = 1,
+                 fitline_color: str = 'red',
+                 label: str = 'label',
+                 showfit: bool = True,
+                 show_prediction_interval: bool = True,
+                 xlim: tuple = None,
+                 ylim: tuple = None,
+                 title: str = None,
+                 xlabel: str = None,
+                 ylabel: str = None
+                 ):
+
+        # Fitplot
+        fig = plt.figure(facecolor='white', figsize=(9, 9), dpi=100)
+        gs = gridspec.GridSpec(1, 1)  # rows, cols
+        # gs.update(wspace=0, hspace=0, left=.2, right=.8, top=.8, bottom=.2)
+        ax = fig.add_subplot(gs[0, 0])
+
+        # x/y
+        _numvals_y = len(self.fit_results['bins_y'])
+        n_vals_min = int(self.fit_results['n_vals_per_bin']['min'])
+        n_vals_max = int(self.fit_results['n_vals_per_bin']['max'])
+        _label = (f"{len(self.fit_results['bin_df'])} {self.bins_y_agg} bins "
+                  f"({n_vals_min}-{n_vals_max} values per bin)")
+
+        # Input data
+        if show_unbinned_data:
+            ax.scatter(x=self.fit_results['input_df'][self.xcol],
+                       y=self.fit_results['input_df'][self.ycol],
+                       c='none',
+                       s=40,
+                       marker='o',
+                       edgecolors='#607D8B',
+                       label=f"{self.ycol} ({len(self.fit_results['input_df'][self.ycol])} values)")
+
+        # Binned data
+        line_xy = ax.scatter(x=self.fit_results['bin_df'][self.xcol]['mean'],
+                             y=self.fit_results['bin_df'][self.ycol]['mean'],
+                             edgecolor=bin_edgecolor, color=bin_color, alpha=bin_alpha, s=bin_size,
+                             label=_label,
+                             zorder=1, marker=bin_marker)
+
+        if show_bin_variation:
+            if self.bins_y_agg == 'mean':
+                ax.errorbar(x=self.fit_results['bin_df'][self.xcol][self.bins_y_agg],
+                            y=self.fit_results['bin_df'][self.ycol][self.bins_y_agg],
+                            xerr=self.fit_results['bin_df'][self.xcol]['std'],
+                            yerr=self.fit_results['bin_df'][self.ycol]['std'],
+                            elinewidth=5, ecolor='black', alpha=.3, lw=0,
+                            zorder=2, label="mean bins SD")
+
+            elif self.bins_y_agg == 'median':
+                ax.fill_between(self.fit_results['bin_df'][self.xcol][self.bins_y_agg],
+                                self.fit_results['bin_df'][self.ycol]['q25'],
+                                self.fit_results['bin_df'][self.ycol]['q75'],
+                                alpha=.3, zorder=2, color='black',
+                                label="median bins IQR")
+
+        # Highlight year
+        if highlight_year:
+            _subset_year = pd.DataFrame()
+            _subset_year['bins_x'] = self.fit_results['bins_x']
+            _subset_year['bins_y'] = self.fit_results['bins_y']
+            _subset_year.index = pd.to_datetime(_subset_year.index)
+            _subset_year = _subset_year.loc[_subset_year.index.year == highlight_year, :]
+            _numvals_y = len(_subset_year['bins_y'])
+            line_highlight = ax.scatter(_subset_year['bins_x'],
+                                        _subset_year['bins_y'],
+                                        edgecolor='#455A64', color='#FFD54F',  # amber 300
+                                        alpha=1, s=100,
+                                        label=f"{label} {highlight_year} ({_numvals_y} days)",
+                                        zorder=98, marker=marker)
+        else:
+            line_highlight = None
+
+        # Fit
+        line_fit = line_fit_ci = None
+        line_fit_pb = None
+        if showfit:
+
+            # rf"$y = {a:.4f}x{operator1}{b:.4f}$"
+
+            _label_line_fit = f"${self.fit_results['fit_equation_str']}, r^2={self.fit_results['fit_r2']:.3f}$"
+            line_fit, = ax.plot(self.fit_results['fit_df']['fit_x'],
+                                self.fit_results['fit_df']['nom'],
+                                c=fitline_color, lw=3, zorder=3, alpha=1, label=_label_line_fit)
+
+            # Fit confidence region
+            # Uncertainty lines (95% confidence)
+            line_fit_ci = ax.fill_between(self.fit_results['fit_df']['fit_x'],
+                                          self.fit_results['fit_df']['nom_lower_ci95'],
+                                          self.fit_results['fit_df']['nom_upper_ci95'],
+                                          alpha=.2, color=fitline_color, zorder=2,
+                                          label="95% confidence region")
+
+            # Fit prediction interval
+            if show_prediction_interval:
+                # Lower prediction band (95% confidence)
+                ax.plot(self.fit_results['fit_df']['fit_x'],
+                        self.fit_results['fit_df']['lower_predband'],
+                        color=fitline_color, ls='--', zorder=3, lw=2,
+                        label="95% prediction interval")
+                # Upper prediction band (95% confidence)
+                line_fit_pb, = ax.plot(self.fit_results['fit_df']['fit_x'],
+                                       self.fit_results['fit_df']['upper_predband'],
+                                       color=fitline_color, ls='--', zorder=3, lw=2,
+                                       label=None)
+        # Format
+        if not title:
+            title = (f"{self.bins_y_agg} {self.ycol} "
+                     f"in {len(self.fit_results['bin_df'])} bins of {self.xcol}")
+        else:
+            pass
+        ax.set_title(title, fontsize=16)
+        _xlabel = xlabel if xlabel else self.fit_results['xvar']
+        _ylabel = ylabel if ylabel else self.fit_results['yvar']
+        default_format(ax=ax,
+                       ax_xlabel_txt=_xlabel,
+                       ax_ylabel_txt=_ylabel,
+                       showgrid=True)
+        add_zeroline_y(ax=ax, data=self.fit_results['input_df'][self.ycol])
+        default_legend(ax=ax, ncol=1, textsize=13)
+        if xlim:
+            ax.set_xlim(xlim[0], xlim[1])
+        if ylim:
+            ax.set_ylim(ylim[0], ylim[1])
+        # ax.locator_params(axis='x', nbins=self.usebins)
+        # ax.locator_params(axis='y', nbins=self.usebins)
+        # default_legend(ax=ax, ncol=1, loc=(.07, .75))
+        fig.show()
+        return line_xy, line_fit, line_fit_ci, line_fit_pb, line_highlight
+
 
 def example():
-    from diive.core.io.files import load_pickle
+    from diive.configs.exampledata import load_exampledata_parquet
+
+    df_orig = load_exampledata_parquet()
+    # df_orig = df_orig.loc[df_orig.index.year == 2021].copy()
 
     # Variables
     vpd_col = 'VPD_f'
+    ta_col = 'Tair_f'
     nee_col = 'NEE_CUT_REF_f'
-    x_col = vpd_col
-    y_col = nee_col
+    xcol = ta_col
+    ycol = vpd_col
 
-    # Load data, using pickle for fast loading
-    source_file = r"L:\Dropbox\luhk_work\20 - CODING\21 - DIIVE\diive\__apply\co2penalty_dav\input_data\CH-DAV_FP2022.1_1997-2022.08_ID20220826234456_30MIN.diive.csv.pickle"
-    df_orig = load_pickle(filepath=source_file)
-    df_orig = df_orig.loc[df_orig.index.year >= 2019].copy()
-
-    # Select daytime data between May and September 1997-2021
-    maysep_dt_df = df_orig.loc[(df_orig.index.month >= 5) & (df_orig.index.month <= 9)].copy()
-    maysep_dt_df = maysep_dt_df.loc[maysep_dt_df['PotRad_CUT_REF'] > 20]
+    maysep_dt_df = df_orig.loc[(df_orig.index.month >= 6) & (df_orig.index.month <= 9)].copy()
+    maysep_dt_df = maysep_dt_df.loc[maysep_dt_df['Rg_f'] > 20]
 
     # Convert units
     maysep_dt_df[vpd_col] = maysep_dt_df[vpd_col].multiply(0.1)  # hPa --> kPa
     maysep_dt_df[nee_col] = maysep_dt_df[nee_col].multiply(0.0792171)  # umol CO2 m-2 s-1 --> g CO2 m-2 30min-1
-    x_units = "kPa"
-    y_units = "gCO_{2}\ m^{-2}\ 30min^{-1}"
-    xlabel = f"Half-hourly VPD ({x_units})"
-    ylabel = f"{y_col} (${y_units}$)"
+    y_units = "kPa"
+    ylabel = f"VPD (${y_units}$)"
+    x_units = "°C"
+    xlabel = f"air temperature (${x_units}$)"
+    # y_units = "gCO_{2}\ m^{-2}\ 30min^{-1}"
 
-    bf = BinFitterBTS(
+    bf = BinFitterCP(
         df=maysep_dt_df,
-        n_bootstraps=99,
-        x_col=x_col,
-        y_col=y_col,
-        predict_max_x=maysep_dt_df[x_col].max(),
-        predict_min_x=maysep_dt_df[x_col].min(),
-        num_predictions=1000,
-        bins_x_num=0,
-        bins_y_agg=None,
-        fit_type='quadratic'
+        # n_bootstraps=2,
+        xcol=xcol,
+        ycol=ycol,
+        # predict_max_x=None,
+        # predict_min_x=None,
+        n_predictions=1000,
+        n_bins_x=10,
+        bins_y_agg='mean',
+        fit_type='quadratic_offset'  # 'linear', 'quadratic_offset', 'quadratic', 'cubic'
     )
-    bf.fit()
+    bf.run()
     fit_results = bf.fit_results
-    bf.showplot_binfitter(highlight_year=2019, xlabel=xlabel, ylabel=ylabel)
+    # bf.showplot_binfitter(highlight_year=None, xlabel=xlabel, ylabel=ylabel)
+
+    bf.showplot(
+        show_unbinned_data=True,
+        show_bin_variation=True,
+        showfit=True,
+        title='',
+        xlabel=xlabel,
+        ylabel=ylabel
+        # xlim=(0, 30),
+        # ylim=(-1, 0)
+    )
 
 
 if __name__ == '__main__':

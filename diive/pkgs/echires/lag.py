@@ -463,27 +463,27 @@ def example():
     from diive.core.io.filereader import ReadFileType
     from diive.core.io.filereader import search_files
 
-    # OUTDIR = r'F:\TMP\das_filesplitter'
-    # SEARCHDIRS = [r'L:\Sync\luhk_work\20 - CODING\27 - VARIOUS\dyco\_testdata']
-    # PATTERN = 'CH-DAS_*.csv.gz'
-    # FILEDATEFORMAT = 'CH-DAS_%Y%m%d%H%M.csv.gz'
-    # FILE_GENERATION_RES = '6h'
-    # DATA_NOMINAL_RES = 0.05
-    # FILES_HOW_MANY = 1
-    # FILETYPE = 'ETH-SONICREAD-BICO-CSVGZ-20HZ'
-    # DATA_SPLIT_DURATION = '30min'
-    # DATA_SPLIT_OUTFILE_PREFIX = 'CH-DAS_'
-    # DATA_SPLIT_OUTFILE_SUFFIX = '_30MIN-SPLIT'
-    #
+    OUTDIR = r'P:\Flux\RDS_calculations\DEG_EddyMercury\Magic file for Diive\OUT'
+    SEARCHDIRS = [r'P:\Flux\RDS_calculations\DEG_EddyMercury\Magic file for Diive\IN']
+    PATTERN = 'DEG_*.csv'
+    FILEDATEFORMAT = 'DEG_%Y%m%d%H%M.csv'
+    FILE_GENERATION_RES = '6h'
+    DATA_NOMINAL_RES = 0.05
+    FILES_HOW_MANY = 1
+    FILETYPE = 'ETH-MERCURY-CSV-20HZ'
+    DATA_SPLIT_DURATION = '30min'
+    DATA_SPLIT_OUTFILE_PREFIX = 'CH-DAS_'
+    DATA_SPLIT_OUTFILE_SUFFIX = '_30MIN-SPLIT'
+
     # from diive.core.io.filesplitter import FileSplitterMulti
     # fsm = FileSplitterMulti(
     #     outdir=OUTDIR,
     #     searchdirs=SEARCHDIRS,
-    #     pattern=PATTERN,
-    #     file_date_format=FILEDATEFORMAT,
-    #     file_generation_res=FILE_GENERATION_RES,
-    #     data_res=DATA_NOMINAL_RES,
-    #     files_how_many=FILES_HOW_MANY,
+    #     filename_pattern=PATTERN,
+    #     filename_date_format=FILEDATEFORMAT,
+    #     file_generation_freq=FILE_GENERATION_RES,
+    #     data_nominal_res=DATA_NOMINAL_RES,
+    #     files_split_how_many=FILES_HOW_MANY,
     #     filetype=FILETYPE,
     #     data_split_duration=DATA_SPLIT_DURATION,
     #     data_split_outfile_prefix=DATA_SPLIT_OUTFILE_PREFIX,
@@ -491,10 +491,10 @@ def example():
     # )
     # fsm.run()
 
-    filelist = search_files(searchdirs=r'L:\Sync\luhk_work\CURRENT\testdata_dyco\1-splits\splits',
-                            pattern='CH-AWS_*.csv')
+    filelist = search_files(searchdirs=r'P:\Flux\RDS_calculations\DEG_EddyMercury\Magic file for Diive\OUT\splits',
+                            pattern='DEG_*.csv.gz')
 
-    # # Settings
+    # Settings
     # U = 'U_[HS50-A]'  # Name of the horizontal wind component measured in x-direction, measured in units of m s-1
     # V = 'V_[HS50-A]'  # Name of the horizontal wind component measured in y-direction, measured in units of m s-1
     # W = 'W_[HS50-A]'  # Name of the vertical wind component measured in z-direction, measured in units of m s-1
@@ -502,10 +502,12 @@ def example():
 
     for filepath in filelist:
         # Read file
-        df, meta = ReadFileType(filepath=filepath,
-                                filetype='GENERIC-CSV-HEADER-1ROW-TS-MIDDLE-FULL-NS-20HZ',
-                                data_nrows=None,
-                                output_middle_timestamp=True).get_filedata()
+        df = pd.read_csv(filepath)
+        df = df.replace(-9999, np.nan)
+        # df, meta = ReadFileType(filepath=filepath,
+        #                         filetype='GENERIC-CSV-HEADER-1ROW-TS-END-FULL-NS-20HZ',
+        #                         data_nrows=None,
+        #                         output_middle_timestamp=True).get_filedata()
 
         # # Already done in input files:
         # from diive.pkgs.echires.windrotation import WindRotation2D
@@ -523,8 +525,8 @@ def example():
         # Find maximum covariance
         mc = MaxCovariance(
             df=df,
-            var_reference='W_[HS50-A]_TURB',
-            var_lagged='CO2_DRY_[IRGA72-A]_TURB',
+            var_reference='z_TURB',
+            var_lagged='Lumex_Hg0_microgram_m3_TURB',
             lgs_winsize_from=-300,
             lgs_winsize_to=300,
             shift_stepsize=1,
@@ -535,7 +537,11 @@ def example():
 
         mc.plot_scatter_cov(title=str(Path(filepath.name)))
         cov_df, props_peak_auto = mc.get()
-
+        cov_df.to_csv(Path(OUTDIR, 'cov_df.csv'), index=False)
+        foundlag = cov_df.loc[cov_df['flag_peak_max_cov_abs'] == True]
+        lag = cov_df.iloc[foundlag.index]['shift']
+        lag = lag.tolist()[0]
+        print(lag)
 
 if __name__ == '__main__':
     example()

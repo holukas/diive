@@ -1,5 +1,20 @@
+from collections import Counter
+
 import numpy as np
 from pandas import Series
+
+
+def find_duplicates_in_list(lst: list) -> dict:
+    """Find duplicate entries in a list.
+
+    Args:
+        lst: List of elements that is checked for duplicate elements.
+
+    Returns:
+        dict with duplicate entry names and their counts.
+    """
+    counter = Counter(lst)
+    return {key: value for key, value in counter.items() if value > 1}
 
 
 def validate_id_string(idstr: str):

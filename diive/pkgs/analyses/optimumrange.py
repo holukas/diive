@@ -23,7 +23,8 @@ class FindOptimumRange:
                  df: DataFrame,
                  xcol: str,
                  ycol: str,
-                 n_vals_per_bin: int = 300,
+                 # n_vals_per_bin: int = 300,
+                 n_bins: int = 100,
                  bins_agg: Literal['median'] = 'median',
                  rwinsize: float = 0.1,
                  ragg: Literal['mean'] = 'mean',
@@ -61,7 +62,8 @@ class FindOptimumRange:
         self.df = df[[xcol, ycol]].copy()
         self.xcol = xcol
         self.ycol = ycol
-        self.n_vals_per_bin = n_vals_per_bin
+        # self.n_vals_per_bin = n_vals_per_bin
+        self.n_bins = n_bins
         self.bins_agg = bins_agg
         self.rwinsize = rwinsize
         self.ragg = ragg
@@ -79,9 +81,10 @@ class FindOptimumRange:
     def find_optimum(self):
         # self._prepare_data() todo?
 
-        bins_df, bin_aggs_df, n_xbins = self._divide_xdata_into_bins()
+        bins_df, bin_aggs_df = self._divide_xdata_into_bins()
 
-        winsize = int(n_xbins * self.rwinsize)
+        winsize = int(self.n_bins * self.rwinsize)
+        # winsize = int(n_xbins * self.rwinsize)
         winsize = winsize + 1 if (winsize % 2 == 0) else winsize  # Must be odd number
         rbin_aggs_df = self._rolling_agg(bin_aggs_df=bin_aggs_df,
                                          use_bin_agg=self.bins_agg,
@@ -97,7 +100,7 @@ class FindOptimumRange:
         optimum_start_bin, optimum_end_bin = self._get_optimum_range(grouped_df=bin_aggs_df,
                                                                      roptimum_bin=roptimum_bin,
                                                                      winsize=winsize)
-        self._validate(roptimum_val=roptimum_val, optimum_ymean=optimum_ymean)
+        # todo self._validate(roptimum_val=roptimum_val, optimum_ymean=optimum_ymean)
 
         vals_in_optimum_range_df = \
             self._values_in_optimum_range(optimum_xstart=optimum_xstart, optimum_xend=optimum_xend)
@@ -113,7 +116,8 @@ class FindOptimumRange:
             rwinsize=winsize,
             roptimum_bin=roptimum_bin,
             roptimum_val=roptimum_val,
-            n_xbins=n_xbins,
+            n_xbins=self.n_bins,
+            # n_xbins=n_xbins,
             xcol=self.xcol,
             ycol=self.ycol,
             vals_in_optimum_range_df=vals_in_optimum_range_df
@@ -162,7 +166,7 @@ class FindOptimumRange:
         # Keep x values > 0
         self.df = self.df.loc[self.df[self.xcol] > 0, :]
 
-    def _divide_xdata_into_bins(self) -> tuple[DataFrame, DataFrame, int]:
+    def _divide_xdata_into_bins(self) -> tuple[DataFrame, DataFrame]:
         """
         Divide x data into bins
 
@@ -175,16 +179,20 @@ class FindOptimumRange:
         bins_df = self.df.copy()
 
         # Detect number of x bins
-        n_xbins = int(len(bins_df) / self.n_vals_per_bin)
+        # n_vals_per_bin = len(bins_df) * (self.rwinsize / 10)
+        # n_xbins = int(len(bins_df) / n_vals_per_bin)
+        # n_xbins = int(len(bins_df) / self.n_vals_per_bin)
 
         # Divide data into bins and add as column
-        xbins = pd.qcut(bins_df[self.xcol], n_xbins, duplicates='drop')  # How awesome!
+        xbins = pd.qcut(bins_df[self.xcol], self.n_bins, duplicates='drop')  # How awesome!
+        # xbins = pd.qcut(bins_df[self.xcol], n_xbins, duplicates='drop')  # How awesome!
         bins_df = bins_df.assign(xbins=xbins)
 
         # Aggregate by bin membership
         bin_aggs_df = bins_df.groupby('xbins').agg({self.bins_agg, 'count'})
 
-        return bins_df, bin_aggs_df, n_xbins
+        return bins_df, bin_aggs_df
+        # return bins_df, bin_aggs_df, n_xbins
 
     def _rolling_agg(self, bin_aggs_df, use_bin_agg, winsize, rolling_agg):
         rolling_df = bin_aggs_df[self.ycol][use_bin_agg].rolling(winsize, center=True)
@@ -202,7 +210,7 @@ class FindOptimumRange:
             roptimum_val = rolling_df[use_rolling_agg][roptimum_bin]
         elif self.define_optimum == 'max':
             roptimum_bin = rolling_df[use_rolling_agg].idxmax()
-            roptimum_val = rolling_df[use_rolling_agg].iloc[roptimum_bin]
+            roptimum_val = rolling_df[use_rolling_agg][roptimum_bin]
         print(f"Optimum {self.define_optimum} found in class: {roptimum_bin}  /  value: {roptimum_val}")
         return roptimum_bin, roptimum_val
 
@@ -253,7 +261,7 @@ class FindOptimumRange:
         ax3 = fig.add_subplot(gs[3, 0])
         ax = self.plot_vals_in_optimum_range(ax=ax1)
         ax = self.plot_bin_aggregates(ax=ax2)
-        ax = self.plot_rolling_bin_aggregates(ax=ax3)
+        # ax = self.plot_rolling_bin_aggregates(ax=ax3)
         fig.show()
         if saveplot:
             save_fig(fig=fig, title=title, path=path)
@@ -306,10 +314,14 @@ class FindOptimumRange:
         #                              txt_ylabel_units='[#]')
         # default_grid(ax=ax)
 
+        # fig.show()
+
         return ax
 
     def plot_bin_aggregates(self, ax):
         """Plot y median in bins of x"""
+
+        # fig, ax = plt.subplots(figsize=(9.2, 5))
 
         # Get data
         bin_aggs_df = self.results_optrange['bin_aggs_df'].copy()
@@ -348,6 +360,10 @@ class FindOptimumRange:
             numpoints=1,
             handler_map={tuple: HandlerTuple(ndivide=None)},
             ncol=2)
+
+        # fig.show()
+
+
 
     def plot_rolling_bin_aggregates(self, ax):
         """Plot rolling mean of y medians in bins of x"""
@@ -400,9 +416,8 @@ def example():
     pd.set_option('display.max_columns', 3000)
 
     # Test data
-    from diive.core.io.files import load_pickle
-    df_orig = load_pickle(
-        filepath=r"L:\Dropbox\luhk_work\20 - CODING\26 - NOTEBOOKS\GL-NOTEBOOKS\_data\ch-dav\CH-DAV_FP2022.1_1997-2022.08_ID20220826234456_30MIN.diive.csv.pickle")
+    from diive.configs.exampledata import load_exampledata_parquet
+    df_orig = load_exampledata_parquet()
 
     # # Check columns
     # import fnmatch
@@ -410,13 +425,18 @@ def example():
 
     # Select daytime data between May and September
     df = df_orig.copy()
-    df = df.loc[(df.index.month >= 5) & (df.index.month <= 9)]
-    df = df.loc[df['PotRad_CUT_REF'] > 20]
+    # df = df.loc[(df.index.month >= 5) & (df.index.month <= 9)]
+    df = df.loc[df['Rg_f'] > 20]
+
+    # import matplotlib.pyplot as plt
+    # df.plot.scatter(x='Tair_f', y='NEE_CUT_REF_f', alpha=.1)
+    # plt.show()
 
     # Optimum range
-    optrange = FindOptimumRange(df=df, xcol='RH', ycol='NEE_CUT_REF_f', define_optimum="min", rwinsize=0.3)
+    optrange = FindOptimumRange(df=df, xcol='Tair_f', ycol='NEE_CUT_REF_f', define_optimum="min", rwinsize=0.05)
     optrange.find_optimum()
-    optrange.plot_results()
+    optrange.showfig()
+
 
 
 if __name__ == '__main__':

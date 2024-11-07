@@ -12,9 +12,9 @@ from matplotlib import dates as mdates
 from pandas import DataFrame, Series
 
 import diive.core.dfun.frames as frames
-from diive.core.dfun.fits import BinFitterCP
+from diive.pkgs.fits.fitter import BinFitterCP
 # from diive.core.dfun.frames import steplagged_variants
-from diive.core.plotting.fitplot import fitplot
+from diive.core.plotting._fitplot import fitplot
 from diive.core.plotting.plotfuncs import default_legend, default_format, nice_date_ticks, save_fig, add_zeroline_y
 from diive.core.plotting.styles.LightTheme import COLOR_NEP, COLOR_RECO
 from diive.core.times.times import include_timestamp_as_cols
@@ -409,7 +409,8 @@ class CO2penalty:
 
         df = self.df.copy()
 
-        if fit_n_bootstraps < 2: fit_n_bootstraps = 2
+        if fit_n_bootstraps < 2:
+            fit_n_bootstraps = 2
 
         xlabel_units = "$\mathrm{hours\ yr^{-1}}$"
         ylabel_penalty = r"$\mathrm{CO_{2}\ penalty}$"
@@ -458,12 +459,12 @@ class CO2penalty:
 
                     # Fit
                     fitter = BinFitterCP(df=bts_df,
-                                         x_col=xcol,
-                                         y_col='PENALTY',
-                                         num_predictions=10000,
+                                         xcol=xcol,
+                                         ycol='PENALTY',
+                                         n_predictions=10000,
                                          predict_min_x=predict_min_x,
                                          predict_max_x=predict_max_x,
-                                         bins_x_num=0,
+                                         n_bins_x=0,
                                          bins_y_agg='mean',
                                          fit_type=fit_type)
                     fitter.run()

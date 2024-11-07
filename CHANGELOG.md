@@ -2,6 +2,38 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.84.0 | 7 Nov 2024
+
+# New features
+
+- New class `BinFitterCP` for fitting function to binned data, includes confidence interval and prediction interval (
+  `diive.pkgs.fits.fitter.BinFitterCP`)
+
+![DIIVE](images/BinFitterCP_diive_v0.84.0.png)
+
+## Additions
+
+- Added small function to detect duplicate entries in lists (`diive.core.funcs.funcs.find_duplicates_in_list`)
+- Added new filetype (`diive/configs/filetypes/ETH-MERCURY-CSV-20HZ.yml`)
+- Added new filetype (`diive/configs/filetypes/GENERIC-CSV-HEADER-1ROW-TS-END-FULL-NS-20HZ.yml`)
+
+## Bugfixes
+
+- Not directly a bug fix, but when reading EddyPro fluxnet files with `LoadEddyProOutputFiles` (e.g., in the flux
+  processing chain) duplicate columns are now automatically renamed by adding a numbered suffix. For example, if two
+  variables are named `CUSTOM_CH4_MEAN` in the output file, they are automatically renamed to `CUSTOM_CH4_MEAN_1` and
+  `CUSTOM_CH4_MEAN_2` (`diive.core.dfun.frames.compare_len_header_vs_data`)
+
+### Notebooks
+
+- Added notebook example for `BinFitterCP` (`notebooks/Fits/BinFitterCP.ipynb`)
+- Updated flux processing chain notebook to `v8.6`, import for loading EddyPro fluxnet output files was missing
+
+### Tests
+
+- Added test case for `BinFitterCP` (`tests.test_fits.TestFits.test_binfittercp`)
+- 51/51 unittests ran successfully
+
 ## v0.83.2 | 25 Oct 2024
 
 From now on Python version `3.11.10` is used for developing Python (up to now, version `3.9` was used). All unittests
