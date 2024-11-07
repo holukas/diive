@@ -67,7 +67,7 @@ _Input/output functions._
 
 ### Fits
 
-- **Bin fitter**
+- **Bin fitter**: ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Fits/BinFitterCP.ipynb))
 
 ### Flux
 
