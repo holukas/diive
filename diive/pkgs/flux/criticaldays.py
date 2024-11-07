@@ -19,7 +19,7 @@ from diive.core.plotting.plotfuncs import save_fig
 from diive.core.plotting.rectangle import rectangle
 from diive.core.plotting.styles.LightTheme import COLOR_THRESHOLD, \
     FONTSIZE_LEGEND, COLOR_NEE, INFOTXT_FONTSIZE
-from diive.pkgs.fits._binfitter import BinFitterBTS, PlotBinFitterBTS
+from __local_folders.__archived._binfitter import BinFitterBTS, PlotBinFitterBTS
 
 pd.set_option('display.width', 1500)
 pd.set_option('display.max_columns', 30)

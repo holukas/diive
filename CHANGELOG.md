@@ -2,11 +2,20 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.83.3 | 6 Nov 2024
+## v0.84.0 | 7 Nov 2024
+
+# New features
+
+- New class `BinFitterCP` for fitting function to binned data, includes confidence interval and prediction interval (
+  `diive.pkgs.fits.fitter.BinFitterCP`)
+
+![DIIVE](images/BinFitterCP_diive_v0.84.0.png)
 
 ## Additions
 
 - Added small function to detect duplicate entries in lists (`diive.core.funcs.funcs.find_duplicates_in_list`)
+- Added new filetype (`diive/configs/filetypes/ETH-MERCURY-CSV-20HZ.yml`)
+- Added new filetype (`diive/configs/filetypes/GENERIC-CSV-HEADER-1ROW-TS-END-FULL-NS-20HZ.yml`)
 
 ## Bugfixes
 
