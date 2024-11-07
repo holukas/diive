@@ -929,7 +929,7 @@ def example():
     # FILENAME = r"51.1_FluxProcessingChain_after-L3.3_NEE.parquet"
     # FILEPATH = Path(SOURCEDIR) / FILENAME
     # maindf = load_parquet(filepath=FILEPATH)
-    SOURCEDIRS = [r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_das_2023"]
+    SOURCEDIRS = [r"F:\TMP\x"]
     ep = LoadEddyProOutputFiles(sourcedir=SOURCEDIRS, filetype='EDDYPRO-FLUXNET-CSV-30MIN')
     ep.searchfiles()
     ep.loadfiles()
@@ -1567,6 +1567,6 @@ def example_cumu():
 
 
 if __name__ == '__main__':
-    example_quick()
-    # example()
+    # example_quick()
+    example()
     # example_cumu()

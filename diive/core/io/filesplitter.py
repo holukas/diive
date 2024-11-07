@@ -446,17 +446,17 @@ class FileSplitterMulti:
 
 
 def example():
-    SEARCHDIRS = [r'F:\CURRENT\DAV_trimmed\2020_2_filtered_CH4']
-    OUTDIR = r'F:\CURRENT\DAV_trimmed\2020_2_filtered_CH4_trimmed'
-    C = 'CH4_DRY_[QCL-C]'
-    PATTERN = 'CH-DAV_*.csv.gz'
-    FILEDATEFORMAT = 'CH-DAV_%Y%m%d%H%M.csv.gz'
+    SEARCHDIRS = [r'F:\CURRENT\DAS_trimmed\2024_filtered_CH4']
+    OUTDIR = r'F:\CURRENT\DAS_trimmed\2024_filtered_CH4_trimmed'
+    C = 'CH4_DRY_[QCL-C2]'
+    PATTERN = 'CH-DAS_*.csv.gz'
+    FILEDATEFORMAT = 'CH-DAS_%Y%m%d%H%M.csv.gz'
     FILE_GENERATION_RES = '6h'
     DATA_NOMINAL_RES = 0.05
     FILES_HOW_MANY = None  # int or None
     FILETYPE = 'ETH-SONICREAD-BICO-CSVGZ-20HZ'
     DATA_SPLIT_DURATION = '30min'
-    DATA_SPLIT_OUTFILE_PREFIX = 'CH-DAV_'
+    DATA_SPLIT_OUTFILE_PREFIX = 'CH-DAS_'
     DATA_SPLIT_OUTFILE_SUFFIX = '_30MIN-SPLIT'
     COMPRESS_SPLITS = True
     ROTATION = False
@@ -493,5 +493,55 @@ def example():
     fsm.run()
 
 
+def example2():
+    OUTDIR = r'P:\Flux\RDS_calculations\DEG_EddyMercury\Magic file for Diive\OUT'
+    SEARCHDIRS = [r'P:\Flux\RDS_calculations\DEG_EddyMercury\Magic file for Diive\IN']
+    PATTERN = 'DEG_*.csv'
+    FILEDATEFORMAT = 'DEG_%Y%m%d%H%M.csv'
+    FILE_GENERATION_RES = '6h'
+    DATA_NOMINAL_RES = 0.05
+    FILES_HOW_MANY = 1
+    FILETYPE = 'ETH-MERCURY-CSV-20HZ'
+    DATA_SPLIT_DURATION = '30min'
+    DATA_SPLIT_OUTFILE_PREFIX = 'DEG_'
+    DATA_SPLIT_OUTFILE_SUFFIX = '_30MIN-SPLIT'
+    C = 'Lumex_Hg0_microgram_m3'
+
+    COMPRESS_SPLITS = True
+    # ROTATION = False
+    ROTATION = True
+    U = 'x'
+    V = 'y'
+    W = 'z'
+    OUTFILE_LIMIT_N_ROWS = None  # int or None, for testing
+    SPLIT_TRIM = True
+    SPLIT_TRIM_VAR = C
+
+    fsm = FileSplitterMulti(
+        outdir=OUTDIR,
+        searchdirs=SEARCHDIRS,
+        filename_pattern=PATTERN,
+        filename_date_format=FILEDATEFORMAT,
+        file_generation_freq=FILE_GENERATION_RES,
+        data_nominal_res=DATA_NOMINAL_RES,
+        files_split_how_many=FILES_HOW_MANY,
+        filetype=FILETYPE,
+        data_split_duration=DATA_SPLIT_DURATION,
+        data_split_outfile_prefix=DATA_SPLIT_OUTFILE_PREFIX,
+        data_split_outfile_suffix=DATA_SPLIT_OUTFILE_SUFFIX,
+        rotation=ROTATION,
+        u_var=U,
+        v_var=V,
+        w_var=W,
+        c_var=C,
+        compress_splits=COMPRESS_SPLITS,
+        outfile_limit_n_rows=OUTFILE_LIMIT_N_ROWS,
+        split_trim=SPLIT_TRIM,
+        split_trim_var=SPLIT_TRIM_VAR
+    )
+    fsm.run()
+
+
 if __name__ == "__main__":
-    example()
+    # example()
+    example2()
