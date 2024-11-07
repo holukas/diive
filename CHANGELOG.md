@@ -26,7 +26,13 @@
 
 ### Notebooks
 
+- Added notebook example for `BinFitterCP` (`notebooks/Fits/BinFitterCP.ipynb`)
 - Updated flux processing chain notebook to `v8.6`, import for loading EddyPro fluxnet output files was missing
+
+### Tests
+
+- Added test case for `BinFitterCP` (`tests.test_fits.TestFits.test_binfittercp`)
+- 51/51 unittests ran successfully
 
 ## v0.83.2 | 25 Oct 2024
 
