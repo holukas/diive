@@ -25,6 +25,7 @@ class DielCycle:
         self.ax = None
         self.showplot = False
         self.title = None
+        self.ylabel = None
         self.txt_ylabel_units = None
         self._diel_cycles_df = None
 
@@ -48,10 +49,12 @@ class DielCycle:
              each_month: bool = False,
              legend_n_col: int = 1,
              ylim: list = None,
+             ylabel: str = None,
              **kwargs):
 
         self.title = title
         self.txt_ylabel_units = txt_ylabel_units
+        self.ylabel = ylabel
 
         # Resample
         self._diel_cycles_df = diel_cycle(series=self.series,
@@ -106,7 +109,8 @@ class DielCycle:
             self.ax.set_title(title, color='black', fontsize=24)
         # ax_xlabel_txt = "Uhrzeit"
         ax_xlabel_txt = "Time (hours of day)"
-        default_format(ax=self.ax, ax_xlabel_txt=ax_xlabel_txt, ax_ylabel_txt=self.series.name,
+        ylabel = self.ylabel if self.ylabel else self.series.name
+        default_format(ax=self.ax, ax_xlabel_txt=ax_xlabel_txt, ax_ylabel_txt=ylabel,
                        txt_ylabel_units=self.txt_ylabel_units,
                        ticks_direction='in', ticks_length=8, ticks_width=2,
                        ax_labels_fontsize=20,
