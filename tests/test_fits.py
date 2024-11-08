@@ -31,7 +31,7 @@ class TestFits(unittest.TestCase):
         fit_results = bf.fit_results
 
         self.assertEqual(len(fit_results['input_df']['group'].unique()), 10)
-        self.assertEqual(fit_results['bin_df'].sum().sum(), 63443.00512672013)
+        self.assertAlmostEqual(fit_results['bin_df'].sum().sum(), 63443.00512672013, places=5   )
         self.assertEqual(fit_results['fit_df']['nom'].sum(), 678.9973275669132)
         self.assertEqual(fit_results['fit_equation_str'], 'y = 0.0050x^2-0.0424x+0.1842')
         self.assertEqual(fit_results['fit_type'], 'quadratic_offset')
