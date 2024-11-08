@@ -2,6 +2,12 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.84.2 | 8 Nov 2024
+
+### Changes
+
+- Adjust version number to avoid publishing conflict
+
 ## v0.84.1 | 8 Nov 2024
 
 ### Bugfixes
