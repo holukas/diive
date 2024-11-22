@@ -501,66 +501,71 @@ class FluxProcessingChain:
 
         # todo
         if run_random_forest:
+            self._run_random_forest(features, rf_kwargs, include_timestamp_as_features, add_continuous_record_number,
+                                    features_lag, verbose, sanitize_timestamp, perm_n_repeats, reduce_features)
 
-            # Store results in separate dict within Level-4.1
-            self._level41['random_forest'] = dict()
+    def _run_random_forest(self, features, rf_kwargs, include_timestamp_as_features, add_continuous_record_number,
+                           features_lag, verbose, sanitize_timestamp, perm_n_repeats, reduce_features):
 
-            # Default parameters for random forest models
-            if not isinstance(rf_kwargs, dict):
-                rf_kwargs = {'n_estimators': 200,
-                             'random_state': 42,
-                             'min_samples_split': 2,
-                             'min_samples_leaf': 1,
-                             'n_jobs': -1}
+        # Store results in separate dict within Level-4.1
+        self._level41['random_forest'] = dict()
 
-            # Collect data and run model for each USTAR scenario for gapfilling
-            # todo what is if there is no scenario eg h2o fluxes?
-            for ustar_scen, ustar_flux in self.filteredseries_level33_qcf.items():
+        # Default parameters for random forest models
+        if not isinstance(rf_kwargs, dict):
+            rf_kwargs = {'n_estimators': 200,
+                         'random_state': 42,
+                         'min_samples_split': 2,
+                         'min_samples_leaf': 1,
+                         'n_jobs': -1}
 
-                # Get features from input data
-                this_ust_scen_df = self.df[features].copy()
+        # Collect data and run model for each USTAR scenario for gapfilling
+        # todo what is if there is no scenario eg h2o fluxes?
+        for ustar_scen, ustar_flux in self.filteredseries_level33_qcf.items():
 
-                # Add USTAR-filtered flux from recent results (Level-3.3)
-                this_ust_scen_df = pd.concat([this_ust_scen_df, self.fpc_df[ustar_flux.name]], axis=1)
+            # Get features from input data
+            this_ust_scen_df = self.df[features].copy()
 
-                # self.level33.flux_corrected_col
-                general_kwargs = dict(
-                    input_df=this_ust_scen_df,
-                    target_col=ustar_flux.name,
-                    include_timestamp_as_features=include_timestamp_as_features,
-                    add_continuous_record_number=add_continuous_record_number,
-                    features_lag=features_lag,
-                    verbose=verbose,
-                    sanitize_timestamp=sanitize_timestamp,
-                    perm_n_repeats=perm_n_repeats
-                )
+            # Add USTAR-filtered flux from recent results (Level-3.3)
+            this_ust_scen_df = pd.concat([this_ust_scen_df, self.fpc_df[ustar_flux.name]], axis=1)
 
-                # Initialize random forest for this scenario
-                instance = LongTermGapFillingRandomForestTS(**general_kwargs, **rf_kwargs)
+            # self.level33.flux_corrected_col
+            general_kwargs = dict(
+                input_df=this_ust_scen_df,
+                target_col=ustar_flux.name,
+                include_timestamp_as_features=include_timestamp_as_features,
+                add_continuous_record_number=add_continuous_record_number,
+                features_lag=features_lag,
+                verbose=verbose,
+                sanitize_timestamp=sanitize_timestamp,
+                perm_n_repeats=perm_n_repeats
+            )
 
-                # Assign model data
-                instance.create_yearpools()
+            # Initialize random forest for this scenario
+            instance = LongTermGapFillingRandomForestTS(**general_kwargs, **rf_kwargs)
 
-                # Init models
-                instance.initialize_yearly_models()
+            # Assign model data
+            instance.create_yearpools()
 
-                # Feature reduction *across all* years (not *per* year)
-                if reduce_features:
-                    instance.reduce_features_across_years()
+            # Init models
+            instance.initialize_yearly_models()
 
-                # Train model and fill gaps
-                instance.fillgaps()
+            # Feature reduction *across all* years (not *per* year)
+            if reduce_features:
+                instance.reduce_features_across_years()
 
-                # Add gap-filled flux and gap-filling flag to flux processing chain dataframe
-                fluxdata = instance.gapfilled_.copy()
-                flagname = [c for c in instance.gapfilling_df_
-                            if str(c).startswith("FLAG_") and str(c).endswith("_ISFILLED")]
-                flagname = flagname[0] if len(flagname) == 1 else None
-                flagdata = instance.gapfilling_df_[flagname].copy()
-                self._fpc_df = pd.concat([self.fpc_df, fluxdata, flagdata], axis=1)
+            # Train model and fill gaps
+            instance.fillgaps()
 
-                # Save instance to Level-4.1
-                self._level41['random_forest'][ustar_scen] = instance
+            # Add gap-filled flux and gap-filling flag to flux processing chain dataframe
+            fluxdata = instance.gapfilled_.copy()
+            flagname = [c for c in instance.gapfilling_df_
+                        if str(c).startswith("FLAG_") and str(c).endswith("_ISFILLED")]
+            flagname = flagname[0] if len(flagname) == 1 else None
+            flagdata = instance.gapfilling_df_[flagname].copy()
+            self._fpc_df = pd.concat([self.fpc_df, fluxdata, flagdata], axis=1)
+
+            # Save instance to Level-4.1
+            self._level41['random_forest'][ustar_scen] = instance
 
         # # How to access data for each USTAR scenario:
         # for ustar_scen, ustar_flux in self.filteredseries_level33_qcf.items():
@@ -925,20 +930,20 @@ def example():
     # Source data
     from pathlib import Path
     from diive.core.io.files import load_parquet
-    # SOURCEDIR = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_cha_fp2024_2005-2023\50_FluxProcessingChain"
-    # FILENAME = r"51.1_FluxProcessingChain_after-L3.3_NEE.parquet"
-    # FILEPATH = Path(SOURCEDIR) / FILENAME
-    # maindf = load_parquet(filepath=FILEPATH)
-    SOURCEDIRS = [r"F:\TMP\x"]
-    ep = LoadEddyProOutputFiles(sourcedir=SOURCEDIRS, filetype='EDDYPRO-FLUXNET-CSV-30MIN')
-    ep.searchfiles()
-    ep.loadfiles()
-    maindf = ep.maindf
-    metadata = ep.metadata
+    SOURCEDIR = r"L:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_cha_fp2024_2005-2023\notebooks\31_FLUXES_L1_mergeData_IRGA+M7+MGMT"
+    FILENAME = r"31.6_CH-CHA_IRGA-L1+M7+MGMT_2005-2023.parquet"
+    FILEPATH = Path(SOURCEDIR) / FILENAME
+    maindf = load_parquet(filepath=str(FILEPATH))
+    # SOURCEDIRS = [r"F:\TMP\x"]
+    # ep = LoadEddyProOutputFiles(sourcedir=SOURCEDIRS, filetype='EDDYPRO-FLUXNET-CSV-30MIN')
+    # ep.searchfiles()
+    # ep.loadfiles()
+    # maindf = ep.maindf
+    # metadata = ep.metadata
 
     # locs = (maindf.index.year >= 2019) & (maindf.index.year <= 2023)
-    # locs = (maindf.index.year >= 2021) & (maindf.index.year <= 2023)
-    # maindf = maindf.loc[locs, :].copy()
+    locs = (maindf.index.year >= 2023) & (maindf.index.year <= 2023)
+    maindf = maindf.loc[locs, :].copy()
     # metadata = None
     # print(maindf)
 
@@ -963,9 +968,9 @@ def example():
     # plt.show()
 
     # Flux processing chain settings
-    FLUXVAR = "LE"
+    # FLUXVAR = "LE"
     # FLUXVAR = "H"
-    # FLUXVAR = "FC"
+    FLUXVAR = "FC"
     SITE_LAT = 47.210227
     SITE_LON = 8.410645
     UTC_OFFSET = 1
@@ -1058,8 +1063,8 @@ def example():
     # --------------------
     fpc.level31_storage_correction(gapfill_storage_term=True)
     fpc.finalize_level31()
-    fpc.level31.report()
-    fpc.level31.showplot()
+    # fpc.level31.report()
+    # fpc.level31.showplot()
     # fpc.fpc_df
     # fpc.filteredseries
     # fpc.level31.results
@@ -1069,7 +1074,7 @@ def example():
     # --------------------
     # (OPTIONAL) ANALYZE
     # --------------------
-    fpc.analyze_highest_quality_flux(showplot=True)
+    # fpc.analyze_highest_quality_flux(showplot=True)
     # -------------------------------------------------------------------------
 
     # --------------------
@@ -1099,10 +1104,10 @@ def example():
     # fpc.level32_flag_outliers_hampel_test(window_length=48 * 7, n_sigma=5, showplot=True, verbose=True, repeat=False)
     # fpc.level32_addflag()
 
-    # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=False, verbose=False, repeat=False)
-    fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=True,
-                                               verbose=True, repeat=True)
-    fpc.level32_addflag()
+    # # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=False, verbose=False, repeat=False)
+    # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=True,
+    #                                            verbose=True, repeat=True)
+    # fpc.level32_addflag()
 
     # fpc.level32_flag_outliers_zscore_rolling_test(winsize=48 * 7, thres_zscore=4, showplot=False, verbose=True,
     #                                               repeat=True)
@@ -1173,19 +1178,19 @@ def example():
     # save_as_pickle(outpath=r"F:\TMP", filename="test", data=fpc)
     # fpc = load_pickle(filepath=r"F:\TMP\test.pickle")
 
-    for ustar_scenario in ustar_scenarios:
-        fpc.level33_qcf[ustar_scenario].showplot_qcf_heatmaps()
-        fpc.level33_qcf[ustar_scenario].report_qcf_evolution()
-        # fpc.filteredseries
-        # fpc.level33
-        # fpc.level33_qcf.showplot_qcf_timeseries()
-        # fpc.level33_qcf.report_qcf_flags()
-        # fpc.level33_qcf.report_qcf_series()
-        # fpc.levelidstr
-        # fpc.filteredseries_level2_qcf
-        # fpc.filteredseries_level31_qcf
-        # fpc.filteredseries_level32_qcf
-        # fpc.filteredseries_level33_qcf
+    # for ustar_scenario in ustar_scenarios:
+    #     fpc.level33_qcf[ustar_scenario].showplot_qcf_heatmaps()
+    #     fpc.level33_qcf[ustar_scenario].report_qcf_evolution()
+    #     # fpc.filteredseries
+    #     # fpc.level33
+    #     # fpc.level33_qcf.showplot_qcf_timeseries()
+    #     # fpc.level33_qcf.report_qcf_flags()
+    #     # fpc.level33_qcf.report_qcf_series()
+    #     # fpc.levelidstr
+    #     # fpc.filteredseries_level2_qcf
+    #     # fpc.filteredseries_level31_qcf
+    #     # fpc.filteredseries_level32_qcf
+    #     # fpc.filteredseries_level33_qcf
 
     # --------------------
     # Level-4.1
@@ -1200,9 +1205,9 @@ def example():
         include_timestamp_as_features=False,
         add_continuous_record_number=False,
         verbose=True,
-        perm_n_repeats=3,
+        perm_n_repeats=2,
         rf_kwargs={
-            'n_estimators': 99,
+            'n_estimators': 3,
             'random_state': 42,
             'min_samples_split': 2,
             'min_samples_leaf': 1,
