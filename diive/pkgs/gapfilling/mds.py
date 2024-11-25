@@ -33,19 +33,38 @@ class FluxMDS:
                  swin_class: float = 50,
                  ta_class: float = 2.5,
                  vpd_class: float = 0.5,
+                 min_n_vals_nt: int = 0,
                  verbose: int = 1):
-        """MDS gap-filling for ecosystem fluxes.
+        """Gap-filling for ecosystem fluxes, based on marginal distribution sampling (MDS
+        described in Reichstein et al. (2005).
+
+        Missing values are replaced by the average *flux* value during
+        similar meteorological conditions.
+
+        The MDS method in diive was implemented following the description in
+        Reichstein et al. (2005). One difference in the implementation is that
+        diive introduces the parameter *min_n_vals_nt*, which allows to set a
+        minimum of required values to calculate the average *flux* for the gap
+        during nighttime conditions.
 
         Args:
-            df:
-            flux:
-            swin:
-            ta:
-            vpd:
-            swin_class: (W m-2)
-            ta_class: (°C)
-            vpd_class: (kPa)
-            verbose:
+            df: Dataframe that contains data for *flux*, *swin*, *ta* and *vpd*.
+            flux: Name of flux variable in *df* that will be gap-filled.
+            swin: Name of short-wave incoming radiation variable in *df*. (W m-2)
+            ta: Name of air temperature variable in *df*. (°C)
+            vpd: Name of vapor pressure deficit variable in *df*. (kPa)
+            swin_class: Used for grouping *flux* data into groups of similar
+                meteorological conditions. Data in the respective group must
+                not deviate by more than +/- 50 W m-2 (default). (W m-2)
+            ta_class: Used for grouping *flux* data into groups of similar
+                meteorological conditions. Data in the respective group must
+                not deviate by more than +/- 2.5 °C (default). (°C)
+            vpd_class: Used for grouping *flux* data into groups of similar
+                meteorological conditions. Data in the respective group must
+                not deviate by more than +/- 0.5 kPa (default). (kPa)
+            min_n_vals_nt: Minimum number of measured *flux* values required to
+                calculate the average *flux* value for gaps during nighttime.
+            verbose: Value 1 creates more text output.
         """
         self._df = df[[flux, swin, ta, vpd]].copy()
         self.flux = flux
@@ -55,6 +74,7 @@ class FluxMDS:
         self.swin_class = swin_class
         self.ta_class = ta_class
         self.vpd_class = vpd_class
+        self.min_n_vals_nt = min_n_vals_nt if min_n_vals_nt else 0
         self.verbose = verbose
 
         self._scores = dict()
@@ -68,17 +88,32 @@ class FluxMDS:
 
     def get_gapfilled_target(self):
         """Gap-filled target time series"""
-        return self.gapfilling_df_[self.target_gapfilled]
+        return self.gapfilling_df_[self.target_gapfilled].copy()
 
     def get_flag(self):
         """Gap-filling flag, where 0=observed, 1+=gap-filled"""
         return self.gapfilling_df_[self.target_gapfilled_flag]
 
     @property
+    def gapfilled_(self) -> pd.Series:
+        """Gap-filled data."""
+        series = self.get_gapfilled_target()
+        if not isinstance(series, pd.Series):
+            raise Exception('No gap-filled data available.')
+        return series
+
+    @property
+    def target_col(self) -> str:
+        """Gap-filled data."""
+        if not isinstance(self.flux, str):
+            raise Exception('No name for gap-filled variable available.')
+        return self.flux
+
+    @property
     def gapfilling_df_(self) -> DataFrame:
         """Dataframe containing all data."""
         if not isinstance(self._df, DataFrame):
-            raise Exception('No overall flag available.')
+            raise Exception('No dataframe containing all data available.')
         return self._df
 
     @property
@@ -142,7 +177,7 @@ class FluxMDS:
               f"    {potential_vals} potential values\n"
               f"    {n_vals_after} available values\n"
               f"    {n_vals_missing_after} missing values\n"
-              f"    {predictionsmeanquality:.3f} predictions mean quality (1=best)")
+              f"    {predictionsmeanquality:.3f} predictions mean quality across all records (1=best)")
 
         print(f"\nGap-filling quality flags ({self.target_gapfilled_flag}):")
         for key, value in flagcounts.items():
@@ -219,9 +254,12 @@ class FluxMDS:
         locs_measured_available = ~locs_measured_missing
         self.gapfilling_df_.loc[locs_measured_available, self.target_gapfilled_flag] = 0
 
-        # Gap-filling flag is equal to prediction quality where measurement was gap-filled
-        self.gapfilling_df_[self.target_gapfilled_flag] = self.gapfilling_df_[self.target_gapfilled_flag].fillna(
-            self.gapfilling_df_['.PREDICTIONS_QUALITY'])
+        # Gap-filling flag is equal to prediction quality where measurement was missing
+        self.gapfilling_df_.loc[locs_measured_missing, self.target_gapfilled_flag] = \
+            self.gapfilling_df_.loc[locs_measured_missing, '.PREDICTIONS_QUALITY']
+        # self.gapfilling_df_[self.target_gapfilled_flag] = \
+        #     self.gapfilling_df_[self.target_gapfilled_flag].fillna(self.gapfilling_df_['.PREDICTIONS_QUALITY'])
+
 
         # # Flag
         # # Make flag column that indicates where predictions for
@@ -247,7 +285,10 @@ class FluxMDS:
         scoredf = scoredf.dropna()
         self._scores = prediction_scores(predictions=scoredf['.PREDICTIONS'], targets=scoredf[self.flux])
 
-        print("Done.")
+        self._scores['mean_quality_flag_gap_predictions'] = \
+            self.gapfilling_df_.loc[locs_measured_missing, self.target_gapfilled_flag].mean()
+
+        print("MDS gap-filling done.")
 
     def _run_all_available(self, days: int, quality: int):
 
@@ -383,9 +424,27 @@ class FluxMDS:
         return avg
 
     def _calc_avg(self, locs: bool) -> float:
-        _array = self.gapfilling_df_.loc[locs, self.flux].to_numpy()
+        _df = self.gapfilling_df_.loc[locs, [self.flux, self.swin]].copy()
+        _array = _df[self.flux].to_numpy()
+        # _array = self.gapfilling_df_.loc[locs, self.flux].to_numpy()
         n_vals = len(_array[~np.isnan(_array)])
-        if n_vals > 0:
+
+        # Return NaN if no flux records available
+        if n_vals == 0:
+            avg = np.nan
+            return avg
+
+        # Check if this is nighttime data
+        _swin = _df.copy()
+        _swin = _df.dropna()  # Keep records where both flux and SW_IN are available
+        _swin = _swin[self.swin].copy()
+        _swin = _swin.to_numpy()
+        _swin = np.nanmean(_swin)
+        # Minimum number of values when building average for nighttime data
+        min_n_vals = self.min_n_vals_nt if _swin < 100 else 0
+
+        if n_vals >= min_n_vals:
+            # print(n_vals)
             avg = np.nanmean(_array)
         else:
             avg = np.nan
