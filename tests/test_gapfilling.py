@@ -24,6 +24,8 @@ class TestGapFilling(unittest.TestCase):
         df = load_exampledata_parquet()
         locs = (df.index.year >= 2022) & (df.index.year <= 2022)
         df = df.loc[locs].copy()
+        locs = (df.index.month >= 7) & (df.index.month <= 7)
+        df = df.loc[locs].copy()
         mds = FluxMDS(
             df=df,
             flux='NEE_CUT_REF_orig',
@@ -32,28 +34,59 @@ class TestGapFilling(unittest.TestCase):
             vpd='VPD_f',
             swin_class=50,
             ta_class=2.5,
-            vpd_class=0.5  # kPa; 5 hPa is default for reference
+            vpd_class=0.5,  # kPa; 5 hPa is default for reference
+            min_n_vals_nt=0
         )
         mds.run()
         # mds.report()
         # mds.showplot()
 
         results = mds.gapfilling_df_
-        self.assertEqual(len(results), 17520)
-        self.assertEqual(mds.scores_['r2'], 0.8242001112906766)
-        self.assertEqual(mds.scores_['medae'], 0.8888333333333329)
+        self.assertEqual(len(results), 1488)
+        self.assertEqual(mds.scores_['r2'], 0.8489359708564446)
+        self.assertEqual(mds.scores_['medae'], 0.7622857142857145)
         self.assertEqual(results[mds.target_gapfilled].isnull().sum(), 0)
-        self.assertEqual(results[mds.target_gapfilled_flag].sum(), 13573)
+        self.assertEqual(results[mds.target_gapfilled_flag].sum(), 914)
         counts = Counter(results[mds.target_gapfilled_flag])
         # Missing in measured as indicated by flag > 0
         a = results[mds.target_gapfilled_flag][results[mds.target_gapfilled_flag] > 0].count()
         # Missing in measured
         b = results[mds.flux].isnull().sum()
-        self.assertEqual(a, 11412)
-        self.assertEqual(b, 11412)
-        self.assertEqual(counts[0], 6108)
-        self.assertEqual(counts[1], 9919)
+        self.assertEqual(a, 770)
+        self.assertEqual(b, 770)
+        self.assertEqual(counts[0], 718)
+        self.assertEqual(counts[1], 677)
 
+        mds = FluxMDS(
+            df=df,
+            flux='NEE_CUT_REF_orig',
+            ta='Tair_f',
+            swin='Rg_f',
+            vpd='VPD_f',
+            swin_class=50,
+            ta_class=2.5,
+            vpd_class=0.5,  # kPa; 5 hPa is default for reference
+            min_n_vals_nt=5
+        )
+        mds.run()
+        # mds.report()
+        # mds.showplot()
+
+        results = mds.gapfilling_df_
+        self.assertEqual(len(results), 1488)
+        self.assertEqual(mds.scores_['r2'], 0.8191458989901276)
+        self.assertEqual(mds.scores_['medae'], 0.9554999999999998)
+        self.assertEqual(results[mds.target_gapfilled].isnull().sum(), 0)
+        self.assertEqual(results[mds.target_gapfilled_flag].sum(), 1529)
+        counts = Counter(results[mds.target_gapfilled_flag])
+        # Missing in measured as indicated by flag > 0
+        a = results[mds.target_gapfilled_flag][results[mds.target_gapfilled_flag] > 0].count()
+        # Missing in measured
+        b = results[mds.flux].isnull().sum()
+        self.assertEqual(a, 770)
+        self.assertEqual(b, 770)
+        self.assertEqual(counts[0], 718)
+        self.assertEqual(counts[1], 322)
 
     def test_gapfilling_longterm_randomforest(self):
         from diive.configs.exampledata import load_exampledata_parquet
@@ -102,7 +135,8 @@ class TestGapFilling(unittest.TestCase):
         self.assertEqual(gf.feature_ranks_per_year.min().min(), 1)
         self.assertEqual(gf.feature_ranks_per_year.max().max(), 11)
         self.assertEqual(len(gf.feature_importances_yearly_.keys()), 5)
-        self.assertAlmostEqual(gf.feature_importances_yearly_['2017']['PERM_IMPORTANCE']['Rg_f'], 1.1685750257993892, places=5)
+        self.assertAlmostEqual(gf.feature_importances_yearly_['2017']['PERM_IMPORTANCE']['Rg_f'], 1.1685750257993892,
+                               places=5)
         scores = []
         r2s = []
         for year, s in gf.scores_.items():
