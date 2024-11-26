@@ -877,15 +877,21 @@ class LoadEddyProOutputFiles:
 
 class QuickFluxProcessingChain:
 
-    def __init__(self,
-                 fluxvars: list,
-                 sourcedirs: list,
-                 site_lat: float,
-                 site_lon: float,
-                 utc_offset: int,
-                 nighttime_threshold: int = 50,
-                 daytime_accept_qcf_below: int = 2,
-                 nighttimetime_accept_qcf_below: int = 2):
+    def __init__(
+            self,
+            fluxvars: list,
+            sourcedirs: list,
+            site_lat: float,
+            site_lon: float,
+            utc_offset: int,
+            nighttime_threshold: int = 20,
+            daytime_accept_qcf_below: int = 2,
+            nighttimetime_accept_qcf_below: int = 2,
+            test_signal_strength=False,
+            test_signal_strength_col='',
+            test_signal_strength_method='discard above',
+            test_signal_strength_threshold=999
+    ):
         self.fluxvars = fluxvars
         self.sourcedirs = sourcedirs
         self.site_lat = site_lat
@@ -894,6 +900,12 @@ class QuickFluxProcessingChain:
         self.nighttime_threshold = nighttime_threshold
         self.daytime_accept_qcf_below = daytime_accept_qcf_below
         self.nighttimetime_accept_qcf_below = nighttimetime_accept_qcf_below
+
+        # Tests that are not always available
+        self.test_signal_strength = test_signal_strength
+        self.test_signal_strength_col = test_signal_strength_col
+        self.test_signal_strength_method = test_signal_strength_method
+        self.test_signal_strength_threshold = test_signal_strength_threshold
 
         self.fpc = None
 
@@ -907,44 +919,62 @@ class QuickFluxProcessingChain:
             self._run_level2()
             self._run_level31()
             self._run_level32()
-            if fluxcol in ['H', 'LE']:
-                continue
-            self._run_level33()
+            self._run_level33(fluxcol=fluxcol)
 
-    def _run_level33(self):
-        self.fpc.level33_constant_ustar(thresholds=[0.08],
-                                        threshold_labels=['CUT_PRELIM'],
+    def _run_level33(self, fluxcol):
+        if fluxcol in ['H', 'LE']:
+            thresholds = [0]
+            ustar_scenarios = ['CUT_NONE']
+        else:
+            thresholds = [0.08]
+            ustar_scenarios = ['CUT_PRELIM']
+        self.fpc.level33_constant_ustar(thresholds=thresholds,
+                                        threshold_labels=ustar_scenarios,
                                         showplot=False)
         self.fpc.finalize_level33()
-    
+
+        for ustar_scenario in ustar_scenarios:
+            self.fpc.level33_qcf[ustar_scenario].showplot_qcf_heatmaps()
+            self.fpc.level33_qcf[ustar_scenario].report_qcf_evolution()
+            # fpc.filteredseries
+            # fpc.level33
+            # self.fpc.level33_qcf[ustar_scenario].showplot_qcf_timeseries()
+            # self.fpc.level33_qcf[ustar_scenario].report_qcf_flags()
+            # self.fpc.level33_qcf[ustar_scenario].report_qcf_series()
+            # fpc.levelidstr
+            # fpc.filteredseries_level2_qcf
+            # fpc.filteredseries_level31_qcf
+            # fpc.filteredseries_level32_qcf
+            # fpc.filteredseries_level33_qcf
+
     def _run_level32(self):
         self.fpc.level32_stepwise_outlier_detection()
-        self.fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
+        self.fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=False, verbose=True, repeat=True)
         self.fpc.level32_addflag()
         self.fpc.finalize_level32()
 
         # self.fpc.filteredseries
         # self.fpc.level32.results
-        self.fpc.level32_qcf.showplot_qcf_heatmaps()
+        # self.fpc.level32_qcf.showplot_qcf_heatmaps()
         # self.fpc.level32_qcf.showplot_qcf_timeseries()
         # self.fpc.level32_qcf.report_qcf_flags()
-        self.fpc.level32_qcf.report_qcf_evolution()
-        self.fpc.level32_qcf.report_qcf_series()
+        # self.fpc.level32_qcf.report_qcf_evolution()
+        # self.fpc.level32_qcf.report_qcf_series()
 
     def _run_level31(self):
         self.fpc.level31_storage_correction(gapfill_storage_term=True)
         self.fpc.finalize_level31()
         # fpc.level31.showplot(maxflux=50)
-        self.fpc.level31.report()
+        # self.fpc.level31.report()
 
     def _run_level2(self):
         TEST_SSITC = True  # Default True
         TEST_GAS_COMPLETENESS = True  # Default True
         TEST_SPECTRAL_CORRECTION_FACTOR = True  # Default True
-        TEST_SIGNAL_STRENGTH = True
-        TEST_SIGNAL_STRENGTH_COL = 'CUSTOM_AGC_MEAN'
-        TEST_SIGNAL_STRENGTH_METHOD = 'discard above'
-        TEST_SIGNAL_STRENGTH_THRESHOLD = 90
+        # TEST_SIGNAL_STRENGTH = True
+        # TEST_SIGNAL_STRENGTH_COL = 'CUSTOM_AGC_MEAN'
+        # TEST_SIGNAL_STRENGTH_METHOD = 'discard above'
+        # TEST_SIGNAL_STRENGTH_THRESHOLD = 90
         # TimeSeries(series=maindf[TEST_SIGNAL_STRENGTH_COL]).plot()
         TEST_RAWDATA = True  # Default True
         TEST_RAWDATA_SPIKES = True  # Default True
@@ -962,10 +992,10 @@ class QuickFluxProcessingChain:
         TEST_RAWDATA_STEADINESS_OF_HORIZONTAL_WIND = False  # Default False
         LEVEL2_SETTINGS = {
             'signal_strength': {
-                'apply': TEST_SIGNAL_STRENGTH,
-                'signal_strength_col': TEST_SIGNAL_STRENGTH_COL,
-                'method': TEST_SIGNAL_STRENGTH_METHOD,
-                'threshold': TEST_SIGNAL_STRENGTH_THRESHOLD},
+                'apply': self.test_signal_strength,
+                'signal_strength_col': self.test_signal_strength_col,
+                'method': self.test_signal_strength_method,
+                'threshold': self.test_signal_strength_threshold},
             'raw_data_screening_vm97': {
                 'apply': TEST_RAWDATA,
                 'spikes': TEST_RAWDATA_SPIKES,
@@ -997,7 +1027,9 @@ class QuickFluxProcessingChain:
             fluxcol=fluxcol,
             site_lat=self.site_lat,
             site_lon=self.site_lon,
-            utc_offset=self.utc_offset
+            utc_offset=self.utc_offset,
+            daytime_accept_qcf_below=self.daytime_accept_qcf_below,
+            nighttimetime_accept_qcf_below=self.nighttimetime_accept_qcf_below
         )
         return fpc
 
@@ -1010,14 +1042,19 @@ class QuickFluxProcessingChain:
 
 def example_quick():
     QuickFluxProcessingChain(
+        # fluxvars=['FC'],
         fluxvars=['FC', 'LE', 'H'],
         sourcedirs=[r'F:\TMP\HON'],
         site_lat=47.115833,
         site_lon=8.537778,
         utc_offset=1,
-        nighttime_threshold=50,
+        nighttime_threshold=20,
         daytime_accept_qcf_below=2,
-        nighttimetime_accept_qcf_below=2
+        nighttimetime_accept_qcf_below=2,
+        test_signal_strength=True,
+        test_signal_strength_col='CUSTOM_AGC_MEAN',
+        test_signal_strength_method='discard above',
+        test_signal_strength_threshold=90,
     )
 
 
