@@ -1,4 +1,5 @@
 #  TODO NEEDS FLOW CHECK
+
 from typing import Literal
 
 import matplotlib.gridspec as gridspec
@@ -20,6 +21,7 @@ from diive.pkgs.flux.ustarthreshold import FlagMultipleConstantUstarThresholds
 from diive.pkgs.fluxprocessingchain.level2_qualityflags import FluxQualityFlagsEddyPro
 from diive.pkgs.fluxprocessingchain.level31_storagecorrection import FluxStorageCorrectionSinglePointEddyPro
 from diive.pkgs.gapfilling.longterm import LongTermGapFillingRandomForestTS
+from diive.pkgs.gapfilling.mds import FluxMDS
 from diive.pkgs.outlierdetection.stepwiseoutlierdetection import StepwiseOutlierDetection
 from diive.pkgs.qaqc.qcf import FlagQCF
 
@@ -109,6 +111,7 @@ class FluxProcessingChain:
         for gfmethod, ustar_scenarios in self.level41.items():
             for ustar_scenario in ustar_scenarios:
                 nongapfilled_vars.append(self.level41[gfmethod][ustar_scenario].target_col)
+        # nongapfilled_vars = list(set(nongapfilled_vars))
         return nongapfilled_vars
 
     def report_gapfilling_variables(self):
@@ -130,43 +133,63 @@ class FluxProcessingChain:
         for gfmethod, ustar_scenarios in self.level41.items():
             for ustar_scenario in ustar_scenarios:
                 print(f"\nMODEL SCORES ({gfmethod}): {ustar_scenario}")
-                modelscores = pd.DataFrame.from_dict(self.level41[gfmethod][ustar_scenario].scores_, orient='columns')
+                try:
+                    modelscores = pd.DataFrame.from_dict(self.level41[gfmethod][ustar_scenario].scores_,
+                                                         orient='columns')
+                except ValueError:
+                    modelscores = pd.DataFrame.from_dict(self.level41[gfmethod][ustar_scenario].scores_,
+                                                         orient='index')
                 print(modelscores)
 
     def report_gapfilling_poolyears(self):
-        print("DATA POOLS USED FOR GAP_FILLING:")
+        print("DATA POOLS USED FOR MACHINE-LEARNING GAP-FILLING:")
         for gfmethod, ustar_scenarios in self.level41.items():
             for ustar_scenario in ustar_scenarios:
-                for yr, pool in self.level41[gfmethod][ustar_scenario].yearpools.items():
-                    print(f"{yr}: {gfmethod} used data from {pool['poolyears']} "
-                          f"for gap-filling {self.level41[gfmethod][ustar_scenario].target_col} and "
-                          f"producing --> {self.level41[gfmethod][ustar_scenario].gapfilled_.name}")
+                try:
+                    for yr, pool in self.level41[gfmethod][ustar_scenario].yearpools.items():
+                        print(f"{yr}: {gfmethod} used data from {pool['poolyears']} "
+                              f"for gap-filling {self.level41[gfmethod][ustar_scenario].target_col} and "
+                              f"producing --> {self.level41[gfmethod][ustar_scenario].gapfilled_.name}")
+                except AttributeError:
+                    print(f"{gfmethod} {ustar_scenario} did not use poolyears.")
                 print("\n")
 
     def showplot_feature_ranks_per_year(self):
         for gfmethod, ustar_scenarios in self.level41.items():
             for ustar_scenario in ustar_scenarios:
-                results = self.level41[gfmethod][ustar_scenario]
-                title = f"{results.gapfilled_.name} ({ustar_scenario})"
-                first_key = next(iter(self.level41[gfmethod][ustar_scenario].results_yearly_))
-                model_params = self.level41[gfmethod][ustar_scenario].results_yearly_[
-                    first_key].model_.get_params()
-                txt = f"MODEL: {gfmethod} / PARAMS: {model_params}"
-                results.showplot_feature_ranks_per_year(title=f"{title}", subtitle=f"{txt}")
+                try:
+                    results = self.level41[gfmethod][ustar_scenario]
+                    title = f"{results.gapfilled_.name} ({ustar_scenario})"
+                    first_key = next(iter(self.level41[gfmethod][ustar_scenario].results_yearly_))
+                    model_params = self.level41[gfmethod][ustar_scenario].results_yearly_[
+                        first_key].model_.get_params()
+                    txt = f"MODEL: {gfmethod} / PARAMS: {model_params}"
+                    results.showplot_feature_ranks_per_year(title=f"{title}", subtitle=f"{txt}")
+                except AttributeError:
+                    print(f"{gfmethod} {ustar_scenario} does not have feature ranks.")
 
-    def showplot_gapfilled_heatmap(self):
+    def showplot_gapfilled_heatmap(self, vmin: float = None, vmax: float = None):
         """Show heatmap plot for gap-filled and non-gap-filled data in each USTAR scenario."""
         gapfilled_vars = self.get_gapfilled_names()
         nongapfilled_vars = self.get_nongapfilled_names()
         gfvars = self.get_gapfilled_variables()
         for ix, g in enumerate(gapfilled_vars):
-            fig = plt.figure(figsize=(9, 9), dpi=100)
+            fig = plt.figure(figsize=(12, 12), dpi=100)
             gs = gridspec.GridSpec(1, 2)  # rows, cols
             # gs.update(wspace=.2, hspace=1, left=.1, right=.9, top=.85, bottom=.1)
             ax_ngf = fig.add_subplot(gs[0, 0])
             ax_gf = fig.add_subplot(gs[0, 1])
-            hm = HeatmapDateTime(ax=ax_ngf, series=gfvars[nongapfilled_vars[ix]]).plot()
-            hm = HeatmapDateTime(ax=ax_gf, series=gfvars[g]).plot()
+
+            # Non-gapfilled data must be a Series, but if the gap-filled time series
+            # have the same data basis then it is a DataFrame. In that case, the dataframe
+            # is converted to a series.
+            series_ngf = gfvars[nongapfilled_vars[ix]].copy()
+            if isinstance(series_ngf, pd.DataFrame):
+                series_ngf = series_ngf.loc[:, ~series_ngf.columns.duplicated()].copy()
+                series_ngf = series_ngf.squeeze()
+
+            hm = HeatmapDateTime(ax=ax_ngf, series=series_ngf, vmin=vmin, vmax=vmax).plot()
+            hm = HeatmapDateTime(ax=ax_gf, series=gfvars[g], vmin=vmin, vmax=vmax).plot()
             fig.tight_layout()
             fig.show()
 
@@ -484,28 +507,91 @@ class FluxProcessingChain:
 
     def level41_gapfilling_longterm(
             self,
-            features: list,
             run_random_forest: bool = True,
-            run_mds: bool = False,  # todo
-            features_lag: list or None = None,
-            reduce_features: bool = False,
-            include_timestamp_as_features: bool = False,
-            add_continuous_record_number: bool = False,
+            run_mds: bool = False,
             sanitize_timestamp: bool = True,
-            perm_n_repeats: int = 10,
-            rf_kwargs: dict = None,
+            ml_feature_settings: dict = None,
+            rf_settings: dict = None,
+            mds_settings: dict = None,
             verbose: int = 0
     ):
+
         idstr = 'L4.1'
         self._levelidstr.append(idstr)
 
-        # todo
         if run_random_forest:
-            self._run_random_forest(features, rf_kwargs, include_timestamp_as_features, add_continuous_record_number,
-                                    features_lag, verbose, sanitize_timestamp, perm_n_repeats, reduce_features)
+            self._run_random_forest(ml_feature_settings, rf_settings, verbose, sanitize_timestamp)
 
-    def _run_random_forest(self, features, rf_kwargs, include_timestamp_as_features, add_continuous_record_number,
-                           features_lag, verbose, sanitize_timestamp, perm_n_repeats, reduce_features):
+        if run_mds:
+            self._run_mds(mds_settings)
+
+    @staticmethod
+    def _get_ml_feature_settings(settings: dict):
+        """General feature settings for machine-learning models"""
+        features = settings['features']
+
+        # Fill missing keys with default settings
+        features_lag = \
+            None if 'features_lag' not in settings else settings['features_lag']
+        reduce_features = \
+            False if 'reduce_features' not in settings else settings['reduce_features']
+        include_timestamp_as_features = \
+            False if 'include_timestamp_as_features' not in settings else settings['include_timestamp_as_features']
+        add_continuous_record_number = \
+            False if 'add_continuous_record_number' not in settings else settings['add_continuous_record_number']
+        perm_n_repeats = \
+            10 if 'perm_n_repeats' not in settings else settings['perm_n_repeats']
+
+        settings = {
+            'features': features,
+            'features_lag': features_lag,
+            'reduce_features': reduce_features,
+            'include_timestamp_as_features': include_timestamp_as_features,
+            'add_continuous_record_number': add_continuous_record_number,
+            'perm_n_repeats': perm_n_repeats
+        }
+
+        return settings
+
+    def _run_mds(self, mds_settings):
+
+        # Store results in separate dict within Level-4.1
+        self._level41['mds'] = dict()
+
+        # Collect data and run model for each USTAR scenario for gapfilling
+        # todo what is if there is no scenario eg h2o fluxes?
+        for ustar_scen, ustar_flux in self.filteredseries_level33_qcf.items():
+            # Get features from input data
+            mdscols = [mds_settings['swin'], mds_settings['ta'], mds_settings['vpd']]
+            this_ust_scen_df = self.df[mdscols].copy()
+
+            # Add USTAR-filtered flux from recent results (Level-3.3)
+            this_ust_scen_df = pd.concat([this_ust_scen_df, self.fpc_df[ustar_flux.name]], axis=1)
+
+            instance = FluxMDS(
+                df=this_ust_scen_df,
+                flux=ustar_flux.name,
+                **mds_settings
+            )
+            instance.run()
+
+            # Add gap-filled flux and gap-filling flag to flux processing chain dataframe
+            fluxdata = instance.get_gapfilled_target()
+            # flagname = [c for c in instance.gapfilling_df_
+            #             if str(c).startswith("FLAG_") and str(c).endswith("_ISFILLED")]
+            # flagname = flagname[0] if len(flagname) == 1 else None
+            flagdata = instance.get_flag()
+            self._fpc_df = pd.concat([self.fpc_df, fluxdata, flagdata], axis=1)
+
+            # Save instance to Level-4.1
+            self._level41['mds'][ustar_scen] = instance
+
+            # instance.report()
+            # instance.showplot()
+
+    def _run_random_forest(self, ml_feature_settings, rf_kwargs, verbose, sanitize_timestamp):
+
+        ml_feature_settings = self._get_ml_feature_settings(settings=ml_feature_settings)
 
         # Store results in separate dict within Level-4.1
         self._level41['random_forest'] = dict()
@@ -523,7 +609,7 @@ class FluxProcessingChain:
         for ustar_scen, ustar_flux in self.filteredseries_level33_qcf.items():
 
             # Get features from input data
-            this_ust_scen_df = self.df[features].copy()
+            this_ust_scen_df = self.df[ml_feature_settings['features']].copy()
 
             # Add USTAR-filtered flux from recent results (Level-3.3)
             this_ust_scen_df = pd.concat([this_ust_scen_df, self.fpc_df[ustar_flux.name]], axis=1)
@@ -532,12 +618,12 @@ class FluxProcessingChain:
             general_kwargs = dict(
                 input_df=this_ust_scen_df,
                 target_col=ustar_flux.name,
-                include_timestamp_as_features=include_timestamp_as_features,
-                add_continuous_record_number=add_continuous_record_number,
-                features_lag=features_lag,
+                include_timestamp_as_features=ml_feature_settings['include_timestamp_as_features'],
+                add_continuous_record_number=ml_feature_settings['add_continuous_record_number'],
+                features_lag=ml_feature_settings['features_lag'],
                 verbose=verbose,
                 sanitize_timestamp=sanitize_timestamp,
-                perm_n_repeats=perm_n_repeats
+                perm_n_repeats=ml_feature_settings['perm_n_repeats'],
             )
 
             # Initialize random forest for this scenario
@@ -550,7 +636,7 @@ class FluxProcessingChain:
             instance.initialize_yearly_models()
 
             # Feature reduction *across all* years (not *per* year)
-            if reduce_features:
+            if ml_feature_settings['reduce_features']:
                 instance.reduce_features_across_years()
 
             # Train model and fill gaps
@@ -821,7 +907,16 @@ class QuickFluxProcessingChain:
             self._run_level2()
             self._run_level31()
             self._run_level32()
+            if fluxcol in ['H', 'LE']:
+                continue
+            self._run_level33()
 
+    def _run_level33(self):
+        self.fpc.level33_constant_ustar(thresholds=[0.08],
+                                        threshold_labels=['CUT_PRELIM'],
+                                        showplot=False)
+        self.fpc.finalize_level33()
+    
     def _run_level32(self):
         self.fpc.level32_stepwise_outlier_detection()
         self.fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
@@ -916,7 +1011,7 @@ class QuickFluxProcessingChain:
 def example_quick():
     QuickFluxProcessingChain(
         fluxvars=['FC', 'LE', 'H'],
-        sourcedirs=[r'L:\Sync\luhk_work\TMP'],
+        sourcedirs=[r'F:\TMP\HON'],
         site_lat=47.115833,
         site_lon=8.537778,
         utc_offset=1,
@@ -934,7 +1029,7 @@ def example():
     FILENAME = r"31.6_CH-CHA_IRGA-L1+M7+MGMT_2005-2023.parquet"
     FILEPATH = Path(SOURCEDIR) / FILENAME
     maindf = load_parquet(filepath=str(FILEPATH))
-    # SOURCEDIRS = [r"F:\TMP\x"]
+    # SOURCEDIRS = [r"L:\Sync\luhk_work\20 - CODING\21 - DIIVE\diive\notebooks\FluxProcessingChain\example_data"]
     # ep = LoadEddyProOutputFiles(sourcedir=SOURCEDIRS, filetype='EDDYPRO-FLUXNET-CSV-30MIN')
     # ep.searchfiles()
     # ep.loadfiles()
@@ -944,6 +1039,8 @@ def example():
     # locs = (maindf.index.year >= 2019) & (maindf.index.year <= 2023)
     locs = (maindf.index.year >= 2023) & (maindf.index.year <= 2023)
     maindf = maindf.loc[locs, :].copy()
+    # locs = (maindf.index.month >= 7) & (maindf.index.month <= 7)
+    # maindf = maindf.loc[locs, :].copy()
     # metadata = None
     # print(maindf)
 
@@ -1071,11 +1168,11 @@ def example():
     # [x for x in fpc.fpc_df.columns if 'L3.1' in x]
     # -------------------------------------------------------------------------
 
-    # --------------------
-    # (OPTIONAL) ANALYZE
-    # --------------------
+    # # --------------------
+    # # (OPTIONAL) ANALYZE
+    # # --------------------
     # fpc.analyze_highest_quality_flux(showplot=True)
-    # -------------------------------------------------------------------------
+    # # -------------------------------------------------------------------------
 
     # --------------------
     # Level-3.2
@@ -1157,16 +1254,15 @@ def example():
     # --------------------
     # Level-3.3
     # --------------------
-    # 0.0532449, 0.0709217, 0.0949867
+    # 0.052945, 0.069898, 0.092841
     # ustar_scenarios = ['NO_USTAR']
     # ustar_thresholds = [-9999]
-    ustar_scenarios = ['CUT_50']
-    ustar_thresholds = [0.0709217]
+    # ustar_scenarios = ['CUT_50']
+    # ustar_thresholds = [0.069898]
     # ustar_scenarios = ['CUT_50', 'CUT_84']
-    # ustar_thresholds = [0.0709217, 0.0949867]
-    # TODO check flag issue during finalizing
-    # ustar_scenarios = ['CUT_16', 'CUT_50', 'CUT_84']
-    # ustar_thresholds = [0.0532449, 0.0709217, 0.0949867]
+    # ustar_thresholds = [0.069898, 0.092841]
+    ustar_scenarios = ['CUT_16', 'CUT_50', 'CUT_84']
+    ustar_thresholds = [0.052945, 0.069898, 0.092841]
     fpc.level33_constant_ustar(thresholds=ustar_thresholds,
                                threshold_labels=ustar_scenarios,
                                showplot=False)
@@ -1198,20 +1294,31 @@ def example():
 
     fpc.level41_gapfilling_longterm(
         run_random_forest=True,
-        run_mds=False,
-        features=["TA_T1_2_1", "SW_IN_T1_2_1", "VPD_T1_2_1"],
-        # features_lag=[-1, -1],
-        reduce_features=False,
-        include_timestamp_as_features=False,
-        add_continuous_record_number=False,
+        run_mds=True,
         verbose=True,
-        perm_n_repeats=2,
-        rf_kwargs={
-            'n_estimators': 3,
+        ml_feature_settings={
+            'features': ["TA_T1_2_1", "SW_IN_T1_2_1", "VPD_T1_2_1"],
+            'features_lag': [-1, -1],
+            'reduce_features': False,
+            'include_timestamp_as_features': True,
+            'add_continuous_record_number': True,
+            'perm_n_repeats': 2,
+        },
+        rf_settings={
+            'n_estimators': 99,
             'random_state': 42,
-            'min_samples_split': 2,
-            'min_samples_leaf': 1,
+            'min_samples_split': 20,
+            'min_samples_leaf': 10,
             'n_jobs': -1
+        },
+        mds_settings={
+            'swin': "SW_IN_T1_2_1",
+            'ta': "TA_T1_2_1",
+            'vpd': "VPD_T1_2_1",
+            'swin_class': 50,
+            'ta_class': 2.5,
+            'vpd_class': 0.5,
+            'min_n_vals_nt': 5
         }
     )
 
@@ -1221,13 +1328,17 @@ def example():
     gapfilled_vars = fpc.get_gapfilled_variables()
     fpc.report_gapfilling_variables()
     fpc.report_gapfilling_model_scores()
+
+    # Only ML models:
     fpc.report_gapfilling_poolyears()
 
     # todo get full data
 
-    fpc.showplot_gapfilled_heatmap()
-    fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{µmol\ CO_2\ m^{-2}}$)', per_year=True)
+    fpc.showplot_gapfilled_heatmap(vmin=-34, vmax=16)
+    # fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{µmol\ CO_2\ m^{-2}}$)', per_year=True)
     fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{µmol\ CO_2\ m^{-2}}$)', per_year=False)
+
+    # Only ML models:
     fpc.showplot_feature_ranks_per_year()
 
     # TODO heatmap of used model data pools
@@ -1572,6 +1683,6 @@ def example_cumu():
 
 
 if __name__ == '__main__':
-    # example_quick()
-    example()
+    example_quick()
+    # example()
     # example_cumu()

@@ -213,7 +213,7 @@ class TestFluxProcessingChain(unittest.TestCase):
             # add_continuous_record_number=True,
             verbose=True,
             perm_n_repeats=1,
-            rf_kwargs={
+            rf_settings={
                 'n_estimators': 3,
                 'random_state': 42,
                 'min_samples_split': 2,

@@ -296,7 +296,7 @@ class FluxMDS:
         if workdf.empty:
             return workdf, _df
 
-        print(f"Gap-filling quality {quality} ...")
+        print(f"\nMDS gap-filling quality {quality} ...")
 
         offset = pd.DateOffset(days=days)
         workdf['.START'] = pd.to_datetime(workdf.index) - offset
