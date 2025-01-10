@@ -2,6 +2,52 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.85.0 | X Dec 2024
+
+- todo implement lagged_variants in fpc etc...
+
+### Updates to MDS gap-filling
+
+Generally, the MDS method in `diive` was implemented following the description in Reichstein et al. (2005) and is thus
+similar to gap-filling applied by FLUXNET, ICOS, ReddyProc and others. By applying the MDS method, missing values are
+replaced by the average *flux* value during similar meteorological conditions.
+
+One important difference of the MDS method in `diive` in comparison to other implementations is that `diive` introduces
+the parameter *min_n_vals_nt*, which allows to set a minimum of required values to calculate the average *flux* for a
+gap during nighttime conditions. Without this setting the MDS method is prone to introducing nighttime CO2 uptake in
+gap-filled data by filling gaps based on the average of few (or single) available data points.
+
+### Changes
+
+- Added parameter `min_n_vals_nt` in MDS gap-filling (`diive.pkgs.gapfilling.mds.FluxMDS`)
+
+### Additions
+
+- Added MDS gap-filling to flux processing chain (
+  `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain`)
+- Allow fitting to unbinned data (`diive.pkgs.fits.fitter.BinFitterCP`)
+- Added parameter to edit y-label (`diive.core.plotting.dielcycle.DielCycle`)
+- Added preliminary USTAR filtering for NEE to quick flux processing chain (
+  `diive.pkgs.fluxprocessingchain.fluxprocessingchain.QuickFluxProcessingChain`)
+
+### Notebooks
+
+- Updated flux processing chain notebook to `v9.0`: added option for MDS gap-filling, more descriptions
+- Bugfix: import for loading from `Path` was missing in flux processing chain notebook
+- Updated MDS gap-filling notebook to `v1.1`, added more descriptions and example for `min_n_vals_nt` parameter
+- Updated quick flux processing chain notebook
+
+### Unittests
+
+- Updated test case `tests.test_gapfilling.TestGapFilling.test_fluxmds`
+- Updated test case `tests.test_fluxprocessingchain.TestFluxProcessingChain.test_fluxprocessingchain`
+- 52/52 unittests ran successfully
+
+### Bugfixes
+
+- The setting for features that should not be lagged was not properly implemented (
+  `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain._get_ml_feature_settings`)
+
 ## v0.84.2 | 8 Nov 2024
 
 ### Changes
