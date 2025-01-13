@@ -8,6 +8,7 @@ import diive.core.io.filedetector as fd
 from diive.core.dfun.frames import trim_frame
 from diive.core.io.filereader import ReadFileType
 from diive.core.io.filereader import search_files
+from diive.core.io.files import save_parquet
 from diive.core.times.times import create_timestamp
 from diive.pkgs.echires.windrotation import WindRotation2D
 
@@ -28,6 +29,7 @@ class FileSplitter:
             outdir: str,
             data_split_outfile_prefix: str = "",
             data_split_outfile_suffix: str = "",
+            splits_output_format: str = "csv",
             compress_splits: bool = False,
             rotation: bool = False,
             u_var: str = None,
@@ -57,8 +59,10 @@ class FileSplitter:
                 For example 3600 if the file is one hour long.
             data_split_outfile_prefix: Prefix for split file names.
             data_split_outfile_suffix: Suffix for split file names.
-            compress_splits: If *True*, compress splits using 'gzip'. If *False*, splits
-                are saved as CSV files.
+            splits_output_format: Can be either 'csv' or 'parquet'.
+            compress_splits: If *True*, splits are saved in the format defined in *splits_output_format*
+                and then compressed using 'gzip', the uncompressed files are deleted. If *False*, splits
+                are saved in the format defined in *splits_output_format*.
             rotation: If *True*, the wind components *u*, *v*, *w* and the scalar *c* are rotated, using
                 2-D wind rotation, i.e., the turbulent departures of wind and scalar are calcualted
                 using Reynold's averaging.
@@ -85,6 +89,7 @@ class FileSplitter:
         self.file_start = file_start
         self.data_split_outfile_prefix = data_split_outfile_prefix
         self.data_split_outfile_suffix = data_split_outfile_suffix
+        self.splits_output_format = splits_output_format
         self.compress_splits = compress_splits
         self.rotation = rotation
         self.u_col = u_var
@@ -160,11 +165,6 @@ class FileSplitter:
         if self.split_trim:
             self.data_split_outfile_suffix = f"{self.data_split_outfile_suffix}_TRIM"
 
-        if self.compress_splits:
-            file_extension = '.csv.gz'
-        else:
-            file_extension = '.csv'
-
         # Loop segments
         splits_overview_df = pd.DataFrame()
         split_grouped = file_df.groupby(pd.Grouper(key='index', freq=self.data_split_duration))
@@ -173,13 +173,14 @@ class FileSplitter:
             split_start = split_df.index[0]
             split_end = split_df.index[-1]
 
+            # Wind rotation
             if self.rotation:
                 split_df = self._rotate_split(split_df=split_df)
 
             # Name for split file
             split_name = (f"{self.data_split_outfile_prefix}"
                           f"{split_start.strftime('%Y%m%d%H%M%S')}"
-                          f"{self.data_split_outfile_suffix}{file_extension}")
+                          f"{self.data_split_outfile_suffix}")
 
             # Trim dataframe: remove start and end records where col is empty
             if self.split_trim:
@@ -189,20 +190,34 @@ class FileSplitter:
                           f"is empty.")
                     continue
 
+            # Limit number of exported records, useful for testing
+            if self.outfile_limit_n_rows:
+                split_df = split_df.iloc[0:self.outfile_limit_n_rows]
+
+            # Fill missing values in split with -9999
             split_df = split_df.fillna(-9999, inplace=False)
 
+            # Save as CSV
+            if self.splits_output_format == 'csv':
+                file_extension = '.csv.gz' if self.compress_splits else '.csv'
+                split_name_ext = f"{split_name}.{file_extension}"
+                split_filepath = outdir_splits / f"{split_name_ext}"
+                compression = 'gzip' if self.compress_splits else None
+                split_df.to_csv(split_filepath, compression=compression)
+
+            # Save as parquet
+            elif self.splits_output_format == 'parquet':
+                split_filepath = save_parquet(data=split_df, filename=split_name, outpath=outdir_splits)
+                split_name_ext = Path(split_filepath).name
+
+            else:
+                split_name_ext = 'error'
+                split_filepath = 'error'
+
             # Export
-            print(f"    Saving split {split_name} | n_records: {len(split_df.index)} "
+            print(f"    Saving split {split_name_ext} | n_records: {len(split_df.index)} "
                   f"| n_columns: {len(split_df.columns)} "
                   f"| start: {split_start} | end: {split_end} | wind_rotation: {self.rotation}")
-            split_filepath = outdir_splits / f"{split_name}"
-            compression = 'gzip' if self.compress_splits else None
-
-            if self.outfile_limit_n_rows:
-                split_df = split_df.iloc[
-                           0:self.outfile_limit_n_rows]  # Limit number of exported records, useful for testing
-
-            split_df.to_csv(split_filepath, compression=compression)
 
             splits_overview_df.loc[split_name, 'start'] = split_start
             splits_overview_df.loc[split_name, 'end'] = split_end
@@ -215,13 +230,13 @@ class FileSplitter:
 
         return splits_overview_df
 
-        # # Stats todo maybe later
-        # for col in split_df.columns:
-        #     self.splits_overview_df.loc[split_name, f'numvals_{col}'] = split_df[col].dropna().size
-        #     try:
-        #         self.splits_overview_df.loc[split_name, f'median_{col}'] = split_df[col].median()
-        #     except TypeError:
-        #         self.splits_overview_df.loc[split_name, f'median_{col}'] = np.nan
+    # # Stats todo maybe later
+    # for col in split_df.columns:
+    #     self.splits_overview_df.loc[split_name, f'numvals_{col}'] = split_df[col].dropna().size
+    #     try:
+    #         self.splits_overview_df.loc[split_name, f'median_{col}'] = split_df[col].median()
+    #     except TypeError:
+    #         self.splits_overview_df.loc[split_name, f'median_{col}'] = np.nan
 
 
 def setup_output_dirs(outdir: str, del_previous_results=False):
@@ -270,6 +285,7 @@ class FileSplitterMulti:
             files_split_how_many: int = None,
             data_split_outfile_prefix: str = "",
             data_split_outfile_suffix: str = "",
+            splits_output_format: str = "csv",
             compress_splits: bool = False,
             rotation: bool = False,
             u_var: str = None,
@@ -305,8 +321,10 @@ class FileSplitterMulti:
             files_split_how_many: How many found files are split. 
             data_split_outfile_prefix: Prefix for split file names.
             data_split_outfile_suffix: Suffix for split file names.
-            compress_splits: If *True*, compress splits using 'gzip'. If *False*, splits
-                are saved as CSV files.
+            splits_output_format: Can be either 'csv' or 'parquet'.
+            compress_splits: If *True*, splits are saved in the format defined in *splits_output_format*
+                and then compressed using 'gzip', the uncompressed files are deleted. If *False*, splits are saved in the format defined in
+                *splits_output_format*.
             rotation: If *True*, the wind components *u*, *v*, *w* and the scalar *c* are rotated, using 
                 2-D wind rotation, i.e., the turbulent departures of wind and scalar are calcualted
                 using Reynold's averaging.
@@ -337,6 +355,7 @@ class FileSplitterMulti:
         self.data_split_duration = data_split_duration
         self.data_split_outfile_prefix = data_split_outfile_prefix
         self.data_split_outfile_suffix = data_split_outfile_suffix
+        self.splits_output_format = splits_output_format
         self.compress_splits = compress_splits
         self.rotation = rotation
         self.outfile_limit_n_rows = outfile_limit_n_rows
@@ -392,6 +411,7 @@ class FileSplitterMulti:
                 v_var=self.v_var,
                 w_var=self.w_var,
                 c_var=self.c_var,
+                splits_output_format=self.splits_output_format,
                 compress_splits=self.compress_splits,
                 outfile_limit_n_rows=self.outfile_limit_n_rows,
                 split_trim=True,
