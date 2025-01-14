@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from pandas import DataFrame
 
@@ -194,8 +195,8 @@ class FileSplitter:
             if self.outfile_limit_n_rows:
                 split_df = split_df.iloc[0:self.outfile_limit_n_rows]
 
-            # Fill missing values in split with -9999
-            split_df = split_df.fillna(-9999, inplace=False)
+            # Fill missing values in split with numpy NAN
+            split_df = split_df.fillna(np.nan, inplace=False)
 
             # Save as CSV
             if self.splits_output_format == 'csv':
@@ -229,14 +230,6 @@ class FileSplitter:
             splits_overview_df.loc[split_name, 'wind_rotation_1=yes'] = int(self.rotation)
 
         return splits_overview_df
-
-    # # Stats todo maybe later
-    # for col in split_df.columns:
-    #     self.splits_overview_df.loc[split_name, f'numvals_{col}'] = split_df[col].dropna().size
-    #     try:
-    #         self.splits_overview_df.loc[split_name, f'median_{col}'] = split_df[col].median()
-    #     except TypeError:
-    #         self.splits_overview_df.loc[split_name, f'median_{col}'] = np.nan
 
 
 def setup_output_dirs(outdir: str, del_previous_results=False):
