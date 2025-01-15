@@ -107,6 +107,21 @@ def colorwheel_36():
     return picked_colors_dict
 
 
+def colorwheel_48():
+    """Create dictionary with a total of 48 colors."""
+    picked_colors_dict = {}
+    pick = -1
+    shades = [200, 400, 600, 800]
+
+    for shade in shades:
+        color_list = colors_12(shade=shade)
+        for c in color_list:
+            pick += 1
+            picked_colors_dict[pick] = c
+
+    return picked_colors_dict
+
+
 def colorwheel_36_wider():
     """Create dictionary with a total of 36 colors."""
     picked_colors_dict = {}
