@@ -6,7 +6,7 @@ from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
 
 from diive.core.ml.common import MlRegressorGapFillingBase
-from diive.core.plotting.styles.LightTheme import colorwheel_36_wider
+from diive.core.plotting.styles.LightTheme import colorwheel_48
 from diive.core.times.neighbors import neighboring_years
 
 
@@ -18,6 +18,7 @@ class LongTermGapFillingBase:
                  target_col: str or tuple,
                  verbose: int = 0,
                  features_lag: list = None,
+                 features_lag_stepsize: int = 1,
                  features_lag_exclude_cols: list = None,
                  include_timestamp_as_features: bool = False,
                  add_continuous_record_number: bool = False,
@@ -53,6 +54,7 @@ class LongTermGapFillingBase:
         self.perm_n_repeats = perm_n_repeats
         self.test_size = test_size
         self.features_lag = features_lag
+        self.features_lag_stepsize = features_lag_stepsize
         self.features_lag_exclude_cols = features_lag_exclude_cols
         self.include_timestamp_as_features = include_timestamp_as_features
         self.add_continuous_record_number = add_continuous_record_number
@@ -145,6 +147,7 @@ class LongTermGapFillingBase:
             target_col=self.target_col,
             verbose=self.verbose,
             features_lag=self.features_lag,
+            features_lag_stepsize=self.features_lag_stepsize,
             features_lag_exclude_cols=self.features_lag_exclude_cols,
             include_timestamp_as_features=self.include_timestamp_as_features,
             add_continuous_record_number=self.add_continuous_record_number,
@@ -238,8 +241,8 @@ class LongTermGapFillingBase:
         width = 2
         height = 1
         verts = list(zip([-width, width, width, -width], [-height, -height, height, height]))
-        colors = colorwheel_36_wider()
-        fig, ax = plt.subplots(figsize=(8, 5), subplot_kw=dict(ylim=(0.5, 0.5 + len(self.feature_ranks_per_year))),
+        colors = colorwheel_48()
+        fig, ax = plt.subplots(figsize=(20, 6), subplot_kw=dict(ylim=(0.5, 0.5 + len(self.feature_ranks_per_year))),
                                layout='constrained')
         color = -1
         # _marker = ['o', 's']
@@ -310,6 +313,7 @@ class LongTermGapFillingRandomForestTS(LongTermGapFillingBase):
                  target_col: str or tuple,
                  verbose: int = 0,
                  features_lag: list = None,
+                 features_lag_stepsize: int = 1,
                  features_lag_exclude_cols: list = None,
                  include_timestamp_as_features: bool = False,
                  add_continuous_record_number: bool = False,
@@ -323,6 +327,7 @@ class LongTermGapFillingRandomForestTS(LongTermGapFillingBase):
             target_col=target_col,
             verbose=verbose,
             features_lag=features_lag,
+            features_lag_stepsize=features_lag_stepsize,
             features_lag_exclude_cols=features_lag_exclude_cols,
             include_timestamp_as_features=include_timestamp_as_features,
             add_continuous_record_number=add_continuous_record_number,
@@ -437,8 +442,8 @@ def example_longterm_rfts():
     # print(gf.yearpools)
     gf.initialize_yearly_models()
 
-    # # Feature reduction
-    # ltrf.reduce_features_across_years()
+    # Feature reduction
+    gf.reduce_features_across_years()
 
     # Train model and fill gaps
     gf.fillgaps()
