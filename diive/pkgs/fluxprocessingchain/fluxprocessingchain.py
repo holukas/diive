@@ -58,7 +58,13 @@ class FluxProcessingChain:
         self._fpc_df = self.df[requiredcols].copy()
 
         # Add potential radiation and daytime and nighttime flags
-        self._fpc_df, self.swinpot_col = self._add_swinpot_dt_nt_flag(df=self._fpc_df)
+        self._fpc_df, self.swinpot_col, daytime_flag_col, nighttime_flag_col = \
+            self._add_swinpot_dt_nt_flag(df=self._fpc_df)
+
+        # Add also to main data, so it can be accessed as feature for ML models
+        newcols = [self.swinpot_col, daytime_flag_col, nighttime_flag_col]
+        self._df = pd.concat([self._df, self.fpc_df[newcols]], axis=1)
+        print(f"++ Added new columns {newcols} to input data.")
 
         # Get the name of the base flux, used to assemble meaningful names for output variables
         if self.fluxcol == 'FC':
@@ -141,6 +147,20 @@ class FluxProcessingChain:
                                                          orient='index')
                 print(modelscores)
 
+    def report_gapfilling_feature_importances(self):
+        for gfmethod, ustar_scenarios in self.level41.items():
+            for ustar_scenario in ustar_scenarios:
+                print(f"\nFEATURE IMPORTANCES ({gfmethod}): {ustar_scenario}")
+                # try:
+                #     fi = pd.DataFrame.from_dict(
+                #         self.level41[gfmethod][ustar_scenario].feature_importances_yearly_,
+                #         orient='columns')
+                # except ValueError:
+                #     fi = pd.DataFrame.from_dict(
+                #         self.level41[gfmethod][ustar_scenario].feature_importances_yearly_,
+                #         orient='index')
+                print(self.level41[gfmethod][ustar_scenario].feature_importance_per_year)
+
     def report_gapfilling_poolyears(self):
         print("DATA POOLS USED FOR MACHINE-LEARNING GAP-FILLING:")
         for gfmethod, ustar_scenarios in self.level41.items():
@@ -152,7 +172,6 @@ class FluxProcessingChain:
                               f"producing --> {self.level41[gfmethod][ustar_scenario].gapfilled_.name}")
                 except AttributeError:
                     print(f"{gfmethod} {ustar_scenario} did not use poolyears.")
-                print("\n")
 
     def showplot_feature_ranks_per_year(self):
         for gfmethod, ustar_scenarios in self.level41.items():
@@ -346,7 +365,7 @@ class FluxProcessingChain:
             raise Exception('Level IDs not available, please run .level2_quality_flag_expansion() first.')
         return self._levelidstr
 
-    def _add_swinpot_dt_nt_flag(self, df: DataFrame) -> tuple[DataFrame, str]:
+    def _add_swinpot_dt_nt_flag(self, df: DataFrame) -> tuple[DataFrame, str, str, str]:
         # Add potential radiation, used for detecting daytime/nighttime
         swinpot = potrad(timestamp_index=df.index,
                          lat=self.site_lat, lon=self.site_lon, utc_offset=self.utc_offset)
@@ -367,7 +386,7 @@ class FluxProcessingChain:
         df[daytime_flag_col] = daytime_flag.copy()
         df[nighttime_flag_col] = nighttime_flag.copy()
 
-        return df, swinpot_col
+        return df, swinpot_col, daytime_flag_col, nighttime_flag_col
 
     def level2_quality_flag_expansion(
             self,
@@ -533,6 +552,10 @@ class FluxProcessingChain:
         # Fill missing keys with default settings
         features_lag = \
             None if 'features_lag' not in settings else settings['features_lag']
+        features_lag_stepsize = \
+            1 if 'features_lag_stepsize' not in settings else settings['features_lag_stepsize']
+        features_lag_exclude_cols = \
+            None if 'features_lag_exclude_cols' not in settings else settings['features_lag_exclude_cols']
         reduce_features = \
             False if 'reduce_features' not in settings else settings['reduce_features']
         include_timestamp_as_features = \
@@ -545,6 +568,8 @@ class FluxProcessingChain:
         settings = {
             'features': features,
             'features_lag': features_lag,
+            'features_lag_stepsize': features_lag_stepsize,
+            'features_lag_exclude_cols': features_lag_exclude_cols,
             'reduce_features': reduce_features,
             'include_timestamp_as_features': include_timestamp_as_features,
             'add_continuous_record_number': add_continuous_record_number,
@@ -614,16 +639,17 @@ class FluxProcessingChain:
             # Add USTAR-filtered flux from recent results (Level-3.3)
             this_ust_scen_df = pd.concat([this_ust_scen_df, self.fpc_df[ustar_flux.name]], axis=1)
 
-            # self.level33.flux_corrected_col
             general_kwargs = dict(
                 input_df=this_ust_scen_df,
                 target_col=ustar_flux.name,
                 include_timestamp_as_features=ml_feature_settings['include_timestamp_as_features'],
                 add_continuous_record_number=ml_feature_settings['add_continuous_record_number'],
                 features_lag=ml_feature_settings['features_lag'],
+                features_lag_stepsize=ml_feature_settings['features_lag_stepsize'],
+                features_lag_exclude_cols=ml_feature_settings['features_lag_exclude_cols'],
                 verbose=verbose,
                 sanitize_timestamp=sanitize_timestamp,
-                perm_n_repeats=ml_feature_settings['perm_n_repeats'],
+                perm_n_repeats=ml_feature_settings['perm_n_repeats']
             )
 
             # Initialize random forest for this scenario
@@ -1062,8 +1088,8 @@ def example():
     # Source data
     from pathlib import Path
     from diive.core.io.files import load_parquet
-    SOURCEDIR = r"L:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_cha_fp2024_2005-2023\notebooks\31_FLUXES_L1_mergeData_IRGA+M7+MGMT"
-    FILENAME = r"31.6_CH-CHA_IRGA-L1+M7+MGMT_2005-2023.parquet"
+    SOURCEDIR = r"L:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_cha_fp2024_2005-2023\notebooks\30_MERGE_DATA"
+    FILENAME = r"33.1_CH-CHA_IRGA+QCL+LGR+M10+MGMT_Level-1_eddypro_fluxnet_2005-2023.parquet"
     FILEPATH = Path(SOURCEDIR) / FILENAME
     maindf = load_parquet(filepath=str(FILEPATH))
     # SOURCEDIRS = [r"L:\Sync\luhk_work\20 - CODING\21 - DIIVE\diive\notebooks\FluxProcessingChain\example_data"]
@@ -1074,7 +1100,8 @@ def example():
     # metadata = ep.metadata
 
     # locs = (maindf.index.year >= 2019) & (maindf.index.year <= 2023)
-    locs = (maindf.index.year >= 2023) & (maindf.index.year <= 2023)
+    locs = (maindf.index.year >= 2012) & (maindf.index.year <= 2012)
+    # locs = (maindf.index.year >= 2007) & (maindf.index.year <= 2011)
     maindf = maindf.loc[locs, :].copy()
     # locs = (maindf.index.month >= 7) & (maindf.index.month <= 7)
     # maindf = maindf.loc[locs, :].copy()
@@ -1104,13 +1131,14 @@ def example():
     # Flux processing chain settings
     # FLUXVAR = "LE"
     # FLUXVAR = "H"
-    FLUXVAR = "FC"
+    # FLUXVAR = "FC"
+    FLUXVAR = "FN2O"
     SITE_LAT = 47.210227
     SITE_LON = 8.410645
     UTC_OFFSET = 1
     NIGHTTIME_THRESHOLD = 20  # Threshold for potential radiation in W m-2, conditions below threshold are nighttime
     DAYTIME_ACCEPT_QCF_BELOW = 2
-    NIGHTTIMETIME_ACCEPT_QCF_BELOW = 1
+    NIGHTTIMETIME_ACCEPT_QCF_BELOW = 2
 
     # from diive.core.dfun.stats import sstats  # Time series stats
     # sstats(maindf[FLUXVAR])
@@ -1140,7 +1168,7 @@ def example():
     # TimeSeries(series=maindf[TEST_SIGNAL_STRENGTH_COL]).plot()
     TEST_RAWDATA = True  # Default True
     TEST_RAWDATA_SPIKES = True  # Default True
-    TEST_RAWDATA_AMPLITUDE = False  # Default True
+    TEST_RAWDATA_AMPLITUDE = True  # Default True
     TEST_RAWDATA_DROPOUT = True  # Default True
     TEST_RAWDATA_ABSLIM = False  # Default False
     TEST_RAWDATA_SKEWKURT_HF = False  # Default False
@@ -1239,7 +1267,7 @@ def example():
     # fpc.level32_addflag()
 
     # # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=False, verbose=False, repeat=False)
-    # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=True,
+    # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 13, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=True,
     #                                            verbose=True, repeat=True)
     # fpc.level32_addflag()
 
@@ -1251,7 +1279,7 @@ def example():
     #                                        repeat=True)
     # fpc.level32_addflag()
 
-    # fpc.level32_flag_outliers_localsd_test(n_sd=3, winsize=48 * 3, constant_sd=True, showplot=True, verbose=True, repeat=True)
+    # fpc.level32_flag_outliers_localsd_test(n_sd=4, winsize=48 * 13, constant_sd=True, showplot=False, verbose=True, repeat=True)
     # fpc.level32_addflag()
 
     # fpc.level32_flag_outliers_increments_zcore_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
@@ -1294,12 +1322,12 @@ def example():
     # 0.052945, 0.069898, 0.092841
     # ustar_scenarios = ['NO_USTAR']
     # ustar_thresholds = [-9999]
-    # ustar_scenarios = ['CUT_50']
-    # ustar_thresholds = [0.069898]
+    ustar_scenarios = ['CUT_50']
+    ustar_thresholds = [0.069898]
     # ustar_scenarios = ['CUT_50', 'CUT_84']
     # ustar_thresholds = [0.069898, 0.092841]
-    ustar_scenarios = ['CUT_16', 'CUT_50', 'CUT_84']
-    ustar_thresholds = [0.052945, 0.069898, 0.092841]
+    # ustar_scenarios = ['CUT_16', 'CUT_50', 'CUT_84']
+    # ustar_thresholds = [0.052945, 0.069898, 0.092841]
     fpc.level33_constant_ustar(thresholds=ustar_thresholds,
                                threshold_labels=ustar_scenarios,
                                showplot=False)
@@ -1312,7 +1340,7 @@ def example():
     # fpc = load_pickle(filepath=r"F:\TMP\test.pickle")
 
     # for ustar_scenario in ustar_scenarios:
-    #     fpc.level33_qcf[ustar_scenario].showplot_qcf_heatmaps()
+    #     # fpc.level33_qcf[ustar_scenario].showplot_qcf_heatmaps()
     #     fpc.level33_qcf[ustar_scenario].report_qcf_evolution()
     #     # fpc.filteredseries
     #     # fpc.level33
@@ -1328,35 +1356,78 @@ def example():
     # --------------------
     # Level-4.1
     # --------------------
+    MGMT_VARS = ["TIMESINCE_MGMT_FERT_MIN_FOOTPRINT", "TIMESINCE_MGMT_FERT_ORG_FOOTPRINT",
+                 "TIMESINCE_MGMT_GRAZING_FOOTPRINT", "TIMESINCE_MGMT_MOWING_FOOTPRINT",
+                 "TIMESINCE_MGMT_SOILCULTIVATION_FOOTPRINT", "TIMESINCE_MGMT_SOWING_FOOTPRINT",
+                 "TIMESINCE_MGMT_PESTICIDE_HERBICIDE_FOOTPRINT"]
+    FEATURES = ["SWC_GF1_0.15_1_gfXG", "TS_GF1_0.04_1_gfXG", "TS_GF1_0.15_1_gfXG", "TS_GF1_0.4_1_gfXG"] + MGMT_VARS
+    # FEATURES = ["SW_IN_T1_2_1", "TA_T1_2_1", "VPD_T1_2_1"] + MGMT_VARS
+    # FEATURES = ["SW_IN_T1_2_1", "TA_T1_2_1", "VPD_T1_2_1", "DAYTIME", "NIGHTTIME"] + MGMT_VARS
+    EXCLUDE_COLS = MGMT_VARS
+    # EXCLUDE_COLS = ["DAYTIME", "NIGHTTIME"] + MGMT_VARS
+
+    # fpc.level41_gapfilling_longterm(
+    #     run_mds=False,
+    #     run_random_forest=True,
+    #     verbose=True,
+    #     ml_feature_settings={
+    #         'features': FEATURES,
+    #         'features_lag': [-1, -1],
+    #         'features_lag_exclude_cols': MGMT_VARS,  # Management variables are not lagged
+    #         'reduce_features': False,
+    #         'include_timestamp_as_features': True,
+    #         'add_continuous_record_number': False,
+    #         'perm_n_repeats': 10,
+    #     },
+    #     rf_settings={
+    #         'n_estimators': 99,
+    #         'random_state': 42,
+    #         'min_samples_split': 2,
+    #         'min_samples_leaf': 1,
+    #         'n_jobs': -1
+    #     },
+    #     # mds_settings={
+    #     #     'swin': "SW_IN_T1_2_1",
+    #     #     'ta': "TA_T1_2_1",
+    #     #     'vpd': "VPD_T1_2_1",
+    #     #     'swin_class': 50,
+    #     #     'ta_class': 2.5,
+    #     #     'vpd_class': 0.5,
+    #     #     'min_n_vals_nt': 0
+    #     # }
+    # )
 
     fpc.level41_gapfilling_longterm(
         run_random_forest=True,
-        run_mds=True,
+        run_mds=False,
         verbose=True,
         ml_feature_settings={
-            'features': ["TA_T1_2_1", "SW_IN_T1_2_1", "VPD_T1_2_1"],
-            'features_lag': [-1, -1],
+            'features': FEATURES,
+            'features_lag': [-24, -6],
+            'features_lag_stepsize': 6,
+            'features_lag_exclude_cols': EXCLUDE_COLS,  # Management variables are not lagged
             'reduce_features': False,
             'include_timestamp_as_features': True,
-            'add_continuous_record_number': True,
-            'perm_n_repeats': 2,
+            'add_continuous_record_number': False,
+            'perm_n_repeats': 2
         },
         rf_settings={
-            'n_estimators': 99,
+            'n_estimators': 3,
+            'max_depth': None,
             'random_state': 42,
-            'min_samples_split': 20,
-            'min_samples_leaf': 10,
+            'min_samples_split': 2,
+            'min_samples_leaf': 1,
             'n_jobs': -1
         },
-        mds_settings={
-            'swin': "SW_IN_T1_2_1",
-            'ta': "TA_T1_2_1",
-            'vpd': "VPD_T1_2_1",
-            'swin_class': 50,
-            'ta_class': 2.5,
-            'vpd_class': 0.5,
-            'min_n_vals_nt': 5
-        }
+        # mds_settings={
+        #     'swin': "SW_IN_T1_2_1",
+        #     'ta': "TA_T1_2_1",
+        #     'vpd': "VPD_T1_2_1",
+        #     'swin_class': 50,
+        #     'ta_class': 2.5,
+        #     'vpd_class': 0.5,
+        #     'min_n_vals_nt': 5
+        # }
     )
 
     results = fpc.get_data()
@@ -1365,23 +1436,22 @@ def example():
     gapfilled_vars = fpc.get_gapfilled_variables()
     fpc.report_gapfilling_variables()
     fpc.report_gapfilling_model_scores()
+    fpc.report_gapfilling_feature_importances()
 
     # Only ML models:
     fpc.report_gapfilling_poolyears()
 
     # todo get full data
 
-    fpc.showplot_gapfilled_heatmap(vmin=-34, vmax=16)
-    # fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{µmol\ CO_2\ m^{-2}}$)', per_year=True)
-    fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{µmol\ CO_2\ m^{-2}}$)', per_year=False)
+    fpc.showplot_gapfilled_heatmap(vmin=-5, vmax=50)
+    fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{µmol\ CO_2\ m^{-2}}$)', per_year=True)
+    # fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{g\ C\ m^{-2}}$)', per_year=False)
 
-    # Only ML models:
-    fpc.showplot_feature_ranks_per_year()
+    # # Only ML models:
+    # fpc.showplot_feature_ranks_per_year()
 
     # TODO heatmap of used model data pools
 
-    print("XXX")
-    print("XXX")
     print("XXX")
     print("XXX")
     print("XXX")
@@ -1720,6 +1790,6 @@ def example_cumu():
 
 
 if __name__ == '__main__':
-    example_quick()
-    # example()
+    # example_quick()
+    example()
     # example_cumu()
