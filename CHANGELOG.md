@@ -8,6 +8,8 @@
 
 ### Updates to MDS gap-filling
 
+XXX
+
 Generally, the MDS method in `diive` was implemented following the description in Reichstein et al. (2005) and is thus
 similar to gap-filling applied by FLUXNET, ICOS, ReddyProc and others. By applying the MDS method, missing values are
 replaced by the average *flux* value during similar meteorological conditions.
@@ -20,6 +22,7 @@ gap-filled data by filling gaps based on the average of few (or single) availabl
 ### Changes
 
 - Added parameter `min_n_vals_nt` in MDS gap-filling (`diive.pkgs.gapfilling.mds.FluxMDS`)
+- When reading a parquet file, sanitizing the timestamp is now optional (`diive.core.io.files.load_parquet`)
 
 ### Additions
 
@@ -29,6 +32,12 @@ gap-filled data by filling gaps based on the average of few (or single) availabl
 - Added parameter to edit y-label (`diive.core.plotting.dielcycle.DielCycle`)
 - Added preliminary USTAR filtering for NEE to quick flux processing chain (
   `diive.pkgs.fluxprocessingchain.fluxprocessingchain.QuickFluxProcessingChain`)
+- `FileSplitter`:
+    - Added parameter to directly output splits as `parquet` files in `FileSplitter` and `FileSplitterMulti`. These two
+      classes split longer time series files (e.g., 6 hours) into several smaller splits (e.g., 12 half-hourly files).
+      Usage of parquet speeds up not only the splitting part, but also the process when later re-reading the files for
+      other processing steps.
+    - After splitting, missing values in the split files are numpy NAN (`diive.core.io.filesplitter.FileSplitter`)
 
 ### Notebooks
 
