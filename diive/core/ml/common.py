@@ -31,6 +31,7 @@ class MlRegressorGapFillingBase:
                  target_col: str or tuple,
                  verbose: int = 0,
                  features_lag: list = None,
+                 features_lag_stepsize: int = 1,
                  features_lag_exclude_cols: list = None,
                  include_timestamp_as_features: bool = False,
                  add_continuous_record_number: bool = False,
@@ -97,6 +98,7 @@ class MlRegressorGapFillingBase:
         self.perm_n_repeats = perm_n_repeats if perm_n_repeats > 0 else 1
         self.test_size = test_size
         self.features_lag = features_lag
+        self.features_lag_stepsize = features_lag_stepsize
         self.features_lag_exclude_cols = features_lag_exclude_cols
         self.verbose = verbose
         self.include_timestamp_as_features = include_timestamp_as_features
@@ -113,9 +115,15 @@ class MlRegressorGapFillingBase:
         else:
             self.gfsuffix = '_gf'
 
+        if verbose:
+            print(f"\n\n{'=' * 60}\nStarting gap-filling for\n{self.target_col}\nusing {self.regressor}\n{'=' * 60}")
+
         # Create model dataframe and Add additional data columns
         self.model_df = input_df.copy()
+
+        # Create additional data columns
         self.model_df = self._create_additional_datacols()
+
         self._check_n_cols()
 
         self.original_input_features = self.model_df.drop(columns=self.target_col).columns.tolist()
@@ -775,7 +783,7 @@ class MlRegressorGapFillingBase:
         if features_lag_exclude_cols:
             exclude_cols += features_lag_exclude_cols
         return fr.lagged_variants(df=self.model_df,
-                                  stepsize=1,
+                                  stepsize=self.features_lag_stepsize,
                                   lag=self.features_lag,
                                   exclude_cols=exclude_cols,
                                   verbose=self.verbose)
