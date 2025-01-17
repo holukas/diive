@@ -28,6 +28,8 @@ class FlagBase:
         self._filteredseries = None
         self._flag = None
 
+        self._fig = None
+
     @property
     def overall_flag(self) -> Series:
         """Overall flag, calculated from individual flags from multiple iterations."""
@@ -45,6 +47,13 @@ class FlagBase:
             raise Exception(f'Flag is empty. '
                             f'Solution: run .calc() to create flag for {self.series.name}.')
         return self._flag
+
+    @property
+    def fig(self) -> Series:
+        """Return figure instance of default plot"""
+        if not self._fig:
+            raise Exception(f'No figure available.')
+        return self._fig
 
     @property
     def filteredseries(self) -> Series:
@@ -151,7 +160,7 @@ class FlagBase:
         iteration_df = self.collect_results()
         return iteration_df, n_outliers
 
-    def defaultplot(self, n_iterations: int = 1):
+    def defaultplot(self, n_iterations: int = 1, showplot: bool = True):
         """Basic plot that shows time series with and without outliers"""
         ok = self.overall_flag == 0
         rejected = self.overall_flag == 2
@@ -192,7 +201,10 @@ class FlagBase:
         nice_date_ticks(ax=ax_ok)
         fig.suptitle(plottitle, fontsize=theme.FIGHEADER_FONTSIZE)
         fig.tight_layout()
-        fig.show()
+        if showplot:
+            fig.show()
+
+        self._fig = fig
 
     def plot_outlier_daytime_nighttime(self, series: Series, flag_daytime: Series,
                                        flag_quality: Series, title: str = None):

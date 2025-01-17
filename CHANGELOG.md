@@ -38,6 +38,19 @@ gap-filled data by filling gaps based on the average of few (or single) availabl
       Usage of parquet speeds up not only the splitting part, but also the process when later re-reading the files for
       other processing steps.
     - After splitting, missing values in the split files are numpy NAN (`diive.core.io.filesplitter.FileSplitter`)
+- Added parameter to hide default plot when called. The method `defaultplot` is used e.g. by outlier detection methods
+  to plot the data after outlier removal, to show flagged vs. unflagged values. (
+  `diive.core.base.flagbase.FlagBase.defaultplot`)
+- Added `fig` property that contains the default plot for outlier removal methods. This is useful when the default plot
+  is needed elsewhere, e.g. saved to a file. At the moment, the parameter `showplot` must be `True` for the property to
+  be accessible. (`diive.core.base.flagbase.FlagBase`)
+    - Example for class `zScoreRolling`:
+      ```
+      zsr = zScoreRolling(..., showplot=True, ...)
+      zsr.calc(repeat=True)
+      fig = zsr.fig  # Contains the figure instance
+      fig.savefig(...)  # Figure can then be saved to a file etc.
+      ```  
 
 ### Notebooks
 
