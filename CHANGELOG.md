@@ -8,7 +8,14 @@
 
 ### Updates to MDS gap-filling
 
-XXX
+The MDS gap-filling method is now part of the flux processing chain. This is the community's default and widely accepted
+gap-filling method for eddy covariance ecosystem fluxes, such as the CO2 flux. It is therefore certainly useful to have
+this method available when post-processing fluxes using the class `FluxProcessingChain`.
+
+[notebooks/GapFilling/FluxMDSGapFilling.ipynb](/notebooks/GapFilling/FluxMDSGapFilling.ipynb)
+
+This means has the advantage of performing gap-filling of ecosystem fluxes with , such as the CO2 flux. means that when
+post-processing fluxes with
 
 Generally, the MDS method in `diive` was implemented following the description in Reichstein et al. (2005) and is thus
 similar to gap-filling applied by FLUXNET, ICOS, ReddyProc and others. By applying the MDS method, missing values are
@@ -18,6 +25,8 @@ One important difference of the MDS method in `diive` in comparison to other imp
 the parameter *min_n_vals_nt*, which allows to set a minimum of required values to calculate the average *flux* for a
 gap during nighttime conditions. Without this setting the MDS method is prone to introducing nighttime CO2 uptake in
 gap-filled data by filling gaps based on the average of few (or single) available data points.
+
+`diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain`
 
 ### Changes
 
