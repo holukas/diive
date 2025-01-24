@@ -5,6 +5,7 @@
 /.idea/
 /__local_folders
 /notebooks/_scratch/
+/notebooks/_testdata_notebooks/
 /notebooks/Workbench/FLUXNET_CH4-N2O_Committee_WP2/data/
 /notebooks/Workbench/CH-HON
 /notebooks/Workbench/CH-DAS_2023_FluxProcessingChain
