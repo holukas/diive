@@ -12,10 +12,10 @@ The MDS gap-filling method is now part of the flux processing chain. This is the
 gap-filling method for eddy covariance ecosystem fluxes, such as the CO2 flux. It is therefore certainly useful to have
 this method available when post-processing fluxes using the class `FluxProcessingChain`.
 
-[notebooks/GapFilling/FluxMDSGapFilling.ipynb](/notebooks/GapFilling/FluxMDSGapFilling.ipynb)
-
-This means has the advantage of performing gap-filling of ecosystem fluxes with , such as the CO2 flux. means that when
-post-processing fluxes with
+- **Example notebook** using MDS as part of the flux processing
+  chain: [Flux Processing Chain](/notebooks/FluxProcessingChain/FluxProcessingChain.ipynb)
+- **Example notebook** using MDS as stand alone
+  class: [MDS gap-filling of ecosystem fluxes](/notebooks/GapFilling/FluxMDSGapFilling.ipynb)
 
 Generally, the MDS method in `diive` was implemented following the description in Reichstein et al. (2005) and is thus
 similar to gap-filling applied by FLUXNET, ICOS, ReddyProc and others. By applying the MDS method, missing values are
@@ -26,7 +26,20 @@ the parameter *min_n_vals_nt*, which allows to set a minimum of required values 
 gap during nighttime conditions. Without this setting the MDS method is prone to introducing nighttime CO2 uptake in
 gap-filled data by filling gaps based on the average of few (or single) available data points.
 
-`diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain`
+#### Background: different flux levels
+
+- The class `FluxProcessingChain` in `diive` follows the flux processing steps as shown in
+  the [Flux Processing Chain](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/)
+  outlined by [Swiss FluxNet](https://www.swissfluxnet.ethz.ch/).
+- The flux processing chain uses different levels for different steps in the chain:
+  - Level-0: preliminary flux calculations, e.g. during the year, done by [EddyPro](https://www.licor.com/products/eddy-covariance/eddypro)
+  - Level-1: final flux calculations, e.g. for complete year, done by [EddyPro](https://www.licor.com/products/eddy-covariance/eddypro)
+  - Level-2: quality flag expansion
+  - Level-3.1: storage correction (using one point measurement only, from profile not included by default)
+  - Level-3.2: outlier removal (flagging)
+  - Level-3.3: USTAR filtering (constant threshold, must be known, detection not included by default)
+  - Level-4.1: gap-filling (MDS, long-term random forest)
+  - 
 
 ### Changes
 
