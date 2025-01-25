@@ -12,7 +12,6 @@ import numpy as np
 import pandas as pd
 from pandas import DataFrame, MultiIndex
 from pandas import Series
-from pandas._libs.tslibs import to_offset
 
 from diive.core.funcs.funcs import find_duplicates_in_list
 from diive.core.times.times import current_time_microseconds_str
@@ -175,43 +174,6 @@ def aggregated_as_hires(aggregate_series: Series,
     return hires_df[agghires_col]
 
 
-def insert_aggregated_in_hires(df: DataFrame, col: str,
-                               to_freq: str = 'D',
-                               to_agg: str = 'mean',
-                               agg_offset: str = None):
-    """
-    Insert aggregated values as column in high-res dataframe
-
-    Args:
-        df: Dataframe containing column that is aggregated
-        col: Column name of variable that is aggregated
-        to_freq: Frequency string, 'D' for daily aggregation, 'A' for yearly, 'M' for monthly
-        to_agg: Aggregation type, e.g. 'mean' for mean, 'max' for maximum
-        agg_offset: Timestamp offset for aggregation, e.g. '7H' when 'to_freq="D"' calculates
-            the daily average from 07:00 (current day) to 06:59 (next day).
-
-    """
-    # Resample and aggregate
-    agg_df = df[[col]].resample(to_freq, offset=agg_offset).agg(to_agg)
-
-    # Start and end of where agg is filled in
-    agg_df['start'] = agg_df.index
-    agg_df['end'] = agg_df.index.shift(1)
-
-    if agg_offset:
-        new_colname = f".{col}_{to_freq}{agg_offset}_{to_agg}"
-    else:
-        new_colname = f".{col}_{to_freq}_{to_agg}"
-    agg_df = rename_cols(df=agg_df, renaming_dict={col: new_colname})
-
-    df[new_colname] = np.nan
-
-    for ix, row in agg_df.iterrows():
-        df[new_colname].loc[(df.index >= row['start']) & (df.index < row['end'])] = row[new_colname]
-
-    return df, new_colname
-
-
 def rename_cols(df: DataFrame, renaming_dict: dict) -> DataFrame:
     """
     Rename columns in dataframe
@@ -232,69 +194,6 @@ def rename_cols(df: DataFrame, renaming_dict: dict) -> DataFrame:
     if multiindex:
         df.columns = pd.MultiIndex.from_tuples(df.columns)  # Restore column MultiIndex
     return df
-
-
-def splitdata_daynight(
-        df: pd.DataFrame,
-        split_on: str,
-        split_day_start_hour: int = None,
-        split_day_end_hour: int = None,
-        split_threshold: int = 20,
-        split_flagtrue: str = 'Larger Than Threshold'
-):
-    """
-    Split data into two separate datasets based on values in column
-
-    Consecutive nighttime
-
-    Done by generating a day/night flag that is then used to
-    split the dataset.
-
-    For example:
-        Split dataset into separate daytime and nighttime datasets
-        based on radiation.
-
-    """
-
-    date_col = '.DATE'
-    grp_daynight_col = '.GRP_DAYNIGHT'
-
-    # Add daytime flag to main data
-    df, flag_daynight_col = \
-        generate_flag_daynight(df=df,
-                               flag_based_on=split_on,
-                               ts_daytime_start_hour=split_day_start_hour,
-                               ts_daytime_end_hour=split_day_end_hour,
-                               col_thres_flagtrue=split_flagtrue,
-                               col_thres_flag_threshold=split_threshold)
-
-    # Add date as column
-    df[date_col] = df.index.date
-    df[date_col] = pd.to_datetime(df[date_col])
-
-    # Find *consecutive* daytimes and nighttimes
-    # While daytime is always consecutive (one date), the nighttime
-    # spans midnight and therefore two different dates. This means that
-    # one specfic night starts in the evening and ends on the next day
-    # in the morning.
-    df[grp_daynight_col] = (df[flag_daynight_col].diff(1) != 0).astype('int').cumsum()
-
-    # Data where flag is 1
-    daytime_ix = df[flag_daynight_col] == 1
-    df_flagtrue = df[daytime_ix].copy()
-
-    # Data where flag is 0 (e.g. nighttime)
-    daytime_ix = df[flag_daynight_col] == 0
-    df_flagfalse = df[daytime_ix].copy()
-
-    return df, df_flagtrue, df_flagfalse, grp_daynight_col, date_col, flag_daynight_col
-
-
-def create_random_gaps(series: pd.Series, frac: float = 0.1):
-    """Create random gaps in series"""
-    ix_gaps = series.sample(frac=frac).index
-    series_with_gaps = series.loc[ix_gaps] = np.nan
-    return series_with_gaps
 
 
 def convert_data_to_numeric(df: pd.DataFrame) -> pd.DataFrame:
@@ -382,25 +281,6 @@ def df_unique_values(df):
     return pd.unique(df.values.ravel())
 
 
-def count_unique_values(df):
-    """
-    Count number of occurrences of unique values across DataFrame
-
-    Parameters
-    ----------
-    df: pandas DataFrame
-
-    Returns
-    -------
-    pandas DataFrame
-    """
-    _unique_values = df_unique_values(df=df)
-    counts_df = pd.DataFrame(index=_unique_values)
-    for col in df.columns:
-        counts_df[col] = df[col].value_counts(dropna=False)
-    return counts_df.sort_index()
-
-
 def flatten_multiindex_all_df_cols(df: DataFrame, keep_first_row_only: bool = False) -> DataFrame:
     if keep_first_row_only:
         # Keep only the first row (variabels) of the MultiIndex column names
@@ -414,123 +294,6 @@ def flatten_multiindex_all_df_cols(df: DataFrame, keep_first_row_only: bool = Fa
         #  Combine first and second row of the MultiIndex column names to one line
         df.columns = ['_'.join(col).strip() for col in df.columns.values]
     return df
-
-
-def remove_duplicate_cols(df):
-    return df.loc[:, ~df.columns.duplicated()]
-
-
-def downsample_data(df, freq, max_freq):
-    """ Downsample data if freq is faster than 1S b/c otherwise maaaany datapoints. """
-    if to_offset(freq) < to_offset(max_freq):
-        df = df.apply('1S').mean()
-        new_freq = '1S'
-    else:
-        new_freq = freq
-    return df, new_freq
-
-
-def insert_drop_timestamp_col(df, timestamp_colname):
-    """
-    Insert timestamp column index as normal column, then drop index.
-
-    Row index is not exported as index, but as regular column. This way,
-    the output file looks as expected with the index col coming first.
-
-    :param df: DataFrame that is exported to file
-    :return: DataFrame
-    """
-    _df = df.copy()
-    try:
-        _df.drop([timestamp_colname], axis=1, inplace=True)
-    except:
-        pass
-    _df.insert(0, timestamp_colname, value=_df.index)  ## index col to normal data col
-    return _df
-
-
-def timestamp_convention(df, timestamp_shows_start, out_timestamp_convention):
-    """Set middle timestamp as main index"""
-
-    df = df.copy()
-
-    original_cols = df.columns
-    df.index = pd.to_datetime(df.index)
-    orig_freq = df.index.freq
-
-    # Original timestamp name
-    ts_col = df.index.name
-    ts_var = ts_col
-
-    # AUXILIARY COLUMNS
-    # Define columns names
-    if timestamp_shows_start:
-        start_col = f"{ts_var}_START_INCL"
-        end_col = f"{ts_var}_END_EXCL"
-    else:
-        start_col = f"{ts_var}_START_EXCL"
-        end_col = f"{ts_var}_END_INCL"
-    middle_col = f"{ts_var}_MIDDLE"
-    diff_col = f"{ts_var}_DIFF"
-    halfdiff_col = f"{ts_var}_HALFDIFF"
-    aux_cols = [start_col, middle_col, end_col, diff_col, halfdiff_col]
-
-    # Add columns as empty columns
-    for col in aux_cols:
-        df[col] = np.nan
-
-    # Calculate auxiliary, e.g. to calculate timestamp for middle of record
-    if timestamp_shows_start:
-        df[start_col] = df.index  # Original timestamp after resampling
-        df[end_col] = df[start_col].shift(-1)  # Shifted for time difference between next and current
-        fill_last_end = pd.date_range(start=df.index[-1], periods=2, freq=df.index.freq)
-        # df[end_col].iloc[-1] = fill_last_end[1]
-        df.loc[df.index[-1], end_col] = fill_last_end[1]  # Otherwise empty b/c shift
-
-    else:
-        df[end_col] = df.index  # Original timestamp after resampling
-        df[start_col] = df[end_col].shift(1)  # Shifted for time difference between next and current
-        fill_first_start = pd.date_range(end=df.index[0], periods=2, freq=df.index.freq)
-        # df[start_col].iloc[0] = fill_first_start[0]
-        df.loc[df.index[0], start_col] = fill_first_start[0]  # Otherwise empty b/c shift
-
-    df[diff_col] = df[end_col] - df[start_col]  # Time difference
-    df[halfdiff_col] = df[diff_col] / 2  # Half-difference for middle of record
-    df[middle_col] = df[end_col] - df[halfdiff_col]  # Middle of record
-
-    # APPLY
-    # -----
-    # according to selected convention
-    if out_timestamp_convention == 'Middle of Record':
-        df.index = df[middle_col]
-    elif out_timestamp_convention == 'End of Record':
-        df.index = df[end_col]
-    elif out_timestamp_convention == 'Start of Record':
-        df.index = df[start_col]
-
-    # Set frequency
-    # The problem is that if the middle timestamp is set as the main timestamp, the
-    # freq info is lost, although freq was not changed. Therefore, there is a check
-    # here if the inferred freq from the new timestamp index is still the same as
-    # the original timestamp index freq.
-    _freq = pd.infer_freq(df.index)  # Inferred freq from new timestamp index
-    if _freq == orig_freq:
-        pass
-    df = df.asfreq(orig_freq)
-
-    # Format timestamp to full datetime
-    # df.index
-    # df.index = df.index.strftime('%Y-%m-%d %H:%M:%S')
-    # df.index = pd.to_datetime(df.index)
-    df.index.name = ts_col
-
-    # Collect timestamp info in df
-    timestamp_info_df = df[aux_cols]
-
-    # Remove aux columns from data by only keeping original columns in df
-    df = df[original_cols]
-
-    return df, timestamp_info_df
 
 
 def df_between_two_dates(df: DataFrame or Series, start_date, end_date, dropna_col: str = None,
@@ -555,78 +318,6 @@ def df_between_two_dates(df: DataFrame or Series, start_date, end_date, dropna_c
         snippet_df = snippet_df.loc[~filter_nan]  # Keep False (=values, i.e. not NaN)
         # snippet_df = snippet_df.dropna()
     return snippet_df
-
-
-def insert_datetimerange(df, win_days, win_hours):
-    """Insert datetime range that describes start and end of chosen day window."""
-    win_start_col = ('start_dt_{}d-{}h'.format(win_days, win_hours), '[datetime]')
-    win_end_col = ('end_dt_{}d-{}h'.format(win_days, win_hours), '[datetime]')
-    df[win_start_col] = df.index - pd.Timedelta(days=win_days) - pd.Timedelta(hours=win_hours)
-    df[win_end_col] = df.index + pd.Timedelta(days=win_days) + pd.Timedelta(hours=win_hours)
-    return df, win_start_col, win_end_col
-
-
-def insert_timerange(df, win_hours):
-    """Insert time range that describes start and end of chosen hour window."""
-    win_start_time_col = ('start_time_{}h'.format(win_hours), '[time]')
-    win_end_time_col = ('end_time_{}h'.format(win_hours), '[time]')
-    df[win_start_time_col] = df.index - pd.Timedelta(hours=win_hours)
-    df[win_end_time_col] = df.index + pd.Timedelta(hours=win_hours)
-
-    df[win_start_time_col] = df[win_start_time_col].dt.time  # keep only time
-    df[win_end_time_col] = df[win_end_time_col].dt.time
-    return df, win_start_time_col, win_end_time_col
-
-
-def find_nans_in_df_col(df, col):
-    """
-    Reduces df to rows where values for col are missing
-
-    :param df:              pandas DataFrame; that is reduced to data rows where col is empty
-    :param col:             tuple; column name in df that is used to reduce df
-    :param prepost:         str; help string in output that indicates when the method was called
-
-    :return: gaps_df:       pandas DataFrame; reduced df that only contains data rows where col is empty
-    :return: gaps_exist:    bool; True = there are data rows where values for col are missing
-    """
-    temp = pd.isnull(df[col]).to_numpy().nonzero()
-    gaps_df = df.iloc[temp]  # contains only NEE NaNs, but the index is important to locate missing NEE values
-    gap_count = len(gaps_df[col])
-    return gaps_df, gap_count
-
-
-def sort_column_names(df, priority_vars):
-    """ Sort column names, ascending, with priority vars at top
-
-        Files w/ many columns are otherwise hard to navigate.
-
-        This is trickier than anticipated (by me), b/c sorting by
-              data_df.sort_index(axis=1, inplace=True)
-        sorts the columns, but is case-sensitive, i.e. 'Var2' is placed before
-        'var1', yielding the order 'Var2', 'var1'. However, we want it sorted like
-        this: 'var1', 'Var2'. Therefore, the columns are converted to a list, the
-        list is then sorted ignoring case, and the sorted list is then used to
-        define the column order in the df.
-    """
-    cols_list = df.columns.to_list()  # list of tuples
-
-    def custom_sort(col):
-        return col.lower()  # sort by 1st tuple element (var name), strictly lowercase
-
-    cols_list.sort(key=custom_sort)
-
-    for ix, col in enumerate(cols_list):
-        if col in priority_vars:
-            cols_list.insert(0, cols_list.pop(ix))  # removes from old location ix, puts to top of list
-
-    # Custom vars are marked w/ a dot ('.') at beginning
-    for ix, col in enumerate(cols_list):
-        if col.startswith('.'):
-            cols_list.insert(0, cols_list.pop(ix))
-
-    df = df[cols_list]  # assign new (sorted) column order
-
-    return df
 
 
 def sort_multiindex_columns_names(df, priority_vars):
@@ -664,101 +355,6 @@ def sort_multiindex_columns_names(df, priority_vars):
     return df
 
 
-def export_to_main(main_df, export_df, tab_data_df):
-    """Rename cols so there is no overlap with other vars"""
-    mapping_dict = {}
-
-    # Tuples for lookup, does not work with MultiIndex columns
-    export_df.columns = [tuple(x) for x in export_df.columns]
-
-    # Add '++' to all variable names, or '+' if var was renamed previously.
-    # This means that all newly created variables have a prefix of '++' or more.
-    for col in export_df.columns:
-        if str(col[0]).startswith('++'):
-            renamed_col = ('+' + col[0], col[1])
-        else:
-            renamed_col = ('++' + col[0], col[1])
-        while renamed_col in tab_data_df.columns:
-            renamed_col = ('+' + renamed_col[0], renamed_col[1])
-        mapping_dict[col] = renamed_col
-
-    # Apply new names
-    export_df.rename(columns=mapping_dict, inplace=True)
-
-    # Make sure columns are MultiIndex
-    export_df.columns = pd.MultiIndex.from_tuples(export_df.columns)
-
-    # Init new cols in main
-    for newcol in export_df.columns:
-        main_df[newcol] = np.nan
-
-    # Data to main
-    main_df = main_df.combine_first(export_df)
-    return main_df
-
-
-def add_to_main(main_df, export_df):
-    """Rename cols so there is no overlap with other vars"""
-    # # Make sure columns are MultiIndex
-    # export_df.columns = pd.MultiIndex.from_tuples(export_df.columns)
-
-    # Init new cols in main
-    for exported_col in export_df.columns:
-        exported_series = export_df[exported_col]
-        while exported_col in main_df.columns:
-            exported_col = ('.' + exported_col[0], exported_col[1])
-        exported_series.name = exported_col
-        main_df[exported_series.name] = exported_series
-    return main_df
-
-
-def move_col_to_pos(df, colname, pos):
-    # Changing columns order: https://engineering.hexacta.com/pandas-by-example-columns-547696ff78dd
-    cols = df.columns.tolist()
-    column_to_move = colname
-    new_position = pos
-    cols.insert(new_position,
-                cols.pop(cols.index(column_to_move)))  # pandas pop: Return item and drop from frm_CategoryOptions
-    df = df[cols]
-
-    return df
-
-
-def limit_data_range_percentiles(df, col, perc_limits):
-    p_lower = df[col].quantile(perc_limits[0])
-    p_upper = df[col].quantile(perc_limits[1])
-    p_filter = (df[col] >= p_lower) & (df[col] <= p_upper)
-    df = df[p_filter]
-    return df
-
-
-def add_second_header_row(df):
-    lst_for_empty_units = []
-    for e in range(len(df.columns)):  ## generate entry for all cols in df
-        lst_for_empty_units.append('-no-units-')
-    df.columns = [df.columns, lst_for_empty_units]  ## conv column index to multiindex
-    return df
-
-
-def create_lagged_variants(df: pd.DataFrame(), num_lags: int = 1, ignore_cols: list = None, info: bool = True):
-    newdf = pd.DataFrame()
-    lagged_cols = []
-    ignored_cols = []
-    for col in df.columns:
-        if col in ignore_cols:
-            newdf[col] = df[col].copy()
-            ignored_cols.append(col)
-            continue
-        for lag in range(1, num_lags):
-            newcol = f"({col[0]}+{lag}, {col[1]})"
-            newdf[newcol] = df[col].shift(lag)
-        lagged_cols.append(col)
-    if info:
-        print(f"Created lagged variants for: {lagged_cols}\n"
-              f"No lagged variants for: {ignored_cols}")
-    return newdf
-
-
 def convert_to_arrays(df: pd.DataFrame, target_col: str, complete_rows: bool = True):
     """Convert data from df to numpy arrays and prepare targets, features and their timestamp"""
 
@@ -779,28 +375,6 @@ def convert_to_arrays(df: pd.DataFrame, target_col: str, complete_rows: bool = T
     timestamp = np.array(_df.index)
 
     return targets, features, features_names, timestamp
-
-
-def rolling_variants(df, records: int, aggtypes: list, exclude_cols: list = None) -> pd.DataFrame:
-    """Create rolling variants of variables
-
-    Calculates rolling aggregation over *records* of type *aggtypes*
-
-    For example, with records=5 and aggtypes=['mean', 'max'] the mean
-    and max over 5 records is produced.
-
-    """
-    for col in df.columns:
-        if exclude_cols:
-            if col in exclude_cols:
-                continue
-
-        for aggtype in aggtypes:
-            aggname = (f".{col[0]}.r-{aggtype}{records}", col[1])
-            min_periods = int(np.ceil(records / 2))
-            df[aggname] = df[col].rolling(records, min_periods=min_periods).agg(aggtype)
-
-    return df
 
 
 def add_continuous_record_number(df: DataFrame) -> DataFrame:
@@ -914,53 +488,6 @@ def lagged_variants(df: DataFrame,
     return df
 
 
-def generate_flag(df: pd.DataFrame, target_col: tuple, tag: str,
-                  upperlim_col: tuple, lowerlim_col: tuple, criterion_col=None):
-    """Calculate flag where 1=True (outlier) and 0=False (no outlier)"""
-
-    # Flag is based on criterion_col, which can be the target or some other col in df
-    criterion_col = target_col if not criterion_col else criterion_col
-
-    # Naming, based on target
-    varname = f"{target_col[0]}"
-    units = f"{target_col[1]}"
-    tag = '' if tag in varname else tag
-    prefix = '.'
-    # prefix = '' if varname.startswith('.') else '.'
-
-    # Get records within limits (bool True means within limits)
-    flag_col = (f"{prefix}QCF_{varname}{tag}", "[1=outlier]")  # Outlier flag
-    df[flag_col] = \
-        (df[criterion_col] < df[upperlim_col]) & \
-        (df[criterion_col] > df[lowerlim_col])
-
-    # Convert bool flag to integers 0 and 1
-    # The bool series needs to be inverted first, so that bool True
-    # means outside limits. True is then translated to integer 1.
-
-    # Set missing values to True (outside limits)
-    # BUT: this also gives True for nan (when criterion is nan/missing)
-    df[flag_col] = ~df[flag_col]
-
-    # Convert True/False to 1/0 (1=outlier, 0=no outlier)
-    df[flag_col] = df[flag_col].astype(int)
-
-    # Set flag to nan if criterion is missing
-    df.loc[df[criterion_col].isnull(), flag_col] = np.nan
-
-    # Series that contains outlier values only
-    target_outliervals_col = (f"{prefix}{varname}{tag}_outliers", units)
-    is_outlier_ix = df[flag_col] == 1
-    df.loc[is_outlier_ix, target_outliervals_col] = df[target_col]
-
-    # Target series where outliers were removed
-    target_nooutliers_col = (f"{prefix}{varname}{tag}", units)
-    is_not_outlier_ix = df[flag_col] == 0
-    df.loc[is_not_outlier_ix, target_nooutliers_col] = df[target_col]
-
-    return df, flag_col, target_nooutliers_col, target_outliervals_col
-
-
 def generate_flag_daynight(df: pd.DataFrame,
                            flag_based_on: str = 'timestamp',
                            ts_daytime_start_hour: int = 7,
@@ -991,12 +518,3 @@ def generate_flag_daynight(df: pd.DataFrame,
     df.loc[daytime_ix, [flag_col]] = 1
     df.loc[nighttime_ix, [flag_col]] = 0
     return df, flag_col
-
-
-def init_class_df(df: pd.DataFrame, subset_cols: list, newcols: list):
-    """Initialize df with columns required by class"""
-    class_df = pd.DataFrame(df[subset_cols])  # Only required cols
-    class_df.sort_index(axis=1, inplace=True)  # lexsort for better performance
-    for newcol in newcols:
-        class_df[newcol] = np.nan
-    return class_df
