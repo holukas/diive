@@ -59,7 +59,7 @@ class LocalSD(FlagBase):
         self.verbose = verbose
 
         if self.showplot:
-            self.fig, self.ax, self.ax2 = self._plot_init()
+            self.fig_localsd, self.ax_localsd, self.ax2_localsd = self._plot_init()
 
     def calc(self, repeat: bool = True):
         """Calculate overall flag, based on individual flags from multiple iterations.
@@ -124,16 +124,16 @@ class LocalSD(FlagBase):
     def _plot_add_iteration(self, rmedian, upper_limit, lower_limit, iteration):
         """Add iteration data to plot, but do not show plot yet."""
         if iteration == 1:
-            self.ax.plot(self.series.index, self.series, label=f"{self.series.name}", color='black',
-                         marker='o', fillstyle='none', alpha=.9, markersize=4, linestyle='none',
-                         markeredgecolor='black', markeredgewidth=1, zorder=1)
+            self.ax_localsd.plot(self.series.index, self.series, label=f"{self.series.name}", color='black',
+                                 marker='o', fillstyle='none', alpha=.9, markersize=4, linestyle='none',
+                                 markeredgecolor='black', markeredgewidth=1, zorder=1)
         # self._filteredseries.loc[rejected] = np.nan
-        self.ax.plot(rmedian.index, rmedian, label=f"rolling median", color="#FFA726",
-                     alpha=1, markersize=0, markeredgecolor='none', ls='-', lw=2, zorder=3)
-        self.ax.plot(upper_limit.index, upper_limit, label=f"upper limit", color="#7E57C2",
-                     alpha=1, markersize=0, markeredgecolor='none', ls='--', lw=1, zorder=4)
-        self.ax.plot(lower_limit.index, lower_limit, label=f"lower limit", color="#26C6DA",
-                     alpha=1, markersize=0, markeredgecolor='none', ls='--', lw=1, zorder=4)
+        self.ax_localsd.plot(rmedian.index, rmedian, label=f"rolling median", color="#FFA726",
+                             alpha=1, markersize=0, markeredgecolor='none', ls='-', lw=2, zorder=3)
+        self.ax_localsd.plot(upper_limit.index, upper_limit, label=f"upper limit", color="#7E57C2",
+                             alpha=1, markersize=0, markeredgecolor='none', ls='--', lw=1, zorder=4)
+        self.ax_localsd.plot(lower_limit.index, lower_limit, label=f"lower limit", color="#26C6DA",
+                             alpha=1, markersize=0, markeredgecolor='none', ls='--', lw=1, zorder=4)
 
     def _plot_finalize(self, n_iterations):
         """Finalize and show plot."""
@@ -142,23 +142,23 @@ class LocalSD(FlagBase):
 
         outliers_only = self.series.copy()
         outliers_only = outliers_only[rejected].copy()
-        self.ax.plot(outliers_only.index, outliers_only,
-                     label=f"outlier", color='#F44336', zorder=2, ls='None',
-                     alpha=1, markersize=12, markeredgecolor='none', marker='X')
+        self.ax_localsd.plot(outliers_only.index, outliers_only,
+                             label=f"outlier", color='#F44336', zorder=2, ls='None',
+                             alpha=1, markersize=12, markeredgecolor='none', marker='X')
 
         filtered = self.series.copy()
         filtered.loc[rejected] = np.nan
-        self.ax2.plot(filtered.index, filtered,
-                      label=f"filtered series", color='black', marker='o', fillstyle='none',
-                      linestyle='none', alpha=.9, markersize=4, markeredgecolor='black', markeredgewidth=1)
-        default_format(ax=self.ax)
-        default_format(ax=self.ax2)
+        self.ax2_localsd.plot(filtered.index, filtered,
+                              label=f"filtered series", color='black', marker='o', fillstyle='none',
+                              linestyle='none', alpha=.9, markersize=4, markeredgecolor='black', markeredgewidth=1)
+        default_format(ax=self.ax_localsd)
+        default_format(ax=self.ax2_localsd)
         # default_legend(ax=self.ax, ncol=2, markerscale=5)
         plottitle = (
             f"Outlier detection based on the standard deviation in a rolling window for {self.series.name}\n"
             f"n_iterations = {n_iterations}, n_outliers = {n_outliers}")
-        self.fig.suptitle(plottitle, fontsize=theme.FIGHEADER_FONTSIZE)
-        self.fig.show()
+        self.fig_localsd.suptitle(plottitle, fontsize=theme.FIGHEADER_FONTSIZE)
+        self.fig_localsd.show()
 
 
 def example():
