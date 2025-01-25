@@ -210,6 +210,7 @@ class TestFluxProcessingChain(unittest.TestCase):
             ml_feature_settings={
                 'features': ["TA_1_1_1", "SW_IN_1_1_1", "VPD_EP"],
                 'features_lag': [-1, -1],
+                'features_lag_stepsize': 1,
                 'reduce_features': False,
                 'include_timestamp_as_features': True,
                 'add_continuous_record_number': True,
