@@ -2,7 +2,7 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.85.0 | X Dec 2024
+## v0.85.0 | X Jan 2024
 
 - todo implement lagged_variants in fpc etc...
 
@@ -32,19 +32,22 @@ gap-filled data by filling gaps based on the average of few (or single) availabl
   the [Flux Processing Chain](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/)
   outlined by [Swiss FluxNet](https://www.swissfluxnet.ethz.ch/).
 - The flux processing chain uses different levels for different steps in the chain:
-  - Level-0: preliminary flux calculations, e.g. during the year, done by [EddyPro](https://www.licor.com/products/eddy-covariance/eddypro)
-  - Level-1: final flux calculations, e.g. for complete year, done by [EddyPro](https://www.licor.com/products/eddy-covariance/eddypro)
-  - Level-2: quality flag expansion
-  - Level-3.1: storage correction (using one point measurement only, from profile not included by default)
-  - Level-3.2: outlier removal (flagging)
-  - Level-3.3: USTAR filtering (constant threshold, must be known, detection not included by default)
-  - Level-4.1: gap-filling (MDS, long-term random forest)
-  - 
+    - Level-0: preliminary flux calculations, e.g. during the year, done
+      by [EddyPro](https://www.licor.com/products/eddy-covariance/eddypro)
+    - Level-1: final flux calculations, e.g. for complete year, done
+      by [EddyPro](https://www.licor.com/products/eddy-covariance/eddypro)
+    - Level-2: quality flag expansion
+    - Level-3.1: storage correction (using one point measurement only, from profile not included by default)
+    - Level-3.2: outlier removal (flagging)
+    - Level-3.3: USTAR filtering (constant threshold, must be known, detection not included by default)
+    - Level-4.1: gap-filling (MDS, long-term random forest)
+    -
 
 ### Changes
 
 - Added parameter `min_n_vals_nt` in MDS gap-filling (`diive.pkgs.gapfilling.mds.FluxMDS`)
 - When reading a parquet file, sanitizing the timestamp is now optional (`diive.core.io.files.load_parquet`)
+- The function for creating lagged variants is now found in `diive.pkgs.createvar.laggedvariants.lagged_variants`
 
 ### Additions
 
@@ -76,6 +79,7 @@ gap-filled data by filling gaps based on the average of few (or single) availabl
 
 ### Notebooks
 
+- Added notebook example for creating lagged variants of variables (`notebooks/CalculateVariable/Create_lagged_variants.ipynb`)
 - Updated flux processing chain notebook to `v9.0`: added option for MDS gap-filling, more descriptions
 - Bugfix: import for loading from `Path` was missing in flux processing chain notebook
 - Updated MDS gap-filling notebook to `v1.1`, added more descriptions and example for `min_n_vals_nt` parameter
@@ -83,14 +87,16 @@ gap-filled data by filling gaps based on the average of few (or single) availabl
 
 ### Unittests
 
+- Added test case `tests.test_createvar.TestCreateVar.test_lagged_variants`
 - Updated test case `tests.test_gapfilling.TestGapFilling.test_fluxmds`
 - Updated test case `tests.test_fluxprocessingchain.TestFluxProcessingChain.test_fluxprocessingchain`
-- 52/52 unittests ran successfully
+- TODO 53/53 unittests ran successfully
 
 ### Bugfixes
 
 - The setting for features that should not be lagged was not properly implemented (
   `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain._get_ml_feature_settings`)
+- Fixed bug when plotting (`diive.pkgs.outlierdetection.localsd.LocalSD`)
 
 ## v0.84.2 | 8 Nov 2024
 
