@@ -14,6 +14,7 @@ from xgboost import XGBRegressor
 from yellowbrick.regressor import PredictionError, ResidualsPlot
 
 import diive.core.dfun.frames as fr
+import diive.pkgs.createvar.laggedvariants
 from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import include_timestamp_as_cols
 from diive.pkgs.gapfilling.scores import prediction_scores
@@ -782,11 +783,11 @@ class MlRegressorGapFillingBase:
         exclude_cols = [self.target_col]
         if features_lag_exclude_cols:
             exclude_cols += features_lag_exclude_cols
-        return fr.lagged_variants(df=self.model_df,
-                                  stepsize=self.features_lag_stepsize,
-                                  lag=self.features_lag,
-                                  exclude_cols=exclude_cols,
-                                  verbose=self.verbose)
+        return diive.pkgs.createvar.laggedvariants.lagged_variants(df=self.model_df,
+                                                                   stepsize=self.features_lag_stepsize,
+                                                                   lag=self.features_lag,
+                                                                   exclude_cols=exclude_cols,
+                                                                   verbose=self.verbose)
 
     def _check_n_cols(self):
         """Check number of columns"""
