@@ -30,7 +30,7 @@ class FluxMDS:
                  swin: str,
                  ta: str,
                  vpd: str,
-                 swin_class: float = 50,
+                 swin_class: list = None,  # Default defined below: [20, 50]
                  ta_class: float = 2.5,
                  vpd_class: float = 0.5,
                  min_n_vals_nt: int = 0,
@@ -53,7 +53,7 @@ class FluxMDS:
             swin: Name of short-wave incoming radiation variable in *df*. (W m-2)
             ta: Name of air temperature variable in *df*. (°C)
             vpd: Name of vapor pressure deficit variable in *df*. (kPa)
-            swin_class: Used for grouping *flux* data into groups of similar
+            todo swin_class: Used for grouping *flux* data into groups of similar
                 meteorological conditions. Data in the respective group must
                 not deviate by more than +/- 50 W m-2 (default). (W m-2)
             ta_class: Used for grouping *flux* data into groups of similar
@@ -66,12 +66,18 @@ class FluxMDS:
                 calculate the average *flux* value for gaps during nighttime.
             verbose: Value 1 creates more text output.
         """
-        self._df = df[[flux, swin, ta, vpd]].copy()
+        self._gapfilling_df = df[[flux, swin, ta, vpd]].copy()
         self.flux = flux
         self.swin = swin
         self.ta = ta
         self.vpd = vpd
-        self.swin_class = swin_class
+        if not swin_class:
+            self.swin_class = [20, 50]
+        else:
+            if isinstance(swin_class, list):
+                self.swin_class = swin_class
+            else:
+                raise TypeError('swin_class must be a list with two elements. (default: [20, 50])')
         self.ta_class = ta_class
         self.vpd_class = vpd_class
         self.min_n_vals_nt = min_n_vals_nt if min_n_vals_nt else 0
@@ -82,7 +88,7 @@ class FluxMDS:
         self.target_gapfilled = f"{self.flux}{self.gfsuffix}"
         self.target_gapfilled_flag = f"FLAG_{self.flux}{self.gfsuffix}_ISFILLED"
 
-        self._add_newcols()
+        self._gapfilling_df = self._add_newcols()
 
         self.workdf = DataFrame()
 
@@ -112,9 +118,9 @@ class FluxMDS:
     @property
     def gapfilling_df_(self) -> DataFrame:
         """Dataframe containing all data."""
-        if not isinstance(self._df, DataFrame):
+        if not isinstance(self._gapfilling_df, DataFrame):
             raise Exception('No dataframe containing all data available.')
-        return self._df
+        return self._gapfilling_df
 
     @property
     def scores_(self) -> dict:
@@ -197,51 +203,51 @@ class FluxMDS:
         # https://www.geeksforgeeks.org/apply-function-to-every-row-in-a-pandas-dataframe/
         # https://labs.quansight.org/blog/unlocking-c-level-performance-in-df-apply
 
-        self._df = self.gapfilling_df_.copy()
+        self._gapfilling_df = self.gapfilling_df_.copy()
         locs_missing = self.gapfilling_df_['.PREDICTIONS'].isnull()
-        self.workdf = self._df[locs_missing].copy()
+        self.workdf = self._gapfilling_df[locs_missing].copy()
 
         # A1: SWIN, TA, VPD, NEE available within 7 days (highest quality gap-filling).
-        self.workdf, self._df = self._run_all_available(days=7, quality=1)
+        self.workdf, self._gapfilling_df = self._run_all_available(days=7, quality=1)
 
         # A2: SWIN, TA, VPD, NEE available within 14 days
-        self.workdf, self._df = self._run_all_available(days=14, quality=2)
+        self.workdf, self._gapfilling_df = self._run_all_available(days=14, quality=2)
 
         # A3: SWIN, NEE available within 7 days
-        self.workdf, self._df = self._run_two_available(days=7, quality=3)
+        self.workdf, self._gapfilling_df = self._run_two_available(days=7, quality=3)
 
         # A4: NEE available within |dt| <= 1h on same day
-        self.workdf, self._df = self._run_mdc(days=0, hours=1, quality=4)
+        self.workdf, self._gapfilling_df = self._run_mdc(days=0, hours=1, quality=4)
 
         # B1: same hour NEE available within |dt| <= 1 day
-        self.workdf, self._df = self._run_mdc(days=1, hours=1, quality=5)
+        self.workdf, self._gapfilling_df = self._run_mdc(days=1, hours=1, quality=5)
 
         # B2: SWIN, TA, VPD, NEE available within 21 days
-        self.workdf, self._df = self._run_all_available(days=21, quality=6)
+        self.workdf, self._gapfilling_df = self._run_all_available(days=21, quality=6)
 
         # B3: SWIN, TA, VPD, NEE available within 28 days
-        self.workdf, self._df = self._run_all_available(days=28, quality=7)
+        self.workdf, self._gapfilling_df = self._run_all_available(days=28, quality=7)
 
         # B4: SWIN, NEE available within 14 days
-        self.workdf, self._df = self._run_two_available(days=14, quality=8)
+        self.workdf, self._gapfilling_df = self._run_two_available(days=14, quality=8)
 
         # C+: SWIN, TA, VPD, NEE available within 35-140 days
         quality = 8  # Quality from previous step B4
         for d in range(35, 147, 7):
             quality += 1
-            self.workdf, self._df = self._run_all_available(days=d, quality=quality)
+            self.workdf, self._gapfilling_df = self._run_all_available(days=d, quality=quality)
 
         # C+: SWIN, NEE available within 21-140 days
         quality = 24  # Maximum possible quality from previous step C+
         for d in range(21, 147, 7):
             quality += 1
-            self.workdf, self._df = self._run_two_available(days=d, quality=quality)
+            self.workdf, self._gapfilling_df = self._run_two_available(days=d, quality=quality)
 
         # C+: same hour NEE available within |dt| <= 7-X days
         quality = 42  # Maximum possible quality from previous step C+
         for d in range(21, 147, 7):
             quality += 1
-            self.workdf, self._df = self._run_mdc(days=d, hours=1, quality=quality)
+            self.workdf, self._gapfilling_df = self._run_mdc(days=d, hours=1, quality=quality)
 
         # print(self.gapfilling_df_)
 
@@ -259,7 +265,6 @@ class FluxMDS:
             self.gapfilling_df_.loc[locs_measured_missing, '.PREDICTIONS_QUALITY']
         # self.gapfilling_df_[self.target_gapfilled_flag] = \
         #     self.gapfilling_df_[self.target_gapfilled_flag].fillna(self.gapfilling_df_['.PREDICTIONS_QUALITY'])
-
 
         # # Flag
         # # Make flag column that indicates where predictions for
@@ -450,29 +455,47 @@ class FluxMDS:
             avg = np.nan
         return avg
 
-    def _add_newcols(self):
-        self._df['.TIMESTAMP'] = self.gapfilling_df_.index
-        self.gapfilling_df_[self.target_gapfilled] = np.nan  # Gap-filling measurement
-        self.gapfilling_df_[self.target_gapfilled_flag] = np.nan  # Gap-filling flag
-        self._df['.PREDICTIONS'] = np.nan
-        self._df['.PREDICTIONS_SD'] = np.nan
-        self._df['.PREDICTIONS_COUNTS'] = np.nan
-        self._df['.PREDICTIONS_QUALITY'] = np.nan
-        self._df['.START'] = np.nan
-        self._df['.END'] = np.nan
-        self._df[f'.{self.swin}_LOWERLIM'] = self.gapfilling_df_[self.swin].sub(self.swin_class)
-        self._df[f'.{self.swin}_UPPERLIM'] = self.gapfilling_df_[self.swin].add(self.swin_class)
-        self._df[f'.{self.ta}_LOWERLIM'] = self.gapfilling_df_[self.ta].sub(self.ta_class)
-        self._df[f'.{self.ta}_UPPERLIM'] = self.gapfilling_df_[self.ta].add(self.ta_class)
-        self._df[f'.{self.vpd}_LOWERLIM'] = self.gapfilling_df_[self.vpd].sub(self.vpd_class)
-        self._df[f'.{self.vpd}_UPPERLIM'] = self.gapfilling_df_[self.vpd].add(self.vpd_class)
+    def _add_newcols(self) -> pd.DataFrame:
+        df = self.gapfilling_df_.copy()
+        # Init new cols
+        df['.TIMESTAMP'] = df.index
+        df[self.target_gapfilled] = np.nan  # Gap-filling measurement
+        df[self.target_gapfilled_flag] = np.nan  # Gap-filling flag
+        df['.PREDICTIONS'] = np.nan
+        df['.PREDICTIONS_SD'] = np.nan
+        df['.PREDICTIONS_COUNTS'] = np.nan
+        df['.PREDICTIONS_QUALITY'] = np.nan
+        df['.START'] = np.nan
+        df['.END'] = np.nan
+        df[f'.{self.swin}_LOWERLIM'] = np.nan
+        df[f'.{self.swin}_UPPERLIM'] = np.nan
+        df[f'.{self.ta}_LOWERLIM'] = np.nan
+        df[f'.{self.ta}_UPPERLIM'] = np.nan
+        df[f'.{self.vpd}_LOWERLIM'] = np.nan
+        df[f'.{self.vpd}_UPPERLIM'] = np.nan
+
+        # Similarity limits for low radiation measurements
+        lowrad = df[self.swin] <= 50
+        df.loc[lowrad, f'.{self.swin}_LOWERLIM'] = df.loc[lowrad, self.swin].sub(self.swin_class[0])
+        df.loc[lowrad, f'.{self.swin}_UPPERLIM'] = df.loc[lowrad, self.swin].add(self.swin_class[0])
+
+        # Similarity limits for high radiation measurements
+        highrad = df[self.swin] > 50
+        df.loc[highrad, f'.{self.swin}_LOWERLIM'] = df.loc[highrad, self.swin].sub(self.swin_class[1])
+        df.loc[highrad, f'.{self.swin}_UPPERLIM'] = df.loc[highrad, self.swin].add(self.swin_class[1])
+
+        df[f'.{self.ta}_LOWERLIM'] = df[self.ta].sub(self.ta_class)
+        df[f'.{self.ta}_UPPERLIM'] = df[self.ta].add(self.ta_class)
+        df[f'.{self.vpd}_LOWERLIM'] = df[self.vpd].sub(self.vpd_class)
+        df[f'.{self.vpd}_UPPERLIM'] = df[self.vpd].add(self.vpd_class)
+        return df
 
 
 def example():
     from diive.core.io.files import load_parquet
 
-    SOURCEDIR = r"L:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_cha_fp2024_2005-2023\40_FLUXES_L1_IRGA+QCL+LGR_mergeData"
-    FILENAME = r"41.1_CH-CHA_IRGA_LGR+QCL_Level-1_eddypro_fluxnet_2005-2023_meteo7.parquet"
+    SOURCEDIR = r"L:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_cha_fp2025_2005-2024\notebooks\30_MERGE_DATA"
+    FILENAME = r"33.3_CH-CHA_IRGA+QCL+LGR+M10+MGMT_Level-1_eddypro_fluxnet_2005-2024.parquet"
     FILEPATH = Path(SOURCEDIR) / FILENAME
     df = load_parquet(filepath=FILEPATH)
 
@@ -482,15 +505,15 @@ def example():
     vpd = 'VPD_T1_2_1'
     ustar = 'USTAR'
     ssitc = 'FC_SSITC_TEST'
-    swin_class = 50  # W m-2
+    swin_class = [25, 25]  # W m-2
     ta_class = 2.5  # °C
     vpd_class = 0.5  # kPa; 5 hPa is default for reference
 
     locs = (
-            (df.index.year >= 2020)
+            (df.index.year >= 2023)
             & (df.index.year <= 2023)
-            & (df.index.month >= 1)
-            & (df.index.month <= 12)
+            & (df.index.month >= 7)
+            & (df.index.month <= 7)
     )
     subsetcols = [flux, swin, ta, vpd, ustar, ssitc]
     subsetdf = df.loc[locs, subsetcols].copy()
