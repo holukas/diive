@@ -256,9 +256,9 @@ class FluxMDS:
                     marker=marker, alpha=1, markersize=5, markeredgecolor=color, fillstyle='full')
 
             if uf > 0:
-                # Add errorbars for gap-filled values
+                # Add errorbars for gap-filled values, use fmt to not draw lines between the bars
                 ax.errorbar(data.index, data[self.target_gapfilled], data['.PREDICTIONS_SD'],
-                            elinewidth=5, ecolor=color, alpha=.2)
+                            elinewidth=5, ecolor=color, alpha=.2, fmt='none')
 
                 # Add counts for gap-filled values
                 ax_counts.plot(data.index, data['.PREDICTIONS_COUNTS'],
