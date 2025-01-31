@@ -30,9 +30,9 @@ class FluxMDS:
                  swin: str,
                  ta: str,
                  vpd: str,
-                 swin_class: list = None,  # Default defined below: [20, 50]
-                 ta_class: float = 2.5,
-                 vpd_class: float = 0.5,
+                 swin_tol: list = None,  # Default defined below: [20, 50]
+                 ta_tol: float = 2.5,
+                 vpd_tol: float = 0.5,
                  avg_min_n_vals: int = 5,
                  verbose: int = 1):
         """Gap-filling for ecosystem fluxes, based on marginal distribution sampling (MDS
@@ -41,11 +41,18 @@ class FluxMDS:
         Missing values are replaced by the average *flux* value during
         similar meteorological conditions.
 
-        The MDS method in diive was implemented following the description in
-        Reichstein et al. (2005). One difference in the implementation is that
-        diive introduces the parameter *min_n_vals_nt*, which allows to set a
-        minimum of required values to calculate the average *flux* for the gap
-        during nighttime conditions.
+        The MDS method in diive was implemented following the descriptions in
+        Reichstein et al. (2005) and Vekuri et al. (2023).
+
+        References:
+            Reichstein et al. (2005). On the separation of net ecosystem exchange
+                into assimilation and ecosystem respiration: Review and improved
+                algorithm. Global Change Biology, 11(9), 1424–1439.
+                https://doi.org/10.1111/j.1365-2486.2005.001002.x
+            Vekuri et al. (2023). A widely-used eddy covariance gap-filling method
+                creates systematic bias in carbon balance estimates.
+                Scientific Reports, 13(1), 1720.
+                https://doi.org/10.1038/s41598-023-28827-2
 
         Args:
             df: Dataframe that contains data for *flux*, *swin*, *ta* and *vpd*.
@@ -56,13 +63,13 @@ class FluxMDS:
             todo swin_class: Used for grouping *flux* data into groups of similar
                 meteorological conditions. Data in the respective group must
                 not deviate by more than +/- 50 W m-2 (default). (W m-2)
-            ta_class: Used for grouping *flux* data into groups of similar
+            ta_tol: Used for grouping *flux* data into groups of similar
                 meteorological conditions. Data in the respective group must
                 not deviate by more than +/- 2.5 °C (default). (°C)
-            vpd_class: Used for grouping *flux* data into groups of similar
+            vpd_tol: Used for grouping *flux* data into groups of similar
                 meteorological conditions. Data in the respective group must
                 not deviate by more than +/- 0.5 kPa (default). (kPa)
-            avg_min_n_vals: Minimum number of measured *flux* values required to
+            todo avg_min_n_vals: Minimum number of measured *flux* values required to
                 calculate the average *flux* value for gaps during nighttime.
             verbose: Value 1 creates more text output.
         """
@@ -71,15 +78,15 @@ class FluxMDS:
         self.swin = swin
         self.ta = ta
         self.vpd = vpd
-        if not swin_class:
-            self.swin_class = [20, 50]
+        if not swin_tol:
+            self.swin_tol = [20, 50]
         else:
-            if isinstance(swin_class, list):
-                self.swin_class = swin_class
+            if isinstance(swin_tol, list):
+                self.swin_tol = swin_tol
             else:
                 raise TypeError('swin_class must be a list with two elements. (default: [20, 50])')
-        self.ta_class = ta_class
-        self.vpd_class = vpd_class
+        self.ta_tol = ta_tol
+        self.vpd_tol = vpd_tol
         self.avg_min_n_vals = avg_min_n_vals if avg_min_n_vals else 0
         self.verbose = verbose
 
@@ -179,8 +186,6 @@ class FluxMDS:
             quality += 1
             self.workdf, self._gapfilling_df = self._run_mdc(days=d, hours=1, quality=quality)
 
-        # print(self.gapfilling_df_)
-
         # Gap-filled measurement time series
         self.gapfilling_df_[self.target_gapfilled] = self.gapfilling_df_[self.flux].fillna(
             self.gapfilling_df_['.PREDICTIONS'])
@@ -241,13 +246,16 @@ class FluxMDS:
         for ix, uf in enumerate(uniqueflags):
             locs = flag == uf
             data = self.gapfilling_df_.loc[locs, :]
-            label = f"measured ({self.flux})" if uf == 0 else f"gap-filled quality {uf}"
+            label = f"measured ({self.flux})" if uf == 0 else f"gap-filled quality {uf}, mean ± SD"
             n_vals = data[self.target_gapfilled].count()
             color = colors[35] if ix > (maxcolors - 1) else colors[ix]
             marker = markers[3] if ix > (maxmarker - 1) else markers[ix]
             ax.plot(data.index, data[self.target_gapfilled],
                     label=f"{label} ({n_vals} values)", color=color, linestyle='none', markeredgewidth=1,
                     marker=marker, alpha=1, markersize=6, markeredgecolor=color, fillstyle='full')
+            if uf > 0:
+                ax.errorbar(data.index, data[self.target_gapfilled], data['.PREDICTIONS_SD'],
+                            elinewidth=5, ecolor=color, alpha=.2)
             ax_flag.plot(data.index, data[self.target_gapfilled_flag],
                          label=f"{label} ({n_vals} values)", color=color, linestyle='none', markeredgewidth=1,
                          marker=marker, alpha=1, markersize=6, markeredgecolor=color, fillstyle='full')
@@ -256,8 +264,7 @@ class FluxMDS:
         default_format(ax=ax)
         ax.tick_params(labelbottom=False)
         default_format(ax=ax_flag)
-        default_legend(ax=ax_flag)
-        # default_legend(ax=ax)
+        default_legend(ax=ax_flag, textsize=theme.FONTSIZE_TXT_LEGEND_SMALL)
         fig.show()
 
     def report(self):
@@ -270,7 +277,7 @@ class FluxMDS:
         predictionsmeanquality = self.gapfilling_df_['.PREDICTIONS_QUALITY'].mean()
         flagcounts = Counter(self.gapfilling_df_[self.target_gapfilled_flag])
 
-        print(f"{self.flux} before gap-filling:\n"
+        print(f"\n{self.flux} before gap-filling:\n"
               f"    {potential_vals} potential values\n"
               f"    {n_vals_before} available values\n"
               f"    {n_vals_missing_before} missing values")
@@ -282,7 +289,7 @@ class FluxMDS:
               f"    {predictionsmeanquality:.3f} predictions mean quality across all records (1=best)")
 
         print(f"\nGap-filling quality flags ({self.target_gapfilled_flag}):")
-        for key, value in flagcounts.items():
+        for key, value in sorted(flagcounts.items()):
             if key == 0:
                 print(f"    Directly measured: {value} values (flag=0)")
             else:
@@ -295,24 +302,25 @@ class FluxMDS:
         for score, val in self.scores_.items():
             print(f'    {score}: {val:.3f}')
 
-
-
     def _run_all_available(self, days: int, quality: int):
 
         _df, workdf = self._prepare_dataframes()
         if workdf.empty:
             return workdf, _df
 
-        print(f"\nMDS gap-filling quality {quality} ...")
+        print(f"MDS gap-filling quality {quality}    using SW_IN, TA, VPD in {days} days window ...")
 
         offset = pd.DateOffset(days=days)
         workdf['.START'] = pd.to_datetime(workdf.index) - offset
         workdf['.END'] = pd.to_datetime(workdf.index) + offset
-        workdf['.PREDICTIONS'] = workdf.apply(self._a_1_2, axis=1)
+        # .apply() needs .to_list() to return multiple series
+        workdf[['.PREDICTIONS', '.PREDICTIONS_SD', '.PREDICTIONS_COUNTS']] = workdf.apply(self._a_1_2, axis=1).to_list()
         workdf['.PREDICTIONS_QUALITY'] = quality
 
         if quality == 1:
             _df['.PREDICTIONS'] = workdf['.PREDICTIONS'].copy()
+            _df['.PREDICTIONS_SD'] = workdf['.PREDICTIONS_SD'].copy()
+            _df['.PREDICTIONS_COUNTS'] = workdf['.PREDICTIONS_COUNTS'].copy()
             _df['.START'] = workdf['.START'].copy()
             _df['.END'] = workdf['.END'].copy()
             _df['.PREDICTIONS_QUALITY'] = workdf['.PREDICTIONS_QUALITY'].copy()
@@ -334,12 +342,12 @@ class FluxMDS:
         if workdf.empty:
             return workdf, _df
 
-        print(f"MDS gap-filling quality {quality} ...")
+        print(f"MDS gap-filling quality {quality}    using SW_IN in {days} days window ...")
 
         offset = pd.DateOffset(days=days)
         workdf['.START'] = pd.to_datetime(workdf.index) - offset
         workdf['.END'] = pd.to_datetime(workdf.index) + offset
-        workdf['.PREDICTIONS'] = workdf.apply(self._a3, axis=1)
+        workdf[['.PREDICTIONS', '.PREDICTIONS_SD', '.PREDICTIONS_COUNTS']] = workdf.apply(self._a3, axis=1).to_list()
         workdf['.PREDICTIONS_QUALITY'] = quality
 
         _df = self._fill_predictions(_df, workdf)
@@ -354,15 +362,18 @@ class FluxMDS:
         if workdf.empty:
             return workdf, _df
 
-        print(f"MDS gap-filling quality {quality} ...")
+        print(f"MDS gap-filling quality {quality}    using mean diurnal cycle of flux in "
+              f"{days} days, {hours} hours window ...")
 
         offset = pd.DateOffset(days=days, hours=hours)
         workdf['.START'] = pd.to_datetime(workdf.index) - offset
         workdf['.END'] = pd.to_datetime(workdf.index) + offset
         if days == 0:
-            workdf['.PREDICTIONS'] = workdf.apply(self._a4, axis=1)
+            workdf[['.PREDICTIONS', '.PREDICTIONS_SD', '.PREDICTIONS_COUNTS']] = workdf.apply(self._a4,
+                                                                                              axis=1).to_list()
         else:
-            workdf['.PREDICTIONS'] = workdf.apply(self._b1, axis=1)
+            workdf[['.PREDICTIONS', '.PREDICTIONS_SD', '.PREDICTIONS_COUNTS']] = workdf.apply(self._b1,
+                                                                                              axis=1).to_list()
         workdf['.PREDICTIONS_QUALITY'] = quality
 
         _df = self._fill_predictions(_df, workdf)
@@ -383,6 +394,7 @@ class FluxMDS:
         locs = locs_available_fills & locs_need_fill
 
         _df.loc[locs, '.PREDICTIONS'] = workdf.loc[locs, '.PREDICTIONS']
+        _df.loc[locs, '.PREDICTIONS_SD'] = workdf.loc[locs, '.PREDICTIONS_SD']
         _df.loc[locs, '.PREDICTIONS_QUALITY'] = workdf.loc[locs, '.PREDICTIONS_QUALITY']
         _df.loc[locs, '.START'] = workdf.loc[locs, '.START']
         _df.loc[locs, '.END'] = workdf.loc[locs, '.END']
@@ -400,8 +412,8 @@ class FluxMDS:
                 & (self.gapfilling_df_[f'.{self.vpd}_UPPERLIM'] > row[self.vpd])
                 & (self.gapfilling_df_[f'.{self.vpd}_LOWERLIM'] < row[self.vpd])
         )
-        avg = self._calc_avg(locs=locs)
-        return avg
+        avg, sd, counts = self._calc_avg(locs=locs)
+        return avg, sd, counts
 
     def _a3(self, row):
         locs = (
@@ -410,16 +422,16 @@ class FluxMDS:
                 & (self.gapfilling_df_[f'.{self.swin}_UPPERLIM'] > row[self.swin])
                 & (self.gapfilling_df_[f'.{self.swin}_LOWERLIM'] < row[self.swin])
         )
-        avg = self._calc_avg(locs=locs)
-        return avg
+        avg, sd, counts = self._calc_avg(locs=locs)
+        return avg, sd, counts
 
     def _a4(self, row):
         locs = (
                 (self.gapfilling_df_.index >= row['.START'])
                 & (self.gapfilling_df_.index <= row['.END'])
         )
-        avg = self._calc_avg(locs=locs)
-        return avg
+        avg, sd, counts = self._calc_avg(locs=locs)
+        return avg, sd, counts
 
     def _b1(self, row):
         locs = (
@@ -427,24 +439,27 @@ class FluxMDS:
                 & (self.gapfilling_df_.index <= row['.END'])
                 & (self.gapfilling_df_.index.hour == row.name.hour)
         )
-        avg = self._calc_avg(locs=locs)
-        return avg
+        avg, sd, counts = self._calc_avg(locs=locs)
+        return avg, sd, counts
 
-    def _calc_avg(self, locs: bool) -> float:
+    def _calc_avg(self, locs: bool) -> [float, float]:
         _df = self.gapfilling_df_.loc[locs, [self.flux]].copy()
         _array = _df[self.flux].to_numpy()
-        n_vals = len(_array[~np.isnan(_array)])
+        counts = len(_array[~np.isnan(_array)])
 
         # Return NaN if no flux records available
-        if n_vals == 0:
+        if counts == 0:
             avg = np.nan
-            return avg
+            sd = np.nan
+            return avg, sd, counts
 
-        if n_vals >= self.avg_min_n_vals:
+        if counts >= self.avg_min_n_vals:
             avg = np.nanmean(_array)
+            sd = np.nanstd(_array)
         else:
             avg = np.nan
-        return avg
+            sd = np.nan
+        return avg, sd, counts
 
     def _add_newcols(self) -> pd.DataFrame:
         df = self.gapfilling_df_.copy()
@@ -467,22 +482,23 @@ class FluxMDS:
 
         # Similarity limits for low radiation measurements
         lowrad = df[self.swin] <= 50
-        df.loc[lowrad, f'.{self.swin}_LOWERLIM'] = df.loc[lowrad, self.swin].sub(self.swin_class[0])
-        df.loc[lowrad, f'.{self.swin}_UPPERLIM'] = df.loc[lowrad, self.swin].add(self.swin_class[0])
+        df.loc[lowrad, f'.{self.swin}_LOWERLIM'] = df.loc[lowrad, self.swin].sub(self.swin_tol[0])
+        df.loc[lowrad, f'.{self.swin}_UPPERLIM'] = df.loc[lowrad, self.swin].add(self.swin_tol[0])
 
         # Similarity limits for high radiation measurements
         highrad = df[self.swin] > 50
-        df.loc[highrad, f'.{self.swin}_LOWERLIM'] = df.loc[highrad, self.swin].sub(self.swin_class[1])
-        df.loc[highrad, f'.{self.swin}_UPPERLIM'] = df.loc[highrad, self.swin].add(self.swin_class[1])
+        df.loc[highrad, f'.{self.swin}_LOWERLIM'] = df.loc[highrad, self.swin].sub(self.swin_tol[1])
+        df.loc[highrad, f'.{self.swin}_UPPERLIM'] = df.loc[highrad, self.swin].add(self.swin_tol[1])
 
-        df[f'.{self.ta}_LOWERLIM'] = df[self.ta].sub(self.ta_class)
-        df[f'.{self.ta}_UPPERLIM'] = df[self.ta].add(self.ta_class)
-        df[f'.{self.vpd}_LOWERLIM'] = df[self.vpd].sub(self.vpd_class)
-        df[f'.{self.vpd}_UPPERLIM'] = df[self.vpd].add(self.vpd_class)
+        df[f'.{self.ta}_LOWERLIM'] = df[self.ta].sub(self.ta_tol)
+        df[f'.{self.ta}_UPPERLIM'] = df[self.ta].add(self.ta_tol)
+        df[f'.{self.vpd}_LOWERLIM'] = df[self.vpd].sub(self.vpd_tol)
+        df[f'.{self.vpd}_UPPERLIM'] = df[self.vpd].add(self.vpd_tol)
         return df
 
 
 def example():
+    import time
     from diive.core.io.files import load_parquet
 
     SOURCEDIR = r"L:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_cha_fp2025_2005-2024\notebooks\30_MERGE_DATA"
@@ -496,15 +512,15 @@ def example():
     vpd = 'VPD_T1_2_1'
     ustar = 'USTAR'
     ssitc = 'FC_SSITC_TEST'
-    swin_class = [25, 25]  # W m-2
-    ta_class = 2.5  # °C
-    vpd_class = 0.5  # kPa; 5 hPa is default for reference
+    swin_tol = [20, 50]  # W m-2
+    ta_tol = 2.5  # °C
+    vpd_tol = 0.5  # kPa; 5 hPa is default for reference
 
     locs = (
             (df.index.year >= 2023)
             & (df.index.year <= 2023)
-            & (df.index.month >= 1)
-            & (df.index.month <= 12)
+            & (df.index.month >= 7)
+            & (df.index.month <= 7)
     )
     subsetcols = [flux, swin, ta, vpd, ustar, ssitc]
     subsetdf = df.loc[locs, subsetcols].copy()
@@ -512,7 +528,6 @@ def example():
     subsetdf.loc[~good, flux] = np.nan
     # subsetdf.describe()
 
-    import time
     a = time.perf_counter()
     mds = FluxMDS(
         df=subsetdf,
@@ -520,14 +535,15 @@ def example():
         ta=ta,
         swin=swin,
         vpd=vpd,
-        swin_class=swin_class,
-        ta_class=ta_class,
-        vpd_class=vpd_class,  # kPa; 5 hPa is default for reference
+        swin_tol=swin_tol,
+        ta_tol=ta_tol,
+        vpd_tol=vpd_tol,  # kPa; 5 hPa is default for reference
         avg_min_n_vals=5
     )
     mds.run()
     mds.report()
     mds.showplot()
+    print(mds.gapfilling_df_)
     b = time.perf_counter()
     print(f"Duration: {b - a}")
 
