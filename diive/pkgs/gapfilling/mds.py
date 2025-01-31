@@ -17,9 +17,9 @@ from pandas import DataFrame
 
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.plotting.plotfuncs import default_format, default_legend
-from diive.core.plotting.styles.LightTheme import colorwheel_36, generate_plot_marker_list
+from diive.core.plotting.styles.LightTheme import colorwheel_36_blackfirst, generate_plot_marker_list
 from diive.pkgs.gapfilling.scores import prediction_scores
-
+from diive.core.plotting.plotfuncs import nice_date_ticks
 
 class FluxMDS:
     gfsuffix = '_gfMDS'
@@ -232,14 +232,15 @@ class FluxMDS:
 
     def showplot(self):
         fig = plt.figure(facecolor='white', figsize=(16, 9), dpi=100, layout='constrained')
-        gs = gridspec.GridSpec(2, 1, figure=fig)  # rows, cols
+        gs = gridspec.GridSpec(3, 1, figure=fig)  # rows, cols
         # gs.update(wspace=0.3, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
         ax = fig.add_subplot(gs[0, 0])
         ax_flag = fig.add_subplot(gs[1, 0], sharex=ax)
+        ax_counts = fig.add_subplot(gs[2, 0], sharex=ax)
         flag = self.gapfilling_df_[self.target_gapfilled_flag]
         uniqueflags = list(flag.unique())
         uniqueflags.sort()
-        colors = colorwheel_36()
+        colors = colorwheel_36_blackfirst()
         maxcolors = len(colors)
         markers = generate_plot_marker_list()
         maxmarker = len(markers)
@@ -249,22 +250,38 @@ class FluxMDS:
             label = f"measured ({self.flux})" if uf == 0 else f"gap-filled quality {uf}, mean ± SD"
             n_vals = data[self.target_gapfilled].count()
             color = colors[35] if ix > (maxcolors - 1) else colors[ix]
-            marker = markers[3] if ix > (maxmarker - 1) else markers[ix]
+            marker = markers[9] if ix > (maxmarker - 1) else markers[ix]
             ax.plot(data.index, data[self.target_gapfilled],
                     label=f"{label} ({n_vals} values)", color=color, linestyle='none', markeredgewidth=1,
-                    marker=marker, alpha=1, markersize=6, markeredgecolor=color, fillstyle='full')
+                    marker=marker, alpha=1, markersize=5, markeredgecolor=color, fillstyle='full')
+
             if uf > 0:
+                # Add errorbars for gap-filled values
                 ax.errorbar(data.index, data[self.target_gapfilled], data['.PREDICTIONS_SD'],
                             elinewidth=5, ecolor=color, alpha=.2)
+
+                # Add counts for gap-filled values
+                ax_counts.plot(data.index, data['.PREDICTIONS_COUNTS'],
+                               label=f"{label} ({n_vals} values)", color=color, linestyle='none', markeredgewidth=1,
+                               marker=marker, alpha=1, markersize=5, markeredgecolor=color, fillstyle='full')
+
             ax_flag.plot(data.index, data[self.target_gapfilled_flag],
                          label=f"{label} ({n_vals} values)", color=color, linestyle='none', markeredgewidth=1,
-                         marker=marker, alpha=1, markersize=6, markeredgecolor=color, fillstyle='full')
+                         marker=marker, alpha=1, markersize=5, markeredgecolor=color, fillstyle='full')
         fig.suptitle(f"Variable {self.flux} gap-filled using MDS: {self.target_gapfilled}",
                      fontsize=theme.FIGHEADER_FONTSIZE)
-        default_format(ax=ax)
+        default_format(ax=ax, ax_ylabel_txt=f"{self.flux}", ax_labels_fontsize=theme.AX_LABELS_FONTSIZE_12)
         ax.tick_params(labelbottom=False)
-        default_format(ax=ax_flag)
-        default_legend(ax=ax_flag, textsize=theme.FONTSIZE_TXT_LEGEND_SMALL)
+        ax_flag.tick_params(labelbottom=False)
+        default_format(ax=ax_flag, ax_ylabel_txt="flag value", ax_labels_fontsize=theme.AX_LABELS_FONTSIZE_12)
+        default_format(ax=ax_counts, ax_ylabel_txt="number of values for mean",
+                       ax_labels_fontsize=theme.AX_LABELS_FONTSIZE_12)
+        default_legend(ax=ax_flag, textsize=theme.FONTSIZE_TXT_LEGEND_SMALL_9, ncol=2)
+        # default_legend(ax=ax_counts, textsize=theme.FONTSIZE_TXT_LEGEND_SMALL)
+
+        nice_date_ticks(ax=ax)
+        nice_date_ticks(ax=ax_flag)
+        nice_date_ticks(ax=ax_counts)
         fig.show()
 
     def report(self):
@@ -395,6 +412,7 @@ class FluxMDS:
 
         _df.loc[locs, '.PREDICTIONS'] = workdf.loc[locs, '.PREDICTIONS']
         _df.loc[locs, '.PREDICTIONS_SD'] = workdf.loc[locs, '.PREDICTIONS_SD']
+        _df.loc[locs, '.PREDICTIONS_COUNTS'] = workdf.loc[locs, '.PREDICTIONS_COUNTS']
         _df.loc[locs, '.PREDICTIONS_QUALITY'] = workdf.loc[locs, '.PREDICTIONS_QUALITY']
         _df.loc[locs, '.START'] = workdf.loc[locs, '.START']
         _df.loc[locs, '.END'] = workdf.loc[locs, '.END']
