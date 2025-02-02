@@ -57,6 +57,9 @@ COLOR_HISTOGRAM = lightgreen(600)
 COLOR_BG_EVENTS = red(500)
 COLOR_TXT_LEGEND = black()
 FONTSIZE_TXT_LEGEND = 16
+FONTSIZE_TXT_LEGEND_SMALL_12 = 12
+FONTSIZE_TXT_LEGEND_SMALL_9 = 9
+FONTSIZE_TXT_LEGEND_SMALL_8 = 8
 
 # HEADERS & LABELS
 FONTSIZE_HEADER_AXIS_LARGE = 9
@@ -66,6 +69,7 @@ FONTCOLOR_HEADER_AXIS = black()
 
 # Axis labels
 AX_LABELS_FONTSIZE = 16
+AX_LABELS_FONTSIZE_12 = 12
 AX_LABELS_FONTCOLOR = black()
 AX_LABELS_FONTWEIGHT = 'normal'
 
@@ -97,6 +101,23 @@ def colorwheel_36():
     picked_colors_dict = {}
     pick = -1
     shades = [300, 600, 900]
+
+    for shade in shades:
+        color_list = colors_12(shade=shade)
+        for c in color_list:
+            pick += 1
+            picked_colors_dict[pick] = c
+
+    return picked_colors_dict
+
+
+def colorwheel_36_blackfirst():
+    """Create dictionary with a total of 36 colors, the first color is always black."""
+    picked_colors_dict = {}
+    pick = 0
+    shades = [300, 600, 900]
+
+    picked_colors_dict[0] = '#000000'
 
     for shade in shades:
         color_list = colors_12(shade=shade)
@@ -183,7 +204,7 @@ def colors_6():
 
 
 def generate_plot_marker_list():
-    plot_marker_dict = {0: 'o', 1: 's', 2: 'v', 3: '^'}
+    plot_marker_dict = {0: 'o', 1: 's', 2: 'v', 3: '^', 4: '<', 5: '>', 6: 'p', 7: 'P', 8: 'D', 9: 'd'}
     return plot_marker_dict
 
 # def colorwheel(ix):

@@ -187,6 +187,18 @@ class FluxProcessingChain:
                 except AttributeError:
                     print(f"{gfmethod} {ustar_scenario} does not have feature ranks.")
 
+    def showplot_mds_gapfilling_qualities(self):
+        for gfmethod, ustar_scenarios in self.level41.items():
+            if gfmethod != 'mds':
+                continue
+            for ustar_scenario in ustar_scenarios:
+                # try:
+                results = self.level41[gfmethod][ustar_scenario]
+                # txt = f"MODEL: {gfmethod}"
+                results.showplot()
+                # except AttributeError:
+                #     print(f"{gfmethod} {ustar_scenario} does not have feature ranks.")
+
     def showplot_gapfilled_heatmap(self, vmin: float = None, vmax: float = None):
         """Show heatmap plot for gap-filled and non-gap-filled data in each USTAR scenario."""
         gapfilled_vars = self.get_gapfilled_names()

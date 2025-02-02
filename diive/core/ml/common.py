@@ -911,10 +911,12 @@ class MlRegressorGapFillingBase:
         # using info from the timestamp, e.g. DOY
         _still_missing_locs = self._gapfilling_df[self.target_gapfilled_col].isnull()
         _num_still_missing = _still_missing_locs.sum()  # Count number of still-missing values
+
+        print(f"\nGap-filling {_num_still_missing} remaining missing records in "
+              f"{self.target_gapfilled_col} using fallback model ...")
+
         if _num_still_missing > 0:
 
-            print(f"\nGap-filling {_num_still_missing} remaining missing records in "
-                  f"{self.target_gapfilled_col} using fallback model ...")
             print(f">>> Fallback model is trained on {self.target_gapfilled_col} and timestamp info ...")
 
             fallback_predictions, \
@@ -928,6 +930,7 @@ class MlRegressorGapFillingBase:
 
             self._gapfilling_df.loc[_still_missing_locs, self.target_gapfilled_flag_col] = 2  # Adjust flag, 2=fallback
         else:
+            print(f">>> Fallback model not necessary, all gaps were already filled.")
             self._gapfilling_df[self.pred_fallback_col] = None
 
         # Cumulative

@@ -42,7 +42,8 @@ class FileSplitter:
             split_trim_var: str = None
 
     ):
-        """Split file into multiple smaller parts and export them as multiple CSV files.
+        """Split files containing eddy covariance data into multiple smaller parts
+        and export each part as separate CSV files.
 
         Args:
             filepath: Path to the file to split.
@@ -74,7 +75,7 @@ class FileSplitter:
             outfile_limit_n_rows: Limit splits to this number of rows. Mainly implemented
                 for faster testing.
             split_trim: Remove all split data before the first available record and after the last available
-                record for *trim_start_end_var*.
+                record for *split_trim_var*.
             split_trim_var: Variable used to trim start and end of split data. Required if *split_trim* is True,
                 otherwise ignored.
         """
