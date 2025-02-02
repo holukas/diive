@@ -17,9 +17,10 @@ from pandas import DataFrame
 
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.plotting.plotfuncs import default_format, default_legend
+from diive.core.plotting.plotfuncs import nice_date_ticks
 from diive.core.plotting.styles.LightTheme import colorwheel_36_blackfirst, generate_plot_marker_list
 from diive.pkgs.gapfilling.scores import prediction_scores
-from diive.core.plotting.plotfuncs import nice_date_ticks
+
 
 class FluxMDS:
     gfsuffix = '_gfMDS'
@@ -139,6 +140,8 @@ class FluxMDS:
     def run(self):
         # https://www.geeksforgeeks.org/apply-function-to-every-row-in-a-pandas-dataframe/
         # https://labs.quansight.org/blog/unlocking-c-level-performance-in-df-apply
+
+        print(f"\n{'=' * 30}\nStarting MDS gap-filling of flux {self.flux}.")
 
         self._gapfilling_df = self.gapfilling_df_.copy()
         locs_missing = self.gapfilling_df_['.PREDICTIONS'].isnull()
