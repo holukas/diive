@@ -227,10 +227,10 @@ class TestFluxProcessingChain(unittest.TestCase):
                 'swin': "SW_IN_1_1_1",
                 'ta': "TA_1_1_1",
                 'vpd': "VPD_EP",
-                'swin_class': 50,
-                'ta_class': 2.5,
-                'vpd_class': 0.5,
-                'min_n_vals_nt': 5
+                'swin_tol': [20, 50],
+                'ta_tol': 2.5,
+                'vpd_tol': 0.5,
+                'avg_min_n_vals': 5
             }
         )
 
@@ -247,13 +247,12 @@ class TestFluxProcessingChain(unittest.TestCase):
         self.assertEqual(type(fpc.level41['mds']['CUT_16']), FluxMDS)
         self.assertEqual(type(fpc.level41['mds']['CUT_50']), FluxMDS)
         self.assertEqual(type(fpc.level41['mds']['CUT_84']), FluxMDS)
-        self.assertAlmostEqual(fpc.level41['mds']['CUT_16'].get_gapfilled_target().sum(), -787.9641770013416, places=5)
-        self.assertAlmostEqual(fpc.level41['mds']['CUT_50'].get_gapfilled_target().sum(), -774.185437842572, places=5)
-        self.assertAlmostEqual(fpc.level41['mds']['CUT_84'].get_gapfilled_target().sum(), -800.2874419060306, places=5)
+        self.assertAlmostEqual(fpc.level41['mds']['CUT_16'].get_gapfilled_target().sum(), -1365.6178576567804, places=5)
+        self.assertAlmostEqual(fpc.level41['mds']['CUT_50'].get_gapfilled_target().sum(), -1316.896036847074, places=5)
+        self.assertAlmostEqual(fpc.level41['mds']['CUT_84'].get_gapfilled_target().sum(), -1292.5348297285425, places=5)
         self.assertEqual(len(fpc.fpc_df.columns), 78)
         flagcols = [c for c in fpc.fpc_df.columns if str(c).startswith("FLAG_") and str(c).endswith("_TEST")]
         self.assertEqual(len(flagcols), 25)
-
 
 
 if __name__ == '__main__':
