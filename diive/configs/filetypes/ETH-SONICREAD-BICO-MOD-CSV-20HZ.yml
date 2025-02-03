@@ -1,0 +1,24 @@
+GENERAL:
+  NAME: "ETH-SONICREAD-BICO-MOD-CSV-20HZ"
+  DESCRIPTION: "Format with 1-row header with variable name and no timestamp. Originates from the ETH eddy covariance logging script sonicread, converted to ASCII format using the script bico, but file was then later modified e.g. in dyco."
+  TAGS: [ "sonicread", "bico" ]
+
+FILE:
+  EXTENSION: "*.csv"
+  COMPRESSION: "None"
+
+TIMESTAMP:
+  DESCRIPTION: "No timestamp in files."
+  INDEX_COLUMN: "-not-available-"
+  DATETIME_FORMAT: "-not-available-"
+  SHOWS_START_MIDDLE_OR_END_OF_RECORD: "-not-available-"
+
+DATA:
+  HEADER_SECTION_ROWS: [ 0 ]
+  SKIP_ROWS: [ ]
+  HEADER_ROWS: [ 0 ]
+  VARNAMES_ROW: 0
+  VARUNITS_ROW: "-not-available-"
+  NA_VALUES: [ -9999, -6999, -999, "nan", "NaN", "NAN", "NA", "inf", "-inf", "-" ]
+  FREQUENCY: "50ms"
+  DELIMITER: ","
