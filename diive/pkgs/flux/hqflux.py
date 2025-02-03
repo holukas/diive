@@ -15,6 +15,7 @@ def analyze_highest_quality_flux(flux: Series, nighttime_flag: Series, showplot:
         hq = flux.loc[nighttime_flag == d].copy()
         # flux = self.flags.loc[self.nighttime == d, self.filteredseriescol_hq].copy()
         n_neighbors = int(hq.dropna().count() / 200)
+        n_neighbors = n_neighbors if n_neighbors > 0 else 10
         contamination = 'auto'
         repeat = False
         print(f"\n>>> Removing outliers from highest-quality {timeofday} fluxes ({hq.name})")

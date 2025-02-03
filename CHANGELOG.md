@@ -7,12 +7,12 @@
 ### Updates to MDS gap-filling
 
 The community-standard MDS gap-filling method for eddy covariance ecosystem fluxes (e.g., CO2 flux) is now integrated
-into the `FluxProcessingChain`. MDS is used during gap-filling in Level-4.1.
+into the `FluxProcessingChain`. MDS is used during gap-filling in flux Level-4.1.
 
 - **Example notebook** using MDS as part of the flux processing chain where it is used together with random
   forest: [Flux Processing Chain](/notebooks/FluxProcessingChain/FluxProcessingChain.ipynb)
-- **Example notebook** using MDS as stand alone
-  class: [MDS gap-filling of ecosystem fluxes](/notebooks/GapFilling/FluxMDSGapFilling.ipynb)
+- **Example notebook** using MDS as stand alone class
+  `FluxMDS`: [MDS gap-filling of ecosystem fluxes](/notebooks/GapFilling/FluxMDSGapFilling.ipynb)
 
 The `diive` implementation of the MDS gap-filling method adheres to the descriptions in Reichstein et al. (2005) and
 Vekuri et al. (2023), similar to the standard gap-filling procedures used by FLUXNET, ICOS, ReddyProc, and other similar
@@ -69,6 +69,7 @@ meteorological conditions.
 - Added parameter to hide default plot when called. The method `defaultplot` is used e.g. by outlier detection methods
   to plot the data after outlier removal, to show flagged vs. unflagged values. (
   `diive.core.base.flagbase.FlagBase.defaultplot`)
+- Added new filetype `ETH-SONICREAD-BICO-MOD-CSV-20HZ`
 - Added `fig` property that contains the default plot for outlier removal methods. This is useful when the default plot
   is needed elsewhere, e.g. saved to a file. At the moment, the parameter `showplot` must be `True` for the property to
   be accessible. (`diive.core.base.flagbase.FlagBase`)
