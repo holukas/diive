@@ -165,7 +165,7 @@ _Create single outlier flags where `0=OK` and `2=outlier`._
 
 ## Installation
 
-`diive` is currently under active developement using Python 3.9.7, but newer (and many older) versions should also work.
+`diive` is currently under active developement using **Python v3.11**, but newer (and many older) versions should also work.
 
 ### Using pip
 
@@ -174,10 +174,6 @@ _Create single outlier flags where `0=OK` and `2=outlier`._
 ### Using poetry
 
 `poetry add diive`
-
-### Using conda
-
-`conda intall -c conda-forge diive`
 
 ### From source
 

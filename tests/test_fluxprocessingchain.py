@@ -203,35 +203,56 @@ class TestFluxProcessingChain(unittest.TestCase):
         # --------------------
         # Level-4.1
         # --------------------
-
         fpc.level41_gapfilling_longterm(
             run_random_forest=True,
-            features=["TA_1_1_1", "SW_IN_1_1_1", "VPD_EP"],
-            features_lag=[-1, -1],
-            # reduce_features=False,
-            include_timestamp_as_features=True,
-            # add_continuous_record_number=True,
+            run_mds=True,
             verbose=True,
-            perm_n_repeats=1,
-            rf_kwargs={
+            ml_feature_settings={
+                'features': ["TA_1_1_1", "SW_IN_1_1_1", "VPD_EP"],
+                'features_lag': [-1, -1],
+                'features_lag_stepsize': 1,
+                'reduce_features': False,
+                'include_timestamp_as_features': True,
+                'add_continuous_record_number': True,
+                'perm_n_repeats': 1,
+            },
+            rf_settings={
                 'n_estimators': 3,
                 'random_state': 42,
                 'min_samples_split': 2,
                 'min_samples_leaf': 1,
                 'n_jobs': -1
+            },
+            mds_settings={
+                'swin': "SW_IN_1_1_1",
+                'ta': "TA_1_1_1",
+                'vpd': "VPD_EP",
+                'swin_tol': [20, 50],
+                'ta_tol': 2.5,
+                'vpd_tol': 0.5,
+                'avg_min_n_vals': 5
             }
         )
+
         # fpc.showplot_gapfilled_heatmap()
         # fpc.showplot_gapfilled_cumulative()
         from diive.pkgs.gapfilling.longterm import LongTermGapFillingRandomForestTS
+        from diive.pkgs.gapfilling.mds import FluxMDS
         self.assertEqual(type(fpc.level41['random_forest']['CUT_16']), LongTermGapFillingRandomForestTS)
         self.assertEqual(type(fpc.level41['random_forest']['CUT_50']), LongTermGapFillingRandomForestTS)
         self.assertEqual(type(fpc.level41['random_forest']['CUT_84']), LongTermGapFillingRandomForestTS)
-        self.assertAlmostEqual(fpc.level41['random_forest']['CUT_50'].gapfilling_df_.sum().sum(), 598498.6040326376, places=5)
-        self.assertEqual(len(fpc.fpc_df.columns), 72)
+        self.assertAlmostEqual(fpc.level41['random_forest']['CUT_16'].gapfilled_.sum(), -559.3215586606335, places=5)
+        self.assertAlmostEqual(fpc.level41['random_forest']['CUT_50'].gapfilled_.sum(), -903.0276816878333, places=5)
+        self.assertAlmostEqual(fpc.level41['random_forest']['CUT_84'].gapfilled_.sum(), 36.95485569336665, places=5)
+        self.assertEqual(type(fpc.level41['mds']['CUT_16']), FluxMDS)
+        self.assertEqual(type(fpc.level41['mds']['CUT_50']), FluxMDS)
+        self.assertEqual(type(fpc.level41['mds']['CUT_84']), FluxMDS)
+        self.assertAlmostEqual(fpc.level41['mds']['CUT_16'].get_gapfilled_target().sum(), -1365.6178576567804, places=5)
+        self.assertAlmostEqual(fpc.level41['mds']['CUT_50'].get_gapfilled_target().sum(), -1316.896036847074, places=5)
+        self.assertAlmostEqual(fpc.level41['mds']['CUT_84'].get_gapfilled_target().sum(), -1292.5348297285425, places=5)
+        self.assertEqual(len(fpc.fpc_df.columns), 78)
         flagcols = [c for c in fpc.fpc_df.columns if str(c).startswith("FLAG_") and str(c).endswith("_TEST")]
         self.assertEqual(len(flagcols), 25)
-
 
 
 if __name__ == '__main__':

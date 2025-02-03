@@ -37,7 +37,7 @@ class MaxCovariance:
             segment_name:
         """
 
-        self.segment_df = df
+        self.df = df
         self.var_reference = var_reference
         self.var_lagged = var_lagged
         self.lgs_winsize_from = lgs_winsize_from
@@ -174,9 +174,9 @@ class MaxCovariance:
 
         cov_df = self.cov_df.copy()
 
-        _index = self.segment_df.index.copy()
-        _var_lagged = self.segment_df[self.var_lagged].copy()
-        _var_reference = self.segment_df[self.var_reference].copy()
+        _index = self.df.index.copy()
+        _var_lagged = self.df[self.var_lagged].copy()
+        _var_reference = self.df[self.var_reference].copy()
 
         # Check if data column is empty
         if _var_lagged.dropna().empty:
@@ -191,16 +191,11 @@ class MaxCovariance:
                 try:
                     if shift < 0:
                         index_shifted = _index[-shift]  # Note the negative sign
-                        # index_shifted = _index.iloc[-shift]  # Note the negative sign
-                        # index_shifted = str(_segment_df['index'].iloc[-shift])  # Note the negative sign
-                        # index_shifted = str(_segment_df['index'][-shift])  # Note the negative sign
                     else:
                         # todo why time?
                         index_shifted = pd.NaT
 
-                    # print(index_shifted)
-
-                    # # Shift and calculate covariance (pandas)
+                    # Shift and calculate covariance (pandas)
                     _scalar_data_shifted = _var_lagged.shift(shift)
                     cov = _var_reference.cov(_scalar_data_shifted)
 

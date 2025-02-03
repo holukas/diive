@@ -27,7 +27,7 @@ class BinFitterCP:
             bins_y_agg: Literal['mean', 'median'] = 'mean',
             fit_type: Literal['linear', 'quadratic_offset', 'quadratic', 'cubic'] = 'quadratic_offset'
     ):
-        """Fit function to binned data and give CI and bootstrapped PI.
+        """Fit function to (binned) data and give CI and bootstrapped PI.
 
         Args:
             df: Dataframe with data for variables *xcol* and *ycol*.
@@ -37,6 +37,7 @@ class BinFitterCP:
             predict_min_x: Minimum x to predict y.
             n_predictions: Number of predictions, e.g. 1000 means y will be predicted for 1000 x-values.
             n_bins_x: Number of bins for y-aggregation. Bins are equally-sized, based on variable defined in *xcol*.
+                If *n_bins_x=0*, then the fit is done for the unbinned data.
             bins_y_agg: Aggregation type for y in each x-bin. Options: 'mean', 'median'
             fit_type: Fit type to fit to the bins. Options: 'linear', 'quadratic_offset', 'quadratic', 'cubic'
         """
@@ -123,6 +124,7 @@ class BinFitterCP:
             n_vals_per_bin['max'] = len_y
         else:
             _df = groupagg(df=df, num_bins=self.usebins, bin_col=self.xcol)
+            _df = _df.dropna()
             x = _df[self.xcol][self.bins_y_agg]
             y = _df[self.ycol][self.bins_y_agg]
             len_y = len(self.y)
@@ -137,6 +139,7 @@ class BinFitterCP:
         """
 
         df, x, y, len_y, n_vals_per_bin = self._set_fit_data(df=self.df)
+
 
         # Fit function f to data
         fit_params_opt, fit_params_cov = curve_fit(self.equation, x, y)
@@ -229,6 +232,7 @@ class BinFitterCP:
                  ax=None,
                  show_unbinned_data: bool = True,
                  show_bin_variation: bool = True,
+                 unbinned_alpha: float = .5,
                  highlight_year: int = None,
                  bin_size: int = 90,
                  bin_color: str = 'black',
@@ -261,36 +265,42 @@ class BinFitterCP:
 
         # Input data
         if show_unbinned_data:
-            ax.scatter(x=self.fit_results['input_df'][self.xcol],
-                       y=self.fit_results['input_df'][self.ycol],
-                       c='none',
-                       s=40,
-                       marker='o',
-                       edgecolors='#607D8B',
-                       label=f"{self.ycol} ({len(self.fit_results['input_df'][self.ycol])} values)")
+            line_xy = ax.scatter(
+                x=self.fit_results['input_df'][self.xcol],
+                y=self.fit_results['input_df'][self.ycol],
+                c='none',
+                s=40,
+                alpha=unbinned_alpha,
+                marker='o',
+                edgecolors='#607D8B',
+                label=f"{self.ycol} ({len(self.fit_results['input_df'][self.ycol])} values)")
 
         # Binned data
-        line_xy = ax.scatter(x=self.fit_results['bin_df'][self.xcol]['mean'],
-                             y=self.fit_results['bin_df'][self.ycol]['mean'],
-                             edgecolor=bin_edgecolor, color=bin_color, alpha=bin_alpha, s=bin_size,
-                             label=_label,
-                             zorder=1, marker=bin_marker)
+        if self.usebins > 0:
+            line_xy = ax.scatter(
+                x=self.fit_results['bin_df'][self.xcol]['mean'],
+                y=self.fit_results['bin_df'][self.ycol]['mean'],
+                edgecolor=bin_edgecolor, color=bin_color, alpha=bin_alpha, s=bin_size,
+                label=_label,
+                zorder=1, marker=bin_marker)
 
-        if show_bin_variation:
+        if show_bin_variation and (self.usebins > 0):
             if self.bins_y_agg == 'mean':
-                ax.errorbar(x=self.fit_results['bin_df'][self.xcol][self.bins_y_agg],
-                            y=self.fit_results['bin_df'][self.ycol][self.bins_y_agg],
-                            xerr=self.fit_results['bin_df'][self.xcol]['std'],
-                            yerr=self.fit_results['bin_df'][self.ycol]['std'],
-                            elinewidth=5, ecolor='black', alpha=.3, lw=0,
-                            zorder=2, label="mean bins SD")
+                ax.errorbar(
+                    x=self.fit_results['bin_df'][self.xcol][self.bins_y_agg],
+                    y=self.fit_results['bin_df'][self.ycol][self.bins_y_agg],
+                    xerr=self.fit_results['bin_df'][self.xcol]['std'],
+                    yerr=self.fit_results['bin_df'][self.ycol]['std'],
+                    elinewidth=5, ecolor='black', alpha=.3, lw=0,
+                    zorder=2, label="mean bins SD")
 
             elif self.bins_y_agg == 'median':
-                ax.fill_between(self.fit_results['bin_df'][self.xcol][self.bins_y_agg],
-                                self.fit_results['bin_df'][self.ycol]['q25'],
-                                self.fit_results['bin_df'][self.ycol]['q75'],
-                                alpha=.3, zorder=2, color='black',
-                                label="median bins IQR")
+                ax.fill_between(
+                    self.fit_results['bin_df'][self.xcol][self.bins_y_agg],
+                    self.fit_results['bin_df'][self.ycol]['q25'],
+                    self.fit_results['bin_df'][self.ycol]['q75'],
+                    alpha=.3, zorder=2, color='black',
+                    label="median bins IQR")
 
         # Highlight year
         if highlight_year:
@@ -300,12 +310,13 @@ class BinFitterCP:
             _subset_year.index = pd.to_datetime(_subset_year.index)
             _subset_year = _subset_year.loc[_subset_year.index.year == highlight_year, :]
             _numvals_y = len(_subset_year['bins_y'])
-            line_highlight = ax.scatter(_subset_year['bins_x'],
-                                        _subset_year['bins_y'],
-                                        edgecolor='#455A64', color='#FFD54F',  # amber 300
-                                        alpha=1, s=100,
-                                        label=f"{label} {highlight_year} ({_numvals_y} days)",
-                                        zorder=98, marker=marker)
+            line_highlight = ax.scatter(
+                _subset_year['bins_x'],
+                _subset_year['bins_y'],
+                edgecolor='#455A64', color='#FFD54F',  # amber 300
+                alpha=1, s=100,
+                label=f"{label} {highlight_year} ({_numvals_y} days)",
+                zorder=98, marker=marker)
         else:
             line_highlight = None
 
@@ -377,30 +388,31 @@ def example():
     vpd_col = 'VPD_f'
     ta_col = 'Tair_f'
     nee_col = 'NEE_CUT_REF_f'
-    xcol = ta_col
-    ycol = vpd_col
+    xcol = vpd_col
+    ycol = nee_col
 
-    maysep_dt_df = df_orig.loc[(df_orig.index.month >= 6) & (df_orig.index.month <= 9)].copy()
-    maysep_dt_df = maysep_dt_df.loc[maysep_dt_df['Rg_f'] > 20]
+    subset = df_orig.loc[(df_orig.index.month >= 6) & (df_orig.index.month <= 9)].copy()
+    subset = subset.loc[subset['Rg_f'] > 200]
 
     # Convert units
-    maysep_dt_df[vpd_col] = maysep_dt_df[vpd_col].multiply(0.1)  # hPa --> kPa
-    maysep_dt_df[nee_col] = maysep_dt_df[nee_col].multiply(0.0792171)  # umol CO2 m-2 s-1 --> g CO2 m-2 30min-1
-    y_units = "kPa"
-    ylabel = f"VPD (${y_units}$)"
+    subset[vpd_col] = subset[vpd_col].multiply(0.1)  # hPa --> kPa
+    subset[nee_col] = subset[nee_col].multiply(0.0792171)  # umol CO2 m-2 s-1 --> g CO2 m-2 30min-1
+    # y_units = "kPa"
+    y_units = "gCO_{2}\ m^{-2}\ 30min^{-1}"
+    ylabel = f"NEE (${y_units}$)"
+    # ylabel = f"VPD (${y_units}$)"
     x_units = "°C"
     xlabel = f"air temperature (${x_units}$)"
-    # y_units = "gCO_{2}\ m^{-2}\ 30min^{-1}"
 
     bf = BinFitterCP(
-        df=maysep_dt_df,
+        df=subset,
         # n_bootstraps=2,
         xcol=xcol,
         ycol=ycol,
         # predict_max_x=None,
         # predict_min_x=None,
         n_predictions=1000,
-        n_bins_x=10,
+        n_bins_x=0,
         bins_y_agg='mean',
         fit_type='quadratic_offset'  # 'linear', 'quadratic_offset', 'quadratic', 'cubic'
     )
@@ -410,11 +422,12 @@ def example():
 
     bf.showplot(
         show_unbinned_data=True,
-        show_bin_variation=True,
+        show_bin_variation=False,
         showfit=True,
         title='',
         xlabel=xlabel,
-        ylabel=ylabel
+        ylabel=ylabel,
+        unbinned_alpha=.5
         # xlim=(0, 30),
         # ylim=(-1, 0)
     )

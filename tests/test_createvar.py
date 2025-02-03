@@ -6,6 +6,32 @@ from diive.pkgs.createvar.timesince import TimeSince
 
 class TestCreateVar(unittest.TestCase):
 
+    def test_lagged_variants(self):
+        from diive.configs.exampledata import load_exampledata_parquet
+        from diive.pkgs.createvar.laggedvariants import lagged_variants
+        df = load_exampledata_parquet()
+        df = load_exampledata_parquet()
+        locs = (df.index.year == 2022) & (df.index.month == 7) & (df.index.hour >= 10) & (df.index.hour <= 15)
+        df = df[locs].copy()
+        df = df[['Tair_f', 'Rg_f', 'NEE_CUT_REF_f']].copy()
+        results = lagged_variants(
+            df=df,
+            lag=[-2, 1],
+            stepsize=1,
+            exclude_cols=['NEE_CUT_REF_f'],  # Variable(s) that will not be lagged
+            verbose=True
+        )
+        self.assertEqual(results.sum().sum(), 1109117.4049999998)
+        self.assertEqual(len(results.columns), 9)
+        self.assertEqual(results.columns.to_list(),
+                         ['Tair_f', 'Rg_f', 'NEE_CUT_REF_f', '.Tair_f-2', '.Tair_f-1', '.Tair_f+1', '.Rg_f-2',
+                          '.Rg_f-1', '.Rg_f+1'])
+
+        self.assertEqual(list(results['Tair_f'].iloc[0:4]), [8.04, 7.94, 8.15, 7.85])
+        self.assertEqual(list(results['.Tair_f-2'].iloc[0:4]), [8.04, 8.04, 8.04, 7.94])
+        self.assertEqual(list(results['.Tair_f-1'].iloc[0:4]), [8.04, 8.04, 7.94, 8.15])
+        self.assertEqual(list(results['.Tair_f+1'].iloc[0:4]), [7.94, 8.15, 7.85, 7.69])
+
     def test_daytime_nighttime_flag(self):
         from diive.configs.exampledata import load_exampledata_parquet
         from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag
