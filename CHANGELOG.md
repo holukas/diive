@@ -2,7 +2,7 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.85.5 | XX Feb 2024
+## v0.85.5 | 3 Feb 2024
 
 ### Updates to MDS gap-filling
 
