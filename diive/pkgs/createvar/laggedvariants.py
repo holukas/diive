@@ -39,6 +39,8 @@ def lagged_variants(df: DataFrame,
         input dataframe with added lagged variants
     """
 
+    exclude_cols = [] if not exclude_cols else exclude_cols
+
     if len(df.columns) == 1:
         if df.columns[0] in exclude_cols:
             raise Exception(f"(!) No lagged variants can be created "
@@ -69,7 +71,7 @@ def lagged_variants(df: DataFrame,
     lagsteps = range(lag[0], lag[1] + 1, stepsize)
 
     for col in df.columns:
-        if exclude_cols:
+        if isinstance(exclude_cols, list):
 
             if col in exclude_cols:
                 _excluded.append(col)
@@ -102,3 +104,32 @@ def lagged_variants(df: DataFrame,
               f"with stepsize {stepsize}), no lagged variants for: {_excluded}. "
               f"Shifting the time series created gaps which were then filled with the nearest value.")
     return df
+
+def example():
+    import importlib.metadata
+    import pandas as pd
+    import warnings
+    from datetime import datetime
+    from pathlib import Path
+    from diive.core.io.files import save_parquet, load_parquet
+    # pd.options.display.width = None
+    # pd.options.display.max_columns = None
+    # pd.set_option('display.max_rows', 3000)
+    # pd.set_option('display.max_columns', 3000)
+
+    SOURCEDIR = r"L:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_cha_fp2025_2005-2024\notebooks\30_MERGE_DATA"
+    FILENAME = r"33.3_CH-CHA_IRGA+QCL+LGR+M10+MGMT_Level-1_eddypro_fluxnet_2005-2024.parquet"
+    FILEPATH = Path(SOURCEDIR) / FILENAME
+    print(f"Data will be loaded from the following file:\n{FILEPATH}")
+    maindf = load_parquet(filepath=FILEPATH)
+
+    measured = ['SWC_GF1_0.15_1_gfXG', 'TS_GF1_0.04_1_gfXG', 'TS_GF1_0.15_1_gfXG', 'TS_GF1_0.4_1_gfXG',
+                'PREC_RAIN_TOT_GF1_0.5_1']
+    lagged = [f"{m}_MEAN3H" for m in measured]
+    subset = maindf[lagged].copy()
+    res = lagged_variants(df=subset, lag=[-24, -6], stepsize=6, exclude_cols=None)
+
+    print(res)
+
+if __name__ == "__main__":
+    example()
