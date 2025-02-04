@@ -1112,7 +1112,7 @@ def example():
     # metadata = ep.metadata
 
     # locs = (maindf.index.year >= 2019) & (maindf.index.year <= 2023)
-    locs = (maindf.index.year >= 2012) & (maindf.index.year <= 2012)
+    locs = (maindf.index.year >= 2012) & (maindf.index.year <= 2022)
     # locs = (maindf.index.year >= 2007) & (maindf.index.year <= 2011)
     maindf = maindf.loc[locs, :].copy()
     # locs = (maindf.index.month >= 7) & (maindf.index.month <= 7)
