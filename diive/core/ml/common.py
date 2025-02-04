@@ -275,13 +275,13 @@ class MlRegressorGapFillingBase:
         accepted_locs = ((series > threshold) & (series > 0))
         accepted_df = pd.DataFrame(series[accepted_locs])
         accepted_features = accepted_df.index.tolist()
-        print(f"{infotxt} >>> Accepted features and their importance:\n{accepted_df}")
+        print(f"\n{infotxt} >>> Accepted features and their importance:\n{accepted_df}")
 
         # Get rejected features
         rejected_locs = ((series < threshold) | (series <= 0))
         rejected_df = pd.DataFrame(series[rejected_locs])
         rejected_features = rejected_df.index.tolist()
-        print(f"{infotxt} >>> Rejected features and their importance:\n{rejected_df}")
+        print(f"\n{infotxt} >>> Rejected features and their importance:\n{rejected_df}")
 
         # Update dataframe, keep accepted columns
         accepted_cols = [self.target_col]

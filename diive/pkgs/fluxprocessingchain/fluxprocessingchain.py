@@ -1418,7 +1418,7 @@ def example():
             'features_lag': [-24, -6],
             'features_lag_stepsize': 6,
             'features_lag_exclude_cols': EXCLUDE_COLS,  # Management variables are not lagged
-            'reduce_features': True,
+            'reduce_features': False,
             'include_timestamp_as_features': True,
             'add_continuous_record_number': False,
             'perm_n_repeats': 2
@@ -1450,17 +1450,17 @@ def example():
     fpc.report_gapfilling_model_scores()
     fpc.report_gapfilling_feature_importances()
 
-    # Only ML models:
-    fpc.report_gapfilling_poolyears()
+    # # Only ML models:
+    # fpc.report_gapfilling_poolyears()
 
     # todo get full data
 
-    fpc.showplot_gapfilled_heatmap(vmin=-5, vmax=50)
-    fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{µmol\ CO_2\ m^{-2}}$)', per_year=True)
+    # fpc.showplot_gapfilled_heatmap(vmin=-5, vmax=50)
+    # fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{µmol\ CO_2\ m^{-2}}$)', per_year=True)
     # fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{g\ C\ m^{-2}}$)', per_year=False)
 
-    # # Only ML models:
-    # fpc.showplot_feature_ranks_per_year()
+    # Only ML models:
+    fpc.showplot_feature_ranks_per_year()
 
     # TODO heatmap of used model data pools
 
