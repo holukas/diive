@@ -258,9 +258,10 @@ class MlRegressorGapFillingBase:
         fi_df = fi_df.mean(axis=1)
         return fi_df
 
-    def _remove_rejected_features(self, factor: float = 1) -> list:
-        """Remove features below importance threshold from model dataframe.
-        The updated model dataframe will then be used for the next (final) model.
+    def _remove_rejected_features(self, factor: float = 1, infotxt="[ FEATURE REDUCTION ]") -> list:
+        """Remove features that are below importance threshold or that are below
+        zero from model dataframe. The updated model dataframe will then be used
+        for the next (final) model.
         """
 
         series = self.feature_importances_reduction_['PERM_IMPORTANCE'].copy()
@@ -268,17 +269,19 @@ class MlRegressorGapFillingBase:
         # Threshold for feature reduction
         threshold = series.loc[self.random_col]
         threshold = threshold * factor if threshold > 0 else threshold / factor
-        print(f">>> Setting threshold for feature rejection to {threshold}.")
+        print(f"{infotxt} >>> Setting threshold for feature rejection to {threshold}.")
 
         # Get accepted features
         accepted_locs = ((series > threshold) & (series > 0))
-        accepted_df = series[accepted_locs].copy()
+        accepted_df = pd.DataFrame(series[accepted_locs])
         accepted_features = accepted_df.index.tolist()
+        print(f"{infotxt} >>> Accepted features and their importance:\n{accepted_df}")
 
-        # # Get rejected features
-        # rejected_locs = ((self.feature_importances_reduction_ <= threshold) | (self.feature_importances_reduction_ < 0))
-        # fidf_rejected = fi_df.loc[rejected_locs].copy()
-        # rejected_features = fidf_rejected.index.tolist()
+        # Get rejected features
+        rejected_locs = ((series < threshold) | (series <= 0))
+        rejected_df = pd.DataFrame(series[rejected_locs])
+        rejected_features = rejected_df.index.tolist()
+        print(f"{infotxt} >>> Rejected features and their importance:\n{rejected_df}")
 
         # Update dataframe, keep accepted columns
         accepted_cols = [self.target_col]
@@ -453,8 +456,10 @@ class MlRegressorGapFillingBase:
         variable are rejected.
         """
 
+        infotxt = "[ FEATURE REDUCTION ]"
+
         # Info
-        print(f"\nFeature reduction based on permutation importance ...")
+        print(f"\n[ FEATURE REDUCTION ] Feature reduction based on permutation importance ...")
 
         df = self.train_df.copy()
         df = df.dropna()
@@ -478,7 +483,8 @@ class MlRegressorGapFillingBase:
         # _ = tree.plot_tree(rf.estimators_[0], feature_names=X.columns, filled=True)
 
         # Calculate permutation importance for all data
-        print(f">>> Calculating feature importances (permutation importance, {self.perm_n_repeats} repeats) ...")
+        print(
+            f"{infotxt} >>> Calculating feature importances (permutation importance, {self.perm_n_repeats} repeats) ...")
         X_names = df.drop(self.target_col, axis=1).columns.tolist()
         feature_importances = self._permutation_importance(model=model, X=X, y=y, X_names=X_names)
         self._feature_importances_reduction = feature_importances.sort_values(by='PERM_IMPORTANCE', ascending=False)
@@ -489,7 +495,7 @@ class MlRegressorGapFillingBase:
         accepted_cols = self._remove_rejected_features(factor=factor)
 
         # Update model data, keep accepted features
-        print(">>> Removing rejected features from model data ...")
+        print(f"{infotxt} >>> Removing rejected features from model data ...")
         self.train_df = self.train_df[accepted_cols].copy()
         self.test_df = self.test_df[accepted_cols].copy()
         self.model_df = self.model_df[accepted_cols].copy()

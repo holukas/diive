@@ -1100,8 +1100,8 @@ def example():
     # Source data
     from pathlib import Path
     from diive.core.io.files import load_parquet
-    SOURCEDIR = r"L:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_cha_fp2024_2005-2023\notebooks\30_MERGE_DATA"
-    FILENAME = r"33.1_CH-CHA_IRGA+QCL+LGR+M10+MGMT_Level-1_eddypro_fluxnet_2005-2023.parquet"
+    SOURCEDIR = r"L:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_cha_fp2025_2005-2024\notebooks\30_MERGE_DATA"
+    FILENAME = r"33.5_CH-CHA_IRGA+QCL+LGR+M10+MGMT_Level-1_eddypro_fluxnet_2005-2024.parquet"
     FILEPATH = Path(SOURCEDIR) / FILENAME
     maindf = load_parquet(filepath=str(FILEPATH))
     # SOURCEDIRS = [r"L:\Sync\luhk_work\20 - CODING\21 - DIIVE\diive\notebooks\FluxProcessingChain\example_data"]
@@ -1418,7 +1418,7 @@ def example():
             'features_lag': [-24, -6],
             'features_lag_stepsize': 6,
             'features_lag_exclude_cols': EXCLUDE_COLS,  # Management variables are not lagged
-            'reduce_features': False,
+            'reduce_features': True,
             'include_timestamp_as_features': True,
             'add_continuous_record_number': False,
             'perm_n_repeats': 2
