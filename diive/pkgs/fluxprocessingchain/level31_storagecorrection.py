@@ -133,8 +133,8 @@ class FluxStorageCorrectionSinglePointEddyPro:
             n_still_missing_strg = gapfilled_df[self.gapfilled_strgcol].isnull().sum()
             if n_still_missing_strg < prev_n_still_missing_strg:
                 print(f"Gap-filling storage-term {self.strgcol} "
-                      f"with rolling median (window size = {window_size} records) "
-                      f"Still missing values for storage term {self.gapfilled_strgcol}: {n_still_missing_strg} ...")
+                      f"with rolling median (window size = {window_size} records, centered)  |  "
+                      f"still missing values for storage term {self.gapfilled_strgcol}: {n_still_missing_strg} ...")
                 prev_n_still_missing_strg = n_still_missing_strg
 
         gapfilled_df = gapfilled_df[[self.gapfilled_strgcol, self.flag_isgapfilled]].copy()

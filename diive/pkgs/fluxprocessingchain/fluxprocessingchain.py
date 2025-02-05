@@ -1100,7 +1100,7 @@ def example():
     # Source data
     from pathlib import Path
     from diive.core.io.files import load_parquet
-    SOURCEDIR = r"L:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_cha_fp2025_2005-2024\notebooks\30_MERGE_DATA"
+    SOURCEDIR = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-cha_flux_product\notebooks\30_MERGE_DATA"
     FILENAME = r"33.5_CH-CHA_IRGA+QCL+LGR+M10+MGMT_Level-1_eddypro_fluxnet_2005-2024.parquet"
     FILEPATH = Path(SOURCEDIR) / FILENAME
     maindf = load_parquet(filepath=str(FILEPATH))
@@ -1112,7 +1112,7 @@ def example():
     # metadata = ep.metadata
 
     # locs = (maindf.index.year >= 2019) & (maindf.index.year <= 2023)
-    locs = (maindf.index.year >= 2012) & (maindf.index.year <= 2022)
+    locs = (maindf.index.year >= 2022) & (maindf.index.year <= 2022)
     # locs = (maindf.index.year >= 2007) & (maindf.index.year <= 2011)
     maindf = maindf.loc[locs, :].copy()
     # locs = (maindf.index.month >= 7) & (maindf.index.month <= 7)
@@ -1418,7 +1418,7 @@ def example():
             'features_lag': [-24, -6],
             'features_lag_stepsize': 6,
             'features_lag_exclude_cols': EXCLUDE_COLS,  # Management variables are not lagged
-            'reduce_features': False,
+            'reduce_features': True,
             'include_timestamp_as_features': True,
             'add_continuous_record_number': False,
             'perm_n_repeats': 2
@@ -1461,6 +1461,9 @@ def example():
 
     # Only ML models:
     fpc.showplot_feature_ranks_per_year()
+
+    # Only MDS:
+    fpc.showplot_mds_gapfilling_qualities()
 
     # TODO heatmap of used model data pools
 

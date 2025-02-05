@@ -227,10 +227,10 @@ class LongTermGapFillingBase:
     def fillgaps(self):
         """Train model for each year"""
         for year, _df in self._yearpools.items():
-            print(f"Training model for {year} ...")
+            print(f"\nTraining model for {year} ...")
             rfts = self.results_yearly_[year]  # Get instance with model from dict
             rfts.trainmodel(showplot_scores=False, showplot_importance=False)
-            print(f"Gap-filling {year} ...")
+            print(f"\nGap-filling {year} ...")
             rfts.fillgaps(showplot_scores=False, showplot_importance=False)
         self._collect()
 
