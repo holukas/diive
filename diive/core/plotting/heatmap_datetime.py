@@ -9,6 +9,7 @@ Kudos:
 import datetime
 
 import numpy as np
+from matplotlib.ticker import MultipleLocator, FormatStrFormatter
 from pandas import Series
 from pandas.plotting import register_matplotlib_converters
 
@@ -218,6 +219,13 @@ class HeatmapYearMonth(HeatmapBase):
         self.ax.set_xticks(tickpos)
         ticklabels = [int(t) for t in tickpos]
         self.ax.set_xticklabels(ticklabels)
+
+        # nice_date_ticks(ax=self.ax, minticks=1, maxticks=24, which='y', locator='year')
+        # Use Locator and Formatter to show every year on y-axis
+        locator = MultipleLocator(1)  # Set ticks every 1 unit
+        formatter = FormatStrFormatter('%d')  # Integer format
+        self.ax.yaxis.set_major_locator(locator)
+        self.ax.yaxis.set_major_formatter(formatter)
 
         # Format
         self.format(

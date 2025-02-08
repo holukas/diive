@@ -2,7 +2,11 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.85.5 | 3 Feb 2024
+## v0.85.6 | X Feb 2025
+
+- Plot now shows every year on y-axis (`diive.core.plotting.heatmap_datetime.HeatmapYearMonth`)
+
+## v0.85.5 | 3 Feb 2025
 
 ### Updates to MDS gap-filling
 
