@@ -15,16 +15,20 @@ from diive.pkgs.qaqc.eddyproflags import flag_signal_strength_eddypro_test
 VARS_CO2 = ['FC', 'FC_SSITC_TEST', 'SC_SINGLE', 'CO2']
 VARS_H2O = ['LE', 'LE_SSITC_TEST', 'SLE_SINGLE', 'H2O']
 VARS_H = ['H', 'H_SSITC_TEST', 'SH_SINGLE']
+VARS_N2O = ['FN2O', 'FN2O_SSITC_TEST', 'SN2O_SINGLE', 'N2O']
+VARS_CH4 = ['FCH4', 'FCH4_SSITC_TEST', 'SCH4_SINGLE', 'CH4']
 VARS_WIND = ['USTAR', 'WD', 'WS', 'FETCH_70', 'FETCH_90', 'FETCH_MAX']
 VARS_METEO = ['SW_IN_1_1_1', 'TA_1_1_1', 'RH_1_1_1', 'PA_1_1_1', 'LW_IN_1_1_1', 'PPFD_IN_1_1_1',
               'G_1_1_1', 'NETRAD_1_1_1', 'TS_1_1_1', 'P_1_1_1', 'SWC_1_1_1']
-VARIABLES = VARS_CO2 + VARS_H2O + VARS_H + VARS_WIND + VARS_METEO
+VARIABLES = VARS_CO2 + VARS_H2O + VARS_H + VARS_N2O + VARS_CH4 + VARS_WIND + VARS_METEO
 
 # Some variables need to be renamed to comply with FLUXNET variable codes
 renaming_dict = {
     'SC_SINGLE': 'SC',
     'SLE_SINGLE': 'SLE',
-    'SH_SINGLE': 'SH'
+    'SH_SINGLE': 'SH',
+    'SN2O_SINGLE': 'SN2O',
+    'SCH4_SINGLE': 'SCH4'
 }
 
 
@@ -98,11 +102,27 @@ class FormatEddyProFluxnetFileForUpload:
                  site: str,
                  sourcedir: str,
                  outdir: str,
+                 use_co2: bool = False,
+                 use_h2o: bool = False,
+                 use_h: bool = False,
+                 use_n2o: bool = False,
+                 use_ch4: bool = False,
+                 use_wind: bool = False,
+                 use_meteo: bool = False,
                  add_runid: bool = True):
         self.site = site
         self.sourcedir = sourcedir
         self.outdir = outdir
         self.add_runid = add_runid
+        self.use_co2=use_co2
+        self.use_h2o=use_h2o
+        self.use_h=use_h
+        self.use_n2o=use_n2o
+        self.use_ch4=use_ch4
+        self.use_wind=use_wind
+        self.use_meteo=use_meteo
+
+        self.req_vars = self._create_list_req_vars()
 
         self._merged_df = None
         self._subset_fluxnet = None
@@ -126,6 +146,33 @@ class FormatEddyProFluxnetFileForUpload:
         if not isinstance(self._subset_fluxnet, DataFrame):
             raise Exception(f"No merged data available.")
         return self._subset_fluxnet
+
+    def _create_list_req_vars(self):
+        """Create a list of variables required by FLUXNET."""
+        req_vars = []
+
+        if self.use_co2:
+            req_vars += VARS_CO2
+        if self.use_h2o:
+            req_vars += VARS_H2O
+        if self.use_h:
+            req_vars += VARS_H
+        if self.use_n2o:
+            req_vars += VARS_N2O
+        if self.use_ch4:
+            req_vars += VARS_CH4
+        if self.use_wind:
+            req_vars += VARS_WIND
+        if self.use_meteo:
+            req_vars += VARS_METEO
+
+        if not req_vars:
+            raise Exception(f"No required variables selected.")
+
+        print(f"The following variables from the output file will be used:")
+        [print(f"    {v}") for v in req_vars]
+
+        return req_vars
 
     def mergefiles(self, limit_n_files: int = None):
         self._merged_df = loadfiles(filetype='EDDYPRO-FLUXNET-CSV-30MIN',
@@ -261,11 +308,18 @@ class FormatEddyProFluxnetFileForUpload:
     def _make_subset(df: DataFrame) -> DataFrame:
         """Make subset that contains variables available for sharing"""
         print("\nAssembling subset of variables ...")
-        available_vars = df.columns
+
+        _df = df.copy()
+
+        print("Removing empty variables ...")
+        _df = _df.dropna(how='all', axis=1, inplace=False)
+
+        available_vars = _df.columns
         subsetcols = []
         notavailablecols = []
         for var in VARIABLES:
             subsetcols.append(var) if var in available_vars else notavailablecols.append(var)
+
         print(f"    Found: {subsetcols}")
         print(f"    Not found: {notavailablecols}")
         subset = df[subsetcols].copy()
@@ -326,13 +380,13 @@ def example():
     # data_df, metadata_df = load_exampledata_eddypro_fluxnet_CSV_30MIN()
 
     # Setup
-    SOURCE = r"F:\Sync\luhk_work\CURRENT\fru\Level-1_results_fluxnet_2023\0-eddypro_fluxnet_files"  # This is the folder where datafiles are searched
-    OUTDIR = r"F:\Sync\luhk_work\CURRENT\fru\Level-1_results_fluxnet_2023\1-formatted_for_upload"  # Output yearly CSV to this folder
+    SOURCE = r"F:\TMP\format_FXN\IN"  # This is the folder where datafiles are searched
+    OUTDIR = r"F:\TMP\format_FXN\OUT"  # Output yearly CSV to this folder
 
     # Imports
     import importlib.metadata
     from datetime import datetime
-    from diive.pkgs.formats.fluxnet import FormatEddyProFluxnetFileForUpload
+    # from diive.pkgs.formats.fluxnet import FormatEddyProFluxnetFileForUpload
 
     dt_string = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"This page was last modified on: {dt_string}")
@@ -345,7 +399,14 @@ def example():
 
     # Initialize
     fxn = FormatEddyProFluxnetFileForUpload(
-        site='CH-FRU',
+        site='CH-CHA',
+        use_co2=False,
+        use_h2o=False,
+        use_h=False,
+        use_n2o=True,
+        use_ch4=True,
+        use_wind=False,
+        use_meteo=False,
         sourcedir=SOURCE,
         outdir=OUTDIR,
         add_runid=True)
@@ -356,20 +417,20 @@ def example():
     # Merged dataframe
     print(fxn.merged_df)
 
-    # Test for signal strength / AGC
-    fxn.remove_low_signal_data(fluxcol='FC',
-                               signal_strength_col='CUSTOM_AGC_MEAN',
-                               method='discard above',
-                               threshold=90)
+    # # Test for signal strength / AGC
+    # fxn.remove_low_signal_data(fluxcol=['FC', 'LE'],
+    #                            signal_strength_col='CUSTOM_AGC_MEAN',
+    #                            method='discard above',
+    #                            threshold=90)
 
-    # Remove problematic time periods
-    fxn.remove_erroneous_data(var='FC',
-                              remove_dates=[
-                                  '2023-11-01 23:58:15',
-                                  ['2023-11-05 00:00:15', '2023-12-07 14:15:00'],
-                                  ['2023-06-01', '2023-08-15']
-                              ],
-                              showplot=True)
+    # # Remove problematic time periods
+    # fxn.remove_erroneous_data(var='FC',
+    #                           remove_dates=[
+    #                               '2023-11-01 23:58:15',
+    #                               ['2023-11-05 00:00:15', '2023-12-07 14:15:00'],
+    #                               ['2023-06-01', '2023-08-15']
+    #                           ],
+    #                           showplot=True)
 
     # Format data for FLUXNET
     fxn.apply_fluxnet_format()
