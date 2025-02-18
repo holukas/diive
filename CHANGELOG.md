@@ -4,7 +4,17 @@
 
 ## v0.85.6 | X Feb 2025
 
-- Plot now shows every year on y-axis (`diive.core.plotting.heatmap_datetime.HeatmapYearMonth`)
+### Changes
+
+- `HeatmapYearMonth` plot now shows every year on y-axis (`diive.core.plotting.heatmap_datetime.HeatmapYearMonth`)
+- Improved check for excluded columns when creating lagged variants (
+  `diive.pkgs.createvar.laggedvariants.lagged_variants`)
+- More text output when reducting features (`diive.core.ml.common.MlRegressorGapFillingBase.reduce_features`)
+- Fixed colorwheel running out of colors when plotting feature ranks (
+  `diive.pkgs.gapfilling.longterm.LongTermGapFillingBase.showplot_feature_ranks_per_year`)
+- Less text output when filling storage term (
+  `diive.pkgs.fluxprocessingchain.level31_storagecorrection.FluxStorageCorrectionSinglePointEddyPro._gapfill_storage_term`)
+- Smaller fixes
 
 ## v0.85.5 | 3 Feb 2025
 

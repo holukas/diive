@@ -9,7 +9,6 @@ Kudos:
 import datetime
 
 import numpy as np
-from matplotlib.ticker import MultipleLocator, FormatStrFormatter
 from pandas import Series
 from pandas.plotting import register_matplotlib_converters
 
@@ -220,13 +219,6 @@ class HeatmapYearMonth(HeatmapBase):
         ticklabels = [int(t) for t in tickpos]
         self.ax.set_xticklabels(ticklabels)
 
-        # nice_date_ticks(ax=self.ax, minticks=1, maxticks=24, which='y', locator='year')
-        # Use Locator and Formatter to show every year on y-axis
-        locator = MultipleLocator(1)  # Set ticks every 1 unit
-        formatter = FormatStrFormatter('%d')  # Integer format
-        self.ax.yaxis.set_major_locator(locator)
-        self.ax.yaxis.set_major_formatter(formatter)
-
         # Format
         self.format(
             ax_xlabel_txt=ax_xlabel_txt,
@@ -255,12 +247,23 @@ def example_heatmap_datetime():
 
 
 def example_heatmap_yearmonth():
-    from diive.configs.exampledata import load_exampledata_parquet
-    df = load_exampledata_parquet()
-    series = df['GPP_DT_CUT_REF'].copy()
-    # series = df['Tair_f'].copy()
+    # from diive.configs.exampledata import load_exampledata_parquet
+    # df = load_exampledata_parquet()
+    # series = df['GPP_DT_CUT_REF'].copy()
+    # # series = df['Tair_f'].copy()
+    # series = series.resample('1MS', label='left').mean()
+    # # series = series.resample('1MS', label='left').agg(np.ptp)
+    # series.index.name = 'TIMESTAMP_START'
 
-    series = series.resample('1MS', label='left').mean()
+    from pathlib import Path
+    from diive.core.io.files import load_parquet
+    SOURCEDIR = r"L:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-cha_flux_product\notebooks\60_MERGE_DATA_FLUXES"
+    FILENAME = r"61.1_FLUXES_M10_MGMT_L4.1_NEE_LE_H_FN2O_FCH4.parquet"
+    FILEPATH = Path(SOURCEDIR) / FILENAME
+    df = load_parquet(filepath=FILEPATH)
+
+    series = df['TA_T1_2_1'].copy()
+    series = series.resample('MS', label='left').mean()
     # series = series.resample('1MS', label='left').agg(np.ptp)
     series.index.name = 'TIMESTAMP_START'
 
@@ -273,7 +276,7 @@ def example_heatmap_yearmonth():
     )
 
     hm.show()
-    hm.export_borderless_heatmap(outpath=r"F:\TMP\heightmap_blender")
+    hm.export_borderless_heatmap(outpath=r"L:\Sync\luhk_work\85 - PROJECTS\3D\Blender\2025-02-09 Testing heightmap")
     print(hm.get_ax())
     print(hm.get_plot_data())
 
