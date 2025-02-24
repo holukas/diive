@@ -7,7 +7,7 @@ from diive.core.times.times import TimestampSanitizer
 class FormatMeteoForEddyProFluxProcessing:
     # Timestamp columns for EddyPro
     colname_timestamp1 = ('TIMESTAMP_1', 'yyyy-mm-dd')
-    colname_timestamp2 = ('TIMSTAMP_2', 'HH:MM')
+    colname_timestamp2 = ('TIMESTAMP_2', 'HH:MM')
 
     def __init__(self, df: pd.DataFrame, cols: dict):
         self._df = df.copy()
