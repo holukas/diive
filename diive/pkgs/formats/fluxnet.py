@@ -22,7 +22,8 @@ VARS_METEO = ['SW_IN_1_1_1', 'TA_1_1_1', 'RH_1_1_1', 'PA_1_1_1', 'LW_IN_1_1_1', 
               'G_1_1_1', 'NETRAD_1_1_1', 'TS_1_1_1', 'P_1_1_1', 'SWC_1_1_1']
 VARIABLES = VARS_CO2 + VARS_H2O + VARS_H + VARS_N2O + VARS_CH4 + VARS_WIND + VARS_METEO
 
-# Some variables need to be renamed to comply with FLUXNET variable codes
+# TODO Some variables need to be renamed to comply with FLUXNET variable codes
+
 renaming_dict = {
     'SC_SINGLE': 'SC',
     'SLE_SINGLE': 'SLE',
@@ -114,15 +115,13 @@ class FormatEddyProFluxnetFileForUpload:
         self.sourcedir = sourcedir
         self.outdir = outdir
         self.add_runid = add_runid
-        self.use_co2=use_co2
-        self.use_h2o=use_h2o
-        self.use_h=use_h
-        self.use_n2o=use_n2o
-        self.use_ch4=use_ch4
-        self.use_wind=use_wind
-        self.use_meteo=use_meteo
-
-        self.req_vars = self._create_list_req_vars()
+        self.use_co2 = use_co2
+        self.use_h2o = use_h2o
+        self.use_h = use_h
+        self.use_n2o = use_n2o
+        self.use_ch4 = use_ch4
+        self.use_wind = use_wind
+        self.use_meteo = use_meteo
 
         self._merged_df = None
         self._subset_fluxnet = None
@@ -132,6 +131,8 @@ class FormatEddyProFluxnetFileForUpload:
         print(f"    source folder: {self.sourcedir}")
         print(f"    output folder: {self.outdir}")
         print(f"    add run ID: {self.add_runid}")
+
+        self.req_vars = self._create_list_req_vars()
 
     @property
     def merged_df(self) -> DataFrame:
@@ -169,7 +170,7 @@ class FormatEddyProFluxnetFileForUpload:
         if not req_vars:
             raise Exception(f"No required variables selected.")
 
-        print(f"The following variables from the output file will be used:")
+        print(f"\nSearching for the following variables in the output file:")
         [print(f"    {v}") for v in req_vars]
 
         return req_vars
@@ -291,38 +292,50 @@ class FormatEddyProFluxnetFileForUpload:
             print(f"    NOT RENAMED --> {var} was not renamed")
         return df
 
-    @staticmethod
-    def _rename_to_variable_codes(df: DataFrame) -> DataFrame:
+    def _rename_to_variable_codes(self, df: DataFrame) -> DataFrame:
         """
         Rename variables to comply with FLUXNET variable codes
 
         see: http://www.europe-fluxdata.eu/home/guidelines/how-to-submit-data/variables-codes
         """
         print("\nThe following variables are renamed to comply with FLUXNET variable codes:")
+
+        # TODO
+
         for key, val in renaming_dict.items():
-            print(f"    RENAMED --> {key} was renamed to {val}")
+            if key in self.req_vars:
+                print(f"    RENAMED --> {key} was renamed to {val}")
         df = df.rename(columns=renaming_dict)
         return df
 
-    @staticmethod
-    def _make_subset(df: DataFrame) -> DataFrame:
+    def _make_subset(self, df: DataFrame) -> DataFrame:
         """Make subset that contains variables available for sharing"""
         print("\nAssembling subset of variables ...")
 
         _df = df.copy()
 
-        print("Removing empty variables ...")
+        print("  > Removing empty variables ...")
         _df = _df.dropna(how='all', axis=1, inplace=False)
 
+        print("  > Collecting available data ...")
         available_vars = _df.columns
         subsetcols = []
         notavailablecols = []
-        for var in VARIABLES:
-            subsetcols.append(var) if var in available_vars else notavailablecols.append(var)
+        for var in self.req_vars:
+            print(f"      searching for {var} ...", end=" ")
+            if var in available_vars:
+                print(f"found {var} OK")
+                subsetcols.append(var)
+            else:
+                print(f"variable {var} not found in output file (!) WARNING")
+                notavailablecols.append(var)
 
-        print(f"    Found: {subsetcols}")
-        print(f"    Not found: {notavailablecols}")
+        if notavailablecols:
+            print(f"      (!) WARNING Some required columns were not available in the data, check {notavailablecols}")
+
+        print(f"  > Creating subset of data with variables {subsetcols} ...", end=" ")
         subset = df[subsetcols].copy()
+        print("OK")
         return subset
 
     def remove_low_signal_data(self,
@@ -375,7 +388,7 @@ class FormatEddyProFluxnetFileForUpload:
         self._merged_df = df[keepcols].copy()
 
 
-def example():
+def _example_format_eddypro_fluxnet_file_for_upload():
     # from diive.configs.exampledata import load_exampledata_eddypro_fluxnet_CSV_30MIN
     # data_df, metadata_df = load_exampledata_eddypro_fluxnet_CSV_30MIN()
 
@@ -400,11 +413,11 @@ def example():
     # Initialize
     fxn = FormatEddyProFluxnetFileForUpload(
         site='CH-CHA',
-        use_co2=False,
+        use_co2=True,
         use_h2o=False,
         use_h=False,
-        use_n2o=True,
-        use_ch4=True,
+        use_n2o=False,
+        use_ch4=False,
         use_wind=False,
         use_meteo=False,
         sourcedir=SOURCE,
@@ -412,10 +425,10 @@ def example():
         add_runid=True)
 
     # Search and merge _fluxnet_ datafiles
-    fxn.mergefiles(limit_n_files=1)
+    fxn.mergefiles(limit_n_files=None)
 
-    # Merged dataframe
-    print(fxn.merged_df)
+    # # Merged dataframe
+    # print(fxn.merged_df)
 
     # # Test for signal strength / AGC
     # fxn.remove_low_signal_data(fluxcol=['FC', 'LE'],
@@ -440,4 +453,4 @@ def example():
 
 
 if __name__ == '__main__':
-    example()
+    _example_format_eddypro_fluxnet_file_for_upload()
