@@ -459,7 +459,7 @@ class MlRegressorGapFillingBase:
         infotxt = "[ FEATURE REDUCTION ]"
 
         # Info
-        print(f"\n[ FEATURE REDUCTION ] Feature reduction based on permutation importance ...")
+        print(f"\n{infotxt} Feature reduction based on permutation importance ...")
 
         df = self.train_df.copy()
         df = df.dropna()
