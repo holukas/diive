@@ -5,32 +5,45 @@ from diive.core.times.times import TimestampSanitizer
 
 
 class FormatMeteoForEddyProProcessing:
-
     # Timestamp columns for EddyPro
     colname_timestamp1 = ('TIMESTAMP_1', 'yyyy-mm-dd')
     colname_timestamp2 = ('TIMSTAMP_2', 'HH:MM')
 
     def __init__(self, df: pd.DataFrame, cols: dict):
-        self.df = df.copy()
+        self._df = df.copy()
         self.cols = cols
 
+    @property
+    def df(self) -> pd.DataFrame:
+        """Dataframe reformatted for EddyPro."""
+        if not isinstance(self._df, pd.DataFrame):
+            raise Exception('No reformatted data available.')
+        return self._df
+
+    def get_results(self):
+        return self.df
+
     def run(self):
-        self.df = self._sanitize_timestamp()
-        self.df = self._split_timestamp_date_time()
-        self.df = self.df.fillna(-9999)
-        self.df = self._rename_columns()
+        self._df = self._sanitize_timestamp()
+        self._df = self._split_timestamp_date_time()
+
+        print("Filling missing values with -9999 ...")
+        self._df = self._df.fillna(-9999)
+
+        self._df = self._rename_columns()
 
     def _rename_columns(self):
-        df = self.df.copy()
+        print("Renaming columns ...")
+        df = self._df.copy()
         df = rename_cols_to_multiindex(df=df, renaming_dict=self.cols)
         return df
-
 
     def _split_timestamp_date_time(self):
         """Split timestamp into separate date and time columns.
         Timestamp column names are stored as tuples.
         """
-        df = self.df.copy()
+        print(f"Splitting timestamp into two separate columns {self.colname_timestamp1} and {self.colname_timestamp2}")
+        df = self._df.copy()
         df[self.colname_timestamp2] = df.index
         first_column = df.pop(self.colname_timestamp2)
         df.insert(0, self.colname_timestamp2, first_column)
@@ -46,9 +59,10 @@ class FormatMeteoForEddyProProcessing:
 
     def _sanitize_timestamp(self):
         tss = TimestampSanitizer(
-            data=self.df,
+            data=self._df,
             output_middle_timestamp=False,
-            nominal_freq="30min"
+            nominal_freq="30min",
+            verbose=True
         )
         df = tss.get()
         return df
@@ -90,13 +104,12 @@ def example():
         # PA: ('Pa_1_1_1', 'kPa),
         PPFD_IN: ('PPFD_1_1_1', 'umol+1m-2s-1'),
     }
-    
+
     f = FormatMeteoForEddyProProcessing(
         df=data_simple,
         cols=rename_dict
     )
     f.run()
-
 
     # df.to_csv(r"F:\TMP\del.csv", index=False)
     # print(df)
