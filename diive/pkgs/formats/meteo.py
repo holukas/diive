@@ -4,7 +4,7 @@ from diive.core.dfun.frames import rename_cols_to_multiindex
 from diive.core.times.times import TimestampSanitizer
 
 
-class FormatMeteoForEddyProProcessing:
+class FormatMeteoForEddyProFluxProcessing:
     # Timestamp columns for EddyPro
     colname_timestamp1 = ('TIMESTAMP_1', 'yyyy-mm-dd')
     colname_timestamp2 = ('TIMSTAMP_2', 'HH:MM')
@@ -105,7 +105,7 @@ def example():
         PPFD_IN: ('PPFD_1_1_1', 'umol+1m-2s-1'),
     }
 
-    f = FormatMeteoForEddyProProcessing(
+    f = FormatMeteoForEddyProFluxProcessing(
         df=data_simple,
         cols=rename_dict
     )
