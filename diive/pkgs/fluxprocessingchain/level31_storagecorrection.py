@@ -119,6 +119,7 @@ class FluxStorageCorrectionSinglePointEddyPro:
         gapfilled_df[self.flag_isgapfilled] = 0
         gapfilled_df = gapfilled_df.dropna(subset=[self.fluxcol])
         n_still_missing_strg = gapfilled_df[self.gapfilled_strgcol].isnull().sum()
+        prev_n_still_missing_strg = n_still_missing_strg
         print(f"Missing values for storage term {self.gapfilled_strgcol}: {n_still_missing_strg}")
 
         # Fill gaps with rolling mean in expanding time window
@@ -130,9 +131,11 @@ class FluxStorageCorrectionSinglePointEddyPro:
             gapfilled_df.loc[locs, self.gapfilled_strgcol] = rmedian
             gapfilled_df.loc[locs, self.flag_isgapfilled] = 1
             n_still_missing_strg = gapfilled_df[self.gapfilled_strgcol].isnull().sum()
-            print(f"Gap-filling storage-term {self.strgcol} "
-                  f"with rolling median (window size = {window_size} records) ...")
-            print(f"Missing values for storage term {self.gapfilled_strgcol}: {n_still_missing_strg}")
+            if n_still_missing_strg < prev_n_still_missing_strg:
+                print(f"Gap-filling storage-term {self.strgcol} "
+                      f"with rolling median (window size = {window_size} records, centered)  |  "
+                      f"still missing values for storage term {self.gapfilled_strgcol}: {n_still_missing_strg} ...")
+                prev_n_still_missing_strg = n_still_missing_strg
 
         gapfilled_df = gapfilled_df[[self.gapfilled_strgcol, self.flag_isgapfilled]].copy()
 

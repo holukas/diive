@@ -195,6 +195,27 @@ def rename_cols(df: DataFrame, renaming_dict: dict) -> DataFrame:
         df.columns = pd.MultiIndex.from_tuples(df.columns)  # Restore column MultiIndex
     return df
 
+def rename_cols_to_multiindex(df: DataFrame, renaming_dict: dict) -> DataFrame:
+    """Rename columns (one-row header) in dataframe to multiindex (two-row header).
+
+    Args:
+        df: Data containing *oldname* column
+        renaming_dict: Dictionary that contains old column names as its keys,
+            and new column names with units as tuples:
+                e.g. {
+                    'oldname1': ('newname1', 'units1'),
+                    'oldname2': ('newname2', 'units2'),
+                    'oldname3': ('newname3', 'units3'),
+                    ...
+                    }
+
+    Returns:
+        DataFrame
+    """
+    df = df.rename(columns=renaming_dict, inplace=False)
+    df.columns = pd.MultiIndex.from_tuples(df.columns)  # Restore column MultiIndex
+    return df
+
 
 def convert_data_to_numeric(df: pd.DataFrame) -> pd.DataFrame:
     """Sanitize time series"""

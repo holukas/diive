@@ -1100,8 +1100,8 @@ def example():
     # Source data
     from pathlib import Path
     from diive.core.io.files import load_parquet
-    SOURCEDIR = r"L:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_cha_fp2024_2005-2023\notebooks\30_MERGE_DATA"
-    FILENAME = r"33.1_CH-CHA_IRGA+QCL+LGR+M10+MGMT_Level-1_eddypro_fluxnet_2005-2023.parquet"
+    SOURCEDIR = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-cha_flux_product\notebooks\30_MERGE_DATA"
+    FILENAME = r"33.5_CH-CHA_IRGA+QCL+LGR+M10+MGMT_Level-1_eddypro_fluxnet_2005-2024.parquet"
     FILEPATH = Path(SOURCEDIR) / FILENAME
     maindf = load_parquet(filepath=str(FILEPATH))
     # SOURCEDIRS = [r"L:\Sync\luhk_work\20 - CODING\21 - DIIVE\diive\notebooks\FluxProcessingChain\example_data"]
@@ -1112,7 +1112,7 @@ def example():
     # metadata = ep.metadata
 
     # locs = (maindf.index.year >= 2019) & (maindf.index.year <= 2023)
-    locs = (maindf.index.year >= 2012) & (maindf.index.year <= 2012)
+    locs = (maindf.index.year >= 2022) & (maindf.index.year <= 2022)
     # locs = (maindf.index.year >= 2007) & (maindf.index.year <= 2011)
     maindf = maindf.loc[locs, :].copy()
     # locs = (maindf.index.month >= 7) & (maindf.index.month <= 7)
@@ -1418,7 +1418,7 @@ def example():
             'features_lag': [-24, -6],
             'features_lag_stepsize': 6,
             'features_lag_exclude_cols': EXCLUDE_COLS,  # Management variables are not lagged
-            'reduce_features': False,
+            'reduce_features': True,
             'include_timestamp_as_features': True,
             'add_continuous_record_number': False,
             'perm_n_repeats': 2
@@ -1450,17 +1450,20 @@ def example():
     fpc.report_gapfilling_model_scores()
     fpc.report_gapfilling_feature_importances()
 
-    # Only ML models:
-    fpc.report_gapfilling_poolyears()
+    # # Only ML models:
+    # fpc.report_gapfilling_poolyears()
 
     # todo get full data
 
-    fpc.showplot_gapfilled_heatmap(vmin=-5, vmax=50)
-    fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{µmol\ CO_2\ m^{-2}}$)', per_year=True)
+    # fpc.showplot_gapfilled_heatmap(vmin=-5, vmax=50)
+    # fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{µmol\ CO_2\ m^{-2}}$)', per_year=True)
     # fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{g\ C\ m^{-2}}$)', per_year=False)
 
-    # # Only ML models:
-    # fpc.showplot_feature_ranks_per_year()
+    # Only ML models:
+    fpc.showplot_feature_ranks_per_year()
+
+    # Only MDS:
+    fpc.showplot_mds_gapfilling_qualities()
 
     # TODO heatmap of used model data pools
 

@@ -227,10 +227,10 @@ class LongTermGapFillingBase:
     def fillgaps(self):
         """Train model for each year"""
         for year, _df in self._yearpools.items():
-            print(f"Training model for {year} ...")
+            print(f"\nTraining model for {year} ...")
             rfts = self.results_yearly_[year]  # Get instance with model from dict
             rfts.trainmodel(showplot_scores=False, showplot_importance=False)
-            print(f"Gap-filling {year} ...")
+            print(f"\nGap-filling {year} ...")
             rfts.fillgaps(showplot_scores=False, showplot_importance=False)
         self._collect()
 
@@ -242,13 +242,12 @@ class LongTermGapFillingBase:
         height = 1
         verts = list(zip([-width, width, width, -width], [-height, -height, height, height]))
         colors = colorwheel_48()
-        fig, ax = plt.subplots(figsize=(20, 6), subplot_kw=dict(ylim=(0.5, 0.5 + len(self.feature_ranks_per_year))),
+        figheight = 6 if len(self.feature_ranks_per_year) <= 30 else 8
+        fig, ax = plt.subplots(figsize=(20, figheight), subplot_kw=dict(ylim=(0.5, 0.5 + len(self.feature_ranks_per_year))),
                                layout='constrained')
         color = -1
-        # _marker = ['o', 's']
-        # _marker_ix = -1
         for ix, row in self.feature_ranks_per_year.iterrows():
-            color += 1
+            color += 1 if color + 1 < len(colors) else 0
             # _marker_ix = _marker_ix + 1 if (_marker_ix + 1) < len(_marker) else 0
             ax.plot(row.index, row.values, "o", marker=verts, ms=20,
                     color=colors[color], zorder=99)

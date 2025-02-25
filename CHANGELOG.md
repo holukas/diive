@@ -2,7 +2,32 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.85.5 | 3 Feb 2024
+## v0.85.6 | 25 Feb 2025
+
+### New features
+
+- Added class to format meteo data as input file for EddyPro flux calcs (
+  `diive.pkgs.formats.meteo.FormatMeteoForEddyProFluxProcessing`)
+
+### Changes
+
+- Updated formatting for FLUXNET upload (`diive.pkgs.formats.fluxnet.FormatEddyProFluxnetFileForUpload`)
+- `HeatmapYearMonth` plot now shows every year on y-axis (`diive.core.plotting.heatmap_datetime.HeatmapYearMonth`)
+- Improved check for excluded columns when creating lagged variants (
+  `diive.pkgs.createvar.laggedvariants.lagged_variants`)
+- More text output when reducting features (`diive.core.ml.common.MlRegressorGapFillingBase.reduce_features`)
+- Fixed colorwheel running out of colors when plotting feature ranks (
+  `diive.pkgs.gapfilling.longterm.LongTermGapFillingBase.showplot_feature_ranks_per_year`)
+- Less text output when filling storage term (
+  `diive.pkgs.fluxprocessingchain.level31_storagecorrection.FluxStorageCorrectionSinglePointEddyPro._gapfill_storage_term`)
+- Smaller fixes
+
+### Notebooks
+
+- Added new notebook `notebooks/Formats/FormatMeteoForEddyProFluxProcessing.ipynb`
+- Updated notebook `notebooks/Formats/notebooks/Formats/FormatEddyProFluxnetFileForUpload.ipynb`
+
+## v0.85.5 | 3 Feb 2025
 
 ### Updates to MDS gap-filling
 
