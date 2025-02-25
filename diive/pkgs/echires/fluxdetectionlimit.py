@@ -253,8 +253,8 @@ if __name__ == '__main__':
     from diive.core.io.filereader import search_files, ReadFileType
 
     # Dirs
-    INDIR = [r'F:\Sync\luhk_work\CURRENT\DAS_detectionlimit_test\IN']
-    OUTDIR = r'F:\Sync\luhk_work\CURRENT\DAS_detectionlimit_test\OUT'
+    INDIR = [r'L:\Sync\luhk_work\CURRENT\DAS_detectionlimit_test\IN']
+    OUTDIR = r'L:\Sync\luhk_work\CURRENT\DAS_detectionlimit_test\OUT'
 
     # Search & merge high-res data files (30MIN files in this example)
     filepaths = search_files(INDIR, "*.csv")
