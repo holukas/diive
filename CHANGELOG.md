@@ -2,6 +2,16 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.85.7 | 26 Feb 2025
+
+### New features
+
+- Added class for formatting meteo data for upload to FLUXNET (`diive.pkgs.formats.meteo.FormatMeteoForFluxnetUpload`)
+
+### Notebooks
+
+- Added new notebook `notebooks/Formats/FormatMeteoForFluxnetUpload.ipynb`
+
 ## v0.85.6 | 25 Feb 2025
 
 ### New features
