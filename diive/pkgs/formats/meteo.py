@@ -1,7 +1,10 @@
+from pathlib import Path
+
 import pandas as pd
 
 from diive.core.dfun.frames import rename_cols_to_multiindex
 from diive.core.times.times import TimestampSanitizer
+from diive.core.times.times import current_date_str_condensed
 from diive.core.times.times import format_timestamp_to_fluxnet_format
 from diive.core.times.times import insert_timestamp
 
@@ -98,6 +101,24 @@ class FormatMeteoForFluxnetUpload:
 
         self._df = self._rename_columns()
 
+    def export_yearly_files(self, site: str, outdir: str):
+        """Create one file per year"""
+        self._save_one_file_per_year(df=self.df, site=site, outdir=outdir)
+
+    @staticmethod
+    def _save_one_file_per_year(df: pd.DataFrame, site: str, outdir: str, add_runid: bool = True):
+        """Save data to yearly files"""
+        print(f"\nSaving yearly CSV files ...")
+        uniq_years = list(df.index.year.unique())
+        runid = f"_{current_date_str_condensed()}" if add_runid else ""
+        for year in uniq_years:
+            outname = f"{site}_{year}_fluxes_meteo{runid}.csv"
+            outpath = Path(outdir) / outname
+            yearlocs = df.index.year == year
+            yeardata = df[yearlocs].copy()
+            yeardata.to_csv(outpath, index=False)
+            print(f"    --> Saved file {outpath}.")
+
     def _rename_columns(self):
         print("Renaming columns ...")
         df = self._df.copy()
@@ -119,7 +140,7 @@ class FormatMeteoForFluxnetUpload:
     def _sanitize_timestamp(self):
         tss = TimestampSanitizer(
             data=self._df,
-            output_middle_timestamp=False,
+            output_middle_timestamp=True,
             nominal_freq="30min",
             verbose=True
         )
@@ -251,7 +272,7 @@ def _example_FormatMeteoForFluxnetUpload():
         'SWC_GF1_0.25_1': 'SWC_1_3_1',
         'SWC_GF1_0.4_1': 'SWC_1_4_1',
         'SWC_GF1_0.95_1': 'SWC_1_5_1',
-        'PREC_TOT_T1_0.5_1+PREC_TOT_GF1_1_1': 'P_1_1_1',
+        'PREC_TOT_GF1_1_1': 'P_1_1_1',
         'G_GF1_0.06_1': 'G_1_1_1',
         'G_GF1_0.06_2': 'G_1_1_2'
     }
@@ -264,7 +285,9 @@ def _example_FormatMeteoForFluxnetUpload():
 
     results = f.get_results()
 
-    results.to_csv(r"F:\TMP\del.csv", index=False)
+    f.export_yearly_files(site=SITE, outdir=r"F:\TMP")
+
+    # results.to_csv(r"F:\TMP\del.csv", index=False)
     # print(results)
 
 
