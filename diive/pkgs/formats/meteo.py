@@ -2,6 +2,8 @@ import pandas as pd
 
 from diive.core.dfun.frames import rename_cols_to_multiindex
 from diive.core.times.times import TimestampSanitizer
+from diive.core.times.times import format_timestamp_to_fluxnet_format
+from diive.core.times.times import insert_timestamp
 
 
 class FormatMeteoForEddyProFluxProcessing:
@@ -68,7 +70,64 @@ class FormatMeteoForEddyProFluxProcessing:
         return df
 
 
-def example():
+class FormatMeteoForFluxnetUpload:
+    # Timestamp columns for EddyPro
+    colname_timestamp1 = ('TIMESTAMP_1', 'yyyy-mm-dd')
+    colname_timestamp2 = ('TIMESTAMP_2', 'HH:MM')
+
+    def __init__(self, df: pd.DataFrame, cols: dict):
+        self._df = df.copy()
+        self.cols = cols
+
+    @property
+    def df(self) -> pd.DataFrame:
+        """Dataframe reformatted for EddyPro."""
+        if not isinstance(self._df, pd.DataFrame):
+            raise Exception('No reformatted data available.')
+        return self._df
+
+    def get_results(self):
+        return self.df
+
+    def run(self):
+        self._df = self._sanitize_timestamp()
+        self._df = self._insert_timestamps_start_end()
+
+        print("Filling missing values with -9999 ...")
+        self._df = self._df.fillna(-9999)
+
+        self._df = self._rename_columns()
+
+    def _rename_columns(self):
+        print("Renaming columns ...")
+        df = self._df.copy()
+        df = df.rename(columns=self.cols)
+        return df
+
+    def _insert_timestamps_start_end(self):
+        """Insert two timestamp columns 'TIMESTAMP_START' and 'TIMESTAMP_END' as
+        required for FLUXNET data submissions.
+        """
+        print(f"Inserting timestamp columns 'TIMESTAMP_START' and 'TIMESTAMP_END' ... ")
+        df = self._df.copy()
+        df = insert_timestamp(data=df, convention='end', insert_as_first_col=True, verbose=True)
+        df = insert_timestamp(data=df, convention='start', insert_as_first_col=True, verbose=True)
+        df['TIMESTAMP_END'] = format_timestamp_to_fluxnet_format(df=df, timestamp_col='TIMESTAMP_END')
+        df['TIMESTAMP_START'] = format_timestamp_to_fluxnet_format(df=df, timestamp_col='TIMESTAMP_START')
+        return df
+
+    def _sanitize_timestamp(self):
+        tss = TimestampSanitizer(
+            data=self._df,
+            output_middle_timestamp=False,
+            nominal_freq="30min",
+            verbose=True
+        )
+        df = tss.get()
+        return df
+
+
+def _example_FormatMeteoForEddyProFluxProcessing():
     # Download example data from database
     from dbc_influxdb import dbcInflux  # Needed for communicating with the database
     SITE = 'ch-fru'  # Site name
@@ -115,5 +174,100 @@ def example():
     # print(df)
 
 
+def _example_FormatMeteoForFluxnetUpload():
+    # Download example data from database
+    from dbc_influxdb import dbcInflux  # Needed for communicating with the database
+    SITE = 'ch-fru'  # Site name
+    START = '2024-01-01 00:01:00'  # Download data starting with this date
+    STOP = '2025-01-01 00:01:00'  # Download data before this date (the stop date itself is not included)
+    MEASUREMENTS = ['TA', 'RH', 'SW', 'PPFD', 'LW', 'TS', 'SWC', 'PREC', 'G']
+    FIELDS = [
+        'TA_T1_2_1',
+        # 'RH_T1_2_1',
+        # 'SW_IN_T1_1_1',
+        # 'SW_OUT_T1_1_1',
+        # 'LW_IN_T1_1_1',
+        # 'LW_OUT_T1_1_1',
+        # 'PPFD_IN_T1_2_1',
+        # 'PPFD_OUT_T1_2_1',
+        # 'TS_GF1_0.01_1',
+        # 'TS_GF1_0.04_1',
+        # 'TS_GF1_0.07_1',
+        # 'TS_GF1_0.1_2',
+        # 'TS_GF1_0.15_1',
+        # 'TS_GF1_0.2_2',
+        # 'TS_GF1_0.25_1',
+        # 'TS_GF1_0.3_2',
+        # 'TS_GF1_0.4_1',
+        # 'TS_GF1_0.5_2',
+        # 'TS_GF1_0.95_1',
+        # 'TS_GF1_1_2',
+        # 'SWC_GF1_0.05_1',
+        # 'SWC_GF1_0.15_1',
+        # 'SWC_GF1_0.25_1',
+        # 'SWC_GF1_0.4_1',
+        # 'SWC_GF1_0.95_1',
+        # 'PREC_TOT_GF1_1_1',
+        # 'G_GF1_0.06_1',
+        # 'G_GF1_0.06_2',
+    ]
+    TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
+    data_version = "meteoscreening_diive"
+    DIRCONF = r'F:\Sync\luhk_work\20 - CODING\22 - POET\configs'
+    dbc = dbcInflux(dirconf=DIRCONF)
+    df, _, _ = \
+        dbc.download(bucket=f'{SITE}_processed',
+                     measurements=MEASUREMENTS,
+                     fields=FIELDS,
+                     start=START,
+                     stop=STOP,
+                     timezone_offset_to_utc_hours=TIMEZONE_OFFSET_TO_UTC_HOURS,
+                     data_version=data_version)
+    # print(data_simple)
+
+    rename_dict = {
+        'TA_T1_2_1': 'TA_1_1_1',
+        'RH_T1_2_1': 'RH_1_1_1',
+        'SW_IN_T1_1_1': 'SW_IN_1_1_1',
+        'SW_OUT_T1_1_1': 'SW_OUT_1_1_1',
+        'LW_IN_T1_1_1': 'LW_IN_1_1_1',
+        'LW_OUT_T1_1_1': 'LW_OUT_1_1_1',
+        'PPFD_IN_T1_2_1': 'PPFD_IN_1_1_1',
+        'PPFD_OUT_T1_2_1': 'PPFD_OUT_1_1_1',
+        'TS_GF1_0.01_1': 'TS_1_1_1',
+        'TS_GF1_0.04_1': 'TS_1_2_1',
+        'TS_GF1_0.07_1': 'TS_1_3_1',
+        'TS_GF1_0.1_2': 'TS_1_4_2',
+        'TS_GF1_0.15_1': 'TS_1_5_1',
+        'TS_GF1_0.2_2': 'TS_1_6_1',
+        'TS_GF1_0.25_1': 'TS_1_7_1',
+        'TS_GF1_0.3_2': 'TS_1_8_1',
+        'TS_GF1_0.4_1': 'TS_1_9_1',
+        'TS_GF1_0.5_2': 'TS_1_10_1',
+        'TS_GF1_0.95_1': 'TS_1_11_1',
+        'TS_GF1_1_2': 'TS_1_12_1',
+        'SWC_GF1_0.05_1': 'SWC_1_1_1',
+        'SWC_GF1_0.15_1': 'SWC_1_2_1',
+        'SWC_GF1_0.25_1': 'SWC_1_3_1',
+        'SWC_GF1_0.4_1': 'SWC_1_4_1',
+        'SWC_GF1_0.95_1': 'SWC_1_5_1',
+        'PREC_TOT_T1_0.5_1+PREC_TOT_GF1_1_1': 'P_1_1_1',
+        'G_GF1_0.06_1': 'G_1_1_1',
+        'G_GF1_0.06_2': 'G_1_1_2'
+    }
+
+    f = FormatMeteoForFluxnetUpload(
+        df=df,
+        cols=rename_dict
+    )
+    f.run()
+
+    results = f.get_results()
+
+    results.to_csv(r"F:\TMP\del.csv", index=False)
+    # print(results)
+
+
 if __name__ == "__main__":
-    example()
+    # example_FormatMeteoForEddyProFluxProcessing()
+    _example_FormatMeteoForFluxnetUpload()
