@@ -9,6 +9,8 @@ import pandas as pd
 from matplotlib.pyplot import cm
 from sklearn.neighbors import KernelDensity
 
+from diive.core.plotting.styles.LightTheme import adjust_color_lightness
+
 
 class RidgePlotTS:
 
@@ -24,22 +26,27 @@ class RidgePlotTS:
         self.colors = None
         self.months_colors = {}
         self.hspace = None
+        self.xlabel = None
 
-    def per_month(self, xlim: list, ylim: list, hspace: float):
+    def per_month(self, xlim: list, ylim: list, hspace: float, xlabel: str):
         self.xlim = xlim
         self.ylim = ylim
         self.hspace = hspace
+        self.xlabel = xlabel
         self.months = self.series.index.month
         self.months_unique = [x for x in np.unique(self.months)]
         # https://matplotlib.org/stable/users/explain/colors/colormaps.html
+        # self.colors = iter(cm.Spectral_r(np.linspace(0, 1, 100)))
         self.colors = iter(cm.Spectral_r(np.linspace(0, 1, len(self.months_unique))))
-        self.months_colors = self._xxx()
-        self._plot()
+        self.months_colors = self._assign_colors()
+        self._plot_per_month()
 
-    def _xxx(self):
+    def _assign_colors(self):
+        """Assign colors depending on the monthly mean value."""
         monthly_means = self.series.groupby(self.series.index.month).agg('mean')
-        # monthly_means = self.series.resample('MS').mean()
         monthly_means = monthly_means.sort_values(ascending=True)
+        # monthly_means_offset = monthly_means.add(abs(monthly_means.min()))
+        # monthly_means_offset_norm = monthly_means_offset / monthly_means_offset.max()
         months_order = monthly_means.index
         months_colors = {}
         for m in months_order:
@@ -47,18 +54,7 @@ class RidgePlotTS:
             months_colors[m] = next(self.colors)
         return months_colors
 
-    def adjust_lightness(self, color, amount=0.5):
-        # https://stackoverflow.com/questions/37765197/darken-or-lighten-a-color-in-matplotlib
-        import matplotlib.colors as mc
-        import colorsys
-        try:
-            c = mc.cnames[color]
-        except:
-            c = color
-        c = colorsys.rgb_to_hls(*mc.to_rgb(c))
-        return colorsys.hls_to_rgb(c[0], max(0, min(1, amount * c[1])), c[2])
-
-    def _plot(self):
+    def _plot_per_month(self):
         gs = (grid_spec.GridSpec(len(self.months_unique), 1))
         fig = plt.figure(figsize=(8, 8))
 
@@ -85,7 +81,7 @@ class RidgePlotTS:
 
             # plotting the distribution
             y = np.exp(logprob1)
-            color_line = self.adjust_lightness(self.months_colors[month], amount=0.4)
+            color_line = adjust_color_lightness(self.months_colors[month], amount=0.4)
             ax.plot(x_d, y, color=color_line, lw=1, alpha=1)
 
             # c = next(self.colors)
@@ -104,7 +100,7 @@ class RidgePlotTS:
             ax.set_yticks([])
 
             if i == len(self.months_unique) - 1:
-                ax.set_xlabel("X", fontsize=16, fontweight="bold")
+                ax.set_xlabel(self.xlabel, fontsize=16, fontweight="bold")
             else:
                 ax.set_xticklabels([])
                 ax.set_xticks([])
@@ -127,9 +123,7 @@ class RidgePlotTS:
             i += 1
 
         gs.update(hspace=self.hspace)
-
         fig.suptitle(self.series.name, fontsize=20)
-
         plt.tight_layout()
         plt.show()
 
@@ -138,12 +132,12 @@ def _example():
     from diive.configs.exampledata import load_exampledata_parquet
     df = load_exampledata_parquet()
     yr = 2015
-    locs = (df.index.year >= yr) & (df.index.year <= yr)
+    locs = (df.index.year >= 2018) & (df.index.year <= 2022)
     df = df[locs].copy()
     series = df['Tair_f'].copy()
 
     rp = RidgePlotTS(series=series)
-    rp.per_month(xlim=[-20, 30], ylim=[0, 0.14], hspace=-0.5)
+    rp.per_month(xlim=[-15, 30], ylim=[0, 0.14], hspace=-0.6, xlabel="Air temperature (°C)")
 
 
 if __name__ == '__main__':
