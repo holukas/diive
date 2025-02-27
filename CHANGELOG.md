@@ -2,6 +2,16 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.86.0 | XX Mar 2025
+
+### New features
+
+- XXX
+
+### Environment
+
+- Updated packages
+
 ## v0.85.7 | 26 Feb 2025
 
 ### New features
