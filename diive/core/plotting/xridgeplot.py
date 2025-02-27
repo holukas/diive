@@ -5,79 +5,146 @@ https://matplotlib.org/matplotblog/posts/create-ridgeplots-in-matplotlib/
 import matplotlib.gridspec as grid_spec
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
+from matplotlib.pyplot import cm
 from sklearn.neighbors import KernelDensity
-from diive.core.plotting.styles.LightTheme import colorwheel_36
-from diive.configs.exampledata import load_exampledata_parquet
 
-df = load_exampledata_parquet()
-print(df)
-col = 'NEE_CUT_REF_f'
-df = df[[col]].copy()
-df['YEAR'] = df.index.year
-df['MONTH'] = df.index.month
-# locs = (df['YEAR'] >= 2015) & (df['YEAR'] <= 2020)
-# df = df[locs].copy()
-years = [x for x in np.unique(df['YEAR'])]
-months = [x for x in np.unique(df['MONTH'])]
-# colors = ['#0000ff', '#3300cc', '#660099', '#990066', '#cc0033', '#ff0000',
-#           '#0000ff', '#3300cc', '#660099', '#990066', '#cc0033', '#ff0000']
 
-colors = colorwheel_36()
-gs = (grid_spec.GridSpec(len(months), 1))
-fig = plt.figure(figsize=(8, 8))
+class RidgePlotTS:
 
-i = 0
+    def __init__(self, series: pd.Series):
+        self.series = series
 
-# Creating empty list
-ax_objs = []
+        self.xlim = None
+        self.ylim = None
 
-for month in months:
-    month = months[i]
-    x = np.array(df[df['MONTH'] == month][col])
-    x_d = np.linspace(-20, 30, 1000)
+        # Per month plotting
+        self.months = None
+        self.months_unique = None
+        self.colors = None
+        self.months_colors = {}
+        self.hspace = None
 
-    kde = KernelDensity(bandwidth=0.99, kernel='gaussian')
-    kde.fit(x[:, None])
+    def per_month(self, xlim: list, ylim: list, hspace: float):
+        self.xlim = xlim
+        self.ylim = ylim
+        self.hspace = hspace
+        self.months = self.series.index.month
+        self.months_unique = [x for x in np.unique(self.months)]
+        # https://matplotlib.org/stable/users/explain/colors/colormaps.html
+        self.colors = iter(cm.Spectral_r(np.linspace(0, 1, len(self.months_unique))))
+        self.months_colors = self._xxx()
+        self._plot()
 
-    logprob = kde.score_samples(x_d[:, None])
+    def _xxx(self):
+        monthly_means = self.series.groupby(self.series.index.month).agg('mean')
+        # monthly_means = self.series.resample('MS').mean()
+        monthly_means = monthly_means.sort_values(ascending=True)
+        months_order = monthly_means.index
+        months_colors = {}
+        for m in months_order:
+            # months_colors.append(next(self.colors))
+            months_colors[m] = next(self.colors)
+        return months_colors
 
-    # creating new axes object
-    ax_objs.append(fig.add_subplot(gs[i:i + 1, 0:]))
+    def adjust_lightness(self, color, amount=0.5):
+        # https://stackoverflow.com/questions/37765197/darken-or-lighten-a-color-in-matplotlib
+        import matplotlib.colors as mc
+        import colorsys
+        try:
+            c = mc.cnames[color]
+        except:
+            c = color
+        c = colorsys.rgb_to_hls(*mc.to_rgb(c))
+        return colorsys.hls_to_rgb(c[0], max(0, min(1, amount * c[1])), c[2])
 
-    # plotting the distribution
-    ax_objs[-1].plot(x_d, np.exp(logprob), color="black", lw=1)
-    ax_objs[-1].fill_between(x_d, np.exp(logprob), alpha=1, color=colors[i])
+    def _plot(self):
+        gs = (grid_spec.GridSpec(len(self.months_unique), 1))
+        fig = plt.figure(figsize=(8, 8))
 
-    # setting uniform x and y lims
-    ax_objs[-1].set_xlim(-20, 10)
-    ax_objs[-1].set_ylim(0, 0.3)
+        i = 0
 
-    # make background transparent
-    rect = ax_objs[-1].patch
-    rect.set_alpha(0)
+        # Creating empty list
+        ax_objs = []
 
-    # remove borders, axis ticks, and labels
-    ax_objs[-1].set_yticklabels([])
-    ax_objs[-1].set_yticks([])
+        for month in self.months_unique:
+            # month = self.months_unique[i]
+            locs_month = self.months == month
 
-    if i == len(months) - 1:
-        ax_objs[-1].set_xlabel("X", fontsize=16, fontweight="bold")
-    else:
-        ax_objs[-1].set_xticklabels([])
-        ax_objs[-1].set_xticks([])
+            x1 = np.array(self.series[locs_month])
+            x1_mean = x1.mean()
+            x_d = np.linspace(self.xlim[0], self.xlim[1], 1000)
 
-    spines = ["top", "right", "left", "bottom"]
-    for s in spines:
-        ax_objs[-1].spines[s].set_visible(False)
+            kde1 = KernelDensity(bandwidth=0.99, kernel='gaussian')
+            kde1.fit(x1[:, None])
+            logprob1 = kde1.score_samples(x_d[:, None])
 
-    adj_country = str(month).replace(" ", "\n")
-    ax_objs[-1].text(-21, 0.01, adj_country, fontweight="bold", fontsize=14, ha="right")
+            # creating new axes object
+            ax_objs.append(fig.add_subplot(gs[i:i + 1, 0:]))
+            ax = ax_objs[-1]
 
-    i += 1
+            # plotting the distribution
+            y = np.exp(logprob1)
+            color_line = self.adjust_lightness(self.months_colors[month], amount=0.4)
+            ax.plot(x_d, y, color=color_line, lw=1, alpha=1)
 
-gs.update(hspace=-0.7)
+            # c = next(self.colors)
+            ax.fill_between(x_d, y, alpha=1, color=self.months_colors[month])
 
-fig.text(0.07, 0.85, "TITLE", fontsize=20)
+            # setting uniform x and y lims
+            ax.set_xlim(self.xlim[0], self.xlim[1])
+            ax.set_ylim(self.ylim[0], self.ylim[1])
 
-plt.tight_layout()
-plt.show()
+            # make background transparent
+            rect = ax.patch
+            rect.set_alpha(0)
+
+            # remove borders, axis ticks, and labels
+            ax.set_yticklabels([])
+            ax.set_yticks([])
+
+            if i == len(self.months_unique) - 1:
+                ax.set_xlabel("X", fontsize=16, fontweight="bold")
+            else:
+                ax.set_xticklabels([])
+                ax.set_xticks([])
+
+            spines = ["top", "right", "left", "bottom"]
+            for s in spines:
+                ax.spines[s].set_visible(False)
+
+            adj_country = str(month).replace(" ", "\n")
+            ax.text(-0.02, 0.01, adj_country, fontweight="bold", fontsize=14, ha="right",
+                    transform=ax.get_yaxis_transform())
+
+            # Mean value
+            ax.text(1, 0.01, f"{x1_mean:.1f}", fontsize=12, ha="right",
+                    transform=ax.get_yaxis_transform(), color=color_line)
+
+            # ax.axvline(0, ls="-", lw=1, color="black")
+            ax.axvline(x1_mean, ls="-", lw=1, color="black")
+
+            i += 1
+
+        gs.update(hspace=self.hspace)
+
+        fig.suptitle(self.series.name, fontsize=20)
+
+        plt.tight_layout()
+        plt.show()
+
+
+def _example():
+    from diive.configs.exampledata import load_exampledata_parquet
+    df = load_exampledata_parquet()
+    yr = 2015
+    locs = (df.index.year >= yr) & (df.index.year <= yr)
+    df = df[locs].copy()
+    series = df['Tair_f'].copy()
+
+    rp = RidgePlotTS(series=series)
+    rp.per_month(xlim=[-20, 30], ylim=[0, 0.14], hspace=-0.5)
+
+
+if __name__ == '__main__':
+    _example()
