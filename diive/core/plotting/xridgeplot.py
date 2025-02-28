@@ -120,8 +120,9 @@ class RidgePlotTS:
     def _plot(self):
 
         # Setup figure
-        gs = (grid_spec.GridSpec(len(self.ys_unique), 1))
         fig = plt.figure(figsize=(self.fig_width, self.fig_height))
+        gs = (grid_spec.GridSpec(len(self.ys_unique), 1))
+        gs.update(wspace=0, hspace=0, left=.1, right=.9, top=.95, bottom=0.05)
 
         # Create empty list for dynamic number of plots (rows)
         ax_objs = []
