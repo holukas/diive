@@ -1,5 +1,6 @@
 """
 https://matplotlib.org/matplotblog/posts/create-ridgeplots-in-matplotlib/
+https://matplotlib.org/stable/users/explain/colors/colormaps.html
 """
 
 import matplotlib.gridspec as grid_spec
@@ -20,105 +21,159 @@ class RidgePlotTS:
         self.xlim = None
         self.ylim = None
 
-        # Per month plotting
-        self.months = None
-        self.months_unique = None
+        self.ys = None
+        self.ys_unique = None
         self.colors = None
-        self.months_colors = {}
+        self.assigned_colors = {}
         self.hspace = None
         self.xlabel = None
+        self.fig_width = None
+        self.fig_height = None
 
-    def per_month(self, xlim: list, ylim: list, hspace: float, xlabel: str):
+    def _update_params(self, xlim: list, ylim: list, hspace: float, xlabel: str,
+                       fig_width: float, fig_height: float):
         self.xlim = xlim
         self.ylim = ylim
         self.hspace = hspace
         self.xlabel = xlabel
-        self.months = self.series.index.month
-        self.months_unique = [x for x in np.unique(self.months)]
-        # https://matplotlib.org/stable/users/explain/colors/colormaps.html
-        # self.colors = iter(cm.Spectral_r(np.linspace(0, 1, 100)))
-        self.colors = iter(cm.Spectral_r(np.linspace(0, 1, len(self.months_unique))))
-        self.months_colors = self._assign_colors()
-        self._plot_per_month()
+        self.fig_width = fig_width
+        self.fig_height = fig_height
+        return self.xlim, self.ylim, self.hspace, self.xlabel
 
-    def _assign_colors(self):
+    def per_year(self, xlim: list, ylim: list, hspace: float, xlabel: str,
+                 fig_width: float = 8, fig_height: float = 8):
+        self._update_params(xlim=xlim, ylim=ylim, hspace=hspace, xlabel=xlabel,
+                            fig_width=fig_width, fig_height=fig_height)
+        self.ys, self.ys_unique = self._y_index(how='yearly')
+        self.colors = iter(cm.Spectral_r(np.linspace(0, 1, len(self.ys_unique))))
+        self.assigned_colors = self._assign_colors(how='yearly')
+        self._plot()
+
+    def per_month(self, xlim: list, ylim: list, hspace: float, xlabel: str,
+                  fig_width: float = 8, fig_height: float = 8):
+        self._update_params(xlim=xlim, ylim=ylim, hspace=hspace, xlabel=xlabel,
+                            fig_width=fig_width, fig_height=fig_height)
+        self.ys, self.ys_unique = self._y_index(how='monthly')
+        self.colors = iter(cm.Spectral_r(np.linspace(0, 1, len(self.ys_unique))))
+        self.assigned_colors = self._assign_colors(how='monthly')
+        self._plot()
+
+    def per_week(self, xlim: list, ylim: list, hspace: float, xlabel: str,
+                 fig_width: float = 8, fig_height: float = 8):
+        self._update_params(xlim=xlim, ylim=ylim, hspace=hspace, xlabel=xlabel,
+                            fig_width=fig_width, fig_height=fig_height)
+        self.ys, self.ys_unique = self._y_index(how='weekly')
+        self.colors = iter(cm.Spectral_r(np.linspace(0, 1, len(self.ys_unique))))
+        self.assigned_colors = self._assign_colors(how='weekly')
+        self._plot()
+
+    def _y_index(self, how: str):
+        if how == 'yearly':
+            y_index = self.series.index.year
+        elif how == 'monthly':
+            y_index = self.series.index.month
+        elif how == 'weekly':
+            y_index = self.series.index.isocalendar().week
+        else:
+            raise Exception(f"{how} not implemented.")
+        y_index_unique = [x for x in np.unique(y_index)]
+        return y_index, y_index_unique
+
+    def _assign_colors(self, how: str):
         """Assign colors depending on the monthly mean value."""
-        monthly_means = self.series.groupby(self.series.index.month).agg('mean')
-        monthly_means = monthly_means.sort_values(ascending=True)
+        if how == 'yearly':
+            aggs = self.series.groupby(self.series.index.year).agg('mean')
+        elif how == 'monthly':
+            aggs = self.series.groupby(self.series.index.month).agg('mean')
+        elif how == 'weekly':
+            aggs = self.series.groupby(self.series.index.isocalendar().week).agg('mean')
+        else:
+            raise Exception(f"{how} not implemented.")
+        aggs = aggs.sort_values(ascending=True)
         # monthly_means_offset = monthly_means.add(abs(monthly_means.min()))
         # monthly_means_offset_norm = monthly_means_offset / monthly_means_offset.max()
-        months_order = monthly_means.index
-        months_colors = {}
-        for m in months_order:
+        y_index_order = aggs.index
+        y_index_colors = {}
+        for m in y_index_order:
             # months_colors.append(next(self.colors))
-            months_colors[m] = next(self.colors)
-        return months_colors
+            y_index_colors[m] = next(self.colors)
+        return y_index_colors
 
-    def _plot_per_month(self):
-        gs = (grid_spec.GridSpec(len(self.months_unique), 1))
-        fig = plt.figure(figsize=(8, 8))
+    def _plot(self):
 
-        i = 0
+        # Setup figure
+        gs = (grid_spec.GridSpec(len(self.ys_unique), 1))
+        fig = plt.figure(figsize=(self.fig_width, self.fig_height))
 
-        # Creating empty list
+        # Create empty list for dynamic number of plots (rows)
         ax_objs = []
 
-        for month in self.months_unique:
-            # month = self.months_unique[i]
-            locs_month = self.months == month
-
-            x1 = np.array(self.series[locs_month])
+        i = 0
+        for y_current in self.ys_unique:
+            # Get data for current year or month or etc.
+            locs_current = self.ys == y_current
+            series = self.series[locs_current].copy()
+            x1 = np.array(series)
             x1_mean = x1.mean()
-            x_d = np.linspace(self.xlim[0], self.xlim[1], 1000)
+            x1_p99 = series.quantile(0.95)
 
+            # Kernel density
             kde1 = KernelDensity(bandwidth=0.99, kernel='gaussian')
             kde1.fit(x1[:, None])
+            x_d = np.linspace(self.xlim[0], self.xlim[1], 1000)
             logprob1 = kde1.score_samples(x_d[:, None])
 
-            # creating new axes object
+            # Create new axes object
             ax_objs.append(fig.add_subplot(gs[i:i + 1, 0:]))
             ax = ax_objs[-1]
 
-            # plotting the distribution
+            # Plot distribution
             y = np.exp(logprob1)
-            color_line = adjust_color_lightness(self.months_colors[month], amount=0.4)
-            ax.plot(x_d, y, color=color_line, lw=1, alpha=1)
+            darker_color = adjust_color_lightness(self.assigned_colors[y_current], amount=0.4)
+            ax.fill_between(x_d, y, alpha=1, color=self.assigned_colors[y_current])
+            ax.plot(x_d, y, color=darker_color, lw=1, alpha=1)  # Outline darker than fill
 
-            # c = next(self.colors)
-            ax.fill_between(x_d, y, alpha=1, color=self.months_colors[month])
-
-            # setting uniform x and y lims
+            # Set uniform x and y limits
             ax.set_xlim(self.xlim[0], self.xlim[1])
             ax.set_ylim(self.ylim[0], self.ylim[1])
 
-            # make background transparent
+            # Make axis background transparent
             rect = ax.patch
             rect.set_alpha(0)
 
-            # remove borders, axis ticks, and labels
+            # Remove axis borders, axis ticks, and labels
             ax.set_yticklabels([])
             ax.set_yticks([])
 
-            if i == len(self.months_unique) - 1:
+            # Show x labels only for last axis
+            if i == len(self.ys_unique) - 1:
                 ax.set_xlabel(self.xlabel, fontsize=16, fontweight="bold")
             else:
                 ax.set_xticklabels([])
                 ax.set_xticks([])
 
+            # Hide axis spines
             spines = ["top", "right", "left", "bottom"]
             for s in spines:
                 ax.spines[s].set_visible(False)
 
-            adj_country = str(month).replace(" ", "\n")
-            ax.text(-0.02, 0.01, adj_country, fontweight="bold", fontsize=14, ha="right",
+            # Show year or month etc. on y axis
+            ax.text(-0.02, 0.01, y_current, fontweight="bold", fontsize=14, ha="right",
                     transform=ax.get_yaxis_transform())
 
-            # Mean value
+            # Show mean value
             ax.text(1, 0.01, f"{x1_mean:.1f}", fontsize=12, ha="right",
-                    transform=ax.get_yaxis_transform(), color=color_line)
+                    transform=ax.get_yaxis_transform(), color=darker_color)
 
-            # ax.axvline(0, ls="-", lw=1, color="black")
+            # Show mean line
             ax.axvline(x1_mean, ls="-", lw=1, color="black")
+
+            # Show 99th percentile
+            locs_p99 = np.where(x_d >= x1_p99)
+            x_d_p99 = x_d[locs_p99]
+            y_p99 = y[locs_p99]
+            slightly_darker_color = adjust_color_lightness(self.assigned_colors[y_current], amount=0.7)
+            ax.fill_between(x_d_p99, y_p99, alpha=1, color=slightly_darker_color)
 
             i += 1
 
@@ -131,13 +186,17 @@ class RidgePlotTS:
 def _example():
     from diive.configs.exampledata import load_exampledata_parquet
     df = load_exampledata_parquet()
-    yr = 2015
-    locs = (df.index.year >= 2018) & (df.index.year <= 2022)
+    # yr = 2015
+    locs = (df.index.year >= 2019) & (df.index.year <= 2019)
     df = df[locs].copy()
     series = df['Tair_f'].copy()
 
     rp = RidgePlotTS(series=series)
-    rp.per_month(xlim=[-15, 30], ylim=[0, 0.14], hspace=-0.6, xlabel="Air temperature (°C)")
+    # rp.per_month(xlim=[-15, 30], ylim=[0, 0.14], hspace=-0.6, xlabel="Air temperature (°C)",
+    #              fig_width=8, fig_height=8)
+    # rp.per_year(xlim=[-15, 30], ylim=[0, 0.14], hspace=-0.8, xlabel="Air temperature (°C)")
+    rp.per_week(xlim=[-15, 30], ylim=[0, 0.21], hspace=-0.6, xlabel="Air temperature (°C)",
+                fig_width=9, fig_height=16)
 
 
 if __name__ == '__main__':
