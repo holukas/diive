@@ -29,39 +29,49 @@ class RidgePlotTS:
         self.xlabel = None
         self.fig_width = None
         self.fig_height = None
+        self.shade_percentile = None
 
     def _update_params(self, xlim: list, ylim: list, hspace: float, xlabel: str,
-                       fig_width: float, fig_height: float):
+                       fig_width: float, fig_height: float, shade_percentile: float,
+                       show_mean_line: bool):
         self.xlim = xlim
         self.ylim = ylim
         self.hspace = hspace
         self.xlabel = xlabel
         self.fig_width = fig_width
         self.fig_height = fig_height
-        return self.xlim, self.ylim, self.hspace, self.xlabel
+        self.shade_percentile = shade_percentile
+        self.show_mean_line = show_mean_line
+        return None
 
     def per_year(self, xlim: list, ylim: list, hspace: float, xlabel: str,
-                 fig_width: float = 8, fig_height: float = 8):
+                 fig_width: float = 8, fig_height: float = 8,
+                 shade_percentile: float = 0.95, show_mean_line:bool = False):
         self._update_params(xlim=xlim, ylim=ylim, hspace=hspace, xlabel=xlabel,
-                            fig_width=fig_width, fig_height=fig_height)
+                            fig_width=fig_width, fig_height=fig_height,
+                            shade_percentile=shade_percentile, show_mean_line=show_mean_line)
         self.ys, self.ys_unique = self._y_index(how='yearly')
         self.colors = iter(cm.Spectral_r(np.linspace(0, 1, len(self.ys_unique))))
         self.assigned_colors = self._assign_colors(how='yearly')
         self._plot()
 
     def per_month(self, xlim: list, ylim: list, hspace: float, xlabel: str,
-                  fig_width: float = 8, fig_height: float = 8):
+                  fig_width: float = 8, fig_height: float = 8,
+                  shade_percentile: float = 0.95, show_mean_line:bool = False):
         self._update_params(xlim=xlim, ylim=ylim, hspace=hspace, xlabel=xlabel,
-                            fig_width=fig_width, fig_height=fig_height)
+                            fig_width=fig_width, fig_height=fig_height,
+                            shade_percentile=shade_percentile, show_mean_line=show_mean_line)
         self.ys, self.ys_unique = self._y_index(how='monthly')
         self.colors = iter(cm.Spectral_r(np.linspace(0, 1, len(self.ys_unique))))
         self.assigned_colors = self._assign_colors(how='monthly')
         self._plot()
 
     def per_week(self, xlim: list, ylim: list, hspace: float, xlabel: str,
-                 fig_width: float = 8, fig_height: float = 8):
+                 fig_width: float = 8, fig_height: float = 8,
+                 shade_percentile: float = 0.95, show_mean_line:bool = False):
         self._update_params(xlim=xlim, ylim=ylim, hspace=hspace, xlabel=xlabel,
-                            fig_width=fig_width, fig_height=fig_height)
+                            fig_width=fig_width, fig_height=fig_height,
+                            shade_percentile=shade_percentile, show_mean_line=show_mean_line)
         self.ys, self.ys_unique = self._y_index(how='weekly')
         self.colors = iter(cm.Spectral_r(np.linspace(0, 1, len(self.ys_unique))))
         self.assigned_colors = self._assign_colors(how='weekly')
@@ -115,7 +125,7 @@ class RidgePlotTS:
             series = self.series[locs_current].copy()
             x1 = np.array(series)
             x1_mean = x1.mean()
-            x1_p99 = series.quantile(0.95)
+            x1_percentile = series.quantile(self.shade_percentile)
 
             # Kernel density
             kde1 = KernelDensity(bandwidth=0.99, kernel='gaussian')
@@ -166,14 +176,15 @@ class RidgePlotTS:
                     transform=ax.get_yaxis_transform(), color=darker_color)
 
             # Show mean line
-            ax.axvline(x1_mean, ls="-", lw=1, color="black")
+            if self.show_mean_line:
+                ax.axvline(x1_mean, ls="-", lw=1, color="black")
 
             # Show 99th percentile
-            locs_p99 = np.where(x_d >= x1_p99)
-            x_d_p99 = x_d[locs_p99]
-            y_p99 = y[locs_p99]
-            slightly_darker_color = adjust_color_lightness(self.assigned_colors[y_current], amount=0.7)
-            ax.fill_between(x_d_p99, y_p99, alpha=1, color=slightly_darker_color)
+            locs_percentile = np.where(x_d >= x1_percentile)
+            x_d_percentile = x_d[locs_percentile]
+            y_percentile = y[locs_percentile]
+            slightly_darker_color = adjust_color_lightness(self.assigned_colors[y_current], amount=0.9)
+            ax.fill_between(x_d_percentile, y_percentile, alpha=1, color=slightly_darker_color)
 
             i += 1
 
@@ -187,16 +198,17 @@ def _example():
     from diive.configs.exampledata import load_exampledata_parquet
     df = load_exampledata_parquet()
     # yr = 2015
-    locs = (df.index.year >= 2019) & (df.index.year <= 2019)
+    locs = (df.index.year >= 2015) & (df.index.year <= 2015)
     df = df[locs].copy()
     series = df['Tair_f'].copy()
 
     rp = RidgePlotTS(series=series)
     # rp.per_month(xlim=[-15, 30], ylim=[0, 0.14], hspace=-0.6, xlabel="Air temperature (°C)",
-    #              fig_width=8, fig_height=8)
-    # rp.per_year(xlim=[-15, 30], ylim=[0, 0.14], hspace=-0.8, xlabel="Air temperature (°C)")
+    #              fig_width=8, fig_height=8, shade_percentile=0.5, show_mean_line=True)
+    # rp.per_year(xlim=[-15, 30], ylim=[0, 0.14], hspace=-0.8, xlabel="Air temperature (°C)",
+    #             fig_width=9, fig_height=16, shade_percentile=0.5, show_mean_line=True)
     rp.per_week(xlim=[-15, 30], ylim=[0, 0.21], hspace=-0.6, xlabel="Air temperature (°C)",
-                fig_width=9, fig_height=16)
+                fig_width=9, fig_height=16, shade_percentile=0.5, show_mean_line=False)
 
 
 if __name__ == '__main__':
