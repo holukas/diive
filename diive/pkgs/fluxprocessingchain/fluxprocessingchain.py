@@ -420,7 +420,7 @@ class FluxProcessingChain:
         self._level2.missing_vals_test()
 
         if ssitc['apply']:
-            self._level2.ssitc_test()
+            self._level2.ssitc_test(setflag_timeperiod=ssitc['setflag_timeperiod'])
 
         if gas_completeness['apply']:
             self._level2.gas_completeness_test()
@@ -1100,7 +1100,7 @@ def example():
     # Source data
     from pathlib import Path
     from diive.core.io.files import load_parquet
-    SOURCEDIR = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-cha_flux_product\notebooks\30_MERGE_DATA"
+    SOURCEDIR = r"L:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-cha_flux_product\notebooks\30_MERGE_DATA"
     FILENAME = r"33.5_CH-CHA_IRGA+QCL+LGR+M10+MGMT_Level-1_eddypro_fluxnet_2005-2024.parquet"
     FILEPATH = Path(SOURCEDIR) / FILENAME
     maindf = load_parquet(filepath=str(FILEPATH))
@@ -1111,8 +1111,8 @@ def example():
     # maindf = ep.maindf
     # metadata = ep.metadata
 
-    # locs = (maindf.index.year >= 2019) & (maindf.index.year <= 2023)
-    locs = (maindf.index.year >= 2022) & (maindf.index.year <= 2022)
+    locs = (maindf.index.year >= 2019) & (maindf.index.year <= 2023)
+    # locs = (maindf.index.year >= 2022) & (maindf.index.year <= 2022)
     # locs = (maindf.index.year >= 2007) & (maindf.index.year <= 2011)
     maindf = maindf.loc[locs, :].copy()
     # locs = (maindf.index.month >= 7) & (maindf.index.month <= 7)
@@ -1126,31 +1126,17 @@ def example():
     # plt.show()
     # plt.show()
 
-    # RANDOM UNCERTAINTY
-    # [print(c) for c in maindf.columns if "SSITC" in c]
-    # import matplotlib.pyplot as plt
-    # maindf['FC_RANDUNC_HF'].plot(x_compat=True)
-    # locs = (
-    #         (maindf['FC'] < 50)
-    #         & (maindf['FC'] > -50)
-    #         & (maindf['NIGHT'] == 1)
-    #         & (maindf['FC_RANDUNC_HF'] < maindf['FC'].abs())
-    #         & (maindf['FC_SSITC_TEST'] == 0)
-    # )
-    # plt.scatter(maindf.loc[locs, 'FC'], maindf.loc[locs, 'FC_RANDUNC_HF'])
-    # plt.show()
-
     # Flux processing chain settings
     # FLUXVAR = "LE"
     # FLUXVAR = "H"
-    # FLUXVAR = "FC"
-    FLUXVAR = "FN2O"
+    FLUXVAR = "FC"
+    # FLUXVAR = "FN2O"
     SITE_LAT = 47.210227
     SITE_LON = 8.410645
     UTC_OFFSET = 1
     NIGHTTIME_THRESHOLD = 20  # Threshold for potential radiation in W m-2, conditions below threshold are nighttime
     DAYTIME_ACCEPT_QCF_BELOW = 2
-    NIGHTTIMETIME_ACCEPT_QCF_BELOW = 2
+    NIGHTTIMETIME_ACCEPT_QCF_BELOW = 1
 
     # from diive.core.dfun.stats import sstats  # Time series stats
     # sstats(maindf[FLUXVAR])
@@ -1171,6 +1157,8 @@ def example():
     # Level-2
     # --------------------
     TEST_SSITC = True  # Default True
+    # TEST_SSITC_SETFLAG_TIMEPERIOD = False
+    TEST_SSITC_SETFLAG_TIMEPERIOD = {2: [[1, '2022-05-01', '2023-09-30']]}  # Set flag 1 to 2 (bad) during time period
     TEST_GAS_COMPLETENESS = True  # Default True
     TEST_SPECTRAL_CORRECTION_FACTOR = True  # Default True
     TEST_SIGNAL_STRENGTH = True
@@ -1210,7 +1198,8 @@ def example():
             'discont_hf': TEST_RAWDATA_DISCONT_HF,
             'discont_sf': TEST_RAWDATA_DISCONT_SF},
         'ssitc': {
-            'apply': TEST_SSITC},
+            'apply': TEST_SSITC,
+            'setflag_timeperiod': TEST_SSITC_SETFLAG_TIMEPERIOD},
         'gas_completeness': {
             'apply': TEST_GAS_COMPLETENESS},
         'spectral_correction_factor': {
@@ -1223,8 +1212,8 @@ def example():
     }
     fpc.level2_quality_flag_expansion(**LEVEL2_SETTINGS)
     fpc.finalize_level2()
-    # fpc.level2_qcf.showplot_qcf_heatmaps()
-    # fpc.level2_qcf.report_qcf_evolution()
+    fpc.level2_qcf.showplot_qcf_heatmaps()
+    fpc.level2_qcf.report_qcf_evolution()
     # fpc.level2_qcf.analyze_highest_quality_flux()
     # fpc.level2_qcf.report_qcf_flags()
     # fpc.level2.results
@@ -1232,167 +1221,200 @@ def example():
     # fpc.filteredseries
     # [x for x in fpc.fpc_df.columns if 'L2' in x]
 
-    # --------------------
-    # Level-3.1
-    # --------------------
-    fpc.level31_storage_correction(gapfill_storage_term=True)
-    fpc.finalize_level31()
-    # fpc.level31.report()
-    # fpc.level31.showplot()
-    # fpc.fpc_df
-    # fpc.filteredseries
-    # fpc.level31.results
-    # [x for x in fpc.fpc_df.columns if 'L3.1' in x]
-    # -------------------------------------------------------------------------
-
     # # --------------------
-    # # (OPTIONAL) ANALYZE
+    # # Level-3.1
     # # --------------------
-    # fpc.analyze_highest_quality_flux(showplot=True)
-    # # -------------------------------------------------------------------------
-
-    # --------------------
-    # Level-3.2
-    # --------------------
-    fpc.level32_stepwise_outlier_detection()
-
-    # fpc.level32_flag_manualremoval_test(
-    #     remove_dates=[
-    #         ['2016-03-18 12:15:00', '2016-05-03 06:45:00'],
-    #         # '2022-12-12 12:45:00',
-    #     ],
-    #     showplot=True, verbose=True)
-    # fpc.level32_addflag()
-
-    DAYTIME_MINMAX = [-50, 50]
-    NIGHTTIME_MINMAX = [-50, 50]
-    fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX,
-                                               showplot=False, verbose=False)
-    # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX, showplot=True, verbose=True)
-    fpc.level32_addflag()
-    # fpc.level32.results  # Stores Level-3.2 flags up to this point
-
-    # fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=False, repeat=True)
-    # fpc.level32_addflag()
-
-    # fpc.level32_flag_outliers_hampel_test(window_length=48 * 7, n_sigma=5, showplot=True, verbose=True, repeat=False)
-    # fpc.level32_addflag()
-
-    # # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=False, verbose=False, repeat=False)
-    # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 13, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=True,
-    #                                            verbose=True, repeat=True)
-    # fpc.level32_addflag()
-
-    # fpc.level32_flag_outliers_zscore_rolling_test(winsize=48 * 7, thres_zscore=4, showplot=False, verbose=True,
-    #                                               repeat=True)
-    # fpc.level32_addflag()
-
-    # fpc.level32_flag_outliers_localsd_test(n_sd=5, winsize=48 * 13, constant_sd=False, showplot=False, verbose=True,
-    #                                        repeat=True)
-    # fpc.level32_addflag()
-
-    # fpc.level32_flag_outliers_localsd_test(n_sd=4, winsize=48 * 13, constant_sd=True, showplot=False, verbose=True, repeat=True)
-    # fpc.level32_addflag()
-
-    # fpc.level32_flag_outliers_increments_zcore_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
-    # fpc.level32_addflag()
-    # fpc.level32.showplot_cleaned()
-    # fpc.level32.results  # Stores Level-3.2 flags up to this point
-
-    # fpc.level32_flag_outliers_lof_dtnt_test(n_neighbors=48 * 5, contamination=None, showplot=True, verbose=True, repeat=True, n_jobs=-1)
-    # fpc.level32_addflag()
-
-    # fpc.level32_flag_outliers_lof_test(n_neighbors=20, contamination=None, showplot=True, verbose=True,
-    #                                    repeat=False, n_jobs=-1)
-    # fpc.level32_addflag()
-
-    # fpc.level32_flag_outliers_zscore_test(thres_zscore=3, showplot=True, verbose=True, repeat=True)
-    # fpc.level32_addflag()
-    # fpc.level32.results
-
-    # fpc.level32_flag_outliers_abslim_test(minval=-50, maxval=50, showplot=False, verbose=True)
-    # fpc.level32_addflag()
-    # fpc.level32.results  # Stores Level-3.2 flags up to this point
-
-    # fpc.level32_flag_outliers_trim_low_test(trim_nighttime=True, lower_limit=-10, showplot=True, verbose=True)
-    # fpc.level32_addflag()
-
-    fpc.finalize_level32()
-
+    # fpc.level31_storage_correction(gapfill_storage_term=True)
+    # fpc.finalize_level31()
+    # # fpc.level31.report()
+    # # fpc.level31.showplot()
+    # # fpc.fpc_df
     # # fpc.filteredseries
-    # # fpc.level32.flags
-    # fpc.level32_qcf.showplot_qcf_heatmaps()
-    # # fpc.level32_qcf.showplot_qcf_timeseries()
-    # # fpc.level32_qcf.report_qcf_flags()
-    # fpc.level32_qcf.report_qcf_evolution()
-    # # fpc.level32_qcf.report_qcf_series()
-    # -------------------------------------------------------------------------
-
-    # --------------------
-    # Level-3.3
-    # --------------------
-    # 0.052945, 0.069898, 0.092841
-    # ustar_scenarios = ['NO_USTAR']
-    # ustar_thresholds = [-9999]
-    ustar_scenarios = ['CUT_50']
-    ustar_thresholds = [0.069898]
-    # ustar_scenarios = ['CUT_50', 'CUT_84']
-    # ustar_thresholds = [0.069898, 0.092841]
-    # ustar_scenarios = ['CUT_16', 'CUT_50', 'CUT_84']
-    # ustar_thresholds = [0.052945, 0.069898, 0.092841]
-    fpc.level33_constant_ustar(thresholds=ustar_thresholds,
-                               threshold_labels=ustar_scenarios,
-                               showplot=False)
-    # Finalize: stores results for each USTAR scenario in a dict
-    fpc.finalize_level33()
-
-    # # Save current instance to pickle for faster testing
-    # from diive.core.io.files import save_as_pickle
-    # save_as_pickle(outpath=r"F:\TMP", filename="test", data=fpc)
-    # fpc = load_pickle(filepath=r"F:\TMP\test.pickle")
-
-    # for ustar_scenario in ustar_scenarios:
-    #     # fpc.level33_qcf[ustar_scenario].showplot_qcf_heatmaps()
-    #     fpc.level33_qcf[ustar_scenario].report_qcf_evolution()
-    #     # fpc.filteredseries
-    #     # fpc.level33
-    #     # fpc.level33_qcf.showplot_qcf_timeseries()
-    #     # fpc.level33_qcf.report_qcf_flags()
-    #     # fpc.level33_qcf.report_qcf_series()
-    #     # fpc.levelidstr
-    #     # fpc.filteredseries_level2_qcf
-    #     # fpc.filteredseries_level31_qcf
-    #     # fpc.filteredseries_level32_qcf
-    #     # fpc.filteredseries_level33_qcf
-
-    # --------------------
-    # Level-4.1
-    # --------------------
-    MGMT_VARS = ["TIMESINCE_MGMT_FERT_MIN_FOOTPRINT", "TIMESINCE_MGMT_FERT_ORG_FOOTPRINT",
-                 "TIMESINCE_MGMT_GRAZING_FOOTPRINT", "TIMESINCE_MGMT_MOWING_FOOTPRINT",
-                 "TIMESINCE_MGMT_SOILCULTIVATION_FOOTPRINT", "TIMESINCE_MGMT_SOWING_FOOTPRINT",
-                 "TIMESINCE_MGMT_PESTICIDE_HERBICIDE_FOOTPRINT"]
-    FEATURES = ["SWC_GF1_0.15_1_gfXG", "TS_GF1_0.04_1_gfXG", "TS_GF1_0.15_1_gfXG", "TS_GF1_0.4_1_gfXG"] + MGMT_VARS
-    # FEATURES = ["SW_IN_T1_2_1", "TA_T1_2_1", "VPD_T1_2_1"] + MGMT_VARS
-    # FEATURES = ["SW_IN_T1_2_1", "TA_T1_2_1", "VPD_T1_2_1", "DAYTIME", "NIGHTTIME"] + MGMT_VARS
-    EXCLUDE_COLS = MGMT_VARS
-    # EXCLUDE_COLS = ["DAYTIME", "NIGHTTIME"] + MGMT_VARS
-
+    # # fpc.level31.results
+    # # [x for x in fpc.fpc_df.columns if 'L3.1' in x]
+    # # -------------------------------------------------------------------------
+    #
+    # # # --------------------
+    # # # (OPTIONAL) ANALYZE
+    # # # --------------------
+    # # fpc.analyze_highest_quality_flux(showplot=True)
+    # # # -------------------------------------------------------------------------
+    #
+    # # --------------------
+    # # Level-3.2
+    # # --------------------
+    # fpc.level32_stepwise_outlier_detection()
+    #
+    # # fpc.level32_flag_manualremoval_test(
+    # #     remove_dates=[
+    # #         ['2016-03-18 12:15:00', '2016-05-03 06:45:00'],
+    # #         # '2022-12-12 12:45:00',
+    # #     ],
+    # #     showplot=True, verbose=True)
+    # # fpc.level32_addflag()
+    #
+    # DAYTIME_MINMAX = [-50, 50]
+    # NIGHTTIME_MINMAX = [-50, 50]
+    # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX,
+    #                                            showplot=False, verbose=False)
+    # # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX, showplot=True, verbose=True)
+    # fpc.level32_addflag()
+    # # fpc.level32.results  # Stores Level-3.2 flags up to this point
+    #
+    # # fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=False, repeat=True)
+    # # fpc.level32_addflag()
+    #
+    # # fpc.level32_flag_outliers_hampel_test(window_length=48 * 7, n_sigma=5, showplot=True, verbose=True, repeat=False)
+    # # fpc.level32_addflag()
+    #
+    # # # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=False, verbose=False, repeat=False)
+    # # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 13, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=True,
+    # #                                            verbose=True, repeat=True)
+    # # fpc.level32_addflag()
+    #
+    # # fpc.level32_flag_outliers_zscore_rolling_test(winsize=48 * 7, thres_zscore=4, showplot=False, verbose=True,
+    # #                                               repeat=True)
+    # # fpc.level32_addflag()
+    #
+    # # fpc.level32_flag_outliers_localsd_test(n_sd=5, winsize=48 * 13, constant_sd=False, showplot=False, verbose=True,
+    # #                                        repeat=True)
+    # # fpc.level32_addflag()
+    #
+    # # fpc.level32_flag_outliers_localsd_test(n_sd=4, winsize=48 * 13, constant_sd=True, showplot=False, verbose=True, repeat=True)
+    # # fpc.level32_addflag()
+    #
+    # # fpc.level32_flag_outliers_increments_zcore_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
+    # # fpc.level32_addflag()
+    # # fpc.level32.showplot_cleaned()
+    # # fpc.level32.results  # Stores Level-3.2 flags up to this point
+    #
+    # # fpc.level32_flag_outliers_lof_dtnt_test(n_neighbors=48 * 5, contamination=None, showplot=True, verbose=True, repeat=True, n_jobs=-1)
+    # # fpc.level32_addflag()
+    #
+    # # fpc.level32_flag_outliers_lof_test(n_neighbors=20, contamination=None, showplot=True, verbose=True,
+    # #                                    repeat=False, n_jobs=-1)
+    # # fpc.level32_addflag()
+    #
+    # # fpc.level32_flag_outliers_zscore_test(thres_zscore=3, showplot=True, verbose=True, repeat=True)
+    # # fpc.level32_addflag()
+    # # fpc.level32.results
+    #
+    # # fpc.level32_flag_outliers_abslim_test(minval=-50, maxval=50, showplot=False, verbose=True)
+    # # fpc.level32_addflag()
+    # # fpc.level32.results  # Stores Level-3.2 flags up to this point
+    #
+    # # fpc.level32_flag_outliers_trim_low_test(trim_nighttime=True, lower_limit=-10, showplot=True, verbose=True)
+    # # fpc.level32_addflag()
+    #
+    # fpc.finalize_level32()
+    #
+    # # # fpc.filteredseries
+    # # # fpc.level32.flags
+    # # fpc.level32_qcf.showplot_qcf_heatmaps()
+    # # # fpc.level32_qcf.showplot_qcf_timeseries()
+    # # # fpc.level32_qcf.report_qcf_flags()
+    # # fpc.level32_qcf.report_qcf_evolution()
+    # # # fpc.level32_qcf.report_qcf_series()
+    # # -------------------------------------------------------------------------
+    #
+    # # --------------------
+    # # Level-3.3
+    # # --------------------
+    # # 0.052945, 0.069898, 0.092841
+    # # ustar_scenarios = ['NO_USTAR']
+    # # ustar_thresholds = [-9999]
+    # ustar_scenarios = ['CUT_50']
+    # ustar_thresholds = [0.069898]
+    # # ustar_scenarios = ['CUT_50', 'CUT_84']
+    # # ustar_thresholds = [0.069898, 0.092841]
+    # # ustar_scenarios = ['CUT_16', 'CUT_50', 'CUT_84']
+    # # ustar_thresholds = [0.052945, 0.069898, 0.092841]
+    # fpc.level33_constant_ustar(thresholds=ustar_thresholds,
+    #                            threshold_labels=ustar_scenarios,
+    #                            showplot=False)
+    # # Finalize: stores results for each USTAR scenario in a dict
+    # fpc.finalize_level33()
+    #
+    # # # Save current instance to pickle for faster testing
+    # # from diive.core.io.files import save_as_pickle
+    # # save_as_pickle(outpath=r"F:\TMP", filename="test", data=fpc)
+    # # fpc = load_pickle(filepath=r"F:\TMP\test.pickle")
+    #
+    # # for ustar_scenario in ustar_scenarios:
+    # #     # fpc.level33_qcf[ustar_scenario].showplot_qcf_heatmaps()
+    # #     fpc.level33_qcf[ustar_scenario].report_qcf_evolution()
+    # #     # fpc.filteredseries
+    # #     # fpc.level33
+    # #     # fpc.level33_qcf.showplot_qcf_timeseries()
+    # #     # fpc.level33_qcf.report_qcf_flags()
+    # #     # fpc.level33_qcf.report_qcf_series()
+    # #     # fpc.levelidstr
+    # #     # fpc.filteredseries_level2_qcf
+    # #     # fpc.filteredseries_level31_qcf
+    # #     # fpc.filteredseries_level32_qcf
+    # #     # fpc.filteredseries_level33_qcf
+    #
+    # # --------------------
+    # # Level-4.1
+    # # --------------------
+    # MGMT_VARS = ["TIMESINCE_MGMT_FERT_MIN_FOOTPRINT", "TIMESINCE_MGMT_FERT_ORG_FOOTPRINT",
+    #              "TIMESINCE_MGMT_GRAZING_FOOTPRINT", "TIMESINCE_MGMT_MOWING_FOOTPRINT",
+    #              "TIMESINCE_MGMT_SOILCULTIVATION_FOOTPRINT", "TIMESINCE_MGMT_SOWING_FOOTPRINT",
+    #              "TIMESINCE_MGMT_PESTICIDE_HERBICIDE_FOOTPRINT"]
+    # FEATURES = ["SWC_GF1_0.15_1_gfXG", "TS_GF1_0.04_1_gfXG", "TS_GF1_0.15_1_gfXG", "TS_GF1_0.4_1_gfXG"] + MGMT_VARS
+    # # FEATURES = ["SW_IN_T1_2_1", "TA_T1_2_1", "VPD_T1_2_1"] + MGMT_VARS
+    # # FEATURES = ["SW_IN_T1_2_1", "TA_T1_2_1", "VPD_T1_2_1", "DAYTIME", "NIGHTTIME"] + MGMT_VARS
+    # EXCLUDE_COLS = MGMT_VARS
+    # # EXCLUDE_COLS = ["DAYTIME", "NIGHTTIME"] + MGMT_VARS
+    #
+    # # fpc.level41_gapfilling_longterm(
+    # #     run_mds=False,
+    # #     run_random_forest=True,
+    # #     verbose=True,
+    # #     ml_feature_settings={
+    # #         'features': FEATURES,
+    # #         'features_lag': [-1, -1],
+    # #         'features_lag_exclude_cols': MGMT_VARS,  # Management variables are not lagged
+    # #         'reduce_features': False,
+    # #         'include_timestamp_as_features': True,
+    # #         'add_continuous_record_number': False,
+    # #         'perm_n_repeats': 10,
+    # #     },
+    # #     rf_settings={
+    # #         'n_estimators': 99,
+    # #         'random_state': 42,
+    # #         'min_samples_split': 2,
+    # #         'min_samples_leaf': 1,
+    # #         'n_jobs': -1
+    # #     },
+    # #     # mds_settings={
+    # #     #     'swin': "SW_IN_T1_2_1",
+    # #     #     'ta': "TA_T1_2_1",
+    # #     #     'vpd': "VPD_T1_2_1",
+    # #     #     'swin_class': 50,
+    # #     #     'ta_class': 2.5,
+    # #     #     'vpd_class': 0.5,
+    # #     #     'min_n_vals_nt': 0
+    # #     # }
+    # # )
+    #
     # fpc.level41_gapfilling_longterm(
-    #     run_mds=False,
     #     run_random_forest=True,
+    #     run_mds=False,
     #     verbose=True,
     #     ml_feature_settings={
     #         'features': FEATURES,
-    #         'features_lag': [-1, -1],
-    #         'features_lag_exclude_cols': MGMT_VARS,  # Management variables are not lagged
-    #         'reduce_features': False,
+    #         'features_lag': [-24, -6],
+    #         'features_lag_stepsize': 6,
+    #         'features_lag_exclude_cols': EXCLUDE_COLS,  # Management variables are not lagged
+    #         'reduce_features': True,
     #         'include_timestamp_as_features': True,
     #         'add_continuous_record_number': False,
-    #         'perm_n_repeats': 10,
+    #         'perm_n_repeats': 2
     #     },
     #     rf_settings={
-    #         'n_estimators': 99,
+    #         'n_estimators': 3,
+    #         'max_depth': None,
     #         'random_state': 42,
     #         'min_samples_split': 2,
     #         'min_samples_leaf': 1,
@@ -1405,71 +1427,38 @@ def example():
     #     #     'swin_class': 50,
     #     #     'ta_class': 2.5,
     #     #     'vpd_class': 0.5,
-    #     #     'min_n_vals_nt': 0
+    #     #     'min_n_vals_nt': 5
     #     # }
     # )
-
-    fpc.level41_gapfilling_longterm(
-        run_random_forest=True,
-        run_mds=False,
-        verbose=True,
-        ml_feature_settings={
-            'features': FEATURES,
-            'features_lag': [-24, -6],
-            'features_lag_stepsize': 6,
-            'features_lag_exclude_cols': EXCLUDE_COLS,  # Management variables are not lagged
-            'reduce_features': True,
-            'include_timestamp_as_features': True,
-            'add_continuous_record_number': False,
-            'perm_n_repeats': 2
-        },
-        rf_settings={
-            'n_estimators': 3,
-            'max_depth': None,
-            'random_state': 42,
-            'min_samples_split': 2,
-            'min_samples_leaf': 1,
-            'n_jobs': -1
-        },
-        # mds_settings={
-        #     'swin': "SW_IN_T1_2_1",
-        #     'ta': "TA_T1_2_1",
-        #     'vpd': "VPD_T1_2_1",
-        #     'swin_class': 50,
-        #     'ta_class': 2.5,
-        #     'vpd_class': 0.5,
-        #     'min_n_vals_nt': 5
-        # }
-    )
-
-    results = fpc.get_data()
-    gapfilled_names = fpc.get_gapfilled_names()
-    nongapfilled_names = fpc.get_nongapfilled_names()
-    gapfilled_vars = fpc.get_gapfilled_variables()
-    fpc.report_gapfilling_variables()
-    fpc.report_gapfilling_model_scores()
-    fpc.report_gapfilling_feature_importances()
-
+    #
+    # results = fpc.get_data()
+    # gapfilled_names = fpc.get_gapfilled_names()
+    # nongapfilled_names = fpc.get_nongapfilled_names()
+    # gapfilled_vars = fpc.get_gapfilled_variables()
+    # fpc.report_gapfilling_variables()
+    # fpc.report_gapfilling_model_scores()
+    # fpc.report_gapfilling_feature_importances()
+    #
+    # # # Only ML models:
+    # # fpc.report_gapfilling_poolyears()
+    #
+    # # todo get full data
+    #
+    # # fpc.showplot_gapfilled_heatmap(vmin=-5, vmax=50)
+    # # fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{µmol\ CO_2\ m^{-2}}$)', per_year=True)
+    # # fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{g\ C\ m^{-2}}$)', per_year=False)
+    #
     # # Only ML models:
-    # fpc.report_gapfilling_poolyears()
-
-    # todo get full data
-
-    # fpc.showplot_gapfilled_heatmap(vmin=-5, vmax=50)
-    # fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{µmol\ CO_2\ m^{-2}}$)', per_year=True)
-    # fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{g\ C\ m^{-2}}$)', per_year=False)
-
-    # Only ML models:
-    fpc.showplot_feature_ranks_per_year()
-
-    # Only MDS:
-    fpc.showplot_mds_gapfilling_qualities()
-
-    # TODO heatmap of used model data pools
-
-    print("XXX")
-    print("XXX")
-    print("XXX")
+    # fpc.showplot_feature_ranks_per_year()
+    #
+    # # Only MDS:
+    # fpc.showplot_mds_gapfilling_qualities()
+    #
+    # # TODO heatmap of used model data pools
+    #
+    # print("XXX")
+    # print("XXX")
+    # print("XXX")
 
     # newcols = [c for c in fpc.fpc_df.columns if c not in maindf.columns]
     # maindf2 = pd.concat([maindf, fpc.fpc_df[newcols]], axis=1)

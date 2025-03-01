@@ -3,10 +3,9 @@ Quality flags that depend on EddyPro output files.
 """
 import numpy as np
 import pandas as pd
-from pandas import DataFrame, Series
-
 from diive.core.funcs.funcs import validate_id_string
 from diive.pkgs.qaqc.flags import restrict_application
+from pandas import DataFrame, Series
 
 
 def flag_signal_strength_eddypro_test(df: DataFrame,
@@ -444,7 +443,7 @@ def _exception_full_output_scf(flux: str, gas: str):
     return scfname
 
 
-def flag_ssitc_eddypro_test(df: DataFrame, flux: str,
+def flag_ssitc_eddypro_test(df: DataFrame, flux: str, setflag_timeperiod: dict = None,
                             idstr: str = None) -> Series:
     """Create series based on the SSITC test flag variable from an EddyPro output file.
 
@@ -452,6 +451,15 @@ def flag_ssitc_eddypro_test(df: DataFrame, flux: str,
         df: A DataFrame containing EddyPro data from the _fluxnet_ or _full_output_ file.
         flux: The name of the flux variable for which the SSITC test was performed. The name of the
             SSITC test variable will be detected based on this variable.
+        setflag_timeperiod: Specifies time periods when the flag is set to given value.
+            Example:
+                Set flag 1 to value 2 between '2022-05-01' and '2023-09-30',
+                and between '2024-04-02' and '2024-04-19' (dates inclusive):
+                    {2: [
+                            [1, '2022-05-01', '2023-09-30'],
+                            [1, '2024-04-02', '2024-04-19']
+                        ]
+                    }
         idstr: An optional identifier string to append to the flag name.
 
     Returns:
@@ -461,6 +469,19 @@ def flag_ssitc_eddypro_test(df: DataFrame, flux: str,
     flagname_out = f'FLAG{idstr}_{flux}_SSITC_TEST'
     flagname = f'{flux}_SSITC_TEST'
     ssitc_flag = Series(index=df.index, data=df[flagname], name=flagname_out)
+
     print(f"SSITC TEST: Generated new flag variable {flagname_out}, "
           f"values taken from output variable {flagname} ...")
+
+    if setflag_timeperiod:
+        for flagval, dates in setflag_timeperiod.items():
+            for fromto in dates:
+                _target = fromto[0]
+                _from = fromto[1]
+                _to = fromto[2]
+                _locs = (ssitc_flag.index >= _from) & (ssitc_flag.index <= _to) & (ssitc_flag == _target)
+                ssitc_flag[_locs] = flagval
+                print(f"    Flag {flagname_out} with value {_target} was set to {flagval} "
+                      f"between {_from} and {_to}")
+
     return ssitc_flag
