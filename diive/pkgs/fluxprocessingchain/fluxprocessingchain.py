@@ -1157,8 +1157,8 @@ def example():
     # Level-2
     # --------------------
     TEST_SSITC = True  # Default True
-    # TEST_SSITC_SETFLAG_TIMEPERIOD = False
-    TEST_SSITC_SETFLAG_TIMEPERIOD = {2: [[1, '2022-05-01', '2023-09-30']]}  # Set flag 1 to 2 (bad) during time period
+    TEST_SSITC_SETFLAG_TIMEPERIOD = False
+    # TEST_SSITC_SETFLAG_TIMEPERIOD = {2: [[1, '2022-05-01', '2023-09-30']]}  # Set flag 1 to 2 (bad) during time period
     TEST_GAS_COMPLETENESS = True  # Default True
     TEST_SPECTRAL_CORRECTION_FACTOR = True  # Default True
     TEST_SIGNAL_STRENGTH = True
@@ -1221,139 +1221,140 @@ def example():
     # fpc.filteredseries
     # [x for x in fpc.fpc_df.columns if 'L2' in x]
 
+    # --------------------
+    # Level-3.1
+    # --------------------
+    fpc.level31_storage_correction(gapfill_storage_term=True)
+    fpc.finalize_level31()
+    # fpc.level31.report()
+    # fpc.level31.showplot()
+    # fpc.fpc_df
+    # fpc.filteredseries
+    # fpc.level31.results
+    # [x for x in fpc.fpc_df.columns if 'L3.1' in x]
+    # -------------------------------------------------------------------------
+
     # # --------------------
-    # # Level-3.1
+    # # (OPTIONAL) ANALYZE
     # # --------------------
-    # fpc.level31_storage_correction(gapfill_storage_term=True)
-    # fpc.finalize_level31()
-    # # fpc.level31.report()
-    # # fpc.level31.showplot()
-    # # fpc.fpc_df
-    # # fpc.filteredseries
-    # # fpc.level31.results
-    # # [x for x in fpc.fpc_df.columns if 'L3.1' in x]
+    # fpc.analyze_highest_quality_flux(showplot=True)
     # # -------------------------------------------------------------------------
-    #
-    # # # --------------------
-    # # # (OPTIONAL) ANALYZE
-    # # # --------------------
-    # # fpc.analyze_highest_quality_flux(showplot=True)
-    # # # -------------------------------------------------------------------------
-    #
-    # # --------------------
-    # # Level-3.2
-    # # --------------------
-    # fpc.level32_stepwise_outlier_detection()
-    #
-    # # fpc.level32_flag_manualremoval_test(
-    # #     remove_dates=[
-    # #         ['2016-03-18 12:15:00', '2016-05-03 06:45:00'],
-    # #         # '2022-12-12 12:45:00',
-    # #     ],
-    # #     showplot=True, verbose=True)
-    # # fpc.level32_addflag()
-    #
-    # DAYTIME_MINMAX = [-50, 50]
-    # NIGHTTIME_MINMAX = [-50, 50]
-    # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX,
-    #                                            showplot=False, verbose=False)
-    # # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX, showplot=True, verbose=True)
+
+    # --------------------
+    # Level-3.2
+    # --------------------
+    fpc.level32_stepwise_outlier_detection()
+
+    fpc.level32_flag_manualremoval_test(
+        remove_dates=[
+            ['2016-03-18 12:15:00', '2016-05-03 06:45:00'],
+
+            # '2022-12-12 12:45:00',
+        ],
+        showplot=True, verbose=True)
+    fpc.level32_addflag()
+
+    DAYTIME_MINMAX = [-50, 50]
+    NIGHTTIME_MINMAX = [-50, 50]
+    fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX,
+                                               showplot=False, verbose=False)
+    # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX, showplot=True, verbose=True)
+    fpc.level32_addflag()
+    # fpc.level32.results  # Stores Level-3.2 flags up to this point
+
+    # fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=False, repeat=True)
     # fpc.level32_addflag()
-    # # fpc.level32.results  # Stores Level-3.2 flags up to this point
-    #
-    # # fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=False, repeat=True)
-    # # fpc.level32_addflag()
-    #
-    # # fpc.level32_flag_outliers_hampel_test(window_length=48 * 7, n_sigma=5, showplot=True, verbose=True, repeat=False)
-    # # fpc.level32_addflag()
-    #
-    # # # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=False, verbose=False, repeat=False)
-    # # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 13, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=True,
-    # #                                            verbose=True, repeat=True)
-    # # fpc.level32_addflag()
-    #
-    # # fpc.level32_flag_outliers_zscore_rolling_test(winsize=48 * 7, thres_zscore=4, showplot=False, verbose=True,
-    # #                                               repeat=True)
-    # # fpc.level32_addflag()
-    #
-    # # fpc.level32_flag_outliers_localsd_test(n_sd=5, winsize=48 * 13, constant_sd=False, showplot=False, verbose=True,
-    # #                                        repeat=True)
-    # # fpc.level32_addflag()
-    #
-    # # fpc.level32_flag_outliers_localsd_test(n_sd=4, winsize=48 * 13, constant_sd=True, showplot=False, verbose=True, repeat=True)
-    # # fpc.level32_addflag()
-    #
-    # # fpc.level32_flag_outliers_increments_zcore_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
-    # # fpc.level32_addflag()
-    # # fpc.level32.showplot_cleaned()
-    # # fpc.level32.results  # Stores Level-3.2 flags up to this point
-    #
-    # # fpc.level32_flag_outliers_lof_dtnt_test(n_neighbors=48 * 5, contamination=None, showplot=True, verbose=True, repeat=True, n_jobs=-1)
-    # # fpc.level32_addflag()
-    #
-    # # fpc.level32_flag_outliers_lof_test(n_neighbors=20, contamination=None, showplot=True, verbose=True,
-    # #                                    repeat=False, n_jobs=-1)
-    # # fpc.level32_addflag()
-    #
-    # # fpc.level32_flag_outliers_zscore_test(thres_zscore=3, showplot=True, verbose=True, repeat=True)
-    # # fpc.level32_addflag()
-    # # fpc.level32.results
-    #
-    # # fpc.level32_flag_outliers_abslim_test(minval=-50, maxval=50, showplot=False, verbose=True)
-    # # fpc.level32_addflag()
-    # # fpc.level32.results  # Stores Level-3.2 flags up to this point
-    #
-    # # fpc.level32_flag_outliers_trim_low_test(trim_nighttime=True, lower_limit=-10, showplot=True, verbose=True)
-    # # fpc.level32_addflag()
-    #
-    # fpc.finalize_level32()
-    #
-    # # # fpc.filteredseries
-    # # # fpc.level32.flags
-    # # fpc.level32_qcf.showplot_qcf_heatmaps()
-    # # # fpc.level32_qcf.showplot_qcf_timeseries()
-    # # # fpc.level32_qcf.report_qcf_flags()
-    # # fpc.level32_qcf.report_qcf_evolution()
-    # # # fpc.level32_qcf.report_qcf_series()
-    # # -------------------------------------------------------------------------
-    #
-    # # --------------------
-    # # Level-3.3
-    # # --------------------
-    # # 0.052945, 0.069898, 0.092841
-    # # ustar_scenarios = ['NO_USTAR']
-    # # ustar_thresholds = [-9999]
-    # ustar_scenarios = ['CUT_50']
-    # ustar_thresholds = [0.069898]
-    # # ustar_scenarios = ['CUT_50', 'CUT_84']
-    # # ustar_thresholds = [0.069898, 0.092841]
-    # # ustar_scenarios = ['CUT_16', 'CUT_50', 'CUT_84']
-    # # ustar_thresholds = [0.052945, 0.069898, 0.092841]
-    # fpc.level33_constant_ustar(thresholds=ustar_thresholds,
-    #                            threshold_labels=ustar_scenarios,
-    #                            showplot=False)
-    # # Finalize: stores results for each USTAR scenario in a dict
-    # fpc.finalize_level33()
-    #
-    # # # Save current instance to pickle for faster testing
-    # # from diive.core.io.files import save_as_pickle
-    # # save_as_pickle(outpath=r"F:\TMP", filename="test", data=fpc)
-    # # fpc = load_pickle(filepath=r"F:\TMP\test.pickle")
-    #
-    # # for ustar_scenario in ustar_scenarios:
-    # #     # fpc.level33_qcf[ustar_scenario].showplot_qcf_heatmaps()
-    # #     fpc.level33_qcf[ustar_scenario].report_qcf_evolution()
-    # #     # fpc.filteredseries
-    # #     # fpc.level33
-    # #     # fpc.level33_qcf.showplot_qcf_timeseries()
-    # #     # fpc.level33_qcf.report_qcf_flags()
-    # #     # fpc.level33_qcf.report_qcf_series()
-    # #     # fpc.levelidstr
-    # #     # fpc.filteredseries_level2_qcf
-    # #     # fpc.filteredseries_level31_qcf
-    # #     # fpc.filteredseries_level32_qcf
-    # #     # fpc.filteredseries_level33_qcf
-    #
+
+    # fpc.level32_flag_outliers_hampel_test(window_length=48 * 7, n_sigma=5, showplot=True, verbose=True, repeat=False)
+    # fpc.level32_addflag()
+
+    # # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=False, verbose=False, repeat=False)
+    # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 13, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=True,
+    #                                            verbose=True, repeat=True)
+    # fpc.level32_addflag()
+
+    # fpc.level32_flag_outliers_zscore_rolling_test(winsize=48 * 7, thres_zscore=4, showplot=False, verbose=True,
+    #                                               repeat=True)
+    # fpc.level32_addflag()
+
+    # fpc.level32_flag_outliers_localsd_test(n_sd=5, winsize=48 * 13, constant_sd=False, showplot=False, verbose=True,
+    #                                        repeat=True)
+    # fpc.level32_addflag()
+
+    # fpc.level32_flag_outliers_localsd_test(n_sd=4, winsize=48 * 13, constant_sd=True, showplot=False, verbose=True, repeat=True)
+    # fpc.level32_addflag()
+
+    # fpc.level32_flag_outliers_increments_zcore_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
+    # fpc.level32_addflag()
+    # fpc.level32.showplot_cleaned()
+    # fpc.level32.results  # Stores Level-3.2 flags up to this point
+
+    # fpc.level32_flag_outliers_lof_dtnt_test(n_neighbors=48 * 5, contamination=None, showplot=True, verbose=True, repeat=True, n_jobs=-1)
+    # fpc.level32_addflag()
+
+    # fpc.level32_flag_outliers_lof_test(n_neighbors=20, contamination=None, showplot=True, verbose=True,
+    #                                    repeat=False, n_jobs=-1)
+    # fpc.level32_addflag()
+
+    # fpc.level32_flag_outliers_zscore_test(thres_zscore=3, showplot=True, verbose=True, repeat=True)
+    # fpc.level32_addflag()
+    # fpc.level32.results
+
+    # fpc.level32_flag_outliers_abslim_test(minval=-50, maxval=50, showplot=False, verbose=True)
+    # fpc.level32_addflag()
+    # fpc.level32.results  # Stores Level-3.2 flags up to this point
+
+    # fpc.level32_flag_outliers_trim_low_test(trim_nighttime=True, lower_limit=-10, showplot=True, verbose=True)
+    # fpc.level32_addflag()
+
+    fpc.finalize_level32()
+
+    # # fpc.filteredseries
+    # # fpc.level32.flags
+    # fpc.level32_qcf.showplot_qcf_heatmaps()
+    # # fpc.level32_qcf.showplot_qcf_timeseries()
+    # # fpc.level32_qcf.report_qcf_flags()
+    # fpc.level32_qcf.report_qcf_evolution()
+    # # fpc.level32_qcf.report_qcf_series()
+    # -------------------------------------------------------------------------
+
+    # --------------------
+    # Level-3.3
+    # --------------------
+    # 0.052945, 0.069898, 0.092841
+    # ustar_scenarios = ['NO_USTAR']
+    # ustar_thresholds = [-9999]
+    ustar_scenarios = ['CUT_50']
+    ustar_thresholds = [0.069898]
+    # ustar_scenarios = ['CUT_50', 'CUT_84']
+    # ustar_thresholds = [0.069898, 0.092841]
+    # ustar_scenarios = ['CUT_16', 'CUT_50', 'CUT_84']
+    # ustar_thresholds = [0.052945, 0.069898, 0.092841]
+    fpc.level33_constant_ustar(thresholds=ustar_thresholds,
+                               threshold_labels=ustar_scenarios,
+                               showplot=False)
+    # Finalize: stores results for each USTAR scenario in a dict
+    fpc.finalize_level33()
+
+    # # Save current instance to pickle for faster testing
+    # from diive.core.io.files import save_as_pickle
+    # save_as_pickle(outpath=r"F:\TMP", filename="test", data=fpc)
+    # fpc = load_pickle(filepath=r"F:\TMP\test.pickle")
+
+    for ustar_scenario in ustar_scenarios:
+        # fpc.level33_qcf[ustar_scenario].showplot_qcf_heatmaps()
+        fpc.level33_qcf[ustar_scenario].report_qcf_evolution()
+        # fpc.filteredseries
+        # fpc.level33
+        # fpc.level33_qcf.showplot_qcf_timeseries()
+        # fpc.level33_qcf.report_qcf_flags()
+        # fpc.level33_qcf.report_qcf_series()
+        # fpc.levelidstr
+        # fpc.filteredseries_level2_qcf
+        # fpc.filteredseries_level31_qcf
+        # fpc.filteredseries_level32_qcf
+        # fpc.filteredseries_level33_qcf
+
     # # --------------------
     # # Level-4.1
     # # --------------------
@@ -1455,10 +1456,10 @@ def example():
     # fpc.showplot_mds_gapfilling_qualities()
     #
     # # TODO heatmap of used model data pools
-    #
-    # print("XXX")
-    # print("XXX")
-    # print("XXX")
+
+    print("XXX")
+    print("XXX")
+    print("XXX")
 
     # newcols = [c for c in fpc.fpc_df.columns if c not in maindf.columns]
     # maindf2 = pd.concat([maindf, fpc.fpc_df[newcols]], axis=1)
