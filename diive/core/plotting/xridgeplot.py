@@ -30,11 +30,11 @@ class RidgePlotTS:
         self.fig_width = None
         self.fig_height = None
         self.shade_percentile = None
-        self.title = None
+        self.fig_title = None
 
     def _update_params(self, xlim: list, ylim: list, hspace: float, xlabel: str,
                        fig_width: float, fig_height: float, shade_percentile: float,
-                       show_mean_line: bool, title: str) -> None:
+                       show_mean_line: bool, fig_title: str):
         self.xlim = xlim
         self.ylim = ylim
         self.hspace = hspace
@@ -43,48 +43,47 @@ class RidgePlotTS:
         self.fig_height = fig_height
         self.shade_percentile = shade_percentile
         self.show_mean_line = show_mean_line
-        self.title = title
+        self.fig_title = fig_title
         return None
-
-    def _setup_plot(self, how: str, xlim: list, ylim: list, hspace: float, xlabel: str,
-                    fig_width: float = 8, fig_height: float = 8,
-                    shade_percentile: float = 0.95, show_mean_line: bool = False,
-                    title: str = None):
-        self._update_params(xlim=xlim, ylim=ylim, hspace=hspace, xlabel=xlabel,
-                            fig_width=fig_width, fig_height=fig_height,
-                            shade_percentile=shade_percentile, show_mean_line=show_mean_line,
-                            title=title)
-        self.ys, self.ys_unique = self._y_index(how=how)
-        self.colors = iter(cm.Spectral_r(np.linspace(0, 1, len(self.ys_unique))))
-        self.assigned_colors = self._assign_colors(how=how)
-        self._plot()
 
     def per_year(self, xlim: list, ylim: list, hspace: float, xlabel: str,
                  fig_width: float = 8, fig_height: float = 8,
                  shade_percentile: float = 0.95, show_mean_line: bool = False,
-                 title: str = None):
-        self._setup_plot(how='yearly', xlim=xlim, ylim=ylim, hspace=hspace, xlabel=xlabel,
-                         fig_width=fig_width, fig_height=fig_height,
-                         shade_percentile=shade_percentile, show_mean_line=show_mean_line,
-                         title=title)
+                 fig_title: str = None):
+        self._update_params(xlim=xlim, ylim=ylim, hspace=hspace, xlabel=xlabel,
+                            fig_width=fig_width, fig_height=fig_height,
+                            shade_percentile=shade_percentile, show_mean_line=show_mean_line,
+                            fig_title=fig_title)
+        self.ys, self.ys_unique = self._y_index(how='yearly')
+        self.colors = iter(cm.Spectral_r(np.linspace(0, 1, len(self.ys_unique))))
+        self.assigned_colors = self._assign_colors(how='yearly')
+        self._plot()
 
     def per_month(self, xlim: list, ylim: list, hspace: float, xlabel: str,
                   fig_width: float = 8, fig_height: float = 8,
                   shade_percentile: float = 0.95, show_mean_line: bool = False,
-                  title: str = None):
-        self._setup_plot(how='monthly', xlim=xlim, ylim=ylim, hspace=hspace, xlabel=xlabel,
-                         fig_width=fig_width, fig_height=fig_height,
-                         shade_percentile=shade_percentile, show_mean_line=show_mean_line,
-                         title=title)
+                  fig_title: str = None):
+        self._update_params(xlim=xlim, ylim=ylim, hspace=hspace, xlabel=xlabel,
+                            fig_width=fig_width, fig_height=fig_height,
+                            shade_percentile=shade_percentile, show_mean_line=show_mean_line,
+                            fig_title=fig_title)
+        self.ys, self.ys_unique = self._y_index(how='monthly')
+        self.colors = iter(cm.Spectral_r(np.linspace(0, 1, len(self.ys_unique))))
+        self.assigned_colors = self._assign_colors(how='monthly')
+        self._plot()
 
     def per_week(self, xlim: list, ylim: list, hspace: float, xlabel: str,
                  fig_width: float = 8, fig_height: float = 8,
                  shade_percentile: float = 0.95, show_mean_line: bool = False,
-                 title: str = None):
-        self._setup_plot(how='weekly', xlim=xlim, ylim=ylim, hspace=hspace, xlabel=xlabel,
-                         fig_width=fig_width, fig_height=fig_height,
-                         shade_percentile=shade_percentile, show_mean_line=show_mean_line,
-                         title=title)
+                 fig_title: str = None):
+        self._update_params(xlim=xlim, ylim=ylim, hspace=hspace, xlabel=xlabel,
+                            fig_width=fig_width, fig_height=fig_height,
+                            shade_percentile=shade_percentile, show_mean_line=show_mean_line,
+                            fig_title=fig_title)
+        self.ys, self.ys_unique = self._y_index(how='weekly')
+        self.colors = iter(cm.Spectral_r(np.linspace(0, 1, len(self.ys_unique))))
+        self.assigned_colors = self._assign_colors(how='weekly')
+        self._plot()
 
     def _y_index(self, how: str):
         if how == 'yearly':
@@ -121,9 +120,10 @@ class RidgePlotTS:
     def _plot(self):
 
         # Setup figure
-        fig = plt.figure(figsize=(self.fig_width, self.fig_height))
+        fig = plt.figure(figsize=(self.fig_width, self.fig_height),
+                         layout=None)
         gs = (grid_spec.GridSpec(len(self.ys_unique), 1))
-        gs.update(wspace=0, hspace=0, left=.1, right=.9, top=.95, bottom=0.05)
+        gs.update(wspace=0, hspace=0, left=0.09, right=0.97, top=0.95, bottom=0.07)
 
         # Create empty list for dynamic number of plots (rows)
         ax_objs = []
@@ -199,12 +199,12 @@ class RidgePlotTS:
             i += 1
 
         gs.update(hspace=self.hspace)
-        if self.title:
-            title = self.title
-        else:
+        if not self.fig_title:
             title = self.series.name
+        else:
+            title = self.fig_title
         fig.suptitle(title, fontsize=20)
-        plt.tight_layout()
+        # plt.tight_layout()
         plt.show()
 
 
@@ -217,15 +217,15 @@ def _example():
     series = df['Tair_f'].copy()
 
     rp = RidgePlotTS(series=series)
-    rp.per_month(xlim=[-15, 30], ylim=[0, 0.14], hspace=-0.6, xlabel="Air temperature (°C)",
-                 fig_width=8, fig_height=8, shade_percentile=0.5, show_mean_line=True,
-                 title="Per month")
-    rp.per_year(xlim=[-15, 30], ylim=[0, 0.14], hspace=-0.8, xlabel="Air temperature (°C)",
-                fig_width=9, fig_height=16, shade_percentile=0.5, show_mean_line=True,
-                title="Per week")
+    # rp.per_month(xlim=[-15, 30], ylim=[0, 0.14], hspace=-0.6, xlabel="Air temperature (°C)",
+    #              fig_width=8, fig_height=8, shade_percentile=0.5, show_mean_line=False,
+    #              fig_title="Air temperatures per month (2015)")
+    # rp.per_year(xlim=[-15, 30], ylim=[0, 0.14], hspace=-0.8, xlabel="Air temperature (°C)",
+    #             fig_width=9, fig_height=9, shade_percentile=0.5, show_mean_line=False,
+    #             fig_title="Air temperatures per year (2015)")
     rp.per_week(xlim=[-15, 30], ylim=[0, 0.21], hspace=-0.6, xlabel="Air temperature (°C)",
-                fig_width=9, fig_height=16, shade_percentile=0.5, show_mean_line=False,
-                title="Air temperatures per week")
+                fig_width=9, fig_height=14, shade_percentile=0.5, show_mean_line=False,
+                fig_title="Air temperatures per week (2015)")
 
 
 if __name__ == '__main__':
