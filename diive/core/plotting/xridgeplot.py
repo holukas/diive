@@ -31,10 +31,11 @@ class RidgePlotTS:
         self.fig_height = None
         self.shade_percentile = None
         self.fig_title = None
+        self.fig_dpi = None
 
     def _update_params(self, xlim: list, ylim: list, hspace: float, xlabel: str,
                        fig_width: float, fig_height: float, shade_percentile: float,
-                       show_mean_line: bool, fig_title: str):
+                       show_mean_line: bool, fig_title: str, fig_dpi: float):
         self.xlim = xlim
         self.ylim = ylim
         self.hspace = hspace
@@ -44,16 +45,17 @@ class RidgePlotTS:
         self.shade_percentile = shade_percentile
         self.show_mean_line = show_mean_line
         self.fig_title = fig_title
+        self.fig_dpi = fig_dpi
         return None
 
     def per_year(self, xlim: list, ylim: list, hspace: float, xlabel: str,
                  fig_width: float = 8, fig_height: float = 8,
                  shade_percentile: float = 0.95, show_mean_line: bool = False,
-                 fig_title: str = None):
+                 fig_title: str = None, fig_dpi: float = 72):
         self._update_params(xlim=xlim, ylim=ylim, hspace=hspace, xlabel=xlabel,
                             fig_width=fig_width, fig_height=fig_height,
                             shade_percentile=shade_percentile, show_mean_line=show_mean_line,
-                            fig_title=fig_title)
+                            fig_title=fig_title, fig_dpi=fig_dpi)
         self.ys, self.ys_unique = self._y_index(how='yearly')
         self.colors = iter(cm.Spectral_r(np.linspace(0, 1, len(self.ys_unique))))
         self.assigned_colors = self._assign_colors(how='yearly')
@@ -62,11 +64,11 @@ class RidgePlotTS:
     def per_month(self, xlim: list, ylim: list, hspace: float, xlabel: str,
                   fig_width: float = 8, fig_height: float = 8,
                   shade_percentile: float = 0.95, show_mean_line: bool = False,
-                  fig_title: str = None):
+                  fig_title: str = None, fig_dpi: float = 72):
         self._update_params(xlim=xlim, ylim=ylim, hspace=hspace, xlabel=xlabel,
                             fig_width=fig_width, fig_height=fig_height,
                             shade_percentile=shade_percentile, show_mean_line=show_mean_line,
-                            fig_title=fig_title)
+                            fig_title=fig_title, fig_dpi=fig_dpi)
         self.ys, self.ys_unique = self._y_index(how='monthly')
         self.colors = iter(cm.Spectral_r(np.linspace(0, 1, len(self.ys_unique))))
         self.assigned_colors = self._assign_colors(how='monthly')
@@ -75,11 +77,11 @@ class RidgePlotTS:
     def per_week(self, xlim: list, ylim: list, hspace: float, xlabel: str,
                  fig_width: float = 8, fig_height: float = 8,
                  shade_percentile: float = 0.95, show_mean_line: bool = False,
-                 fig_title: str = None):
+                 fig_title: str = None, fig_dpi: float = 72):
         self._update_params(xlim=xlim, ylim=ylim, hspace=hspace, xlabel=xlabel,
                             fig_width=fig_width, fig_height=fig_height,
                             shade_percentile=shade_percentile, show_mean_line=show_mean_line,
-                            fig_title=fig_title)
+                            fig_title=fig_title, fig_dpi=fig_dpi)
         self.ys, self.ys_unique = self._y_index(how='weekly')
         self.colors = iter(cm.Spectral_r(np.linspace(0, 1, len(self.ys_unique))))
         self.assigned_colors = self._assign_colors(how='weekly')
@@ -121,7 +123,7 @@ class RidgePlotTS:
 
         # Setup figure
         fig = plt.figure(figsize=(self.fig_width, self.fig_height),
-                         layout=None)
+                         dpi=self.fig_dpi, layout=None)
         gs = (grid_spec.GridSpec(len(self.ys_unique), 1))
         gs.update(wspace=0, hspace=0, left=0.09, right=0.97, top=0.95, bottom=0.07)
 
