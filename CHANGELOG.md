@@ -6,7 +6,7 @@
 
 ### New features
 
-- XXX
+- `diive/configs/filetypes/EDDYPRO-FLUXNET-CSV-60MIN.yml`
 
 ### Environment
 
