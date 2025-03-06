@@ -29,19 +29,13 @@ class RidgePlotTS:
         self.xlabel = None
         self.fig_width = None
         self.fig_height = None
-        self.fig_dpi = None
         self.shade_percentile = None
         self.fig_title = None
-        self.fig = None
-        self.showplot = None
-
-    def get_fig(self):
-        """Return matplotlib figure in which plot was generated."""
-        return self.fig
+        self.fig_dpi = None
 
     def _update_params(self, xlim: list, ylim: list, hspace: float, xlabel: str,
                        fig_width: float, fig_height: float, shade_percentile: float,
-                       show_mean_line: bool, fig_title: str, fig_dpi: float, showplot: bool):
+                       show_mean_line: bool, fig_title: str, fig_dpi: float):
         self.xlim = xlim
         self.ylim = ylim
         self.hspace = hspace
@@ -52,17 +46,16 @@ class RidgePlotTS:
         self.show_mean_line = show_mean_line
         self.fig_title = fig_title
         self.fig_dpi = fig_dpi
-        self.showplot = showplot
         return None
 
     def per_year(self, xlim: list, ylim: list, hspace: float, xlabel: str,
                  fig_width: float = 8, fig_height: float = 8,
                  shade_percentile: float = 0.95, show_mean_line: bool = False,
-                 fig_title: str = None, fig_dpi: float = 72, showplot: bool = True):
+                 fig_title: str = None, fig_dpi: float = 72):
         self._update_params(xlim=xlim, ylim=ylim, hspace=hspace, xlabel=xlabel,
                             fig_width=fig_width, fig_height=fig_height,
                             shade_percentile=shade_percentile, show_mean_line=show_mean_line,
-                            fig_title=fig_title, fig_dpi=fig_dpi, showplot=showplot)
+                            fig_title=fig_title, fig_dpi=fig_dpi)
         self.ys, self.ys_unique = self._y_index(how='yearly')
         self.colors = iter(cm.Spectral_r(np.linspace(0, 1, len(self.ys_unique))))
         self.assigned_colors = self._assign_colors(how='yearly')
@@ -71,11 +64,11 @@ class RidgePlotTS:
     def per_month(self, xlim: list, ylim: list, hspace: float, xlabel: str,
                   fig_width: float = 8, fig_height: float = 8,
                   shade_percentile: float = 0.95, show_mean_line: bool = False,
-                  fig_title: str = None, fig_dpi: float = 72, showplot: bool = True):
+                  fig_title: str = None, fig_dpi: float = 72):
         self._update_params(xlim=xlim, ylim=ylim, hspace=hspace, xlabel=xlabel,
                             fig_width=fig_width, fig_height=fig_height,
                             shade_percentile=shade_percentile, show_mean_line=show_mean_line,
-                            fig_title=fig_title, fig_dpi=fig_dpi, showplot=showplot)
+                            fig_title=fig_title, fig_dpi=fig_dpi)
         self.ys, self.ys_unique = self._y_index(how='monthly')
         self.colors = iter(cm.Spectral_r(np.linspace(0, 1, len(self.ys_unique))))
         self.assigned_colors = self._assign_colors(how='monthly')
@@ -84,11 +77,11 @@ class RidgePlotTS:
     def per_week(self, xlim: list, ylim: list, hspace: float, xlabel: str,
                  fig_width: float = 8, fig_height: float = 8,
                  shade_percentile: float = 0.95, show_mean_line: bool = False,
-                 fig_title: str = None, fig_dpi: float = 72, showplot: bool = True):
+                 fig_title: str = None, fig_dpi: float = 72):
         self._update_params(xlim=xlim, ylim=ylim, hspace=hspace, xlabel=xlabel,
                             fig_width=fig_width, fig_height=fig_height,
                             shade_percentile=shade_percentile, show_mean_line=show_mean_line,
-                            fig_title=fig_title, fig_dpi=fig_dpi, showplot=showplot)
+                            fig_title=fig_title, fig_dpi=fig_dpi)
         self.ys, self.ys_unique = self._y_index(how='weekly')
         self.colors = iter(cm.Spectral_r(np.linspace(0, 1, len(self.ys_unique))))
         self.assigned_colors = self._assign_colors(how='weekly')
@@ -128,9 +121,9 @@ class RidgePlotTS:
 
     def _plot(self):
 
-        self.fig = plt.figure(figsize=(self.fig_width, self.fig_height),
-                              layout=None, dpi=self.fig_dpi)
-
+        # Setup figure
+        fig = plt.figure(figsize=(self.fig_width, self.fig_height),
+                         dpi=self.fig_dpi, layout=None)
         gs = (grid_spec.GridSpec(len(self.ys_unique), 1))
         gs.update(wspace=0, hspace=0, left=0.09, right=0.97, top=0.95, bottom=0.07)
 
@@ -153,57 +146,57 @@ class RidgePlotTS:
             logprob1 = kde1.score_samples(x_d[:, None])
 
             # Create new axes object
-            ax_objs.append(self.fig.add_subplot(gs[i:i + 1, 0:]))
-            self.ax = ax_objs[-1]
+            ax_objs.append(fig.add_subplot(gs[i:i + 1, 0:]))
+            ax = ax_objs[-1]
 
             # Plot distribution
             y = np.exp(logprob1)
             darker_color = adjust_color_lightness(self.assigned_colors[y_current], amount=0.4)
-            self.ax.fill_between(x_d, y, alpha=1, color=self.assigned_colors[y_current])
-            self.ax.plot(x_d, y, color=darker_color, lw=1, alpha=1)  # Outline darker than fill
+            ax.fill_between(x_d, y, alpha=1, color=self.assigned_colors[y_current])
+            ax.plot(x_d, y, color=darker_color, lw=1, alpha=1)  # Outline darker than fill
 
             # Set uniform x and y limits
-            self.ax.set_xlim(self.xlim[0], self.xlim[1])
-            self.ax.set_ylim(self.ylim[0], self.ylim[1])
+            ax.set_xlim(self.xlim[0], self.xlim[1])
+            ax.set_ylim(self.ylim[0], self.ylim[1])
 
             # Make axis background transparent
-            rect = self.ax.patch
+            rect = ax.patch
             rect.set_alpha(0)
 
             # Remove axis borders, axis ticks, and labels
-            self.ax.set_yticklabels([])
-            self.ax.set_yticks([])
+            ax.set_yticklabels([])
+            ax.set_yticks([])
 
             # Show x labels only for last axis
             if i == len(self.ys_unique) - 1:
-                self.ax.set_xlabel(self.xlabel, fontsize=16, fontweight="bold")
+                ax.set_xlabel(self.xlabel, fontsize=16, fontweight="bold")
             else:
-                self.ax.set_xticklabels([])
-                self.ax.set_xticks([])
+                ax.set_xticklabels([])
+                ax.set_xticks([])
 
             # Hide axis spines
             spines = ["top", "right", "left", "bottom"]
             for s in spines:
-                self.ax.spines[s].set_visible(False)
+                ax.spines[s].set_visible(False)
 
             # Show year or month etc. on y axis
-            self.ax.text(-0.02, 0.01, y_current, fontweight="bold", fontsize=14, ha="right",
-                         transform=self.ax.get_yaxis_transform())
+            ax.text(-0.02, 0.01, y_current, fontweight="bold", fontsize=14, ha="right",
+                    transform=ax.get_yaxis_transform())
 
             # Show mean value
-            self.ax.text(1, 0.01, f"{x1_mean:.1f}", fontsize=12, ha="right",
-                         transform=self.ax.get_yaxis_transform(), color=darker_color)
+            ax.text(1, 0.01, f"{x1_mean:.1f}", fontsize=12, ha="right",
+                    transform=ax.get_yaxis_transform(), color=darker_color)
 
             # Show mean line
             if self.show_mean_line:
-                self.ax.axvline(x1_mean, ls="-", lw=1, color="black")
+                ax.axvline(x1_mean, ls="-", lw=1, color="black")
 
             # Show 99th percentile
             locs_percentile = np.where(x_d >= x1_percentile)
             x_d_percentile = x_d[locs_percentile]
             y_percentile = y[locs_percentile]
             slightly_darker_color = adjust_color_lightness(self.assigned_colors[y_current], amount=0.9)
-            self.ax.fill_between(x_d_percentile, y_percentile, alpha=1, color=slightly_darker_color)
+            ax.fill_between(x_d_percentile, y_percentile, alpha=1, color=slightly_darker_color)
 
             i += 1
 
@@ -212,31 +205,29 @@ class RidgePlotTS:
             title = self.series.name
         else:
             title = self.fig_title
-        self.fig.suptitle(title, fontsize=20)
+        fig.suptitle(title, fontsize=20)
         # plt.tight_layout()
-        if self.showplot:
-            self.fig.show()
+        plt.show()
 
 
 def _example():
     from diive.configs.exampledata import load_exampledata_parquet
     df = load_exampledata_parquet()
     # yr = 2015
-    locs = (df.index.year >= 2015) & (df.index.year <= 2024)
+    locs = (df.index.year >= 2015) & (df.index.year <= 2015)
     df = df[locs].copy()
     series = df['Tair_f'].copy()
 
     rp = RidgePlotTS(series=series)
     # rp.per_month(xlim=[-15, 30], ylim=[0, 0.14], hspace=-0.6, xlabel="Air temperature (°C)",
     #              fig_width=8, fig_height=8, shade_percentile=0.5, show_mean_line=False,
-    #              fig_title="Air temperatures per month (2015)", showplot=True)
-    rp.per_year(xlim=[-15, 30], ylim=[0, 0.1], hspace=-0.6, xlabel="Air temperature (°C)",
-                fig_width=9, fig_height=7, shade_percentile=0.5, show_mean_line=False,
-                fig_title="Air temperatures per year (2015)", showplot=True)
-    # rp.per_week(xlim=[-15, 30], ylim=[0, 0.21], hspace=-0.6, xlabel="Air temperature (°C)",
-    #             fig_width=9, fig_height=14, shade_percentile=0.5, show_mean_line=False,
-    #             fig_title="Air temperatures per week (2015)", showplot=True)
-    print(rp.get_fig())
+    #              fig_title="Air temperatures per month (2015)")
+    # rp.per_year(xlim=[-15, 30], ylim=[0, 0.14], hspace=-0.8, xlabel="Air temperature (°C)",
+    #             fig_width=9, fig_height=9, shade_percentile=0.5, show_mean_line=False,
+    #             fig_title="Air temperatures per year (2015)")
+    rp.per_week(xlim=[-15, 30], ylim=[0, 0.21], hspace=-0.6, xlabel="Air temperature (°C)",
+                fig_width=9, fig_height=14, shade_percentile=0.5, show_mean_line=False,
+                fig_title="Air temperatures per week (2015)")
 
 
 if __name__ == '__main__':
