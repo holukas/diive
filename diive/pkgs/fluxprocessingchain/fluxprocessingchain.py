@@ -135,6 +135,57 @@ class FluxProcessingChain:
         gfvars = gapfilled_vars + nongapfilled_vars
         return self.fpc_df[gfvars].copy()
 
+    def report_traintest_model_scores(self):
+        for gfmethod, ustar_scenarios in self.level41.items():
+            for ustar_scenario in ustar_scenarios:
+                # Check if needed instance property exists
+                instance = self.level41[gfmethod][ustar_scenario]
+                if hasattr(instance, 'scores_traintest_'):
+                    print(f"\nMODEL SCORES from TRAINING/TESTING ({gfmethod}): "
+                          f"\n trained on training data, tested on unseen test data"
+                          f"{ustar_scenario}")
+                    try:
+                        modelscores = pd.DataFrame.from_dict(self.level41[gfmethod][ustar_scenario].scores_traintest_,
+                                                             orient='columns')
+                    except ValueError:
+                        modelscores = pd.DataFrame.from_dict(self.level41[gfmethod][ustar_scenario].scores_traintest_,
+                                                             orient='index')
+                    print(modelscores)
+                else:
+                    print(f"{gfmethod} {ustar_scenario} does not have train/test model scores.")
+
+    def report_traintest_details(self):
+        for gfmethod, ustar_scenarios in self.level41.items():
+            for ustar_scenario in ustar_scenarios:
+                # Check if needed instance property exists
+                instance = self.level41[gfmethod][ustar_scenario]
+                if hasattr(instance, 'traintest_details_'):
+                    print(f"\nDETAILS from TRAINING/TESTING ({gfmethod} {ustar_scenario}): "
+                          f"\n trained on training data, tested on unseen test data")
+                    try:
+                        modelscores = pd.DataFrame.from_dict(self.level41[gfmethod][ustar_scenario].traintest_details_,
+                                                             orient='columns')
+                    except ValueError:
+                        modelscores = pd.DataFrame.from_dict(self.level41[gfmethod][ustar_scenario].traintest_details_,
+                                                             orient='index')
+                    print(modelscores)
+                else:
+                    print(f"{gfmethod} {ustar_scenario} does not have train/test details.")
+
+    #     def showplot_feature_ranks_per_year(self):
+    #         for gfmethod, ustar_scenarios in self.level41.items():
+    #             for ustar_scenario in ustar_scenarios:
+    #                 try:
+    #                     results = self.level41[gfmethod][ustar_scenario]
+    #                     title = f"{results.gapfilled_.name} ({ustar_scenario})"
+    #                     first_key = next(iter(self.level41[gfmethod][ustar_scenario].results_yearly_))
+    #                     model_params = self.level41[gfmethod][ustar_scenario].results_yearly_[
+    #                         first_key].model_.get_params()
+    #                     txt = f"MODEL: {gfmethod} / PARAMS: {model_params}"
+    #                     results.showplot_feature_ranks_per_year(title=f"{title}", subtitle=f"{txt}")
+    #                 except AttributeError:
+    #                     print(f"{gfmethod} {ustar_scenario} does not have feature ranks.")
+
     def report_gapfilling_model_scores(self):
         for gfmethod, ustar_scenarios in self.level41.items():
             for ustar_scenario in ustar_scenarios:
@@ -151,14 +202,6 @@ class FluxProcessingChain:
         for gfmethod, ustar_scenarios in self.level41.items():
             for ustar_scenario in ustar_scenarios:
                 print(f"\nFEATURE IMPORTANCES ({gfmethod}): {ustar_scenario}")
-                # try:
-                #     fi = pd.DataFrame.from_dict(
-                #         self.level41[gfmethod][ustar_scenario].feature_importances_yearly_,
-                #         orient='columns')
-                # except ValueError:
-                #     fi = pd.DataFrame.from_dict(
-                #         self.level41[gfmethod][ustar_scenario].feature_importances_yearly_,
-                #         orient='index')
                 print(self.level41[gfmethod][ustar_scenario].feature_importance_per_year)
 
     def report_gapfilling_poolyears(self):
@@ -642,7 +685,6 @@ class FluxProcessingChain:
                          'n_jobs': -1}
 
         # Collect data and run model for each USTAR scenario for gapfilling
-        # todo what is if there is no scenario eg h2o fluxes?
         for ustar_scen, ustar_flux in self.filteredseries_level33_qcf.items():
 
             # Get features from input data
@@ -1100,7 +1142,7 @@ def example():
     # Source data
     from pathlib import Path
     from diive.core.io.files import load_parquet
-    SOURCEDIR = r"L:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-cha_flux_product\notebooks\30_MERGE_DATA"
+    SOURCEDIR = r"L:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-cha_flux_product\dataset_ch-cha_flux_product\notebooks\30_MERGE_DATA"
     FILENAME = r"33.5_CH-CHA_IRGA+QCL+LGR+M10+MGMT_Level-1_eddypro_fluxnet_2005-2024.parquet"
     FILEPATH = Path(SOURCEDIR) / FILENAME
     maindf = load_parquet(filepath=str(FILEPATH))
@@ -1111,7 +1153,8 @@ def example():
     # maindf = ep.maindf
     # metadata = ep.metadata
 
-    locs = (maindf.index.year >= 2019) & (maindf.index.year <= 2023)
+    locs = ((maindf.index.year >= 2023) & (maindf.index.year <= 2023)
+            & (maindf.index.month >= 6) & (maindf.index.month <= 7))
     # locs = (maindf.index.year >= 2022) & (maindf.index.year <= 2022)
     # locs = (maindf.index.year >= 2007) & (maindf.index.year <= 2011)
     maindf = maindf.loc[locs, :].copy()
@@ -1120,17 +1163,8 @@ def example():
     # metadata = None
     # print(maindf)
 
-    # import matplotlib.pyplot as plt
-    # locs = (maindf.index.year >= 2008) & (maindf.index.year <= 2009)
-    # maindf.loc[locs, 'FC'].plot(x_compat=True)
-    # plt.show()
-    # plt.show()
-
     # Flux processing chain settings
-    # FLUXVAR = "LE"
-    # FLUXVAR = "H"
     FLUXVAR = "FC"
-    # FLUXVAR = "FN2O"
     SITE_LAT = 47.210227
     SITE_LON = 8.410645
     UTC_OFFSET = 1
@@ -1157,7 +1191,7 @@ def example():
     # Level-2
     # --------------------
     TEST_SSITC = True  # Default True
-    TEST_SSITC_SETFLAG_TIMEPERIOD = False
+    TEST_SSITC_SETFLAG_TIMEPERIOD = None
     # TEST_SSITC_SETFLAG_TIMEPERIOD = {2: [[1, '2022-05-01', '2023-09-30']]}  # Set flag 1 to 2 (bad) during time period
     TEST_GAS_COMPLETENESS = True  # Default True
     TEST_SPECTRAL_CORRECTION_FACTOR = True  # Default True
@@ -1212,7 +1246,7 @@ def example():
     }
     fpc.level2_quality_flag_expansion(**LEVEL2_SETTINGS)
     fpc.finalize_level2()
-    fpc.level2_qcf.showplot_qcf_heatmaps()
+    # fpc.level2_qcf.showplot_qcf_heatmaps()
     fpc.level2_qcf.report_qcf_evolution()
     # fpc.level2_qcf.analyze_highest_quality_flux()
     # fpc.level2_qcf.report_qcf_flags()
@@ -1224,7 +1258,7 @@ def example():
     # --------------------
     # Level-3.1
     # --------------------
-    fpc.level31_storage_correction(gapfill_storage_term=True)
+    fpc.level31_storage_correction(gapfill_storage_term=False)
     fpc.finalize_level31()
     # fpc.level31.report()
     # fpc.level31.showplot()
@@ -1244,14 +1278,12 @@ def example():
     # Level-3.2
     # --------------------
     fpc.level32_stepwise_outlier_detection()
-
     fpc.level32_flag_manualremoval_test(
         remove_dates=[
             ['2016-03-18 12:15:00', '2016-05-03 06:45:00'],
-
             # '2022-12-12 12:45:00',
         ],
-        showplot=True, verbose=True)
+        showplot=False, verbose=True)
     fpc.level32_addflag()
 
     DAYTIME_MINMAX = [-50, 50]
@@ -1355,67 +1387,34 @@ def example():
         # fpc.filteredseries_level32_qcf
         # fpc.filteredseries_level33_qcf
 
-    # # --------------------
-    # # Level-4.1
-    # # --------------------
-    # MGMT_VARS = ["TIMESINCE_MGMT_FERT_MIN_FOOTPRINT", "TIMESINCE_MGMT_FERT_ORG_FOOTPRINT",
-    #              "TIMESINCE_MGMT_GRAZING_FOOTPRINT", "TIMESINCE_MGMT_MOWING_FOOTPRINT",
-    #              "TIMESINCE_MGMT_SOILCULTIVATION_FOOTPRINT", "TIMESINCE_MGMT_SOWING_FOOTPRINT",
-    #              "TIMESINCE_MGMT_PESTICIDE_HERBICIDE_FOOTPRINT"]
-    # FEATURES = ["SWC_GF1_0.15_1_gfXG", "TS_GF1_0.04_1_gfXG", "TS_GF1_0.15_1_gfXG", "TS_GF1_0.4_1_gfXG"] + MGMT_VARS
-    # # FEATURES = ["SW_IN_T1_2_1", "TA_T1_2_1", "VPD_T1_2_1"] + MGMT_VARS
-    # # FEATURES = ["SW_IN_T1_2_1", "TA_T1_2_1", "VPD_T1_2_1", "DAYTIME", "NIGHTTIME"] + MGMT_VARS
-    # EXCLUDE_COLS = MGMT_VARS
-    # # EXCLUDE_COLS = ["DAYTIME", "NIGHTTIME"] + MGMT_VARS
-    #
-    # # fpc.level41_gapfilling_longterm(
-    # #     run_mds=False,
-    # #     run_random_forest=True,
-    # #     verbose=True,
-    # #     ml_feature_settings={
-    # #         'features': FEATURES,
-    # #         'features_lag': [-1, -1],
-    # #         'features_lag_exclude_cols': MGMT_VARS,  # Management variables are not lagged
-    # #         'reduce_features': False,
-    # #         'include_timestamp_as_features': True,
-    # #         'add_continuous_record_number': False,
-    # #         'perm_n_repeats': 10,
-    # #     },
-    # #     rf_settings={
-    # #         'n_estimators': 99,
-    # #         'random_state': 42,
-    # #         'min_samples_split': 2,
-    # #         'min_samples_leaf': 1,
-    # #         'n_jobs': -1
-    # #     },
-    # #     # mds_settings={
-    # #     #     'swin': "SW_IN_T1_2_1",
-    # #     #     'ta': "TA_T1_2_1",
-    # #     #     'vpd': "VPD_T1_2_1",
-    # #     #     'swin_class': 50,
-    # #     #     'ta_class': 2.5,
-    # #     #     'vpd_class': 0.5,
-    # #     #     'min_n_vals_nt': 0
-    # #     # }
-    # # )
-    #
+    # --------------------
+    # Level-4.1
+    # --------------------
+    MGMT_VARS = ["TIMESINCE_MGMT_FERT_MIN_FOOTPRINT", "TIMESINCE_MGMT_FERT_ORG_FOOTPRINT",
+                 "TIMESINCE_MGMT_GRAZING_FOOTPRINT", "TIMESINCE_MGMT_MOWING_FOOTPRINT",
+                 "TIMESINCE_MGMT_SOILCULTIVATION_FOOTPRINT", "TIMESINCE_MGMT_SOWING_FOOTPRINT",
+                 "TIMESINCE_MGMT_PESTICIDE_HERBICIDE_FOOTPRINT"]
+    FEATURES = ["SWC_GF1_0.15_1_gfXG", "TS_GF1_0.04_1_gfXG", "TS_GF1_0.15_1_gfXG", "TS_GF1_0.4_1_gfXG"] + MGMT_VARS
+    # FEATURES = ["SW_IN_T1_2_1", "TA_T1_2_1", "VPD_T1_2_1"] + MGMT_VARS
+    # FEATURES = ["SW_IN_T1_2_1", "TA_T1_2_1", "VPD_T1_2_1", "DAYTIME", "NIGHTTIME"] + MGMT_VARS
+    EXCLUDE_COLS = MGMT_VARS
+    # EXCLUDE_COLS = ["DAYTIME", "NIGHTTIME"] + MGMT_VARS
+
     # fpc.level41_gapfilling_longterm(
-    #     run_random_forest=True,
     #     run_mds=False,
+    #     run_random_forest=True,
     #     verbose=True,
     #     ml_feature_settings={
     #         'features': FEATURES,
-    #         'features_lag': [-24, -6],
-    #         'features_lag_stepsize': 6,
-    #         'features_lag_exclude_cols': EXCLUDE_COLS,  # Management variables are not lagged
-    #         'reduce_features': True,
+    #         'features_lag': [-1, -1],
+    #         'features_lag_exclude_cols': MGMT_VARS,  # Management variables are not lagged
+    #         'reduce_features': False,
     #         'include_timestamp_as_features': True,
     #         'add_continuous_record_number': False,
-    #         'perm_n_repeats': 2
+    #         'perm_n_repeats': 10,
     #     },
     #     rf_settings={
-    #         'n_estimators': 3,
-    #         'max_depth': None,
+    #         'n_estimators': 99,
     #         'random_state': 42,
     #         'min_samples_split': 2,
     #         'min_samples_leaf': 1,
@@ -1428,34 +1427,69 @@ def example():
     #     #     'swin_class': 50,
     #     #     'ta_class': 2.5,
     #     #     'vpd_class': 0.5,
-    #     #     'min_n_vals_nt': 5
+    #     #     'min_n_vals_nt': 0
     #     # }
     # )
-    #
-    # results = fpc.get_data()
+
+    fpc.level41_gapfilling_longterm(
+        run_random_forest=True,
+        run_mds=False,
+        verbose=True,
+        ml_feature_settings={
+            'features': FEATURES,
+            'features_lag': [-24, -6],
+            'features_lag_stepsize': 6,
+            'features_lag_exclude_cols': EXCLUDE_COLS,  # Management variables are not lagged
+            'reduce_features': False,
+            'include_timestamp_as_features': True,
+            'add_continuous_record_number': False,
+            'perm_n_repeats': 2
+        },
+        rf_settings={
+            'n_estimators': 3,
+            'max_depth': None,
+            'random_state': 42,
+            'min_samples_split': 2,
+            'min_samples_leaf': 1,
+            'n_jobs': -1
+        },
+        # mds_settings={
+        #     'swin': "SW_IN_T1_2_1",
+        #     'ta': "TA_T1_2_1",
+        #     'vpd': "VPD_T1_2_1",
+        #     'swin_class': 50,
+        #     'ta_class': 2.5,
+        #     'vpd_class': 0.5,
+        #     'min_n_vals_nt': 5
+        # }
+    )
+
+    results = fpc.get_data()
     # gapfilled_names = fpc.get_gapfilled_names()
     # nongapfilled_names = fpc.get_nongapfilled_names()
     # gapfilled_vars = fpc.get_gapfilled_variables()
-    # fpc.report_gapfilling_variables()
-    # fpc.report_gapfilling_model_scores()
+    fpc.report_gapfilling_variables()
+    fpc.report_gapfilling_model_scores()
+    fpc.report_traintest_model_scores()
+    fpc.report_traintest_details()
     # fpc.report_gapfilling_feature_importances()
-    #
-    # # # Only ML models:
-    # # fpc.report_gapfilling_poolyears()
-    #
-    # # todo get full data
-    #
-    # # fpc.showplot_gapfilled_heatmap(vmin=-5, vmax=50)
-    # # fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{µmol\ CO_2\ m^{-2}}$)', per_year=True)
-    # # fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{g\ C\ m^{-2}}$)', per_year=False)
-    #
+
+    # # Only ML models:
+    # fpc.report_gapfilling_poolyears()
+
+    # todo get full data
+
+    # fpc.showplot_gapfilled_heatmap(vmin=-5, vmax=50)
+    # fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{µmol\ CO_2\ m^{-2}}$)', per_year=True)
+    # fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{g\ C\ m^{-2}}$)', per_year=False)
+
     # # Only ML models:
     # fpc.showplot_feature_ranks_per_year()
-    #
+
     # # Only MDS:
     # fpc.showplot_mds_gapfilling_qualities()
-    #
-    # # TODO heatmap of used model data pools
+
+    # TODO heatmap of used model data pools
 
     print("XXX")
     print("XXX")

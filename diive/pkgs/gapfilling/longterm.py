@@ -65,6 +65,8 @@ class LongTermGapFillingBase:
         self._results_yearly = {}
         self._gapfilling_df = pd.DataFrame()
         self._scores = {}
+        self._scores_traintest = {}
+        self._traintest_details = {}
         self._feature_importances_yearly = {}
         self._gapfilled = pd.Series()
 
@@ -103,6 +105,20 @@ class LongTermGapFillingBase:
         if not self._scores:
             raise Exception(f'Not available: collected scores.')
         return self._scores
+
+    @property
+    def scores_traintest_(self) -> dict:
+        """Return training/testing scoring results for each year"""
+        if not self._scores_traintest:
+            raise Exception(f'Not available: collected scores from training/testing.')
+        return self._scores_traintest
+
+    @property
+    def traintest_details_(self) -> dict:
+        """Return training/testing details for each year"""
+        if not self._traintest_details:
+            raise Exception(f'Not available: collected details from training/testing.')
+        return self._traintest_details
 
     @property
     def feature_importances_yearly_(self) -> dict:
@@ -280,6 +296,8 @@ class LongTermGapFillingBase:
             keepyear = rfts.gapfilling_df_.index.year == int(year)
             self._gapfilling_df = pd.concat([self._gapfilling_df, rfts.gapfilling_df_[keepyear]], axis=0)
             self._scores[year] = rfts.scores_
+            self._scores_traintest[year] = rfts.scores_traintest_
+            self._traintest_details[year] = rfts.traintest_details_
             self._feature_importances_yearly[year] = rfts.feature_importances_
             gapfilled = rfts.get_gapfilled_target()
             if counter == 1:
