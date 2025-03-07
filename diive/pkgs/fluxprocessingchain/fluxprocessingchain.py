@@ -1142,7 +1142,7 @@ def example():
     # Source data
     from pathlib import Path
     from diive.core.io.files import load_parquet
-    SOURCEDIR = r"L:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-cha_flux_product\dataset_ch-cha_flux_product\notebooks\30_MERGE_DATA"
+    SOURCEDIR = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-cha_flux_product\dataset_ch-cha_flux_product\notebooks\30_MERGE_DATA"
     FILENAME = r"33.5_CH-CHA_IRGA+QCL+LGR+M10+MGMT_Level-1_eddypro_fluxnet_2005-2024.parquet"
     FILEPATH = Path(SOURCEDIR) / FILENAME
     maindf = load_parquet(filepath=str(FILEPATH))
@@ -1437,13 +1437,14 @@ def example():
         verbose=True,
         ml_feature_settings={
             'features': FEATURES,
-            'features_lag': [-24, -6],
-            'features_lag_stepsize': 6,
-            'features_lag_exclude_cols': EXCLUDE_COLS,  # Management variables are not lagged
+            'features_lag': None,
+            # 'features_lag': [-24, -6],
+            # 'features_lag_stepsize': 6,
+            # 'features_lag_exclude_cols': EXCLUDE_COLS,  # Management variables are not lagged
             'reduce_features': False,
-            'include_timestamp_as_features': True,
+            'include_timestamp_as_features': False,
             'add_continuous_record_number': False,
-            'perm_n_repeats': 2
+            'perm_n_repeats': 1
         },
         rf_settings={
             'n_estimators': 3,

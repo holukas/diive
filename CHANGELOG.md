@@ -7,6 +7,10 @@
 ### New features
 
 - `diive/configs/filetypes/EDDYPRO-FLUXNET-CSV-60MIN.yml`
+- `setflag_timeperiod`
+- `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain.report_traintest_model_scores`
+- `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain.report_traintest_details`
+- ridge plot
 
 ### Environment
 
