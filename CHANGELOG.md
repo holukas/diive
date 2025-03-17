@@ -6,12 +6,12 @@
 
 ### New features
 
-### Ridge plot
+### Ridgeline plot
 
 simplified API
-uses `ridgeplot()`
+uses `ridgelineplot()`
 
-- (`diive.core.plotting.ridgeplot.RidgePlotTS`)
+- (`diive.core.plotting.ridgelineplot.RidgeLinePlot`)
 
 ## Additions
 

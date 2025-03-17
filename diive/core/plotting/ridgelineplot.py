@@ -13,7 +13,7 @@ from sklearn.neighbors import KernelDensity
 from diive.core.plotting.styles.LightTheme import adjust_color_lightness
 
 
-class RidgePlotTS:
+class RidgeLinePlot:
 
     def __init__(self, series: pd.Series):
         self.series = series
@@ -181,7 +181,6 @@ class RidgePlotTS:
                 y_check.append(min(y))
                 y_check.append(max(y))
             self.ylim = [0, max(y_check)]  # Should always start at zero
-
 
         # n_uniques = len(self.ys_unique)
         i = 0
