@@ -6,11 +6,28 @@
 
 ### New features
 
-- `diive/configs/filetypes/EDDYPRO-FLUXNET-CSV-60MIN.yml`
-- `setflag_timeperiod`
-- `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain.report_traintest_model_scores`
-- `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain.report_traintest_details`
-- ridge plot
+### Ridge plot
+
+simplified API
+uses `ridgeplot()`
+
+- (`diive.core.plotting.ridgeplot.RidgePlotTS`)
+
+## Additions
+
+- Additions to the flux processing chain:
+    - Added two methods to get details about training and testing when using machine-learning models in the flux
+      processing chain: `.report_traintest_model_scores()` and `.report_traintest_details()`
+    - Added parameter `setflag_timeperiod` to set the flag for the SSITC to another value during certain time periods,
+      for example when a time period needs stricter filtering (e.g. due to issues with the sonic anemometer). In this
+      case the parameter can be used to set all values where flag=1 (medium quality data) to flag=2 (bad data). 
+      - Example from docstring:```
+      Set flag 1 to value 2 between '2022-05-01' and '2023-09-30', and between 
+      '2024-04-02' and '2024-04-19' (dates inclusive): 
+      setflag_timeperiod={2: [ [1, '2022-05-01', '2023-09-30'], [1, '2024-04-02', '2024-04-19'] ]}
+      ``` (`diive.pkgs.qaqc.eddyproflags.flag_ssitc_eddypro_test`)
+    - (`diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain`)
+- Added new filetype for 60MIN EddyPro output (`diive/configs/filetypes/EDDYPRO-FLUXNET-CSV-60MIN.yml`)
 
 ### Environment
 
