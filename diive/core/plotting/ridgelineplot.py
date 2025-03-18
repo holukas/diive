@@ -14,6 +14,11 @@ from diive.core.plotting.styles.LightTheme import adjust_color_lightness
 
 
 class RidgeLinePlot:
+    """
+    RidgeLinePlot uses the kernel density estimator from scikit-learn, see here:
+        - https://scikit-learn.org/stable/modules/generated/sklearn.neighbors.KernelDensity.html
+        - https://scikit-learn.org/stable/modules/density.html#kernel-density
+    """
 
     def __init__(self, series: pd.Series):
         self.series = series
@@ -36,6 +41,7 @@ class RidgeLinePlot:
         self.showplot = None
         self.ascending = False
         self.verbose = False
+        self.kd_kwargs = None
 
     def get_fig(self):
         """Return matplotlib figure in which plot was generated."""
@@ -44,7 +50,7 @@ class RidgeLinePlot:
     def _update_params(self, xlim: list, ylim: list, hspace: float, xlabel: str,
                        fig_width: float, fig_height: float, shade_percentile: float,
                        show_mean_line: bool, fig_title: str, fig_dpi: float, showplot: bool,
-                       ascending: bool, verbose: bool = False):
+                       ascending: bool, verbose: bool = False, kd_kwargs: dict = None):
         self.xlim = xlim
         self.ylim = ylim
         self.hspace = hspace
@@ -58,51 +64,22 @@ class RidgeLinePlot:
         self.showplot = showplot
         self.ascending = ascending
         self.verbose = verbose
+        self.kd_kwargs = kd_kwargs
         return None
 
-    def per_year(self, xlim: list = None, ylim: list = None, hspace: float = -0.5, xlabel: str = None,
-                 fig_width: float = 8, fig_height: float = 8,
-                 shade_percentile: float = 0.5, show_mean_line: bool = False,
-                 fig_title: str = None, fig_dpi: float = 72, showplot: bool = True,
-                 ascending: bool = False):
+    def plot(self, xlim: list = None, ylim: list = None, hspace: float = -0.5, xlabel: str = None,
+             fig_width: float = 8, fig_height: float = 8,
+             shade_percentile: float = 0.5, show_mean_line: bool = False,
+             fig_title: str = None, fig_dpi: float = 72, showplot: bool = True,
+             ascending: bool = False, how: str = 'weekly', kd_kwargs: dict = None):
         self._update_params(xlim=xlim, ylim=ylim, hspace=hspace, xlabel=xlabel,
                             fig_width=fig_width, fig_height=fig_height,
                             shade_percentile=shade_percentile, show_mean_line=show_mean_line,
                             fig_title=fig_title, fig_dpi=fig_dpi, showplot=showplot,
-                            ascending=ascending)
-        self.ys, self.ys_unique = self._y_index(how='yearly')
+                            ascending=ascending, kd_kwargs=kd_kwargs)
+        self.ys, self.ys_unique = self._y_index(how=how)
         self.colors = iter(cm.Spectral_r(np.linspace(0, 1, len(self.ys_unique))))
-        self.assigned_colors = self._assign_colors(how='yearly')
-        self._plot()
-
-    def per_month(self, xlim: list = None, ylim: list = None, hspace: float = -0.5, xlabel: str = None,
-                  fig_width: float = 8, fig_height: float = 8,
-                  shade_percentile: float = 0.5, show_mean_line: bool = False,
-                  fig_title: str = None, fig_dpi: float = 72, showplot: bool = True,
-                  ascending: bool = False):
-        self._update_params(xlim=xlim, ylim=ylim, hspace=hspace, xlabel=xlabel,
-                            fig_width=fig_width, fig_height=fig_height,
-                            shade_percentile=shade_percentile, show_mean_line=show_mean_line,
-                            fig_title=fig_title, fig_dpi=fig_dpi, showplot=showplot,
-                            ascending=ascending)
-        self.ys, self.ys_unique = self._y_index(how='monthly')
-        self.colors = iter(cm.Spectral_r(np.linspace(0, 1, len(self.ys_unique))))
-        self.assigned_colors = self._assign_colors(how='monthly')
-        self._plot()
-
-    def per_week(self, xlim: list = None, ylim: list = None, hspace: float = -0.5, xlabel: str = None,
-                 fig_width: float = 8, fig_height: float = 14,
-                 shade_percentile: float = 0.5, show_mean_line: bool = False,
-                 fig_title: str = None, fig_dpi: float = 72, showplot: bool = True,
-                 ascending: bool = False):
-        self._update_params(xlim=xlim, ylim=ylim, hspace=hspace, xlabel=xlabel,
-                            fig_width=fig_width, fig_height=fig_height,
-                            shade_percentile=shade_percentile, show_mean_line=show_mean_line,
-                            fig_title=fig_title, fig_dpi=fig_dpi, showplot=showplot,
-                            ascending=ascending)
-        self.ys, self.ys_unique = self._y_index(how='weekly')
-        self.colors = iter(cm.Spectral_r(np.linspace(0, 1, len(self.ys_unique))))
-        self.assigned_colors = self._assign_colors(how='weekly')
+        self.assigned_colors = self._assign_colors(how=how)
         self._plot()
 
     def _y_index(self, how: str):
@@ -168,25 +145,44 @@ class RidgeLinePlot:
         # Detect min and max of y across all required aggs (e.g. across all years),
         # to have the same scaling for the y-axis in all plots
         if not self.ylim:
-            y_check = []
+            y_currents = []  # List of y IDs, e.g. months or years
+            y_maxs = []  # List of y maxima
             for y_current in self.ys_unique:
                 locs_current = self.ys == y_current
                 series = self.series[locs_current].copy()
                 x1 = np.array(series)
-                kde1 = KernelDensity(bandwidth=0.99, kernel='gaussian')
+                # Kernel density
+                if self.kd_kwargs:
+                    kde1 = KernelDensity(**self.kd_kwargs)
+                else:
+                    kde1 = KernelDensity()
+                # kde1 = KernelDensity(bandwidth=0.99, kernel='gaussian')
                 kde1.fit(x1[:, None])
                 x_d = np.linspace(self.xlim[0], self.xlim[1], 1000)
                 logprob1 = kde1.score_samples(x_d[:, None])
                 y = np.exp(logprob1)
-                y_check.append(min(y))
-                y_check.append(max(y))
-            self.ylim = [0, max(y_check)]  # Should always start at zero
+                # y_check.append(min(y))
+                y_maxs.append(max(y))
+                y_currents.append(y_current)
+
+            # Maximum value for y (probability from KDE)
+            found_ymax = max(y_maxs)
+
+            # Set y-axis to found maximum, should always start at zero
+            self.ylim = [0, found_ymax]
+
+            # Index of ymax in list of maxima
+            index_of_max = y_maxs.index(max(y_maxs))
+
+            # TODO Use index to get y ID (e.g. week) where max was found
+            y_id = y_currents[index_of_max]
+
 
         # n_uniques = len(self.ys_unique)
         i = 0
         for y_current in self.ys_unique:
             if self.verbose:
-                print(f"Month: {y_current}  Position in gridspec: {i + 1}")
+                print(f"Current y: {y_current}  Position in gridspec: {i + 1}")
             # Get data for current year or month or etc.
             locs_current = self.ys == y_current
             series = self.series[locs_current].copy()
@@ -195,7 +191,10 @@ class RidgeLinePlot:
             x1_percentile = series.quantile(self.shade_percentile)
 
             # Kernel density
-            kde1 = KernelDensity(bandwidth=0.99, kernel='gaussian')
+            if self.kd_kwargs:
+                kde1 = KernelDensity(**self.kd_kwargs)
+            else:
+                kde1 = KernelDensity()
             kde1.fit(x1[:, None])
             x_d = np.linspace(self.xlim[0], self.xlim[1], 1000)
             logprob1 = kde1.score_samples(x_d[:, None])
@@ -239,7 +238,7 @@ class RidgeLinePlot:
                 self.ax.spines[s].set_visible(False)
 
             # Show year or month etc. on y axis
-            self.ax.text(-0.02, 0.01, y_current, fontweight="bold", fontsize=14, ha="right",
+            self.ax.text(-0.02, 0.01, y_current, fontweight="normal", fontsize=14, ha="right",
                          transform=self.ax.get_yaxis_transform())
 
             # Show mean value
@@ -281,22 +280,30 @@ def _example():
     df = df[locs].copy()
     series = df['Tair_f'].copy()
 
-    rp = dv.ridgeplot(series=series)
-    rp.per_month()
-    rp.per_year()
-    rp.per_week()
+    rp = dv.ridgelineplot(series=series)
+    rp.plot(
+        how='weekly',
+        kd_kwargs=None,  # params from scikit KernelDensity as dict
+        xlim=None,  # min/max as list
+        ylim=None,  # min/max as list
+        hspace=-0.5,  # overlap between months
+        xlabel=r'Air temperature (°C)',
+        fig_width=8,
+        fig_height=10,
+        shade_percentile=0.5,
+        show_mean_line=False,
+        fig_title="Air temperatures per month (2019)",
+        fig_dpi=72,
+        showplot=True,
+        ascending=False
+    )
+    # rp.per_month()
+    # rp.per_year()
+    # rp.per_week()
 
-    # rp = RidgePlotTS(series=series)
-    # rp.per_month(xlim=[-15, 30], ylim=[0, 0.14], hspace=-0.6, xlabel="Air temperature (°C)",
-    #              fig_width=8, fig_height=8, shade_percentile=0.5, show_mean_line=False,
-    #              fig_title="Air temperatures per month (2015)", showplot=True, ascending=False)
-    # rp.per_year(xlim=[-15, 30], ylim=[0, 0.1], hspace=-0.6, xlabel="Air temperature (°C)",
-    #             fig_width=9, fig_height=7, shade_percentile=0.5, show_mean_line=False,
-    #             fig_title="Air temperatures per year (2015)", showplot=True, ascending=False)
-    # rp.per_week(xlim=[-15, 30], ylim=[0, 0.21], hspace=-0.6, xlabel="Air temperature (°C)",
-    #             fig_width=9, fig_height=14, shade_percentile=0.5, show_mean_line=False,
-    #             fig_title="Air temperatures per week (2015)", showplot=True, ascending=False)
     print(rp.get_fig())
+    print(rp.xlim)
+    print(rp.ylim)
 
 
 if __name__ == '__main__':
