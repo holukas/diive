@@ -57,6 +57,10 @@ See the notebook here for more examples:
 
 - Updated packages
 
+### Unittests
+
+- 53/53 unittests ran successfully
+
 ## v0.85.7 | 26 Feb 2025
 
 ### New features
