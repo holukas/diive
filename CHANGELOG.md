@@ -8,10 +8,30 @@
 
 ### Ridgeline plot
 
-simplified API
-uses `ridgelineplot()`
+`diive` can now create ridgeline plots.
 
-- (`diive.core.plotting.ridgelineplot.RidgeLinePlot`)
+![plotRidgeLinePlot_diive_v0.86.0.png](images/plotRidgeLinePlot_diive_v0.86.0.png)
+
+The ridgeline plot effectively visualizes the distribution of a quantitative variable by stacking overlapping density
+plots, creating a "ridged" landscape. I think this is quite pleasing to look at. With the implementation in `diive`, it
+facilitates the comparison of distributional shapes and changes of time series data across weeks, months and years.
+Ridgeline plots are quite space-efficient and hopefully visually intuitive for revealing patterns and trends in data.
+
+This is also the first function that uses a simplified API. After importing `diive`, the plot can simply be accessed via
+`.ridgelineplot()`. It accesses the class `RidgeLinePlot` that is otherwise deeply buried in the code here:
+`diive.core.plotting.ridgelineplot.RidgeLinePlot`. In the future, other classes and functions will also be accessible
+via similar shortforms.
+
+Basic example:
+
+```
+import diive as diive
+rp = dv.ridgelineplot(series=series)  # Initialize instance, series is a pandas Series
+rp.plot()  # Generate basic plot
+```
+
+See the notebook here for more examples:
+`notebooks/Plotting/ridgelineplot.ipynb`
 
 ## Additions
 
@@ -20,14 +40,18 @@ uses `ridgelineplot()`
       processing chain: `.report_traintest_model_scores()` and `.report_traintest_details()`
     - Added parameter `setflag_timeperiod` to set the flag for the SSITC to another value during certain time periods,
       for example when a time period needs stricter filtering (e.g. due to issues with the sonic anemometer). In this
-      case the parameter can be used to set all values where flag=1 (medium quality data) to flag=2 (bad data). 
-      - Example from docstring:```
+      case the parameter can be used to set all values where flag=1 (medium quality data) to flag=2 (bad data).
+        - Example from docstring:```
       Set flag 1 to value 2 between '2022-05-01' and '2023-09-30', and between 
       '2024-04-02' and '2024-04-19' (dates inclusive): 
       setflag_timeperiod={2: [ [1, '2022-05-01', '2023-09-30'], [1, '2024-04-02', '2024-04-19'] ]}
       ``` (`diive.pkgs.qaqc.eddyproflags.flag_ssitc_eddypro_test`)
     - (`diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain`)
 - Added new filetype for 60MIN EddyPro output (`diive/configs/filetypes/EDDYPRO-FLUXNET-CSV-60MIN.yml`)
+
+### Notebooks
+
+- Added notebook for ridgeline plot (`notebooks/Plotting/ridgelineplot.ipynb`)
 
 ### Environment
 
