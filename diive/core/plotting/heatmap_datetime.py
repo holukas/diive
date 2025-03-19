@@ -239,19 +239,15 @@ def example_heatmap_datetime():
     from diive.configs.exampledata import load_exampledata_parquet
     df = load_exampledata_parquet()
     series = df['VPD_f'].copy()
-
     # series = series.resample('3h', label='left').mean()
     series = series.loc[series.index.year == 2021]
     series.index.name = 'TIMESTAMP_START'
-
+    series.name = None
     hm = HeatmapDateTime(series=series, title="test")
-
     hm.show()
-
-    hm.export_borderless_heatmap(outpath=r"F:\TMP\heightmap_blender")
-
-    print(hm.get_ax())
-    print(hm.get_plot_data())
+    # hm.export_borderless_heatmap(outpath=r"F:\TMP\heightmap_blender")
+    # print(hm.get_ax())
+    # print(hm.get_plot_data())
 
 
 def example_heatmap_yearmonth():
@@ -279,5 +275,5 @@ def example_heatmap_yearmonth():
 
 
 if __name__ == '__main__':
-    # example_heatmap_datetime()
-    example_heatmap_yearmonth()
+    example_heatmap_datetime()
+    # example_heatmap_yearmonth()

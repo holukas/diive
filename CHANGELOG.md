@@ -12,15 +12,15 @@
 
 ![plotRidgeLinePlot_diive_v0.86.0.png](images/plotRidgeLinePlot_diive_v0.86.0.png)
 
-The ridgeline plot effectively visualizes the distribution of a quantitative variable by stacking overlapping density
-plots, creating a "ridged" landscape. I think this is quite pleasing to look at. With the implementation in `diive`, it
+The ridgeline plot visualizes the distribution of a quantitative variable by stacking overlapping density plots,
+creating a "ridged" landscape. I think this is quite pleasing to look at. With the implementation in `diive`, it
 facilitates the comparison of distributional shapes and changes of time series data across weeks, months and years.
 Ridgeline plots are quite space-efficient and hopefully visually intuitive for revealing patterns and trends in data.
 
 This is also the first function that uses a simplified API. After importing `diive`, the plot can simply be accessed via
-`.ridgelineplot()`. It accesses the class `RidgeLinePlot` that is otherwise deeply buried in the code here:
-`diive.core.plotting.ridgelineplot.RidgeLinePlot`. In the future, other classes and functions will also be accessible
-via similar shortforms.
+`.ridgelineplot()`. This is a shortcut to access the class `RidgeLinePlot` that is otherwise deeply buried in the code
+here: `diive.core.plotting.ridgelineplot.RidgeLinePlot`. In the future, other classes and functions will also be
+accessible via similar shortforms.
 
 Basic example:
 
@@ -47,6 +47,9 @@ See the notebook here for more examples:
       setflag_timeperiod={2: [ [1, '2022-05-01', '2023-09-30'], [1, '2024-04-02', '2024-04-19'] ]}
       ``` (`diive.pkgs.qaqc.eddyproflags.flag_ssitc_eddypro_test`)
     - (`diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain`)
+- Added check if time series has a name when plotting heatmaps. If time series does not have a name, it is automatically
+  assigned the name `data`. Implemented in class `HeatmapBase` that is used by all heatmap plotters. (
+  `diive.core.plotting.heatmap_base.HeatmapBase`)
 - Added new filetype for 60MIN EddyPro output (`diive/configs/filetypes/EDDYPRO-FLUXNET-CSV-60MIN.yml`)
 
 ### Notebooks
