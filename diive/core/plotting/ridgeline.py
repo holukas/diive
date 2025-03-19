@@ -42,16 +42,11 @@ class RidgeLinePlot:
         self.ascending = False
         self.verbose = False
         self.kd_kwargs = None
-        self.found_ymax = None  # Value (probability) of max y that is used as the upper limit in the panels
-        self.y_id = None  # Panel number where max y was found
-        self.kde = None  # KernelDensity estimator
+        self.kde = None
 
     def get_fig(self):
         """Return matplotlib figure in which plot was generated."""
         return self.fig
-
-    def report_ymax(self):
-        print(f"Maximum y ({self.found_ymax}) was found in panel {self.y_id}")
 
     def _update_params(self, xlim: list, ylim: list, hspace: float, xlabel: str,
                        fig_width: float, fig_height: float, shade_percentile: float,
@@ -162,6 +157,7 @@ class RidgeLinePlot:
                     self.kde = KernelDensity(**self.kd_kwargs)
                 else:
                     self.kde = KernelDensity()
+                # self.kde1 = KernelDensity(bandwidth=0.99, kernel='gaussian')
                 self.kde.fit(x1[:, None])
                 x_d = np.linspace(self.xlim[0], self.xlim[1], 1000)
                 logprob1 = self.kde.score_samples(x_d[:, None])
@@ -171,16 +167,16 @@ class RidgeLinePlot:
                 y_currents.append(y_current)
 
             # Maximum value for y (probability from KDE)
-            self.found_ymax = max(y_maxs)
+            found_ymax = max(y_maxs)
 
             # Set y-axis to found maximum, should always start at zero
-            self.ylim = [0, self.found_ymax]
+            self.ylim = [0, found_ymax]
 
             # Index of ymax in list of maxima
             index_of_max = y_maxs.index(max(y_maxs))
 
-            # Use index to get y ID (e.g. week) where max was found
-            self.y_id = y_currents[index_of_max]
+            # TODO Use index to get y ID (e.g. week) where max was found
+            y_id = y_currents[index_of_max]
 
 
         # n_uniques = len(self.ys_unique)
@@ -285,9 +281,9 @@ def _example():
     df = df[locs].copy()
     series = df['Tair_f'].copy()
 
-    rp = dv.ridgelineplot(series=series)
+    rp = dv.ridgeline(series=series)
     rp.plot(
-        how='monthly',
+        how='weekly',
         kd_kwargs=None,  # params from scikit KernelDensity as dict
         xlim=None,  # min/max as list
         ylim=None,  # min/max as list
@@ -302,12 +298,15 @@ def _example():
         showplot=True,
         ascending=False
     )
+    # rp.per_month()
+    # rp.per_year()
+    # rp.per_week()
 
-    rp.report_ymax()
+    print(rp.get_fig())
+    print(rp.xlim)
+    print(rp.ylim)
 
-    # print(rp.get_fig())
-    # print(rp.xlim)
-    # print(rp.ylim)
+    rp.kde
 
 
 if __name__ == '__main__':

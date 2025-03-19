@@ -218,7 +218,6 @@ class FluxProcessingChain:
                     outfilepath = Path(outpath) / outfile
                     modelscores.to_csv(outfilepath)
 
-
     def report_gapfilling_feature_importances(self, outpath: str = None):
         for gfmethod, ustar_scenarios in self.level41.items():
             for ustar_scenario in ustar_scenarios:
@@ -234,29 +233,6 @@ class FluxProcessingChain:
                         _df.to_csv(outfilepath)
                 else:
                     print(f"{gfmethod} {ustar_scenario} does not have feature importances.")
-
-    # # TODO implement for above then delete the below
-    # def report_traintest_details(self, outpath: str = None):
-    #     for gfmethod, ustar_scenarios in self.level41.items():
-    #         for ustar_scenario in ustar_scenarios:
-    #             # Check if needed instance property exists
-    #             instance = self.level41[gfmethod][ustar_scenario]
-    #             if hasattr(instance, 'traintest_details_'):
-    #                 print(f"\nDETAILS from TRAINING/TESTING ({gfmethod} {ustar_scenario}): "
-    #                       f"\n trained on training data, tested on unseen test data")
-    #                 try:
-    #                     modelscores = pd.DataFrame.from_dict(self.level41[gfmethod][ustar_scenario].traintest_details_,
-    #                                                          orient='columns')
-    #                 except ValueError:
-    #                     modelscores = pd.DataFrame.from_dict(self.level41[gfmethod][ustar_scenario].traintest_details_,
-    #                                                          orient='index')
-    #                 print(modelscores)
-    #                 if outpath:
-    #                     outfile = f"traintest_model_details_{ustar_scenario}_{gfmethod}.csv"
-    #                     outfilepath = Path(outpath) / outfile
-    #                     modelscores.to_csv(outfilepath)
-    #             else:
-    #                 print(f"{gfmethod} {ustar_scenario} does not have train/test details.")
 
     def report_gapfilling_poolyears(self):
         print("DATA POOLS USED FOR MACHINE-LEARNING GAP-FILLING:")

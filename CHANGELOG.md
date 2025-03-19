@@ -18,23 +18,24 @@ facilitates the comparison of distributional shapes and changes of time series d
 Ridgeline plots are quite space-efficient and hopefully visually intuitive for revealing patterns and trends in data.
 
 This is also the first function that uses a simplified API. After importing `diive`, the plot can simply be accessed via
-`.ridgelineplot()`. This is a shortcut to access the class `RidgeLinePlot` that is otherwise deeply buried in the code
-here: `diive.core.plotting.ridgelineplot.RidgeLinePlot`. In the future, other classes and functions will also be
+`.ridgeline()`. This is a shortcut to access the class `RidgeLinePlot` that is otherwise deeply buried in the code
+here: `diive.core.plotting.ridgeline.RidgeLinePlot`. In the future, other classes and functions will also be
 accessible via similar shortforms.
 
 Basic example:
 
 ```
-import diive as diive
-rp = dv.ridgelineplot(series=series)  # Initialize instance, series is a pandas Series
+import diive as dv
+rp = dv.ridgeline(series=series)  # Initialize instance, series is a pandas Series
 rp.plot()  # Generate basic plot
 ```
 
 See the notebook here for more examples:
-`notebooks/Plotting/ridgelineplot.ipynb`
+`notebooks/Plotting/ridgeline.ipynb`
 
 ## Additions
 
+- todo Save to file FPC
 - Additions to the flux processing chain:
     - Added two methods to get details about training and testing when using machine-learning models in the flux
       processing chain: `.report_traintest_model_scores()` and `.report_traintest_details()`
@@ -54,7 +55,7 @@ See the notebook here for more examples:
 
 ### Notebooks
 
-- Added notebook for ridgeline plot (`notebooks/Plotting/ridgelineplot.ipynb`)
+- Added notebook for ridgeline plot (`notebooks/Plotting/ridgeline.ipynb`)
 
 ### Bugfixes
 
