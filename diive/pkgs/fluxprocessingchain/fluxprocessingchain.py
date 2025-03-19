@@ -1,5 +1,6 @@
 #  TODO NEEDS FLOW CHECK
 
+from pathlib import Path
 from typing import Literal
 
 import matplotlib.gridspec as gridspec
@@ -142,14 +143,14 @@ class FluxProcessingChain:
         gfvars = gapfilled_vars + nongapfilled_vars
         return self.fpc_df[gfvars].copy()
 
-    def report_traintest_model_scores(self):
+    def report_traintest_model_scores(self, outpath: str = None):
         for gfmethod, ustar_scenarios in self.level41.items():
             for ustar_scenario in ustar_scenarios:
                 # Check if needed instance property exists
                 instance = self.level41[gfmethod][ustar_scenario]
                 if hasattr(instance, 'scores_traintest_'):
                     print(f"\nMODEL SCORES from TRAINING/TESTING ({gfmethod}): "
-                          f"\n trained on training data, tested on unseen test data"
+                          f"\n trained on training data, tested on unseen test data "
                           f"{ustar_scenario}")
                     try:
                         modelscores = pd.DataFrame.from_dict(self.level41[gfmethod][ustar_scenario].scores_traintest_,
@@ -158,10 +159,14 @@ class FluxProcessingChain:
                         modelscores = pd.DataFrame.from_dict(self.level41[gfmethod][ustar_scenario].scores_traintest_,
                                                              orient='index')
                     print(modelscores)
+                    if outpath:
+                        outfile = f"traintest_model_scores_{ustar_scenario}_{gfmethod}.csv"
+                        outfilepath = Path(outpath) / outfile
+                        modelscores.to_csv(outfilepath)
                 else:
                     print(f"{gfmethod} {ustar_scenario} does not have train/test model scores.")
 
-    def report_traintest_details(self):
+    def report_traintest_details(self, outpath: str = None):
         for gfmethod, ustar_scenarios in self.level41.items():
             for ustar_scenario in ustar_scenarios:
                 # Check if needed instance property exists
@@ -176,6 +181,10 @@ class FluxProcessingChain:
                         modelscores = pd.DataFrame.from_dict(self.level41[gfmethod][ustar_scenario].traintest_details_,
                                                              orient='index')
                     print(modelscores)
+                    if outpath:
+                        outfile = f"traintest_model_details_{ustar_scenario}_{gfmethod}.csv"
+                        outfilepath = Path(outpath) / outfile
+                        modelscores.to_csv(outfilepath)
                 else:
                     print(f"{gfmethod} {ustar_scenario} does not have train/test details.")
 
@@ -193,7 +202,7 @@ class FluxProcessingChain:
     #                 except AttributeError:
     #                     print(f"{gfmethod} {ustar_scenario} does not have feature ranks.")
 
-    def report_gapfilling_model_scores(self):
+    def report_gapfilling_model_scores(self, outpath: str = None):
         for gfmethod, ustar_scenarios in self.level41.items():
             for ustar_scenario in ustar_scenarios:
                 print(f"\nMODEL SCORES ({gfmethod}): {ustar_scenario}")
@@ -204,12 +213,50 @@ class FluxProcessingChain:
                     modelscores = pd.DataFrame.from_dict(self.level41[gfmethod][ustar_scenario].scores_,
                                                          orient='index')
                 print(modelscores)
+                if outpath:
+                    outfile = f"gapfilling_model_scores_{ustar_scenario}_{gfmethod}.csv"
+                    outfilepath = Path(outpath) / outfile
+                    modelscores.to_csv(outfilepath)
 
-    def report_gapfilling_feature_importances(self):
+
+    def report_gapfilling_feature_importances(self, outpath: str = None):
         for gfmethod, ustar_scenarios in self.level41.items():
             for ustar_scenario in ustar_scenarios:
-                print(f"\nFEATURE IMPORTANCES ({gfmethod}): {ustar_scenario}")
-                print(self.level41[gfmethod][ustar_scenario].feature_importance_per_year)
+                # Check if needed instance property exists
+                instance = self.level41[gfmethod][ustar_scenario]
+                if hasattr(instance, 'feature_importance_per_year'):
+                    print(f"\nFEATURE IMPORTANCES ({gfmethod}): {ustar_scenario}")
+                    _df = self.level41[gfmethod][ustar_scenario].feature_importance_per_year
+                    print(_df)
+                    if outpath:
+                        outfile = f"gapfilling_model_feature_importances_{ustar_scenario}_{gfmethod}.csv"
+                        outfilepath = Path(outpath) / outfile
+                        _df.to_csv(outfilepath)
+                else:
+                    print(f"{gfmethod} {ustar_scenario} does not have feature importances.")
+
+    # # TODO implement for above then delete the below
+    # def report_traintest_details(self, outpath: str = None):
+    #     for gfmethod, ustar_scenarios in self.level41.items():
+    #         for ustar_scenario in ustar_scenarios:
+    #             # Check if needed instance property exists
+    #             instance = self.level41[gfmethod][ustar_scenario]
+    #             if hasattr(instance, 'traintest_details_'):
+    #                 print(f"\nDETAILS from TRAINING/TESTING ({gfmethod} {ustar_scenario}): "
+    #                       f"\n trained on training data, tested on unseen test data")
+    #                 try:
+    #                     modelscores = pd.DataFrame.from_dict(self.level41[gfmethod][ustar_scenario].traintest_details_,
+    #                                                          orient='columns')
+    #                 except ValueError:
+    #                     modelscores = pd.DataFrame.from_dict(self.level41[gfmethod][ustar_scenario].traintest_details_,
+    #                                                          orient='index')
+    #                 print(modelscores)
+    #                 if outpath:
+    #                     outfile = f"traintest_model_details_{ustar_scenario}_{gfmethod}.csv"
+    #                     outfilepath = Path(outpath) / outfile
+    #                     modelscores.to_csv(outfilepath)
+    #             else:
+    #                 print(f"{gfmethod} {ustar_scenario} does not have train/test details.")
 
     def report_gapfilling_poolyears(self):
         print("DATA POOLS USED FOR MACHINE-LEARNING GAP-FILLING:")
