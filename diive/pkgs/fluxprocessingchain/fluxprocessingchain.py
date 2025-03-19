@@ -1079,6 +1079,7 @@ class QuickFluxProcessingChain:
 
     def _run_level2(self):
         TEST_SSITC = True  # Default True
+        TEST_SSITC_SETFLAG_TIMEPERIOD = None
         TEST_GAS_COMPLETENESS = True  # Default True
         TEST_SPECTRAL_CORRECTION_FACTOR = True  # Default True
         # TEST_SIGNAL_STRENGTH = True
@@ -1117,7 +1118,8 @@ class QuickFluxProcessingChain:
                 'discont_hf': TEST_RAWDATA_DISCONT_HF,
                 'discont_sf': TEST_RAWDATA_DISCONT_SF},
             'ssitc': {
-                'apply': TEST_SSITC},
+                'apply': TEST_SSITC,
+                'setflag_timeperiod': TEST_SSITC_SETFLAG_TIMEPERIOD},
             'gas_completeness': {
                 'apply': TEST_GAS_COMPLETENESS},
             'spectral_correction_factor': {
