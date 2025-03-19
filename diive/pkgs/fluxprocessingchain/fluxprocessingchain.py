@@ -63,8 +63,15 @@ class FluxProcessingChain:
 
         # Add also to main data, so it can be accessed as feature for ML models
         newcols = [self.swinpot_col, daytime_flag_col, nighttime_flag_col]
-        self._df = pd.concat([self._df, self.fpc_df[newcols]], axis=1)
-        print(f"++ Added new columns {newcols} to input data.")
+
+        for c in newcols:
+            existingcol = True if c in self.df.columns else False
+            self._df[c] = self.fpc_df[c].copy()
+            if existingcol:
+                print(f"++ Added new column {c} to input data.  (!) Existing {c} in input data is overwritten.")
+            else:
+                print(f"++ Added new column {c} to input data.")
+        # self._df = pd.concat([self._df, self.fpc_df[newcols]], axis=1)
 
         # Get the name of the base flux, used to assemble meaningful names for output variables
         if self.fluxcol == 'FC':
@@ -1390,6 +1397,7 @@ def example():
     # --------------------
     # Level-4.1
     # --------------------
+
     MGMT_VARS = ["TIMESINCE_MGMT_FERT_MIN_FOOTPRINT", "TIMESINCE_MGMT_FERT_ORG_FOOTPRINT",
                  "TIMESINCE_MGMT_GRAZING_FOOTPRINT", "TIMESINCE_MGMT_MOWING_FOOTPRINT",
                  "TIMESINCE_MGMT_SOILCULTIVATION_FOOTPRINT", "TIMESINCE_MGMT_SOWING_FOOTPRINT",
@@ -1431,38 +1439,69 @@ def example():
     #     # }
     # )
 
+    # fpc.level41_gapfilling_longterm(
+    #     run_random_forest=True,
+    #     run_mds=False,
+    #     verbose=True,
+    #     ml_feature_settings={
+    #         'features': FEATURES,
+    #         # 'features_lag': None,
+    #         'features_lag': [-1, -1],
+    #         'features_lag_stepsize': 1,
+    #         'features_lag_exclude_cols': EXCLUDE_COLS,  # Management variables are not lagged
+    #         'reduce_features': False,
+    #         'include_timestamp_as_features': False,
+    #         'add_continuous_record_number': False,
+    #         'perm_n_repeats': 1
+    #     },
+    #     rf_settings={
+    #         'n_estimators': 3,
+    #         'max_depth': None,
+    #         'random_state': 42,
+    #         'min_samples_split': 2,
+    #         'min_samples_leaf': 1,
+    #         'n_jobs': -1
+    #     },
+    #     # mds_settings={
+    #     #     'swin': "SW_IN_T1_2_1",
+    #     #     'ta': "TA_T1_2_1",
+    #     #     'vpd': "VPD_T1_2_1",
+    #     #     'swin_class': 50,
+    #     #     'ta_class': 2.5,
+    #     #     'vpd_class': 0.5,
+    #     #     'min_n_vals_nt': 5
+    #     # }
+    # )
+
     fpc.level41_gapfilling_longterm(
+        run_mds=True,
         run_random_forest=True,
-        run_mds=False,
         verbose=True,
         ml_feature_settings={
-            'features': FEATURES,
-            'features_lag': None,
-            # 'features_lag': [-24, -6],
-            # 'features_lag_stepsize': 6,
-            # 'features_lag_exclude_cols': EXCLUDE_COLS,  # Management variables are not lagged
-            'reduce_features': False,
-            'include_timestamp_as_features': False,
-            'add_continuous_record_number': False,
-            'perm_n_repeats': 1
+            'features': ["TA_T1_2_1", "SW_IN_POT", "VPD_T1_2_1"],
+            'features_lag': [-1, -1],
+            'features_lag_stepsize': 1,
+            'reduce_features': True,
+            'include_timestamp_as_features': True,
+            'add_continuous_record_number': True,
+            'perm_n_repeats': 2,
         },
         rf_settings={
-            'n_estimators': 3,
-            'max_depth': None,
+            'n_estimators': 99,
             'random_state': 42,
             'min_samples_split': 2,
             'min_samples_leaf': 1,
             'n_jobs': -1
         },
-        # mds_settings={
-        #     'swin': "SW_IN_T1_2_1",
-        #     'ta': "TA_T1_2_1",
-        #     'vpd': "VPD_T1_2_1",
-        #     'swin_class': 50,
-        #     'ta_class': 2.5,
-        #     'vpd_class': 0.5,
-        #     'min_n_vals_nt': 5
-        # }
+        mds_settings={
+            'swin': "SW_IN_T1_2_1",
+            'ta': "TA_T1_2_1",
+            'vpd': "VPD_T1_2_1",
+            'swin_tol': [20, 50],  # in W m-2
+            'ta_tol': 2.5,  # in °C
+            'vpd_tol': 0.5,  # in kPa
+            'avg_min_n_vals': 5
+        }
     )
 
     results = fpc.get_data()

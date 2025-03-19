@@ -56,6 +56,15 @@ See the notebook here for more examples:
 
 - Added notebook for ridgeline plot (`notebooks/Plotting/ridgelineplot.ipynb`)
 
+### Bugfixes
+
+- Fixed bug where the flux processing chain would crash when a variable with the same name as one of the automatically
+  generated variables was already present in the input data. For example, the potential radiation `SW_IN_POT` is
+  generated when the flux processing chain starts and then it is added also to the input data. If the input data already
+  has a variable with the same name, the processing chain would crash. Now, the automatically generated `SW_IN_POT` is
+  given priority, which means the variable in the input data is overwritten. (
+  `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain`)
+
 ### Environment
 
 - Updated packages
