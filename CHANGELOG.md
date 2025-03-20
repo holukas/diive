@@ -2,7 +2,7 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.86.0 | XX Mar 2025
+## v0.86.0 | 20 Mar 2025
 
 ### New features
 
@@ -35,7 +35,6 @@ See the notebook here for more examples:
 
 ## Additions
 
-- todo Save to file FPC
 - Additions to the flux processing chain:
     - Added two methods to get details about training and testing when using machine-learning models in the flux
       processing chain: `.report_traintest_model_scores()` and `.report_traintest_details()`
@@ -47,6 +46,8 @@ See the notebook here for more examples:
       '2024-04-02' and '2024-04-19' (dates inclusive): 
       setflag_timeperiod={2: [ [1, '2022-05-01', '2023-09-30'], [1, '2024-04-02', '2024-04-19'] ]}
       ``` (`diive.pkgs.qaqc.eddyproflags.flag_ssitc_eddypro_test`)
+    - Added params to export some gap-filling results (e.g. model scores) to csv files (e.g.,
+      `.report_gapfilling_model_scores(outpath=...)`)
     - (`diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain`)
 - Added check if time series has a name when plotting heatmaps. If time series does not have a name, it is automatically
   assigned the name `data`. Implemented in class `HeatmapBase` that is used by all heatmap plotters. (
