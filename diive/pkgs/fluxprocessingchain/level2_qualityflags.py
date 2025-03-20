@@ -111,8 +111,9 @@ class FluxQualityFlagsEddyPro:
         flag = flagtest.get_flag()
         self._results[flag.name] = flag
 
-    def ssitc_test(self):
-        flag = flag_ssitc_eddypro_test(df=self.dfin, flux=self.fluxcol, idstr=self.idstr)
+    def ssitc_test(self, setflag_timeperiod: dict = None):
+        flag = flag_ssitc_eddypro_test(df=self.dfin, flux=self.fluxcol, idstr=self.idstr,
+                                       setflag_timeperiod=setflag_timeperiod)
         self._results[flag.name] = flag
 
     def gas_completeness_test(self, thres_good: float = 0.99, thres_ok: float = 0.97):

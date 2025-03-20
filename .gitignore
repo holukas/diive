@@ -6,11 +6,13 @@
 /__local_folders
 /notebooks/_scratch/
 /notebooks/_testdata_notebooks/
+/notebooks/FluxProcessingChain/example_data
 /notebooks/Workbench/FLUXNET_CH4-N2O_Committee_WP2/data/
 /notebooks/Workbench/CH-HON
 /notebooks/Workbench/CH-DAS_2023_FluxProcessingChain
 /notebooks/Workbench/prelim_fluxes
 /notebooks/Workbench/Comparisons
+/notebooks/Workbench/mercury
 /diive/configs/exampledata/local
 
 

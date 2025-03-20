@@ -52,6 +52,7 @@ class HeatmapBase:
 
         """
         self.series = series.copy()
+        self.series.name = self.series.name if self.series.name else "data"  # Time series must have a name
         self.verbose = verbose
         self.title = title
         self.cmap = cmap

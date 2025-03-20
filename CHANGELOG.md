@@ -2,6 +2,79 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.86.0 | 20 Mar 2025
+
+### New features
+
+### Ridgeline plot
+
+`diive` can now create ridgeline plots.
+
+![plotRidgeLinePlot_diive_v0.86.0.png](images/plotRidgeLinePlot_diive_v0.86.0.png)
+
+The ridgeline plot visualizes the distribution of a quantitative variable by stacking overlapping density plots,
+creating a "ridged" landscape. I think this is quite pleasing to look at. With the implementation in `diive`, it
+facilitates the comparison of distributional shapes and changes of time series data across weeks, months and years.
+Ridgeline plots are quite space-efficient and hopefully visually intuitive for revealing patterns and trends in data.
+
+This is also the first function that uses a simplified API. After importing `diive`, the plot can simply be accessed via
+`.ridgeline()`. This is a shortcut to access the class `RidgeLinePlot` that is otherwise deeply buried in the code
+here: `diive.core.plotting.ridgeline.RidgeLinePlot`. In the future, other classes and functions will also be
+accessible via similar shortforms.
+
+Basic example:
+
+```
+import diive as dv
+rp = dv.ridgeline(series=series)  # Initialize instance, series is a pandas Series
+rp.plot()  # Generate basic plot
+```
+
+See the notebook here for more examples:
+`notebooks/Plotting/ridgeline.ipynb`
+
+## Additions
+
+- Additions to the flux processing chain:
+    - Added two methods to get details about training and testing when using machine-learning models in the flux
+      processing chain: `.report_traintest_model_scores()` and `.report_traintest_details()`
+    - Added parameter `setflag_timeperiod` to set the flag for the SSITC to another value during certain time periods,
+      for example when a time period needs stricter filtering (e.g. due to issues with the sonic anemometer). In this
+      case the parameter can be used to set all values where flag=1 (medium quality data) to flag=2 (bad data).
+        - Example from docstring:```
+      Set flag 1 to value 2 between '2022-05-01' and '2023-09-30', and between 
+      '2024-04-02' and '2024-04-19' (dates inclusive): 
+      setflag_timeperiod={2: [ [1, '2022-05-01', '2023-09-30'], [1, '2024-04-02', '2024-04-19'] ]}
+      ``` (`diive.pkgs.qaqc.eddyproflags.flag_ssitc_eddypro_test`)
+    - Added params to export some gap-filling results (e.g. model scores) to csv files (e.g.,
+      `.report_gapfilling_model_scores(outpath=...)`)
+    - (`diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain`)
+- Added check if time series has a name when plotting heatmaps. If time series does not have a name, it is automatically
+  assigned the name `data`. Implemented in class `HeatmapBase` that is used by all heatmap plotters. (
+  `diive.core.plotting.heatmap_base.HeatmapBase`)
+- Added new filetype for 60MIN EddyPro output (`diive/configs/filetypes/EDDYPRO-FLUXNET-CSV-60MIN.yml`)
+
+### Notebooks
+
+- Added notebook for ridgeline plot (`notebooks/Plotting/ridgeline.ipynb`)
+
+### Bugfixes
+
+- Fixed bug where the flux processing chain would crash when a variable with the same name as one of the automatically
+  generated variables was already present in the input data. For example, the potential radiation `SW_IN_POT` is
+  generated when the flux processing chain starts and then it is added also to the input data. If the input data already
+  has a variable with the same name, the processing chain would crash. Now, the automatically generated `SW_IN_POT` is
+  given priority, which means the variable in the input data is overwritten. (
+  `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain`)
+
+### Environment
+
+- Updated packages
+
+### Unittests
+
+- 53/53 unittests ran successfully
+
 ## v0.85.7 | 26 Feb 2025
 
 ### New features

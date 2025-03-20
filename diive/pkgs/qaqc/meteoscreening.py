@@ -781,8 +781,8 @@ def example():
     SITE = 'ch-cha'
     SITE_LAT = 47.210227
     SITE_LON = 8.410645
-    FIELDS = ['TA_T1_2_1']
-    MEASUREMENT = 'TA'
+    FIELDS = ['G_GF1_0.03_1']
+    MEASUREMENT = 'G'
     START = '2024-06-01 00:00:01'
     STOP = '2024-07-01 00:00:01'
     RESAMPLING_AGG = 'mean'
@@ -791,7 +791,7 @@ def example():
     TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
     RESAMPLING_FREQ = '30min'  # During MeteoScreening the screened high-res data will be resampled to this frequency; '30min' = 30-minute time resolution
     # DIRCONF = r'P:\Flux\RDS_calculations\_scripts\_configs\configs'  # Location of configuration files, needed e.g. for connection to database
-    DIRCONF = r'F:\Sync\luhk_work\20 - CODING\22 - POET\configs'
+    DIRCONF = r'L:\Sync\luhk_work\20 - CODING\22 - POET\configs'
     BUCKET_RAW = f'{SITE}_raw'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_raw' contains all raw data for CH-LAE
     BUCKET_PROCESSED = f'a'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_processed' contains all processed data for CH-LAE
     # BUCKET_PROCESSED = f'{SITE}_processed'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_processed' contains all processed data for CH-LAE
