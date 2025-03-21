@@ -106,11 +106,28 @@ class HeatmapDateTime(HeatmapBase):
     def plot(self):
         """Plot heatmap"""
         cmap, z = self.set_cmap(cmap=self.cmap, color_bad=self.color_bad, z=self.z)
-        # Run._remove_cbar(ax=ax)
+
         p = self.ax.pcolormesh(self.x, self.y, self.z,
                                linewidths=1, cmap=cmap,
                                vmin=self.vmin, vmax=self.vmax,
                                shading='flat', zorder=99)
+
+
+
+        # import matplotlib.pyplot as plt
+        # from matplotlib.colors import ListedColormap
+        # import numpy as np
+        #
+        # mat = np.random.randint(0, 3, (5, 8))
+        # cmap = ListedColormap(['lime', 'orange', 'tomato'])
+        #
+        # plt.pcolormesh(np.arange(-0.5, mat.shape[1]), np.arange(-0.5, mat.shape[0]), mat, cmap=cmap)
+        #
+        # color_dict = {0: 'normal', 1: 'high', 2: 'very\nhigh'}
+        # for i in range(mat.shape[0]):
+        #     for j in range(mat.shape[1]):
+        #         plt.text(j, i, color_dict[mat[i, j]], ha='center', va='center')
+        # plt.show()
 
         # Ticks
         ax_xlabel_txt = 'Time (hours)'
@@ -139,7 +156,8 @@ class HeatmapYearMonth(HeatmapBase):
                  axlabels_fontsize: float = theme.AX_LABELS_FONTSIZE,
                  ticks_labelsize: float = theme.TICKS_LABELS_FONTSIZE, minyticks: int = 3, maxyticks: int = 10,
                  cmap: str = 'RdYlBu_r', color_bad: str = 'grey', zlabel: str = "Value",
-                 figsize: tuple = (6, 10.7), verbose: bool = False):
+                 figsize: tuple = (6, 10.7), verbose: bool = False, show_values: bool = False,
+                 show_values_n_dec_places: int = 0):
         """Plot heatmap of time series data with year on y-axis and month on x-axis.
 
         Args:
@@ -151,11 +169,14 @@ class HeatmapYearMonth(HeatmapBase):
             cb_digits_after_comma: How many digits after the comma are shown in the colorbar legend.
             cmap: Matplotlib colormap
             color_bad: Color of missing values
+            show_values: Show z-values in plot.
+            show_values_n_dec_places: Number of decimal places to show in heatmap.
+                Only considered if *show_values* is True.
 
         """
         super().__init__(series_monthly, fig, ax, title, vmin, vmax, cb_digits_after_comma, cb_labelsize,
                          axlabels_fontsize, ticks_labelsize, minyticks, maxyticks, cmap, color_bad, figsize, zlabel,
-                         verbose)
+                         show_values, show_values_n_dec_places, verbose)
 
         # Setup data for plotting
         self.series = self._setup_timestamp()
@@ -212,6 +233,9 @@ class HeatmapYearMonth(HeatmapBase):
                                vmin=self.vmin, vmax=self.vmax,
                                shading='flat', zorder=99)
 
+        if self.show_values:
+            self.show_vals_in_plot()
+
         # Ticks
         ax_xlabel_txt = 'Month'
         ax_ylabel_txt = 'Year'
@@ -264,16 +288,18 @@ def example_heatmap_yearmonth():
         series_monthly=series,
         title="Range per month",
         cb_digits_after_comma=0,
+        show_values=True,
+        show_values_n_dec_places=0
         # todo display_type='week_year'
         # todo display_type='year_doy'
     )
 
     hm.show()
-    hm.export_borderless_heatmap(outpath=r"F:\TMP\heightmap_blender")
-    print(hm.get_ax())
-    print(hm.get_plot_data())
+    # hm.export_borderless_heatmap(outpath=r"F:\TMP\heightmap_blender")
+    # print(hm.get_ax())
+    # print(hm.get_plot_data())
 
 
 if __name__ == '__main__':
-    example_heatmap_datetime()
-    # example_heatmap_yearmonth()
+    # example_heatmap_datetime()
+    example_heatmap_yearmonth()
