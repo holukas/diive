@@ -48,6 +48,7 @@ _Functions to create various variables._
 - **Time since**: calculate time since last occurrence, e.g. since last precipitation ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/CalculateVariable/TimeSince.ipynb))
 - **Daytime/nighttime flag**: calculate daytime flag, nighttime flag and potential radiation from latitude and longitude ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/CalculateVariable/Daytime_and_nighttime_flag.ipynb))
 - **Vapor pressure deficit**: calculate VPD from air temperature and RH ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/CalculateVariable/Calculate_VPD_from_TA_and_RH.ipynb))
+- **Calculate ET from LE**: calculate evapotranspiration from latent heat flux ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/CalculateVariable/Calculate_ET_from_LE.ipynb))
 
 ### Eddy covariance high-resolution
 
