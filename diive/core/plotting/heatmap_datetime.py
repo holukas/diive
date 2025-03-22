@@ -112,8 +112,6 @@ class HeatmapDateTime(HeatmapBase):
                                vmin=self.vmin, vmax=self.vmax,
                                shading='flat', zorder=99)
 
-
-
         # import matplotlib.pyplot as plt
         # from matplotlib.colors import ListedColormap
         # import numpy as np
@@ -259,7 +257,8 @@ class HeatmapYearMonth(HeatmapBase):
         )
 
 
-def example_heatmap_datetime():
+def _example_heatmap_datetime():
+    import diive as dv
     from diive.configs.exampledata import load_exampledata_parquet
     df = load_exampledata_parquet()
     series = df['VPD_f'].copy()
@@ -267,14 +266,15 @@ def example_heatmap_datetime():
     series = series.loc[series.index.year == 2021]
     series.index.name = 'TIMESTAMP_START'
     series.name = None
-    hm = HeatmapDateTime(series=series, title="test")
+    hm = dv.heatmapdatetime(series=series, title="test")
     hm.show()
     # hm.export_borderless_heatmap(outpath=r"F:\TMP\heightmap_blender")
     # print(hm.get_ax())
     # print(hm.get_plot_data())
 
 
-def example_heatmap_yearmonth():
+def _example_heatmap_yearmonth():
+    import diive as dv
     from diive.configs.exampledata import load_exampledata_parquet
     df = load_exampledata_parquet()
     series = df['GPP_DT_CUT_REF'].copy()
@@ -284,7 +284,7 @@ def example_heatmap_yearmonth():
     # series = series.resample('1MS', label='left').agg(np.ptp)
     series.index.name = 'TIMESTAMP_START'
 
-    hm = HeatmapYearMonth(
+    hm = dv.heatmapyearmonth(
         series_monthly=series,
         title="Range per month",
         cb_digits_after_comma=0,
@@ -301,5 +301,5 @@ def example_heatmap_yearmonth():
 
 
 if __name__ == '__main__':
-    # example_heatmap_datetime()
-    example_heatmap_yearmonth()
+    _example_heatmap_datetime()
+    # _example_heatmap_yearmonth()

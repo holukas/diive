@@ -2,11 +2,23 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.87.0 | 20 Mar 2025
+## v0.87.0 | XX Mar 2025
 
-### XXX
+### New features
 
-- XXX
+- Added new function to calculate ET (evapotranspiration in mm h-1) from LE (latent heat flux in W m-2). (
+  `diive.pkgs.createvar.conversions.et_from_le`)
+- Added new function to calculate latent heat of vaporization. Originally needed for calculating ET from LE. (
+  `diive.pkgs.createvar.conversions.latent_heat_of_vaporization`)
+
+### Additions
+
+- Heatmap plotting:
+    - Heatmaps can now show the z-value for each rectangle in the plot, using the parameters `show_values` and
+      `show_values_n_dec_places`. This makes more sense for data that are plotted month vs. year than for e.g.
+      half-hourly data.
+    - Simplified API to call heatmap plots: after `import diive as dv`, the heatmaps can now be called via
+      `dv.heatmapyearmonth()` and `dv.heatmapdatetime()`.
 
 ## v0.86.0 | 20 Mar 2025
 
