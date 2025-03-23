@@ -22,6 +22,7 @@
 
 ### Notebooks
 
+- Updated notebook `HeatmapDateTime`
 - Updated notebook `HeatmapYearMonth`
 - Changed name of notebook `ridgeline` to camel-case `RidgeLine`
 
