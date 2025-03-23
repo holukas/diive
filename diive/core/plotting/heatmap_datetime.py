@@ -148,13 +148,25 @@ class HeatmapDateTime(HeatmapBase):
 # @ConsoleOutputDecorator(spacing=False)
 class HeatmapYearMonth(HeatmapBase):
 
-    def __init__(self, series_monthly: Series, fig=None, ax=None, title: str = None, vmin: float = None,
+    def __init__(self,
+                 series_monthly: Series,
+                 fig=None,
+                 ax=None,
+                 title: str = None,
+                 vmin: float = None,
                  vmax: float = None,
-                 cb_digits_after_comma: int = 2, cb_labelsize: float = theme.AX_LABELS_FONTSIZE,
+                 cb_digits_after_comma: int = 2,
+                 cb_labelsize: float = theme.AX_LABELS_FONTSIZE,
                  axlabels_fontsize: float = theme.AX_LABELS_FONTSIZE,
-                 ticks_labelsize: float = theme.TICKS_LABELS_FONTSIZE, minyticks: int = 3, maxyticks: int = 10,
-                 cmap: str = 'RdYlBu_r', color_bad: str = 'grey', zlabel: str = "Value",
-                 figsize: tuple = (6, 10.7), verbose: bool = False, show_values: bool = False,
+                 ticks_labelsize: float = theme.TICKS_LABELS_FONTSIZE,
+                 minyticks: int = 3,
+                 maxyticks: int = 10,
+                 cmap: str = 'RdYlBu_r',
+                 color_bad: str = 'grey',
+                 zlabel: str = "Value",
+                 figsize: tuple = (6, 10.7),
+                 verbose: bool = False,
+                 show_values: bool = False,
                  show_values_n_dec_places: int = 0):
         """Plot heatmap of time series data with year on y-axis and month on x-axis.
 

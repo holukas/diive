@@ -20,6 +20,11 @@
     - Simplified API to call heatmap plots: after `import diive as dv`, the heatmaps can now be called via
       `dv.heatmapyearmonth()` and `dv.heatmapdatetime()`.
 
+### Notebooks
+
+- Updated notebook `HeatmapYearMonth`
+- Changed name of notebook `ridgeline` to camel-case `RidgeLine`
+
 ## v0.86.0 | 20 Mar 2025
 
 ### New features
