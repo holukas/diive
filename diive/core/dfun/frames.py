@@ -195,6 +195,7 @@ def rename_cols(df: DataFrame, renaming_dict: dict) -> DataFrame:
         df.columns = pd.MultiIndex.from_tuples(df.columns)  # Restore column MultiIndex
     return df
 
+
 def rename_cols_to_multiindex(df: DataFrame, renaming_dict: dict) -> DataFrame:
     """Rename columns (one-row header) in dataframe to multiindex (two-row header).
 
@@ -437,3 +438,44 @@ def generate_flag_daynight(df: pd.DataFrame,
     df.loc[daytime_ix, [flag_col]] = 1
     df.loc[nighttime_ix, [flag_col]] = 0
     return df, flag_col
+
+
+def convert_matrix_to_longform(matrixdf: pd.DataFrame):
+    # Convert to long-form
+
+    # newdf = pd.DataFrame()
+    # matrixdf_unstacked = matrixdf.unstack()
+    # x = matrixdf_unstacked.index.get_level_values(level=1)
+    # y = matrixdf_unstacked.index.get_level_values(level=0)
+    # z = matrixdf_unstacked.values
+    # newdf['x'] = x
+    # newdf['y'] = y
+    # newdf['z'] = z
+
+    # TODO hier weiter
+    long_form_df = pd.melt(matrixdf, var_name=matrixdf.columns.name, value_name='VALUE', ignore_index=False)
+    long_form_df = long_form_df.reset_index(inplace=False)
+
+    long_form_df = long_form_df.rename(columns={'YEAR': 'YEAR'})
+    long_form_df['TIMESTAMP_START'] = \
+        long_form_df['YEAR'].astype(str) + '-' + long_form_df['MONTH'].astype(str) + '-' + '01'
+    long_form_df['TIMESTAMP_START'] = pd.to_datetime(long_form_df['TIMESTAMP_START'])
+    long_form_df = long_form_df.drop(['YEAR', 'MONTH'], axis=1)
+    long_form_df = long_form_df.set_index('TIMESTAMP_START')
+    long_form_df = long_form_df.sort_index()
+    series_monthly = long_form_df['RANK']
+    series_monthly = series_monthly.astype(int)
+    series_monthly.index.freq = 'MS'
+
+
+def _example_convert_matrix_to_longform():
+    import diive as dv
+    from diive.configs.exampledata import load_exampledata_parquet_long
+    df = load_exampledata_parquet_long()
+    series = df['Tair_f'].copy()
+    monthly = dv.resample_to_monthly_agg_matrix(series=series, agg='mean', ranks=True)
+    convert_matrix_to_longform(matrixdf=monthly)
+
+
+if __name__ == "__main__":
+    _example_convert_matrix_to_longform()

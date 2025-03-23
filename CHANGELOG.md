@@ -6,6 +6,8 @@
 
 ### New features
 
+- Added new function to calculate a matrix of monthly aggregates across years (
+  `diive.core.times.resampling.resample_to_monthly_agg_matrix`)
 - Added new function to calculate ET (evapotranspiration in mm h-1) from LE (latent heat flux in W m-2). (
   `diive.pkgs.createvar.conversions.et_from_le`)
 - Added new function to calculate latent heat of vaporization. Originally needed for calculating ET from LE. (
@@ -22,6 +24,7 @@
 
 ### Notebooks
 
+- Added new notebook for calculating a monthly aggregation matrix (`notebooks/Resampling/ResamplingMonthlyMatrix.ipynb`)
 - Updated notebook `HeatmapDateTime`
 - Updated notebook `HeatmapYearMonth`
 - Changed name of notebook `ridgeline` to camel-case `RidgeLine`
