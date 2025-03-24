@@ -9,10 +9,12 @@ Kudos:
 import datetime
 
 import numpy as np
+import pandas as pd
 from matplotlib.ticker import MultipleLocator, FormatStrFormatter
 from pandas import Series
 from pandas.plotting import register_matplotlib_converters
 
+import diive as dv
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.plotting.heatmap_base import HeatmapBase
 from diive.core.plotting.plotfuncs import nice_date_ticks
@@ -269,6 +271,69 @@ class HeatmapYearMonth(HeatmapBase):
         )
 
 
+class HeatmapYearMonthRanks:
+
+    def __init__(
+            self,
+            agg: str = 'mean',
+            z_var_name: str = None,
+            title: str = None,
+            ranks: bool = True,
+            **kwargs
+    ):
+        """Plot monthly ranks across years.
+
+        Args:
+            **kwargs: Parameters for HeatmapBase.
+        """
+        self.series = kwargs['series']
+        self.kwargs = kwargs
+        self.agg = agg
+        self.z_var_name = z_var_name
+        self.title = title
+        self.ranks = ranks
+
+        # Check if a colormap was defined
+        if 'cmap' not in self.kwargs.keys():
+            self.kwargs['cmap'] = 'RdYlBu'
+
+        self.ranks_matrix, self.ranks_long = self._transform_data(series=kwargs['series'])
+        del kwargs['series']
+        self._plot()
+
+    def _transform_data(self, series: pd.Series):
+        ranks = dv.resample_to_monthly_agg_matrix(series=series, agg=self.agg, ranks=self.ranks)
+        ranks_long = dv.transform_yearmonth_matrix_to_longform(matrixdf=ranks, z_var_name=self.z_var_name)
+        return ranks, ranks_long
+
+    def _make_title(self):
+        if self.title:
+            title = self.title
+        else:
+            if self.z_var_name:
+                title = f"Ranks of monthly {self.z_var_name} {self.agg}"
+            else:
+                title = f"Ranks of monthly {self.agg}"
+        return title
+
+    def _plot(self):
+        self.title = self._make_title()
+        hm = dv.heatmapyearmonth(
+            series_monthly=self.ranks_long,
+            title=self.title,
+            cb_digits_after_comma=0,
+            show_values=True,
+            show_values_n_dec_places=0,
+            zlabel="rank",
+            **self.kwargs
+            # cmap=self.cmap
+            # todo display_type='week_year'
+            # todo display_type='year_doy'
+        )
+
+        hm.show()
+
+
 def _example_heatmap_datetime():
     import diive as dv
     from diive.configs.exampledata import load_exampledata_parquet
@@ -285,8 +350,14 @@ def _example_heatmap_datetime():
     # print(hm.get_plot_data())
 
 
+def _example_heatmap_yearmonth_ranks():
+    from diive.configs.exampledata import load_exampledata_parquet_long
+    df = load_exampledata_parquet_long()
+    series = df['Tair_f'].copy()
+    dv.heatmapyearmonth_ranks(series=series, z_var_name='air temperature', cmap='RdYlBu', ranks=True)
+
+
 def _example_heatmap_yearmonth():
-    import diive as dv
     from diive.configs.exampledata import load_exampledata_parquet
     df = load_exampledata_parquet()
     series = df['GPP_DT_CUT_REF'].copy()
@@ -313,5 +384,6 @@ def _example_heatmap_yearmonth():
 
 
 if __name__ == '__main__':
-    _example_heatmap_datetime()
+    _example_heatmap_yearmonth_ranks()
+    # _example_heatmap_datetime()
     # _example_heatmap_yearmonth()
