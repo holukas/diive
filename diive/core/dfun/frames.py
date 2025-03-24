@@ -440,32 +440,74 @@ def generate_flag_daynight(df: pd.DataFrame,
     return df, flag_col
 
 
-def convert_matrix_to_longform(matrixdf: pd.DataFrame):
-    # Convert to long-form
+def transform_yearmonth_matrix_to_longform(matrixdf: pd.DataFrame, z_var_name: str = 'VALUE') -> pd.Series:
+    """
+    Transform a year-month matrix into a long-form pandas Series with a datetime index.
 
-    # newdf = pd.DataFrame()
-    # matrixdf_unstacked = matrixdf.unstack()
-    # x = matrixdf_unstacked.index.get_level_values(level=1)
-    # y = matrixdf_unstacked.index.get_level_values(level=0)
-    # z = matrixdf_unstacked.values
-    # newdf['x'] = x
-    # newdf['y'] = y
-    # newdf['z'] = z
+    **Matrix Structure:**
 
-    # TODO hier weiter
-    long_form_df = pd.melt(matrixdf, var_name=matrixdf.columns.name, value_name='VALUE', ignore_index=False)
+    The input `matrixdf` must have:
+
+    * Years as the index.
+    * Months as the columns.
+    * Numerical values representing the data.
+
+    Example:
+        MONTH    1     2     3
+        YEAR
+        1997    2.0   9.0   5.0
+        1998   10.0   1.0  19.0
+        1999    8.0  22.0  13.0
+
+    **Transformation:**
+
+    The function combines the year (from the index) and month (from the columns) to create
+    a datetime index. The corresponding values from the matrix become the values of the
+    resulting Series.
+
+    Example Output (with `z_var_name` as 'VALUE'):
+
+                     VALUE
+        TIMESTAMP
+        1997-01-01    2.0
+        1997-02-01    9.0
+        1997-03-01    5.0
+        ...
+
+    Args:
+        matrixdf: pandas DataFrame with years as index and months as columns.
+        z_var_name: (Optional) Name of the resulting pandas Series. Defaults to 'VALUE'.
+
+    Returns:
+        pandas Series with a datetime index ('YYYY-MM-01' format, monthly start frequency 'MS') and values from the input matrix.
+
+    """
+
+    cols = matrixdf.columns.name
+    long_form_df = pd.melt(matrixdf, var_name=matrixdf.columns.name, value_name=z_var_name, ignore_index=False)
+    rows = long_form_df.index.name
     long_form_df = long_form_df.reset_index(inplace=False)
 
-    long_form_df = long_form_df.rename(columns={'YEAR': 'YEAR'})
-    long_form_df['TIMESTAMP_START'] = \
-        long_form_df['YEAR'].astype(str) + '-' + long_form_df['MONTH'].astype(str) + '-' + '01'
-    long_form_df['TIMESTAMP_START'] = pd.to_datetime(long_form_df['TIMESTAMP_START'])
+    year = long_form_df[rows].astype(str).str.zfill(4)
+    month = long_form_df[cols].astype(str).str.zfill(2)
+    yearmonth = year.str.cat(month, sep='-')
+    yearmonth = pd.to_datetime(yearmonth, format='%Y-%m')
+
+    # Insert into dataframe
+    long_form_df['TIMESTAMP'] = yearmonth
     long_form_df = long_form_df.drop(['YEAR', 'MONTH'], axis=1)
-    long_form_df = long_form_df.set_index('TIMESTAMP_START')
+    long_form_df = long_form_df.set_index('TIMESTAMP')
     long_form_df = long_form_df.sort_index()
-    series_monthly = long_form_df['RANK']
-    series_monthly = series_monthly.astype(int)
-    series_monthly.index.freq = 'MS'
+    long_form_df.index.freq = pd.infer_freq(long_form_df.index)
+
+    if not long_form_df.index.freqstr == 'MS':
+        raise ValueError('Failed building monthly timestamp for long-form time series.')
+
+    return pd.Series(long_form_df[z_var_name])
+
+    # series_monthly = long_form_df['RANK']
+    # series_monthly = series_monthly.astype(int)
+    # series_monthly.index.freq = 'MS'
 
 
 def _example_convert_matrix_to_longform():
@@ -474,7 +516,9 @@ def _example_convert_matrix_to_longform():
     df = load_exampledata_parquet_long()
     series = df['Tair_f'].copy()
     monthly = dv.resample_to_monthly_agg_matrix(series=series, agg='mean', ranks=True)
-    convert_matrix_to_longform(matrixdf=monthly)
+    monthly_longform = transform_yearmonth_matrix_to_longform(matrixdf=monthly)
+    print(monthly)
+    print(monthly_longform)
 
 
 if __name__ == "__main__":
