@@ -6,8 +6,11 @@
 
 ### New features
 
-- Added new function to calculate a matrix of monthly aggregates across years (
+- Added new function `.resample_to_monthly_agg_matrix()` to calculate a matrix of monthly aggregates across years (
   `diive.core.times.resampling.resample_to_monthly_agg_matrix`)
+- Added new function `.transform_yearmonth_matrix_to_longform()` to convert monthly aggregation matrix to long-form time
+  series (
+  `diive.core.dfun.frames.transform_yearmonth_matrix_to_longform`)
 - Added new function to calculate ET (evapotranspiration in mm h-1) from LE (latent heat flux in W m-2). (
   `diive.pkgs.createvar.conversions.et_from_le`)
 - Added new function to calculate latent heat of vaporization. Originally needed for calculating ET from LE. (
@@ -28,6 +31,13 @@
 - Updated notebook `HeatmapDateTime`
 - Updated notebook `HeatmapYearMonth`
 - Changed name of notebook `ridgeline` to camel-case `RidgeLine`
+
+### Unittests
+
+- Added test case for `.resample_to_monthly_agg_matrix()`, this test also includes the transformation to long-form time
+  series using `.transform_yearmonth_matrix_to_longform()` (
+  `tests.test_resampling.TestResampling.test_resample_to_monthly_agg_matrix`)
+- TODO 54/54 unittests ran successfully
 
 ## v0.86.0 | 20 Mar 2025
 
