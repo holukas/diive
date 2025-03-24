@@ -34,10 +34,11 @@
 
 ### Unittests
 
+- Added test case for `.et_from_le()` (`tests.test_createvar.TestCreateVar.test_conversion_et_from_le`)
 - Added test case for `.resample_to_monthly_agg_matrix()`, this test also includes the transformation to long-form time
   series using `.transform_yearmonth_matrix_to_longform()` (
   `tests.test_resampling.TestResampling.test_resample_to_monthly_agg_matrix`)
-- TODO 54/54 unittests ran successfully
+- TODO 55/55 unittests ran successfully
 
 ## v0.86.0 | 20 Mar 2025
 
