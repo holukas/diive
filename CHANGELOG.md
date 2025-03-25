@@ -4,8 +4,34 @@
 
 ## v0.87.0 | XX Mar 2025
 
+### Heatmap rank plot
+
+`diive` can now create heatmap rank plots.
+
+![plotRidgeLinePlot_diive_v0.86.0.png](images/plotRidgeLinePlot_diive_v0.86.0.png)
+
+This visualization displays the relative ranking of monthly aggregated values across multiple years. Essentially, it
+shows how each month's overall value compares to the same month in other years. By default, the plot ranks the monthly
+mean (average) of the selected variable.
+
+Other aggregation methods commonly used in the `pandas` library are possible, such as `median`, `min`, `max` and `std`,
+among others.  
+
+Basic example:
+
+```
+import diive as dv
+hm = dv.heatmapyearmonth_ranks(series=series)  # Initialize instance, series is a pandas Series
+hm.plot()  # Generate basic plot
+```
+
+See the notebook here for more examples:
+`notebooks/Plotting/HeatmapYearMonthRank.ipynb`
+
 ### New features
 
+- Added new class `.heatmapyearmonth_ranks()` to plot monthly ranks of an aggregated value across years (
+  `diive.core.plotting.heatmap_datetime.HeatmapYearMonthRanks`)
 - Added new function `.resample_to_monthly_agg_matrix()` to calculate a matrix of monthly aggregates across years (
   `diive.core.times.resampling.resample_to_monthly_agg_matrix`)
 - Added new function `.transform_yearmonth_matrix_to_longform()` to convert monthly aggregation matrix to long-form time
@@ -69,7 +95,7 @@ rp.plot()  # Generate basic plot
 ```
 
 See the notebook here for more examples:
-`notebooks/Plotting/ridgeline.ipynb`
+`notebooks/Plotting/RidgeLine.ipynb`
 
 ## Additions
 
