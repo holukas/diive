@@ -15,7 +15,7 @@ shows how each month's overall value compares to the same month in other years. 
 mean (average) of the selected variable.
 
 Other aggregation methods commonly used in the `pandas` library are possible, such as `median`, `min`, `max` and `std`,
-among others.  
+among others.
 
 Basic example:
 
@@ -65,6 +65,10 @@ See the notebook here for more examples:
   series using `.transform_yearmonth_matrix_to_longform()` (
   `tests.test_resampling.TestResampling.test_resample_to_monthly_agg_matrix`)
 - TODO 55/55 unittests ran successfully
+
+### Environment
+
+- Updated packages
 
 ## v0.86.0 | 20 Mar 2025
 
