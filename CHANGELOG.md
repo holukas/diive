@@ -64,11 +64,12 @@ See the notebook here for more examples:
 - Added test case for `.resample_to_monthly_agg_matrix()`, this test also includes the transformation to long-form time
   series using `.transform_yearmonth_matrix_to_longform()` (
   `tests.test_resampling.TestResampling.test_resample_to_monthly_agg_matrix`)
-- TODO 55/55 unittests ran successfully
+- 55/55 unittests ran successfully
 
 ### Environment
 
-- Updated packages
+- `diive` is now using Python version `3.11` upwards
+- Updated environment, poetry `pyproject.toml` file now has the currently used structure
 
 ## v0.86.0 | 20 Mar 2025
 

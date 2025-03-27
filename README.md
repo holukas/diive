@@ -167,7 +167,7 @@ _Create single outlier flags where `0=OK` and `2=outlier`._
 
 ## Installation
 
-`diive` is currently under active developement using **Python v3.11**, but newer (and many older) versions should also work.
+`diive` is currently under active developement using **Python v3.11**.
 
 ### Using pip
 
