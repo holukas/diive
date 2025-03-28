@@ -14,8 +14,7 @@
 /notebooks/Workbench/Comparisons
 /notebooks/Workbench/mercury
 /diive/configs/exampledata/local
-/docs/source/*.rst
-docs
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
