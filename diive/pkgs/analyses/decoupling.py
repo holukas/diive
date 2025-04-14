@@ -89,7 +89,7 @@ class SortingBinsMethod:
         self._df = self.df.rank(pct=True).copy()
 
     def _assignbins(self):
-        group, bins = pd.qcut(self.df[self.var1_col], q=self.n_bins_var1, retbins=True, duplicates='drop')
+        group, bins = pd.qcut(self.df[self.var1_col], q=self.n_bins_var1, retbins=True, precision=9, duplicates='drop')
 
         self._df[self.var1_group_col] = group
         # perc_df = self.df[[self.var1_col, self.var2_col, self.var3_col]].copy()
@@ -100,23 +100,39 @@ class SortingBinsMethod:
         for g, g_df in grouped:
             g_df = g_df.set_index(self.var1_group_col)
 
-            label_var1 = g_df[self.var1_col].mean()
+            label_var1 = g_df[self.var1_col].median()
             label_var1 = label_var1.round(decimals=2)
             label_var1 = f"{label_var1}"
 
-            group, bins = pd.qcut(g_df[self.var2_col], q=self.n_subbins_var2, retbins=True, duplicates='drop')
+            group, bins = pd.qcut(g_df[self.var2_col], q=self.n_subbins_var2, retbins=True, precision=9, duplicates='drop')
             g_df[self.var2_group_col] = group
+
+            # Check if the required number of bins was generated
+            if len(set(group.tolist())) != self.n_subbins_var2:
+                print(f"(!)WARNING: Unable to produce requested number of bins for {label_var1}, skipped.")
+                continue
 
             medians = g_df.groupby(by=g_df[self.var2_group_col], observed=True, as_index=True, sort=False,
                                    group_keys=True).median()
+
+            # Counts
+            counts = g_df.groupby(by=g_df[self.var2_group_col], observed=True, as_index=True, sort=False,
+                                   group_keys=True).count()
+            var3_counts_col = f"{self.var3_col}_COUNTS"
+            medians[var3_counts_col] = counts[self.var3_col]
+
+
+            # Percentile 25th
             p25 = g_df.groupby(by=g_df[self.var2_group_col], observed=True, as_index=True, sort=False,
                                group_keys=True).quantile(.25)
-            p75 = g_df.groupby(by=g_df[self.var2_group_col], observed=True, as_index=True, sort=False,
-                               group_keys=True).quantile(.75)
             var2_p25_col = f"{self.var2_col}_P25"
             var3_p25_col = f"{self.var3_col}_P25"
             medians[var2_p25_col] = p25[self.var2_col]
             medians[var3_p25_col] = p25[self.var3_col]
+
+            # Percentile 75th
+            p75 = g_df.groupby(by=g_df[self.var2_group_col], observed=True, as_index=True, sort=False,
+                               group_keys=True).quantile(.75)
             var2_p75_col = f"{self.var2_col}_P75"
             var3_p75_col = f"{self.var3_col}_P75"
             medians[var2_p75_col] = p75[self.var2_col]
@@ -155,7 +171,7 @@ class SortingBinsMethod:
                                 emphasize_lines: bool = True,
                                 **kwargs):
 
-        # Figure size and legen number of columns
+        # Figure size and legend number of columns
         n_col = 1  # int(self.n_bins_var1 / 20)
         figsize = (12, 9)
         if (self.n_bins_var1 > 24) and (self.n_bins_var1 <= 48):
@@ -175,6 +191,7 @@ class SortingBinsMethod:
         # gs.update(wspace=.2, hspace=1, left=.1, right=.9, top=.85, bottom=.1)
         ax = fig.add_subplot(gs[0, 0])
         ax = self._plot_bins(ax=ax, n_col=n_col, emphasize_lines=emphasize_lines, **kwargs)
+        fig.suptitle(title, fontsize=16)
         fig.tight_layout()
         fig.show()
         if saveplot:
@@ -215,9 +232,9 @@ class SortingBinsMethod:
                f"= {n_vals_datapoint} values per data point")
         # n_vals = self.df.groupby(self.var1_group_col).count().mean()[self.var1_col]
         # n_vals = int(n_vals / self.n_subbins_var2)
-        ax.text(0.02, 0.98, txt,
+        ax.text(0.98, 0.02, txt,
                 size=theme.AX_LABELS_FONTSIZE, color='k', backgroundcolor='none', transform=ax.transAxes,
-                alpha=1, horizontalalignment='left', verticalalignment='top')
+                alpha=1, horizontalalignment='right', verticalalignment='bottom')
         default_format(ax=ax,
                        ax_xlabel_txt=f"{self.var2_col}{txt_perc}",
                        ax_ylabel_txt=f"{self.var3_col}{txt_perc}")

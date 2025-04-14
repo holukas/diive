@@ -2,7 +2,7 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.87.0 | XX Mar 2025
+## v0.87.0 | XX Apr 2025
 
 ### Heatmap rank plot
 
@@ -36,8 +36,7 @@ See the notebook here for more examples:
 - Added new function `.resample_to_monthly_agg_matrix()` to calculate a matrix of monthly aggregates across years (
   `diive.core.times.resampling.resample_to_monthly_agg_matrix`)
 - Added new function `.transform_yearmonth_matrix_to_longform()` to convert monthly aggregation matrix to long-form time
-  series (
-  `diive.core.dfun.frames.transform_yearmonth_matrix_to_longform`)
+  series (`diive.core.dfun.frames.transform_yearmonth_matrix_to_longform`)
 - Added new function to calculate ET (evapotranspiration in mm h-1) from LE (latent heat flux in W m-2). (
   `diive.pkgs.createvar.conversions.et_from_le`)
 - Added new function to calculate latent heat of vaporization. Originally needed for calculating ET from LE. (
@@ -51,6 +50,11 @@ See the notebook here for more examples:
       half-hourly data.
     - Simplified API to call heatmap plots: after `import diive as dv`, the heatmaps can now be called via
       `dv.heatmapyearmonth()` and `dv.heatmapdatetime()`.
+- `SortingBinsMethod`:
+    - The counts per bin are now also part of the bin stats
+    - Sometimes the required number of bins cannot be generated, in this case the stats for the respective bin are now
+      skipped and the bin is missing from the output (`.calcbins`)
+    - (`diive.pkgs.analyses.decoupling.SortingBinsMethod`)
 
 ### Notebooks
 
