@@ -44,8 +44,8 @@ class SortingBinsMethod:
             var1_col: Name of the first binning variable, will be shown as colors (z) in the plot.
             var2_col: Name of the second binning variable, will be shown on the x-axis (x) in the plot.
             var3_col: Name of the variable of interest, will be shown on the y-axis (y) in the plot.
-            n_bins_var1: Number of bins for variable *var1_col*.
-            n_subbins_var2: Number of bins for variable *var2_col*.
+            n_bins_var1: Number of bins for variable *var1_col*. Must be >0 and <= 120.
+            n_subbins_var2: Number of bins for variable *var2_col*. Must be >= 2.
 
         Returns:
             Dict with results stored as dataframes for each bin of *var1_col*.
@@ -57,8 +57,15 @@ class SortingBinsMethod:
         self.var1_col = var1_col
         self.var2_col = var2_col
         self.var3_col = var3_col
+
+        if not (n_bins_var1 > 0) & (n_bins_var1 <= 120):
+            raise ValueError("n_bins_var1 must be >0 and <= 120.")
         self.n_bins_var1 = n_bins_var1
+
+        if not (n_subbins_var2 >= 2):
+            raise ValueError("n_bins_var1 must be >= 2.")
         self.n_subbins_var2 = n_subbins_var2
+
         self.convert_to_percentiles = convert_to_percentiles
 
         self.var1_group_col = f"group_{self.var1_col}"
@@ -225,10 +232,17 @@ class SortingBinsMethod:
         n_vals_datapoint = int(n_vals_datapoint / self.n_subbins_var2)
         txt_perc = " percentile " if self.convert_to_percentiles else " "
 
+        # Check number of available bins
+        n_bins_var1 = len(self.binmedians)
+        if n_bins_var1 != self.n_bins_var1:
+            n_not_generated = self.n_bins_var1 - n_bins_var1
+        else:
+            n_not_generated = 0
+
         txt = (f"showing medians with interquartile range\n"
                f"{n_vals_var3}{txt_perc}values of {self.var3_col}\n"
                f"in {self.n_subbins_var2}{txt_perc}classes of {self.var2_col},\n"
-               f"separate for {self.n_bins_var1}{txt_perc}classes of {self.var1_col}\n"
+               f"separate for {n_bins_var1}{txt_perc}classes of {self.var1_col}\n"               
                f"= {n_vals_datapoint} values per data point")
         # n_vals = self.df.groupby(self.var1_group_col).count().mean()[self.var1_col]
         # n_vals = int(n_vals / self.n_subbins_var2)
@@ -239,9 +253,10 @@ class SortingBinsMethod:
                        ax_xlabel_txt=f"{self.var2_col}{txt_perc}",
                        ax_ylabel_txt=f"{self.var3_col}{txt_perc}")
 
-        textsize = theme.FONTSIZE_TXT_LEGEND
+        textsize = theme.FONTSIZE_TXT_LEGEND_SMALLER_14
         default_legend(ax=ax, ncol=n_col,
-                       title=f"{self.n_bins_var1}{txt_perc}classes of {self.var1_col} (median)",
+                       title=f"{n_bins_var1}{txt_perc}classes of {self.var1_col} (median) "
+                             f"(not generated: {n_not_generated} classes)",
                        loc='upper left',
                        textsize=textsize,
                        bbox_to_anchor=(1, 1.02))
