@@ -12,16 +12,16 @@ DECOUPLING: SORTING BINS METHOD
 """
 from pathlib import Path
 
+import diive.core.plotting.styles.LightTheme as theme
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from pandas import DataFrame
-
-import diive.core.plotting.styles.LightTheme as theme
 from diive.core.plotting.plotfuncs import default_format
 from diive.core.plotting.plotfuncs import default_legend
 from diive.core.plotting.plotfuncs import save_fig
+from pandas import DataFrame
+from scipy.stats import zscore
 
 
 class SortingBinsMethod:
@@ -33,8 +33,8 @@ class SortingBinsMethod:
                  yvar: str,
                  n_bins_z: int = 48,
                  n_bins_x: int = 2,
-                 convert_to_percentiles: bool = False,
-                 agg: str = 'median',):
+                 conversion: str = None,
+                 agg: str = 'median'):
         """Investigate binned aggregates of a variable z in binned classes of x and y.
 
         For example: show median GPP (y) in 5 classes of VPD (x), separate for 10 classes
@@ -47,6 +47,7 @@ class SortingBinsMethod:
             yvar: Name of the variable of interest, will be shown on the y-axis (y) in the plot.
             n_bins_z: Number of bins for variable *var1_col*. Must be >0 and <= 120.
             n_bins_x: Number of bins for variable *var2_col*. Must be >= 2.
+            conversion: Convert to z-scores or percentiles. Options: 'z-score', 'percentile'
             agg: Aggregation method for binning, e.g. 'median', 'mean'.
 
         Returns:
@@ -69,14 +70,14 @@ class SortingBinsMethod:
             raise ValueError("n_bins_var1 must be >= 2.")
         self.n_bins_x = n_bins_x
 
-        self.convert_to_percentiles = convert_to_percentiles
+        self.conversion = conversion
 
         self.z_group_col = f"group_{self.zvar}"
         self.x_group_col = f"group_{self.xvar}"
 
         self._binaggs = {}
-        if self.convert_to_percentiles:
-            self._convert_to_percentiles()
+        if self.conversion:
+            self._convert()
         self._assignbins()
 
     @property
@@ -95,10 +96,16 @@ class SortingBinsMethod:
         """Return dict of dataframes with variable 1 group as key"""
         return self.binaggs
 
-    def _convert_to_percentiles(self):
-        self._df = self.df.rank(pct=True).copy()
+    def _convert(self):
+        if self.conversion == 'percentile':
+            self._df = self.df.rank(pct=True).copy()
+        elif self.conversion == 'z-score':
+            self._df = self.df.apply(zscore)
+        else:
+            raise NotImplementedError(f"Conversion {self.conversion} not implemented.")
 
     def _assignbins(self):
+
         group, bins = pd.qcut(self.df[self.zvar], q=self.n_bins_z, retbins=True, precision=9, duplicates='drop')
 
         self._df[self.z_group_col] = group
@@ -123,14 +130,13 @@ class SortingBinsMethod:
                 continue
 
             aggs = g_df.groupby(by=g_df[self.x_group_col], observed=True, as_index=True, sort=False,
-                                   group_keys=True).agg(self.agg)
+                                group_keys=True).agg(self.agg)
 
             # Counts
             counts = g_df.groupby(by=g_df[self.x_group_col], observed=True, as_index=True, sort=False,
                                   group_keys=True).count()
             var3_counts_col = f"{self.yvar}_COUNTS"
             aggs[var3_counts_col] = counts[self.yvar]
-
 
             # Percentile 25th
             p25 = g_df.groupby(by=g_df[self.x_group_col], observed=True, as_index=True, sort=False,
@@ -233,7 +239,9 @@ class SortingBinsMethod:
         n_vals_var3 = self.df[self.yvar].count()
         n_vals_datapoint = n_vals_var3 / self.n_bins_z
         n_vals_datapoint = int(n_vals_datapoint / self.n_bins_x)
-        txt_perc = " percentile " if self.convert_to_percentiles else " "
+
+
+        txt_perc = f" {self.conversion} " if self.conversion else " "
 
         # Check number of available bins
         n_bins_var1 = len(self.binaggs)
@@ -245,7 +253,7 @@ class SortingBinsMethod:
         txt = (f"showing {self.agg} with interquartile range\n"
                f"{n_vals_var3}{txt_perc}values of {self.yvar}\n"
                f"in {self.n_bins_x}{txt_perc}classes of {self.xvar},\n"
-               f"separate for {n_bins_var1}{txt_perc}classes of {self.zvar}\n"               
+               f"separate for {n_bins_var1}{txt_perc}classes of {self.zvar}\n"
                f"= {n_vals_datapoint} values per data point")
         # n_vals = self.df.groupby(self.var1_group_col).count().mean()[self.var1_col]
         # n_vals = int(n_vals / self.n_subbins_var2)
@@ -303,7 +311,7 @@ def example():
                             yvar=nee_col,
                             n_bins_z=48,
                             n_bins_x=2,
-                            convert_to_percentiles=False)
+                            conversion=False)
     sbm.calcbins()
     sbm.showplot_decoupling_sbm(marker='o', emphasize_lines=True)
 

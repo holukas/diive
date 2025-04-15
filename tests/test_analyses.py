@@ -60,7 +60,7 @@ class TestAnalyses(unittest.TestCase):
                                 yvar=vpd_col,
                                 n_bins_z=5,
                                 n_bins_x=10,
-                                convert_to_percentiles=False)
+                                conversion=False)
         sbm.calcbins()
         binmedians = sbm.get_binaggs()
         keys = []

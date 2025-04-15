@@ -60,6 +60,7 @@ See the notebook here for more examples:
     - All parameters were renamed to better reflect what is going on
     - (`diive.pkgs.analyses.decoupling.SortingBinsMethod`)
     - Added `agg` parameter to define aggregation method used in binning the data
+    - Renamed and reworked `conversion` paramater, now allows conversion to z-scores in addition to percentiles
 
 ### Notebooks
 
