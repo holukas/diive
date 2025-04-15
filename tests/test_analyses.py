@@ -55,14 +55,14 @@ class TestAnalyses(unittest.TestCase):
         # Make subset
         df = df[[ta_col, vpd_col, swin_col]].copy()
         sbm = SortingBinsMethod(df=df,
-                                var1_col=ta_col,
-                                var2_col=swin_col,
-                                var3_col=vpd_col,
-                                n_bins_var1=5,
-                                n_subbins_var2=10,
+                                zvar=ta_col,
+                                xvar=swin_col,
+                                yvar=vpd_col,
+                                n_bins_z=5,
+                                n_bins_x=10,
                                 convert_to_percentiles=False)
         sbm.calcbins()
-        binmedians = sbm.get_binmedians()
+        binmedians = sbm.get_binaggs()
         keys = []
         for group_key, group_df in binmedians.items():
             keys.append(group_key)

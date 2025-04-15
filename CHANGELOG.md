@@ -4,6 +4,9 @@
 
 ## v0.87.0 | XX Apr 2025
 
+TODO unittests
+TODO rename sortingbinsmethod
+
 ### Heatmap rank plot
 
 `diive` can now create heatmap rank plots.
@@ -54,7 +57,9 @@ See the notebook here for more examples:
     - The counts per bin are now also part of the bin stats
     - Sometimes the required number of bins cannot be generated, in this case the stats for the respective bin are now
       skipped and the bin is missing from the output (`.calcbins`)
+    - All parameters were renamed to better reflect what is going on
     - (`diive.pkgs.analyses.decoupling.SortingBinsMethod`)
+    - Added `agg` parameter to define aggregation method used in binning the data
 
 ### Notebooks
 
