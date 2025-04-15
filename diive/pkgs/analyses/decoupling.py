@@ -105,11 +105,16 @@ class SortingBinsMethod:
             raise NotImplementedError(f"Conversion {self.conversion} not implemented.")
 
     def _assignbins(self):
-
         group, bins = pd.qcut(self.df[self.zvar], q=self.n_bins_z, retbins=True, precision=9, duplicates='drop')
-
         self._df[self.z_group_col] = group
-        # perc_df = self.df[[self.var1_col, self.var2_col, self.var3_col]].copy()
+
+        # import time
+        # import polars as pl
+        # _s = pl.Series(self.df[self.zvar])
+        # start_time = time.time()
+        # _ss = _s.qcut(quantiles=self.n_bins_x)
+        # end_time = time.time()
+        # print(f"Time elapsed: {end_time - start_time}")
 
     def calcbins(self):
         # counter = 0
@@ -239,7 +244,6 @@ class SortingBinsMethod:
         n_vals_var3 = self.df[self.yvar].count()
         n_vals_datapoint = n_vals_var3 / self.n_bins_z
         n_vals_datapoint = int(n_vals_datapoint / self.n_bins_x)
-
 
         txt_perc = f" {self.conversion} " if self.conversion else " "
 
