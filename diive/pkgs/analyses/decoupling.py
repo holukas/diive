@@ -122,16 +122,16 @@ class SortingBinsMethod:
         for g, g_df in grouped:
             g_df = g_df.set_index(self.z_group_col)
 
-            label_var1 = g_df[self.zvar].agg(self.agg)
-            label_var1 = label_var1.round(decimals=2)
-            label_var1 = f"{label_var1}"
+            label_zvar = g_df[self.zvar].agg(self.agg)
+            label_zvar = label_zvar.round(decimals=2)
+            label_zvar = f"{label_zvar}"
 
             group, bins = pd.qcut(g_df[self.xvar], q=self.n_bins_x, retbins=True, precision=9, duplicates='drop')
             g_df[self.x_group_col] = group
 
             # Check if the required number of bins was generated
             if len(set(group.tolist())) != self.n_bins_x:
-                print(f"(!)WARNING: Unable to produce requested number of bins for {label_var1}, skipped.")
+                print(f"(!)WARNING: Unable to produce requested number of bins for {label_zvar}, skipped.")
                 continue
 
             aggs = g_df.groupby(by=g_df[self.x_group_col], observed=True, as_index=True, sort=False,
@@ -140,29 +140,29 @@ class SortingBinsMethod:
             # Counts
             counts = g_df.groupby(by=g_df[self.x_group_col], observed=True, as_index=True, sort=False,
                                   group_keys=True).count()
-            var3_counts_col = f"{self.yvar}_COUNTS"
-            aggs[var3_counts_col] = counts[self.yvar]
+            yvar_counts_col = f"{self.yvar}_COUNTS"
+            aggs[yvar_counts_col] = counts[self.yvar]
 
-            # Percentile 25th
-            p25 = g_df.groupby(by=g_df[self.x_group_col], observed=True, as_index=True, sort=False,
-                               group_keys=True).quantile(.25)
-            var2_p25_col = f"{self.xvar}_P25"
-            var3_p25_col = f"{self.yvar}_P25"
-            aggs[var2_p25_col] = p25[self.xvar]
-            aggs[var3_p25_col] = p25[self.yvar]
+            # Percentile 16th
+            p16 = g_df.groupby(by=g_df[self.x_group_col], observed=True, as_index=True, sort=False,
+                               group_keys=True).quantile(.16)
+            xvar_p16_col = f"{self.xvar}_P16"
+            yvar_p16_col = f"{self.yvar}_P16"
+            aggs[xvar_p16_col] = p16[self.xvar]
+            aggs[yvar_p16_col] = p16[self.yvar]
 
-            # Percentile 75th
-            p75 = g_df.groupby(by=g_df[self.x_group_col], observed=True, as_index=True, sort=False,
-                               group_keys=True).quantile(.75)
-            var2_p75_col = f"{self.xvar}_P75"
-            var3_p75_col = f"{self.yvar}_P75"
-            aggs[var2_p75_col] = p75[self.xvar]
-            aggs[var3_p75_col] = p75[self.yvar]
+            # Percentile 84th
+            p84 = g_df.groupby(by=g_df[self.x_group_col], observed=True, as_index=True, sort=False,
+                               group_keys=True).quantile(.84)
+            xvar_p84_col = f"{self.xvar}_P84"
+            yvar_p84_col = f"{self.yvar}_P84"
+            aggs[xvar_p84_col] = p84[self.xvar]
+            aggs[yvar_p84_col] = p84[self.yvar]
 
-            aggs['xerror_neg'] = aggs[self.xvar] - aggs[var2_p25_col]
-            aggs['xerror_pos'] = aggs[self.xvar] - aggs[var2_p75_col]
-            aggs['yerror_neg'] = aggs[self.yvar] - aggs[var3_p25_col]
-            aggs['yerror_pos'] = aggs[self.yvar] - aggs[var3_p75_col]
+            aggs['xerror_neg'] = aggs[self.xvar] - aggs[xvar_p16_col]
+            aggs['xerror_pos'] = aggs[self.xvar] - aggs[xvar_p84_col]
+            aggs['yerror_neg'] = aggs[self.yvar] - aggs[yvar_p16_col]
+            aggs['yerror_pos'] = aggs[self.yvar] - aggs[yvar_p84_col]
 
             aggs['xerror_neg'] = aggs['xerror_neg'].abs()
             aggs['xerror_pos'] = aggs['xerror_pos'].abs()
@@ -171,7 +171,7 @@ class SortingBinsMethod:
 
             aggs = aggs.sort_values(by=self.xvar)
             aggs = aggs.reset_index()
-            self._binaggs[label_var1] = aggs
+            self._binaggs[label_zvar] = aggs
 
             # means = g_df.groupby(by=g_df[self.var2_group_col], observed=True, as_index=True, sort=False,
             #                      group_keys=True).mean()
@@ -186,6 +186,7 @@ class SortingBinsMethod:
             # self._binmeans[label_var1] = means
 
     def showplot_decoupling_sbm(self,
+                                ax=None,
                                 saveplot: bool = False,
                                 title: str = None,
                                 path: Path or str = None,
@@ -207,18 +208,21 @@ class SortingBinsMethod:
             n_col += 4
             figsize = (18, 9)
 
-        fig = plt.figure(figsize=figsize)
-        gs = gridspec.GridSpec(1, 1)  # rows, cols
-        # gs.update(wspace=.2, hspace=1, left=.1, right=.9, top=.85, bottom=.1)
-        ax = fig.add_subplot(gs[0, 0])
-        ax = self._plot_bins(ax=ax, n_col=n_col, emphasize_lines=emphasize_lines, **kwargs)
-        fig.suptitle(title, fontsize=16)
-        fig.tight_layout()
-        fig.show()
+        if not ax:
+            fig = plt.figure(figsize=figsize)
+            gs = gridspec.GridSpec(1, 1)  # rows, cols
+            # gs.update(wspace=.2, hspace=1, left=.1, right=.9, top=.85, bottom=.1)
+            ax = fig.add_subplot(gs[0, 0])
+            ax = self._plot_bins(ax=ax, n_col=n_col, emphasize_lines=emphasize_lines, **kwargs)
+            fig.suptitle(title, fontsize=16)
+            fig.tight_layout()
+            fig.show()
+        else:
+            ax = self._plot_bins(ax=ax, n_col=n_col, emphasize_lines=emphasize_lines, **kwargs)
         if saveplot:
             save_fig(fig=fig, title=title, path=path)
 
-    def _plot_bins(self, ax, emphasize_lines, n_col, **kwargs):
+    def _plot_bins(self, ax, emphasize_lines, n_col, legend:bool = True, **kwargs):
         colors = plt.cm.coolwarm(np.linspace(0.1, 1, self.n_bins_z))
         for ix, m in enumerate(self.binaggs.keys()):
             lw = 5 if emphasize_lines else 3
@@ -241,23 +245,23 @@ class SortingBinsMethod:
                         ls='-', lw=2, ms=0, label=None, color='black',
                         mec='k', mew=1, alpha=1, zorder=99)
 
-        n_vals_var3 = self.df[self.yvar].count()
-        n_vals_datapoint = n_vals_var3 / self.n_bins_z
+        n_vals_yvar = self.df[self.yvar].count()
+        n_vals_datapoint = n_vals_yvar / self.n_bins_z
         n_vals_datapoint = int(n_vals_datapoint / self.n_bins_x)
 
         txt_perc = f" {self.conversion} " if self.conversion else " "
 
         # Check number of available bins
-        n_bins_var1 = len(self.binaggs)
-        if n_bins_var1 != self.n_bins_z:
-            n_not_generated = self.n_bins_z - n_bins_var1
+        n_bins_zvar = len(self.binaggs)
+        if n_bins_zvar != self.n_bins_z:
+            n_not_generated = self.n_bins_z - n_bins_zvar
         else:
             n_not_generated = 0
 
-        txt = (f"showing {self.agg} with interquartile range\n"
-               f"{n_vals_var3}{txt_perc}values of {self.yvar}\n"
+        txt = (f"showing {self.agg} with 16-84 percentile range\n"
+               f"{n_vals_yvar}{txt_perc}values of {self.yvar}\n"
                f"in {self.n_bins_x}{txt_perc}classes of {self.xvar},\n"
-               f"separate for {n_bins_var1}{txt_perc}classes of {self.zvar}\n"
+               f"separate for {n_bins_zvar}{txt_perc}classes of {self.zvar}\n"
                f"= {n_vals_datapoint} values per data point")
         # n_vals = self.df.groupby(self.var1_group_col).count().mean()[self.var1_col]
         # n_vals = int(n_vals / self.n_subbins_var2)
@@ -269,12 +273,14 @@ class SortingBinsMethod:
                        ax_ylabel_txt=f"{self.yvar}{txt_perc}")
 
         textsize = theme.FONTSIZE_TXT_LEGEND_SMALLER_14
-        default_legend(ax=ax, ncol=n_col,
-                       title=f"{n_bins_var1}{txt_perc}classes of {self.zvar} ({self.agg}) "
-                             f"(not generated: {n_not_generated} classes)",
-                       loc='upper left',
-                       textsize=textsize,
-                       bbox_to_anchor=(1, 1.02))
+
+        if legend:
+            default_legend(ax=ax, ncol=n_col,
+                           title=f"{n_bins_zvar}{txt_perc}classes of {self.zvar} ({self.agg}) "
+                                 f"(not generated: {n_not_generated} classes)",
+                           loc='upper left',
+                           textsize=textsize,
+                           bbox_to_anchor=(1, 1.02))
         return ax
 
 
