@@ -61,6 +61,7 @@ See the notebook here for more examples:
     - (`diive.pkgs.analyses.decoupling.SortingBinsMethod`)
     - Added `agg` parameter to define aggregation method used in binning the data
     - Renamed and reworked `conversion` paramater, now allows conversion to z-scores in addition to percentiles
+- Added new filetype `FLUXNET-FULLSET-HR-CSV-60MIN` for reading FLUXNET files with 60MIN time resolution
 
 ### Notebooks
 

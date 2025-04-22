@@ -1,0 +1,24 @@
+GENERAL:
+  NAME: "FLUXNET-FULLSET-HR-CSV-60MIN"
+  DESCRIPTION: "The FULLSET Data Product for the FLUXNET2015 Release includes all variables for the data product, including all quality and uncertainty variables, plus a few selected variables from the intermediate data processing steps in the data processing pipeline."
+  TAGS: [ "FLUXNET" ]
+
+FILE:
+  EXTENSION: "*.csv"
+  COMPRESSION: "None"
+
+TIMESTAMP:
+  DESCRIPTION: "1 column with full timestamp with seconds"
+  INDEX_COLUMN: [ 'TIMESTAMP_END' ]
+  DATETIME_FORMAT: "%Y%m%d%H%M"
+  SHOWS_START_MIDDLE_OR_END_OF_RECORD: "end"
+
+DATA:
+  HEADER_SECTION_ROWS: [ 0 ]
+  SKIP_ROWS: [ ]
+  HEADER_ROWS: [ 0 ]
+  VARNAMES_ROW: 0
+  VARUNITS_ROW: "-not-available-"
+  NA_VALUES: [ -9999, -6999, -999, "nan", "NaN", "NAN", "NA", "inf", "-inf", "-" ]
+  FREQUENCY: "h"
+  DELIMITER: ","
