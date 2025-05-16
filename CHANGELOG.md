@@ -2,11 +2,82 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.87.0 | 20 Mar 2025
+## v0.87.0 | 17 May 2025
 
-### XXX
+### Heatmap rank plot
 
-- XXX
+`diive` can now create heatmap rank plots.
+
+![plotHeatmapYearMonthRank_diive_v0.87.0.png](images/plotHeatmapYearMonthRank_diive_v0.87.0.png)
+
+Heatmap rank plots display the relative ranking of monthly aggregated values across multiple years. Essentially, it
+shows how each month's overall value compares to the same month in other years. By default, the plot ranks the monthly
+mean (average) of the selected variable.
+
+Other aggregation methods commonly used in the `pandas` library are possible, such as `median`, `min`, `max` and `std`,
+among others.
+
+Basic example:
+
+```
+import diive as dv
+hm = dv.heatmapyearmonth_ranks(series=series)  # Initialize instance, series is a pandas Series
+hm.plot()  # Generate basic plot
+```
+
+See the notebook here for more examples:
+`notebooks/Plotting/HeatmapYearMonthRank.ipynb`
+
+### New features
+
+- Added new class `.heatmapyearmonth_ranks()` to plot monthly ranks of an aggregated value across years (
+  `diive.core.plotting.heatmap_datetime.HeatmapYearMonthRanks`)
+- Added new function `.resample_to_monthly_agg_matrix()` to calculate a matrix of monthly aggregates across years (
+  `diive.core.times.resampling.resample_to_monthly_agg_matrix`)
+- Added new function `.transform_yearmonth_matrix_to_longform()` to convert monthly aggregation matrix to long-form time
+  series (`diive.core.dfun.frames.transform_yearmonth_matrix_to_longform`)
+- Added new function to calculate ET (evapotranspiration in mm h-1) from LE (latent heat flux in W m-2). (
+  `diive.pkgs.createvar.conversions.et_from_le`)
+- Added new function to calculate latent heat of vaporization. Originally needed for calculating ET from LE. (
+  `diive.pkgs.createvar.conversions.latent_heat_of_vaporization`)
+
+### Additions
+
+- Heatmap plotting:
+    - Heatmaps can now show the z-value for each rectangle in the plot, using the parameters `show_values` and
+      `show_values_n_dec_places`. This makes more sense for data that are plotted month vs. year than for e.g.
+      half-hourly data.
+    - Simplified API to call heatmap plots: after `import diive as dv`, the heatmaps can now be called via
+      `dv.heatmapyearmonth()` and `dv.heatmapdatetime()`.
+- `SortingBinsMethod`:
+    - The counts per bin are now also part of the bin stats
+    - Sometimes the required number of bins cannot be generated, in this case the stats for the respective bin are now
+      skipped and the bin is missing from the output (`.calcbins`)
+    - All parameters were renamed to better reflect what is going on
+    - (`diive.pkgs.analyses.decoupling.SortingBinsMethod`)
+    - Added `agg` parameter to define aggregation method used in binning the data
+    - Renamed and reworked `conversion` paramater, now allows conversion to z-scores in addition to percentiles
+- Added new filetype `FLUXNET-FULLSET-HR-CSV-60MIN` for reading FLUXNET files with 60MIN time resolution
+
+### Notebooks
+
+- Added new notebook for calculating a monthly aggregation matrix (`notebooks/Resampling/ResamplingMonthlyMatrix.ipynb`)
+- Updated notebook `HeatmapDateTime`
+- Updated notebook `HeatmapYearMonth`
+- Changed name of notebook `ridgeline` to camel-case `RidgeLine`
+
+### Unittests
+
+- Added test case for `.et_from_le()` (`tests.test_createvar.TestCreateVar.test_conversion_et_from_le`)
+- Added test case for `.resample_to_monthly_agg_matrix()`, this test also includes the transformation to long-form time
+  series using `.transform_yearmonth_matrix_to_longform()` (
+  `tests.test_resampling.TestResampling.test_resample_to_monthly_agg_matrix`)
+- 55/55 unittests ran successfully
+
+### Environment
+
+- `diive` is now using Python version `3.11` upwards
+- Updated environment, poetry `pyproject.toml` file now has the currently used structure
 
 ## v0.86.0 | 20 Mar 2025
 
@@ -37,7 +108,7 @@ rp.plot()  # Generate basic plot
 ```
 
 See the notebook here for more examples:
-`notebooks/Plotting/ridgeline.ipynb`
+`notebooks/Plotting/RidgeLine.ipynb`
 
 ## Additions
 

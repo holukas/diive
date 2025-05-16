@@ -1,10 +1,24 @@
 import unittest
 
+import diive as dv
+from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
 from diive.configs.exampledata import load_exampledata_parquet
 from diive.pkgs.createvar.timesince import TimeSince
 
 
 class TestCreateVar(unittest.TestCase):
+
+    def test_conversion_et_from_le(self):
+        """Calculate ET from LE and compare results to ET calculated by EddyPro."""
+        df, meta = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
+        le = df['LE'].copy()
+        et_eddypro = df['ET'].copy()  # Should be in mm h-1
+        ta = df['TA_1_1_1'].copy()
+        et = dv.et_from_le(le=le, ta=ta)
+        self.assertAlmostEqual(et[0], et_eddypro[0], places=4)
+        self.assertAlmostEqual(et[1], et_eddypro[1], places=4)
+        self.assertAlmostEqual(et[-1], et_eddypro[-1], places=3)
+        self.assertAlmostEqual(et.sum(), et_eddypro.sum(), places=0)
 
     def test_lagged_variants(self):
         from diive.configs.exampledata import load_exampledata_parquet

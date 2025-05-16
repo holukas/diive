@@ -195,7 +195,7 @@ def _example_FormatMeteoForEddyProFluxProcessing():
     # print(df)
 
 
-def _example_FormatMeteoForFluxnetUpload():
+def _example_fromDatabase_FormatMeteoForFluxnetUpload():
     # Download example data from database
     from dbc_influxdb import dbcInflux  # Needed for communicating with the database
     SITE = 'ch-fru'  # Site name
@@ -291,6 +291,84 @@ def _example_FormatMeteoForFluxnetUpload():
     # print(results)
 
 
+def _example_fromCsvFile_FormatMeteoForFluxnetUpload():
+    filepath = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-fru_flux_product\dataset_ch-fru_flux_product\notebooks\10_METEO\13.1_CH-CHA_meteo_2005-2024.csv"
+    df = pd.read_csv(filepath)
+    df = df.set_index('TIMESTAMP_MIDDLE', inplace=False)
+    # [print(c) for c in df.columns];
+
+    rename_dict = {
+        'G_GF1_0.03_1': 'G_1_1_1',
+        'G_GF1_0.03_2': 'G_1_1_2',
+        'G_GF1_0.03_3': 'G_1_1_3',
+        'G_GF1_0.03_4': 'G_1_1_4',
+        'G_GF1_0.06_1': 'G_1_2_1',
+        'G_GF1_0.06_2': 'G_1_2_2',
+        'LW_IN_T1_1_1': 'LW_IN_1_1_1',
+        'LW_OUT_T1_1_1': 'LW_OUT_1_1_1',
+        'PPFD_IN_T1_2_1': 'PPFD_IN_1_1_1',
+        'PPFD_OUT_T1_2_1': 'PPFD_OUT_1_1_1',
+        'PREC_TOT_GF1_1_1': 'P_1_1_1',
+        'RH_T1_2_1': 'RH_1_1_1',
+        'SWC_GF1_0.05_1': 'SWC_1_1_1',
+        'SWC_GF1_0.05_2': 'SWC_1_1_2',
+        'SWC_GF1_0.1_2': 'SWC_1_2_1',
+        'SWC_GF1_0.15_1': 'SWC_1_3_1',
+        'SWC_GF1_0.2_2': 'SWC_1_4_1',
+        'SWC_GF1_0.25_1': 'SWC_1_5_1',
+        'SWC_GF1_0.3_2': 'SWC_1_6_1',
+        'SWC_GF1_0.4_1': 'SWC_1_7_1',
+        'SWC_GF1_0.4_2': 'SWC_1_7_2',
+        'SWC_GF1_0.5_2': 'SWC_1_8_1',
+        'SWC_GF1_0.6_2': 'SWC_1_9_1',
+        'SWC_GF1_0.75_1': 'SWC_1_10_1',
+        'SWC_GF1_0.75_2': 'SWC_1_10_2',
+        'SWC_GF1_0.95_1': 'SWC_1_11_1',
+        'SWC_GF1_1_2': 'SWC_1_12_1',
+        'SW_IN_T1_1_1': 'SW_IN_1_1_1',
+        'SW_OUT_T1_1_1': 'SW_OUT_1_1_1',
+        'TA_T1_2_1': 'TA_1_1_1',
+        'TS_GF1_0.01_1': 'TS_1_1_1',
+        'TS_GF1_0.02_1': 'TS_1_2_1',
+        'TS_GF1_0.04_1': 'TS_1_3_1',
+        'TS_GF1_0.05_2': 'TS_1_4_1',
+        'TS_GF1_0.07_1': 'TS_1_5_1',
+        'TS_GF1_0.1_1': 'TS_1_6_1',
+        'TS_GF1_0.1_2': 'TS_1_6_2',
+        'TS_GF1_0.15_1': 'TS_1_7_1',
+        'TS_GF1_0.2_2': 'TS_1_8_1',
+        'TS_GF1_0.25_1': 'TS_1_9_1',
+        'TS_GF1_0.3_2': 'TS_1_10_1',
+        'TS_GF1_0.4_1': 'TS_1_11_1',
+        'TS_GF1_0.4_2': 'TS_1_11_2',
+        'TS_GF1_0.5_2': 'TS_1_12_1',
+        'TS_GF1_0.6_2': 'TS_1_13_1',
+        'TS_GF1_0.75_2': 'TS_1_14_1',
+        'TS_GF1_0.95_1': 'TS_1_15_1',
+        'TS_GF1_1_2': 'TS_1_16_1',
+    }
+
+    f = FormatMeteoForFluxnetUpload(
+        df=df,
+        cols=rename_dict
+    )
+    f.run()
+
+    results = f.get_results()
+
+    import matplotlib.pyplot as plt
+    import numpy as np
+    results = results.replace(-9999, np.nan)
+    results.plot(subplots=True, x_compat=True, figsize=(8, 23))
+    plt.show()
+
+    f.export_yearly_files(site="CH-Fru", outdir=r"F:\TMP")
+
+    # results.to_csv(r"F:\TMP\del.csv", index=False)
+    # print(results)
+
+
 if __name__ == "__main__":
     # example_FormatMeteoForEddyProFluxProcessing()
-    _example_FormatMeteoForFluxnetUpload()
+    _example_fromCsvFile_FormatMeteoForFluxnetUpload()
+    # _example_fromDatabase_FormatMeteoForFluxnetUpload()

@@ -10,6 +10,38 @@ from diive.core.times.times import convert_series_timestamp_to_middle
 from diive.core.utils.prints import ConsoleOutputDecorator
 
 
+def resample_to_monthly_agg_matrix(series: pd.Series, agg: str, ranks: bool = False) -> pd.DataFrame:
+    """Resample to monthly aggregation across years, store results in a matrix.
+
+    Args:
+        series: Time series with timestamp.
+        agg: Method for monthly aggregation, e.g. *agg='mean'*.
+            Allowed methods: 'mean', 'median', 'sum', 'max', 'min', 'std', 'skew'.
+        ranks: Returns ranks of aggregation values in the matrix.
+            For example, if *agg='mean'* and *ranks=True*, then the highest value
+            in each month across years is attributed rank 1, the second highest rank 2, etc.
+            For measurements such as air temperature, rank 1 means that the respective month
+            was the warmest across all years.
+
+    Returns:
+        Matrix with resampled data. The resulting dataframe has YEAR as index and MONTH as columns.
+    """
+    series.name = 'data' if not series.name else series.name
+    df = pd.DataFrame(series)
+    df['MONTH'] = df.index.month
+    df['YEAR'] = df.index.year
+    monthly_agg = df.groupby(['YEAR', 'MONTH'])[series.name].agg(agg).unstack()
+
+    # Calculate ranks per month
+    def rank_monthly_aggs(col):
+        return col.rank(method='dense', ascending=False)
+
+    if ranks:
+        monthly_agg = monthly_agg.apply(rank_monthly_aggs, axis=0)
+
+    return monthly_agg
+
+
 @ConsoleOutputDecorator()
 def resample_series_to_30MIN(series: Series,
                              to_freqstr: Literal['30T', '30min'] = '30min',
@@ -161,3 +193,16 @@ def diel_cycle(series: Series,
         aggs = pd.concat({'ALL_MONTHS': aggs}, names=[series.index.name])
 
     return aggs
+
+
+def _example_resample_to_monthly_agg_matrix():
+    from diive.configs.exampledata import load_exampledata_parquet_long
+    df = load_exampledata_parquet_long()
+    series = df['Tair_f'].copy()
+    import diive as dv
+    monthly = dv.resample_to_monthly_agg_matrix(series=series, agg='mean', ranks=True)
+    print(monthly)
+
+
+if __name__ == '__main__':
+    _example_resample_to_monthly_agg_matrix()

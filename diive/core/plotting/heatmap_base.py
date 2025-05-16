@@ -36,6 +36,8 @@ class HeatmapBase:
                  color_bad: str = 'grey',
                  figsize: tuple = (6, 10.7),
                  zlabel: str = "Value",
+                 show_values: bool = False,
+                 show_values_n_dec_places: int = 0,
                  verbose: bool = False):
         """Base class for heatmap plots using series with datetime index.
 
@@ -49,6 +51,9 @@ class HeatmapBase:
             cmap: Matplotlib colormap
             color_bad: Color of missing values
             zlabel: Label for colorbar.
+            show_values: Show z-values in heatmap.
+            show_values_n_dec_places: Number of decimal places to show in heatmap.
+                Only considered if *show_values* is True.
 
         """
         self.series = series.copy()
@@ -69,6 +74,8 @@ class HeatmapBase:
         self.minyticks = minyticks
         self.maxyticks = maxyticks
         self.zlabel = zlabel
+        self.show_values = show_values
+        self.showvalues_n_dec_places = show_values_n_dec_places
 
         if self.verbose:
             print("Plotting heatmap  ...")
@@ -166,6 +173,16 @@ class HeatmapBase:
 
             fig_render_bw.show()
 
+    def show_vals_in_plot(self):
+        # Write "X" into z-value rectangle
+        for i in range(self.z.shape[0]):
+            for j in range(self.z.shape[1]):
+                # Calculate the center coordinates
+                x_center = (self.x[j] + self.x[j + 1]) / 2
+                y_center = (self.y[i] + self.y[i + 1]) / 2
+                self.ax.text(self.x[j] + 0.5, self.y[i] + 0.5, f"{self.z[i, j]:.{self.showvalues_n_dec_places}f}",
+                             ha='center', va='center', color='black', fontsize=9, zorder=100)
+
     def setup(self):
 
         fig = self.fig
@@ -206,7 +223,7 @@ class HeatmapBase:
         plot_df.reset_index(drop=True, inplace=True)
 
         # Put needed data in new df_pivot, then pivot to bring it in needed shape
-        plot_df_pivot = plot_df.pivot(index='y_vals', columns='x_vals', values='z')  ## new in pandas 23.4
+        plot_df_pivot = plot_df.pivot(index='y_vals', columns='x_vals', values='z')  # new in pandas 23.4
         # plot_df_pivot = plot_df_pivot.append(plot_df_pivot.iloc[-1])
         x = plot_df_pivot.columns.values
         y = plot_df_pivot.index.values

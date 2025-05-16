@@ -6,7 +6,7 @@ def latent_heat_of_vaporization(ta: pd.Series) -> pd.Series:
 
     Kudos:
         Based on code of the R package 'bigleaf':
-        https://rdrr.io/cran/bigleaf/src/R/meteorological_variables.r#sym-latent.heat.vaporization
+        https://rdrr.io/cran/bigleaf/src/R/meteorological_variables.r (latent.heat.vaporization)
 
     Reference:
         Stull, B., 1988: An Introduction to Boundary Layer Meteorology (p.641)
@@ -44,7 +44,7 @@ def et_from_le(le: pd.Series, ta: pd.Series) -> pd.Series:
     return et
 
 
-def _example():
+def _example_et_from_le():
     from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
     df, meta = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
     le = df['LE'].copy()
@@ -76,4 +76,4 @@ def _example():
 
 
 if __name__ == '__main__':
-    _example()
+    _example_et_from_le()

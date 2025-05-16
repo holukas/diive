@@ -1,46 +1,49 @@
-[tool.poetry]
+[project]
 name = "diive"
 version = "0.87.0"
 description = "Time series processing"
-authors = ["holukas <holukas@ethz.ch>"]
+authors = [
+    {name = "Lukas Hörtnagl",email = "holukas@ethz.ch"}
+]
+license = {text = "GNU General Public License v3.0"}
 readme = "README.md"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "pandas (>=2.2.3,<3.0.0)",
+    "xgboost (>=3.0.0,<4.0.0)",
+    "scikit-learn (>=1.6.1,<2.0.0)",
+    "matplotlib (>=3.10.1,<4.0.0)",
+    "pyyaml (>=6.0.2,<7.0.0)",
+    "uncertainties (>=3.2.2,<4.0.0)",
+    "statsmodels (>=0.14.4,<0.15.0)",
+    "prophet (>=1.1.6,<2.0.0)",
+    "seaborn (>=0.13.2,<0.14.0)",
+    "bokeh (>=3.7.1,<4.0.0)",
+    "pyarrow (>=19.0.1,<20.0.0)",
+    "pymannkendall (>=1.4.3,<2.0.0)",
+    "yellowbrick (>=1.5,<2.0)",
+    "shap (>=0.47.1,<0.48.0)",
+    "eli5 (>=0.14.0,<0.15.0)",
+    "dtreeviz (>=2.2.2,<3.0.0)",
+    "numpy (>=2.2.4,<3.0.0)",
+    "sktime (>=0.36.0,<0.37.0)",
+    "category-encoders (>=2.8.1,<3.0.0)",
+    "scikit-optimize (>=0.10.2,<0.11.0)",
+    "polars (>=1.26.0,<2.0.0)",
+    "jupyterlab (>=4.3.6,<5.0.0)",
+    "jupyter-bokeh (>=4.0.5,<5.0.0)"
+]
 
-[tool.poetry.dependencies]
-python = ">=3.9,<3.12"
-pandas = ">=2.1.0"
-scipy = ">=1.11.2"
-scikit-learn = ">=1.3.0"
-matplotlib = ">=3.7.3"
-pyyaml = ">=6.0.1"
-uncertainties = ">=3.1.7"
-statsmodels = ">=0.14.0"
-prophet = ">=1.1.4"
-seaborn = ">=0.12.2"
-bokeh = ">=3.2.2"
-pyarrow = ">=13.0.0"
-pymannkendall = ">=1.4.3"
-yellowbrick = ">=1.5"
-shap = ">=0.42.1"
-eli5 = ">=0.13.0"
-xgboost = ">=2.0.0"
-numpy = ">=1.20.0"
-dtreeviz = ">=2.2.2"
-sktime = ">=0.32.1"
-category-encoders = ">=2.6.3"
-scikit-optimize = ">=0.10.2"
-polars = ">=1.8.1"
-jupyterlab = ">=4.2.5"
-jupyter-bokeh = ">=4.0.5"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.group.dev.dependencies]
 dbc-influxdb = { path = "../../22 - POET/dbc-influxdb", develop = true }
-sphinx = ">=7.2.6"
-sphinxcontrib-napoleon = ">=0.7"
-sphinx-rtd-theme = ">=2.0.0"
-ipywidgets = ">=8.1.1"
-ruff = ">=0.6.8"
-autopep8 = ">=2.3.1"
+sphinx = ">=8.2.3"
+sphinx-rtd-theme = ">=3.0.2"
+ipywidgets = ">=8.1.5"
+ruff = ">=0.11.2"
+autopep8 = ">=2.3.2"
 
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"

@@ -55,22 +55,24 @@ class TestAnalyses(unittest.TestCase):
         # Make subset
         df = df[[ta_col, vpd_col, swin_col]].copy()
         sbm = SortingBinsMethod(df=df,
-                                var1_col=ta_col,
-                                var2_col=swin_col,
-                                var3_col=vpd_col,
-                                n_bins_var1=5,
-                                n_subbins_var2=10,
-                                convert_to_percentiles=False)
+                                zvar=ta_col,
+                                xvar=swin_col,
+                                yvar=vpd_col,
+                                n_bins_z=5,
+                                n_bins_x=10,
+                                conversion=None,
+                                agg='median')
         sbm.calcbins()
-        binmedians = sbm.get_binmedians()
+        sbm.showplot_decoupling_sbm(marker='o', emphasize_lines=True)
+        binmedians = sbm.get_binaggs()
         keys = []
         for group_key, group_df in binmedians.items():
             keys.append(group_key)
         self.assertEqual(len(keys), 5)
-        self.assertEqual(len(binmedians['21.3'].columns), 12)
-        self.assertEqual(len(binmedians['21.3'].index), 10)
-        self.assertEqual(binmedians['21.3'].drop('group_short-wave_incoming_radiation', axis=1).sum().sum(),
-                         20226.767999999996)
+        self.assertEqual(len(binmedians['20.9'].columns), 13)
+        self.assertEqual(len(binmedians['20.9'].index), 10)
+        self.assertEqual(binmedians['20.9'].drop('group_short-wave_incoming_radiation', axis=1).sum().sum(),
+                         25880.624680000004)
 
     def test_daily_correlation(self):
         from diive.configs.exampledata import load_exampledata_parquet

@@ -31,13 +31,13 @@ class TestFits(unittest.TestCase):
         fit_results = bf.fit_results
 
         self.assertEqual(len(fit_results['input_df']['group'].unique()), 10)
-        self.assertAlmostEqual(fit_results['bin_df'].sum().sum(), 63443.00512672013, places=5   )
-        self.assertEqual(fit_results['fit_df']['nom'].sum(), 678.9973275669132)
+        self.assertAlmostEqual(fit_results['bin_df'].sum().sum(), 63443.00512672013, places=5)
+        self.assertAlmostEqual(fit_results['fit_df']['nom'].sum(), 678.9973275669132, places=5)
         self.assertEqual(fit_results['fit_equation_str'], 'y = 0.0050x^2-0.0424x+0.1842')
         self.assertEqual(fit_results['fit_type'], 'quadratic_offset')
-        self.assertEqual(fit_results['fit_params_opt'][0], 0.005026230803512368)
-        self.assertEqual(fit_results['fit_params_opt'][1], -0.042381023692167855)
-        self.assertEqual(fit_results['fit_params_opt'][2], 0.18422391667068622)
+        self.assertAlmostEqual(fit_results['fit_params_opt'][0], 0.005026230803512368, places=5)
+        self.assertAlmostEqual(fit_results['fit_params_opt'][1], -0.042381023692167855, places=5)
+        self.assertAlmostEqual(fit_results['fit_params_opt'][2], 0.18422391667068622, places=5)
         self.assertEqual(fit_results['fit_r2'], 0.999999685472016)
         self.assertEqual(fit_results['n_vals_per_bin'], {'min': 3088.0, 'max': 3150.0})
         self.assertEqual(fit_results['bins_x'].sum(), fit_results['bin_df'][xcol]['mean'].sum())

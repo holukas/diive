@@ -9,10 +9,12 @@ Kudos:
 import datetime
 
 import numpy as np
+import pandas as pd
 from matplotlib.ticker import MultipleLocator, FormatStrFormatter
 from pandas import Series
 from pandas.plotting import register_matplotlib_converters
 
+import diive as dv
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.plotting.heatmap_base import HeatmapBase
 from diive.core.plotting.plotfuncs import nice_date_ticks
@@ -106,11 +108,26 @@ class HeatmapDateTime(HeatmapBase):
     def plot(self):
         """Plot heatmap"""
         cmap, z = self.set_cmap(cmap=self.cmap, color_bad=self.color_bad, z=self.z)
-        # Run._remove_cbar(ax=ax)
+
         p = self.ax.pcolormesh(self.x, self.y, self.z,
                                linewidths=1, cmap=cmap,
                                vmin=self.vmin, vmax=self.vmax,
                                shading='flat', zorder=99)
+
+        # import matplotlib.pyplot as plt
+        # from matplotlib.colors import ListedColormap
+        # import numpy as np
+        #
+        # mat = np.random.randint(0, 3, (5, 8))
+        # cmap = ListedColormap(['lime', 'orange', 'tomato'])
+        #
+        # plt.pcolormesh(np.arange(-0.5, mat.shape[1]), np.arange(-0.5, mat.shape[0]), mat, cmap=cmap)
+        #
+        # color_dict = {0: 'normal', 1: 'high', 2: 'very\nhigh'}
+        # for i in range(mat.shape[0]):
+        #     for j in range(mat.shape[1]):
+        #         plt.text(j, i, color_dict[mat[i, j]], ha='center', va='center')
+        # plt.show()
 
         # Ticks
         ax_xlabel_txt = 'Time (hours)'
@@ -133,13 +150,26 @@ class HeatmapDateTime(HeatmapBase):
 # @ConsoleOutputDecorator(spacing=False)
 class HeatmapYearMonth(HeatmapBase):
 
-    def __init__(self, series_monthly: Series, fig=None, ax=None, title: str = None, vmin: float = None,
+    def __init__(self,
+                 series_monthly: Series,
+                 fig=None,
+                 ax=None,
+                 title: str = None,
+                 vmin: float = None,
                  vmax: float = None,
-                 cb_digits_after_comma: int = 2, cb_labelsize: float = theme.AX_LABELS_FONTSIZE,
+                 cb_digits_after_comma: int = 2,
+                 cb_labelsize: float = theme.AX_LABELS_FONTSIZE,
                  axlabels_fontsize: float = theme.AX_LABELS_FONTSIZE,
-                 ticks_labelsize: float = theme.TICKS_LABELS_FONTSIZE, minyticks: int = 3, maxyticks: int = 10,
-                 cmap: str = 'RdYlBu_r', color_bad: str = 'grey', zlabel: str = "Value",
-                 figsize: tuple = (6, 10.7), verbose: bool = False):
+                 ticks_labelsize: float = theme.TICKS_LABELS_FONTSIZE,
+                 minyticks: int = 3,
+                 maxyticks: int = 10,
+                 cmap: str = 'RdYlBu_r',
+                 color_bad: str = 'grey',
+                 zlabel: str = "Value",
+                 figsize: tuple = (6, 10.7),
+                 verbose: bool = False,
+                 show_values: bool = False,
+                 show_values_n_dec_places: int = 0):
         """Plot heatmap of time series data with year on y-axis and month on x-axis.
 
         Args:
@@ -151,11 +181,14 @@ class HeatmapYearMonth(HeatmapBase):
             cb_digits_after_comma: How many digits after the comma are shown in the colorbar legend.
             cmap: Matplotlib colormap
             color_bad: Color of missing values
+            show_values: Show z-values in plot.
+            show_values_n_dec_places: Number of decimal places to show in heatmap.
+                Only considered if *show_values* is True.
 
         """
         super().__init__(series_monthly, fig, ax, title, vmin, vmax, cb_digits_after_comma, cb_labelsize,
                          axlabels_fontsize, ticks_labelsize, minyticks, maxyticks, cmap, color_bad, figsize, zlabel,
-                         verbose)
+                         show_values, show_values_n_dec_places, verbose)
 
         # Setup data for plotting
         self.series = self._setup_timestamp()
@@ -212,6 +245,9 @@ class HeatmapYearMonth(HeatmapBase):
                                vmin=self.vmin, vmax=self.vmax,
                                shading='flat', zorder=99)
 
+        if self.show_values:
+            self.show_vals_in_plot()
+
         # Ticks
         ax_xlabel_txt = 'Month'
         ax_ylabel_txt = 'Year'
@@ -235,7 +271,100 @@ class HeatmapYearMonth(HeatmapBase):
         )
 
 
-def example_heatmap_datetime():
+class HeatmapYearMonthRanks:
+
+    def __init__(
+            self,
+            agg: str = 'mean',
+            z_var_name: str = None,
+            title: str = None,
+            ranks: bool = True,
+            **kwargs
+    ):
+        """Plot monthly ranks across years.
+
+        Args:
+            **kwargs: Parameters for HeatmapBase.
+        """
+        self.series = kwargs['series']
+        self.kwargs = kwargs
+        self.agg = agg
+        self.z_var_name = z_var_name
+        self.title = title
+        self.ranks = ranks
+
+        self.hm = None  # Stores heatmap instance
+
+        self.kwargs = self._set_defaults()
+
+        self.ranks_matrix, self.ranks_long = self._transform_data(series=kwargs['series'])
+        del kwargs['series']
+        self._make_plot()
+
+    def _set_defaults(self) -> dict:
+        kwargs = self.kwargs
+
+        # Check if a colormap was defined, otherwise default
+        if 'cmap' not in kwargs.keys():
+            kwargs['cmap'] = 'RdYlBu'
+
+        # Check if digits after comma defined, otherwise default
+        if 'cb_digits_after_comma' not in kwargs.keys():
+            kwargs['cb_digits_after_comma'] = 0
+
+        # Check if zlabel defined, otherwise default
+        if 'zlabel' not in kwargs.keys():
+            kwargs['zlabel'] = 'rank'
+
+        # Check if show_values_n_dec_places defined, otherwise default
+        if 'show_values_n_dec_places' not in kwargs.keys():
+            kwargs['show_values_n_dec_places'] = 0
+
+        # Check if show_values defined, otherwise default
+        if 'show_values' not in kwargs.keys():
+            kwargs['show_values'] = True
+
+        return kwargs
+
+    def _transform_data(self, series: pd.Series):
+        ranks = dv.resample_to_monthly_agg_matrix(series=series, agg=self.agg, ranks=self.ranks)
+        ranks_long = dv.transform_yearmonth_matrix_to_longform(matrixdf=ranks, z_var_name=self.z_var_name)
+        return ranks, ranks_long
+
+    def _make_title(self):
+        if self.title:
+            title = self.title
+        else:
+            if self.z_var_name:
+                title = f"Ranks of monthly {self.z_var_name} {self.agg}"
+            else:
+                title = f"Ranks of monthly {self.agg}"
+        return title
+
+    def _make_plot(self):
+        self.title = self._make_title()
+        self.hm = dv.heatmapyearmonth(
+            series_monthly=self.ranks_long,
+            title=self.title,
+            # cb_digits_after_comma=0,
+            # show_values=True,
+            # show_values_n_dec_places=0,
+            # zlabel="rank",
+            **self.kwargs
+        )
+
+        if not self.hm.ax:
+            self.hm.show()
+
+    def plot(self):
+        self.hm.plot()
+
+    def show(self):
+        self.hm.show()
+
+
+def _example_heatmap_datetime():
+    import diive as dv
     from diive.configs.exampledata import load_exampledata_parquet
     df = load_exampledata_parquet()
     series = df['VPD_f'].copy()
@@ -243,14 +372,58 @@ def example_heatmap_datetime():
     series = series.loc[series.index.year == 2021]
     series.index.name = 'TIMESTAMP_START'
     series.name = None
-    hm = HeatmapDateTime(series=series, title="test")
+    hm = dv.heatmapdatetime(series=series, title="test")
     hm.show()
     # hm.export_borderless_heatmap(outpath=r"F:\TMP\heightmap_blender")
     # print(hm.get_ax())
     # print(hm.get_plot_data())
 
 
-def example_heatmap_yearmonth():
+def _example_heatmap_yearmonth_ranks():
+    from diive.configs.exampledata import load_exampledata_parquet_long
+    df = load_exampledata_parquet_long()
+    series = df['Tair_f'].copy()
+
+    # Minimal example
+    hm = dv.heatmapyearmonth_ranks(series=series)
+    hm.show()
+
+
+def _example_multiple_heatmap_yearmonth_ranks():
+    import matplotlib.pyplot as plt
+    import matplotlib.gridspec as gridspec
+    from diive.configs.exampledata import load_exampledata_parquet_long
+    df = load_exampledata_parquet_long()
+    series = df['Tair_f'].copy()
+
+    # Figure
+    fig = plt.figure(facecolor='white', figsize=(16, 9))
+
+    # Gridspec for layout
+    gs = gridspec.GridSpec(1, 3)  # rows, cols
+    gs.update(wspace=0.5, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
+    ax_mean = fig.add_subplot(gs[0, 0])
+    ax_min = fig.add_subplot(gs[0, 1])
+    ax_max = fig.add_subplot(gs[0, 2])
+
+    dv.heatmapyearmonth_ranks(ax=ax_mean, series=series, agg='mean').plot()
+    dv.heatmapyearmonth_ranks(ax=ax_min, series=series, agg='min').plot()
+    dv.heatmapyearmonth_ranks(ax=ax_max, series=series, agg='max').plot()
+
+    ax_mean.set_title("Air temperature mean", color='black')
+    ax_min.set_title("Air temperature min", color='black')
+    ax_max.set_title("Air temperature max", color='black')
+
+    ax_mean.tick_params(left=True, right=False, top=False, bottom=True,
+                        labelleft=True, labelright=False, labeltop=False, labelbottom=True)
+    ax_min.tick_params(left=True, right=False, top=False, bottom=True,
+                       labelleft=True, labelright=False, labeltop=False, labelbottom=True)
+    ax_max.tick_params(left=True, right=False, top=False, bottom=True,
+                       labelleft=True, labelright=False, labeltop=False, labelbottom=True)
+    fig.show()
+
+
+def _example_heatmap_yearmonth():
     from diive.configs.exampledata import load_exampledata_parquet
     df = load_exampledata_parquet()
     series = df['GPP_DT_CUT_REF'].copy()
@@ -260,20 +433,60 @@ def example_heatmap_yearmonth():
     # series = series.resample('1MS', label='left').agg(np.ptp)
     series.index.name = 'TIMESTAMP_START'
 
-    hm = HeatmapYearMonth(
+    hm = dv.heatmapyearmonth(
         series_monthly=series,
         title="Range per month",
         cb_digits_after_comma=0,
+        show_values=True,
+        show_values_n_dec_places=0
         # todo display_type='week_year'
         # todo display_type='year_doy'
     )
 
     hm.show()
-    hm.export_borderless_heatmap(outpath=r"F:\TMP\heightmap_blender")
-    print(hm.get_ax())
-    print(hm.get_plot_data())
+    # hm.export_borderless_heatmap(outpath=r"F:\TMP\heightmap_blender")
+    # print(hm.get_ax())
+    # print(hm.get_plot_data())
+
+
+def _example_multiple_heatmaps_yearmonth():
+    import matplotlib.pyplot as plt
+    import matplotlib.gridspec as gridspec
+    from diive.configs.exampledata import load_exampledata_parquet
+    df = load_exampledata_parquet()
+    aggs = df['Tair_f'].resample('1MS', label='left').agg(
+        {'mean', 'min', 'max', np.ptp})  # numpy's ptp gives the data range
+
+    # Figure
+    fig = plt.figure(facecolor='white', figsize=(16, 9))
+
+    # Gridspec for layout
+    gs = gridspec.GridSpec(1, 3)  # rows, cols
+    gs.update(wspace=0.5, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
+    ax_mean = fig.add_subplot(gs[0, 0])
+    ax_min = fig.add_subplot(gs[0, 1])
+    ax_max = fig.add_subplot(gs[0, 2])
+
+    dv.heatmapyearmonth(ax=ax_mean, series_monthly=aggs['mean'], zlabel="", cb_digits_after_comma=0).plot()
+    dv.heatmapyearmonth(ax=ax_min, series_monthly=aggs['min'], zlabel="", cb_digits_after_comma=0).plot()
+    dv.heatmapyearmonth(ax=ax_max, series_monthly=aggs['max'], zlabel="", cb_digits_after_comma=0).plot()
+
+    ax_mean.set_title("Air temperature mean", color='black')
+    ax_min.set_title("Air temperature min", color='black')
+    ax_max.set_title("Air temperature max", color='black')
+
+    ax_mean.tick_params(left=True, right=False, top=False, bottom=True,
+                        labelleft=True, labelright=False, labeltop=False, labelbottom=True)
+    ax_min.tick_params(left=True, right=False, top=False, bottom=True,
+                       labelleft=True, labelright=False, labeltop=False, labelbottom=True)
+    ax_max.tick_params(left=True, right=False, top=False, bottom=True,
+                       labelleft=True, labelright=False, labeltop=False, labelbottom=True)
+    fig.show()
 
 
 if __name__ == '__main__':
-    example_heatmap_datetime()
-    # example_heatmap_yearmonth()
+    _example_heatmap_yearmonth_ranks()
+    # _example_multiple_heatmap_yearmonth_ranks()
+    # _example_heatmap_datetime()
+    # _example_multiple_heatmaps_yearmonth()
+    # _example_heatmap_yearmonth()
