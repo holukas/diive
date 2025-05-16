@@ -2,19 +2,15 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.87.0 | XX Apr 2025
-
-TODO unittests
-TODO rename sortingbinsmethod
+## v0.87.0 | 17 May 2025
 
 ### Heatmap rank plot
 
 `diive` can now create heatmap rank plots.
 
-TODO:
-![plotRidgeLinePlot_diive_v0.86.0.png](images/plotRidgeLinePlot_diive_v0.86.0.png)
+![plotHeatmapYearMonthRank_diive_v0.87.0.png](images/plotHeatmapYearMonthRank_diive_v0.87.0.png)
 
-This visualization displays the relative ranking of monthly aggregated values across multiple years. Essentially, it
+Heatmap rank plots display the relative ranking of monthly aggregated values across multiple years. Essentially, it
 shows how each month's overall value compares to the same month in other years. By default, the plot ranks the monthly
 mean (average) of the selected variable.
 

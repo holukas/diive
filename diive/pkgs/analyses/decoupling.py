@@ -195,7 +195,7 @@ class SortingBinsMethod:
 
         # Figure size and legend number of columns
         n_col = 1  # int(self.n_bins_var1 / 20)
-        figsize = (12, 9)
+        figsize = (16, 7.2)
         if (self.n_bins_z > 24) and (self.n_bins_z <= 48):
             n_col += 1
         elif (self.n_bins_z > 48) and (self.n_bins_z <= 72):

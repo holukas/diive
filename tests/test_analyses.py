@@ -60,17 +60,19 @@ class TestAnalyses(unittest.TestCase):
                                 yvar=vpd_col,
                                 n_bins_z=5,
                                 n_bins_x=10,
-                                conversion=False)
+                                conversion=None,
+                                agg='median')
         sbm.calcbins()
+        sbm.showplot_decoupling_sbm(marker='o', emphasize_lines=True)
         binmedians = sbm.get_binaggs()
         keys = []
         for group_key, group_df in binmedians.items():
             keys.append(group_key)
         self.assertEqual(len(keys), 5)
-        self.assertEqual(len(binmedians['21.3'].columns), 12)
-        self.assertEqual(len(binmedians['21.3'].index), 10)
-        self.assertEqual(binmedians['21.3'].drop('group_short-wave_incoming_radiation', axis=1).sum().sum(),
-                         20226.767999999996)
+        self.assertEqual(len(binmedians['20.9'].columns), 13)
+        self.assertEqual(len(binmedians['20.9'].index), 10)
+        self.assertEqual(binmedians['20.9'].drop('group_short-wave_incoming_radiation', axis=1).sum().sum(),
+                         25880.624680000004)
 
     def test_daily_correlation(self):
         from diive.configs.exampledata import load_exampledata_parquet
