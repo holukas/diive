@@ -9,6 +9,10 @@
 `diive` can now create heatmap rank plots.
 
 ![plotHeatmapYearMonthRank_diive_v0.87.0.png](images/plotHeatmapYearMonthRank_diive_v0.87.0.png)
+*Example heatmap rank plot for air temperatures. This heatmap displays the rank of average monthly air temperatures
+compared across different years. For instance, May 2022 had the highest average temperature among all Mays on record (
+rank 1), as did October 2022 for Octobers. Conversely, January 2019 recorded the lowest average temperature for January
+within the 26-year period shown.*
 
 Heatmap rank plots display the relative ranking of monthly aggregated values across multiple years. Essentially, it
 shows how each month's overall value compares to the same month in other years. By default, the plot ranks the monthly
