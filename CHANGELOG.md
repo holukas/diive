@@ -2,6 +2,12 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.87.0 | 20 Mar 2025
+
+### XXX
+
+- XXX
+
 ## v0.86.0 | 20 Mar 2025
 
 ### New features
