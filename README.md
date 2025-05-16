@@ -139,7 +139,7 @@ _Create single outlier flags where `0=OK` and `2=outlier`._
 - **Cumulatives per year** ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/CumulativesPerYear.ipynb))
 - **Diel cycle per month** ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/DielCycle.ipynb))
 - **Heatmap date/time**: showing values (z) of time series as date (y) vs time (x) ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/HeatmapDateTime.ipynb))
-- **Heatmap year/month**: showing values (z) of time series as year (y) vs month (x) ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/HeatmapYearMonth.ipynb))
+- **Heatmap year/month**: plot monthly ranks across years ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/HeatmapYearMonthRank.ipynb))
 - **Histogram**: includes options to show z-score limits and to highlight the peak distribution bin ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/Histogram.ipynb))
 - **Long-term anomalies**: calculate and plot long-term anomaly for a variable, per year, compared to a reference period. ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/LongTermAnomalies.ipynb))
 - **Ridgeline plot**: looks a bit like a landscape ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/ridgeline.ipynb))
