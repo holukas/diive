@@ -2,6 +2,13 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.87.1 | XX Jun 2025
+
+### New features
+
+- Added new function to set exact values in a time series to missing values. (
+  `diive.pkgs.corrections.setto_missing.set_exact_values_to_missing`)
+
 ## v0.87.0 | 17 May 2025
 
 ### Heatmap rank plot
