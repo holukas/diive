@@ -136,3 +136,17 @@ def verify_dir(path: str) -> None:
     """ Create dir if it does not exist. """
     Path(path).mkdir(parents=True, exist_ok=True)
     return None
+
+
+def _example_read_parquet():
+    df = load_parquet(
+        filepath=r"F:\Sync\luhk_work\40 - DATA\DATASETS\2025_FORESTS\2-parquet_merged\CH-Dav_ENF_ICOS+FXN_1997-2024.parquet",
+        output_middle_timestamp=True,
+        sanitize_timestamp=False
+    )
+    print(df)
+    df.to_csv(r"F:\TMP\example.csv")
+
+
+if __name__ == "__main__":
+    _example_read_parquet()

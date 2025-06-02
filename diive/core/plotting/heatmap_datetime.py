@@ -364,15 +364,26 @@ class HeatmapYearMonthRanks:
 
 
 def _example_heatmap_datetime():
-    import diive as dv
-    from diive.configs.exampledata import load_exampledata_parquet
-    df = load_exampledata_parquet()
-    series = df['VPD_f'].copy()
+    # import diive as dv
+    # from diive.configs.exampledata import load_exampledata_parquet
+    # df = load_exampledata_parquet()
+
+    from diive.core.io.filereader import ReadFileType
+    filepath = r"F:\Sync\luhk_work\40 - DATA\DATASETS\2025_FORESTS\1-downloads\ICOSETC_CH-Dav_ARCHIVE_L2\ICOSETC_CH-Dav_FLUXNET_HH_L2.csv"
+    loaddatafile = ReadFileType(filetype='FLUXNET-FULLSET-HH-CSV-30MIN',
+                                filepath=filepath,
+                                data_nrows=None)
+    df, metadata_df = loaddatafile.get_filedata()
+
+
+
+    var = 'RECO_NT_CUT_50'
+    series = df[var].copy()
     # series = series.resample('3h', label='left').mean()
-    series = series.loc[series.index.year == 2021]
+    series = series.loc[series.index.year >= 2020]
     series.index.name = 'TIMESTAMP_START'
-    series.name = None
-    hm = dv.heatmapdatetime(series=series, title="test")
+    series.name = var
+    hm = dv.heatmapdatetime(series=series, title=None, vmin=-20, vmax=20)
     hm.show()
     # hm.export_borderless_heatmap(outpath=r"F:\TMP\heightmap_blender")
     # print(hm.get_ax())
@@ -485,8 +496,8 @@ def _example_multiple_heatmaps_yearmonth():
 
 
 if __name__ == '__main__':
-    _example_heatmap_yearmonth_ranks()
+    # _example_heatmap_yearmonth_ranks()
     # _example_multiple_heatmap_yearmonth_ranks()
-    # _example_heatmap_datetime()
+    _example_heatmap_datetime()
     # _example_multiple_heatmaps_yearmonth()
     # _example_heatmap_yearmonth()

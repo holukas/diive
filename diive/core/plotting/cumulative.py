@@ -229,7 +229,7 @@ class Cumulative:
             self.fig.show()
 
 
-def example_cum_overall():
+def _example_cum_overall():
     # Test data
     from diive.configs.exampledata import load_exampledata_parquet
     df_orig = load_exampledata_parquet()
@@ -243,10 +243,18 @@ def example_cum_overall():
         end_year=2019).plot()
 
 
-def example_cum_year():
-    # Test data
-    from diive.configs.exampledata import load_exampledata_parquet
-    df_orig = load_exampledata_parquet()
+def _example_cum_year():
+    # # Test data
+    # from diive.configs.exampledata import load_exampledata_parquet
+    # df_orig = load_exampledata_parquet()
+
+    from pathlib import Path
+    from diive.core.io.filereader import ReadFileType
+    filepath = r"F:\Sync\luhk_work\40 - DATA\DATASETS\2025_FORESTS\1-downloads\ICOSETC_CH-Dav_ARCHIVE_L2\ICOSETC_CH-Dav_FLUXNET_HH_L2.csv"
+    loaddatafile = ReadFileType(filetype='FLUXNET-FULLSET-HH-CSV-30MIN',
+                                filepath=filepath,
+                                data_nrows=None)
+    df_orig, metadata_df = loaddatafile.get_filedata()
 
     df = df_orig.copy()
 
@@ -271,7 +279,7 @@ def example_cum_year():
     # series.index = pd.to_datetime(series.index)
     # series = series.groupby(series.index.year).mean()  # yearly mean
 
-    series = df['NEE_CUT_REF_f'].copy()
+    series = df['GPP_NT_CUT_50'].copy()
     # series = df['NEE_CUT_REF_f'].copy()
     series = series.multiply(0.02161926)  # umol CO2 m-2 s-1 --> g C m-2 30min-1
     series_units = r'($\mathrm{gC\ m^{-2}}$)'
@@ -285,8 +293,8 @@ def example_cum_year():
         series_units=series_units,
         yearly_end_date=None,
         # yearly_end_date='08-11',
-        start_year=2005,
-        end_year=2020,
+        start_year=2020,
+        end_year=2024,
         show_reference=True,
         excl_years_from_reference=None,
         # excl_years_from_reference=[2022],
@@ -295,5 +303,5 @@ def example_cum_year():
 
 
 if __name__ == '__main__':
-    example_cum_overall()
-    # example_cum_year()
+    # _example_cum_overall()
+    _example_cum_year()
