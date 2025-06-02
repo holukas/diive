@@ -26,6 +26,7 @@ from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import detect_freq_groups
 from diive.pkgs.analyses.correlation import daily_correlation
 from diive.pkgs.corrections.offsetcorrection import remove_radiation_zero_offset, remove_relativehumidity_offset
+from diive.pkgs.corrections.setto_missing import set_exact_values_to_missing
 from diive.pkgs.corrections.setto_threshold import setto_threshold
 from diive.pkgs.corrections.setto_value import setto_value
 from diive.pkgs.createvar.potentialradiation import potrad
@@ -57,6 +58,13 @@ class StepwiseMeteoScreeningDb:
     - `.flag_outliers_zscore_test()`:  Identify outliers based on the z-score
     - `.flag_outliers_lof_dtnt_test()`: Identify outliers based on local outlier factor, daytime nighttime separately
     - `.flag_outliers_lof_test()`: Identify outliers based on local outlier factor, across all data
+    - `.flag_outliers_hampel_test()`: Identify outliers in a sliding window based on the Hampel filter
+    - `.flag_outliers_hampel_dtnt_test()`: Identify based on the Hampel filter, daytime nighttime separately
+    - `.flag_outliers_abslim_dtnt_test()`: Generate flag that indicates if daytime and nighttime values in data are
+        outside their respectively specified ranges
+
+    # TODO implement:
+    #     - `.flag_outliers_trim_low_test()`: Remove values below threshold and remove an equal amount of records from high end of data
 
     Implemented corrections:
     - `.correction_remove_radiation_zero_offset()`: Remove nighttime offset from all radiation data and set nighttime to zero
@@ -64,6 +72,7 @@ class StepwiseMeteoScreeningDb:
     - `.correction_setto_max_threshold()`: Set values above a threshold value to threshold value
     - `.correction_setto_min_threshold()`: Set values below a threshold value to threshold value
     - `.correction_setto_value()`: Set records in time range(s) to constant value
+    todo - `.correction_set_exact_value_to_missing()`: Set records with exact value to missing values (NaN)
 
     Implemented analyses:
     - `.analysis_potential_radiation_correlation()`: Analyzes time series daily correlation with potential radiation
@@ -471,6 +480,13 @@ class StepwiseMeteoScreeningDb:
             self._series_hires_cleaned[field] = \
                 setto_threshold(series=self._series_hires_cleaned[field],
                                 threshold=threshold, type='max', showplot=True)
+
+    def correction_set_exact_value_to_missing(self, values: list):
+        """Set exact values to missing values"""
+        for field in self.fields:
+            self._series_hires_cleaned[field] = \
+                set_exact_values_to_missing(series=self._series_hires_cleaned[field],
+                                            values=values, showplot=True)
 
     def correction_setto_min_threshold(self, threshold: float):
         """Set values below threshold to threshold"""
