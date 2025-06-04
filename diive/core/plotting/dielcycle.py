@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from pandas import Series, DataFrame
 
 import diive.core.plotting.styles.LightTheme as theme
+from diive.core.plotting.plotfuncs import default_format, format_spines, default_legend, add_zeroline_y
 from diive.core.plotting.plotfuncs import set_fig
 from diive.core.times.resampling import diel_cycle
 
@@ -28,6 +29,7 @@ class DielCycle:
         self.ylabel = None
         self.txt_ylabel_units = None
         self._diel_cycles_df = None
+        self.showgrid = True
 
     def get_data(self) -> DataFrame:
         return self.diel_cycles_df
@@ -50,11 +52,13 @@ class DielCycle:
              legend_n_col: int = 1,
              ylim: list = None,
              ylabel: str = None,
+             showgrid: bool = True,
              **kwargs):
 
         self.title = title
         self.txt_ylabel_units = txt_ylabel_units
         self.ylabel = ylabel
+        self.showgrid = showgrid
 
         # Resample
         self._diel_cycles_df = diel_cycle(series=self.series,
@@ -104,7 +108,7 @@ class DielCycle:
 
     def _format(self, title, legend_n_col, ylim):
         # title = self.title if self.title else f"{self.series.name} in {self.series.index.freqstr} time resolution"
-        from diive.core.plotting.plotfuncs import default_format, format_spines, default_legend, add_zeroline_y
+
         if title:
             self.ax.set_title(title, color='black', fontsize=24)
         # ax_xlabel_txt = "Uhrzeit"
@@ -114,7 +118,8 @@ class DielCycle:
                        txt_ylabel_units=self.txt_ylabel_units,
                        ticks_direction='in', ticks_length=8, ticks_width=2,
                        ax_labels_fontsize=20,
-                       ticks_labels_fontsize=20)
+                       ticks_labels_fontsize=20,
+                       showgrid=self.showgrid)
         format_spines(ax=self.ax, color='black', lw=1)
         default_legend(ax=self.ax, ncol=legend_n_col)
         add_zeroline_y(ax=self.ax, data=self.diel_cycles_df['mean'])

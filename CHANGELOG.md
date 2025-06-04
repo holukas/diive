@@ -9,6 +9,10 @@
 - Added new function to set exact values in a time series to missing values. (
   `diive.pkgs.corrections.setto_missing.set_exact_values_to_missing`)
 
+### Additions
+
+- Added parameter for showing grid when plotting diel cycles (`diive.core.plotting.dielcycle.DielCycle.plot`)
+
 ## v0.87.0 | 17 May 2025
 
 ### Heatmap rank plot
