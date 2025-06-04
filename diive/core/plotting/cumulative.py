@@ -168,6 +168,11 @@ class Cumulative:
         if self.start_year | self.end_year:
             self.df = keep_years(data=self.df, start_year=self.start_year, end_year=self.end_year)
 
+        self.show_grid = True
+        self.show_legend = True
+        self.ylabel = None
+        self.show_title = True
+
         self.cumulative = self.df.cumsum()
 
         # Create axis
@@ -175,20 +180,26 @@ class Cumulative:
         self.ax.xaxis.axis_date()
 
     def _apply_format(self):
-        title = f"Cumulatives ({self.cumulative.index.min()}-{self.cumulative.index.max()})"
-        self.fig.suptitle(title, fontsize=theme.FIGHEADER_FONTSIZE)
+        if self.show_title:
+            title = f"Cumulatives ({self.cumulative.index.min()}-{self.cumulative.index.max()})"
+            self.fig.suptitle(title, fontsize=theme.FIGHEADER_FONTSIZE)
         ymin = self.cumulative.min().min()
         ymax = self.cumulative.max().max()
+        ymax = ymax * 1.05 if ymax > 0 else ymax * 0.95
+        ymin = ymin * 0.95 if ymin > 0 else ymin * 1.05
         self.ax.set_ylim(ymin, ymax)
         pf.add_zeroline_y(ax=self.ax, data=self.cumulative)
+        ax_ylabel_txt = self.ylabel if self.ylabel else "Cumulative"
         pf.default_format(ax=self.ax,
                           ax_xlabel_txt="Date",
-                          ax_ylabel_txt="Cumulative",
-                          txt_ylabel_units=self.units)
+                          ax_ylabel_txt=ax_ylabel_txt,
+                          txt_ylabel_units=self.units,
+                          showgrid=self.show_grid)
         n_legend_cols = pf.n_legend_cols(n_legend_entries=len(self.cumulative.columns))
-        pf.default_legend(ax=self.ax,
-                          labelspacing=0.2,
-                          ncol=n_legend_cols)
+        if self.show_legend:
+            pf.default_legend(ax=self.ax,
+                              labelspacing=0.2,
+                              ncol=n_legend_cols)
         pf.nice_date_ticks(ax=self.ax, minticks=3, maxticks=20, which='x', locator='auto')
 
         # self.fig.tight_layout()
@@ -197,7 +208,18 @@ class Cumulative:
         """Return axis"""
         return self.ax
 
-    def plot(self, showplot: bool = True, digits_after_comma: int = 0):
+    def plot(self, showplot: bool = True,
+             digits_after_comma: int = 0,
+             show_grid: bool = True,
+             show_legend: bool = True,
+             ylabel: str = None,
+             show_title: bool = True
+             ):
+        self.show_grid = show_grid
+        self.show_legend = show_legend
+        self.ylabel = ylabel
+        self.show_title = show_title
+
         color_list = theme.colorwheel_36()  # get some colors
 
         # Plot yearly cumulatives

@@ -16,6 +16,12 @@
     - Added parameter `show_xlabel` for showing x-ticklabels
     - Added parameter `show_legend` for showing legend
     - (`diive.core.plotting.dielcycle.DielCycle.plot`)
+- Similarly, added more params for plotting cumulatives (`diive.core.plotting.cumulative.Cumulative`)
+
+### Changes
+
+- Scaling of the y-axis is now slightly extended (by 5%) when plotting cumulatives (
+  `diive.core.plotting.cumulative.Cumulative`)
 
 ## v0.87.0 | 17 May 2025
 
