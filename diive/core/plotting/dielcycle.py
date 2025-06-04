@@ -32,6 +32,7 @@ class DielCycle:
         self.showgrid = True
         self.show_xticklabels = True
         self.show_xlabel = True
+        self.show_legend = True
 
     def get_data(self) -> DataFrame:
         return self.diel_cycles_df
@@ -57,6 +58,7 @@ class DielCycle:
              showgrid: bool = True,
              show_xticklabels: bool = True,
              show_xlabel: bool = True,
+             show_legend: bool = True,
              **kwargs):
 
         self.title = title
@@ -65,6 +67,7 @@ class DielCycle:
         self.showgrid = showgrid
         self.show_xticklabels = show_xticklabels
         self.show_xlabel = show_xlabel
+        self.show_legend = show_legend
 
         # Resample
         self._diel_cycles_df = diel_cycle(series=self.series,
@@ -127,7 +130,8 @@ class DielCycle:
         if not self.show_xlabel:
             self.ax.set_xlabel("")
         format_spines(ax=self.ax, color='black', lw=1)
-        default_legend(ax=self.ax, ncol=legend_n_col)
+        if self.show_legend:
+            default_legend(ax=self.ax, ncol=legend_n_col)
         add_zeroline_y(ax=self.ax, data=self.diel_cycles_df['mean'])
         self.ax.set_xticks(['3:00', '6:00', '9:00', '12:00', '15:00', '18:00', '21:00'])
         self.ax.set_xticklabels([3, 6, 9, 12, 15, 18, 21])
