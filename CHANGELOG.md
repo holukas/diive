@@ -12,6 +12,7 @@
 ### Additions
 
 - Added parameter for showing grid when plotting diel cycles (`diive.core.plotting.dielcycle.DielCycle.plot`)
+- Added parameter for hiding x-ticklabels when plotting diel cycles (`diive.core.plotting.dielcycle.DielCycle.plot`)
 
 ## v0.87.0 | 17 May 2025
 
