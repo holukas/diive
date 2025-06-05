@@ -6,7 +6,7 @@
 
 ### New features
 
-- Added new function to set exact values in a time series to missing values. (
+- Added new function to set specific values in a time series to missing values. (
   `diive.pkgs.corrections.setto_missing.set_exact_values_to_missing`)
 
 ### Additions

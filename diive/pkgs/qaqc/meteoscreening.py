@@ -788,7 +788,7 @@ class StepwiseMeteoScreeningDb:
         return data_detailed
 
 
-def example():
+def _example():
     from pathlib import Path
     from diive.core.times.times import DetectFrequency
 
@@ -924,6 +924,7 @@ def example():
     # mscr.correction_setto_min_threshold(threshold=-5)  # Set to min threshold
     # DATES = [['2022-04-01', '2022-04-05'], ['2022-09-05', '2022-09-07']]
     # mscr.correction_setto_value(dates=DATES, value=3.7, verbose=1)  # Set to value
+    mscr.correction_set_exact_value_to_missing(values=[0])
 
     # # -----------
     # # ANALYSES
@@ -984,4 +985,4 @@ def example():
 
 
 if __name__ == '__main__':
-    example()
+    _example()
