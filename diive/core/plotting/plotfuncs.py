@@ -360,7 +360,7 @@ def quickplot(data: DataFrame or Series, hline: None or float = None, subplots: 
             data_cols[series.name] = series
         data = pd.concat(data_cols, axis=1)
 
-    fig = plt.figure(figsize=(20, 9))
+    fig = plt.figure(figsize=(16, 9))
 
     # Number of plots in figure
     n_plotrows = len(data.columns) if subplots else 1
