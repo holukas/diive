@@ -20,6 +20,8 @@
 
 ### Changes
 
+- In `.quickplot()`, other rows now use the same scaling for x-axis as the plot in the first row (
+  `diive.core.plotting.plotfuncs.quickplot`)
 - Scaling of the y-axis is now slightly extended (by 5%) when plotting cumulatives (
   `diive.core.plotting.cumulative.Cumulative`)
 
