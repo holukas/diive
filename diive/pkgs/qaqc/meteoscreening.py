@@ -72,7 +72,7 @@ class StepwiseMeteoScreeningDb:
     - `.correction_setto_max_threshold()`: Set values above a threshold value to threshold value
     - `.correction_setto_min_threshold()`: Set values below a threshold value to threshold value
     - `.correction_setto_value()`: Set records in time range(s) to constant value
-    todo - `.correction_set_exact_value_to_missing()`: Set records with exact value to missing values (NaN)
+    - `.correction_set_exact_value_to_missing()`: Set records with exact value to missing values (NaN)
 
     Implemented analyses:
     - `.analysis_potential_radiation_correlation()`: Analyzes time series daily correlation with potential radiation
@@ -481,12 +481,12 @@ class StepwiseMeteoScreeningDb:
                 setto_threshold(series=self._series_hires_cleaned[field],
                                 threshold=threshold, type='max', showplot=True)
 
-    def correction_set_exact_value_to_missing(self, values: list):
+    def correction_set_exact_value_to_missing(self, values: list, verbose: int = 0):
         """Set exact values to missing values"""
         for field in self.fields:
             self._series_hires_cleaned[field] = \
                 set_exact_values_to_missing(series=self._series_hires_cleaned[field],
-                                            values=values, showplot=True)
+                                            values=values, showplot=True, verbose=verbose)
 
     def correction_setto_min_threshold(self, threshold: float):
         """Set values below threshold to threshold"""
@@ -794,22 +794,22 @@ def _example():
 
     TESTDIR = Path(r"F:\TMP")
 
-    SITE = 'ch-cha'
-    SITE_LAT = 47.210227
-    SITE_LON = 8.410645
-    FIELDS = ['G_GF1_0.03_1']
-    MEASUREMENT = 'G'
-    START = '2024-06-01 00:00:01'
-    STOP = '2024-07-01 00:00:01'
+    SITE = 'ch-hon'
+    SITE_LAT = 47.41887  # CH-HON
+    SITE_LON = 8.491318  # CH-HON
+    FIELDS = ['TA_T1_4_2']
+    MEASUREMENT = 'TA'
+    START = '2025-02-01 00:00:01'
+    STOP = '2025-03-01 00:00:01'
     RESAMPLING_AGG = 'mean'
     # RESAMPLING_AGG = 'sum'
     DATA_VERSION = 'raw'
     TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
     RESAMPLING_FREQ = '30min'  # During MeteoScreening the screened high-res data will be resampled to this frequency; '30min' = 30-minute time resolution
     # DIRCONF = r'P:\Flux\RDS_calculations\_scripts\_configs\configs'  # Location of configuration files, needed e.g. for connection to database
-    DIRCONF = r'L:\Sync\luhk_work\20 - CODING\22 - POET\configs'
+    DIRCONF = r'F:\Sync\luhk_work\20 - CODING\22 - POET\configs'
     BUCKET_RAW = f'{SITE}_raw'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_raw' contains all raw data for CH-LAE
-    BUCKET_PROCESSED = f'a'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_processed' contains all processed data for CH-LAE
+    BUCKET_PROCESSED = f'{SITE}_processed'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_processed' contains all processed data for CH-LAE
     # BUCKET_PROCESSED = f'{SITE}_processed'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_processed' contains all processed data for CH-LAE
 
     from dbc_influxdb import dbcInflux
@@ -847,13 +847,13 @@ def _example():
     # save_as_pickle(filename="meteodata_detailed", data=data_detailed, outpath=TESTDIR)
     # save_as_pickle(filename="meteodata_assigned_measurements", data=assigned_measurements, outpath=TESTDIR)
 
-    # Import data from pickle for fast testing
-    from diive.core.io.files import load_parquet, load_pickle
-    data_simple = load_parquet(filepath=TESTDIR / "meteodata_simple.parquet")
-    _f = str(TESTDIR / "meteodata_detailed.pickle")
-    data_detailed = load_pickle(_f)
-    _f = str(TESTDIR / "meteodata_assigned_measurements.pickle")
-    assigned_measurements = load_pickle(_f)
+    # # Import data from pickle for fast testing
+    # from diive.core.io.files import load_parquet, load_pickle
+    # data_simple = load_parquet(filepath=TESTDIR / "meteodata_simple.parquet")
+    # _f = str(TESTDIR / "meteodata_detailed.pickle")
+    # data_detailed = load_pickle(_f)
+    # _f = str(TESTDIR / "meteodata_assigned_measurements.pickle")
+    # assigned_measurements = load_pickle(_f)
 
     # # Restrict data for testing
     # from diive.core.dfun.frames import df_between_two_dates
@@ -867,7 +867,7 @@ def _example():
                                     site_lat=SITE_LAT,
                                     site_lon=SITE_LON,
                                     utc_offset=TIMEZONE_OFFSET_TO_UTC_HOURS)
-    # mscr.showplot_orig()
+    mscr.showplot_orig()
     mscr.showplot_cleaned()
 
     # -----------------

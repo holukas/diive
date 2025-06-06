@@ -9,7 +9,8 @@ from diive.core.utils.prints import ConsoleOutputDecorator
 @ConsoleOutputDecorator()
 def set_exact_values_to_missing(series: Series,
                                 values: list,
-                                showplot: bool = False) -> Series:
+                                showplot: bool = False,
+                                verbose: int = 0) -> Series:
     """
     Set records matching *values* to missing values.
 
@@ -17,6 +18,7 @@ def set_exact_values_to_missing(series: Series,
         series: Data for variable that is corrected
         values: List of floats that will be set to missing values
         showplot: Show plot
+        verbose: Verbosity level
 
     Returns:
         Corrected series
@@ -50,7 +52,9 @@ def set_exact_values_to_missing(series: Series,
     print(f"Correction: set exact values to missing")
     print(f"    Variable: {series.name}")
     print(f"    Number of records set to missing: {n_vals}")
-    print(f"    Locations of records set to missing: {locs}")
+
+    if verbose > 0:
+        print(f"    Locations of records set to missing: {locs}")
 
     # Plot
     if showplot:
