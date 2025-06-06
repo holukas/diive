@@ -6,7 +6,7 @@
 
 ### New features
 
-- Added new function to set specific values in a time series to missing values. (
+- Added new function `.set_exact_values_to_missing()` to set specific values in a time series to missing values (
   `diive.pkgs.corrections.setto_missing.set_exact_values_to_missing`)
 
 ### Additions
@@ -24,6 +24,10 @@
   `diive.core.plotting.plotfuncs.quickplot`)
 - Scaling of the y-axis is now slightly extended (by 5%) when plotting cumulatives (
   `diive.core.plotting.cumulative.Cumulative`)
+
+### Notebooks
+
+- Updated `StepwiseMeteoScreeningFromDatabase.ipynb`, added new correction `.set_exact_values_to_missing()`
 
 ### Unittests
 
