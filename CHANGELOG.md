@@ -23,6 +23,10 @@
 - Scaling of the y-axis is now slightly extended (by 5%) when plotting cumulatives (
   `diive.core.plotting.cumulative.Cumulative`)
 
+### Unittests
+
+- Added test case for `.set_exact_values_to_missing()` (`tests.test_corrections.TestCorrections.test_settomissing`)
+
 ## v0.87.0 | 17 May 2025
 
 ### Heatmap rank plot
