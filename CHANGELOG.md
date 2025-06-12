@@ -2,7 +2,7 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.87.1 | XX Jun 2025
+## v0.87.1 | 12 Jun 2025
 
 ### New features
 
@@ -32,6 +32,7 @@
 ### Unittests
 
 - Added test case for `.set_exact_values_to_missing()` (`tests.test_corrections.TestCorrections.test_settomissing`)
+- 56/56 unittests ran successfully
 
 ## v0.87.0 | 17 May 2025
 

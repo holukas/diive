@@ -1,8 +1,9 @@
-import matplotlib.pyplot as plt
+import decimal
+
 import numpy as np
 import pandas as pd
-from pandas import Series, DataFrame
-import decimal
+from pandas import Series
+
 import diive.core.dfun.frames as frames
 from diive.core.plotting.plotfuncs import quickplot
 from diive.core.utils.prints import ConsoleOutputDecorator
@@ -81,7 +82,6 @@ class MeasurementOffsetFromReplicate:
         offsets_df = pd.DataFrame(columns=['OFFSET', 'ABS_DIFF'])
         counter = 0
         for offset in np.arange(self.offset_start, self.offset_end, self.offset_stepsize):
-
             counter += 1
             m_shifted = m.copy()
             m_shifted += offset
@@ -224,6 +224,12 @@ def remove_radiation_zero_offset(series: Series,
     nighttimeflag = dnf.get_nighttime_flag()
     # daytime = dnf.get_daytime_flag()
 
+    # Debug
+    import diive as dv
+    hm = dv.heatmapdatetime(series=series)
+    hm.show()
+
+
     nighttime_ix = nighttimeflag == 1
 
     # Get series nighttime data
@@ -279,45 +285,58 @@ def remove_radiation_zero_offset(series: Series,
 
 
 def example():
-    # from dbc_influxdb import dbcInflux
-    # SITE = 'ch-cha'
-    # MEASUREMENTS = ['TS']
-    # FIELDS = ['TS_GF1_0.05_1', 'TS_LOWRES_GF1_0.05_3']
-    # DIRCONF = r'L:\Sync\luhk_work\20 - CODING\22 - POET\configs'
-    # BUCKET_RAW = f'{SITE}_processed'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_raw' contains all raw data for CH-LAE
-    # dbc = dbcInflux(dirconf=DIRCONF)
-    # data_simple, data_detailed, assigned_measurements = dbc.download(
-    #     bucket=BUCKET_RAW,
-    #     measurements=MEASUREMENTS,
-    #     fields=FIELDS,
-    #     start='2022-01-01 00:00:01',
-    #     stop='2025-01-01 00:00:01',
-    #     timezone_offset_to_utc_hours=1,
-    #     data_version='meteoscreening_diive'
-    # )
-    # print(data_simple)
-    # print(data_detailed)
-    # print(assigned_measurements)
+    from dbc_influxdb import dbcInflux
+    SITE = 'ch-lae'
+    MEASUREMENTS = ['SW']
+    FIELDS = ['SW_IN_T1_47_1']
+    DIRCONF = r'F:\Sync\luhk_work\20 - CODING\22 - POET\configs'
+    BUCKET_RAW = f'{SITE}_processed'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_raw' contains all raw data for CH-LAE
+    dbc = dbcInflux(dirconf=DIRCONF)
+    data_simple, data_detailed, assigned_measurements = dbc.download(
+        bucket=BUCKET_RAW,
+        measurements=MEASUREMENTS,
+        fields=FIELDS,
+        start='2012-08-01 00:00:01',
+        stop='2012-09-01 00:00:01',
+        timezone_offset_to_utc_hours=1,
+        data_version=['meteoscreening_mst']
+    )
+    print(data_simple)
+    print(data_detailed)
+    print(assigned_measurements)
+
+    SITE_LAT = 47.478333  # CH-LAE
+    SITE_LON = 8.364389  # CH-LAE
+    corrected = remove_radiation_zero_offset(series=data_simple['SW_IN_T1_47_1'], lat=SITE_LAT, lon=SITE_LON,
+                                             utc_offset=1, showplot=True)
+
+    # import matplotlib.pyplot as plt
+    # # df.plot(x_compat=True)
+    # # plt.show()
+    # data_simple['SW_IN_T1_47_1'].plot(x_compat=True)
+    # plt.show()
+
     # # Export data to parquet for fast testing
     # from diive.core.io.files import save_parquet
     # filepath = save_parquet(filename="meteodata_simple", data=data_simple, outpath=r"F:\TMP")
 
-    from diive.core.io.files import load_parquet
-    df = load_parquet(filepath=r"F:\TMP\meteodata_simple.parquet")
-    df = df.dropna()
-    import matplotlib.pyplot as plt
+    # from diive.core.io.files import load_parquet
+    # df = load_parquet(filepath=r"F:\TMP\meteodata_simple.parquet")
+    # df = df.dropna()
+
+    # import matplotlib.pyplot as plt
+    # # df.plot(x_compat=True)
+    # # plt.show()
     # df.plot(x_compat=True)
     # plt.show()
-    df.plot(x_compat=True)
-    plt.show()
 
-    off = MeasurementOffsetFromReplicate(measurement=df['TS_GF1_0.05_1'],
-                                         replicate=df['TS_LOWRES_GF1_0.05_3'],
-                                         offset_start=-10, offset_end=0, offset_stepsize=.1)
-    corrected = off.get_corrected_measurement()
-    offset = off.get_offset()
-
-    print(f"The offset with minimum absolute difference between data points is {offset}")
+    # off = MeasurementOffsetFromReplicate(measurement=df['TS_GF1_0.05_1'],
+    #                                      replicate=df['TS_LOWRES_GF1_0.05_3'],
+    #                                      offset_start=-10, offset_end=0, offset_stepsize=.1)
+    # corrected = off.get_corrected_measurement()
+    # offset = off.get_offset()
+    #
+    # print(f"The offset with minimum absolute difference between data points is {offset}")
 
     # corrected.plot(x_compat=True, label=f"TS_GF1_0.05_1 corrected by offset {offset:.2f}")
     # df['TS_LOWRES_GF1_0.05_3'].plot(x_compat=True, label="TS_LOWRES_GF1_0.05_3 (replicate)")

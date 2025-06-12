@@ -62,9 +62,7 @@ class StepwiseMeteoScreeningDb:
     - `.flag_outliers_hampel_dtnt_test()`: Identify based on the Hampel filter, daytime nighttime separately
     - `.flag_outliers_abslim_dtnt_test()`: Generate flag that indicates if daytime and nighttime values in data are
         outside their respectively specified ranges
-
-    # TODO implement:
-    #     - `.flag_outliers_trim_low_test()`: Remove values below threshold and remove an equal amount of records from high end of data
+    - `.flag_outliers_trim_low_test()`: Remove values below threshold and remove an equal amount of records from high end of data
 
     Implemented corrections:
     - `.correction_remove_radiation_zero_offset()`: Remove nighttime offset from all radiation data and set nighttime to zero
