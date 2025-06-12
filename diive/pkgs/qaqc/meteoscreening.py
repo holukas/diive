@@ -26,6 +26,7 @@ from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import detect_freq_groups
 from diive.pkgs.analyses.correlation import daily_correlation
 from diive.pkgs.corrections.offsetcorrection import remove_radiation_zero_offset, remove_relativehumidity_offset
+from diive.pkgs.corrections.setto_missing import set_exact_values_to_missing
 from diive.pkgs.corrections.setto_threshold import setto_threshold
 from diive.pkgs.corrections.setto_value import setto_value
 from diive.pkgs.createvar.potentialradiation import potrad
@@ -57,6 +58,11 @@ class StepwiseMeteoScreeningDb:
     - `.flag_outliers_zscore_test()`:  Identify outliers based on the z-score
     - `.flag_outliers_lof_dtnt_test()`: Identify outliers based on local outlier factor, daytime nighttime separately
     - `.flag_outliers_lof_test()`: Identify outliers based on local outlier factor, across all data
+    - `.flag_outliers_hampel_test()`: Identify outliers in a sliding window based on the Hampel filter
+    - `.flag_outliers_hampel_dtnt_test()`: Identify based on the Hampel filter, daytime nighttime separately
+    - `.flag_outliers_abslim_dtnt_test()`: Generate flag that indicates if daytime and nighttime values in data are
+        outside their respectively specified ranges
+    - `.flag_outliers_trim_low_test()`: Remove values below threshold and remove an equal amount of records from high end of data
 
     Implemented corrections:
     - `.correction_remove_radiation_zero_offset()`: Remove nighttime offset from all radiation data and set nighttime to zero
@@ -64,6 +70,7 @@ class StepwiseMeteoScreeningDb:
     - `.correction_setto_max_threshold()`: Set values above a threshold value to threshold value
     - `.correction_setto_min_threshold()`: Set values below a threshold value to threshold value
     - `.correction_setto_value()`: Set records in time range(s) to constant value
+    - `.correction_set_exact_value_to_missing()`: Set records with exact value to missing values (NaN)
 
     Implemented analyses:
     - `.analysis_potential_radiation_correlation()`: Analyzes time series daily correlation with potential radiation
@@ -472,6 +479,13 @@ class StepwiseMeteoScreeningDb:
                 setto_threshold(series=self._series_hires_cleaned[field],
                                 threshold=threshold, type='max', showplot=True)
 
+    def correction_set_exact_value_to_missing(self, values: list, verbose: int = 0):
+        """Set exact values to missing values"""
+        for field in self.fields:
+            self._series_hires_cleaned[field] = \
+                set_exact_values_to_missing(series=self._series_hires_cleaned[field],
+                                            values=values, showplot=True, verbose=verbose)
+
     def correction_setto_min_threshold(self, threshold: float):
         """Set values below threshold to threshold"""
         for field in self.fields:
@@ -772,28 +786,28 @@ class StepwiseMeteoScreeningDb:
         return data_detailed
 
 
-def example():
+def _example():
     from pathlib import Path
     from diive.core.times.times import DetectFrequency
 
     TESTDIR = Path(r"F:\TMP")
 
-    SITE = 'ch-cha'
-    SITE_LAT = 47.210227
-    SITE_LON = 8.410645
-    FIELDS = ['G_GF1_0.03_1']
-    MEASUREMENT = 'G'
-    START = '2024-06-01 00:00:01'
-    STOP = '2024-07-01 00:00:01'
+    SITE = 'ch-hon'
+    SITE_LAT = 47.41887  # CH-HON
+    SITE_LON = 8.491318  # CH-HON
+    FIELDS = ['TA_T1_4_2']
+    MEASUREMENT = 'TA'
+    START = '2025-02-01 00:00:01'
+    STOP = '2025-03-01 00:00:01'
     RESAMPLING_AGG = 'mean'
     # RESAMPLING_AGG = 'sum'
     DATA_VERSION = 'raw'
     TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
     RESAMPLING_FREQ = '30min'  # During MeteoScreening the screened high-res data will be resampled to this frequency; '30min' = 30-minute time resolution
     # DIRCONF = r'P:\Flux\RDS_calculations\_scripts\_configs\configs'  # Location of configuration files, needed e.g. for connection to database
-    DIRCONF = r'L:\Sync\luhk_work\20 - CODING\22 - POET\configs'
+    DIRCONF = r'F:\Sync\luhk_work\20 - CODING\22 - POET\configs'
     BUCKET_RAW = f'{SITE}_raw'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_raw' contains all raw data for CH-LAE
-    BUCKET_PROCESSED = f'a'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_processed' contains all processed data for CH-LAE
+    BUCKET_PROCESSED = f'{SITE}_processed'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_processed' contains all processed data for CH-LAE
     # BUCKET_PROCESSED = f'{SITE}_processed'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_processed' contains all processed data for CH-LAE
 
     from dbc_influxdb import dbcInflux
@@ -831,13 +845,13 @@ def example():
     # save_as_pickle(filename="meteodata_detailed", data=data_detailed, outpath=TESTDIR)
     # save_as_pickle(filename="meteodata_assigned_measurements", data=assigned_measurements, outpath=TESTDIR)
 
-    # Import data from pickle for fast testing
-    from diive.core.io.files import load_parquet, load_pickle
-    data_simple = load_parquet(filepath=TESTDIR / "meteodata_simple.parquet")
-    _f = str(TESTDIR / "meteodata_detailed.pickle")
-    data_detailed = load_pickle(_f)
-    _f = str(TESTDIR / "meteodata_assigned_measurements.pickle")
-    assigned_measurements = load_pickle(_f)
+    # # Import data from pickle for fast testing
+    # from diive.core.io.files import load_parquet, load_pickle
+    # data_simple = load_parquet(filepath=TESTDIR / "meteodata_simple.parquet")
+    # _f = str(TESTDIR / "meteodata_detailed.pickle")
+    # data_detailed = load_pickle(_f)
+    # _f = str(TESTDIR / "meteodata_assigned_measurements.pickle")
+    # assigned_measurements = load_pickle(_f)
 
     # # Restrict data for testing
     # from diive.core.dfun.frames import df_between_two_dates
@@ -851,7 +865,7 @@ def example():
                                     site_lat=SITE_LAT,
                                     site_lon=SITE_LON,
                                     utc_offset=TIMEZONE_OFFSET_TO_UTC_HOURS)
-    # mscr.showplot_orig()
+    mscr.showplot_orig()
     mscr.showplot_cleaned()
 
     # -----------------
@@ -908,6 +922,7 @@ def example():
     # mscr.correction_setto_min_threshold(threshold=-5)  # Set to min threshold
     # DATES = [['2022-04-01', '2022-04-05'], ['2022-09-05', '2022-09-07']]
     # mscr.correction_setto_value(dates=DATES, value=3.7, verbose=1)  # Set to value
+    mscr.correction_set_exact_value_to_missing(values=[0])
 
     # # -----------
     # # ANALYSES
@@ -968,4 +983,4 @@ def example():
 
 
 if __name__ == '__main__':
-    example()
+    _example()

@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from pandas import Series, DataFrame
 
 import diive.core.plotting.styles.LightTheme as theme
+from diive.core.plotting.plotfuncs import default_format, format_spines, default_legend, add_zeroline_y
 from diive.core.plotting.plotfuncs import set_fig
 from diive.core.times.resampling import diel_cycle
 
@@ -28,6 +29,10 @@ class DielCycle:
         self.ylabel = None
         self.txt_ylabel_units = None
         self._diel_cycles_df = None
+        self.showgrid = True
+        self.show_xticklabels = True
+        self.show_xlabel = True
+        self.show_legend = True
 
     def get_data(self) -> DataFrame:
         return self.diel_cycles_df
@@ -50,11 +55,19 @@ class DielCycle:
              legend_n_col: int = 1,
              ylim: list = None,
              ylabel: str = None,
+             showgrid: bool = True,
+             show_xticklabels: bool = True,
+             show_xlabel: bool = True,
+             show_legend: bool = True,
              **kwargs):
 
         self.title = title
         self.txt_ylabel_units = txt_ylabel_units
         self.ylabel = ylabel
+        self.showgrid = showgrid
+        self.show_xticklabels = show_xticklabels
+        self.show_xlabel = show_xlabel
+        self.show_legend = show_legend
 
         # Resample
         self._diel_cycles_df = diel_cycle(series=self.series,
@@ -103,24 +116,27 @@ class DielCycle:
             self.fig.show()
 
     def _format(self, title, legend_n_col, ylim):
-        # title = self.title if self.title else f"{self.series.name} in {self.series.index.freqstr} time resolution"
-        from diive.core.plotting.plotfuncs import default_format, format_spines, default_legend, add_zeroline_y
+
         if title:
             self.ax.set_title(title, color='black', fontsize=24)
-        # ax_xlabel_txt = "Uhrzeit"
         ax_xlabel_txt = "Time (hours of day)"
         ylabel = self.ylabel if self.ylabel else self.series.name
         default_format(ax=self.ax, ax_xlabel_txt=ax_xlabel_txt, ax_ylabel_txt=ylabel,
                        txt_ylabel_units=self.txt_ylabel_units,
                        ticks_direction='in', ticks_length=8, ticks_width=2,
                        ax_labels_fontsize=20,
-                       ticks_labels_fontsize=20)
+                       ticks_labels_fontsize=20,
+                       showgrid=self.showgrid)
+        if not self.show_xlabel:
+            self.ax.set_xlabel("")
         format_spines(ax=self.ax, color='black', lw=1)
-        default_legend(ax=self.ax, ncol=legend_n_col)
+        if self.show_legend:
+            default_legend(ax=self.ax, ncol=legend_n_col)
         add_zeroline_y(ax=self.ax, data=self.diel_cycles_df['mean'])
         self.ax.set_xticks(['3:00', '6:00', '9:00', '12:00', '15:00', '18:00', '21:00'])
-        # self.ax.set_xticklabels(['3:00', '6:00', '9:00', '12:00', '15:00', '18:00', '21:00'])
         self.ax.set_xticklabels([3, 6, 9, 12, 15, 18, 21])
+        if not self.show_xticklabels:
+            self.ax.set_xticklabels([])
         self.ax.set_xlim(['0:00', '23:59:59'])
         self.ax.set_ylim(ylim)
         if self.showplot:

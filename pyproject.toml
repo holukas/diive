@@ -1,6 +1,6 @@
 [project]
 name = "diive"
-version = "0.87.0"
+version = "0.87.1"
 description = "Time series processing"
 authors = [
     {name = "Lukas Hörtnagl",email = "holukas@ethz.ch"}
@@ -41,9 +41,8 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.group.dev.dependencies]
 dbc-influxdb = { path = "../../22 - POET/dbc-influxdb", develop = true }
-sphinx = ">=8.2.3"
-sphinx-rtd-theme = ">=3.0.2"
 ipywidgets = ">=8.1.5"
 ruff = ">=0.11.2"
 autopep8 = ">=2.3.2"
-
+ghp-import = ">=2.1.0"
+jupyter-book = ">=1.0.4.post1"

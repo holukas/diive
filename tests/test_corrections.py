@@ -3,6 +3,15 @@ import unittest
 
 class TestCorrections(unittest.TestCase):
 
+    def test_settomissing(self):
+        import numpy as np
+        import pandas as pd
+        from diive.pkgs.corrections.setto_missing import set_exact_values_to_missing
+        series = pd.Series([1, 2, 0, 4, 5, 6, 7, 0, 9, 10], name="testdata")
+        series_corr = set_exact_values_to_missing(series=series, values=[0, 1, 10], showplot=False)
+        expected_series = pd.Series([np.nan, 2.0, np.nan, 4.0, 5.0, 6.0, 7.0, np.nan, 9.0, np.nan], name="testdata")
+        pd.testing.assert_series_equal(series_corr, expected_series)
+
     def test_winddiroffset(self):
         from diive.configs.exampledata import load_exampledata_winddir
         from diive.pkgs.corrections.winddiroffset import WindDirOffset

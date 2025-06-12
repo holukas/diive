@@ -2,6 +2,38 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.87.1 | 12 Jun 2025
+
+### New features
+
+- Added new function `.set_exact_values_to_missing()` to set specific values in a time series to missing values (
+  `diive.pkgs.corrections.setto_missing.set_exact_values_to_missing`)
+
+### Additions
+
+- Added parameters when plotting diel cycles:
+    - Added parameter `show_xticklabels` for showing grid
+    - Added parameter `show_xlabel` for showing x-ticklabels
+    - Added parameter `show_legend` for showing legend
+    - (`diive.core.plotting.dielcycle.DielCycle.plot`)
+- Similarly, added more params for plotting cumulatives (`diive.core.plotting.cumulative.Cumulative`)
+
+### Changes
+
+- In `.quickplot()`, other rows now use the same scaling for x-axis as the plot in the first row (
+  `diive.core.plotting.plotfuncs.quickplot`)
+- Scaling of the y-axis is now slightly extended (by 5%) when plotting cumulatives (
+  `diive.core.plotting.cumulative.Cumulative`)
+
+### Notebooks
+
+- Updated `StepwiseMeteoScreeningFromDatabase.ipynb`, added new correction `.set_exact_values_to_missing()`
+
+### Unittests
+
+- Added test case for `.set_exact_values_to_missing()` (`tests.test_corrections.TestCorrections.test_settomissing`)
+- 56/56 unittests ran successfully
+
 ## v0.87.0 | 17 May 2025
 
 ### Heatmap rank plot
