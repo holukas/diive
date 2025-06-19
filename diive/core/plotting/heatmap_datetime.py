@@ -3,7 +3,8 @@ HEATMAP
 =======
 
 Kudos:
-    - https://matplotlib.org/3.1.1/gallery/images_contours_and_fields/pcolormesh_levels.html#sphx-glr-gallery-images-contours-and-fields-pcolormesh-levels-py
+    - https://matplotlib.org/3.1.1/gallery/images_contours_and_fields/
+    pcolormesh_levels.html#sphx-glr-gallery-images-contours-and-fields-pcolormesh-levels-py
 
 """
 import datetime
@@ -266,14 +267,14 @@ class HeatmapYearMonth(HeatmapBase):
         else:
             raise NotImplementedError
 
-        # Set ticks
-        # xtickpos = np.arange(1.5, 13.5, 1)
+        # # Set ticks
+        # # xtickpos = np.arange(1.5, 13.5, 1)
         xtickpos = np.arange(self.x[0] + 0.5, self.x[-1] + 0.5, 1)
-        ytickpos = np.arange(self.y[0] + 0.5, self.y[-1] + 0.5, 1)
         self.ax.set_xticks(xtickpos)
-        self.ax.set_xticks(ytickpos)
         xticklabels = [int(t) for t in xtickpos]
         self.ax.set_xticklabels(xticklabels)
+        ytickpos = np.arange(self.y[0] + 0.5, self.y[-1] + 0.5, 1)
+        self.ax.set_yticks(ytickpos)
         yticklabels = [int(t) for t in ytickpos]
         self.ax.set_yticklabels(yticklabels)
 
@@ -500,22 +501,25 @@ def _example_multiple_heatmaps_yearmonth():
     # dv.heatmapyearmonth(ax=ax_min, series_monthly=aggs['min'], zlabel="", cb_digits_after_comma=0).plot()
     # dv.heatmapyearmonth(ax=ax_max, series_monthly=aggs['max'], zlabel="", cb_digits_after_comma=0).plot()
 
-    # Gridspec for top-to-bottom layout
-    gs = gridspec.GridSpec(2, 1)  # rows, cols
-    gs.update(wspace=0.5, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
-    ax1 = fig.add_subplot(gs[0, 0])
-    ax2 = fig.add_subplot(gs[1, 0])
-    dv.heatmapyearmonth(ax=ax1, series_monthly=aggs['mean'], orientation='horizontal', zlabel="", cb_digits_after_comma=0).plot()
+    # # Gridspec for top-to-bottom layout
+    # gs = gridspec.GridSpec(2, 1)  # rows, cols
+    # gs.update(wspace=0.5, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
+    # ax1 = fig.add_subplot(gs[0, 0])
+    # ax2 = fig.add_subplot(gs[1, 0])
+    # dv.heatmapyearmonth(ax=ax1, series_monthly=aggs['mean'], orientation='horizontal', zlabel="", cb_digits_after_comma=0).plot()
     # dv.heatmapyearmonth(ax=ax2, series_monthly=aggs['min'], orientation='vertical', zlabel="", cb_digits_after_comma=0).plot()
 
-    ax1.set_title("Air temperature mean", color='black')
-    ax2.set_title("Air temperature min", color='black')
+    dv.heatmapyearmonth(series_monthly=aggs['mean'], orientation='vertical', zlabel="",
+                        cb_digits_after_comma=0).show()
 
-    ax1.tick_params(left=True, right=False, top=False, bottom=True,
-                    labelleft=True, labelright=False, labeltop=False, labelbottom=True)
-    ax2.tick_params(left=True, right=False, top=False, bottom=True,
-                    labelleft=True, labelright=False, labeltop=False, labelbottom=True)
-    fig.show()
+    # ax1.set_title("Air temperature mean", color='black')
+    # ax2.set_title("Air temperature min", color='black')
+    #
+    # ax1.tick_params(left=True, right=False, top=False, bottom=True,
+    #                 labelleft=True, labelright=False, labeltop=False, labelbottom=True)
+    # ax2.tick_params(left=True, right=False, top=False, bottom=True,
+    #                 labelleft=True, labelright=False, labeltop=False, labelbottom=True)
+    # fig.show()
 
 
 if __name__ == '__main__':
