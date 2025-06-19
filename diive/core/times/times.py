@@ -606,10 +606,10 @@ def insert_season(timestamp: DatetimeIndex) -> Series:
     """
     Insert meteorological season as integer
 
-    spring = 1 (DJF)
-    summer = 2 (MAM)
-    autumn = 3 (JJA)
-    winter = 4 (SON)
+    spring = 1 (MAM)
+    summer = 2 (JJA)
+    autumn = 3 (SON)
+    winter = 4 (DJF)
 
     Args:
         timestamp: timestamp of time series

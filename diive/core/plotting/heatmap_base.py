@@ -23,6 +23,7 @@ class HeatmapBase:
                  series: Series,
                  fig=None,
                  ax=None,
+                 orientation: str = "vertical",
                  title: str = None,
                  vmin: float = None,
                  vmax: float = None,
@@ -44,6 +45,7 @@ class HeatmapBase:
         Args:
             series: Series
             ax: Axis in which heatmap is shown. If *None*, a figure with axis will be generated.
+            orientation: Orientation of heatmap. Options: 'horizontal', 'vertical'
             title: Text shown at the top of the plot.
             vmin: Minimum value shown in plot
             vmax: Maximum value shown in plot
@@ -59,6 +61,7 @@ class HeatmapBase:
         self.series = series.copy()
         self.series.name = self.series.name if self.series.name else "data"  # Time series must have a name
         self.verbose = verbose
+        self.orientation = orientation
         self.title = title
         self.cmap = cmap
         self.vmin = vmin
@@ -220,7 +223,7 @@ class HeatmapBase:
         # xaxis_vals, yaxis_vals = self._set_xy_axes_type()
         plot_df['y_vals'] = yaxis_vals
         plot_df['x_vals'] = xaxis_vals
-        plot_df.reset_index(drop=True, inplace=True)
+        plot_df = plot_df.reset_index(drop=True, inplace=False)
 
         # Put needed data in new df_pivot, then pivot to bring it in needed shape
         plot_df_pivot = plot_df.pivot(index='y_vals', columns='x_vals', values='z')  # new in pandas 23.4

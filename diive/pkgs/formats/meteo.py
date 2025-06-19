@@ -147,8 +147,42 @@ class FormatMeteoForFluxnetUpload:
         df = tss.get()
         return df
 
+def _example_FormatMeteoForEddyProFluxProcessing_dataFromParquetFile():
+    from diive.core.io.files import load_parquet, save_parquet
 
-def _example_FormatMeteoForEddyProFluxProcessing():
+    # Name of the variables in the original data file
+    SW_IN = 'SW_IN_T1_47_1_gfXG'
+    RH = 'RH_T1_47_1'
+    PPFD_IN = 'PPFD_IN_T1_47_1_gfXG'
+    LW_IN = 'LW_IN_T1_47_1'
+    TA = 'TA_T1_47_1_gfXG'
+    PA = 'PA_T1_47_1'
+
+    # Rename original variables for EddyPro, and add units
+    rename_dict = {
+        TA: ('Ta_1_1_1', 'C'),
+        SW_IN: ('Rg_1_1_1', 'W+1m-2'),
+        RH: ('RH_1_1_1', '%'),
+        LW_IN: ('Lwin_1_1_1', 'W+1m-2'),
+        PA: ('Pa_1_1_1', 'kPa'),
+        PPFD_IN: ('PPFD_1_1_1', 'umol+1m-2s-1'),
+    }
+
+    # Load data
+    SOURCEFILE = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\10_METEO\12.5_METEO7_GAPFILLED_2004-2024.parquet"
+    df = load_parquet(filepath=SOURCEFILE)
+
+
+    f = FormatMeteoForEddyProFluxProcessing(
+        df=df,
+        cols=rename_dict
+    )
+    f.run()
+
+    # df.to_csv(r"F:\TMP\del.csv", index=False)
+    # print(df)
+
+def _example_FormatMeteoForEddyProFluxProcessing_dataFromDatabase():
     # Download example data from database
     from dbc_influxdb import dbcInflux  # Needed for communicating with the database
     SITE = 'ch-fru'  # Site name
@@ -369,6 +403,7 @@ def _example_fromCsvFile_FormatMeteoForFluxnetUpload():
 
 
 if __name__ == "__main__":
-    # example_FormatMeteoForEddyProFluxProcessing()
-    _example_fromCsvFile_FormatMeteoForFluxnetUpload()
+    _example_FormatMeteoForEddyProFluxProcessing_dataFromParquetFile()
+    # _example_FormatMeteoForEddyProFluxProcessing_dataFromDatabase()
+    # _example_fromCsvFile_FormatMeteoForFluxnetUpload()
     # _example_fromDatabase_FormatMeteoForFluxnetUpload()

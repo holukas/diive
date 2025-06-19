@@ -360,7 +360,7 @@ def quickplot(data: DataFrame or Series, hline: None or float = None, subplots: 
             data_cols[series.name] = series
         data = pd.concat(data_cols, axis=1)
 
-    fig = plt.figure(figsize=(20, 9))
+    fig = plt.figure(figsize=(16, 9))
 
     # Number of plots in figure
     n_plotrows = len(data.columns) if subplots else 1
@@ -371,7 +371,12 @@ def quickplot(data: DataFrame or Series, hline: None or float = None, subplots: 
     # Create axis for each column
     axes = {}
     for a in range(0, n_plotrows):
-        axes[a] = fig.add_subplot(gs[a, 0])
+        if a == 0:
+            # Create plot in first row
+            axes[a] = fig.add_subplot(gs[a, 0])
+        else:
+            # For other rows, use same x-axis scaling as for first row
+            axes[a] = fig.add_subplot(gs[a, 0], sharex=axes[0])
 
     colors = colors_12(400)
     for ix, col in enumerate(data.columns):
