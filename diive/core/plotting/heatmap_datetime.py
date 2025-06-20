@@ -459,7 +459,57 @@ def _example_multiple_heatmap_yearmonth_ranks():
     fig.show()
 
 
+def _example_heatmap_yearmonth():
+    from diive.configs.exampledata import load_exampledata_parquet
+    df = load_exampledata_parquet()
+    series = df['Tair_f'].copy()
+    series = series.resample('1MS', label='left').mean()
+    series.index.name = 'TIMESTAMP_START'
+    dv.heatmapyearmonth(series_monthly=series, cb_digits_after_comma=0, zlabel="degC",
+                        ax_orientation="vertical", figsize=(14, 10)).show()
+    dv.heatmapyearmonth(series_monthly=series, cb_digits_after_comma=0, zlabel="degC",
+                        ax_orientation="horizontal", figsize=(14, 10)).show()
+    # hm.export_borderless_heatmap(outpath=r"F:\TMP\heightmap_blender")
+    # print(hm.get_ax())
+    # print(hm.get_plot_data())
+
+
+def _example_multiple_heatmaps_yearmonth_horizontal():
+    # Figure (top-to-bottom, horizontal plots)
+    import matplotlib.pyplot as plt
+    import matplotlib.gridspec as gridspec
+    from diive.configs.exampledata import load_exampledata_parquet
+    df = load_exampledata_parquet()
+    aggs = df['NEE_CUT_REF_f'].resample('1MS', label='left').agg(
+        {'mean', 'min', 'max', np.ptp})  # numpy's ptp gives the data range
+    fig = plt.figure(facecolor='white', figsize=(12, 21), layout="constrained")
+    gs = gridspec.GridSpec(4, 1, figure=fig)  # rows, cols
+    # gs.update(wspace=0.5, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax2 = fig.add_subplot(gs[1, 0])
+    ax3 = fig.add_subplot(gs[2, 0])
+    ax4 = fig.add_subplot(gs[3, 0])
+    zlabel = r'$\mathrm{\mu mol\ CO_2\ m^{-2}\ s^{-1}}$'
+    settings = dict(ax_orientation='horizontal', zlabel=zlabel, cb_digits_after_comma=0)
+    dv.heatmapyearmonth(ax=ax1, series_monthly=aggs['mean'], **settings).plot()
+    dv.heatmapyearmonth(ax=ax2, series_monthly=aggs['min'], **settings).plot()
+    dv.heatmapyearmonth(ax=ax3, series_monthly=aggs['max'], **settings).plot()
+    dv.heatmapyearmonth(ax=ax4, series_monthly=aggs['ptp'], **settings).plot()
+    axs = [ax1, ax2, ax3, ax4]
+    for ax in axs:
+        if ax != ax4:
+            ax.set_xlabel("")
+            ax.set_xticklabels("")
+    ax1.set_title("Mean")
+    ax2.set_title("Min")
+    ax3.set_title("Max")
+    ax4.set_title("Range")
+    fig.suptitle("NEE")
+    fig.show()
+
+
 def _example_colormaps():
+    """Creates heatmaps with all available colormaps and exports them to files."""
     from heatmap_base import list_of_colormaps
     from diive.configs.exampledata import load_exampledata_parquet
     cmaps = list_of_colormaps()
@@ -479,93 +529,21 @@ def _example_colormaps():
     # print(hm.get_plot_data())
 
 
-def _example_heatmap_yearmonth():
-    from diive.configs.exampledata import load_exampledata_parquet
-    df = load_exampledata_parquet()
-    series = df['Tair_f'].copy()
-    series = series.resample('1MS', label='left').mean()
-    series.index.name = 'TIMESTAMP_START'
-    dv.heatmapyearmonth(series_monthly=series, cb_digits_after_comma=0, zlabel="degC",
-                        ax_orientation="vertical", figsize=(14, 10)).show()
-    dv.heatmapyearmonth(series_monthly=series, cb_digits_after_comma=0, zlabel="degC",
-                        ax_orientation="horizontal", figsize=(14, 10)).show()
-    # hm.export_borderless_heatmap(outpath=r"F:\TMP\heightmap_blender")
-    # print(hm.get_ax())
-    # print(hm.get_plot_data())
-
-
-def _example_multiple_heatmaps_yearmonth_horizontal():
-    import matplotlib.pyplot as plt
-    import matplotlib.gridspec as gridspec
-    from diive.configs.exampledata import load_exampledata_parquet
-    df = load_exampledata_parquet()
-    aggs = df['Tair_f'].resample('1MS', label='left').agg(
-        {'mean', 'min', 'max', np.ptp})  # numpy's ptp gives the data range
-
-    # from diive.core.io.files import load_parquet
-    # f1 = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-cha_flux_product"
-    # f2 = r"dataset_ch-cha_flux_product\notebooks\80_FINALIZE"
-    # f3 = f"81.1_FLUXES_M15_MGMT_L4.2_NEE_GPP_RECO_LE_H_FN2O_FCH4.parquet"
-    # f = f"{f1}\\{f2}\\{f3}"
-    # df = load_parquet(f)
-    # # [print(c) for c in df.columns if "FN2O" in c];
-    # nee_monthly = df['NEE_L3.1_L3.3_CUT_50_QCF_gfRF'].resample('1MS', label='left').agg(
-    #     {'mean'})  # numpy's ptp gives the data range
-    # n2o_monthly = df['FN2O_L3.1_L3.3_CUT_50_QCF_gfRF'].resample('1MS', label='left').agg(
-    #     {'mean'})  # numpy's ptp gives the data range
-
-    # Figure (top-to-bottom, horizontal plots)
-    fig = plt.figure(facecolor='white', figsize=(16, 9), layout="constrained")
-    gs = gridspec.GridSpec(2, 1, figure=fig)  # rows, cols
-    ax1 = fig.add_subplot(gs[0, 0])
-    ax2 = fig.add_subplot(gs[1, 0])
-    ax3 = fig.add_subplot(gs[2, 0])
-    ax4 = fig.add_subplot(gs[3, 0])
-
-    # # Gridspec for left-to-right layout
-    # gs = gridspec.GridSpec(1, 3)  # rows, cols
-    # gs.update(wspace=0.5, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
-    # ax_mean = fig.add_subplot(gs[0, 0])
-    # ax_min = fig.add_subplot(gs[0, 1])
-    # ax_max = fig.add_subplot(gs[0, 2])
-    # dv.heatmapyearmonth(ax=ax_mean, series_monthly=aggs['mean'], zlabel="", cb_digits_after_comma=0).plot()
-    # dv.heatmapyearmonth(ax=ax_min, series_monthly=aggs['min'], zlabel="", cb_digits_after_comma=0).plot()
-    # dv.heatmapyearmonth(ax=ax_max, series_monthly=aggs['max'], zlabel="", cb_digits_after_comma=0).plot()
-
-    # Gridspec for top-to-bottom layout
-
-    # gs.update(wspace=0, hspace=0.3, left=0.05, right=1, top=0.95, bottom=0.05)
-
-    zlabel = r'$\mathrm{\mu mol\ CO_2\ m^{-2}\ s^{-1}}$'
-    dv.heatmapyearmonth(ax=ax1, series_monthly=nee_monthly['mean'], ax_orientation='horizontal',
-                        zlabel=zlabel, cb_digits_after_comma=0).plot()
-    zlabel = r'$\mathrm{nmol\ N_2O\ m^{-2}\ s^{-1}}$'
-    dv.heatmapyearmonth(ax=ax2, series_monthly=n2o_monthly['mean'], ax_orientation='horizontal',
-                        zlabel=zlabel, cb_digits_after_comma=0).plot()
-    # dv.heatmapyearmonth(ax=ax2, series_monthly=aggs['min'], orientation='vertical', zlabel="", cb_digits_after_comma=0).plot()
-
-    # dv.heatmapyearmonth(series_monthly=aggs['mean'], orientation='horizontal', zlabel="",
-    #                     cb_digits_after_comma=0).show()
-    # dv.heatmapyearmonth(series_monthly=aggs['mean'], orientation='vertical', zlabel="",
-    #                     cb_digits_after_comma=0).show()
-
-    # ax1.set_title("Air temperature mean", color='black')
-    # ax2.set_title("Air temperature min", color='black')
-    #
-    # ax1.tick_params(left=True, right=False, top=False, bottom=True,
-    #                 labelleft=True, labelright=False, labeltop=False, labelbottom=True)
-    # ax2.tick_params(left=True, right=False, top=False, bottom=True,
-    #                 labelleft=True, labelright=False, labeltop=False, labelbottom=True)
-    ax1.set_xlabel("")
-    ax1.set_xticklabels("")
-    ax1.set_title("")
-    ax2.set_title("")
-    fig.show()
-
-
 if __name__ == '__main__':
     # _example_heatmap_yearmonth_ranks()
     # _example_multiple_heatmap_yearmonth_ranks()
     # _example_heatmap_datetime()
-    # _example_multiple_heatmaps_yearmonth_horizontal()
-    _example_heatmap_yearmonth()
+    _example_multiple_heatmaps_yearmonth_horizontal()
+    # _example_heatmap_yearmonth()
+
+# # from diive.core.io.files import load_parquet
+#     # f1 = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-cha_flux_product"
+#     # f2 = r"dataset_ch-cha_flux_product\notebooks\80_FINALIZE"
+#     # f3 = f"81.1_FLUXES_M15_MGMT_L4.2_NEE_GPP_RECO_LE_H_FN2O_FCH4.parquet"
+#     # f = f"{f1}\\{f2}\\{f3}"
+#     # df = load_parquet(f)
+#     # # [print(c) for c in df.columns if "FN2O" in c];
+#     # nee_monthly = df['NEE_L3.1_L3.3_CUT_50_QCF_gfRF'].resample('1MS', label='left').agg(
+#     #     {'mean'})  # numpy's ptp gives the data range
+#     # n2o_monthly = df['FN2O_L3.1_L3.3_CUT_50_QCF_gfRF'].resample('1MS', label='left').agg(
+#     #     {'mean'})  # numpy's ptp gives the data range
