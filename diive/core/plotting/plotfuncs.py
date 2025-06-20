@@ -33,8 +33,8 @@ def make_patch_spines_invisible(ax):
         sp.set_visible(False)
 
 
-def show_ticks_on_all_spines(ax):
-    ax.tick_params(left=True, right=True, top=True, bottom=True)
+def show_ticks_on_all_spines(ax, left=True, right=True, top=True, bottom=True):
+    ax.tick_params(left=left, right=right, top=top, bottom=bottom)
 
 
 def hide_ticks_and_ticklabels(ax):
@@ -123,16 +123,19 @@ def default_format(ax,
     # Spines
     format_spines(ax=ax, color=color, lw=spines_lw)
 
-    # Labels
-    if ax_xlabel_txt:
-        ax.set_xlabel(ax_xlabel_txt, color=ax_labels_fontcolor, fontsize=ax_labels_fontsize,
-                      fontweight=ax_labels_fontweight)
+    # Set x-label
+    ax.set_xlabel(ax_xlabel_txt, color=ax_labels_fontcolor, fontsize=ax_labels_fontsize,
+                  fontweight=ax_labels_fontweight)
+
+    # Set y-label
     if ax_ylabel_txt and txt_ylabel_units:
-        ax.set_ylabel(f'{ax_ylabel_txt}  {txt_ylabel_units}', color=ax_labels_fontcolor, fontsize=ax_labels_fontsize,
-                      fontweight=ax_labels_fontweight)
-    if ax_ylabel_txt and not txt_ylabel_units:
-        ax.set_ylabel(f'{ax_ylabel_txt}', color=ax_labels_fontcolor, fontsize=ax_labels_fontsize,
-                      fontweight=ax_labels_fontweight)
+        _ax_ylabel_txt = f"{ax_ylabel_txt}  {txt_ylabel_units}"
+    elif ax_ylabel_txt and not txt_ylabel_units:
+        _ax_ylabel_txt = f"{ax_ylabel_txt}"
+    else:
+        _ax_ylabel_txt = ax_ylabel_txt
+    ax.set_ylabel(_ax_ylabel_txt, color=ax_labels_fontcolor, fontsize=ax_labels_fontsize,
+                  fontweight=ax_labels_fontweight)
 
     # Grid
     if showgrid:

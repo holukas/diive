@@ -11,7 +11,6 @@ import datetime
 
 import numpy as np
 import pandas as pd
-from matplotlib.ticker import MultipleLocator, FormatStrFormatter
 from pandas import Series
 from pandas.plotting import register_matplotlib_converters
 
@@ -153,25 +152,7 @@ class HeatmapYearMonth(HeatmapBase):
 
     def __init__(self,
                  series_monthly: Series,
-                 fig=None,
-                 ax=None,
-                 orientation: str = "vertical",
-                 title: str = None,
-                 vmin: float = None,
-                 vmax: float = None,
-                 cb_digits_after_comma: int = 2,
-                 cb_labelsize: float = theme.AX_LABELS_FONTSIZE,
-                 axlabels_fontsize: float = theme.AX_LABELS_FONTSIZE,
-                 ticks_labelsize: float = theme.TICKS_LABELS_FONTSIZE,
-                 minyticks: int = 3,
-                 maxyticks: int = 10,
-                 cmap: str = 'RdYlBu_r',
-                 color_bad: str = 'grey',
-                 zlabel: str = "Value",
-                 figsize: tuple = (6, 10.7),
-                 verbose: bool = False,
-                 show_values: bool = False,
-                 show_values_n_dec_places: int = 0):
+                 **kwargs):
         """Plot heatmap of time series data with year on y-axis and month on x-axis.
 
         Args:
@@ -189,18 +170,44 @@ class HeatmapYearMonth(HeatmapBase):
                 Only considered if *show_values* is True.
 
         """
-        super().__init__(series_monthly, fig, ax, orientation, title, vmin, vmax, cb_digits_after_comma, cb_labelsize,
-                         axlabels_fontsize, ticks_labelsize, minyticks, maxyticks, cmap, color_bad, figsize, zlabel,
-                         show_values, show_values_n_dec_places, verbose)
+        super().__init__(series_monthly, **kwargs)
 
-        # Setup data for plotting
-        self.series = self._setup_timestamp()
-        self.plot_df, self.fig, self.ax = self.setup()
+        # Instance vars
+        self.plotdf = None
+        self.x, self.y, self.z = None, None, None
+
+        # Set xylabels
+        self.xlabel = 'Month' if self.ax_orientation == "vertical" else 'Year'
+        self.ylabel = 'Year' if self.ax_orientation == "vertical" else 'Month'
+
+        # Start heatmap construction
+        self._run()
+
+    def _run(self):
+        # Bring data into shape
+        self.series = self._sanitize_monthly_timestamp()
+        self.plotdf = self._setup_plotdf()
         xaxis_vals, yaxis_vals = self._set_xy_axes_type()
-        self.x, self.y, self.z, self.plot_df = self.transform_data(xaxis_vals=xaxis_vals, yaxis_vals=yaxis_vals)
-        self.x, self.y, self.z = self._set_bounds(x=self.x, y=self.y, z=self.z)
+        self.plotdf_pivot = self._pivot_plotdf(xaxis_vals=xaxis_vals, yaxis_vals=yaxis_vals)
 
-    def _setup_timestamp(self) -> Series:
+        # Prepare xyz
+        x = self.plotdf_pivot.columns.values
+        y = self.plotdf_pivot.index.values
+        z = self.plotdf_pivot.values
+        self.x, self.y, self.z = self._set_bounds(x=x, y=y, z=z)
+
+    def _pivot_plotdf(self, xaxis_vals, yaxis_vals) -> pd.DataFrame:
+        # Setup xy axes
+        plotdf = self.plotdf
+        plotdf['y_vals'] = yaxis_vals
+        plotdf['x_vals'] = xaxis_vals
+        plotdf = plotdf.reset_index(drop=True, inplace=False)
+
+        # Put needed data in new df_pivot, then pivot to bring it in needed shape
+        plotdf_pivot = plotdf.pivot(index='y_vals', columns='x_vals', values='z')
+        return plotdf_pivot
+
+    def _sanitize_monthly_timestamp(self) -> Series:
         series = self.series.copy()
         series = TimestampSanitizer(
             data=series,
@@ -235,12 +242,12 @@ class HeatmapYearMonth(HeatmapBase):
         return x, y, z
 
     def _set_xy_axes_type(self):
-        if self.orientation == "vertical":
-            xaxis_vals = self.plot_df.index.month
-            yaxis_vals = self.plot_df.index.year
-        elif self.orientation == "horizontal":
-            xaxis_vals = self.plot_df.index.year
-            yaxis_vals = self.plot_df.index.month
+        if self.ax_orientation == "vertical":
+            xaxis_vals = self.plotdf.index.month
+            yaxis_vals = self.plotdf.index.year
+        elif self.ax_orientation == "horizontal":
+            xaxis_vals = self.plotdf.index.year
+            yaxis_vals = self.plotdf.index.month
         else:
             raise NotImplementedError
         return xaxis_vals, yaxis_vals
@@ -257,16 +264,6 @@ class HeatmapYearMonth(HeatmapBase):
         if self.show_values:
             self.show_vals_in_plot()
 
-        # Define tick positions
-        if self.orientation == "vertical":
-            ax_xlabel_txt = 'Month'
-            ax_ylabel_txt = 'Year'
-        elif self.orientation == "horizontal":
-            ax_xlabel_txt = 'Year'
-            ax_ylabel_txt = 'Month'
-        else:
-            raise NotImplementedError
-
         # # Set ticks
         # # xtickpos = np.arange(1.5, 13.5, 1)
         xtickpos = np.arange(self.x[0] + 0.5, self.x[-1] + 0.5, 1)
@@ -278,17 +275,25 @@ class HeatmapYearMonth(HeatmapBase):
         yticklabels = [int(t) for t in ytickpos]
         self.ax.set_yticklabels(yticklabels)
 
-        # # nice_date_ticks(ax=self.ax, minticks=1, maxticks=24, which='y', locator='year')
+        # Get all current x-axis tick labels
+        if self.show_less_xticklabels:
+            labels = self.ax.get_xticklabels()
+            # Iterate through the labels and hide every second one
+            for i, label in enumerate(labels):
+                if i % 2 != 0:  # Check if the index is odd (to hide every second, starting from the second label)
+                    label.set_visible(False)
+
+        # # # nice_date_ticks(ax=self.ax, minticks=1, maxticks=24, which='y', locator='year')
         # # Use Locator and Formatter to label every year or hour on y-axis
-        # locator = MultipleLocator(1)  # Set ticks every 1 unit
+        # locator = MultipleLocator(2)  # Set ticks every 1 unit
         # formatter = FormatStrFormatter('%d')  # Integer format
         # self.ax.yaxis.set_major_locator(locator)
         # self.ax.yaxis.set_major_formatter(formatter)
 
         # Format
         self.format(
-            ax_xlabel_txt=ax_xlabel_txt,
-            ax_ylabel_txt=ax_ylabel_txt,
+            ax_xlabel_txt=self.xlabel,
+            ax_ylabel_txt=self.ylabel,
             plot=p,
         )
 
@@ -454,33 +459,42 @@ def _example_multiple_heatmap_yearmonth_ranks():
     fig.show()
 
 
-def _example_heatmap_yearmonth():
+def _example_colormaps():
+    from heatmap_base import list_of_colormaps
     from diive.configs.exampledata import load_exampledata_parquet
+    cmaps = list_of_colormaps()
     df = load_exampledata_parquet()
-    series = df['GPP_DT_CUT_REF'].copy()
-    # series = df['Tair_f'].copy()
-
+    series = df['Tair_f'].copy()
     series = series.resample('1MS', label='left').mean()
-    # series = series.resample('1MS', label='left').agg(np.ptp)
     series.index.name = 'TIMESTAMP_START'
-
-    hm = dv.heatmapyearmonth(
-        series_monthly=series,
-        title="Range per month",
-        cb_digits_after_comma=0,
-        show_values=True,
-        show_values_n_dec_places=0
-        # todo display_type='week_year'
-        # todo display_type='year_doy'
-    )
-
-    hm.show()
+    for cmap in cmaps:
+        hm = dv.heatmapyearmonth(series_monthly=series, cb_digits_after_comma=0, zlabel="degC",
+                                 ax_orientation="vertical", figsize=(14, 10), cmap=cmap, title=cmap)
+        hm.show()
+        outfile = rf"F:\Sync\luhk_work\20 - CODING\matplotlib_colormaps\{cmap}.png"
+        hm.fig.savefig(outfile)
+        print(f"Saved {outfile}")
     # hm.export_borderless_heatmap(outpath=r"F:\TMP\heightmap_blender")
     # print(hm.get_ax())
     # print(hm.get_plot_data())
 
 
-def _example_multiple_heatmaps_yearmonth():
+def _example_heatmap_yearmonth():
+    from diive.configs.exampledata import load_exampledata_parquet
+    df = load_exampledata_parquet()
+    series = df['Tair_f'].copy()
+    series = series.resample('1MS', label='left').mean()
+    series.index.name = 'TIMESTAMP_START'
+    dv.heatmapyearmonth(series_monthly=series, cb_digits_after_comma=0, zlabel="degC",
+                        ax_orientation="vertical", figsize=(14, 10)).show()
+    dv.heatmapyearmonth(series_monthly=series, cb_digits_after_comma=0, zlabel="degC",
+                        ax_orientation="horizontal", figsize=(14, 10)).show()
+    # hm.export_borderless_heatmap(outpath=r"F:\TMP\heightmap_blender")
+    # print(hm.get_ax())
+    # print(hm.get_plot_data())
+
+
+def _example_multiple_heatmaps_yearmonth_horizontal():
     import matplotlib.pyplot as plt
     import matplotlib.gridspec as gridspec
     from diive.configs.exampledata import load_exampledata_parquet
@@ -488,8 +502,25 @@ def _example_multiple_heatmaps_yearmonth():
     aggs = df['Tair_f'].resample('1MS', label='left').agg(
         {'mean', 'min', 'max', np.ptp})  # numpy's ptp gives the data range
 
-    # Figure
-    fig = plt.figure(facecolor='white', figsize=(16, 9))
+    # from diive.core.io.files import load_parquet
+    # f1 = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-cha_flux_product"
+    # f2 = r"dataset_ch-cha_flux_product\notebooks\80_FINALIZE"
+    # f3 = f"81.1_FLUXES_M15_MGMT_L4.2_NEE_GPP_RECO_LE_H_FN2O_FCH4.parquet"
+    # f = f"{f1}\\{f2}\\{f3}"
+    # df = load_parquet(f)
+    # # [print(c) for c in df.columns if "FN2O" in c];
+    # nee_monthly = df['NEE_L3.1_L3.3_CUT_50_QCF_gfRF'].resample('1MS', label='left').agg(
+    #     {'mean'})  # numpy's ptp gives the data range
+    # n2o_monthly = df['FN2O_L3.1_L3.3_CUT_50_QCF_gfRF'].resample('1MS', label='left').agg(
+    #     {'mean'})  # numpy's ptp gives the data range
+
+    # Figure (top-to-bottom, horizontal plots)
+    fig = plt.figure(facecolor='white', figsize=(16, 9), layout="constrained")
+    gs = gridspec.GridSpec(2, 1, figure=fig)  # rows, cols
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax2 = fig.add_subplot(gs[1, 0])
+    ax3 = fig.add_subplot(gs[2, 0])
+    ax4 = fig.add_subplot(gs[3, 0])
 
     # # Gridspec for left-to-right layout
     # gs = gridspec.GridSpec(1, 3)  # rows, cols
@@ -501,16 +532,22 @@ def _example_multiple_heatmaps_yearmonth():
     # dv.heatmapyearmonth(ax=ax_min, series_monthly=aggs['min'], zlabel="", cb_digits_after_comma=0).plot()
     # dv.heatmapyearmonth(ax=ax_max, series_monthly=aggs['max'], zlabel="", cb_digits_after_comma=0).plot()
 
-    # # Gridspec for top-to-bottom layout
-    # gs = gridspec.GridSpec(2, 1)  # rows, cols
-    # gs.update(wspace=0.5, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
-    # ax1 = fig.add_subplot(gs[0, 0])
-    # ax2 = fig.add_subplot(gs[1, 0])
-    # dv.heatmapyearmonth(ax=ax1, series_monthly=aggs['mean'], orientation='horizontal', zlabel="", cb_digits_after_comma=0).plot()
+    # Gridspec for top-to-bottom layout
+
+    # gs.update(wspace=0, hspace=0.3, left=0.05, right=1, top=0.95, bottom=0.05)
+
+    zlabel = r'$\mathrm{\mu mol\ CO_2\ m^{-2}\ s^{-1}}$'
+    dv.heatmapyearmonth(ax=ax1, series_monthly=nee_monthly['mean'], ax_orientation='horizontal',
+                        zlabel=zlabel, cb_digits_after_comma=0).plot()
+    zlabel = r'$\mathrm{nmol\ N_2O\ m^{-2}\ s^{-1}}$'
+    dv.heatmapyearmonth(ax=ax2, series_monthly=n2o_monthly['mean'], ax_orientation='horizontal',
+                        zlabel=zlabel, cb_digits_after_comma=0).plot()
     # dv.heatmapyearmonth(ax=ax2, series_monthly=aggs['min'], orientation='vertical', zlabel="", cb_digits_after_comma=0).plot()
 
-    dv.heatmapyearmonth(series_monthly=aggs['mean'], orientation='vertical', zlabel="",
-                        cb_digits_after_comma=0).show()
+    # dv.heatmapyearmonth(series_monthly=aggs['mean'], orientation='horizontal', zlabel="",
+    #                     cb_digits_after_comma=0).show()
+    # dv.heatmapyearmonth(series_monthly=aggs['mean'], orientation='vertical', zlabel="",
+    #                     cb_digits_after_comma=0).show()
 
     # ax1.set_title("Air temperature mean", color='black')
     # ax2.set_title("Air temperature min", color='black')
@@ -519,12 +556,16 @@ def _example_multiple_heatmaps_yearmonth():
     #                 labelleft=True, labelright=False, labeltop=False, labelbottom=True)
     # ax2.tick_params(left=True, right=False, top=False, bottom=True,
     #                 labelleft=True, labelright=False, labeltop=False, labelbottom=True)
-    # fig.show()
+    ax1.set_xlabel("")
+    ax1.set_xticklabels("")
+    ax1.set_title("")
+    ax2.set_title("")
+    fig.show()
 
 
 if __name__ == '__main__':
     # _example_heatmap_yearmonth_ranks()
     # _example_multiple_heatmap_yearmonth_ranks()
     # _example_heatmap_datetime()
-    _example_multiple_heatmaps_yearmonth()
-    # _example_heatmap_yearmonth()
+    # _example_multiple_heatmaps_yearmonth_horizontal()
+    _example_heatmap_yearmonth()

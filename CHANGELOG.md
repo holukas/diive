@@ -2,7 +2,9 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.87.2 | XX Jun 2025
+## v0.88.0 | XX Jun 2025
+
+### Heatmap updates
 
 - 
 

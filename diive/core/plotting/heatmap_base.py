@@ -5,7 +5,6 @@ HEATMAP
 import copy
 from pathlib import Path
 
-import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -22,8 +21,9 @@ class HeatmapBase:
     def __init__(self,
                  series: Series,
                  fig=None,
+                 figsize: tuple = None,
                  ax=None,
-                 orientation: str = "vertical",
+                 ax_orientation: str = "vertical",
                  title: str = None,
                  vmin: float = None,
                  vmax: float = None,
@@ -35,8 +35,8 @@ class HeatmapBase:
                  maxyticks: int = 10,
                  cmap: str = 'RdYlBu_r',
                  color_bad: str = 'grey',
-                 figsize: tuple = (6, 10.7),
-                 zlabel: str = "Value",
+                 zlabel: str = None,
+                 show_less_xticklabels: bool = False,
                  show_values: bool = False,
                  show_values_n_dec_places: int = 0,
                  verbose: bool = False):
@@ -45,7 +45,7 @@ class HeatmapBase:
         Args:
             series: Series
             ax: Axis in which heatmap is shown. If *None*, a figure with axis will be generated.
-            orientation: Orientation of heatmap. Options: 'horizontal', 'vertical'
+            ax_orientation: Orientation of heatmap. Options: 'horizontal', 'vertical'
             title: Text shown at the top of the plot.
             vmin: Minimum value shown in plot
             vmax: Maximum value shown in plot
@@ -58,10 +58,17 @@ class HeatmapBase:
                 Only considered if *show_values* is True.
 
         """
+
+        # Instance variables
         self.series = series.copy()
         self.series.name = self.series.name if self.series.name else "data"  # Time series must have a name
+        self.fig = fig
+        self.figsize = figsize
+        self.ax = ax
+        self.ax_orientation = ax_orientation
+
         self.verbose = verbose
-        self.orientation = orientation
+
         self.title = title
         self.cmap = cmap
         self.vmin = vmin
@@ -69,19 +76,20 @@ class HeatmapBase:
         self.cb_digits_after_comma = cb_digits_after_comma
         self.cb_labelsize = cb_labelsize
         self.color_bad = color_bad
-        self.figsize = figsize
-        self.ax = ax
+
+        # Create fig and axis if no axis is given, otherwise use given axis
+        if not ax:
+            self.fig, self.ax = plt.subplots(constrained_layout=True, figsize=self.figsize)
+
         self.axlabels_fontsize = axlabels_fontsize
-        self.fig = fig
         self.ticks_labelsize = ticks_labelsize
         self.minyticks = minyticks
         self.maxyticks = maxyticks
         self.zlabel = zlabel
+
+        self.show_less_xticklabels = show_less_xticklabels
         self.show_values = show_values
         self.showvalues_n_dec_places = show_values_n_dec_places
-
-        if self.verbose:
-            print("Plotting heatmap  ...")
 
         self.plot_df = None
         self.x = None
@@ -99,7 +107,7 @@ class HeatmapBase:
     def show(self):
         """Generate plot and show figure."""
         self.plot()
-        plt.tight_layout()
+        # plt.tight_layout()
         self.fig.show()
 
     def export_borderless_heatmap(self, outpath: str):
@@ -186,53 +194,12 @@ class HeatmapBase:
                 self.ax.text(self.x[j] + 0.5, self.y[i] + 0.5, f"{self.z[i, j]:.{self.showvalues_n_dec_places}f}",
                              ha='center', va='center', color='black', fontsize=9, zorder=100)
 
-    def setup(self):
-
-        fig = self.fig
-
-        if self.verbose:
-            print("Preparing timestamp for heatmap plotting ...")
-
-        # Create axis if none is given
-        if not self.ax:
-            fig, ax = self._create_ax()
-        else:
-            ax = self.ax
-
-        # Create dataframe with values as z variable for colors
-        plot_df = pd.DataFrame(index=self.series.index,
-                               columns=['z'],
-                               data=self.series.values)
-        return plot_df, fig, ax
-
-    def _create_ax(self):
-        """Create figure and axis"""
-        # Figure setup
-        fig = plt.figure(facecolor='white', figsize=self.figsize)
-        gs = gridspec.GridSpec(1, 1)  # rows, cols
-        # gs.update(wspace=0.3, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
-        ax = fig.add_subplot(gs[0, 0])
-        return fig, ax
-
-    def transform_data(self, xaxis_vals, yaxis_vals):
-        """Transform data for plotting"""
-
-        plot_df = self.plot_df.copy()
-
-        # Setup xy axes
-        # xaxis_vals, yaxis_vals = self._set_xy_axes_type()
-        plot_df['y_vals'] = yaxis_vals
-        plot_df['x_vals'] = xaxis_vals
-        plot_df = plot_df.reset_index(drop=True, inplace=False)
-
-        # Put needed data in new df_pivot, then pivot to bring it in needed shape
-        plot_df_pivot = plot_df.pivot(index='y_vals', columns='x_vals', values='z')  # new in pandas 23.4
-        # plot_df_pivot = plot_df_pivot.append(plot_df_pivot.iloc[-1])
-        x = plot_df_pivot.columns.values
-        y = plot_df_pivot.index.values
-        z = plot_df_pivot.values
-
-        return x, y, z, plot_df_pivot
+    def _setup_plotdf(self) -> pd.DataFrame:
+        """Create dataframe with values as z variable for colors"""
+        plotdf = pd.DataFrame(index=self.series.index,
+                              columns=['z'],
+                              data=self.series.values)
+        return plotdf
 
     @staticmethod
     def set_cmap(cmap, color_bad, z):
@@ -247,12 +214,25 @@ class HeatmapBase:
         title = self.title if self.title else f"{self.series.name} ({self.series.index.freqstr})"
         self.ax.set_title(title, color='black')
         # Colorbar
-        cb = plt.colorbar(plot, ax=self.ax, format=f"%.{int(self.cb_digits_after_comma)}f",
+        # Inside your class, assuming self.ax is an Axes object
+        fig = self.ax.get_figure()
+        cb = fig.colorbar(plot, ax=self.ax, format=f"%.{int(self.cb_digits_after_comma)}f",
                           label=self.zlabel)
-        cb.set_label(label=self.zlabel, size=self.axlabels_fontsize)
+        cb.set_label(label=self.zlabel, size=self.axlabels_fontsize, labelpad=20)
         cb.ax.tick_params(labelsize=self.cb_labelsize)
         default_format(ax=self.ax, ax_xlabel_txt=ax_xlabel_txt, ax_ylabel_txt=ax_ylabel_txt,
                        ticks_direction='out', ticks_length=4, ticks_width=2,
                        ax_labels_fontsize=self.axlabels_fontsize,
                        ticks_labels_fontsize=self.ticks_labelsize)
         format_spines(ax=self.ax, color='black', lw=2)
+        self.ax.tick_params(left=True, right=False, top=False, bottom=True)
+
+
+def list_of_colormaps() -> list:
+    """List of matplotlib colormaps."""
+    return plt.colormaps()
+
+
+if __name__ == '__main__':
+    cmaps = list_of_colormaps()
+    print(cmaps)
