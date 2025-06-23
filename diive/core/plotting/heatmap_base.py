@@ -91,7 +91,7 @@ class HeatmapBase:
         self.show_values = show_values
         self.showvalues_n_dec_places = show_values_n_dec_places
 
-        self.plot_df = None
+        self.plotdf = None
         self.x = None
         self.y = None
         self.z = None
@@ -102,7 +102,7 @@ class HeatmapBase:
 
     def get_plot_data(self) -> pd.DataFrame:
         """Return pivot dataframe used to plot the heatmap."""
-        return self.plot_df
+        return self.plotdf
 
     def show(self):
         """Generate plot and show figure."""
@@ -194,6 +194,7 @@ class HeatmapBase:
                 self.ax.text(self.x[j] + 0.5, self.y[i] + 0.5, f"{self.z[i, j]:.{self.showvalues_n_dec_places}f}",
                              ha='center', va='center', color='black', fontsize=9, zorder=100)
 
+    # TODO check if needed
     def _setup_plotdf(self) -> pd.DataFrame:
         """Create dataframe with values as z variable for colors"""
         plotdf = pd.DataFrame(index=self.series.index,
@@ -210,8 +211,8 @@ class HeatmapBase:
         z = np.ma.masked_invalid(z)  # Mask NaN as missing
         return cmap, z
 
-    def format(self, ax_xlabel_txt, ax_ylabel_txt, plot):
-        title = self.title if self.title else f"{self.series.name} ({self.series.index.freqstr})"
+    def format(self, ax_xlabel_txt, ax_ylabel_txt, plot, shown_freq):
+        title = self.title if self.title else f"{self.series.name} ({shown_freq})"
         self.ax.set_title(title, color='black')
         # Colorbar
         # Inside your class, assuming self.ax is an Axes object
