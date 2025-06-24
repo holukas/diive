@@ -225,7 +225,7 @@ class HeatmapBase:
                        ticks_direction='out', ticks_length=4, ticks_width=2,
                        ax_labels_fontsize=self.axlabels_fontsize,
                        ticks_labels_fontsize=self.ticks_labelsize)
-        format_spines(ax=self.ax, color='black', lw=2)
+        format_spines(ax=self.ax, color='black', lw=1)
         self.ax.tick_params(left=True, right=False, top=False, bottom=True)
 
 

@@ -365,9 +365,9 @@ def _example_multiple_heatmaps_yearmonth_horizontal():
     import matplotlib.gridspec as gridspec
     from diive.configs.exampledata import load_exampledata_parquet
     df = load_exampledata_parquet()
-    fig = plt.figure(facecolor='white', figsize=(16, 9), layout="constrained")
+    fig = plt.figure(facecolor='white', figsize=(16, 9), layout="constrained", dpi=300)
     gs = gridspec.GridSpec(2, 1, figure=fig)  # rows, cols
-    # gs.update(wspace=0.5, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
+    gs.update(wspace=0.5, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
     ax1 = fig.add_subplot(gs[0, 0])
     ax2 = fig.add_subplot(gs[1, 0])
     zlabel = r'$\mathrm{\mu mol\ CO_2\ m^{-2}\ s^{-1}}$'
