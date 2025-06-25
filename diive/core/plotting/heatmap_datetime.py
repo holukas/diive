@@ -23,6 +23,7 @@ class HeatmapDateTime(HeatmapBase):
 
     def __init__(self,
                  series: Series,
+                 verbose: bool = False,
                  **kwargs):
         """Plot heatmap of time series data with date on y-axis and time on x-axis.
 
@@ -32,6 +33,7 @@ class HeatmapDateTime(HeatmapBase):
 
         """
         super().__init__(series, **kwargs)
+        self.verbose = verbose
 
         self._prepare_data()
 
@@ -110,6 +112,8 @@ class HeatmapDateTime(HeatmapBase):
             self.ax.set_yticks(ticks_time)
             self.ax.set_yticklabels(ticklabels_time)
             nice_date_ticks(ax=self.ax, minticks=self.minticks, maxticks=self.maxticks, which='x')
+        else:
+            raise NotImplementedError
 
         # Format
         self.format(
@@ -233,8 +237,7 @@ class HeatmapYearMonth(HeatmapBase):
 
 def _example_heatmap_datetime():
     import diive as dv
-    from diive.configs.exampledata import load_exampledata_parquet
-    df = load_exampledata_parquet()
+    df = dv.load_exampledata_parquet()
 
     # from diive.core.io.filereader import ReadFileType
     # filepath = r"F:\Sync\luhk_work\40 - DATA\DATASETS\2025_FORESTS\1-downloads\ICOSETC_CH-Dav_ARCHIVE_L2\ICOSETC_CH-Dav_FLUXNET_HH_L2.csv"
@@ -262,8 +265,7 @@ def _example_heatmap_datetime():
 
 
 def _example_heatmap_yearmonth():
-    from diive.configs.exampledata import load_exampledata_parquet
-    df = load_exampledata_parquet()
+    df = dv.load_exampledata_parquet()
     series = df['Tair_f'].copy()
     series.name = None  # For testing
     series.index.freq = None  # For testing
@@ -281,8 +283,7 @@ def _example_multiple_heatmaps_yearmonth_horizontal():
     # Figure (top-to-bottom, horizontal plots)
     import matplotlib.pyplot as plt
     import matplotlib.gridspec as gridspec
-    from diive.configs.exampledata import load_exampledata_parquet
-    df = load_exampledata_parquet()
+    df = dv.load_exampledata_parquet()
     fig = plt.figure(facecolor='white', figsize=(16, 9), layout="constrained", dpi=300)
     gs = gridspec.GridSpec(2, 1, figure=fig)  # rows, cols
     gs.update(wspace=0.5, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
@@ -305,9 +306,8 @@ def _example_multiple_heatmaps_yearmonth_horizontal():
 def _example_colormaps():
     """Creates heatmaps with all available colormaps and exports them to files."""
     from heatmap_base import list_of_colormaps
-    from diive.configs.exampledata import load_exampledata_parquet
     cmaps = list_of_colormaps()
-    df = load_exampledata_parquet()
+    df = dv.load_exampledata_parquet()
     series = df['Tair_f'].copy()
     for cmap in cmaps:
         hm = dv.heatmapyearmonth(series=series, cb_digits_after_comma=0, zlabel="degC",

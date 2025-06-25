@@ -22,6 +22,7 @@ class HeatmapBase:
                  series: pd.Series,
                  fig=None,
                  figsize: tuple = None,
+                 figdpi: int = 72,
                  ax=None,
                  ax_orientation: str = "vertical",
                  title: str = None,
@@ -47,6 +48,7 @@ class HeatmapBase:
             series: Time series (pandas Series) with a timestamp index, from which the heatmap data will be derived.
             fig: Matplotlib Figure object to plot on. If None, a new figure will be created.
             figsize: Tuple (width, height) in inches, specifying the size of the figure. Only used if `fig` is None.
+            figdpi: The resolution of the figure in dots per inch (DPI). Only used if `fig` is None.
             ax: Matplotlib Axes object in which the heatmap is shown. If None, a new figure with an axis will be generated.
             ax_orientation: Orientation of the heatmap. Options are 'vertical' or 'horizontal'.
             title: Text string to be shown at the top of the plot as its main title.
@@ -71,14 +73,14 @@ class HeatmapBase:
         # Instance variables
         self.series = series.copy()
         self.series.name = self.series.name if self.series.name else "data"  # Time series must have a name
+        self.verbose = verbose
         self.series = self._setup_timestamp()
 
         self.fig = fig
         self.figsize = figsize
+        self.figdpi = figdpi
         self.ax = ax
         self.ax_orientation = ax_orientation
-
-        self.verbose = verbose
 
         self.title = title
         self.cmap = cmap
@@ -90,7 +92,7 @@ class HeatmapBase:
 
         # Create fig and axis if no axis is given, otherwise use given axis
         if not ax:
-            self.fig, self.ax = plt.subplots(constrained_layout=True, figsize=self.figsize)
+            self.fig, self.ax = plt.subplots(constrained_layout=True, figsize=self.figsize, dpi=self.figdpi)
 
         self.axlabels_fontsize = axlabels_fontsize
         self.ticks_labelsize = ticks_labelsize
@@ -118,7 +120,7 @@ class HeatmapBase:
             sort_ascending=True,
             remove_duplicates=True,
             regularize=True,
-            verbose=True
+            verbose=self.verbose
         ).get()
 
         # Heatmap works best with TIMESTAMP_START, convert timestamp index if needed
@@ -247,7 +249,7 @@ class HeatmapBase:
 
     def format(self, ax_xlabel_txt, ax_ylabel_txt, plot, shown_freq):
         title = self.title if self.title else f"{self.series.name} ({shown_freq})"
-        self.ax.set_title(title, color='black')
+        self.ax.set_title(title, color='black', size=self.axlabels_fontsize)
         # Colorbar
         # Inside your class, assuming self.ax is an Axes object
         fig = self.ax.get_figure()
@@ -259,7 +261,7 @@ class HeatmapBase:
                        ticks_direction='out', ticks_length=4, ticks_width=2,
                        ax_labels_fontsize=self.axlabels_fontsize,
                        ticks_labels_fontsize=self.ticks_labelsize)
-        format_spines(ax=self.ax, color='black', lw=1)
+        format_spines(ax=self.ax, color='black', lw=2)
         self.ax.tick_params(left=True, right=False, top=False, bottom=True)
 
 
