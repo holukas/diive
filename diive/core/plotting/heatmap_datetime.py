@@ -10,99 +10,77 @@ Kudos:
 import datetime
 
 import numpy as np
+import pandas as pd
 from pandas import Series
 from pandas.plotting import register_matplotlib_converters
 
 import diive as dv
-import diive.core.plotting.styles.LightTheme as theme
 from diive.core.plotting.heatmap_base import HeatmapBase
 from diive.core.plotting.plotfuncs import nice_date_ticks
-from diive.core.times.times import TimestampSanitizer, insert_timestamp
 
 
 class HeatmapDateTime(HeatmapBase):
 
-    def __init__(self, series: Series, fig=None, ax=None, title: str = None, vmin: float = None, vmax: float = None,
-                 cb_digits_after_comma: int = 2, cb_labelsize: float = theme.AX_LABELS_FONTSIZE,
-                 axlabels_fontsize: float = theme.AX_LABELS_FONTSIZE,
-                 ticks_labelsize: float = theme.TICKS_LABELS_FONTSIZE, minyticks: int = 3, maxyticks: int = 10,
-                 cmap: str = 'RdYlBu_r', color_bad: str = 'grey', zlabel: str = "Value",
-                 figsize: tuple = (6, 10.7), verbose: bool = False):
+    def __init__(self,
+                 series: Series,
+                 **kwargs):
         """Plot heatmap of time series data with date on y-axis and time on x-axis.
 
         Args:
-            series: Series
-            ax: Axis in which heatmap is shown. If *None*, a figure with axis will be generated.
-            title: Text shown at the top of the plot.
-            vmin: Minimum value shown in plot
-            vmax: Maximum value shown in plot
-            cb_digits_after_comma: How many digits after the comma are shown in the colorbar legend.
-            cmap: Matplotlib colormap
-            color_bad: Color of missing values
+            series: Time series with timestamp index.
+            **kwargs: Parameters for HeatmapBase.
 
         """
-        super().__init__(series, fig, ax, title, vmin, vmax, cb_digits_after_comma, cb_labelsize, axlabels_fontsize,
-                         ticks_labelsize, minyticks, maxyticks, cmap, color_bad, figsize, zlabel, verbose)
+        super().__init__(series, **kwargs)
 
-        # Setup data for plotting
-        self.series = self._setup_timestamp()
-        self.plot_df, self.fig, self.ax = self.setup()
-        xaxis_vals, yaxis_vals = self._set_xy_axes_type()
-        self.x, self.y, self.z, self.plot_df = self.transform_data(xaxis_vals=xaxis_vals, yaxis_vals=yaxis_vals)
-        self.x, self.y, self.z = self._set_bounds(x=self.x, y=self.y, z=self.z)
+        self._prepare_data()
 
-    def _setup_timestamp(self) -> Series:
-        # Sanitize timestamp
-        # TimestampSanitizer outputs TIMESTAMP_MIDDLE by default.
-        series = self.series.copy()
+    def _prepare_data(self):
+        # Needed for time plotting
+        register_matplotlib_converters()
 
-        series = TimestampSanitizer(
-            data=series,
-            output_middle_timestamp=True,
-            validate_naming=True,
-            convert_to_datetime=True,
-            sort_ascending=True,
-            remove_duplicates=True,
-            regularize=True,
-            verbose=self.verbose
-        ).get()
+        # Data for plotting
+        self.plotdf = pd.DataFrame(self.series)
+        self.plotdf['DATE'] = self.plotdf.index.date
+        self.plotdf['TIME'] = self.plotdf.index.time
+        self.plotdf = self.plotdf.reset_index(drop=True, inplace=False)
 
-        # Heatmap works best with TIMESTAMP_START, convert timestamp index if needed
-        # Working with a timestamp that shows the start of the averaging period means
-        # that e.g. the ticks on the x-axis for hours is shown before the corresponding
-        # data between e.g. 1:00 and 1:59.
-        if series.index.name != 'TIMESTAMP_START':
-            _series_df = insert_timestamp(data=series, convention='start', set_as_index=True)
-            series = _series_df[series.name].copy()
-        return series
+        if self.ax_orientation == "vertical":
+            self.plotdf = self.plotdf.pivot(index='DATE', columns='TIME', values=self.series.name)
+        elif self.ax_orientation == "horizontal":
+            self.plotdf = self.plotdf.pivot(index='TIME', columns='DATE', values=self.series.name)
 
-    @staticmethod
-    def _set_bounds(x, y, z):
+        # Extend
+        self.x, self.y, self.z = self._set_bounds()
+
+    def _set_bounds(self):
         """Extend data for plotting
 
         x and y are bounds, so z should be the value *inside* those bounds.
         Therefore, extend x and y by one value (last_x, last_y).
         """
+        x = self.plotdf.columns.values
+        y = self.plotdf.index.values
+        z = self.plotdf.values
 
-        # Add last entry for x (datetime)
-        # x-axis shows hours 0, 1, 2 ... 23
-        last_x = x[-1]
-        last_x = last_x.replace(hour=23, minute=59)
+        # Add last entries for x and y
+        last_x = x[-1]  # Last record for x
+        last_y = y[-1]  # Last record for y
+
+        if self.ax_orientation == "vertical":
+            # x = TIME, y = DATE
+            last_x = last_x.replace(hour=23, minute=59)  # x-axis shows hours 0, 1, 2 ... 23
+            last_y = last_y + datetime.timedelta(days=1)  # y-axis shows dates
+
+        elif self.ax_orientation == "horizontal":
+            # x = DATE, y = TIME
+            last_x = last_x + datetime.timedelta(days=1)  # x-axis shows dates
+            last_y = last_y.replace(hour=23, minute=59)  # y-axis shows hours 0, 1, 2 ... 23
+
         x = np.append(x, last_x)
-
-        # Add last entry for y (datetime)
-        # y-axis shows years
-        last_y = y[-1]
-        last_y = last_y + datetime.timedelta(days=1)
         y = np.append(y, last_y)
 
         return x, y, z
-
-    def _set_xy_axes_type(self):
-        xaxis_vals = self.plot_df.index.time
-        yaxis_vals = self.plot_df.index.date
-        register_matplotlib_converters()  # Needed for time plotting
-        return xaxis_vals, yaxis_vals
 
     def plot(self):
         """Plot heatmap"""
@@ -113,36 +91,32 @@ class HeatmapDateTime(HeatmapBase):
                                vmin=self.vmin, vmax=self.vmax,
                                shading='flat', zorder=99)
 
-        # import matplotlib.pyplot as plt
-        # from matplotlib.colors import ListedColormap
-        # import numpy as np
-        #
-        # mat = np.random.randint(0, 3, (5, 8))
-        # cmap = ListedColormap(['lime', 'orange', 'tomato'])
-        #
-        # plt.pcolormesh(np.arange(-0.5, mat.shape[1]), np.arange(-0.5, mat.shape[0]), mat, cmap=cmap)
-        #
-        # color_dict = {0: 'normal', 1: 'high', 2: 'very\nhigh'}
-        # for i in range(mat.shape[0]):
-        #     for j in range(mat.shape[1]):
-        #         plt.text(j, i, color_dict[mat[i, j]], ha='center', va='center')
-        # plt.show()
-
         # Ticks
-        ax_xlabel_txt = 'Time (hours)'
-        ax_ylabel_txt = 'Date'
-        self.ax.set_xticks(['3:00', '6:00', '9:00', '12:00', '15:00', '18:00', '21:00'])
-        self.ax.set_xticklabels([3, 6, 9, 12, 15, 18, 21])
-        # # matplotlib's HourLocator did not work
-        # nice_date_ticks(ax=self.ax, minticks=1, maxticks=24, which='x', locator='hour')
-        # For the y-axis AutoDateLocator worked
-        nice_date_ticks(ax=self.ax, minticks=self.minyticks, maxticks=self.maxyticks, which='y')
+        ticks_time = ['3:00', '6:00', '9:00', '12:00', '15:00', '18:00', '21:00']
+        ticklabels_time = [3, 6, 9, 12, 15, 18, 21]
+
+        if self.ax_orientation == "vertical":
+            ax_xlabel_txt = 'Time (hours)'
+            ax_ylabel_txt = 'Date'
+            self.ax.set_xticks(ticks_time)
+            self.ax.set_xticklabels(ticklabels_time)
+            # # matplotlib's HourLocator did not work
+            # nice_date_ticks(ax=self.ax, minticks=1, maxticks=24, which='x', locator='hour')
+            # For the y-axis (DATE) AutoDateLocator worked
+            nice_date_ticks(ax=self.ax, minticks=self.minticks, maxticks=self.maxticks, which='y')
+        elif self.ax_orientation == "horizontal":
+            ax_xlabel_txt = 'Date'
+            ax_ylabel_txt = 'Time (hours)'
+            self.ax.set_yticks(ticks_time)
+            self.ax.set_yticklabels(ticklabels_time)
+            nice_date_ticks(ax=self.ax, minticks=self.minticks, maxticks=self.maxticks, which='x')
 
         # Format
         self.format(
             ax_xlabel_txt=ax_xlabel_txt,
             ax_ylabel_txt=ax_ylabel_txt,
-            plot=p
+            plot=p,
+            shown_freq=self.series.index.freqstr
         )
 
 
@@ -158,8 +132,8 @@ class HeatmapYearMonth(HeatmapBase):
         """Plot heatmap of time series data with year and month.
 
         Args:
-            series: Series in monthly time resolution.
-            **kwargs: Parameter for HeatmapBase.
+            series: Time series with timestamp index.
+            **kwargs: Parameters for HeatmapBase.
 
         """
         super().__init__(series, **kwargs)
@@ -180,7 +154,6 @@ class HeatmapYearMonth(HeatmapBase):
 
     def _prepare_data(self):
         # Bring data into shape
-        self.series = self._sanitize_original_timestamp()
         self.plotdf = dv.resample_to_monthly_agg_matrix(series=self.series, agg=self.agg, ranks=self.ranks)
 
         # Transpose in case of horizontal, to have months as index, years as columns
@@ -191,31 +164,6 @@ class HeatmapYearMonth(HeatmapBase):
         y = self.plotdf.index.values
         z = self.plotdf.values
         self.x, self.y, self.z = self._set_bounds(x=x, y=y, z=z)
-
-    def _sanitize_original_timestamp(self) -> Series:
-        # Sanitize timestamp
-        # TimestampSanitizer outputs TIMESTAMP_MIDDLE by default.
-        series = self.series.copy()
-
-        series = TimestampSanitizer(
-            data=series,
-            output_middle_timestamp=True,
-            validate_naming=True,
-            convert_to_datetime=True,
-            sort_ascending=True,
-            remove_duplicates=True,
-            regularize=True,
-            verbose=self.verbose
-        ).get()
-
-        # Heatmap works best with TIMESTAMP_START, convert timestamp index if needed
-        # Working with a timestamp that shows the start of the averaging period means
-        # that e.g. the ticks on the x-axis for hours is shown before the corresponding
-        # data between e.g. 1:00 and 1:59.
-        if series.index.name != 'TIMESTAMP_START':
-            _series_df = insert_timestamp(data=series, convention='start', set_as_index=True)
-            series = _series_df[series.name].copy()
-        return series
 
     @staticmethod
     def _set_bounds(x, y, z):
@@ -284,66 +232,36 @@ class HeatmapYearMonth(HeatmapBase):
 
 
 def _example_heatmap_datetime():
-    # import diive as dv
-    # from diive.configs.exampledata import load_exampledata_parquet
-    # df = load_exampledata_parquet()
+    import diive as dv
+    from diive.configs.exampledata import load_exampledata_parquet
+    df = load_exampledata_parquet()
 
-    from diive.core.io.filereader import ReadFileType
-    filepath = r"F:\Sync\luhk_work\40 - DATA\DATASETS\2025_FORESTS\1-downloads\ICOSETC_CH-Dav_ARCHIVE_L2\ICOSETC_CH-Dav_FLUXNET_HH_L2.csv"
-    loaddatafile = ReadFileType(filetype='FLUXNET-FULLSET-HH-CSV-30MIN',
-                                filepath=filepath,
-                                data_nrows=None)
-    df, metadata_df = loaddatafile.get_filedata()
+    # from diive.core.io.filereader import ReadFileType
+    # filepath = r"F:\Sync\luhk_work\40 - DATA\DATASETS\2025_FORESTS\1-downloads\ICOSETC_CH-Dav_ARCHIVE_L2\ICOSETC_CH-Dav_FLUXNET_HH_L2.csv"
+    # loaddatafile = ReadFileType(filetype='FLUXNET-FULLSET-HH-CSV-30MIN',
+    #                             filepath=filepath,
+    #                             data_nrows=None)
+    # df, metadata_df = loaddatafile.get_filedata()
 
-    var = 'RECO_NT_CUT_50'
+    var = 'NEE_CUT_REF_f'
     series = df[var].copy()
-    # series = series.resample('3h', label='left').mean()
-    series = series.loc[series.index.year >= 2020]
-    series.index.name = 'TIMESTAMP_START'
-    series.name = var
-    hm = dv.heatmapdatetime(series=series, title=None, vmin=-20, vmax=20)
+    # series = series.resample('3h', label='left').mean()  # For testing
+    # series.index.name = "TIMESTAMP_START"  # For testing
+    # locs = (series.index.date >= datetime.date(2022, 6, 1)) & (series.index.date <= datetime.date(2022, 6, 5))
+    locs = series.index.year >= 2020
+    series = series.loc[locs]
+    series.iloc[100:120] = np.nan  # For testing
+    series = series.dropna()  # For testing
+
+    # hm = dv.heatmapdatetime(series=series, title=None, vmin=-10, vmax=10, ax_orientation="vertical")
+    hm = dv.heatmapdatetime(series=series, title=None, vmin=-10, vmax=10, ax_orientation="horizontal")
     hm.show()
     # hm.export_borderless_heatmap(outpath=r"F:\TMP\heightmap_blender")
     # print(hm.get_ax())
     # print(hm.get_plot_data())
 
 
-def _example_multiple_heatmap_yearmonth_ranks():
-    import matplotlib.pyplot as plt
-    import matplotlib.gridspec as gridspec
-    from diive.configs.exampledata import load_exampledata_parquet_long
-    df = load_exampledata_parquet_long()
-    series = df['Tair_f'].copy()
-
-    # Figure
-    fig = plt.figure(facecolor='white', figsize=(16, 9))
-
-    # Gridspec for layout
-    gs = gridspec.GridSpec(1, 3)  # rows, cols
-    gs.update(wspace=0.5, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
-    ax_mean = fig.add_subplot(gs[0, 0])
-    ax_min = fig.add_subplot(gs[0, 1])
-    ax_max = fig.add_subplot(gs[0, 2])
-
-    dv.heatmapyearmonth_ranks(ax=ax_mean, series=series, agg='mean').plot()
-    dv.heatmapyearmonth_ranks(ax=ax_min, series=series, agg='min').plot()
-    dv.heatmapyearmonth_ranks(ax=ax_max, series=series, agg='max').plot()
-
-    ax_mean.set_title("Air temperature mean", color='black')
-    ax_min.set_title("Air temperature min", color='black')
-    ax_max.set_title("Air temperature max", color='black')
-
-    ax_mean.tick_params(left=True, right=False, top=False, bottom=True,
-                        labelleft=True, labelright=False, labeltop=False, labelbottom=True)
-    ax_min.tick_params(left=True, right=False, top=False, bottom=True,
-                       labelleft=True, labelright=False, labeltop=False, labelbottom=True)
-    ax_max.tick_params(left=True, right=False, top=False, bottom=True,
-                       labelleft=True, labelright=False, labeltop=False, labelbottom=True)
-    fig.show()
-
-
 def _example_heatmap_yearmonth():
-    import numpy as np
     from diive.configs.exampledata import load_exampledata_parquet
     df = load_exampledata_parquet()
     series = df['Tair_f'].copy()
@@ -391,8 +309,6 @@ def _example_colormaps():
     cmaps = list_of_colormaps()
     df = load_exampledata_parquet()
     series = df['Tair_f'].copy()
-    # series = series.resample('1MS', label='left').mean()
-    # series.index.name = 'TIMESTAMP_START'
     for cmap in cmaps:
         hm = dv.heatmapyearmonth(series=series, cb_digits_after_comma=0, zlabel="degC",
                                  ax_orientation="vertical", figsize=(14, 10), cmap=cmap, title=cmap)
@@ -406,10 +322,10 @@ def _example_colormaps():
 
 
 if __name__ == '__main__':
-    # _example_heatmap_yearmonth_ranks()
-    # _example_heatmap_datetime()
-    _example_multiple_heatmaps_yearmonth_horizontal()
+    _example_heatmap_datetime()
+    # _example_multiple_heatmaps_yearmonth_horizontal()
     # _example_heatmap_yearmonth()
+    # _example_colormaps()
 
 # # from diive.core.io.files import load_parquet
 #     # f1 = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-cha_flux_product"

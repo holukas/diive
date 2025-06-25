@@ -14,6 +14,7 @@ import diive.core.plotting.styles.LightTheme as theme
 from diive.core.io.files import verify_dir
 from diive.core.plotting.plotfuncs import default_format, format_spines, hide_xaxis_yaxis, hide_ticks_and_ticklabels, \
     make_patch_spines_invisible
+from diive.core.times.times import TimestampSanitizer, insert_timestamp
 
 
 class HeatmapBase:
@@ -62,6 +63,8 @@ class HeatmapBase:
         # Instance variables
         self.series = series.copy()
         self.series.name = self.series.name if self.series.name else "data"  # Time series must have a name
+        self.series = self._setup_timestamp()
+
         self.fig = fig
         self.figsize = figsize
         self.ax = ax
@@ -83,8 +86,8 @@ class HeatmapBase:
 
         self.axlabels_fontsize = axlabels_fontsize
         self.ticks_labelsize = ticks_labelsize
-        self.minyticks = minyticks
-        self.maxyticks = maxyticks
+        self.minticks = minyticks
+        self.maxticks = maxyticks
         self.zlabel = zlabel
 
         self.show_less_xticklabels = show_less_xticklabels
@@ -95,6 +98,29 @@ class HeatmapBase:
         self.x = None
         self.y = None
         self.z = None
+
+    def _setup_timestamp(self) -> Series:
+        # Sanitize timestamp
+
+        series = TimestampSanitizer(
+            data=self.series,
+            output_middle_timestamp=False,
+            validate_naming=True,
+            convert_to_datetime=True,
+            sort_ascending=True,
+            remove_duplicates=True,
+            regularize=True,
+            verbose=True
+        ).get()
+
+        # Heatmap works best with TIMESTAMP_START, convert timestamp index if needed
+        # Working with a timestamp that shows the start of the averaging period means
+        # that e.g. the ticks on the x-axis for hours is shown before the corresponding
+        # data between e.g. 1:00 and 1:59.
+        if series.index.name != 'TIMESTAMP_START':
+            _series_df = insert_timestamp(data=series, convention='start', set_as_index=True)
+            series = _series_df[series.name].copy()
+        return series
 
     def get_ax(self):
         """Return axis in which plot was generated."""
