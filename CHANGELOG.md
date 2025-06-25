@@ -6,7 +6,19 @@
 
 ### Heatmap updates
 
-- 
+Harmonized heatmap creation when using `.heatmapdatetime()` and `.heatmapyearmonth()`. In addition, added the option to plot
+heatmaps in either vertical or horizontal orientation. Code was refactored accordingly. Both 
+
+(`diive.core.plotting.heatmap_datetime.HeatmapDateTime`)
+(`diive.core.plotting.heatmap_datetime.HeatmapYearMonth`)
+
+### Notebooks
+
+- XXX
+
+### Unittests
+
+- XXX
 
 ## v0.87.1 | 12 Jun 2025
 

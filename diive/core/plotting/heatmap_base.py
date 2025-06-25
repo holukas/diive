@@ -8,7 +8,6 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from pandas import Series
 
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.io.files import verify_dir
@@ -20,7 +19,7 @@ from diive.core.times.times import TimestampSanitizer, insert_timestamp
 class HeatmapBase:
 
     def __init__(self,
-                 series: Series,
+                 series: pd.Series,
                  fig=None,
                  figsize: tuple = None,
                  ax=None,
@@ -32,8 +31,8 @@ class HeatmapBase:
                  cb_labelsize: float = theme.AX_LABELS_FONTSIZE,
                  axlabels_fontsize: float = theme.AX_LABELS_FONTSIZE,
                  ticks_labelsize: float = theme.TICKS_LABELS_FONTSIZE,
-                 minyticks: int = 3,
-                 maxyticks: int = 10,
+                 minticks: int = 3,
+                 maxticks: int = 10,
                  cmap: str = 'RdYlBu_r',
                  color_bad: str = 'grey',
                  zlabel: str = None,
@@ -41,22 +40,31 @@ class HeatmapBase:
                  show_values: bool = False,
                  show_values_n_dec_places: int = 0,
                  verbose: bool = False):
-        """Base class for heatmap plots using series with datetime index.
+        """
+        Initialize the HeatmapBase class for generating heatmap visualizations.
 
         Args:
-            series: Series
-            ax: Axis in which heatmap is shown. If *None*, a figure with axis will be generated.
-            ax_orientation: Orientation of heatmap. Options: 'horizontal', 'vertical'
-            title: Text shown at the top of the plot.
-            vmin: Minimum value shown in plot
-            vmax: Maximum value shown in plot
-            cb_digits_after_comma: How many digits after the comma are shown in the colorbar legend.
-            cmap: Matplotlib colormap
-            color_bad: Color of missing values
-            zlabel: Label for colorbar.
-            show_values: Show z-values in heatmap.
-            show_values_n_dec_places: Number of decimal places to show in heatmap.
-                Only considered if *show_values* is True.
+            series: Time series (pandas Series) with a timestamp index, from which the heatmap data will be derived.
+            fig: Matplotlib Figure object to plot on. If None, a new figure will be created.
+            figsize: Tuple (width, height) in inches, specifying the size of the figure. Only used if `fig` is None.
+            ax: Matplotlib Axes object in which the heatmap is shown. If None, a new figure with an axis will be generated.
+            ax_orientation: Orientation of the heatmap. Options are 'vertical' or 'horizontal'.
+            title: Text string to be shown at the top of the plot as its main title.
+            vmin: Minimum value for the color scale of the heatmap. If None, it will be determined automatically from the data.
+            vmax: Maximum value for the color scale of the heatmap. If None, it will be determined automatically from the data.
+            cb_digits_after_comma: The number of digits after the comma to display in the colorbar legend.
+            cb_labelsize: Font size for the labels on the colorbar.
+            axlabels_fontsize: Font size for the x and y axis labels.
+            ticks_labelsize: Font size for the tick labels on both axes.
+            minticks: Minimum number of major ticks to display.
+            maxticks: Maximum number of major ticks to display.
+            cmap: Name of a Matplotlib colormap (e.g., 'viridis', 'plasma', 'RdYlBu_r'). This colormap will be used for the heatmap colors.
+            color_bad: Color used to represent missing (NaN) values in the heatmap.
+            zlabel: Label for the colorbar, typically describing what the color intensity represents (e.g., 'Temperature', 'Value').
+            show_less_xticklabels: If True, attempts to reduce the number of x-axis tick labels for better readability, especially when dealing with a dense time series.
+            show_values: If True, the actual numerical z-values will be overlaid on top of the heatmap cells.
+            show_values_n_dec_places: Number of decimal places to format the displayed values if `show_values` is True. This parameter is only considered if `show_values` is set to True.
+            verbose: If True, enables verbose output for debugging or informational messages during heatmap generation.
 
         """
 
@@ -86,8 +94,8 @@ class HeatmapBase:
 
         self.axlabels_fontsize = axlabels_fontsize
         self.ticks_labelsize = ticks_labelsize
-        self.minticks = minyticks
-        self.maxticks = maxyticks
+        self.minticks = minticks
+        self.maxticks = maxticks
         self.zlabel = zlabel
 
         self.show_less_xticklabels = show_less_xticklabels
@@ -99,7 +107,7 @@ class HeatmapBase:
         self.y = None
         self.z = None
 
-    def _setup_timestamp(self) -> Series:
+    def _setup_timestamp(self) -> pd.Series:
         # Sanitize timestamp
 
         series = TimestampSanitizer(
