@@ -6,11 +6,19 @@
 
 ### Heatmap updates
 
-Harmonized heatmap creation when using `.heatmapdatetime()` and `.heatmapyearmonth()`. In addition, added the option to plot
-heatmaps in either vertical or horizontal orientation. Code was refactored accordingly. Both 
+There are several improvements for heatmap visualizations:
 
-(`diive.core.plotting.heatmap_datetime.HeatmapDateTime`)
-(`diive.core.plotting.heatmap_datetime.HeatmapYearMonth`)
+- Consistent Heatmap Creation: The `.heatmapdatetime()` and `.heatmapyearmonth()` functions now offer a more unified
+  experience for generating heatmaps.
+- Flexible Orientation: You can now choose to display your heatmaps vertically or horizontally using the new parameter
+  `ax_orientation`.
+
+Fyi, `.heatmapdatetime()` is an alias for the `diive.core.plotting.heatmap_datetime.HeatmapDateTime` class, and
+`.heatmapyearmonth()` is an alias for `diive.core.plotting.heatmap_datetime.HeatmapYearMonth`. Both of these classes
+leverage the `diive.core.plotting.heatmap_base.HeatmapBase` class for their core functionality.
+
+- `diive.pkgs.analyses.quantilegridaggregator.QuantileGridAggregator`
+
 
 ### Notebooks
 
@@ -18,7 +26,7 @@ heatmaps in either vertical or horizontal orientation. Code was refactored accor
 
 ### Unittests
 
-- XXX
+- Updated test case for `tests.test_analyses.TestAnalyses.test_quantilegridaggregator`
 
 ## v0.87.1 | 12 Jun 2025
 

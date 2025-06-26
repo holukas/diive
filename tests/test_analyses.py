@@ -110,7 +110,7 @@ class TestAnalyses(unittest.TestCase):
         self.assertEqual(daycorrs.min(), -0.9450031804629302)
         self.assertEqual(daycorrs.max(), 0.7109706199504967)
 
-    def test_quantilexyaggz(self):
+    def test_quantilegridaggregator(self):
         import diive as dv
         df = dv.load_exampledata_parquet()
         # Make subset of three required columns

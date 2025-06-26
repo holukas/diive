@@ -161,34 +161,89 @@ class QuantileGridAggregator:
 
     def _assign_xybins(self, df: DataFrame) -> DataFrame:
         """Create bins for x and y data"""
-        labels_stepsize = int(100 / self.n_quantiles)
-        labels = range(0, 100, labels_stepsize)
-        group, bins = pd.qcut(df[self.xname],
-                              q=self.n_quantiles,
-                              labels=labels,
-                              retbins=True,
-                              # duplicates='raise',
-                              duplicates='drop'
-                              )
-        # group, bins = pd.cut(df[self.xname],
-        #                      bins=self.n_quantiles,
-        #                      labels=labels,
-        #                      retbins=True,
-        #                      duplicates='drop')
-        df[self.xbinname] = group.astype(int)
-        group, bins = pd.qcut(df[self.yname],
-                              q=self.n_quantiles,
-                              labels=labels,
-                              retbins=True,
-                              # duplicates='raise',
-                              duplicates='drop'
-                              )
-        # group, bins = pd.cut(df[self.yname],
-        #                      bins=self.n_xybins,
-        #                      labels=range(1, self.n_xybins + 1),
-        #                      retbins=True,
-        #                      duplicates='drop')
-        df[self.ybinname] = group.astype(int)
+        # labels_stepsize = int(100 / self.n_quantiles)
+        # labels = range(0, 100, labels_stepsize)
+        # group, bins = pd.qcut(df[self.xname],
+        #                       q=self.n_quantiles,
+        #                       # labels=labels,
+        #                       retbins=True,
+        #                       # duplicates='raise',
+        #                       duplicates='drop'
+        #                       )
+        # # group, bins = pd.cut(df[self.xname],
+        # #                      bins=self.n_quantiles,
+        # #                      labels=labels,
+        # #                      retbins=True,
+        # #                      duplicates='drop')
+        # df[self.xbinname] = group.astype(int)
+
+        # --- Dynamic Label Generation for X-axis ---
+        # Step 1: Run qcut once WITHOUT labels to determine the actual number of bins
+        temp_group_x, temp_bins_x = pd.qcut(df[self.xname],
+                                            q=self.n_quantiles,
+                                            retbins=True,
+                                            duplicates='drop'
+                                            )
+        actual_n_bins_x = len(temp_bins_x) - 1  # Number of bins is (num_edges - 1)
+
+        # Step 2: Generate labels based on the actual number of bins
+        # This ensures 'labels' count matches the actual bins created
+        labels_stepsize_x = int(100 / actual_n_bins_x) if actual_n_bins_x > 0 else 0
+        labels_x = list(range(0, actual_n_bins_x * labels_stepsize_x, labels_stepsize_x))
+        if len(labels_x) != actual_n_bins_x:  # Adjust for potential rounding issues
+            labels_x = list(range(0, 100, int(100 / actual_n_bins_x)))[:actual_n_bins_x]
+
+        # Step 3: Run qcut again WITH the correctly sized labels
+        group_x, bins_x = pd.qcut(df[self.xname],
+                                  q=self.n_quantiles,
+                                  labels=labels_x,
+                                  retbins=True,
+                                  duplicates='drop'
+                                  )
+        df[self.xbinname] = group_x.astype(int)
+
+        # --- Dynamic Label Generation for Y-axis ---
+        # Step 1: Run qcut once WITHOUT labels to determine the actual number of bins
+        temp_group_y, temp_bins_y = pd.qcut(df[self.yname],
+                                            q=self.n_quantiles,
+                                            retbins=True,
+                                            duplicates='drop'
+                                            )
+        actual_n_bins_y = len(temp_bins_y) - 1
+
+        # Step 2: Generate labels based on the actual number of bins
+        labels_stepsize_y = int(100 / actual_n_bins_y) if actual_n_bins_y > 0 else 0
+        labels_y = list(range(0, actual_n_bins_y * labels_stepsize_y, labels_stepsize_y))
+        if len(labels_y) != actual_n_bins_y:  # Adjust for potential rounding issues
+            labels_y = list(range(0, 100, int(100 / actual_n_bins_y)))[:actual_n_bins_y]
+
+        # Step 3: Run qcut again WITH the correctly sized labels
+        group_y, bins_y = pd.qcut(df[self.yname],
+                                  q=self.n_quantiles,
+                                  labels=labels_y,
+                                  retbins=True,
+                                  duplicates='drop'
+                                  )
+        df[self.ybinname] = group_y.astype(int)
+
+
+
+
+
+
+        # group, bins = pd.qcut(df[self.yname],
+        #                       q=self.n_quantiles,
+        #                       # labels=labels,
+        #                       retbins=True,
+        #                       # duplicates='raise',
+        #                       duplicates='drop'
+        #                       )
+        # # group, bins = pd.cut(df[self.yname],
+        # #                      bins=self.n_xybins,
+        # #                      labels=range(1, self.n_xybins + 1),
+        # #                      retbins=True,
+        # #                      duplicates='drop')
+        # df[self.ybinname] = group.astype(int)
         return df
 
 
@@ -223,16 +278,17 @@ def _example():
     print(pivotdf)
     print(q.longformdf)
 
-    # hm = HeatmapXYZ(pivotdf=pivotdf)
-    # hm.plot(cb_digits_after_comma=0,
-    #         xlabel=r'Short-wave incoming radiation ($\mathrm{percentile}$)',
-    #         ylabel=r'Air temperature ($\mathrm{percentile}$)',
-    #         # ylabel=r'Percentile of TA ($\mathrm{°C}$)',
-    #         zlabel=r'Vapor pressure deficit (counts)',
-    #         # zlabel=r'Vapor pressure deficit ($\mathrm{gCO_{2}\ m^{-2}\ d^{-1}}$)',
-    #         # tickpos=[16, 25, 50, 75, 84],
-    #         # ticklabels=['16', '25', '50', '75', '84']
-    #         )
+    hm = dv.heatmapxyz(pivotdf=pivotdf, show_values=True)
+    hm.plot(cb_digits_after_comma=0,
+            xlabel=r'Short-wave incoming radiation ($\mathrm{percentile}$)',
+            ylabel=r'Air temperature ($\mathrm{percentile}$)',
+            # ylabel=r'Percentile of TA ($\mathrm{°C}$)',
+            zlabel=r'Vapor pressure deficit (counts)',
+            # zlabel=r'Vapor pressure deficit ($\mathrm{gCO_{2}\ m^{-2}\ d^{-1}}$)',
+            tickpos=[16, 25, 50, 75, 84],
+            ticklabels=['16', '25', '50', '75', '84']
+
+            )
 
     # print(res)
 

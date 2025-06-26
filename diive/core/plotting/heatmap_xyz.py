@@ -11,7 +11,9 @@ from pandas import DataFrame
 
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.plotting.plotfuncs import default_format
-from diive.pkgs.analyses.quantilexyaggz import QuantileXYAggZ
+
+
+# from diive.pkgs.analyses.quantilexyaggz import QuantileGridAggregator
 
 
 class HeatmapBase:
@@ -96,7 +98,7 @@ class HeatmapBase:
         return cmap, z
 
 
-class HeatmapPivotXYZ(HeatmapBase):
+class HeatmapXYZ(HeatmapBase):
 
     def __init__(self, pivotdf: DataFrame, verbose: bool = False):
         """
@@ -153,8 +155,6 @@ class HeatmapPivotXYZ(HeatmapBase):
                           vmin=vmin, vmax=vmax,
                           zorder=99)
 
-
-
         self.format(ax=ax, plot=p,
                     xlabel=xlabel, ylabel=ylabel, zlabel=zlabel,
                     tickpos=tickpos, ticklabels=ticklabels,
@@ -170,72 +170,78 @@ class HeatmapPivotXYZ(HeatmapBase):
         return x, y, z
 
 
-def example():
-    from diive.core.io.files import load_pickle
+def _example():
+    import diive as dv
 
     vpd_col = 'VPD_f'
     nee_col = 'NEE_CUT_REF_f'
-    nee_orig = 'NEE_CUT_REF_orig'
     nep_col = 'NEP'
     ta_col = 'Tair_f'
-    gpp_dt_col = 'GPP_DT_CUT_REF'
-    reco_dt_col = 'Reco_DT_CUT_REF'
-    gpp_nt_col = 'GPP_CUT_REF_f'
-    reco_nt_col = 'Reco_CUT_REF'
-    ratio_dt_gpp_reco = 'RATIO_DT_GPP_RECO'
-    rh_col = 'RH'
-    swin_col = 'Rg_f'
+    # nee_orig = 'NEE_CUT_REF_orig'
+    # gpp_dt_col = 'GPP_DT_CUT_REF'
+    # reco_dt_col = 'Reco_DT_CUT_REF'
+    # gpp_nt_col = 'GPP_CUT_REF_f'
+    # reco_nt_col = 'Reco_CUT_REF'
+    # ratio_dt_gpp_reco = 'RATIO_DT_GPP_RECO'
+    # rh_col = 'RH'
+    # swin_col = 'Rg_f'
 
-    # Load data, using pickle for fast loading
-    source_file = r"F:\Sync\luhk_work\20 - CODING\21 - DIIVE\diive\__manuscripts\11.01_NEP-Penalty_CH-DAV_1997-2022.09 (2023)\data\CH-DAV_FP2022.5_1997-2022_ID20230206154316_30MIN.diive.csv.pickle"
-    df_orig = load_pickle(filepath=source_file)
+    # Load data, using parquet for fast loading
+    df_orig = dv.load_exampledata_parquet()
     # df_orig = df_orig.loc[df_orig.index.year >= 2019].copy()
 
     # Data between May and Sep
     df_orig = df_orig.loc[(df_orig.index.month >= 5) & (df_orig.index.month <= 9)].copy()
 
     # Subset
-    df = df_orig[[nee_col, vpd_col, ta_col, gpp_dt_col, reco_dt_col, swin_col]].copy()
-    df[ratio_dt_gpp_reco] = df[gpp_dt_col].divide(df[reco_dt_col])
+    df = df_orig[[nee_col, vpd_col, ta_col]].copy()
+    # df[ratio_dt_gpp_reco] = df[gpp_dt_col].divide(df[reco_dt_col])
 
     # Convert units
     df[vpd_col] = df[vpd_col].multiply(0.1)  # hPa --> kPa
     df[nee_col] = df[nee_col].multiply(0.0792171)  # umol CO2 m-2 s-1 --> g CO2 m-2 30min-1
     df[nep_col] = df[nee_col].multiply(-1)  # Convert NEE to NEP, net uptake is now positive
-    df[gpp_dt_col] = df[gpp_dt_col].multiply(0.0792171)  # umol CO2 m-2 s-1 --> g CO2 m-2 30min-1
-    df[reco_dt_col] = df[reco_dt_col].multiply(0.0792171)  # umol CO2 m-2 s-1 --> g CO2 m-2 30min-1
+    # df[gpp_dt_col] = df[gpp_dt_col].multiply(0.0792171)  # umol CO2 m-2 s-1 --> g CO2 m-2 30min-1
+    # df[reco_dt_col] = df[reco_dt_col].multiply(0.0792171)  # umol CO2 m-2 s-1 --> g CO2 m-2 30min-1
 
     xcol = ta_col
     ycol = vpd_col
-    zcol = reco_dt_col
+    zcol = nep_col
 
     # Aggregation to daily values
     df = df.groupby(df.index.date).agg(
         {
-            xcol: ['min', 'max'],
-            ycol: ['min', 'max'],
+            xcol: ['min', 'max', 'mean'],
+            ycol: ['min', 'max', 'mean'],
             zcol: 'sum'
         }
     )
 
     from diive.core.dfun.frames import flatten_multiindex_all_df_cols
     df = flatten_multiindex_all_df_cols(df=df)
-    x = f"{xcol}_max"
-    y = f"{ycol}_max"
+    x = f"{xcol}_mean"
+    y = f"{ycol}_mean"
     z = f"{zcol}_sum"
 
-    pivotdf = QuantileXYAggZ(x=df[x],
-                             y=df[y],
-                             z=df[z],
-                             n_quantiles=20,
-                             min_n_vals_per_bin=5,
-                             binagg_z='mean')
+    q = dv.qga(
+        x=df[x],
+        y=df[y],
+        z=df[z],
+        n_quantiles=10,
+        min_n_vals_per_bin=1,
+        binagg_z='mean'
+    )
+    q.run()
 
-    print(pivotdf)
+    print(q.pivotdf)
 
-    hm = HeatmapPivotXYZ(pivotdf=pivotdf)
+    hm = dv.heatmapxyz(pivotdf=q.pivotdf)
     hm.plot(
         cb_digits_after_comma=0,
+        tickpos=[10, 50, 90],
+        # tickpos=[16, 25, 50, 75, 84],
+        ticklabels=['10', '50', '90']
+        # ticklabels=['16', '25', '50', '75', '84']
         # xlabel=r'Percentile of daily maximum TA ($\mathrm{°C}$)',
         # ylabel=r'Percentile of daily maximum VPD ($\mathrm{kPa}$)',
         # zlabel=r'Net ecosystem productivity ($\mathrm{gCO_{2}\ m^{-2}\ d^{-1}}$)'
@@ -243,4 +249,4 @@ def example():
 
 
 if __name__ == '__main__':
-    example()
+    _example()
