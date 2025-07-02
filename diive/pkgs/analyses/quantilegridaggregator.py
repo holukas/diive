@@ -268,7 +268,7 @@ def _example():
         x=subset[swin_col],
         y=subset[ta_col],
         z=subset[vpd_col],
-        n_quantiles=10,
+        n_quantiles=50,
         min_n_vals_per_bin=3,
         binagg_z='mean'
     )
@@ -278,7 +278,7 @@ def _example():
     print(pivotdf)
     print(q.longformdf)
 
-    hm = dv.heatmapxyz(pivotdf=pivotdf, show_values=True)
+    hm = dv.heatmapxyz(pivotdf=pivotdf)
     hm.plot(cb_digits_after_comma=0,
             xlabel=r'Short-wave incoming radiation ($\mathrm{percentile}$)',
             ylabel=r'Air temperature ($\mathrm{percentile}$)',

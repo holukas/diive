@@ -322,9 +322,9 @@ def _example_colormaps():
 
 
 if __name__ == '__main__':
-    _example_heatmap_datetime()
+    # _example_heatmap_datetime()
     # _example_multiple_heatmaps_yearmonth_horizontal()
-    # _example_heatmap_yearmonth()
+    _example_heatmap_yearmonth()
     # _example_colormaps()
 
 # # from diive.core.io.files import load_parquet
