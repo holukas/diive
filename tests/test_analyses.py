@@ -133,8 +133,8 @@ class TestAnalyses(unittest.TestCase):
             binagg_z='mean'
         )
         q.run()
-        pivotdf = q.pivotdf
-        longformdf = q.longformdf
+        pivotdf = q.df_wide
+        longformdf = q.df_long
         self.assertEqual(pivotdf.sum().sum(), 573.6496756683449)
         self.assertEqual(len(pivotdf.columns), 10)
         self.assertEqual(len(pivotdf.index), 10)

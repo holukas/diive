@@ -49,7 +49,7 @@ class QuantileGridAggregator:
                  z: Series,
                  n_quantiles: int = 10,
                  min_n_vals_per_bin: int = 1,
-                 binagg_z: Literal['mean', 'min', 'max', 'median', 'count'] = 'mean'
+                 binagg_z: Literal['mean', 'min', 'max', 'median', 'count', 'sum'] = 'mean'
                  ):
         """
         Initialize QuantileGridAggregator
@@ -88,20 +88,20 @@ class QuantileGridAggregator:
         self.ybinname = f'BIN_{self.yname}'
 
         if binagg_z == 'sum':
-            self.aggfunc = np.sum
+            self.aggfunc = 'sum'
         elif binagg_z == 'mean':
-            self.aggfunc = np.mean
+            self.aggfunc = 'mean'
         elif binagg_z == 'min':
-            self.aggfunc = np.min
+            self.aggfunc = 'min'
         elif binagg_z == 'max':
-            self.aggfunc = np.max
+            self.aggfunc = 'max'
         elif binagg_z == 'median':
-            self.aggfunc = np.median
+            self.aggfunc = 'median'
         elif binagg_z == 'count':
             self.aggfunc = np.count_nonzero
 
-        self._pivotdf = None
-        self._longformdf = None
+        self._df_wide = None
+        self._df_long = None
 
     def run(self):
         # Create dataframe from input data
@@ -111,36 +111,36 @@ class QuantileGridAggregator:
         plot_df = plot_df.loc[:, ~plot_df.columns.duplicated()]
         plot_df.index.name = 'DATE'
 
-        self._pivotdf, self._longformdf = self._transform_data(df=plot_df)
+        self._df_wide, self._df_long = self._transform_data(df=plot_df)
 
     @property
-    def pivotdf(self) -> DataFrame:
-        if not isinstance(self._pivotdf, DataFrame):
+    def df_wide(self) -> DataFrame:
+        if not isinstance(self._df_wide, DataFrame):
             raise Exception(f'pivotdf is not available, use .run() first.')
-        return self._pivotdf
+        return self._df_wide
 
     @property
-    def longformdf(self) -> DataFrame:
-        if not isinstance(self._longformdf, DataFrame):
+    def df_long(self) -> DataFrame:
+        if not isinstance(self._df_long, DataFrame):
             raise Exception(f'longformdf is not available, use .run() first.')
-        return self._longformdf
+        return self._df_long
 
     def _transform_data(self, df) -> tuple:
         """Transform data for plotting"""
 
         # Setup xy axes
-        longformdf = df.reset_index(drop=False).copy()
+        df_long = df.reset_index(drop=False).copy()
 
         # Bin x and y data
-        longformdf = self._assign_xybins(df=longformdf)
+        df_long = self._assign_xybins(df=df_long)
 
         # Add new column for unique bin combinations
-        longformdf['BINS_COMBINED_STR'] = longformdf[self.xbinname].astype(str) + "+" + longformdf[
+        df_long['BINS_COMBINED_STR'] = df_long[self.xbinname].astype(str) + "+" + df_long[
             self.ybinname].astype(str)
-        longformdf['BINS_COMBINED_INT'] = longformdf[self.xbinname].add(longformdf[self.ybinname])
+        df_long['BINS_COMBINED_INT'] = df_long[self.xbinname].add(df_long[self.ybinname])
 
         # Count number of available values per combined bin
-        ok_bin = longformdf.groupby('BINS_COMBINED_STR').count()['DATE'] >= self.min_n_vals_per_bin
+        ok_bin = df_long.groupby('BINS_COMBINED_STR').count()['DATE'] >= self.min_n_vals_per_bin
         # ok_bin = longformdf.groupby('BIN_Tair_f_max').count()['DATE'] > self.min_n_vals_per_bin
 
         # Bins with enough values
@@ -148,16 +148,26 @@ class QuantileGridAggregator:
         ok_binlist = list(ok_bin.index)  # List of bins with enough values
 
         # Keep data rows where the respective bin has enough values
-        ok_row = longformdf['BINS_COMBINED_STR'].isin(ok_binlist)
-        longformdf = longformdf[ok_row]
+        ok_row = df_long['BINS_COMBINED_STR'].isin(ok_binlist)
+        df_long = df_long[ok_row]
 
-        _counts = pd.pivot_table(longformdf, index=self.ybinname, columns=self.xbinname, values=self.zname,
+        _counts = pd.pivot_table(df_long, index=self.ybinname, columns=self.xbinname, values=self.zname,
                                  aggfunc=np.count_nonzero)
 
-        pivotdf = pd.pivot_table(longformdf, index=self.ybinname, columns=self.xbinname, values=self.zname,
+        df_wide = pd.pivot_table(df_long, index=self.ybinname, columns=self.xbinname, values=self.zname,
                                  aggfunc=self.aggfunc)
 
-        return pivotdf, longformdf
+        # Reset the index to make 'BIN_VPD_f_mean' a column
+        df_reset = df_wide.reset_index()
+
+        # Melt the DataFrame to long format:
+        # - id_vars: The column(s) to remain as identifier variables. Here, it's our index after resetting.
+        # - var_name: The name for the new column that will hold the original column names (e.g., '0', '25').
+        # - value_name: The name for the new column that will hold the values from the melted columns.
+        df_long = df_wide.reset_index().melt(id_vars=[self.ybinname], var_name=self.xbinname, value_name=self.zname)
+
+
+        return df_wide, df_long
 
     def _assign_xybins(self, df: DataFrame) -> DataFrame:
         """Create bins for x and y data"""
@@ -274,9 +284,9 @@ def _example():
     )
     q.run()
 
-    pivotdf = q.pivotdf.copy()
+    pivotdf = q.df_wide.copy()
     print(pivotdf)
-    print(q.longformdf)
+    print(q.df_long)
 
     hm = dv.heatmapxyz(pivotdf=pivotdf)
     hm.plot(cb_digits_after_comma=0,

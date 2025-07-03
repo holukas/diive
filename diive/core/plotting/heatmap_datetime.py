@@ -23,7 +23,6 @@ class HeatmapDateTime(HeatmapBase):
 
     def __init__(self,
                  series: Series,
-                 verbose: bool = False,
                  **kwargs):
         """Plot heatmap of time series data with date on y-axis and time on x-axis.
 
@@ -32,12 +31,14 @@ class HeatmapDateTime(HeatmapBase):
             **kwargs: Parameters for HeatmapBase.
 
         """
-        super().__init__(series, **kwargs)
-        self.verbose = verbose
-
+        super().__init__(**kwargs)
+        self.series = series.copy()
         self._prepare_data()
 
     def _prepare_data(self):
+        self.series.name = self.series.name if self.series.name else "data"  # Time series must have a name
+        self.series = self._setup_timestamp(series=self.series)
+
         # Needed for time plotting
         register_matplotlib_converters()
 
@@ -84,22 +85,20 @@ class HeatmapDateTime(HeatmapBase):
 
         return x, y, z
 
-    def plot(self):
-        """Plot heatmap"""
-        cmap, z = self.set_cmap(cmap=self.cmap, color_bad=self.color_bad, z=self.z)
-
-        p = self.ax.pcolormesh(self.x, self.y, self.z,
-                               linewidths=1, cmap=cmap,
-                               vmin=self.vmin, vmax=self.vmax,
-                               shading='flat', zorder=99)
-
-        # Ticks
+    @staticmethod
+    def _set_ticks():
         ticks_time = ['3:00', '6:00', '9:00', '12:00', '15:00', '18:00', '21:00']
         ticklabels_time = [3, 6, 9, 12, 15, 18, 21]
+        return ticks_time, ticklabels_time
+
+    def plot(self):
+        """Plot heatmap from time series."""
+        p = self.plot_pcolormesh()
+        ticks_time, ticklabels_time = self._set_ticks()
 
         if self.ax_orientation == "vertical":
-            ax_xlabel_txt = 'Time (hours)'
-            ax_ylabel_txt = 'Date'
+            xlabel = 'Time (hours)'
+            ylabel = 'Date'
             self.ax.set_xticks(ticks_time)
             self.ax.set_xticklabels(ticklabels_time)
             # # matplotlib's HourLocator did not work
@@ -107,8 +106,8 @@ class HeatmapDateTime(HeatmapBase):
             # For the y-axis (DATE) AutoDateLocator worked
             nice_date_ticks(ax=self.ax, minticks=self.minticks, maxticks=self.maxticks, which='y')
         elif self.ax_orientation == "horizontal":
-            ax_xlabel_txt = 'Date'
-            ax_ylabel_txt = 'Time (hours)'
+            xlabel = 'Date'
+            ylabel = 'Time (hours)'
             self.ax.set_yticks(ticks_time)
             self.ax.set_yticklabels(ticklabels_time)
             nice_date_ticks(ax=self.ax, minticks=self.minticks, maxticks=self.maxticks, which='x')
@@ -117,8 +116,8 @@ class HeatmapDateTime(HeatmapBase):
 
         # Format
         self.format(
-            ax_xlabel_txt=ax_xlabel_txt,
-            ax_ylabel_txt=ax_ylabel_txt,
+            ax_xlabel_txt=xlabel,
+            ax_ylabel_txt=ylabel,
             plot=p,
             shown_freq=self.series.index.freqstr
         )
@@ -140,8 +139,8 @@ class HeatmapYearMonth(HeatmapBase):
             **kwargs: Parameters for HeatmapBase.
 
         """
-        super().__init__(series, **kwargs)
-
+        super().__init__(**kwargs)
+        self.series = series.copy()
         self.agg = agg
         self.ranks = ranks
 
@@ -150,13 +149,12 @@ class HeatmapYearMonth(HeatmapBase):
         else:
             self.cmap = cmap
 
-        # Set xylabels
-        self.xlabel = 'Month' if self.ax_orientation == "vertical" else 'Year'
-        self.ylabel = 'Year' if self.ax_orientation == "vertical" else 'Month'
-
         self._prepare_data()
 
     def _prepare_data(self):
+        self.series.name = self.series.name if self.series.name else "data"  # Time series must have a name
+        self.series = self._setup_timestamp(series=self.series)
+
         # Bring data into shape
         self.plotdf = dv.resample_to_monthly_agg_matrix(series=self.series, agg=self.agg, ranks=self.ranks)
 
@@ -191,12 +189,7 @@ class HeatmapYearMonth(HeatmapBase):
 
     def plot(self):
         """Plot heatmap"""
-        cmap, z = self.set_cmap(cmap=self.cmap, color_bad=self.color_bad, z=self.z)
-        # Run._remove_cbar(ax=ax)
-        p = self.ax.pcolormesh(self.x, self.y, self.z,
-                               linewidths=1, cmap=cmap,
-                               vmin=self.vmin, vmax=self.vmax,
-                               shading='flat', zorder=99)
+        p = self.plot_pcolormesh()
 
         if self.show_values:
             self.show_vals_in_plot()
@@ -219,17 +212,14 @@ class HeatmapYearMonth(HeatmapBase):
                 if i % 2 != 0:  # Check if the index is odd (to hide every second, starting from the second label)
                     label.set_visible(False)
 
-        # # # nice_date_ticks(ax=self.ax, minticks=1, maxticks=24, which='y', locator='year')
-        # # Use Locator and Formatter to label every year or hour on y-axis
-        # locator = MultipleLocator(2)  # Set ticks every 1 unit
-        # formatter = FormatStrFormatter('%d')  # Integer format
-        # self.ax.yaxis.set_major_locator(locator)
-        # self.ax.yaxis.set_major_formatter(formatter)
+        # Set xylabels
+        xlabel = 'Month' if self.ax_orientation == "vertical" else 'Year'
+        ylabel = 'Year' if self.ax_orientation == "vertical" else 'Month'
 
         # Format
         self.format(
-            ax_xlabel_txt=self.xlabel,
-            ax_ylabel_txt=self.ylabel,
+            ax_xlabel_txt=xlabel,
+            ax_ylabel_txt=ylabel,
             plot=p,
             shown_freq=f'{self.agg}, MS'
         )
@@ -323,8 +313,8 @@ def _example_colormaps():
 
 if __name__ == '__main__':
     # _example_heatmap_datetime()
-    # _example_multiple_heatmaps_yearmonth_horizontal()
     _example_heatmap_yearmonth()
+    # _example_multiple_heatmaps_yearmonth_horizontal()
     # _example_colormaps()
 
 # # from diive.core.io.files import load_parquet

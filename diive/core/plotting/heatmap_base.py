@@ -5,21 +5,21 @@ HEATMAP
 import copy
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib import pyplot as plt, gridspec as gridspec
 
-import diive.core.plotting.styles.LightTheme as theme
 from diive.core.io.files import verify_dir
 from diive.core.plotting.plotfuncs import default_format, format_spines, hide_xaxis_yaxis, hide_ticks_and_ticklabels, \
     make_patch_spines_invisible
+from diive.core.plotting.styles import LightTheme as theme
 from diive.core.times.times import TimestampSanitizer, insert_timestamp
 
 
 class HeatmapBase:
 
     def __init__(self,
-                 series: pd.Series,
+                 # series: pd.Series,
                  fig=None,
                  figsize: tuple = None,
                  figdpi: int = 72,
@@ -71,10 +71,10 @@ class HeatmapBase:
         """
 
         # Instance variables
-        self.series = series.copy()
-        self.series.name = self.series.name if self.series.name else "data"  # Time series must have a name
+        # self.series = series.copy()
+        # self.series.name = self.series.name if self.series.name else "data"  # Time series must have a name
+        # self.series = self._setup_timestamp()
         self.verbose = verbose
-        self.series = self._setup_timestamp()
 
         self.fig = fig
         self.figsize = figsize
@@ -109,11 +109,11 @@ class HeatmapBase:
         self.y = None
         self.z = None
 
-    def _setup_timestamp(self) -> pd.Series:
+    def _setup_timestamp(self, series: pd.Series) -> pd.Series:
         # Sanitize timestamp
 
         series = TimestampSanitizer(
-            data=self.series,
+            data=series,
             output_middle_timestamp=False,
             validate_naming=True,
             convert_to_datetime=True,
@@ -140,11 +140,28 @@ class HeatmapBase:
         """Return pivot dataframe used to plot the heatmap."""
         return self.plotdf
 
+    def plot_pcolormesh(self, shading: str = None):
+        cmap, z = self.set_cmap(cmap=self.cmap, color_bad=self.color_bad, z=self.z)
+        # self.z = self.z.reshape(-1, 1)
+        p = self.ax.pcolormesh(self.x, self.y, self.z,
+                               linewidths=1, cmap=cmap,
+                               vmin=self.vmin, vmax=self.vmax,
+                               shading=shading, zorder=99)
+        return p
+
     def show(self):
         """Generate plot and show figure."""
         self.plot()
         # plt.tight_layout()
         self.fig.show()
+
+    @staticmethod
+    def set_cmap(cmap, color_bad, z):
+        """Set colormap and color of missing values"""
+        cmap = copy.copy(plt.get_cmap(cmap))  # Needed for now, https://github.com/matplotlib/matplotlib/issues/17634
+        cmap.set_bad(color=color_bad, alpha=1.)  # Set missing data to specific color
+        z = np.ma.masked_invalid(z)  # Mask NaN as missing
+        return cmap, z
 
     def export_borderless_heatmap(self, outpath: str):
         # TODO----------
@@ -230,25 +247,14 @@ class HeatmapBase:
                 self.ax.text(self.x[j] + 0.5, self.y[i] + 0.5, f"{self.z[i, j]:.{self.showvalues_n_dec_places}f}",
                              ha='center', va='center', color='black', fontsize=9, zorder=100)
 
-    # TODO check if needed
-    def _setup_plotdf(self) -> pd.DataFrame:
-        """Create dataframe with values as z variable for colors"""
-        plotdf = pd.DataFrame(index=self.series.index,
-                              columns=['z'],
-                              data=self.series.values)
-        return plotdf
 
-    @staticmethod
-    def set_cmap(cmap, color_bad, z):
-        """Set colormap and color of missing values"""
-        # Colormap
-        cmap = copy.copy(plt.get_cmap(cmap))  # Needed for now, https://github.com/matplotlib/matplotlib/issues/17634
-        cmap.set_bad(color=color_bad, alpha=1.)  # Set missing data to specific color
-        z = np.ma.masked_invalid(z)  # Mask NaN as missing
-        return cmap, z
 
-    def format(self, ax_xlabel_txt, ax_ylabel_txt, plot, shown_freq):
-        title = self.title if self.title else f"{self.series.name} ({shown_freq})"
+
+    def format(self, ax_xlabel_txt, ax_ylabel_txt, plot, shown_freq: str = None):
+        if shown_freq:
+            title = self.title if self.title else f"{self.series.name} ({shown_freq})"
+        else:
+            title = self.title if self.title else ""
         self.ax.set_title(title, color='black', size=self.axlabels_fontsize)
         # Colorbar
         # Inside your class, assuming self.ax is an Axes object
@@ -263,6 +269,102 @@ class HeatmapBase:
                        ticks_labels_fontsize=self.ticks_labelsize)
         format_spines(ax=self.ax, color='black', lw=2)
         self.ax.tick_params(left=True, right=False, top=False, bottom=True)
+
+
+# todo del class HeatmapBaseXYZ:
+#     """A base class for creating and formatting heatmap plots.
+#
+#         This class encapsulates the basic setup of a Matplotlib figure and axis
+#         for a heatmap. It provides helper methods for formatting the axes,
+#         the colorbar, and for configuring the colormap, including
+#         handling missing values.
+#
+#         Attributes:
+#             fig (matplotlib.figure.Figure): The Matplotlib figure containing the plot.
+#             ax (matplotlib.axes.Axes): The Matplotlib axes on which the heatmap is drawn.
+#             title (str): The title of the plot.
+#             cb_digits_after_comma (int): Number of decimal places for the colorbar labels.
+#             cb_label_fontsize (float): Font size for the colorbar's label.
+#             axlabels_fontsize (float): Font size for the x and y-axis labels.
+#             ticks_labelsize (float): Font size for the axis tick labels.
+#             minyticks (int): Minimum number of ticks on the y-axis.
+#             maxyticks (int): Maximum number of ticks on the y-axis.
+#             cmap (str): Name of the Matplotlib colormap to use.
+#             color_bad (str): Color to use for invalid or missing (NaN) values.
+#             figsize (tuple): Size of the figure as (width, height) in inches.
+#         """
+#
+#     def __init__(self,
+#                  fig=None,
+#                  ax=None,
+#                  title: str = None,
+#                  cb_digits_after_comma: int = 2,
+#                  cb_label_fontsize: float = theme.AX_LABELS_FONTSIZE,
+#                  ax_labels_fontsize: float = theme.AX_LABELS_FONTSIZE,
+#                  ticks_labels_fontsize: float = theme.TICKS_LABELS_FONTSIZE,
+#                  minyticks: int = 3,
+#                  maxyticks: int = 10,
+#                  cmap: str = 'RdYlBu_r',
+#                  color_bad: str = 'grey',
+#                  figsize: tuple = (10, 9)):
+#         self.fig = fig
+#         self.ax = ax
+#         self.title = title
+#         self.cb_digits_after_comma = cb_digits_after_comma
+#         self.cb_label_fontsize = cb_label_fontsize
+#         self.axlabels_fontsize = ax_labels_fontsize
+#         self.ticks_labelsize = ticks_labels_fontsize
+#         self.minyticks = minyticks
+#         self.maxyticks = maxyticks
+#         self.cmap = cmap
+#         self.color_bad = color_bad
+#         self.figsize = figsize
+#
+#         # Create axis if none is given
+#         if not ax:
+#             self.fig, self.ax = self._create_ax()
+#
+#     def _create_ax(self):
+#         """Create figure and axis"""
+#         # Figure setup
+#         fig = plt.figure(facecolor='white', figsize=self.figsize)
+#         gs = gridspec.GridSpec(1, 1)  # rows, cols
+#         # gs.update(wspace=0.3, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
+#         ax = fig.add_subplot(gs[0, 0])
+#         return fig, ax
+#
+#     def format(self, ax, plot, xlabel: str, ylabel: str, zlabel: str,
+#                tickpos: list, ticklabels: list, cb_digits_after_comma: int = 2,
+#                labelsize: float = None):
+#         # title = self.title if self.title else f"{self.series.name} in {self.series.index.freqstr} time resolution"
+#         # self.ax.set_title(title, color='black')
+#         # self.ax.set_title(self.title, color='black', size=theme.FONTSIZE_HEADER_AXIS)
+#         labelsize = labelsize if labelsize else self.cb_label_fontsize
+#         ax.set_xticks(tickpos)
+#         ax.set_yticks(tickpos)
+#         ax.set_xticklabels(ticklabels)
+#         ax.set_yticklabels(ticklabels)
+#         # nice_date_ticks(ax=self.ax, minticks=self.minyticks, maxticks=self.maxyticks, which='y')
+#         cb = plt.colorbar(plot, ax=ax, format=f"%.{int(cb_digits_after_comma)}f",
+#                           label=zlabel)
+#         cb.ax.tick_params(labelsize=labelsize)
+#         cb.set_label(label=zlabel, size=labelsize)
+#
+#         # cbytick_obj = plt.getp(cb.axes_dict, 'yticklabels')  # Set y tick label color
+#         # plt.setp(cbytick_obj, color='black', fontsize=theme.FONTSIZE_HEADER_AXIS)
+#         default_format(ax=ax,
+#                        ax_xlabel_txt=xlabel,
+#                        ax_ylabel_txt=ylabel,
+#                        ax_labels_fontsize=labelsize,
+#                        ticks_direction='out',
+#                        ticks_length=8,
+#                        ticks_width=2,
+#                        ticks_labels_fontsize=labelsize)
+#
+#         from diive.core.plotting.plotfuncs import format_spines
+#         format_spines(ax=ax, color='black', lw=2)
+
+
 
 
 def list_of_colormaps() -> list:

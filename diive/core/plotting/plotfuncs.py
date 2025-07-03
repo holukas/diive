@@ -1,8 +1,10 @@
+import copy
 import time
 from pathlib import Path
 from typing import Literal
 
 import matplotlib.gridspec as gridspec
+import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt, _pylab_helpers, dates as mdates
 from pandas import DataFrame, Series
@@ -24,6 +26,9 @@ def set_fig(ax: plt.Axes):
         fig, ax = create_ax()
         showplot = True
     return fig, ax, showplot
+
+
+
 
 
 def make_patch_spines_invisible(ax):

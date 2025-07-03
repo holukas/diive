@@ -22,8 +22,9 @@ example plot shows the monthly maximum air temperature.*
 
 Fyi, `.heatmapdatetime()` is an alias for the `diive.core.plotting.heatmap_datetime.HeatmapDateTime` class,
 `.heatmapyearmonth()` is an alias for `diive.core.plotting.heatmap_datetime.HeatmapYearMonth`, `.heatmapxyz()` is an
-alias for `diive.core.plotting.heatmap_xyz.HeatmapXYZ`. All of these classes use the
-`diive.core.plotting.heatmap_base.HeatmapBase` class for their core functionality.
+alias for `diive.core.plotting.heatmap_xyz.HeatmapXYZ`. All of these classes use
+`diive.core.plotting.heatmap_base.HeatmapBase` or `diive.core.plotting.heatmap_base.HeatmapBaseXYZ` as base class for
+their core functionality.
 
 ### Notebooks
 
@@ -34,6 +35,7 @@ alias for `diive.core.plotting.heatmap_xyz.HeatmapXYZ`. All of these classes use
 ### Unittests
 
 - Updated test case for `tests.test_analyses.TestAnalyses.test_quantilegridaggregator`
+- 56/56 unittests ran successfully
 
 ## v0.87.1 | 12 Jun 2025
 
