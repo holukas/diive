@@ -139,7 +139,7 @@ class HeatmapYearMonth(HeatmapBase):
             **kwargs: Parameters for HeatmapBase.
 
         """
-        super().__init__(**kwargs)
+        super().__init__(heatmaptype='yearmonth', **kwargs)
         self.series = series.copy()
         self.agg = agg
         self.ranks = ranks

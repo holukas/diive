@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from matplotlib import pyplot as plt, gridspec as gridspec
+from matplotlib import pyplot as plt
 
 from diive.core.io.files import verify_dir
 from diive.core.plotting.plotfuncs import default_format, format_spines, hide_xaxis_yaxis, hide_ticks_and_ticklabels, \
@@ -39,7 +39,9 @@ class HeatmapBase:
                  zlabel: str = None,
                  show_less_xticklabels: bool = False,
                  show_values: bool = False,
+                 showvalues_fontsize: float = theme.AX_LABELS_FONTSIZE,
                  show_values_n_dec_places: int = 0,
+                 heatmaptype: str=None,
                  verbose: bool = False):
         """
         Initialize the HeatmapBase class for generating heatmap visualizations.
@@ -102,7 +104,9 @@ class HeatmapBase:
 
         self.show_less_xticklabels = show_less_xticklabels
         self.show_values = show_values
+        self.showvalues_fontsize = showvalues_fontsize
         self.showvalues_n_dec_places = show_values_n_dec_places
+        self.heatmaptype = heatmaptype
 
         self.plotdf = None
         self.x = None
@@ -242,13 +246,17 @@ class HeatmapBase:
         for i in range(self.z.shape[0]):
             for j in range(self.z.shape[1]):
                 # Calculate the center coordinates
-                x_center = (self.x[j] + self.x[j + 1]) / 2
-                y_center = (self.y[i] + self.y[i + 1]) / 2
-                self.ax.text(self.x[j] + 0.5, self.y[i] + 0.5, f"{self.z[i, j]:.{self.showvalues_n_dec_places}f}",
-                             ha='center', va='center', color='black', fontsize=9, zorder=100)
+                if self.heatmaptype == 'xyz':
+                    x_center = (self.x[j] + self.x[j + 1]) / 2
+                    y_center = (self.y[i] + self.y[i + 1]) / 2
+                elif self.heatmaptype == 'yearmonth':
+                    x_center = self.x[j] + 0.5
+                    y_center = self.y[i] + 0.5
+                else:
+                    raise NotImplementedError
 
-
-
+                self.ax.text(x_center, y_center, f"{self.z[i, j]:.{self.showvalues_n_dec_places}f}",
+                             ha='center', va='center', color='black', fontsize=self.showvalues_fontsize, zorder=100)
 
     def format(self, ax_xlabel_txt, ax_ylabel_txt, plot, shown_freq: str = None):
         if shown_freq:
@@ -269,102 +277,6 @@ class HeatmapBase:
                        ticks_labels_fontsize=self.ticks_labelsize)
         format_spines(ax=self.ax, color='black', lw=2)
         self.ax.tick_params(left=True, right=False, top=False, bottom=True)
-
-
-# todo del class HeatmapBaseXYZ:
-#     """A base class for creating and formatting heatmap plots.
-#
-#         This class encapsulates the basic setup of a Matplotlib figure and axis
-#         for a heatmap. It provides helper methods for formatting the axes,
-#         the colorbar, and for configuring the colormap, including
-#         handling missing values.
-#
-#         Attributes:
-#             fig (matplotlib.figure.Figure): The Matplotlib figure containing the plot.
-#             ax (matplotlib.axes.Axes): The Matplotlib axes on which the heatmap is drawn.
-#             title (str): The title of the plot.
-#             cb_digits_after_comma (int): Number of decimal places for the colorbar labels.
-#             cb_label_fontsize (float): Font size for the colorbar's label.
-#             axlabels_fontsize (float): Font size for the x and y-axis labels.
-#             ticks_labelsize (float): Font size for the axis tick labels.
-#             minyticks (int): Minimum number of ticks on the y-axis.
-#             maxyticks (int): Maximum number of ticks on the y-axis.
-#             cmap (str): Name of the Matplotlib colormap to use.
-#             color_bad (str): Color to use for invalid or missing (NaN) values.
-#             figsize (tuple): Size of the figure as (width, height) in inches.
-#         """
-#
-#     def __init__(self,
-#                  fig=None,
-#                  ax=None,
-#                  title: str = None,
-#                  cb_digits_after_comma: int = 2,
-#                  cb_label_fontsize: float = theme.AX_LABELS_FONTSIZE,
-#                  ax_labels_fontsize: float = theme.AX_LABELS_FONTSIZE,
-#                  ticks_labels_fontsize: float = theme.TICKS_LABELS_FONTSIZE,
-#                  minyticks: int = 3,
-#                  maxyticks: int = 10,
-#                  cmap: str = 'RdYlBu_r',
-#                  color_bad: str = 'grey',
-#                  figsize: tuple = (10, 9)):
-#         self.fig = fig
-#         self.ax = ax
-#         self.title = title
-#         self.cb_digits_after_comma = cb_digits_after_comma
-#         self.cb_label_fontsize = cb_label_fontsize
-#         self.axlabels_fontsize = ax_labels_fontsize
-#         self.ticks_labelsize = ticks_labels_fontsize
-#         self.minyticks = minyticks
-#         self.maxyticks = maxyticks
-#         self.cmap = cmap
-#         self.color_bad = color_bad
-#         self.figsize = figsize
-#
-#         # Create axis if none is given
-#         if not ax:
-#             self.fig, self.ax = self._create_ax()
-#
-#     def _create_ax(self):
-#         """Create figure and axis"""
-#         # Figure setup
-#         fig = plt.figure(facecolor='white', figsize=self.figsize)
-#         gs = gridspec.GridSpec(1, 1)  # rows, cols
-#         # gs.update(wspace=0.3, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
-#         ax = fig.add_subplot(gs[0, 0])
-#         return fig, ax
-#
-#     def format(self, ax, plot, xlabel: str, ylabel: str, zlabel: str,
-#                tickpos: list, ticklabels: list, cb_digits_after_comma: int = 2,
-#                labelsize: float = None):
-#         # title = self.title if self.title else f"{self.series.name} in {self.series.index.freqstr} time resolution"
-#         # self.ax.set_title(title, color='black')
-#         # self.ax.set_title(self.title, color='black', size=theme.FONTSIZE_HEADER_AXIS)
-#         labelsize = labelsize if labelsize else self.cb_label_fontsize
-#         ax.set_xticks(tickpos)
-#         ax.set_yticks(tickpos)
-#         ax.set_xticklabels(ticklabels)
-#         ax.set_yticklabels(ticklabels)
-#         # nice_date_ticks(ax=self.ax, minticks=self.minyticks, maxticks=self.maxyticks, which='y')
-#         cb = plt.colorbar(plot, ax=ax, format=f"%.{int(cb_digits_after_comma)}f",
-#                           label=zlabel)
-#         cb.ax.tick_params(labelsize=labelsize)
-#         cb.set_label(label=zlabel, size=labelsize)
-#
-#         # cbytick_obj = plt.getp(cb.axes_dict, 'yticklabels')  # Set y tick label color
-#         # plt.setp(cbytick_obj, color='black', fontsize=theme.FONTSIZE_HEADER_AXIS)
-#         default_format(ax=ax,
-#                        ax_xlabel_txt=xlabel,
-#                        ax_ylabel_txt=ylabel,
-#                        ax_labels_fontsize=labelsize,
-#                        ticks_direction='out',
-#                        ticks_length=8,
-#                        ticks_width=2,
-#                        ticks_labels_fontsize=labelsize)
-#
-#         from diive.core.plotting.plotfuncs import format_spines
-#         format_spines(ax=ax, color='black', lw=2)
-
-
 
 
 def list_of_colormaps() -> list:

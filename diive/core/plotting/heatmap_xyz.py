@@ -21,6 +21,7 @@ class HeatmapXYZ(HeatmapBase):
                  binagg_z: Literal['mean', 'min', 'max', 'median', 'count', 'sum'] = 'mean',
                  xlabel: str = None,
                  ylabel: str = None,
+                 zlabel: str = None,
                  xtickpos: list = None,
                  xticklabels: list = None,
                  ytickpos: list = None,
@@ -36,7 +37,7 @@ class HeatmapXYZ(HeatmapBase):
             verbose: More text output to the console if *True*
 
         """
-        super().__init__(**kwargs)
+        super().__init__(heatmaptype='xyz', **kwargs)
         # self.pivotdf = pivotdf
         self.x = x
         self.y = y
@@ -47,6 +48,7 @@ class HeatmapXYZ(HeatmapBase):
 
         self.xlabel = self.x.name if not xlabel else xlabel
         self.ylabel = self.y.name if not ylabel else ylabel
+        self.zlabel = f"{self.z.name} ({self.binagg_z})" if not zlabel else zlabel
         self.xtickpos = xtickpos
         self.xticklabels = xticklabels
         self.ytickpos = ytickpos
@@ -185,7 +187,9 @@ def _example():
         z=df[z],
         n_bins=5,
         min_n_vals_per_bin=1,
-        binagg_z='count',
+        binagg_z='mean',
+        show_values=True,
+        show_values_n_dec_places=0,
         # x=df[x],
         # y=df[y],
         # z=df[z],
