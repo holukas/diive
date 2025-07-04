@@ -5,6 +5,7 @@ HEATMAP
 import copy
 from pathlib import Path
 
+import matplotlib
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
@@ -17,6 +18,15 @@ from diive.core.times.times import TimestampSanitizer, insert_timestamp
 
 
 class HeatmapBase:
+    """
+    Base class for generating various types of heatmap visualizations.
+
+    This class provides the fundamental structure and common functionalities
+    required for creating heatmaps, including figure and axis management,
+    color mapping, handling of missing values, and basic plot formatting.
+    It is designed to be extended by specific heatmap types (e.g., HeatmapDateTime,
+    HeatmapYearMonth) that prepare their data in a specific way.
+    """
 
     def __init__(self,
                  fig=None,
@@ -46,12 +56,11 @@ class HeatmapBase:
         Initialize the HeatmapBase class for generating heatmap visualizations.
 
         Args:
-            series: Time series (pandas Series) with a timestamp index, from which the heatmap data will be derived.
             fig: Matplotlib Figure object to plot on. If None, a new figure will be created.
             figsize: Tuple (width, height) in inches, specifying the size of the figure. Only used if `fig` is None.
             figdpi: The resolution of the figure in dots per inch (DPI). Only used if `fig` is None.
             ax: Matplotlib Axes object in which the heatmap is shown. If None, a new figure with an axis will be generated.
-            ax_orientation: Orientation of the heatmap. Options are 'vertical' or 'horizontal'.
+            ax_orientation: Orientation of the heatmap. Options are 'vertical' (default, y-axis is primary grouping, x-axis is secondary) or 'horizontal'.
             title: Text string to be shown at the top of the plot as its main title.
             vmin: Minimum value for the color scale of the heatmap. If None, it will be determined automatically from the data.
             vmax: Maximum value for the color scale of the heatmap. If None, it will be determined automatically from the data.
@@ -68,8 +77,8 @@ class HeatmapBase:
             show_values: If True, the actual numerical z-values will be overlaid on top of the heatmap cells.
             show_values_fontsize: Font size for the numerical values displayed on the heatmap cells if `show_values` is True.
             show_values_n_dec_places: Number of decimal places to format the displayed values if `show_values` is True. This parameter is only considered if `show_values` is set to True.
+            heatmaptype: A string indicating the type of heatmap (e.g., 'yearmonth', 'xyz'). Used internally for specific formatting logic.
             verbose: If True, enables verbose output for debugging or informational messages during heatmap generation.
-
         """
 
         self.verbose = verbose
@@ -110,7 +119,22 @@ class HeatmapBase:
         self.z = None
 
     def _setup_timestamp(self, series: pd.Series) -> pd.Series:
-        # Sanitize timestamp
+        """Sanitizes and prepares the time series index for heatmap plotting.
+
+        This method ensures that the time series index is in a consistent
+        and appropriate format for heatmap generation. It uses `TimestampSanitizer`
+        to perform operations like converting to datetime, sorting, removing
+        duplicates, and regularizing the time series. It also ensures the
+        timestamp convention is 'TIMESTAMP_START', which is optimal for
+        representing data within a given period on a heatmap.
+
+        Args:
+            series: The input pandas Series with a datetime-like index.
+
+        Returns:
+            pd.Series: The sanitized and prepared pandas Series with a
+                       'TIMESTAMP_START' index.
+        """
 
         series = TimestampSanitizer(
             data=series,
@@ -133,14 +157,38 @@ class HeatmapBase:
         return series
 
     def get_ax(self):
-        """Return axis in which plot was generated."""
+        """Returns the Matplotlib Axes object where the plot was generated.
+
+        Returns:
+            matplotlib.axes.Axes: The Axes object containing the heatmap.
+        """
         return self.ax
 
     def get_plot_data(self) -> pd.DataFrame:
-        """Return pivot dataframe used to plot the heatmap."""
+        """Returns the pivot DataFrame used to plot the heatmap.
+
+        This DataFrame contains the reshaped data (`self.plotdf`) that forms
+        the grid of values for the heatmap.
+
+        Returns:
+            pd.DataFrame: The DataFrame used for plotting.
+        """
         return self.plotdf
 
     def plot_pcolormesh(self, shading: str = None):
+        """Generates the core pcolormesh plot for the heatmap.
+
+        This method sets up the colormap, handles missing values, and then
+        uses `matplotlib.pyplot.pcolormesh` to draw the heatmap. It uses
+        the `x`, `y`, and `z` arrays prepared by the subclass.
+
+        Args:
+            shading: The shading method for `pcolormesh`. Can be 'flat' or 'gouraud'.
+                     Defaults to None, letting Matplotlib choose based on data.
+
+        Returns:
+            matplotlib.collections.QuadMesh: The QuadMesh object returned by `pcolormesh`.
+        """
         cmap, z = self.set_cmap(cmap=self.cmap, color_bad=self.color_bad, z=self.z)
         # self.z = self.z.reshape(-1, 1)
         p = self.ax.pcolormesh(self.x, self.y, self.z,
@@ -150,14 +198,35 @@ class HeatmapBase:
         return p
 
     def show(self):
-        """Generate plot and show figure."""
+        """Generates the heatmap plot and displays the figure.
+
+        This method calls the `plot` method (which should be implemented by
+        subclasses) to draw the heatmap and then uses `self.fig.show()`
+        to display the generated Matplotlib figure.
+        """
         self.plot()
         # plt.tight_layout()
         self.fig.show()
 
     @staticmethod
     def set_cmap(cmap, color_bad, z):
-        """Set colormap and color of missing values"""
+        """Sets the colormap and handles missing values for plotting.
+
+        This static method takes a colormap name, a color for bad/missing values,
+        and the data array. It creates a copy of the colormap and sets the
+        color for NaN values. It also masks invalid (NaN) values in the data
+        array so that the colormap's 'bad' color is applied.
+
+        Args:
+            cmap (str): The name of the colormap to use.
+            color_bad (str): The color string for missing values.
+            z (np.ndarray): The 2D numpy array of data values.
+
+        Returns:
+            tuple: A tuple containing:
+                   - `cmap`: The modified Matplotlib colormap object.
+                   - `z`: The masked numpy array with invalid values masked.
+        """
         cmap = copy.copy(plt.get_cmap(cmap))  # Needed for now, https://github.com/matplotlib/matplotlib/issues/17634
         cmap.set_bad(color=color_bad, alpha=1.)  # Set missing data to specific color
         z = np.ma.masked_invalid(z)  # Mask NaN as missing
@@ -165,7 +234,19 @@ class HeatmapBase:
 
     def export_borderless_heatmap(self, outpath: str):
         # TODO----------
-        """Save borderless plots (b/w heightmap and texture) for Blender render."""
+        """Saves borderless heatmap plots (grayscale heightmap and color texture)
+        for external rendering purposes, such as in Blender.
+
+        This method generates different versions of the heatmap (grayscale for
+        heightmaps and color for textures, with normal and reversed colormaps).
+        It creates a new figure and axis for each export, ensuring no borders,
+        ticks, or labels are present, making them suitable for direct use as
+        image textures or height maps in 3D rendering software.
+
+        Args:
+            outpath: The directory path where the generated image files will be saved.
+                     The directory will be created if it does not exist.
+        """
         # https://www.youtube.com/watch?v=BXDSfrzR0zI
 
         # First, check if output directory exists
@@ -238,7 +319,14 @@ class HeatmapBase:
             fig_render_bw.show()
 
     def show_vals_in_plot(self):
-        # Write "X" into z-value rectangle
+        """Overlays numerical values onto the heatmap cells.
+
+        This method iterates through each cell of the heatmap (`self.z` data)
+        and places the corresponding numerical value as text within the cell.
+        It calculates the center coordinates for each cell based on the
+        `heatmaptype` and formats the value according to `show_values_n_dec_places`.
+        NaN values are displayed as empty strings.
+        """
         for i in range(self.z.shape[0]):
             for j in range(self.z.shape[1]):
                 # Calculate the center coordinates
@@ -260,6 +348,19 @@ class HeatmapBase:
                              ha='center', va='center', color='black', fontsize=self.showvalues_fontsize, zorder=100)
 
     def format(self, ax_xlabel_txt, ax_ylabel_txt, plot, shown_freq: str = None):
+        """Applies general formatting to the heatmap plot.
+
+        This method sets the plot title, configures the colorbar, and applies
+        default axis and spine formatting.
+
+        Args:
+            ax_xlabel_txt (str): The label for the x-axis.
+            ax_ylabel_txt (str): The label for the y-axis.
+            plot (matplotlib.collections.QuadMesh): The QuadMesh object returned by `pcolormesh`.
+            shown_freq (str, optional): A string indicating the frequency or aggregation
+                                        method of the data, which will be appended to the
+                                        title if provided. Defaults to None.
+        """
         if shown_freq:
             title = self.title if self.title else f"{self.series.name} ({shown_freq})"
         else:
