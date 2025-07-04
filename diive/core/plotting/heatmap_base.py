@@ -251,7 +251,12 @@ class HeatmapBase:
                 else:
                     raise NotImplementedError
 
-                self.ax.text(x_center, y_center, f"{self.z[i, j]:.{self.showvalues_n_dec_places}f}",
+                val = self.z[i, j]
+                if not np.isnan(val):  # Check if number, skips part if NaN
+                    valstr = f"{val:.{self.showvalues_n_dec_places}f}"
+                else:
+                    valstr = ""
+                self.ax.text(x_center, y_center, valstr,
                              ha='center', va='center', color='black', fontsize=self.showvalues_fontsize, zorder=100)
 
     def format(self, ax_xlabel_txt, ax_ylabel_txt, plot, shown_freq: str = None):
