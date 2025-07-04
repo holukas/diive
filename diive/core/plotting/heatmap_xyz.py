@@ -119,7 +119,7 @@ class HeatmapXYZ(HeatmapBase):
         if self.ytickpos:
             self.ax.set_yticks(self.ytickpos)
             if self.yticklabels:
-                self.ax.setyticklabels(self.yticklabels)
+                self.ax.set_yticklabels(self.yticklabels)
 
         self.format(
             plot=p,
