@@ -133,14 +133,14 @@ class TestAnalyses(unittest.TestCase):
             binagg_z='mean'
         )
         q.run()
-        pivotdf = q.df_wide
-        longformdf = q.df_long
-        self.assertEqual(pivotdf.sum().sum(), 573.6496756683449)
-        self.assertEqual(len(pivotdf.columns), 10)
-        self.assertEqual(len(pivotdf.index), 10)
-        self.assertEqual(longformdf['BINS_COMBINED_INT'].sum(), 4089180)
-        self.assertEqual(len(longformdf.columns), 8)
-        self.assertEqual(len(longformdf.index), 45447)
+        df_wide = q.df_wide
+        df_long = q.df_long
+        self.assertEqual(df_wide.sum().sum(), 573.6496756683449)
+        self.assertEqual(len(df_wide.columns), 10)
+        self.assertEqual(len(df_wide.index), 10)
+        self.assertEqual(df_long.sum().sum(), 9573.649675668345)
+        self.assertEqual(len(df_long.columns), 3)
+        self.assertEqual(len(df_long.index), 100)
 
     def test_histogram(self):
         from diive.configs.exampledata import load_exampledata_parquet
