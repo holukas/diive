@@ -19,7 +19,6 @@ from diive.core.times.times import TimestampSanitizer, insert_timestamp
 class HeatmapBase:
 
     def __init__(self,
-                 # series: pd.Series,
                  fig=None,
                  figsize: tuple = None,
                  figdpi: int = 72,
@@ -39,9 +38,9 @@ class HeatmapBase:
                  zlabel: str = None,
                  show_less_xticklabels: bool = False,
                  show_values: bool = False,
-                 showvalues_fontsize: float = theme.AX_LABELS_FONTSIZE,
+                 show_values_fontsize: float = theme.AX_LABELS_FONTSIZE,
                  show_values_n_dec_places: int = 0,
-                 heatmaptype: str=None,
+                 heatmaptype: str = None,
                  verbose: bool = False):
         """
         Initialize the HeatmapBase class for generating heatmap visualizations.
@@ -67,15 +66,12 @@ class HeatmapBase:
             zlabel: Label for the colorbar, typically describing what the color intensity represents (e.g., 'Temperature', 'Value').
             show_less_xticklabels: If True, attempts to reduce the number of x-axis tick labels for better readability, especially when dealing with a dense time series.
             show_values: If True, the actual numerical z-values will be overlaid on top of the heatmap cells.
+            show_values_fontsize: Font size for the numerical values displayed on the heatmap cells if `show_values` is True.
             show_values_n_dec_places: Number of decimal places to format the displayed values if `show_values` is True. This parameter is only considered if `show_values` is set to True.
             verbose: If True, enables verbose output for debugging or informational messages during heatmap generation.
 
         """
 
-        # Instance variables
-        # self.series = series.copy()
-        # self.series.name = self.series.name if self.series.name else "data"  # Time series must have a name
-        # self.series = self._setup_timestamp()
         self.verbose = verbose
 
         self.fig = fig
@@ -104,7 +100,7 @@ class HeatmapBase:
 
         self.show_less_xticklabels = show_less_xticklabels
         self.show_values = show_values
-        self.showvalues_fontsize = showvalues_fontsize
+        self.showvalues_fontsize = show_values_fontsize
         self.showvalues_n_dec_places = show_values_n_dec_places
         self.heatmaptype = heatmaptype
 

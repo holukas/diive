@@ -2,13 +2,12 @@
 HEATMAP
 =======
 """
-from poetry.console.commands import self
 
-import diive as dv
-import pandas as pd
 import numpy as np
+import pandas as pd
+
 from diive.core.plotting.heatmap_base import HeatmapBase
-from typing import Literal
+
 
 class HeatmapXYZ(HeatmapBase):
 
@@ -16,9 +15,6 @@ class HeatmapXYZ(HeatmapBase):
                  x: pd.Series,
                  y: pd.Series,
                  z: pd.Series,
-                 n_bins: int = 10,
-                 min_n_vals_per_bin: int = 1,
-                 binagg_z: Literal['mean', 'min', 'max', 'median', 'count', 'sum'] = 'mean',
                  xlabel: str = None,
                  ylabel: str = None,
                  zlabel: str = None,
@@ -28,27 +24,36 @@ class HeatmapXYZ(HeatmapBase):
                  yticklabels: list = None,
                  **kwargs):
         """
-        Plot heatmap of pivoted dataframe with dataframe columns on x-axis,
-        dataframe index on y-axis and dataframe values as z colors
+        Initializes the HeatmapXYZ class for plotting heatmaps from X, Y, and Z Series data.
+
+        This class extends HeatmapBase to create a heatmap where the x-axis, y-axis,
+        and color values (z) are derived directly from input pandas Series. It pivots
+        the data to create the 2D grid for the heatmap.
 
         Args:
-            pivotdf: Pivoted dataframe containing values for x in columns,
-                y in index and z in values
-            verbose: More text output to the console if *True*
-
+            x: A pandas Series representing the x-coordinates (columns in the pivoted data).
+               Its name will be used as the x-axis label if `xlabel` is None.
+            y: A pandas Series representing the y-coordinates (index in the pivoted data).
+               Its name will be used as the y-axis label if `ylabel` is None.
+            z: A pandas Series representing the values (colors) for the heatmap cells.
+               Its name will be used as the colorbar label if `zlabel` is None.
+            xlabel: Optional string for the x-axis label. If None, `x.name` is used.
+            ylabel: Optional string for the y-axis label. If None, `y.name` is used.
+            zlabel: Optional string for the colorbar label. If None, `z.name` is used.
+            xtickpos: Optional list of x-axis tick positions.
+            xticklabels: Optional list of x-axis tick labels, corresponding to `xtickpos`.
+            ytickpos: Optional list of y-axis tick positions.
+            yticklabels: Optional list of y-axis tick labels, corresponding to `ytickpos`.
+            **kwargs: Additional keyword arguments passed to the `HeatmapBase` constructor.
         """
         super().__init__(heatmaptype='xyz', **kwargs)
-        # self.pivotdf = pivotdf
         self.x = x
         self.y = y
         self.z = z
-        self.n_bins = n_bins
-        self.min_n_vals_per_bin = min_n_vals_per_bin
-        self.binagg_z = binagg_z
 
         self.xlabel = self.x.name if not xlabel else xlabel
         self.ylabel = self.y.name if not ylabel else ylabel
-        self.zlabel = f"{self.z.name} ({self.binagg_z})" if not zlabel else zlabel
+        self.zlabel = self.z.name if not zlabel else zlabel
         self.xtickpos = xtickpos
         self.xticklabels = xticklabels
         self.ytickpos = ytickpos
@@ -57,19 +62,24 @@ class HeatmapXYZ(HeatmapBase):
         self._prepare_data()
 
     def _prepare_data(self):
+        """
+        Prepare input x, y, and z Series into a pivoted DataFrame
+        suitable for heatmap plotting.
 
-        q = dv.qga(
-            x=self.x,
-            y=self.y,
-            z=self.z,
-            n_quantiles=self.n_bins,
-            min_n_vals_per_bin=self.min_n_vals_per_bin,
-            binagg_z=self.binagg_z
-        )
-        q.run()
+        Creates a DataFrame from the three input Series,
+        then pivots it to form a 2D grid. Calculates the cell
+        edges for `pcolormesh` to ensure proper rendering with 'flat' shading.
+        The processed x, y, and z arrays are stored as instance variables.
+        """
 
-        # Pivoted dataframe, 2D grid (matrix)
-        pivot_df = q.df_wide
+        data = {
+            self.x.name: self.x,
+            self.y.name: self.y,
+            self.z.name: self.z
+        }
+        df = pd.DataFrame.from_dict(data, orient='columns')
+
+        pivot_df = pd.pivot_table(df, index=self.y.name, columns=self.x.name, values=self.z.name)
 
         # Extract x, y, and z values for pcolormesh
         x_coords = pivot_df.columns.values
@@ -77,9 +87,7 @@ class HeatmapXYZ(HeatmapBase):
         z_values = pivot_df.values
 
         # For pcolormesh, it's generally better to define the *edges* of the cells
-        # rather than their centers. We can get these calculating the differences
-        # between the coordinate values and extending by half the step at the ends.
-        # Assuming regular spacing, which is true for 0, 25, 50, 75.
+        # rather than their centers. Needed for 'shading=flat'
         dx = np.diff(x_coords)[-1]
         dy = np.diff(y_coords)[-1]
 
@@ -92,17 +100,18 @@ class HeatmapXYZ(HeatmapBase):
         self.z = z_values
 
     def plot(self):
+        """
+        Generate HeatmapXYZ plot.
+
+        This method orchestrates the plotting process by calling `plot_pcolormesh`,
+        optionally displaying values on the heatmap, and applying axis formatting
+        including custom tick positions and labels if provided.
+        """
         p = self.plot_pcolormesh(shading='flat')
 
         if self.show_values:
             self.show_vals_in_plot()
 
-        # xlabel = self.pivotdf.columns.name
-        # xlabel = xlabel if xlabel else self.pivotdf.columns.name
-        # ylabel = self.pivotdf.index.name
-        # ylabel = ylabel if ylabel else self.pivotdf.index.name
-        zlabel = "Value"
-        # zlabel = zlabel if zlabel else "Value"
         if self.xtickpos:
             self.ax.set_xticks(self.xtickpos)
             if self.xticklabels:
@@ -116,14 +125,7 @@ class HeatmapXYZ(HeatmapBase):
             plot=p,
             ax_xlabel_txt=self.xlabel,
             ax_ylabel_txt=self.ylabel,
-            # zlabel=zlabel,
-            # tickpos=tickpos,
-            # ticklabels=ticklabels,
-            # cb_digits_after_comma=cb_digits_after_comma,
-            # labelsize=20
         )
-        # if showplot:
-        #     self.fig.show()
 
 
 def _example():
@@ -179,17 +181,26 @@ def _example():
     y = f"{ycol}_mean"
     z = f"{zcol}_sum"
 
-
-
-    hm = dv.heatmapxyz(
+    q = dv.qga(
         x=df[x],
         y=df[y],
         z=df[z],
-        n_bins=5,
+        n_quantiles=10,
         min_n_vals_per_bin=1,
-        binagg_z='mean',
+        binagg_z='mean'
+    )
+    q.run()
+
+    # Pivoted dataframe, 2D grid (matrix)
+    df_long = q.df_long
+
+    hm = dv.heatmapxyz(
+        x=df_long['BIN_Tair_f_mean'],
+        y=df_long['BIN_VPD_f_mean'],
+        z=df_long['NEP_sum'],
         show_values=True,
         show_values_n_dec_places=0,
+        show_values_fontsize=9,
         # x=df[x],
         # y=df[y],
         # z=df[z],
