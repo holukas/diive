@@ -2,7 +2,7 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.88.0 | 2 Jul 2025
+## v0.88.0 | 5 Jul 2025
 
 ![plotHeatmapYearMonthMaxTA_diive_v0.88.0](images/plotHeatmapYearMonthMaxTA_diive_v0.88.0.png)
 *Heatmaps can now be plotted in horizontal orientation by setting the parameter `ax_orientation='horizontal'`. This
