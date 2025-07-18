@@ -110,34 +110,37 @@ class TestAnalyses(unittest.TestCase):
         self.assertEqual(daycorrs.min(), -0.9450031804629302)
         self.assertEqual(daycorrs.max(), 0.7109706199504967)
 
-    def test_quantilexyaggz(self):
-        from diive.configs.exampledata import load_exampledata_parquet
-        from diive.pkgs.analyses.quantilexyaggz import QuantileXYAggZ
-        df = load_exampledata_parquet()
+    def test_quantilegridaggregator(self):
+        import diive as dv
+        df = dv.load_exampledata_parquet()
         # Make subset of three required columns
         vpd_col = 'VPD_f'
         ta_col = 'Tair_f'
         swin_col = 'Rg_f'
-        df = df[[vpd_col, ta_col, swin_col]].copy()
+        subset = df[[vpd_col, ta_col, swin_col]].copy()
         # Use data May and Sep
-        df = df.loc[(df.index.month >= 5) & (df.index.month <= 9)].copy()
+        subset = subset.loc[(subset.index.month >= 5) & (subset.index.month <= 9)].copy()
         # Use daytime data
-        daytime_locs = (df[swin_col] > 0)
-        df = df[daytime_locs].copy()
-        df = df.dropna()
-        q = QuantileXYAggZ(
-            x=df[swin_col],
-            y=df[ta_col],
-            z=df[vpd_col],
+        daytime_locs = (subset[swin_col] > 0)
+        subset = subset[daytime_locs].copy()
+        subset = subset.dropna()
+        q = dv.qga(
+            x=subset[swin_col],
+            y=subset[ta_col],
+            z=subset[vpd_col],
             n_quantiles=10,
             min_n_vals_per_bin=3,
             binagg_z='mean'
         )
         q.run()
-        pivotdf = q.pivotdf.copy()
-        self.assertEqual(pivotdf.sum().sum(), 573.6496756683449)
-        self.assertEqual(len(pivotdf.columns), 10)
-        self.assertEqual(len(pivotdf.index), 10)
+        df_wide = q.df_wide
+        df_long = q.df_long
+        self.assertEqual(df_wide.sum().sum(), 573.6496756683449)
+        self.assertEqual(len(df_wide.columns), 10)
+        self.assertEqual(len(df_wide.index), 10)
+        self.assertEqual(df_long.sum().sum(), 9573.649675668345)
+        self.assertEqual(len(df_long.columns), 3)
+        self.assertEqual(len(df_long.index), 100)
 
     def test_histogram(self):
         from diive.configs.exampledata import load_exampledata_parquet

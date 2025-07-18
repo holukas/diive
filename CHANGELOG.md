@@ -2,6 +2,41 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.88.0 | 18 Jul 2025
+
+![plotHeatmapYearMonthMaxTA_diive_v0.88.0](images/plotHeatmapYearMonthMaxTA_diive_v0.88.0.png)
+*Heatmaps can now be plotted in horizontal orientation by setting the parameter `ax_orientation='horizontal'`. This
+example plot shows the monthly maximum air temperature.*
+
+### Changes
+
+#### Heatmap updates
+
+- There are several improvements for heatmap visualizations:
+    - More consistent heatmap creation: The `.heatmapdatetime()`, `.heatmapyearmonth()` and `.heatmapxyz()` functions
+      now offer a more unified experience for generating heatmaps.
+    - Flexible orientation: heatmaps can now be displayed vertically or horizontally using the new parameter
+      `ax_orientation`.
+    - The rank plot introduced in the previous version can now be created using the parameter `ranks=True` when using
+      `.heatmapyearmonth()`.
+
+Fyi, `.heatmapdatetime()` is an alias for the `diive.core.plotting.heatmap_datetime.HeatmapDateTime` class,
+`.heatmapyearmonth()` is an alias for `diive.core.plotting.heatmap_datetime.HeatmapYearMonth`, `.heatmapxyz()` is an
+alias for `diive.core.plotting.heatmap_xyz.HeatmapXYZ`. All of these classes use
+`diive.core.plotting.heatmap_base.HeatmapBase` or `diive.core.plotting.heatmap_base.HeatmapBaseXYZ` as base class for
+their core functionality.
+
+### Notebooks
+
+- Updated notebook for `QuantileGridAggregator` (formerly `CalculateZaggregatesInQuantileClassesOfXY`)
+- Updated notebook for `HeatmapDateTime`
+- Updated notebook for `HeatmapYearMonth`
+
+### Unittests
+
+- Updated test case for `tests.test_analyses.TestAnalyses.test_quantilegridaggregator`
+- 56/56 unittests ran successfully
+
 ## v0.87.1 | 12 Jun 2025
 
 ### New features
@@ -58,17 +93,18 @@ Basic example:
 
 ```
 import diive as dv
-hm = dv.heatmapyearmonth_ranks(series=series)  # Initialize instance, series is a pandas Series
+hm = dv.heatmapyearmonth(ranks=True, ...)  # Use parameter  
 hm.plot()  # Generate basic plot
 ```
 
 See the notebook here for more examples:
-`notebooks/Plotting/HeatmapYearMonthRank.ipynb`
+`notebooks/Plotting/HeatmapYearMonth.ipynb`
 
 ### New features
 
-- Added new class `.heatmapyearmonth_ranks()` to plot monthly ranks of an aggregated value across years (
-  `diive.core.plotting.heatmap_datetime.HeatmapYearMonthRanks`)
+- Now deprecated: ~~Added new class `.heatmapyearmonth_ranks()` to plot monthly ranks of an aggregated value across
+  years (`diive.core.plotting.heatmap_datetime.HeatmapYearMonthRanks`)~~ Use `.heatmapyearmonth(ranks=True, ...)`
+  instead
 - Added new function `.resample_to_monthly_agg_matrix()` to calculate a matrix of monthly aggregates across years (
   `diive.core.times.resampling.resample_to_monthly_agg_matrix`)
 - Added new function `.transform_yearmonth_matrix_to_longform()` to convert monthly aggregation matrix to long-form time

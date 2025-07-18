@@ -1,8 +1,10 @@
+import copy
 import time
 from pathlib import Path
 from typing import Literal
 
 import matplotlib.gridspec as gridspec
+import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt, _pylab_helpers, dates as mdates
 from pandas import DataFrame, Series
@@ -26,6 +28,9 @@ def set_fig(ax: plt.Axes):
     return fig, ax, showplot
 
 
+
+
+
 def make_patch_spines_invisible(ax):
     ax.set_frame_on(True)
     ax.patch.set_visible(False)
@@ -33,8 +38,8 @@ def make_patch_spines_invisible(ax):
         sp.set_visible(False)
 
 
-def show_ticks_on_all_spines(ax):
-    ax.tick_params(left=True, right=True, top=True, bottom=True)
+def show_ticks_on_all_spines(ax, left=True, right=True, top=True, bottom=True):
+    ax.tick_params(left=left, right=right, top=top, bottom=bottom)
 
 
 def hide_ticks_and_ticklabels(ax):
@@ -123,16 +128,19 @@ def default_format(ax,
     # Spines
     format_spines(ax=ax, color=color, lw=spines_lw)
 
-    # Labels
-    if ax_xlabel_txt:
-        ax.set_xlabel(ax_xlabel_txt, color=ax_labels_fontcolor, fontsize=ax_labels_fontsize,
-                      fontweight=ax_labels_fontweight)
+    # Set x-label
+    ax.set_xlabel(ax_xlabel_txt, color=ax_labels_fontcolor, fontsize=ax_labels_fontsize,
+                  fontweight=ax_labels_fontweight)
+
+    # Set y-label
     if ax_ylabel_txt and txt_ylabel_units:
-        ax.set_ylabel(f'{ax_ylabel_txt}  {txt_ylabel_units}', color=ax_labels_fontcolor, fontsize=ax_labels_fontsize,
-                      fontweight=ax_labels_fontweight)
-    if ax_ylabel_txt and not txt_ylabel_units:
-        ax.set_ylabel(f'{ax_ylabel_txt}', color=ax_labels_fontcolor, fontsize=ax_labels_fontsize,
-                      fontweight=ax_labels_fontweight)
+        _ax_ylabel_txt = f"{ax_ylabel_txt}  {txt_ylabel_units}"
+    elif ax_ylabel_txt and not txt_ylabel_units:
+        _ax_ylabel_txt = f"{ax_ylabel_txt}"
+    else:
+        _ax_ylabel_txt = ax_ylabel_txt
+    ax.set_ylabel(_ax_ylabel_txt, color=ax_labels_fontcolor, fontsize=ax_labels_fontsize,
+                  fontweight=ax_labels_fontweight)
 
     # Grid
     if showgrid:
@@ -360,7 +368,7 @@ def quickplot(data: DataFrame or Series, hline: None or float = None, subplots: 
             data_cols[series.name] = series
         data = pd.concat(data_cols, axis=1)
 
-    fig = plt.figure(figsize=(20, 9))
+    fig = plt.figure(figsize=(16, 9))
 
     # Number of plots in figure
     n_plotrows = len(data.columns) if subplots else 1
@@ -371,7 +379,12 @@ def quickplot(data: DataFrame or Series, hline: None or float = None, subplots: 
     # Create axis for each column
     axes = {}
     for a in range(0, n_plotrows):
-        axes[a] = fig.add_subplot(gs[a, 0])
+        if a == 0:
+            # Create plot in first row
+            axes[a] = fig.add_subplot(gs[a, 0])
+        else:
+            # For other rows, use same x-axis scaling as for first row
+            axes[a] = fig.add_subplot(gs[a, 0], sharex=axes[0])
 
     colors = colors_12(400)
     for ix, col in enumerate(data.columns):
