@@ -2,6 +2,12 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.XX.0 | XX XXX 2025
+
+### Environment
+
+- Updated dependencies
+
 ## v0.88.0 | 18 Jul 2025
 
 ![plotHeatmapYearMonthMaxTA_diive_v0.88.0](images/plotHeatmapYearMonthMaxTA_diive_v0.88.0.png)
