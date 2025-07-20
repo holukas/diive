@@ -5,8 +5,7 @@ import pandas as pd
 from pandas import Series, DataFrame
 
 
-
-class QuantileGridAggregator:
+class GridAggregator:
     """
     Calculates aggregated values of a target variable (z) within a 2D grid
     defined by quantiles of two independent variables (x and y).
@@ -27,7 +26,7 @@ class QuantileGridAggregator:
         x (pd.Series): The input Series for the first independent variable.
         y (pd.Series): The input Series for the second independent variable.
         z (pd.Series): The input Series for the dependent variable to aggregate.
-        n_quantiles (int): The number of quantile bins to create for both x and y.
+        n_bins (int): The number of quantile bins to create for both x and y.
         min_n_vals_per_bin (int): The minimum number of data points required
                                   for a combined x-y bin to be included in the results.
                                   Bins with fewer than `min_n_vals_per_bin` observations
@@ -48,7 +47,8 @@ class QuantileGridAggregator:
                  x: Series,
                  y: Series,
                  z: Series,
-                 n_quantiles: int = 10,
+                 quantiles: bool = False,
+                 n_bins: int = 10,
                  min_n_vals_per_bin: int = 1,
                  binagg_z: Literal['mean', 'min', 'max', 'median', 'count', 'sum'] = 'mean'
                  ):
@@ -62,7 +62,7 @@ class QuantileGridAggregator:
                                Its name will be used for labeling.
                 z (pd.Series): The pandas Series representing the z-axis variable
                                (values to be aggregated). Its name will be used for labeling.
-                n_quantiles (int, optional): The number of quantile bins to divide
+                n_bins (int, optional): The number of quantile bins to divide
                                              both the 'x' and 'y' data into.
                                              Defaults to 10.
                 min_n_vals_per_bin (int, optional): The minimum number of observations
@@ -82,7 +82,8 @@ class QuantileGridAggregator:
         self.xname = x.name if x.name is not None else 'x'
         self.yname = y.name if y.name is not None else 'y'
         self.zname = z.name if z.name is not None else 'z'
-        self.n_quantiles = n_quantiles
+        self.quantiles = quantiles
+        self.n_bins = n_bins
         self.min_n_vals_per_bin = min_n_vals_per_bin
 
         self.xbinname = f'BIN_{self.xname}'
@@ -133,12 +134,17 @@ class QuantileGridAggregator:
         df_long = df.reset_index(drop=False).copy()
 
         # Bin x and y data
-        df_long = self._assign_xybins(df=df_long)
+        df_long[self.xbinname] = self._assign_bins(series=df_long[self.xname])
+        df_long[self.ybinname] = self._assign_bins(series=df_long[self.yname])
+        # df_long = self._assign_xybins(df=df_long)
 
         # Add new column for unique bin combinations
         df_long['BINS_COMBINED_STR'] = df_long[self.xbinname].astype(str) + "+" + df_long[
             self.ybinname].astype(str)
-        df_long['BINS_COMBINED_INT'] = df_long[self.xbinname].add(df_long[self.ybinname])
+
+        # Adding bins together makes only sense when x and y are quantiles
+        if self.quantiles:
+            df_long['BINS_COMBINED_INT'] = df_long[self.xbinname].add(df_long[self.ybinname])
 
         # Count number of available values per combined bin
         ok_bin = df_long.groupby('BINS_COMBINED_STR').count()['DATE'] >= self.min_n_vals_per_bin
@@ -158,8 +164,8 @@ class QuantileGridAggregator:
         df_wide = pd.pivot_table(df_long, index=self.ybinname, columns=self.xbinname, values=self.zname,
                                  aggfunc=self.aggfunc)
 
-        # Reset the index to make 'BIN_VPD_f_mean' a column
-        df_reset = df_wide.reset_index()
+        # # Reset the index to make 'BIN_VPD_f_mean' a column
+        # df_reset = df_wide.reset_index()
 
         # Melt the DataFrame to long format:
         # - id_vars: The column(s) to remain as identifier variables. Here, it's our index after resetting.
@@ -167,100 +173,139 @@ class QuantileGridAggregator:
         # - value_name: The name for the new column that will hold the values from the melted columns.
         df_long = df_wide.reset_index().melt(id_vars=[self.ybinname], var_name=self.xbinname, value_name=self.zname)
 
-
         return df_wide, df_long
 
-    def _assign_xybins(self, df: DataFrame) -> DataFrame:
-        """Create bins for x and y data"""
-        # labels_stepsize = int(100 / self.n_quantiles)
-        # labels = range(0, 100, labels_stepsize)
-        # group, bins = pd.qcut(df[self.xname],
-        #                       q=self.n_quantiles,
-        #                       # labels=labels,
-        #                       retbins=True,
-        #                       # duplicates='raise',
-        #                       duplicates='drop'
-        #                       )
-        # # group, bins = pd.cut(df[self.xname],
-        # #                      bins=self.n_quantiles,
-        # #                      labels=labels,
-        # #                      retbins=True,
-        # #                      duplicates='drop')
-        # df[self.xbinname] = group.astype(int)
-
+    def _assign_bins(self, series: pd.Series) -> pd.Series:
         # --- Dynamic Label Generation for X-axis ---
         # Step 1: Run qcut once WITHOUT labels to determine the actual number of bins
-        temp_group_x, temp_bins_x = pd.qcut(df[self.xname],
-                                            q=self.n_quantiles,
-                                            retbins=True,
-                                            duplicates='drop'
-                                            )
-        actual_n_bins_x = len(temp_bins_x) - 1  # Number of bins is (num_edges - 1)
+        if self.quantiles:
+            temp_group_x, temp_bins_x = pd.qcut(
+                series,
+                q=self.n_bins,
+                retbins=True,
+                duplicates='drop')
+        else:
+            temp_group_x, temp_bins_x = pd.cut(
+                series,
+                bins=self.n_bins,
+                retbins=True,
+                duplicates='drop')
 
-        # Step 2: Generate labels based on the actual number of bins
-        # This ensures 'labels' count matches the actual bins created
-        labels_stepsize_x = int(100 / actual_n_bins_x) if actual_n_bins_x > 0 else 0
-        labels_x = list(range(0, actual_n_bins_x * labels_stepsize_x, labels_stepsize_x))
-        if len(labels_x) != actual_n_bins_x:  # Adjust for potential rounding issues
-            labels_x = list(range(0, 100, int(100 / actual_n_bins_x)))[:actual_n_bins_x]
-
-        # Step 3: Run qcut again WITH the correctly sized labels
-        group_x, bins_x = pd.qcut(df[self.xname],
-                                  q=self.n_quantiles,
-                                  labels=labels_x,
-                                  retbins=True,
-                                  duplicates='drop'
-                                  )
-        df[self.xbinname] = group_x.astype(int)
-
-        # --- Dynamic Label Generation for Y-axis ---
-        # Step 1: Run qcut once WITHOUT labels to determine the actual number of bins
-        temp_group_y, temp_bins_y = pd.qcut(df[self.yname],
-                                            q=self.n_quantiles,
-                                            retbins=True,
-                                            duplicates='drop'
-                                            )
-        actual_n_bins_y = len(temp_bins_y) - 1
-
-        # Step 2: Generate labels based on the actual number of bins
-        labels_stepsize_y = int(100 / actual_n_bins_y) if actual_n_bins_y > 0 else 0
-        labels_y = list(range(0, actual_n_bins_y * labels_stepsize_y, labels_stepsize_y))
-        if len(labels_y) != actual_n_bins_y:  # Adjust for potential rounding issues
-            labels_y = list(range(0, 100, int(100 / actual_n_bins_y)))[:actual_n_bins_y]
+        # Number of bins is (num_edges - 1)
+        actual_n_bins_x = len(temp_bins_x) - 1
 
         # Step 3: Run qcut again WITH the correctly sized labels
-        group_y, bins_y = pd.qcut(df[self.yname],
-                                  q=self.n_quantiles,
-                                  labels=labels_y,
-                                  retbins=True,
-                                  duplicates='drop'
-                                  )
-        df[self.ybinname] = group_y.astype(int)
+        if self.quantiles:
+
+            # Step 2: Generate labels based on the actual number of bins
+            # This ensures 'labels' count matches the actual bins created
+            labels_stepsize_x = int(100 / actual_n_bins_x) if actual_n_bins_x > 0 else 0
+            labels_x = list(range(0, actual_n_bins_x * labels_stepsize_x, labels_stepsize_x))
+            if len(labels_x) != actual_n_bins_x:  # Adjust for potential rounding issues
+                labels_x = list(range(0, 100, int(100 / actual_n_bins_x)))[:actual_n_bins_x]
+
+            group_x, bins_x = pd.qcut(
+                series,
+                q=self.n_bins,
+                labels=labels_x,
+                retbins=True,
+                duplicates='drop')
+        else:
+            labels_x = temp_bins_x[:actual_n_bins_x]
+            group_x, bins_x = pd.cut(
+                series,
+                bins=self.n_bins,
+                labels=labels_x,
+                retbins=True,
+                duplicates='drop')
+
+        series_bins = group_x.astype(int)
+        return series_bins
 
 
-
-
-
-
-        # group, bins = pd.qcut(df[self.yname],
-        #                       q=self.n_quantiles,
-        #                       # labels=labels,
-        #                       retbins=True,
-        #                       # duplicates='raise',
-        #                       duplicates='drop'
-        #                       )
-        # # group, bins = pd.cut(df[self.yname],
-        # #                      bins=self.n_xybins,
-        # #                      labels=range(1, self.n_xybins + 1),
-        # #                      retbins=True,
-        # #                      duplicates='drop')
-        # df[self.ybinname] = group.astype(int)
-        return df
+    # def _assign_xybins(self, df: DataFrame) -> DataFrame:
+    #     """Create bins for x and y data"""
+    #     df[self.xbinname] = self._assign_xbins(series=df[self.xname])
+    #     df[self.ybinname] = self._assign_xbins(series=df[self.yname])
+    #
+    #     # # --- Dynamic Label Generation for X-axis ---
+    #     # # Step 1: Run qcut once WITHOUT labels to determine the actual number of bins
+    #     # if self.quantiles:
+    #     #     temp_group_x, temp_bins_x = pd.qcut(
+    #     #         df[self.xname],
+    #     #         q=self.n_bins,
+    #     #         retbins=True,
+    #     #         duplicates='drop')
+    #     # else:
+    #     #     temp_group_x, temp_bins_x = pd.cut(
+    #     #         df[self.xname],
+    #     #         bins=self.n_bins,
+    #     #         retbins=True,
+    #     #         duplicates='drop')
+    #     #
+    #     # # Number of bins is (num_edges - 1)
+    #     # actual_n_bins_x = len(temp_bins_x) - 1
+    #     #
+    #     #
+    #     # # Step 3: Run qcut again WITH the correctly sized labels
+    #     # if self.quantiles:
+    #     #
+    #     #     # Step 2: Generate labels based on the actual number of bins
+    #     #     # This ensures 'labels' count matches the actual bins created
+    #     #     labels_stepsize_x = int(100 / actual_n_bins_x) if actual_n_bins_x > 0 else 0
+    #     #     labels_x = list(range(0, actual_n_bins_x * labels_stepsize_x, labels_stepsize_x))
+    #     #     if len(labels_x) != actual_n_bins_x:  # Adjust for potential rounding issues
+    #     #         labels_x = list(range(0, 100, int(100 / actual_n_bins_x)))[:actual_n_bins_x]
+    #     #
+    #     #     group_x, bins_x = pd.qcut(
+    #     #         df[self.xname],
+    #     #         q=self.n_bins,
+    #     #         labels=labels_x,
+    #     #         retbins=True,
+    #     #         duplicates='drop')
+    #     # else:
+    #     #     labels_x = temp_bins_x[:actual_n_bins_x]
+    #     #     group_x, bins_x = pd.cut(
+    #     #         df[self.xname],
+    #     #         bins=self.n_bins,
+    #     #         labels=labels_x,
+    #     #         retbins=True,
+    #     #         duplicates='drop')
+    #     #
+    #     # df[self.xbinname] = group_x.astype(int)
+    #
+    #
+    #
+    #
+    #     # # --- Dynamic Label Generation for Y-axis ---
+    #     # # Step 1: Run qcut once WITHOUT labels to determine the actual number of bins
+    #     # temp_group_y, temp_bins_y = pd.qcut(df[self.yname],
+    #     #                                     q=self.n_bins,
+    #     #                                     retbins=True,
+    #     #                                     duplicates='drop'
+    #     #                                     )
+    #     # actual_n_bins_y = len(temp_bins_y) - 1
+    #     #
+    #     # # Step 2: Generate labels based on the actual number of bins
+    #     # labels_stepsize_y = int(100 / actual_n_bins_y) if actual_n_bins_y > 0 else 0
+    #     # labels_y = list(range(0, actual_n_bins_y * labels_stepsize_y, labels_stepsize_y))
+    #     # if len(labels_y) != actual_n_bins_y:  # Adjust for potential rounding issues
+    #     #     labels_y = list(range(0, 100, int(100 / actual_n_bins_y)))[:actual_n_bins_y]
+    #     #
+    #     # # Step 3: Run qcut again WITH the correctly sized labels
+    #     # group_y, bins_y = pd.qcut(df[self.yname],
+    #     #                           q=self.n_bins,
+    #     #                           labels=labels_y,
+    #     #                           retbins=True,
+    #     #                           duplicates='drop'
+    #     #                           )
+    #     # df[self.ybinname] = group_y.astype(int)
+    #
+    #     return df
 
 
 def _example():
     import diive as dv
-    from diive.core.plotting.heatmap_xyz import HeatmapXYZ
 
     # Load example data
     df = dv.load_exampledata_parquet()
@@ -275,11 +320,12 @@ def _example():
     subset = subset[daytime_locs].copy()
     subset = subset.dropna()
 
-    q = dv.qga(
+    q = dv.ga(
         x=subset[swin_col],
         y=subset[ta_col],
         z=subset[vpd_col],
-        n_quantiles=50,
+        quantiles=False,
+        n_bins=10,
         min_n_vals_per_bin=3,
         binagg_z='mean'
     )
@@ -287,19 +333,19 @@ def _example():
 
     pivotdf = q.df_wide.copy()
     print(pivotdf)
-    print(q.df_long)
+    # print(q.df_long)
 
-    hm = dv.heatmapxyz(pivotdf=pivotdf)
-    hm.plot(cb_digits_after_comma=0,
-            xlabel=r'Short-wave incoming radiation ($\mathrm{percentile}$)',
-            ylabel=r'Air temperature ($\mathrm{percentile}$)',
-            # ylabel=r'Percentile of TA ($\mathrm{°C}$)',
-            zlabel=r'Vapor pressure deficit (counts)',
-            # zlabel=r'Vapor pressure deficit ($\mathrm{gCO_{2}\ m^{-2}\ d^{-1}}$)',
-            tickpos=[16, 25, 50, 75, 84],
-            ticklabels=['16', '25', '50', '75', '84']
-
-            )
+    # hm = dv.heatmapxyz(pivotdf=pivotdf)
+    # hm.plot(cb_digits_after_comma=0,
+    #         xlabel=r'Short-wave incoming radiation ($\mathrm{percentile}$)',
+    #         ylabel=r'Air temperature ($\mathrm{percentile}$)',
+    #         # ylabel=r'Percentile of TA ($\mathrm{°C}$)',
+    #         zlabel=r'Vapor pressure deficit (counts)',
+    #         # zlabel=r'Vapor pressure deficit ($\mathrm{gCO_{2}\ m^{-2}\ d^{-1}}$)',
+    #         tickpos=[16, 25, 50, 75, 84],
+    #         ticklabels=['16', '25', '50', '75', '84']
+    #
+    #         )
 
     # print(res)
 

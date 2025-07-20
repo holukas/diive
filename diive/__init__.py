@@ -11,6 +11,8 @@ from diive.core.times.resampling import resample_to_monthly_agg_matrix as resamp
 from diive.pkgs.createvar.conversions import et_from_le as et_from_le
 
 # Analyses
+from diive.pkgs.analyses.gridaggregator import GridAggregator as ga
+from diive.pkgs.analyses.gridaggregator import GridAggregator as gridaggregator
 from diive.pkgs.analyses.quantilegridaggregator import QuantileGridAggregator as qga
 from diive.pkgs.analyses.quantilegridaggregator import QuantileGridAggregator as quantilegridaggregator
 
