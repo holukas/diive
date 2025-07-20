@@ -10,59 +10,21 @@ Author: Lukas Hörtnagl
 License: GPL-3.0
 """
 
-from typing import Literal
+from typing import Literal, Callable, Union
 
 import numpy as np
 import pandas as pd
-from pandas import Series, DataFrame
 
 
 class GridAggregator:
-    """
-        Aggregates three pandas Series (x, y, and z) into a 2D grid structure,
-        allowing for various aggregation methods on the 'z' Series within each bin.
-
-        This class facilitates the creation of both wide and long-form DataFrames
-        from binned data, useful for visualization and further analysis of
-        relationships between three variables.
-
-        Attributes:
-            x (pd.Series): The Series to be used for the x-axis, binned.
-            y (pd.Series): The Series to be used for the y-axis, binned.
-            z (pd.Series): The Series to be aggregated within the x-y bins.
-            xname (str): The name of the x Series (or 'x' if not specified).
-            yname (str): The name of the y Series (or 'y' if not specified).
-            zname (str): The name of the z Series (or 'z' if not specified).
-            quantiles (bool): If True, binning uses quantiles (qcut); otherwise,
-                              it uses fixed-width bins (cut). Defaults to False.
-            n_bins (int): The number of bins to create for both x and y Series.
-                          Defaults to 10.
-            min_n_vals_per_bin (int): The minimum number of values required in a
-                                      combined x-y bin for it to be included in
-                                      the output. Bins with fewer values are dropped.
-                                      Defaults to 1.
-            binagg_z (Literal['mean', 'min', 'max', 'median', 'count', 'sum']):
-                      The aggregation function to apply to the 'z' values within
-                      each bin. Defaults to 'mean'.
-            xbinname (str): The name of the generated x-axis bin column (e.g., 'BIN_x').
-            ybinname (str): The name of the generated y-axis bin column (e.g., 'BIN_y').
-            aggfunc (str or callable): The internal aggregation function derived from
-                                       `binagg_z`. Can be a string ('sum', 'mean', etc.)
-                                       or `numpy.count_nonzero` for 'count'.
-            _df_wide (pd.DataFrame or None): Stores the wide-format aggregated DataFrame
-                                             after `run()` is called. Initially None.
-            _df_long (pd.DataFrame or None): Stores the long-form aggregated DataFrame
-                                             after `run()` is called. Initially None.
-        """
 
     def __init__(self,
-                 x: Series,
-                 y: Series,
-                 z: Series,
-                 quantiles: bool = False,
+                 x: pd.Series,
+                 y: pd.Series,
+                 z: pd.Series,
                  n_bins: int = 10,
                  min_n_vals_per_bin: int = 1,
-                 binagg_z: Literal['mean', 'min', 'max', 'median', 'count', 'sum'] = 'mean'
+                 binagg_z: Union[Literal['mean', 'min', 'max', 'median', 'sum'], Callable] = 'mean'
                  ):
         self.x = x
         self.y = y
@@ -70,140 +32,100 @@ class GridAggregator:
         self.xname = x.name if x.name is not None else 'x'
         self.yname = y.name if y.name is not None else 'y'
         self.zname = z.name if z.name is not None else 'z'
-        self.quantiles = quantiles
         self.n_bins = n_bins
         self.min_n_vals_per_bin = min_n_vals_per_bin
 
         self.xbinname = f'BIN_{self.xname}'
         self.ybinname = f'BIN_{self.yname}'
 
-        if binagg_z == 'sum':
-            self.aggfunc = 'sum'
-        elif binagg_z == 'mean':
-            self.aggfunc = 'mean'
-        elif binagg_z == 'min':
-            self.aggfunc = 'min'
-        elif binagg_z == 'max':
-            self.aggfunc = 'max'
-        elif binagg_z == 'median':
-            self.aggfunc = 'median'
-        elif binagg_z == 'count':
-            self.aggfunc = np.count_nonzero
+        self.aggfunc = np.count_nonzero if binagg_z == 'count' else binagg_z
 
-        self._df_wide = None
-        self._df_long = None
+        # Prepare data
+        self.df = pd.concat([self.x, self.y, self.z], axis=1)
+        self.df = self.df.loc[:, ~self.df.columns.duplicated()]
+        self.df.index.name = 'INDEX'
+        self.df = self.df.reset_index(drop=False).copy()
 
-    def run(self):
-        # Create dataframe from input data
-        plot_df = pd.concat([self.x, self.y, self.z], axis=1)
-
-        # Remove duplicates, in case e.g. x=y
-        plot_df = plot_df.loc[:, ~plot_df.columns.duplicated()]
-        plot_df.index.name = 'DATE'
-
-        self._df_wide, self._df_long = self._transform_data(df=plot_df)
+        self._df_agg_wide = None
+        self._df_agg_long = None
 
     @property
-    def df_wide(self) -> DataFrame:
-        if not isinstance(self._df_wide, DataFrame):
-            raise Exception(f'pivotdf is not available, use .run() first.')
-        return self._df_wide
+    def df_agg_wide(self) -> pd.DataFrame:
+        if not isinstance(self._df_agg_wide, pd.DataFrame):
+            raise Exception(
+                f'Aggregated wide DataFrame is not available. Please run `quantiles()` or `equal_width()` first.')
+        return self._df_agg_wide
 
     @property
-    def df_long(self) -> DataFrame:
-        if not isinstance(self._df_long, DataFrame):
-            raise Exception(f'longformdf is not available, use .run() first.')
-        return self._df_long
+    def df_agg_long(self) -> pd.DataFrame:
+        if not isinstance(self._df_agg_long, pd.DataFrame):
+            raise Exception(
+                f'Aggregated long DataFrame is not available. Please run `quantiles()` or `equal_width()` first.')
+        return self._df_agg_long
 
-    def _transform_data(self, df) -> tuple:
+    def _assign_bins_quantiles(self, series: pd.Series):
+        # Run qcut once WITHOUT labels to determine the actual number of bins
+        temp_group, temp_bins = pd.qcut(series, q=self.n_bins, retbins=True, duplicates='drop')
+        actual_n_bins = len(temp_bins) - 1  # Number of bins is (num_edges - 1)
+        # Generate labels based on the actual number of bins
+        # This ensures 'labels' count matches the actual bins created
+        labels_stepsize = int(100 / actual_n_bins) if actual_n_bins > 0 else 0
+        labels = list(range(0, actual_n_bins * labels_stepsize, labels_stepsize))
+        if len(labels) != actual_n_bins:  # Adjust for potential rounding issues
+            labels = list(range(0, 100, int(100 / actual_n_bins)))[:actual_n_bins]
+        group_x, bins_x = pd.qcut(series, q=self.n_bins, labels=labels, retbins=True, duplicates='drop')
+        series_bins = group_x.astype(int)
+        return series_bins
+
+    def quantiles(self):
+        self.df[self.xbinname] = self._assign_bins_quantiles(series=self.df[self.xname])
+        self.df[self.ybinname] = self._assign_bins_quantiles(series=self.df[self.yname])
+        self._df_agg_wide, self._df_agg_long = self._transform_data(is_quantiles=True)
+
+    def _assign_bins_equal_widh(self, series: pd.Series):
+        # Run cut once WITHOUT labels to determine the actual number of bins
+        temp_group_x, temp_bins_x = pd.cut(series, bins=self.n_bins, retbins=True, duplicates='drop')
+        actual_n_bins_x = len(temp_bins_x) - 1  # Number of bins is (num_edges - 1)
+        labels_x = temp_bins_x[:actual_n_bins_x]
+        group_x, bins_x = pd.cut(series, bins=self.n_bins, labels=labels_x, retbins=True, duplicates='drop')
+        series_bins = group_x.astype(int)
+        return series_bins
+
+    def equal_width(self):
+        self.df[self.xbinname] = self._assign_bins_equal_widh(series=self.df[self.xname])
+        self.df[self.ybinname] = self._assign_bins_equal_widh(series=self.df[self.yname])
+        self._df_agg_wide, self._df_agg_long = self._transform_data(is_quantiles=False)
+
+    def _transform_data(self, is_quantiles: bool) -> tuple:
         """Transform data for plotting"""
 
-        # Setup xy axes
-        df_long = df.reset_index(drop=False).copy()
-
-        # Bin x and y data
-        df_long[self.xbinname] = self._assign_bins(series=df_long[self.xname])
-        df_long[self.ybinname] = self._assign_bins(series=df_long[self.yname])
-
         # Add new column for unique bin combinations
-        df_long['BINS_COMBINED_STR'] = df_long[self.xbinname].astype(str) + "+" + df_long[
-            self.ybinname].astype(str)
+        self.df['BINS_COMBINED_STR'] = self.df[self.xbinname].astype(str) + "+" + self.df[self.ybinname].astype(str)
 
         # Adding bins together makes only sense when x and y are quantiles
-        if self.quantiles:
-            df_long['BINS_COMBINED_INT'] = df_long[self.xbinname].add(df_long[self.ybinname])
+        if is_quantiles:
+            self.df['BINS_COMBINED_INT'] = self.df[self.xbinname].add(self.df[self.ybinname])
 
         # Count number of available values per combined bin
-        ok_bin = df_long.groupby('BINS_COMBINED_STR').count()['DATE'] >= self.min_n_vals_per_bin
-        # ok_bin = longformdf.groupby('BIN_Tair_f_max').count()['DATE'] > self.min_n_vals_per_bin
+        ok_bin = self.df.groupby('BINS_COMBINED_STR').count()['INDEX'] >= self.min_n_vals_per_bin
 
         # Bins with enough values
         ok_bin = ok_bin[ok_bin]  # Filter (True/False) indicating if bin has enough values
         ok_binlist = list(ok_bin.index)  # List of bins with enough values
 
         # Keep data rows where the respective bin has enough values
-        ok_row = df_long['BINS_COMBINED_STR'].isin(ok_binlist)
-        df_long = df_long[ok_row]
+        ok_row = self.df['BINS_COMBINED_STR'].isin(ok_binlist)
+        self.df = self.df[ok_row].copy()
 
-        _counts = pd.pivot_table(df_long, index=self.ybinname, columns=self.xbinname,
-                                 values=self.zname, aggfunc=np.count_nonzero)
-
-        df_wide_agg = pd.pivot_table(df_long, index=self.ybinname, columns=self.xbinname,
+        df_agg_wide = pd.pivot_table(self.df, index=self.ybinname, columns=self.xbinname,
                                      values=self.zname, aggfunc=self.aggfunc)
 
         # Melt the DataFrame to long format
-        df_long_agg = df_wide_agg.reset_index().melt(id_vars=[self.ybinname],
-                                                     var_name=self.xbinname, value_name=self.zname)
+        df_agg_long = df_agg_wide.reset_index().melt(id_vars=[self.ybinname],
+                                                     var_name=self.xbinname,
+                                                     value_name=self.zname)
 
-        return df_wide_agg, df_long_agg
-
-    def _assign_bins(self, series: pd.Series) -> pd.Series:
-
-        # --- Dynamic Label Generation for X-axis ---
-        # Run qcut/cut once WITHOUT labels to determine the actual number of bins
-        if self.quantiles:
-            temp_group_x, temp_bins_x = pd.qcut(
-                series,
-                q=self.n_bins,
-                retbins=True,
-                duplicates='drop')
-        else:
-            temp_group_x, temp_bins_x = pd.cut(
-                series,
-                bins=self.n_bins,
-                retbins=True,
-                duplicates='drop')
-
-        # Number of bins is (num_edges - 1)
-        actual_n_bins_x = len(temp_bins_x) - 1
-
-        # Run qcut/cut again WITH the correctly sized labels
-        if self.quantiles:
-
-            # Step 2: Generate labels based on the actual number of bins
-            # This ensures 'labels' count matches the actual bins created
-            labels_stepsize_x = int(100 / actual_n_bins_x) if actual_n_bins_x > 0 else 0
-            labels_x = list(range(0, actual_n_bins_x * labels_stepsize_x, labels_stepsize_x))
-            if len(labels_x) != actual_n_bins_x:  # Adjust for potential rounding issues
-                labels_x = list(range(0, 100, int(100 / actual_n_bins_x)))[:actual_n_bins_x]
-
-            group_x, bins_x = pd.qcut(
-                series,
-                q=self.n_bins,
-                labels=labels_x,
-                retbins=True,
-                duplicates='drop')
-        else:
-            labels_x = temp_bins_x[:actual_n_bins_x]
-            group_x, bins_x = pd.cut(
-                series,
-                bins=self.n_bins,
-                labels=labels_x,
-                retbins=True,
-                duplicates='drop')
-
-        series_bins = group_x.astype(int)
-        return series_bins
+        return df_agg_wide, df_agg_long
 
 
 def _example():
@@ -226,16 +148,18 @@ def _example():
         x=subset[swin_col],
         y=subset[ta_col],
         z=subset[vpd_col],
-        quantiles=False,
-        n_bins=20,
+        # quantiles=True,
+        n_bins=10,
         min_n_vals_per_bin=5,
         binagg_z='mean'
     )
-    q.run()
+    q.quantiles()
+    # q.equal_width()
 
-    pivotdf = q.df_wide.copy()
+    pivotdf = q.df_agg_wide.copy()
     print(pivotdf)
-    df_long = q.df_long.copy()
+    df_long = q.df_agg_long.copy()
+    print(df_long)
 
     hm = dv.heatmapxyz(
         x=df_long['BIN_Rg_f'],
