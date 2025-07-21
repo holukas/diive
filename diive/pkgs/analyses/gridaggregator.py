@@ -100,23 +100,63 @@ class GridAggregator:
         self.df[self.ybinname] = self._assign_bins_equal_widh(series=self.df[self.yname])
         self._df_agg_wide, self._df_agg_long = self._transform_data(is_quantiles=False)
 
-    def _assign_bins_quantiles(self, series: pd.Series):
-        # Run qcut once WITHOUT labels to determine the actual number of bins
-        temp_group, temp_bins = pd.qcut(series, q=self.n_bins, retbins=True, duplicates='drop')
-        actual_n_bins = len(temp_bins) - 1  # Number of bins is (num_edges - 1)
-        # Generate labels based on the actual number of bins
-        # This ensures 'labels' count matches the actual bins created
-        labels_stepsize = int(100 / actual_n_bins) if actual_n_bins > 0 else 0
-        labels = list(range(0, actual_n_bins * labels_stepsize, labels_stepsize))
-        if len(labels) != actual_n_bins:  # Adjust for potential rounding issues
-            labels = list(range(0, 100, int(100 / actual_n_bins)))[:actual_n_bins]
-        group_x, bins_x = pd.qcut(series, q=self.n_bins, labels=labels, retbins=True, duplicates='drop')
-        series_bins = group_x.astype(int)
-        return series_bins
+
+    def _assign_bins_quantiles(self, series: pd.Series) -> pd.Series:
+        """
+        Assigns bins to a Series using quantile-based binning, with labels ranging from 0 to 100
+        representing the lower bound of each quantile.
+        """
+        try:
+            # Determine the bin edges first, allowing duplicates to be dropped if necessary
+            # This gives us the actual number of bins created by pandas.qcut
+            _, bins = pd.qcut(series, q=self.n_bins, retbins=True, duplicates='drop')
+
+            actual_n_bins = len(bins) - 1
+
+            if actual_n_bins == 0:
+                # Handle cases where no bins can be formed (e.g., all series values are identical)
+                print(
+                    f"Warning: Could not form any quantile bins for series '{series.name}'. All values are identical or n_bins is too high relative to unique values.")
+                return pd.Series(np.nan, index=series.index, name=f'BIN_{series.name}')
+
+            # Calculate a step size for labels to distribute them evenly between 0 and 100
+            # For example, if actual_n_bins is 4, labels would be [0, 25, 50, 75]
+            labels = [int(i * (100 / actual_n_bins)) for i in range(actual_n_bins)]
+
+            # Apply qcut with the generated percentile-based labels
+            # We re-run qcut with the determined labels
+            binned_series = pd.qcut(series, q=self.n_bins, labels=labels, retbins=False, duplicates='drop')
+
+            # Convert the categorical result to integer labels
+            return binned_series.astype(int)
+
+        except ValueError as e:
+            # Catch specific ValueError for qcut if quantiles are not unique
+            print(
+                f"Warning: Could not apply quantile binning to series '{series.name}'. Error: {e}. This might happen if there are too many duplicate values preventing the creation of distinct quantiles.")
+            return pd.Series(np.nan, index=series.index, name=f'BIN_{series.name}')
+        except Exception as e:
+            # Catch any other unexpected errors during binning
+            print(f"An unexpected error occurred during quantile binning for series '{series.name}': {e}")
+            return pd.Series(np.nan, index=series.index, name=f'BIN_{series.name}')
+
+    # def _assign_bins_quantiles(self, series: pd.Series):
+    #     # Run qcut once WITHOUT labels to determine the actual number of bins
+    #     _, temp_bins = pd.qcut(series, q=self.n_bins, retbins=True, duplicates='drop')
+    #     actual_n_bins = len(temp_bins) - 1  # Number of bins is (num_edges - 1)
+    #     # Generate labels based on the actual number of bins
+    #     # This ensures 'labels' count matches the actual bins created
+    #     labels_stepsize = int(100 / actual_n_bins) if actual_n_bins > 0 else 0
+    #     labels = list(range(0, actual_n_bins * labels_stepsize, labels_stepsize))
+    #     if len(labels) != actual_n_bins:  # Adjust for potential rounding issues
+    #         labels = list(range(0, 100, int(100 / actual_n_bins)))[:actual_n_bins]
+    #     group_x, bins_x = pd.qcut(series, q=self.n_bins, labels=labels, retbins=True, duplicates='drop')
+    #     series_bins = group_x.astype(int)
+    #     return series_bins
 
     def _assign_bins_equal_widh(self, series: pd.Series):
         # Run cut once WITHOUT labels to determine the actual number of bins
-        temp_group_x, temp_bins_x = pd.cut(series, bins=self.n_bins, retbins=True, duplicates='drop')
+        _, temp_bins_x = pd.cut(series, bins=self.n_bins, retbins=True, duplicates='drop')
         actual_n_bins_x = len(temp_bins_x) - 1  # Number of bins is (num_edges - 1)
         labels_x = temp_bins_x[:actual_n_bins_x]
         group_x, bins_x = pd.cut(series, bins=self.n_bins, labels=labels_x, retbins=True, duplicates='drop')
