@@ -25,26 +25,45 @@ class GridAggregator:
                  binning_type: Literal['quantiles', 'equal_width'],
                  n_bins: int = 10,
                  min_n_vals_per_bin: int = 1,
-                 binagg_z: Union[Literal['mean', 'min', 'max', 'median', 'sum'], Callable] = 'mean'
+                 aggfunc: Union[Literal['mean', 'min', 'max', 'median', 'sum'], Callable] = 'mean'
                  ):
-        self.x = x
-        self.y = y
-        self.z = z
+
+        # Input checks
+        if not all(isinstance(arg, pd.Series) for arg in [x, y, z]):
+            raise TypeError("x, y, and z must be pandas Series.")
+        if not all(len(arg) == len(x) for arg in [y, z]):
+            raise ValueError("x, y, and z Series must have the same length.")
+        if n_bins <= 0:
+            raise ValueError("n_bins must be a positive integer.")
+        if min_n_vals_per_bin <= 0:
+            raise ValueError("min_n_vals_per_bin must be a positive integer.")
+        if binning_type not in ['quantiles', 'equal_width']:
+            raise ValueError("binning_type must be 'quantiles' or 'equal_width'.")
+
+        self.x = x.copy()
+        self.y = y.copy()
+        self.z = z.copy()
         self.binning_type = binning_type
-        self.xname = x.name if x.name is not None else 'x'
-        self.yname = y.name if y.name is not None else 'y'
-        self.zname = z.name if z.name is not None else 'z'
         self.n_bins = n_bins
         self.min_n_vals_per_bin = min_n_vals_per_bin
+
+        self.xname = x.name if x.name is not None else 'x_data'
+        self.yname = y.name if y.name is not None else 'y_data'
+        self.zname = z.name if z.name is not None else 'z_data'
 
         self.xbinname = f'BIN_{self.xname}'
         self.ybinname = f'BIN_{self.yname}'
 
-        self.aggfunc = np.count_nonzero if binagg_z == 'count' else binagg_z
+        # Map 'count' to np.count_nonzero, otherwise use the provided aggfunc
+        self.aggfunc = np.count_nonzero if aggfunc == 'count' else aggfunc
 
-        # Prepare data
-        self.df = pd.concat([self.x, self.y, self.z], axis=1)
-        self.df = self.df.loc[:, ~self.df.columns.duplicated()]
+        # Prepare dataframe
+        # Ensure column names are unique if Series names might overlap
+        self.df = pd.DataFrame({
+            self.xname: self.x,
+            self.yname: self.y,
+            self.zname: self.z
+        })
         self.df.index.name = 'INDEX'
         self.df = self.df.reset_index(drop=False).copy()
 
@@ -156,11 +175,11 @@ def _example():
         x=subset[swin_col],
         y=subset[ta_col],
         z=subset[vpd_col],
-        binning_type='equal_width',
-        # binning_type='quantiles',
+        # binning_type='equal_width',
+        binning_type='quantiles',
         n_bins=10,
         min_n_vals_per_bin=5,
-        binagg_z='mean'
+        aggfunc='mean'
     )
     q.bin()
 
