@@ -37,8 +37,8 @@ class GridAggregator:
             raise ValueError("x, y, and z Series must have the same length.")
         if n_bins <= 0 and binning_type != 'custom':  # n_bins not strictly required for custom type
             raise ValueError("n_bins must be a positive integer for 'quantiles' or 'equal_width' binning.")
-        if min_n_vals_per_bin <= 0:
-            raise ValueError("min_n_vals_per_bin must be a positive integer.")
+        if min_n_vals_per_bin <= 0 and binning_type != 'custom':
+            raise ValueError("min_n_vals_per_bin must be a positive integer for 'quantiles' or 'equal_width' binning.")
         if binning_type not in ['quantiles', 'equal_width', 'custom']:  # Updated validation
             raise ValueError("binning_type must be 'quantiles', 'equal_width', or 'custom'.")
 
@@ -287,29 +287,41 @@ def _example():
     ta_col = 'Tair_f'  # Air temperature
     swin_col = 'Rg_f'  # Shortwave incoming radiation
     subset = df[[vpd_col, ta_col, swin_col]].copy()
-    subset = subset.loc[(subset.index.month >= 5) & (subset.index.month <= 9)].copy()  # Use data May and Sep
+
     # daytime_locs = (subset[swin_col] > 50)  # Use daytime data
     # subset = subset[daytime_locs].copy()
+
+
+
+    # Convert to z-scores, ignoring NaNs
+    from scipy.stats import zscore
+    subset = subset.apply(lambda x: zscore(x, nan_policy='omit'))
+
+    print(subset.describe())
+
+    subset = subset.loc[(subset.index.month >= 5) & (subset.index.month <= 10)].copy()  # Use data May and Sep
     subset = subset.dropna()
+
 
     q = dv.ga(
         x=subset[swin_col],
         y=subset[ta_col],
         z=subset[vpd_col],
         binning_type='custom',
-        custom_x_bins=list(range(0, 2000, 100)),
-        custom_y_bins=list(range(0, 5, 1)),
+        custom_x_bins=[-99, -3, -2, -1, 0, 1, 2, 3],
+        custom_y_bins=[-99, -3, -2, -1, 0, 1, 2, 3],
+        # custom_y_bins=list(range(0, 5, 1)),
         # binning_type='equal_width',
         # binning_type='quantiles',
         n_bins=10,
-        min_n_vals_per_bin=5,
+        min_n_vals_per_bin=0,
         aggfunc='mean'
     )
 
     pivotdf = q.df_agg_wide.copy()
     print(pivotdf)
     df_long = q.df_agg_long.copy()
-    # print(df_long)
+    # print(len(df_long))
 
     hm = dv.heatmapxyz(
         x=df_long['BIN_Rg_f'],
