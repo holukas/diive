@@ -100,9 +100,8 @@ class GridAggregator:
         self.df[self.ybinname] = self._assign_bins_quantiles(series=self.df[self.yname])
 
     def _apply_equal_width_binning(self):
-        self.df[self.xbinname] = self._assign_bins_equal_widh(series=self.df[self.xname])
-        self.df[self.ybinname] = self._assign_bins_equal_widh(series=self.df[self.yname])
-
+        self.df[self.xbinname] = self._assign_bins_equal_width(series=self.df[self.xname])
+        self.df[self.ybinname] = self._assign_bins_equal_width(series=self.df[self.yname])
 
     def _assign_bins_quantiles(self, series: pd.Series) -> pd.Series:
         """
@@ -143,28 +142,33 @@ class GridAggregator:
             print(f"An unexpected error occurred during quantile binning for series '{series.name}': {e}")
             return pd.Series(np.nan, index=series.index, name=f'BIN_{series.name}')
 
-    # def _assign_bins_quantiles(self, series: pd.Series):
-    #     # Run qcut once WITHOUT labels to determine the actual number of bins
-    #     _, temp_bins = pd.qcut(series, q=self.n_bins, retbins=True, duplicates='drop')
-    #     actual_n_bins = len(temp_bins) - 1  # Number of bins is (num_edges - 1)
-    #     # Generate labels based on the actual number of bins
-    #     # This ensures 'labels' count matches the actual bins created
-    #     labels_stepsize = int(100 / actual_n_bins) if actual_n_bins > 0 else 0
-    #     labels = list(range(0, actual_n_bins * labels_stepsize, labels_stepsize))
-    #     if len(labels) != actual_n_bins:  # Adjust for potential rounding issues
-    #         labels = list(range(0, 100, int(100 / actual_n_bins)))[:actual_n_bins]
-    #     group_x, bins_x = pd.qcut(series, q=self.n_bins, labels=labels, retbins=True, duplicates='drop')
-    #     series_bins = group_x.astype(int)
-    #     return series_bins
+    def _assign_bins_equal_width(self, series: pd.Series):
+        try:
+            # Run cut once WITHOUT labels to determine the actual number of bins
+            _, bins = pd.cut(series, bins=self.n_bins, retbins=True, duplicates='drop')
 
-    def _assign_bins_equal_widh(self, series: pd.Series):
-        # Run cut once WITHOUT labels to determine the actual number of bins
-        _, temp_bins_x = pd.cut(series, bins=self.n_bins, retbins=True, duplicates='drop')
-        actual_n_bins_x = len(temp_bins_x) - 1  # Number of bins is (num_edges - 1)
-        labels_x = temp_bins_x[:actual_n_bins_x]
-        group_x, bins_x = pd.cut(series, bins=self.n_bins, labels=labels_x, retbins=True, duplicates='drop')
-        series_bins = group_x.astype(int)
-        return series_bins
+            actual_n_bins = len(bins) - 1
+
+            if actual_n_bins == 0:
+                print(f"Warning: Could not form any equal-width bins for series '{series.name}'. "
+                      f"All values might be identical or range is too small. Returning NaN for bin labels.")
+                return pd.Series(np.nan, index=series.index, name=f'BIN_{series.name}')
+
+            labels = bins[:actual_n_bins]
+
+            binned_series = pd.cut(series, bins=self.n_bins, labels=labels, retbins=False, duplicates='drop')
+            return binned_series.astype(int)
+        except Exception as e:
+            print(f"Warning: Could not apply equal-width binning to series '{series.name}'. Error: {e}. "
+                  f"Returning NaN for bin labels.")
+            return pd.Series(np.nan, index=series.index, name=f'BIN_{series.name}')
+        # # Run cut once WITHOUT labels to determine the actual number of bins
+        # _, temp_bins_x = pd.cut(series, bins=self.n_bins, retbins=True, duplicates='drop')
+        # actual_n_bins_x = len(temp_bins_x) - 1  # Number of bins is (num_edges - 1)
+        # labels_x = temp_bins_x[:actual_n_bins_x]
+        # group_x, bins_x = pd.cut(series, bins=self.n_bins, labels=labels_x, retbins=True, duplicates='drop')
+        # series_bins = group_x.astype(int)
+        # return series_bins
 
     def _transform_and_pivot(self, is_quantiles: bool) -> None:
         """Transform data for plotting"""
@@ -211,25 +215,14 @@ class GridAggregator:
             self._df_agg_long = pd.DataFrame()
             return
 
-        # # Count number of available values per combined bin
-        # ok_bin = self.df.groupby('BINS_COMBINED_STR').count()['INDEX'] >= self.min_n_vals_per_bin
-        #
-        # # Bins with enough values
-        # ok_bin = ok_bin[ok_bin]  # Filter (True/False) indicating if bin has enough values
-        # ok_binlist = list(ok_bin.index)  # List of bins with enough values
-        #
-        # # Keep data rows where the respective bin has enough values
-        # ok_row = self.df['BINS_COMBINED_STR'].isin(ok_binlist)
-        # self.df = self.df[ok_row].copy()
-
-        # Step 4: Perform aggregation using pivot_table
+        # Perform aggregation using pivot_table
         self._df_agg_wide = pd.pivot_table(self.df,
                                            index=self.ybinname,  # Rows
                                            columns=self.xbinname,  # Columns
                                            values=self.zname,  # Values to aggregate
                                            aggfunc=self.aggfunc)  # Aggregation function
 
-        # Step 5: Melt the DataFrame to long format for easier plotting/analysis
+        # Melt the DataFrame to long format for easier plotting/analysis
         df_agg_long_temp = self._df_agg_wide.reset_index()
 
         # Identify value columns to melt, excluding the ybinname (index in wide format)
@@ -243,16 +236,6 @@ class GridAggregator:
         # Ensure bin columns in the long format DataFrame are integers
         self._df_agg_long[self.xbinname] = self._df_agg_long[self.xbinname].astype(int)
         self._df_agg_long[self.ybinname] = self._df_agg_long[self.ybinname].astype(int)
-
-        # df_agg_wide = pd.pivot_table(self.df, index=self.ybinname, columns=self.xbinname,
-        #                              values=self.zname, aggfunc=self.aggfunc)
-
-        # # Melt the DataFrame to long format
-        # df_agg_long = df_agg_wide.reset_index().melt(id_vars=[self.ybinname],
-        #                                              var_name=self.xbinname,
-        #                                              value_name=self.zname)
-
-        # return df_agg_wide, df_agg_long
 
 
 def _example():
@@ -275,8 +258,8 @@ def _example():
         x=subset[swin_col],
         y=subset[ta_col],
         z=subset[vpd_col],
-        binning_type='equal_width',
-        # binning_type='quantiles',
+        # binning_type='equal_width',
+        binning_type='quantiles',
         n_bins=10,
         min_n_vals_per_bin=5,
         aggfunc='mean'
