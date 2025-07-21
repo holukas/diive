@@ -28,7 +28,7 @@ class GridAggregator:
                  aggfunc: Union[Literal['mean', 'min', 'max', 'median', 'sum'], Callable] = 'mean'
                  ):
 
-        # Input checks
+        # Input validation
         if not all(isinstance(arg, pd.Series) for arg in [x, y, z]):
             raise TypeError("x, y, and z must be pandas Series.")
         if not all(len(arg) == len(x) for arg in [y, z]):
@@ -40,6 +40,7 @@ class GridAggregator:
         if binning_type not in ['quantiles', 'equal_width']:
             raise ValueError("binning_type must be 'quantiles' or 'equal_width'.")
 
+        # Initialize attributes
         self.x = x.copy()
         self.y = y.copy()
         self.z = z.copy()
@@ -70,35 +71,37 @@ class GridAggregator:
         self._df_agg_wide = None
         self._df_agg_long = None
 
+        # Perform binning and aggregation on initialization
+        self._bin_and_aggregate()
+
     @property
     def df_agg_wide(self) -> pd.DataFrame:
-        if not isinstance(self._df_agg_wide, pd.DataFrame):
-            raise Exception(
-                f'Aggregated wide DataFrame is not available. Please run `quantiles()` or `equal_width()` first.')
+        if self._df_agg_wide is None:
+            raise AttributeError("Aggregated wide DataFrame is not available. Ensure binning was successful.")
         return self._df_agg_wide
 
     @property
     def df_agg_long(self) -> pd.DataFrame:
-        if not isinstance(self._df_agg_long, pd.DataFrame):
-            raise Exception(
-                f'Aggregated long DataFrame is not available. Please run `quantiles()` or `equal_width()` first.')
+        if self._df_agg_long is None:
+            raise AttributeError("Aggregated long DataFrame is not available. Ensure binning was successful.")
         return self._df_agg_long
 
-    def bin(self):
+    def _bin_and_aggregate(self):
         if self.binning_type == 'quantiles':
-            self._quantiles()
+            self._apply_quantile_binning()
         elif self.binning_type == 'equal_width':
-            self._equal_width()
+            self._apply_equal_width_binning()
 
-    def _quantiles(self):
+        # After binning, proceed to transform and aggregate
+        self._transform_and_pivot(is_quantiles=(self.binning_type == 'quantiles'))
+
+    def _apply_quantile_binning(self):
         self.df[self.xbinname] = self._assign_bins_quantiles(series=self.df[self.xname])
         self.df[self.ybinname] = self._assign_bins_quantiles(series=self.df[self.yname])
-        self._df_agg_wide, self._df_agg_long = self._transform_data(is_quantiles=True)
 
-    def _equal_width(self):
+    def _apply_equal_width_binning(self):
         self.df[self.xbinname] = self._assign_bins_equal_widh(series=self.df[self.xname])
         self.df[self.ybinname] = self._assign_bins_equal_widh(series=self.df[self.yname])
-        self._df_agg_wide, self._df_agg_long = self._transform_data(is_quantiles=False)
 
 
     def _assign_bins_quantiles(self, series: pd.Series) -> pd.Series:
@@ -163,36 +166,93 @@ class GridAggregator:
         series_bins = group_x.astype(int)
         return series_bins
 
-    def _transform_data(self, is_quantiles: bool) -> tuple:
+    def _transform_and_pivot(self, is_quantiles: bool) -> None:
         """Transform data for plotting"""
+        # Drop rows where binning failed (NaNs in bin columns)
+        initial_rows = len(self.df)
+        # Using .loc for direct modification in place and better practice
+        self.df = self.df.dropna(subset=[self.xbinname, self.ybinname]).copy()
+        if len(self.df) < initial_rows:
+            print(f"Warning: Dropped {initial_rows - len(self.df)} rows due to failed binning (NaNs in bin columns).")
+
+        if self.df.empty:
+            print("Warning: No data left after dropping NaNs in bin columns. Aggregated DataFrames will be empty.")
+            self._df_agg_wide = pd.DataFrame()
+            self._df_agg_long = pd.DataFrame()
+            return
 
         # Add new column for unique bin combinations
+        # Using .astype(str) for robustness if bin labels are not purely numeric
         self.df['BINS_COMBINED_STR'] = self.df[self.xbinname].astype(str) + "+" + self.df[self.ybinname].astype(str)
 
-        # Adding bins together makes only sense when x and y are quantiles
+        # Add combined integer bin for quantile analysis if applicable
         if is_quantiles:
-            self.df['BINS_COMBINED_INT'] = self.df[self.xbinname].add(self.df[self.ybinname])
+            # Check if bin columns are numeric AND contain no NaNs (after dropna above)
+            if pd.api.types.is_numeric_dtype(self.df[self.xbinname]) and \
+                    pd.api.types.is_numeric_dtype(self.df[self.ybinname]):
+                self.df['BINS_COMBINED_INT'] = self.df[self.xbinname] + self.df[self.ybinname]
+            else:
+                # This warning should ideally not trigger if dropna was effective, but good for robustness
+                print("Warning: Could not create 'BINS_COMBINED_INT' as bin columns are not numeric "
+                      "or still contain non-numeric values after NaN drop.")
 
-        # Count number of available values per combined bin
-        ok_bin = self.df.groupby('BINS_COMBINED_STR').count()['INDEX'] >= self.min_n_vals_per_bin
+        # Filter out bins that don't meet the minimum value requirement
+        # Perform groupby and count on the original index to get accurate counts per bin
+        bin_counts = self.df.groupby('BINS_COMBINED_STR')['INDEX'].count()
+        valid_bins = bin_counts[bin_counts >= self.min_n_vals_per_bin].index
 
-        # Bins with enough values
-        ok_bin = ok_bin[ok_bin]  # Filter (True/False) indicating if bin has enough values
-        ok_binlist = list(ok_bin.index)  # List of bins with enough values
+        # Filter the DataFrame to keep only rows belonging to valid bins
+        self.df = self.df[self.df['BINS_COMBINED_STR'].isin(valid_bins)].copy()
 
-        # Keep data rows where the respective bin has enough values
-        ok_row = self.df['BINS_COMBINED_STR'].isin(ok_binlist)
-        self.df = self.df[ok_row].copy()
+        if self.df.empty:
+            print(
+                "Warning: No data left after filtering for minimum values per bin. Aggregated DataFrames will be empty.")
+            self._df_agg_wide = pd.DataFrame()
+            self._df_agg_long = pd.DataFrame()
+            return
 
-        df_agg_wide = pd.pivot_table(self.df, index=self.ybinname, columns=self.xbinname,
-                                     values=self.zname, aggfunc=self.aggfunc)
+        # # Count number of available values per combined bin
+        # ok_bin = self.df.groupby('BINS_COMBINED_STR').count()['INDEX'] >= self.min_n_vals_per_bin
+        #
+        # # Bins with enough values
+        # ok_bin = ok_bin[ok_bin]  # Filter (True/False) indicating if bin has enough values
+        # ok_binlist = list(ok_bin.index)  # List of bins with enough values
+        #
+        # # Keep data rows where the respective bin has enough values
+        # ok_row = self.df['BINS_COMBINED_STR'].isin(ok_binlist)
+        # self.df = self.df[ok_row].copy()
 
-        # Melt the DataFrame to long format
-        df_agg_long = df_agg_wide.reset_index().melt(id_vars=[self.ybinname],
-                                                     var_name=self.xbinname,
-                                                     value_name=self.zname)
+        # Step 4: Perform aggregation using pivot_table
+        self._df_agg_wide = pd.pivot_table(self.df,
+                                           index=self.ybinname,  # Rows
+                                           columns=self.xbinname,  # Columns
+                                           values=self.zname,  # Values to aggregate
+                                           aggfunc=self.aggfunc)  # Aggregation function
 
-        return df_agg_wide, df_agg_long
+        # Step 5: Melt the DataFrame to long format for easier plotting/analysis
+        df_agg_long_temp = self._df_agg_wide.reset_index()
+
+        # Identify value columns to melt, excluding the ybinname (index in wide format)
+        value_vars_for_melt = [col for col in df_agg_long_temp.columns if col != self.ybinname]
+
+        self._df_agg_long = df_agg_long_temp.melt(id_vars=[self.ybinname],
+                                                  value_vars=value_vars_for_melt,
+                                                  var_name=self.xbinname,
+                                                  value_name=self.zname)
+
+        # Ensure bin columns in the long format DataFrame are integers
+        self._df_agg_long[self.xbinname] = self._df_agg_long[self.xbinname].astype(int)
+        self._df_agg_long[self.ybinname] = self._df_agg_long[self.ybinname].astype(int)
+
+        # df_agg_wide = pd.pivot_table(self.df, index=self.ybinname, columns=self.xbinname,
+        #                              values=self.zname, aggfunc=self.aggfunc)
+
+        # # Melt the DataFrame to long format
+        # df_agg_long = df_agg_wide.reset_index().melt(id_vars=[self.ybinname],
+        #                                              var_name=self.xbinname,
+        #                                              value_name=self.zname)
+
+        # return df_agg_wide, df_agg_long
 
 
 def _example():
@@ -215,13 +275,12 @@ def _example():
         x=subset[swin_col],
         y=subset[ta_col],
         z=subset[vpd_col],
-        # binning_type='equal_width',
-        binning_type='quantiles',
+        binning_type='equal_width',
+        # binning_type='quantiles',
         n_bins=10,
         min_n_vals_per_bin=5,
         aggfunc='mean'
     )
-    q.bin()
 
     pivotdf = q.df_agg_wide.copy()
     print(pivotdf)
