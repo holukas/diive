@@ -22,6 +22,7 @@ class GridAggregator:
                  x: pd.Series,
                  y: pd.Series,
                  z: pd.Series,
+                 binning_type: Literal['quantiles', 'equal_width'],
                  n_bins: int = 10,
                  min_n_vals_per_bin: int = 1,
                  binagg_z: Union[Literal['mean', 'min', 'max', 'median', 'sum'], Callable] = 'mean'
@@ -29,6 +30,7 @@ class GridAggregator:
         self.x = x
         self.y = y
         self.z = z
+        self.binning_type = binning_type
         self.xname = x.name if x.name is not None else 'x'
         self.yname = y.name if y.name is not None else 'y'
         self.zname = z.name if z.name is not None else 'z'
@@ -63,6 +65,22 @@ class GridAggregator:
                 f'Aggregated long DataFrame is not available. Please run `quantiles()` or `equal_width()` first.')
         return self._df_agg_long
 
+    def bin(self):
+        if self.binning_type == 'quantiles':
+            self._quantiles()
+        elif self.binning_type == 'equal_width':
+            self._equal_width()
+
+    def _quantiles(self):
+        self.df[self.xbinname] = self._assign_bins_quantiles(series=self.df[self.xname])
+        self.df[self.ybinname] = self._assign_bins_quantiles(series=self.df[self.yname])
+        self._df_agg_wide, self._df_agg_long = self._transform_data(is_quantiles=True)
+
+    def _equal_width(self):
+        self.df[self.xbinname] = self._assign_bins_equal_widh(series=self.df[self.xname])
+        self.df[self.ybinname] = self._assign_bins_equal_widh(series=self.df[self.yname])
+        self._df_agg_wide, self._df_agg_long = self._transform_data(is_quantiles=False)
+
     def _assign_bins_quantiles(self, series: pd.Series):
         # Run qcut once WITHOUT labels to determine the actual number of bins
         temp_group, temp_bins = pd.qcut(series, q=self.n_bins, retbins=True, duplicates='drop')
@@ -77,11 +95,6 @@ class GridAggregator:
         series_bins = group_x.astype(int)
         return series_bins
 
-    def quantiles(self):
-        self.df[self.xbinname] = self._assign_bins_quantiles(series=self.df[self.xname])
-        self.df[self.ybinname] = self._assign_bins_quantiles(series=self.df[self.yname])
-        self._df_agg_wide, self._df_agg_long = self._transform_data(is_quantiles=True)
-
     def _assign_bins_equal_widh(self, series: pd.Series):
         # Run cut once WITHOUT labels to determine the actual number of bins
         temp_group_x, temp_bins_x = pd.cut(series, bins=self.n_bins, retbins=True, duplicates='drop')
@@ -90,11 +103,6 @@ class GridAggregator:
         group_x, bins_x = pd.cut(series, bins=self.n_bins, labels=labels_x, retbins=True, duplicates='drop')
         series_bins = group_x.astype(int)
         return series_bins
-
-    def equal_width(self):
-        self.df[self.xbinname] = self._assign_bins_equal_widh(series=self.df[self.xname])
-        self.df[self.ybinname] = self._assign_bins_equal_widh(series=self.df[self.yname])
-        self._df_agg_wide, self._df_agg_long = self._transform_data(is_quantiles=False)
 
     def _transform_data(self, is_quantiles: bool) -> tuple:
         """Transform data for plotting"""
@@ -148,13 +156,13 @@ def _example():
         x=subset[swin_col],
         y=subset[ta_col],
         z=subset[vpd_col],
-        # quantiles=True,
+        binning_type='equal_width',
+        # binning_type='quantiles',
         n_bins=10,
         min_n_vals_per_bin=5,
         binagg_z='mean'
     )
-    q.quantiles()
-    # q.equal_width()
+    q.bin()
 
     pivotdf = q.df_agg_wide.copy()
     print(pivotdf)
