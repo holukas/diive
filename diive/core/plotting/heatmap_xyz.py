@@ -171,7 +171,7 @@ def _example():
         {
             xcol: ['min', 'max', 'mean'],
             ycol: ['min', 'max', 'mean'],
-            zcol: 'sum'
+            zcol: 'mean'
         }
     )
 
@@ -179,17 +179,17 @@ def _example():
     df = flatten_multiindex_all_df_cols(df=df)
     x = f"{xcol}_mean"
     y = f"{ycol}_mean"
-    z = f"{zcol}_sum"
+    z = f"{zcol}_mean"
 
-    q = dv.qga(
+    q = dv.ga(
         x=df[x],
         y=df[y],
         z=df[z],
-        n_quantiles=10,
+        binning_type='quantiles',
+        n_bins=10,
         min_n_vals_per_bin=1,
-        binagg_z='mean'
+        aggfunc='mean'
     )
-    q.run()
 
     # Pivoted dataframe, 2D grid (matrix)
     df_long = q.df_long
@@ -197,10 +197,10 @@ def _example():
     hm = dv.heatmapxyz(
         x=df_long['BIN_Tair_f_mean'],
         y=df_long['BIN_VPD_f_mean'],
-        z=df_long['NEP_sum'],
+        z=df_long['NEP_mean'],
         show_values=True,
-        show_values_n_dec_places=0,
-        show_values_fontsize=9,
+        show_values_n_dec_places=2,
+        show_values_fontsize=8,
         # x=df[x],
         # y=df[y],
         # z=df[z],

@@ -2,6 +2,46 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.89.0 | 23 Jul 2025
+
+Version 0.89.0 introduces a new `GridAggregator` class for 2D data aggregation with support for quantile,
+equal-width, and custom binning methods, along with comprehensive documentation improvements and major dependency
+updates including shapiq integration for enhanced analysis capabilities.
+
+See the [notebook](https://github.com/holukas/diive/blob/main/notebooks/Analyses/GridAggregator.ipynb) for example
+usage.
+
+### Added
+
+- New `GridAggregator` class for 2D grid data aggregation (`diive/pkgs/analyses/gridaggregator.py`)
+    - Supports quantile, equal-width, and custom binning methods
+    - Flexible aggregation functions
+    - Comprehensive input validation and error handling
+    - Added unit tests covering core functionality
+    - Added example notebook:
+        - `notebooks/Examples/GridAggregator.ipynb` - demonstrates 2D data aggregation and binning
+
+### Enhanced
+
+- Improved documentation across modules
+    - Added detailed docstrings for methods and classes
+    - Updated example notebooks for better clarity
+    - Streamlined notebook structure in Overview
+
+### Dependencies
+
+- Updated multiple Python dependencies to their latest versions
+- Added new dependencies:
+    - shapiq (>=1.3.1,<2.0.0)
+    - galois
+    - networkx
+    - sparse-transform
+
+### Unittests
+
+- Added unittests for `dv.heatmap_xyz`
+- 66/66 unittests ran successfully
+
 ## v0.88.0 | 18 Jul 2025
 
 ![plotHeatmapYearMonthMaxTA_diive_v0.88.0](images/plotHeatmapYearMonthMaxTA_diive_v0.88.0.png)

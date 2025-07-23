@@ -27,8 +27,8 @@ Recent releases: [Releases](https://github.com/holukas/diive/releases)
 
 - **Daily correlation**: calculate daily correlation between two time series ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/DailyCorrelation.ipynb))
 - **Decoupling**: Investigate binned aggregates (median) of a variable z in binned classes of x and y ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/DecouplingSortingBins.ipynb))
-- **Quantile aggregation**: calculate z-aggregates in quantiles (classes) of x and y ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/CalculateZaggregatesInQuantileClassesOfXY.ipynb))
 - **Data gaps identification**: ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/GapFinder.ipynb))
+- **Grid aggregator**: calculate z-aggregates in bins (classes) of x and y ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/GridAggregator.ipynb))
 - **Histogram calculation**: calculate histogram from Series ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/Histogram.ipynb))
 - **Optimum range**: find x range for optimum y
 - **Percentiles**: Calculate percentiles 0-100 for series ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/Percentiles.ipynb))
