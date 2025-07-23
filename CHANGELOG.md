@@ -39,6 +39,7 @@ usage.
 
 ### Unittests
 
+- Added unittests for `dv.heatmap_xyz`
 - 61/61 unittests ran successfully
 
 ## v0.88.0 | 18 Jul 2025
