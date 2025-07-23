@@ -2,7 +2,7 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.89.0 | XX Jul 2025
+## v0.89.0 | 23 Jul 2025
 
 Version 0.89.0 introduces a new `GridAggregator` class for 2D data aggregation with support for quantile,
 equal-width, and custom binning methods, along with comprehensive documentation improvements and major dependency
