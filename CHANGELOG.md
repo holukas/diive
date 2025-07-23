@@ -8,6 +8,15 @@
 
 - Updated dependencies
 
+### Notebooks
+
+- grid
+
+### Unittests
+
+- Added six test cases fors `tests.test_gridaggregator.TestGridAggregator`
+- 62/62 unittests ran successfully
+
 ## v0.88.0 | 18 Jul 2025
 
 ![plotHeatmapYearMonthMaxTA_diive_v0.88.0](images/plotHeatmapYearMonthMaxTA_diive_v0.88.0.png)
