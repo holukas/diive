@@ -4,18 +4,35 @@
 
 ## v0.XX.0 | XX XXX 2025
 
-### Environment
+### Added
 
-- Updated dependencies
+- New `GridAggregator` class for 2D grid data aggregation (`diive/pkgs/analyses/gridaggregator.py`)
+    - Supports quantile, equal-width, and custom binning methods
+    - Flexible aggregation functions
+    - Comprehensive input validation and error handling
+    - Added unit tests covering core functionality
+    - Added example notebook:
+        - `notebooks/Examples/GridAggregator.ipynb` - demonstrates 2D data aggregation and binning
 
-### Notebooks
+### Enhanced
 
-- grid
+- Improved documentation across modules
+    - Added detailed docstrings for methods and classes
+    - Updated example notebooks for better clarity
+    - Streamlined notebook structure in Overview
+
+### Dependencies
+
+- Updated multiple Python dependencies to their latest versions
+- Added new dependencies:
+    - shapiq (>=1.3.1,<2.0.0)
+    - galois
+    - networkx
+    - sparse-transform
 
 ### Unittests
 
-- Added six test cases fors `tests.test_gridaggregator.TestGridAggregator`
-- 62/62 unittests ran successfully
+- 61/61 unittests ran successfully
 
 ## v0.88.0 | 18 Jul 2025
 

@@ -182,13 +182,6 @@ class GridAggregator:
         The property ensures that the DataFrame is not empty and that
         it contains columns. A copy of the DataFrame is returned to preserve data integrity and
         prevent external modifications.
-
-        Raises:
-            AttributeError: If the DataFrame is empty while its columns are still
-                present, indicating the absence of valid data to return.
-
-        Returns:
-            pd.DataFrame: A copy of the long-form DataFrame.
         """
         if self._df_long.empty and not self._df_long.columns.empty:  # Check if empty but columns exist (e.g., after dropna leads to empty)
             raise AttributeError("Long (non-aggregated) DataFrame is not available.")
@@ -198,12 +191,6 @@ class GridAggregator:
     def df_agg_wide(self) -> pd.DataFrame:
         """
         Provides a read-only property to access the aggregated wide DataFrame.
-
-        Raises:
-            AttributeError: If the aggregated wide DataFrame is unavailable or empty.
-
-        Returns:
-            pd.DataFrame: A copy of the aggregated wide DataFrame.
         """
         if self._df_agg_wide is None or self._df_agg_wide.empty:
             raise AttributeError("Aggregated wide DataFrame is not available. Ensure binning was successful.")
@@ -214,12 +201,6 @@ class GridAggregator:
         """
         Property to access the aggregated long DataFrame. Ensures that the DataFrame is available
         and not empty before returning a copy.
-
-        Raises:
-            AttributeError: If the aggregated long DataFrame is not available or is empty.
-
-        Returns:
-            pd.DataFrame: A copy of the aggregated long DataFrame.
         """
         if self._df_agg_long is None or self._df_agg_long.empty:
             raise AttributeError("Aggregated long DataFrame is not available. Ensure binning was successful.")
@@ -230,11 +211,6 @@ class GridAggregator:
         Applies appropriate binning and aggregation to the data based on the specified
         binning type. Supports multiple binning methods and transforms the data accordingly.
         Raises an error when the binning type is not recognized.
-
-        Raises:
-            ValueError: If the specified `binning_type` does not match any supported
-            binning methods.
-
         """
         # Select the appropriate binning method
         binning_methods = {
@@ -260,12 +236,6 @@ class GridAggregator:
         This method modifies the DataFrame by assigning quantile-based bin numbers to the
         values in the specified columns. The bin assignments are based on percentiles
         of the data, and they are stored in new columns within the DataFrame.
-
-        Args:
-            None
-
-        Raises:
-            None
         """
         self._df_long[self.x_bin_col_name] = self._assign_bins_quantiles(series=self._df_long[self.x_col_name])
         self._df_long[self.y_bin_col_name] = self._assign_bins_quantiles(series=self._df_long[self.y_col_name])
@@ -288,12 +258,6 @@ class GridAggregator:
 
         Sets up custom binning for x and y columns based on the provided custom bin
         configuration and assigns the resulting bins to new columns.
-
-        Raises:
-            KeyError: If the specified columns for x or y are not present in the
-                dataframe.
-            ValueError: If the custom bins are not properly defined.
-
         """
         self._df_long[self.x_bin_col_name] = self._assign_bins_custom(series=self._df_long[self.x_col_name],
                                                                       bins=self.custom_x_bins)
@@ -309,10 +273,6 @@ class GridAggregator:
         due to repetitive or identical values, NaN is returned for all entries in the series.
         The bin labels are represented as floating-point values, which denote the corresponding
         quantile percentiles.
-
-        Args:
-            series (pd.Series): Input pandas Series to be binned. This should be a one-dimensional
-                                dataset with numeric values.
 
         Returns:
             pd.Series: A pandas Series where each value is replaced by its corresponding bin label.
@@ -356,9 +316,6 @@ class GridAggregator:
         Assigns equal-width bins to the values in the given pandas Series and labels them with the lower
         bound of the corresponding bin. If bin creation fails or no distinct bins are formed, returns NaN
         values for bin labels.
-
-        Args:
-            series (pd.Series): A pandas Series to which equal-width binning will be applied.
 
         Returns:
             pd.Series: A new pandas Series containing the numeric bin labels corresponding to the lower
