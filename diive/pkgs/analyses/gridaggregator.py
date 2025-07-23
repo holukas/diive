@@ -361,10 +361,13 @@ def _example():
     vpd_col = 'VPD_f'  # Vapor pressure deficit
     ta_col = 'Tair_f'  # Air temperature
     swin_col = 'Rg_f'  # Shortwave incoming radiation
-    subset = df[[vpd_col, ta_col, swin_col]].copy()
+    swc_col = 'SWC_FF0_0.15_1'
+    flux_col = 'NEE_CUT_REF_f'
+    subset = df[[flux_col, vpd_col, ta_col, swc_col, swin_col]].copy()
 
-    daytime_locs = (subset[swin_col] > 50)  # Use daytime data
-    subset = subset[daytime_locs].copy()
+    # daytime_locs = (subset[swin_col] > 50)  # Use daytime data
+    # subset = subset[daytime_locs].copy()
+    # subset = subset.drop(swin_col, axis=1, inplace=False)  # Remove col from df
 
     # Convert to z-scores, ignoring NaNs
     from scipy.stats import zscore
@@ -376,16 +379,16 @@ def _example():
     print(subset.describe())
 
     q = dv.ga(
-        x=subset[swin_col],
-        y=subset[ta_col],
-        z=subset[vpd_col],
-        binning_type='custom',
-        custom_x_bins=[-99, -3, -2, -1, 0, 1, 2, 3],
-        custom_y_bins=[-99, -3, -2, -1, 0, 1, 2, 3],
+        x=subset[vpd_col],
+        y=subset[swc_col],
+        z=subset[flux_col],
+        # binning_type='custom',
+        # custom_x_bins=[-99, -3, -2, -1, 0, 1, 2, 3],
+        # custom_y_bins=[-99, -3, -2, -1, 0, 1, 2, 3],
         # custom_y_bins=list(range(0, 5, 1)),
         # binning_type='equal_width',
-        # binning_type='quantiles',
-        n_bins=5,
+        binning_type='quantiles',
+        n_bins=10,
         min_n_vals_per_bin=5,
         aggfunc='mean'
     )
@@ -396,9 +399,9 @@ def _example():
     # print(q.df_long)
 
     hm = dv.heatmapxyz(
-        x=df_agg_long['BIN_Rg_f'],
-        y=df_agg_long['BIN_Tair_f'],
-        z=df_agg_long['VPD_f'],
+        x=df_agg_long[f'BIN_{vpd_col}'],
+        y=df_agg_long[f'BIN_{swc_col}'],
+        z=df_agg_long[f'{flux_col}'],
         cb_digits_after_comma=0,
         xlabel=r'x data',
         ylabel=r'y data',
