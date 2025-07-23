@@ -8,6 +8,9 @@ Version 0.89.0 introduces a new `GridAggregator` class for 2D data aggregation w
 equal-width, and custom binning methods, along with comprehensive documentation improvements and major dependency
 updates including shapiq integration for enhanced analysis capabilities.
 
+See the [notebook](https://github.com/holukas/diive/blob/main/notebooks/Analyses/GridAggregator.ipynb) for example
+usage.
+
 ### Added
 
 - New `GridAggregator` class for 2D grid data aggregation (`diive/pkgs/analyses/gridaggregator.py`)
