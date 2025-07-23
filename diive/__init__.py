@@ -13,8 +13,6 @@ from diive.pkgs.createvar.conversions import et_from_le as et_from_le
 # Analyses
 from diive.pkgs.analyses.gridaggregator import GridAggregator as ga
 from diive.pkgs.analyses.gridaggregator import GridAggregator as gridaggregator
-from diive.pkgs.analyses.quantilegridaggregator import QuantileGridAggregator as qga
-from diive.pkgs.analyses.quantilegridaggregator import QuantileGridAggregator as quantilegridaggregator
 
 # I/O
 from diive.configs.exampledata import load_exampledata_parquet as load_exampledata_parquet

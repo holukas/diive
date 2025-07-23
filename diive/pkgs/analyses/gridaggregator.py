@@ -251,7 +251,7 @@ class GridAggregator:
             raise ValueError(f"Unknown binning type: {self.binning_type}")
 
         # After binning, proceed to transform and aggregate
-        self._transform_and_pivot(is_quantiles=(self.binning_type == 'quantiles'))
+        self._transform_and_pivot()
 
     def _apply_quantile_binning(self):
         """
