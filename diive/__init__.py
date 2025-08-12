@@ -2,6 +2,7 @@
 from diive.configs.exampledata import load_exampledata_parquet as load_exampledata_parquet
 from diive.core.dfun.frames import transform_yearmonth_matrix_to_longform as transform_yearmonth_matrix_to_longform
 from diive.core.io.filereader import ReadFileType as readfiletype
+from diive.core.io.files import load_parquet as load_parquet
 from diive.core.io.files import save_parquet as save_parquet
 from diive.core.io.filereader import search_files as search_files
 # Plotting
