@@ -2,6 +2,13 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+##  
+
+### Bugfix
+
+- Fixed wrong parameter name for min/max ticks (
+  `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.showplot_resampled`)
+
 ## v0.89.0 | 23 Jul 2025
 
 Version 0.89.0 introduces a new `GridAggregator` class for 2D data aggregation with support for quantile,
