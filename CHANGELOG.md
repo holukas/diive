@@ -2,12 +2,17 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-##  
+## Changes
+
+- Increased percentage threshold for data required to be considered as valid time resolution (2) 
 
 ### Bugfix
 
-- Fixed wrong parameter name for min/max ticks (
-  `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.showplot_resampled`)
+- Fixed wrong parameter name for min/max ticks (1)
+
+### References
+- (1) `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.showplot_resampled`
+- (2) `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb._validate_n_grouprecords`
 
 ## v0.89.0 | 23 Jul 2025
 

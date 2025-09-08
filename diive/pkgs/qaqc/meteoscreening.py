@@ -767,7 +767,7 @@ class StepwiseMeteoScreeningDb:
             counts_perc = (counts / n_vals) * 100
             print(f"    Found time resolution {freq} (seconds) with {counts} records "
                   f"({counts_perc:.2f}% of total records).", end=" ")
-            if counts_perc > 0.01:
+            if counts_perc > 0.2:  # At least 0.2% of the data must have this resolution to be considered
                 used_freqs.append(freq)
                 print("")
             else:
