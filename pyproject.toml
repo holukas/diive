@@ -1,6 +1,6 @@
 [project]
 name = "diive"
-version = "0.89.0"
+version = "0.90.0"
 description = "Time series processing"
 authors = [
     {name = "Lukas Hörtnagl",email = "holukas@ethz.ch"}
