@@ -45,6 +45,7 @@ class HeatmapBase:
                  cmap: str = 'RdYlBu_r',
                  color_bad: str = 'grey',
                  zlabel: str = None,
+                 show_colormap: bool = True,
                  show_less_xticklabels: bool = False,
                  show_values: bool = False,
                  show_values_fontsize: float = theme.AX_LABELS_FONTSIZE,
@@ -111,6 +112,7 @@ class HeatmapBase:
         self.showvalues_fontsize = show_values_fontsize
         self.showvalues_n_dec_places = show_values_n_dec_places
         self.heatmaptype = heatmaptype
+        self.show_colormap = show_colormap
 
         self.plotdf = None
         self.x = None
@@ -368,10 +370,11 @@ class HeatmapBase:
         # Colorbar
         # Inside your class, assuming self.ax is an Axes object
         fig = self.ax.get_figure()
-        cb = fig.colorbar(plot, ax=self.ax, format=f"%.{int(self.cb_digits_after_comma)}f",
-                          label=self.zlabel)
-        cb.set_label(label=self.zlabel, size=self.axlabels_fontsize, labelpad=20)
-        cb.ax.tick_params(labelsize=self.cb_labelsize)
+        if self.show_colormap:
+            cb = fig.colorbar(plot, ax=self.ax, format=f"%.{int(self.cb_digits_after_comma)}f",
+                              label=self.zlabel)
+            cb.set_label(label=self.zlabel, size=self.axlabels_fontsize, labelpad=20)
+            cb.ax.tick_params(labelsize=self.cb_labelsize)
         default_format(ax=self.ax, ax_xlabel_txt=ax_xlabel_txt, ax_ylabel_txt=ax_ylabel_txt,
                        ticks_direction='out', ticks_length=4, ticks_width=2,
                        ax_labels_fontsize=self.axlabels_fontsize,
