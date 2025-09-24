@@ -50,6 +50,7 @@ class HeatmapBase:
                  show_values: bool = False,
                  show_values_fontsize: float = theme.AX_LABELS_FONTSIZE,
                  show_values_n_dec_places: int = 0,
+                 show_grid: bool = False,
                  heatmaptype: str = None,
                  verbose: bool = False):
         """
@@ -113,6 +114,7 @@ class HeatmapBase:
         self.showvalues_n_dec_places = show_values_n_dec_places
         self.heatmaptype = heatmaptype
         self.show_colormap = show_colormap
+        self.show_grid = show_grid
 
         self.plotdf = None
         self.x = None
@@ -377,7 +379,7 @@ class HeatmapBase:
             cb.ax.tick_params(labelsize=self.cb_labelsize)
         default_format(ax=self.ax, ax_xlabel_txt=ax_xlabel_txt, ax_ylabel_txt=ax_ylabel_txt,
                        ticks_direction='out', ticks_length=4, ticks_width=2,
-                       ax_labels_fontsize=self.axlabels_fontsize,
+                       ax_labels_fontsize=self.axlabels_fontsize, showgrid=self.show_grid,
                        ticks_labels_fontsize=self.ticks_labelsize)
         format_spines(ax=self.ax, color='black', lw=2)
         self.ax.tick_params(left=True, right=False, top=False, bottom=True)
