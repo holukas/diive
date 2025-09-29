@@ -38,6 +38,7 @@ class HeatmapBase:
                  vmax: float = None,
                  cb_digits_after_comma: int = 2,
                  cb_labelsize: float = theme.AX_LABELS_FONTSIZE,
+                 cb_extend: str = 'neither',
                  axlabels_fontsize: float = theme.AX_LABELS_FONTSIZE,
                  ticks_labelsize: float = theme.TICKS_LABELS_FONTSIZE,
                  minticks: int = 3,
@@ -96,6 +97,7 @@ class HeatmapBase:
         self.vmax = vmax
         self.cb_digits_after_comma = cb_digits_after_comma
         self.cb_labelsize = cb_labelsize
+        self.cb_extend = cb_extend
         self.color_bad = color_bad
 
         # Create fig and axis if no axis is given, otherwise use given axis
@@ -374,7 +376,7 @@ class HeatmapBase:
         fig = self.ax.get_figure()
         if self.show_colormap:
             cb = fig.colorbar(plot, ax=self.ax, format=f"%.{int(self.cb_digits_after_comma)}f",
-                              label=self.zlabel)
+                              label=self.zlabel, extend=self.cb_extend)
             cb.set_label(label=self.zlabel, size=self.axlabels_fontsize, labelpad=20)
             cb.ax.tick_params(labelsize=self.cb_labelsize)
         default_format(ax=self.ax, ax_xlabel_txt=ax_xlabel_txt, ax_ylabel_txt=ax_ylabel_txt,
