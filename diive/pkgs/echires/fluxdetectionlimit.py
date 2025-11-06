@@ -40,6 +40,8 @@ FLUX DETECTION LIMIT
         code for conventional and disjunct eddy covariance analysis of trace gas measurements:
         An urban test case. Atmospheric Measurement Techniques, 13(3), 1447–1465.
         https://doi.org/10.5194/amt-13-1447-2020
+        Source code: https://www.atm-phys-chem.at/innflux/
+        Source code: https://git.uibk.ac.at/acinn/apc/innflux
 
 
 """
@@ -85,6 +87,8 @@ class FluxDetectionLimit:
 
         # Calculate turbulent fluctuations
         self.w_prime, self.c_prime = self._turbulent_fluctuations()
+        self.df[self.w_prime.name] = self.w_prime
+        self.df[self.c_prime.name] = self.c_prime
 
         # Calculate covariances
         self.cov_df = self._crosscovariance()
@@ -196,6 +200,11 @@ class FluxDetectionLimit:
                 Ta  ... air temperature, K (in SAB18 degC were used)
                 R   ... Universal gas constant, m3 Pa K-1 mol-1
                 pd  ... dry air partial pressure, Pa
+
+        From STR20:
+        # calculate conversion factor for flux in nmol/m^2/s
+        flux_conversion_factor = 1/( (T_mean/273.15) * (1013.25/p_mean) * 22.414e-3 );
+
         """
         # Partial pressure of water vapor (Pa) (CAM98, p39, eq.(3.5), see their example)
         #   "The mole fraction of a gas can be calculated as the ratio of its partial pressure
@@ -250,57 +259,53 @@ class FluxDetectionLimit:
 
 if __name__ == '__main__':
 
-    from diive.core.io.filereader import search_files, ReadFileType
+    from diive.core.io.filereader import search_files
 
     # Dirs
-    INDIR = [r'L:\Sync\luhk_work\CURRENT\DAS_detectionlimit_test\IN']
-    OUTDIR = r'L:\Sync\luhk_work\CURRENT\DAS_detectionlimit_test\OUT'
+    INDIR = [r'F:\Sync\luhk_work\CURRENT\flux_detection_limit\raw']
+    OUTDIR = r'F:\Sync\luhk_work\CURRENT\flux_detection_limit\OUT'
 
     # Search & merge high-res data files (30MIN files in this example)
-    filepaths = search_files(INDIR, "*.csv")
-    print(filepaths)
+    filepaths = search_files(INDIR, "*.txt")
+    # print(filepaths)
 
     # Column names
-    u_col = 'U_[R350-B]'  # m s-1
-    v_col = 'V_[R350-B]'  # m s-1
-    w_col = 'W_[R350-B]'  # m s-1
-    # n2o_col = 'N2O_DRY_[LGR-A]'  # dry mole fraction in nmol mol-1 (ppb)
-    ch4_col = 'CH4_DRY_[QCL-C2]'  # dry mole fraction in nmol mol-1 (ppb)
-    h2o_col = 'H2O_DRY_[QCL-C2]'  # nmol mol-1 (ppb)
-    pd_col = 'PRESS_CELL_[QCL-C2]'  # hPa, but will be converted to Pa
-    ta_col = 'T_CELL_[QCL-C2]'  # K, we use this as air temperature for now
+    u_col = 'x'  # m s-1
+    v_col = 'y'  # m s-1
+    w_col = 'z'  # m s-1
+    n2o_col = 'N2Od'  # should be dry mole fraction in nmol mol-1 (ppb)
+    # ch4_col = 'CH4_DRY_[QCL-C2]'  # dry mole fraction in nmol mol-1 (ppb)
+    h2o_col = 'H2O'  # nmol mol-1 (ppb)
+    pd_col = 'CellP'  # hPa, but will be converted to Pa
+    ta_col = 'CellT'  # K, we use this as air temperature for now
 
     file_results_df = pd.DataFrame(columns=['file',
                                             'flux_detection_limit', 'flux_noise_rmse',
                                             'lag', 'flux_signal_at_cov_max_shift', 'signal_to_noise',
                                             'signal_to_detection_limit'])
 
-    for fp in filepaths:
+    for ix, fp in enumerate(filepaths):
         # Load data
         print(f"File: {fp}")
-        loaddatafile = ReadFileType(filetype='ETH-SONICREAD-BICO-MOD-CSV-20HZ',
-                                    filepath=fp,
-                                    data_nrows=None)
-        data_df, metadata_df = loaddatafile.get_filedata()
-        df = loaddatafile.data_df
+        df = pd.read_csv(fp)
 
         # Conversions
         df[h2o_col] = df[h2o_col].div(10 ** 9)  # Convert from nmol mol-1 to mol mol-1
-        df[pd_col] = df[pd_col].multiply(100)  # From hPa to Pa; R also has Pa
+        df[pd_col] = df[pd_col].multiply(1000)  # From kPa to Pa; R also has Pa
 
         fdl = FluxDetectionLimit(
             df=df,
             u_col=u_col,
             v_col=v_col,
             w_col=w_col,
-            c_col=ch4_col,
+            c_col=n2o_col,
             ta_col=ta_col,  # K; R also has K
             h2o_col=h2o_col,
             press_col=pd_col,
             lag_from=-180,  # in seconds
             lag_to=180,  # in seconds
             shift_stepsize=10,
-            sampling_rate=20)
+            sampling_rate=10)  # Hz
 
         fdl.run()
 
@@ -320,6 +325,6 @@ if __name__ == '__main__':
         print(file_results_df)
 
         # Save after each file
-        outfile = Path(OUTDIR) / 'results_CH4.csv'
+        outfile = Path(OUTDIR) / 'results_N2O.csv'
         # outfile = Path(outdir) / 'results_CH4.csv'
         file_results_df.to_csv(outfile)
