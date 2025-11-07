@@ -2,9 +2,12 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.89.1 | XX Nov 2025
+
 ## Changes
 
-- Increased percentage threshold for data required to be considered as valid time resolution (2) 
+- Increased percentage threshold for data required to be considered as valid time resolution to 0.2% (2) 
+- Added parameter `cb_extend` for colorbar extension in heatmap plots (3)
 
 ### Bugfix
 
@@ -13,6 +16,7 @@
 ### References
 - (1) `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.showplot_resampled`
 - (2) `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb._validate_n_grouprecords`
+- (3) `diive.core.plotting.heatmap_base.py`
 
 ## v0.89.0 | 23 Jul 2025
 

@@ -62,19 +62,30 @@ class FluxDetectionLimit:
     def __init__(self, df: pd.DataFrame, u_col, v_col, w_col, c_col, ta_col, h2o_col, press_col,
                  lag_from: int, lag_to: int, shift_stepsize: int, sampling_rate: int):
         self.df = df.copy()
-        self.u = self.df[u_col].copy()
-        self.v = self.df[v_col].copy()
-        self.w = self.df[w_col].copy()
-        self.c = self.df[c_col].copy()
-        self.ta = self.df[ta_col].copy()
-        self.h2o = self.df[h2o_col].copy()
-        self.press = self.df[press_col].copy()
+        self.u_col = u_col
+        self.v_col = v_col
+        self.w_col = w_col
+        self.c_col = c_col
+        self.ta_col = ta_col
+        self.h2o_col = h2o_col
+        self.press_col = press_col
 
         # Convert s to number or records,
         #   e.g. for 20Hz data (20 records = 1s): 180s * 20 = 3600 records
         self.lag_from = lag_from * sampling_rate
         self.lag_to = lag_to * sampling_rate
         self.shift_stepsize = shift_stepsize
+
+        # e = partial pressure of water vapor (Pa) = H2O mole fraction (mol mol-1) * air pressure (Pa)
+        # CAM98, p39 eq.(3.5), solve for e
+        self.e_col = 'e'
+        self.df[self.e_col] = self.df[self.h2o_col] * self.df[self.press_col]
+
+        # pd = dry air partial pressure (Pa)
+        # pd (in Pa) = pa (in Pa) - e (in Pa)
+        # SAB18, p513
+        self.pd_col = 'pd'
+        self.df[self.pd_col] = self.df[self.press_col] - self.df['e']
 
         # New variables
         self.w_prime = None
@@ -93,6 +104,8 @@ class FluxDetectionLimit:
         # Calculate covariances
         self.cov_df = self._crosscovariance()
 
+        print(self.cov_df)
+
         # Max covariance
         foundlag = self.cov_df.loc[self.cov_df['flag_peak_max_cov_abs'] == True]
 
@@ -101,6 +114,11 @@ class FluxDetectionLimit:
         self.cov_max_shift = foundlag.iloc[0]['shift']
 
         # self.cov_max_ix, self.cov_max_shift = self._max_abs_covariance(cov_df=self.cov_df)
+
+
+
+
+
 
         # Convert covariance to flux units
         self.cov_df['cov_flux'] = self.cov_df['cov'].copy()
@@ -149,9 +167,12 @@ class FluxDetectionLimit:
         return results
 
     def _turbulent_fluctuations(self):
-        r = WindRotation2D(u=self.u, v=self.v, w=self.w, c=self.c)
+        r = WindRotation2D(u=self.df[self.u_col],
+                           v=self.df[self.v_col],
+                           w=self.df[self.w_col],
+                           c=self.df[self.c_col])
         primes_df = r.get_primes()
-        return primes_df[f"{self.w.name}_TURB"], primes_df[f"{self.c.name}_TURB"]
+        return primes_df[f"{self.w_col}_TURB"], primes_df[f"{self.c_col}_TURB"]
 
     def _crosscovariance(self) -> DataFrame:
         # # 20 Hz data: 1 record = 0.05s, 20 records = 1s
@@ -163,8 +184,8 @@ class FluxDetectionLimit:
 
         mc = MaxCovariance(
             df=self.df,
-            var_reference=f"{self.w.name}_TURB",
-            var_lagged=f"{self.c.name}_TURB",
+            var_reference=f"{self.w_col}_TURB",
+            var_lagged=f"{self.c_col}_TURB",
             lgs_winsize_from=self.lag_from,
             lgs_winsize_to=self.lag_to,
             shift_stepsize=self.shift_stepsize,
@@ -174,21 +195,8 @@ class FluxDetectionLimit:
         mc.run()
         cov_df, props_peak_auto = mc.get()
 
-        mc.plot_scatter_cov(title="Covariance vs time lag")
+        # mc.plot_scatter_cov(title="Covariance vs time lag")
 
-        # # Old: todo delete
-        # cov_df = pd.DataFrame(columns=['shift', 'cov', 'cov_flux', 'cov_abs'])
-        # # Complete lag range
-        # lagrange = range(self.lag_from, abs(self.lag_from), self.shift_stepsize)
-        # cov_df['shift'] = Series(lagrange)
-        #
-        # for ix, row in cov_df.iterrows():
-        #     shift = row['shift']
-        #     cov = self.w_prime.cov(self.c_prime.shift(shift))
-        #     cov_df.loc[cov_df['shift'] == row['shift'], 'cov'] = cov
-        # cov_df['cov'] = cov_df['cov'].astype(float)
-        # cov_df['cov_abs'] = cov_df['cov'].abs()
-        # # cov_df.loc[cov_max_ix, 'flag_peak_max_cov_abs'] = True
         return cov_df
 
     def _flux_conversion_factor(self, cov_df: DataFrame) -> Series:
@@ -202,18 +210,10 @@ class FluxDetectionLimit:
                 pd  ... dry air partial pressure, Pa
 
         From STR20:
-        # calculate conversion factor for flux in nmol/m^2/s
-        flux_conversion_factor = 1/( (T_mean/273.15) * (1013.25/p_mean) * 22.414e-3 );
+            Calculate conversion factor for flux in nmol m-2 s-1
+            flux_conversion_factor = 1/( (T_mean/273.15) * (1013.25/p_mean) * 22.414e-3 );
 
         """
-        # Partial pressure of water vapor (Pa) (CAM98, p39, eq.(3.5), see their example)
-        #   "The mole fraction of a gas can be calculated as the ratio of its partial pressure
-        #   and the total atmospheric pressure."
-
-        e = self.h2o * self.press
-
-        # Dry air partial pressure (Pa) (SAB18, p513)
-        pd = self.press - e
 
         # Flux conversion factor, SAB18, eq.(16)
         flux_conversion_factor = 1 / ((self.R * self.ta) / pd)
@@ -273,11 +273,10 @@ if __name__ == '__main__':
     u_col = 'x'  # m s-1
     v_col = 'y'  # m s-1
     w_col = 'z'  # m s-1
-    n2o_col = 'N2Od'  # should be dry mole fraction in nmol mol-1 (ppb)
-    # ch4_col = 'CH4_DRY_[QCL-C2]'  # dry mole fraction in nmol mol-1 (ppb)
-    h2o_col = 'H2O'  # nmol mol-1 (ppb)
-    pd_col = 'CellP'  # hPa, but will be converted to Pa
-    ta_col = 'CellT'  # K, we use this as air temperature for now
+    n2o_col = 'N2Od'  # dry umol mol-1 (ppm), but must be dry mole fraction in nmol mol-1 (ppb)
+    h2o_col = 'H2O'  # umol mol-1 (ppm)
+    pd_col = 'CellP'  # Torr, hPa, but will be converted to Pa
+    ta_col = 'CellT'  # °C, K, we use this as air temperature for now
 
     file_results_df = pd.DataFrame(columns=['file',
                                             'flux_detection_limit', 'flux_noise_rmse',
@@ -285,23 +284,29 @@ if __name__ == '__main__':
                                             'signal_to_detection_limit'])
 
     for ix, fp in enumerate(filepaths):
+
+        if ix > 5:
+            break
+
         # Load data
         print(f"File: {fp}")
         df = pd.read_csv(fp)
 
         # Conversions
-        df[h2o_col] = df[h2o_col].div(10 ** 9)  # Convert from nmol mol-1 to mol mol-1
-        df[pd_col] = df[pd_col].multiply(1000)  # From kPa to Pa; R also has Pa
+        df[n2o_col] = df[n2o_col].multiply(10 ** 3)  # Convert from umol mol-1 to nmol mol-1
+        df[h2o_col] = df[h2o_col].div(10 ** 6)  # Convert from mmol mol-1 to mol mol-1
+        df[pd_col] = df[pd_col].multiply(133.322)  # From Torr to Pa
+        df[ta_col] = df[ta_col].add(273.15)  # From degC to K
 
         fdl = FluxDetectionLimit(
             df=df,
-            u_col=u_col,
-            v_col=v_col,
-            w_col=w_col,
-            c_col=n2o_col,
-            ta_col=ta_col,  # K; R also has K
-            h2o_col=h2o_col,
-            press_col=pd_col,
+            u_col=u_col,  # m s-1
+            v_col=v_col,  # m s-1
+            w_col=w_col,  # m s-1
+            c_col=n2o_col,  # nmol mol-1 (ppb)
+            ta_col=ta_col,  # degC
+            h2o_col=h2o_col,  # mol mol-1
+            press_col=pd_col,  # Pa
             lag_from=-180,  # in seconds
             lag_to=180,  # in seconds
             shift_stepsize=10,
@@ -322,9 +327,11 @@ if __name__ == '__main__':
         ]
         file_results_df.loc[len(file_results_df)] = new_results
 
-        print(file_results_df)
+        # print(file_results_df)
 
         # Save after each file
         outfile = Path(OUTDIR) / 'results_N2O.csv'
         # outfile = Path(outdir) / 'results_CH4.csv'
         file_results_df.to_csv(outfile)
+
+    print(file_results_df)
