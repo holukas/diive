@@ -1,3 +1,4 @@
+
 """
 FLUX DETECTION LIMIT
 ====================
@@ -21,7 +22,7 @@ FLUX DETECTION LIMIT
 
     (MAM16) Mammarella, I., Peltola, O., Nordbo, A., Järvi, L., & Rannik, Ü. (2016). Quantifying
         the uncertainty of eddy covariance fluxes due to the use ofdifferent software packages
-        and combinations of processing steps in twocontrasting ecosystems. Atmospheric Measurement
+        and combinations of processing steps in two contrasting ecosystems. Atmospheric Measurement
         Techniques, 9(10), 4915–4933. https://doi.org/10.5194/amt-9-4915-2016
 
     (NEM18) Nemitz, E., Mammarella, I., Ibrom, A., Aurela, M., Burba, G. G., Dengel, S., Gielen, B., Grelle,
@@ -45,23 +46,37 @@ FLUX DETECTION LIMIT
 
 
 """
-
+import numbers
+import time
 import math
 from pathlib import Path
 
 import pandas as pd
-from pandas import Series, DataFrame
+from pandas import DataFrame
 
 from diive.pkgs.echires.lag import MaxCovariance
 from diive.pkgs.echires.windrotation import WindRotation2D
 
 
 class FluxDetectionLimit:
-    R = 8.31446261815324  # Universal gas constant, m3 Pa K-1 mol-1
 
-    def __init__(self, df: pd.DataFrame, u_col, v_col, w_col, c_col, ta_col, h2o_col, press_col,
-                 lag_from: int, lag_to: int, shift_stepsize: int, sampling_rate: int):
-        self.df = df.copy()
+    def __init__(
+            self,
+            df: pd.DataFrame,
+            u_col: str,
+            v_col: str,
+            w_col: str,
+            c_col: str,
+            ta_col: str,
+            h2o_col: str,
+            press_col: str,
+            default_lag: int,
+            noise_range: int,
+            lag_range: list,
+            lag_stepsize: int,
+            sampling_rate: int
+    ):
+        self.hires_df = df.copy()
         self.u_col = u_col
         self.v_col = v_col
         self.w_col = w_col
@@ -69,67 +84,66 @@ class FluxDetectionLimit:
         self.ta_col = ta_col
         self.h2o_col = h2o_col
         self.press_col = press_col
+        self.noise_range = noise_range
+        self.lag_range = lag_range
+        self.default_lag = default_lag
+        self.lag_stepsize = lag_stepsize
+        self.sampling_rate = sampling_rate
 
         # Convert s to number or records,
         #   e.g. for 20Hz data (20 records = 1s): 180s * 20 = 3600 records
-        self.lag_from = lag_from * sampling_rate
-        self.lag_to = lag_to * sampling_rate
-        self.shift_stepsize = shift_stepsize
+        self.lag_from = lag_range[0] * sampling_rate
+        self.lag_to = lag_range[1] * sampling_rate
 
+        # Calculate e
         # e = partial pressure of water vapor (Pa) = H2O mole fraction (mol mol-1) * air pressure (Pa)
         # CAM98, p39 eq.(3.5), solve for e
         self.e_col = 'e'
-        self.df[self.e_col] = self.df[self.h2o_col] * self.df[self.press_col]
+        self.hires_df[self.e_col] = self.hires_df[self.h2o_col] * self.hires_df[self.press_col]
 
+        # Calculate pd
         # pd = dry air partial pressure (Pa)
         # pd (in Pa) = pa (in Pa) - e (in Pa)
         # SAB18, p513
         self.pd_col = 'pd'
-        self.df[self.pd_col] = self.df[self.press_col] - self.df['e']
+        self.hires_df[self.pd_col] = self.hires_df[self.press_col] - self.hires_df['e']
 
         # New variables
-        self.w_prime = None
-        self.c_prime = None
         self.cov_df = pd.DataFrame()
-        self.cov_max_ix = None
-        self.cov_max_shift = None
+        self.results = {}
 
     def run(self):
 
         # Calculate turbulent fluctuations
-        self.w_prime, self.c_prime = self._turbulent_fluctuations()
-        self.df[self.w_prime.name] = self.w_prime
-        self.df[self.c_prime.name] = self.c_prime
+        self.hires_df = self._turbulent_fluctuations(df=self.hires_df)
 
         # Calculate covariances
-        self.cov_df = self._crosscovariance()
+        self.cov_df, cov_max_ix, cov_max_shift = self._crosscovariance(showplot=False)
 
-        print(self.cov_df)
-
-        # Max covariance
-        foundlag = self.cov_df.loc[self.cov_df['flag_peak_max_cov_abs'] == True]
-
-        # Location of max abs covariance
-        self.cov_max_ix = foundlag.index[0]
-        self.cov_max_shift = foundlag.iloc[0]['shift']
-
-        # self.cov_max_ix, self.cov_max_shift = self._max_abs_covariance(cov_df=self.cov_df)
-
-
-
-
-
-
+        # Flux conversion factor
         # Convert covariance to flux units
         self.cov_df['cov_flux'] = self.cov_df['cov'].copy()
-        self.cov_df['cov_flux'] = self._flux_conversion_factor(cov_df=self.cov_df)  # todo check
+        self.cov_df = self._flux_conversion_factor(cov_df=self.cov_df)
 
-        self.flux_detection_limit, self.flux_noise_rmse = self._flux_detection_limit(cov_df=self.cov_df.copy())
+        # Flux detection limit
+        flux_detection_limit, flux_noise_rmse = self._flux_detection_limit(cov_df=self.cov_df.copy())
 
-        if self.cov_max_ix:
-            self.flux = self.cov_df.iloc[self.cov_max_ix]['cov_flux']
-        self.signal_to_noise = abs(self.flux) / self.flux_noise_rmse if self.flux else None
-        self.signal_to_detection_limit = abs(self.flux) / self.flux_detection_limit if self.flux else None
+        if isinstance(cov_max_ix, numbers.Integral):
+            flux = self.cov_df.iloc[cov_max_ix]['cov_flux']
+        else:
+            raise Exception("No max abs covariance found")
+        signal_to_noise = abs(flux) / flux_noise_rmse if flux else None
+        signal_to_detection_limit = abs(flux) / flux_detection_limit if flux else None
+
+        self.results = {
+            'flux_detection_limit': flux_detection_limit,
+            'flux_noise_rmse': flux_noise_rmse,
+            'cov_max_ix': cov_max_ix,
+            'cov_max_shift': cov_max_shift,
+            'flux_signal_at_cov_max_shift': flux,
+            'signal_to_noise': signal_to_noise,
+            'signal_to_detection_limit': signal_to_detection_limit
+        }
 
     def _max_abs_covariance(self, cov_df: DataFrame):
         """Get index of max covariance and respective lag time (shift in records)"""
@@ -155,26 +169,18 @@ class FluxDetectionLimit:
         return subset_cov_max_ix, subset_cov_max_shift
 
     def get_detection_limit(self) -> dict:
-        results = {
-            'flux_detection_limit': self.flux_detection_limit,
-            'flux_noise_rmse': self.flux_noise_rmse,
-            'cov_max_ix': self.cov_max_ix,
-            'cov_max_shift': self.cov_max_shift,
-            'flux_signal_at_cov_max_shift': self.flux,
-            'signal_to_noise': self.signal_to_noise,
-            'signal_to_detection_limit': self.signal_to_detection_limit
-        }
-        return results
+        return self.results
 
-    def _turbulent_fluctuations(self):
-        r = WindRotation2D(u=self.df[self.u_col],
-                           v=self.df[self.v_col],
-                           w=self.df[self.w_col],
-                           c=self.df[self.c_col])
+    def _turbulent_fluctuations(self, df: pd.DataFrame) -> pd.DataFrame:
+        r = WindRotation2D(u=df[self.u_col],
+                           v=df[self.v_col],
+                           w=df[self.w_col],
+                           c=df[self.c_col])
         primes_df = r.get_primes()
-        return primes_df[f"{self.w_col}_TURB"], primes_df[f"{self.c_col}_TURB"]
+        df = pd.concat([df, primes_df], axis=1)
+        return df
 
-    def _crosscovariance(self) -> DataFrame:
+    def _crosscovariance(self, showplot: bool) -> tuple[pd.DataFrame, int, int]:
         # # 20 Hz data: 1 record = 0.05s, 20 records = 1s
         # # we want to shift from -180s to -160s and from +160s to +180s
         # sampling_rate = 20  # Hz
@@ -182,43 +188,60 @@ class FluxDetectionLimit:
         # lag_to = -160 * sampling_rate
         # shift_stepsize = 1
 
+        start_time = time.perf_counter()
         mc = MaxCovariance(
-            df=self.df,
+            df=self.hires_df,
             var_reference=f"{self.w_col}_TURB",
             var_lagged=f"{self.c_col}_TURB",
             lgs_winsize_from=self.lag_from,
             lgs_winsize_to=self.lag_to,
-            shift_stepsize=self.shift_stepsize,
+            shift_stepsize=self.lag_stepsize,
             segment_name="cross-covariance"
         )
 
         mc.run()
+        end_time = time.perf_counter()
+        elapsed_time_seconds = end_time - start_time
+        print(f"Time needed for covariance calculation: {elapsed_time_seconds:0.3f}s")
         cov_df, props_peak_auto = mc.get()
 
-        # mc.plot_scatter_cov(title="Covariance vs time lag")
+        if showplot:
+            mc.plot_scatter_cov(title="Covariance vs time lag")
 
-        return cov_df
+        # Max covariance
+        foundlag = cov_df.loc[cov_df['flag_peak_max_cov_abs'] == True]
 
-    def _flux_conversion_factor(self, cov_df: DataFrame) -> Series:
+        # Location of max abs covariance
+        cov_max_ix = foundlag.index[0]
+        cov_max_shift = foundlag.iloc[0]['shift']
+
+        return cov_df, cov_max_ix, cov_max_shift
+
+    def _flux_conversion_factor(self, cov_df: DataFrame) -> pd.DataFrame:
         """Calculate flux conversion factor
 
         Conversion from covariances to flux units:
             see SAB18, eq.(16) (or similar: MAM16, eq.(2))
             flux_conversion_factor = 1 / ( (R Ta) / pd)   [same as: 1 / ( (Ta / pd) * R )]
-                Ta  ... air temperature, K (in SAB18 degC were used)
+                Ta  ... air temperature, K
                 R   ... Universal gas constant, m3 Pa K-1 mol-1
                 pd  ... dry air partial pressure, Pa
 
-        From STR20:
+        From STR20 (innFLUX script):
             Calculate conversion factor for flux in nmol m-2 s-1
             flux_conversion_factor = 1/( (T_mean/273.15) * (1013.25/p_mean) * 22.414e-3 );
+            They achieve the identical result (the dry air molar density),
+            but the innFLUX script expresses the conversion as a ratio against STP reference
+            conditions, while SAB18 uses the direct P/RT Ideal Gas Law formulation.
 
         """
-
         # Flux conversion factor, SAB18, eq.(16)
-        flux_conversion_factor = 1 / ((self.R * self.ta) / pd)
-        flux_conversion_factor = flux_conversion_factor.mean()  # Use overall mean
-        return cov_df['cov'] * flux_conversion_factor
+        R = 8.31446261815324  # Universal gas constant, m3 Pa K-1 mol-1
+        ta_mean = self.hires_df[self.ta_col].mean()  # K
+        pd_mean = self.hires_df[self.pd_col].mean()  # Pa
+        flux_conversion_factor = 1 / ((R * ta_mean) / pd_mean)
+        cov_df['cov_flux'] = cov_df['cov'] * flux_conversion_factor
+        return cov_df
 
     def _flux_detection_limit(self, cov_df: DataFrame):
         """Calculate flux detection limit
@@ -232,7 +255,8 @@ class FluxDetectionLimit:
         # from +3200 to +3600 (+160 to +180s)
 
         # 20s @ 20Hz = 20 * 20 = 400 records
-        winsize = 20 * 20
+        # 20s @ 10Hz = 20 * 10 = 200 records
+        winsize = self.noise_range * self.sampling_rate
 
         # LAN15, eq.(9)
         # Left lag window
@@ -265,18 +289,17 @@ if __name__ == '__main__':
     INDIR = [r'F:\Sync\luhk_work\CURRENT\flux_detection_limit\raw']
     OUTDIR = r'F:\Sync\luhk_work\CURRENT\flux_detection_limit\OUT'
 
-    # Search & merge high-res data files (30MIN files in this example)
+    # Search high-res data files (30MIN files in this example)
     filepaths = search_files(INDIR, "*.txt")
-    # print(filepaths)
 
     # Column names
     u_col = 'x'  # m s-1
     v_col = 'y'  # m s-1
     w_col = 'z'  # m s-1
     n2o_col = 'N2Od'  # dry umol mol-1 (ppm), but must be dry mole fraction in nmol mol-1 (ppb)
-    h2o_col = 'H2O'  # umol mol-1 (ppm)
-    pd_col = 'CellP'  # Torr, hPa, but will be converted to Pa
-    ta_col = 'CellT'  # °C, K, we use this as air temperature for now
+    h2o_col = 'H2O'  # umol mol-1 (ppm), but needs to be in mol mol-1 (ppt)
+    press_col = 'Pressure'  # Pa, example value
+    ta_col = 'Ts'  # °C
 
     file_results_df = pd.DataFrame(columns=['file',
                                             'flux_detection_limit', 'flux_noise_rmse',
@@ -285,17 +308,19 @@ if __name__ == '__main__':
 
     for ix, fp in enumerate(filepaths):
 
-        if ix > 5:
-            break
+        # todo testing
+        # if ix != 59:
+        #     continue
 
         # Load data
-        print(f"File: {fp}")
+        print(f"Reading file #{ix}: {fp} ...")
         df = pd.read_csv(fp)
 
         # Conversions
         df[n2o_col] = df[n2o_col].multiply(10 ** 3)  # Convert from umol mol-1 to nmol mol-1
         df[h2o_col] = df[h2o_col].div(10 ** 6)  # Convert from mmol mol-1 to mol mol-1
-        df[pd_col] = df[pd_col].multiply(133.322)  # From Torr to Pa
+        df[press_col] = 100_000  # Pa, example value
+        # df[press_col] = df[press_col].multiply(133.322)  # From Torr to Pa
         df[ta_col] = df[ta_col].add(273.15)  # From degC to K
 
         fdl = FluxDetectionLimit(
@@ -306,10 +331,11 @@ if __name__ == '__main__':
             c_col=n2o_col,  # nmol mol-1 (ppb)
             ta_col=ta_col,  # degC
             h2o_col=h2o_col,  # mol mol-1
-            press_col=pd_col,  # Pa
-            lag_from=-180,  # in seconds
-            lag_to=180,  # in seconds
-            shift_stepsize=10,
+            press_col=press_col,  # Pa
+            noise_range=20,  # seconds
+            default_lag=-3,  # seconds
+            lag_range=[-180, 180],  # seconds
+            lag_stepsize=10,
             sampling_rate=10)  # Hz
 
         fdl.run()
@@ -334,4 +360,4 @@ if __name__ == '__main__':
         # outfile = Path(outdir) / 'results_CH4.csv'
         file_results_df.to_csv(outfile)
 
-    print(file_results_df)
+    # print(file_results_df)

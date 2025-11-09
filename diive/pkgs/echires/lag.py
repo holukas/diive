@@ -2,6 +2,7 @@ import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import polars as pl
 from matplotlib.collections import LineCollection
 from pandas import DataFrame
 from scipy.signal import find_peaks
@@ -84,8 +85,6 @@ class MaxCovariance:
             self.get_peak_idx(cov_df=self.cov_df, flag_col='flag_peak_max_cov_abs')
         self.idx_peak_auto = \
             self.get_peak_idx(cov_df=self.cov_df, flag_col='flag_peak_auto')
-        self.idx_instantaneous_default_lag = \
-            self.get_peak_idx(cov_df=self.cov_df, flag_col='flag_instantaneous_default_lag')
 
     def _setup_lagsearch_df(self) -> DataFrame:
         """
@@ -95,19 +94,17 @@ class MaxCovariance:
         -------
         pandas DataFrame prepared for storing segment lag search results
         """
-        df = DataFrame(columns=['index', 'segment_name', 'shift', 'cov', 'cov_abs',
+        df = DataFrame(columns=['segment_name', 'shift', 'cov', 'cov_abs',
                                 'flag_peak_max_cov_abs', 'flag_peak_auto'])
         df['shift'] = range(int(self.lgs_winsize_from),
                             int(self.lgs_winsize_to) + self.shift_stepsize,
                             self.shift_stepsize)
-        df['index'] = pd.NaT
-        # df['index'] = np.nan
+        # df['index'] = pd.NaT
         df['segment_name'] = self.segment_name
         df['cov'] = np.nan
         df['cov_abs'] = np.nan
         df['flag_peak_max_cov_abs'] = False  # Flag True = found peak
         df['flag_peak_auto'] = False
-        df['flag_instantaneous_default_lag'] = False
         return df
 
     def find_auto_peak(self):
@@ -172,66 +169,112 @@ class MaxCovariance:
         pandas DataFrame with segment lag search results
         """
 
-        cov_df = self.cov_df.copy()
+        # Convert inputs to Polars for processing
+        # We only need the core data columns and the shifts
+        pl_df = pl.DataFrame(self.df[[self.var_reference, self.var_lagged]])
+        pl_cov_df = pl.DataFrame(self.cov_df[['shift']])
 
-        _index = self.df.index.copy()
-        _var_lagged = self.df[self.var_lagged].copy()
-        _var_reference = self.df[self.var_reference].copy()
+        # Rename columns for clarity in Polars
+        ref_col = self.var_reference
+        lagged_col = self.var_lagged
+        pl_df = pl_df.rename({ref_col: "reference", lagged_col: "lagged"})
 
-        # Check if data column is empty
-        if _var_lagged.dropna().empty:
-            pass
+        # Join the shifts onto the main data (Cartesian product)
+        # This creates a row for every combination of (data point, shift value)
+        pl_with_shifts = pl_df.join(pl_cov_df, how="cross")
 
-        else:
+        # Group by the 'shift' value and calculate the covariance within each group
+        # for the lagged column relative to the reference column.
+        pl_results = (
+            pl_with_shifts.group_by("shift")
+            .agg(
+                # Calculate covariance between the 'reference' column and the 'lagged' column
+                # shifted by the current group's 'shift' value.
+                pl.cov("reference", pl.col("lagged").shift(pl.first("shift"))).alias("cov")
+            )
+            # The 'index' and 'cov_abs' columns still need to be calculated/added
+            .with_columns(
+                # Calculate absolute covariance
+                pl.col("cov").abs().alias("cov_abs")
+            )
+            .sort("shift")  # Sort to match original output order
+        )
 
-            # start_time = time.time()
+        # Convert the results back to Pandas for the final steps
+        cov_df_new = pl_results.to_pandas()
 
-            for ix, row in cov_df.iterrows():
-                shift = int(row['shift'])
-                try:
-                    if shift < 0:
-                        index_shifted = _index[-shift]  # Note the negative sign
-                    else:
-                        # todo why time?
-                        index_shifted = pd.NaT
+        # Merge the new cov and cov_abs columns into the original cov_df structure
+        cov_df = self.cov_df.drop(columns=['cov', 'cov_abs'], errors='ignore')
+        cov_df = cov_df.merge(cov_df_new, on='shift', how='left')
 
-                    # Shift and calculate covariance (pandas)
-                    _scalar_data_shifted = _var_lagged.shift(shift)
-                    cov = _var_reference.cov(_scalar_data_shifted)
+        # Find the maximum absolute covariance
+        cov_max_ix = cov_df['cov_abs'].idxmax()
+        cov_df.loc[cov_max_ix, 'flag_peak_max_cov_abs'] = True
 
-                    # # Shift and calculate covariance (numpy)
-                    # # As an alternative, covariance can be calculated using numpy. While
-                    # # this approach might be faster in many cases, it is slower here, I
-                    # # assume because of the presence of NaNs in the data that have to be
-                    # # masked first.
-                    # # Requires masking the NaN values in _scalar_data_shifted_array.
-                    # _scalar_data_shifted = _var_lagged.shift(shift)
-                    # _var_reference_array = _var_reference.values
-                    # _scalar_data_shifted_array = _scalar_data_shifted.values
-                    # _masked_scalar_data_shifted_array = (
-                    #     np.ma.array(_scalar_data_shifted_array, mask=np.isnan(_scalar_data_shifted_array)))
-                    # # Calculating the covariance, extract from covariance matrix
-                    # cov = np.ma.cov(_var_reference_array, _masked_scalar_data_shifted_array)[0,1]
-
-                    cov_df.loc[cov_df['shift'] == row['shift'], 'cov'] = cov
-                    cov_df.loc[cov_df['shift'] == row['shift'], 'index'] = index_shifted
-
-                except IndexError:
-                    # If not enough data in the file to perform the shift, continue
-                    # to the next shift and try again. This can happen for the last
-                    # segments in each file, when there is no more data available
-                    # at the end.
-                    continue
-
-            # # Timing (for testing)
-            # end_time = time.time()
-            # execution_time = end_time - start_time
-            # print(f"Function execution time: {execution_time:.6f} seconds")
-
-            # Results
-            cov_df['cov_abs'] = cov_df['cov'].abs()
-            cov_max_ix = cov_df['cov_abs'].idxmax()
-            cov_df.loc[cov_max_ix, 'flag_peak_max_cov_abs'] = True
+        # cov_df = self.cov_df.copy()
+        #
+        # _index = self.df.index.copy()
+        # _var_lagged = self.df[self.var_lagged].copy()
+        # _var_reference = self.df[self.var_reference].copy()
+        #
+        # # Check if data column is empty
+        # if _var_lagged.dropna().empty:
+        #     pass
+        #
+        # else:
+        #
+        #     # start_time = time.time()
+        #
+        #     for ix, row in cov_df.iterrows():
+        #         shift = int(row['shift'])
+        #         try:
+        #             if shift < 0:
+        #                 index_shifted = _index[-shift]  # Note the negative sign
+        #             else:
+        #                 # todo why time?
+        #                 index_shifted = pd.NaT
+        #
+        #             # Shift and calculate covariance (pandas)
+        #             _scalar_data_shifted = _var_lagged.shift(shift)
+        #             cov = _var_reference.cov(_scalar_data_shifted)
+        #
+        #             # # Shift and calculate covariance (numpy)
+        #             # # As an alternative, covariance can be calculated using numpy. While
+        #             # # this approach might be faster in many cases, it is slower here, I
+        #             # # assume because of the presence of NaNs in the data that have to be
+        #             # # masked first.
+        #             # # Requires masking the NaN values in _scalar_data_shifted_array.
+        #             # _scalar_data_shifted = _var_lagged.shift(shift)
+        #             # _var_reference_array = _var_reference.values
+        #             # _scalar_data_shifted_array = _scalar_data_shifted.values
+        #             # _masked_scalar_data_shifted_array = (
+        #             #     np.ma.array(_scalar_data_shifted_array, mask=np.isnan(_scalar_data_shifted_array)))
+        #             # # Calculating the covariance, extract from covariance matrix
+        #             # cov = np.ma.cov(_var_reference_array, _masked_scalar_data_shifted_array)[0,1]
+        #
+        #             cov_df.loc[cov_df['shift'] == row['shift'], 'cov'] = cov
+        #             cov_df.loc[cov_df['shift'] == row['shift'], 'index'] = index_shifted
+        #
+        #         except IndexError:
+        #             # If not enough data in the file to perform the shift, continue
+        #             # to the next shift and try again. This can happen for the last
+        #             # segments in each file, when there is no more data available
+        #             # at the end.
+        #             continue
+        #
+        #     # # Timing (for testing)
+        #     # end_time = time.time()
+        #     # execution_time = end_time - start_time
+        #     # print(f"Function execution time: {execution_time:.6f} seconds")
+        #
+        #     # Results
+        #     cov_df['cov_abs'] = cov_df['cov'].abs()
+        #     cov_max_ix = cov_df['cov_abs'].idxmax()
+        #
+        #     # todo Limit time range for accepted max cov
+        #     # if -100 < cov_df.loc[cov_max_ix, 'shift'] < 0:
+        #     #     cov_df.loc[cov_max_ix, 'flag_peak_max_cov_abs'] = True
+        #     cov_df.loc[cov_max_ix, 'flag_peak_max_cov_abs'] = True
 
         return cov_df
 
@@ -455,7 +498,6 @@ class MaxCovariance:
 
 def example():
     from pathlib import Path
-    from diive.core.io.filereader import ReadFileType
     from diive.core.io.filereader import search_files
 
     OUTDIR = r'P:\Flux\RDS_calculations\DEG_EddyMercury\Magic file for Diive\OUT'
@@ -537,6 +579,7 @@ def example():
         lag = cov_df.iloc[foundlag.index]['shift']
         lag = lag.tolist()[0]
         print(lag)
+
 
 if __name__ == '__main__':
     example()

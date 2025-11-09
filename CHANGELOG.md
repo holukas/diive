@@ -6,7 +6,9 @@
 
 ## Changes
 
-- Increased percentage threshold for data required to be considered as valid time resolution to 0.2% (2) 
+- Maximum covariance for high-res eddy covariance data is now calculated using the library [polars](https://pola.rs/)
+  for faster calculations (3x faster on half-hourly 10Hz data) (4)
+- Increased percentage threshold for data required to be considered as valid time resolution to 0.2% (2)
 - Added parameter `cb_extend` for colorbar extension in heatmap plots (3)
 
 ### Bugfix
@@ -14,9 +16,11 @@
 - Fixed wrong parameter name for min/max ticks (1)
 
 ### References
+
 - (1) `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.showplot_resampled`
 - (2) `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb._validate_n_grouprecords`
 - (3) `diive.core.plotting.heatmap_base.py`
+- (4) `diive.pkgs.echires.lag.MaxCovariance._find_max_cov_peak`
 
 ## v0.89.0 | 23 Jul 2025
 
