@@ -1,4 +1,3 @@
-
 """
 FLUX DETECTION LIMIT
 ====================
@@ -46,19 +45,114 @@ FLUX DETECTION LIMIT
 
 
 """
+import math
 import numbers
 import time
-import math
 from pathlib import Path
 
 import pandas as pd
 from pandas import DataFrame
 
+from diive.pkgs.createvar.conversions import air_temp_from_sonic_temp
 from diive.pkgs.echires.lag import MaxCovariance
 from diive.pkgs.echires.windrotation import WindRotation2D
 
 
 class FluxDetectionLimit:
+    """Calculates the flux detection limit from high-resolution eddy covariance data.
+
+    This class implements the method described by Langford et al. (2015) to
+    determine the flux detection limit (FDL) and signal-to-noise ratio for
+    a given scalar flux (e.g., N2O, CH4).
+
+    The FDL is calculated based on the noise in the cross-covariance function
+    at large time lags, which are assumed to be uncorrelated with the turbulent
+    flux. The flux noise is quantified as the Root Mean Square Error (RMSE)
+    of the covariances in these "noise" windows (e.g., +/- 160-180s). The FDL
+    is then defined as 3 * RMSE.
+
+    The implementation follows the methodology used in Striednig et al. (2020)
+    for the noise RMSE calculation (based on LAN15, eq. 9) and Sabbatini et al.
+    (2018) for the flux conversion factor.
+
+    The class processes a pandas DataFrame of high-resolution (e.g., 10Hz or
+    20Hz) eddy covariance data.
+
+    The main workflow executed by the `run()` method is:
+    1.  Convert sonic temperature to air temperature.
+    2.  Calculate turbulent fluctuations (primes) via 2D wind rotation.
+    3.  Compute the full cross-covariance function between vertical wind (w')
+        and the scalar (c') over the specified `lag_range`.
+    4.  Convert covariance to physical flux units (e.g., nmol m-2 s-1)
+        using the mean air temperature and dry air pressure.
+    5.  Calculate the noise RMSE from the covariance function at the large
+        lag windows defined by `lag_range` and `noise_range`.
+    6.  Determine the FDL (3 * RMSE).
+    7.  Find the maximum covariance (the flux signal) and calculate
+        signal-to-noise ratios.
+
+    Args:
+        df (pd.DataFrame): High-resolution time series data,
+            e.g., a half-hourly eddy covariance raw data file.
+        u_col (str): Column name for the u component of wind speed (m s-1).
+        v_col (str): Column name for the v component of wind speed (m s-1).
+        w_col (str): Column name for the w component of wind speed (m s-1).
+        c_col (str): Column name for the scalar concentration
+            e.g., N2O in nmol mol-1, but it can also be any other scalar
+            such as CO2 in umol mol-1. The units affect the units of the
+            FDL, for N2O FDL would be nmol m-2 s-1, for CO2 it would be
+            umol m-2 s-1, etc.
+        ts_col (str): Column name for the sonic temperature (K).
+            Note: This is converted to air temperature internally.
+        h2o_col (str): Column name for the H2O mole fraction (mol mol-1).
+        press_col (str): Column name for the air pressure (Pa).
+        default_lag (int): The default time lag (in seconds) to use for the
+            calculation of the "signal" in the signal-to-noise ratio.
+        noise_range (int): The width of the time window (in seconds) at the
+            edges of the lag range used to calculate noise (e.g., 20s).
+            This means that if the lag range is [-180, 180] (in seconds),
+            then the noise will be calculated between -180 and -160s and
+            then again between +160 and +180s.
+        lag_range (list): A two-element list specifying the total time lag
+            range [min, max] (in seconds) for the covariance calculation
+            (e.g., [-180, 180] will calculate all covariances between -180s
+            and +180s).
+        lag_stepsize (int): The step size (in records) for iterating
+            through the covariance lag search. Note that this is given as
+            number of records, not seconds.
+        sampling_rate (int): The data sampling rate (in Hz), e.g., 20 for 20Hz.
+
+    Attributes:
+        hires_df (pd.DataFrame): A copy of the input DataFrame with added
+            calculated columns (e.g., 'e', 'pd', primes for w and c).
+        cov_df (pd.DataFrame): A DataFrame holding the results of the
+            cross-covariance calculation, including shifts (lags in records),
+            covariance values, and flux-converted values.
+        results (dict): A dictionary containing the final calculated results
+            after `run()` is called. Keys include:
+            - 'flux_detection_limit'
+            - 'flux_noise_rmse'
+            - 'cov_max_ix' (index of max covariance)
+            - 'cov_max_shift' (lag in records of max covariance)
+            - 'flux_signal_at_cov_max_shift'
+            - 'signal_to_noise'
+            - 'signal_to_detection_limit'
+
+    References:
+        (LAN15) Langford, B., et al. (2015). Eddy-covariance
+            data with low signal-to-noise ratio: Time-lag determination,
+            uncertainties and limit of detection. Atmospheric Measurement
+            Techniques, 8(10), 4197–4213.
+
+        (SAB18) Sabbatini, S., et al. (2018). Eddy covariance raw data
+            processing for CO2 and energy fluxes calculation at ICOS
+            ecosystem stations. International Agrophysics, 32(4), 495–515.
+
+        (STR20) Striednig, M., et al. (2020). InnFLUX – an open-source
+            code for conventional and disjunct eddy covariance analysis of
+            trace gas measurements: An urban test case. Atmospheric
+            Measurement Techniques, 13(3), 1447–1465.
+    """
 
     def __init__(
             self,
@@ -67,7 +161,7 @@ class FluxDetectionLimit:
             v_col: str,
             w_col: str,
             c_col: str,
-            ta_col: str,
+            ts_col: str,
             h2o_col: str,
             press_col: str,
             default_lag: int,
@@ -81,7 +175,7 @@ class FluxDetectionLimit:
         self.v_col = v_col
         self.w_col = w_col
         self.c_col = c_col
-        self.ta_col = ta_col
+        self.ts_col = ts_col
         self.h2o_col = h2o_col
         self.press_col = press_col
         self.noise_range = noise_range
@@ -108,6 +202,10 @@ class FluxDetectionLimit:
         self.pd_col = 'pd'
         self.hires_df[self.pd_col] = self.hires_df[self.press_col] - self.hires_df['e']
 
+        # Convert sonic temperature (K) to air temperature (K)
+        self.hires_df[ts_col] = (
+            air_temp_from_sonic_temp(sonic_temp=self.hires_df[ts_col], h2o=self.hires_df[self.h2o_col]))
+
         # New variables
         self.cov_df = pd.DataFrame()
         self.results = {}
@@ -129,7 +227,11 @@ class FluxDetectionLimit:
         flux_detection_limit, flux_noise_rmse = self._flux_detection_limit(cov_df=self.cov_df.copy())
 
         if isinstance(cov_max_ix, numbers.Integral):
-            flux = self.cov_df.iloc[cov_max_ix]['cov_flux']
+            # Calculate flux at default lag, this is the "signal" in the signal-to-noise ratio
+            # Default lag is given as seconds, here it is converted to shift of "number of records", i.e.,
+            # by how many records the time series needs to be shifted in one direction.
+            flux = self.cov_df.loc[self.cov_df['shift'] == -self.default_lag * self.sampling_rate]['cov_flux'].values[0]
+            # flux = self.cov_df.iloc[cov_max_ix]['cov_flux']
         else:
             raise Exception("No max abs covariance found")
         signal_to_noise = abs(flux) / flux_noise_rmse if flux else None
@@ -237,7 +339,7 @@ class FluxDetectionLimit:
         """
         # Flux conversion factor, SAB18, eq.(16)
         R = 8.31446261815324  # Universal gas constant, m3 Pa K-1 mol-1
-        ta_mean = self.hires_df[self.ta_col].mean()  # K
+        ta_mean = self.hires_df[self.ts_col].mean()  # K
         pd_mean = self.hires_df[self.pd_col].mean()  # Pa
         flux_conversion_factor = 1 / ((R * ta_mean) / pd_mean)
         cov_df['cov_flux'] = cov_df['cov'] * flux_conversion_factor
@@ -299,7 +401,7 @@ if __name__ == '__main__':
     n2o_col = 'N2Od'  # dry umol mol-1 (ppm), but must be dry mole fraction in nmol mol-1 (ppb)
     h2o_col = 'H2O'  # umol mol-1 (ppm), but needs to be in mol mol-1 (ppt)
     press_col = 'Pressure'  # Pa, example value
-    ta_col = 'Ts'  # °C
+    ta_col = 'Ts'  # °C, sonic temperature
 
     file_results_df = pd.DataFrame(columns=['file',
                                             'flux_detection_limit', 'flux_noise_rmse',
@@ -307,7 +409,6 @@ if __name__ == '__main__':
                                             'signal_to_detection_limit'])
 
     for ix, fp in enumerate(filepaths):
-
         # todo testing
         # if ix != 59:
         #     continue
@@ -329,7 +430,7 @@ if __name__ == '__main__':
             v_col=v_col,  # m s-1
             w_col=w_col,  # m s-1
             c_col=n2o_col,  # nmol mol-1 (ppb)
-            ta_col=ta_col,  # degC
+            ts_col=ta_col,  # degC
             h2o_col=h2o_col,  # mol mol-1
             press_col=press_col,  # Pa
             noise_range=20,  # seconds
