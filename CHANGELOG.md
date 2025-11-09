@@ -4,6 +4,10 @@
 
 ## v0.89.1 | XX Nov 2025
 
+## Additions
+
+- Added new function to calculate air temperature from sonic temperature (5)
+
 ## Changes
 
 - Maximum covariance for high-res eddy covariance data is now calculated using the library [polars](https://pola.rs/)
@@ -21,6 +25,7 @@
 - (2) `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb._validate_n_grouprecords`
 - (3) `diive.core.plotting.heatmap_base.py`
 - (4) `diive.pkgs.echires.lag.MaxCovariance._find_max_cov_peak`
+- (5) `diive.pkgs.createvar.conversions.air_temp_from_sonic_temp`
 
 ## v0.89.0 | 23 Jul 2025
 
