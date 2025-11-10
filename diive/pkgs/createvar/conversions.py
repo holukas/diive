@@ -28,6 +28,7 @@ def air_temp_from_sonic_temp(sonic_temp: pd.Series, h2o: pd.Series) -> pd.Series
         pd.Series: Air temperature data in Kelvin.
     """
     ta = sonic_temp / (1 + 0.32 * h2o)
+    ta.name = "TA_SONIC"
     return ta
 
 

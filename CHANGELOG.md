@@ -19,6 +19,10 @@
 
 - Fixed wrong parameter name for min/max ticks (1)
 
+### Notebooks
+
+- Added new notebook `Calculate_air_temp_from_sonic_temp` (7) 
+
 ### Unittests
 
 - Added unit test for air temperature from sonic temperature (6)
@@ -32,6 +36,7 @@
 - (4) `diive.pkgs.echires.lag.MaxCovariance._find_max_cov_peak`
 - (5) `diive.pkgs.createvar.conversions.air_temp_from_sonic_temp`
 - (6) `tests.test_createvar.TestCreateVar.test_air_temp_from_sonic_temp`
+- (7) `notebooks/CalculateVariable/Calculate_air_temp_from_sonic_temp.ipynb`
 
 ## v0.89.0 | 23 Jul 2025
 
