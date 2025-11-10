@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import polars as pl
 from matplotlib.collections import LineCollection
+from matplotlib.figure import Figure
 from pandas import DataFrame
 from scipy.signal import find_peaks
 
@@ -13,6 +14,36 @@ from diive.core.plotting.plotfuncs import default_format
 # todo logger: setup_dyco
 
 class MaxCovariance:
+    """
+    Class to determine the time lag between two variables by finding the maximum covariance.
+
+    This class processes data to identify the lag between two variables by calculating their
+    covariance over a range of time lags. It includes functionality for automatic peak detection
+    and validation to improve reliability in identifying meaningful lags. Appropriate pre-processing
+    and lag search techniques are implemented to calculate lag-specific covariances and their
+    associated metrics.
+
+    Attributes:
+        df (DataFrame): Input data for processing.
+        var_reference (str): Name of the reference variable in `df`. The lag of the lagged variable
+            will be determined relative to this reference.
+        var_lagged (str): Name of the lagged variable in `df`. Its lag will be determined relative
+            to the reference variable.
+        lgs_winsize_from (int): Beginning of the lag search time window in terms of record count.
+        lgs_winsize_to (int): End of the lag search time window in terms of record count.
+        shift_stepsize (int): Step size for the lag search, representing the number of records
+            by which the data is shifted for each calculation.
+        segment_name (str): Segment identifier, used for labeling and differentiation in processed
+            results.
+        props_peak_auto (DataFrame, optional): Data describing the properties of automatically
+            detected peaks. Updated after running the process pipeline.
+        idx_peak_cov_abs_max (int, optional): Index of the row where the maximum absolute covariance
+            is found.
+        idx_peak_auto (int, optional): Index of the automatically detected peak in the covariance
+            data.
+        idx_instantaneous_default_lag (int, optional): Default lag index for instantaneous peak
+            detection.
+    """
 
     def __init__(
             self,
@@ -24,18 +55,23 @@ class MaxCovariance:
             shift_stepsize: int = 1,
             segment_name: str = "segment_name_here",
     ):
-        """ Determine the time lag between two variables by finding the maximum
-         covariance.
+        """
+        Initializes the class with data and configuration parameters for analyzing lagged
+        relationships and segments based on specific variables within a DataFrame.
+
+        Postive lag means *var_lagged* lags behind *var_reference* (arrives later).
+        Negative lag means *var_lagged* lags ahead of *var_reference* (arrives earlier).
 
         Args:
-            df: Input data.
-            var_reference: Name of reference variable in *df*. Lag of *var_lagged* will be determined in
-                relation to this reference.
-            var_lagged: Name of lagged variable in *df*. Lag will be determined in relation *var_reference*.
-            lgs_winsize_from: Start of lag search time window (in number of records).
-            lgs_winsize_to: End of lag search time window (in number of records).
-            shift_stepsize: Step-size for lag search (in number of records).
-            segment_name:
+            df (DataFrame): The input data containing columns relevant for analysis.
+            var_reference (str): The name of the reference column in the DataFrame.
+            var_lagged (str): The name of the lagged column in the DataFrame.
+            lgs_winsize_from (int): The starting size of the lagging window. Defaults to -1000.
+            lgs_winsize_to (int): The ending size of the lagging window. Defaults to 1000.
+            shift_stepsize (int): The step size for shifting lagged data. Defaults to 1. Negative
+                values move lagged values upwards in the column.
+            segment_name (str): The name of the segment for identification purposes. Defaults to
+                "segment_name_here".
         """
 
         self.df = df
@@ -190,7 +226,7 @@ class MaxCovariance:
             .agg(
                 # Calculate covariance between the 'reference' column and the 'lagged' column
                 # shifted by the current group's 'shift' value.
-                pl.cov("reference", pl.col("lagged").shift(pl.first("shift"))).alias("cov")
+                pl.cov("reference", pl.col("lagged").shift(-pl.first("shift"))).alias("cov")
             )
             # The 'index' and 'cov_abs' columns still need to be calculated/added
             .with_columns(
@@ -301,7 +337,8 @@ class MaxCovariance:
             idx = False
         return idx
 
-    def plot_scatter_cov(self, title: str = None, txt_info: str = "", outpath: str = None, outname: str = None):
+    def plot_scatter_cov(self, title: str = None, txt_info: str = "", outpath: str = None,
+                         outname: str = None) -> Figure:
         """Make scatter plot with z-values as colors and display found max covariance."""
 
         # Setup figure
@@ -351,6 +388,8 @@ class MaxCovariance:
             self._save_cov_plot(fig=fig, outpath=outpath, outname=outname)
         else:
             fig.show()
+
+        return fig
 
     def _save_cov_plot(self, fig, outpath, outname):
         """
