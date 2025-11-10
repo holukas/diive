@@ -35,8 +35,15 @@ for tick parameter names, a new plotting parameter for heatmaps, and an increase
 
 ### Unittests
 
+- Added unit test for calculating the flux detection limit (10)
 - Added unit test for air temperature from sonic temperature (6)
 - XX/XX unittests ran successfully
+
+### Other
+
+- Added example data
+  `diive/configs/exampledata/exampledata_GENERIC-TXT-EDDY-COVARIANCE-10Hz-2023-06-24-03-30_LGRData.txt`, used for unit
+  tests and notebook examples for flux detection limit and calculating air temperature from sonic temperature
 
 ### References
 
@@ -49,6 +56,7 @@ for tick parameter names, a new plotting parameter for heatmaps, and an increase
 - (7) `notebooks/CalculateVariable/Calculate_air_temp_from_sonic_temp.ipynb`
 - (8) `notebooks/CalculateVariable/FluxDetectionLimit/Flux_detection_limit.ipynb`
 - (9) `diive.pkgs.echires.fluxdetectionlimit.FluxDetectionLimit`
+- (10) `tests.test_createvar.TestCreateVar.test_flux_detection_limit`
 
 ## v0.89.0 | 23 Jul 2025
 

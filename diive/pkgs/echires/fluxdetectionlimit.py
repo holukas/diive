@@ -168,7 +168,7 @@ class FluxDetectionLimit:
             ts_col: str,
             h2o_col: str,
             press_col: str,
-            default_lag: int,
+            default_lag: float,
             noise_range: int,
             lag_range: list,
             lag_stepsize: int,
