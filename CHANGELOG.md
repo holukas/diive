@@ -4,14 +4,23 @@
 
 ## v0.90.0 | XX Nov 2025
 
+In v0.90.0, the main update is a performance boost for high-resolution eddy covariance data, as the maximum covariance
+calculation now uses the `polars` library for 3x faster processing (CPU dependent).
+
+A new function was added to calculate air temperature from sonic temperature, which is accompanied by a new unit test
+and an example notebook. A second new notebook demonstrates the `Flux_detection_limit`. Minor changes include a bug fix
+for tick parameter names, a new plotting parameter for heatmaps, and an increased data validation threshold.
+
 ## Additions
 
 - Added new function to calculate air temperature from sonic temperature (5)
 
 ## Changes
 
+- Re-visited and refactored class `FluxDetectionLimit` to calculate the flux detection limit for eddy covariance
+  fluxes (9)
 - Maximum covariance for high-res eddy covariance data is now calculated using the library [polars](https://pola.rs/)
-  for faster calculations (3x faster on half-hourly 10Hz data) (4)
+  for faster calculations (3x faster on half-hourly 10Hz data, but not on all CPUs) (4)
 - Increased percentage threshold for data required to be considered as valid time resolution to 0.2% (2)
 - Added parameter `cb_extend` for colorbar extension in heatmap plots (3)
 
@@ -21,7 +30,8 @@
 
 ### Notebooks
 
-- Added new notebook `Calculate_air_temp_from_sonic_temp` (7) 
+- Added new notebook `Flux_detection_limit` (8)
+- Added new notebook `Calculate_air_temp_from_sonic_temp` (7)
 
 ### Unittests
 
@@ -37,6 +47,8 @@
 - (5) `diive.pkgs.createvar.conversions.air_temp_from_sonic_temp`
 - (6) `tests.test_createvar.TestCreateVar.test_air_temp_from_sonic_temp`
 - (7) `notebooks/CalculateVariable/Calculate_air_temp_from_sonic_temp.ipynb`
+- (8) `notebooks/CalculateVariable/FluxDetectionLimit/Flux_detection_limit.ipynb`
+- (9) `diive.pkgs.echires.fluxdetectionlimit.FluxDetectionLimit`
 
 ## v0.89.0 | 23 Jul 2025
 
