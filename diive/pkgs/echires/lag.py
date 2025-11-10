@@ -1,3 +1,4 @@
+from matplotlib.transforms import blended_transform_factory
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
@@ -9,9 +10,8 @@ from pandas import DataFrame
 from scipy.signal import find_peaks
 
 from diive.core.plotting.plotfuncs import default_format
+from diive.core.plotting.styles import LightTheme as theme
 
-
-# todo logger: setup_dyco
 
 class MaxCovariance:
     """
@@ -247,71 +247,6 @@ class MaxCovariance:
         cov_max_ix = cov_df['cov_abs'].idxmax()
         cov_df.loc[cov_max_ix, 'flag_peak_max_cov_abs'] = True
 
-        # cov_df = self.cov_df.copy()
-        #
-        # _index = self.df.index.copy()
-        # _var_lagged = self.df[self.var_lagged].copy()
-        # _var_reference = self.df[self.var_reference].copy()
-        #
-        # # Check if data column is empty
-        # if _var_lagged.dropna().empty:
-        #     pass
-        #
-        # else:
-        #
-        #     # start_time = time.time()
-        #
-        #     for ix, row in cov_df.iterrows():
-        #         shift = int(row['shift'])
-        #         try:
-        #             if shift < 0:
-        #                 index_shifted = _index[-shift]  # Note the negative sign
-        #             else:
-        #                 # todo why time?
-        #                 index_shifted = pd.NaT
-        #
-        #             # Shift and calculate covariance (pandas)
-        #             _scalar_data_shifted = _var_lagged.shift(shift)
-        #             cov = _var_reference.cov(_scalar_data_shifted)
-        #
-        #             # # Shift and calculate covariance (numpy)
-        #             # # As an alternative, covariance can be calculated using numpy. While
-        #             # # this approach might be faster in many cases, it is slower here, I
-        #             # # assume because of the presence of NaNs in the data that have to be
-        #             # # masked first.
-        #             # # Requires masking the NaN values in _scalar_data_shifted_array.
-        #             # _scalar_data_shifted = _var_lagged.shift(shift)
-        #             # _var_reference_array = _var_reference.values
-        #             # _scalar_data_shifted_array = _scalar_data_shifted.values
-        #             # _masked_scalar_data_shifted_array = (
-        #             #     np.ma.array(_scalar_data_shifted_array, mask=np.isnan(_scalar_data_shifted_array)))
-        #             # # Calculating the covariance, extract from covariance matrix
-        #             # cov = np.ma.cov(_var_reference_array, _masked_scalar_data_shifted_array)[0,1]
-        #
-        #             cov_df.loc[cov_df['shift'] == row['shift'], 'cov'] = cov
-        #             cov_df.loc[cov_df['shift'] == row['shift'], 'index'] = index_shifted
-        #
-        #         except IndexError:
-        #             # If not enough data in the file to perform the shift, continue
-        #             # to the next shift and try again. This can happen for the last
-        #             # segments in each file, when there is no more data available
-        #             # at the end.
-        #             continue
-        #
-        #     # # Timing (for testing)
-        #     # end_time = time.time()
-        #     # execution_time = end_time - start_time
-        #     # print(f"Function execution time: {execution_time:.6f} seconds")
-        #
-        #     # Results
-        #     cov_df['cov_abs'] = cov_df['cov'].abs()
-        #     cov_max_ix = cov_df['cov_abs'].idxmax()
-        #
-        #     # todo Limit time range for accepted max cov
-        #     # if -100 < cov_df.loc[cov_max_ix, 'shift'] < 0:
-        #     #     cov_df.loc[cov_max_ix, 'flag_peak_max_cov_abs'] = True
-        #     cov_df.loc[cov_max_ix, 'flag_peak_max_cov_abs'] = True
-
         return cov_df
 
     @staticmethod
@@ -371,6 +306,13 @@ class MaxCovariance:
         txt_info = self.mark_max_cov_abs_peak(ax=ax, txt_info=txt_info)
         txt_info = self.mark_auto_detected_peak(ax=ax, txt_info=txt_info)
         txt_info = self.mark_instantaneous_default_lag(ax=ax, txt_info=txt_info)
+
+        arrow = r"$\rightarrow$"
+        # Create a blended transform: Data coordinates for X, Axes coordinates for Y
+        blended_trans = blended_transform_factory(ax.transData, ax.transAxes)
+        ax.text(0, 0.05, f"positive lag: {self.var_lagged} lags behind {self.var_reference} {arrow}",
+                transform=blended_trans, color='black', size=theme.AX_LABELS_FONTSIZE,
+                ha='left', va='bottom', zorder=99, backgroundcolor='white')
 
         # Add info text
         ax.text(0.02, 0.98, txt_info,
