@@ -2,7 +2,7 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.89.1 | XX Nov 2025
+## v0.90.0 | XX Nov 2025
 
 ## Additions
 
@@ -19,6 +19,11 @@
 
 - Fixed wrong parameter name for min/max ticks (1)
 
+### Unittests
+
+- Added unit test for air temperature from sonic temperature (6)
+- XX/XX unittests ran successfully
+
 ### References
 
 - (1) `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.showplot_resampled`
@@ -26,6 +31,7 @@
 - (3) `diive.core.plotting.heatmap_base.py`
 - (4) `diive.pkgs.echires.lag.MaxCovariance._find_max_cov_peak`
 - (5) `diive.pkgs.createvar.conversions.air_temp_from_sonic_temp`
+- (6) `tests.test_createvar.TestCreateVar.test_air_temp_from_sonic_temp`
 
 ## v0.89.0 | 23 Jul 2025
 

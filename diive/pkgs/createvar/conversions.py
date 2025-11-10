@@ -10,6 +10,16 @@ def air_temp_from_sonic_temp(sonic_temp: pd.Series, h2o: pd.Series) -> pd.Series
     into account the relationship between sonic temperature, air temperature, and
     the effect of water vapor on sonic wave speed.
 
+    Based on the code in:
+    Striednig, M., Graus, M., Märk, T. D., & Karl, T. G. (2020). InnFLUX – an open-source
+        code for conventional and disjunct eddy covariance analysis of trace gas measurements:
+        An urban test case. Atmospheric Measurement Techniques, 13(3), 1447–1465.
+        https://doi.org/10.5194/amt-13-1447-2020
+        Source code: https://www.atm-phys-chem.at/innflux/
+        Source code: https://git.uibk.ac.at/acinn/apc/innflux
+        Source code: https://git.uibk.ac.at/acinn/apc/innflux/-/blob/master/innFLUX_step1.m?ref_type=heads#L329
+
+
     Args:
         sonic_temp (pd.Series): Sonic temperature data in Kelvin.
         h2o (pd.Series): Water vapor concentration in the air in mol mol-1.

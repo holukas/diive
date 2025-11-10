@@ -410,8 +410,8 @@ if __name__ == '__main__':
 
     for ix, fp in enumerate(filepaths):
         # todo testing
-        # if ix != 59:
-        #     continue
+        if ix > 1:
+            break
 
         # Load data
         print(f"Reading file #{ix}: {fp} ...")
@@ -454,11 +454,11 @@ if __name__ == '__main__':
         ]
         file_results_df.loc[len(file_results_df)] = new_results
 
-        # print(file_results_df)
+    print(file_results_df)
 
-        # Save after each file
-        outfile = Path(OUTDIR) / 'results_N2O.csv'
-        # outfile = Path(outdir) / 'results_CH4.csv'
-        file_results_df.to_csv(outfile)
+    # Save
+    outfile = Path(OUTDIR) / 'results_N2O.csv'
+    # outfile = Path(outdir) / 'results_CH4.csv'
+    file_results_df.to_csv(outfile)
 
     # print(file_results_df)
