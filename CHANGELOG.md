@@ -56,7 +56,7 @@ for tick parameter names, a new plotting parameter for heatmaps, and an increase
 - (7) `notebooks/CalculateVariable/Calculate_air_temp_from_sonic_temp.ipynb`
 - (8) `notebooks/CalculateVariable/FluxDetectionLimit/Flux_detection_limit.ipynb`
 - (9) `diive.pkgs.echires.fluxdetectionlimit.FluxDetectionLimit`
-- (10) `tests.test_createvar.TestCreateVar.test_flux_detection_limit`
+- (10) `tests.test_echires.TestEcHires`
 
 ## v0.89.0 | 23 Jul 2025
 
