@@ -18,7 +18,8 @@ for tick parameter names, a new plotting parameter for heatmaps, and an increase
 ## Changes
 
 - Re-visited and refactored class `FluxDetectionLimit` to calculate the flux detection limit for eddy covariance
-  fluxes (9)
+  fluxes. Important: now a positive time lag means that the lagged variable (e.g., a gas) lags behind the reference
+  variable (turbulent vertical wind), before it was the other way round, but this seems more logical. (9)
 - Maximum covariance for high-res eddy covariance data is now calculated using the library [polars](https://pola.rs/)
   for faster calculations (3x faster on half-hourly 10Hz data, but not on all CPUs) (4)
 - Increased percentage threshold for data required to be considered as valid time resolution to 0.2% (2)

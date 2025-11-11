@@ -273,7 +273,7 @@ class MaxCovariance:
         return idx
 
     def plot_scatter_cov(self, title: str = None, txt_info: str = "", outpath: str = None,
-                         outname: str = None) -> Figure:
+                         outname: str = None, showplot: bool = True) -> Figure:
         """Make scatter plot with z-values as colors and display found max covariance."""
 
         # Setup figure
@@ -328,7 +328,8 @@ class MaxCovariance:
 
         if outpath:
             self._save_cov_plot(fig=fig, outpath=outpath, outname=outname)
-        else:
+
+        if showplot:
             fig.show()
 
         return fig

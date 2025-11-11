@@ -173,7 +173,7 @@ class FluxDetectionLimit:
             lag_range: list,
             lag_stepsize: int,
             sampling_rate: int,
-            show_covariance_plot: bool = True,
+            create_covariance_plot: bool = True,
             title_covariance_plot: str = None
     ):
         self.hires_df = df.copy()
@@ -189,7 +189,7 @@ class FluxDetectionLimit:
         self.default_lag = default_lag
         self.lag_stepsize = lag_stepsize
         self.sampling_rate = sampling_rate
-        self.show_covariance_plot = show_covariance_plot
+        self.create_covariance_plot = create_covariance_plot
         self.title_covariance_plot = title_covariance_plot
 
         # Convert s to number or records,
@@ -218,6 +218,7 @@ class FluxDetectionLimit:
         self.cov_df = pd.DataFrame()
         self.results = {}
         self.fig_cov = None
+        self.maxcov_obj = None  # Stores covariances from lag search
 
     def run(self):
 
@@ -225,7 +226,7 @@ class FluxDetectionLimit:
         self.hires_df = self._turbulent_fluctuations(df=self.hires_df)
 
         # Calculate covariances
-        self.cov_df, cov_max_ix, cov_max_shift, self.fig_cov = self._crosscovariance()
+        self.cov_df, cov_max_ix, cov_max_shift, self.maxcov_obj = self._crosscovariance()
 
         # Flux conversion factor
         # Convert covariance to flux units
@@ -244,8 +245,6 @@ class FluxDetectionLimit:
             # flux = self.cov_df.iloc[cov_max_ix]['cov_flux']
         else:
             raise Exception("No default lag covariance found")
-        signal_to_noise = abs(flux) / flux_noise_rmse if flux else None
-        signal_to_detection_limit = abs(flux) / flux_detection_limit if flux else None
 
         self.results = {
             'flux_detection_limit': flux_detection_limit,
@@ -253,8 +252,8 @@ class FluxDetectionLimit:
             'cov_max_ix': cov_max_ix,
             'cov_max_shift': cov_max_shift,
             'flux_signal_at_default_lag': flux,
-            'signal_to_noise': signal_to_noise,
-            'signal_to_detection_limit': signal_to_detection_limit
+            'signal_to_noise': abs(flux) / flux_noise_rmse if flux else None,
+            'signal_to_detection_limit': abs(flux) / flux_detection_limit if flux else None
         }
 
     def _max_abs_covariance(self, cov_df: DataFrame):
@@ -284,7 +283,9 @@ class FluxDetectionLimit:
         return self.results
 
     def get_fig_cov(self) -> matplotlib.figure.Figure:
-        return self.fig_cov
+        fig_cov = self.maxcov_obj.plot_scatter_cov(
+            title=f"Covariance vs time lag {self.title_covariance_plot}", showplot=False)
+        return fig_cov
 
     def _turbulent_fluctuations(self, df: pd.DataFrame) -> pd.DataFrame:
         r = WindRotation2D(u=df[self.u_col],
@@ -295,7 +296,7 @@ class FluxDetectionLimit:
         df = pd.concat([df, primes_df], axis=1)
         return df
 
-    def _crosscovariance(self) -> tuple[pd.DataFrame, int, int, matplotlib.figure.Figure]:
+    def _crosscovariance(self) -> tuple[pd.DataFrame, int, int, MaxCovariance]:
         # # 20 Hz data: 1 record = 0.05s, 20 records = 1s
         # # we want to shift from -180s to -160s and from +160s to +180s
         # sampling_rate = 20  # Hz
@@ -304,7 +305,7 @@ class FluxDetectionLimit:
         # shift_stepsize = 1
 
         start_time = time.perf_counter()
-        mc = MaxCovariance(
+        maxcov_obj = MaxCovariance(
             df=self.hires_df,
             var_reference=f"{self.w_col}_TURB",
             var_lagged=f"{self.c_col}_TURB",
@@ -312,19 +313,13 @@ class FluxDetectionLimit:
             lgs_winsize_to=self.lag_to,
             shift_stepsize=self.lag_stepsize,
             segment_name="cross-covariance",
-
         )
 
-        mc.run()
+        maxcov_obj.run()
         end_time = time.perf_counter()
         elapsed_time_seconds = end_time - start_time
         print(f"Time needed for covariance calculation: {elapsed_time_seconds:0.3f}s")
-        cov_df, props_peak_auto = mc.get()
-
-        if self.show_covariance_plot:
-            fig_cov = mc.plot_scatter_cov(title=f"Covariance vs time lag {self.title_covariance_plot}")
-        else:
-            fig_cov = None
+        cov_df, props_peak_auto = maxcov_obj.get()
 
         # Max covariance
         foundlag = cov_df.loc[cov_df['flag_peak_max_cov_abs'] == True]
@@ -333,7 +328,7 @@ class FluxDetectionLimit:
         cov_max_ix = foundlag.index[0]
         cov_max_shift = foundlag.iloc[0]['shift']
 
-        return cov_df, cov_max_ix, cov_max_shift, fig_cov
+        return cov_df, cov_max_ix, cov_max_shift, maxcov_obj
 
     def _flux_conversion_factor(self, cov_df: DataFrame) -> pd.DataFrame:
         """Calculate flux conversion factor
@@ -399,8 +394,7 @@ class FluxDetectionLimit:
         return flux_detection_limit, flux_noise_rmse
 
 
-if __name__ == '__main__':
-
+def _example():
     from diive.core.io.filereader import search_files
 
     # Dirs
@@ -455,7 +449,7 @@ if __name__ == '__main__':
             lag_range=[-180, 180],  # seconds
             lag_stepsize=10,
             sampling_rate=10,
-            show_covariance_plot=True,
+            create_covariance_plot=True,
             title_covariance_plot=fp.name)  # Hz
 
         fdl.run()
@@ -475,7 +469,11 @@ if __name__ == '__main__':
         file_results_df.loc[len(file_results_df)] = new_results
 
         if fig_cov:
-            fig_cov.savefig(Path(OUTDIR) / f'cov_{fp.name}.png')
+            outpath = Path(OUTDIR) / f'cov_{fp.name}.png'
+            fig_cov.savefig(outpath)
+            print(f"Saved figure {outpath}")
+            fig_cov.show()
+
 
     print(file_results_df)
 
@@ -485,3 +483,7 @@ if __name__ == '__main__':
     file_results_df.to_csv(outfile)
 
     # print(file_results_df)
+
+
+if __name__ == '__main__':
+    _example()
