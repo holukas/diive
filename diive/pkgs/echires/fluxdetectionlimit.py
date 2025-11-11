@@ -217,6 +217,7 @@ class FluxDetectionLimit:
         # New variables
         self.cov_df = pd.DataFrame()
         self.results = {}
+        self.fig_cov = None
 
     def run(self):
 
@@ -224,7 +225,7 @@ class FluxDetectionLimit:
         self.hires_df = self._turbulent_fluctuations(df=self.hires_df)
 
         # Calculate covariances
-        self.cov_df, cov_max_ix, cov_max_shift, fig_cov = self._crosscovariance()
+        self.cov_df, cov_max_ix, cov_max_shift, self.fig_cov = self._crosscovariance()
 
         # Flux conversion factor
         # Convert covariance to flux units
@@ -281,6 +282,9 @@ class FluxDetectionLimit:
 
     def get_detection_limit(self) -> dict:
         return self.results
+
+    def get_fig_cov(self) -> matplotlib.figure.Figure:
+        return self.fig_cov
 
     def _turbulent_fluctuations(self, df: pd.DataFrame) -> pd.DataFrame:
         r = WindRotation2D(u=df[self.u_col],
@@ -420,6 +424,7 @@ if __name__ == '__main__':
                                             'lag', 'flux_signal_at_cov_max_shift', 'signal_to_noise',
                                             'signal_to_detection_limit'])
 
+    fig_cov = None
     for ix, fp in enumerate(filepaths):
         # todo testing
         if ix > 0:
@@ -456,6 +461,7 @@ if __name__ == '__main__':
         fdl.run()
 
         results = fdl.get_detection_limit()
+        fig_cov = fdl.get_fig_cov()
 
         new_results = [
             fp.name,
@@ -467,6 +473,9 @@ if __name__ == '__main__':
             results['signal_to_detection_limit']
         ]
         file_results_df.loc[len(file_results_df)] = new_results
+
+        if fig_cov:
+            fig_cov.savefig(Path(OUTDIR) / f'cov_{fp.name}.png')
 
     print(file_results_df)
 
