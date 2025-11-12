@@ -388,7 +388,7 @@ class FluxDetectionLimit:
                 (cov_df_left['cov_flux'].std()) ** 2 + (cov_df_left['cov_flux'].mean()) ** 2 +
                 (cov_df_right['cov_flux'].std()) ** 2 + (cov_df_right['cov_flux'].mean()) ** 2
         ))
-        flux_detection_limit = flux_noise_rmse * 3
+        flux_detection_limit = flux_noise_rmse * 2
         print(f"Flux noise RMSE: {flux_noise_rmse}")
         print(f"Flux detection limit: {flux_detection_limit}")
         return flux_detection_limit, flux_noise_rmse
@@ -469,9 +469,9 @@ def _example():
         file_results_df.loc[len(file_results_df)] = new_results
 
         if fig_cov:
-            outpath = Path(OUTDIR) / f'cov_{fp.name}.png'
-            fig_cov.savefig(outpath)
-            print(f"Saved figure {outpath}")
+            # outpath = Path(OUTDIR) / f'cov_{fp.name}.png'
+            # fig_cov.savefig(outpath)
+            # print(f"Saved figure {outpath}")
             fig_cov.show()
 
 

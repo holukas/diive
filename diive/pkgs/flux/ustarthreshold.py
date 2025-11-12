@@ -784,7 +784,7 @@ class UstarDetectionMPT:
         ax = fig.add_subplot(gs[0, 0])
         for class_key, class_group_df in class_grouped:
             # class_group_df.plot.scatter('W_SIGMA', 'FC', title=f"TA: XXX", ax=ax)
-            class_group_df.plot.scatter('USTAR', 'FC', title=f"TA: XXX", ax=ax)
+            class_group_df.plot.scatter(self.ustar_col, self.nee_col, title=f"TA: XXX", ax=ax)
         fig.show()
 
         # Loop TA classes and calculate the ustar threshold in each class
@@ -1016,23 +1016,18 @@ class UstarDetectionMPT:
 
 def example():
     import diive as dv
-    filepath = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\20_MERGE_DATA\22.4_FLUXES_L1_IRGA72+METEO7_2016-2024.parquet"
+    filepath = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\30_FLUX_PROCESSING_CHAIN\31_USTAR_DETECTION\13_SUBSET_NEE_QCF11_IRGA72_2016-2024.parquet"
     df = dv.load_parquet(filepath=filepath)
-    locs = (df.index.year >= 2016) & (df.index.year <= 2024)
+    locs = (df.index.year >= 2016) & (df.index.year <= 2017)
     df = df.loc[locs].copy()
     [print(c) for c in df.columns if "SIGMA" in c];
 
-    NEE_COL = "FC"
-    NEE_QC_COL = "FC_SSITC_TEST"
+    NEE_COL = "NEE_L3.1_L3.2_QCF"
     TA_COL = "TA_T1_47_1_gfXG"
-    # USTAR_COL = "W_SIGMA"
     USTAR_COL = "USTAR"
-    SW_IN_POT_COL = "SW_IN_POT"
+    SW_IN = "SW_IN_T1_47_1_gfXG"
 
-    df = df[[NEE_COL, NEE_QC_COL, TA_COL, USTAR_COL, SW_IN_POT_COL]].copy()
-    df = df.loc[(df[NEE_QC_COL] <= 1)].copy()
-    df = df.loc[(df[NEE_COL] >= -50)].copy()
-    df = df.loc[(df[NEE_COL] <= 50)].copy()
+    df = df[[NEE_COL, TA_COL, USTAR_COL, SW_IN]].copy()
     df = df.dropna()
 
     ust = UstarDetectionMPT(
@@ -1043,7 +1038,7 @@ def example():
         ta_n_classes=6,
         ustar_n_classes=20,
         n_bootstraps=10,
-        swin_pot_col=SW_IN_POT_COL,
+        swin_pot_col=SW_IN,
         nighttime_threshold=20,
         utc_offset=1,
         lat=47.478333,  # CH-LAE
