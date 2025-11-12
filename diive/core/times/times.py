@@ -1,3 +1,7 @@
+from ast import Index
+
+from pandas import DatetimeIndex, Series
+from typing import Optional, List, Dict # Import for robust typing
 import datetime as dt
 import fnmatch
 import time
@@ -5,10 +9,17 @@ from typing import Literal
 
 import numpy as np
 import pandas as pd
-from jinja2.nodes import Keyword
 from pandas import DataFrame, Series, DatetimeIndex
 from pandas.tseries.frequencies import to_offset
 
+# Define the default mapping outside the function for clean reference and mutability safety
+DEFAULT_SEASON_MAP = {
+    # Season ID: [List of months (int)]
+    1: [3, 4, 5],   # Spring
+    2: [6, 7, 8],   # Summer
+    3: [9, 10, 11], # Autumn
+    4: [12, 1, 2]   # Winter
+}
 
 def format_timestamp_to_fluxnet_format(df: DataFrame, timestamp_col: str) -> Series:
     """Apply FLUXNET timestamp format (YYYYMMDDhhmm) to timestamp columns (not index).
@@ -602,39 +613,71 @@ def include_timestamp_as_cols(df,
     return df
 
 
-def insert_season(timestamp: DatetimeIndex) -> Series:
+def insert_season(
+        timestamp: DatetimeIndex,
+        spring: Optional[List[int]] = None,
+        summer: Optional[List[int]] = None,
+        autumn: Optional[List[int]] = None,
+        winter: Optional[List[int]] = None,
+) -> Index:
     """
-    Insert meteorological season as integer
-
-    spring = 1 (MAM)
-    summer = 2 (JJA)
-    autumn = 3 (SON)
-    winter = 4 (DJF)
+    Inserts seasonal labels into a pandas Timestamp index based on a customizable mapping
+    of months to seasons. The function allows for flexible assignment of months to seasons
+    and verifies robustness against overlapping or incomplete season definitions.
 
     Args:
-        timestamp: timestamp of time series
+        timestamp (DatetimeIndex): The pandas DatetimeIndex for which seasonal labels
+            are assigned based on the provided mapping.
+        spring (Optional[List[int]]): A list of month numbers (1 to 12) defining spring.
+            Defaults to a predefined season map if not provided.
+        summer (Optional[List[int]]): A list of month numbers (1 to 12) defining summer.
+            Defaults to a predefined season map if not provided.
+        autumn (Optional[List[int]]): A list of month numbers (1 to 12) defining autumn.
+            Defaults to a predefined season map if not provided.
+        winter (Optional[List[int]]): A list of month numbers (1 to 12) defining winter.
+            Defaults to a predefined season map if not provided.
 
     Returns:
-        season series with timestamp
+        Index: A pandas Index object with seasonal labels (as nullable integer dtype)
+            corresponding to the input DatetimeIndex. NaN values are returned for months
+            not mapped to any season.
+
+    Raises:
+        ValueError: If a month is assigned to multiple seasons, resulting in overlapping
+            definitions.
     """
+    # Handle Mutable Defaults
+    season_months = {
+        1: spring if spring is not None else DEFAULT_SEASON_MAP[1],
+        2: summer if summer is not None else DEFAULT_SEASON_MAP[2],
+        3: autumn if autumn is not None else DEFAULT_SEASON_MAP[3],
+        4: winter if winter is not None else DEFAULT_SEASON_MAP[4],
+    }
 
-    winter = [1, 2, 12]
-    spring = [3, 4, 5]
-    summer = [6, 7, 8]
-    autumn = [9, 10, 11]
-    season = pd.Series(data=timestamp.month, index=timestamp)
+    # Robustness Check: ensure no month is assigned to more than one season
+    all_months = [m for sublist in season_months.values() for m in sublist]
+    if len(all_months) != len(set(all_months)):
+        raise ValueError("Season definitions overlap: A month is assigned to multiple seasons.")
+    if len(all_months) != 12:
+        print("Warning: Not all 12 months are defined in the seasons. Unassigned months will be set to NaN.")
 
-    is_winter = season.isin(winter)
-    is_spring = season.isin(spring)
-    is_summer = season.isin(summer)
-    is_autumn = season.isin(autumn)
+    # Create a single Month-to-Season mapping dictionary
+    # Example: {3: 1, 4: 1, 5: 1, 6: 2, ...}
+    month_to_season_map = {}
+    for season_id, month_list in season_months.items():
+        for month in month_list:
+            month_to_season_map[month] = season_id
 
-    season[is_spring] = 1
-    season[is_summer] = 2
-    season[is_autumn] = 3
-    season[is_winter] = 4
+    # Extract the month numbers from the DatetimeIndex
+    month_series = timestamp.month
 
-    return season
+    # Use .map() for assignment operation
+    # The default return value for unmapped months is NaN
+    season_series = month_series.map(month_to_season_map)
+
+    # Convert the resulting Series back to Int64Dtype (pandas' nullable integer) to safely handle potential NaNs
+    return season_series.astype('Int64')
+
 
 
 class DetectFrequency:
