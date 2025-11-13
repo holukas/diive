@@ -66,11 +66,6 @@ class HampelDaytimeNighttime(FlagBase):
         self.n_sigma_nt = n_sigma_nt
         self.k = k
 
-        # Make sure time series has frequency
-        # Freq is needed for the detection of daytime/nighttime from lat/lon
-        if not self.series.index.freq:
-            freq = DetectFrequency(index=self.series.index, verbose=True).get()
-            self.series = self.series.asfreq(freq)
 
         # Detect nighttime
         dnf = DaytimeNighttimeFlag(

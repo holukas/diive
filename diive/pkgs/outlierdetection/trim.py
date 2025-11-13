@@ -69,12 +69,6 @@ class TrimLow(FlagBase):
         self.trim_nighttime = trim_nighttime
         self.lower_limit = lower_limit
 
-        # Make sure time series has frequency
-        # Freq is needed for the detection of daytime/nighttime from lat/lon
-        if not self.series.index.freq:
-            freq = DetectFrequency(index=self.series.index, verbose=True).get()
-            self.series = self.series.asfreq(freq)
-
         # Detect nighttime
         dnf = DaytimeNighttimeFlag(
             timestamp_index=self.series.index,

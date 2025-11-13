@@ -61,11 +61,6 @@ class AbsoluteLimitsDaytimeNighttime(FlagBase):
         self.showplot = showplot
         self.verbose = verbose
 
-        # Make sure time series has frequency
-        # Freq is needed for the detection of daytime/nighttime from lat/lon
-        if not self.series.index.freq:
-            freq = DetectFrequency(index=self.series.index, verbose=True).get()
-            self.series = self.series.asfreq(freq)
 
         # Detect daytime and nighttime
         dnf = DaytimeNighttimeFlag(

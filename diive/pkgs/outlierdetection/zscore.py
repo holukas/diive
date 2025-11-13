@@ -15,7 +15,7 @@ from pandas import Series, DatetimeIndex
 
 import diive.core.funcs.funcs as funcs
 from diive.core.base.flagbase import FlagBase
-from diive.core.times.times import DetectFrequency
+
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag
 
@@ -59,12 +59,6 @@ class zScoreDaytimeNighttime(FlagBase):
         self.thres_zscore = thres_zscore
         self.showplot = showplot
         self.verbose = verbose
-
-        # Make sure time series has frequency
-        # Freq is needed for the detection of daytime/nighttime from lat/lon
-        if not self.series.index.freq:
-            freq = DetectFrequency(index=self.series.index, verbose=True).get()
-            self.series = self.series.asfreq(freq)
 
         # Detect nighttime
         dnf = DaytimeNighttimeFlag(

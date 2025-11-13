@@ -14,6 +14,7 @@ import diive.core.plotting.styles.LightTheme as theme
 from diive.core.funcs.funcs import validate_id_string
 from diive.core.plotting.histogram import HistogramPlot
 from diive.core.plotting.plotfuncs import default_format, default_legend, nice_date_ticks
+from diive.core.times.times import DetectFrequency
 
 
 class FlagBase:
@@ -23,6 +24,12 @@ class FlagBase:
         self._flagid = flagid
         self._idstr = validate_id_string(idstr=idstr)
         self.verbose = verbose
+
+        # Make sure time series has frequency
+        # Freq is needed for the detection of daytime/nighttime from lat/lon
+        if not self.series.index.freq:
+            freq = DetectFrequency(index=self.series.index, verbose=True).get()
+            self.series = self.series.asfreq(freq)
 
         self._overall_flag = None
         self._filteredseries = None
