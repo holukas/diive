@@ -236,13 +236,14 @@ class FluxDetectionLimit:
         # Flux detection limit
         flux_detection_limit, flux_noise_rmse = self._flux_detection_limit(cov_df=self.cov_df.copy())
 
-        # Get flux at default lag
+        # Calculate flux at default lag, this is the "signal" in the signal-to-noise ratio
+        # Default lag is given as seconds, here it is converted to shift of "number of records", i.e.,
+        # by how many records the time series needs to be shifted in one direction.
+        flux = self.cov_df.loc[self.cov_df['shift'] == -self.default_lag * self.sampling_rate]['cov_flux'].values[0]
+
+        # Get flux at maximum covariance lag
         if isinstance(cov_max_ix, numbers.Integral):
-            # Calculate flux at default lag, this is the "signal" in the signal-to-noise ratio
-            # Default lag is given as seconds, here it is converted to shift of "number of records", i.e.,
-            # by how many records the time series needs to be shifted in one direction.
-            flux = self.cov_df.loc[self.cov_df['shift'] == -self.default_lag * self.sampling_rate]['cov_flux'].values[0]
-            # flux = self.cov_df.iloc[cov_max_ix]['cov_flux']
+            maxcovflux = self.cov_df.iloc[cov_max_ix]['cov_flux']
         else:
             raise Exception("No default lag covariance found")
 
@@ -252,6 +253,7 @@ class FluxDetectionLimit:
             'cov_max_ix': cov_max_ix,
             'cov_max_shift': cov_max_shift,
             'flux_signal_at_default_lag': flux,
+            'flux_signal_at_cov_max_lag': maxcovflux,
             'signal_to_noise': abs(flux) / flux_noise_rmse if flux else None,
             'signal_to_detection_limit': abs(flux) / flux_detection_limit if flux else None
         }
@@ -388,7 +390,7 @@ class FluxDetectionLimit:
                 (cov_df_left['cov_flux'].std()) ** 2 + (cov_df_left['cov_flux'].mean()) ** 2 +
                 (cov_df_right['cov_flux'].std()) ** 2 + (cov_df_right['cov_flux'].mean()) ** 2
         ))
-        flux_detection_limit = flux_noise_rmse * 2
+        flux_detection_limit = flux_noise_rmse * 3
         print(f"Flux noise RMSE: {flux_noise_rmse}")
         print(f"Flux detection limit: {flux_detection_limit}")
         return flux_detection_limit, flux_noise_rmse
@@ -413,20 +415,20 @@ def _example():
     press_col = 'Pressure'  # Pa, example value
     ta_col = 'Ts'  # °C, sonic temperature
 
-    file_results_df = pd.DataFrame(columns=['file',
-                                            'flux_detection_limit', 'flux_noise_rmse',
-                                            'lag', 'flux_signal_at_cov_max_shift', 'signal_to_noise',
-                                            'signal_to_detection_limit'])
+    file_results_df = pd.DataFrame()
 
     fig_cov = None
     for ix, fp in enumerate(filepaths):
-        # todo testing
-        if ix > 0:
-            break
+        # # todo testing
+        # if ix > 1:
+        #     break
 
         # Load data
         print(f"Reading file #{ix}: {fp} ...")
-        df = pd.read_csv(fp)
+        try:
+            df = pd.read_csv(fp)
+        except UnicodeDecodeError:
+            continue
 
         # Conversions
         df[n2o_col] = df[n2o_col].multiply(10 ** 3)  # Convert from umol mol-1 to nmol mol-1
@@ -457,22 +459,25 @@ def _example():
         results = fdl.get_detection_limit()
         fig_cov = fdl.get_fig_cov()
 
-        new_results = [
-            fp.name,
-            results['flux_detection_limit'],
-            results['flux_noise_rmse'],
-            results['cov_max_shift'],
-            results['flux_signal_at_default_lag'],
-            results['signal_to_noise'],
-            results['signal_to_detection_limit']
-        ]
-        file_results_df.loc[len(file_results_df)] = new_results
+        # Organize results dataframe
+        results['filename'] = fp.name
+        new_results = pd.DataFrame([results])
+        first_col = 'filename'
+        other_cols = [col for col in new_results.columns if col != first_col]
+        new_column_order = [first_col] + other_cols
+        new_results = new_results[new_column_order]
 
-        if fig_cov:
-            # outpath = Path(OUTDIR) / f'cov_{fp.name}.png'
-            # fig_cov.savefig(outpath)
-            # print(f"Saved figure {outpath}")
-            fig_cov.show()
+        if ix == 0:
+            file_results_df = new_results.copy()
+        else:
+            file_results_df = pd.concat([file_results_df, new_results], axis=0, ignore_index=True)
+
+
+        # if fig_cov:
+        #     # outpath = Path(OUTDIR) / f'cov_{fp.name}.png'
+        #     # fig_cov.savefig(outpath)
+        #     # print(f"Saved figure {outpath}")
+        #     fig_cov.show()
 
 
     print(file_results_df)
