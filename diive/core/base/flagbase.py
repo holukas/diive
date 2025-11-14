@@ -149,7 +149,7 @@ class FlagBase:
             if not repeat:
                 break
 
-        # Calcualte the sum of all flags that show 2, for each data row
+        # Calculate the sum of all flags that show 2, for each data row
         overall_flag = iteration_flags_df[iteration_flags_df == 2].sum(axis=1)
         overall_flag.name = self.generate_flagname()
 

@@ -11,9 +11,8 @@ import pandas as pd
 from pandas import Series, DatetimeIndex
 
 from diive.core.base.flagbase import FlagBase
-from diive.core.times.times import DetectFrequency
 from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag
+from diive.pkgs.outlierdetection.common import create_daytime_nighttime_flags
 
 
 @ConsoleOutputDecorator()
@@ -61,18 +60,9 @@ class AbsoluteLimitsDaytimeNighttime(FlagBase):
         self.showplot = showplot
         self.verbose = verbose
 
-
         # Detect daytime and nighttime
-        dnf = DaytimeNighttimeFlag(
-            timestamp_index=self.series.index,
-            nighttime_threshold=50,
-            lat=lat,
-            lon=lon,
-            utc_offset=utc_offset)
-        flag_nighttime = dnf.get_nighttime_flag()  # 0/1 flag needed outside init
-        self.flag_daytime = dnf.get_daytime_flag()
-        self.is_nighttime = flag_nighttime == 1  # Convert 0/1 flag to False/True flag
-        self.is_daytime = self.flag_daytime == 1  # Convert 0/1 flag to False/True flag
+        self.flag_daytime, flag_nighttime, self.is_daytime, self.is_nighttime = (
+            create_daytime_nighttime_flags(timestamp_index=self.series.index, lat=lat, lon=lon, utc_offset=utc_offset))
 
     def calc(self, repeat: bool = False):
         """Calculate overall flag, based on individual flags from multiple iterations.
@@ -191,8 +181,6 @@ class AbsoluteLimits(FlagBase):
 
 
 def example():
-    import numpy as np
-    import pandas as pd
     np.random.seed(100)
     rows = 1000
     data = np.random.rand(rows) * 100  # Random numbers b/w 0 and 100
@@ -208,8 +196,6 @@ def example():
 
 
 def example_daytime_nighttime():
-    import numpy as np
-    import pandas as pd
     np.random.seed(100)
     rows = 1000
     data = np.random.rand(rows) * 100  # Random numbers b/w 0 and 100
