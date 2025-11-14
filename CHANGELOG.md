@@ -24,6 +24,8 @@ for tick parameter names, a new plotting parameter for heatmaps, and an increase
   for faster calculations (3x faster on half-hourly 10Hz data, but not on all CPUs) (4)
 - Increased percentage threshold for data required to be considered as valid time resolution to 0.2% (2)
 - Added parameter `cb_extend` for colorbar extension in heatmap plots (3)
+- Refactored `insert_season` (11)
+- Daytime/nighttime flag creation is now harmonized across outlier detection methods (12)
 
 ### Bugfix
 
@@ -58,6 +60,8 @@ for tick parameter names, a new plotting parameter for heatmaps, and an increase
 - (8) `notebooks/CalculateVariable/FluxDetectionLimit/Flux_detection_limit.ipynb`
 - (9) `diive.pkgs.echires.fluxdetectionlimit.FluxDetectionLimit`
 - (10) `tests.test_echires.TestEcHires`
+- (11) `diive.core.times.times.insert_season`
+- (12) `diive.pkgs.outlierdetection.common.create_daytime_nighttime_flags`
 
 ## v0.89.0 | 23 Jul 2025
 

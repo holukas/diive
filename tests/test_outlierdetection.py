@@ -118,24 +118,24 @@ class TestOutlierDetection(unittest.TestCase):
 
         # Checks on bad data
         badmean = checkdf.loc[checkdf.flag == 2, 's_noise'].mean()
-        self.assertEqual(badmean, 19.926195230975953)
+        self.assertEqual(badmean, 19.90764864489646)
         baddata_stats = checkdf.loc[checkdf.flag == 2].describe()
         self.assertEqual(baddata_stats.loc['max']['s_noise'], 338.9234661966423)
         self.assertEqual(baddata_stats.loc['min']['s_noise'], -12.230067031003944)
-        self.assertEqual(baddata_stats.loc['count']['flag'], 380)
+        self.assertEqual(baddata_stats.loc['count']['flag'], 378)
         self.assertEqual(baddata_stats.loc['min']['flag'], 2)
         self.assertEqual(baddata_stats.loc['max']['flag'], 2)
-        self.assertEqual(baddata_stats.loc['count']['s_noise'], 380)
+        self.assertEqual(baddata_stats.loc['count']['s_noise'], 378)
 
         # Checks on good data
         goodmean = checkdf.loc[checkdf.flag == 0, 's_noise'].mean()
-        self.assertEqual(goodmean, 17.8173584698141)
+        self.assertEqual(goodmean, 17.82747404013876)
         gooddata_stats = checkdf.loc[checkdf.flag == 0].describe()
         self.assertEqual(gooddata_stats.loc['max']['s_noise'], 338.3652327597214)
         self.assertEqual(gooddata_stats.loc['min']['s_noise'], -40.33549755756406)
         self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
         self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
-        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1108)
+        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1110)
 
     def test_hampel_filter_daytime_nighttime(self):
         df = ed.load_exampledata_parquet()
@@ -172,10 +172,10 @@ class TestOutlierDetection(unittest.TestCase):
         baddata_stats = checkdf.loc[checkdf.flag == 2].describe()
         self.assertEqual(baddata_stats.loc['max']['s_noise'], 420.37816376334473)
         self.assertEqual(baddata_stats.loc['min']['s_noise'], -38.04507418841196)
-        self.assertEqual(baddata_stats.loc['count']['flag'], 102)
+        self.assertEqual(baddata_stats.loc['count']['flag'], 100)
         self.assertEqual(baddata_stats.loc['min']['flag'], 2)
         self.assertEqual(baddata_stats.loc['max']['flag'], 2)
-        self.assertEqual(baddata_stats.loc['count']['s_noise'], 102)
+        self.assertEqual(baddata_stats.loc['count']['s_noise'], 100)
 
         # Checks on good data
         gooddata_stats = checkdf.loc[checkdf.flag == 0].describe()
@@ -183,7 +183,7 @@ class TestOutlierDetection(unittest.TestCase):
         self.assertEqual(gooddata_stats.loc['min']['s_noise'], 5.049)
         self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
         self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
-        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1386)
+        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1388)
 
     def test_hampel_filter(self):
         df = ed.load_exampledata_parquet()
