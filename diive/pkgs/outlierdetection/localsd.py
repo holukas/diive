@@ -19,6 +19,16 @@ from diive.core.utils.prints import ConsoleOutputDecorator
 
 @ConsoleOutputDecorator()
 class LocalSD(FlagBase):
+    """
+    Identifies outliers in a time series based on the local standard deviation
+    within a rolling window.
+
+    This method calculates a rolling median and a rolling standard deviation (SD)
+    over a defined window size (`winsize`). Records that deviate from the
+    rolling median by more than `n_sd` times the SD are flagged as outliers.
+    The process can be repeated (`calc` method with `repeat=True`) to remove
+    all detected outliers iteratively.
+    """
     flagid = 'OUTLIER_LOCALSD'
 
     def __init__(self,
@@ -34,19 +44,19 @@ class LocalSD(FlagBase):
         Args:
             series: Time series in which outliers are identified.
             idstr: Identifier, added as suffix to output variable names.
-            winsize: Window size. Is used to calculate the rolling median and
-                rolling standard deviation in a time window of size *winsize* records.
-            n_sd: Number of standard deviations. Records with sd outside this value
-                are flagged as outliers.
-            constant_sd: If *True*, the standard deviation across all data is used
-                when calculating upper and lower limits that define outliers. By
-                default, this is set to *False*, i.e., the rolling standard deviation
-                within the defined window is used.
-            showplot: Show plot with removed data points.
-            verbose: More text output to console if *True*.
+            n_sd: **Number of standard deviations**. Records with data outside this value
+                relative to the rolling median are flagged as outliers.
+            winsize: **Window size** (number of records). Used to calculate the rolling median and
+                rolling standard deviation in a time window of this size. If **None**, it is
+                automatically set to $1/20^{th}$ of the series length in `_flagtests`.
+            constant_sd: If **True**, the standard deviation across **all data** is used
+                when calculating upper and lower limits that define outliers. If **False** (default),
+                the rolling standard deviation within the defined window is used.
+            showplot: Show plot with removed data points after calculation is complete.
+            verbose: More text output to console if **True**.
 
         Returns:
-            Flag series that combines flags from all iterations in one single flag.
+            The initialized LocalSD object (inherits from FlagBase).
 
         """
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
@@ -64,12 +74,17 @@ class LocalSD(FlagBase):
     def calc(self, repeat: bool = True):
         """Calculate overall flag, based on individual flags from multiple iterations.
 
+        This method calls `self.repeat(self.run_flagtests, repeat=repeat)` to perform
+        the outlier detection, potentially in a loop until no new outliers are found.
+
         Args:
-            repeat: If *True*, the outlier detection is repeated until all
+            repeat: If **True**, the outlier detection is repeated until all
                 outliers are removed.
 
+        Returns:
+            Flag series that combines flags from all iterations in one single flag.
+            (This is handled by the `FlagBase` class but is the conceptual output).
         """
-
         self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=repeat)
         if self.showplot:
             # Default plot for outlier tests, showing rejected values
@@ -77,8 +92,22 @@ class LocalSD(FlagBase):
             self._plot_finalize(n_iterations=n_iterations)
 
     def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
-        """Perform tests required for this flag"""
+        """
+        Performs the local standard deviation outlier detection test for one iteration.
 
+        It calculates the rolling median and either the rolling or constant standard
+        deviation, defines the upper and lower limits, and identifies records
+        outside these limits as outliers.
+
+        Args:
+            iteration: The current iteration number of the flagging process.
+
+        Returns:
+            A tuple containing:
+            - ok: DatetimeIndex of records that are **NOT** flagged as outliers.
+            - rejected: DatetimeIndex of records that **ARE** flagged as outliers.
+            - n_outliers: The total number of outliers found in this iteration.
+        """
         # Working data
         s = self.filteredseries.copy()
         s = s.dropna()
@@ -111,7 +140,18 @@ class LocalSD(FlagBase):
 
     @staticmethod
     def _plot_init():
-        """Initialize plot that collects iteration data."""
+        """
+        Initializes the plot figure and two subplots (axes) for visualizing
+        the outlier detection process and the resulting filtered series.
+
+        The plot uses a GridSpec layout with two stacked subplots.
+
+        Returns:
+            A tuple containing:
+            - fig: The matplotlib Figure object.
+            - ax: The top Axes object (showing original data, limits, and outliers).
+            - ax2: The bottom Axes object (showing the filtered series).
+        """
         fig = plt.figure(facecolor='white', figsize=(16, 12))
         gs = gridspec.GridSpec(2, 1)  # rows, cols
         # gs.update(wspace=0.3, hspace=0.1, left=0.03, right=0.97, top=0.95, bottom=0.05)
@@ -122,7 +162,18 @@ class LocalSD(FlagBase):
         return fig, ax, ax2
 
     def _plot_add_iteration(self, rmedian, upper_limit, lower_limit, iteration):
-        """Add iteration data to plot, but do not show plot yet."""
+        """
+        Adds the rolling median and the calculated upper/lower limits for the
+        current iteration to the top subplot (`self.ax_localsd`).
+
+        The original series is plotted only during the first iteration.
+
+        Args:
+            rmedian: Series containing the rolling median.
+            upper_limit: Series containing the upper outlier limit.
+            lower_limit: Series containing the lower outlier limit.
+            iteration: The current iteration number.
+        """
         if iteration == 1:
             self.ax_localsd.plot(self.series.index, self.series, label=f"{self.series.name}", color='black',
                                  marker='o', fillstyle='none', alpha=.9, markersize=4, linestyle='none',
@@ -136,7 +187,16 @@ class LocalSD(FlagBase):
                              alpha=1, markersize=0, markeredgecolor='none', ls='--', lw=1, zorder=4)
 
     def _plot_finalize(self, n_iterations):
-        """Finalize and show plot."""
+        """
+        Finalizes the plot by adding the overall flagged outliers to the top
+        subplot and the final filtered series to the bottom subplot.
+
+        It also applies default formatting, sets the plot title, and displays the figure.
+
+        Args:
+            n_iterations: The total number of iterations performed during the
+                outlier detection process.
+        """
         rejected = self.overall_flag == 2
         n_outliers = rejected.sum()
 

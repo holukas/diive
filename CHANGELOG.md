@@ -40,6 +40,7 @@ for tick parameter names, a new plotting parameter for heatmaps, and an increase
 
 - Added unit test for calculating the flux detection limit (10)
 - Added unit test for air temperature from sonic temperature (6)
+- Updated unit tests for outlier detection methods
 - XX/XX unittests ran successfully
 
 ### Other
