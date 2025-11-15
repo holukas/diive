@@ -114,10 +114,10 @@ class FlagBase:
         if isinstance(rejected, DatetimeIndex):
             self._filteredseries.loc[rejected] = np.nan
 
-    def reset(self):
-        self._filteredseries = self.series.copy()
-        # Generate flag series with NaNs
-        self._flag = pd.Series(index=self.series.index, data=np.nan, name=self.flagname)
+    # TODO delete def reset(self):
+    #     self._filteredseries = self.series.copy()
+    #     # Generate flag series with NaNs
+    #     self._flag = pd.Series(index=self.series.index, data=np.nan, name=self.flagname)
 
     def generate_flagname(self, iteration: int = None) -> str:
         """Generate standardized name for flag variable"""

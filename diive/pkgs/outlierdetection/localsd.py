@@ -6,15 +6,19 @@ This module is part of the diive library:
 https://github.com/holukas/diive
 
 """
+from typing import Any
+
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from pandas import DatetimeIndex, Series
 
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.base.flagbase import FlagBase
 from diive.core.plotting.plotfuncs import default_format
 from diive.core.utils.prints import ConsoleOutputDecorator
+from diive.pkgs.outlierdetection.common import create_daytime_nighttime_flags
 
 
 @ConsoleOutputDecorator()
@@ -34,9 +38,13 @@ class LocalSD(FlagBase):
     def __init__(self,
                  series: Series,
                  idstr: str = None,
-                 n_sd: float = 7,
-                 winsize: int = None,
+                 n_sd: float | list = 7,
+                 winsize: int | list = None,
                  constant_sd: bool = False,
+                 separate_daytime_nighttime: bool = False,
+                 lat: float = None,
+                 lon: float = None,
+                 utc_offset: int = None,
                  showplot: bool = False,
                  verbose: bool = False):
         """Identify outliers based on the local standard deviation.
@@ -63,13 +71,37 @@ class LocalSD(FlagBase):
         self.showplot = False
         self.verbose = False
         self.n_sd = n_sd
-        self.winsize = winsize
         self.constant_sd = constant_sd
+        self.separate_daytime_nighttime = separate_daytime_nighttime
+        self.lat = lat
+        self.lon = lon
+        self.utc_offset = utc_offset
         self.showplot = showplot
         self.verbose = verbose
 
+        self.winsize = int(len(self.series) / 20) if not winsize else winsize
+
+        # Validate and detect daytime and nighttime
+        if self.separate_daytime_nighttime:
+            self._validate_daytime_nighttime_setup()
+            self.flag_daytime, self.flag_nighttime, self.is_daytime, self.is_nighttime = (
+                create_daytime_nighttime_flags(timestamp_index=self.series.index, lat=lat, lon=lon,
+                                               utc_offset=utc_offset))
+
         if self.showplot:
             self.fig_localsd, self.ax_localsd, self.ax2_localsd = self._plot_init()
+
+    def _validate_daytime_nighttime_setup(self):
+        if not isinstance(self.n_sd, list):
+            raise ValueError(f"n_sd must be a list if separate_daytime_nighttime is True")
+        if not isinstance(self.winsize, list):
+            raise ValueError(f"winsize must be a list if separate_daytime_nighttime is True")
+        if not self.lat:
+            raise ValueError(f"lat must be set if separate_daytime_nighttime is True")
+        if not self.lon:
+            raise ValueError(f"lon must be set if separate_daytime_nighttime is True")
+        if not self.utc_offset:
+            raise ValueError(f"utc_offset must be set if separate_daytime_nighttime is True")
 
     def calc(self, repeat: bool = True):
         """Calculate overall flag, based on individual flags from multiple iterations.
@@ -91,7 +123,34 @@ class LocalSD(FlagBase):
             self.defaultplot(n_iterations=n_iterations)
             self._plot_finalize(n_iterations=n_iterations)
 
-    def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
+    def _identify_outliers(
+            self,
+            s: pd.Series,
+            winsize: int,
+            n_sd: float,
+            iteration: int,
+            infotxt: str = None
+    ) -> tuple[Any, Any, int]:
+        rmedian = s.rolling(window=winsize, center=True, min_periods=3).median()
+        if self.constant_sd:
+            sd = s.std()
+        else:
+            sd = s.rolling(window=winsize, center=True, min_periods=3).std()
+        upper_limit = rmedian + (sd * n_sd)
+        lower_limit = rmedian - (sd * n_sd)
+        ok = (s < upper_limit) & (s > lower_limit)
+        ok = ok[ok].index
+        rejected = (s > upper_limit) | (s < lower_limit)
+        rejected = rejected[rejected].index
+        n_outliers = len(rejected)
+        if self.verbose:
+            if self.verbose:
+                print(f"ITERATION#{iteration}{infotxt}: Total found outliers: {len(rejected)} values")
+        if self.showplot:
+            self._plot_add_iteration(rmedian, upper_limit, lower_limit, iteration)
+        return ok, rejected, n_outliers
+
+    def _flagtests(self, iteration: int) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """
         Performs the local standard deviation outlier detection test for one iteration.
 
@@ -108,33 +167,33 @@ class LocalSD(FlagBase):
             - rejected: DatetimeIndex of records that **ARE** flagged as outliers.
             - n_outliers: The total number of outliers found in this iteration.
         """
+
+        ok = None
+        rejected = None
+        n_outliers = None
+
         # Working data
-        s = self.filteredseries.copy()
-        s = s.dropna()
+        s = self.filteredseries.copy().dropna()
 
-        if not self.winsize:
-            self.winsize = int(len(s) / 20)
+        if not self.separate_daytime_nighttime:
+            ok, rejected, n_outliers = self._identify_outliers(
+                s=s, iteration=iteration, n_sd=self.n_sd, winsize=self.winsize, infotxt=" (daytime+nighttime)")
 
-        rmedian = s.rolling(window=self.winsize, center=True, min_periods=3).median()
-        if self.constant_sd:
-            sd = s.std()
-        else:
-            sd = s.rolling(window=self.winsize, center=True, min_periods=3).std()
-        upper_limit = rmedian + (sd * self.n_sd)
-        lower_limit = rmedian - (sd * self.n_sd)
+        if self.separate_daytime_nighttime:
+            # Run for daytime (dt)
+            s_dt = s[self.is_daytime].copy()  # Daytime data
+            ok_dt, rejected_dt, n_outliers_dt = self._identify_outliers(
+                s=s_dt, iteration=iteration, n_sd=self.n_sd[0], winsize=self.winsize[0], infotxt=" (daytime)")
 
-        ok = (s < upper_limit) & (s > lower_limit)
-        ok = ok[ok].index
-        rejected = (s > upper_limit) | (s < lower_limit)
-        rejected = rejected[rejected].index
+            # Run for nighttime
+            s_nt = s[self.is_nighttime].copy()  # Nighttime data
+            ok_nt, rejected_nt, n_outliers_nt = self._identify_outliers(
+                s=s_nt, iteration=iteration, n_sd=self.n_sd[1], winsize=self.winsize[1], infotxt=" (nighttime)")
 
-        n_outliers = len(rejected)
-
-        if self.verbose:
-            if self.verbose:
-                print(f"ITERATION#{iteration}: Total found outliers: {len(rejected)} values")
-        if self.showplot:
-            self._plot_add_iteration(rmedian, upper_limit, lower_limit, iteration)
+            # Collect daytime and nighttime flags in one overall flag
+            ok = ok_dt.union(ok_nt)
+            rejected = rejected_dt.union(rejected_nt)
+            n_outliers = n_outliers_dt + n_outliers_nt
 
         return ok, rejected, n_outliers
 
@@ -221,7 +280,42 @@ class LocalSD(FlagBase):
         self.fig_localsd.show()
 
 
-def example():
+def _example_localsd_daytime_nighttime():
+    import importlib.metadata
+    import diive.configs.exampledata as ed
+    from diive.pkgs.createvar.noise import add_impulse_noise
+    import warnings
+    warnings.filterwarnings('ignore')
+    version_diive = importlib.metadata.version("diive")
+    print(f"diive version: v{version_diive}")
+    df = ed.load_exampledata_parquet()
+    s = df['Tair_f'].copy()
+    s = s.loc[s.index.year == 2018].copy()
+    s = s.loc[s.index.month == 7].copy()
+    s_noise = add_impulse_noise(series=s,
+                                factor_low=-10,
+                                factor_high=3,
+                                contamination=0.4)  # Add impulse noise (spikes)
+    s_noise.name = f"{s.name}+noise"
+    # TimeSeries(s_noise).plot()
+
+    lsd = LocalSD(
+        series=s_noise,
+        separate_daytime_nighttime=True,
+        n_sd=[2, 3],
+        winsize=[48 * 2, 48 * 2],
+        constant_sd=True,
+        lat=46.0,
+        lon=11.0,
+        utc_offset=1,
+        showplot=True,
+        verbose=True
+    )
+
+    lsd.calc(repeat=True)
+
+
+def _example_localsd():
     import importlib.metadata
     import diive.configs.exampledata as ed
     from diive.pkgs.createvar.noise import add_impulse_noise
@@ -253,4 +347,5 @@ def example():
 
 
 if __name__ == '__main__':
-    example()
+    _example_localsd_daytime_nighttime()
+    # _example_localsd()

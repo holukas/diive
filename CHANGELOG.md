@@ -13,6 +13,7 @@ for tick parameter names, a new plotting parameter for heatmaps, and an increase
 
 ## Additions
 
+- Added option in `LocalSD` outlier detection to run the filter separately for daytime and nighttime (13)
 - Added new function to calculate air temperature from sonic temperature (5)
 
 ## Changes
@@ -63,6 +64,7 @@ for tick parameter names, a new plotting parameter for heatmaps, and an increase
 - (10) `tests.test_echires.TestEcHires`
 - (11) `diive.core.times.times.insert_season`
 - (12) `diive.pkgs.outlierdetection.common.create_daytime_nighttime_flags`
+- (13) `diive.pkgs.outlierdetection.localsd.LocalSD`
 
 ## v0.89.0 | 23 Jul 2025
 
