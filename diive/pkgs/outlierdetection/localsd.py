@@ -24,14 +24,20 @@ from diive.pkgs.outlierdetection.common import create_daytime_nighttime_flags
 @ConsoleOutputDecorator()
 class LocalSD(FlagBase):
     """
-    Identifies outliers in a time series based on the local standard deviation
-    within a rolling window.
+    Identifies time series outliers using a local standard deviation approach.
 
-    This method calculates a rolling median and a rolling standard deviation (SD)
-    over a defined window size (`winsize`). Records that deviate from the
-    rolling median by more than `n_sd` times the SD are flagged as outliers.
-    The process can be repeated (`calc` method with `repeat=True`) to remove
-    all detected outliers iteratively.
+    This class flags data points that deviate from a rolling median by a
+    specified number of standard deviations (local or constant). It can
+    iteratively remove outliers and recalculate until no new outliers are found.
+
+    The class supports two main operation modes:
+    1.  **Standard:** Analyzes the entire series with one set of parameters.
+    2.  **Day/Night:** Analyzes daytime and nighttime data separately, using
+        distinct parameters (window size, SD multiplier) for each period.
+
+    Attributes:
+        flagid (str): The identifier for this flagging method, 'OUTLIER_LOCALSD'.
+
     """
     flagid = 'OUTLIER_LOCALSD'
 
@@ -47,25 +53,51 @@ class LocalSD(FlagBase):
                  utc_offset: int = None,
                  showplot: bool = False,
                  verbose: bool = False):
-        """Identify outliers based on the local standard deviation.
+        """
+        Initializes the LocalSD outlier detection instance.
 
         Args:
-            series: Time series in which outliers are identified.
-            idstr: Identifier, added as suffix to output variable names.
-            n_sd: **Number of standard deviations**. Records with data outside this value
-                relative to the rolling median are flagged as outliers.
-            winsize: **Window size** (number of records). Used to calculate the rolling median and
-                rolling standard deviation in a time window of this size. If **None**, it is
-                automatically set to $1/20^{th}$ of the series length in `_flagtests`.
-            constant_sd: If **True**, the standard deviation across **all data** is used
-                when calculating upper and lower limits that define outliers. If **False** (default),
-                the rolling standard deviation within the defined window is used.
-            showplot: Show plot with removed data points after calculation is complete.
-            verbose: More text output to console if **True**.
+            series (Series): The pandas time series data to analyze.
+            idstr (str, optional): A unique identifier for this instance.
+                Defaults to None.
+            n_sd (float | list, optional): The number of standard deviations
+                (multiplier) to define the outlier threshold. If
+                `separate_daytime_nighttime` is True, this must be a list
+                [day_sd, night_sd]. Defaults to 7.
+            winsize (int | list, optional): The rolling window size for
+                median/SD calculation. If `separate_daytime_nighttime` is True,
+                this must be a list [day_win, night_win]. If None, defaults
+                to 5% of the series length. Defaults to None.
+            constant_sd (bool, optional): If True, uses the standard deviation
+                of the *entire* series. If False (default), uses a *rolling*
+                standard deviation based on `winsize`. Defaults to False.
+            separate_daytime_nighttime (bool, optional): If True, runs the
+                detection separately for day and night periods. Defaults to False.
+            lat (float, optional): Latitude, required if
+                `separate_daytime_nighttime` is True for sun-position
+                calculations. Defaults to None.
+            lon (float, optional): Longitude, required if
+                `separate_daytime_nighttime` is True. Defaults to None.
+            utc_offset (int, optional): UTC offset in hours, required if
+                `separate_daytime_nighttime` is True. Defaults to None.
+            showplot (bool, optional): If True, generates a plot of the
+                detection process upon calling `.calc()`. Defaults to False.
+            verbose (bool, optional): If True, prints iteration details to the
+                console. Defaults to False.
 
-        Returns:
-            The initialized LocalSD object (inherits from FlagBase).
-
+        Attributes:
+            series (Series): The input time series.
+            n_sd (float | list): Standard deviation multiplier.
+            winsize (int | list): Rolling window size.
+            constant_sd (bool): Flag for constant vs. rolling SD.
+            separate_daytime_nighttime (bool): Flag for day/night mode.
+            flag_daytime (Series): Boolean flags for daytime (if enabled).
+            flag_nighttime (Series): Boolean flags for nighttime (if enabled).
+            is_daytime (Series): Boolean mask for daytime indices (if enabled).
+            is_nighttime (Series): Boolean mask for nighttime indices (if enabled).
+            fig_localsd (plt.Figure): Matplotlib figure object (if showplot).
+            ax_localsd (plt.Axes): Top subplot for data and limits (if showplot).
+            ax2_localsd (plt.Axes): Bottom subplot for filtered data (if showplot).
         """
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.showplot = False
@@ -104,24 +136,30 @@ class LocalSD(FlagBase):
             raise ValueError(f"utc_offset must be set if separate_daytime_nighttime is True")
 
     def calc(self, repeat: bool = True):
-        """Calculate overall flag, based on individual flags from multiple iterations.
+        """
+        Runs the iterative outlier detection process.
 
-        This method calls `self.repeat(self.run_flagtests, repeat=repeat)` to perform
-        the outlier detection, potentially in a loop until no new outliers are found.
+        This method repeatedly calls the `_flagtests` method (via `self.repeat`
+        from the parent `FlagBase`) to find and flag outliers.
+
+        If `showplot` was set to True in the constructor, this method will
+        also generate and display the final summary plot after calculation.
 
         Args:
-            repeat: If **True**, the outlier detection is repeated until all
-                outliers are removed.
+            repeat (bool, optional): If True, the detection process is
+                repeated until a stable state (no new outliers) is reached.
+                If False, it runs only once. Defaults to True.
 
         Returns:
-            Flag series that combines flags from all iterations in one single flag.
-            (This is handled by the `FlagBase` class but is the conceptual output).
+            pd.Series: A flag series (managed by the `FlagBase` parent class)
+            where outliers are marked with flag ID 2.
         """
         self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=repeat)
         if self.showplot:
 
             if self.separate_daytime_nighttime:
                 # Daytime/nighttime details for separated approach
+                # This is a dedicated plot in FlagBase for daytime/nighttime methods
                 title = (f"Absolute limits filter daytime/nighttime: {self.series.name}, "
                          f"n_iterations = {n_iterations}, "
                          f"n_outliers = {self.series[self.overall_flag == 2].count()}")
@@ -129,8 +167,10 @@ class LocalSD(FlagBase):
                                                     flag_quality=self.overall_flag, title=title)
             else:
                 # Default plot only needed for non-separated outlier detection
+                # This is a general plot in FlagBase for outlier methods
                 self.defaultplot(n_iterations=n_iterations)
 
+            # Plot special to LocalSD
             self._plot_finalize(n_iterations=n_iterations)
 
     def _identify_outliers(
@@ -141,6 +181,29 @@ class LocalSD(FlagBase):
             iteration: int,
             infotxt: str = None
     ) -> tuple[Any, Any, int]:
+        """
+        Performs a single pass of outlier detection on a series.
+
+        Calculates the rolling median, standard deviation (rolling or constant),
+        and the resulting upper/lower thresholds. It then identifies all
+        data points outside these thresholds.
+
+        Args:
+            s (pd.Series): The time series data to analyze (e.g., full series,
+                or just daytime/nighttime subset).
+            winsize (int): The rolling window size to use.
+            n_sd (float): The standard deviation multiplier for the threshold.
+            iteration (int): The current iteration number (for plotting and
+                verbose output).
+            infotxt (str, optional): Additional text to display in verbose
+                output (e.g., "(daytime)"). Defaults to None.
+
+        Returns:
+            tuple[pd.DatetimeIndex, pd.DatetimeIndex, int]:
+                - ok: DatetimeIndex of valid data points.
+                - rejected: DatetimeIndex of outlier data points.
+                - n_outliers: The count of rejected outliers.
+        """
         rmedian = s.rolling(window=winsize, center=True, min_periods=3).median()
         if self.constant_sd:
             sd = s.std()
@@ -162,22 +225,27 @@ class LocalSD(FlagBase):
 
     def _flagtests(self, iteration: int) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """
-        Performs the local standard deviation outlier detection test for one iteration.
+        Performs one full iteration of the local SD outlier test.
 
-        It calculates the rolling median and either the rolling or constant standard
-        deviation, defines the upper and lower limits, and identifies records
-        outside these limits as outliers.
+        This method handles the logic for a single pass. If day/night
+        separation is *False*, it calls `_identify_outliers` once on the
+        current filtered series.
+
+        If day/night separation is *True*, it splits the data into daytime
+        and nighttime subsets and calls `_identify_outliers` on each subset
+        separately, using their respective `n_sd` and `winsize` parameters.
+        The results are then merged.
 
         Args:
-            iteration: The current iteration number of the flagging process.
+            iteration (int): The current iteration number, passed from the
+                `repeat` loop (from `FlagBase`).
 
         Returns:
-            A tuple containing:
-            - ok: DatetimeIndex of records that are **NOT** flagged as outliers.
-            - rejected: DatetimeIndex of records that **ARE** flagged as outliers.
-            - n_outliers: The total number of outliers found in this iteration.
+            tuple[DatetimeIndex, DatetimeIndex, int]:
+                - ok: DatetimeIndex of all valid records for this iteration.
+                - rejected: DatetimeIndex of all outliers found in this iteration.
+                - n_outliers: The total number of outliers found.
         """
-
         ok = None
         rejected = None
         n_outliers = None
@@ -209,18 +277,6 @@ class LocalSD(FlagBase):
 
     @staticmethod
     def _plot_init():
-        """
-        Initializes the plot figure and two subplots (axes) for visualizing
-        the outlier detection process and the resulting filtered series.
-
-        The plot uses a GridSpec layout with two stacked subplots.
-
-        Returns:
-            A tuple containing:
-            - fig: The matplotlib Figure object.
-            - ax: The top Axes object (showing original data, limits, and outliers).
-            - ax2: The bottom Axes object (showing the filtered series).
-        """
         fig = plt.figure(facecolor='white', figsize=(16, 12))
         gs = gridspec.GridSpec(2, 1)  # rows, cols
         # gs.update(wspace=0.3, hspace=0.1, left=0.03, right=0.97, top=0.95, bottom=0.05)
@@ -232,16 +288,17 @@ class LocalSD(FlagBase):
 
     def _plot_add_iteration(self, rmedian, upper_limit, lower_limit, iteration):
         """
-        Adds the rolling median and the calculated upper/lower limits for the
-        current iteration to the top subplot (`self.ax_localsd`).
+        Adds the results of a single iteration to the main plot.
 
-        The original series is plotted only during the first iteration.
+        This plots the rolling median, upper limit, and lower limit lines
+        on the top subplot (`self.ax_localsd`). The original series is
+        plotted only on the first iteration (iteration == 1).
 
         Args:
-            rmedian: Series containing the rolling median.
-            upper_limit: Series containing the upper outlier limit.
-            lower_limit: Series containing the lower outlier limit.
-            iteration: The current iteration number.
+            rmedian (Series): Series of the rolling median for this iteration.
+            upper_limit (Series): Series of the upper threshold for this iteration.
+            lower_limit (Series): Series of the lower threshold for this iteration.
+            iteration (int): The current iteration number.
         """
         if iteration == 1:
             self.ax_localsd.plot(self.series.index, self.series, label=f"{self.series.name}", color='black',
@@ -257,14 +314,15 @@ class LocalSD(FlagBase):
 
     def _plot_finalize(self, n_iterations):
         """
-        Finalizes the plot by adding the overall flagged outliers to the top
-        subplot and the final filtered series to the bottom subplot.
+        Finalizes and displays the outlier detection plot.
 
-        It also applies default formatting, sets the plot title, and displays the figure.
+        This method adds the final set of all identified outliers (as 'X'
+        markers) to the top plot and plots the complete filtered series
+        (with NaNs for outliers) on the bottom plot. It then applies
+        formatting and shows the figure.
 
         Args:
-            n_iterations: The total number of iterations performed during the
-                outlier detection process.
+            n_iterations (int): The total number of iterations performed.
         """
         rejected = self.overall_flag == 2
         n_outliers = rejected.sum()
