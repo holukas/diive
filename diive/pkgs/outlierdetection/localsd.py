@@ -119,8 +119,18 @@ class LocalSD(FlagBase):
         """
         self._overall_flag, n_iterations = self.repeat(self.run_flagtests, repeat=repeat)
         if self.showplot:
-            # Default plot for outlier tests, showing rejected values
-            self.defaultplot(n_iterations=n_iterations)
+
+            if self.separate_daytime_nighttime:
+                # Daytime/nighttime details for separated approach
+                title = (f"Absolute limits filter daytime/nighttime: {self.series.name}, "
+                         f"n_iterations = {n_iterations}, "
+                         f"n_outliers = {self.series[self.overall_flag == 2].count()}")
+                self.plot_outlier_daytime_nighttime(series=self.series, flag_daytime=self.flag_daytime,
+                                                    flag_quality=self.overall_flag, title=title)
+            else:
+                # Default plot only needed for non-separated outlier detection
+                self.defaultplot(n_iterations=n_iterations)
+
             self._plot_finalize(n_iterations=n_iterations)
 
     def _identify_outliers(
@@ -295,7 +305,8 @@ def _example_localsd_daytime_nighttime():
     s_noise = add_impulse_noise(series=s,
                                 factor_low=-10,
                                 factor_high=3,
-                                contamination=0.4)  # Add impulse noise (spikes)
+                                contamination=0.4,
+                                seed=42)  # Add impulse noise (spikes)
     s_noise.name = f"{s.name}+noise"
     # TimeSeries(s_noise).plot()
 
@@ -303,7 +314,7 @@ def _example_localsd_daytime_nighttime():
         series=s_noise,
         separate_daytime_nighttime=True,
         n_sd=[2, 3],
-        winsize=[48 * 2, 48 * 2],
+        winsize=[48 * 1, 48 * 2],
         constant_sd=True,
         lat=46.0,
         lon=11.0,
@@ -336,7 +347,7 @@ def _example_localsd():
 
     lsd = LocalSD(
         series=s_noise,
-        n_sd=2.1,
+        n_sd=2,
         winsize=48 * 2,
         constant_sd=True,
         showplot=True,
