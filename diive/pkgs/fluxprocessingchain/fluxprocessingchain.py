@@ -855,10 +855,16 @@ class FluxProcessingChain:
         self._level32.flag_outliers_zscore_dtnt_test(thres_zscore=thres_zscore, showplot=showplot, verbose=verbose,
                                                      repeat=repeat)
 
-    def level32_flag_outliers_localsd_test(self, n_sd: float = 7, winsize: int = None, showplot: bool = False,
-                                           constant_sd: bool = False, verbose: bool = False, repeat: bool = True):
-        self._level32.flag_outliers_localsd_test(n_sd=n_sd, winsize=winsize, showplot=showplot, verbose=verbose,
-                                                 constant_sd=constant_sd, repeat=repeat)
+    def level32_flag_outliers_localsd_test(self, n_sd: float | list = 7, winsize: int | list = None,
+                                           showplot: bool = False, constant_sd: bool = False,
+                                           separate_daytime_nighttime: bool = False, lat: float = None,
+                                           lon: float = None, utc_offset: int = None,
+                                           verbose: bool = False, repeat: bool = True):
+        self._level32.flag_outliers_localsd_test(n_sd=n_sd, winsize=winsize,
+                                                 separate_daytime_nighttime=separate_daytime_nighttime,
+                                                 lat=lat, lon=lon, utc_offset=utc_offset,
+                                                 constant_sd=constant_sd, showplot=showplot,
+                                                 verbose=verbose, repeat=repeat)
 
     def level32_flag_manualremoval_test(self, remove_dates: list, showplot: bool = False, verbose: bool = False):
         self._level32.flag_manualremoval_test(remove_dates=remove_dates, showplot=showplot, verbose=verbose)
@@ -1174,8 +1180,8 @@ def example():
     # Source data
     from pathlib import Path
     from diive.core.io.files import load_parquet
-    SOURCEDIR = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-cha_flux_product\dataset_ch-cha_flux_product\notebooks\30_MERGE_DATA"
-    FILENAME = r"33.5_CH-CHA_IRGA+QCL+LGR+M10+MGMT_Level-1_eddypro_fluxnet_2005-2024.parquet"
+    SOURCEDIR = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\20_MERGE_DATA"
+    FILENAME = r"22.4_FLUXES_L1_IRGA72+METEO7_2016-2024.parquet"
     FILEPATH = Path(SOURCEDIR) / FILENAME
     maindf = load_parquet(filepath=str(FILEPATH))
     # SOURCEDIRS = [r"L:\Sync\luhk_work\20 - CODING\21 - DIIVE\diive\notebooks\FluxProcessingChain\example_data"]
@@ -1225,23 +1231,23 @@ def example():
     TEST_SSITC = True  # Default True
     TEST_SSITC_SETFLAG_TIMEPERIOD = None
     # TEST_SSITC_SETFLAG_TIMEPERIOD = {2: [[1, '2022-05-01', '2023-09-30']]}  # Set flag 1 to 2 (bad) during time period
-    TEST_GAS_COMPLETENESS = True  # Default True
+    TEST_GAS_COMPLETENESS = False  # Default True
     TEST_SPECTRAL_CORRECTION_FACTOR = True  # Default True
     TEST_SIGNAL_STRENGTH = True
-    TEST_SIGNAL_STRENGTH_COL = 'CUSTOM_AGC_MEAN'
-    TEST_SIGNAL_STRENGTH_METHOD = 'discard above'
-    TEST_SIGNAL_STRENGTH_THRESHOLD = 90
+    TEST_SIGNAL_STRENGTH_COL = 'CUSTOM_SIGNAL_STRENGTH_IRGA72_MEAN'
+    TEST_SIGNAL_STRENGTH_METHOD = 'discard below'
+    TEST_SIGNAL_STRENGTH_THRESHOLD = 60
     # TimeSeries(series=maindf[TEST_SIGNAL_STRENGTH_COL]).plot()
     TEST_RAWDATA = True  # Default True
     TEST_RAWDATA_SPIKES = True  # Default True
-    TEST_RAWDATA_AMPLITUDE = True  # Default True
+    TEST_RAWDATA_AMPLITUDE = False  # Default True
     TEST_RAWDATA_DROPOUT = True  # Default True
     TEST_RAWDATA_ABSLIM = False  # Default False
     TEST_RAWDATA_SKEWKURT_HF = False  # Default False
     TEST_RAWDATA_SKEWKURT_SF = False  # Default False
     TEST_RAWDATA_DISCONT_HF = False  # Default False
     TEST_RAWDATA_DISCONT_SF = False  # Default False
-    TEST_RAWDATA_ANGLE_OF_ATTACK = True  # Default False
+    TEST_RAWDATA_ANGLE_OF_ATTACK = False  # Default False
     TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES = [['2008-01-01', '2010-01-01'],
                                                       ['2016-03-01', '2016-05-01']]  # Default False
     # TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES = False  # Default False
@@ -1310,21 +1316,22 @@ def example():
     # Level-3.2
     # --------------------
     fpc.level32_stepwise_outlier_detection()
-    fpc.level32_flag_manualremoval_test(
-        remove_dates=[
-            ['2016-03-18 12:15:00', '2016-05-03 06:45:00'],
-            # '2022-12-12 12:45:00',
-        ],
-        showplot=False, verbose=True)
-    fpc.level32_addflag()
 
-    DAYTIME_MINMAX = [-50, 50]
-    NIGHTTIME_MINMAX = [-50, 50]
-    fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX,
-                                               showplot=False, verbose=False)
-    # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX, showplot=True, verbose=True)
-    fpc.level32_addflag()
-    # fpc.level32.results  # Stores Level-3.2 flags up to this point
+    # fpc.level32_flag_manualremoval_test(
+    #     remove_dates=[
+    #         ['2016-03-18 12:15:00', '2016-05-03 06:45:00'],
+    #         # '2022-12-12 12:45:00',
+    #     ],
+    #     showplot=False, verbose=True)
+    # fpc.level32_addflag()
+
+    # DAYTIME_MINMAX = [-50, 50]
+    # NIGHTTIME_MINMAX = [-50, 50]
+    # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX,
+    #                                            showplot=False, verbose=False)
+    # # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX, showplot=True, verbose=True)
+    # fpc.level32_addflag()
+    # # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
     # fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=False, repeat=True)
     # fpc.level32_addflag()
@@ -1347,6 +1354,11 @@ def example():
 
     # fpc.level32_flag_outliers_localsd_test(n_sd=4, winsize=48 * 13, constant_sd=True, showplot=False, verbose=True, repeat=True)
     # fpc.level32_addflag()
+
+    fpc.level32_flag_outliers_localsd_test(n_sd=[1.2, 99], winsize=[48 * 13, 48 * 2], constant_sd=False,
+                                           separate_daytime_nighttime=True, lat=SITE_LAT, lon=SITE_LON, utc_offset=1,
+                                           showplot=True, verbose=True, repeat=False)
+    fpc.level32_addflag()
 
     # fpc.level32_flag_outliers_increments_zcore_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
     # fpc.level32_addflag()
@@ -1375,11 +1387,12 @@ def example():
 
     # # fpc.filteredseries
     # # fpc.level32.flags
-    # fpc.level32_qcf.showplot_qcf_heatmaps()
+    fpc.level32_qcf.showplot_qcf_heatmaps()
     # # fpc.level32_qcf.showplot_qcf_timeseries()
     # # fpc.level32_qcf.report_qcf_flags()
     # fpc.level32_qcf.report_qcf_evolution()
     # # fpc.level32_qcf.report_qcf_series()
+    print("STOP")
     # -------------------------------------------------------------------------
 
     # --------------------
