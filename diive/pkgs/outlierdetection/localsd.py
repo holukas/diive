@@ -300,7 +300,7 @@ class LocalSD(FlagBase):
             iteration (int): The current iteration number.
         """
         if time_period == " (daytime+nighttime)":
-            color = "#FFA726"
+            color = "#FF5722"
         else:
             if time_period == " (daytime)":
                 color = "#FF5722"
@@ -354,10 +354,18 @@ class LocalSD(FlagBase):
             self.ax_localsd.plot(outliers_only_nt.index, outliers_only_nt,
                                  label=f"nighttime outlier ({n_outliers_nt})", color='#81D4FA', zorder=2, ls='None',
                                  alpha=1, markersize=12, markeredgecolor='none', marker='X')
+            figtitle = (
+                f"Outlier detection based on the standard deviation in a rolling window for {self.series.name}\n"
+                f"n_iterations = {n_iterations}, "
+                f"n_outliers = {n_outliers_total} (daytime: {n_outliers_dt}, nighttime: {n_outliers_nt})")
         else:
             self.ax_localsd.plot(outliers_only.index, outliers_only,
                                  label=f"outlier ({n_outliers_total})", color='#F44336', zorder=2, ls='None',
                                  alpha=1, markersize=12, markeredgecolor='none', marker='X')
+            figtitle = (
+                f"Outlier detection based on the standard deviation in a rolling window for {self.series.name}\n"
+                f"n_iterations = {n_iterations}, "
+                f"n_outliers = {n_outliers_total}")
 
         filtered = self.series.copy()
         filtered.loc[rejected_total] = np.nan
@@ -367,10 +375,7 @@ class LocalSD(FlagBase):
         default_format(ax=self.ax_localsd)
         default_format(ax=self.ax2_localsd)
         default_legend(ax=self.ax_localsd, ncol=2, markerscale=1)
-        plottitle = (
-            f"Outlier detection based on the standard deviation in a rolling window for {self.series.name}\n"
-            f"n_iterations = {n_iterations}, n_outliers = {n_outliers_total}")
-        self.fig_localsd.suptitle(plottitle, fontsize=theme.FIGHEADER_FONTSIZE)
+        self.fig_localsd.suptitle(figtitle, fontsize=theme.FIGHEADER_FONTSIZE)
         self.fig_localsd.show()
 
 
