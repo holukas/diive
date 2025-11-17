@@ -29,7 +29,7 @@ class TestEcHires(unittest.TestCase):
             lag_range=[-180, 180],  # seconds, calculate covariance for all steps between -180s and +180s
             lag_stepsize=1,  # number of records, step size for lag search
             sampling_rate=10,  # Hz
-            show_covariance_plot=True,
+            create_covariance_plot=True,
             title_covariance_plot="Covariance vs time lag for example file")
         fdl.run()
         results = fdl.get_detection_limit()

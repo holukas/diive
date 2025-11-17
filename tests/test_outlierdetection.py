@@ -354,6 +354,61 @@ class TestOutlierDetection(unittest.TestCase):
         self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
         self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1441)
 
+    def test_localsd_daytime_nighttime(self):
+        df = ed.load_exampledata_parquet()
+        s = df['Tair_f'].copy()
+        s = s.loc[s.index.year == 2018].copy()
+        s = s.loc[s.index.month == 7].copy()
+        s_noise = add_impulse_noise(series=s,
+                                    factor_low=-11,
+                                    factor_high=9,
+                                    contamination=0.2,
+                                    seed=42)  # Add impulse noise (spikes)
+        lsd = LocalSD(
+            series=s_noise,
+            separate_daytime_nighttime=True,
+            n_sd=[3, 2],
+            winsize=[48 * 2, 48 * 1],
+            constant_sd=False,
+            lat=46.0,
+            lon=11.0,
+            utc_offset=1,
+            showplot=False,
+            verbose=False
+        )
+        lsd.calc(repeat=True)
+        flag = lsd.get_flag()
+        frame = {'s_noise': s_noise, 'flag': flag}
+        checkdf = pd.DataFrame.from_dict(frame)
+
+        # Get daytime and nighttime data
+        checkdf['FLAG_DAYTIME'] = lsd.flag_daytime
+        checkdf['FLAG_NIGHTTIME'] = lsd.flag_nighttime
+        good_dt = checkdf.loc[(checkdf['FLAG_DAYTIME'] == 1) & (checkdf['flag'] == 0)].copy()
+        bad_dt = checkdf.loc[(checkdf['FLAG_DAYTIME'] == 1) & (checkdf['flag'] == 2)].copy()
+        good_nt = checkdf.loc[(checkdf['FLAG_NIGHTTIME'] == 1) & (checkdf['flag'] == 0)].copy()
+        bad_nt = checkdf.loc[(checkdf['FLAG_NIGHTTIME'] == 1) & (checkdf['flag'] == 2)].copy()
+
+        # Checks on good data
+        good_dt_stats = good_dt.describe()
+        self.assertEqual(good_dt_stats.loc['max']['s_noise'], 31.87658379873561)
+        self.assertEqual(good_dt_stats.loc['min']['s_noise'], 4.3238046734031155)
+        self.assertEqual(good_dt_stats.loc['count']['s_noise'], 766)
+        good_nt_stats = good_nt.describe()
+        self.assertEqual(good_nt_stats.loc['max']['s_noise'], 17.073)
+        self.assertEqual(good_nt_stats.loc['min']['s_noise'], 5.345)
+        self.assertEqual(good_nt_stats.loc['count']['s_noise'], 371)
+
+        # Checks on bad data
+        bad_dt_stats = bad_dt.describe()
+        self.assertEqual(bad_dt_stats.loc['max']['s_noise'], 231.78475439289213)
+        self.assertEqual(bad_dt_stats.loc['min']['s_noise'], -38.52634400343396)
+        self.assertEqual(bad_dt_stats.loc['count']['s_noise'], 165)
+        bad_nt_stats = bad_nt.describe()
+        self.assertEqual(bad_nt_stats.loc['max']['s_noise'], 224.8390630344748)
+        self.assertEqual(bad_nt_stats.loc['min']['s_noise'], -36.84146979488223)
+        self.assertEqual(bad_nt_stats.loc['count']['s_noise'], 186)
+
     def test_localsd_with_constantsd(self):
         df = ed.load_exampledata_parquet()
         s = df['Tair_f'].copy()

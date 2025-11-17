@@ -39,10 +39,11 @@ for tick parameter names, a new plotting parameter for heatmaps, and an increase
 
 ### Unittests
 
+- Added unit test for outlier detection using `LocalSD` for daytime/nighttime (14)
 - Added unit test for calculating the flux detection limit (10)
-- Added unit test for air temperature from sonic temperature (6)
+- Added unit test for calculating air temperature from sonic temperature (6)
 - Updated unit tests for outlier detection methods
-- XX/XX unittests ran successfully
+- XX/69 unittests ran successfully
 
 ### Other
 
@@ -65,6 +66,7 @@ for tick parameter names, a new plotting parameter for heatmaps, and an increase
 - (11) `diive.core.times.times.insert_season`
 - (12) `diive.pkgs.outlierdetection.common.create_daytime_nighttime_flags`
 - (13) `diive.pkgs.outlierdetection.localsd.LocalSD`
+- (14) `tests.test_outlierdetection.TestOutlierDetection.test_localsd_daytime_nighttime`
 
 ## v0.89.0 | 23 Jul 2025
 
