@@ -16,7 +16,7 @@ from pandas import DatetimeIndex, Series
 
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.base.flagbase import FlagBase
-from diive.core.plotting.plotfuncs import default_format
+from diive.core.plotting.plotfuncs import default_format, default_legend
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.pkgs.outlierdetection.common import create_daytime_nighttime_flags
 
@@ -179,7 +179,7 @@ class LocalSD(FlagBase):
             winsize: int,
             n_sd: float,
             iteration: int,
-            infotxt: str = None
+            time_period: str = None
     ) -> tuple[Any, Any, int]:
         """
         Performs a single pass of outlier detection on a series.
@@ -195,7 +195,7 @@ class LocalSD(FlagBase):
             n_sd (float): The standard deviation multiplier for the threshold.
             iteration (int): The current iteration number (for plotting and
                 verbose output).
-            infotxt (str, optional): Additional text to display in verbose
+            time_period (str, optional): Additional text to display in verbose
                 output (e.g., "(daytime)"). Defaults to None.
 
         Returns:
@@ -217,10 +217,9 @@ class LocalSD(FlagBase):
         rejected = rejected[rejected].index
         n_outliers = len(rejected)
         if self.verbose:
-            if self.verbose:
-                print(f"ITERATION#{iteration}{infotxt}: Total found outliers: {len(rejected)} values")
+            print(f"ITERATION#{iteration}{time_period}: Total found outliers: {len(rejected)} values")
         if self.showplot:
-            self._plot_add_iteration(rmedian, upper_limit, lower_limit, iteration)
+            self._plot_add_iteration(rmedian, upper_limit, lower_limit, iteration, time_period=time_period)
         return ok, rejected, n_outliers
 
     def _flagtests(self, iteration: int) -> tuple[DatetimeIndex, DatetimeIndex, int]:
@@ -255,18 +254,18 @@ class LocalSD(FlagBase):
 
         if not self.separate_daytime_nighttime:
             ok, rejected, n_outliers = self._identify_outliers(
-                s=s, iteration=iteration, n_sd=self.n_sd, winsize=self.winsize, infotxt=" (daytime+nighttime)")
+                s=s, iteration=iteration, n_sd=self.n_sd, winsize=self.winsize, time_period=" (daytime+nighttime)")
 
         if self.separate_daytime_nighttime:
             # Run for daytime (dt)
             s_dt = s[self.is_daytime].copy()  # Daytime data
             ok_dt, rejected_dt, n_outliers_dt = self._identify_outliers(
-                s=s_dt, iteration=iteration, n_sd=self.n_sd[0], winsize=self.winsize[0], infotxt=" (daytime)")
+                s=s_dt, iteration=iteration, n_sd=self.n_sd[0], winsize=self.winsize[0], time_period=" (daytime)")
 
             # Run for nighttime
             s_nt = s[self.is_nighttime].copy()  # Nighttime data
             ok_nt, rejected_nt, n_outliers_nt = self._identify_outliers(
-                s=s_nt, iteration=iteration, n_sd=self.n_sd[1], winsize=self.winsize[1], infotxt=" (nighttime)")
+                s=s_nt, iteration=iteration, n_sd=self.n_sd[1], winsize=self.winsize[1], time_period=" (nighttime)")
 
             # Collect daytime and nighttime flags in one overall flag
             ok = ok_dt.union(ok_nt)
@@ -286,7 +285,7 @@ class LocalSD(FlagBase):
         ax2.xaxis.axis_date()
         return fig, ax, ax2
 
-    def _plot_add_iteration(self, rmedian, upper_limit, lower_limit, iteration):
+    def _plot_add_iteration(self, rmedian, upper_limit, lower_limit, iteration, time_period=""):
         """
         Adds the results of a single iteration to the main plot.
 
@@ -300,16 +299,25 @@ class LocalSD(FlagBase):
             lower_limit (Series): Series of the lower threshold for this iteration.
             iteration (int): The current iteration number.
         """
+        if time_period == " (daytime+nighttime)":
+            color = "#FFA726"
+        else:
+            if time_period == " (daytime)":
+                color = "#FF5722"
+            else:
+                color = "#81D4FA"
+
         if iteration == 1:
-            self.ax_localsd.plot(self.series.index, self.series, label=f"{self.series.name}", color='black',
+            # label = f"{self.series.name}"
+            self.ax_localsd.plot(self.series.index, self.series, label=None, color='black',
                                  marker='o', fillstyle='none', alpha=.9, markersize=4, linestyle='none',
                                  markeredgecolor='black', markeredgewidth=1, zorder=1)
         # self._filteredseries.loc[rejected] = np.nan
-        self.ax_localsd.plot(rmedian.index, rmedian, label=f"rolling median", color="#FFA726",
+        self.ax_localsd.plot(rmedian.index, rmedian, label=None, color=color,
                              alpha=1, markersize=0, markeredgecolor='none', ls='-', lw=2, zorder=3)
-        self.ax_localsd.plot(upper_limit.index, upper_limit, label=f"upper limit", color="#7E57C2",
+        self.ax_localsd.plot(upper_limit.index, upper_limit, label=None, color=color,
                              alpha=1, markersize=0, markeredgecolor='none', ls='--', lw=1, zorder=4)
-        self.ax_localsd.plot(lower_limit.index, lower_limit, label=f"lower limit", color="#26C6DA",
+        self.ax_localsd.plot(lower_limit.index, lower_limit, label=None, color=color,
                              alpha=1, markersize=0, markeredgecolor='none', ls='--', lw=1, zorder=4)
 
     def _plot_finalize(self, n_iterations):
@@ -324,26 +332,44 @@ class LocalSD(FlagBase):
         Args:
             n_iterations (int): The total number of iterations performed.
         """
-        rejected = self.overall_flag == 2
-        n_outliers = rejected.sum()
-
+        # Get overall time series
+        rejected_total = self.overall_flag == 2
+        n_outliers_total = rejected_total.sum()
         outliers_only = self.series.copy()
-        outliers_only = outliers_only[rejected].copy()
-        self.ax_localsd.plot(outliers_only.index, outliers_only,
-                             label=f"outlier", color='#F44336', zorder=2, ls='None',
-                             alpha=1, markersize=12, markeredgecolor='none', marker='X')
+        outliers_only = outliers_only[rejected_total].copy()
+
+        # Get daytime and nighttime time series
+        if self.separate_daytime_nighttime:
+            rejected_dt = (self.overall_flag == 2) & self.is_daytime
+            rejected_nt = (self.overall_flag == 2) & self.is_nighttime
+            n_outliers_dt = rejected_dt.sum()
+            n_outliers_nt = rejected_nt.sum()
+            outliers_only_dt = self.series.copy()
+            outliers_only_dt = outliers_only_dt[rejected_dt].copy()
+            outliers_only_nt = self.series.copy()
+            outliers_only_nt = outliers_only_nt[rejected_nt].copy()
+            self.ax_localsd.plot(outliers_only_dt.index, outliers_only_dt,
+                                 label=f"daytime outlier ({n_outliers_dt})", color='#FF5722', zorder=2, ls='None',
+                                 alpha=1, markersize=12, markeredgecolor='none', marker='X')
+            self.ax_localsd.plot(outliers_only_nt.index, outliers_only_nt,
+                                 label=f"nighttime outlier ({n_outliers_nt})", color='#81D4FA', zorder=2, ls='None',
+                                 alpha=1, markersize=12, markeredgecolor='none', marker='X')
+        else:
+            self.ax_localsd.plot(outliers_only.index, outliers_only,
+                                 label=f"outlier ({n_outliers_total})", color='#F44336', zorder=2, ls='None',
+                                 alpha=1, markersize=12, markeredgecolor='none', marker='X')
 
         filtered = self.series.copy()
-        filtered.loc[rejected] = np.nan
+        filtered.loc[rejected_total] = np.nan
         self.ax2_localsd.plot(filtered.index, filtered,
                               label=f"filtered series", color='black', marker='o', fillstyle='none',
                               linestyle='none', alpha=.9, markersize=4, markeredgecolor='black', markeredgewidth=1)
         default_format(ax=self.ax_localsd)
         default_format(ax=self.ax2_localsd)
-        # default_legend(ax=self.ax, ncol=2, markerscale=5)
+        default_legend(ax=self.ax_localsd, ncol=2, markerscale=1)
         plottitle = (
             f"Outlier detection based on the standard deviation in a rolling window for {self.series.name}\n"
-            f"n_iterations = {n_iterations}, n_outliers = {n_outliers}")
+            f"n_iterations = {n_iterations}, n_outliers = {n_outliers_total}")
         self.fig_localsd.suptitle(plottitle, fontsize=theme.FIGHEADER_FONTSIZE)
         self.fig_localsd.show()
 
@@ -371,9 +397,9 @@ def _example_localsd_daytime_nighttime():
     lsd = LocalSD(
         series=s_noise,
         separate_daytime_nighttime=True,
-        n_sd=[2, 3],
-        winsize=[48 * 1, 48 * 2],
-        constant_sd=True,
+        n_sd=[3, 2],
+        winsize=[48 * 2, 48 * 1],
+        constant_sd=False,
         lat=46.0,
         lon=11.0,
         utc_offset=1,

@@ -306,19 +306,6 @@ class StepwiseOutlierDetection:
             self._flags[new_flagname] = flag.copy()
             print(f"++Added flag column {new_flagname} to flag data")
 
-        # # Name of filtered series in last results is the same as the original name
-        # self._series_hires_cleaned = self.last_flag[self.series_hires_orig.name]
-        # # Remove filtered series to keep only flag columns
-        # flags_df = self.last_flag.drop(self.series_hires_orig.name, axis=1).copy()
-        #
-        # flag = self._last_results.flag
-        # # self._series_hires_cleaned = self._last_results.filteredseries
-        # if flag.name not in self._results.columns:
-        #     self._results[flag.name] = flag
-        # else:
-        #     pass
-        # print(f"++Added flag column {flag.name} to flag data")
-
     def _setup(self) -> tuple[DataFrame, Series, Series]:
         """Setup data for outlier detection"""
         _series = self._series.copy()  # Data for this field
