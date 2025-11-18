@@ -36,10 +36,13 @@ for tick parameter names, a new plotting parameter for heatmaps, and an increase
 
 - Added new notebook `Flux_detection_limit` (8)
 - Added new notebook `Calculate_air_temp_from_sonic_temp` (7)
+- Updated notebook `FluxProcessingChain` with `LocalSD` (daytime/nighttime) (15)
+- Updated notebook `StepwiseMeteoScreeningFromDatabase` with `LocalSD` (daytime/nighttime) (16)
 
 ### Unittests
 
-- Added unit test for outlier detection using `LocalSD` for daytime/nighttime (14)
+- Added unit test for outlier detection using `LocalSD` (daytime/nighttime) (14)
+- Updated unit test `test_fluxprocessingchain` with `LocalSD` (daytime/nighttime)
 - Added unit test for calculating the flux detection limit (10)
 - Added unit test for calculating air temperature from sonic temperature (6)
 - Updated unit tests for outlier detection methods
@@ -67,6 +70,8 @@ for tick parameter names, a new plotting parameter for heatmaps, and an increase
 - (12) `diive.pkgs.outlierdetection.common.create_daytime_nighttime_flags`
 - (13) `diive.pkgs.outlierdetection.localsd.LocalSD`
 - (14) `tests.test_outlierdetection.TestOutlierDetection.test_localsd_daytime_nighttime`
+- (15) `notebooks/FluxProcessingChain/FluxProcessingChain.ipynb`
+- (16) `notebooks/MeteoScreening/StepwiseMeteoScreeningFromDatabase.ipynb`
 
 ## v0.89.0 | 23 Jul 2025
 

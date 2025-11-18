@@ -345,16 +345,16 @@ class StepwiseMeteoScreeningDb:
                                                                          verbose=verbose,
                                                                          repeat=repeat)
 
-    def flag_outliers_localsd_test(self, n_sd: float, winsize: int = None, showplot: bool = False,
-                                   constant_sd: bool = False, verbose: bool = False, repeat: bool = True):
+    def flag_outliers_localsd_test(self, n_sd: float | list = 7, winsize: int | list = None,
+                                   showplot: bool = False, constant_sd: bool = False,
+                                   separate_daytime_nighttime: bool = False,
+                                   verbose: bool = False, repeat: bool = True):
         """Identify outliers based on standard deviation in a rolling window"""
         for field in self.fields:
-            self.outlier_detection[field].flag_outliers_localsd_test(n_sd=n_sd,
-                                                                     winsize=winsize,
-                                                                     constant_sd=constant_sd,
-                                                                     showplot=showplot,
-                                                                     verbose=verbose,
-                                                                     repeat=repeat)
+            self.outlier_detection[field].flag_outliers_localsd_test(
+                n_sd=n_sd, winsize=winsize, separate_daytime_nighttime=separate_daytime_nighttime,
+                constant_sd=constant_sd, showplot=showplot,
+                verbose=verbose, repeat=repeat)
 
     def flag_outliers_increments_zcore_test(self, thres_zscore: int = 30, showplot: bool = False,
                                             verbose: bool = False, repeat: bool = True):
@@ -889,6 +889,8 @@ def _example():
     # mscr.flag_outliers_zscore_rolling_test(thres_zscore=3, winsize=48, showplot=True, verbose=True, repeat=True)
     # mscr.flag_outliers_localsd_test(n_sd=2.5, winsize=24, showplot=True, verbose=True, repeat=False)
     # mscr.flag_outliers_localsd_test(n_sd=2.5, winsize=24, showplot=True, verbose=True, repeat=False)
+    mscr.flag_outliers_localsd_test(separate_daytime_nighttime=True, n_sd=[2.5, 2.5], winsize=[24, 24],
+                                    showplot=True, verbose=True, repeat=False, constant_sd=False)
     # mscr.flag_outliers_increments_zcore_test(thres_zscore=9, showplot=True, verbose=True, repeat=True)
     # mscr.flag_outliers_zscore_test(thres_zscore=15, showplot=True, verbose=True, repeat=True)
     # mscr.flag_outliers_lof_dtnt_test(n_neighbors=3, contamination=0.00001, showplot=True,

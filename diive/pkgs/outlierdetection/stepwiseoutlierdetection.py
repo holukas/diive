@@ -151,13 +151,12 @@ class StepwiseOutlierDetection:
 
     def flag_outliers_localsd_test(self, n_sd: float | list = 7, winsize: int | list = None, showplot: bool = False,
                                    constant_sd: bool = False, separate_daytime_nighttime: bool = False,
-                                   lat: float = None, lon: float = None, utc_offset: int = None,
                                    verbose: bool = False, repeat: bool = True):
         """Identify outliers based on standard deviation in a rolling window"""
         series_cleaned = self._series_hires_cleaned.copy()
         flagtest = LocalSD(series=series_cleaned, idstr=self.idstr, n_sd=n_sd, winsize=winsize,
-                           separate_daytime_nighttime=separate_daytime_nighttime, lat=lat, lon=lon,
-                           utc_offset=utc_offset, constant_sd=constant_sd, showplot=showplot, verbose=verbose)
+                           separate_daytime_nighttime=separate_daytime_nighttime, lat=self.site_lat, lon=self.site_lon,
+                           utc_offset=self.utc_offset, constant_sd=constant_sd, showplot=showplot, verbose=verbose)
         flagtest.calc(repeat=repeat)
         self._last_flag = flagtest.get_flag()
 
