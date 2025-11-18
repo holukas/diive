@@ -1,4 +1,16 @@
-#  TODO NEEDS FLOW CHECK
+"""
+Implements the multi-step Swiss FluxNet-style processing chain for eddy covariance flux data.
+
+This chain typically involves:
+1. Level-1: Load flux data, including meteo variables (handled by LoadEddyProOutputFiles).
+2. Level-2: Quality flag expansion (VM97, signal strength, etc.).
+3. Level-3.1: Storage correction using a single-point profile.
+4. Level-3.2: Stepwise Outlier detection.
+5. Level-3.3: USTAR threshold filtering for low-turbulence periods.
+6. Level-4.1: Gap-filling using methods like Random Forest or MDS.
+
+The `FluxProcessingChain` class manages the data flow and state across these levels.
+"""
 
 from pathlib import Path
 from typing import Literal
@@ -28,6 +40,26 @@ from diive.pkgs.qaqc.qcf import FlagQCF
 
 
 class FluxProcessingChain:
+    """
+    Manages the multi-level processing chain for eddy covariance flux data.
+
+    This class orchestrates the application of quality control (QC) tests,
+    corrections (storage), filtering (USTAR), and final gap-filling, tracking
+    the state and results at each level.
+
+    Attributes:
+        fluxcol (str): The name of the primary flux column (e.g., 'FC').
+        site_lat (float): Latitude of the measurement site.
+        site_lon (float): Longitude of the measurement site.
+        utc_offset (int): UTC offset of the site (in hours).
+        nighttime_threshold (float): Potential incoming shortwave radiation threshold (W/m²)
+                                     to define nighttime periods.
+        daytime_accept_qcf_below (int): QCF value (0, 1, or 2) below which daytime data are retained.
+        nighttimetime_accept_qcf_below (int): QCF value (0, 1, or 2) below which nighttime data are retained.
+        fluxbasevar (str): The base gas/variable name used for the flux (e.g., 'CO2').
+        ustarcol (str): The column name for friction velocity (USTAR).
+        outname (str): The output name for the final flux (e.g., 'NEE' for 'FC').
+        """
 
     def __init__(
             self,
@@ -40,6 +72,24 @@ class FluxProcessingChain:
             daytime_accept_qcf_below: int = 1,
             nighttimetime_accept_qcf_below: int = 1
     ):
+        """
+        Initializes the flux processing chain instance.
+
+        Sets up metadata, detects the base flux variable, and adds necessary
+        pre-calculated variables (potential radiation, day/night flags) to the
+        internal dataframes.
+
+        Args:
+            df (DataFrame): Input DataFrame containing flux and meteorological data.
+            fluxcol (str): Name of the raw flux column to process (e.g., 'FC', 'LE', 'H').
+            site_lat (float): Site latitude.
+            site_lon (float): Site longitude.
+            utc_offset (int): UTC offset (in hours).
+            nighttime_threshold (float, optional): Potential radiation threshold (W/m²)
+                                                  for defining nighttime. Defaults to 20.
+            daytime_accept_qcf_below (int, optional): QCF value (0, 1, or 2) below which daytime data are retained.
+            nighttimetime_accept_qcf_below (int, optional): QCF value (0, 1, or 2) below which nighttime data are retained.
+        """
 
         self._df = df.copy()
         self.fluxcol = fluxcol
@@ -100,7 +150,16 @@ class FluxProcessingChain:
         self._level33_qcf = dict()  # dict because there can be multiple USTAR scenarios
 
     def get_data(self, verbose: int = 1):
-        """Return dataframe containing all input data and results."""
+        """
+        Returns the full input DataFrame combined with all new results/flags from the processing chain.
+
+        Args:
+            verbose (int, optional): If > 0, prints a list of the new variables added
+                                     by the processing chain. Defaults to 1.
+
+        Returns:
+            DataFrame: The combined DataFrame.
+        """
         # newcols = detect_new_columns(df=self.fpc_df, other=self.df)
         newcols = [c for c in self.fpc_df.columns if c not in self.df.columns]
         if verbose:
@@ -112,7 +171,16 @@ class FluxProcessingChain:
         return full_data_df
 
     def get_gapfilled_names(self) -> list:
-        """Return names of gap-filled variables."""
+        """
+        Retrieves a list of gap-filled variable names.
+
+        This method collects names of all gap-filled variables from the nested dictionary
+        `level41`. It iterates over gap-filling methods and associated u* (ustar) scenarios to
+        extract the gap-filled variable names and compiles them into a list.
+
+        Returns:
+            list: A list containing the names of all gap-filled variables.
+        """
         gapfilled_vars = []
         for gfmethod, ustar_scenarios in self.level41.items():
             for ustar_scenario in ustar_scenarios:
@@ -120,7 +188,18 @@ class FluxProcessingChain:
         return gapfilled_vars
 
     def get_nongapfilled_names(self) -> list:
-        """Return names of target variables that were gap-filled."""
+        """
+        Retrieves a list of nongapfilled variable names from the level41 attribute.
+
+        This method iterates over the nested dictionary structure under the level41
+        attribute and extracts the `target_col` attribute from each contained
+        element. The method collects and returns these values as a list. The resulting
+        list represents variable names that were not gap-filled, based on the provided
+        structure of the level41 dictionary.
+
+        Returns:
+            list: A list of nongapfilled variable names extracted from the level41 attribute.
+        """
         nongapfilled_vars = []
         for gfmethod, ustar_scenarios in self.level41.items():
             for ustar_scenario in ustar_scenarios:
@@ -129,7 +208,20 @@ class FluxProcessingChain:
         return nongapfilled_vars
 
     def report_gapfilling_variables(self):
-        """Show names of variables before and after gap-filling."""
+        """
+        Reports gap-filling variables and their mappings.
+
+        This method iterates through the hierarchical structure of gap-filling methods and
+        associated u* (ustar) scenarios within `level41`. For each combination of gap-filling
+        method and u* scenario, it retrieves and displays the original (non-gap-filled) variable name
+        and its corresponding gap-filled variable name in a formatted string.
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
         for gfmethod, ustar_scenarios in self.level41.items():
             for ustar_scenario in ustar_scenarios:
                 gapfilled_name = self.level41[gfmethod][ustar_scenario].gapfilled_.name
@@ -137,13 +229,42 @@ class FluxProcessingChain:
                 print(f"{gfmethod} ({ustar_scenario}): {nongapfilled_name} -> {gapfilled_name}")
 
     def get_gapfilled_variables(self) -> DataFrame:
-        """Return data of gap-filled and non-gap-filled variables."""
+        """
+        Fetches and returns the DataFrame containing both gap-filled and non-gap-filled variables.
+
+        This method aggregates variable names marked as gap-filled and non-gap-filled,
+        then filters the internal DataFrame to include only these variables while maintaining
+        their original data.
+
+        Returns:
+            DataFrame: A new DataFrame containing columns corresponding to both gap-filled
+                and non-gap-filled variable names.
+        """
         gapfilled_vars = self.get_gapfilled_names()
         nongapfilled_vars = self.get_nongapfilled_names()
         gfvars = gapfilled_vars + nongapfilled_vars
         return self.fpc_df[gfvars].copy()
 
     def report_traintest_model_scores(self, outpath: str = None):
+        """
+        Reports and optionally saves train/test model scores for each u*-scenario associated
+        with each gap-filling method, if available.
+
+        This method iterates through all the u*-scenarios and checks if the required
+        instance property ('scores_traintest_') exists for a given gap-filling method
+        and u*-scenario combination. If the scores are available, it prints them in
+        a structured tabular format using pandas. Optionally, the scores can also
+        be saved to a file in CSV format within a specified output directory.
+
+        Args:
+            outpath (str, optional): Directory path where train/test model scores will be
+                saved as CSV files if provided. If not specified, no files will be saved.
+
+        Raises:
+            ValueError: Raised internally when attempting to convert invalid score
+                dictionaries into pandas DataFrames, specifically if the orientation
+                needed for the conversion does not align appropriately.
+        """
         for gfmethod, ustar_scenarios in self.level41.items():
             for ustar_scenario in ustar_scenarios:
                 # Check if needed instance property exists
@@ -167,6 +288,15 @@ class FluxProcessingChain:
                     print(f"{gfmethod} {ustar_scenario} does not have train/test model scores.")
 
     def report_traintest_details(self, outpath: str = None):
+        """
+        Reports the training and testing details for a specific instance in the `level41` dictionary. The
+        method prints the details to the console and optionally saves them to a CSV file if an output path
+        is provided.
+
+        Args:
+            outpath (str, optional): The file path where the training and testing details will be saved in a
+                CSV format. Defaults to None.
+        """
         for gfmethod, ustar_scenarios in self.level41.items():
             for ustar_scenario in ustar_scenarios:
                 # Check if needed instance property exists
@@ -203,6 +333,16 @@ class FluxProcessingChain:
     #                     print(f"{gfmethod} {ustar_scenario} does not have feature ranks.")
 
     def report_gapfilling_model_scores(self, outpath: str = None):
+        """
+        Generates a report containing model scores for gap-filling methods and ustar scenarios.
+        Iterates over gap-filling methods and their associated ustar scenarios,
+        extracting and formatting model score data, then printing or saving the
+        results as a CSV file if an output path is provided.
+
+        Args:
+            outpath (str, optional): Directory path where CSV files with model scores
+                will be saved. If None, the scores are only printed to the console.
+        """
         for gfmethod, ustar_scenarios in self.level41.items():
             for ustar_scenario in ustar_scenarios:
                 print(f"\nMODEL SCORES ({gfmethod}): {ustar_scenario}")
@@ -219,6 +359,21 @@ class FluxProcessingChain:
                     modelscores.to_csv(outfilepath)
 
     def report_gapfilling_feature_importances(self, outpath: str = None):
+        """
+        Reports the feature importances for gapfilling models and saves them to the specified
+        output path if provided.
+
+        This method iterates over the gapfilling methods and U* scenarios stored in the
+        `level41` attribute. For each combination, it checks for the presence of the
+        `feature_importance_per_year` attribute within the corresponding instance. If the
+        attribute exists, it prints the feature importances and optionally saves them as a
+        CSV file to the provided output path.
+
+        Args:
+            outpath (str, optional): The path where the feature importance CSV files will
+                be saved. If `None`, the files are not saved but the results are printed
+                to the console.
+        """
         for gfmethod, ustar_scenarios in self.level41.items():
             for ustar_scenario in ustar_scenarios:
                 # Check if needed instance property exists
@@ -235,6 +390,14 @@ class FluxProcessingChain:
                     print(f"{gfmethod} {ustar_scenario} does not have feature importances.")
 
     def report_gapfilling_poolyears(self):
+        """
+        Reports the data pools used for machine-learning-based gap-filling for each year and their associated
+        scenarios and methods. Iterates through the provided levels and prints metadata regarding the years
+        of data used, the target variable being gap-filled, and the resulting gap-filled data column.
+
+        Raises:
+            AttributeError: If the required attributes are missing in the data structure during iteration.
+        """
         print("DATA POOLS USED FOR MACHINE-LEARNING GAP-FILLING:")
         for gfmethod, ustar_scenarios in self.level41.items():
             for ustar_scenario in ustar_scenarios:
@@ -247,6 +410,19 @@ class FluxProcessingChain:
                     print(f"{gfmethod} {ustar_scenario} did not use poolyears.")
 
     def showplot_feature_ranks_per_year(self):
+        """
+        Displays feature ranks per year for each scenario and method in the given dataset.
+
+        This method iterates over the gap-filling methods and u* scenarios from a nested data
+        structure (`level41`). For each combination, it retrieves results, constructs a title
+        and subtitle containing model information, and calls a plotting function to visualize
+        feature ranks per year. If feature ranks are unavailable for a particular case,
+        it catches the exception and prints an informative message instead of failing.
+
+        Raises:
+            AttributeError: Raised when feature rank data or a required intermediate attribute
+                does not exist for a specific combination of method and scenario.
+        """
         for gfmethod, ustar_scenarios in self.level41.items():
             for ustar_scenario in ustar_scenarios:
                 try:
@@ -261,6 +437,19 @@ class FluxProcessingChain:
                     print(f"{gfmethod} {ustar_scenario} does not have feature ranks.")
 
     def showplot_mds_gapfilling_qualities(self):
+        """
+        Displays the plot of gap filling qualities using the MDS method for available
+        ustar scenarios.
+
+        This function iterates through the `level41` attribute, filtering for the
+        'MDS' (Marginal Data Substitution) gap filling method. It subsequently
+        invokes the `showplot` method for each ustar scenario within this method,
+        displaying the associated plots.
+
+        Raises:
+            AttributeError: If the `results` object for a specific ustar scenario
+            does not have a `showplot` method defined.
+        """
         for gfmethod, ustar_scenarios in self.level41.items():
             if gfmethod != 'mds':
                 continue
@@ -273,7 +462,22 @@ class FluxProcessingChain:
                 #     print(f"{gfmethod} {ustar_scenario} does not have feature ranks.")
 
     def showplot_gapfilled_heatmap(self, vmin: float = None, vmax: float = None):
-        """Show heatmap plot for gap-filled and non-gap-filled data in each USTAR scenario."""
+        """
+        Displays a heatmap visualization for gap-filled and non-gap-filled variables.
+
+        This method generates and displays heatmaps for gap-filled and corresponding
+        non-gap-filled data. For each pair of gap-filled and non-gap-filled variables
+        identified, the method creates a figure containing two heatmaps side-by-side:
+        one for the non-gap-filled data and one for the gap-filled data. If the
+        non-gap-filled data is stored as a DataFrame, it is converted to a Series
+        before plotting.
+
+        Args:
+            vmin (float, optional): Minimum value for the heatmap color scale. If not
+                provided, the minimum value is inferred from the data.
+            vmax (float, optional): Maximum value for the heatmap color scale. If not
+                provided, the maximum value is inferred from the data.
+        """
         gapfilled_vars = self.get_gapfilled_names()
         nongapfilled_vars = self.get_nongapfilled_names()
         gfvars = self.get_gapfilled_variables()
@@ -299,7 +503,20 @@ class FluxProcessingChain:
 
     def showplot_gapfilled_cumulative(self, gain: float = 1, units: str = "", per_year: bool = True,
                                       start_year: int = None, end_year: int = None):
-        """Show cumulative plot for gap-filled data in each USTAR scenario."""
+        """
+        Plots cumulative data for gap-filled variables, either as a yearly cumulative plot or
+        overall cumulative plot. This method processes gap-filled variables, scales them by the
+        `gain` factor, and plots them individually per year or as a whole, based on the `per_year`
+        indicator.
+
+        Args:
+            gain (float): Scaling factor for the gap-filled variables.
+            units (str): Units of the scaled values to be displayed in the plot.
+            per_year (bool): Indicator for yearly cumulative plot. If True, plots cumulatively
+                for each year; if False, plots overall cumulative data.
+            start_year (int): Optional starting year for the cumulative plot. Defaults to None.
+            end_year (int): Optional ending year for the cumulative plot. Defaults to None.
+        """
         gapfilled_vars = self.get_gapfilled_names()
         gfvars = self.get_gapfilled_variables()[gapfilled_vars]
         if per_year:
