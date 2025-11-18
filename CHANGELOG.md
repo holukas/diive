@@ -11,6 +11,10 @@ A new function was added to calculate air temperature from sonic temperature, wh
 and an example notebook. A second new notebook demonstrates the `Flux_detection_limit`. Minor changes include a bug fix
 for tick parameter names, a new plotting parameter for heatmaps, and an increased data validation threshold.
 
+## New
+
+- `add_date_attributes` `include_timestamp_as_cols`
+
 ## Additions
 
 - Added option in `LocalSD` outlier detection to run the filter separately for daytime and nighttime (13)
