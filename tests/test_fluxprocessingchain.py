@@ -168,7 +168,7 @@ class TestFluxProcessingChain(unittest.TestCase):
         fpc.level32_addflag()
         fpc.level32_flag_outliers_localsd_test(
             n_sd=[3.5, 3], winsize=[48 * 3, 48 * 3], constant_sd=False,
-            separate_daytime_nighttime=True, lat=SITE_LAT, lon=SITE_LON, utc_offset=UTC_OFFSET, repeat=False, **kwargs)
+            separate_daytime_nighttime=True, repeat=False, **kwargs)
         fpc.level32_addflag()
         fpc.level32_flag_outliers_increments_zcore_test(thres_zscore=5, repeat=True, **kwargs)
         fpc.level32_addflag()
