@@ -166,6 +166,10 @@ class TestFluxProcessingChain(unittest.TestCase):
         fpc.level32_flag_outliers_localsd_test(
             n_sd=3, winsize=48 * 7, constant_sd=True, repeat=True, **kwargs)
         fpc.level32_addflag()
+        fpc.level32_flag_outliers_localsd_test(
+            n_sd=[3.5, 3], winsize=[48 * 3, 48 * 3], constant_sd=False,
+            separate_daytime_nighttime=True, lat=SITE_LAT, lon=SITE_LON, utc_offset=UTC_OFFSET, repeat=False, **kwargs)
+        fpc.level32_addflag()
         fpc.level32_flag_outliers_increments_zcore_test(thres_zscore=5, repeat=True, **kwargs)
         fpc.level32_addflag()
         fpc.level32_flag_outliers_lof_dtnt_test(n_neighbors=48 * 7, contamination=None, repeat=True, n_jobs=-1,
@@ -177,14 +181,14 @@ class TestFluxProcessingChain(unittest.TestCase):
         fpc.level32_addflag()
         fpc.level32_flag_outliers_abslim_test(minval=-50, maxval=50, **kwargs)
         fpc.level32_addflag()
-        fpc.level32_flag_outliers_trim_low_test(trim_nighttime=True, lower_limit=-3, **kwargs)
+        fpc.level32_flag_outliers_trim_low_test(trim_nighttime=True, lower_limit=-2.5, **kwargs)
         fpc.level32_addflag()
         fpc.finalize_level32()
         from diive.pkgs.outlierdetection.stepwiseoutlierdetection import StepwiseOutlierDetection
         self.assertEqual(type(fpc.level32), StepwiseOutlierDetection)
-        self.assertEqual(len(fpc.fpc_df.columns), 45)
+        self.assertEqual(len(fpc.fpc_df.columns), 46)
         flagcols = [c for c in fpc.fpc_df.columns if str(c).startswith("FLAG_") and str(c).endswith("_TEST")]
-        self.assertEqual(len(flagcols), 22)
+        self.assertEqual(len(flagcols), 23)
 
         # --------------------
         # Level-3.3
@@ -198,9 +202,9 @@ class TestFluxProcessingChain(unittest.TestCase):
         fpc.finalize_level33()
         from diive.pkgs.flux.ustarthreshold import FlagMultipleConstantUstarThresholds
         self.assertEqual(type(fpc.level33), FlagMultipleConstantUstarThresholds)
-        self.assertEqual(len(fpc.fpc_df.columns), 66)
+        self.assertEqual(len(fpc.fpc_df.columns), 67)
         flagcols = [c for c in fpc.fpc_df.columns if str(c).startswith("FLAG_") and str(c).endswith("_TEST")]
-        self.assertEqual(len(flagcols), 25)
+        self.assertEqual(len(flagcols), 26)
 
         # --------------------
         # Level-4.1
@@ -252,9 +256,9 @@ class TestFluxProcessingChain(unittest.TestCase):
         self.assertAlmostEqual(fpc.level41['mds']['CUT_16'].get_gapfilled_target().sum(), -1365.6178576567804, places=5)
         self.assertAlmostEqual(fpc.level41['mds']['CUT_50'].get_gapfilled_target().sum(), -1316.896036847074, places=5)
         self.assertAlmostEqual(fpc.level41['mds']['CUT_84'].get_gapfilled_target().sum(), -1292.5348297285425, places=5)
-        self.assertEqual(len(fpc.fpc_df.columns), 78)
+        self.assertEqual(len(fpc.fpc_df.columns), 79)
         flagcols = [c for c in fpc.fpc_df.columns if str(c).startswith("FLAG_") and str(c).endswith("_TEST")]
-        self.assertEqual(len(flagcols), 25)
+        self.assertEqual(len(flagcols), 26)
 
 
 if __name__ == '__main__':
