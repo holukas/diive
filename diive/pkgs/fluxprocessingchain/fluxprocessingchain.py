@@ -826,61 +826,20 @@ class FluxProcessingChain:
             )
             self._filteredseries_level33_qcf[u] = self.filteredseries.copy()  # Store filtered series as variable
 
-    def level41_gapfilling_longterm(
+    def level41_mds(
             self,
-            run_random_forest: bool = True,
-            run_mds: bool = False,
-            sanitize_timestamp: bool = True,
-            ml_feature_settings: dict = None,
-            rf_settings: dict = None,
-            mds_settings: dict = None,
-            verbose: int = 0
+            swin: str = None,
+            ta: str = None,
+            vpd: str = None,
+            swin_tol: list = None,  # Default defined below: [20, 50]
+            ta_tol: float = 2.5,
+            vpd_tol: float = 0.5,
+            avg_min_n_vals: int = 5,
     ):
 
         idstr = 'L4.1'
-        self._levelidstr.append(idstr)
-
-        if run_random_forest:
-            self._run_random_forest(ml_feature_settings, rf_settings, verbose, sanitize_timestamp)
-
-        if run_mds:
-            self._run_mds(mds_settings)
-
-    @staticmethod
-    def _get_ml_feature_settings(settings: dict):
-        """General feature settings for machine-learning models"""
-        features = settings['features']
-
-        # Fill missing keys with default settings
-        features_lag = \
-            None if 'features_lag' not in settings else settings['features_lag']
-        features_lag_stepsize = \
-            1 if 'features_lag_stepsize' not in settings else settings['features_lag_stepsize']
-        features_lag_exclude_cols = \
-            None if 'features_lag_exclude_cols' not in settings else settings['features_lag_exclude_cols']
-        reduce_features = \
-            False if 'reduce_features' not in settings else settings['reduce_features']
-        include_timestamp_as_features = \
-            False if 'include_timestamp_as_features' not in settings else settings['include_timestamp_as_features']
-        add_continuous_record_number = \
-            False if 'add_continuous_record_number' not in settings else settings['add_continuous_record_number']
-        perm_n_repeats = \
-            10 if 'perm_n_repeats' not in settings else settings['perm_n_repeats']
-
-        settings = {
-            'features': features,
-            'features_lag': features_lag,
-            'features_lag_stepsize': features_lag_stepsize,
-            'features_lag_exclude_cols': features_lag_exclude_cols,
-            'reduce_features': reduce_features,
-            'include_timestamp_as_features': include_timestamp_as_features,
-            'add_continuous_record_number': add_continuous_record_number,
-            'perm_n_repeats': perm_n_repeats
-        }
-
-        return settings
-
-    def _run_mds(self, mds_settings):
+        if idstr not in self._levelidstr:
+            self._levelidstr.append(idstr)
 
         # Store results in separate dict within Level-4.1
         self._level41['mds'] = dict()
@@ -889,7 +848,7 @@ class FluxProcessingChain:
         # todo what is if there is no scenario eg h2o fluxes?
         for ustar_scen, ustar_flux in self.filteredseries_level33_qcf.items():
             # Get features from input data
-            mdscols = [mds_settings['swin'], mds_settings['ta'], mds_settings['vpd']]
+            mdscols = [swin, ta, vpd]
             this_ust_scen_df = self.df[mdscols].copy()
 
             # Add USTAR-filtered flux from recent results (Level-3.3)
@@ -898,7 +857,13 @@ class FluxProcessingChain:
             instance = FluxMDS(
                 df=this_ust_scen_df,
                 flux=ustar_flux.name,
-                **mds_settings
+                swin=swin,
+                ta=ta,
+                vpd=vpd,
+                swin_tol=swin_tol,
+                ta_tol=ta_tol,
+                vpd_tol=vpd_tol,
+                avg_min_n_vals=avg_min_n_vals
             )
             instance.run()
 
@@ -916,12 +881,27 @@ class FluxProcessingChain:
             # instance.report()
             # instance.showplot()
 
-    def _run_random_forest(self, ml_feature_settings, rf_kwargs, verbose, sanitize_timestamp):
+    def level41_longterm_random_forest(
+            self,
+            sanitize_timestamp: bool = True,
+            features: list = None,
+            features_lag: list = None,
+            features_lag_stepsize: int = 1,
+            features_lag_exclude_cols: list = None,
+            reduce_features: bool = False,
+            include_timestamp_as_features: bool = False,
+            add_continuous_record_number: bool = False,
+            perm_n_repeats: int = 10,
+            verbose: int = 0,
+            **rf_kwargs
+    ):
 
-        ml_feature_settings = self._get_ml_feature_settings(settings=ml_feature_settings)
+        idstr = 'L4.1'
+        if idstr not in self._levelidstr:
+            self._levelidstr.append(idstr)
 
         # Store results in separate dict within Level-4.1
-        self._level41['random_forest'] = dict()
+        self._level41['long_term_random_forest'] = dict()
 
         # Default parameters for random forest models
         if not isinstance(rf_kwargs, dict):
@@ -935,22 +915,23 @@ class FluxProcessingChain:
         for ustar_scen, ustar_flux in self.filteredseries_level33_qcf.items():
 
             # Get features from input data
-            this_ust_scen_df = self.df[ml_feature_settings['features']].copy()
+            this_ust_scen_df = self.df[features].copy()
 
             # Add USTAR-filtered flux from recent results (Level-3.3)
             this_ust_scen_df = pd.concat([this_ust_scen_df, self.fpc_df[ustar_flux.name]], axis=1)
+            this_ust_scen_df = this_ust_scen_df.copy()
 
             general_kwargs = dict(
                 input_df=this_ust_scen_df,
                 target_col=ustar_flux.name,
-                include_timestamp_as_features=ml_feature_settings['include_timestamp_as_features'],
-                add_continuous_record_number=ml_feature_settings['add_continuous_record_number'],
-                features_lag=ml_feature_settings['features_lag'],
-                features_lag_stepsize=ml_feature_settings['features_lag_stepsize'],
-                features_lag_exclude_cols=ml_feature_settings['features_lag_exclude_cols'],
+                include_timestamp_as_features=include_timestamp_as_features,
+                add_continuous_record_number=add_continuous_record_number,
+                features_lag=features_lag,
+                features_lag_stepsize=features_lag_stepsize,
+                features_lag_exclude_cols=features_lag_exclude_cols,
                 verbose=verbose,
                 sanitize_timestamp=sanitize_timestamp,
-                perm_n_repeats=ml_feature_settings['perm_n_repeats']
+                perm_n_repeats=perm_n_repeats
             )
 
             # Initialize random forest for this scenario
@@ -963,7 +944,7 @@ class FluxProcessingChain:
             instance.initialize_yearly_models()
 
             # Feature reduction *across all* years (not *per* year)
-            if ml_feature_settings['reduce_features']:
+            if reduce_features:
                 instance.reduce_features_across_years()
 
             # Train model and fill gaps
@@ -978,7 +959,7 @@ class FluxProcessingChain:
             self._fpc_df = pd.concat([self.fpc_df, fluxdata, flagdata], axis=1)
 
             # Save instance to Level-4.1
-            self._level41['random_forest'][ustar_scen] = instance
+            self._level41['long_term_random_forest'][ustar_scen] = instance
 
         # # How to access data for each USTAR scenario:
         # for ustar_scen, ustar_flux in self.filteredseries_level33_qcf.items():
@@ -1540,13 +1521,13 @@ def example():
     #     showplot=False, verbose=True)
     # fpc.level32_addflag()
 
-    # DAYTIME_MINMAX = [-50, 50]
-    # NIGHTTIME_MINMAX = [-50, 50]
-    # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX,
-    #                                            showplot=False, verbose=False)
-    # # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX, showplot=True, verbose=True)
-    # fpc.level32_addflag()
-    # # fpc.level32.results  # Stores Level-3.2 flags up to this point
+    DAYTIME_MINMAX = [-50, 50]
+    NIGHTTIME_MINMAX = [-50, 50]
+    fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX,
+                                               showplot=False, verbose=False)
+    # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX, showplot=True, verbose=True)
+    fpc.level32_addflag()
+    # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
     # fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=False, repeat=True)
     # fpc.level32_addflag()
@@ -1570,10 +1551,10 @@ def example():
     # fpc.level32_flag_outliers_localsd_test(n_sd=4, winsize=48 * 13, constant_sd=True, showplot=False, verbose=True, repeat=True)
     # fpc.level32_addflag()
 
-    fpc.level32_flag_outliers_localsd_test(n_sd=[1.2, 99], winsize=[48 * 13, 48 * 2], constant_sd=False,
-                                           separate_daytime_nighttime=True, lat=SITE_LAT, lon=SITE_LON, utc_offset=1,
-                                           showplot=True, verbose=True, repeat=False)
-    fpc.level32_addflag()
+    # fpc.level32_flag_outliers_localsd_test(n_sd=[1.2, 99], winsize=[48 * 13, 48 * 2], constant_sd=False,
+    #                                        separate_daytime_nighttime=True, lat=SITE_LAT, lon=SITE_LON, utc_offset=1,
+    #                                        showplot=True, verbose=True, repeat=False)
+    # fpc.level32_addflag()
 
     # fpc.level32_flag_outliers_increments_zcore_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
     # fpc.level32_addflag()
@@ -1602,7 +1583,7 @@ def example():
 
     # # fpc.filteredseries
     # # fpc.level32.flags
-    fpc.level32_qcf.showplot_qcf_heatmaps()
+    # fpc.level32_qcf.showplot_qcf_heatmaps()
     # # fpc.level32_qcf.showplot_qcf_timeseries()
     # # fpc.level32_qcf.report_qcf_flags()
     # fpc.level32_qcf.report_qcf_evolution()
@@ -1616,10 +1597,12 @@ def example():
     # 0.052945, 0.069898, 0.092841
     # ustar_scenarios = ['NO_USTAR']
     # ustar_thresholds = [-9999]
+    # ustar_scenarios = ['CUT_50']
+    # ustar_thresholds = [0.069898]
     ustar_scenarios = ['CUT_50']
-    ustar_thresholds = [0.069898]
-    # ustar_scenarios = ['CUT_50', 'CUT_84']
-    # ustar_thresholds = [0.069898, 0.092841]
+    ustar_thresholds = [0.303628125]  # CH-LAE
+    # ustar_scenarios = ['CUT_16', 'CUT_50', 'CUT_84']
+    # ustar_thresholds = [0.271619922, 0.303628125, 0.339684084]  # CH-LAE
     # ustar_scenarios = ['CUT_16', 'CUT_50', 'CUT_84']
     # ustar_thresholds = [0.052945, 0.069898, 0.092841]
     fpc.level33_constant_ustar(thresholds=ustar_thresholds,
@@ -1650,111 +1633,37 @@ def example():
     # --------------------
     # Level-4.1
     # --------------------
+    FEATURES = ["TA_T1_47_1_gfXG", "SW_IN_T1_47_1_gfXG", "VPD_T1_47_1_gfXG"]
 
-    MGMT_VARS = ["TIMESINCE_MGMT_FERT_MIN_FOOTPRINT", "TIMESINCE_MGMT_FERT_ORG_FOOTPRINT",
-                 "TIMESINCE_MGMT_GRAZING_FOOTPRINT", "TIMESINCE_MGMT_MOWING_FOOTPRINT",
-                 "TIMESINCE_MGMT_SOILCULTIVATION_FOOTPRINT", "TIMESINCE_MGMT_SOWING_FOOTPRINT",
-                 "TIMESINCE_MGMT_PESTICIDE_HERBICIDE_FOOTPRINT"]
-    FEATURES = ["SWC_GF1_0.15_1_gfXG", "TS_GF1_0.04_1_gfXG", "TS_GF1_0.15_1_gfXG", "TS_GF1_0.4_1_gfXG"] + MGMT_VARS
-    # FEATURES = ["SW_IN_T1_2_1", "TA_T1_2_1", "VPD_T1_2_1"] + MGMT_VARS
-    # FEATURES = ["SW_IN_T1_2_1", "TA_T1_2_1", "VPD_T1_2_1", "DAYTIME", "NIGHTTIME"] + MGMT_VARS
-    EXCLUDE_COLS = MGMT_VARS
-    # EXCLUDE_COLS = ["DAYTIME", "NIGHTTIME"] + MGMT_VARS
 
-    # fpc.level41_gapfilling_longterm(
-    #     run_mds=False,
-    #     run_random_forest=True,
-    #     verbose=True,
-    #     ml_feature_settings={
-    #         'features': FEATURES,
-    #         'features_lag': [-1, -1],
-    #         'features_lag_exclude_cols': MGMT_VARS,  # Management variables are not lagged
-    #         'reduce_features': False,
-    #         'include_timestamp_as_features': True,
-    #         'add_continuous_record_number': False,
-    #         'perm_n_repeats': 10,
-    #     },
-    #     rf_settings={
-    #         'n_estimators': 99,
-    #         'random_state': 42,
-    #         'min_samples_split': 2,
-    #         'min_samples_leaf': 1,
-    #         'n_jobs': -1
-    #     },
-    #     # mds_settings={
-    #     #     'swin': "SW_IN_T1_2_1",
-    #     #     'ta': "TA_T1_2_1",
-    #     #     'vpd': "VPD_T1_2_1",
-    #     #     'swin_class': 50,
-    #     #     'ta_class': 2.5,
-    #     #     'vpd_class': 0.5,
-    #     #     'min_n_vals_nt': 0
-    #     # }
-    # )
-
-    # fpc.level41_gapfilling_longterm(
-    #     run_random_forest=True,
-    #     run_mds=False,
-    #     verbose=True,
-    #     ml_feature_settings={
-    #         'features': FEATURES,
-    #         # 'features_lag': None,
-    #         'features_lag': [-1, -1],
-    #         'features_lag_stepsize': 1,
-    #         'features_lag_exclude_cols': EXCLUDE_COLS,  # Management variables are not lagged
-    #         'reduce_features': False,
-    #         'include_timestamp_as_features': False,
-    #         'add_continuous_record_number': False,
-    #         'perm_n_repeats': 1
-    #     },
-    #     rf_settings={
-    #         'n_estimators': 3,
-    #         'max_depth': None,
-    #         'random_state': 42,
-    #         'min_samples_split': 2,
-    #         'min_samples_leaf': 1,
-    #         'n_jobs': -1
-    #     },
-    #     # mds_settings={
-    #     #     'swin': "SW_IN_T1_2_1",
-    #     #     'ta': "TA_T1_2_1",
-    #     #     'vpd': "VPD_T1_2_1",
-    #     #     'swin_class': 50,
-    #     #     'ta_class': 2.5,
-    #     #     'vpd_class': 0.5,
-    #     #     'min_n_vals_nt': 5
-    #     # }
-    # )
-
-    fpc.level41_gapfilling_longterm(
-        run_mds=True,
-        run_random_forest=True,
+    fpc.level41_longterm_random_forest(
+        features=FEATURES,
+        sanitize_timestamp=True,
+        features_lag=[-1, 1],
+        features_lag_stepsize=1,
+        features_lag_exclude_cols=None,
+        reduce_features=False,
+        include_timestamp_as_features=True,
+        add_continuous_record_number=True,
+        perm_n_repeats=1,
         verbose=True,
-        ml_feature_settings={
-            'features': ["TA_T1_2_1", "SW_IN_POT", "VPD_T1_2_1"],
-            'features_lag': [-1, -1],
-            'features_lag_stepsize': 1,
-            'reduce_features': True,
-            'include_timestamp_as_features': True,
-            'add_continuous_record_number': True,
-            'perm_n_repeats': 2,
-        },
-        rf_settings={
-            'n_estimators': 99,
-            'random_state': 42,
-            'min_samples_split': 2,
-            'min_samples_leaf': 1,
-            'n_jobs': -1
-        },
-        mds_settings={
-            'swin': "SW_IN_T1_2_1",
-            'ta': "TA_T1_2_1",
-            'vpd': "VPD_T1_2_1",
-            'swin_tol': [20, 50],  # in W m-2
-            'ta_tol': 2.5,  # in °C
-            'vpd_tol': 0.5,  # in kPa
-            'avg_min_n_vals': 5
-        }
+        n_estimators=3,
+        max_depth=3,
+        min_samples_split=10,
+        min_samples_leaf=5,
+        n_jobs=2,
+        random_state=42,
+    )
+    # fpc.level41['long_term_random_forest']['CUT_50']
+
+    fpc.level41_mds(
+        swin="SW_IN_T1_47_1_gfXG",
+        ta="TA_T1_47_1_gfXG",
+        vpd="VPD_T1_47_1_gfXG",
+        swin_tol=[20, 50],
+        ta_tol=2.5,
+        vpd_tol=0.5,
+        avg_min_n_vals=5
     )
 
     results = fpc.get_data()
@@ -1772,15 +1681,15 @@ def example():
 
     # todo get full data
 
-    # fpc.showplot_gapfilled_heatmap(vmin=-5, vmax=50)
-    # fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{µmol\ CO_2\ m^{-2}}$)', per_year=True)
-    # fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{g\ C\ m^{-2}}$)', per_year=False)
+    fpc.showplot_gapfilled_heatmap(vmin=-5, vmax=50)
+    fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{µmol\ CO_2\ m^{-2}}$)', per_year=True)
+    fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{g\ C\ m^{-2}}$)', per_year=False)
 
     # # Only ML models:
-    # fpc.showplot_feature_ranks_per_year()
+    fpc.showplot_feature_ranks_per_year()
 
     # # Only MDS:
-    # fpc.showplot_mds_gapfilling_qualities()
+    fpc.showplot_mds_gapfilling_qualities()
 
     # TODO heatmap of used model data pools
 

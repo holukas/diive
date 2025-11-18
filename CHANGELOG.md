@@ -18,6 +18,7 @@ for tick parameter names, a new plotting parameter for heatmaps, and an increase
 
 ## Changes
 
+- todo gap-filling methods
 - Re-visited and refactored class `FluxDetectionLimit` to calculate the flux detection limit for eddy covariance
   fluxes. Important: now a positive time lag means that the lagged variable (e.g., a gas) lags behind the reference
   variable (turbulent vertical wind), before it was the other way round, but this seems more logical. (9)
@@ -47,6 +48,10 @@ for tick parameter names, a new plotting parameter for heatmaps, and an increase
 - Added unit test for calculating air temperature from sonic temperature (6)
 - Updated unit tests for outlier detection methods
 - XX/69 unittests ran successfully
+
+### Environment
+
+- Updated all packages to newest (possible) versions
 
 ### Other
 
