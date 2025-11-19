@@ -11,76 +11,77 @@ A new function was added to calculate air temperature from sonic temperature, wh
 and an example notebook. A second new notebook demonstrates the `Flux_detection_limit`. Minor changes include a bug fix
 for tick parameter names, a new plotting parameter for heatmaps, and an increased data validation threshold.
 
-## New
+Here is the changelog reformatted as a clean, emoji-free Markdown document.
 
-- `add_date_attributes` `include_timestamp_as_cols`
+## Feature Highlights and Logic Changes
 
-## Additions
+### Time Series and Date Handling
 
-- Added option in `LocalSD` outlier detection to run the filter separately for daytime and nighttime (13)
-- Added new function to calculate air temperature from sonic temperature (5)
+* **Refactor and Rename**: Renamed `include_timestamp_as_cols` to `add_date_attributes`. The function now supports
+  generating sine/cosine variants for cyclical timestamp attributes (e.g., DOY) (18).
+* **Optimization**: Refactored `insert_season` for better performance and stability (11).
+* **New Resources**: Added notebook `AddDateAttributes` (17).
 
-## Changes
+### Outlier Detection (LocalSD)
 
-- todo gap-filling methods
-- Re-visited and refactored class `FluxDetectionLimit` to calculate the flux detection limit for eddy covariance
-  fluxes. Important: now a positive time lag means that the lagged variable (e.g., a gas) lags behind the reference
-  variable (turbulent vertical wind), before it was the other way round, but this seems more logical. (9)
-- Maximum covariance for high-res eddy covariance data is now calculated using the library [polars](https://pola.rs/)
-  for faster calculations (3x faster on half-hourly 10Hz data, but not on all CPUs) (4)
-- Increased percentage threshold for data required to be considered as valid time resolution to 0.2% (2)
-- Added parameter `cb_extend` for colorbar extension in heatmap plots (3)
-- Refactored `insert_season` (11)
-- Daytime/nighttime flag creation is now harmonized across outlier detection methods (12)
+* **Day/Night Separation**: Added an option to `LocalSD` to run the outlier filter separately for daytime and nighttime
+  periods (13).
+* **Harmonization**: Harmonized the creation of daytime/nighttime flags across all outlier detection methods (12).
+* **Integration**: Updated `FluxProcessingChain` (15) and `StepwiseMeteoScreeningFromDatabase` (16) notebooks, as well
+  as relevant unit tests (14), to support the new `LocalSD` functionality.
 
-### Bugfix
+### Eddy Covariance and Flux Processing
 
-- Fixed wrong parameter name for min/max ticks (1)
+* **Logic Change (Flux Limits)**: Refactored `FluxDetectionLimit`. **Important**: The logic for time lags has been
+  inverted to be more intuitive; a positive time lag now means the lagged variable (e.g., a gas) lags *behind* the
+  reference variable (turbulent vertical wind) (9).
+* **Performance Boost**: Maximum covariance for high-res data is now calculated using the [polars](https://pola.rs/)
+  library. Expect ~3x speed improvements on half-hourly 10Hz data, depending on CPU (4).
+* **New Resources**: Added `Flux_detection_limit` notebook (8), associated unit tests (10), and generic 10Hz EC example
+  data.
 
-### Notebooks
+### Physics and Variable Conversions
 
-- Added new notebook `Flux_detection_limit` (8)
-- Added new notebook `Calculate_air_temp_from_sonic_temp` (7)
-- Updated notebook `FluxProcessingChain` with `LocalSD` (daytime/nighttime) (15)
-- Updated notebook `StepwiseMeteoScreeningFromDatabase` with `LocalSD` (daytime/nighttime) (16)
+* **New Function**: Added functionality to calculate air temperature derived from sonic temperature (5).
+* **New Resources**: Added `Calculate_air_temp_from_sonic_temp` notebook (7) and associated unit tests (6).
 
-### Unittests
+## System and Visualization Improvements
 
-- Added unit test for outlier detection using `LocalSD` (daytime/nighttime) (14)
-- Updated unit test `test_fluxprocessingchain` with `LocalSD` (daytime/nighttime)
-- Added unit test for calculating the flux detection limit (10)
-- Added unit test for calculating air temperature from sonic temperature (6)
-- Updated unit tests for outlier detection methods
-- XX/69 unittests ran successfully
+### Visualization
 
-### Environment
+* **Heatmaps**: Added `cb_extend` parameter to allow colorbar extensions in heatmap plots (3).
+* **Bugfix**: Fixed an issue with incorrect parameter naming for min/max ticks (1).
 
-- Updated all packages to newest (possible) versions
+### Quality Control and System
 
-### Other
+* **Thresholds**: Increased the percentage threshold required for a time resolution to be considered valid to 0.2% (2).
+* **Environment**: Updated all packages to the newest possible versions.
+* **Testing**: Currently, XX/69 unit tests are passing successfully.
 
-- Added example data
-  `diive/configs/exampledata/exampledata_GENERIC-TXT-EDDY-COVARIANCE-10Hz-2023-06-24-03-30_LGRData.txt`, used for unit
-  tests and notebook examples for flux detection limit and calculating air temperature from sonic temperature
+## Work in Progress
 
-### References
+* Gap-filling methods.
 
-- (1) `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.showplot_resampled`
-- (2) `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb._validate_n_grouprecords`
-- (3) `diive.core.plotting.heatmap_base.py`
-- (4) `diive.pkgs.echires.lag.MaxCovariance._find_max_cov_peak`
-- (5) `diive.pkgs.createvar.conversions.air_temp_from_sonic_temp`
-- (6) `tests.test_createvar.TestCreateVar.test_air_temp_from_sonic_temp`
-- (7) `notebooks/CalculateVariable/Calculate_air_temp_from_sonic_temp.ipynb`
-- (8) `notebooks/CalculateVariable/FluxDetectionLimit/Flux_detection_limit.ipynb`
-- (9) `diive.pkgs.echires.fluxdetectionlimit.FluxDetectionLimit`
-- (10) `tests.test_echires.TestEcHires`
-- (11) `diive.core.times.times.insert_season`
-- (12) `diive.pkgs.outlierdetection.common.create_daytime_nighttime_flags`
-- (13) `diive.pkgs.outlierdetection.localsd.LocalSD`
-- (14) `tests.test_outlierdetection.TestOutlierDetection.test_localsd_daytime_nighttime`
-- (15) `notebooks/FluxProcessingChain/FluxProcessingChain.ipynb`
-- (16) `notebooks/MeteoScreening/StepwiseMeteoScreeningFromDatabase.ipynb`
+## References
+
+* (1) `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.showplot_resampled`
+* (2) `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb._validate_n_grouprecords`
+* (3) `diive.core.plotting.heatmap_base.py`
+* (4) `diive.pkgs.echires.lag.MaxCovariance._find_max_cov_peak`
+* (5) `diive.pkgs.createvar.conversions.air_temp_from_sonic_temp`
+* (6) `tests.test_createvar.TestCreateVar.test_air_temp_from_sonic_temp`
+* (7) `notebooks/CalculateVariable/Calculate_air_temp_from_sonic_temp.ipynb`
+* (8) `notebooks/CalculateVariable/FluxDetectionLimit/Flux_detection_limit.ipynb`
+* (9) `diive.pkgs.echires.fluxdetectionlimit.FluxDetectionLimit`
+* (10) `tests.test_echires.TestEcHires`
+* (11) `diive.core.times.times.insert_season`
+* (12) `diive.pkgs.outlierdetection.common.create_daytime_nighttime_flags`
+* (13) `diive.pkgs.outlierdetection.localsd.LocalSD`
+* (14) `tests.test_outlierdetection.TestOutlierDetection.test_localsd_daytime_nighttime`
+* (15) `notebooks/FluxProcessingChain/FluxProcessingChain.ipynb`
+* (16) `notebooks/MeteoScreening/StepwiseMeteoScreeningFromDatabase.ipynb`
+* (17) `notebooks/TimeFunctions/AddDateAttributes.ipynb`
+* (18) `diive.core.times.times.add_date_attributes`
 
 ## v0.89.0 | 23 Jul 2025
 
