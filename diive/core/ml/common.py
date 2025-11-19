@@ -624,6 +624,9 @@ class MlRegressorGapFillingBase:
 
             if self.vectorize_timestamps:
                 model_df = add_date_attributes(df=model_df, txt="")
+                # For cyclical variables, keep only the sine/cosine variants, drop linear versions
+                model_df = model_df.drop(columns=['.HOUR', '.SEASON', '.MONTH', '.WEEK', '.DOY'])
+
 
             if self.add_continuous_record_number:
                 model_df = fr.add_continuous_record_number(df=model_df)
