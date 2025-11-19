@@ -217,7 +217,7 @@ class TestFluxProcessingChain(unittest.TestCase):
             features_lag_stepsize=1,
             features_lag_exclude_cols=None,
             reduce_features=False,
-            include_timestamp_as_features=True,
+            vectorize_timestamps=True,
             add_continuous_record_number=True,
             perm_n_repeats=1,
             verbose=True,

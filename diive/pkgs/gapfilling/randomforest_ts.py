@@ -161,7 +161,7 @@ class RandomForestTS(MlRegressorGapFillingBase):
                  features_lag: list = None,
                  features_lag_stepsize: int = 1,
                  features_lag_exclude_cols: list = None,
-                 include_timestamp_as_features: bool = False,
+                 vectorize_timestamps: bool = False,
                  add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False,
                  **kwargs):
@@ -195,7 +195,7 @@ class RandomForestTS(MlRegressorGapFillingBase):
                     TA+1  = [  6,   7,   8, NaN]  --> each TA record is paired with the next record TA+1
                     TA+2  = [  7,   8, NaN, NaN]
 
-            include_timestamp_as_features:
+            vectorize_timestamps:
                 Include timestamp info as integer data: year, season, month, week, doy, hour
 
             add_continuous_record_number:
@@ -224,7 +224,7 @@ class RandomForestTS(MlRegressorGapFillingBase):
             features_lag=features_lag,
             features_lag_stepsize=features_lag_stepsize,
             features_lag_exclude_cols=features_lag_exclude_cols,
-            include_timestamp_as_features=include_timestamp_as_features,
+            vectorize_timestamps=vectorize_timestamps,
             add_continuous_record_number=add_continuous_record_number,
             sanitize_timestamp=sanitize_timestamp,
             **kwargs
@@ -250,7 +250,7 @@ class QuickFillRFTS:
             target_col=self.target_col,
             verbose=True,
             features_lag=[-1, -1],
-            include_timestamp_as_features=True,
+            vectorize_timestamps=True,
             add_continuous_record_number=True,
             sanitize_timestamp=True,
             n_estimators=99,
@@ -412,8 +412,8 @@ def example_rfts():
         # features_lag=None,
         features_lag=[-1, -1],
         # features_lag_exclude_cols=['test', 'test2'],
-        # include_timestamp_as_features=False,
-        include_timestamp_as_features=True,
+        # vectorize_timestamps=False,
+        vectorize_timestamps=True,
         # add_continuous_record_number=False,
         add_continuous_record_number=True,
         sanitize_timestamp=True,

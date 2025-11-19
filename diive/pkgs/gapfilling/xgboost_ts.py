@@ -28,7 +28,7 @@ class XGBoostTS(MlRegressorGapFillingBase):
 
     def __init__(self, input_df: DataFrame, target_col: str or tuple, verbose: int = 0, perm_n_repeats: int = 10,
                  test_size: float = 0.25, features_lag: list = None, features_lag_exclude_cols: list = None,
-                 include_timestamp_as_features: bool = False, add_continuous_record_number: bool = False,
+                 vectorize_timestamps: bool = False, add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False, **kwargs):
         """
         Gap-fill timeseries with predictions from random forest model
@@ -65,7 +65,7 @@ class XGBoostTS(MlRegressorGapFillingBase):
                 List of predictors for which no lagged variants are added.
                 Example: with ['A', 'B'] no lagged variants for variables 'A' and 'B' are added.
 
-            include_timestamp_as_features:
+            vectorize_timestamps:
                 Include timestamp info as integer data: year, season, month, week, doy, hour
 
             add_continuous_record_number:
@@ -96,7 +96,7 @@ class XGBoostTS(MlRegressorGapFillingBase):
             test_size=test_size,
             features_lag=features_lag,
             features_lag_exclude_cols=features_lag_exclude_cols,
-            include_timestamp_as_features=include_timestamp_as_features,
+            vectorize_timestamps=vectorize_timestamps,
             add_continuous_record_number=add_continuous_record_number,
             sanitize_timestamp=sanitize_timestamp,
             **kwargs
@@ -223,8 +223,8 @@ def example_xgbts():
         features_lag=[-1, -1],
         features_lag_exclude_cols=['TIMESINCE_PREC_TOT_T1_25+20_1'],
         # features_lag_exclude_cols=['Rg_f', 'TA>0', 'TA>20', 'DAYTIME', 'NIGHTTIME'],
-        # include_timestamp_as_features=False,
-        include_timestamp_as_features=True,
+        # vectorize_timestamps=False,
+        vectorize_timestamps=True,
         add_continuous_record_number=False,
         # add_continuous_record_number=True,
         sanitize_timestamp=True,

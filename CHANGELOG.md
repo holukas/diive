@@ -4,21 +4,13 @@
 
 ## v0.90.0 | XX Nov 2025
 
-In v0.90.0, the main update is a performance boost for high-resolution eddy covariance data, as the maximum covariance
-calculation now uses the `polars` library for 3x faster processing (CPU dependent).
-
-A new function was added to calculate air temperature from sonic temperature, which is accompanied by a new unit test
-and an example notebook. A second new notebook demonstrates the `Flux_detection_limit`. Minor changes include a bug fix
-for tick parameter names, a new plotting parameter for heatmaps, and an increased data validation threshold.
-
-Here is the changelog reformatted as a clean, emoji-free Markdown document.
-
-## Feature Highlights and Logic Changes
+**Feature Highlights and Logic Changes**
 
 ### Time Series and Date Handling
 
 * **Refactor and Rename**: Renamed `include_timestamp_as_cols` to `add_date_attributes`. The function now supports
-  generating sine/cosine variants for cyclical timestamp attributes (e.g., DOY) (18).
+  generating sine/cosine variants for cyclical timestamp attributes (e.g., DOY) (18). The same function is used as
+  parameter `vectorize_timestamps` in machine learning approaches to include timestamp attributes in feature vectors.
 * **Optimization**: Refactored `insert_season` for better performance and stability (11).
 * **New Resources**: Added notebook `AddDateAttributes` (17).
 

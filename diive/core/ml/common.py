@@ -34,7 +34,7 @@ class MlRegressorGapFillingBase:
                  features_lag: list = None,
                  features_lag_stepsize: int = 1,
                  features_lag_exclude_cols: list = None,
-                 include_timestamp_as_features: bool = False,
+                 vectorize_timestamps: bool = False,
                  add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False,
                  perm_n_repeats: int = 10,
@@ -74,7 +74,7 @@ class MlRegressorGapFillingBase:
                 List of predictors for which no lagged variants are added.
                 Example: with ['A', 'B'] no lagged variants for variables 'A' and 'B' are added.
 
-            include_timestamp_as_features:
+            vectorize_timestamps:
                 Include timestamp info as integer data: year, season, month, week, doy, hour
 
             add_continuous_record_number:
@@ -102,7 +102,7 @@ class MlRegressorGapFillingBase:
         self.features_lag_stepsize = features_lag_stepsize
         self.features_lag_exclude_cols = features_lag_exclude_cols
         self.verbose = verbose
-        self.include_timestamp_as_features = include_timestamp_as_features
+        self.vectorize_timestamps = vectorize_timestamps
         self.add_continuous_record_number = add_continuous_record_number
         self.sanitize_timestamp = sanitize_timestamp
         self.kwargs = kwargs
@@ -616,13 +616,13 @@ class MlRegressorGapFillingBase:
         model_df = self.model_df.copy()
 
         # Additional data columns
-        if any([self.features_lag, self.include_timestamp_as_features,
+        if any([self.features_lag, self.vectorize_timestamps,
                 self.add_continuous_record_number]):
             print("\nAdding new data columns ...")
             if self.features_lag and (len(model_df.columns) > 1):
                 model_df = self._lag_features(features_lag_exclude_cols=self.features_lag_exclude_cols)
 
-            if self.include_timestamp_as_features:
+            if self.vectorize_timestamps:
                 model_df = add_date_attributes(df=model_df, txt="")
 
             if self.add_continuous_record_number:

@@ -889,7 +889,7 @@ class FluxProcessingChain:
             features_lag_stepsize: int = 1,
             features_lag_exclude_cols: list = None,
             reduce_features: bool = False,
-            include_timestamp_as_features: bool = False,
+            vectorize_timestamps: bool = False,
             add_continuous_record_number: bool = False,
             perm_n_repeats: int = 10,
             verbose: int = 0,
@@ -924,7 +924,7 @@ class FluxProcessingChain:
             general_kwargs = dict(
                 input_df=this_ust_scen_df,
                 target_col=ustar_flux.name,
-                include_timestamp_as_features=include_timestamp_as_features,
+                vectorize_timestamps=vectorize_timestamps,
                 add_continuous_record_number=add_continuous_record_number,
                 features_lag=features_lag,
                 features_lag_stepsize=features_lag_stepsize,
@@ -1635,7 +1635,6 @@ def example():
     # --------------------
     FEATURES = ["TA_T1_47_1_gfXG", "SW_IN_T1_47_1_gfXG", "VPD_T1_47_1_gfXG"]
 
-
     fpc.level41_longterm_random_forest(
         features=FEATURES,
         sanitize_timestamp=True,
@@ -1643,7 +1642,7 @@ def example():
         features_lag_stepsize=1,
         features_lag_exclude_cols=None,
         reduce_features=False,
-        include_timestamp_as_features=True,
+        vectorize_timestamps=True,
         add_continuous_record_number=True,
         perm_n_repeats=1,
         verbose=True,
@@ -1787,8 +1786,8 @@ def example():
     #             # features_lag=None,
     #             features_lag=[-1, -1],
     #             # features_lag_exclude_cols=['test', 'test2'],
-    #             # include_timestamp_as_features=False,
-    #             include_timestamp_as_features=True,
+    #             # vectorize_timestamps=False,
+    #             vectorize_timestamps=True,
     #             # add_continuous_record_number=False,
     #             add_continuous_record_number=True,
     #             sanitize_timestamp=True,
@@ -1815,8 +1814,8 @@ def example():
     #             features_lag=[-1, -1],
     #             # features_lag_exclude_cols=['TIMESINCE_PREC_TOT_T1_25+20_1'],
     #             # features_lag_exclude_cols=['Rg_f', 'TA>0', 'TA>20', 'DAYTIME', 'NIGHTTIME'],
-    #             # include_timestamp_as_features=False,
-    #             include_timestamp_as_features=True,
+    #             # vectorize_timestamps=False,
+    #             vectorize_timestamps=True,
     #             # add_continuous_record_number=False,
     #             add_continuous_record_number=True,
     #             sanitize_timestamp=True,
