@@ -3,7 +3,89 @@ import pandas as pd
 from pandas import DatetimeIndex, Series
 
 
-def potrad(timestamp_index: DatetimeIndex, lat: float, lon: float, utc_offset: int) -> Series:
+def potrad(timestamp_index: pd.DatetimeIndex, lat: float, lon: float, utc_offset: int,
+           use_atmospheric_transmission=False) -> pd.Series:
+    """
+    Calculate Potential Shortwave Radiation.
+    Default is Top-of-Atmosphere (TOA). Set use_atmospheric_transmission=True for clear-sky surface approximation.
+    """
+
+    # Input validation
+    if not (-90 <= lat <= 90):
+        raise ValueError(f"Latitude {lat} is out of range (-90 to 90).")
+    if not (-180 <= lon <= 180):
+        raise ValueError(f"Longitude {lon} is out of range (-180 to 180).")
+
+    # Constants
+    S_SC = 1361  # Solar constant (W/m²)
+    d_y = 365.25  # Average days per year
+    d_r = 173  # Summer solstice DOY
+    phi_r = np.deg2rad(23.45)  # Tropic of Cancer
+    phi = np.deg2rad(lat)  # Site latitude in radians
+
+    # Time calculations
+    # Ensures we are working with a Series/Index that supports .dt accessors immediately
+    timestamp_index = pd.to_datetime(timestamp_index)
+    res = pd.DataFrame(index=timestamp_index)
+    res['utc_time'] = timestamp_index - pd.Timedelta(hours=utc_offset)
+    res['doy'] = res['utc_time'].dt.dayofyear
+
+    # Decimal hour
+    res['utc_h'] = (res['utc_time'].dt.hour +
+                    res['utc_time'].dt.minute / 60.0 +
+                    res['utc_time'].dt.second / 3600.0)
+
+    # Solar Geometry
+
+    # Solar declination (delta)
+    # Uses cosine because we anchor to solstice (d_r)
+    res['delta'] = phi_r * np.cos(2 * np.pi * (res['doy'] - d_r) / d_y)
+
+    # Equation of Time (EoT)
+    # Woolfs (1968) approximation
+    B = 2 * np.pi * (res['doy'] - 81) / 365.0
+    res['eot_min'] = 9.87 * np.sin(2 * B) - 7.53 * np.cos(B) - 1.5 * np.sin(B)
+    res['eot_h'] = res['eot_min'] / 60.0
+
+    # Solar hour angle (H)
+    # (SolarTime - 12) * 15 degrees converted to radians
+    lon_in_hours = lon / 15.0
+    solar_time_h = res['utc_h'] + lon_in_hours + res['eot_h']
+    res['H_rad'] = (solar_time_h - 12) * (np.pi / 12)
+
+    # Radiation Calculation
+
+    # Sine of solar elevation (sin_psi)
+    res['sin_psi'] = (np.sin(phi) * np.sin(res['delta']) +
+                      np.cos(phi) * np.cos(res['delta']) * np.cos(res['H_rad']))
+
+    # Earth-Sun distance correction (eccentricity factor)
+    # Earth is closer in Winter (Northern Hemisphere), further in Summer.
+    # Factor ranges roughly from 0.96 to 1.03
+    res['eccentricity'] = 1 + 0.033 * np.cos(2 * np.pi * res['doy'] / 365.0)
+
+    # Calculate radiation
+    # Standard TOA formula: S * eccentricity * sin(elevation)
+    rad = S_SC * res['eccentricity'] * res['sin_psi']
+
+    # Optional: Simple atmospheric transmission (Clear Sky Approximation)
+    # A common simplified approximation is ~0.75 transmission or a function of elevation
+    if use_atmospheric_transmission:
+        # Calculate Air Mass (M = 1 / sin(elevation))
+        # Clip to 0.01 to avoid division by zero at night/horizon
+        sin_psi_clamped = res['sin_psi'].clip(lower=0.01)
+        M = 1 / sin_psi_clamped
+        tau = 0.75
+        # Apply Beer-Lambert Law: Transmission decreases exponentially with path length
+        rad = rad * (tau ** M)
+
+    # Clamp night values to 0
+    rad[rad < 0] = 0
+
+    return rad
+
+
+def _potrad_oldmethod(timestamp_index: DatetimeIndex, lat: float, lon: float, utc_offset: int) -> Series:
     """
     Calculate potential shortwave-incoming radiation
 

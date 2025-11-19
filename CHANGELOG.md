@@ -11,6 +11,7 @@
 * **Refactor and Rename**: Renamed `include_timestamp_as_cols` to `add_date_attributes`. The function now supports
   generating sine/cosine variants for cyclical timestamp attributes (e.g., DOY) (18). The same function is used as
   parameter `vectorize_timestamps` in machine learning approaches to include timestamp attributes in feature vectors.
+  Notebooks that use XGBoost or random forest were upated accordingly.
 * **Optimization**: Refactored `insert_season` for better performance and stability (11).
 * **New Resources**: Added notebook `AddDateAttributes` (17).
 
@@ -36,6 +37,7 @@
 
 * **New Function**: Added functionality to calculate air temperature derived from sonic temperature (5).
 * **New Resources**: Added `Calculate_air_temp_from_sonic_temp` notebook (7) and associated unit tests (6).
+* Refactored code for calculating potential radiation (19)
 
 ## System and Visualization Improvements
 
@@ -48,11 +50,7 @@
 
 * **Thresholds**: Increased the percentage threshold required for a time resolution to be considered valid to 0.2% (2).
 * **Environment**: Updated all packages to the newest possible versions.
-* **Testing**: Currently, XX/69 unit tests are passing successfully.
-
-## Work in Progress
-
-* Gap-filling methods.
+* **Testing**: Currently, 69/69 unit tests are passing successfully.
 
 ## References
 
@@ -74,6 +72,7 @@
 * (16) `notebooks/MeteoScreening/StepwiseMeteoScreeningFromDatabase.ipynb`
 * (17) `notebooks/TimeFunctions/AddDateAttributes.ipynb`
 * (18) `diive.core.times.times.add_date_attributes`
+* (19) `diive.pkgs.createvar.potentialradiation.potrad`
 
 ## v0.89.0 | 23 Jul 2025
 
