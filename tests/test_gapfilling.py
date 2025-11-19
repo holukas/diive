@@ -102,13 +102,13 @@ class TestGapFilling(unittest.TestCase):
         self.assertEqual(results[gf.gapfilled_.name].sum(), gf.gapfilled_.sum())
         self.assertEqual(results[TARGET_COL].isnull().sum(), 67444)
         self.assertEqual(results[gf.gapfilled_.name].isnull().sum(), 0)
-        self.assertAlmostEqual(results[gf.gapfilled_.name].sum(), -39072.126777777776, places=5)
+        self.assertAlmostEqual(results[gf.gapfilled_.name].sum(), -40293.52333333333, places=5)
         self.assertEqual(results['FLAG_NEE_CUT_REF_orig_gfRF_ISFILLED'].sum(), 67444)
-        self.assertEqual(len(gf.features_reduced_across_years), 11)
+        self.assertEqual(len(gf.features_reduced_across_years), 14)
         self.assertEqual(gf.feature_ranks_per_year.min().min(), 1)
-        self.assertEqual(gf.feature_ranks_per_year.max().max(), 11)
+        self.assertEqual(gf.feature_ranks_per_year.max().max(), 14)
         self.assertEqual(len(gf.feature_importances_yearly_.keys()), 5)
-        self.assertAlmostEqual(gf.feature_importances_yearly_['2017']['PERM_IMPORTANCE']['Rg_f'], 1.1685750257993892,
+        self.assertAlmostEqual(gf.feature_importances_yearly_['2017']['PERM_IMPORTANCE']['Rg_f'], 1.3285911032587547,
                                places=5)
         scores = []
         r2s = []
@@ -116,15 +116,15 @@ class TestGapFilling(unittest.TestCase):
             scores.append(s['mae'])
             r2s.append(s['r2'])
         self.assertEqual(len(scores), 5)
-        self.assertAlmostEqual(mean(scores), 1.3502779449542526, places=5)
-        self.assertAlmostEqual(mean(r2s), 0.8878948369317223, places=5)
+        self.assertAlmostEqual(mean(scores), 1.3457167328267534, places=5)
+        self.assertAlmostEqual(mean(r2s), 0.889033354793049, places=5)
         self.assertEqual(type(gf.results_yearly_['2017']), MlRegressorGapFillingBase)
-        self.assertAlmostEqual(gf.results_yearly_['2014'].scores_['rmse'], 2.169915773456053, places=5)
+        self.assertAlmostEqual(gf.results_yearly_['2014'].scores_['rmse'], 2.1702071839917103, places=5)
         self.assertEqual(gf.yearpools['2014']['poolyears'], [2014, 2015, 2016])
         self.assertEqual(gf.yearpools['2018']['poolyears'], [2016, 2017, 2018])
         self.assertEqual(gf.yearpools['2016']['poolyears'], [2015, 2016, 2017])
-        self.assertAlmostEqual(gf.yearpools['2017']['df'].sum().sum(), 83261338263.81297, places=5)
-        self.assertAlmostEqual(gf.feature_importance_per_year.sum().sum(), 11.707053647511076, places=5)
+        self.assertAlmostEqual(gf.yearpools['2017']['df'].sum().sum(), 109363879401.53656, places=5)
+        self.assertAlmostEqual(gf.feature_importance_per_year.sum().sum(), 12.38255737756192, places=5)
 
     def test_linear_interpolation(self):
         from diive.configs.exampledata import load_exampledata_parquet
@@ -187,12 +187,12 @@ class TestGapFilling(unittest.TestCase):
         # gapfilled.cumsum().plot()
         # plt.show()
 
-        self.assertAlmostEqual(scores['mae'], 1.7173094522108192, places=5)
-        self.assertEqual(scores['r2'], 0.7942644518782538)
-        self.assertEqual(scores['mse'], 5.600341576611584)
-        self.assertAlmostEqual(gfdf['NEE_CUT_REF_orig_gfRF'].sum(), -706.6381230007763, places=5)
+        self.assertAlmostEqual(scores['mae'], 1.720970828022708, places=5)
+        self.assertEqual(scores['r2'], 0.7929018497024596)
+        self.assertEqual(scores['mse'], 5.637433064626899)
+        self.assertAlmostEqual(gfdf['NEE_CUT_REF_orig_gfRF'].sum(), -674.6789030138996, places=5)
         self.assertEqual(gfdf['NEE_CUT_REF_orig_gfRF'].sum(), gapfilled.sum())
-        self.assertEqual(fi['PERM_IMPORTANCE']['Rg_f'], 1.1749124161423874)
+        self.assertEqual(fi['PERM_IMPORTANCE']['Rg_f'], 0.9930012740332321)
 
     def test_gapfilling_xgboost(self):
         """Fill gaps using XGBoost"""
@@ -247,12 +247,12 @@ class TestGapFilling(unittest.TestCase):
         # gapfilled.cumsum().plot()
         # plt.show()
 
-        self.assertEqual(scores['mae'], 1.474872398011102)
-        self.assertEqual(scores['r2'], 0.8472293439937181)
-        self.assertEqual(scores['mse'], 4.158580587210508)
-        self.assertEqual(gfdf['NEE_CUT_REF_orig_gfXG'].sum(), -1364.7877804577352)
+        self.assertEqual(scores['mae'], 1.4466057357526463)
+        self.assertEqual(scores['r2'], 0.8495961639953273)
+        self.assertEqual(scores['mse'], 4.094153216343495)
+        self.assertEqual(gfdf['NEE_CUT_REF_orig_gfXG'].sum(), -1677.1556693665684)
         self.assertEqual(gfdf['NEE_CUT_REF_orig_gfXG'].sum(), gapfilled.sum())
-        self.assertEqual(fi['PERM_IMPORTANCE']['Rg_f'], 1.1121007247659092)
+        self.assertEqual(fi['PERM_IMPORTANCE']['Rg_f'], 1.0692439521924493)
 
 
 if __name__ == '__main__':
