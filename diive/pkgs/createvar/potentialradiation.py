@@ -3,10 +3,10 @@ import pandas as pd
 from pandas import DatetimeIndex, Series
 
 
-def potrad(timestamp_index: pd.DatetimeIndex, lat: float, lon: float, utc_offset: int,
+def potrad_eot(timestamp_index: pd.DatetimeIndex, lat: float, lon: float, utc_offset: int,
            use_atmospheric_transmission=False) -> pd.Series:
     """
-    Calculate Potential Shortwave Radiation.
+    Calculate Potential Shortwave Radiation, uses equation of time. Alternative approach to `potrad`.
     Default is Top-of-Atmosphere (TOA). Set use_atmospheric_transmission=True for clear-sky surface approximation.
     """
 
@@ -85,7 +85,7 @@ def potrad(timestamp_index: pd.DatetimeIndex, lat: float, lon: float, utc_offset
     return rad
 
 
-def _potrad_oldmethod(timestamp_index: DatetimeIndex, lat: float, lon: float, utc_offset: int) -> Series:
+def potrad(timestamp_index: DatetimeIndex, lat: float, lon: float, utc_offset: int) -> Series:
     """
     Calculate potential shortwave-incoming radiation
 

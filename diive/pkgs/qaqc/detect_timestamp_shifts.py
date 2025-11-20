@@ -2,13 +2,16 @@ import calendar
 
 import matplotlib.gridspec as grid_spec
 import numpy as np
+import seaborn as sns
 from matplotlib.pyplot import cm
 
 import diive as dv
 from diive.pkgs.createvar.potentialradiation import potrad
 
-filepath = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\20_MERGE_DATA\21.4_FLUXES_L1_noSHC_IRGA75+METEO7.parquet"
+# filepath = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\20_MERGE_DATA\21.4_FLUXES_L1_noSHC_IRGA75+METEO7.parquet"
+filepath = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\20_MERGE_DATA\22.4_FLUXES_L1_IRGA72+METEO7_2016-2024.parquet"
 df = dv.load_parquet(filepath=filepath)
+# df = df.loc[df.index.year < 2010].copy()
 
 # years = [2015]
 years = sorted(list(set(df.index.year)))
@@ -29,8 +32,7 @@ swinpotcol = 'SW_IN_POT'
 colors = cm.Spectral_r(np.linspace(0, 1, len(years)))
 
 # Overwrite potential radiation
-df[swinpotcol] = potrad(timestamp_index=df.index, lat=47.286417, lon=7.733750, utc_offset=1,
-                        use_atmospheric_transmission=False)
+df[swinpotcol] = potrad(timestamp_index=df.index, lat=47.286417, lon=7.733750, utc_offset=1)
 
 
 # dc = DielCycle(series=series)
@@ -38,6 +40,180 @@ df[swinpotcol] = potrad(timestamp_index=df.index, lat=47.286417, lon=7.733750, u
 # units = 'units'
 # dc.plot(ax=None, title=title, txt_ylabel_units=units,
 #         each_month=True, legend_n_col=2)
+
+def execute_phase_shift_fft():
+    # ==========================================
+    # EXECUTION
+    # ==========================================
+
+    # Run the FFT detection
+    df_phase = calculate_phase_shift_fft(df,
+                                         col_meas=varcol,
+                                         col_pot=swinpotcol,
+                                         min_clearness=0.6)
+
+    df_phase.index = pd.to_datetime(df_phase.index)
+
+    # Filter for valid days (amplitude check removes pure noise days)
+    valid_phase = df_phase[df_phase['amplitude_meas'] > 1000]  # Threshold depends on your units (W/m2 sum)
+
+    # ==========================================
+    # PLOTTING
+    # ==========================================
+
+    fig = plt.figure(figsize=(14, 10))
+    gs = grid_spec.GridSpec(3, 2)
+
+    # 1. Scatter Plot: Shift vs Date
+    ax1 = fig.add_subplot(gs[0, :])  # Span top row
+    ax1.scatter(valid_phase.index, valid_phase['shift_minutes'],
+                color='teal', alpha=0.6, s=15, label='Daily Phase Shift')
+
+    # Add Rolling Median (Smoothed trend)
+    rolling = valid_phase['shift_minutes'].rolling(window=15, center=True).median()
+    ax1.plot(valid_phase.index, rolling, color='red', linewidth=2, label='15-Day Rolling Median')
+
+    ax1.set_ylabel("Time Shift (Minutes)")
+    ax1.set_title(f"Phase Shift Detection (FFT Method)\nPositive = Measured data is LATE (Lagging)")
+    ax1.axhline(0, color='k', linewidth=1)
+    ax1.axhline(60, color='gray', linestyle=':', alpha=0.5)  # DST
+    ax1.axhline(-60, color='gray', linestyle=':', alpha=0.5)  # DST
+    ax1.legend(loc='upper right')
+    ax1.grid(True, alpha=0.3)
+
+    # 2. Histogram: Distribution of Shifts
+    ax2 = fig.add_subplot(gs[1, 0])
+    try:
+        sns.histplot(valid_phase['shift_minutes'], bins=50, kde=True, ax=ax2, color='teal')
+    except:
+        ax2.hist(valid_phase['shift_minutes'], bins=50, color='teal', alpha=0.7)
+
+    ax2.set_xlabel("Shift (Minutes)")
+    ax2.set_title("Distribution of Time Shifts")
+    ax2.axvline(0, color='k')
+    median_val = valid_phase['shift_minutes'].median()
+    ax2.axvline(median_val, color='red', linestyle='--')
+    ax2.text(median_val, ax2.get_ylim()[1] * 0.9, f" Median: {median_val:.2f} min", color='red')
+
+    # 3. Polar Plot: Phase Angle Visualization (The "Clock")
+    # This visualizes where the "average" peak of the day is happening relative to noon
+    ax3 = fig.add_subplot(gs[1, 1], projection='polar')
+
+    # Convert minutes back to radians for polar plot
+    # 0 degrees = Noon in this context if we treat potential as reference
+    # We plot the DIFFERENCE
+    rads = (valid_phase['shift_minutes'] / 1440) * 2 * np.pi
+
+    ax3.scatter(rads, valid_phase['amplitude_meas'], c='teal', alpha=0.3, s=10)
+    ax3.set_theta_zero_location("N")  # Top is 0 shift
+    ax3.set_theta_direction(-1)  # Clockwise
+    ax3.set_title("Phase Shift Polar Plot (0 = Perfect Sync)")
+    # Limit the view to the top sector (assuming shifts are within +/- 4 hours)
+    ax3.set_thetamin(-45)
+    ax3.set_thetamax(45)
+
+    # 4. Monthly Boxplot (To see seasonal drift)
+    ax4 = fig.add_subplot(gs[2, :])  # Span bottom row
+    valid_phase['Month'] = valid_phase.index.month
+    valid_phase.boxplot(column='shift_minutes', by='Month', ax=ax4, grid=False,
+                        patch_artist=True, boxprops=dict(facecolor="teal", alpha=0.5))
+    ax4.set_title("Monthly variability of Time Shift")
+    ax4.set_ylabel("Shift (Minutes)")
+    ax4.axhline(0, color='k', linewidth=1)
+    fig.suptitle("")  # Remove pandas auto-title
+
+    plt.tight_layout()
+    plt.show()
+
+
+def calculate_phase_shift_fft(df, col_meas, col_pot, min_clearness=0.5):
+    """
+    Calculates time shift by comparing the Phase Angle of the fundamental
+    24-hour frequency component of Measured vs Potential radiation.
+
+    Math:
+    Delta_t (min) = (Delta_phi (rad) / 2*pi) * 1440 min
+    """
+
+    results = {}
+
+    # Determine sampling interval in minutes
+    freq = pd.infer_freq(df.index)
+    if freq:
+        dt_min = pd.to_timedelta(freq).total_seconds() / 60
+    else:
+        dt_min = (df.index[1] - df.index[0]).total_seconds() / 60
+
+    points_per_day = int(1440 / dt_min)
+
+    # Group by day
+    grouped = df.groupby(df.index.date)
+    print(f"Analyzing {len(grouped)} days using FFT Phase Shift...")
+
+    for date, group in grouped:
+        # 1. Data Check
+        if len(group) < (points_per_day * 0.9):  # Skip incomplete days
+            results[date] = {'shift_minutes': np.nan, 'amplitude_meas': 0}
+            continue
+
+        # Fill NaNs with 0 (night/missing) for FFT safety
+        y_meas = group[col_meas].fillna(0).values
+        y_pot = group[col_pot].fillna(0).values
+
+        # Basic Clearness Check (Filter out heavy overcast days)
+        if np.sum(y_pot) > 0:
+            clearness = np.sum(y_meas) / np.sum(y_pot)
+            if clearness < min_clearness:
+                results[date] = {'shift_minutes': np.nan, 'amplitude_meas': 0}
+                continue
+        else:
+            continue
+
+        # 2. The Math: Discrete Fourier Transform for k=1 (Fundamental 24h cycle)
+        # We don't need a full FFT; we just need the complex number for the 1-day period.
+        # X_k = sum(x_n * exp(-i * 2*pi * k * n / N))
+
+        N = len(y_meas)
+        n = np.arange(N)
+
+        # The "Basis Vector" for exactly 1 cycle per day
+        # If your data is not exactly 24h chunks, this needs adjustment,
+        # but groupby(date) usually ensures this.
+        k = 1
+        basis = np.exp(-1j * 2 * np.pi * k * n / N)
+
+        # Project data onto the basis (Dot product)
+        # These are Complex numbers representing the 24h wave
+        X_meas = np.sum(y_meas * basis)
+        X_pot = np.sum(y_pot * basis)
+
+        # 3. Get Phase Angles (in Radians)
+        phi_meas = np.angle(X_meas)
+        phi_pot = np.angle(X_pot)
+
+        # 4. Calculate Difference
+        delta_phi = phi_meas - phi_pot
+
+        # Handle Wrap-around (e.g., if diff is > pi or < -pi)
+        # This ensures the shift is finding the shortest path around the circle
+        delta_phi = (delta_phi + np.pi) % (2 * np.pi) - np.pi
+
+        # 5. Convert Radians to Minutes
+        # 2*pi radians = 1440 minutes (24 hours)
+        shift_minutes = (delta_phi / (2 * np.pi)) * 1440
+
+        # Note on Sign:
+        # If phi_meas is larger (later phase), the wave is shifted to the RIGHT (Delayed/Late)
+        # However, in time series, a "Late" signal usually means we need to subtract time.
+        # Let's standardize: Positive result = Measured Peak is LATER than Potential Peak.
+
+        results[date] = {
+            'shift_minutes': shift_minutes,
+            'amplitude_meas': np.abs(X_meas)  # Strength of the signal
+        }
+
+    return pd.DataFrame.from_dict(results, orient='index')
+
 
 def plot_monthly_dielcycles(df, varcol, swinpotcol):
     fig = plt.figure(facecolor='white', figsize=(16, 7))
@@ -140,6 +316,7 @@ def plot_monthly_dielcycles(df, varcol, swinpotcol):
 
 from diive.core.times.resampling import diel_cycle
 
+
 # ---
 
 
@@ -207,106 +384,119 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def calculate_timeshift_crosscorr(df, col_meas, col_pot, max_shift_hours=2, scan_range_min=None):
+def calculate_timeshift_highres(df, col_meas, col_pot,
+                                max_shift_min=120,
+                                upsample_freq='1min',
+                                min_clearness_index=0.5):
     """
-    Detects time shifts by cross-correlating measured vs potential radiation per day.
+    Detects time shifts with high precision by upsampling data (interpolation)
+    before cross-correlating.
 
     Parameters:
     -----------
     df : pd.DataFrame
         Dataframe with DateTimeIndex.
     col_meas : str
-        Name of measured radiation column.
+        Measured radiation column name.
     col_pot : str
-        Name of potential radiation column.
-    max_shift_hours : int
-        Maximum expected shift to look for (limits search space).
-    scan_range_min : int (optional)
-        If provided, overrides the automatic resolution detection.
-        Step size for the lag search in minutes.
+        Potential radiation column name.
+    max_shift_min : int
+        Max shift to search for in minutes (e.g., 120 = +/- 2 hours).
+    upsample_freq : str
+        Resolution to interpolate to (e.g., '1min').
+    min_clearness_index : float
+        0.0 to 1.0. Only analyze days where Measure/Potential > this value.
+        Helps filter out heavily overcast days that produce noise.
 
     Returns:
     --------
-    pd.DataFrame containing 'shift_minutes' and 'correlation' indexed by Day.
+    pd.DataFrame with 'shift_minutes' and 'max_corr'.
     """
-
-    # 1. Determine data resolution (time step) in minutes
-    if scan_range_min is None:
-        freq = pd.infer_freq(df.index)
-        if freq is None:
-            # Fallback: calculate from first two rows
-            diff = (df.index[1] - df.index[0]).total_seconds() / 60
-            step_size = int(diff)
-        else:
-            step_size = int(pd.to_timedelta(freq).total_seconds() / 60)
-    else:
-        step_size = scan_range_min
-
-    print(f"Detected time step: {step_size} minutes")
-
-    # Define the lags we want to test (in integer steps)
-    # e.g., if resolution is 10min and max_shift is 2h, we test -12 to +12 steps
-    steps_range = int((max_shift_hours * 60) / step_size)
-    lags = range(-steps_range, steps_range + 1)
 
     results = {}
 
-    # Group by day
-    # We iterate over days to handle clock drift (which changes over time)
-    # or sudden jumps (DST).
+    # Group by date to handle drift over time
     grouped = df.groupby(df.index.date)
+    print(f"Analyzing {len(grouped)} days at {upsample_freq} resolution...")
 
-    print(f"Analyzing {len(grouped)} days...")
+    # Pre-calculate steps for the progress log
+    count = 0
+    total = len(grouped)
 
     for date, group in grouped:
-        # 2. Filter: Only analyze if we have significant data
-        # Skip days where potential radiation sum is too low (very short winter days or errors)
-        if group[col_pot].sum() < 100:
+        count += 1
+
+        # 1. Preliminary Filters (Skip useless days)
+        pot_sum = group[col_pot].sum()
+        meas_sum = group[col_meas].sum()
+
+        # Skip if potential is near zero (winter errors/polar night)
+        if pot_sum < 100:
             results[date] = {'shift_minutes': np.nan, 'max_corr': np.nan}
             continue
 
-        # Focus only on daylight hours to avoid high correlation of 0=0 at night
-        daylight = group[group[col_pot] > 10]
-
-        if len(daylight) < 10:  # Not enough daylight data points
+        # Skip if day is too cloudy (Clearness Index)
+        # Cloudy days have flat shapes that cross-correlate poorly
+        if (meas_sum / pot_sum) < min_clearness_index:
             results[date] = {'shift_minutes': np.nan, 'max_corr': np.nan}
             continue
 
-        ts_meas = daylight[col_meas]
-        ts_pot = daylight[col_pot]
+        try:
+            # 2. Upsampling (The Magic Step)
+            # Create a high-res time index for this specific day
+            start_time = group.index[0]
+            end_time = group.index[-1]
+            highres_idx = pd.date_range(start_time, end_time, freq=upsample_freq)
 
-        best_corr = -1
-        best_lag_steps = 0
-        corrs = []
+            # Interpolate POTENTIAL using Cubic Spline (Physics is smooth)
+            # We limit area to daytime to avoid interpolation weirdness at edges
+            daytime_mask = group[col_pot] > 0
+            if daytime_mask.sum() < 5: continue
 
-        # 3. The Cross-Correlation Loop
-        # We shift the MEASURED data.
-        # If shifting it by +1 step makes it match POTENTIAL, the data was 1 step EARLY (lag is negative).
-        for lag in lags:
-            # shift() moves data down (positive lag) or up (negative lag)
-            shifted_meas = ts_meas.shift(lag)
+            # Reindex and Interpolate
+            # We use 'pchip' or 'cubic' for potential because the sun moves smoothly
+            ts_pot_hr = group[col_pot].reindex(highres_idx).interpolate(method='pchip').fillna(0)
 
-            # Calculate correlation (ignoring NaNs created by shift)
-            corr = ts_pot.corr(shifted_meas)
+            # Interpolate MEASURED using Linear (Clouds are sharp/jagged)
+            # Cubic interpolation on measured data can cause "ringing" artifacts
+            ts_meas_hr = group[col_meas].reindex(highres_idx).interpolate(method='linear').fillna(0)
 
-            corrs.append(corr)
+            # 3. Cross-Correlation
+            # We only look at the "sun up" portion to save computation
+            # and avoid correlating night noise (0 vs 0)
+            sun_up = ts_pot_hr > 10
+            ts_pot_hr = ts_pot_hr[sun_up]
+            ts_meas_hr = ts_meas_hr[sun_up]
 
-            if corr > best_corr:
-                best_corr = corr
-                best_lag_steps = lag
+            if len(ts_pot_hr) == 0: continue
 
-        # Convert lag steps back to minutes
-        # Note: If we shifted measured by +1 to match, measured was early.
-        # Usually we want to know: "Add X minutes to timestamp to fix it".
-        # If lag is +1 (shifted down), the timestamp needs to increase.
-        shift_minutes = best_lag_steps * step_size
+            lags = range(-max_shift_min, max_shift_min + 1)
+            best_corr = -1
+            best_lag = 0
 
-        results[date] = {
-            'shift_minutes': shift_minutes,  # Negative means sensor is late, Positive means sensor is early
-            'max_corr': best_corr,
-            'avg_corr': np.mean(corrs)
-        }
+            # Iterate through lags (in minutes)
+            for lag in lags:
+                # Shift measured data
+                shifted = ts_meas_hr.shift(lag)
 
+                # Correlation
+                corr = ts_pot_hr.corr(shifted)
+
+                if corr > best_corr:
+                    best_corr = corr
+                    best_lag = lag
+
+            # Store result (Lag is in minutes because freq='1min')
+            results[date] = {
+                'shift_minutes': best_lag,
+                'max_corr': best_corr
+            }
+
+        except Exception as e:
+            # Fallback for empty days or interpolation errors
+            results[date] = {'shift_minutes': np.nan, 'max_corr': np.nan}
+
+    print("Analysis complete.")
     return pd.DataFrame.from_dict(results, orient='index')
 
 
@@ -315,45 +505,54 @@ def execute_crosscorr():
     # EXECUTION
     # ==========================================
 
-    # Run the detection
-    # Assuming 'df' is your dataframe from your snippet
-    shift_df = calculate_timeshift_crosscorr(df,
-                                             col_meas=varcol,
-                                             col_pot=swinpotcol,
-                                             max_shift_hours=6)
+    # Run the high-res detection
+    # This might take 10-20 seconds depending on dataset size
+    shift_df = calculate_timeshift_highres(df,
+                                           col_meas=varcol,
+                                           col_pot=swinpotcol,
+                                           max_shift_min=120,
+                                           min_clearness_index=0.6)  # Only look at reasonably clear days
 
-    # Convert index to datetime for plotting
     shift_df.index = pd.to_datetime(shift_df.index)
 
     # ==========================================
-    # PLOTTING RESULTS
+    # VISUALIZATION
     # ==========================================
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
 
-    # Plot 1: The detected time shift
-    # We filter for days with high correlation (confident matches)
-    # confident = shift_df[shift_df['avg_corr'] > 0.6]
-    confident = shift_df[shift_df['max_corr'] > 0.98]
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 9), gridspec_kw={'height_ratios': [2, 1]})
 
-    ax1.scatter(confident.index, confident['shift_minutes'], alpha=0.6, s=14, c='tab:blue')
-    ax1.set_ylabel("Estimated Time Shift (min)")
-    ax1.set_title(f"Detected Time Shift: {varcol} vs {swinpotcol}")
-    ax1.grid(True, linestyle='--', alpha=0.5)
-    ax1.axhline(0, color='black', linewidth=1)
+    # Filter for very high confidence (sunny days)
+    confident = shift_df[shift_df['max_corr'] > 0.97]
 
-    # Add horizontal bands for common errors
-    ax1.axhline(60, color='red', linestyle=':', alpha=0.5, label='DST (+1h)')
-    ax1.axhline(-60, color='red', linestyle=':', alpha=0.5, label='DST (-1h)')
-    ax1.legend()
+    # 1. Scatter Plot of Drift over Time
+    sc = ax1.scatter(confident.index, confident['shift_minutes'],
+                     c=confident['max_corr'], cmap='viridis', s=15, alpha=0.8)
+    ax1.set_ylabel("Time Shift (Minutes)")
+    ax1.set_title(
+        f"High-Resolution Time Shift Detection (1-min precision)\nPositive = Measured is Early | Negative = Measured is Late")
+    ax1.axhline(0, c='k', lw=1)
+    ax1.grid(True, alpha=0.3)
+    plt.colorbar(sc, ax=ax1, label="Correlation Strength")
 
-    # Plot 2: Correlation Strength (Quality Check)
-    # Low correlation implies cloudy days where shift detection is unreliable
-    ax2.plot(shift_df.index, shift_df['max_corr'], color='gray', alpha=0.5)
-    ax2.set_ylabel("Correlation Coefficient")
-    ax2.set_xlabel("Date")
-    ax2.set_ylim(0.8, 1.0)  # Focus on the top range
-    ax2.grid(True)
-    ax2.text(shift_df.index[0], 0.81, "Low correlation = Cloudy/Overcast (Ignore these shifts)", color='gray')
+    # Add bands for common errors
+    ax1.axhline(60, c='r', ls=':', alpha=0.4)
+    ax1.text(shift_df.index[0], 62, "DST (+60m)", color='red', fontsize=8)
+    ax1.axhline(-60, c='r', ls=':', alpha=0.4)
+
+    # 2. Histogram of Shifts (To find the systematic error)
+    # This tells you: "Most days are shifted by exactly X minutes"
+    ax2.hist(confident['shift_minutes'], bins=range(-120, 120, 2), color='tab:blue', alpha=0.7, edgecolor='k')
+    ax2.set_xlabel("Shift Minutes")
+    ax2.set_ylabel("Frequency (Days)")
+    ax2.set_title("Distribution of Detected Shifts")
+    ax2.axvline(0, c='k', lw=2)
+    try:
+        median_shift = confident['shift_minutes'].median()
+        ax2.axvline(median_shift, c='r', ls='--', lw=2)
+        ax2.text(median_shift + 2, ax2.get_ylim()[1] * 0.9, f"Median: {median_shift:.1f} min", color='r',
+                 fontweight='bold')
+    except:
+        pass
 
     plt.tight_layout()
     plt.show()
@@ -362,10 +561,11 @@ def execute_crosscorr():
 if __name__ == '__main__':
     # plot_monthly_dielcycles(df, varcol, swinpotcol)
     # detect_noon_shift(df, varcol, swinpotcol)
-    plot_radiation_fingerprint(df, varcol, 2006)
-    plot_radiation_fingerprint(df, varcol, 2007)
-    plot_radiation_fingerprint(df, varcol, 2008)
-    plot_radiation_fingerprint(df, varcol, 2009)
-    plot_radiation_fingerprint(df, varcol, 2010)
-    plot_radiation_fingerprint(df, varcol, 2011)
+    # plot_radiation_fingerprint(df, varcol, 2006)
+    # plot_radiation_fingerprint(df, varcol, 2007)
+    # plot_radiation_fingerprint(df, varcol, 2008)
+    # plot_radiation_fingerprint(df, varcol, 2009)
+    # plot_radiation_fingerprint(df, varcol, 2010)
+    # plot_radiation_fingerprint(df, varcol, 2011)
     # execute_crosscorr()
+    execute_phase_shift_fft()

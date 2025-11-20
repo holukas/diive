@@ -37,7 +37,8 @@
 
 * **New Function**: Added functionality to calculate air temperature derived from sonic temperature (5).
 * **New Resources**: Added `Calculate_air_temp_from_sonic_temp` notebook (7) and associated unit tests (6).
-* Refactored code for calculating potential radiation (19)
+* Added new function `potrad_eot` for an alternative to `potrad` to calculate potential radiation. Takes into account
+  the equation of time. (19)
 
 ## System and Visualization Improvements
 
@@ -72,7 +73,7 @@
 * (16) `notebooks/MeteoScreening/StepwiseMeteoScreeningFromDatabase.ipynb`
 * (17) `notebooks/TimeFunctions/AddDateAttributes.ipynb`
 * (18) `diive.core.times.times.add_date_attributes`
-* (19) `diive.pkgs.createvar.potentialradiation.potrad`
+* (19) `diive.pkgs.createvar.potentialradiation.potrad_eot`
 
 ## v0.89.0 | 23 Jul 2025
 
