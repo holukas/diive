@@ -2,6 +2,11 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+- self-heating correction
+- time shift detection fft
+
+- Added new function to calculate dry air density (20)
+
 ## v0.90.0 | XX Nov 2025
 
 **Feature Highlights and Logic Changes**
@@ -74,6 +79,7 @@
 * (17) `notebooks/TimeFunctions/AddDateAttributes.ipynb`
 * (18) `diive.core.times.times.add_date_attributes`
 * (19) `diive.pkgs.createvar.potentialradiation.potrad_eot`
+* (20) `diive.pkgs.createvar.air.dry_air_density`
 
 ## v0.89.0 | 23 Jul 2025
 
