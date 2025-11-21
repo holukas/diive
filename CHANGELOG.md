@@ -5,7 +5,8 @@
 - self-heating correction
 - time shift detection fft
 
-- Added new function to calculate dry air density (20)
+- Added new function to calculate `aerodynamic_resistance` (21)
+- Added new function to calculate `dry_air_density` (20)
 
 ## v0.90.0 | XX Nov 2025
 
@@ -80,6 +81,7 @@
 * (18) `diive.core.times.times.add_date_attributes`
 * (19) `diive.pkgs.createvar.potentialradiation.potrad_eot`
 * (20) `diive.pkgs.createvar.air.dry_air_density`
+* (21) `diive.pkgs.createvar.air.aerodynamic_resistance`
 
 ## v0.89.0 | 23 Jul 2025
 

@@ -1,17 +1,52 @@
+import numpy as np
 import pandas as pd
 
 
-def aerodynamic_resistance(u_ms, ustar_ms):
-    """Calculate aerodynamic resistance
+def aerodynamic_resistance(u_ms: pd.Series, ustar_ms: pd.Series) -> pd.Series:
+    """Calculates aerodynamic resistance (ra) using wind speed and friction velocity.
 
-    :param u_ms: series, horizontal wind speed (m s-1)
-    :param ustar_ms: series, ustar (m s-1)
-    :return:
-    series, aerodynamic resistance (s m-1)
+    This uses the momentum transfer approximation: ra = u / ustar^2.
+    Reference: Kittler et al. (2017), eq.(5).
+
+    Args:
+        u_ms (pd.Series): Horizontal wind speed in [m s-1].
+        ustar_ms (pd.Series): Friction velocity (ustar) in [m s-1].
+
+    Returns:
+        pd.Series: Aerodynamic resistance (ra) in [s m-1].
+        Returns NaN where ustar is 0 or NaN.
     """
-    ra = u_ms / ustar_ms / ustar_ms  # This is the same as: ra = u_ms / (ustar_ms)^2 that is mentioned in Kittler et al. (2017), eq.(5)
-    print(f"Aerodynamic resistance, mean = {ra.mean():.2f} s m-1")
+    # Filter invalid ustar values to prevent DivisionByZero
+    # Replace 0 or negative values with NaN
+    # (Physically, ustar cannot be 0 for valid turbulence calculations)
+    ustar_clean = ustar_ms.copy()
+    ustar_clean[ustar_clean <= 0] = np.nan
+
+    # Calculate resistance
+    # ra = u / (u_*)^2
+    ra = u_ms / (ustar_clean ** 2)
+
+    # Report
+    valid_count = ra.count()
+    if valid_count < len(ra):
+        dropped = len(ra) - valid_count
+        print(f"Warning: {dropped} data points resulted in NaN due to ustar <= 0.")
+    print(f"Aerodynamic resistance: Mean = {ra.mean():.2f} s m-1")
     return ra
+
+
+# # old version from SCOP scripts
+# def aerodynamic_resistance(u_ms, ustar_ms):
+#     """Calculate aerodynamic resistance
+#
+#     :param u_ms: series, horizontal wind speed (m s-1)
+#     :param ustar_ms: series, ustar (m s-1)
+#     :return:
+#     series, aerodynamic resistance (s m-1)
+#     """
+#     ra = u_ms / ustar_ms / ustar_ms  # This is the same as: ra = u_ms / (ustar_ms)^2 that is mentioned in Kittler et al. (2017), eq.(5)
+#     print(f"Aerodynamic resistance, mean = {ra.mean():.2f} s m-1")
+#     return ra
 
 
 def dry_air_density(rho_a: pd.Series, rho_v: pd.Series) -> pd.Series:
