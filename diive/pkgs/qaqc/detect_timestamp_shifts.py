@@ -1,21 +1,22 @@
+from dbc_influxdb import dbcInflux  # Needed for communicating with the database
 import calendar
 
 import matplotlib.gridspec as grid_spec
 import numpy as np
 import seaborn as sns
 from matplotlib.pyplot import cm
-
+import pandas as pd
 import diive as dv
-from diive.pkgs.createvar.potentialradiation import potrad
+from diive.pkgs.createvar.potentialradiation import potrad, potrad_eot
 
 # filepath = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\20_MERGE_DATA\21.4_FLUXES_L1_noSHC_IRGA75+METEO7.parquet"
-filepath = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\20_MERGE_DATA\22.4_FLUXES_L1_IRGA72+METEO7_2016-2024.parquet"
-df = dv.load_parquet(filepath=filepath)
+# filepath = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\20_MERGE_DATA\22.4_FLUXES_L1_IRGA72+METEO7_2016-2024.parquet"
+# df = dv.load_parquet(filepath=filepath)
 # df = df.loc[df.index.year < 2010].copy()
-
-# years = [2015]
-years = sorted(list(set(df.index.year)))
-months = list(set(df.index.month))
+# # years = [2015]
+# years = sorted(list(set(df.index.year)))
+# months = list(set(df.index.month))
+# colors = cm.Spectral_r(np.linspace(0, 1, len(years)))  # Create one color for each year
 
 SITE_LAT = 47.478333  # CH-LAE
 SITE_LON = 8.364389  # CH-LAE
@@ -25,15 +26,48 @@ NIGHTTIME_THRESHOLD = 20
 # varcol = 'PPFD_IN_T1_47_1_gfXG'
 # varcol = 'VPD_T1_47_1_gfXG'
 # varcol = 'TA_T1_47_1_gfXG'
-varcol = 'SW_IN_T1_47_1_gfXG'
+# varcol = 'SW_IN_T1_47_1_gfXG'
 swinpotcol = 'SW_IN_POT'
 
-# Create one color for each year
-colors = cm.Spectral_r(np.linspace(0, 1, len(years)))
+# Test on raw data
+filepath = r"F:\TMP\CH-LAE_iDL_T1_47_1_TBL1_20210701-0000.dat"
+df = pd.read_csv(filepath, sep=',', skiprows=[0,2,3], index_col='TIMESTAMP')
+df.index = pd.to_datetime(df.index)
+varcol = 'SW_IN_T1_47_1_Avg'
+df = df[[varcol]].copy()
+
+# BUCKET_PROCESSING = 'ch-lae_raw'
+# START = '2021-07-01 00:00:01'
+# STOP = '2021-08-01 00:00:01'
+# DIRCONF = r'F:\Sync\luhk_work\20 - CODING\22 - POET\configs'
+# dbc = dbcInflux(dirconf=DIRCONF)
+# df, _, _ = dbc.download(
+#     bucket=BUCKET_PROCESSING,
+#     measurements=['SW'],
+#     fields=['SW_IN_T1_47_1'],
+#     start=START,
+#     stop=STOP,
+#     timezone_offset_to_utc_hours=1,
+#     data_version=['raw'])
+# varcol = 'SW_IN_T1_47_1'
+
+# Testing resampling with middle timestamp
+from diive.core.times.resampling import resample_series_to_30MIN
+series = df[varcol].copy()
+from diive.core.times.times import DetectFrequency
+freq = DetectFrequency(index=series.index, verbose=True).get()
+series = series.asfreq(freq)
+series.index.name = 'TIMESTAMP_END'
+resampled = resample_series_to_30MIN(series=series)
+df = pd.DataFrame(resampled)
+from diive.core.times.times import insert_timestamp
+df = insert_timestamp(data=df, convention='middle', set_as_index=True)
+# df.loc["2022-08-01 09:15"]
 
 # Overwrite potential radiation
-df[swinpotcol] = potrad(timestamp_index=df.index, lat=47.286417, lon=7.733750, utc_offset=1)
-
+df[swinpotcol] = potrad_eot(timestamp_index=df.index, lat=SITE_LAT, lon=SITE_LON, utc_offset=UTC_OFFSET)
+# df[swinpotcol] = potrad(timestamp_index=df.index, lat=SITE_LAT, lon=SITE_LON, utc_offset=UTC_OFFSET)
+print(df)
 
 # dc = DielCycle(series=series)
 # title = f'{var}'
@@ -139,6 +173,7 @@ def calculate_phase_shift_fft(df, col_meas, col_pot, min_clearness=0.5):
 
     # Determine sampling interval in minutes
     freq = pd.infer_freq(df.index)
+    freq = '1min' if freq == 'min' else freq
     if freq:
         dt_min = pd.to_timedelta(freq).total_seconds() / 60
     else:
