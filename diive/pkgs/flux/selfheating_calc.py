@@ -35,7 +35,7 @@ def surface_temp_bur06(ta):
     return ts_bur06
 
 
-def surface_temp_jar09(ta, daytime_filter, nighttime_filter):
+def surface_temp_jar09(ta, daytime):
     """Calculate bulk instrument surface temperature (JAR09)
 
     :param ta: series, air temperature (°C)

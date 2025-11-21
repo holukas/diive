@@ -18,7 +18,7 @@ def detect_daytime(swin):
     daytime_series = pd.Series(index=swin.index)
     daytime_series.loc[nighttime_filter] = 0
     daytime_series.loc[daytime_filter] = 1
-    return daytime_series, daytime_filter, nighttime_filter
+    return daytime_series
 
 
 def init_scaling_factors_df(num_classes):

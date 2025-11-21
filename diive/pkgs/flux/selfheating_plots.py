@@ -3,11 +3,10 @@ import matplotlib.pyplot as plt
 import pandas
 import pandas as pd
 
-import newcols
-import settings
+import selfheating_newcols
 
 
-class ScalingFactors(newcols.NewCols):
+class ScalingFactors(selfheating_newcols.NewCols):
 
     def __init__(self, plot_df, outplot, classvar_col, userconfig):
         self.userconfig = userconfig
@@ -78,7 +77,7 @@ class ScalingFactors(newcols.NewCols):
         return axes_dict, fig
 
 
-class DielCyclesFlux(newcols.NewCols):
+class DielCyclesFlux(selfheating_newcols.NewCols):
 
     def __init__(self, df, outdir,
                  uncorrected_flux_col, corrected_flux_col, true_flux_col=None):
@@ -108,19 +107,19 @@ class DielCyclesFlux(newcols.NewCols):
                         ax=self.axes_dict['ax1'])
         if self.true_flux_col:
             plot_diel_cycle(title="Difference:\nOPEN-PATH (uncorrected) - ENCLOSED-PATH (true flux)",
-                        series=self.uncorrected_flux.sub(self.true_flux),
-                        ax=self.axes_dict['ax3'])
+                            series=self.uncorrected_flux.sub(self.true_flux),
+                            ax=self.axes_dict['ax3'])
 
         # IRGA72
         if self.true_flux_col:
             plot_diel_cycle(title="ENCLOSED-PATH CO2 flux (true flux)",
-                        series=self.true_flux,
-                        ax=self.axes_dict['ax4'])
+                            series=self.true_flux,
+                            ax=self.axes_dict['ax4'])
             plot_diel_cycle(series=self.uncorrected_flux,
-                        ax=self.axes_dict['ax4'], ls=':')
+                            ax=self.axes_dict['ax4'], ls=':')
             plot_diel_cycle(title="Difference:\nENCLOSED-PATH - OPEN-PATH (uncorrected) ",
-                        series=self.true_flux.sub(self.uncorrected_flux),
-                        ax=self.axes_dict['ax5'])
+                            series=self.true_flux.sub(self.uncorrected_flux),
+                            ax=self.axes_dict['ax5'])
 
         # IRGA75 (corrected)
         plot_diel_cycle(title="OPEN-PATH CO2 flux (corrected)",
@@ -133,8 +132,8 @@ class DielCyclesFlux(newcols.NewCols):
                         ax=self.axes_dict['ax8'])
         if self.true_flux_col:
             plot_diel_cycle(title="Difference:\nOPEN-PATH (corrected) - ENCLOSED-PATH (true flux)",
-                        series=self.corrected_flux.sub(self.true_flux),
-                        ax=self.axes_dict['ax9'])
+                            series=self.corrected_flux.sub(self.true_flux),
+                            ax=self.axes_dict['ax9'])
 
         savefig(fig=self.fig, outfile=self.outfile)
 
@@ -162,7 +161,7 @@ class DielCyclesFlux(newcols.NewCols):
         return axes_dict, fig
 
 
-class SeriesFlux(newcols.NewCols):
+class SeriesFlux(selfheating_newcols.NewCols):
 
     def __init__(self, outdir, daytime,
                  uncorrected_flux, corrected_flux, true_flux=pd.Series()):
@@ -206,7 +205,7 @@ class SeriesFlux(newcols.NewCols):
         return axes_dict, fig
 
 
-class CumulativeFlux(newcols.NewCols):
+class CumulativeFlux(selfheating_newcols.NewCols):
 
     def __init__(self, df, outdir, daytime_col,
                  uncorrected_flux_col, corrected_flux_col, true_flux_col=None):
@@ -263,7 +262,7 @@ class CumulativeFlux(newcols.NewCols):
         return axes_dict, fig
 
 
-class DielCyclesVars(newcols.NewCols):
+class DielCyclesVars(selfheating_newcols.NewCols):
 
     def __init__(self, plot_df, outdir):
         self.plot_df = plot_df
@@ -322,7 +321,7 @@ class DielCyclesVars(newcols.NewCols):
         return axes_dict, fig
 
 
-class SeriesVars(newcols.NewCols):
+class SeriesVars(selfheating_newcols.NewCols):
 
     def __init__(self, plot_df, outdir):
         self.plot_df = plot_df
