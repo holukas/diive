@@ -2,23 +2,6 @@ import numpy as np
 import pandas as pd
 
 
-def detect_daytime(swin):
-    """Detect daytime and nighttime periods from global radiation
-
-    Generates column that contains daytime flag (1=daytime, 0=nighttime).
-
-    :param swin: series
-    :return:
-    series: series indicating daytime and nighttime
-    daytime_filter: indices of daytime rows
-    nighttime_filter: indices of nighttime rows
-    """
-    nighttime_filter = swin <= 20
-    daytime_filter = swin > 20
-    daytime_series = pd.Series(index=swin.index)
-    daytime_series.loc[nighttime_filter] = 0
-    daytime_series.loc[daytime_filter] = 1
-    return daytime_series
 
 
 def init_scaling_factors_df(num_classes):

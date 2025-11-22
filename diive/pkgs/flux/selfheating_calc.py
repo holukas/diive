@@ -2,14 +2,7 @@
 
 
 
-    References:
-        Burba et al. (2006). Correcting apparent off-season CO2 uptake due
-            to surface heating of an open path gas analyzer: Progress report
-            of an ongoing study. 13.
-        Kittler et al. (2017). High-quality eddy-covariance CO2 budgets
-            under cold climate conditions: Arctic Eddy-Covariance CO2 Budgets.
-            Journal of Geophysical Research: Biogeosciences, 122(8), 2064–2084.
-            https://doi.org/10.1002/2017JG003830
+
 
 """
 
@@ -18,6 +11,8 @@ import pandas as pd
 
 
 def corrected_flux(uncorrected_flux, fct_unsc_gf, sf_gf):
+    # Use only a fraction of the unscaled flux correction term
+    # Add scaled correction flux to original WPL-only open-path flux
     fct = fct_unsc_gf.multiply(sf_gf)
     corrected_flux = uncorrected_flux + fct
     return corrected_flux, fct
@@ -35,7 +30,7 @@ def surface_temp_bur06(ta):
     return ts_bur06
 
 
-def surface_temp_jar09(ta, daytime):
+def surface_temp_jar09(ta: pd.Series, daytime: pd.Series):
     """Calculate bulk instrument surface temperature (JAR09)
 
     :param ta: series, air temperature (°C)
@@ -48,12 +43,12 @@ def surface_temp_jar09(ta, daytime):
 
     # Combine day and night temperatures
     ts_jar09_daynight = pd.Series(index=_ts_jar09_day.index)
-    ts_jar09_daynight.loc[daytime_filter] = _ts_jar09_day  # Use daytime Ts in daytime data rows
-    ts_jar09_daynight.loc[nighttime_filter] = _ts_jar09_night  # Use nighttime Ts in nighttime data rows
+    ts_jar09_daynight.loc[daytime == 1] = _ts_jar09_day  # Use daytime Ts in daytime data rows
+    ts_jar09_daynight.loc[daytime == 0] = _ts_jar09_night  # Use nighttime Ts in nighttime data rows
 
     # Stats
-    print(f"Available daytime Ts (JAR09): {ts_jar09_daynight.loc[daytime_filter].count()} values")
-    print(f"Available nighttime Ts (JAR09): {ts_jar09_daynight.loc[nighttime_filter].count()} values")
+    print(f"Available daytime Ts (JAR09): {ts_jar09_daynight.loc[daytime == 1].count()} values")
+    print(f"Available nighttime Ts (JAR09): {ts_jar09_daynight.loc[daytime == 0].count()} values")
     print(f"Available Ts (JAR09): {ts_jar09_daynight.count()} total values")
     print(f"Ts (JAR09), mean = {ts_jar09_daynight.mean()}")
     return ts_jar09_daynight
