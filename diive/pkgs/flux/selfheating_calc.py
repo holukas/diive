@@ -40,6 +40,7 @@ def surface_temp_jar09(ta: pd.Series, daytime: pd.Series):
     # Surface temperatures, separate for daytime and nighttime
     _ts_jar09_day = 0.93 * ta + 3.17
     _ts_jar09_night = 1.05 * ta + 1.52
+    # _ts_jar09_night = 1.05 * ta + 1.52
 
     # Combine day and night temperatures
     ts_jar09_daynight = pd.Series(index=_ts_jar09_day.index)

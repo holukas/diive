@@ -21,7 +21,6 @@ from scipy.optimize import minimize_scalar
 
 import selfheating_calc
 import selfheating_constants
-import selfheating_files
 import selfheating_frames
 import selfheating_newcols
 import selfheating_plots
@@ -56,15 +55,6 @@ class Scop(selfheating_newcols.NewCols, selfheating_constants.Constants):
             n_classes: int,
             n_bootstrap_runs: int,
             classvar: str,
-            cr_ta_col: str,
-            cr_swin_col: str,
-            cr_ustar_col: str,
-            cr_u_col: str,
-            cr_rho_v_col: str,
-            cr_rho_a_col: str,
-            cr_qc_mmol_col: str,
-            cr_op_flux_wpl_col: str,
-            cr_class_var_col: str,
     ):
         """
         Initializes an object with configuration parameters related to processing and
@@ -135,16 +125,8 @@ class Scop(selfheating_newcols.NewCols, selfheating_constants.Constants):
         df[self.t_instrument_surface] = self.calc_instrument_surface_temperature(
             ta=df[self.air_temperature], daytime=df[self.daytime])
         df[self.fct_unsc], df[self.fct_unsc_gf], df[self.fct_unsc_lutvals] = (
-            self.calc_unscaled_flux_correction_term(
-                t_instrument_surface=df[self.t_instrument_surface],
-                air_temperature=df[self.air_temperature],
-                co2_molar_density=df[self.co2_molar_density].multiply(1000),
-                aerodynamic_resistance=df[self.aerodynamic_resistance],
-                water_vapor_density=df[self.water_vapor_density],
-                dry_air_density=df[self.dry_air_density],
-                rem_outliers=True,
-                lut_gapfill=True))
-        scaling_factors_df = self.optimize_scaling_factors(df=df, class_var_col=self.classvar)
+            self.calc_unscaled_flux_correction_term(df=df, rem_outliers=True, lut_gapfill=True))
+        scaling_factors_df = self.optimize_scaling_factors(df=df, class_var_col=self.classvar, showplot=False)
         df = self.assign_scaling_factors(df=df, scaling_factors_df=scaling_factors_df,
                                          classvar_col=self.classvar, lut_gapfill=True)
         df[self.nee_op_corr], df[self.fct] = selfheating_calc.corrected_flux(
@@ -153,14 +135,6 @@ class Scop(selfheating_newcols.NewCols, selfheating_constants.Constants):
             sf_gf=df[self.sf_gf])
         self.stats(df=df)
         self.plot_pm(df=df)
-
-    def readfile(self, file, nrows=None):
-        """Read file to dataframe
-
-        :param file: str
-        :return:
-        """
-        self.df = selfheating_files.read(src=file, nrows=nrows)
 
     # def custom_class_var(self):
     #     """Select custom variable that is then used to divide data into x classes
@@ -264,7 +238,7 @@ class Scop(selfheating_newcols.NewCols, selfheating_constants.Constants):
                 selfheating_calc.gapfilling_lut(df[self.sf])
         return df
 
-    def optimize_scaling_factors(self, df: pd.DataFrame, class_var_col: str):
+    def optimize_scaling_factors(self, df: pd.DataFrame, class_var_col: str, showplot: bool = True):
         optimize = OptimizeScalingFactors(df=df,
                                           daytime_col=self.daytime,
                                           class_var_col=class_var_col,
@@ -273,7 +247,8 @@ class Scop(selfheating_newcols.NewCols, selfheating_constants.Constants):
                                           # outdir=self.outdir,
                                           pm_num_bootstrap_runs=self.n_bootstrap_runs,
                                           pm_op_co2_flux_nocorr_col=self.flux_openpath,
-                                          pm_cp_co2_flux_col=self.flux_closedpath)
+                                          pm_cp_co2_flux_col=self.flux_closedpath,
+                                          showplot=showplot)
         return optimize.get()
 
     def calc_aerodynamic_resistance(self, u, ustar, rem_outliers: bool = False) -> pd.Series:
@@ -290,14 +265,18 @@ class Scop(selfheating_newcols.NewCols, selfheating_constants.Constants):
     def calc_instrument_surface_temperature(self, ta, daytime) -> pd.Series:
         return selfheating_calc.surface_temp_jar09(ta=ta, daytime=daytime)
 
-    def calc_unscaled_flux_correction_term(self, t_instrument_surface, air_temperature, co2_molar_density, aerodynamic_resistance, water_vapor_density, dry_air_density,
-                                           lut_gapfill: bool = False, rem_outliers: bool = False):
+    def calc_unscaled_flux_correction_term(self, df: pd.DataFrame, lut_gapfill: bool = False,
+                                           rem_outliers: bool = False):
         print("\nCalculating unscaled flux correction term ...")
         fct_unsc_gf = pd.Series()
         fct_unsc_lutvals = pd.Series()
+        co2_molar_density = df[self.co2_molar_density].multiply(1000)
 
+        # Calculate unscaled flux correction term
         fct_unsc = selfheating_calc.flux_correction_term_unscaled(
-            ts=t_instrument_surface, ta=air_temperature, qc_umol=co2_molar_density, ra=aerodynamic_resistance, rho_v=water_vapor_density, rho_d=dry_air_density)
+            ts=df[self.t_instrument_surface], ta=df[self.air_temperature],
+            qc_umol=co2_molar_density, ra=df[self.aerodynamic_resistance],
+            rho_v=df[self.water_vapor_density], rho_d=df[self.dry_air_density])
 
         # Remove outliers
         if rem_outliers:
@@ -312,8 +291,8 @@ class Scop(selfheating_newcols.NewCols, selfheating_constants.Constants):
 class OptimizeScalingFactors(selfheating_newcols.NewCols):
 
     def __init__(self, df, daytime_col, class_var_col, class_var_group_col,
-                 num_classes, pm_num_bootstrap_runs, pm_op_co2_flux_nocorr_col, pm_cp_co2_flux_col):
-        # self.userconfig = userconfig
+                 num_classes, pm_num_bootstrap_runs, pm_op_co2_flux_nocorr_col, pm_cp_co2_flux_col,
+                 showplot: bool = True):
         self.df = df
         self.daytime_col = daytime_col
         self.class_var_col = class_var_col
@@ -322,6 +301,7 @@ class OptimizeScalingFactors(selfheating_newcols.NewCols):
         self.pm_num_bootstrap_runs = pm_num_bootstrap_runs
         self.pm_op_co2_flux_nocorr_col = pm_op_co2_flux_nocorr_col
         self.pm_cp_co2_flux_col = pm_cp_co2_flux_col
+        self.showplot = showplot
 
         # If data are not bootstrapped, set flag to False
         if self.pm_num_bootstrap_runs == 0:
@@ -396,6 +376,8 @@ class OptimizeScalingFactors(selfheating_newcols.NewCols):
         ax1.axhline(0, lw=1, color='black')
         ax1.legend()
         default_format(ax=ax1)
+        if self.showplot:
+            fig.show()
 
     def print_stats(self):
         print("BOOTSTRAPPING RESULTS")
@@ -551,12 +533,8 @@ def main():
         inputdf=df,
         site="CH-LAE",
         title="CH-LAE self-heating correction",
-        # outdir="XXX",
-        # pm_file="XXX",
         flux_openpath=FLUX_75,
-        # pm_qcf_op_flux_wpl_col="XXX",
         flux_closedpath=FLUX_72,
-        # pm_qcf_cp_trueflux_col="XXX",
         air_heat_capacity=AIR_CP,
         co2_molar_density=CO2_MOLAR_DENSITY,
         u=U,
@@ -568,17 +546,6 @@ def main():
         n_classes=5,
         n_bootstrap_runs=0,
         classvar=USTAR,
-        # cr_file="XXX",
-        # cr_sf_file="XXX",
-        cr_ta_col=TA,
-        cr_swin_col=SWIN,
-        cr_ustar_col=USTAR,
-        cr_u_col=U,
-        cr_rho_v_col=VAPOR_DENSITY,
-        cr_rho_a_col=AIR_DENSITY,
-        cr_qc_mmol_col=CO2_MOLAR_DENSITY,
-        cr_op_flux_wpl_col=FLUX_75,
-        cr_class_var_col=USTAR
     )
     scop.calc_sf()
     # apply_scaling_factors = Scop().apply_sf()
