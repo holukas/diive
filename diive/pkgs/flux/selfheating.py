@@ -19,9 +19,6 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import minimize_scalar
 
-import selfheating_calc
-import selfheating_constants
-import selfheating_frames
 import selfheating_newcols
 import selfheating_plots
 from diive.core.plotting.plotfuncs import default_format
@@ -32,10 +29,13 @@ pd.set_option('display.max_columns', 14)
 pd.set_option('display.max_rows', 30)
 
 
-class Scop(selfheating_newcols.NewCols, selfheating_constants.Constants):
+class Scop(selfheating_newcols.NewCols):
     """
     Calculate scaling factors by comparing parallel measurements
     """
+    M_AIR = 0.028965  # molar mass of dry air (kg mol-1) (M_AIR)
+    M_H2O = 0.018  # molar mass of water vapor (kg mol-1) (M_H2O)
+    T0_K = 273.15  # Absolute zero (K)
 
     def __init__(
             self,
@@ -77,7 +77,7 @@ class Scop(selfheating_newcols.NewCols, selfheating_constants.Constants):
             flux_openpath (str): Column name for OP flux with WPL correction in PM file.
             flux_closedpath (str): Column name for CP true flux in PM file.
             air_heat_capacity (str): Column name for specific heat at constant pressure of
-                ambient air (J K-1 kg-1) in PM file.
+                ambient air (J K-1 kg-1) in PM file. [c_p]
             co2_molar_density (str): Column name for CO2 molar density column (mmol m-3) in PM file. [qc]
             u (str): Column name for horizontal wind speed (m s-1) in PM file.
             ustar (str): Column name for USTAR friction velocity (m s-1) in PM file.
@@ -98,7 +98,7 @@ class Scop(selfheating_newcols.NewCols, selfheating_constants.Constants):
         self.title = title
         self.flux_openpath = flux_openpath
         self.flux_closedpath = flux_closedpath
-        self.pm_airheatcap_jkkg_col = air_heat_capacity
+        self.air_heat_capacity = air_heat_capacity
         self.co2_molar_density = co2_molar_density
         self.u = u
         self.ustar = ustar
@@ -117,22 +117,41 @@ class Scop(selfheating_newcols.NewCols, selfheating_constants.Constants):
         """Calculate scaling factors from parallel measurements"""
         df = self.inputdf.copy()
         df = self.init_newcols(df=df)
+
+        # Detect daytime/nighttime
         df[self.daytime] = self.detect_daytime(swin=df[self.swin])
+
+        # Calculate aerodynamic resistance
         df[self.aerodynamic_resistance] = self.calc_aerodynamic_resistance(
             u=df[self.u], ustar=df[self.ustar], rem_outliers=True)
+
+        # Calculate dry air density
         df[self.dry_air_density] = self.calc_dry_air_density(
             rho_v=df[self.water_vapor_density], rho_a=df[self.air_density])
-        df[self.t_instrument_surface] = self.calc_instrument_surface_temperature(
-            ta=df[self.air_temperature], daytime=df[self.daytime])
+
+        # Calculate instrument surface temperature
+        df[self.t_instrument_surface] = self.calc_instrument_surface_temperature(df=df, method='JAR09')
+
+        # Calculate unscaled flux correction term
+        df[self.fct_unsc] = self.fct_unscaled_bur08(df=df)
+
+        # TODO hier weiter
+
+
         df[self.fct_unsc], df[self.fct_unsc_gf], df[self.fct_unsc_lutvals] = (
             self.calc_unscaled_flux_correction_term(df=df, rem_outliers=True, lut_gapfill=True))
+
+        # Calculate scaling factors
         scaling_factors_df = self.optimize_scaling_factors(df=df, class_var_col=self.classvar, showplot=False)
         df = self.assign_scaling_factors(df=df, scaling_factors_df=scaling_factors_df,
                                          classvar_col=self.classvar, lut_gapfill=True)
-        df[self.nee_op_corr], df[self.fct] = selfheating_calc.corrected_flux(
+
+        # Correct flux
+        df[self.nee_op_corr], df[self.fct] = self.corrected_flux(
             uncorrected_flux=df[self.flux_openpath],
             fct_unsc_gf=df[self.fct_unsc_gf],
             sf_gf=df[self.sf_gf])
+
         self.stats(df=df)
         self.plot_pm(df=df)
 
@@ -146,6 +165,13 @@ class Scop(selfheating_newcols.NewCols, selfheating_constants.Constants):
     #         self.df[('_custom', '--')] = self.df.index.month  #
     #         self.num_classes = None
     #         self.class_var_col = ('_custom', '--')
+
+    def corrected_flux(self, uncorrected_flux, fct_unsc_gf, sf_gf):
+        # Use only a fraction of the unscaled flux correction term
+        # Add scaled correction flux to original WPL-only open-path flux
+        fct = fct_unsc_gf.multiply(sf_gf)
+        corrected_flux = uncorrected_flux + fct
+        return corrected_flux, fct
 
     def detect_daytime(self, swin) -> pd.Series:
         # Daytime, nighttime
@@ -212,13 +238,6 @@ class Scop(selfheating_newcols.NewCols, selfheating_constants.Constants):
                                          corrected_flux_col=self.nee_op_corr,
                                          true_flux_col=self.flux_closedpath)
 
-    def calc_corrected_fluxes(self, op_co2_flux_nocorr_col):
-        # Use only a fraction of the unscaled flux correction term
-        # Add scaled correction flux to original WPL-only open-path flux
-        return selfheating_calc.corrected_flux(uncorrected_flux=self.df[op_co2_flux_nocorr_col],
-                                               fct_unsc_gf=self.df[self.fct_unsc_gf],
-                                               sf_gf=self.df[self.sf_gf])
-
     def assign_scaling_factors(self, df: pd.DataFrame, scaling_factors_df: pd.DataFrame,
                                classvar_col: str, lut_gapfill: bool = False) -> pd.DataFrame:
         # TODO Since the scaling factors are assigned using the LUT, there are probably some flux values where the
@@ -235,8 +254,32 @@ class Scop(selfheating_newcols.NewCols, selfheating_constants.Constants):
 
         if lut_gapfill:
             df[self.sf_gf], df[self.sf_lutvals_col] = \
-                selfheating_calc.gapfilling_lut(df[self.sf])
+                self.gapfilling_lut(df[self.sf])
         return df
+
+    def gapfilling_lut(self, series):
+        """Gap-fill time series using look-up table (LUT)
+
+        The LUT contains hourly means of the series data for each month in the data
+
+        :param series: series
+        :return:
+        """
+        lutvals = pd.Series(index=series.index, data=np.nan)
+        found_months = series.index.month.unique()
+        found_hours = series.index.hour.unique()
+        lut_df = series.groupby([series.index.month, series.index.hour]).mean().unstack()
+        for found_month in found_months:
+            for found_hour in found_hours:
+                lutval = lut_df.loc[found_month, found_hour]  # Lookup value for this month and hour in LUT
+                _filter = (series.index.month == found_month) & (
+                        series.index.hour == found_hour)  # Indices of this month and hour in dataframe
+                lutvals.loc[_filter] = lutval  # Fill in lookup value at index locations
+
+        # Use the values from the LUT to gap-fill the calculated unscaled correction fluxes:
+        series_gf = series.fillna(lutvals)  # Fill gaps
+
+        return series_gf, lutvals
 
     def optimize_scaling_factors(self, df: pd.DataFrame, class_var_col: str, showplot: bool = True):
         optimize = OptimizeScalingFactors(df=df,
@@ -255,15 +298,194 @@ class Scop(selfheating_newcols.NewCols, selfheating_constants.Constants):
         # Aerodynamic resistance
         ra = aerodynamic_resistance(u_ms=u, ustar_ms=ustar)
         if rem_outliers:
-            ra = selfheating_calc.remove_outliers(series=ra, plot_title="X", n_sigmas=20)
+            ra = self.remove_outliers(series=ra, plot_title="X", n_sigmas=20)
         return ra
+
+    def remove_outliers(self, series, plot_title: str, n_sigmas: int = 5):
+        """Remove outliers with Hampel filter, using running MAD (median absolute deviation)
+
+        :param series: pandas.Series, data from which outliers are removed
+        :param plot_title: Plot title
+        :param n_sigmas:
+        :return:
+        pandas.Series with outliers removed
+        """
+        # n_sigmas = 4  # Number of sigmas for limits
+        k = 1.4826  # Scale factor for Gaussian distribution
+        window = 1440  # Rolling time window in number of records
+        min_periods = 1  # Min number of records in window
+
+        _series_rolling = series.rolling(window=window, min_periods=min_periods, center=True)
+        _series_running_median = _series_rolling.median()
+        _series_sub_winmed = series.sub(_series_running_median).abs()  # Data series minus median in time window
+        _series_running_mad = _series_sub_winmed.rolling(window=window, min_periods=min_periods,
+                                                         center=True).median().multiply(k)
+        _diff_series_runmed = np.abs(series - _series_running_median)
+        _diff_limit = _series_running_mad.multiply(n_sigmas)  # Limit
+
+        _outliers_ix = _diff_series_runmed > _diff_limit
+        series.loc[_outliers_ix] = np.nan  # Remove outliers from series (set to missing)
+        return series
+
+        # # Plot
+        # figsize = (14, 5)
+        # plt.figure()
+        # series_orig.plot(figsize=figsize, title=f"{plot_title} BEFORE outlier removal");
+        # plt.figure()
+        # series.plot(title=f"{plot_title} AFTER outlier removal", figsize=figsize, label="series after outlier removal");
+        # _diff_series_runmed.loc[~_outliers_ix].plot(
+        #     label="absolute difference of: series - running median of series; for outlier detection")
+        # _diff_limit.plot(label="limit from: series running MAD * number of sigmas")
+        # _series_running_mad.plot(label="series running MAD (median absolute deviation)")
+        # _series_running_median.plot(label="series running median")
+        # plt.legend()
+        # print(series.describe())
+
+        # return series, series_orig
 
     def calc_dry_air_density(self, rho_v, rho_a) -> pd.Series:
         # Dry air density
         return dry_air_density(rho_v=rho_v, rho_a=rho_a)
 
-    def calc_instrument_surface_temperature(self, ta, daytime) -> pd.Series:
-        return selfheating_calc.surface_temp_jar09(ta=ta, daytime=daytime)
+    def calc_instrument_surface_temperature(self, df: pd.DataFrame, method: str) -> pd.Series:
+        if method == 'JAR09':
+            return self.surface_temp_jar09(df=df)
+        elif method == 'BUR06':
+            return self.surface_temp_bur06(df=df)
+        elif method == 'BUR08':
+            return
+        else:
+            return pd.Series()
+
+    def flux_correction_term_unscaled(self, ts, ta, qc_umol, ra, rho_v, rho_d):
+        """Calculate unscaled flux correction term
+
+        fct_unsc ... unscaled flux correction term
+
+        Source:
+            - Part of eq. (8) in Burba et al. (2006)
+            - Similar to eq. (5) in Kittler et al. (2017)
+
+        :param ts: series, bulk surface temperature (°C)
+        :param ta: series, air temperature (°C)
+        :param qc_umol: series, CO2 molar density (µmol m-3)
+        :param ra: series, aerodynamic resistance (s m-1)
+        :param rho_v: series, water vapor density (kg m-3)
+        :param rho_d: series, dry air density (kg m-3)
+        :return:
+        pandas.Series
+        """
+        _a = (ts - ta) * qc_umol  # Uses BUR06 or JAR09 surface temperature
+        _b = ra * (ta + 273.15)
+        _c = 1 + 1.6077 * (rho_v / rho_d)
+        fct_unsc = (_a / _b * _c)
+        # flux_correction_term_unscaled = _a / _b * _c
+        return fct_unsc
+
+    def surface_temp_bur06(self, df: pd.DataFrame) -> pd.Series:
+        """Calculate bulk instrument surface temperature (BUR06)
+
+        :return:
+        series, surface temperature (BUR06) (°C)
+        """
+        ta = df[self.air_temperature].copy()
+        ts_bur06 = 0.0025 * ta ** 2 + 0.9 * ta + 2.07
+        print(f"Ts (BUR06), mean = {ts_bur06.mean():.2f}°C")
+        return ts_bur06
+
+    def fct_unscaled_bur08(self, df: pd.DataFrame) -> pd.Series:
+        """Calculate bulk instrument surface temperature (BUR08)"""
+        u = df[self.u].copy()
+        ta = df[self.air_temperature].copy()
+        daytime = df[self.daytime].copy()
+        k_air = df[self.air_thermal_conductivity].copy()  # (W m-1 K-1)
+        c_p = df[self.air_heat_capacity].copy()
+        rho_a = df[self.air_density].copy()
+        qc = df[self.co2_molar_density].copy()  # (umol m-3)
+
+        # TOP OF WINDOW ---
+        # Surface temperatures day/night
+        # Calculate and then combine day and night temperatures
+        _ts_bur08_day_top = 1.005 * ta + 0.24
+        _ts_bur08_night_top = 1.008 * ta - 0.41
+        ts_top = pd.Series(index=_ts_bur08_day_top.index)
+        ts_top.loc[daytime == 1] = _ts_bur08_day_top  # Use daytime Ts in daytime data rows
+        ts_top.loc[daytime == 0] = _ts_bur08_night_top  # Use nighttime Ts in nighttime data rows
+        # Calculate sigma below top window
+        l_top = 0.045  # Diameter of the detector housing (m)
+        sigma_top = 0.0028 * np.sqrt(l_top / df[u]) + (0.00025 / df[u]) + 0.0045
+        # Calculate top window sensible heat
+        r_top = 0.0225  # Radius of the detector sphere (m)
+        a = (r_top + sigma_top) * (ts_top - ta)
+        b = r_top * sigma_top
+        S_top = k_air * (a / b)
+
+        # BOTTOM WINDOW ---
+        # Surface temperatures day/night
+        # Calculate and then combine day and night temperatures
+        _ts_bur08_day_bottom = 0.944 * ta + 2.57
+        _ts_bur08_night_bottom = 0.883 * ta + 2.17
+        ts_bottom = pd.Series(index=_ts_bur08_day_bottom.index)
+        ts_bottom.loc[daytime == 1] = _ts_bur08_day_bottom  # Use daytime Ts in daytime data rows
+        ts_bottom.loc[daytime == 0] = _ts_bur08_night_bottom  # Use nighttime Ts in nighttime data rows
+        # Calculate sigma above bottom window
+        l_bottom = 0.065  # Diameter of the source housing (m)
+        sigma_bottom = 0.004 * np.sqrt(l_bottom / df[u]) + 0.004
+        # Calculate bottom window sensible heat
+        S_bottom = k_air * ((ts_bottom - df[ta]) / sigma_bottom)
+
+
+        # SPAR ---
+        # Surface temperatures day/night
+        # Calculate and then combine day and night temperatures
+        _ts_bur08_day_spar = 1.01 * ta + 0.36
+        _ts_bur08_night_spar = 1.01 * ta - 0.17
+        ts_spar = pd.Series(index=_ts_bur08_day_spar.index)
+        ts_spar.loc[daytime == 1] = _ts_bur08_day_spar  # Use daytime Ts in daytime data rows
+        ts_spar.loc[daytime == 0] = _ts_bur08_night_spar  # Use nighttime Ts in nighttime data rows
+        # Calculate sigma around spar
+        l_spar = 0.005  # Diameter of the spar (m)
+        sigma_spar = 0.0058 * np.sqrt(l_spar / df[u])
+        # Calculate spar sensible heat
+        r_spar = 0.0025  # Radius of the spar cylinder (m)
+        a = ts_spar - df[ta]
+        b = r_spar * np.log((r_spar + sigma_spar) / r_spar)
+        S_spar = k_air * (a / b)
+
+        # Calculate sensible heat from all key instrument surfaces
+        S = S_bottom + S_top + 0.15 * S_spar  # W m-2
+
+        # Calculate unscaled flux correction term
+        fct_unsc = (S / (rho_a * c_p)) * (qc / (ta + 273.15))
+
+        # print(f"Ts (BUR08), mean = {fct_unsc.mean():.2f}")
+        return fct_unsc
+
+    def surface_temp_jar09(self, df: pd.DataFrame) -> pd.Series:
+        """Calculate bulk instrument surface temperature (JAR09)
+
+        :return:
+        series, surface temperature (°C)
+        """
+        ta = df[self.air_temperature].copy()
+        daytime = df[self.daytime].copy()
+
+        # Surface temperatures, separate for daytime and nighttime
+        _ts_jar09_day = 0.93 * ta + 3.17
+        _ts_jar09_night = 1.05 * ta + 1.52
+        # _ts_jar09_night = 1.05 * ta + 1.52
+
+        # Combine day and night temperatures
+        ts_jar09_daynight = pd.Series(index=_ts_jar09_day.index)
+        ts_jar09_daynight.loc[daytime == 1] = _ts_jar09_day  # Use daytime Ts in daytime data rows
+        ts_jar09_daynight.loc[daytime == 0] = _ts_jar09_night  # Use nighttime Ts in nighttime data rows
+
+        # Stats
+        print(f"Available daytime Ts (JAR09): {ts_jar09_daynight.loc[daytime == 1].count()} values")
+        print(f"Available nighttime Ts (JAR09): {ts_jar09_daynight.loc[daytime == 0].count()} values")
+        print(f"Available Ts (JAR09): {ts_jar09_daynight.count()} total values")
+        print(f"Ts (JAR09), mean = {ts_jar09_daynight.mean()}")
+        return ts_jar09_daynight
 
     def calc_unscaled_flux_correction_term(self, df: pd.DataFrame, lut_gapfill: bool = False,
                                            rem_outliers: bool = False):
@@ -273,18 +495,18 @@ class Scop(selfheating_newcols.NewCols, selfheating_constants.Constants):
         co2_molar_density = df[self.co2_molar_density].multiply(1000)
 
         # Calculate unscaled flux correction term
-        fct_unsc = selfheating_calc.flux_correction_term_unscaled(
+        fct_unsc = self.flux_correction_term_unscaled(
             ts=df[self.t_instrument_surface], ta=df[self.air_temperature],
             qc_umol=co2_molar_density, ra=df[self.aerodynamic_resistance],
             rho_v=df[self.water_vapor_density], rho_d=df[self.dry_air_density])
 
         # Remove outliers
         if rem_outliers:
-            fct_unsc = selfheating_calc.remove_outliers(series=fct_unsc, plot_title="XXX")
+            fct_unsc = self.remove_outliers(series=fct_unsc, plot_title="XXX")
 
         # Gap-filling (LUT)
         if lut_gapfill:
-            fct_unsc_gf, fct_unsc_lutvals = selfheating_calc.gapfilling_lut(series=fct_unsc)
+            fct_unsc_gf, fct_unsc_lutvals = self.gapfilling_lut(series=fct_unsc)
         return fct_unsc, fct_unsc_gf, fct_unsc_lutvals
 
 
@@ -312,7 +534,7 @@ class OptimizeScalingFactors(selfheating_newcols.NewCols):
 
         if self.class_var_col[0] == '_custom':
             num_classes = len(self.df[self.class_var_col].unique())
-        self.scaling_factors_df = selfheating_frames.init_scaling_factors_df(num_classes=num_classes)
+        self.scaling_factors_df = self.init_scaling_factors_df(num_classes=num_classes)
 
         self.run()
 
@@ -511,6 +733,24 @@ class OptimizeScalingFactors(selfheating_newcols.NewCols):
 
         # print(f"factor: {factor}  sos: {sum_of_squares}")
         return sum_of_squares
+
+    def init_scaling_factors_df(self, num_classes):
+        """Initialize df that collects results for scaling factors
+        - Needs to be initialized with a Multiindex
+        - Multiindex consists of two indices: (1) daytime and (2) sonic temperature class
+        """
+        _list_class_var_classes = [*range(0, num_classes)]
+        _iterables = [[1, 0], _list_class_var_classes]
+        _multi_ix = pd.MultiIndex.from_product(_iterables, names=["daytime_ix", "sonic_temperature_class_ix"])
+        scaling_factors_df = pd.DataFrame(index=_multi_ix)
+
+        cols = ['SF_MEDIAN', 'SOS_MEDIAN', 'NUMVALS_AVG', 'SF_Q25',
+                'SF_Q75', 'SF_Q01', 'SF_Q99']
+
+        for col in cols:
+            scaling_factors_df[col] = np.nan
+
+        return scaling_factors_df
 
 
 def main():
