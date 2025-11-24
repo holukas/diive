@@ -24,6 +24,7 @@ import pandas as pd
 from scipy.optimize import minimize_scalar
 
 from diive.pkgs.createvar.air import dry_air_density, aerodynamic_resistance
+from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
 from diive.pkgs.outlierdetection.hampel import HampelDaytimeNighttime
 
 pd.set_option('display.width', 2000)
@@ -151,43 +152,6 @@ class Scop:
         df = self.inputdf.copy()
         df = self.init_newcols(df=df)
 
-        # # TODO Analyze difference between IRGAs w/ ML
-        # test = df.copy()
-        # test['diff'] = test[self.flux_openpath] - test[self.flux_closedpath]
-        # test = test[[self.air_temperature, 'diff', self.air_heat_capacity, self.air_density, self.u, self.ustar]].copy()
-        # test = test.dropna()
-        # from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
-        # rfts = RandomForestTS(
-        #     input_df=test,
-        #     target_col='diff',
-        #     verbose=True,
-        #     # features_lag=None,
-        #     features_lag=[-1, -1],
-        #     # features_lag_exclude_cols=['test', 'test2'],
-        #     # vectorize_timestamps=False,
-        #     vectorize_timestamps=True,
-        #     # add_continuous_record_number=False,
-        #     add_continuous_record_number=True,
-        #     sanitize_timestamp=True,
-        #     perm_n_repeats=3,
-        #     n_estimators=9,
-        #     random_state=42,
-        #     # random_state=None,
-        #     max_depth=None,
-        #     min_samples_split=2,
-        #     min_samples_leaf=1,
-        #     criterion='squared_error',
-        #     # test_size=0.2,
-        #     n_jobs=-1
-        # )
-        # rfts.trainmodel(showplot_scores=False, showplot_importance=False)
-        # rfts.report_traintest()
-        # rfts.fillgaps(showplot_scores=False, showplot_importance=False)
-        # rfts.report_gapfilling()
-        # print(rfts.feature_importances_)
-        # print(rfts.scores_)
-        # print(rfts.gapfilling_df_)
-
         # Detect daytime/nighttime
         df[self.cols.daytime] = self.detect_daytime(swin=df[self.swin])
 
@@ -217,6 +181,41 @@ class Scop:
 
         # Gap-fill unscaled flux correction term
         # todo random forest
+        # # TODO Analyze difference between IRGAs w/ ML
+        gfdf = df[[self.cols.fct_unsc, self.air_temperature, self.air_heat_capacity, self.air_density, self.u,
+                   self.ustar]].copy()
+        gfdf = gfdf.dropna()
+
+        rfts = RandomForestTS(
+            input_df=gfdf,
+            target_col=self.cols.fct_unsc,
+            verbose=True,
+            # features_lag=None,
+            features_lag=[-1, -1],
+            # features_lag_exclude_cols=['test', 'test2'],
+            vectorize_timestamps=True,
+            add_continuous_record_number=True,
+            sanitize_timestamp=True,
+            perm_n_repeats=3,
+            n_estimators=9,
+            random_state=42,
+            # random_state=None,
+            max_depth=None,
+            min_samples_split=2,
+            min_samples_leaf=1,
+            criterion='squared_error',
+            # test_size=0.2,
+            n_jobs=-1
+        )
+        rfts.trainmodel(showplot_scores=False, showplot_importance=False)
+        rfts.report_traintest()
+        rfts.fillgaps(showplot_scores=False, showplot_importance=False)
+        rfts.report_gapfilling()
+        print(rfts.feature_importances_)
+        print(rfts.scores_)
+        print(rfts.gapfilling_df_)
+        df[self.cols.fct_unsc_gf] = rfts.gapfilling_df_['.FCT_UNSC_gfRF'].copy()
+
         df[self.cols.fct_unsc_gf], df[self.cols.fct_unsc_lutvals] = self.gapfilling_lut(
             series=df[self.cols.fct_unsc].copy())
 
