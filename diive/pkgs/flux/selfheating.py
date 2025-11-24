@@ -20,7 +20,6 @@ import pandas as pd
 from scipy.optimize import minimize_scalar
 
 import selfheating_newcols
-import selfheating_plots
 from diive.core.plotting.plotfuncs import default_format
 from diive.pkgs.createvar.air import dry_air_density, aerodynamic_resistance
 
@@ -176,9 +175,11 @@ class Scop(selfheating_newcols.NewCols):
         # df[self.fct_unsc] = self.fct_unscaled_bur06(df=df)
 
         # # Remove outliers from unscaled flux correction term
+        # todo
         # df[self.fct_unsc] = self.remove_outliers(series=df[self.fct_unsc], plot_title="X", n_sigmas=5)
 
         # Gap-fill unscaled flux correction term
+        # todo random forest
         df[self.fct_unsc_gf], df[self.fct_unsc_lutvals] = self.gapfilling_lut(series=df[self.fct_unsc].copy())
 
         # Calculate scaling factors
@@ -193,7 +194,10 @@ class Scop(selfheating_newcols.NewCols):
             sf_gf=df[self.sf_gf])
 
         self.stats(df=df)
-        self.plot_pm(df=df)
+        # self.plot_diel_cycle_vars(df=df)
+        # self.plot_series_flux(df=df)
+        self.plot_diel_cycles_flux(df=df)
+        # self.plot_cumulative_flux(df=df)
 
     # def custom_class_var(self):
     #     """Select custom variable that is then used to divide data into x classes
@@ -260,29 +264,6 @@ class Scop(selfheating_newcols.NewCols):
         df[self.fct] = np.nan
         df[self.nee_op_corr] = np.nan
         return df
-
-    def plot_pm(self, df: pd.DataFrame):
-        """Plot results from scaling factor calculations from parallel measurements"""
-        # selfheating_plots.SeriesVars(plot_df=df.copy())
-
-        self.plot_series_flux(df=df)
-        # selfheating_plots.SeriesFlux(daytime=df[self.daytime],
-        #                              uncorrected_flux=df[self.flux_openpath],
-        #                              true_flux=df[self.flux_closedpath],
-        #                              corrected_flux=df[self.nee_op_corr])
-
-        # selfheating_plots.DielCyclesVars(plot_df=df.copy())
-        # selfheating_plots.DielCyclesFlux(df=df.copy(),
-        #                                  uncorrected_flux_col=self.flux_openpath,
-        #                                  corrected_flux_col=self.nee_op_corr,
-        #                                  true_flux_col=self.flux_closedpath)
-
-        self.plot_cumulative_flux(df=df)
-        # selfheating_plots.CumulativeFlux(df=df.copy(),
-        #                                  daytime_col=self.daytime,
-        #                                  uncorrected_flux_col=self.flux_openpath,
-        #                                  corrected_flux_col=self.nee_op_corr,
-        #                                  true_flux_col=self.flux_closedpath)
 
     def assign_scaling_factors(self, df: pd.DataFrame, scaling_factors_df: pd.DataFrame,
                                classvar_col: str, lut_gapfill: bool = False) -> pd.DataFrame:
@@ -623,6 +604,65 @@ class Scop(selfheating_newcols.NewCols):
             ax.set_ylabel(f'{txt_ylabel}', color=label_color, fontsize=fontsize, fontweight='bold')
         return None
 
+    def plot_diel_cycles_flux(self, df: pd.DataFrame):
+        print("Plotting DielCyclesFlux ...")
+
+        gs = gridspec.GridSpec(3, 3)  # rows, cols
+        # gs.update(wspace=0.2, hspace=0.2, left=0.03, right=0.96, top=0.96, bottom=0.03)
+        fig = plt.figure(facecolor='white', figsize=(12, 9))
+        ax1 = fig.add_subplot(gs[0, 0])
+        ax2 = fig.add_subplot(gs[0, 1])
+        ax2.axis('off')  # Hide axis
+        ax3 = fig.add_subplot(gs[0, 2])
+        ax4 = fig.add_subplot(gs[1, 0], sharey=ax1)
+        ax5 = fig.add_subplot(gs[1, 1])
+        ax6 = fig.add_subplot(gs[1, 2])
+        ax6.axis('off')  # Hide axis
+        ax7 = fig.add_subplot(gs[2, 0])
+        ax8 = fig.add_subplot(gs[2, 1])
+        ax9 = fig.add_subplot(gs[2, 2])
+        axes_dict = {'ax1': ax1, 'ax2': ax2, 'ax3': ax3, 'ax4': ax4,
+                     'ax5': ax5, 'ax6': ax6, 'ax7': ax7, 'ax8': ax8,
+                     'ax9': ax9}
+        for key, ax in axes_dict.items():
+            default_format(ax=ax)
+
+        # IRGA75 (uncorrected)
+        self._plot_diel_cycle(title="OPEN-PATH CO2 flux (uncorrected)",
+                              series=df[self.flux_openpath],
+                              ax=axes_dict['ax1'])
+        if self.flux_closedpath:
+            self._plot_diel_cycle(title="Difference:\nOPEN-PATH (uncorrected) - ENCLOSED-PATH (true flux)",
+                                  series=df[self.flux_openpath].sub(df[self.flux_closedpath]),
+                                  ax=axes_dict['ax3'])
+
+        # IRGA72
+        if self.flux_closedpath:
+            self._plot_diel_cycle(title="ENCLOSED-PATH CO2 flux (true flux)",
+                                  series=df[self.flux_closedpath],
+                                  ax=axes_dict['ax4'])
+            self._plot_diel_cycle(series=df[self.flux_openpath],
+                                  ax=axes_dict['ax4'], ls=':')
+            self._plot_diel_cycle(title="Difference:\nENCLOSED-PATH - OPEN-PATH (uncorrected) ",
+                                  series=df[self.flux_closedpath].sub(df[self.flux_openpath]),
+                                  ax=axes_dict['ax5'])
+
+        # IRGA75 (corrected)
+        self._plot_diel_cycle(title="OPEN-PATH CO2 flux (corrected)",
+                              series=df[self.nee_op_corr],
+                              ax=axes_dict['ax7'])
+        self._plot_diel_cycle(series=df[self.flux_openpath],
+                              ax=axes_dict['ax7'], ls=':')
+        self._plot_diel_cycle(title="Difference:\nOPEN-PATH (corrected) - OPEN-PATH (uncorrected) ",
+                              series=df[self.nee_op_corr].sub(df[self.flux_openpath]),
+                              ax=axes_dict['ax8'])
+        if self.flux_openpath:
+            self._plot_diel_cycle(title="Difference:\nOPEN-PATH (corrected) - ENCLOSED-PATH (true flux)",
+                                  series=df[self.nee_op_corr].sub(df[self.flux_closedpath]),
+                                  ax=axes_dict['ax9'])
+        fig.tight_layout()
+        fig.show()
+
     def plot_series_flux(self, df: pd.DataFrame):
         print("Plotting SeriesFlux ...")
 
@@ -651,6 +691,65 @@ class Scop(selfheating_newcols.NewCols):
 
         # savefig(fig=self.fig, outfile=self.outfile)
         fig.show()
+
+    def plot_diel_cycle_vars(self, df: pd.DataFrame):
+        print("Plotting DielCyclesVars ...")
+        gs = gridspec.GridSpec(2, 4)  # rows, cols
+        # gs.update(wspace=0.2, hspace=0.2, left=0.03, right=0.96, top=0.96, bottom=0.03)
+        fig = plt.figure(facecolor='white', figsize=(16, 9))
+        ax1 = fig.add_subplot(gs[0, 0])
+        ax2 = fig.add_subplot(gs[0, 1])
+        ax3 = fig.add_subplot(gs[0, 2])
+        ax4 = fig.add_subplot(gs[0, 3])
+
+        ax5 = fig.add_subplot(gs[1, 0])
+        ax6 = fig.add_subplot(gs[1, 1])
+        ax7 = fig.add_subplot(gs[1, 2])
+        ax8 = fig.add_subplot(gs[1, 3])
+
+        axes_dict = {'ax1': ax1, 'ax2': ax2, 'ax3': ax3, 'ax4': ax4,
+                     'ax5': ax5, 'ax6': ax6, 'ax7': ax7, 'ax8': ax8}
+        for key, ax in axes_dict.items():
+            default_format(ax=ax)
+
+        self._plot_diel_cycle(title="ra: Aerodynamic Resistance (s m-1)",
+                              series=df[self.aerodynamic_resistance],
+                              ax=axes_dict['ax1'])
+
+        self._plot_diel_cycle(title="rho_d: Dry Air Density (kg m-3)",
+                              series=df[self.dry_air_density],
+                              ax=axes_dict['ax2'])
+
+        self._plot_diel_cycle(title="TS (°C)",
+                              series=df[self.t_instrument_surface],
+                              ax=axes_dict['ax5'])
+
+        self._plot_diel_cycle(title="FCT_unsc (µmol m-2 s-1)",
+                              series=df[self.fct_unsc_gf],
+                              ax=axes_dict['ax6'])
+
+        self._plot_diel_cycle(title="SF (#)",
+                              series=df[self.sf_gf],
+                              ax=axes_dict['ax7'])
+
+        self._plot_diel_cycle(title="FCT (µmol m-2 s-1)",
+                              series=df[self.fct],
+                              ax=axes_dict['ax8'])
+
+        # savefig(fig=self.fig, outfile=self.outfile)
+        fig.tight_layout()
+        fig.show()
+
+    def _plot_diel_cycle(self, ax, series, title=None, ls='-', lw=1, legend=True):
+        # Calculate the hourly mean per month
+        diel_cycle_df = series.groupby([series.index.month, series.index.hour]).mean().unstack()
+        diel_cycle_df.T.plot(ls=ls, ax=ax, colormap='jet', label="X", lw=lw)
+        if title:
+            ax.set_title(title, fontsize=8, fontweight='bold', y=1)
+        if legend:
+            ax.legend(ncol=2, labelspacing=0.1, prop={'size': 5})
+        if (series.min() < 0) & (series.max() > 0):
+            ax.axhline(0, lw=1, color='black')
 
     def plot_cumulative_flux(self, df: pd.DataFrame):
         print("Plotting CumulativeFlux ...")
