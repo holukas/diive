@@ -357,7 +357,7 @@ def example_rfts():
         target_col=TARGET_COL,
         verbose=True,
         # features_lag=None,
-        features_lag=[-1, -1],
+        # features_lag=[-1, -1],
         # features_lag_exclude_cols=['test', 'test2'],
         # vectorize_timestamps=False,
         vectorize_timestamps=True,
