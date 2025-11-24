@@ -204,8 +204,8 @@ class Scop:
 
         # Calculate unscaled flux correction term
         # df[self.cols.fct_unsc] = self.fct_unscaled_bur08(df=df)
-        # df[self.cols.fct_unsc], df[self.cols.t_instrument_surface] = self.fct_unscaled_jar09(df=df)
-        df[self.cols.fct_unsc], df[self.cols.t_instrument_surface] = self.fct_unscaled_bur06(df=df)
+        df[self.cols.fct_unsc], df[self.cols.t_instrument_surface] = self.fct_unscaled_jar09(df=df)
+        # df[self.cols.fct_unsc], df[self.cols.t_instrument_surface] = self.fct_unscaled_bur06(df=df)
 
         # Remove outliers from unscaled flux correction term
         if self.remove_outliers_method == "fast":
@@ -1155,7 +1155,8 @@ def main():
         n_classes=5,
         n_bootstrap_runs=0,
         classvar=USTAR,
-        remove_outliers_method="separate"
+        remove_outliers_method="fast"
+        # remove_outliers_method="separate"
     )
     scop.calc_sf()
     # apply_scaling_factors = Scop().apply_sf()
