@@ -95,29 +95,11 @@ class SeriesFlux(selfheating_newcols.NewCols):
         self.corrected_flux = corrected_flux
         self.true_flux = true_flux
         self.daytime = daytime
-        self.axes_dict, self.fig = self.prepare_axes()
-        self.run()
-        self.fig.show()
+
 
     def run(self):
         print("Plotting SeriesFlux ...")
 
-        plot_series(title="OPEN-PATH CO2 flux (uncorrected)",
-                    series=self.uncorrected_flux,
-                    ax=self.axes_dict['ax1'])
-
-        if not self.true_flux.empty:
-            plot_series(title="ENCLOSED-PATH CO2 flux (true flux)",
-                        series=self.true_flux,
-                        ax=self.axes_dict['ax2'])
-
-        plot_series(title="OPEN-PATH CO2 flux (corrected)",
-                    series=self.corrected_flux,
-                    ax=self.axes_dict['ax3'])
-
-        # savefig(fig=self.fig, outfile=self.outfile)
-
-    def prepare_axes(self):
         gs = gridspec.GridSpec(3, 1)  # rows, cols
         gs.update(wspace=0.2, hspace=0.2, left=0.03, right=0.96, top=0.96, bottom=0.03)
         fig = plt.figure(facecolor='white', figsize=(9, 9))
@@ -127,62 +109,25 @@ class SeriesFlux(selfheating_newcols.NewCols):
         axes_dict = {'ax1': ax1, 'ax2': ax2, 'ax3': ax3}
         for key, ax in axes_dict.items():
             default_format(ax=ax)
-        # plt.show()
-        return axes_dict, fig
+
+        plot_series(title="OPEN-PATH CO2 flux (uncorrected)",
+                    series=self.uncorrected_flux,
+                    ax=axes_dict['ax1'])
+
+        if not self.true_flux.empty:
+            plot_series(title="ENCLOSED-PATH CO2 flux (true flux)",
+                        series=self.true_flux,
+                        ax=axes_dict['ax2'])
+
+        plot_series(title="OPEN-PATH CO2 flux (corrected)",
+                    series=self.corrected_flux,
+                    ax=axes_dict['ax3'])
+
+        # savefig(fig=self.fig, outfile=self.outfile)
+        fig.show()
 
 
-class CumulativeFlux(selfheating_newcols.NewCols):
 
-    def __init__(self, df, daytime_col,
-                 uncorrected_flux_col, corrected_flux_col, true_flux_col=None):
-
-        self.daytime_col = daytime_col
-
-        self.plot_df = df[[daytime_col, uncorrected_flux_col, corrected_flux_col]].copy()
-        if true_flux_col:
-            self.plot_df[true_flux_col] = df[true_flux_col]
-
-        self.plot_df = self.plot_df.dropna()  # Keep overlapping
-        self.uncorrected_flux = self.plot_df[uncorrected_flux_col]
-        self.corrected_flux = self.plot_df[corrected_flux_col]
-        if true_flux_col:
-            self.true_flux = self.plot_df[true_flux_col]
-
-        self.true_flux_col = true_flux_col
-
-        self.axes_dict, self.fig = self.prepare_axes()
-        self.run()
-        self.fig.show()
-
-    def run(self):
-        print("Plotting CumulativeFlux ...")
-
-        plot_cumulative(title="Daytime", which='daytime',
-                        ax=self.axes_dict['ax1'],
-                        subset=self.plot_df,
-                        daytime_col=self.daytime_col)
-
-        plot_cumulative(title="Nighttime", which='nighttime',
-                        ax=self.axes_dict['ax2'],
-                        subset=self.plot_df,
-                        daytime_col=self.daytime_col)
-
-        plot_cumulative(title="Daytime & Nighttime", which='all',
-                        ax=self.axes_dict['ax3'],
-                        subset=self.plot_df,
-                        daytime_col=self.daytime_col)
-
-    def prepare_axes(self):
-        gs = gridspec.GridSpec(3, 1)  # rows, cols
-        gs.update(wspace=0.2, hspace=0.2, left=0.03, right=0.96, top=0.96, bottom=0.03)
-        fig = plt.figure(facecolor='white', figsize=(9, 9))
-        ax1 = fig.add_subplot(gs[0, 0])
-        ax2 = fig.add_subplot(gs[1, 0])
-        ax3 = fig.add_subplot(gs[2, 0])
-        axes_dict = {'ax1': ax1, 'ax2': ax2, 'ax3': ax3}
-        for key, ax in axes_dict.items():
-            default_format(ax=ax)
-        return axes_dict, fig
 
 
 class DielCyclesVars(selfheating_newcols.NewCols):
@@ -301,41 +246,15 @@ class SeriesVars(selfheating_newcols.NewCols):
         return axes_dict, fig
 
 
-def default_format(ax, fontsize=9, label_color='black',
-                   txt_xlabel=False, txt_ylabel=False, txt_ylabel_units=False,
-                   width=0.5, length=3, direction='in', colors='black', facecolor='white'):
-    """ Apply default format to plot. """
-    ax.set_facecolor(facecolor)
-    ax.tick_params(axis='x', width=width, length=length, direction=direction, colors=colors, labelsize=fontsize)
-    ax.tick_params(axis='y', width=width, length=length, direction=direction, colors=colors, labelsize=fontsize)
-    format_spines(ax=ax, color=colors, lw=1)
-    if txt_xlabel:
-        ax.set_xlabel(txt_xlabel, color=label_color, fontsize=fontsize, fontweight='bold')
-    if txt_ylabel and txt_ylabel_units:
-        ax.set_ylabel(f'{txt_ylabel}  {txt_ylabel_units}', color=label_color, fontsize=fontsize, fontweight='bold')
-    if txt_ylabel and not txt_ylabel_units:
-        ax.set_ylabel(f'{txt_ylabel}', color=label_color, fontsize=fontsize, fontweight='bold')
-    return None
 
 
-def format_spines(ax, color, lw):
-    spines = ['top', 'bottom', 'left', 'right']
-    for spine in spines:
-        ax.spines[spine].set_color(color)
-        ax.spines[spine].set_linewidth(lw)
-    return None
 
 
-def savefig(fig, outfile):
-    print(f"--> Saving plot {outfile} ...")
-    fig.savefig(outfile, format='png', bbox_inches='tight', facecolor='w',
-                transparent=True, dpi=150)
 
 
-def plot_series(ax, series, title):
-    ax.plot_date(x=series.index, y=series,
-                 ms=2, alpha=.3, ls='-', marker='o', markeredgecolor='none')
-    ax.set_title(title, fontsize=9, fontweight='bold', y=1)
+
+
+
 
 
 def plot_diel_cycle(ax, series, title=None, ls='-', lw=1, legend=True):
@@ -350,32 +269,7 @@ def plot_diel_cycle(ax, series, title=None, ls='-', lw=1, legend=True):
         ax.axhline(0, lw=1, color='black')
 
 
-def plot_cumulative(ax: plt.axis, title: str, which: str, subset: pandas.DataFrame,
-                    daytime_col: tuple):
-    subset = subset.dropna()
 
-    if which == 'daytime':
-        subset = subset.loc[subset[daytime_col] == 1]
-    elif which == 'nighttime':
-        subset = subset.loc[subset[daytime_col] == 0]
-    elif which == 'all':
-        pass
-
-    # # Convert to gC m-2
-    # _subset[self.op_co2_flux_QC01_nocorr_col] = \
-    #     _subset[self.op_co2_flux_QC01_nocorr_col].multiply(0.02161926)
-    # _subset[self.cp_co2_flux_QC01_col] = \
-    #     _subset[self.cp_co2_flux_QC01_col].multiply(0.02161926)
-    # _subset[self.op_co2_flux_corr_jar09_col] = \
-    #     _subset[self.op_co2_flux_corr_jar09_col].multiply(0.02161926)
-
-    subset = subset.cumsum()
-    for col in subset.columns:
-        if col == daytime_col:
-            continue
-        ax.plot_date(x=subset.index, y=subset[col], label=col, ms=3, alpha=.5)
-    ax.set_title(title, fontsize=9, fontweight='bold', y=1)
-    ax.legend()
 
 # def plot_cumulative_diff(self, ax: plt.axis, title: str, which: str):
 #     _subset = self.plot_df[self.cols].copy()

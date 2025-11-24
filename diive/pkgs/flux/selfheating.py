@@ -155,7 +155,6 @@ class Scop(selfheating_newcols.NewCols):
         # print(rfts.scores_)
         # print(rfts.gapfilling_df_)
 
-
         # Detect daytime/nighttime
         df[self.daytime] = self.detect_daytime(swin=df[self.swin])
 
@@ -265,20 +264,25 @@ class Scop(selfheating_newcols.NewCols):
     def plot_pm(self, df: pd.DataFrame):
         """Plot results from scaling factor calculations from parallel measurements"""
         # selfheating_plots.SeriesVars(plot_df=df.copy())
-        # selfheating_plots.SeriesFlux(daytime=df[self.daytime_col],
+
+        self.plot_series_flux(df=df)
+        # selfheating_plots.SeriesFlux(daytime=df[self.daytime],
         #                              uncorrected_flux=df[self.flux_openpath],
         #                              true_flux=df[self.flux_closedpath],
-        #                              corrected_flux=df[self.op_co2_flux_corr_col])
+        #                              corrected_flux=df[self.nee_op_corr])
+
         # selfheating_plots.DielCyclesVars(plot_df=df.copy())
         # selfheating_plots.DielCyclesFlux(df=df.copy(),
         #                                  uncorrected_flux_col=self.flux_openpath,
-        #                                  corrected_flux_col=self.op_co2_flux_corr_col,
+        #                                  corrected_flux_col=self.nee_op_corr,
         #                                  true_flux_col=self.flux_closedpath)
-        selfheating_plots.CumulativeFlux(df=df.copy(),
-                                         daytime_col=self.daytime,
-                                         uncorrected_flux_col=self.flux_openpath,
-                                         corrected_flux_col=self.nee_op_corr,
-                                         true_flux_col=self.flux_closedpath)
+
+        self.plot_cumulative_flux(df=df)
+        # selfheating_plots.CumulativeFlux(df=df.copy(),
+        #                                  daytime_col=self.daytime,
+        #                                  uncorrected_flux_col=self.flux_openpath,
+        #                                  corrected_flux_col=self.nee_op_corr,
+        #                                  true_flux_col=self.flux_closedpath)
 
     def assign_scaling_factors(self, df: pd.DataFrame, scaling_factors_df: pd.DataFrame,
                                classvar_col: str, lut_gapfill: bool = False) -> pd.DataFrame:
@@ -448,7 +452,6 @@ class Scop(selfheating_newcols.NewCols):
         fct_unsc = self.flux_correction_term_unscaled(ts=ts, ta=ta, qc_umol=qc, ra=ra, rho_v=rho_v, rho_d=rho_d)
         return fct_unsc
 
-
     def fct_unscaled_bur08(self, df: pd.DataFrame) -> pd.Series:
         """Calculate bulk instrument surface temperature (BUR08)"""
         u = df[self.u].copy()
@@ -591,6 +594,122 @@ class Scop(selfheating_newcols.NewCols):
         fct_unsc = (_a / _b * _c)
 
         return fct_unsc
+
+    def plot_series(self, ax, series, title):
+        ax.plot_date(x=series.index, y=series,
+                     ms=2, alpha=.3, ls='-', marker='o', markeredgecolor='none')
+        ax.set_title(title, fontsize=9, fontweight='bold', y=1)
+
+    def format_spines(self, ax, color, lw):
+        spines = ['top', 'bottom', 'left', 'right']
+        for spine in spines:
+            ax.spines[spine].set_color(color)
+            ax.spines[spine].set_linewidth(lw)
+        return None
+
+    def default_format(self, ax, fontsize=9, label_color='black',
+                       txt_xlabel=False, txt_ylabel=False, txt_ylabel_units=False,
+                       width=0.5, length=3, direction='in', colors='black', facecolor='white'):
+        """ Apply default format to plot. """
+        ax.set_facecolor(facecolor)
+        ax.tick_params(axis='x', width=width, length=length, direction=direction, colors=colors, labelsize=fontsize)
+        ax.tick_params(axis='y', width=width, length=length, direction=direction, colors=colors, labelsize=fontsize)
+        self.format_spines(ax=ax, color=colors, lw=1)
+        if txt_xlabel:
+            ax.set_xlabel(txt_xlabel, color=label_color, fontsize=fontsize, fontweight='bold')
+        if txt_ylabel and txt_ylabel_units:
+            ax.set_ylabel(f'{txt_ylabel}  {txt_ylabel_units}', color=label_color, fontsize=fontsize, fontweight='bold')
+        if txt_ylabel and not txt_ylabel_units:
+            ax.set_ylabel(f'{txt_ylabel}', color=label_color, fontsize=fontsize, fontweight='bold')
+        return None
+
+    def plot_series_flux(self, df: pd.DataFrame):
+        print("Plotting SeriesFlux ...")
+
+        gs = gridspec.GridSpec(3, 1)  # rows, cols
+        gs.update(wspace=0.2, hspace=0.2, left=0.03, right=0.96, top=0.96, bottom=0.03)
+        fig = plt.figure(facecolor='white', figsize=(9, 9))
+        ax1 = fig.add_subplot(gs[0, 0])
+        ax2 = fig.add_subplot(gs[1, 0], sharey=ax1)
+        ax3 = fig.add_subplot(gs[2, 0], sharey=ax1)
+        axes_dict = {'ax1': ax1, 'ax2': ax2, 'ax3': ax3}
+        for key, ax in axes_dict.items():
+            default_format(ax=ax)
+
+        self.plot_series(title="OPEN-PATH CO2 flux (uncorrected)",
+                         series=df[self.flux_openpath],
+                         ax=axes_dict['ax1'])
+
+        if not df[self.flux_closedpath].empty:
+            self.plot_series(title="ENCLOSED-PATH CO2 flux (true flux)",
+                             series=df[self.flux_closedpath],
+                             ax=axes_dict['ax2'])
+
+        self.plot_series(title="OPEN-PATH CO2 flux (corrected)",
+                         series=df[self.nee_op_corr],
+                         ax=axes_dict['ax3'])
+
+        # savefig(fig=self.fig, outfile=self.outfile)
+        fig.show()
+
+    def plot_cumulative_flux(self, df: pd.DataFrame):
+        print("Plotting CumulativeFlux ...")
+
+        gs = gridspec.GridSpec(3, 1)  # rows, cols
+        gs.update(wspace=0.2, hspace=0.2, left=0.03, right=0.96, top=0.96, bottom=0.03)
+        fig = plt.figure(facecolor='white', figsize=(9, 9))
+        ax1 = fig.add_subplot(gs[0, 0])
+        ax2 = fig.add_subplot(gs[1, 0])
+        ax3 = fig.add_subplot(gs[2, 0])
+        axes_dict = {'ax1': ax1, 'ax2': ax2, 'ax3': ax3}
+        for key, ax in axes_dict.items():
+            default_format(ax=ax)
+
+        plotdf = df[[self.flux_openpath, self.nee_op_corr, self.flux_closedpath, self.daytime]].dropna()
+
+        self.plot_cumulative(title="Daytime", which='daytime',
+                             ax=axes_dict['ax1'],
+                             df=plotdf,
+                             daytime_col=self.daytime)
+
+        self.plot_cumulative(title="Nighttime", which='nighttime',
+                             ax=axes_dict['ax2'],
+                             df=plotdf,
+                             daytime_col=self.daytime)
+
+        self.plot_cumulative(title="Daytime & Nighttime", which='all',
+                             ax=axes_dict['ax3'],
+                             df=plotdf,
+                             daytime_col=self.daytime)
+
+        fig.show()
+
+    def plot_cumulative(self, ax: plt.axis, title: str, which: str, df: pd.DataFrame,
+                        daytime_col: str):
+        df = df.dropna()
+
+        if which == 'daytime':
+            df = df.loc[df[daytime_col] == 1]
+        elif which == 'nighttime':
+            df = df.loc[df[daytime_col] == 0]
+        elif which == 'all':
+            pass
+
+        # # Convert to gC m-2
+        # _subset[self.op_co2_flux_QC01_nocorr_col] = \
+        #     _subset[self.op_co2_flux_QC01_nocorr_col].multiply(0.02161926)
+        # _subset[self.cp_co2_flux_QC01_col] = \
+        #     _subset[self.cp_co2_flux_QC01_col].multiply(0.02161926)
+        # _subset[self.op_co2_flux_corr_jar09_col] = \
+        #     _subset[self.op_co2_flux_corr_jar09_col].multiply(0.02161926)
+
+        df = df.cumsum()
+        for col in df.columns:
+            if col == daytime_col:
+                continue
+            ax.plot_date(x=df.index, y=df[col], label=col, ms=3, alpha=.5)
+        ax.set_title(title, fontsize=9, fontweight='bold', y=1)
+        ax.legend()
 
 
 class OptimizeScalingFactors(selfheating_newcols.NewCols):
