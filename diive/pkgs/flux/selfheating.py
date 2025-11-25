@@ -13,6 +13,7 @@ References:
         https://doi.org/10.1002/2017JG003830
 
 """
+import time
 from dataclasses import dataclass
 from typing import Literal
 
@@ -40,24 +41,101 @@ class ColumnConfig:
     air_thermal_conductivity: str = '.AIR_THERMAL_CONDUCTIVITY'
     aerodynamic_resistance: str = '.AERODYNAMIC_RESISTANCE'
     dry_air_density: str = '.DRY_AIR_DENSITY'
-    t_instrument_surface: str = '.T_INSTRUMENT_SURFACE'
+    t_instr_surface: str = '.T_INSTRUMENT_SURFACE'
     nee_op_corr: str = '.NEE_OP_CORR'
     fct_unsc: str = '.FCT_UNSC'
     fct_unsc_gf: str = '.FCT_UNSC_GF'
-    fct_unsc_lutvals: str = '.FCT_UNSC_LUTVALS'
     fct: str = '.FCT'
     sf: str = '.SF'
     sf_gf: str = '.SF_GF'
-    sf_lutvals_col: str = '.SF_LUTVALS'
+
+
+class FluxCorrectionTerm:
+
+    @staticmethod
+    def flux_correction_term_unscaled(ts, ta, qc, ra, rho_v, rho_d):
+        """
+        Calculate unscaled flux correction term.
+        Equation (8) in Burba et al. (2006).
+
+        Used by JAR09 and BUR06.
+
+        Args:
+            ts: series, bulk surface temperature (°C)
+            ta: series, air temperature (°C)
+            qc: series, CO2 molar density (µmol m-3)
+            ra: series, aerodynamic resistance (s m-1)
+            rho_v: series, water vapor density (kg m-3)
+            rho_d: series, dry air density (kg m-3)
+
+        """
+        # Convert temperatures to Kelvin for the denominator
+        ta_k = ta + 273.15
+
+        # Term A: Surface - Air temp delta * CO2 density
+        term_a = (ts - ta) * qc
+
+        # Term B: Aerodynamic resistance * Temp
+        term_b = ra * ta_k
+
+        # Term C: Water vapor correction factor
+        term_c = 1 + 1.6077 * (rho_v / rho_d)
+
+        return (term_a / term_b) * term_c
+
+    @staticmethod
+    def estimate_surface_temp_bur06(ta: pd.Series) -> pd.Series:
+        """
+        Estimates the surface temperature based on the provided air temperature
+        values using the BUR06 model. The BUR06 model applies a quadratic
+        relationship to approximate the surface temperature from air temperature.
+
+        Args:
+            ta (pd.Series): Air temperature values provided as a pandas Series.
+
+        Returns:
+            pd.Series: Estimated surface temperature values calculated using the
+            BUR06 model.
+        """
+        ts = 0.0025 * ta ** 2 + 0.9 * ta + 2.07
+        return ts
+
+    @staticmethod
+    def estimate_surface_temp_jar09(ta: pd.Series, daytime: pd.Series) -> pd.Series:
+        """
+        Estimates surface temperature using the JAR09 method.
+
+        This method calculates surface temperature based on ambient temperature and
+        a binary series representing daytime or nighttime conditions. It applies
+        different linear relationships for daytime and nighttime data.
+
+        Args:
+            ta (pd.Series): A Pandas Series representing ambient temperatures.
+            daytime (pd.Series): A binary Pandas Series where 1 indicates daytime
+                and 0 indicates nighttime.
+
+        Returns:
+            pd.Series: A Pandas Series representing the estimated surface temperatures.
+        """
+        ts = pd.Series(index=ta.index, dtype=float)
+
+        # Daytime relation
+        ts.loc[daytime == 1] = 0.93 * ta.loc[daytime == 1] + 3.17
+        # Nighttime relation
+        ts.loc[daytime == 0] = 1.05 * ta.loc[daytime == 0] + 1.52
+
+        return ts
 
 
 class Scop:
     """
     Calculate scaling factors by comparing parallel measurements
     """
-    M_AIR = 0.028965  # molar mass of dry air (kg mol-1) (M_AIR)
-    M_H2O = 0.018  # molar mass of water vapor (kg mol-1) (M_H2O)
-    T0_K = 273.15  # Absolute zero (K)
+
+    # # todo delete
+    # M_AIR = 0.028965  # molar mass of dry air (kg mol-1) (M_AIR)
+    # M_H2O = 0.018  # molar mass of water vapor (kg mol-1) (M_H2O)
+    # T0_K = 273.15  # Absolute zero (K)
 
     def __init__(
             self,
@@ -80,6 +158,7 @@ class Scop:
             lat: float,
             lon: float,
             utc_offset: int,
+            correction_method_base: Literal["JAR09", "BUR06", "BUR08"] = "JAR09",
             remove_outliers_method: Literal["fast", "separate"] = "fast"
     ):
         """
@@ -143,6 +222,7 @@ class Scop:
         self.lon = lon
         self.utc_offset = utc_offset
         self.remove_outliers_method = remove_outliers_method
+        self.correction_method_base = correction_method_base
 
         self.df = pd.DataFrame()
         self.scaling_factors_df = pd.DataFrame()
@@ -166,10 +246,33 @@ class Scop:
         # Calculate thermal conductivity of air (required for BUR08)
         df[self.cols.air_thermal_conductivity] = self.calc_air_thermal_conductivity(ta=df[self.air_temperature])
 
-        # Calculate unscaled flux correction term
-        # df[self.cols.fct_unsc] = self.fct_unscaled_bur08(df=df)
-        df[self.cols.fct_unsc], df[self.cols.t_instrument_surface] = self.fct_unscaled_jar09(df=df)
-        # df[self.cols.fct_unsc], df[self.cols.t_instrument_surface] = self.fct_unscaled_bur06(df=df)
+        # Calculate unscaled flux correction term (fct_unsc)
+        if self.correction_method_base in ["JAR09", "BUR06"]:
+            if self.correction_method_base == "JAR09":
+                # Estimate instrument surface temperature (JAR09)
+                df[self.cols.t_instr_surface] = FluxCorrectionTerm.estimate_surface_temp_jar09(
+                    ta=df[self.air_temperature], daytime=df[self.cols.daytime])
+            elif self.correction_method_base == "BUR06":
+                # Estimate instrument surface temperature (BUR06)
+                df[self.cols.t_instr_surface] = FluxCorrectionTerm.estimate_surface_temp_bur06(
+                    ta=df[self.air_temperature])
+            else:
+                raise ValueError(f"Unknown correction_method_base: {self.correction_method_base}")
+            # Calculate unscaled flux correction term (fct_unsc)
+            df[self.cols.fct_unsc] = FluxCorrectionTerm.flux_correction_term_unscaled(
+                ts=df[self.cols.t_instr_surface],
+                ta=df[self.air_temperature],
+                qc=df[self.co2_molar_density],  # in umol mol-1
+                ra=df[self.cols.aerodynamic_resistance],
+                rho_v=df[self.water_vapor_density],
+                rho_d=df[self.cols.dry_air_density]
+            )
+        elif self.correction_method_base == "BUR08":
+            # Calculate unscaled flux correction term (BUR08)
+            df[self.cols.fct_unsc] = self.fct_unscaled_bur08(df=df)
+            # df[self.cols.fct_unsc], df[self.cols.t_instrument_surface] = self.fct_unscaled_bur06(df=df)
+        else:
+            raise ValueError(f"Unknown correction_method_base: {self.correction_method_base}")
 
         # Remove outliers from unscaled flux correction term
         if self.remove_outliers_method == "fast":
@@ -180,12 +283,9 @@ class Scop:
             raise ValueError(f"Unknown remove_outliers_method: {self.remove_outliers_method}")
 
         # Gap-fill unscaled flux correction term
-        # todo random forest
-        # # TODO Analyze difference between IRGAs w/ ML
-        gfdf = df[[self.cols.fct_unsc, self.air_temperature, self.air_heat_capacity, self.air_density, self.u,
-                   self.ustar]].copy()
+        gfdf = df[[self.cols.fct_unsc, self.air_temperature, self.air_heat_capacity,
+                   self.air_density, self.u, self.ustar]].copy()
         gfdf = gfdf.dropna()
-
         rfts = RandomForestTS(
             input_df=gfdf,
             target_col=self.cols.fct_unsc,
@@ -196,8 +296,8 @@ class Scop:
             vectorize_timestamps=True,
             add_continuous_record_number=True,
             sanitize_timestamp=True,
-            perm_n_repeats=3,
-            n_estimators=9,
+            perm_n_repeats=1,
+            n_estimators=3,
             random_state=42,
             # random_state=None,
             max_depth=None,
@@ -216,42 +316,37 @@ class Scop:
         print(rfts.gapfilling_df_)
         df[self.cols.fct_unsc_gf] = rfts.gapfilling_df_['.FCT_UNSC_gfRF'].copy()
 
-        df[self.cols.fct_unsc_gf], df[self.cols.fct_unsc_lutvals] = self.gapfilling_lut(
+        df[self.cols.fct_unsc_gf], df["X"] = self.gapfilling_lut(
             series=df[self.cols.fct_unsc].copy())
 
         # Calculate scaling factors
-        scaling_factors_df = self.optimize_scaling_factors(df=df, class_var_col=self.classvar, showplot=True)
-        df = self.assign_scaling_factors(df=df, scaling_factors_df=scaling_factors_df,
-                                         classvar_col=self.classvar, lut_gapfill=True)
+        optimize = OptimizeScalingFactors(df=df,
+                                          class_var_col=self.classvar,
+                                          n_classes=self.n_classes,
+                                          n_bootstrap_runs=self.n_bootstrap_runs,
+                                          flux_openpath=self.flux_openpath,
+                                          flux_closedpath=self.flux_closedpath,
+                                          showplot=False,
+                                          cols=self.cols)
+        scaling_factors_df = optimize.get()
 
-        # Correct flux
-        df[self.cols.nee_op_corr], df[self.cols.fct] = self.corrected_flux(
-            uncorrected_flux=df[self.flux_openpath],
-            fct_unsc_gf=df[self.cols.fct_unsc_gf],
-            sf_gf=df[self.cols.sf_gf])
+        # Assign scaling factors
+        df = self.assign_scaling_factors(df=df,
+                                         scaling_factors_df=scaling_factors_df,
+                                         classvar_col=self.classvar,
+                                         lut_gapfill=False)
 
+        # Final flux correction
+        # Corrected OP = uncorrected OP + (FCT_unscaled * ScalingFactor)
+        df[self.cols.fct] = df[self.cols.fct_unsc_gf] * df[self.cols.sf]
+        df[self.cols.nee_op_corr] = df[self.flux_openpath] + df[self.cols.fct]
+
+        # Visualization
         self.stats(df=df)
         self.plot_diel_cycles(df=df)
         self.plot_flux_analysis_dashboard(df=df)
 
-    # def custom_class_var(self):
-    #     """Select custom variable that is then used to divide data into x classes
-    #
-    #     This method enables the calculation of scaling factors in dependence of the
-    #     time stamp, e.g. scaling factors for each month.
-    #     """
-    #     if self.class_var_col == 'custom':
-    #         self.df[('_custom', '--')] = self.df.index.month  #
-    #         self.num_classes = None
-    #         self.class_var_col = ('_custom', '--')
-
-    def corrected_flux(self, uncorrected_flux, fct_unsc_gf, sf_gf):
-        # Use only a fraction of the unscaled flux correction term
-        # Add scaled correction flux to original WPL-only open-path flux
-        # Manual test best: sf_gf = 0.17 daytime / 0.10 nighttime
-        fct = fct_unsc_gf.multiply(sf_gf)
-        corrected_flux = uncorrected_flux + fct
-        return corrected_flux, fct
+        self.df = df.copy()
 
     def detect_daytime(self, swin) -> pd.Series:
         # Daytime, nighttime
@@ -285,13 +380,13 @@ class Scop:
         df[self.cols.daytime] = np.nan
         df[self.cols.aerodynamic_resistance] = np.nan
         df[self.cols.dry_air_density] = np.nan
-        df[self.cols.t_instrument_surface] = np.nan
+        df[self.cols.t_instr_surface] = np.nan
         df[self.cols.fct_unsc] = np.nan
         df[self.cols.fct_unsc_gf] = np.nan
-        df[self.cols.fct_unsc_lutvals] = np.nan
+        # df[self.cols.fct_unsc_lutvals] = np.nan
         df[self.cols.class_var_group] = np.nan
         df[self.cols.sf] = np.nan
-        df[self.cols.sf_lutvals_col] = np.nan
+        # df[self.cols.sf_lutvals_col] = np.nan
         df[self.cols.class_var_group] = np.nan
         df[self.cols.fct] = np.nan
         df[self.cols.nee_op_corr] = np.nan
@@ -312,6 +407,7 @@ class Scop:
             df.loc[_filter_group, self.cols.sf] = row['SF_MEDIAN']
 
         if lut_gapfill:
+            # pass
             df[self.cols.sf_gf], df[self.cols.sf_lutvals_col] = \
                 self.gapfilling_lut(df[self.cols.sf])
         return df
@@ -329,18 +425,6 @@ class Scop:
         series_gf = series.fillna(lutvals)
 
         return series_gf, lutvals
-
-    def optimize_scaling_factors(self, df: pd.DataFrame, class_var_col: str, showplot: bool = True):
-        optimize = OptimizeScalingFactors(df=df,
-                                          class_var_col=class_var_col,
-                                          n_classes=self.n_classes,
-                                          # outdir=self.outdir,
-                                          n_bootstrap_runs=self.n_bootstrap_runs,
-                                          flux_openpath=self.flux_openpath,
-                                          flux_closedpath=self.flux_closedpath,
-                                          showplot=showplot,
-                                          cols=self.cols)
-        return optimize.get()
 
     def calc_aerodynamic_resistance(self, u, ustar, rem_outliers: bool = False) -> pd.Series:
         # Aerodynamic resistance
@@ -430,30 +514,30 @@ class Scop:
         k_air = 0.02425 + (0.00007 * ta)
         return k_air
 
-    def flux_correction_term_unscaled(self, ts, ta, qc_umol, ra, rho_v, rho_d):
-        """Calculate unscaled flux correction term
-
-        fct_unsc ... unscaled flux correction term
-
-        Source:
-            - Part of eq. (8) in Burba et al. (2006)
-            - Similar to eq. (5) in Kittler et al. (2017)
-
-        :param ts: series, bulk surface temperature (°C)
-        :param ta: series, air temperature (°C)
-        :param qc_umol: series, CO2 molar density (µmol m-3)
-        :param ra: series, aerodynamic resistance (s m-1)
-        :param rho_v: series, water vapor density (kg m-3)
-        :param rho_d: series, dry air density (kg m-3)
-        :return:
-        pandas.Series
-        """
-        _a = (ts - ta) * qc_umol  # Uses BUR06 or JAR09 surface temperature
-        _b = ra * (ta + 273.15)
-        _c = 1 + 1.6077 * (rho_v / rho_d)
-        fct_unsc = (_a / _b * _c)
-        # flux_correction_term_unscaled = _a / _b * _c
-        return fct_unsc
+    # def flux_correction_term_unscaled(self, ts, ta, qc_umol, ra, rho_v, rho_d):
+    #     """Calculate unscaled flux correction term
+    #
+    #     fct_unsc ... unscaled flux correction term
+    #
+    #     Source:
+    #         - Part of eq. (8) in Burba et al. (2006)
+    #         - Similar to eq. (5) in Kittler et al. (2017)
+    #
+    #     :param ts: series, bulk surface temperature (°C)
+    #     :param ta: series, air temperature (°C)
+    #     :param qc_umol: series, CO2 molar density (µmol m-3)
+    #     :param ra: series, aerodynamic resistance (s m-1)
+    #     :param rho_v: series, water vapor density (kg m-3)
+    #     :param rho_d: series, dry air density (kg m-3)
+    #     :return:
+    #     pandas.Series
+    #     """
+    #     _a = (ts - ta) * qc_umol  # Uses BUR06 or JAR09 surface temperature
+    #     _b = ra * (ta + 273.15)
+    #     _c = 1 + 1.6077 * (rho_v / rho_d)
+    #     fct_unsc = (_a / _b * _c)
+    #     # flux_correction_term_unscaled = _a / _b * _c
+    #     return fct_unsc
 
     def fct_unscaled_bur06(self, df: pd.DataFrame) -> pd.Series:
         """Calculate bulk instrument surface temperature (BUR06)
@@ -462,7 +546,8 @@ class Scop:
         series, surface temperature (BUR06) (°C)
         """
         ta = df[self.air_temperature].copy()
-        qc = df[self.co2_molar_density].copy().multiply(1000)  # Needs umol
+        qc = df[self.co2_molar_density].copy()  # Needs umol
+        # qc = df[self.co2_molar_density].copy().multiply(1000)  # Needs umol
         ra = df[self.cols.aerodynamic_resistance].copy()
         rho_v = df[self.water_vapor_density].copy()
         rho_d = df[self.cols.dry_air_density].copy()
@@ -482,7 +567,8 @@ class Scop:
         k_air = df[self.cols.air_thermal_conductivity].copy()  # (W m-1 K-1)
         c_p = df[self.air_heat_capacity].copy()
         rho_a = df[self.air_density].copy()
-        qc = df[self.co2_molar_density].copy().multiply(1000)  # (umol m-3)
+        qc = df[self.co2_molar_density].copy()  # (umol m-3)
+        # qc = df[self.co2_molar_density].copy().multiply(1000)  # (umol m-3)
 
         # TOP OF WINDOW ---
         # Surface temperatures day/night
@@ -541,41 +627,6 @@ class Scop:
         # print(f"Ts (BUR08), mean = {fct_unsc.mean():.2f}")
         return fct_unsc
 
-    def fct_unscaled_jar09(self, df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
-        """Calculate bulk instrument surface temperature (JAR09)
-
-        :return:
-        series, surface temperature (°C)
-        """
-        ta = df[self.air_temperature].copy()
-        daytime = df[self.cols.daytime].copy()
-        qc = df[self.co2_molar_density].copy().multiply(1000)  # Needs umol
-        ra = df[self.cols.aerodynamic_resistance].copy()
-        rho_v = df[self.water_vapor_density].copy()
-        rho_d = df[self.cols.dry_air_density].copy()
-
-        # Surface temperatures, separate for daytime and nighttime
-        _ts_jar09_day = 0.93 * ta + 3.17
-        _ts_jar09_night = 1.05 * ta + 1.52
-        # _ts_jar09_night = 1.05 * ta + 1.52
-
-        # Combine day and night temperatures
-        ts = pd.Series(index=_ts_jar09_day.index)
-        ts.loc[daytime == 1] = _ts_jar09_day  # Use daytime Ts in daytime data rows
-        ts.loc[daytime == 0] = _ts_jar09_night  # Use nighttime Ts in nighttime data rows
-
-        # df[self.cols.t_instrument_surface] = ts.copy()
-
-        # Stats
-        print(f"Available daytime Ts (JAR09): {ts.loc[daytime == 1].count()} values")
-        print(f"Available nighttime Ts (JAR09): {ts.loc[daytime == 0].count()} values")
-        print(f"Available Ts (JAR09): {ts.count()} total values")
-        print(f"Ts (JAR09), mean = {ts.mean()}")
-
-        # Calculate unscaled flux correction term
-        fct_unsc = self.flux_correction_term_unscaled(ts=ts, ta=ta, qc_umol=qc, ra=ra, rho_v=rho_v, rho_d=rho_d)
-        return fct_unsc, ts
-
     def plot_series(self, ax, series, title):
         ax.plot_date(x=series.index, y=series,
                      ms=2, alpha=.3, ls='-', marker='o', markeredgecolor='none')
@@ -632,7 +683,7 @@ class Scop:
         plot_vars = [
             # ROW 1: DRIVERS
             {'col': self.swin, 'title': '1. Shortwave Incoming (Driver)', 'unit': '$W\\ m^{-2}$'},
-            {'col': self.cols.t_instrument_surface, 'title': '2. Instrument Surface Temp', 'unit': '°C'},
+            {'col': self.cols.t_instr_surface, 'title': '2. Instrument Surface Temp', 'unit': '°C'},
             {'col': self.cols.aerodynamic_resistance, 'title': '3. Aerodynamic Resistance', 'unit': '$s\\ m^{-1}$'},
             {'col': self.cols.dry_air_density, 'title': '4. Dry Air Density', 'unit': '$kg\\ m^{-3}$'},
 
@@ -1134,6 +1185,10 @@ def main():
     FLUX_72 = "NEE_L3.1_L3.2_QCF_IRGA72"  # (umol m-2 s-1)
     FLUX_75 = "NEE_L3.1_L3.2_QCF_IRGA75"  # (umol m-2 s-1)
 
+    df[CO2_MOLAR_DENSITY] = df[CO2_MOLAR_DENSITY] * 1000  # Convert to umol mol-1
+
+    tic = time.time()
+
     scop = Scop(
         inputdf=df,
         site="CH-LAE",
@@ -1144,7 +1199,7 @@ def main():
         flux_openpath=FLUX_75,
         flux_closedpath=FLUX_72,
         air_heat_capacity=AIR_CP,
-        co2_molar_density=CO2_MOLAR_DENSITY,
+        co2_molar_density=CO2_MOLAR_DENSITY,  # in umol mol-1
         u=U,
         ustar=USTAR,
         water_vapor_density=VAPOR_DENSITY,
@@ -1154,11 +1209,18 @@ def main():
         n_classes=5,
         n_bootstrap_runs=0,
         classvar=USTAR,
-        remove_outliers_method="fast"
+        remove_outliers_method="fast",
         # remove_outliers_method="separate"
+        correction_method_base="BUR08"
+        # correction_method_base="BUR06"
+        # correction_method_base="JAR09"
     )
     scop.calc_sf()
     # apply_scaling_factors = Scop().apply_sf()
+
+    toc = time.time()
+    print(f"Time elapsed: {toc - tic:.2f} seconds")
+
     print("End.")
 
 
