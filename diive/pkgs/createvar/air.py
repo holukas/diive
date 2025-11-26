@@ -26,6 +26,8 @@ def aerodynamic_resistance(u_ms: pd.Series, ustar_ms: pd.Series) -> pd.Series:
     # ra = u / (u_*)^2
     ra = u_ms / (ustar_clean ** 2)
 
+    ra.name = "AERODYNAMIC_RESISTANCE"
+
     # Report
     valid_count = ra.count()
     if valid_count < len(ra):
@@ -71,6 +73,7 @@ def dry_air_density(rho_a: pd.Series, rho_v: pd.Series) -> pd.Series:
     Returns:
         pd.Series: The calculated dry air density (rho_d) in [kg m-3].
 
+
     Raises:
         TypeError: If inputs are not pandas Series or numeric arrays.
         ValueError: If rho_v is larger than rho_a (resulting in negative dry density),
@@ -86,6 +89,8 @@ def dry_air_density(rho_a: pd.Series, rho_v: pd.Series) -> pd.Series:
 
     # Output statistics
     print(f"Dry air density: Mean = {rho_d.mean():.4f} kg m-3")
+
+    rho_d.name = "DRY_AIR_DENSITY"
 
     return rho_d
 
