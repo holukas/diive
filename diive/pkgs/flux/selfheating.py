@@ -228,7 +228,7 @@ class Scop:
         self.scaling_factors_df = pd.DataFrame()
 
     def calc_sf(self):
-        """Calculate scaling factors from parallel measurements"""
+        """Calculate flux correction term and scaling factors from parallel measurements"""
         df = self.inputdf.copy()
         df = self.init_newcols(df=df)
 
@@ -329,6 +329,8 @@ class Scop:
                                           showplot=False,
                                           cols=self.cols)
         scaling_factors_df = optimize.get()
+
+    def correct_fluxes(self, df:pd.DataFrame, scaling_factors_df:pd.DataFrame):
 
         # Assign scaling factors
         df = self.assign_scaling_factors(df=df,
