@@ -36,17 +36,17 @@ pd.set_option('display.max_rows', 30)
 @dataclass(frozen=True)
 class ColumnConfig:
     """Immutable configuration for newly created column names"""
-    class_var_group: str = '.GROUP_CLASSVAR'
-    daytime: str = '.DAYTIME'
-    air_thermal_conductivity: str = '.AIR_THERMAL_CONDUCTIVITY'
-    aerodynamic_resistance: str = '.AERODYNAMIC_RESISTANCE'
-    dry_air_density: str = '.DRY_AIR_DENSITY'
-    t_instr_surface: str = '.T_INSTRUMENT_SURFACE'
-    nee_op_corr: str = '.NEE_OP_CORR'
-    fct_unsc: str = '.FCT_UNSC'
-    fct_unsc_gf: str = '.FCT_UNSC_GF'
-    fct: str = '.FCT'
-    sf: str = '.SF'
+    class_var_group: str = 'GROUP_CLASSVAR'
+    daytime: str = 'DAYTIME'
+    air_thermal_conductivity: str = 'AIR_THERMAL_CONDUCTIVITY'
+    aerodynamic_resistance: str = 'AERODYNAMIC_RESISTANCE'
+    dry_air_density: str = 'DRY_AIR_DENSITY'
+    t_instr_surface: str = 'T_INSTRUMENT_SURFACE'
+    nee_op_corr: str = 'NEE_OP_CORR'
+    fct_unsc: str = 'FCT_UNSC'
+    fct_unsc_gf: str = 'FCT_UNSC_gfRF'
+    fct: str = 'FCT'
+    sf: str = 'SF'
     sf_gf: str = '.SF_GF'
 
 
@@ -314,10 +314,10 @@ class Scop:
         print(rfts.feature_importances_)
         print(rfts.scores_)
         print(rfts.gapfilling_df_)
-        df[self.cols.fct_unsc_gf] = rfts.gapfilling_df_['.FCT_UNSC_gfRF'].copy()
+        df[self.cols.fct_unsc_gf] = rfts.gapfilling_df_[self.cols.fct_unsc_gf].copy()
 
-        df[self.cols.fct_unsc_gf], df["X"] = self.gapfilling_lut(
-            series=df[self.cols.fct_unsc].copy())
+        # df[self.cols.fct_unsc_gf], df["X"] = self.gapfilling_lut(
+        #     series=df[self.cols.fct_unsc].copy())
 
         # Calculate scaling factors
         optimize = OptimizeScalingFactors(df=df,
@@ -383,10 +383,8 @@ class Scop:
         df[self.cols.t_instr_surface] = np.nan
         df[self.cols.fct_unsc] = np.nan
         df[self.cols.fct_unsc_gf] = np.nan
-        # df[self.cols.fct_unsc_lutvals] = np.nan
         df[self.cols.class_var_group] = np.nan
         df[self.cols.sf] = np.nan
-        # df[self.cols.sf_lutvals_col] = np.nan
         df[self.cols.class_var_group] = np.nan
         df[self.cols.fct] = np.nan
         df[self.cols.nee_op_corr] = np.nan
@@ -394,37 +392,84 @@ class Scop:
 
     def assign_scaling_factors(self, df: pd.DataFrame, scaling_factors_df: pd.DataFrame,
                                classvar_col: str, lut_gapfill: bool = False) -> pd.DataFrame:
-        # TODO Since the scaling factors are assigned using the LUT, there are probably some flux values where the
-        # TODO class variable (ustar) is outside the lookup range the LUT can provide.
-        # TODO For these fluxes, the last known scaling factor is used.
 
-        for ix, row in scaling_factors_df.iterrows():
-            _filter_group = row
-            _filter_group = (df[self.cols.daytime] == row['DAYTIME']) \
-                            & (df[classvar_col] >= row['GROUP_CLASSVAR_MIN']) \
-                            & (df[classvar_col] <= row['GROUP_CLASSVAR_MAX'])
-            df.loc[_filter_group, self.cols.class_var_group] = row['GROUP_CLASSVAR']
-            df.loc[_filter_group, self.cols.sf] = row['SF_MEDIAN']
+        # Initialize destination columns
+        if self.cols.class_var_group not in df.columns:
+            df[self.cols.class_var_group] = np.nan
+        if self.cols.sf not in df.columns:
+            df[self.cols.sf] = np.nan
 
-        if lut_gapfill:
-            # pass
-            df[self.cols.sf_gf], df[self.cols.sf_lutvals_col] = \
-                self.gapfilling_lut(df[self.cols.sf])
-        return df
+        # Filter for valid keys
+        valid_mask = df[classvar_col].notna() & df[self.cols.daytime].notna()
+        if valid_mask.sum() == 0:
+            raise ValueError("No valid keys found in DataFrame. Check class variable and daytime columns.")
 
-    def gapfilling_lut(self, series):
-        """Gap-fill time series using look-up table (LUT)
+        # Prepare left subset
+        cols_needed = [classvar_col, self.cols.daytime]
+        df_valid = df.loc[valid_mask, cols_needed].sort_values(by=classvar_col)
 
-        Optimized version using groupby().transform()
-        """
-        # 1. Calculate the mean for every (Month, Hour) group
-        # 'transform' calculates the mean and broadcasts it back to the original index size
-        lutvals = series.groupby([series.index.month, series.index.hour]).transform('mean')
+        # Prepare right subset (lookup table)
+        sf_sorted = scaling_factors_df.sort_values(by='GROUP_CLASSVAR_MIN')
 
-        # 2. Fill the gaps in the original series using these means
-        series_gf = series.fillna(lutvals)
+        # Perform backward merge
+        # direction='backward': Finds the bin where [classvar] >= [GROUP_CLASSVAR_MIN]
+        # - If value is inside range: matches correct bin.
+        # - If value is > max: matches the highest bin (conceptually "last known" bin).
+        # - If value is < min: returns NaN.
+        merged_subset = pd.merge_asof(
+            df_valid,
+            sf_sorted[['DAYTIME', 'GROUP_CLASSVAR_MIN', 'GROUP_CLASSVAR', 'SF_MEDIAN']],
+            left_on=classvar_col,
+            right_on='GROUP_CLASSVAR_MIN',
+            by=self.cols.daytime,
+            direction='backward'
+        )
 
-        return series_gf, lutvals
+        # Handle low outliers (< min)
+        # Because 'backward' merge produces NaNs for values smaller than the lowest bin
+        # These NaNs are filled with the SF of the FIRST bin (first known SF)
+        # This is done by grouping by daytime and filling NaNs with the first valid observation
+        if merged_subset['SF_MEDIAN'].isna().any():
+            merged_subset['SF_MEDIAN'] = merged_subset.groupby(self.cols.daytime)['SF_MEDIAN'] \
+                .transform(lambda x: x.bfill())
+            merged_subset['GROUP_CLASSVAR'] = merged_subset.groupby(self.cols.daytime)['GROUP_CLASSVAR'] \
+                .transform(lambda x: x.bfill())
+
+        # Assign 'merged_subset' data back to original DataFrame
+        df.loc[df_valid.index, self.cols.class_var_group] = merged_subset['GROUP_CLASSVAR'].values
+        df.loc[df_valid.index, self.cols.sf] = merged_subset['SF_MEDIAN'].values
+
+        # Check if all open-path fluxes have a scaling factor
+        # logic: Where Flux exists AND Scaling Factor is NaN
+        missing_sf_mask = df[self.flux_openpath].notna() & df[self.cols.sf].isna()
+        if missing_sf_mask.any():
+            n_missing = missing_sf_mask.sum()
+            # # Optional: Print the first few problematic rows for debugging
+            # print("Rows with Flux but no Scaling Factor:")
+            # print(df.loc[missing_sf_mask, [self.flux_openpath, self.cols.sf, self.ustar, self.cols.daytime]].head())
+            raise ValueError(f"Not all open-path fluxes have a scaling factor. Found {n_missing} missing values.")
+
+        # # 8. Gapfilling (Time-based interpolation for missing USTAR data)
+        # if lut_gapfill:
+        #     df[self.cols.sf_gf] = df[self.cols.sf].interpolate(method='time').bfill().ffill()
+        # else:
+        #     df[self.cols.sf_gf] = df[self.cols.sf]
+
+        return df.sort_index()
+
+    # def gapfilling_lut(self, series):
+    #     """Gap-fill time series using look-up table (LUT)
+    #
+    #     Optimized version using groupby().transform()
+    #     """
+    #     # 1. Calculate the mean for every (Month, Hour) group
+    #     # 'transform' calculates the mean and broadcasts it back to the original index size
+    #     lutvals = series.groupby([series.index.month, series.index.hour]).transform('mean')
+    #
+    #     # 2. Fill the gaps in the original series using these means
+    #     series_gf = series.fillna(lutvals)
+    #
+    #     return series_gf, lutvals
 
     def calc_aerodynamic_resistance(self, u, ustar, rem_outliers: bool = False) -> pd.Series:
         # Aerodynamic resistance
@@ -1173,6 +1218,9 @@ def main():
         filepath=r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\30_FLUX_PROCESSING_CHAIN\32_SELF-HEATING_CORRECTION\21_MERGED_IRGA75-noSHC+IRGA72_FluxProcessingChain_after-L3.2_NEE_QCF10_2016-2017.parquet")
     # [print(c) for c in df.columns if "AIR" in c];
 
+    # Parallel measurements starting 27 May 2016
+    df = df.loc["2016-05-27 00:15:00":"2017-12-11 23:45:00"].copy()
+
     # Variables from EddyPro _fluxnet_ output file
     AIR_CP = "AIR_CP_IRGA72"  # air_heat_capacity (J kg-1 K-1)
     AIR_DENSITY = "AIR_DENSITY_IRGA72"  # air_density (kg m-3)
@@ -1185,6 +1233,7 @@ def main():
     FLUX_72 = "NEE_L3.1_L3.2_QCF_IRGA72"  # (umol m-2 s-1)
     FLUX_75 = "NEE_L3.1_L3.2_QCF_IRGA75"  # (umol m-2 s-1)
 
+    # Conversions
     df[CO2_MOLAR_DENSITY] = df[CO2_MOLAR_DENSITY] * 1000  # Convert to umol mol-1
 
     tic = time.time()
@@ -1211,9 +1260,9 @@ def main():
         classvar=USTAR,
         remove_outliers_method="fast",
         # remove_outliers_method="separate"
-        correction_method_base="BUR08"
+        # correction_method_base="BUR08"
         # correction_method_base="BUR06"
-        # correction_method_base="JAR09"
+        correction_method_base="JAR09"
     )
     scop.calc_sf()
     # apply_scaling_factors = Scop().apply_sf()
