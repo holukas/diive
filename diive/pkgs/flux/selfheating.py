@@ -22,6 +22,7 @@ import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from poetry.console.commands import self
 from scipy.optimize import minimize_scalar
 
 from diive.pkgs.createvar.air import dry_air_density, aerodynamic_resistance
@@ -49,169 +50,6 @@ class ColumnConfig:
     sf: str = 'SF'
     sf_gf: str = '.SF_GF'
     s: str = 'S'  # Sensible heat from all key instrument surfaces (W m-2) (BUR08)
-
-
-class UnscaledFluxCorrectionTerm:
-
-    def __init__(self, ta: pd.Series, qc: pd.Series, ra: pd.Series, rho_a: pd.Series, rho_v: pd.Series,
-                 rho_d: pd.Series, daytime: pd.Series, u: pd.Series, k_air: pd.Series, c_p: pd.Series):
-        """
-        Args:
-            ta: series, air temperature (°C)
-            qc: series, CO2 molar density (µmol m-3)
-            ra: series, aerodynamic resistance (s m-1)
-            rho_a: series, air density (kg m-3)
-            rho_v: series, water vapor density (kg m-3)
-            rho_d: series, dry air density (kg m-3)
-            daytime: series (daytime=1, nighttime=0)
-            u: series, wind speed (m s-1)
-            k_air: series, thermal conductivity of air (W m-1 K-1)
-            c_p: series, specific heat at constant pressure of air (J K-1 kg-1)
-        """
-
-        self.ta = ta
-        self.qc = qc
-        self.ra = ra
-        self.rho_a = rho_a
-        self.rho_v = rho_v
-        self.rho_d = rho_d
-        self.u = u
-        self.k_air = k_air
-        self.c_p = c_p
-
-        self.daytime = daytime
-
-        self.ts = None  # Calculated
-
-    def bur06(self) -> tuple[pd.Series, pd.Series]:
-        ts = self._estimate_surface_temp_bur06()
-        fct_unsc = self._flux_correction_term_unscaled_jar09_bur06(ts=ts)
-        return fct_unsc, ts
-
-    def jar09(self) -> tuple[pd.Series, pd.Series]:
-        ts = self._estimate_surface_temp_jar09()
-        fct_unsc = self._flux_correction_term_unscaled_jar09_bur06(ts=ts)
-        return fct_unsc, ts
-
-    def bur08(self) -> tuple[pd.Series, pd.Series]:
-        fct_unsc, ts = self._flux_correction_term_unscaled_bur08()
-        return fct_unsc, ts
-
-    def _flux_correction_term_unscaled_bur08(self) -> tuple[pd.Series, pd.Series]:
-        """Calculate bulk instrument surface temperature (BUR08)"""
-
-        # TOP OF WINDOW ---
-        # Surface temperatures day/night
-        # Calculate and then combine day and night temperatures
-        _ts_bur08_day_top = 1.005 * self.ta + 0.24
-        _ts_bur08_night_top = 1.008 * self.ta - 0.41
-        ts_top = pd.Series(index=_ts_bur08_day_top.index)
-        ts_top.loc[self.daytime == 1] = _ts_bur08_day_top  # Use daytime Ts in daytime data rows
-        ts_top.loc[self.daytime == 0] = _ts_bur08_night_top  # Use nighttime Ts in nighttime data rows
-        # Calculate sigma below top window
-        l_top = 0.045  # Diameter of the detector housing (m)
-        sigma_top = 0.0028 * np.sqrt(l_top / self.u) + (0.00025 / self.u) + 0.0045
-        # Calculate top window sensible heat
-        r_top = 0.0225  # Radius of the detector sphere (m)
-        a = (r_top + sigma_top) * (ts_top - self.ta)
-        b = r_top * sigma_top
-        S_top = self.k_air * (a / b)
-
-        # BOTTOM WINDOW ---
-        # Surface temperatures day/night
-        # Calculate and then combine day and night temperatures
-        _ts_bur08_day_bottom = 0.944 * self.ta + 2.57
-        _ts_bur08_night_bottom = 0.883 * self.ta + 2.17
-        ts_bottom = pd.Series(index=_ts_bur08_day_bottom.index)
-        ts_bottom.loc[self.daytime == 1] = _ts_bur08_day_bottom  # Use daytime Ts in daytime data rows
-        ts_bottom.loc[self.daytime == 0] = _ts_bur08_night_bottom  # Use nighttime Ts in nighttime data rows
-        # Calculate sigma above bottom window
-        l_bottom = 0.065  # Diameter of the source housing (m)
-        sigma_bottom = 0.004 * np.sqrt(l_bottom / self.u) + 0.004
-        # Calculate bottom window sensible heat
-        S_bottom = self.k_air * ((ts_bottom - self.ta) / sigma_bottom)
-
-        # SPAR ---
-        # Surface temperatures day/night
-        # Calculate and then combine day and night temperatures
-        _ts_bur08_day_spar = 1.01 * self.ta + 0.36
-        _ts_bur08_night_spar = 1.01 * self.ta - 0.17
-        ts_spar = pd.Series(index=_ts_bur08_day_spar.index)
-        ts_spar.loc[self.daytime == 1] = _ts_bur08_day_spar  # Use daytime Ts in daytime data rows
-        ts_spar.loc[self.daytime == 0] = _ts_bur08_night_spar  # Use nighttime Ts in nighttime data rows
-        # Calculate sigma around spar
-        l_spar = 0.005  # Diameter of the spar (m)
-        sigma_spar = 0.0058 * np.sqrt(l_spar / self.u)
-        # Calculate spar sensible heat
-        r_spar = 0.0025  # Radius of the spar cylinder (m)
-        a = ts_spar - self.ta
-        b = r_spar * np.log((r_spar + sigma_spar) / r_spar)
-        S_spar = self.k_air * (a / b)
-
-        # Calculate sensible heat from all key instrument surfaces
-        S = S_bottom + S_top + 0.15 * S_spar  # W m-2
-
-        # Calculate unscaled flux correction term
-        fct_unsc = (S / (self.rho_a * self.c_p)) * (self.qc / (self.ta + 273.15))
-
-        # print(f"Ts (BUR08), mean = {fct_unsc.mean():.2f}")
-        return fct_unsc, S
-
-    def _flux_correction_term_unscaled_jar09_bur06(self, ts: pd.Series) -> pd.Series:
-        """
-        Calculate unscaled flux correction term.
-        Equation (8) in Burba et al. (2006).
-        Used by JAR09 and BUR06.
-
-        Args:
-            ts: series, instrument surface temperature (°C)
-        """
-        # Convert temperatures to Kelvin for the denominator
-        ta_k = self.ta + 273.15
-
-        # Term A: Surface - Air temp delta * CO2 density
-        term_a = (ts - self.ta) * self.qc
-
-        # Term B: Aerodynamic resistance * Temp
-        term_b = self.ra * ta_k
-
-        # Term C: Water vapor correction factor
-        term_c = 1 + 1.6077 * (self.rho_v / self.rho_d)
-
-        return (term_a / term_b) * term_c
-
-    def _estimate_surface_temp_bur06(self) -> pd.Series:
-        """
-        Estimates the surface temperature based on the provided air temperature
-        values using the BUR06 model. The BUR06 model applies a quadratic
-        relationship to approximate the surface temperature from air temperature.
-
-        Returns:
-            pd.Series: Estimated surface temperature values calculated using the
-            BUR06 model.
-        """
-        ts = 0.0025 * self.ta ** 2 + 0.9 * self.ta + 2.07
-        return ts
-
-    def _estimate_surface_temp_jar09(self) -> pd.Series:
-        """
-        Estimates surface temperature using the JAR09 method.
-
-        This method calculates surface temperature based on ambient temperature and
-        a binary series representing daytime or nighttime conditions. It applies
-        different linear relationships for daytime and nighttime data.
-
-        Returns:
-            pd.Series: A Pandas Series representing the estimated surface temperatures.
-        """
-        ts = pd.Series(index=self.ta.index, dtype=float)
-
-        # Daytime relation
-        ts.loc[self.daytime == 1] = 0.93 * self.ta.loc[self.daytime == 1] + 3.17
-        # Nighttime relation
-        ts.loc[self.daytime == 0] = 1.05 * self.ta.loc[self.daytime == 0] + 1.52
-
-        return ts
 
 
 class Scop:
@@ -314,125 +152,19 @@ class Scop:
         df = self.inputdf.copy()
         df = self.init_newcols(df=df)
 
-        # Detect daytime/nighttime
-        df[self.cols.daytime] = self.detect_daytime(swin=df[self.swin])
-
-        # Calculate aerodynamic resistance
-        df[self.cols.aerodynamic_resistance] = self.calc_aerodynamic_resistance(
-            u=df[self.u], ustar=df[self.ustar], rem_outliers=True)
-
-        # Calculate dry air density
-        df[self.cols.dry_air_density] = self.calc_dry_air_density(
-            rho_v=df[self.water_vapor_density], rho_a=df[self.air_density])
-
-        # Calculate thermal conductivity of air (required for BUR08)
-        df[self.cols.air_thermal_conductivity] = self.calc_air_thermal_conductivity(ta=df[self.air_temperature])
-
-        # Calculate unscaled flux correction term (fct_unsc)
-        ufct = UnscaledFluxCorrectionTerm(
-            ta=df[self.air_temperature].copy(),
-            qc=df[self.co2_molar_density].copy(),
-            ra=df[self.cols.aerodynamic_resistance].copy(),
-            rho_v=df[self.water_vapor_density].copy(),
-            rho_d=df[self.cols.dry_air_density].copy(),
-            daytime=df[self.cols.daytime].copy(),
-            u=df[self.u].copy(),
-            rho_a=df[self.air_density].copy(),
-            k_air=df[self.cols.air_thermal_conductivity].copy(),
-            c_p=df[self.air_heat_capacity].copy()
-        )
-        if self.correction_method_base == "JAR09":
-            df[self.cols.fct_unsc], df[self.cols.t_instr_surface] = ufct.jar09()
-        elif self.correction_method_base == "BUR06":
-            df[self.cols.fct_unsc], df[self.cols.t_instr_surface] = ufct.bur06()
-        elif self.correction_method_base == "BUR08":
-            df[self.cols.fct_unsc], df[self.cols.s] = ufct.bur08()
-        else:
-            raise ValueError(f"Unknown correction_method_base: {self.correction_method_base}")
-
-            # # Calculate unscaled flux correction term (fct_unsc)
-            # if self.correction_method_base in ["JAR09", "BUR06"]:
-            #     if self.correction_method_base == "JAR09":
-            #         # Estimate instrument surface temperature (JAR09)
-            #         df[self.cols.t_instr_surface] = UnscaledFluxCorrectionTerm._estimate_surface_temp_jar09(
-            #             ta=df[self.air_temperature], daytime=df[self.cols.daytime])
-            #     elif self.correction_method_base == "BUR06":
-            #         # Estimate instrument surface temperature (BUR06)
-            #         df[self.cols.t_instr_surface] = UnscaledFluxCorrectionTerm._estimate_surface_temp_bur06(
-            #             ta=df[self.air_temperature])
-            #     else:
-            #         raise ValueError(f"Unknown correction_method_base: {self.correction_method_base}")
-            #     # Calculate unscaled flux correction term (fct_unsc)
-            #     df[self.cols.fct_unsc] = UnscaledFluxCorrectionTerm._flux_correction_term_unscaled_jar09_bur06(
-            #         ts=df[self.cols.t_instr_surface],
-            #         ta=df[self.air_temperature],
-            #         qc=df[self.co2_molar_density],  # in umol mol-1
-            #         ra=df[self.cols.aerodynamic_resistance],
-            #         rho_v=df[self.water_vapor_density],
-            #         rho_d=df[self.cols.dry_air_density]
-            #     )
-            # elif self.correction_method_base == "BUR08":
-            #     # Calculate unscaled flux correction term (BUR08)
-            df[self.cols.fct_unsc] = self.fct_unscaled_bur08(df=df)
-        #     # df[self.cols.fct_unsc], df[self.cols.t_instrument_surface] = self.fct_unscaled_bur06(df=df)
-        # else:
-        #     raise ValueError(f"Unknown correction_method_base: {self.correction_method_base}")
-
-        # Remove outliers from unscaled flux correction term
-        if self.remove_outliers_method == "fast":
-            df[self.cols.fct_unsc] = self.remove_outliers_fast(series=df[self.cols.fct_unsc])
-        elif self.remove_outliers_method == "separate":
-            df[self.cols.fct_unsc] = self.remove_outliers(series=df[self.cols.fct_unsc])
-        else:
-            raise ValueError(f"Unknown remove_outliers_method: {self.remove_outliers_method}")
-
-        # Gap-fill unscaled flux correction term
-        gfdf = df[[self.cols.fct_unsc, self.air_temperature, self.air_heat_capacity,
-                   self.air_density, self.u, self.ustar]].copy()
-        gfdf = gfdf.dropna()
-        rfts = RandomForestTS(
-            input_df=gfdf,
-            target_col=self.cols.fct_unsc,
-            verbose=True,
-            # features_lag=None,
-            features_lag=[-1, -1],
-            # features_lag_exclude_cols=['test', 'test2'],
-            vectorize_timestamps=True,
-            add_continuous_record_number=True,
-            sanitize_timestamp=True,
-            perm_n_repeats=1,
-            n_estimators=3,
-            random_state=42,
-            # random_state=None,
-            max_depth=None,
-            min_samples_split=2,
-            min_samples_leaf=1,
-            criterion='squared_error',
-            # test_size=0.2,
-            n_jobs=-1
-        )
-        rfts.trainmodel(showplot_scores=False, showplot_importance=False)
-        rfts.report_traintest()
-        rfts.fillgaps(showplot_scores=False, showplot_importance=False)
-        rfts.report_gapfilling()
-        print(rfts.feature_importances_)
-        print(rfts.scores_)
-        print(rfts.gapfilling_df_)
-        df[self.cols.fct_unsc_gf] = rfts.gapfilling_df_[self.cols.fct_unsc_gf].copy()
-
-        # df[self.cols.fct_unsc_gf], df["X"] = self.gapfilling_lut(
-        #     series=df[self.cols.fct_unsc].copy())
-
         # Calculate scaling factors
-        optimize = OptimizeScalingFactors(df=df,
-                                          class_var_col=self.classvar,
-                                          n_classes=self.n_classes,
-                                          n_bootstrap_runs=self.n_bootstrap_runs,
-                                          flux_openpath=self.flux_openpath,
-                                          flux_closedpath=self.flux_closedpath,
-                                          showplot=True,
-                                          cols=self.cols)
+        optimize = ScopOptimizer(df=df,
+                                 class_var=self.classvar,
+                                 n_classes=self.n_classes,
+                                 n_bootstrap_runs=self.n_bootstrap_runs,
+                                 flux_openpath=self.flux_openpath,
+                                 flux_closedpath=self.flux_closedpath,
+                                 showplot=True,
+                                 cols=self.cols)
         scaling_factors_df = optimize.get()
+
+
+class ScopApplicator:
 
     def correct_fluxes(self, df: pd.DataFrame, scaling_factors_df: pd.DataFrame):
 
@@ -454,14 +186,14 @@ class Scop:
 
         self.df = df.copy()
 
-    def detect_daytime(self, swin) -> pd.Series:
-        # Daytime, nighttime
-        nighttime_filter = swin <= 20
-        daytime_filter = swin > 20
-        daytime_series = pd.Series(index=swin.index)
-        daytime_series.loc[nighttime_filter] = 0
-        daytime_series.loc[daytime_filter] = 1
-        return daytime_series
+    # def detect_daytime(self, swin) -> pd.Series:
+    #     # Daytime, nighttime
+    #     nighttime_filter = swin <= 20
+    #     daytime_filter = swin > 20
+    #     daytime_series = pd.Series(index=swin.index)
+    #     daytime_series.loc[nighttime_filter] = 0
+    #     daytime_series.loc[daytime_filter] = 1
+    #     return daytime_series
 
     def stats(self, df: pd.DataFrame):
         cols = [self.flux_openpath, self.flux_closedpath, self.cols.nee_op_corr]
@@ -577,93 +309,93 @@ class Scop:
     #
     #     return series_gf, lutvals
 
-    def calc_aerodynamic_resistance(self, u, ustar, rem_outliers: bool = False) -> pd.Series:
-        # Aerodynamic resistance
-        ra = aerodynamic_resistance(u_ms=u, ustar_ms=ustar)
-        if rem_outliers:
-            if self.remove_outliers_method == "fast":
-                ra = self.remove_outliers_fast(series=ra)
-            elif self.remove_outliers_method == "separate":
-                ra = self.remove_outliers(series=ra)
-            else:
-                raise ValueError(f"Unknown remove_outliers_method: {self.remove_outliers_method}")
-        return ra
+    # def calc_aerodynamic_resistance(self, u, ustar, rem_outliers: bool = False) -> pd.Series:
+    #     # Aerodynamic resistance
+    #     ra = aerodynamic_resistance(u_ms=u, ustar_ms=ustar)
+    #     if rem_outliers:
+    #         if self.remove_outliers_method == "fast":
+    #             ra = self.remove_outliers_fast(series=ra)
+    #         elif self.remove_outliers_method == "separate":
+    #             ra = self.remove_outliers(series=ra)
+    #         else:
+    #             raise ValueError(f"Unknown remove_outliers_method: {self.remove_outliers_method}")
+    #     return ra
 
-    def remove_outliers(self, series: pd.Series):
-        ham = HampelDaytimeNighttime(
-            series=series,
-            n_sigma_dt=4,
-            n_sigma_nt=4,
-            window_length=48 * 5,
-            showplot=True,
-            verbose=True,
-            lat=self.lat,
-            lon=self.lon,
-            utc_offset=self.utc_offset
-        )
-        ham.calc(repeat=False)
-        return ham.filteredseries
+    # def remove_outliers(self, series: pd.Series):
+    #     ham = HampelDaytimeNighttime(
+    #         series=series,
+    #         n_sigma_dt=4,
+    #         n_sigma_nt=4,
+    #         window_length=48 * 5,
+    #         showplot=True,
+    #         verbose=True,
+    #         lat=self.lat,
+    #         lon=self.lon,
+    #         utc_offset=self.utc_offset
+    #     )
+    #     ham.calc(repeat=False)
+    #     return ham.filteredseries
 
-    def remove_outliers_fast(self, series, plot_title: str = "X", n_sigmas: int = 5):
-        """Remove outliers with Hampel filter, using running MAD (median absolute deviation)
+    # def remove_outliers_fast(self, series, plot_title: str = "X", n_sigmas: int = 5):
+    #     """Remove outliers with Hampel filter, using running MAD (median absolute deviation)
+    #
+    #     :param series: pandas.Series, data from which outliers are removed
+    #     :param plot_title: Plot title
+    #     :param n_sigmas:
+    #     :return:
+    #     pandas.Series with outliers removed
+    #     """
+    #     # n_sigmas = 4  # Number of sigmas for limits
+    #     k = 1.4826  # Scale factor for Gaussian distribution
+    #     window = 1440  # Rolling time window in number of records
+    #     min_periods = 1  # Min number of records in window
+    #
+    #     _series_rolling = series.rolling(window=window, min_periods=min_periods, center=True)
+    #     _series_running_median = _series_rolling.median()
+    #     _series_sub_winmed = series.sub(_series_running_median).abs()  # Data series minus median in time window
+    #     _series_running_mad = _series_sub_winmed.rolling(window=window, min_periods=min_periods,
+    #                                                      center=True).median().multiply(k)
+    #     _diff_series_runmed = np.abs(series - _series_running_median)
+    #     _diff_limit = _series_running_mad.multiply(n_sigmas)  # Limit
+    #
+    #     _outliers_ix = _diff_series_runmed > _diff_limit
+    #     series.loc[_outliers_ix] = np.nan  # Remove outliers from series (set to missing)
+    #     return series
+    #
+    #     # # Plot
+    #     # figsize = (14, 5)
+    #     # plt.figure()
+    #     # series_orig.plot(figsize=figsize, title=f"{plot_title} BEFORE outlier removal");
+    #     # plt.figure()
+    #     # series.plot(title=f"{plot_title} AFTER outlier removal", figsize=figsize, label="series after outlier removal");
+    #     # _diff_series_runmed.loc[~_outliers_ix].plot(
+    #     #     label="absolute difference of: series - running median of series; for outlier detection")
+    #     # _diff_limit.plot(label="limit from: series running MAD * number of sigmas")
+    #     # _series_running_mad.plot(label="series running MAD (median absolute deviation)")
+    #     # _series_running_median.plot(label="series running median")
+    #     # plt.legend()
+    #     # print(series.describe())
+    #
+    #     # return series, series_orig
 
-        :param series: pandas.Series, data from which outliers are removed
-        :param plot_title: Plot title
-        :param n_sigmas:
-        :return:
-        pandas.Series with outliers removed
-        """
-        # n_sigmas = 4  # Number of sigmas for limits
-        k = 1.4826  # Scale factor for Gaussian distribution
-        window = 1440  # Rolling time window in number of records
-        min_periods = 1  # Min number of records in window
+    # def calc_dry_air_density(self, rho_v, rho_a) -> pd.Series:
+    #     # Dry air density
+    #     return dry_air_density(rho_v=rho_v, rho_a=rho_a)
 
-        _series_rolling = series.rolling(window=window, min_periods=min_periods, center=True)
-        _series_running_median = _series_rolling.median()
-        _series_sub_winmed = series.sub(_series_running_median).abs()  # Data series minus median in time window
-        _series_running_mad = _series_sub_winmed.rolling(window=window, min_periods=min_periods,
-                                                         center=True).median().multiply(k)
-        _diff_series_runmed = np.abs(series - _series_running_median)
-        _diff_limit = _series_running_mad.multiply(n_sigmas)  # Limit
-
-        _outliers_ix = _diff_series_runmed > _diff_limit
-        series.loc[_outliers_ix] = np.nan  # Remove outliers from series (set to missing)
-        return series
-
-        # # Plot
-        # figsize = (14, 5)
-        # plt.figure()
-        # series_orig.plot(figsize=figsize, title=f"{plot_title} BEFORE outlier removal");
-        # plt.figure()
-        # series.plot(title=f"{plot_title} AFTER outlier removal", figsize=figsize, label="series after outlier removal");
-        # _diff_series_runmed.loc[~_outliers_ix].plot(
-        #     label="absolute difference of: series - running median of series; for outlier detection")
-        # _diff_limit.plot(label="limit from: series running MAD * number of sigmas")
-        # _series_running_mad.plot(label="series running MAD (median absolute deviation)")
-        # _series_running_median.plot(label="series running median")
-        # plt.legend()
-        # print(series.describe())
-
-        # return series, series_orig
-
-    def calc_dry_air_density(self, rho_v, rho_a) -> pd.Series:
-        # Dry air density
-        return dry_air_density(rho_v=rho_v, rho_a=rho_a)
-
-    def calc_air_thermal_conductivity(self, ta: pd.Series) -> pd.Series:
-        """
-        Calculate thermal conductivity of air (k_air) as a function of temperature.
-
-        Approximation for dry air.
-        Units: W m-1 K-1
-
-        Args:
-            ta: Air temperature in Celsius
-        """
-        # Linear approximation suitable for atmospheric range (-50 to 100 C)
-        # k ~ 0.02425 at 0C, increasing by ~0.00007 per degree C
-        k_air = 0.02425 + (0.00007 * ta)
-        return k_air
+    # def calc_air_thermal_conductivity(self, ta: pd.Series) -> pd.Series:
+    #     """
+    #     Calculate thermal conductivity of air (k_air) as a function of temperature.
+    # 
+    #     Approximation for dry air.
+    #     Units: W m-1 K-1
+    # 
+    #     Args:
+    #         ta: Air temperature in Celsius
+    #     """
+    #     # Linear approximation suitable for atmospheric range (-50 to 100 C)
+    #     # k ~ 0.02425 at 0C, increasing by ~0.00007 per degree C
+    #     k_air = 0.02425 + (0.00007 * ta)
+    #     return k_air
 
     # def flux_correction_term_unscaled(self, ts, ta, qc_umol, ra, rho_v, rho_d):
     #     """Calculate unscaled flux correction term
@@ -998,18 +730,387 @@ class Scop:
         ax.legend()
 
 
-class OptimizeScalingFactors:
+class ScopPhysics:
 
-    def __init__(self, df, class_var_col, cols: ColumnConfig, n_classes,
-                 n_bootstrap_runs, flux_openpath, flux_closedpath, showplot: bool = True):
-        self.df = df
-        self.class_var_col = class_var_col
+    def __init__(self, ta: pd.Series, qc: pd.Series, rho_a: pd.Series, rho_v: pd.Series,
+                 u: pd.Series, c_p: pd.Series, ustar: pd.Series, swin: pd.Series,
+                 lat: float, lon: float, utc_offset: int,
+                 remove_outliers_method: Literal["fast", "separate"] = "fast"):
+        """
+        Args:
+            ta: series, air temperature (°C)
+            qc: series, CO2 molar density (µmol m-3)
+            rho_a: series, air density (kg m-3)
+            rho_v: series, water vapor density (kg m-3)          
+            u: series, wind speed (m s-1)            
+            c_p: series, air heat capacity, specific heat at constant pressure of ambient air (J K-1 kg-1)
+            ustar: series, friction velocity (m s-1)
+            swin: series, shortwave incoming radiation (W m-2)
+            lat: float, latitude of the site
+            lon: float, longitude of the site
+            utc_offset: int, UTC offset of the timestamp (hours)
+            remove_outliers_method: str, method to remove outliers from the data
+                Used for removing outliers in 'ra' and 'fct_unsc'.
+        """
+
+        self.ta = ta
+        self.qc = qc
+        self.rho_a = rho_a
+        self.rho_v = rho_v
+        self.u = u
+        self.c_p = c_p
+        self.ustar = ustar
+        self.swin = swin
+        self.lat = lat
+        self.lon = lon
+        self.utc_offset = utc_offset
+        self.remove_outliers_method = remove_outliers_method
+
+        self.cols = ColumnConfig()
+
+        # Detect daytime/nighttime (daytime=1, nighttime=0)
+        self.daytime = self._detect_daytime(swin=self.swin)
+
+        # Calculate aerodynamic resistance (ra) (s m-1)
+        self.ra = self._calc_aerodynamic_resistance(u=self.u, ustar=self.ustar, rem_outliers=True)
+
+        # Calculate dry air density (rho_d) (kg m-3)
+        self.rho_d = dry_air_density(rho_v=rho_v, rho_a=rho_a)
+
+        # Calculate thermal conductivity of air (required for BUR08) (k_air) (W m-1 K-1)
+        self.k_air = self._calc_air_thermal_conductivity(ta=self.ta)
+
+        # Calculated in .run()
+        self.ts = pd.Series(name=self.cols.t_instr_surface)  # Bulk instrument surface temperature (BUR06, JAR09)
+        self.S = pd.Series(name=self.cols.s)  # Sensible heat from all key instrument surfaces  (BUR08)
+        self.fct_unsc = pd.Series(name=self.cols.fct_unsc)  # Unscaled flux correction term, produced by all methods
+        self.fct_unsc_gf = pd.Series(name=self.cols.fct_unsc_gf)  # Unscaled flux correction term, gap-filled
+
+    def get_results(self) -> pd.DataFrame:
+        frame = {
+            self.cols.fct_unsc_gf: self.fct_unsc_gf,
+            self.cols.fct_unsc: self.fct_unsc,
+            self.cols.s: self.S,
+            self.cols.t_instr_surface: self.ts,
+            self.ta.name: self.ta,
+            self.c_p.name: self.c_p,
+            self.ra.name: self.ra,
+            self.rho_a.name: self.rho_a,
+            self.rho_d.name: self.rho_d,
+            self.rho_v.name: self.rho_v,
+            self.u.name: self.u,
+            self.ustar.name: self.ustar,
+            self.qc.name: self.qc,
+            self.swin.name: self.swin,
+            self.k_air.name: self.k_air,
+            self.daytime.name: self.daytime
+        }
+        return pd.DataFrame.from_dict(frame)
+
+    def run(self, correction_method_base: Literal["JAR09", "BUR06", "BUR08"] = "JAR09",
+            gapfill: bool = True):
+        if correction_method_base == "BUR06":
+            self.ts = self._estimate_surface_temp_bur06()
+            self.fct_unsc = self._flux_correction_term_unscaled_jar09_bur06(ts=self.ts)
+        elif correction_method_base == "JAR09":
+            self.ts = self._estimate_surface_temp_jar09()
+            self.fct_unsc = self._flux_correction_term_unscaled_jar09_bur06(ts=self.ts)
+        elif correction_method_base == "BUR08":
+            self.fct_unsc, self.S = self._flux_correction_term_unscaled_bur08()
+
+        self.fct_unsc.name = self.cols.fct_unsc
+
+        # Remove outliers from unscaled flux correction term
+        if self.remove_outliers_method == "fast":
+            self.fct_unsc = self._remove_outliers_fast(series=self.fct_unsc)
+        elif self.remove_outliers_method == "separate":
+            self.fct_unsc = self._remove_outliers(series=self.fct_unsc)
+        else:
+            raise ValueError(f"Unknown remove_outliers_method: {self.remove_outliers_method}")
+
+        if gapfill:
+            self.fct_unsc_gf = self._gapfill()
+
+    def _gapfill(self):
+        # Gap-fill unscaled flux correction term
+        frame = {
+            self.cols.fct_unsc: self.fct_unsc,
+            self.ta.name: self.ta,
+            self.c_p.name: self.c_p,
+            self.rho_a.name: self.rho_a,
+            self.u.name: self.u,
+            self.ustar.name: self.ustar
+        }
+        gfdf = pd.DataFrame.from_dict(frame)
+
+        gfdf = gfdf.dropna()
+        rfts = RandomForestTS(
+            input_df=gfdf,
+            target_col=self.cols.fct_unsc,
+            verbose=True,
+            # features_lag=None,
+            features_lag=[-1, -1],
+            # features_lag_exclude_cols=['test', 'test2'],
+            vectorize_timestamps=True,
+            add_continuous_record_number=True,
+            sanitize_timestamp=True,
+            perm_n_repeats=1,
+            n_estimators=3,
+            random_state=42,
+            # random_state=None,
+            max_depth=None,
+            min_samples_split=20,
+            min_samples_leaf=10,
+            criterion='squared_error',
+            # test_size=0.2,
+            n_jobs=-1
+        )
+        rfts.trainmodel(showplot_scores=False, showplot_importance=False)
+        rfts.report_traintest()
+        rfts.fillgaps(showplot_scores=False, showplot_importance=False)
+        rfts.report_gapfilling()
+        print(rfts.feature_importances_)
+        print(rfts.scores_)
+        print(rfts.gapfilling_df_)
+        fct_unsc_gf = rfts.gapfilling_df_[self.cols.fct_unsc_gf].copy()
+        return fct_unsc_gf
+
+    def _detect_daytime(self, swin) -> pd.Series:
+        # Daytime, nighttime
+        # daytime_series: series (daytime=1, nighttime=0)
+        nighttime_filter = swin <= 20
+        daytime_filter = swin > 20
+        daytime_series = pd.Series(index=swin.index)
+        daytime_series.loc[nighttime_filter] = 0
+        daytime_series.loc[daytime_filter] = 1
+        daytime_series.name = self.cols.daytime
+        return daytime_series
+
+    @staticmethod
+    def _calc_air_thermal_conductivity(ta: pd.Series) -> pd.Series:
+        """
+        Calculates the thermal conductivity of air using a linear approximation.
+
+        This method uses a linear approximation to estimate the thermal conductivity of air 
+        for temperatures ranging from -50°C to 100°C. The calculation is based on the 
+        temperature-dependent relationship where the thermal conductivity at 0°C is approximately 
+        0.02425 W/m·K and increases by approximately 0.00007 W/m·K per degree Celsius.
+
+        Args:
+            ta (pd.Series): A pandas Series representing the air temperature in degrees Celsius.
+
+        Returns:
+            pd.Series: A pandas Series containing the calculated thermal conductivity of air (W m-1 K-1)
+                corresponding to the input temperatures. 
+        """
+        # Linear approximation suitable for atmospheric range (-50 to 100 C)
+        # k ~ 0.02425 at 0C, increasing by ~0.00007 per degree C
+        k_air = 0.02425 + (0.00007 * ta)
+        k_air.name = "AIR_THERMAL_CONDUCTIVITY"
+        return k_air
+
+    def _remove_outliers(self, series: pd.Series):
+        ham = HampelDaytimeNighttime(
+            series=series,
+            n_sigma_dt=4,
+            n_sigma_nt=4,
+            window_length=48 * 5,
+            showplot=True,
+            verbose=True,
+            lat=self.lat,
+            lon=self.lon,
+            utc_offset=self.utc_offset
+        )
+        ham.calc(repeat=False)
+        return ham.filteredseries
+
+    def _calc_aerodynamic_resistance(self, u, ustar, rem_outliers: bool = False) -> pd.Series:
+        # Aerodynamic resistance
+        # ra: series, aerodynamic resistance (s m-1)
+        ra = aerodynamic_resistance(u_ms=u, ustar_ms=ustar)
+        if rem_outliers:
+            if self.remove_outliers_method == "fast":
+                ra = self._remove_outliers_fast(series=ra)
+            elif self.remove_outliers_method == "separate":
+                ra = self._remove_outliers(series=ra)
+            else:
+                raise ValueError(f"Unknown remove_outliers_method: {self.remove_outliers_method}")
+        return ra
+
+    @staticmethod
+    def _remove_outliers_fast(series, plot_title: str = "X", n_sigmas: int = 5):
+        """Remove outliers with Hampel filter, using running MAD (median absolute deviation)
+
+        :param series: pandas.Series, data from which outliers are removed
+        :param plot_title: Plot title
+        :param n_sigmas:
+        :return:
+        pandas.Series with outliers removed
+        """
+        # n_sigmas = 4  # Number of sigmas for limits
+        k = 1.4826  # Scale factor for Gaussian distribution
+        window = 1440  # Rolling time window in number of records
+        min_periods = 1  # Min number of records in window
+
+        _series_rolling = series.rolling(window=window, min_periods=min_periods, center=True)
+        _series_running_median = _series_rolling.median()
+        _series_sub_winmed = series.sub(_series_running_median).abs()  # Data series minus median in time window
+        _series_running_mad = _series_sub_winmed.rolling(window=window, min_periods=min_periods,
+                                                         center=True).median().multiply(k)
+        _diff_series_runmed = np.abs(series - _series_running_median)
+        _diff_limit = _series_running_mad.multiply(n_sigmas)  # Limit
+
+        _outliers_ix = _diff_series_runmed > _diff_limit
+        series.loc[_outliers_ix] = np.nan  # Remove outliers from series (set to missing)
+        return series
+
+        # # Plot
+        # figsize = (14, 5)
+        # plt.figure()
+        # series_orig.plot(figsize=figsize, title=f"{plot_title} BEFORE outlier removal");
+        # plt.figure()
+        # series.plot(title=f"{plot_title} AFTER outlier removal", figsize=figsize, label="series after outlier removal");
+        # _diff_series_runmed.loc[~_outliers_ix].plot(
+        #     label="absolute difference of: series - running median of series; for outlier detection")
+        # _diff_limit.plot(label="limit from: series running MAD * number of sigmas")
+        # _series_running_mad.plot(label="series running MAD (median absolute deviation)")
+        # _series_running_median.plot(label="series running median")
+        # plt.legend()
+        # print(series.describe())
+
+        # return series, series_orig
+
+    def _flux_correction_term_unscaled_bur08(self) -> tuple[pd.Series, pd.Series]:
+        """Calculate bulk instrument surface temperature (BUR08)"""
+
+        # TOP OF WINDOW ---
+        # Surface temperatures day/night
+        # Calculate and then combine day and night temperatures
+        _ts_bur08_day_top = 1.005 * self.ta + 0.24
+        _ts_bur08_night_top = 1.008 * self.ta - 0.41
+        ts_top = pd.Series(index=_ts_bur08_day_top.index)
+        ts_top.loc[self.daytime == 1] = _ts_bur08_day_top  # Use daytime Ts in daytime data rows
+        ts_top.loc[self.daytime == 0] = _ts_bur08_night_top  # Use nighttime Ts in nighttime data rows
+        # Calculate sigma below top window
+        l_top = 0.045  # Diameter of the detector housing (m)
+        sigma_top = 0.0028 * np.sqrt(l_top / self.u) + (0.00025 / self.u) + 0.0045
+        # Calculate top window sensible heat
+        r_top = 0.0225  # Radius of the detector sphere (m)
+        a = (r_top + sigma_top) * (ts_top - self.ta)
+        b = r_top * sigma_top
+        S_top = self.k_air * (a / b)
+
+        # BOTTOM WINDOW ---
+        # Surface temperatures day/night
+        # Calculate and then combine day and night temperatures
+        _ts_bur08_day_bottom = 0.944 * self.ta + 2.57
+        _ts_bur08_night_bottom = 0.883 * self.ta + 2.17
+        ts_bottom = pd.Series(index=_ts_bur08_day_bottom.index)
+        ts_bottom.loc[self.daytime == 1] = _ts_bur08_day_bottom  # Use daytime Ts in daytime data rows
+        ts_bottom.loc[self.daytime == 0] = _ts_bur08_night_bottom  # Use nighttime Ts in nighttime data rows
+        # Calculate sigma above bottom window
+        l_bottom = 0.065  # Diameter of the source housing (m)
+        sigma_bottom = 0.004 * np.sqrt(l_bottom / self.u) + 0.004
+        # Calculate bottom window sensible heat
+        S_bottom = self.k_air * ((ts_bottom - self.ta) / sigma_bottom)
+
+        # SPAR ---
+        # Surface temperatures day/night
+        # Calculate and then combine day and night temperatures
+        _ts_bur08_day_spar = 1.01 * self.ta + 0.36
+        _ts_bur08_night_spar = 1.01 * self.ta - 0.17
+        ts_spar = pd.Series(index=_ts_bur08_day_spar.index)
+        ts_spar.loc[self.daytime == 1] = _ts_bur08_day_spar  # Use daytime Ts in daytime data rows
+        ts_spar.loc[self.daytime == 0] = _ts_bur08_night_spar  # Use nighttime Ts in nighttime data rows
+        # Calculate sigma around spar
+        l_spar = 0.005  # Diameter of the spar (m)
+        sigma_spar = 0.0058 * np.sqrt(l_spar / self.u)
+        # Calculate spar sensible heat
+        r_spar = 0.0025  # Radius of the spar cylinder (m)
+        a = ts_spar - self.ta
+        b = r_spar * np.log((r_spar + sigma_spar) / r_spar)
+        S_spar = self.k_air * (a / b)
+
+        # Calculate sensible heat from all key instrument surfaces
+        S = S_bottom + S_top + 0.15 * S_spar  # W m-2
+
+        # Calculate unscaled flux correction term
+        fct_unsc = (S / (self.rho_a * self.c_p)) * (self.qc / (self.ta + 273.15))
+
+        # print(f"Ts (BUR08), mean = {fct_unsc.mean():.2f}")
+        return fct_unsc, S
+
+    def _flux_correction_term_unscaled_jar09_bur06(self, ts: pd.Series) -> pd.Series:
+        """
+        Calculate unscaled flux correction term.
+        Equation (8) in Burba et al. (2006).
+        Used by JAR09 and BUR06.
+
+        Args:
+            ts: series, instrument surface temperature (°C)
+        """
+        # Convert temperatures to Kelvin for the denominator
+        ta_k = self.ta + 273.15
+
+        # Term A: Surface - Air temp delta * CO2 density
+        term_a = (ts - self.ta) * self.qc
+
+        # Term B: Aerodynamic resistance * Temp
+        term_b = self.ra * ta_k
+
+        # Term C: Water vapor correction factor
+        term_c = 1 + 1.6077 * (self.rho_v / self.rho_d)
+
+        return (term_a / term_b) * term_c
+
+    def _estimate_surface_temp_bur06(self) -> pd.Series:
+        """
+        Estimates the surface temperature based on the provided air temperature
+        values using the BUR06 model. The BUR06 model applies a quadratic
+        relationship to approximate the surface temperature from air temperature.
+
+        Returns:
+            pd.Series: Estimated surface temperature values calculated using the
+            BUR06 model.
+        """
+        ts = 0.0025 * self.ta ** 2 + 0.9 * self.ta + 2.07
+        return ts
+
+    def _estimate_surface_temp_jar09(self) -> pd.Series:
+        """
+        Estimates surface temperature using the JAR09 method.
+
+        This method calculates surface temperature based on ambient temperature and
+        a binary series representing daytime or nighttime conditions. It applies
+        different linear relationships for daytime and nighttime data.
+
+        Returns:
+            pd.Series: A Pandas Series representing the estimated surface temperatures.
+        """
+        ts = pd.Series(index=self.ta.index, dtype=float)
+
+        # Daytime relation
+        ts.loc[self.daytime == 1] = 0.93 * self.ta.loc[self.daytime == 1] + 3.17
+        # Nighttime relation
+        ts.loc[self.daytime == 0] = 1.05 * self.ta.loc[self.daytime == 0] + 1.52
+
+        return ts
+
+
+class ScopOptimizer:
+
+    def __init__(self, class_var: pd.Series, n_classes: int, fct_unsc: pd.Series, daytime: pd.Series,
+                 n_bootstrap_runs: int, flux_openpath: pd.Series, flux_closedpath: pd.Series, showplot: bool = True):
+        self.class_var = class_var
         self.n_classes = n_classes
         self.n_bootstrap_runs = n_bootstrap_runs
         self.flux_openpath = flux_openpath
         self.flux_closedpath = flux_closedpath
+        self.fct_unsc = fct_unsc
+        self.daytime = daytime
         self.showplot = showplot
-        self.cols = cols
+
+        self.cols = ColumnConfig()
 
         # If data are not bootstrapped, set flag to False
         if self.n_bootstrap_runs == 0:
@@ -1018,11 +1119,16 @@ class OptimizeScalingFactors:
         else:
             self.bootstrapped = True
 
-        if self.class_var_col[0] == '_custom':
-            n_classes = len(self.df[self.class_var_col].unique())
         self.scaling_factors_df = self.init_scaling_factors_df(num_classes=n_classes)
 
-        self.run()
+        frame = {
+            self.class_var.name: self.class_var,
+            self.flux_openpath.name: self.flux_openpath,
+            self.flux_closedpath.name: self.flux_closedpath,
+            self.fct_unsc.name: self.fct_unsc,
+            self.daytime.name: self.daytime
+        }
+        self.df = pd.DataFrame.from_dict(frame)
 
     def run(self):
         self.bootstrapping()
@@ -1083,7 +1189,7 @@ class OptimizeScalingFactors:
 
         # --- STYLING ---
         # Clean formatting for the Class Variable name
-        xlabel = str(self.class_var_col).replace('_', ' ').title()
+        xlabel = str(self.class_var.name).replace('_', ' ').title()
 
         ax.set_title(f"Scaling Factors vs. {xlabel}", fontsize=14, fontweight='bold', loc='left', color='#333333')
         ax.set_xlabel(f"Class Variable: {xlabel} (units)", fontsize=11, color='#333333')
@@ -1108,7 +1214,7 @@ class OptimizeScalingFactors:
 
     def print_stats(self):
         print("BOOTSTRAPPING RESULTS")
-        print(f"class variable: {self.class_var_col}")
+        print(f"class variable: {self.class_var}")
         print(f"number of classes: {self.n_classes}")
 
         print("\nSF results:")
@@ -1135,14 +1241,10 @@ class OptimizeScalingFactors:
         # Loop through daytime / nighttime data
         for _group_daynighttime, _group_daynighttime_df in _grouped_by_daynighttime:
 
-            if self.class_var_col[0] == '_custom':
-                _group_daynighttime_df[self.cols.class_var_group] = \
-                    _group_daynighttime_df[self.class_var_col]
-            else:
-                # Divide data into x class variable groups w/ same number of values
-                _group_daynighttime_df[self.cols.class_var_group] = \
-                    pd.qcut(_group_daynighttime_df[self.class_var_col],
-                            q=self.n_classes, labels=False)
+            # Divide data into x class variable groups w/ same number of values
+            _group_daynighttime_df[self.cols.class_var_group] = \
+                pd.qcut(_group_daynighttime_df[self.class_var.name],
+                        q=self.n_classes, labels=False)
 
             # Group data records by class variable membership
             _grouped_by_class_var = _group_daynighttime_df.groupby(self.cols.class_var_group)
@@ -1168,13 +1270,13 @@ class OptimizeScalingFactors:
 
                     bts_sample_df.sort_index(inplace=True)
 
-                    result = self.optimize_factor(target=bts_sample_df[self.flux_openpath],
-                                                  reference=bts_sample_df[self.flux_closedpath],
+                    result = self.optimize_factor(target=bts_sample_df[self.flux_openpath.name],
+                                                  reference=bts_sample_df[self.flux_closedpath.name],
                                                   fct_unsc_gf=bts_sample_df[self.cols.fct_unsc_gf])
 
                     bts_factors.append(result.x)  # x = scaling factor
                     bts_sum_of_squares.append(result.fun)
-                    bts_num_vals.append(bts_sample_df[self.class_var_col].count())
+                    bts_num_vals.append(bts_sample_df[self.class_var.name].count())
 
                     # Break if only working with measured data (no bootstrapping)
                     if not self.bootstrapped:
@@ -1188,9 +1290,9 @@ class OptimizeScalingFactors:
                 self.scaling_factors_df.loc[location, f'DAYTIME'] = _group_daynighttime
                 self.scaling_factors_df.loc[location, f'GROUP_CLASSVAR'] = _group_class_var
                 self.scaling_factors_df.loc[location, f'GROUP_CLASSVAR_MIN'] = _group_class_var_df[
-                    self.class_var_col].min()
+                    self.class_var.name].min()
                 self.scaling_factors_df.loc[location, f'GROUP_CLASSVAR_MAX'] = _group_class_var_df[
-                    self.class_var_col].max()
+                    self.class_var.name].max()
                 self.scaling_factors_df.loc[location, f'BOOTSTRAP_RUNS'] = self.n_bootstrap_runs
 
                 self.scaling_factors_df.loc[location, f'SF_MEDIAN'] = np.median(bts_factors)
@@ -1276,33 +1378,63 @@ def main():
 
     tic = time.time()
 
-    scop = Scop(
-        inputdf=df,
-        site="CH-LAE",
+    # Calculate
+    physics = ScopPhysics(
+        ta=df[TA].copy(),
+        qc=df[CO2_MOLAR_DENSITY].copy(),
+        rho_a=df[AIR_DENSITY].copy(),
+        rho_v=df[VAPOR_DENSITY].copy(),
+        u=df[U].copy(),
+        c_p=df[AIR_CP].copy(),
+        ustar=df[USTAR].copy(),
+        swin=df[SWIN].copy(),
         lat=47.478333,  # CH–LAE
         lon=8.364389,  # CH–LAE
         utc_offset=1,
-        title="CH-LAE self-heating correction",
-        flux_openpath=FLUX_75,
-        flux_closedpath=FLUX_72,
-        air_heat_capacity=AIR_CP,
-        co2_molar_density=CO2_MOLAR_DENSITY,  # in umol mol-1
-        u=U,
-        ustar=USTAR,
-        water_vapor_density=VAPOR_DENSITY,
-        air_density=AIR_DENSITY,
-        air_temperature=TA,
-        swin=SWIN,
-        n_classes=5,
-        n_bootstrap_runs=0,
-        classvar=USTAR,
-        remove_outliers_method="fast",
-        # remove_outliers_method="separate"
-        correction_method_base="BUR08"
-        # correction_method_base="BUR06"
-        # correction_method_base="JAR09"
     )
-    scop.calc_sf()
+    physics.run(correction_method_base="BUR08", gapfill=True)
+    # physics.run(correction_method_base="JAR09", gapfill=True)
+    results_physics_df = physics.get_results()
+
+    optimizer = ScopOptimizer(
+        fct_unsc=results_physics_df["FCT_UNSC_gfRF"],
+        class_var=df[USTAR].copy(),
+        n_classes=10,
+        n_bootstrap_runs=10,
+        flux_openpath=df[FLUX_75].copy(),
+        flux_closedpath=df[FLUX_72].copy(),
+        daytime=results_physics_df["DAYTIME"],
+        showplot=True
+    )
+    optimizer.run()
+
+    # scop = ScopOptimizer(
+    #     inputdf=df,
+    #     site="CH-LAE",
+    #     lat=47.478333,  # CH–LAE
+    #     lon=8.364389,  # CH–LAE
+    #     utc_offset=1,
+    #     title="CH-LAE self-heating correction",
+    #     flux_openpath=FLUX_75,
+    #     flux_closedpath=FLUX_72,
+    #     air_heat_capacity=AIR_CP,
+    #     co2_molar_density=CO2_MOLAR_DENSITY,  # in umol mol-1
+    #     u=U,
+    #     ustar=USTAR,
+    #     water_vapor_density=VAPOR_DENSITY,
+    #     air_density=AIR_DENSITY,
+    #     air_temperature=TA,
+    #     swin=SWIN,
+    #     n_classes=5,
+    #     n_bootstrap_runs=0,
+    #     classvar=USTAR,
+    #     remove_outliers_method="fast",
+    #     # remove_outliers_method="separate"
+    #     correction_method_base="BUR08"
+    #     # correction_method_base="BUR06"
+    #     # correction_method_base="JAR09"
+    # )
+    # scop.calc_sf()
     # apply_scaling_factors = Scop().apply_sf()
 
     toc = time.time()
