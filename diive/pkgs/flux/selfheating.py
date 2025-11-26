@@ -48,60 +48,152 @@ class ColumnConfig:
     fct: str = 'FCT'
     sf: str = 'SF'
     sf_gf: str = '.SF_GF'
+    s: str = 'S'  # Sensible heat from all key instrument surfaces (W m-2) (BUR08)
 
 
-class FluxCorrectionTerm:
+class UnscaledFluxCorrectionTerm:
 
-    @staticmethod
-    def flux_correction_term_unscaled(ts, ta, qc, ra, rho_v, rho_d):
+    def __init__(self, ta: pd.Series, qc: pd.Series, ra: pd.Series, rho_a: pd.Series, rho_v: pd.Series,
+                 rho_d: pd.Series, daytime: pd.Series, u: pd.Series, k_air: pd.Series, c_p: pd.Series):
         """
-        Calculate unscaled flux correction term.
-        Equation (8) in Burba et al. (2006).
-
-        Used by JAR09 and BUR06.
-
         Args:
-            ts: series, bulk surface temperature (°C)
             ta: series, air temperature (°C)
             qc: series, CO2 molar density (µmol m-3)
             ra: series, aerodynamic resistance (s m-1)
+            rho_a: series, air density (kg m-3)
             rho_v: series, water vapor density (kg m-3)
             rho_d: series, dry air density (kg m-3)
+            daytime: series (daytime=1, nighttime=0)
+            u: series, wind speed (m s-1)
+            k_air: series, thermal conductivity of air (W m-1 K-1)
+            c_p: series, specific heat at constant pressure of air (J K-1 kg-1)
+        """
 
+        self.ta = ta
+        self.qc = qc
+        self.ra = ra
+        self.rho_a = rho_a
+        self.rho_v = rho_v
+        self.rho_d = rho_d
+        self.u = u
+        self.k_air = k_air
+        self.c_p = c_p
+
+        self.daytime = daytime
+
+        self.ts = None  # Calculated
+
+    def bur06(self) -> tuple[pd.Series, pd.Series]:
+        ts = self._estimate_surface_temp_bur06()
+        fct_unsc = self._flux_correction_term_unscaled_jar09_bur06(ts=ts)
+        return fct_unsc, ts
+
+    def jar09(self) -> tuple[pd.Series, pd.Series]:
+        ts = self._estimate_surface_temp_jar09()
+        fct_unsc = self._flux_correction_term_unscaled_jar09_bur06(ts=ts)
+        return fct_unsc, ts
+
+    def bur08(self) -> tuple[pd.Series, pd.Series]:
+        fct_unsc, ts = self._flux_correction_term_unscaled_bur08()
+        return fct_unsc, ts
+
+    def _flux_correction_term_unscaled_bur08(self) -> tuple[pd.Series, pd.Series]:
+        """Calculate bulk instrument surface temperature (BUR08)"""
+
+        # TOP OF WINDOW ---
+        # Surface temperatures day/night
+        # Calculate and then combine day and night temperatures
+        _ts_bur08_day_top = 1.005 * self.ta + 0.24
+        _ts_bur08_night_top = 1.008 * self.ta - 0.41
+        ts_top = pd.Series(index=_ts_bur08_day_top.index)
+        ts_top.loc[self.daytime == 1] = _ts_bur08_day_top  # Use daytime Ts in daytime data rows
+        ts_top.loc[self.daytime == 0] = _ts_bur08_night_top  # Use nighttime Ts in nighttime data rows
+        # Calculate sigma below top window
+        l_top = 0.045  # Diameter of the detector housing (m)
+        sigma_top = 0.0028 * np.sqrt(l_top / self.u) + (0.00025 / self.u) + 0.0045
+        # Calculate top window sensible heat
+        r_top = 0.0225  # Radius of the detector sphere (m)
+        a = (r_top + sigma_top) * (ts_top - self.ta)
+        b = r_top * sigma_top
+        S_top = self.k_air * (a / b)
+
+        # BOTTOM WINDOW ---
+        # Surface temperatures day/night
+        # Calculate and then combine day and night temperatures
+        _ts_bur08_day_bottom = 0.944 * self.ta + 2.57
+        _ts_bur08_night_bottom = 0.883 * self.ta + 2.17
+        ts_bottom = pd.Series(index=_ts_bur08_day_bottom.index)
+        ts_bottom.loc[self.daytime == 1] = _ts_bur08_day_bottom  # Use daytime Ts in daytime data rows
+        ts_bottom.loc[self.daytime == 0] = _ts_bur08_night_bottom  # Use nighttime Ts in nighttime data rows
+        # Calculate sigma above bottom window
+        l_bottom = 0.065  # Diameter of the source housing (m)
+        sigma_bottom = 0.004 * np.sqrt(l_bottom / self.u) + 0.004
+        # Calculate bottom window sensible heat
+        S_bottom = self.k_air * ((ts_bottom - self.ta) / sigma_bottom)
+
+        # SPAR ---
+        # Surface temperatures day/night
+        # Calculate and then combine day and night temperatures
+        _ts_bur08_day_spar = 1.01 * self.ta + 0.36
+        _ts_bur08_night_spar = 1.01 * self.ta - 0.17
+        ts_spar = pd.Series(index=_ts_bur08_day_spar.index)
+        ts_spar.loc[self.daytime == 1] = _ts_bur08_day_spar  # Use daytime Ts in daytime data rows
+        ts_spar.loc[self.daytime == 0] = _ts_bur08_night_spar  # Use nighttime Ts in nighttime data rows
+        # Calculate sigma around spar
+        l_spar = 0.005  # Diameter of the spar (m)
+        sigma_spar = 0.0058 * np.sqrt(l_spar / self.u)
+        # Calculate spar sensible heat
+        r_spar = 0.0025  # Radius of the spar cylinder (m)
+        a = ts_spar - self.ta
+        b = r_spar * np.log((r_spar + sigma_spar) / r_spar)
+        S_spar = self.k_air * (a / b)
+
+        # Calculate sensible heat from all key instrument surfaces
+        S = S_bottom + S_top + 0.15 * S_spar  # W m-2
+
+        # Calculate unscaled flux correction term
+        fct_unsc = (S / (self.rho_a * self.c_p)) * (self.qc / (self.ta + 273.15))
+
+        # print(f"Ts (BUR08), mean = {fct_unsc.mean():.2f}")
+        return fct_unsc, S
+
+    def _flux_correction_term_unscaled_jar09_bur06(self, ts: pd.Series) -> pd.Series:
+        """
+        Calculate unscaled flux correction term.
+        Equation (8) in Burba et al. (2006).
+        Used by JAR09 and BUR06.
+
+        Args:
+            ts: series, instrument surface temperature (°C)
         """
         # Convert temperatures to Kelvin for the denominator
-        ta_k = ta + 273.15
+        ta_k = self.ta + 273.15
 
         # Term A: Surface - Air temp delta * CO2 density
-        term_a = (ts - ta) * qc
+        term_a = (ts - self.ta) * self.qc
 
         # Term B: Aerodynamic resistance * Temp
-        term_b = ra * ta_k
+        term_b = self.ra * ta_k
 
         # Term C: Water vapor correction factor
-        term_c = 1 + 1.6077 * (rho_v / rho_d)
+        term_c = 1 + 1.6077 * (self.rho_v / self.rho_d)
 
         return (term_a / term_b) * term_c
 
-    @staticmethod
-    def estimate_surface_temp_bur06(ta: pd.Series) -> pd.Series:
+    def _estimate_surface_temp_bur06(self) -> pd.Series:
         """
         Estimates the surface temperature based on the provided air temperature
         values using the BUR06 model. The BUR06 model applies a quadratic
         relationship to approximate the surface temperature from air temperature.
 
-        Args:
-            ta (pd.Series): Air temperature values provided as a pandas Series.
-
         Returns:
             pd.Series: Estimated surface temperature values calculated using the
             BUR06 model.
         """
-        ts = 0.0025 * ta ** 2 + 0.9 * ta + 2.07
+        ts = 0.0025 * self.ta ** 2 + 0.9 * self.ta + 2.07
         return ts
 
-    @staticmethod
-    def estimate_surface_temp_jar09(ta: pd.Series, daytime: pd.Series) -> pd.Series:
+    def _estimate_surface_temp_jar09(self) -> pd.Series:
         """
         Estimates surface temperature using the JAR09 method.
 
@@ -109,20 +201,15 @@ class FluxCorrectionTerm:
         a binary series representing daytime or nighttime conditions. It applies
         different linear relationships for daytime and nighttime data.
 
-        Args:
-            ta (pd.Series): A Pandas Series representing ambient temperatures.
-            daytime (pd.Series): A binary Pandas Series where 1 indicates daytime
-                and 0 indicates nighttime.
-
         Returns:
             pd.Series: A Pandas Series representing the estimated surface temperatures.
         """
-        ts = pd.Series(index=ta.index, dtype=float)
+        ts = pd.Series(index=self.ta.index, dtype=float)
 
         # Daytime relation
-        ts.loc[daytime == 1] = 0.93 * ta.loc[daytime == 1] + 3.17
+        ts.loc[self.daytime == 1] = 0.93 * self.ta.loc[self.daytime == 1] + 3.17
         # Nighttime relation
-        ts.loc[daytime == 0] = 1.05 * ta.loc[daytime == 0] + 1.52
+        ts.loc[self.daytime == 0] = 1.05 * self.ta.loc[self.daytime == 0] + 1.52
 
         return ts
 
@@ -131,11 +218,6 @@ class Scop:
     """
     Calculate scaling factors by comparing parallel measurements
     """
-
-    # # todo delete
-    # M_AIR = 0.028965  # molar mass of dry air (kg mol-1) (M_AIR)
-    # M_H2O = 0.018  # molar mass of water vapor (kg mol-1) (M_H2O)
-    # T0_K = 273.15  # Absolute zero (K)
 
     def __init__(
             self,
@@ -247,32 +329,54 @@ class Scop:
         df[self.cols.air_thermal_conductivity] = self.calc_air_thermal_conductivity(ta=df[self.air_temperature])
 
         # Calculate unscaled flux correction term (fct_unsc)
-        if self.correction_method_base in ["JAR09", "BUR06"]:
-            if self.correction_method_base == "JAR09":
-                # Estimate instrument surface temperature (JAR09)
-                df[self.cols.t_instr_surface] = FluxCorrectionTerm.estimate_surface_temp_jar09(
-                    ta=df[self.air_temperature], daytime=df[self.cols.daytime])
-            elif self.correction_method_base == "BUR06":
-                # Estimate instrument surface temperature (BUR06)
-                df[self.cols.t_instr_surface] = FluxCorrectionTerm.estimate_surface_temp_bur06(
-                    ta=df[self.air_temperature])
-            else:
-                raise ValueError(f"Unknown correction_method_base: {self.correction_method_base}")
-            # Calculate unscaled flux correction term (fct_unsc)
-            df[self.cols.fct_unsc] = FluxCorrectionTerm.flux_correction_term_unscaled(
-                ts=df[self.cols.t_instr_surface],
-                ta=df[self.air_temperature],
-                qc=df[self.co2_molar_density],  # in umol mol-1
-                ra=df[self.cols.aerodynamic_resistance],
-                rho_v=df[self.water_vapor_density],
-                rho_d=df[self.cols.dry_air_density]
-            )
+        ufct = UnscaledFluxCorrectionTerm(
+            ta=df[self.air_temperature].copy(),
+            qc=df[self.co2_molar_density].copy(),
+            ra=df[self.cols.aerodynamic_resistance].copy(),
+            rho_v=df[self.water_vapor_density].copy(),
+            rho_d=df[self.cols.dry_air_density].copy(),
+            daytime=df[self.cols.daytime].copy(),
+            u=df[self.u].copy(),
+            rho_a=df[self.air_density].copy(),
+            k_air=df[self.cols.air_thermal_conductivity].copy(),
+            c_p=df[self.air_heat_capacity].copy()
+        )
+        if self.correction_method_base == "JAR09":
+            df[self.cols.fct_unsc], df[self.cols.t_instr_surface] = ufct.jar09()
+        elif self.correction_method_base == "BUR06":
+            df[self.cols.fct_unsc], df[self.cols.t_instr_surface] = ufct.bur06()
         elif self.correction_method_base == "BUR08":
-            # Calculate unscaled flux correction term (BUR08)
-            df[self.cols.fct_unsc] = self.fct_unscaled_bur08(df=df)
-            # df[self.cols.fct_unsc], df[self.cols.t_instrument_surface] = self.fct_unscaled_bur06(df=df)
+            df[self.cols.fct_unsc], df[self.cols.s] = ufct.bur08()
         else:
             raise ValueError(f"Unknown correction_method_base: {self.correction_method_base}")
+
+            # # Calculate unscaled flux correction term (fct_unsc)
+            # if self.correction_method_base in ["JAR09", "BUR06"]:
+            #     if self.correction_method_base == "JAR09":
+            #         # Estimate instrument surface temperature (JAR09)
+            #         df[self.cols.t_instr_surface] = UnscaledFluxCorrectionTerm._estimate_surface_temp_jar09(
+            #             ta=df[self.air_temperature], daytime=df[self.cols.daytime])
+            #     elif self.correction_method_base == "BUR06":
+            #         # Estimate instrument surface temperature (BUR06)
+            #         df[self.cols.t_instr_surface] = UnscaledFluxCorrectionTerm._estimate_surface_temp_bur06(
+            #             ta=df[self.air_temperature])
+            #     else:
+            #         raise ValueError(f"Unknown correction_method_base: {self.correction_method_base}")
+            #     # Calculate unscaled flux correction term (fct_unsc)
+            #     df[self.cols.fct_unsc] = UnscaledFluxCorrectionTerm._flux_correction_term_unscaled_jar09_bur06(
+            #         ts=df[self.cols.t_instr_surface],
+            #         ta=df[self.air_temperature],
+            #         qc=df[self.co2_molar_density],  # in umol mol-1
+            #         ra=df[self.cols.aerodynamic_resistance],
+            #         rho_v=df[self.water_vapor_density],
+            #         rho_d=df[self.cols.dry_air_density]
+            #     )
+            # elif self.correction_method_base == "BUR08":
+            #     # Calculate unscaled flux correction term (BUR08)
+            df[self.cols.fct_unsc] = self.fct_unscaled_bur08(df=df)
+        #     # df[self.cols.fct_unsc], df[self.cols.t_instrument_surface] = self.fct_unscaled_bur06(df=df)
+        # else:
+        #     raise ValueError(f"Unknown correction_method_base: {self.correction_method_base}")
 
         # Remove outliers from unscaled flux correction term
         if self.remove_outliers_method == "fast":
@@ -326,11 +430,11 @@ class Scop:
                                           n_bootstrap_runs=self.n_bootstrap_runs,
                                           flux_openpath=self.flux_openpath,
                                           flux_closedpath=self.flux_closedpath,
-                                          showplot=False,
+                                          showplot=True,
                                           cols=self.cols)
         scaling_factors_df = optimize.get()
 
-    def correct_fluxes(self, df:pd.DataFrame, scaling_factors_df:pd.DataFrame):
+    def correct_fluxes(self, df: pd.DataFrame, scaling_factors_df: pd.DataFrame):
 
         # Assign scaling factors
         df = self.assign_scaling_factors(df=df,
@@ -605,74 +709,6 @@ class Scop:
         # Calculate unscaled flux correction term
         fct_unsc = self.flux_correction_term_unscaled(ts=ts, ta=ta, qc_umol=qc, ra=ra, rho_v=rho_v, rho_d=rho_d)
         return fct_unsc, ts
-
-    def fct_unscaled_bur08(self, df: pd.DataFrame) -> pd.Series:
-        """Calculate bulk instrument surface temperature (BUR08)"""
-        u = df[self.u].copy()
-        ta = df[self.air_temperature].copy()
-        daytime = df[self.cols.daytime].copy()
-        k_air = df[self.cols.air_thermal_conductivity].copy()  # (W m-1 K-1)
-        c_p = df[self.air_heat_capacity].copy()
-        rho_a = df[self.air_density].copy()
-        qc = df[self.co2_molar_density].copy()  # (umol m-3)
-        # qc = df[self.co2_molar_density].copy().multiply(1000)  # (umol m-3)
-
-        # TOP OF WINDOW ---
-        # Surface temperatures day/night
-        # Calculate and then combine day and night temperatures
-        _ts_bur08_day_top = 1.005 * ta + 0.24
-        _ts_bur08_night_top = 1.008 * ta - 0.41
-        ts_top = pd.Series(index=_ts_bur08_day_top.index)
-        ts_top.loc[daytime == 1] = _ts_bur08_day_top  # Use daytime Ts in daytime data rows
-        ts_top.loc[daytime == 0] = _ts_bur08_night_top  # Use nighttime Ts in nighttime data rows
-        # Calculate sigma below top window
-        l_top = 0.045  # Diameter of the detector housing (m)
-        sigma_top = 0.0028 * np.sqrt(l_top / u) + (0.00025 / u) + 0.0045
-        # Calculate top window sensible heat
-        r_top = 0.0225  # Radius of the detector sphere (m)
-        a = (r_top + sigma_top) * (ts_top - ta)
-        b = r_top * sigma_top
-        S_top = k_air * (a / b)
-
-        # BOTTOM WINDOW ---
-        # Surface temperatures day/night
-        # Calculate and then combine day and night temperatures
-        _ts_bur08_day_bottom = 0.944 * ta + 2.57
-        _ts_bur08_night_bottom = 0.883 * ta + 2.17
-        ts_bottom = pd.Series(index=_ts_bur08_day_bottom.index)
-        ts_bottom.loc[daytime == 1] = _ts_bur08_day_bottom  # Use daytime Ts in daytime data rows
-        ts_bottom.loc[daytime == 0] = _ts_bur08_night_bottom  # Use nighttime Ts in nighttime data rows
-        # Calculate sigma above bottom window
-        l_bottom = 0.065  # Diameter of the source housing (m)
-        sigma_bottom = 0.004 * np.sqrt(l_bottom / u) + 0.004
-        # Calculate bottom window sensible heat
-        S_bottom = k_air * ((ts_bottom - ta) / sigma_bottom)
-
-        # SPAR ---
-        # Surface temperatures day/night
-        # Calculate and then combine day and night temperatures
-        _ts_bur08_day_spar = 1.01 * ta + 0.36
-        _ts_bur08_night_spar = 1.01 * ta - 0.17
-        ts_spar = pd.Series(index=_ts_bur08_day_spar.index)
-        ts_spar.loc[daytime == 1] = _ts_bur08_day_spar  # Use daytime Ts in daytime data rows
-        ts_spar.loc[daytime == 0] = _ts_bur08_night_spar  # Use nighttime Ts in nighttime data rows
-        # Calculate sigma around spar
-        l_spar = 0.005  # Diameter of the spar (m)
-        sigma_spar = 0.0058 * np.sqrt(l_spar / u)
-        # Calculate spar sensible heat
-        r_spar = 0.0025  # Radius of the spar cylinder (m)
-        a = ts_spar - ta
-        b = r_spar * np.log((r_spar + sigma_spar) / r_spar)
-        S_spar = k_air * (a / b)
-
-        # Calculate sensible heat from all key instrument surfaces
-        S = S_bottom + S_top + 0.15 * S_spar  # W m-2
-
-        # Calculate unscaled flux correction term
-        fct_unsc = (S / (rho_a * c_p)) * (qc / (ta + 273.15))
-
-        # print(f"Ts (BUR08), mean = {fct_unsc.mean():.2f}")
-        return fct_unsc
 
     def plot_series(self, ax, series, title):
         ax.plot_date(x=series.index, y=series,
@@ -1179,7 +1215,7 @@ class OptimizeScalingFactors:
         fct_unsc_gf = optimization_df['fct_unscaled_col'].copy()  # Unscaled flux correction term
 
         result = minimize_scalar(self.calc_sumofsquares, args=(fct_unsc_gf, target, reference),
-                                 method='Bounded', bounds=[-1, 4])
+                                 method='Bounded', bounds=[-1, 200])
         return result
 
     def calc_sumofsquares(self, factor, unsc_flux_corr_term, target, reference):
@@ -1262,9 +1298,9 @@ def main():
         classvar=USTAR,
         remove_outliers_method="fast",
         # remove_outliers_method="separate"
-        # correction_method_base="BUR08"
+        correction_method_base="BUR08"
         # correction_method_base="BUR06"
-        correction_method_base="JAR09"
+        # correction_method_base="JAR09"
     )
     scop.calc_sf()
     # apply_scaling_factors = Scop().apply_sf()
