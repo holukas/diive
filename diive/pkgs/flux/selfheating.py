@@ -1,4 +1,41 @@
 """
+SELF-HEATING CORRECTION FOR OPEN-PATH IRGAS (SCOP)
+
+    Calculation of the flux correction term (FCT) for open-path infrared gas analyzers (IRGAs)
+    based on scaling factors from parallel measurements with an (en)closed-path IRGA.
+
+    This correction is designed to remove spurious CO2 flux measurements caused by the sun-induced
+    heating of the open-path (OP) instrument surfaces. This self-heating warms the air passing the
+    sensor head, creating a low-density thermal plume around the sampling volume. Since the OP-IRGA
+    measures molar density, this plume artificially lowers the measured CO2 concentration, resulting
+    in a systematic, non-biological uptake (negative flux) bias, especially prevalent during high
+    solar radiation and low wind conditions.
+
+Core Correction Principle
+
+    The method first calculates an unscaled flux correction term (FCT_UNSC) based on boundary-layer
+    dynamics and instrument-specific thermal properties (e.g., sensible heat flux S or instrument
+    surface temperature TS). FCT_UNSC is proportional to the heat transfer from the instrument surfaces
+    to the air, which directly drives the artificial dilution.
+
+Scaling and Final Application
+
+    To apply the correction, FCT_UNSC is scaled using a scaling factor SF derived from a parallel
+    measurement campaign with a (en)closed path IRGA.
+
+1.  Reference: A co-located (en)closed-path (CP) IRGA, e.g. the LI-7200, which is largely
+    immune to self-heating effects, serves as the "true" flux reference.
+2.  Optimization: The scaling factor SF is determined by minimizing the difference between the CP
+    reference flux and the OP flux corrected by FCT_UNSC * SF. In this implementation, the optimization
+    is binned by a key environmental variable, such as USTAR friction velocity, and done separately for
+    daytime and nighttime conditions.
+3.  Final corrected OP flux: The final flux correction term (FCT) is calculated as FCT_UNSC * SF. This
+    term is then added to the raw OP flux to produce the corrected measurement:
+
+    Flux_OP_corr = Flux_OP_raw + FCT
+
+The result is a corrected flux measurement.
+
 References:
     (BUR06) Burba et al. (2006). Correcting apparent off-season CO2 uptake due
         to surface heating of an open path gas analyzer: Progress report
@@ -13,35 +50,32 @@ References:
         https://doi.org/10.1002/2017JG003830
 
 Abbreviations:
-            pm ... Parallel measurements
-            OP ... open-path
-            CP ... enclosed-path
-            wpl ... WPL-correction
-            cr ... correction
-            Settings for calculation of scaling factors from parallel measurements
-            Correction (cr) needed for application of scaling factors to (uncorrected) fluxes
 
-Args:
-            df:
-            site (str): Site identifier where the data is collected.
-            title (str): Title or name for the dataset or processing task.
-            flux_openpath (str): Column name for OP flux with WPL correction in PM file.
-            flux_closedpath (str): Column name for CP true flux in PM file.
-            air_heat_capacity (str): Column name for specific heat at constant pressure of
-                ambient air (J K-1 kg-1) in PM file. [c_p]
-            co2_molar_density (str): Column name for CO2 molar density column (mmol m-3) in PM file. [qc]
-            u (str): Column name for horizontal wind speed (m s-1) in PM file.
-            ustar (str): Column name for USTAR friction velocity (m s-1) in PM file.
-            water_vapor_density (str): Column name for water vapor density (kg m-3) in PM file. [rho_v]
-            air_density (str): Column name for air density (kg m-3) in PM file. [rho_a]
-            air_temperature (str): Column name for ambient air temperature (°C) in PM file.
-            swin (str): Column name for shortwave-incoming radiation (W m-2) in PM file.
-            n_classes (int): Number of classes for categorization in PM processing, ignored
-                if class_var_col = 'custom'.
-            n_bootstrap_runs (int): Number of bootstraps in each class, *0* uses measured
-                data only w/o bootstrapping.
-            classvar (str): Column name for the class variable in PM file. Each class
-                has its own scaling factor.
+    Required variables and units:
+        swin ... shortwave-incoming radiation (W m-2)
+        ta ... ambient air temperature (°C)
+        u ... horizontal wind speed (m s-1)
+        ustar ... USTAR friction velocity (m s-1)
+        qc ... CO2 molar density (µmol m-3)
+        rho_a ... air density (kg m-3)
+        rho_v ... water vapor density (kg m-3)
+        c_p ... specific heat at constant pressure, air heat capacity (J K-1 kg-1)
+
+    Newly calculated variables:
+        ra ... aerodynamic resistance (s m-1)
+        rho_d ... dry air density (kg m-3)
+        k_air ... thermal conductivity of air (W m-1 K-1)
+        ts ... bulk instrument surface temperature (°C), from BUR06/JAR09
+        s ... sensible heat from all key instrument surfaces (W m-2), from BUR08
+        fct_unsc ... unscaled flux correction term (flux units)
+        fct_unsc_gf ... gap-filled unscaled flux correction term (flux units)
+        fct ... flux correction term (flux units)
+        sf ... scaling factor (unitless)
+
+    Other:
+        OP ... open-path
+        CP ... enclosed-path
+        wpl ... WPL-correction
 
 """
 import time
@@ -1182,8 +1216,8 @@ def _example():
     optimizer = ScopOptimizer(
         fct_unsc=results_physics_df["FCT_UNSC_gfRF"],
         class_var=df[USTAR].copy(),
-        n_classes=20,
-        n_bootstrap_runs=10,
+        n_classes=1,
+        n_bootstrap_runs=3,
         flux_openpath=df[FLUX_75].copy(),
         flux_closedpath=df[FLUX_72].copy(),
         daytime=results_physics_df["DAYTIME"]

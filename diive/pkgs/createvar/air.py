@@ -5,6 +5,10 @@ import pandas as pd
 def aerodynamic_resistance(u_ms: pd.Series, ustar_ms: pd.Series) -> pd.Series:
     """Calculates aerodynamic resistance (ra) using wind speed and friction velocity.
 
+    “The aerodynamic resistance is determined directly from the friction velocity USTAR (m s-1)
+    and the horizontal wind speed u (m s-1) as ra = u / (USTAR^2) according to the simplified bulk
+    approach described in Stull [1988].” (Kittler et al., 2017)
+
     This uses the momentum transfer approximation: ra = u / ustar^2.
     Reference: Kittler et al. (2017), eq.(5).
 
