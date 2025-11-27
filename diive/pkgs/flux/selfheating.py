@@ -910,254 +910,209 @@ class ScopPhysics:
 
 
 class ScopOptimizer:
+    """
+    Optimizes scaling factors using Block Bootstrapping and SciPy minimization.
+    """
 
-    def __init__(self, class_var: pd.Series, n_classes: int, fct_unsc: pd.Series, daytime: pd.Series,
-                 n_bootstrap_runs: int, flux_openpath: pd.Series, flux_closedpath: pd.Series, showplot: bool = True):
-        self.class_var = class_var
+    def __init__(self,
+                 class_var: pd.Series,
+                 n_classes: int,
+                 fct_unsc: pd.Series,
+                 daytime: pd.Series,
+                 n_bootstrap_runs: int,
+                 flux_openpath: pd.Series,
+                 flux_closedpath: pd.Series):
+
         self.n_classes = n_classes
-        self.n_bootstrap_runs = n_bootstrap_runs
-        self.flux_openpath = flux_openpath
-        self.flux_closedpath = flux_closedpath
-        self.fct_unsc = fct_unsc
-        self.daytime = daytime
-        self.showplot = showplot
-
+        self.n_bootstrap = n_bootstrap_runs
         self.cols = ColumnConfig()
 
-        # If data are not bootstrapped, set flag to False
-        if self.n_bootstrap_runs == 0:
-            self.bootstrapped = False
-            self.n_bootstrap_runs = 9999  # Set to arbitrary number
-        else:
-            self.bootstrapped = True
+        # Combine inputs into a single DataFrame for easier grouping
+        # We rename columns to generic internal names to avoid confusion
+        self.df = pd.DataFrame({
+            'class_var': class_var,
+            'target': flux_openpath,
+            'reference': flux_closedpath,
+            'fct_unsc': fct_unsc,
+            self.cols.daytime: daytime
+        })
 
-        self.scaling_factors_df = self.init_scaling_factors_df(num_classes=n_classes)
+        self.scaling_factors_df = pd.DataFrame()
 
-        frame = {
-            self.class_var.name: self.class_var,
-            self.flux_openpath.name: self.flux_openpath,
-            self.flux_closedpath.name: self.flux_closedpath,
-            self.fct_unsc.name: self.fct_unsc,
-            self.daytime.name: self.daytime
-        }
-        self.df = pd.DataFrame.from_dict(frame)
+    def run(self) -> pd.DataFrame:
+        """
+        Executes the optimization routine.
+        Uses list accumulation for speed instead of DataFrame.loc assignment.
+        """
+        results = []
 
-    def run(self):
+        # 1. Group by Daytime
+        for daytime, day_group in self.df.groupby(self.cols.daytime):
 
-        # Group data records by daytime / nighttime membership
-        _grouped_by_daynighttime = self.df.groupby(self.cols.daytime)
+            # 2. Create Bins (Quantiles)
+            # 'duplicates=drop' handles cases where data is constant/sparse
+            try:
+                day_group['bin'] = pd.qcut(day_group['class_var'], self.n_classes, labels=False, duplicates='drop')
+            except ValueError:
+                # Fallback to linear cut if qcut fails
+                day_group['bin'] = pd.cut(day_group['class_var'], self.n_classes, labels=False)
 
-        # Loop through daytime / nighttime data
-        for _group_daynighttime, _group_daynighttime_df in _grouped_by_daynighttime:
+            # 3. Iterate through Bins
+            for bin_id, bin_group in day_group.groupby('bin'):
 
-            # Divide data into x class variable groups w/ same number of values
-            _group_daynighttime_df[self.cols.class_var_group] = \
-                pd.qcut(_group_daynighttime_df[self.class_var.name],
-                        q=self.n_classes, labels=False)
+                if bin_group.empty:
+                    continue
 
-            # Group data records by class variable membership
-            _grouped_by_class_var = _group_daynighttime_df.groupby(self.cols.class_var_group)
+                # Drop NaNs upfront for this bin
+                # (We only need rows where all vars are present)
+                valid_bin = bin_group.dropna()
+                if len(valid_bin) < 10: continue
 
-            # Loop through class variable groups
-            for _group_class_var, _group_class_var_df in _grouped_by_class_var:
-                # Bootstrap group data
+                factors = []
+                sos_vals = []
 
-                bts_factors = []
-                bts_sum_of_squares = []
-                bts_num_vals = []
+                # --- PREPARE NUMPY ARRAYS (Performance Boost) ---
+                # We convert to numpy ONCE per bin, not inside the bootstrap loop
+                arr_target = valid_bin['target'].values
+                arr_ref = valid_bin['reference'].values
+                arr_fct = valid_bin['fct_unsc'].values
+                n_samples = len(valid_bin)
 
-                for bts_run in range(0, self.n_bootstrap_runs):
-                    num_rows = int(len(_group_class_var_df.index))
+                # --- BOOTSTRAPPING LOOP ---
+                # If n_bootstrap == 0, run once on raw data
+                runs = self.n_bootstrap if self.n_bootstrap > 0 else 1
 
-                    if self.bootstrapped:
-                        # Use bootstrapped data
-                        bts_sample_df = _group_class_var_df.sample(n=num_rows,
-                                                                   replace=True)  # Take sample w/ replacement
+                for _ in range(runs):
+
+                    # A. Sampling
+                    if self.n_bootstrap > 0:
+                        # Use Circular Block Bootstrap (Preserves time correlation)
+                        # Block size 12 approx 6 hours (if 30min data)
+                        indices = self._block_bootstrap_indices(n_samples, block_size=12)
+
+                        s_target = arr_target[indices]
+                        s_ref = arr_ref[indices]
+                        s_fct = arr_fct[indices]
                     else:
-                        # Use measured data in cas
-                        bts_sample_df = _group_class_var_df
+                        # No bootstrapping
+                        s_target, s_ref, s_fct = arr_target, arr_ref, arr_fct
 
-                    bts_sample_df.sort_index(inplace=True)
+                    # B. Optimization (SciPy)
+                    # We pass numpy arrays to the cost function
+                    res = minimize_scalar(
+                        self._cost_function_numpy,
+                        args=(s_fct, s_target, s_ref),
+                        bounds=(-1.0, 50.0),
+                        method='bounded'
+                    )
 
-                    result = self.optimize_factor(target=bts_sample_df[self.flux_openpath.name],
-                                                  reference=bts_sample_df[self.flux_closedpath.name],
-                                                  fct_unsc_gf=bts_sample_df[self.cols.fct_unsc_gf])
+                    factors.append(res.x)
+                    sos_vals.append(res.fun)
 
-                    bts_factors.append(result.x)  # x = scaling factor
-                    bts_sum_of_squares.append(result.fun)
-                    bts_num_vals.append(bts_sample_df[self.class_var.name].count())
+                # --- AGGREGATE STATISTICS ---
+                if not factors: continue
 
-                    # Break if only working with measured data (no bootstrapping)
-                    if not self.bootstrapped:
-                        break
+                results.append({
+                    'DAYTIME': daytime,
+                    'GROUP_CLASSVAR': bin_id,
+                    'GROUP_CLASSVAR_MIN': valid_bin['class_var'].min(),
+                    'GROUP_CLASSVAR_MAX': valid_bin['class_var'].max(),
+                    'BOOTSTRAP_RUNS': self.n_bootstrap,
+                    'SF_MEDIAN': np.median(factors),
+                    'SF_Q25': np.percentile(factors, 25),
+                    'SF_Q75': np.percentile(factors, 75),
+                    'SF_Q01': np.percentile(factors, 1),
+                    'SF_Q99': np.percentile(factors, 99),
+                    'SOS_MEDIAN': np.median(sos_vals),
+                    'NUMVALS_AVG': n_samples
+                })
 
-                print(f"Finished {self.n_bootstrap_runs} bootstrap runs for group {_group_class_var} "
-                      f"in daytime = {_group_daynighttime}")
+                print(f"Finished group {bin_id} (Daytime {daytime}): Median SF = {np.median(factors):.3f}")
 
-                # Stats, aggregates for current class group
-                location = tuple([_group_daynighttime, _group_class_var])
-                self.scaling_factors_df.loc[location, f'DAYTIME'] = _group_daynighttime
-                self.scaling_factors_df.loc[location, f'GROUP_CLASSVAR'] = _group_class_var
-                self.scaling_factors_df.loc[location, f'GROUP_CLASSVAR_MIN'] = _group_class_var_df[
-                    self.class_var.name].min()
-                self.scaling_factors_df.loc[location, f'GROUP_CLASSVAR_MAX'] = _group_class_var_df[
-                    self.class_var.name].max()
-                self.scaling_factors_df.loc[location, f'BOOTSTRAP_RUNS'] = self.n_bootstrap_runs
-
-                self.scaling_factors_df.loc[location, f'SF_MEDIAN'] = np.median(bts_factors)
-                self.scaling_factors_df.loc[location, f'SOS_MEDIAN'] = np.median(
-                    bts_sum_of_squares)
-                self.scaling_factors_df.loc[location, f'NUMVALS_AVG'] = np.mean(bts_num_vals)
-                self.scaling_factors_df.loc[location, f'SF_Q25'] = np.quantile(bts_factors, 0.25)
-                self.scaling_factors_df.loc[location, f'SF_Q75'] = np.quantile(bts_factors, 0.75)
-                self.scaling_factors_df.loc[location, f'SF_Q01'] = np.quantile(bts_factors, 0.01)
-                self.scaling_factors_df.loc[location, f'SF_Q99'] = np.quantile(bts_factors, 0.99)
+        # Create DataFrame once at the end (Much faster than .loc inside loop)
+        self.scaling_factors_df = pd.DataFrame(results)
         return self.scaling_factors_df
 
+    @staticmethod
+    def _cost_function_numpy(factor, fct_arr, target_arr, ref_arr):
+        """
+        Vectorized Cost Function using NumPy.
+        Objective: Minimize L1 norm of the difference between cumulative sums.
+        """
+        corrected = target_arr + (fct_arr * factor)
+        # diff = Cumulative(Corrected) - Cumulative(Reference)
+        diff = np.cumsum(corrected) - np.cumsum(ref_arr)
+        return np.sum(np.abs(diff))
+
+    def _block_bootstrap_indices(self, n, block_size):
+        """Generates indices for circular block bootstrapping."""
+        # 1. How many blocks?
+        num_blocks = int(np.ceil(n / block_size))
+        # 2. Random start positions
+        start_indices = np.random.randint(0, n, size=num_blocks)
+        # 3. Build indices array
+        indices = []
+        for start in start_indices:
+            # Create a block [start, start+1, ...] using modulo for circularity
+            indices.extend((np.arange(start, start + block_size) % n))
+        return np.array(indices[:n])
+
     def plot(self):
-        """
-        Plots the optimized scaling factors with bootstrapped confidence intervals.
-        """
-        if not self.showplot:
+        """Plots optimized scaling factors with confidence intervals."""
+        if self.scaling_factors_df.empty:
             return
 
-        print("Plotting Scaling Factors (Modern Style)...")
-
-        # Create a copy to ensure sorting works for line plots
+        print("Plotting Scaling Factors...")
         plot_df = self.scaling_factors_df.copy()
 
-        # --- CONFIGURATION ---
-        # Scientific color palette: High contrast, warm vs cool
-        # 1 = Day (Warm Orange), 0 = Night (Deep Blue)
         styles = {
             1: {'color': '#d35400', 'label': 'Daytime', 'marker': 'o'},
             0: {'color': '#2980b9', 'label': 'Nighttime', 'marker': 's'}
         }
 
-        # --- FIGURE SETUP ---
         fig, ax = plt.subplots(figsize=(10, 7), constrained_layout=True)
 
-        # --- PLOTTING LOOP ---
-        # Group by DAYTIME (0 or 1)
         for day_flag, group in plot_df.groupby('DAYTIME'):
-            # Sort by the class variable (x-axis) to ensure lines connect correctly
             group = group.sort_values('GROUP_CLASSVAR_MIN')
+            style = styles.get(day_flag, {'color': 'k', 'label': '?', 'marker': 'x'})
 
             x = group['GROUP_CLASSVAR_MIN']
-            y = group['SF_MEDIAN']
-            style = styles.get(day_flag, {'color': 'black', 'label': 'Unknown', 'marker': 'x'})
 
-            # Calculate average sample size for the legend
-            avg_n = group['NUMVALS_AVG'].mean()
-            label_text = f"{style['label']} (N $\\approx$ {avg_n:.0f})"
+            # Confidence Intervals
+            ax.fill_between(x, group['SF_Q01'], group['SF_Q99'], color=style['color'], alpha=0.1, edgecolor='none')
+            ax.fill_between(x, group['SF_Q25'], group['SF_Q75'], color=style['color'], alpha=0.25, edgecolor='none')
 
-            # 1. Outer Confidence Interval (1% - 99%)
-            # Very transparent, shows extreme range
-            ax.fill_between(x, group['SF_Q01'], group['SF_Q99'],
-                            color=style['color'], alpha=0.1, edgecolor='none', zorder=1)
+            # Median
+            ax.plot(x, group['SF_MEDIAN'], color=style['color'], marker=style['marker'],
+                    lw=2, label=f"{style['label']} (N={group['NUMVALS_AVG'].mean():.0f})")
 
-            # 2. Inner Confidence Interval (25% - 75% / IQR)
-            # More visible, shows typical variation
-            ax.fill_between(x, group['SF_Q25'], group['SF_Q75'],
-                            color=style['color'], alpha=0.25, edgecolor='none', zorder=2)
+        ax.set_title("Scaling Factors vs Class Variable", fontsize=14, fontweight='bold', loc='left', color='#333333')
+        ax.set_ylabel(r"Scaling Factor ($\xi$)", fontsize=11)
+        ax.set_xlabel("Class Variable", fontsize=11)
+        ax.axhline(0, lw=1, color='k', linestyle='-', zorder=0)
+        ax.grid(True, linestyle=':', alpha=0.6)
+        ax.legend(frameon=False)
 
-            # 3. Median Line
-            # Solid, distinct line
-            ax.plot(x, y, color=style['color'], marker=style['marker'],
-                    markersize=5, linewidth=2, zorder=3, label=label_text)
-
-        # --- STYLING ---
-        # Clean formatting for the Class Variable name
-        xlabel = str(self.class_var.name).replace('_', ' ').title()
-
-        ax.set_title(f"Scaling Factors vs. {xlabel}", fontsize=14, fontweight='bold', loc='left', color='#333333')
-        ax.set_xlabel(f"Class Variable: {xlabel} (units)", fontsize=11, color='#333333')
-        ax.set_ylabel(r"Scaling Factor ($\xi$)", fontsize=11, color='#333333')
-
-        # Reference line at 0
-        ax.axhline(0, lw=1, color='#333333', linestyle='-', zorder=0)
-
-        # Modern Grid
-        ax.grid(True, which='major', linestyle=':', alpha=0.6, color='gray')
-
-        # Despine (Remove top and right borders)
+        # Despine
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_linewidth(0.5)
-        ax.spines['bottom'].set_linewidth(0.5)
 
-        # Legend
-        ax.legend(loc='best', frameon=False, fontsize=10)
-
-        fig.show()
+        plt.show()
 
     def stats(self):
-        print("BOOTSTRAPPING RESULTS")
-        print(f"class variable: {self.class_var}")
-        print(f"number of classes: {self.n_classes}")
+        """Prints summary statistics."""
+        if self.scaling_factors_df.empty:
+            print("No results to display.")
+            return
 
-        print("\nSF results:")
-        print("====================")
-        print(f"scaling factor (daytime median): {self.scaling_factors_df.loc[1, 'SF_MEDIAN'].median():.3f}")
-        print(
-            f"scaling factor (nighttime median): {self.scaling_factors_df.loc[0, 'SF_MEDIAN'].median():.3f}")
-        print(f"scaling factor (overall median): {self.scaling_factors_df.loc[:, 'SF_MEDIAN'].median():.3f}")
-        print(
-            f"sum of squares (daytime median): {self.scaling_factors_df.loc[1, 'SOS_MEDIAN'].median():.3f}")
-        print(
-            f"sum of squares (nighttime median): {self.scaling_factors_df.loc[0, 'SOS_MEDIAN'].median():.3f}")
-        print(
-            f"sum of squares (overall median): {self.scaling_factors_df.loc[:, 'SOS_MEDIAN'].median():.3f}")
+        print("\n=== OPTIMIZATION RESULTS ===")
+        # Use pandas grouping to get median of medians
+        summary = self.scaling_factors_df.groupby('DAYTIME')[['SF_MEDIAN', 'SOS_MEDIAN']].median()
+        print(summary)
+        print("============================")
 
     def get(self) -> pd.DataFrame:
         return self.scaling_factors_df
-
-    def optimize_factor(self, target, reference, fct_unsc_gf):
-        """Optimize factor by minimizing sum of squares b/w corrected target and reference"""
-        optimization_df = pd.DataFrame()
-        optimization_df['target'] = target
-        optimization_df['reference'] = reference
-        optimization_df['fct_unscaled_col'] = fct_unsc_gf
-        optimization_df = optimization_df.dropna()
-
-        target = optimization_df['target'].copy()
-        reference = optimization_df['reference'].copy()
-        fct_unsc_gf = optimization_df['fct_unscaled_col'].copy()  # Unscaled flux correction term
-
-        result = minimize_scalar(self.calc_sumofsquares, args=(fct_unsc_gf, target, reference),
-                                 method='Bounded', bounds=[-1, 200])
-        return result
-
-    def calc_sumofsquares(self, factor, unsc_flux_corr_term, target, reference):
-        corrected = target + unsc_flux_corr_term.multiply(factor)
-
-        # diff2 = np.sqrt((corrected - reference) ** 2)
-        # sum_of_squares = diff2.sum()
-
-        corrected_cumsum = corrected.cumsum()
-        reference_cumsum = reference.cumsum()
-        diff2 = np.sqrt((corrected_cumsum - reference_cumsum) ** 2)
-        sum_of_squares = diff2.sum()
-
-        return sum_of_squares
-
-    def init_scaling_factors_df(self, num_classes):
-        """Initialize df that collects results for scaling factors
-        - Needs to be initialized with a Multiindex
-        - Multiindex consists of two indices: (1) daytime and (2) sonic temperature class
-        """
-        _list_class_var_classes = [*range(0, num_classes)]
-        _iterables = [[1, 0], _list_class_var_classes]
-        _multi_ix = pd.MultiIndex.from_product(_iterables, names=["daytime_ix", "sonic_temperature_class_ix"])
-        scaling_factors_df = pd.DataFrame(index=_multi_ix)
-
-        cols = ['SF_MEDIAN', 'SOS_MEDIAN', 'NUMVALS_AVG', 'SF_Q25',
-                'SF_Q75', 'SF_Q01', 'SF_Q99']
-
-        for col in cols:
-            scaling_factors_df[col] = np.nan
-
-        return scaling_factors_df
 
 
 def _example():
@@ -1201,18 +1156,16 @@ def _example():
         utc_offset=1,
     )
     physics.run(correction_method_base="JAR09", gapfill=True)
-    # physics.run(correction_method_base="JAR09", gapfill=True)
     results_physics_df = physics.get_results()
 
     optimizer = ScopOptimizer(
         fct_unsc=results_physics_df["FCT_UNSC_gfRF"],
         class_var=df[USTAR].copy(),
-        n_classes=3,
-        n_bootstrap_runs=0,
+        n_classes=20,
+        n_bootstrap_runs=10,
         flux_openpath=df[FLUX_75].copy(),
         flux_closedpath=df[FLUX_72].copy(),
-        daytime=results_physics_df["DAYTIME"],
-        showplot=False
+        daytime=results_physics_df["DAYTIME"]
     )
     scaling_factors_df = optimizer.run()
     optimizer.stats()
@@ -1231,10 +1184,9 @@ def _example():
         swin=df[SWIN].copy()
     )
     applicator.run()
-
-    # applicator.stats()
+    applicator.stats()
     applicator.plot_diel_cycles()
-    # applicator.plot_flux_analysis_dashboard()
+    applicator.plot_flux_analysis_dashboard()
 
     toc = time.time()
     print(f"Time elapsed: {toc - tic:.2f} seconds")
