@@ -22,7 +22,6 @@ import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from poetry.console.commands import self
 from scipy.optimize import minimize_scalar
 
 from diive.pkgs.createvar.air import dry_air_density, aerodynamic_resistance
@@ -43,7 +42,7 @@ class ColumnConfig:
     aerodynamic_resistance: str = 'AERODYNAMIC_RESISTANCE'
     dry_air_density: str = 'DRY_AIR_DENSITY'
     t_instr_surface: str = 'T_INSTRUMENT_SURFACE'
-    nee_op_corr: str = 'NEE_OP_CORR'
+    flux_op_corr: str = 'NEE_OP_CORR'
     fct_unsc: str = 'FCT_UNSC'
     fct_unsc_gf: str = 'FCT_UNSC_gfRF'
     fct: str = 'FCT'
@@ -166,88 +165,75 @@ class Scop:
 
 class ScopApplicator:
 
-    def correct_fluxes(self, df: pd.DataFrame, scaling_factors_df: pd.DataFrame):
+    def __init__(self, fct_unsc: pd.Series, scaling_factors_df: pd.DataFrame, flux_openpath: pd.Series,
+                 flux_closedpath: pd.Series, classvar: pd.Series, daytime: pd.Series, swin: pd.Series):
 
-        # Assign scaling factors
-        df = self.assign_scaling_factors(df=df,
-                                         scaling_factors_df=scaling_factors_df,
-                                         classvar_col=self.classvar,
-                                         lut_gapfill=False)
+        self.fct_unsc = fct_unsc.copy()
+        self.scaling_factors_df = scaling_factors_df.copy()
+        self.flux_openpath = flux_openpath.copy()
+        self.flux_closedpath = flux_closedpath.copy()
+        self.classvar = classvar.copy()
+        self.daytime = daytime.copy()
+        self.swin = swin.copy()
+
+        self.cols = ColumnConfig()
+
+        frame = {self.fct_unsc.name: self.fct_unsc, self.flux_openpath.name: self.flux_openpath,
+                 self.flux_closedpath.name: self.flux_closedpath,
+                 self.classvar.name: self.classvar, self.daytime.name: self.daytime, self.swin.name: self.swin}
+        self.df = pd.DataFrame(frame)
+
+    def run(self):
+
+        # Assign scaling factors depending on the class var (e.g. USTAR)
+        self.df = self._assign_scaling_factors()
 
         # Final flux correction
         # Corrected OP = uncorrected OP + (FCT_unscaled * ScalingFactor)
-        df[self.cols.fct] = df[self.cols.fct_unsc_gf] * df[self.cols.sf]
-        df[self.cols.nee_op_corr] = df[self.flux_openpath] + df[self.cols.fct]
+        self.df[self.cols.fct] = self.df[self.cols.fct_unsc_gf] * self.df[self.cols.sf]
+        self.df[self.cols.flux_op_corr] = self.df[self.flux_openpath.name] + self.df[self.cols.fct]
 
         # Visualization
-        self.stats(df=df)
-        self.plot_diel_cycles(df=df)
-        self.plot_flux_analysis_dashboard(df=df)
+        self.stats()
+        self.plot_diel_cycles()
+        self.plot_flux_analysis_dashboard()
 
-        self.df = df.copy()
+        # self.df = df.copy()
 
-    # def detect_daytime(self, swin) -> pd.Series:
-    #     # Daytime, nighttime
-    #     nighttime_filter = swin <= 20
-    #     daytime_filter = swin > 20
-    #     daytime_series = pd.Series(index=swin.index)
-    #     daytime_series.loc[nighttime_filter] = 0
-    #     daytime_series.loc[daytime_filter] = 1
-    #     return daytime_series
+    # def init_newcols(self, df: pd.DataFrame) -> pd.DataFrame:
+    #     df[self.cols.daytime] = np.nan
+    #     df[self.cols.aerodynamic_resistance] = np.nan
+    #     df[self.cols.dry_air_density] = np.nan
+    #     df[self.cols.t_instr_surface] = np.nan
+    #     df[self.cols.fct_unsc] = np.nan
+    #     df[self.cols.fct_unsc_gf] = np.nan
+    #     df[self.cols.class_var_group] = np.nan
+    #     df[self.cols.sf] = np.nan
+    #     df[self.cols.class_var_group] = np.nan
+    #     df[self.cols.fct] = np.nan
+    #     df[self.cols.flux_op_corr] = np.nan
+    #     return df
 
-    def stats(self, df: pd.DataFrame):
-        cols = [self.flux_openpath, self.flux_closedpath, self.cols.nee_op_corr]
+    def _assign_scaling_factors(self) -> pd.DataFrame:
 
-        _stats_df = df[cols].copy()
-        _stats_df = _stats_df.dropna()
-        _numvals = len(_stats_df)
-
-        print("\nCUMULATIVE FLUXES:")
-        print(f"Values: {_numvals}")
-        _cumsum_opnocorr = _stats_df[self.flux_openpath].sum()
-        _cumsum_cptrueflux = _stats_df[self.flux_closedpath].sum()
-        _perc = (_cumsum_opnocorr / _cumsum_cptrueflux) * 100
-        print(f"OPEN-PATH (uncorrected): {_cumsum_opnocorr:.0f}  ({_perc:.1f}% of true flux)")
-        print(f"ENCLOSED-PATH (true flux): {_cumsum_cptrueflux:.0f}")
-        _cumsum = _stats_df[self.cols.nee_op_corr].sum()
-        _perc = (_cumsum / _cumsum_cptrueflux) * 100
-        print(f"OPEN-PATH (corrected): {_cumsum:.0f}  ({_perc:.1f}% of true flux)")
-        print("\n\n")
-
-    def init_newcols(self, df: pd.DataFrame) -> pd.DataFrame:
-        df[self.cols.daytime] = np.nan
-        df[self.cols.aerodynamic_resistance] = np.nan
-        df[self.cols.dry_air_density] = np.nan
-        df[self.cols.t_instr_surface] = np.nan
-        df[self.cols.fct_unsc] = np.nan
-        df[self.cols.fct_unsc_gf] = np.nan
-        df[self.cols.class_var_group] = np.nan
-        df[self.cols.sf] = np.nan
-        df[self.cols.class_var_group] = np.nan
-        df[self.cols.fct] = np.nan
-        df[self.cols.nee_op_corr] = np.nan
-        return df
-
-    def assign_scaling_factors(self, df: pd.DataFrame, scaling_factors_df: pd.DataFrame,
-                               classvar_col: str, lut_gapfill: bool = False) -> pd.DataFrame:
-
-        # Initialize destination columns
-        if self.cols.class_var_group not in df.columns:
-            df[self.cols.class_var_group] = np.nan
-        if self.cols.sf not in df.columns:
-            df[self.cols.sf] = np.nan
+        # # Initialize destination columns
+        # if self.cols.class_var_group not in df.columns:
+        #     df[self.cols.class_var_group] = np.nan
+        # if self.cols.sf not in df.columns:
+        #     df[self.cols.sf] = np.nan
 
         # Filter for valid keys
-        valid_mask = df[classvar_col].notna() & df[self.cols.daytime].notna()
+        valid_mask = self.classvar.notna() & self.daytime.notna()
         if valid_mask.sum() == 0:
             raise ValueError("No valid keys found in DataFrame. Check class variable and daytime columns.")
 
         # Prepare left subset
-        cols_needed = [classvar_col, self.cols.daytime]
-        df_valid = df.loc[valid_mask, cols_needed].sort_values(by=classvar_col)
+        df_valid = self.df.loc[valid_mask].sort_values(by=str(self.classvar.name))
+        cols_needed = [self.classvar.name, self.cols.daytime]
+        df_valid = df_valid.loc[valid_mask, cols_needed].sort_values(by=self.classvar.name)
 
         # Prepare right subset (lookup table)
-        sf_sorted = scaling_factors_df.sort_values(by='GROUP_CLASSVAR_MIN')
+        sf_sorted = self.scaling_factors_df.sort_values(by='GROUP_CLASSVAR_MIN')
 
         # Perform backward merge
         # direction='backward': Finds the bin where [classvar] >= [GROUP_CLASSVAR_MIN]
@@ -257,9 +243,9 @@ class ScopApplicator:
         merged_subset = pd.merge_asof(
             df_valid,
             sf_sorted[['DAYTIME', 'GROUP_CLASSVAR_MIN', 'GROUP_CLASSVAR', 'SF_MEDIAN']],
-            left_on=classvar_col,
+            left_on=self.classvar.name,
             right_on='GROUP_CLASSVAR_MIN',
-            by=self.cols.daytime,
+            by=self.daytime.name,
             direction='backward'
         )
 
@@ -274,12 +260,12 @@ class ScopApplicator:
                 .transform(lambda x: x.bfill())
 
         # Assign 'merged_subset' data back to original DataFrame
-        df.loc[df_valid.index, self.cols.class_var_group] = merged_subset['GROUP_CLASSVAR'].values
-        df.loc[df_valid.index, self.cols.sf] = merged_subset['SF_MEDIAN'].values
+        self.df.loc[df_valid.index, self.cols.class_var_group] = merged_subset['GROUP_CLASSVAR'].values
+        self.df.loc[df_valid.index, self.cols.sf] = merged_subset['SF_MEDIAN'].values
 
         # Check if all open-path fluxes have a scaling factor
         # logic: Where Flux exists AND Scaling Factor is NaN
-        missing_sf_mask = df[self.flux_openpath].notna() & df[self.cols.sf].isna()
+        missing_sf_mask = self.df[self.flux_openpath.name].notna() & self.df[self.cols.sf].isna()
         if missing_sf_mask.any():
             n_missing = missing_sf_mask.sum()
             # # Optional: Print the first few problematic rows for debugging
@@ -293,7 +279,26 @@ class ScopApplicator:
         # else:
         #     df[self.cols.sf_gf] = df[self.cols.sf]
 
-        return df.sort_index()
+        return self.df.sort_index()
+
+    def stats(self):
+        cols = [self.flux_openpath.name, self.flux_closedpath.name, self.cols.flux_op_corr]
+
+        _stats_df = self.df[cols].copy()
+        _stats_df = _stats_df.dropna()
+        _numvals = len(_stats_df)
+
+        print("\nCUMULATIVE FLUXES:")
+        print(f"Values: {_numvals}")
+        _cumsum_opnocorr = _stats_df[self.flux_openpath.name].sum()
+        _cumsum_cptrueflux = _stats_df[self.flux_closedpath.name].sum()
+        _perc = (_cumsum_opnocorr / _cumsum_cptrueflux) * 100
+        print(f"OPEN-PATH (uncorrected): {_cumsum_opnocorr:.0f}  ({_perc:.1f}% of true flux)")
+        print(f"ENCLOSED-PATH (true flux): {_cumsum_cptrueflux:.0f}")
+        _cumsum = _stats_df[self.cols.flux_op_corr].sum()
+        _perc = (_cumsum / _cumsum_cptrueflux) * 100
+        print(f"OPEN-PATH (corrected): {_cumsum:.0f}  ({_perc:.1f}% of true flux)")
+        print("\n\n")
 
     # def gapfilling_lut(self, series):
     #     """Gap-fill time series using look-up table (LUT)
@@ -308,139 +313,6 @@ class ScopApplicator:
     #     series_gf = series.fillna(lutvals)
     #
     #     return series_gf, lutvals
-
-    # def calc_aerodynamic_resistance(self, u, ustar, rem_outliers: bool = False) -> pd.Series:
-    #     # Aerodynamic resistance
-    #     ra = aerodynamic_resistance(u_ms=u, ustar_ms=ustar)
-    #     if rem_outliers:
-    #         if self.remove_outliers_method == "fast":
-    #             ra = self.remove_outliers_fast(series=ra)
-    #         elif self.remove_outliers_method == "separate":
-    #             ra = self.remove_outliers(series=ra)
-    #         else:
-    #             raise ValueError(f"Unknown remove_outliers_method: {self.remove_outliers_method}")
-    #     return ra
-
-    # def remove_outliers(self, series: pd.Series):
-    #     ham = HampelDaytimeNighttime(
-    #         series=series,
-    #         n_sigma_dt=4,
-    #         n_sigma_nt=4,
-    #         window_length=48 * 5,
-    #         showplot=True,
-    #         verbose=True,
-    #         lat=self.lat,
-    #         lon=self.lon,
-    #         utc_offset=self.utc_offset
-    #     )
-    #     ham.calc(repeat=False)
-    #     return ham.filteredseries
-
-    # def remove_outliers_fast(self, series, plot_title: str = "X", n_sigmas: int = 5):
-    #     """Remove outliers with Hampel filter, using running MAD (median absolute deviation)
-    #
-    #     :param series: pandas.Series, data from which outliers are removed
-    #     :param plot_title: Plot title
-    #     :param n_sigmas:
-    #     :return:
-    #     pandas.Series with outliers removed
-    #     """
-    #     # n_sigmas = 4  # Number of sigmas for limits
-    #     k = 1.4826  # Scale factor for Gaussian distribution
-    #     window = 1440  # Rolling time window in number of records
-    #     min_periods = 1  # Min number of records in window
-    #
-    #     _series_rolling = series.rolling(window=window, min_periods=min_periods, center=True)
-    #     _series_running_median = _series_rolling.median()
-    #     _series_sub_winmed = series.sub(_series_running_median).abs()  # Data series minus median in time window
-    #     _series_running_mad = _series_sub_winmed.rolling(window=window, min_periods=min_periods,
-    #                                                      center=True).median().multiply(k)
-    #     _diff_series_runmed = np.abs(series - _series_running_median)
-    #     _diff_limit = _series_running_mad.multiply(n_sigmas)  # Limit
-    #
-    #     _outliers_ix = _diff_series_runmed > _diff_limit
-    #     series.loc[_outliers_ix] = np.nan  # Remove outliers from series (set to missing)
-    #     return series
-    #
-    #     # # Plot
-    #     # figsize = (14, 5)
-    #     # plt.figure()
-    #     # series_orig.plot(figsize=figsize, title=f"{plot_title} BEFORE outlier removal");
-    #     # plt.figure()
-    #     # series.plot(title=f"{plot_title} AFTER outlier removal", figsize=figsize, label="series after outlier removal");
-    #     # _diff_series_runmed.loc[~_outliers_ix].plot(
-    #     #     label="absolute difference of: series - running median of series; for outlier detection")
-    #     # _diff_limit.plot(label="limit from: series running MAD * number of sigmas")
-    #     # _series_running_mad.plot(label="series running MAD (median absolute deviation)")
-    #     # _series_running_median.plot(label="series running median")
-    #     # plt.legend()
-    #     # print(series.describe())
-    #
-    #     # return series, series_orig
-
-    # def calc_dry_air_density(self, rho_v, rho_a) -> pd.Series:
-    #     # Dry air density
-    #     return dry_air_density(rho_v=rho_v, rho_a=rho_a)
-
-    # def calc_air_thermal_conductivity(self, ta: pd.Series) -> pd.Series:
-    #     """
-    #     Calculate thermal conductivity of air (k_air) as a function of temperature.
-    # 
-    #     Approximation for dry air.
-    #     Units: W m-1 K-1
-    # 
-    #     Args:
-    #         ta: Air temperature in Celsius
-    #     """
-    #     # Linear approximation suitable for atmospheric range (-50 to 100 C)
-    #     # k ~ 0.02425 at 0C, increasing by ~0.00007 per degree C
-    #     k_air = 0.02425 + (0.00007 * ta)
-    #     return k_air
-
-    # def flux_correction_term_unscaled(self, ts, ta, qc_umol, ra, rho_v, rho_d):
-    #     """Calculate unscaled flux correction term
-    #
-    #     fct_unsc ... unscaled flux correction term
-    #
-    #     Source:
-    #         - Part of eq. (8) in Burba et al. (2006)
-    #         - Similar to eq. (5) in Kittler et al. (2017)
-    #
-    #     :param ts: series, bulk surface temperature (°C)
-    #     :param ta: series, air temperature (°C)
-    #     :param qc_umol: series, CO2 molar density (µmol m-3)
-    #     :param ra: series, aerodynamic resistance (s m-1)
-    #     :param rho_v: series, water vapor density (kg m-3)
-    #     :param rho_d: series, dry air density (kg m-3)
-    #     :return:
-    #     pandas.Series
-    #     """
-    #     _a = (ts - ta) * qc_umol  # Uses BUR06 or JAR09 surface temperature
-    #     _b = ra * (ta + 273.15)
-    #     _c = 1 + 1.6077 * (rho_v / rho_d)
-    #     fct_unsc = (_a / _b * _c)
-    #     # flux_correction_term_unscaled = _a / _b * _c
-    #     return fct_unsc
-
-    def fct_unscaled_bur06(self, df: pd.DataFrame) -> pd.Series:
-        """Calculate bulk instrument surface temperature (BUR06)
-
-        :return:
-        series, surface temperature (BUR06) (°C)
-        """
-        ta = df[self.air_temperature].copy()
-        qc = df[self.co2_molar_density].copy()  # Needs umol
-        # qc = df[self.co2_molar_density].copy().multiply(1000)  # Needs umol
-        ra = df[self.cols.aerodynamic_resistance].copy()
-        rho_v = df[self.water_vapor_density].copy()
-        rho_d = df[self.cols.dry_air_density].copy()
-
-        ts = 0.0025 * ta ** 2 + 0.9 * ta + 2.07
-        print(f"Ts (BUR06), mean = {ts.mean():.2f}°C")
-
-        # Calculate unscaled flux correction term
-        fct_unsc = self.flux_correction_term_unscaled(ts=ts, ta=ta, qc_umol=qc, ra=ra, rho_v=rho_v, rho_d=rho_d)
-        return fct_unsc, ts
 
     def plot_series(self, ax, series, title):
         ax.plot_date(x=series.index, y=series,
@@ -470,7 +342,7 @@ class ScopApplicator:
             ax.set_ylabel(f'{txt_ylabel}', color=label_color, fontsize=fontsize, fontweight='bold')
         return None
 
-    def plot_diel_cycles(self, df: pd.DataFrame):
+    def plot_diel_cycles(self):
         """
         Combines flux results and auxiliary variables into a single
         publication-quality dashboard plot.
@@ -486,10 +358,10 @@ class ScopApplicator:
         # Create a temporary column for the Residual (Corrected - Reference)
         # We handle cases where reference might be missing
         diff_col_name = 'diff_corr_ref'
-        plot_df = df.copy()
+        plot_df = self.df.copy()
 
-        if self.flux_closedpath and self.flux_closedpath in plot_df.columns:
-            plot_df[diff_col_name] = plot_df[self.cols.nee_op_corr] - plot_df[self.flux_closedpath]
+        if self.flux_closedpath.name and self.flux_closedpath.name in plot_df.columns:
+            plot_df[diff_col_name] = plot_df[self.cols.flux_op_corr] - plot_df[self.flux_closedpath.name]
         else:
             plot_df[diff_col_name] = np.nan
 
@@ -497,7 +369,7 @@ class ScopApplicator:
         # Define the grid layout (variable list)
         plot_vars = [
             # ROW 1: DRIVERS
-            {'col': self.swin, 'title': '1. Shortwave Incoming (Driver)', 'unit': '$W\\ m^{-2}$'},
+            {'col': self.swin.name, 'title': '1. Shortwave Incoming (Driver)', 'unit': '$W\\ m^{-2}$'},
             {'col': self.cols.t_instr_surface, 'title': '2. Instrument Surface Temp', 'unit': '°C'},
             {'col': self.cols.aerodynamic_resistance, 'title': '3. Aerodynamic Resistance', 'unit': '$s\\ m^{-1}$'},
             {'col': self.cols.dry_air_density, 'title': '4. Dry Air Density', 'unit': '$kg\\ m^{-3}$'},
@@ -505,14 +377,14 @@ class ScopApplicator:
             # ROW 2: CORRECTION MECHANISM
             {'col': self.cols.fct_unsc_gf, 'title': '5. Unscaled Correction ($FCT_{unsc}$)',
              'unit': '$\\mu mol\\ m^{-2}\\ s^{-1}$'},
-            {'col': self.cols.sf_gf, 'title': '6. Scaling Factor ($\\xi$)', 'unit': '-'},
+            {'col': "SF", 'title': '6. Scaling Factor ($\\xi$)', 'unit': '-'},
             {'col': self.cols.fct, 'title': '7. Final Correction Term', 'unit': '$\\mu mol\\ m^{-2}\\ s^{-1}$'},
             {'col': None},  # Spacer to align grid if needed, or we can simply skip
 
             # ROW 3: FLUX RESULTS
-            {'col': self.flux_openpath, 'title': '8. OP Flux (Uncorrected)', 'unit': '$\\mu mol\\ m^{-2}\\ s^{-1}$'},
-            {'col': self.flux_closedpath, 'title': '9. CP Flux (Reference)', 'unit': '$\\mu mol\\ m^{-2}\\ s^{-1}$'},
-            {'col': self.cols.nee_op_corr, 'title': '10. OP Flux (Corrected)', 'unit': '$\\mu mol\\ m^{-2}\\ s^{-1}$'},
+            {'col': self.flux_openpath.name, 'title': '8. OP Flux (Uncorrected)', 'unit': '$\\mu mol\\ m^{-2}\\ s^{-1}$'},
+            {'col': self.flux_closedpath.name, 'title': '9. CP Flux (Reference)', 'unit': '$\\mu mol\\ m^{-2}\\ s^{-1}$'},
+            {'col': self.cols.flux_op_corr, 'title': '10. OP Flux (Corrected)', 'unit': '$\\mu mol\\ m^{-2}\\ s^{-1}$'},
             {'col': diff_col_name, 'title': '11. Residual (Corrected - Ref)', 'unit': '$\\mu mol\\ m^{-2}\\ s^{-1}$'},
         ]
 
@@ -539,7 +411,8 @@ class ScopApplicator:
                 ax.axis('off')
                 continue
 
-            series = plot_df[var['col']]
+            series = plot_df[var['col']].copy()
+            series.index = pd.to_datetime(series.index)
 
             # Helper call
             self._plot_diel_cycle_modern(ax, series, cmap=cmap, norm=norm)
@@ -584,20 +457,20 @@ class ScopApplicator:
         ax.set_xlim(0, 23)
         ax.set_xticks([0, 6, 12, 18, 24])
 
-    def plot_flux_analysis_dashboard(self, df: pd.DataFrame):
+    def plot_flux_analysis_dashboard(self):
         print("Plotting Flux Analysis Dashboard (Time Series + Cumulative)...")
 
         # --- CONFIGURATION ---
         # Consistent styling across all panels
         # zorder: Corrected on top (3), Reference middle (2), Uncorrected bottom (1)
         style_config = {
-            self.flux_openpath: {
+            self.flux_openpath.name: {
                 'label': 'Uncorrected (OP)', 'color': '#95a5a6', 'zorder': 1, 'alpha_pts': 0.1, 'alpha_line': 0.7
             },
-            self.flux_closedpath: {
+            self.flux_closedpath.name: {
                 'label': 'Reference (CP)', 'color': '#2c3e50', 'zorder': 2, 'alpha_pts': 0.1, 'alpha_line': 0.8
             },
-            self.cols.nee_op_corr: {
+            self.cols.flux_op_corr: {
                 'label': 'Corrected (OP)', 'color': '#e74c3c', 'zorder': 3, 'alpha_pts': 0.15, 'alpha_line': 1.0
             }
         }
@@ -615,13 +488,15 @@ class ScopApplicator:
         fig.set_constrained_layout_pads(w_pad=0.1, h_pad=0.1, wspace=0.1, hspace=0.1)
 
         # Top row: time series
-        cols_to_plot = [self.flux_openpath, self.flux_closedpath, self.cols.nee_op_corr]
+        cols_to_plot = [self.flux_openpath.name, self.flux_closedpath.name, self.cols.flux_op_corr]
 
         for col in cols_to_plot:
-            if col not in df.columns or col is None: continue
+            if col not in self.df.columns or col is None:
+                continue
 
-            series = df[col].dropna()
-            if series.empty: continue
+            series = self.df[col].dropna()
+            if series.empty:
+                continue
 
             style = style_config[col]
 
@@ -646,8 +521,8 @@ class ScopApplicator:
         # Bottom row: cumulative fluxes
         # Prepare scenarios
         scenarios = [
-            {'ax': ax_day, 'title': 'B. Daytime Budget', 'filter': df[self.cols.daytime] == 1},
-            {'ax': ax_night, 'title': 'C. Nighttime Budget', 'filter': df[self.cols.daytime] == 0},
+            {'ax': ax_day, 'title': 'B. Daytime Budget', 'filter': self.df[self.cols.daytime] == 1},
+            {'ax': ax_night, 'title': 'C. Nighttime Budget', 'filter': self.df[self.cols.daytime] == 0},
             {'ax': ax_all, 'title': 'D. Total Budget', 'filter': slice(None)}  # No filter
         ]
 
@@ -656,9 +531,9 @@ class ScopApplicator:
 
             # Filter data first
             if isinstance(scen['filter'], slice):
-                subset = df.copy()
+                subset = self.df.copy()
             else:
-                subset = df.loc[scen['filter']].copy()
+                subset = self.df.loc[scen['filter']].copy()
 
             # Drop rows where any of the key fluxes are missing to ensure fair cumulative comparison
             # (If one sensor is down, we shouldn't sum the other one during that time)
@@ -1131,11 +1006,11 @@ class ScopOptimizer:
         self.df = pd.DataFrame.from_dict(frame)
 
     def run(self):
-        self.bootstrapping()
-        self.plot()
-        self.print_stats()
+        self._bootstrapping()
+        self._plot()
+        self._print_stats()
 
-    def plot(self):
+    def _plot(self):
         """
         Plots the optimized scaling factors with bootstrapped confidence intervals.
         """
@@ -1212,7 +1087,7 @@ class ScopOptimizer:
 
         fig.show()
 
-    def print_stats(self):
+    def _print_stats(self):
         print("BOOTSTRAPPING RESULTS")
         print(f"class variable: {self.class_var}")
         print(f"number of classes: {self.n_classes}")
@@ -1230,10 +1105,10 @@ class ScopOptimizer:
         print(
             f"sum of squares (overall median): {self.scaling_factors_df.loc[:, 'SOS_MEDIAN'].median():.3f}")
 
-    def get(self):
+    def get(self) -> pd.DataFrame:
         return self.scaling_factors_df
 
-    def bootstrapping(self):
+    def _bootstrapping(self):
 
         # Group data records by daytime / nighttime membership
         _grouped_by_daynighttime = self.df.groupby(self.cols.daytime)
@@ -1392,21 +1267,33 @@ def main():
         lon=8.364389,  # CH–LAE
         utc_offset=1,
     )
-    physics.run(correction_method_base="BUR08", gapfill=True)
+    physics.run(correction_method_base="JAR09", gapfill=True)
     # physics.run(correction_method_base="JAR09", gapfill=True)
     results_physics_df = physics.get_results()
 
     optimizer = ScopOptimizer(
         fct_unsc=results_physics_df["FCT_UNSC_gfRF"],
         class_var=df[USTAR].copy(),
-        n_classes=10,
-        n_bootstrap_runs=10,
+        n_classes=3,
+        n_bootstrap_runs=0,
         flux_openpath=df[FLUX_75].copy(),
         flux_closedpath=df[FLUX_72].copy(),
         daytime=results_physics_df["DAYTIME"],
         showplot=True
     )
     optimizer.run()
+    scaling_factors_df = optimizer.get()
+
+    applicator = ScopApplicator(
+        fct_unsc=results_physics_df["FCT_UNSC_gfRF"],
+        scaling_factors_df=scaling_factors_df,
+        flux_openpath=df[FLUX_75].copy(),
+        flux_closedpath=df[FLUX_72].copy(),
+        classvar=df[USTAR].copy(),
+        daytime=results_physics_df["DAYTIME"].copy(),
+        swin=df[SWIN].copy()
+    )
+    applicator.run()
 
     # scop = ScopOptimizer(
     #     inputdf=df,
