@@ -12,6 +12,37 @@ References:
         Journal of Geophysical Research: Biogeosciences, 122(8), 2064–2084.
         https://doi.org/10.1002/2017JG003830
 
+Abbreviations:
+            pm ... Parallel measurements
+            OP ... open-path
+            CP ... enclosed-path
+            wpl ... WPL-correction
+            cr ... correction
+            Settings for calculation of scaling factors from parallel measurements
+            Correction (cr) needed for application of scaling factors to (uncorrected) fluxes
+
+Args:
+            df:
+            site (str): Site identifier where the data is collected.
+            title (str): Title or name for the dataset or processing task.
+            flux_openpath (str): Column name for OP flux with WPL correction in PM file.
+            flux_closedpath (str): Column name for CP true flux in PM file.
+            air_heat_capacity (str): Column name for specific heat at constant pressure of
+                ambient air (J K-1 kg-1) in PM file. [c_p]
+            co2_molar_density (str): Column name for CO2 molar density column (mmol m-3) in PM file. [qc]
+            u (str): Column name for horizontal wind speed (m s-1) in PM file.
+            ustar (str): Column name for USTAR friction velocity (m s-1) in PM file.
+            water_vapor_density (str): Column name for water vapor density (kg m-3) in PM file. [rho_v]
+            air_density (str): Column name for air density (kg m-3) in PM file. [rho_a]
+            air_temperature (str): Column name for ambient air temperature (°C) in PM file.
+            swin (str): Column name for shortwave-incoming radiation (W m-2) in PM file.
+            n_classes (int): Number of classes for categorization in PM processing, ignored
+                if class_var_col = 'custom'.
+            n_bootstrap_runs (int): Number of bootstraps in each class, *0* uses measured
+                data only w/o bootstrapping.
+            classvar (str): Column name for the class variable in PM file. Each class
+                has its own scaling factor.
+
 """
 import time
 from dataclasses import dataclass
@@ -41,7 +72,7 @@ class ColumnConfig:
     air_thermal_conductivity: str = 'AIR_THERMAL_CONDUCTIVITY'
     aerodynamic_resistance: str = 'AERODYNAMIC_RESISTANCE'
     dry_air_density: str = 'DRY_AIR_DENSITY'
-    t_instr_surface: str = 'T_INSTRUMENT_SURFACE'
+    t_instr_surface: str = 'TS'
     flux_op_corr: str = 'NEE_OP_CORR'
     fct_unsc: str = 'FCT_UNSC'
     fct_unsc_gf: str = 'FCT_UNSC_gfRF'
@@ -51,124 +82,16 @@ class ColumnConfig:
     s: str = 'S'  # Sensible heat from all key instrument surfaces (W m-2) (BUR08)
 
 
-class Scop:
-    """
-    Calculate scaling factors by comparing parallel measurements
-    """
-
-    def __init__(
-            self,
-            inputdf: pd.DataFrame,
-            site: str,
-            title: str,
-            flux_openpath: str,
-            flux_closedpath: str,
-            air_heat_capacity: str,
-            co2_molar_density: str,
-            u: str,
-            ustar: str,
-            water_vapor_density: str,
-            air_density: str,
-            air_temperature: str,
-            swin: str,
-            n_classes: int,
-            n_bootstrap_runs: int,
-            classvar: str,
-            lat: float,
-            lon: float,
-            utc_offset: int,
-            correction_method_base: Literal["JAR09", "BUR06", "BUR08"] = "JAR09",
-            remove_outliers_method: Literal["fast", "separate"] = "fast"
-    ):
-        """
-        Initializes an object with configuration parameters related to processing and
-        analyzing flux and meteorological data. This method sets up all the necessary
-        attributes for further data handling and computations.
-
-        Abbreviations:
-            pm ... Parallel measurements
-            OP ... open-path
-            CP ... enclosed-path
-            wpl ... WPL-correction
-            cr ... correction
-            Settings for calculation of scaling factors from parallel measurements
-            Correction (cr) needed for application of scaling factors to (uncorrected) fluxes
-
-        Args:
-            df:
-            site (str): Site identifier where the data is collected.
-            title (str): Title or name for the dataset or processing task.
-            flux_openpath (str): Column name for OP flux with WPL correction in PM file.
-            flux_closedpath (str): Column name for CP true flux in PM file.
-            air_heat_capacity (str): Column name for specific heat at constant pressure of
-                ambient air (J K-1 kg-1) in PM file. [c_p]
-            co2_molar_density (str): Column name for CO2 molar density column (mmol m-3) in PM file. [qc]
-            u (str): Column name for horizontal wind speed (m s-1) in PM file.
-            ustar (str): Column name for USTAR friction velocity (m s-1) in PM file.
-            water_vapor_density (str): Column name for water vapor density (kg m-3) in PM file. [rho_v]
-            air_density (str): Column name for air density (kg m-3) in PM file. [rho_a]
-            air_temperature (str): Column name for ambient air temperature (°C) in PM file.
-            swin (str): Column name for shortwave-incoming radiation (W m-2) in PM file.
-            n_classes (int): Number of classes for categorization in PM processing, ignored
-                if class_var_col = 'custom'.
-            n_bootstrap_runs (int): Number of bootstraps in each class, *0* uses measured
-                data only w/o bootstrapping.
-            classvar (str): Column name for the class variable in PM file. Each class
-                has its own scaling factor.
-        """
-        super().__init__()
-
-        # Initialize configuration
-        self.cols = ColumnConfig()
-
-        self.inputdf = inputdf.copy()
-        self.site = site
-        self.title = title
-        self.flux_openpath = flux_openpath
-        self.flux_closedpath = flux_closedpath
-        self.air_heat_capacity = air_heat_capacity
-        self.co2_molar_density = co2_molar_density
-        self.u = u
-        self.ustar = ustar
-        self.water_vapor_density = water_vapor_density
-        self.air_density = air_density
-        self.air_temperature = air_temperature
-        self.swin = swin
-        self.n_classes = n_classes
-        self.n_bootstrap_runs = n_bootstrap_runs
-        self.classvar = classvar
-        self.lat = lat
-        self.lon = lon
-        self.utc_offset = utc_offset
-        self.remove_outliers_method = remove_outliers_method
-        self.correction_method_base = correction_method_base
-
-        self.df = pd.DataFrame()
-        self.scaling_factors_df = pd.DataFrame()
-
-    def calc_sf(self):
-        """Calculate flux correction term and scaling factors from parallel measurements"""
-        df = self.inputdf.copy()
-        df = self.init_newcols(df=df)
-
-        # Calculate scaling factors
-        optimize = ScopOptimizer(df=df,
-                                 class_var=self.classvar,
-                                 n_classes=self.n_classes,
-                                 n_bootstrap_runs=self.n_bootstrap_runs,
-                                 flux_openpath=self.flux_openpath,
-                                 flux_closedpath=self.flux_closedpath,
-                                 showplot=True,
-                                 cols=self.cols)
-        scaling_factors_df = optimize.get()
-
-
 class ScopApplicator:
 
     def __init__(self, fct_unsc: pd.Series, scaling_factors_df: pd.DataFrame, flux_openpath: pd.Series,
-                 flux_closedpath: pd.Series, classvar: pd.Series, daytime: pd.Series, swin: pd.Series):
+                 flux_closedpath: pd.Series, classvar: pd.Series, daytime: pd.Series, swin: pd.Series,
+                 ts: pd.Series, ra: pd.Series, rho_d: pd.Series):
 
         self.fct_unsc = fct_unsc.copy()
+        self.ts = ts
+        self.ra = ra
+        self.rho_d = rho_d
         self.scaling_factors_df = scaling_factors_df.copy()
         self.flux_openpath = flux_openpath.copy()
         self.flux_closedpath = flux_closedpath.copy()
@@ -179,8 +102,9 @@ class ScopApplicator:
         self.cols = ColumnConfig()
 
         frame = {self.fct_unsc.name: self.fct_unsc, self.flux_openpath.name: self.flux_openpath,
-                 self.flux_closedpath.name: self.flux_closedpath,
-                 self.classvar.name: self.classvar, self.daytime.name: self.daytime, self.swin.name: self.swin}
+                 self.flux_closedpath.name: self.flux_closedpath, self.ts.name: self.ts, self.ra.name: self.ra,
+                 self.classvar.name: self.classvar, self.daytime.name: self.daytime, self.swin.name: self.swin,
+                 self.rho_d.name: self.rho_d}
         self.df = pd.DataFrame(frame)
 
     def run(self):
@@ -193,34 +117,7 @@ class ScopApplicator:
         self.df[self.cols.fct] = self.df[self.cols.fct_unsc_gf] * self.df[self.cols.sf]
         self.df[self.cols.flux_op_corr] = self.df[self.flux_openpath.name] + self.df[self.cols.fct]
 
-        # Visualization
-        self.stats()
-        self.plot_diel_cycles()
-        self.plot_flux_analysis_dashboard()
-
-        # self.df = df.copy()
-
-    # def init_newcols(self, df: pd.DataFrame) -> pd.DataFrame:
-    #     df[self.cols.daytime] = np.nan
-    #     df[self.cols.aerodynamic_resistance] = np.nan
-    #     df[self.cols.dry_air_density] = np.nan
-    #     df[self.cols.t_instr_surface] = np.nan
-    #     df[self.cols.fct_unsc] = np.nan
-    #     df[self.cols.fct_unsc_gf] = np.nan
-    #     df[self.cols.class_var_group] = np.nan
-    #     df[self.cols.sf] = np.nan
-    #     df[self.cols.class_var_group] = np.nan
-    #     df[self.cols.fct] = np.nan
-    #     df[self.cols.flux_op_corr] = np.nan
-    #     return df
-
     def _assign_scaling_factors(self) -> pd.DataFrame:
-
-        # # Initialize destination columns
-        # if self.cols.class_var_group not in df.columns:
-        #     df[self.cols.class_var_group] = np.nan
-        # if self.cols.sf not in df.columns:
-        #     df[self.cols.sf] = np.nan
 
         # Filter for valid keys
         valid_mask = self.classvar.notna() & self.daytime.notna()
@@ -273,12 +170,6 @@ class ScopApplicator:
             # print(df.loc[missing_sf_mask, [self.flux_openpath, self.cols.sf, self.ustar, self.cols.daytime]].head())
             raise ValueError(f"Not all open-path fluxes have a scaling factor. Found {n_missing} missing values.")
 
-        # # 8. Gapfilling (Time-based interpolation for missing USTAR data)
-        # if lut_gapfill:
-        #     df[self.cols.sf_gf] = df[self.cols.sf].interpolate(method='time').bfill().ffill()
-        # else:
-        #     df[self.cols.sf_gf] = df[self.cols.sf]
-
         return self.df.sort_index()
 
     def stats(self):
@@ -314,12 +205,14 @@ class ScopApplicator:
     #
     #     return series_gf, lutvals
 
+    @staticmethod
     def plot_series(self, ax, series, title):
         ax.plot_date(x=series.index, y=series,
                      ms=2, alpha=.3, ls='-', marker='o', markeredgecolor='none')
         ax.set_title(title, fontsize=9, fontweight='bold', y=1)
 
-    def format_spines(self, ax, color, lw):
+    @staticmethod
+    def format_spines(ax, color, lw):
         spines = ['top', 'bottom', 'left', 'right']
         for spine in spines:
             ax.spines[spine].set_color(color)
@@ -345,105 +238,149 @@ class ScopApplicator:
     def plot_diel_cycles(self):
         """
         Combines flux results and auxiliary variables into a single
-        publication-quality dashboard plot.
-
-        Layout:
-        Row 1: Physics/Drivers (SWIN, Ts, Ra, Rho)
-        Row 2: Correction Mechanics (FCT_unsc, SF, FCT_final)
-        Row 3: Flux Results (Uncorrected, Reference, Corrected, Residual)
+        publication-quality dashboard plot with a modern, minimalist design.
         """
+        import matplotlib.ticker as ticker
+
         print("Plotting Comprehensive Diel Cycles (Modern Dashboard)...")
 
-        # --- PRE-CALCULATION ---
-        # Create a temporary column for the Residual (Corrected - Reference)
-        # We handle cases where reference might be missing
+        # --- 1. PRE-CALCULATION ---
         diff_col_name = 'diff_corr_ref'
+        # Assuming self.df exists and contains the necessary columns
         plot_df = self.df.copy()
 
-        if self.flux_closedpath.name and self.flux_closedpath.name in plot_df.columns:
-            plot_df[diff_col_name] = plot_df[self.cols.flux_op_corr] - plot_df[self.flux_closedpath.name]
+        # Note: Using .name attributes is prone to errors if the input was a Series object
+        # instead of a column name string. Using string literals for safety in this example.
+
+        # Calculate residual if reference exists (assuming string column names are used)
+        # The actual column names from the previous scope must be used here:
+        # self.flux_closedpath, self.flux_openpath, self.cols.nee_op_corr, etc.
+        # ***For this snippet, I'll use placeholders that were in your original code:***
+
+        OP_COL = self.flux_openpath.name
+        CP_COL = self.flux_closedpath.name
+
+        if CP_COL in plot_df.columns:
+            # Assuming self.cols.nee_op_corr is the corrected column name
+            plot_df[diff_col_name] = plot_df[self.cols.flux_op_corr] - plot_df[CP_COL]
         else:
             plot_df[diff_col_name] = np.nan
 
-        # --- CONFIGURATION ---
-        # Define the grid layout (variable list)
+        # --- 2. CONFIGURATION ---
+        # Define vars (using string placeholders for the original variables)
         plot_vars = [
             # ROW 1: DRIVERS
-            {'col': self.swin.name, 'title': '1. Shortwave Incoming (Driver)', 'unit': '$W\\ m^{-2}$'},
-            {'col': self.cols.t_instr_surface, 'title': '2. Instrument Surface Temp', 'unit': '°C'},
-            {'col': self.cols.aerodynamic_resistance, 'title': '3. Aerodynamic Resistance', 'unit': '$s\\ m^{-1}$'},
-            {'col': self.cols.dry_air_density, 'title': '4. Dry Air Density', 'unit': '$kg\\ m^{-3}$'},
+            {'col': self.swin.name, 'title': '1. Shortwave Incoming', 'unit': r'$W\ m^{-2}$'},
+            {'col': 'TS', 'title': '2. Instrument Surface Temp', 'unit': r'°C'},
+            {'col': self.cols.aerodynamic_resistance, 'title': '3. Aerodynamic Resistance', 'unit': r'$s\ m^{-1}$'},
+            {'col': self.cols.dry_air_density, 'title': '4. Dry Air Density', 'unit': r'$kg\ m^{-3}$'},
 
             # ROW 2: CORRECTION MECHANISM
-            {'col': self.cols.fct_unsc_gf, 'title': '5. Unscaled Correction ($FCT_{unsc}$)',
-             'unit': '$\\mu mol\\ m^{-2}\\ s^{-1}$'},
-            {'col': "SF", 'title': '6. Scaling Factor ($\\xi$)', 'unit': '-'},
-            {'col': self.cols.fct, 'title': '7. Final Correction Term', 'unit': '$\\mu mol\\ m^{-2}\\ s^{-1}$'},
-            {'col': None},  # Spacer to align grid if needed, or we can simply skip
+            {'col': self.cols.fct_unsc_gf, 'title': r'5. Unscaled Correction ($FCT_{unsc}$)',
+             'unit': r'$\mu mol\ m^{-2}\ s^{-1}$'},
+            {'col': self.cols.sf, 'title': r'6. Scaling Factor ($\xi$)', 'unit': '-'},
+            {'col': self.cols.fct, 'title': '7. Final Correction Term', 'unit': r'$\mu mol\ m^{-2}\ s^{-1}$'},
+            {'col': None},
 
             # ROW 3: FLUX RESULTS
-            {'col': self.flux_openpath.name, 'title': '8. OP Flux (Uncorrected)', 'unit': '$\\mu mol\\ m^{-2}\\ s^{-1}$'},
-            {'col': self.flux_closedpath.name, 'title': '9. CP Flux (Reference)', 'unit': '$\\mu mol\\ m^{-2}\\ s^{-1}$'},
-            {'col': self.cols.flux_op_corr, 'title': '10. OP Flux (Corrected)', 'unit': '$\\mu mol\\ m^{-2}\\ s^{-1}$'},
-            {'col': diff_col_name, 'title': '11. Residual (Corrected - Ref)', 'unit': '$\\mu mol\\ m^{-2}\\ s^{-1}$'},
+            {'col': OP_COL, 'title': '8. OP Flux (Uncorrected)', 'unit': r'$\mu mol\ m^{-2}\ s^{-1}$'},
+            {'col': CP_COL, 'title': '9. CP Flux (Reference)', 'unit': r'$\mu mol\ m^{-2}\ s^{-1}$'},
+            {'col': self.cols.flux_op_corr, 'title': '10. OP Flux (Corrected)', 'unit': r'$\mu mol\ m^{-2}\ s^{-1}$'},
+            {'col': diff_col_name, 'title': '11. Residual (Corrected - Ref)', 'unit': r'$\mu mol\ m^{-2}\ s^{-1}$'},
         ]
 
-        # --- FIGURE SETUP ---
-        # 3 Rows, 4 Columns
-        rows, cols = 3, 4
-        fig, axes = plt.subplots(rows, cols, figsize=(18, 12), constrained_layout=True, sharex=True)
+        # --- 3. STYLE SETTINGS ---
+        with plt.rc_context({
+            'font.family': 'sans-serif',
+            'axes.edgecolor': '#bdc3c7',
+            'axes.linewidth': 0.8,
+            'grid.color': '#ecf0f1',
+            'text.color': '#2c3e50',
+            'axes.labelcolor': '#2c3e50',
+            'xtick.color': '#7f8c8d',
+            'ytick.color': '#7f8c8d'
+        }):
 
-        # Adjust padding for readability
-        fig.set_constrained_layout_pads(w_pad=0.1, h_pad=0.1, wspace=0.05, hspace=0.05)
+            rows, cols = 3, 4
+            fig, axes = plt.subplots(rows, cols, figsize=(20, 13), constrained_layout=True, sharex=True)
 
-        axes_flat = axes.flatten()
+            cmap = plt.get_cmap('Spectral_r', 12)
+            norm = plt.Normalize(vmin=0.5, vmax=12.5)
+            axes_flat = axes.flatten()
 
-        # Colormap
-        # Viridis with 12 discrete steps for months
-        cmap = plt.get_cmap('viridis', 12)
-        norm = plt.Normalize(vmin=0.5, vmax=12.5)
+            for i, var in enumerate(plot_vars):
+                ax = axes_flat[i]
+                col_name = var['col']
 
-        for i, var in enumerate(plot_vars):
-            ax = axes_flat[i]
+                if col_name is None or col_name not in plot_df.columns:
+                    ax.axis('off')
+                    continue
 
-            # Handle spacer or missing columns
-            if var['col'] is None or var['col'] not in plot_df.columns:
-                ax.axis('off')
-                continue
+                series = plot_df[col_name].copy()
 
-            series = plot_df[var['col']].copy()
-            series.index = pd.to_datetime(series.index)
+                # --- FIX: Ensure DatetimeIndex ---
+                # This is essential for .index.month and .index.hour to work.
+                if not isinstance(series.index, pd.DatetimeIndex):
+                    try:
+                        series.index = pd.to_datetime(series.index)
+                    except Exception:
+                        ax.set_title(f"Data for {col_name} has invalid index type.", fontsize=8)
+                        continue
 
-            # Helper call
-            self._plot_diel_cycle_modern(ax, series, cmap=cmap, norm=norm)
+                # 4. Data Aggregation
+                # Group by Month and Hour, then calculate mean
+                diel = series.groupby([series.index.month, series.index.hour]).mean().unstack()
 
-            # Styling
-            ax.set_title(var['title'], fontsize=11, fontweight='bold', loc='left', color='#333333')
-            ax.set_ylabel(var['unit'], fontsize=9, color='#555555')
-            ax.grid(True, linestyle=':', alpha=0.6, color='gray')
+                # Global Annual Mean
+                annual_mean = series.groupby(series.index.hour).mean()
 
-            # Zero line for flux-related variables
-            if (series.min() < 0) and (series.max() > 0):
-                ax.axhline(0, lw=1, color='#333333', linestyle='-', zorder=1)
+                # --- 5. PLOTTING ---
 
-            # Despine
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
-            ax.spines['left'].set_linewidth(0.5)
-            ax.spines['bottom'].set_linewidth(0.5)
+                # A. Plot Annual Mean (Context Layer)
+                ax.plot(annual_mean.index, annual_mean.values, color='#95a5a6',
+                        linestyle='--', linewidth=1.5, alpha=0.6, zorder=1, label='Annual Mean')
 
-        # Shared colorbar on the right
-        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-        sm.set_array([])
-        cbar = fig.colorbar(sm, ax=axes, orientation='vertical', aspect=40, shrink=0.6, label='Month')
-        cbar.set_ticks(np.arange(1, 13))
-        cbar.set_ticklabels(['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'])
-        cbar.outline.set_visible(False)
+                # B. Plot Monthly Lines
+                for month in diel.index:
+                    vals = diel.loc[month]
+                    color = cmap(norm(month))
+                    # FIX: Ensure we plot against the numerical hour (0-23)
+                    ax.plot(vals.index, vals.values, color=color,
+                            alpha=0.9, linewidth=2, zorder=2)
 
-        # Global X Label
-        fig.supxlabel("Hour of Day (Local Winter Time)", fontsize=13, fontweight='normal')
+                # 6. Styling
+                ax.set_title(var['title'], fontsize=12, fontweight='bold', loc='left', color='#2c3e50', pad=10)
+                ax.set_ylabel(var['unit'], fontsize=10, color='#7f8c8d', fontweight='medium')
+                ax.grid(True, axis='y', linestyle='-', linewidth=1, color='#ecf0f1')
+                ax.grid(False, axis='x')
 
-        fig.show()
+                # Zero line (Emphasis)
+                if (series.min() < 0) and (series.max() > 0):
+                    ax.axhline(0, lw=1.2, color='#34495e', linestyle='-', zorder=3)
+
+                ax.spines['top'].set_visible(False)
+                ax.spines['right'].set_visible(False)
+                ax.spines['left'].set_visible(False)
+                ax.spines['bottom'].set_visible(True)
+                ax.spines['bottom'].set_color('#bdc3c7')
+
+                ax.set_xlim(0, 23)
+                ax.xaxis.set_major_locator(ticker.MultipleLocator(6))
+                ax.tick_params(axis='both', which='major', labelsize=9, length=0)
+
+            # --- LEGEND / COLORBAR ---
+            sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+            sm.set_array([])
+            cbar = fig.colorbar(sm, ax=axes, orientation='vertical', aspect=35, shrink=0.7, pad=0.02)
+            cbar.set_label('Month', rotation=270, labelpad=15, color='#7f8c8d', fontsize=10)
+            cbar.set_ticks(np.arange(1, 13))
+            cbar.set_ticklabels(['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'])
+            cbar.ax.tick_params(color='#bdc3c7', labelcolor='#7f8c8d', size=0)
+            cbar.outline.set_visible(False)
+
+            fig.supxlabel("Hour of Day", fontsize=12, color='#2c3e50', y=0.02)
+
+            plt.show()
 
     def _plot_diel_cycle_modern(self, ax, series, cmap, norm):
         """Helper to plot hourly means by month."""
@@ -1006,11 +943,78 @@ class ScopOptimizer:
         self.df = pd.DataFrame.from_dict(frame)
 
     def run(self):
-        self._bootstrapping()
-        self._plot()
-        self._print_stats()
 
-    def _plot(self):
+        # Group data records by daytime / nighttime membership
+        _grouped_by_daynighttime = self.df.groupby(self.cols.daytime)
+
+        # Loop through daytime / nighttime data
+        for _group_daynighttime, _group_daynighttime_df in _grouped_by_daynighttime:
+
+            # Divide data into x class variable groups w/ same number of values
+            _group_daynighttime_df[self.cols.class_var_group] = \
+                pd.qcut(_group_daynighttime_df[self.class_var.name],
+                        q=self.n_classes, labels=False)
+
+            # Group data records by class variable membership
+            _grouped_by_class_var = _group_daynighttime_df.groupby(self.cols.class_var_group)
+
+            # Loop through class variable groups
+            for _group_class_var, _group_class_var_df in _grouped_by_class_var:
+                # Bootstrap group data
+
+                bts_factors = []
+                bts_sum_of_squares = []
+                bts_num_vals = []
+
+                for bts_run in range(0, self.n_bootstrap_runs):
+                    num_rows = int(len(_group_class_var_df.index))
+
+                    if self.bootstrapped:
+                        # Use bootstrapped data
+                        bts_sample_df = _group_class_var_df.sample(n=num_rows,
+                                                                   replace=True)  # Take sample w/ replacement
+                    else:
+                        # Use measured data in cas
+                        bts_sample_df = _group_class_var_df
+
+                    bts_sample_df.sort_index(inplace=True)
+
+                    result = self.optimize_factor(target=bts_sample_df[self.flux_openpath.name],
+                                                  reference=bts_sample_df[self.flux_closedpath.name],
+                                                  fct_unsc_gf=bts_sample_df[self.cols.fct_unsc_gf])
+
+                    bts_factors.append(result.x)  # x = scaling factor
+                    bts_sum_of_squares.append(result.fun)
+                    bts_num_vals.append(bts_sample_df[self.class_var.name].count())
+
+                    # Break if only working with measured data (no bootstrapping)
+                    if not self.bootstrapped:
+                        break
+
+                print(f"Finished {self.n_bootstrap_runs} bootstrap runs for group {_group_class_var} "
+                      f"in daytime = {_group_daynighttime}")
+
+                # Stats, aggregates for current class group
+                location = tuple([_group_daynighttime, _group_class_var])
+                self.scaling_factors_df.loc[location, f'DAYTIME'] = _group_daynighttime
+                self.scaling_factors_df.loc[location, f'GROUP_CLASSVAR'] = _group_class_var
+                self.scaling_factors_df.loc[location, f'GROUP_CLASSVAR_MIN'] = _group_class_var_df[
+                    self.class_var.name].min()
+                self.scaling_factors_df.loc[location, f'GROUP_CLASSVAR_MAX'] = _group_class_var_df[
+                    self.class_var.name].max()
+                self.scaling_factors_df.loc[location, f'BOOTSTRAP_RUNS'] = self.n_bootstrap_runs
+
+                self.scaling_factors_df.loc[location, f'SF_MEDIAN'] = np.median(bts_factors)
+                self.scaling_factors_df.loc[location, f'SOS_MEDIAN'] = np.median(
+                    bts_sum_of_squares)
+                self.scaling_factors_df.loc[location, f'NUMVALS_AVG'] = np.mean(bts_num_vals)
+                self.scaling_factors_df.loc[location, f'SF_Q25'] = np.quantile(bts_factors, 0.25)
+                self.scaling_factors_df.loc[location, f'SF_Q75'] = np.quantile(bts_factors, 0.75)
+                self.scaling_factors_df.loc[location, f'SF_Q01'] = np.quantile(bts_factors, 0.01)
+                self.scaling_factors_df.loc[location, f'SF_Q99'] = np.quantile(bts_factors, 0.99)
+        return self.scaling_factors_df
+
+    def plot(self):
         """
         Plots the optimized scaling factors with bootstrapped confidence intervals.
         """
@@ -1087,7 +1091,7 @@ class ScopOptimizer:
 
         fig.show()
 
-    def _print_stats(self):
+    def stats(self):
         print("BOOTSTRAPPING RESULTS")
         print(f"class variable: {self.class_var}")
         print(f"number of classes: {self.n_classes}")
@@ -1107,77 +1111,6 @@ class ScopOptimizer:
 
     def get(self) -> pd.DataFrame:
         return self.scaling_factors_df
-
-    def _bootstrapping(self):
-
-        # Group data records by daytime / nighttime membership
-        _grouped_by_daynighttime = self.df.groupby(self.cols.daytime)
-
-        # Loop through daytime / nighttime data
-        for _group_daynighttime, _group_daynighttime_df in _grouped_by_daynighttime:
-
-            # Divide data into x class variable groups w/ same number of values
-            _group_daynighttime_df[self.cols.class_var_group] = \
-                pd.qcut(_group_daynighttime_df[self.class_var.name],
-                        q=self.n_classes, labels=False)
-
-            # Group data records by class variable membership
-            _grouped_by_class_var = _group_daynighttime_df.groupby(self.cols.class_var_group)
-
-            # Loop through class variable groups
-            for _group_class_var, _group_class_var_df in _grouped_by_class_var:
-                # Bootstrap group data
-
-                bts_factors = []
-                bts_sum_of_squares = []
-                bts_num_vals = []
-
-                for bts_run in range(0, self.n_bootstrap_runs):
-                    num_rows = int(len(_group_class_var_df.index))
-
-                    if self.bootstrapped:
-                        # Use bootstrapped data
-                        bts_sample_df = _group_class_var_df.sample(n=num_rows,
-                                                                   replace=True)  # Take sample w/ replacement
-                    else:
-                        # Use measured data in cas
-                        bts_sample_df = _group_class_var_df
-
-                    bts_sample_df.sort_index(inplace=True)
-
-                    result = self.optimize_factor(target=bts_sample_df[self.flux_openpath.name],
-                                                  reference=bts_sample_df[self.flux_closedpath.name],
-                                                  fct_unsc_gf=bts_sample_df[self.cols.fct_unsc_gf])
-
-                    bts_factors.append(result.x)  # x = scaling factor
-                    bts_sum_of_squares.append(result.fun)
-                    bts_num_vals.append(bts_sample_df[self.class_var.name].count())
-
-                    # Break if only working with measured data (no bootstrapping)
-                    if not self.bootstrapped:
-                        break
-
-                print(f"Finished {self.n_bootstrap_runs} bootstrap runs for group {_group_class_var} "
-                      f"in daytime = {_group_daynighttime}")
-
-                # Stats, aggregates for current class group
-                location = tuple([_group_daynighttime, _group_class_var])
-                self.scaling_factors_df.loc[location, f'DAYTIME'] = _group_daynighttime
-                self.scaling_factors_df.loc[location, f'GROUP_CLASSVAR'] = _group_class_var
-                self.scaling_factors_df.loc[location, f'GROUP_CLASSVAR_MIN'] = _group_class_var_df[
-                    self.class_var.name].min()
-                self.scaling_factors_df.loc[location, f'GROUP_CLASSVAR_MAX'] = _group_class_var_df[
-                    self.class_var.name].max()
-                self.scaling_factors_df.loc[location, f'BOOTSTRAP_RUNS'] = self.n_bootstrap_runs
-
-                self.scaling_factors_df.loc[location, f'SF_MEDIAN'] = np.median(bts_factors)
-                self.scaling_factors_df.loc[location, f'SOS_MEDIAN'] = np.median(
-                    bts_sum_of_squares)
-                self.scaling_factors_df.loc[location, f'NUMVALS_AVG'] = np.mean(bts_num_vals)
-                self.scaling_factors_df.loc[location, f'SF_Q25'] = np.quantile(bts_factors, 0.25)
-                self.scaling_factors_df.loc[location, f'SF_Q75'] = np.quantile(bts_factors, 0.75)
-                self.scaling_factors_df.loc[location, f'SF_Q01'] = np.quantile(bts_factors, 0.01)
-                self.scaling_factors_df.loc[location, f'SF_Q99'] = np.quantile(bts_factors, 0.99)
 
     def optimize_factor(self, target, reference, fct_unsc_gf):
         """Optimize factor by minimizing sum of squares b/w corrected target and reference"""
@@ -1227,7 +1160,7 @@ class ScopOptimizer:
         return scaling_factors_df
 
 
-def main():
+def _example():
     from diive.core.io.files import load_parquet
     df = load_parquet(
         filepath=r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\30_FLUX_PROCESSING_CHAIN\32_SELF-HEATING_CORRECTION\21_MERGED_IRGA75-noSHC+IRGA72_FluxProcessingChain_after-L3.2_NEE_QCF10_2016-2017.parquet")
@@ -1279,13 +1212,17 @@ def main():
         flux_openpath=df[FLUX_75].copy(),
         flux_closedpath=df[FLUX_72].copy(),
         daytime=results_physics_df["DAYTIME"],
-        showplot=True
+        showplot=False
     )
-    optimizer.run()
-    scaling_factors_df = optimizer.get()
+    scaling_factors_df = optimizer.run()
+    optimizer.stats()
+    optimizer.plot()
 
     applicator = ScopApplicator(
         fct_unsc=results_physics_df["FCT_UNSC_gfRF"],
+        ts=results_physics_df["TS"],
+        ra=results_physics_df["AERODYNAMIC_RESISTANCE"],
+        rho_d=results_physics_df["DRY_AIR_DENSITY"],
         scaling_factors_df=scaling_factors_df,
         flux_openpath=df[FLUX_75].copy(),
         flux_closedpath=df[FLUX_72].copy(),
@@ -1295,34 +1232,9 @@ def main():
     )
     applicator.run()
 
-    # scop = ScopOptimizer(
-    #     inputdf=df,
-    #     site="CH-LAE",
-    #     lat=47.478333,  # CH–LAE
-    #     lon=8.364389,  # CH–LAE
-    #     utc_offset=1,
-    #     title="CH-LAE self-heating correction",
-    #     flux_openpath=FLUX_75,
-    #     flux_closedpath=FLUX_72,
-    #     air_heat_capacity=AIR_CP,
-    #     co2_molar_density=CO2_MOLAR_DENSITY,  # in umol mol-1
-    #     u=U,
-    #     ustar=USTAR,
-    #     water_vapor_density=VAPOR_DENSITY,
-    #     air_density=AIR_DENSITY,
-    #     air_temperature=TA,
-    #     swin=SWIN,
-    #     n_classes=5,
-    #     n_bootstrap_runs=0,
-    #     classvar=USTAR,
-    #     remove_outliers_method="fast",
-    #     # remove_outliers_method="separate"
-    #     correction_method_base="BUR08"
-    #     # correction_method_base="BUR06"
-    #     # correction_method_base="JAR09"
-    # )
-    # scop.calc_sf()
-    # apply_scaling_factors = Scop().apply_sf()
+    # applicator.stats()
+    applicator.plot_diel_cycles()
+    # applicator.plot_flux_analysis_dashboard()
 
     toc = time.time()
     print(f"Time elapsed: {toc - tic:.2f} seconds")
@@ -1331,4 +1243,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    _example()
