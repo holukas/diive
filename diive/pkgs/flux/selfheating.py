@@ -1044,18 +1044,39 @@ class ScopOptimizer:
         diff = np.cumsum(corrected) - np.cumsum(ref_arr)
         return np.sum(np.abs(diff))
 
-    def _block_bootstrap_indices(self, n, block_size):
-        """Generates indices for circular block bootstrapping."""
-        # 1. How many blocks?
+    @staticmethod
+    def _block_bootstrap_indices(n: int, block_size: int) -> np.ndarray:
+        """
+        Generates indices for circular block bootstrapping using vectorized NumPy operations.
+
+        Args:
+            n: Total number of data points.
+            block_size: Length of each contiguous block.
+
+        Returns:
+            np.ndarray: An array of resampled indices of length n.
+        """
+        # 1. Calculate how many blocks are needed to cover the array
         num_blocks = int(np.ceil(n / block_size))
-        # 2. Random start positions
+
+        # 2. Randomly select start positions for each block
         start_indices = np.random.randint(0, n, size=num_blocks)
-        # 3. Build indices array
-        indices = []
-        for start in start_indices:
-            # Create a block [start, start+1, ...] using modulo for circularity
-            indices.extend((np.arange(start, start + block_size) % n))
-        return np.array(indices[:n])
+
+        # 3. Create a 2D array of indices using broadcasting
+        # Shape (num_blocks, 1) + Shape (1, block_size) -> Shape (num_blocks, block_size)
+        # logic: start_index + [0, 1, 2, ... block_size-1]
+        offsets = np.arange(block_size)
+        indices_2d = start_indices[:, None] + offsets[None, :]
+
+        # 4. Flatten the 2D array into a 1D array
+        indices_flat = indices_2d.flatten()
+
+        # 5. Handle circularity and trim
+        # Modulo n (%) ensures that if a block goes past the end, it wraps to the start
+        indices_circular = indices_flat % n
+
+        # Trim to the exact original length n (since num_blocks * block_size >= n)
+        return indices_circular[:n]
 
     def plot(self):
         """Plots optimized scaling factors with confidence intervals."""
