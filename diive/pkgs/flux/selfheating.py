@@ -1187,12 +1187,16 @@ def _example():
     USTAR = "USTAR_IRGA72"  # (m s-1)
     TA = "TA_T1_47_1_gfXG_IRGA72"  # (degC)
     SWIN = "SW_IN_T1_47_1_gfXG_IRGA72"  # (W m-2)
-    CO2_MOLAR_DENSITY = "CO2_MOLAR_DENSITY_IRGA72"  # (mol mol-1)
+    CO2_MOLAR_DENSITY = "CO2_MOLAR_DENSITY_IRGA75"  # (mmol m-3)
+    H2O_MOLAR_DENSITY = "H2O_MOLAR_DENSITY_IRGA75"  # (mmol m-3)
     FLUX_72 = "NEE_L3.1_L3.2_QCF_IRGA72"  # (umol m-2 s-1)
     FLUX_75 = "NEE_L3.1_L3.2_QCF_IRGA75"  # (umol m-2 s-1)
+    # FLUX_72 = "LE_L3.1_L3.2_QCF_IRGA72"  # (umol m-2 s-1)
+    # FLUX_75 = "LE_L3.1_L3.2_QCF_IRGA75"  # (umol m-2 s-1)
 
     # Conversions
-    df[CO2_MOLAR_DENSITY] = df[CO2_MOLAR_DENSITY] * 1000  # Convert to umol mol-1
+    df[CO2_MOLAR_DENSITY] = df[CO2_MOLAR_DENSITY] * 1000  # Convert to umol m-3
+    df[H2O_MOLAR_DENSITY] = df[H2O_MOLAR_DENSITY] * 1000  # Convert to umol m-3
 
     tic = time.time()
 
