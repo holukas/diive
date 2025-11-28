@@ -4,6 +4,12 @@ SELF-HEATING CORRECTION FOR OPEN-PATH IRGAS (SCOP)
     Calculation of the flux correction term (FCT) for open-path infrared gas analyzers (IRGAs)
     based on scaling factors from parallel measurements with an (en)closed-path IRGA.
 
+    The correction can be applied to CO2 fluxes (NEE, µmol m-2 s-1).
+    It can be used for H2O fluxes (LE, W m-2), but the code has only been implemented for testing.
+    When LE from the open-path shows higher fluxes than LE from the closed-path, then this
+    correction is most likely the wrong approach. The self-heating correction always increases the
+    flux (it assumes heating lowers density, so it adds density back).
+
     This correction is designed to remove spurious CO2 flux measurements caused by the sun-induced
     heating of the open-path (OP) instrument surfaces. This self-heating warms the air passing the
     sensor head, creating a low-density thermal plume around the sampling volume. Since the OP-IRGA
@@ -71,6 +77,7 @@ Abbreviations:
         fct_unsc_gf ... gap-filled unscaled flux correction term (flux units)
         fct ... flux correction term (flux units)
         sf ... scaling factor (unitless)
+        lv ... latent heat of vaporization (J µmol-1), in this units can be used for LE
 
     Other:
         OP ... open-path
@@ -80,7 +87,7 @@ Abbreviations:
 """
 import time
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Optional
 
 import matplotlib.dates as mdates
 import matplotlib.gridspec as gridspec
@@ -97,6 +104,8 @@ pd.set_option('display.width', 2000)
 pd.set_option('display.max_columns', 14)
 pd.set_option('display.max_rows', 30)
 
+FluxType = Literal["CO2", "H2O"]
+
 
 @dataclass(frozen=True)
 class ColumnConfig:
@@ -107,21 +116,39 @@ class ColumnConfig:
     aerodynamic_resistance: str = 'AERODYNAMIC_RESISTANCE'
     dry_air_density: str = 'DRY_AIR_DENSITY'
     t_instr_surface: str = 'TS'
-    flux_op_corr: str = 'NEE_OP_CORR'
+
+    # Dynamic base names (will be prefixed/suffixed based on flux type)
+    flux_corr_suffix: str = '_OP_CORR'
     fct_unsc: str = 'FCT_UNSC'
     fct_unsc_gf: str = 'FCT_UNSC_gfRF'
     fct: str = 'FCT'
     sf: str = 'SF'
-    sf_gf: str = '.SF_GF'
     s: str = 'S'  # Sensible heat from all key instrument surfaces (W m-2) (BUR08)
 
 
 class ScopApplicator:
 
-    def __init__(self, fct_unsc: pd.Series, scaling_factors_df: pd.DataFrame, flux_openpath: pd.Series,
-                 flux_closedpath: pd.Series, classvar: pd.Series, daytime: pd.Series, swin: pd.Series,
-                 ts: pd.Series, ra: pd.Series, rho_d: pd.Series):
-
+    def __init__(self,
+                 flux_type: FluxType,
+                 fct_unsc: pd.Series,
+                 scaling_factors_df: pd.DataFrame,
+                 flux_openpath: pd.Series,
+                 flux_closedpath: pd.Series,
+                 classvar: pd.Series,
+                 daytime: pd.Series,
+                 swin: pd.Series,
+                 ts: pd.Series,
+                 ra: pd.Series,
+                 rho_d: pd.Series,
+                 latent_heat_vaporization: Optional[pd.Series] = None):
+        """
+        Args:
+            flux_type: "CO2" or "H2O"
+            latent_heat_vaporization: Series of Lambda (J/mmol or J/kg depending on inputs).
+                                      Required ONLY if flux_type="H2O" and fluxes are in W m-2
+                                      but correction is in molar units.
+        """
+        self.flux_type = flux_type
         self.fct_unsc = fct_unsc.copy()
         self.ts = ts
         self.ra = ra
@@ -132,8 +159,13 @@ class ScopApplicator:
         self.classvar = classvar.copy()
         self.daytime = daytime.copy()
         self.swin = swin.copy()
+        self.Lv = latent_heat_vaporization
 
         self.cols = ColumnConfig()
+
+        # Determine output column name
+        prefix = 'LE' if self.flux_type == 'H2O' else 'NEE'
+        self.col_flux_corr = f"{prefix}{self.cols.flux_corr_suffix}"
 
         frame = {self.fct_unsc.name: self.fct_unsc, self.flux_openpath.name: self.flux_openpath,
                  self.flux_closedpath.name: self.flux_closedpath, self.ts.name: self.ts, self.ra.name: self.ra,
@@ -141,15 +173,31 @@ class ScopApplicator:
                  self.rho_d.name: self.rho_d}
         self.df = pd.DataFrame(frame)
 
+        # Add Lv if needed for H2O conversion
+        if self.Lv is not None:
+            self.df['Lv'] = self.Lv
+
     def run(self):
 
         # Assign scaling factors depending on the class var (e.g. USTAR)
         self.df = self._assign_scaling_factors()
 
-        # Final flux correction
+        # Calculate final flux correction term
         # Corrected OP = uncorrected OP + (FCT_unscaled * ScalingFactor)
-        self.df[self.cols.fct] = self.df[self.cols.fct_unsc_gf] * self.df[self.cols.sf]
-        self.df[self.cols.flux_op_corr] = self.df[self.flux_openpath.name] + self.df[self.cols.fct]
+        fct_molar = self.df[self.cols.fct_unsc_gf] * self.df[self.cols.sf]
+
+        # Apply unit conversion if H2O (Watts)
+        if self.flux_type == "H2O" and 'Lv' in self.df.columns:
+            # [µmol m-2 s-1] * [J / µmol] = [J m-2 s-1] = [W m-2]
+            self.df[self.cols.fct] = fct_molar * self.df['Lv']
+        else:
+            # CO2 (or H2O if already molar)
+            self.df[self.cols.fct] = fct_molar
+
+        # Apply correction
+        self.df[self.col_flux_corr] = self.df[self.flux_openpath.name] + self.df[self.cols.fct]
+        # self.df[self.cols.fct] = self.df[self.cols.fct_unsc_gf] * self.df[self.cols.sf]
+        # self.df[self.cols.flux_corr_suffix] = self.df[self.flux_openpath.name] + self.df[self.cols.fct]
 
     def _assign_scaling_factors(self) -> pd.DataFrame:
 
@@ -160,13 +208,19 @@ class ScopApplicator:
 
         # Prepare left subset
         df_valid = self.df.loc[valid_mask].sort_values(by=str(self.classvar.name))
-        cols_needed = [self.classvar.name, self.cols.daytime]
-        df_valid = df_valid.loc[valid_mask, cols_needed].sort_values(by=self.classvar.name)
 
         # Prepare right subset (lookup table)
         sf_sorted = self.scaling_factors_df.sort_values(by='GROUP_CLASSVAR_MIN')
 
-        # Perform backward merge
+        # # Prepare left subset
+        # df_valid = self.df.loc[valid_mask].sort_values(by=str(self.classvar.name))
+        # cols_needed = [self.classvar.name, self.cols.daytime]
+        # df_valid = df_valid.loc[valid_mask, cols_needed].sort_values(by=self.classvar.name)
+        #
+        # # Prepare right subset (lookup table)
+        # sf_sorted = self.scaling_factors_df.sort_values(by='GROUP_CLASSVAR_MIN')
+
+        # Perform backward merge to find bins
         # direction='backward': Finds the bin where [classvar] >= [GROUP_CLASSVAR_MIN]
         # - If value is inside range: matches correct bin.
         # - If value is > max: matches the highest bin (conceptually "last known" bin).
@@ -185,10 +239,10 @@ class ScopApplicator:
         # These NaNs are filled with the SF of the FIRST bin (first known SF)
         # This is done by grouping by daytime and filling NaNs with the first valid observation
         if merged_subset['SF_MEDIAN'].isna().any():
-            merged_subset['SF_MEDIAN'] = merged_subset.groupby(self.cols.daytime)['SF_MEDIAN'] \
-                .transform(lambda x: x.bfill())
-            merged_subset['GROUP_CLASSVAR'] = merged_subset.groupby(self.cols.daytime)['GROUP_CLASSVAR'] \
-                .transform(lambda x: x.bfill())
+            merged_subset['SF_MEDIAN'] = merged_subset.groupby(self.cols.daytime)['SF_MEDIAN'].transform(
+                lambda x: x.bfill())
+            merged_subset['GROUP_CLASSVAR'] = merged_subset.groupby(self.cols.daytime)['GROUP_CLASSVAR'].transform(
+                lambda x: x.bfill())
 
         # Assign 'merged_subset' data back to original DataFrame
         self.df.loc[df_valid.index, self.cols.class_var_group] = merged_subset['GROUP_CLASSVAR'].values
@@ -207,23 +261,20 @@ class ScopApplicator:
         return self.df.sort_index()
 
     def stats(self):
-        cols = [self.flux_openpath.name, self.flux_closedpath.name, self.cols.flux_op_corr]
+        cols = [self.flux_openpath.name, self.flux_closedpath.name, self.col_flux_corr]
+        _stats_df = self.df[cols].dropna()
 
-        _stats_df = self.df[cols].copy()
-        _stats_df = _stats_df.dropna()
-        _numvals = len(_stats_df)
+        print(f"\n=== CUMULATIVE {self.flux_type} FLUXES ===")
+        print(f"N: {len(_stats_df)}")
 
-        print("\nCUMULATIVE FLUXES:")
-        print(f"Values: {_numvals}")
-        _cumsum_opnocorr = _stats_df[self.flux_openpath.name].sum()
-        _cumsum_cptrueflux = _stats_df[self.flux_closedpath.name].sum()
-        _perc = (_cumsum_opnocorr / _cumsum_cptrueflux) * 100
-        print(f"OPEN-PATH (uncorrected): {_cumsum_opnocorr:.0f}  ({_perc:.1f}% of true flux)")
-        print(f"ENCLOSED-PATH (true flux): {_cumsum_cptrueflux:.0f}")
-        _cumsum = _stats_df[self.cols.flux_op_corr].sum()
-        _perc = (_cumsum / _cumsum_cptrueflux) * 100
-        print(f"OPEN-PATH (corrected): {_cumsum:.0f}  ({_perc:.1f}% of true flux)")
-        print("\n\n")
+        op_sum = _stats_df[self.flux_openpath.name].sum()
+        cp_sum = _stats_df[self.flux_closedpath.name].sum()
+        corr_sum = _stats_df[self.col_flux_corr].sum()
+
+        print(f"OPEN-PATH (uncorrected): {op_sum:,.0f}  ({(op_sum / cp_sum) * 100:.1f}% of ref)")
+        print(f"ENCLOSED-PATH (ref):     {cp_sum:,.0f}")
+        print(f"OPEN-PATH (corrected):   {corr_sum:,.0f}  ({(corr_sum / cp_sum) * 100:.1f}% of ref)")
+        print("\n")
 
     # def gapfilling_lut(self, series):
     #     """Gap-fill time series using look-up table (LUT)
@@ -296,7 +347,7 @@ class ScopApplicator:
 
         if CP_COL in plot_df.columns:
             # Assuming self.cols.nee_op_corr is the corrected column name
-            plot_df[diff_col_name] = plot_df[self.cols.flux_op_corr] - plot_df[CP_COL]
+            plot_df[diff_col_name] = plot_df[self.col_flux_corr] - plot_df[CP_COL]
         else:
             plot_df[diff_col_name] = np.nan
 
@@ -319,7 +370,8 @@ class ScopApplicator:
             # ROW 3: FLUX RESULTS
             {'col': OP_COL, 'title': '8. OP Flux (Uncorrected)', 'unit': r'$\mu mol\ m^{-2}\ s^{-1}$'},
             {'col': CP_COL, 'title': '9. CP Flux (Reference)', 'unit': r'$\mu mol\ m^{-2}\ s^{-1}$'},
-            {'col': self.cols.flux_op_corr, 'title': '10. OP Flux (Corrected)', 'unit': r'$\mu mol\ m^{-2}\ s^{-1}$'},
+            {'col': self.col_flux_corr, 'title': '10. OP Flux (Corrected)',
+             'unit': r'$\mu mol\ m^{-2}\ s^{-1}$'},
             {'col': diff_col_name, 'title': '11. Residual (Corrected - Ref)', 'unit': r'$\mu mol\ m^{-2}\ s^{-1}$'},
         ]
 
@@ -441,7 +493,7 @@ class ScopApplicator:
             self.flux_closedpath.name: {
                 'label': 'Reference (CP)', 'color': '#2c3e50', 'zorder': 2, 'alpha_pts': 0.1, 'alpha_line': 0.8
             },
-            self.cols.flux_op_corr: {
+            self.col_flux_corr: {
                 'label': 'Corrected (OP)', 'color': '#e74c3c', 'zorder': 3, 'alpha_pts': 0.15, 'alpha_line': 1.0
             }
         }
@@ -459,7 +511,7 @@ class ScopApplicator:
         fig.set_constrained_layout_pads(w_pad=0.1, h_pad=0.1, wspace=0.1, hspace=0.1)
 
         # Top row: time series
-        cols_to_plot = [self.flux_openpath.name, self.flux_closedpath.name, self.cols.flux_op_corr]
+        cols_to_plot = [self.flux_openpath.name, self.flux_closedpath.name, self.col_flux_corr]
 
         for col in cols_to_plot:
             if col not in self.df.columns or col is None:
@@ -578,14 +630,25 @@ class ScopApplicator:
 
 class ScopPhysics:
 
-    def __init__(self, ta: pd.Series, qc: pd.Series, rho_a: pd.Series, rho_v: pd.Series,
-                 u: pd.Series, c_p: pd.Series, ustar: pd.Series, swin: pd.Series,
-                 lat: float, lon: float, utc_offset: int,
+    def __init__(self,
+                 flux_type: FluxType,
+                 ta: pd.Series,
+                 gas_density: pd.Series,
+                 rho_a: pd.Series,
+                 rho_v: pd.Series,
+                 u: pd.Series,
+                 c_p: pd.Series,
+                 ustar: pd.Series,
+                 swin: pd.Series,
+                 lat: float,
+                 lon: float,
+                 utc_offset: int,
                  remove_outliers_method: Literal["fast", "separate"] = "fast"):
         """
         Args:
+            flux_type: "CO2" or "H2O"
             ta: series, air temperature (°C)
-            qc: series, CO2 molar density (µmol m-3)
+            gas_density: series, molar density of the gas (µmol m-3)
             rho_a: series, air density (kg m-3)
             rho_v: series, water vapor density (kg m-3)          
             u: series, wind speed (m s-1)            
@@ -598,9 +661,9 @@ class ScopPhysics:
             remove_outliers_method: str, method to remove outliers from the data
                 Used for removing outliers in 'ra' and 'fct_unsc'.
         """
-
+        self.flux_type = flux_type
         self.ta = ta
-        self.qc = qc
+        self.gas_density = gas_density
         self.rho_a = rho_a
         self.rho_v = rho_v
         self.u = u
@@ -626,6 +689,9 @@ class ScopPhysics:
         # Calculate thermal conductivity of air (required for BUR08) (k_air) (W m-1 K-1)
         self.k_air = self._calc_air_thermal_conductivity(ta=self.ta)
 
+        # Calculate latent heat of vaporization (required for LE only) (J µmol-1)
+        self.lv = self._calc_latent_heat_vaporization_j_umol(ta=self.ta)
+
         # Calculated in .run()
         self.ts = pd.Series(name=self.cols.t_instr_surface)  # Bulk instrument surface temperature (BUR06, JAR09)
         self.S = pd.Series(name=self.cols.s)  # Sensible heat from all key instrument surfaces  (BUR08)
@@ -646,10 +712,11 @@ class ScopPhysics:
             self.rho_v.name: self.rho_v,
             self.u.name: self.u,
             self.ustar.name: self.ustar,
-            self.qc.name: self.qc,
+            self.gas_density.name: self.gas_density,
             self.swin.name: self.swin,
             self.k_air.name: self.k_air,
-            self.daytime.name: self.daytime
+            self.daytime.name: self.daytime,
+            self.lv.name: self.lv
         }
         return pd.DataFrame.from_dict(frame)
 
@@ -671,14 +738,12 @@ class ScopPhysics:
             self.fct_unsc = self._remove_outliers_fast(series=self.fct_unsc)
         elif self.remove_outliers_method == "separate":
             self.fct_unsc = self._remove_outliers(series=self.fct_unsc)
-        else:
-            raise ValueError(f"Unknown remove_outliers_method: {self.remove_outliers_method}")
 
         if gapfill:
             self.fct_unsc_gf = self._gapfill()
 
     def _gapfill(self):
-        # Gap-fill unscaled flux correction term
+        """Gap-fill unscaled flux correction term using RandomForestTS"""
         frame = {
             self.cols.fct_unsc: self.fct_unsc,
             self.ta.name: self.ta,
@@ -691,33 +756,20 @@ class ScopPhysics:
 
         gfdf = gfdf.dropna()
         rfts = RandomForestTS(
-            input_df=gfdf,
-            target_col=self.cols.fct_unsc,
-            verbose=True,
-            # features_lag=None,
-            features_lag=[-1, -1],
-            # features_lag_exclude_cols=['test', 'test2'],
-            vectorize_timestamps=True,
-            add_continuous_record_number=True,
-            sanitize_timestamp=True,
-            perm_n_repeats=1,
-            n_estimators=3,
-            random_state=42,
-            # random_state=None,
-            max_depth=None,
-            min_samples_split=20,
-            min_samples_leaf=10,
-            criterion='squared_error',
-            # test_size=0.2,
-            n_jobs=-1
-        )
+            input_df=gfdf, target_col=self.cols.fct_unsc, verbose=True,
+            features_lag=[-1, -1], vectorize_timestamps=True,
+            add_continuous_record_number=True, sanitize_timestamp=True,
+            perm_n_repeats=1, n_estimators=3, random_state=42,
+            max_depth=None, min_samples_split=20, min_samples_leaf=10,
+            criterion='squared_error', n_jobs=-1)
+
         rfts.trainmodel(showplot_scores=False, showplot_importance=False)
-        rfts.report_traintest()
+        # rfts.report_traintest()
         rfts.fillgaps(showplot_scores=False, showplot_importance=False)
         rfts.report_gapfilling()
         print(rfts.feature_importances_)
         print(rfts.scores_)
-        print(rfts.gapfilling_df_)
+        # print(rfts.gapfilling_df_)
         fct_unsc_gf = rfts.gapfilling_df_[self.cols.fct_unsc_gf].copy()
         return fct_unsc_gf
 
@@ -755,18 +807,36 @@ class ScopPhysics:
         k_air.name = "AIR_THERMAL_CONDUCTIVITY"
         return k_air
 
+    import pandas as pd
+
+    @staticmethod
+    def _calc_latent_heat_vaporization_j_umol(ta: pd.Series) -> pd.Series:
+        """
+        Calculates Latent Heat of Vaporization in [J µmol-1].
+
+        Needed for the correction of the latent heat flux LE.
+
+        Formula derivation:
+        1. Lv [J/kg]  = (2.501 - 0.00237 * Ta) * 10^6
+        2. Mw [kg/mol] = 0.018015
+        3. Lv [J/µmol] = Lv [J/kg] * Mw * 10^-6
+
+        (The 10^6 and 10^-6 cancel out).
+        """
+        # Molar mass of water (kg/mol)
+        MW_WATER = 0.01801528
+
+        # Calculate directly in J / µmol
+        lv_j_umol = (2.501 - 0.00237 * ta) * MW_WATER
+        lv_j_umol.name = "LATENT_HEAT_VAPORIZATION_J_UMOL"
+
+        return lv_j_umol
+
     def _remove_outliers(self, series: pd.Series):
         ham = HampelDaytimeNighttime(
-            series=series,
-            n_sigma_dt=4,
-            n_sigma_nt=4,
-            window_length=48 * 5,
-            showplot=True,
-            verbose=True,
-            lat=self.lat,
-            lon=self.lon,
-            utc_offset=self.utc_offset
-        )
+            series=series, n_sigma_dt=4, n_sigma_nt=4,
+            window_length=48 * 5, showplot=True, verbose=True,
+            lat=self.lat, lon=self.lon, utc_offset=self.utc_offset)
         ham.calc(repeat=False)
         return ham.filteredseries
 
@@ -881,7 +951,9 @@ class ScopPhysics:
         S = S_bottom + S_top + 0.15 * S_spar  # W m-2
 
         # Calculate unscaled flux correction term
-        fct_unsc = (S / (self.rho_a * self.c_p)) * (self.qc / (self.ta + 273.15))
+        # self.gas_density is in [µmol m-3]
+        # Result fct_unsc is in [µmol m-2 s-1]
+        fct_unsc = (S / (self.rho_a * self.c_p)) * (self.gas_density / (self.ta + 273.15))
 
         # print(f"Ts (BUR08), mean = {fct_unsc.mean():.2f}")
         return fct_unsc, S
@@ -899,7 +971,8 @@ class ScopPhysics:
         ta_k = self.ta + 273.15
 
         # Term A: Surface - Air temp delta * CO2 density
-        term_a = (ts - self.ta) * self.qc
+        # gas_density in [µmol m-3] -> term_a in [K * µmol m-3]
+        term_a = (ts - self.ta) * self.gas_density
 
         # Term B: Aerodynamic resistance * Temp
         term_b = self.ra * ta_k
@@ -949,20 +1022,41 @@ class ScopOptimizer:
     """
 
     def __init__(self,
+                 flux_type: FluxType,
                  class_var: pd.Series,
                  n_classes: int,
                  fct_unsc: pd.Series,
                  daytime: pd.Series,
                  n_bootstrap_runs: int,
                  flux_openpath: pd.Series,
-                 flux_closedpath: pd.Series):
+                 flux_closedpath: pd.Series,
+                 latent_heat_vaporization: Optional[pd.Series] = None):
+        """
+                Args:
+                    flux_type: "CO2" or "H2O"
+                    latent_heat_vaporization: Series in [J / µmol].
+                                              Required if flux_type="H2O" to convert
+                                              correction term to Watts.
+                """
 
+        self.flux_type = flux_type
         self.n_classes = n_classes
         self.n_bootstrap = n_bootstrap_runs
         self.cols = ColumnConfig()
 
+        # UNIT MATCHING
+        # fct_unsc is always [µmol m-2 s-1]
+        # If H2O, fluxes (LE) are in [W m-2]. Must convert FCT to W.
+        if self.flux_type == "H2O":
+            if latent_heat_vaporization is None:
+                raise ValueError("latent_heat_vaporization required for H2O flux optimization")
+            # [µmol m-2 s-1] * [J / µmol] = [J m-2 s-1] = [W m-2]
+            _fct_for_opt = fct_unsc * latent_heat_vaporization
+        else:
+            # CO2: [µmol m-2 s-1] matches [µmol m-2 s-1]. No change.
+            _fct_for_opt = fct_unsc
+
         # Combine inputs into a single DataFrame for easier grouping
-        # We rename columns to generic internal names to avoid confusion
         self.df = pd.DataFrame({
             'class_var': class_var,
             'target': flux_openpath,
@@ -980,10 +1074,10 @@ class ScopOptimizer:
         """
         results = []
 
-        # 1. Group by Daytime
+        # Group by daytime
         for daytime, day_group in self.df.groupby(self.cols.daytime):
 
-            # 2. Create Bins (Quantiles)
+            # Create bins (quantiles)
             # 'duplicates=drop' handles cases where data is constant/sparse
             try:
                 day_group['bin'] = pd.qcut(day_group['class_var'], self.n_classes, labels=False, duplicates='drop')
@@ -993,58 +1087,45 @@ class ScopOptimizer:
 
             # 3. Iterate through Bins
             for bin_id, bin_group in day_group.groupby('bin'):
-
                 if bin_group.empty:
                     continue
 
                 # Drop NaNs upfront for this bin
                 # (We only need rows where all vars are present)
                 valid_bin = bin_group.dropna()
-                if len(valid_bin) < 10: continue
+                if len(valid_bin) < 10:
+                    continue
 
-                factors = []
-                sos_vals = []
-
-                # --- PREPARE NUMPY ARRAYS (Performance Boost) ---
-                # We convert to numpy ONCE per bin, not inside the bootstrap loop
+                # Prepare numpy arrays (for speed)
                 arr_target = valid_bin['target'].values
                 arr_ref = valid_bin['reference'].values
                 arr_fct = valid_bin['fct_unsc'].values
                 n_samples = len(valid_bin)
 
-                # --- BOOTSTRAPPING LOOP ---
                 # If n_bootstrap == 0, run once on raw data
                 runs = self.n_bootstrap if self.n_bootstrap > 0 else 1
+                factors = []
+                sos_vals = []
 
                 for _ in range(runs):
-
-                    # A. Sampling
+                    # Sampling
                     if self.n_bootstrap > 0:
-                        # Use Circular Block Bootstrap (Preserves time correlation)
+                        # Circular block bootstrap (preserves time correlation)
                         # Block size 12 approx 6 hours (if 30min data)
                         indices = self._block_bootstrap_indices(n_samples, block_size=12)
-
-                        s_target = arr_target[indices]
-                        s_ref = arr_ref[indices]
-                        s_fct = arr_fct[indices]
+                        s_target, s_ref, s_fct = arr_target[indices], arr_ref[indices], arr_fct[indices]
                     else:
                         # No bootstrapping
                         s_target, s_ref, s_fct = arr_target, arr_ref, arr_fct
 
-                    # B. Optimization (SciPy)
-                    # We pass numpy arrays to the cost function
+                    # Optimization (SciPy)
                     res = minimize_scalar(
                         self._cost_function_numpy,
                         args=(s_fct, s_target, s_ref),
-                        bounds=(-1.0, 50.0),
-                        method='bounded'
-                    )
+                        method='bounded', bounds=(0, 50.0))
 
                     factors.append(res.x)
                     sos_vals.append(res.fun)
-
-                # --- AGGREGATE STATISTICS ---
-                if not factors: continue
 
                 results.append({
                     'DAYTIME': daytime,
@@ -1063,7 +1144,7 @@ class ScopOptimizer:
 
                 print(f"Finished group {bin_id} (Daytime {daytime}): Median SF = {np.median(factors):.3f}")
 
-        # Create DataFrame once at the end (Much faster than .loc inside loop)
+        # Create dataframe
         self.scaling_factors_df = pd.DataFrame(results)
         return self.scaling_factors_df
 
@@ -1090,22 +1171,22 @@ class ScopOptimizer:
         Returns:
             np.ndarray: An array of resampled indices of length n.
         """
-        # 1. Calculate how many blocks are needed to cover the array
+        # Calculate how many blocks are needed to cover the array
         num_blocks = int(np.ceil(n / block_size))
 
-        # 2. Randomly select start positions for each block
+        # Randomly select start positions for each block
         start_indices = np.random.randint(0, n, size=num_blocks)
 
-        # 3. Create a 2D array of indices using broadcasting
+        # Create a 2D array of indices using broadcasting
         # Shape (num_blocks, 1) + Shape (1, block_size) -> Shape (num_blocks, block_size)
         # logic: start_index + [0, 1, 2, ... block_size-1]
         offsets = np.arange(block_size)
         indices_2d = start_indices[:, None] + offsets[None, :]
 
-        # 4. Flatten the 2D array into a 1D array
+        # Flatten the 2D array into a 1D array
         indices_flat = indices_2d.flatten()
 
-        # 5. Handle circularity and trim
+        # Handle circularity and trim
         # Modulo n (%) ensures that if a block goes past the end, it wraps to the start
         indices_circular = indices_flat % n
 
@@ -1173,8 +1254,8 @@ class ScopOptimizer:
 def _example():
     from diive.core.io.files import load_parquet
     df = load_parquet(
-        filepath=r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\30_FLUX_PROCESSING_CHAIN\32_SELF-HEATING_CORRECTION\21_MERGED_IRGA75-noSHC+IRGA72_FluxProcessingChain_after-L3.2_NEE_QCF10_2016-2017.parquet")
-    # [print(c) for c in df.columns if "AIR" in c];
+        filepath=r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\30_FLUX_PROCESSING_CHAIN\31_SELF-HEATING_CORRECTION\22_MERGED_IRGA75-noSHC+IRGA72_FluxProcessingChain_after-L3.2_NEE-QCF10_LE-QCF11_2016-2017.parquet")
+    # [print(c) for c in df.columns if "RH" in c];
 
     # Parallel measurements starting 27 May 2016
     df = df.loc["2016-05-27 00:15:00":"2017-12-11 23:45:00"].copy()
@@ -1187,23 +1268,29 @@ def _example():
     USTAR = "USTAR_IRGA72"  # (m s-1)
     TA = "TA_T1_47_1_gfXG_IRGA72"  # (degC)
     SWIN = "SW_IN_T1_47_1_gfXG_IRGA72"  # (W m-2)
-    CO2_MOLAR_DENSITY = "CO2_MOLAR_DENSITY_IRGA75"  # (mmol m-3)
-    H2O_MOLAR_DENSITY = "H2O_MOLAR_DENSITY_IRGA75"  # (mmol m-3)
+    RH = "RH_T1_47_1_IRGA72"  # (RH)
+
+    FLUX_TYPE = "CO2"
+    GAS_DENSITY = "CO2_MOLAR_DENSITY_IRGA75"  # (originally in mmol m-3)
     FLUX_72 = "NEE_L3.1_L3.2_QCF_IRGA72"  # (umol m-2 s-1)
     FLUX_75 = "NEE_L3.1_L3.2_QCF_IRGA75"  # (umol m-2 s-1)
+    CLASSVAR = USTAR
+    # FLUX_TYPE = "H2O"
+    # GAS_DENSITY = "H2O_MOLAR_DENSITY_IRGA75"  # (originally in mmol m-3)
     # FLUX_72 = "LE_L3.1_L3.2_QCF_IRGA72"  # (umol m-2 s-1)
     # FLUX_75 = "LE_L3.1_L3.2_QCF_IRGA75"  # (umol m-2 s-1)
+    # CLASSVAR = RH
 
     # Conversions
-    df[CO2_MOLAR_DENSITY] = df[CO2_MOLAR_DENSITY] * 1000  # Convert to umol m-3
-    df[H2O_MOLAR_DENSITY] = df[H2O_MOLAR_DENSITY] * 1000  # Convert to umol m-3
+    df[GAS_DENSITY] = df[GAS_DENSITY] * 1000  # Convert to umol m-3
 
     tic = time.time()
 
     # Calculate
     physics = ScopPhysics(
+        flux_type=FLUX_TYPE,
         ta=df[TA].copy(),
-        qc=df[CO2_MOLAR_DENSITY].copy(),
+        gas_density=df[GAS_DENSITY].copy(),
         rho_a=df[AIR_DENSITY].copy(),
         rho_v=df[VAPOR_DENSITY].copy(),
         u=df[U].copy(),
@@ -1218,19 +1305,22 @@ def _example():
     results_physics_df = physics.get_results()
 
     optimizer = ScopOptimizer(
+        flux_type=FLUX_TYPE,
         fct_unsc=results_physics_df["FCT_UNSC_gfRF"],
         class_var=df[USTAR].copy(),
-        n_classes=1,
-        n_bootstrap_runs=3,
+        n_classes=20,
+        n_bootstrap_runs=1000,
         flux_openpath=df[FLUX_75].copy(),
         flux_closedpath=df[FLUX_72].copy(),
-        daytime=results_physics_df["DAYTIME"]
+        daytime=results_physics_df["DAYTIME"],
+        latent_heat_vaporization=results_physics_df["LATENT_HEAT_VAPORIZATION_J_UMOL"],
     )
     scaling_factors_df = optimizer.run()
     optimizer.stats()
     optimizer.plot()
 
     applicator = ScopApplicator(
+        flux_type=FLUX_TYPE,
         fct_unsc=results_physics_df["FCT_UNSC_gfRF"],
         ts=results_physics_df["TS"],
         ra=results_physics_df["AERODYNAMIC_RESISTANCE"],
@@ -1238,9 +1328,10 @@ def _example():
         scaling_factors_df=scaling_factors_df,
         flux_openpath=df[FLUX_75].copy(),
         flux_closedpath=df[FLUX_72].copy(),
-        classvar=df[USTAR].copy(),
+        classvar=df[CLASSVAR].copy(),
         daytime=results_physics_df["DAYTIME"].copy(),
-        swin=df[SWIN].copy()
+        swin=df[SWIN].copy(),
+        latent_heat_vaporization=results_physics_df["LATENT_HEAT_VAPORIZATION_J_UMOL"]
     )
     applicator.run()
     applicator.stats()
