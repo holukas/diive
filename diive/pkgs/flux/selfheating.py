@@ -92,6 +92,7 @@ from typing import Literal, Optional
 import matplotlib.dates as mdates
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import numpy as np
 import pandas as pd
 from scipy.optimize import minimize_scalar
@@ -109,7 +110,13 @@ FluxType = Literal["CO2", "H2O"]
 
 @dataclass(frozen=True)
 class ColumnConfig:
-    """Immutable configuration for newly created column names"""
+    """
+    Configuration for column definitions related to flux and thermal properties.
+
+    This class defines constant configurations for column names used in flux and
+    thermal properties-related calculations. It organizes these columns by grouping
+    similar properties and suffixes or prefixes they may require during computation.
+    """
     class_var_group: str = 'GROUP_CLASSVAR'
     daytime: str = 'DAYTIME'
     air_thermal_conductivity: str = 'AIR_THERMAL_CONDUCTIVITY'
@@ -126,506 +133,7 @@ class ColumnConfig:
     s: str = 'S'  # Sensible heat from all key instrument surfaces (W m-2) (BUR08)
 
 
-class ScopApplicator:
 
-    def __init__(self,
-                 flux_type: FluxType,
-                 fct_unsc: pd.Series,
-                 scaling_factors_df: pd.DataFrame,
-                 flux_openpath: pd.Series,
-                 flux_closedpath: pd.Series,
-                 classvar: pd.Series,
-                 daytime: pd.Series,
-                 swin: pd.Series,
-                 ts: pd.Series,
-                 ra: pd.Series,
-                 rho_d: pd.Series,
-                 latent_heat_vaporization: Optional[pd.Series] = None):
-        """
-        Args:
-            flux_type: "CO2" or "H2O"
-            latent_heat_vaporization: Series of Lambda (J/mmol or J/kg depending on inputs).
-                                      Required ONLY if flux_type="H2O" and fluxes are in W m-2
-                                      but correction is in molar units.
-        """
-        self.flux_type = flux_type
-        self.fct_unsc = fct_unsc.copy()
-        self.ts = ts
-        self.ra = ra
-        self.rho_d = rho_d
-        self.scaling_factors_df = scaling_factors_df.copy()
-        self.flux_openpath = flux_openpath.copy()
-        self.flux_closedpath = flux_closedpath.copy()
-        self.classvar = classvar.copy()
-        self.daytime = daytime.copy()
-        self.swin = swin.copy()
-        self.Lv = latent_heat_vaporization
-
-        self.cols = ColumnConfig()
-
-        # Determine output column name
-        prefix = 'LE' if self.flux_type == 'H2O' else 'NEE'
-        self.col_flux_corr = f"{prefix}{self.cols.flux_corr_suffix}"
-
-        frame = {self.fct_unsc.name: self.fct_unsc, self.flux_openpath.name: self.flux_openpath,
-                 self.flux_closedpath.name: self.flux_closedpath, self.ts.name: self.ts, self.ra.name: self.ra,
-                 self.classvar.name: self.classvar, self.daytime.name: self.daytime, self.swin.name: self.swin,
-                 self.rho_d.name: self.rho_d}
-        self.df = pd.DataFrame(frame)
-
-        # Add Lv if needed for H2O conversion
-        if self.Lv is not None:
-            self.df['Lv'] = self.Lv
-
-    def run(self):
-
-        # Assign scaling factors depending on the class var (e.g. USTAR)
-        self.df = self._assign_scaling_factors()
-
-        # Calculate final flux correction term
-        # Corrected OP = uncorrected OP + (FCT_unscaled * ScalingFactor)
-        fct_molar = self.df[self.cols.fct_unsc_gf] * self.df[self.cols.sf]
-
-        # Apply unit conversion if H2O (Watts)
-        if self.flux_type == "H2O" and 'Lv' in self.df.columns:
-            # [µmol m-2 s-1] * [J / µmol] = [J m-2 s-1] = [W m-2]
-            self.df[self.cols.fct] = fct_molar * self.df['Lv']
-        else:
-            # CO2 (or H2O if already molar)
-            self.df[self.cols.fct] = fct_molar
-
-        # Apply correction
-        self.df[self.col_flux_corr] = self.df[self.flux_openpath.name] + self.df[self.cols.fct]
-        # self.df[self.cols.fct] = self.df[self.cols.fct_unsc_gf] * self.df[self.cols.sf]
-        # self.df[self.cols.flux_corr_suffix] = self.df[self.flux_openpath.name] + self.df[self.cols.fct]
-
-    def _assign_scaling_factors(self) -> pd.DataFrame:
-
-        # Filter for valid keys
-        valid_mask = self.classvar.notna() & self.daytime.notna()
-        if valid_mask.sum() == 0:
-            raise ValueError("No valid keys found in DataFrame. Check class variable and daytime columns.")
-
-        # Prepare left subset
-        df_valid = self.df.loc[valid_mask].sort_values(by=str(self.classvar.name))
-
-        # Prepare right subset (lookup table)
-        sf_sorted = self.scaling_factors_df.sort_values(by='GROUP_CLASSVAR_MIN')
-
-        # # Prepare left subset
-        # df_valid = self.df.loc[valid_mask].sort_values(by=str(self.classvar.name))
-        # cols_needed = [self.classvar.name, self.cols.daytime]
-        # df_valid = df_valid.loc[valid_mask, cols_needed].sort_values(by=self.classvar.name)
-        #
-        # # Prepare right subset (lookup table)
-        # sf_sorted = self.scaling_factors_df.sort_values(by='GROUP_CLASSVAR_MIN')
-
-        # Perform backward merge to find bins
-        # direction='backward': Finds the bin where [classvar] >= [GROUP_CLASSVAR_MIN]
-        # - If value is inside range: matches correct bin.
-        # - If value is > max: matches the highest bin (conceptually "last known" bin).
-        # - If value is < min: returns NaN.
-        merged_subset = pd.merge_asof(
-            df_valid,
-            sf_sorted[['DAYTIME', 'GROUP_CLASSVAR_MIN', 'GROUP_CLASSVAR', 'SF_MEDIAN']],
-            left_on=self.classvar.name,
-            right_on='GROUP_CLASSVAR_MIN',
-            by=self.daytime.name,
-            direction='backward'
-        )
-
-        # Handle low outliers (< min)
-        # Because 'backward' merge produces NaNs for values smaller than the lowest bin
-        # These NaNs are filled with the SF of the FIRST bin (first known SF)
-        # This is done by grouping by daytime and filling NaNs with the first valid observation
-        if merged_subset['SF_MEDIAN'].isna().any():
-            merged_subset['SF_MEDIAN'] = merged_subset.groupby(self.cols.daytime)['SF_MEDIAN'].transform(
-                lambda x: x.bfill())
-            merged_subset['GROUP_CLASSVAR'] = merged_subset.groupby(self.cols.daytime)['GROUP_CLASSVAR'].transform(
-                lambda x: x.bfill())
-
-        # Assign 'merged_subset' data back to original DataFrame
-        self.df.loc[df_valid.index, self.cols.class_var_group] = merged_subset['GROUP_CLASSVAR'].values
-        self.df.loc[df_valid.index, self.cols.sf] = merged_subset['SF_MEDIAN'].values
-
-        # Check if all open-path fluxes have a scaling factor
-        # logic: Where Flux exists AND Scaling Factor is NaN
-        missing_sf_mask = self.df[self.flux_openpath.name].notna() & self.df[self.cols.sf].isna()
-        if missing_sf_mask.any():
-            n_missing = missing_sf_mask.sum()
-            # # Optional: Print the first few problematic rows for debugging
-            # print("Rows with Flux but no Scaling Factor:")
-            # print(df.loc[missing_sf_mask, [self.flux_openpath, self.cols.sf, self.ustar, self.cols.daytime]].head())
-            raise ValueError(f"Not all open-path fluxes have a scaling factor. Found {n_missing} missing values.")
-
-        return self.df.sort_index()
-
-    def stats(self):
-        cols = [self.flux_openpath.name, self.flux_closedpath.name, self.col_flux_corr]
-        _stats_df = self.df[cols].dropna()
-
-        print(f"\n=== CUMULATIVE {self.flux_type} FLUXES ===")
-        print(f"N: {len(_stats_df)}")
-
-        op_sum = _stats_df[self.flux_openpath.name].sum()
-        cp_sum = _stats_df[self.flux_closedpath.name].sum()
-        corr_sum = _stats_df[self.col_flux_corr].sum()
-
-        print(f"OPEN-PATH (uncorrected): {op_sum:,.0f}  ({(op_sum / cp_sum) * 100:.1f}% of ref)")
-        print(f"ENCLOSED-PATH (ref):     {cp_sum:,.0f}")
-        print(f"OPEN-PATH (corrected):   {corr_sum:,.0f}  ({(corr_sum / cp_sum) * 100:.1f}% of ref)")
-        print("\n")
-
-    # def gapfilling_lut(self, series):
-    #     """Gap-fill time series using look-up table (LUT)
-    #
-    #     Optimized version using groupby().transform()
-    #     """
-    #     # 1. Calculate the mean for every (Month, Hour) group
-    #     # 'transform' calculates the mean and broadcasts it back to the original index size
-    #     lutvals = series.groupby([series.index.month, series.index.hour]).transform('mean')
-    #
-    #     # 2. Fill the gaps in the original series using these means
-    #     series_gf = series.fillna(lutvals)
-    #
-    #     return series_gf, lutvals
-
-    @staticmethod
-    def plot_series(self, ax, series, title):
-        ax.plot_date(x=series.index, y=series,
-                     ms=2, alpha=.3, ls='-', marker='o', markeredgecolor='none')
-        ax.set_title(title, fontsize=9, fontweight='bold', y=1)
-
-    @staticmethod
-    def format_spines(ax, color, lw):
-        spines = ['top', 'bottom', 'left', 'right']
-        for spine in spines:
-            ax.spines[spine].set_color(color)
-            ax.spines[spine].set_linewidth(lw)
-        return None
-
-    def default_format(self, ax, fontsize=9, label_color='black',
-                       txt_xlabel=False, txt_ylabel=False, txt_ylabel_units=False,
-                       width=0.5, length=3, direction='in', colors='black', facecolor='white'):
-        """ Apply default format to plot. """
-        ax.set_facecolor(facecolor)
-        ax.tick_params(axis='x', width=width, length=length, direction=direction, colors=colors, labelsize=fontsize)
-        ax.tick_params(axis='y', width=width, length=length, direction=direction, colors=colors, labelsize=fontsize)
-        self.format_spines(ax=ax, color=colors, lw=1)
-        if txt_xlabel:
-            ax.set_xlabel(txt_xlabel, color=label_color, fontsize=fontsize, fontweight='bold')
-        if txt_ylabel and txt_ylabel_units:
-            ax.set_ylabel(f'{txt_ylabel}  {txt_ylabel_units}', color=label_color, fontsize=fontsize, fontweight='bold')
-        if txt_ylabel and not txt_ylabel_units:
-            ax.set_ylabel(f'{txt_ylabel}', color=label_color, fontsize=fontsize, fontweight='bold')
-        return None
-
-    def plot_diel_cycles(self):
-        """
-        Combines flux results and auxiliary variables into a single
-        publication-quality dashboard plot with a modern, minimalist design.
-        """
-        import matplotlib.ticker as ticker
-
-        print("Plotting Comprehensive Diel Cycles (Modern Dashboard)...")
-
-        # --- 1. PRE-CALCULATION ---
-        diff_col_name = 'diff_corr_ref'
-        # Assuming self.df exists and contains the necessary columns
-        plot_df = self.df.copy()
-
-        # Note: Using .name attributes is prone to errors if the input was a Series object
-        # instead of a column name string. Using string literals for safety in this example.
-
-        # Calculate residual if reference exists (assuming string column names are used)
-        # The actual column names from the previous scope must be used here:
-        # self.flux_closedpath, self.flux_openpath, self.cols.nee_op_corr, etc.
-        # ***For this snippet, I'll use placeholders that were in your original code:***
-
-        OP_COL = self.flux_openpath.name
-        CP_COL = self.flux_closedpath.name
-
-        if CP_COL in plot_df.columns:
-            # Assuming self.cols.nee_op_corr is the corrected column name
-            plot_df[diff_col_name] = plot_df[self.col_flux_corr] - plot_df[CP_COL]
-        else:
-            plot_df[diff_col_name] = np.nan
-
-        # --- 2. CONFIGURATION ---
-        # Define vars (using string placeholders for the original variables)
-        plot_vars = [
-            # ROW 1: DRIVERS
-            {'col': self.swin.name, 'title': '1. Shortwave Incoming', 'unit': r'$W\ m^{-2}$'},
-            {'col': 'TS', 'title': '2. Instrument Surface Temp', 'unit': r'°C'},
-            {'col': self.cols.aerodynamic_resistance, 'title': '3. Aerodynamic Resistance', 'unit': r'$s\ m^{-1}$'},
-            {'col': self.cols.dry_air_density, 'title': '4. Dry Air Density', 'unit': r'$kg\ m^{-3}$'},
-
-            # ROW 2: CORRECTION MECHANISM
-            {'col': self.cols.fct_unsc_gf, 'title': r'5. Unscaled Correction ($FCT_{unsc}$)',
-             'unit': r'$\mu mol\ m^{-2}\ s^{-1}$'},
-            {'col': self.cols.sf, 'title': r'6. Scaling Factor ($\xi$)', 'unit': '-'},
-            {'col': self.cols.fct, 'title': '7. Final Correction Term', 'unit': r'$\mu mol\ m^{-2}\ s^{-1}$'},
-            {'col': None},
-
-            # ROW 3: FLUX RESULTS
-            {'col': OP_COL, 'title': '8. OP Flux (Uncorrected)', 'unit': r'$\mu mol\ m^{-2}\ s^{-1}$'},
-            {'col': CP_COL, 'title': '9. CP Flux (Reference)', 'unit': r'$\mu mol\ m^{-2}\ s^{-1}$'},
-            {'col': self.col_flux_corr, 'title': '10. OP Flux (Corrected)',
-             'unit': r'$\mu mol\ m^{-2}\ s^{-1}$'},
-            {'col': diff_col_name, 'title': '11. Residual (Corrected - Ref)', 'unit': r'$\mu mol\ m^{-2}\ s^{-1}$'},
-        ]
-
-        # --- 3. STYLE SETTINGS ---
-        with plt.rc_context({
-            'font.family': 'sans-serif',
-            'axes.edgecolor': '#bdc3c7',
-            'axes.linewidth': 0.8,
-            'grid.color': '#ecf0f1',
-            'text.color': '#2c3e50',
-            'axes.labelcolor': '#2c3e50',
-            'xtick.color': '#7f8c8d',
-            'ytick.color': '#7f8c8d'
-        }):
-
-            rows, cols = 3, 4
-            fig, axes = plt.subplots(rows, cols, figsize=(20, 13), constrained_layout=True, sharex=True)
-
-            cmap = plt.get_cmap('Spectral_r', 12)
-            norm = plt.Normalize(vmin=0.5, vmax=12.5)
-            axes_flat = axes.flatten()
-
-            for i, var in enumerate(plot_vars):
-                ax = axes_flat[i]
-                col_name = var['col']
-
-                if col_name is None or col_name not in plot_df.columns:
-                    ax.axis('off')
-                    continue
-
-                series = plot_df[col_name].copy()
-
-                # --- FIX: Ensure DatetimeIndex ---
-                # This is essential for .index.month and .index.hour to work.
-                if not isinstance(series.index, pd.DatetimeIndex):
-                    try:
-                        series.index = pd.to_datetime(series.index)
-                    except Exception:
-                        ax.set_title(f"Data for {col_name} has invalid index type.", fontsize=8)
-                        continue
-
-                # 4. Data Aggregation
-                # Group by Month and Hour, then calculate mean
-                diel = series.groupby([series.index.month, series.index.hour]).mean().unstack()
-
-                # Global Annual Mean
-                annual_mean = series.groupby(series.index.hour).mean()
-
-                # --- 5. PLOTTING ---
-
-                # A. Plot Annual Mean (Context Layer)
-                ax.plot(annual_mean.index, annual_mean.values, color='#95a5a6',
-                        linestyle='--', linewidth=1.5, alpha=0.6, zorder=1, label='Annual Mean')
-
-                # B. Plot Monthly Lines
-                for month in diel.index:
-                    vals = diel.loc[month]
-                    color = cmap(norm(month))
-                    # FIX: Ensure we plot against the numerical hour (0-23)
-                    ax.plot(vals.index, vals.values, color=color,
-                            alpha=0.9, linewidth=2, zorder=2)
-
-                # 6. Styling
-                ax.set_title(var['title'], fontsize=12, fontweight='bold', loc='left', color='#2c3e50', pad=10)
-                ax.set_ylabel(var['unit'], fontsize=10, color='#7f8c8d', fontweight='medium')
-                ax.grid(True, axis='y', linestyle='-', linewidth=1, color='#ecf0f1')
-                ax.grid(False, axis='x')
-
-                # Zero line (Emphasis)
-                if (series.min() < 0) and (series.max() > 0):
-                    ax.axhline(0, lw=1.2, color='#34495e', linestyle='-', zorder=3)
-
-                ax.spines['top'].set_visible(False)
-                ax.spines['right'].set_visible(False)
-                ax.spines['left'].set_visible(False)
-                ax.spines['bottom'].set_visible(True)
-                ax.spines['bottom'].set_color('#bdc3c7')
-
-                ax.set_xlim(0, 23)
-                ax.xaxis.set_major_locator(ticker.MultipleLocator(6))
-                ax.tick_params(axis='both', which='major', labelsize=9, length=0)
-
-            # --- LEGEND / COLORBAR ---
-            sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-            sm.set_array([])
-            cbar = fig.colorbar(sm, ax=axes, orientation='vertical', aspect=35, shrink=0.7, pad=0.02)
-            cbar.set_label('Month', rotation=270, labelpad=15, color='#7f8c8d', fontsize=10)
-            cbar.set_ticks(np.arange(1, 13))
-            cbar.set_ticklabels(['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'])
-            cbar.ax.tick_params(color='#bdc3c7', labelcolor='#7f8c8d', size=0)
-            cbar.outline.set_visible(False)
-
-            fig.supxlabel("Hour of Day", fontsize=12, color='#2c3e50', y=0.02)
-
-            plt.show()
-
-    def _plot_diel_cycle_modern(self, ax, series, cmap, norm):
-        """Helper to plot hourly means by month."""
-        diel_df = series.groupby([series.index.month, series.index.hour]).mean().unstack()
-        hours = diel_df.columns
-        for month in diel_df.index:
-            vals = diel_df.loc[month]
-            color = cmap(norm(month))
-            ax.plot(hours, vals, color=color, alpha=0.8, linewidth=1.5)
-
-        ax.set_xlim(0, 23)
-        ax.set_xticks([0, 6, 12, 18, 24])
-
-    def plot_flux_analysis_dashboard(self):
-        print("Plotting Flux Analysis Dashboard (Time Series + Cumulative)...")
-
-        # --- CONFIGURATION ---
-        # Consistent styling across all panels
-        # zorder: Corrected on top (3), Reference middle (2), Uncorrected bottom (1)
-        style_config = {
-            self.flux_openpath.name: {
-                'label': 'Uncorrected (OP)', 'color': '#95a5a6', 'zorder': 1, 'alpha_pts': 0.1, 'alpha_line': 0.7
-            },
-            self.flux_closedpath.name: {
-                'label': 'Reference (CP)', 'color': '#2c3e50', 'zorder': 2, 'alpha_pts': 0.1, 'alpha_line': 0.8
-            },
-            self.col_flux_corr: {
-                'label': 'Corrected (OP)', 'color': '#e74c3c', 'zorder': 3, 'alpha_pts': 0.15, 'alpha_line': 1.0
-            }
-        }
-
-        fig = plt.figure(figsize=(16, 12), constrained_layout=True)
-        gs = gridspec.GridSpec(2, 3, figure=fig, height_ratios=[1, 0.8])  # Top row slightly taller
-
-        # Define axes
-        ax_ts = fig.add_subplot(gs[0, :])  # Top row: Time Series (Spans all columns)
-        ax_day = fig.add_subplot(gs[1, 0])  # Bottom Left: Daytime Cumulative
-        ax_night = fig.add_subplot(gs[1, 1])  # Bottom Mid: Nighttime Cumulative
-        ax_all = fig.add_subplot(gs[1, 2])  # Bottom Right: All Cumulative
-
-        # Adjust padding
-        fig.set_constrained_layout_pads(w_pad=0.1, h_pad=0.1, wspace=0.1, hspace=0.1)
-
-        # Top row: time series
-        cols_to_plot = [self.flux_openpath.name, self.flux_closedpath.name, self.col_flux_corr]
-
-        for col in cols_to_plot:
-            if col not in self.df.columns or col is None:
-                continue
-
-            series = self.df[col].dropna()
-            if series.empty:
-                continue
-
-            style = style_config[col]
-
-            # Raw data scatter
-            ax_ts.scatter(series.index, series, s=2, color=style['color'],
-                          alpha=style['alpha_pts'], edgecolors='none',
-                          zorder=style['zorder'])
-
-            # Trend line (3-day rolling mean)
-            rolling = series.rolling(window=144, center=True, min_periods=1).mean()
-            ax_ts.plot(rolling.index, rolling, color=style['color'], lw=2,
-                       alpha=style['alpha_line'], zorder=style['zorder'] + 10,
-                       label=f"{style['label']}")
-
-        # Styling Top Row
-        ax_ts.set_title("A. Flux Time Series & Trends", fontsize=12, fontweight='bold', loc='left', color='#333333')
-        ax_ts.set_ylabel(r"CO$_2$ Flux ($\mu mol\ m^{-2}\ s^{-1}$)", fontsize=10, color='#555555')
-        ax_ts.axhline(0, lw=1.5, color='#333333', linestyle='-', zorder=5)
-        ax_ts.legend(loc='upper left', frameon=False, fontsize=10, ncol=3)
-        ax_ts.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
-
-        # Bottom row: cumulative fluxes
-        # Prepare scenarios
-        scenarios = [
-            {'ax': ax_day, 'title': 'B. Daytime Budget', 'filter': self.df[self.cols.daytime] == 1},
-            {'ax': ax_night, 'title': 'C. Nighttime Budget', 'filter': self.df[self.cols.daytime] == 0},
-            {'ax': ax_all, 'title': 'D. Total Budget', 'filter': slice(None)}  # No filter
-        ]
-
-        for scen in scenarios:
-            ax = scen['ax']
-
-            # Filter data first
-            if isinstance(scen['filter'], slice):
-                subset = self.df.copy()
-            else:
-                subset = self.df.loc[scen['filter']].copy()
-
-            # Drop rows where any of the key fluxes are missing to ensure fair cumulative comparison
-            # (If one sensor is down, we shouldn't sum the other one during that time)
-            subset = subset.dropna(subset=cols_to_plot, how='any')
-
-            # Calculate Cumulative Sum
-            for col in cols_to_plot:
-                if col not in subset.columns or col is None: continue
-                style = style_config[col]
-
-                cumsum_series = subset[col].cumsum()
-
-                # Plot Line
-                ax.plot(subset.index, cumsum_series, color=style['color'],
-                        lw=2, zorder=style['zorder'], label=style['label'])
-
-                # Add final value annotation at the end of the line
-                if not cumsum_series.empty:
-                    final_val = cumsum_series.iloc[-1]
-                    ax.text(subset.index[-1], final_val, f" {final_val:.0f}",
-                            verticalalignment='center', fontsize=8, color=style['color'], fontweight='bold')
-
-            # Styling Bottom Row
-            ax.set_title(scen['title'], fontsize=11, fontweight='bold', loc='left', color='#333333')
-            if scen['ax'] == ax_day:
-                ax.set_ylabel(r"Cumulative Sum ($\Sigma$)", fontsize=10, color='#555555')
-
-            ax.xaxis.set_major_formatter(mdates.DateFormatter('%b'))  # Short month name
-
-            # Simplified legend only on the last plot to reduce clutter
-            if scen['ax'] == ax_all:
-                ax.legend(loc='best', frameon=False, fontsize=8)
-
-        # Global styling
-        for ax in [ax_ts, ax_day, ax_night, ax_all]:
-            ax.grid(True, which='major', linestyle=':', alpha=0.6, color='gray')
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
-            ax.spines['left'].set_linewidth(0.5)
-            ax.spines['bottom'].set_linewidth(0.5)
-
-        fig.show()
-
-    def plot_cumulative(self, ax: plt.axis, title: str, which: str, df: pd.DataFrame,
-                        daytime_col: str):
-        df = df.dropna()
-
-        if which == 'daytime':
-            df = df.loc[df[daytime_col] == 1]
-        elif which == 'nighttime':
-            df = df.loc[df[daytime_col] == 0]
-        elif which == 'all':
-            pass
-
-        # # Convert to gC m-2
-        # _subset[self.op_co2_flux_QC01_nocorr_col] = \
-        #     _subset[self.op_co2_flux_QC01_nocorr_col].multiply(0.02161926)
-        # _subset[self.cp_co2_flux_QC01_col] = \
-        #     _subset[self.cp_co2_flux_QC01_col].multiply(0.02161926)
-        # _subset[self.op_co2_flux_corr_jar09_col] = \
-        #     _subset[self.op_co2_flux_corr_jar09_col].multiply(0.02161926)
-
-        df = df.cumsum()
-        for col in df.columns:
-            if col == daytime_col:
-                continue
-            ax.plot_date(x=df.index, y=df[col], label=col, ms=3, alpha=.5)
-        ax.set_title(title, fontsize=9, fontweight='bold', y=1)
-        ax.legend()
 
 
 class ScopPhysics:
@@ -697,6 +205,11 @@ class ScopPhysics:
         self.S = pd.Series(name=self.cols.s)  # Sensible heat from all key instrument surfaces  (BUR08)
         self.fct_unsc = pd.Series(name=self.cols.fct_unsc)  # Unscaled flux correction term, produced by all methods
         self.fct_unsc_gf = pd.Series(name=self.cols.fct_unsc_gf)  # Unscaled flux correction term, gap-filled
+
+        # Initialize BUR08 specific surfaces
+        self.ts_top = None
+        self.ts_bottom = None
+        self.ts_spar = None
 
     def get_results(self) -> pd.DataFrame:
         frame = {
@@ -947,6 +460,16 @@ class ScopPhysics:
         b = r_spar * np.log((r_spar + sigma_spar) / r_spar)
         S_spar = self.k_air * (a / b)
 
+        # Save specific surfaces to self for plotting
+        self.ts_top = ts_top
+        self.ts_top.name = "Ts_Top"
+
+        self.ts_bottom = ts_bottom
+        self.ts_bottom.name = "Ts_Bottom"
+
+        self.ts_spar = ts_spar
+        self.ts_spar.name = "Ts_Spar"
+
         # Calculate sensible heat from all key instrument surfaces
         S = S_bottom + S_top + 0.15 * S_spar  # W m-2
 
@@ -1014,6 +537,124 @@ class ScopPhysics:
         ts.loc[self.daytime == 0] = 1.05 * self.ta.loc[self.daytime == 0] + 1.52
 
         return ts
+
+    def plot_diel_cycles(self):
+        """
+        Plots the mean diurnal cycles.
+        Auto-detects if BUR08 surfaces exist and plots them individually.
+        """
+        import matplotlib.pyplot as plt
+        import matplotlib.gridspec as gridspec
+        import matplotlib.ticker as ticker
+        import numpy as np
+
+        print("Plotting Physics Diel Cycles...")
+
+        # Check if BUR08 surfaces exist
+        has_bur08 = (self.ts_bottom is not None)
+
+        # Create plot dataframe
+        frame = {
+            'SWIN': self.swin, 'Ta': self.ta, 'U': self.u, 'Ra': self.ra,
+            'FCT_unsc': self.fct_unsc_gf if not self.fct_unsc_gf.empty else self.fct_unsc
+        }
+
+        if has_bur08:
+            frame.update({
+                'Ts_Top': self.ts_top,
+                'Ts_Bottom': self.ts_bottom,
+                'Ts_Spar': self.ts_spar
+            })
+            # For heating, we use the weighted average or main window delta
+            frame['Delta_T'] = self.ts_bottom - self.ta
+        else:
+            frame['Ts'] = self.ts
+            if 'Ts' in frame and 'Ta' in frame:
+                frame['Delta_T'] = self.ts - self.ta
+            else:
+                frame['Delta_T'] = np.nan
+
+        plot_df = pd.DataFrame(frame)
+        if not isinstance(plot_df.index, pd.DatetimeIndex):
+            plot_df.index = pd.to_datetime(plot_df.index)
+
+        # --- CONFIGURATION ---
+        plot_vars = [
+            {'col': 'SWIN', 'title': '1. Incoming Radiation', 'unit': r'$W\ m^{-2}$'},
+            {'col': 'Ta', 'title': '2. Air Temperature', 'unit': r'$^{\circ}C$'},
+            # Panel 3 is special (Multi-line for BUR08)
+            {'col': 'Ts_Multi' if has_bur08 else 'Ts',
+             'title': '3. Instrument Surfaces (BUR08)' if has_bur08 else '3. Surface Temp',
+             'unit': r'$^{\circ}C$'},
+            {'col': 'Delta_T', 'title': r'4. Heating (Main Surf - Ta)', 'unit': r'$\Delta^{\circ}C$'},
+            {'col': 'U', 'title': '5. Wind Speed', 'unit': r'$m\ s^{-1}$'},
+            {'col': 'Ra', 'title': '6. Aerodynamic Res.', 'unit': r'$s\ m^{-1}$'},
+            {'col': 'FCT_unsc', 'title': '7. Unscaled Correction', 'unit': r'$\mu mol$'},
+            {'col': None}
+        ]
+
+        # Colors
+        colors = ['#f1c40f', '#e67e22', '#d35400', '#c0392b', '#3498db', '#9b59b6', '#2c3e50']
+
+        # Settings
+        rc_settings = {'font.family': 'sans-serif', 'font.size': 11}
+
+        with plt.rc_context(rc_settings):
+            fig = plt.figure(figsize=(22, 12), constrained_layout=True)
+            gs = gridspec.GridSpec(2, 4, figure=fig)
+            axes = [fig.add_subplot(gs[i // 4, i % 4]) for i in range(8)]
+
+            for i, var in enumerate(plot_vars):
+                ax = axes[i]
+                col_name = var.get('col')
+                if col_name is None:
+                    ax.axis('off');
+                    continue
+
+                # --- SPECIAL HANDLING FOR BUR08 SURFACES (PANEL 3) ---
+                if col_name == 'Ts_Multi':
+                    # Plot annual means of all 3 surfaces + Ta
+
+                    # 1. Ta (Reference)
+                    mean_ta = plot_df['Ta'].groupby(plot_df.index.hour).mean()
+                    ax.plot(mean_ta.index, mean_ta.values, color='black', ls=':', lw=1.5, label='Ta (Air)')
+
+                    # 2. Surfaces
+                    surfs = [('Ts_Bottom', '#c0392b'), ('Ts_Top', '#e67e22'), ('Ts_Spar', '#8e44ad')]
+                    for s_col, s_color in surfs:
+                        mean_s = plot_df[s_col].groupby(plot_df.index.hour).mean()
+                        ax.plot(mean_s.index, mean_s.values, color=s_color, lw=2, label=s_col.split('_')[1])
+
+                    ax.legend(fontsize=9, frameon=False, loc='best')
+                    ax.set_title(var['title'], fontweight='bold', loc='left')
+                    ax.set_ylabel(var['unit'])
+                    ax.set_xlim(0, 23)
+                    ax.xaxis.set_major_locator(ticker.MultipleLocator(6))
+                    continue
+
+                # --- STANDARD PLOTTING ---
+                series = plot_df[col_name].dropna()
+                if series.empty: continue
+
+                diel = series.groupby([series.index.month, series.index.hour]).mean().unstack()
+                annual = series.groupby(series.index.hour).mean()
+
+                ax.plot(annual.index, annual.values, color='gray', ls='--', lw=2, alpha=0.5, zorder=1)
+
+                # Monthly lines
+                cmap = plt.get_cmap('Spectral_r', 12)
+                for m in diel.index:
+                    ax.plot(diel.columns, diel.loc[m], color=cmap((m - 0.5) / 12), alpha=0.8)
+
+                ax.set_title(var['title'], fontweight='bold', loc='left')
+                ax.set_ylabel(var['unit'], color='#7f8c8d')
+                ax.set_xlim(0, 23)
+                ax.xaxis.set_major_locator(ticker.MultipleLocator(6))
+
+                if series.min() < 0 < series.max(): ax.axhline(0, lw=1, color='k')
+
+            fig.suptitle(f"Physics Drivers ({self.flux_type})", fontsize=16, fontweight='bold', y=1.02)
+            plt.show()
 
 
 class ScopOptimizer:
@@ -1236,20 +877,541 @@ class ScopOptimizer:
         plt.show()
 
     def stats(self):
-        """Prints summary statistics."""
+        """
+        Prints a professional summary of the optimization results,
+        including global averages and per-bin details.
+        """
         if self.scaling_factors_df.empty:
-            print("No results to display.")
+            print("(!) No optimization results found. Run .run() first.")
             return
 
-        print("\n=== OPTIMIZATION RESULTS ===")
-        # Use pandas grouping to get median of medians
-        summary = self.scaling_factors_df.groupby('DAYTIME')[['SF_MEDIAN', 'SOS_MEDIAN']].median()
-        print(summary)
-        print("============================")
+        import numpy as np
+
+        df = self.scaling_factors_df
+
+        # Helper for separators
+        def print_sep(char='-', length=75):
+            print(char * length)
+
+        print("\n")
+        print_sep('=', 75)
+        print(f"{'SCALING FACTOR OPTIMIZATION REPORT':^75}")
+        print_sep('=', 75)
+
+        print(f"Flux Type      : {self.flux_type}")
+        print(f"Bootstrap Runs : {self.n_bootstrap}")
+        print(f"Total Bins     : {len(df)}")
+        print_sep('-', 75)
+
+        # --- 1. GLOBAL SUMMARY (Day vs Night) ---
+        print(f"{'1. GLOBAL SUMMARY (Median of Bins)':<40}")
+        print_sep('.', 75)
+        print(f"{'Period':<15} | {'Median SF':>10} | {'Mean Uncertainty (IQR)':>22} | {'N_Avg':>8}")
+
+        summary_groups = df.groupby('DAYTIME')
+        for daytime, group in summary_groups:
+            period = "Daytime" if daytime == 1 else "Nighttime"
+            median_sf = group['SF_MEDIAN'].median()
+            mean_iqr = (group['SF_Q75'] - group['SF_Q25']).mean()
+            mean_n = group['NUMVALS_AVG'].mean()
+
+            print(f"{period:<15} | {median_sf:>10.3f} | {mean_iqr:>22.3f} | {mean_n:>8.0f}")
+
+        print("\n")
+
+        # --- 2. DETAILED BIN REPORT ---
+        print(f"{'2. DETAILED BIN BREAKDOWN':<40}")
+        print_sep('.', 75)
+
+        # Header
+        # Range column needs space for "123.45 - 123.45"
+        header = (f"{'Bin':<4} | {'Class Range':^19} | {'N':>5} | "
+                  f"{'Median SF (ξ)':>16} | {'99% CI':^16} | {'Error (SOS)':>10}")
+        print(header)
+        print_sep('-', 75)
+
+        # Iterate Day then Night
+        for daytime in [1, 0]:
+            subset = df[df['DAYTIME'] == daytime].sort_values('GROUP_CLASSVAR_MIN')
+            if subset.empty:
+                continue
+
+            period_label = "DAYTIME" if daytime == 1 else "NIGHTTIME"
+            print(f"--- {period_label} ---")
+
+            for _, row in subset.iterrows():
+                # Format the range string
+                r_min, r_max = row['GROUP_CLASSVAR_MIN'], row['GROUP_CLASSVAR_MAX']
+                range_str = f"{r_min:>7.2f} - {r_max:<7.2f}"
+
+                # Format CI string
+                ci_str = f"[{row['SF_Q01']:>4.2f}-{row['SF_Q99']:<4.2f}]"
+
+                print(f"{int(row['GROUP_CLASSVAR']):<4} | "
+                      f"{range_str:^19} | "
+                      f"{int(row['NUMVALS_AVG']):>5} | "
+                      f"{row['SF_MEDIAN']:>16.3f} | "
+                      f"{ci_str:^16} | "
+                      f"{row['SOS_MEDIAN']:>10.2f}")
+            print("")  # Spacer between day/night
+
+        print_sep('=', 75)
+        print("\n")
 
     def get(self) -> pd.DataFrame:
         return self.scaling_factors_df
 
+
+class ScopApplicator:
+
+    def __init__(self,
+                 flux_type: FluxType,
+                 fct_unsc: pd.Series,
+                 scaling_factors_df: pd.DataFrame,
+                 flux_openpath: pd.Series,
+                 classvar: pd.Series,
+                 daytime: pd.Series,
+                 latent_heat_vaporization: Optional[pd.Series] = None):
+        """
+        Args:
+            flux_type: "CO2" or "H2O"
+            latent_heat_vaporization: Series of Lambda (J/mmol or J/kg depending on inputs).
+                                      Required ONLY if flux_type="H2O" and fluxes are in W m-2
+                                      but correction is in molar units.
+        """
+        self.flux_type = flux_type
+        self.fct_unsc = fct_unsc.copy()
+        self.scaling_factors_df = scaling_factors_df.copy()
+        self.flux_openpath = flux_openpath.copy()
+        self.classvar = classvar.copy()
+        self.daytime = daytime.copy()
+        self.latent_heat_vaporization = latent_heat_vaporization
+
+        self.cols = ColumnConfig()
+
+        # Determine output column name
+        prefix = 'LE' if self.flux_type == 'H2O' else 'NEE'
+        self.col_flux_corr = f"{prefix}{self.cols.flux_corr_suffix}"
+
+        frame = {self.fct_unsc.name: self.fct_unsc, self.flux_openpath.name: self.flux_openpath,
+                 self.classvar.name: self.classvar, self.daytime.name: self.daytime}
+        self.df = pd.DataFrame(frame)
+
+        # Add Lv if needed for H2O conversion
+        if self.latent_heat_vaporization is not None:
+            self.df['Lv'] = self.latent_heat_vaporization
+
+    def run(self):
+
+        # Assign scaling factors depending on the class var (e.g. USTAR)
+        self.df = self._assign_scaling_factors()
+
+        # Calculate final flux correction term
+        # Corrected OP = uncorrected OP + (FCT_unscaled * ScalingFactor)
+        fct_molar = self.df[self.cols.fct_unsc_gf] * self.df[self.cols.sf]
+
+        # Apply unit conversion if H2O (Watts)
+        if self.flux_type == "H2O" and 'Lv' in self.df.columns:
+            # [µmol m-2 s-1] * [J / µmol] = [J m-2 s-1] = [W m-2]
+            self.df[self.cols.fct] = fct_molar * self.df['Lv']
+        else:
+            # CO2 (or H2O if already molar)
+            self.df[self.cols.fct] = fct_molar
+
+        # Apply correction
+        self.df[self.col_flux_corr] = self.df[self.flux_openpath.name] + self.df[self.cols.fct]
+        # self.df[self.cols.fct] = self.df[self.cols.fct_unsc_gf] * self.df[self.cols.sf]
+        # self.df[self.cols.flux_corr_suffix] = self.df[self.flux_openpath.name] + self.df[self.cols.fct]
+
+    def _assign_scaling_factors(self) -> pd.DataFrame:
+
+        # Filter for valid keys
+        valid_mask = self.classvar.notna() & self.daytime.notna()
+        if valid_mask.sum() == 0:
+            raise ValueError("No valid keys found in DataFrame. Check class variable and daytime columns.")
+
+        # Prepare left subset
+        df_valid = self.df.loc[valid_mask].sort_values(by=str(self.classvar.name))
+
+        # Prepare right subset (lookup table)
+        sf_sorted = self.scaling_factors_df.sort_values(by='GROUP_CLASSVAR_MIN')
+
+        # # Prepare left subset
+        # df_valid = self.df.loc[valid_mask].sort_values(by=str(self.classvar.name))
+        # cols_needed = [self.classvar.name, self.cols.daytime]
+        # df_valid = df_valid.loc[valid_mask, cols_needed].sort_values(by=self.classvar.name)
+        #
+        # # Prepare right subset (lookup table)
+        # sf_sorted = self.scaling_factors_df.sort_values(by='GROUP_CLASSVAR_MIN')
+
+        # Perform backward merge to find bins
+        # direction='backward': Finds the bin where [classvar] >= [GROUP_CLASSVAR_MIN]
+        # - If value is inside range: matches correct bin.
+        # - If value is > max: matches the highest bin (conceptually "last known" bin).
+        # - If value is < min: returns NaN.
+        merged_subset = pd.merge_asof(
+            df_valid,
+            sf_sorted[['DAYTIME', 'GROUP_CLASSVAR_MIN', 'GROUP_CLASSVAR', 'SF_MEDIAN']],
+            left_on=self.classvar.name,
+            right_on='GROUP_CLASSVAR_MIN',
+            by=self.daytime.name,
+            direction='backward'
+        )
+
+        # Handle low outliers (< min)
+        # Because 'backward' merge produces NaNs for values smaller than the lowest bin
+        # These NaNs are filled with the SF of the FIRST bin (first known SF)
+        # This is done by grouping by daytime and filling NaNs with the first valid observation
+        if merged_subset['SF_MEDIAN'].isna().any():
+            merged_subset['SF_MEDIAN'] = merged_subset.groupby(self.cols.daytime)['SF_MEDIAN'].transform(
+                lambda x: x.bfill())
+            merged_subset['GROUP_CLASSVAR'] = merged_subset.groupby(self.cols.daytime)['GROUP_CLASSVAR'].transform(
+                lambda x: x.bfill())
+
+        # Assign 'merged_subset' data back to original DataFrame
+        self.df.loc[df_valid.index, self.cols.class_var_group] = merged_subset['GROUP_CLASSVAR'].values
+        self.df.loc[df_valid.index, self.cols.sf] = merged_subset['SF_MEDIAN'].values
+
+        # Check if all open-path fluxes have a scaling factor
+        # logic: Where Flux exists AND Scaling Factor is NaN
+        missing_sf_mask = self.df[self.flux_openpath.name].notna() & self.df[self.cols.sf].isna()
+        if missing_sf_mask.any():
+            n_missing = missing_sf_mask.sum()
+            # # Optional: Print the first few problematic rows for debugging
+            # print("Rows with Flux but no Scaling Factor:")
+            # print(df.loc[missing_sf_mask, [self.flux_openpath, self.cols.sf, self.ustar, self.cols.daytime]].head())
+            raise ValueError(f"Not all open-path fluxes have a scaling factor. Found {n_missing} missing values.")
+
+        return self.df.sort_index()
+
+    def stats(self, flux_closedpath: Optional[pd.Series] = None):
+        """
+        Prints a professional statistical report.
+        - If Ref provided: Compares Corrected vs. Reference (Accuracy).
+        - If Ref missing:  Compares Corrected vs. Uncorrected (Magnitude of Adjustment).
+        """
+        import numpy as np
+
+        # --- 1. DATA PREPARATION ---
+        cp_col = None
+        if flux_closedpath is not None:
+            cp_col = flux_closedpath.name if flux_closedpath.name else 'flux_closedpath'
+            self.df[cp_col] = flux_closedpath
+
+        col_op_raw = self.flux_openpath.name
+        col_op_corr = self.col_flux_corr
+
+        # Subset data
+        cols_to_check = [col_op_raw, col_op_corr]
+        if cp_col: cols_to_check.append(cp_col)
+
+        df_stats = self.df[cols_to_check].dropna()
+        n_obs = len(df_stats)
+
+        if n_obs == 0:
+            print("(!) No overlapping data found for statistics.")
+            return
+
+        # --- 2. CALCULATIONS ---
+        sum_raw = df_stats[col_op_raw].sum()
+        sum_corr = df_stats[col_op_corr].sum()
+
+        # Helper for separators
+        def print_sep(char='-', length=60):
+            print(char * length)
+
+        print("\n")
+        print_sep('=', 60)
+
+        # --- SCENARIO A: REFERENCE AVAILABLE ---
+        if cp_col:
+            print(f"{'FLUX CORRECTION PERFORMANCE REPORT':^60}")
+            print_sep('=', 60)
+            print(f"Flux Type: {self.flux_type:<10} | N Observations: {n_obs:,}")
+            print_sep('-', 60)
+
+            # 1. TOTALS
+            sum_ref = df_stats[cp_col].sum()
+            ratio_raw = (sum_raw / sum_ref) * 100
+            ratio_corr = (sum_corr / sum_ref) * 100
+
+            print(f"{'1. CUMULATIVE BUDGET / TOTALS':<40} {'(% of Ref)':>18}")
+            print_sep('.', 60)
+            print(f"   Reference (CP)     : {sum_ref:>12,.0f} {'(100.0%)':>18}")
+            print(f"   Uncorrected (OP)   : {sum_raw:>12,.0f} {f'({ratio_raw:.1f}%)':>18}")
+            symbol = "✓" if 95 < ratio_corr < 105 else "~"
+            print(f" {symbol} Corrected (OP)     : {sum_corr:>12,.0f} {f'({ratio_corr:.1f}%)':>18}")
+
+            # 2. ERROR METRICS
+            resid = df_stats[col_op_corr] - df_stats[cp_col]
+            bias = resid.mean()
+            mae = np.abs(resid).mean()
+            rmse = np.sqrt((resid ** 2).mean())
+            slope, intercept = np.polyfit(df_stats[cp_col], df_stats[col_op_corr], 1)
+            r_sq = np.corrcoef(df_stats[cp_col], df_stats[col_op_corr])[0, 1] ** 2
+
+            print("\n")
+            print(f"{'2. ACCURACY (Corrected vs. Reference)':<60}")
+            print_sep('.', 60)
+            print(f"   RMSE    : {rmse:>8.3f}       |   R² Score  : {r_sq:>8.4f}")
+            print(f"   MAE     : {mae:>8.3f}       |   Slope (m) : {slope:>8.3f}")
+            print(f"   Bias    : {bias:>8.3f}       |   Interc (c): {intercept:>8.3f}")
+
+            # Improvement stats
+            rmse_raw = np.sqrt(((df_stats[col_op_raw] - df_stats[cp_col]) ** 2).mean())
+            improvement = (1 - (rmse / rmse_raw)) * 100
+            print_sep('-', 60)
+            print(f"   Optimization Gain (RMSE Reduction): {improvement:>10.1f}%")
+
+        # --- SCENARIO B: NO REFERENCE (COMPARE TO RAW) ---
+        else:
+            print(f"{'FLUX CORRECTION IMPACT REPORT':^60}")
+            print_sep('=', 60)
+            print(f"Flux Type: {self.flux_type:<10} | N Observations: {n_obs:,}")
+            print(f"(No Reference provided. Comparing Corrected vs. Uncorrected)")
+            print_sep('-', 60)
+
+            # 1. TOTALS
+            diff_total = sum_corr - sum_raw
+            pct_change = (diff_total / abs(sum_raw)) * 100
+
+            print(f"{'1. CUMULATIVE IMPACT':<40} {'(Delta)':>18}")
+            print_sep('.', 60)
+            print(f"   Uncorrected (OP)   : {sum_raw:>12,.0f} {'(Baseline)':>18}")
+            print(f"   Corrected (OP)     : {sum_corr:>12,.0f} {f'({pct_change:+.1f}%)':>18}")
+            print(f"   Net Adjustment     : {diff_total:>12,.0f}")
+
+            # 2. MODIFICATION STATISTICS
+            # Here, 'residuals' are actually the correction terms themselves
+            corrections = df_stats[col_op_corr] - df_stats[col_op_raw]
+
+            mean_adj = corrections.mean()
+            rms_adj = np.sqrt((corrections ** 2).mean())  # RMS of the correction
+            slope, intercept = np.polyfit(df_stats[col_op_raw], df_stats[col_op_corr], 1)
+            r_sq = np.corrcoef(df_stats[col_op_raw], df_stats[col_op_corr])[0, 1] ** 2
+
+            print("\n")
+            print(f"{'2. CORRECTION MAGNITUDE (How much was added?)':<60}")
+            print_sep('.', 60)
+            print(f"   Mean Adj.: {mean_adj:>8.3f}       |   R² (vs Raw): {r_sq:>8.4f}")
+            print(f"   RMS Adj. : {rms_adj:>8.3f}       |   Slope (m)  : {slope:>8.3f}")
+            print(f"   Max Adj. : {corrections.max():>8.3f}       |   Interc (c) : {intercept:>8.3f}")
+
+            print_sep('-', 60)
+            print("   * R² -> 1.0 means linear scaling.")
+            print("   * R² -> 0.0 means correction drastically alters pattern.")
+
+        print_sep('=', 60)
+        print("\n")
+
+    # def gapfilling_lut(self, series):
+    #     """Gap-fill time series using look-up table (LUT)
+    #
+    #     Optimized version using groupby().transform()
+    #     """
+    #     # 1. Calculate the mean for every (Month, Hour) group
+    #     # 'transform' calculates the mean and broadcasts it back to the original index size
+    #     lutvals = series.groupby([series.index.month, series.index.hour]).transform('mean')
+    #
+    #     # 2. Fill the gaps in the original series using these means
+    #     series_gf = series.fillna(lutvals)
+    #
+    #     return series_gf, lutvals
+
+    def plot_dashboard(self, flux_closedpath: Optional[pd.Series] = None):
+        """
+        Generates a master dashboard with INCREASED FONT SIZES for better readability.
+        """
+
+        print("Generating Comprehensive Flux Dashboard (Large Font Edition)...")
+
+        # --- 1. DATA PREPARATION ---
+        if self.col_flux_corr not in self.df.columns:
+            print(f"Warning: '{self.col_flux_corr}' not found. Run .run() first.")
+            return
+
+        plot_df = self.df.copy()
+
+        if not isinstance(plot_df.index, pd.DatetimeIndex):
+            try:
+                plot_df.index = pd.to_datetime(plot_df.index)
+            except Exception as e:
+                raise TypeError("Index must be DatetimeIndex.") from e
+
+        cp_col_name = None
+        if flux_closedpath is not None:
+            cp_col_name = flux_closedpath.name if flux_closedpath.name else 'flux_closedpath'
+            plot_df[cp_col_name] = flux_closedpath
+
+        OP_COL = self.flux_openpath.name
+        CORR_COL = self.col_flux_corr
+        DIFF_COL = 'diff_corr_ref'
+
+        if cp_col_name and cp_col_name in plot_df.columns:
+            plot_df[DIFF_COL] = plot_df[CORR_COL] - plot_df[cp_col_name]
+        else:
+            plot_df[DIFF_COL] = np.nan
+
+        # --- 2. GLOBAL STYLE CONFIG ---
+        STYLE = {
+            OP_COL: {'label': 'Uncorrected (OP)', 'color': '#95a5a6', 'zorder': 1},
+            cp_col_name: {'label': 'Reference (CP)', 'color': '#2c3e50', 'zorder': 2},
+            CORR_COL: {'label': 'Corrected (OP)', 'color': '#e74c3c', 'zorder': 3},
+            DIFF_COL: {'label': 'Residual', 'color': '#8e44ad', 'zorder': 2}
+        }
+
+        # --- FONT CONFIGURATION ---
+        # We use a context manager to set global defaults larger,
+        # then specific elements are tweaked further below.
+        rc_settings = {
+            'font.family': 'sans-serif',
+            'font.size': 14,  # Base font size (was ~10)
+            'axes.titlesize': 16,  # Subplot titles
+            'axes.labelsize': 14,  # Axis labels
+            'xtick.labelsize': 12,  # Ticks
+            'ytick.labelsize': 12,
+            'legend.fontsize': 13,
+            'figure.titlesize': 20
+        }
+
+        with plt.rc_context(rc_settings):
+
+            # --- 3. LAYOUT SETUP ---
+            fig = plt.figure(figsize=(24, 20), constrained_layout=True)
+            gs = gridspec.GridSpec(4, 4, figure=fig, height_ratios=[1.2, 0.8, 1, 1])
+
+            ax_ts = fig.add_subplot(gs[0, :])
+            ax_day = fig.add_subplot(gs[1, 0])
+            ax_night = fig.add_subplot(gs[1, 1])
+            ax_all = fig.add_subplot(gs[1, 2:])
+
+            diel_axes = []
+            for r in [2, 3]:
+                for c in range(4):
+                    diel_axes.append(fig.add_subplot(gs[r, c]))
+
+            common_date_fmt = mdates.DateFormatter('%b')
+
+            # =================================================================
+            # SECTION A: TIME SERIES (Row 0)
+            # =================================================================
+            cols_ts = [OP_COL, cp_col_name, CORR_COL]
+            for col in cols_ts:
+                if col not in plot_df.columns or col is None: continue
+                s = STYLE.get(col, {})
+
+                # Scatter
+                ax_ts.scatter(plot_df.index, plot_df[col], s=3, color=s['color'],
+                              alpha=0.2, edgecolors='none', zorder=s['zorder'])
+                # Trend
+                rolling = plot_df[col].rolling(window=336, center=True, min_periods=1).mean()
+                ax_ts.plot(rolling.index, rolling, color=s['color'], lw=2.5,
+                           alpha=0.9, zorder=s['zorder'] + 10, label=s['label'])
+
+            # Larger Title/Label
+            ax_ts.set_title("A. Flux Time Series & Trends", fontsize=18, fontweight='bold', loc='left', pad=10)
+            ax_ts.set_ylabel(r"$\mu mol\ m^{-2}\ s^{-1}$", fontsize=14, fontweight='medium')
+            ax_ts.axhline(0, color='k', lw=1, zorder=5)
+            ax_ts.legend(loc='upper left', frameon=False, ncol=3, fontsize=13, markerscale=2)
+            ax_ts.set_xlim(plot_df.index.min(), plot_df.index.max())
+
+            # =================================================================
+            # SECTION B: BUDGETS (Row 1)
+            # =================================================================
+            scenarios = [
+                {'ax': ax_day, 'title': 'B1. Daytime Budget', 'mask': plot_df[self.cols.daytime] == 1},
+                {'ax': ax_night, 'title': 'B2. Nighttime Budget', 'mask': plot_df[self.cols.daytime] == 0},
+                {'ax': ax_all, 'title': 'B3. Total Budget', 'mask': slice(None)}
+            ]
+
+            for scen in scenarios:
+                ax = scen['ax']
+                subset = plot_df.loc[scen['mask']].dropna(subset=[c for c in cols_ts if c in plot_df.columns])
+
+                for col in cols_ts:
+                    if col not in subset.columns or col is None: continue
+                    s = STYLE.get(col, {})
+                    cumsum = subset[col].cumsum()
+
+                    ax.plot(subset.index, cumsum, color=s['color'], lw=3, label=s['label'])
+
+                    # Larger Annotation
+                    if not cumsum.empty:
+                        ax.text(subset.index[-1], cumsum.iloc[-1], f" {cumsum.iloc[-1]:.0f}",
+                                color=s['color'], fontsize=11, fontweight='bold', va='center')
+
+                ax.set_title(scen['title'], fontsize=16, fontweight='bold', loc='left')
+                ax.xaxis.set_major_formatter(common_date_fmt)
+                if scen['ax'] == ax_day: ax.set_ylabel(r"Cumulative $\Sigma$", fontsize=14)
+                if scen['ax'] == ax_all: ax.legend(loc='best', frameon=False, fontsize=12)
+
+            # =================================================================
+            # SECTION C: DIEL CYCLES (Rows 2 & 3)
+            # =================================================================
+            diel_vars = [
+                {'col': self.cols.fct_unsc_gf, 'title': r'C1. Unscaled Corr. ($FCT_{unsc}$)', 'unit': r'$\mu mol$'},
+                {'col': self.cols.sf, 'title': r'C2. Scaling Factor ($\xi$)', 'unit': '-'},
+                {'col': self.cols.fct, 'title': 'C3. Final Correction Term', 'unit': r'$\mu mol$'},
+                {'col': None},
+                {'col': OP_COL, 'title': 'C4. OP Flux (Uncorrected)', 'unit': r'$\mu mol$'},
+                {'col': cp_col_name, 'title': 'C5. CP Flux (Reference)', 'unit': r'$\mu mol$'},
+                {'col': CORR_COL, 'title': 'C6. OP Flux (Corrected)', 'unit': r'$\mu mol$'},
+                {'col': DIFF_COL, 'title': 'C7. Residual (Corrected - Ref)', 'unit': r'$\mu mol$'},
+            ]
+
+            cmap = plt.get_cmap('Spectral_r', 12)
+            norm = plt.Normalize(vmin=0.5, vmax=12.5)
+
+            for i, var in enumerate(diel_vars):
+                ax = diel_axes[i]
+                col_name = var.get('col')
+                if col_name is None or col_name not in plot_df.columns:
+                    ax.axis('off')
+                    continue
+
+                series = plot_df[col_name].dropna()
+                if series.empty: continue
+
+                diel = series.groupby([series.index.month, series.index.hour]).mean().unstack()
+                annual = series.groupby(series.index.hour).mean()
+
+                ax.plot(annual.index, annual.values, color='#7f8c8d', ls='--', lw=2, zorder=1, alpha=0.5)
+                for month in diel.index:
+                    ax.plot(diel.columns, diel.loc[month], color=cmap(norm(month)),
+                            lw=2, alpha=0.8, zorder=2)
+
+                # Larger Subplot Titles and labels
+                ax.set_title(var['title'], fontsize=14, fontweight='bold', loc='left', pad=8)
+                ax.set_ylabel(var['unit'], fontsize=11, color='#555555')
+                ax.set_xlim(0, 23)
+                ax.xaxis.set_major_locator(ticker.MultipleLocator(6))  # Keeps ticks clean (0, 6, 12, 18)
+
+                if series.min() < 0 < series.max():
+                    ax.axhline(0, color='k', lw=1, zorder=0)
+
+            # --- 4. FINISHING TOUCHES ---
+
+            # Apply global spine formatting
+            for ax in [ax_ts, ax_day, ax_night, ax_all] + diel_axes:
+                if not ax.axison: continue
+                ax.spines['top'].set_visible(False)
+                ax.spines['right'].set_visible(False)
+                ax.spines['left'].set_linewidth(0.8)
+                ax.spines['bottom'].set_linewidth(0.8)
+                ax.grid(True, ls=':', alpha=0.5)
+
+            # Colorbar
+            sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+            sm.set_array([])
+            cbar = fig.colorbar(sm, ax=diel_axes, orientation='vertical',
+                                fraction=0.02, pad=0.02, aspect=35)
+
+            cbar.set_label('Month', rotation=270, labelpad=20, fontsize=13)
+            cbar.set_ticks(range(1, 13))
+            cbar.set_ticklabels(['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'])
+            cbar.outline.set_visible(False)
+
+            fig.show()
 
 def _example():
     from diive.core.io.files import load_parquet
@@ -1301,15 +1463,16 @@ def _example():
         lon=8.364389,  # CH–LAE
         utc_offset=1,
     )
-    physics.run(correction_method_base="JAR09", gapfill=True)
+    physics.run(correction_method_base="BUR08", gapfill=True)
+    physics.plot_diel_cycles()
     results_physics_df = physics.get_results()
 
     optimizer = ScopOptimizer(
         flux_type=FLUX_TYPE,
         fct_unsc=results_physics_df["FCT_UNSC_gfRF"],
         class_var=df[USTAR].copy(),
-        n_classes=20,
-        n_bootstrap_runs=1000,
+        n_classes=5,
+        n_bootstrap_runs=5,
         flux_openpath=df[FLUX_75].copy(),
         flux_closedpath=df[FLUX_72].copy(),
         daytime=results_physics_df["DAYTIME"],
@@ -1319,24 +1482,17 @@ def _example():
     optimizer.stats()
     optimizer.plot()
 
-    applicator = ScopApplicator(
-        flux_type=FLUX_TYPE,
-        fct_unsc=results_physics_df["FCT_UNSC_gfRF"],
-        ts=results_physics_df["TS"],
-        ra=results_physics_df["AERODYNAMIC_RESISTANCE"],
-        rho_d=results_physics_df["DRY_AIR_DENSITY"],
-        scaling_factors_df=scaling_factors_df,
-        flux_openpath=df[FLUX_75].copy(),
-        flux_closedpath=df[FLUX_72].copy(),
-        classvar=df[CLASSVAR].copy(),
-        daytime=results_physics_df["DAYTIME"].copy(),
-        swin=df[SWIN].copy(),
-        latent_heat_vaporization=results_physics_df["LATENT_HEAT_VAPORIZATION_J_UMOL"]
-    )
-    applicator.run()
-    applicator.stats()
-    applicator.plot_diel_cycles()
-    applicator.plot_flux_analysis_dashboard()
+    # applicator = ScopApplicator(
+    #     flux_type=FLUX_TYPE,
+    #     fct_unsc=results_physics_df["FCT_UNSC_gfRF"],
+    #     scaling_factors_df=scaling_factors_df,
+    #     flux_openpath=df[FLUX_75].copy(),
+    #     classvar=df[CLASSVAR].copy(),
+    #     daytime=results_physics_df["DAYTIME"].copy()
+    # )
+    # applicator.run()
+    # applicator.stats()
+    # applicator.plot_dashboard(flux_closedpath=df[FLUX_72].copy())
 
     toc = time.time()
     print(f"Time elapsed: {toc - tic:.2f} seconds")
