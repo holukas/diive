@@ -98,6 +98,7 @@ import pandas as pd
 from scipy.optimize import minimize_scalar
 
 from diive.pkgs.createvar.air import dry_air_density, aerodynamic_resistance
+from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag
 from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
 from diive.pkgs.outlierdetection.hampel import HampelDaytimeNighttime
 
@@ -144,7 +145,6 @@ class ScopPhysics:
                  u: pd.Series,
                  c_p: pd.Series,
                  ustar: pd.Series,
-                 swin: pd.Series,
                  lat: float,
                  lon: float,
                  utc_offset: int,
@@ -159,7 +159,6 @@ class ScopPhysics:
             u: series, wind speed (m s-1)            
             c_p: series, air heat capacity, specific heat at constant pressure of ambient air (J K-1 kg-1)
             ustar: series, friction velocity (m s-1)
-            swin: series, shortwave incoming radiation (W m-2)
             lat: float, latitude of the site
             lon: float, longitude of the site
             utc_offset: int, UTC offset of the timestamp (hours)
@@ -174,7 +173,6 @@ class ScopPhysics:
         self.u = u
         self.c_p = c_p
         self.ustar = ustar
-        self.swin = swin
         self.lat = lat
         self.lon = lon
         self.utc_offset = utc_offset
@@ -182,8 +180,11 @@ class ScopPhysics:
 
         self.cols = ColumnConfig()
 
-        # Detect daytime/nighttime (daytime=1, nighttime=0)
-        self.daytime = self._detect_daytime(swin=self.swin)
+        # Detect daytime/nighttime from potential radiation (daytime=1, nighttime=0)
+        dnf = DaytimeNighttimeFlag(timestamp_index=self.ta.index, nighttime_threshold=20,
+                                   lat=self.lat, lon=self.lon, utc_offset=self.utc_offset)
+        self.daytime = dnf.get_daytime_flag()
+        self.swin_pot = dnf.get_swinpot()
 
         # Calculate aerodynamic resistance (ra) (s m-1)
         self.ra = self._calc_aerodynamic_resistance(u=self.u, ustar=self.ustar, rem_outliers=True)
@@ -223,7 +224,7 @@ class ScopPhysics:
             self.u.name: self.u,
             self.ustar.name: self.ustar,
             self.gas_density.name: self.gas_density,
-            self.swin.name: self.swin,
+            self.swin_pot.name: self.swin_pot,
             self.k_air.name: self.k_air,
             self.daytime.name: self.daytime,
             self.lv.name: self.lv
@@ -252,8 +253,93 @@ class ScopPhysics:
         if gapfill:
             self.fct_unsc_gf = self._gapfill()
 
+    def stats(self):
+        """
+        Prints a diagnostic summary of the physics calculation.
+        Focuses on Data Coverage (Hybrid Gap-Filling), Instrument Heating,
+        and Correction Magnitude.
+        """
+        print(f"\n{'=' * 65}")
+        print(f"SCOP PHYSICS DIAGNOSTICS ({self.flux_type})")
+        print(f"{'=' * 65}")
+
+        # --- 1. DATA COVERAGE (Hybrid RF + MDV) ---
+        n_total = len(self.ta)
+        n_raw = self.fct_unsc.count()
+        n_final = self.fct_unsc_gf.count()
+        n_filled = n_final - n_raw
+
+        print(f"1. DATA COVERAGE & GAP-FILLING")
+        print(f"{'-' * 30}")
+        print(f"   Total Timestamps       : {n_total:,}")
+        print(f"   Raw Physics Calculated : {n_raw:,}  ({n_raw / n_total:>6.1%})")
+        print(f"   Final Gap-Filled (GF)  : {n_final:,}  ({n_final / n_total:>6.1%})")
+        print(f"   -> Imputed (RF + MDV)  : {n_filled:,}  ({n_filled / n_total:>6.1%})")
+
+        # --- 2. HEATING EFFECT (Delta T) ---
+        # The core physical assumption is that Ts > Ta due to radiation.
+        if self.ts is not None and not self.ts.dropna().empty:
+            delta_t = self.ts - self.ta
+
+            # Filter for Daytime (when heating is relevant)
+            day_mask = (self.daytime == 1)
+
+            # Stats
+            d_mean = delta_t.loc[day_mask].mean()
+            d_max = delta_t.loc[day_mask].max()
+            n_mean = delta_t.loc[~day_mask].mean()
+
+            print(f"\n2. INSTRUMENT SELF-HEATING (Ts - Ta)")
+            print(f"{'-' * 30}")
+            print(f"   Avg Daytime Heating    : {d_mean:+.2f} °C")
+            print(f"   Max Daytime Heating    : {d_max:+.2f} °C")
+            print(f"   Avg Nighttime Offset   : {n_mean:+.2f} °C")
+
+        # --- 3. SENSIBLE HEAT FLUX (BUR08 Only) ---
+        if not self.S.dropna().empty:
+            s_day = self.S.loc[self.daytime == 1].mean()
+            print(f"\n   Modeled Sensible Heat (S) : {s_day:.1f} W m-2 (Daytime Avg)")
+
+        # --- 4. CORRECTION MAGNITUDE (FCT_UNSC) ---
+        # Units are always [µmol m-2 s-1] regardless of flux type in this class.
+        print(f"\n3. UNSCALED CORRECTION TERM (FCT_unsc)")
+        print(f"   (Units: µmol m-2 s-1)")
+        print(f"{'-' * 30}")
+
+        # Group stats by Day/Night
+        df_stat = pd.DataFrame({'FCT': self.fct_unsc_gf, 'Day': self.daytime})
+        g = df_stat.groupby('Day')['FCT'].agg(['mean', 'std', 'min', 'max'])
+
+        # Safely get rows (handle if missing day or night data)
+        row_day = g.loc[1] if 1 in g.index else pd.Series(0, index=g.columns)
+        row_night = g.loc[0] if 0 in g.index else pd.Series(0, index=g.columns)
+
+        print(
+            f"   DAYTIME   : {row_day['mean']:+.4f} ± {row_day['std']:.4f}  [Range: {row_day['min']:.2f} to {row_day['max']:.2f}]")
+        print(
+            f"   NIGHTTIME : {row_night['mean']:+.4f} ± {row_night['std']:.4f}  [Range: {row_night['min']:.2f} to {row_night['max']:.2f}]")
+
+        # --- 5. DRIVERS OVERVIEW ---
+        day_idx = self.daytime == 1
+        swin_avg = self.swin_pot[day_idx].mean() if not self.swin_pot.isna().all() else 0
+        u_avg = self.u[day_idx].mean() if not self.u.isna().all() else 0
+        ra_avg = self.ra[day_idx].mean() if not self.ra.isna().all() else 0
+
+        print(f"\n4. KEY DRIVERS (Daytime Avg)")
+        print(f"{'-' * 30}")
+        print(f"   Radiation (SW_IN)      : {swin_avg:.0f} W m-2")
+        print(f"   Wind Speed (U)         : {u_avg:.2f} m s-1")
+        print(f"   Aero Resistance (Ra)   : {ra_avg:.1f} s m-1")
+
+        print(f"{'=' * 65}\n")
+
     def _gapfill(self):
-        """Gap-fill unscaled flux correction term using RandomForestTS"""
+        """
+        Gap-fill unscaled flux correction term using a hybrid approach:
+        1. RandomForestTS (Machine Learning)
+        2. Mean Diurnal Variation (MDV) Lookup Table (Fallback)
+        """
+        # --- STAGE 1: RANDOM FOREST GAP-FILLING ---
         frame = {
             self.cols.fct_unsc: self.fct_unsc,
             self.ta.name: self.ta,
@@ -262,37 +348,75 @@ class ScopPhysics:
             self.u.name: self.u,
             self.ustar.name: self.ustar
         }
-        gfdf = pd.DataFrame.from_dict(frame)
+        gfdf = pd.DataFrame.from_dict(frame).dropna()
 
-        gfdf = gfdf.dropna()
+        # Run Random Forest
         rfts = RandomForestTS(
             input_df=gfdf, target_col=self.cols.fct_unsc, verbose=True,
             features_lag=[-1, -1], vectorize_timestamps=True,
             add_continuous_record_number=True, sanitize_timestamp=True,
             perm_n_repeats=1, n_estimators=3, random_state=42,
             max_depth=None, min_samples_split=20, min_samples_leaf=10,
-            criterion='squared_error', n_jobs=-1)
-
+            criterion='squared_error', n_jobs=-1
+        )
         rfts.trainmodel(showplot_scores=False, showplot_importance=False)
-        # rfts.report_traintest()
         rfts.fillgaps(showplot_scores=False, showplot_importance=False)
-        rfts.report_gapfilling()
-        print(rfts.feature_importances_)
-        print(rfts.scores_)
-        # print(rfts.gapfilling_df_)
-        fct_unsc_gf = rfts.gapfilling_df_[self.cols.fct_unsc_gf].copy()
-        return fct_unsc_gf
 
-    def _detect_daytime(self, swin) -> pd.Series:
-        # Daytime, nighttime
-        # daytime_series: series (daytime=1, nighttime=0)
-        nighttime_filter = swin <= 20
-        daytime_filter = swin > 20
-        daytime_series = pd.Series(index=swin.index)
-        daytime_series.loc[nighttime_filter] = 0
-        daytime_series.loc[daytime_filter] = 1
-        daytime_series.name = self.cols.daytime
-        return daytime_series
+        # Initial result from RF
+        fct_rf = rfts.gapfilling_df_[self.cols.fct_unsc_gf].copy()
+
+        # --- STAGE 2: MDV LOOKUP TABLE (FILL REMAINING GAPS) ---
+        # Align RF result to original index (fill missing spots with NaN)
+        fct_hybrid = fct_rf.reindex(self.ta.index)
+
+        # Identify gaps that RF missed (e.g., if drivers were missing)
+        missing_mask = fct_hybrid.isna()
+
+        if missing_mask.any():
+            print(f"    (i) RF left {missing_mask.sum()} gaps. Filling with MDV Lookup Table...")
+
+            # Create a temporary DataFrame for grouping
+            df_lut = pd.DataFrame({'Target': fct_hybrid}, index=self.ta.index)
+
+            # Ensure DatetimeIndex
+            if not isinstance(df_lut.index, pd.DatetimeIndex):
+                df_lut.index = pd.to_datetime(df_lut.index)
+
+            # Add temporal features
+            df_lut['__MONTH'] = df_lut.index.month
+            df_lut['__HOUR'] = df_lut.index.hour
+            df_lut['__MINUTE'] = df_lut.index.minute
+
+            # Use pre-calculated daytime flag if available, else derive it
+            if self.daytime is not None:
+                # Ensure alignment
+                df_lut['__DAYTIME'] = self.daytime.reindex(df_lut.index).fillna(-1)
+            else:
+                # Fallback if daytime flag isn't ready (unlikely in this class flow)
+                df_lut['__DAYTIME'] = 0
+
+                # Define Groupers
+            grouper_fine = ['__MONTH', '__DAYTIME', '__HOUR', '__MINUTE']
+            grouper_coarse = ['__MONTH', '__DAYTIME']
+
+            # Calculate Medians (Transform broadcasts back to original shape)
+            mdv_fine = df_lut.groupby(grouper_fine)['Target'].transform('median')
+            mdv_coarse = df_lut.groupby(grouper_coarse)['Target'].transform('median')
+            global_median = df_lut['Target'].median()
+
+            # Apply Waterfall Filling
+            # 1. Fill with Fine-Grained MDV
+            fct_hybrid = fct_hybrid.fillna(mdv_fine)
+
+            # 2. Fill remaining with Coarse MDV (Month-Daytime)
+            fct_hybrid = fct_hybrid.fillna(mdv_coarse)
+
+            # 3. Fill any final edge cases with Global Median
+            fct_hybrid = fct_hybrid.fillna(global_median)
+
+            print(f"    > Gaps remaining after MDV: {fct_hybrid.isna().sum()}")
+
+        return fct_hybrid
 
     @staticmethod
     def _calc_air_thermal_conductivity(ta: pd.Series) -> pd.Series:
@@ -552,7 +676,7 @@ class ScopPhysics:
 
         # Create plot dataframe
         frame = {
-            'SWIN': self.swin, 'Ta': self.ta, 'U': self.u, 'Ra': self.ra,
+            'SWIN': self.swin_pot, 'Ta': self.ta, 'U': self.u, 'Ra': self.ra,
             'FCT_unsc': self.fct_unsc_gf if not self.fct_unsc_gf.empty else self.fct_unsc
         }
 
@@ -990,11 +1114,14 @@ class ScopApplicator:
 
         frame = {self.fct_unsc.name: self.fct_unsc, self.flux_openpath.name: self.flux_openpath,
                  self.classvar.name: self.classvar, self.daytime.name: self.daytime}
-        self.df = pd.DataFrame(frame)
+        self.df = pd.DataFrame(frame, index=self.flux_openpath.index)
 
         # Add Lv if needed for H2O conversion
         if self.latent_heat_vaporization is not None:
             self.df['Lv'] = self.latent_heat_vaporization
+
+    def get_results(self) -> pd.DataFrame:
+        return self.df
 
     def run(self):
 
@@ -1021,16 +1148,19 @@ class ScopApplicator:
     def _assign_scaling_factors(self) -> pd.DataFrame:
 
         # --- 1. STANDARD LOOKUP (Primary Method) ---
-        # Uses actual USTAR data to look up the Scaling Factor
+        # Uses actual class variable (e.g. USTAR) to look up the Scaling Factor
 
         valid_mask = self.classvar.notna() & self.daytime.notna()
 
         if valid_mask.sum() > 0:
             df_valid = self.df.loc[valid_mask].copy()
+
+            # Sort copy by USTAR for the merge_asof
             df_valid = df_valid.sort_values(by=self.classvar.name)
 
             sf_sorted = self.scaling_factors_df.sort_values(by='GROUP_CLASSVAR_MIN')
 
+            # Merge based on USTAR bins (Backward search)
             merged_subset = pd.merge_asof(
                 df_valid,
                 sf_sorted[['DAYTIME', 'GROUP_CLASSVAR_MIN', 'GROUP_CLASSVAR', 'SF_MEDIAN']],
@@ -1048,65 +1178,122 @@ class ScopApplicator:
                     lambda x: x.bfill())
 
             # Assign found SFs back to main DataFrame
+            # Note: self.df is NOT sorted here, we use the index to map values back
             self.df.loc[df_valid.index, self.cols.class_var_group] = merged_subset['GROUP_CLASSVAR'].values
             self.df.loc[df_valid.index, self.cols.sf] = merged_subset['SF_MEDIAN'].values
 
         # --- 2. GAP FILLING: MEDIAN DIURNAL VARIATION (MDV) ---
 
-        # Identify where Flux exists but SF is missing
-        missing_sf_mask = self.df[self.flux_openpath.name].notna() & self.df[self.cols.sf].isna()
+        missing_sf_mask = self.df[self.cols.sf].isna()
+        # missing_sf_mask = self.df[self.flux_openpath.name].notna() & self.df[self.cols.sf].isna()
 
         if missing_sf_mask.any():
             n_missing = missing_sf_mask.sum()
             print(f"(!) Warning: {n_missing} fluxes missing Scaling Factor (due to missing {self.classvar.name}).")
-            print("    Imputing using Month-Daytime-Hour Diel Cycle Median...")
+            print("    Imputing using Month-Daytime-Hour-Minute Diel Cycle Median...")
 
-            # CRITICAL FIX: Ensure DatetimeIndex for .month and .hour access
-            if not isinstance(self.df.index, pd.DatetimeIndex):
-                try:
-                    self.df.index = pd.to_datetime(self.df.index)
-                except Exception as e:
-                    raise TypeError("Index must be DatetimeIndex to calculate hourly medians.") from e
+            # --- KEY CHANGE: USE ORIGINAL FLUX INDEX ---
+            # We access the index directly from the original input series stored in self.
+            # This ensures strict alignment with the input data structure.
+            idx = self.flux_openpath.index
 
-            # DEFINE THE GROUPER
-            # We group by:
-            # 1. Month (to capture the seasonal color variance in your plot)
-            # 2. Daytime (to respect the specific day/night bins)
-            # 3. Hour (to capture the "M" shape in your plot)
+            if not isinstance(idx, pd.DatetimeIndex):
+                # Fallback if input series wasn't a time series (unlikely in this context)
+                idx = pd.to_datetime(idx)
+
+            # A. PREPARE KEYS USING ORIGINAL INDEX
+            # We ensure self.df aligns with this index before assigning columns
+            # (In standard usage, self.df already shares this index, but this is explicit safety)
+            self.df['__MONTH'] = idx.month
+            self.df['__HOUR'] = idx.hour
+            self.df['__MINUTE'] = idx.minute
+
+            # B. DEFINE GROUPER
             grouper = [
-                self.df.index.month.rename('month'),
+                self.df['__MONTH'],
                 self.df[self.daytime.name],
-                self.df.index.hour.rename('hour')
+                self.df['__HOUR'],
+                self.df['__MINUTE']
             ]
 
-            # CALCULATE & FILL
-            # transform('median') calculates the median for the group and
-            # broadcasts it back to every row belonging to that group.
-            sf_mdv = self.df.groupby(grouper)[self.cols.sf].transform('median')
+            # C. CREATE LOOKUP TABLE
+            sf_lut_series = self.df.groupby(grouper)[self.cols.sf].median()
 
-            # Fill only the missing values
-            self.df.loc[missing_sf_mask, self.cols.sf] = self.df.loc[missing_sf_mask, self.cols.sf].fillna(sf_mdv)
+            sf_lut_df = sf_lut_series.reset_index()
+            sf_lut_df.columns = ['__MONTH', self.daytime.name, '__HOUR', '__MINUTE', 'SF_MEDIAN_LUT']
 
-            # --- FINAL CHECK ---
+            # D. MERGE LUT BACK
+            # We use reset_index() to preserve the time index during the merge
+            df_temp = self.df.reset_index()
+
+            # Merge on the calculated time columns
+            df_merged = df_temp.merge(
+                sf_lut_df,
+                on=['__MONTH', self.daytime.name, '__HOUR', '__MINUTE'],
+                how='left'
+            )
+
+            # Restore the index from the temp dataframe
+            df_merged.set_index(df_temp.columns[0], inplace=True)
+            self.df['SF_MEDIAN_LUT'] = df_merged['SF_MEDIAN_LUT']
+
+            # E. FILL GAPS
+            self.df.loc[missing_sf_mask, self.cols.sf] = self.df.loc[missing_sf_mask, self.cols.sf].fillna(
+                self.df.loc[missing_sf_mask, 'SF_MEDIAN_LUT']
+            )
+
+            # F. FALLBACK (Edge Cases)
+            # Check what is still missing after applying the fine-grained LUT
             remaining_missing = self.df[self.flux_openpath.name].notna() & self.df[self.cols.sf].isna()
-            if remaining_missing.any():
-                # If a specific Month+Hour combination has NEVER been seen in the dataset,
-                # the MDV will be NaN. We perform a tiny fallback to the generic "Daytime" or "Nighttime" median
-                # to ensure the code doesn't crash, but this should be rare.
-                print(
-                    f"    (!) {remaining_missing.sum()} items still NaN (Specific Month-Hour combination has no data).")
-                print("    -> Filling these edge cases with the global Month-Daytime median.")
 
-                # Coarser fallback: Just Month + Daytime (ignoring exact hour)
-                coarse_grouper = [self.df.index.month, self.df[self.daytime.name]]
+            if remaining_missing.any():
+                print(
+                    f"    (!) {remaining_missing.sum()} items still NaN (Exact Month-Hour-Minute combo never observed).")
+
+                # --- DIAGNOSTIC: PRINT MISSING COMBINATIONS ---
+                print("    [DEBUG] The following (Month, Daytime, Hour, Minute) combinations are missing from the LUT:")
+
+                # Select the relevant columns for the missing rows
+                missing_combos = self.df.loc[remaining_missing, ['__MONTH', self.daytime.name, '__HOUR', '__MINUTE']]
+
+                # Count how many times each specific missing combination occurs
+                # This returns a readable Series indexed by the combinations
+                missing_counts = missing_combos.value_counts().sort_index()
+
+                # Print the list (Month, Daytime, Hour, Minute) -> Count of missing records
+                print(missing_counts)
+                print("    -----------------------------------------------------------------------------------------")
+                # ----------------------------------------------
+
+                print("    -> Filling edge cases with global Month-Daytime median.")
+
+                # Coarser fallback: Just Month + Daytime (ignoring exact hour/minute)
+                coarse_grouper = [self.df['__MONTH'], self.df[self.daytime.name]]
                 sf_coarse = self.df.groupby(coarse_grouper)[self.cols.sf].transform('median')
                 self.df.loc[remaining_missing, self.cols.sf] = self.df.loc[remaining_missing, self.cols.sf].fillna(
                     sf_coarse)
+
+            # G. CLEANUP
+            cols_to_drop = ['__MONTH', '__HOUR', '__MINUTE', 'SF_MEDIAN_LUT']
+            self.df.drop(columns=[c for c in cols_to_drop if c in self.df.columns], inplace=True)
 
             n_filled = n_missing - (self.df[self.flux_openpath.name].notna() & self.df[self.cols.sf].isna()).sum()
             print(f"    > Successfully imputed {n_filled} missing Scaling Factors.")
 
         return self.df.sort_index()
+
+    def _gapfilling_lut(self, series):
+        """Gap-fill time series using look-up table (LUT)
+
+        """
+        # 1. Calculate the mean for every (Month, Hour) group
+        # 'transform' calculates the mean and broadcasts it back to the original index size
+        lutvals = series.groupby([series.index.month, series.index.hour]).transform('mean')
+
+        # 2. Fill the gaps in the original series using these means
+        series_gf = series.fillna(lutvals)
+
+        return series_gf, lutvals
 
     def stats(self, flux_closedpath: Optional[pd.Series] = None):
         """
@@ -1210,20 +1397,6 @@ class ScopApplicator:
 
         print_sep('=', 75)
         print("\n")
-
-    # def gapfilling_lut(self, series):
-    #     """Gap-fill time series using look-up table (LUT)
-    #
-    #     Optimized version using groupby().transform()
-    #     """
-    #     # 1. Calculate the mean for every (Month, Hour) group
-    #     # 'transform' calculates the mean and broadcasts it back to the original index size
-    #     lutvals = series.groupby([series.index.month, series.index.hour]).transform('mean')
-    #
-    #     # 2. Fill the gaps in the original series using these means
-    #     series_gf = series.fillna(lutvals)
-    #
-    #     return series_gf, lutvals
 
     def plot_dashboard(self, flux_closedpath: Optional[pd.Series] = None):
         """
@@ -1466,12 +1639,12 @@ def _example():
         u=df[U].copy(),
         c_p=df[AIR_CP].copy(),
         ustar=df[USTAR].copy(),
-        swin=df[SWIN].copy(),
         lat=47.478333,  # CH–LAE
         lon=8.364389,  # CH–LAE
         utc_offset=1,
     )
-    physics.run(correction_method_base="BUR08", gapfill=True)
+    physics.run(correction_method_base="JAR09", gapfill=True)
+    physics.stats()
     physics.plot_diel_cycles()
     results_physics_df = physics.get_results()
 
@@ -1511,10 +1684,11 @@ def _example():
 def _example_lae():
     import pandas as pd
     from diive.core.io.files import load_parquet
-    from diive.pkgs.flux.selfheating import ScopPhysics, ScopApplicator
+    # from diive.pkgs.flux.selfheating import ScopPhysics, ScopApplicator
     FILEPATH = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\20_MERGE_DATA\21.4_FLUXES_L1_noSHC_IRGA75+METEO7.parquet"
     print(f"Data will be loaded from the following file:\n{FILEPATH}")
     df = load_parquet(filepath=FILEPATH)
+    # df = df.loc[df.index.year == 2014].copy()
     physics = ScopPhysics(
         flux_type="CO2",
         ta=df["TA_T1_47_1"].copy(),
@@ -1524,7 +1698,6 @@ def _example_lae():
         u=df["U"].copy(),
         c_p=df["AIR_CP"].copy(),
         ustar=df["USTAR"].copy(),
-        swin=df["SW_IN_T1_47_1_gfXG"].copy(),
         lat=47.478333,  # CH–LAE
         lon=8.364389,  # CH–LAE
         utc_offset=1,
@@ -1532,6 +1705,7 @@ def _example_lae():
     physics.run(correction_method_base="JAR09", gapfill=True)
     results_physics_df = physics.get_results()
     results_physics_df.describe()
+    physics.stats()
     physics.plot_diel_cycles()
     sfdf = pd.read_csv(
         r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\30_FLUX_PROCESSING_CHAIN\31_SELF-HEATING_CORRECTION\32_SelfHeatingCorrection_ScalingFactors_NEE.csv")
@@ -1549,5 +1723,5 @@ def _example_lae():
 
 
 if __name__ == '__main__':
-    # _example()
-    _example_lae()
+    _example()
+    # _example_lae()
