@@ -133,9 +133,6 @@ class ColumnConfig:
     s: str = 'S'  # Sensible heat from all key instrument surfaces (W m-2) (BUR08)
 
 
-
-
-
 class ScopPhysics:
 
     def __init__(self,
@@ -885,8 +882,6 @@ class ScopOptimizer:
             print("(!) No optimization results found. Run .run() first.")
             return
 
-        import numpy as np
-
         df = self.scaling_factors_df
 
         # Helper for separators
@@ -1025,183 +1020,195 @@ class ScopApplicator:
 
     def _assign_scaling_factors(self) -> pd.DataFrame:
 
-        # Filter for valid keys
+        # --- 1. STANDARD LOOKUP (Primary Method) ---
+        # Uses actual USTAR data to look up the Scaling Factor
+
         valid_mask = self.classvar.notna() & self.daytime.notna()
-        if valid_mask.sum() == 0:
-            raise ValueError("No valid keys found in DataFrame. Check class variable and daytime columns.")
 
-        # Prepare left subset
-        df_valid = self.df.loc[valid_mask].sort_values(by=str(self.classvar.name))
+        if valid_mask.sum() > 0:
+            df_valid = self.df.loc[valid_mask].copy()
+            df_valid = df_valid.sort_values(by=self.classvar.name)
 
-        # Prepare right subset (lookup table)
-        sf_sorted = self.scaling_factors_df.sort_values(by='GROUP_CLASSVAR_MIN')
+            sf_sorted = self.scaling_factors_df.sort_values(by='GROUP_CLASSVAR_MIN')
 
-        # # Prepare left subset
-        # df_valid = self.df.loc[valid_mask].sort_values(by=str(self.classvar.name))
-        # cols_needed = [self.classvar.name, self.cols.daytime]
-        # df_valid = df_valid.loc[valid_mask, cols_needed].sort_values(by=self.classvar.name)
-        #
-        # # Prepare right subset (lookup table)
-        # sf_sorted = self.scaling_factors_df.sort_values(by='GROUP_CLASSVAR_MIN')
+            merged_subset = pd.merge_asof(
+                df_valid,
+                sf_sorted[['DAYTIME', 'GROUP_CLASSVAR_MIN', 'GROUP_CLASSVAR', 'SF_MEDIAN']],
+                left_on=self.classvar.name,
+                right_on='GROUP_CLASSVAR_MIN',
+                by=self.daytime.name,
+                direction='backward'
+            )
 
-        # Perform backward merge to find bins
-        # direction='backward': Finds the bin where [classvar] >= [GROUP_CLASSVAR_MIN]
-        # - If value is inside range: matches correct bin.
-        # - If value is > max: matches the highest bin (conceptually "last known" bin).
-        # - If value is < min: returns NaN.
-        merged_subset = pd.merge_asof(
-            df_valid,
-            sf_sorted[['DAYTIME', 'GROUP_CLASSVAR_MIN', 'GROUP_CLASSVAR', 'SF_MEDIAN']],
-            left_on=self.classvar.name,
-            right_on='GROUP_CLASSVAR_MIN',
-            by=self.daytime.name,
-            direction='backward'
-        )
+            # Handle Low Outliers (< lowest bin)
+            if merged_subset['SF_MEDIAN'].isna().any():
+                merged_subset['SF_MEDIAN'] = merged_subset.groupby(self.daytime.name)['SF_MEDIAN'].transform(
+                    lambda x: x.bfill())
+                merged_subset['GROUP_CLASSVAR'] = merged_subset.groupby(self.daytime.name)['GROUP_CLASSVAR'].transform(
+                    lambda x: x.bfill())
 
-        # Handle low outliers (< min)
-        # Because 'backward' merge produces NaNs for values smaller than the lowest bin
-        # These NaNs are filled with the SF of the FIRST bin (first known SF)
-        # This is done by grouping by daytime and filling NaNs with the first valid observation
-        if merged_subset['SF_MEDIAN'].isna().any():
-            merged_subset['SF_MEDIAN'] = merged_subset.groupby(self.cols.daytime)['SF_MEDIAN'].transform(
-                lambda x: x.bfill())
-            merged_subset['GROUP_CLASSVAR'] = merged_subset.groupby(self.cols.daytime)['GROUP_CLASSVAR'].transform(
-                lambda x: x.bfill())
+            # Assign found SFs back to main DataFrame
+            self.df.loc[df_valid.index, self.cols.class_var_group] = merged_subset['GROUP_CLASSVAR'].values
+            self.df.loc[df_valid.index, self.cols.sf] = merged_subset['SF_MEDIAN'].values
 
-        # Assign 'merged_subset' data back to original DataFrame
-        self.df.loc[df_valid.index, self.cols.class_var_group] = merged_subset['GROUP_CLASSVAR'].values
-        self.df.loc[df_valid.index, self.cols.sf] = merged_subset['SF_MEDIAN'].values
+        # --- 2. GAP FILLING: MEDIAN DIURNAL VARIATION (MDV) ---
 
-        # Check if all open-path fluxes have a scaling factor
-        # logic: Where Flux exists AND Scaling Factor is NaN
+        # Identify where Flux exists but SF is missing
         missing_sf_mask = self.df[self.flux_openpath.name].notna() & self.df[self.cols.sf].isna()
+
         if missing_sf_mask.any():
             n_missing = missing_sf_mask.sum()
-            # # Optional: Print the first few problematic rows for debugging
-            # print("Rows with Flux but no Scaling Factor:")
-            # print(df.loc[missing_sf_mask, [self.flux_openpath, self.cols.sf, self.ustar, self.cols.daytime]].head())
-            raise ValueError(f"Not all open-path fluxes have a scaling factor. Found {n_missing} missing values.")
+            print(f"(!) Warning: {n_missing} fluxes missing Scaling Factor (due to missing {self.classvar.name}).")
+            print("    Imputing using Month-Daytime-Hour Diel Cycle Median...")
+
+            # CRITICAL FIX: Ensure DatetimeIndex for .month and .hour access
+            if not isinstance(self.df.index, pd.DatetimeIndex):
+                try:
+                    self.df.index = pd.to_datetime(self.df.index)
+                except Exception as e:
+                    raise TypeError("Index must be DatetimeIndex to calculate hourly medians.") from e
+
+            # DEFINE THE GROUPER
+            # We group by:
+            # 1. Month (to capture the seasonal color variance in your plot)
+            # 2. Daytime (to respect the specific day/night bins)
+            # 3. Hour (to capture the "M" shape in your plot)
+            grouper = [
+                self.df.index.month.rename('month'),
+                self.df[self.daytime.name],
+                self.df.index.hour.rename('hour')
+            ]
+
+            # CALCULATE & FILL
+            # transform('median') calculates the median for the group and
+            # broadcasts it back to every row belonging to that group.
+            sf_mdv = self.df.groupby(grouper)[self.cols.sf].transform('median')
+
+            # Fill only the missing values
+            self.df.loc[missing_sf_mask, self.cols.sf] = self.df.loc[missing_sf_mask, self.cols.sf].fillna(sf_mdv)
+
+            # --- FINAL CHECK ---
+            remaining_missing = self.df[self.flux_openpath.name].notna() & self.df[self.cols.sf].isna()
+            if remaining_missing.any():
+                # If a specific Month+Hour combination has NEVER been seen in the dataset,
+                # the MDV will be NaN. We perform a tiny fallback to the generic "Daytime" or "Nighttime" median
+                # to ensure the code doesn't crash, but this should be rare.
+                print(
+                    f"    (!) {remaining_missing.sum()} items still NaN (Specific Month-Hour combination has no data).")
+                print("    -> Filling these edge cases with the global Month-Daytime median.")
+
+                # Coarser fallback: Just Month + Daytime (ignoring exact hour)
+                coarse_grouper = [self.df.index.month, self.df[self.daytime.name]]
+                sf_coarse = self.df.groupby(coarse_grouper)[self.cols.sf].transform('median')
+                self.df.loc[remaining_missing, self.cols.sf] = self.df.loc[remaining_missing, self.cols.sf].fillna(
+                    sf_coarse)
+
+            n_filled = n_missing - (self.df[self.flux_openpath.name].notna() & self.df[self.cols.sf].isna()).sum()
+            print(f"    > Successfully imputed {n_filled} missing Scaling Factors.")
 
         return self.df.sort_index()
 
     def stats(self, flux_closedpath: Optional[pd.Series] = None):
         """
-        Prints a professional statistical report.
-        - If Ref provided: Compares Corrected vs. Reference (Accuracy).
-        - If Ref missing:  Compares Corrected vs. Uncorrected (Magnitude of Adjustment).
+        Prints a detailed report including:
+        1. Assignment Method (Direct Lookup vs. MDV Imputation).
+        2. Correction Magnitude (Shift in fluxes).
+        3. Accuracy Metrics (if Reference is provided).
         """
         import numpy as np
 
-        # --- 1. DATA PREPARATION ---
+        # --- 1. SAFETY CHECKS ---
+        if self.col_flux_corr not in self.df.columns:
+            print("(!) No corrected data found. Run .run() first.")
+            return
+
+        # Prepare Reference if available
         cp_col = None
         if flux_closedpath is not None:
             cp_col = flux_closedpath.name if flux_closedpath.name else 'flux_closedpath'
             self.df[cp_col] = flux_closedpath
 
-        col_op_raw = self.flux_openpath.name
-        col_op_corr = self.col_flux_corr
+        # Define Columns
+        col_op = self.flux_openpath.name
+        col_corr = self.col_flux_corr
+        col_sf = self.cols.sf
+        col_key = self.classvar.name
 
-        # Subset data
-        cols_to_check = [col_op_raw, col_op_corr]
-        if cp_col: cols_to_check.append(cp_col)
+        # --- 2. ASSIGNMENT STATISTICS ---
+        # Logic:
+        # - Direct: Flux exists AND ClassVar (USTAR) exists.
+        # - Imputed: Flux exists BUT ClassVar is missing (so we used MDV).
 
-        df_stats = self.df[cols_to_check].dropna()
-        n_obs = len(df_stats)
+        # Filter to rows where we actually have Open-Path data
+        op_mask = self.df[col_op].notna()
+        df_active = self.df.loc[op_mask]
 
-        if n_obs == 0:
-            print("(!) No overlapping data found for statistics.")
-            return
+        n_total = len(df_active)
+        n_direct = df_active[col_key].notna().sum()
+        n_imputed = n_total - n_direct
 
-        # --- 2. CALCULATIONS ---
-        sum_raw = df_stats[col_op_raw].sum()
-        sum_corr = df_stats[col_op_corr].sum()
+        pct_direct = (n_direct / n_total) * 100
+        pct_imputed = (n_imputed / n_total) * 100
 
-        # Helper for separators
-        def print_sep(char='-', length=60):
+        # --- 3. SCALING FACTOR STATISTICS ---
+        mean_sf_day = df_active.loc[df_active[self.cols.daytime] == 1, col_sf].median()
+        mean_sf_night = df_active.loc[df_active[self.cols.daytime] == 0, col_sf].median()
+
+        # --- 4. FLUX MAGNITUDE STATS ---
+        sum_raw = df_active[col_op].sum()
+        sum_corr = df_active[col_corr].sum()
+        net_change = sum_corr - sum_raw
+
+        # Helper for printing
+        def print_sep(char='-', length=75):
             print(char * length)
 
+        # ================= REPORT =================
         print("\n")
-        print_sep('=', 60)
+        print_sep('=', 75)
+        print(f"{'FLUX CORRECTION REPORT':^75}")
+        print_sep('=', 75)
+        print(f"Flux Type      : {self.flux_type}")
+        print(f"Total Records  : {n_total:,}")
+        print_sep('-', 75)
 
-        # --- SCENARIO A: REFERENCE AVAILABLE ---
+        # SECTION A: ASSIGNMENT DETAILS
+        print(f"{'1. SCALING FACTOR ASSIGNMENT':<40} {'(Method Used)':>34}")
+        print_sep('.', 75)
+
+        print(f"   Direct Lookup (Valid {col_key}) : {n_direct:>8,}  ({pct_direct:>5.1f}%)")
+
+        # Highlight Imputation
+        imp_symbol = "!" if pct_imputed > 10 else "i"
+        print(f" {imp_symbol} Gap-Filled    (MDV Imputation) : {n_imputed:>8,}  ({pct_imputed:>5.1f}%)")
+
+        print(f"\n   Median Scaling Factor (Day)     : {mean_sf_day:.3f}")
+        print(f"   Median Scaling Factor (Night)   : {mean_sf_night:.3f}")
+        print("\n")
+
+        # SECTION B: BUDGET IMPACT
+        print(f"{'2. CORRECTION IMPACT (Budget)':<40} {'(Units: Sum)':>34}")
+        print_sep('.', 75)
+        print(f"   Uncorrected Sum                 : {sum_raw:>15,.0f}")
+        print(f"   Corrected Sum                   : {sum_corr:>15,.0f}")
+        print(f"   Net Adjustment                  : {net_change:>15,.0f}  ({(net_change / abs(sum_raw)) * 100:+.1f}%)")
+
+        # SECTION C: ACCURACY (Only if Ref provided)
         if cp_col:
-            print(f"{'FLUX CORRECTION PERFORMANCE REPORT':^60}")
-            print_sep('=', 60)
-            print(f"Flux Type: {self.flux_type:<10} | N Observations: {n_obs:,}")
-            print_sep('-', 60)
-
-            # 1. TOTALS
-            sum_ref = df_stats[cp_col].sum()
-            ratio_raw = (sum_raw / sum_ref) * 100
-            ratio_corr = (sum_corr / sum_ref) * 100
-
-            print(f"{'1. CUMULATIVE BUDGET / TOTALS':<40} {'(% of Ref)':>18}")
-            print_sep('.', 60)
-            print(f"   Reference (CP)     : {sum_ref:>12,.0f} {'(100.0%)':>18}")
-            print(f"   Uncorrected (OP)   : {sum_raw:>12,.0f} {f'({ratio_raw:.1f}%)':>18}")
-            symbol = "✓" if 95 < ratio_corr < 105 else "~"
-            print(f" {symbol} Corrected (OP)     : {sum_corr:>12,.0f} {f'({ratio_corr:.1f}%)':>18}")
-
-            # 2. ERROR METRICS
-            resid = df_stats[col_op_corr] - df_stats[cp_col]
-            bias = resid.mean()
-            mae = np.abs(resid).mean()
+            sum_ref = df_active[cp_col].sum()
+            resid = df_active[col_corr] - df_active[cp_col]
             rmse = np.sqrt((resid ** 2).mean())
-            slope, intercept = np.polyfit(df_stats[cp_col], df_stats[col_op_corr], 1)
-            r_sq = np.corrcoef(df_stats[cp_col], df_stats[col_op_corr])[0, 1] ** 2
+            slope, _ = np.polyfit(df_active[cp_col].fillna(0), df_active[col_corr].fillna(0), 1)
 
             print("\n")
-            print(f"{'2. ACCURACY (Corrected vs. Reference)':<60}")
-            print_sep('.', 60)
-            print(f"   RMSE    : {rmse:>8.3f}       |   R² Score  : {r_sq:>8.4f}")
-            print(f"   MAE     : {mae:>8.3f}       |   Slope (m) : {slope:>8.3f}")
-            print(f"   Bias    : {bias:>8.3f}       |   Interc (c): {intercept:>8.3f}")
+            print(f"{'3. ACCURACY vs REFERENCE':<40}")
+            print_sep('.', 75)
+            print(f"   Reference Sum                   : {sum_ref:>15,.0f}")
+            print(f"   Recovery (Corrected / Ref)      : {(sum_corr / sum_ref) * 100:>14.1f}%")
+            print(f"   RMSE                            : {rmse:>15.3f}")
+            print(f"   Slope (m)                       : {slope:>15.3f}")
 
-            # Improvement stats
-            rmse_raw = np.sqrt(((df_stats[col_op_raw] - df_stats[cp_col]) ** 2).mean())
-            improvement = (1 - (rmse / rmse_raw)) * 100
-            print_sep('-', 60)
-            print(f"   Optimization Gain (RMSE Reduction): {improvement:>10.1f}%")
-
-        # --- SCENARIO B: NO REFERENCE (COMPARE TO RAW) ---
-        else:
-            print(f"{'FLUX CORRECTION IMPACT REPORT':^60}")
-            print_sep('=', 60)
-            print(f"Flux Type: {self.flux_type:<10} | N Observations: {n_obs:,}")
-            print(f"(No Reference provided. Comparing Corrected vs. Uncorrected)")
-            print_sep('-', 60)
-
-            # 1. TOTALS
-            diff_total = sum_corr - sum_raw
-            pct_change = (diff_total / abs(sum_raw)) * 100
-
-            print(f"{'1. CUMULATIVE IMPACT':<40} {'(Delta)':>18}")
-            print_sep('.', 60)
-            print(f"   Uncorrected (OP)   : {sum_raw:>12,.0f} {'(Baseline)':>18}")
-            print(f"   Corrected (OP)     : {sum_corr:>12,.0f} {f'({pct_change:+.1f}%)':>18}")
-            print(f"   Net Adjustment     : {diff_total:>12,.0f}")
-
-            # 2. MODIFICATION STATISTICS
-            # Here, 'residuals' are actually the correction terms themselves
-            corrections = df_stats[col_op_corr] - df_stats[col_op_raw]
-
-            mean_adj = corrections.mean()
-            rms_adj = np.sqrt((corrections ** 2).mean())  # RMS of the correction
-            slope, intercept = np.polyfit(df_stats[col_op_raw], df_stats[col_op_corr], 1)
-            r_sq = np.corrcoef(df_stats[col_op_raw], df_stats[col_op_corr])[0, 1] ** 2
-
-            print("\n")
-            print(f"{'2. CORRECTION MAGNITUDE (How much was added?)':<60}")
-            print_sep('.', 60)
-            print(f"   Mean Adj.: {mean_adj:>8.3f}       |   R² (vs Raw): {r_sq:>8.4f}")
-            print(f"   RMS Adj. : {rms_adj:>8.3f}       |   Slope (m)  : {slope:>8.3f}")
-            print(f"   Max Adj. : {corrections.max():>8.3f}       |   Interc (c) : {intercept:>8.3f}")
-
-            print_sep('-', 60)
-            print("   * R² -> 1.0 means linear scaling.")
-            print("   * R² -> 0.0 means correction drastically alters pattern.")
-
-        print_sep('=', 60)
+        print_sep('=', 75)
         print("\n")
 
     # def gapfilling_lut(self, series):
@@ -1411,7 +1418,8 @@ class ScopApplicator:
             cbar.set_ticklabels(['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'])
             cbar.outline.set_visible(False)
 
-            fig.show()
+            plt.show()
+
 
 def _example():
     from diive.core.io.files import load_parquet
@@ -1482,17 +1490,17 @@ def _example():
     optimizer.stats()
     optimizer.plot()
 
-    # applicator = ScopApplicator(
-    #     flux_type=FLUX_TYPE,
-    #     fct_unsc=results_physics_df["FCT_UNSC_gfRF"],
-    #     scaling_factors_df=scaling_factors_df,
-    #     flux_openpath=df[FLUX_75].copy(),
-    #     classvar=df[CLASSVAR].copy(),
-    #     daytime=results_physics_df["DAYTIME"].copy()
-    # )
-    # applicator.run()
-    # applicator.stats()
-    # applicator.plot_dashboard(flux_closedpath=df[FLUX_72].copy())
+    applicator = ScopApplicator(
+        flux_type=FLUX_TYPE,
+        fct_unsc=results_physics_df["FCT_UNSC_gfRF"],
+        scaling_factors_df=scaling_factors_df,
+        flux_openpath=df[FLUX_75].copy(),
+        classvar=df[CLASSVAR].copy(),
+        daytime=results_physics_df["DAYTIME"].copy()
+    )
+    applicator.run()
+    applicator.stats(flux_closedpath=df[FLUX_72].copy())
+    applicator.plot_dashboard(flux_closedpath=df[FLUX_72].copy())
 
     toc = time.time()
     print(f"Time elapsed: {toc - tic:.2f} seconds")
@@ -1500,5 +1508,46 @@ def _example():
     print("End.")
 
 
+def _example_lae():
+    import pandas as pd
+    from diive.core.io.files import load_parquet
+    from diive.pkgs.flux.selfheating import ScopPhysics, ScopApplicator
+    FILEPATH = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\20_MERGE_DATA\21.4_FLUXES_L1_noSHC_IRGA75+METEO7.parquet"
+    print(f"Data will be loaded from the following file:\n{FILEPATH}")
+    df = load_parquet(filepath=FILEPATH)
+    physics = ScopPhysics(
+        flux_type="CO2",
+        ta=df["TA_T1_47_1"].copy(),
+        gas_density=df["CO2_MOLAR_DENSITY"].copy() * 1000,  # Requires umol m-3
+        rho_a=df["AIR_DENSITY"].copy(),
+        rho_v=df["VAPOR_DENSITY"].copy(),
+        u=df["U"].copy(),
+        c_p=df["AIR_CP"].copy(),
+        ustar=df["USTAR"].copy(),
+        swin=df["SW_IN_T1_47_1_gfXG"].copy(),
+        lat=47.478333,  # CH–LAE
+        lon=8.364389,  # CH–LAE
+        utc_offset=1,
+    )
+    physics.run(correction_method_base="JAR09", gapfill=True)
+    results_physics_df = physics.get_results()
+    results_physics_df.describe()
+    physics.plot_diel_cycles()
+    sfdf = pd.read_csv(
+        r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\30_FLUX_PROCESSING_CHAIN\31_SELF-HEATING_CORRECTION\32_SelfHeatingCorrection_ScalingFactors_NEE.csv")
+    applicator = ScopApplicator(
+        flux_type="CO2",
+        fct_unsc=results_physics_df["FCT_UNSC_gfRF"],
+        scaling_factors_df=sfdf,
+        flux_openpath=df["FC"].copy(),
+        classvar=df["USTAR"].copy(),
+        daytime=results_physics_df["DAYTIME"].copy()
+    )
+    applicator.run()
+    applicator.stats()
+    applicator.plot_dashboard()
+
+
 if __name__ == '__main__':
-    _example()
+    # _example()
+    _example_lae()
