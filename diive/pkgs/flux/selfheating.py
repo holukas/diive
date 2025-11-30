@@ -339,7 +339,7 @@ class ScopPhysics:
         1. RandomForestTS (Machine Learning)
         2. Mean Diurnal Variation (MDV) Lookup Table (Fallback)
         """
-        # --- STAGE 1: RANDOM FOREST GAP-FILLING ---
+        # 1. RANDOM FOREST GAP-FILLING
         frame = {
             self.cols.fct_unsc: self.fct_unsc,
             self.ta.name: self.ta,
@@ -350,13 +350,13 @@ class ScopPhysics:
         }
         gfdf = pd.DataFrame.from_dict(frame).dropna()
 
-        # Run Random Forest
+        # Run random forest
         rfts = RandomForestTS(
             input_df=gfdf, target_col=self.cols.fct_unsc, verbose=True,
             features_lag=[-1, -1], vectorize_timestamps=True,
             add_continuous_record_number=True, sanitize_timestamp=True,
-            perm_n_repeats=1, n_estimators=3, random_state=42,
-            max_depth=None, min_samples_split=20, min_samples_leaf=10,
+            perm_n_repeats=1, n_estimators=100, random_state=42,
+            max_depth=None, min_samples_split=10, min_samples_leaf=5,
             criterion='squared_error', n_jobs=-1
         )
         rfts.trainmodel(showplot_scores=False, showplot_importance=False)
@@ -365,7 +365,7 @@ class ScopPhysics:
         # Initial result from RF
         fct_rf = rfts.gapfilling_df_[self.cols.fct_unsc_gf].copy()
 
-        # --- STAGE 2: MDV LOOKUP TABLE (FILL REMAINING GAPS) ---
+        # 2. MDV LOOKUP TABLE (FILL REMAINING GAPS)
         # Align RF result to original index (fill missing spots with NaN)
         fct_hybrid = fct_rf.reindex(self.ta.index)
 
@@ -395,23 +395,23 @@ class ScopPhysics:
                 # Fallback if daytime flag isn't ready (unlikely in this class flow)
                 df_lut['__DAYTIME'] = 0
 
-                # Define Groupers
+            # Define groupers
             grouper_fine = ['__MONTH', '__DAYTIME', '__HOUR', '__MINUTE']
             grouper_coarse = ['__MONTH', '__DAYTIME']
 
-            # Calculate Medians (Transform broadcasts back to original shape)
+            # Calculate medians (transform broadcasts back to original shape)
             mdv_fine = df_lut.groupby(grouper_fine)['Target'].transform('median')
             mdv_coarse = df_lut.groupby(grouper_coarse)['Target'].transform('median')
             global_median = df_lut['Target'].median()
 
-            # Apply Waterfall Filling
-            # 1. Fill with Fine-Grained MDV
+            # Apply waterfall filling
+            # 1. Fill with fine-grained MDV
             fct_hybrid = fct_hybrid.fillna(mdv_fine)
 
-            # 2. Fill remaining with Coarse MDV (Month-Daytime)
+            # 2. Fill remaining with coarse MDV (Month-Daytime)
             fct_hybrid = fct_hybrid.fillna(mdv_coarse)
 
-            # 3. Fill any final edge cases with Global Median
+            # 3. Fill any final edge cases with global median
             fct_hybrid = fct_hybrid.fillna(global_median)
 
             print(f"    > Gaps remaining after MDV: {fct_hybrid.isna().sum()}")
