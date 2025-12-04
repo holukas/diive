@@ -468,7 +468,7 @@ class ScopPhysics:
 
     def _remove_outliers(self, series: pd.Series):
         ham = HampelDaytimeNighttime(
-            series=series, n_sigma_dt=4, n_sigma_nt=4,
+            series=series, n_sigma_dt=5, n_sigma_nt=5, use_differencing=True,
             window_length=48 * 5, showplot=True, verbose=True,
             lat=self.lat, lon=self.lon, utc_offset=self.utc_offset)
         ham.calc(repeat=False)
