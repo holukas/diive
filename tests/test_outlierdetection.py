@@ -154,10 +154,11 @@ class TestOutlierDetection(unittest.TestCase):
 
         ham = HampelDaytimeNighttime(
             series=s_noise,
-            n_sigma_dt=4,
-            n_sigma_nt=3,
-            window_length=48 * 9,
-            showplot=False,
+            n_sigma_dt=5.5,
+            n_sigma_nt=5.5,
+            window_length=48,
+            use_differencing=False,
+            showplot=True,
             verbose=False,
             lat=47.286417,
             lon=7.733750,

@@ -2,12 +2,10 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-- one random forest model for all years
 - self-heating correction
 - time shift detection fft
 
-- Added new function to calculate `aerodynamic_resistance` (21)
-- Added new function to calculate `dry_air_density` (20)
+* Refactored `HampelDaytimeNighttime` outlier removal method, it now runs 100x faster (23)
 
 ## v0.90.0 | XX Nov 2025
 
@@ -39,6 +37,10 @@
   library. Expect ~3x speed improvements on half-hourly 10Hz data, depending on CPU (4).
 * **New Resources**: Added `Flux_detection_limit` notebook (8), associated unit tests (10), and generic 10Hz EC example
   data.
+* Added option to set storage to zero when applying storage correction in Level-31. If *True*, sets the storage term to
+  zero, in which case the storage data in the dataframe is ignored. Normally not needed, but can be useful during
+  testing or when developing a correction method for FC (the CO2 flux not corrected for storage) but still needing
+  outlier-removed values from the FluxProcessingChain. (22)
 
 ### Physics and Variable Conversions
 
@@ -46,6 +48,8 @@
 * **New Resources**: Added `Calculate_air_temp_from_sonic_temp` notebook (7) and associated unit tests (6).
 * Added new function `potrad_eot` for an alternative to `potrad` to calculate potential radiation. Takes into account
   the equation of time. (19)
+* Added new function to calculate `aerodynamic_resistance` (21)
+* Added new function to calculate `dry_air_density` (20)
 
 ## System and Visualization Improvements
 
@@ -83,6 +87,8 @@
 * (19) `diive.pkgs.createvar.potentialradiation.potrad_eot`
 * (20) `diive.pkgs.createvar.air.dry_air_density`
 * (21) `diive.pkgs.createvar.air.aerodynamic_resistance`
+* (22) `diive.pkgs.fluxprocessingchain.level31_storagecorrection.FluxStorageCorrectionSinglePointEddyPro`
+* (23) `diive.pkgs.outlierdetection.hampel.HampelDaytimeNighttime`
 
 ## v0.89.0 | 23 Jul 2025
 

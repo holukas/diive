@@ -26,9 +26,10 @@ class HampelDaytimeNighttime(FlagBase):
                  lon: float,
                  utc_offset: int,
                  window_length: int = 10,
-                 n_sigma_dt: float = 5,
-                 n_sigma_nt: float = 2,
+                 n_sigma_dt: float = 5.5,
+                 n_sigma_nt: float = 5.5,
                  k: float = 1.4826,
+                 use_differencing: bool = True,
                  idstr: str = None,
                  showplot: bool = False,
                  verbose: bool = False):
@@ -55,106 +56,6 @@ class HampelDaytimeNighttime(FlagBase):
             Flag series that combines flags from all iterations in one single flag.
 
         """
-        super().__init__(series=series, flagid=self.flagid, idstr=idstr)
-        self.showplot = False
-        self.verbose = False
-        self.showplot = showplot
-        self.verbose = verbose
-        self.window_length = window_length
-        self.n_sigma_dt = n_sigma_dt
-        self.n_sigma_nt = n_sigma_nt
-        self.k = k
-
-        # Detect daytime and nighttime
-        self.flag_daytime, flag_nighttime, self.is_daytime, self.is_nighttime = (
-            create_daytime_nighttime_flags(timestamp_index=self.series.index, lat=lat, lon=lon, utc_offset=utc_offset))
-
-    def calc(self, repeat: bool = True):
-        """Calculate overall flag, based on individual flags from multiple iterations.
-
-        Args:
-            repeat: If *True*, the outlier detection is repeated until all
-                outliers are removed.
-
-        """
-
-        self._overall_flag, n_iterations = self.repeat(func=self.run_flagtests, repeat=repeat)
-        if self.showplot:
-            # Default plot for outlier tests, showing rejected values
-            self.defaultplot(n_iterations=n_iterations)
-            title = (f"Hampel filter daytime/nighttime: {self.series.name}, "
-                     f"n_iterations = {n_iterations}, "
-                     f"n_outliers = {self.series[self.overall_flag == 2].count()}")
-            self.plot_outlier_daytime_nighttime(series=self.series, flag_daytime=self.flag_daytime,
-                                                flag_quality=self.overall_flag, title=title)
-
-    def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
-        """Perform tests required for this flag"""
-
-        # Working data
-        s = self.filteredseries.copy()
-        s = s.dropna()
-
-        flag = pd.Series(index=s.index, data=np.nan)
-
-        # Run for daytime (dt)
-        _s_dt = s[self.is_daytime].copy()
-        transformer = HampelFilter(window_length=self.window_length,
-                                   n_sigma=self.n_sigma_dt,
-                                   k=self.k,
-                                   return_bool=True)
-        is_outlier = transformer.fit_transform(_s_dt)
-        _ok_dt = is_outlier == False
-        _ok_dt = _ok_dt[_ok_dt].index
-        _rejected_dt = is_outlier == True
-        _rejected_dt = _rejected_dt[_rejected_dt].index
-
-        # Run for nighttime (nt)
-        _s_nt = s[self.is_nighttime].copy()
-        transformer = HampelFilter(window_length=self.window_length,
-                                   n_sigma=self.n_sigma_nt,
-                                   k=self.k,
-                                   return_bool=True)
-        is_outlier = transformer.fit_transform(_s_nt)
-        _ok_nt = is_outlier == False
-        _ok_nt = _ok_nt[_ok_nt].index
-        _rejected_nt = is_outlier == True
-        _rejected_nt = _rejected_nt[_rejected_nt].index
-
-        # Collect daytime and nighttime flags in one overall flag
-        flag.loc[_ok_dt] = 0
-        flag.loc[_rejected_dt] = 2
-        flag.loc[_ok_nt] = 0
-        flag.loc[_rejected_nt] = 2
-
-        n_outliers = (flag == 2).sum()
-
-        ok = (flag == 0)
-        ok = ok[ok].index
-        rejected = (flag == 2)
-        rejected = rejected[rejected].index
-
-        if self.verbose:
-            print(f"ITERATION#{iteration}: Total found outliers: "
-                  f"{n_outliers} (daytime+nighttime), "
-                  f"{len(_rejected_dt)} (daytime), "
-                  f"{len(_rejected_nt)} (nighttime)")
-
-        return ok, rejected, n_outliers
-
-
-@ConsoleOutputDecorator()
-class Hampel(FlagBase):
-    flagid = 'OUTLIER_HAMPEL'
-
-    def __init__(self,
-                 series: Series,
-                 window_length: int = 10,
-                 n_sigma: float = 5,
-                 k: float = 1.4826,
-                 idstr: str = None,
-                 showplot: bool = False,
-                 verbose: bool = False):
         """Identify outliers in a sliding window based on the Hampel filter.
 
         The Hampel filter employs a moving window and utilizes the Median Absolute Deviation (MAD)
@@ -184,6 +85,121 @@ class Hampel(FlagBase):
             Flag series that combines flags from all iterations in one single flag.
 
         """
+        super().__init__(series=series, flagid=self.flagid, idstr=idstr)
+        self.showplot = False
+        self.verbose = False
+        self.showplot = showplot
+        self.verbose = verbose
+        self.window_length = window_length
+        self.n_sigma_dt = n_sigma_dt
+        self.n_sigma_nt = n_sigma_nt
+        self.k = k
+        self.use_differencing = use_differencing
+
+        # Detect daytime and nighttime
+        self.flag_daytime, flag_nighttime, self.is_daytime, self.is_nighttime = (
+            create_daytime_nighttime_flags(timestamp_index=self.series.index, lat=lat, lon=lon, utc_offset=utc_offset))
+
+    def calc(self, repeat: bool = True):
+        """Calculate overall flag, based on individual flags from multiple iterations.
+
+        Args:
+            repeat: If *True*, the outlier detection is repeated until all
+                outliers are removed.
+
+        """
+
+        self._overall_flag, n_iterations = self.repeat(func=self.run_flagtests, repeat=repeat)
+        if self.showplot:
+            # Default plot for outlier tests, showing rejected values
+            self.defaultplot(n_iterations=n_iterations)
+            title = (f"Hampel filter daytime/nighttime: {self.series.name}, "
+                     f"n_iterations = {n_iterations}, "
+                     f"n_outliers = {self.series[self.overall_flag == 2].count()}")
+            self.plot_outlier_daytime_nighttime(series=self.series, flag_daytime=self.flag_daytime,
+                                                flag_quality=self.overall_flag, title=title)
+
+    def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
+        """Perform tests required for this flag using optimized Pandas operations."""
+
+        # Prepare data
+        s = self.filteredseries.copy().dropna()
+
+        # 2. Transform data
+        if self.use_differencing:
+            # d = (x_t - x_{t-1}) - (x_{t+1} - x_t)
+            s_to_test = s.diff() - s.diff().shift(-1)
+            s_to_test = s_to_test.fillna(0)
+        else:
+            s_to_test = s
+
+        # Calculate rolling stats (vectorized on the whole series)
+        # This is much faster than splitting day/night first
+        rolling_median = s_to_test.rolling(window=self.window_length, center=True, min_periods=1).median()
+
+        # MAD (Median Absolute Deviation) calculation
+        # deviations = | data - rolling_median |
+        deviations = np.abs(s_to_test - rolling_median)
+        # rolling_mad = median(deviations)
+        rolling_mad = deviations.rolling(window=self.window_length, center=True, min_periods=1).median()
+
+        # Define thresholds vectorized
+        # Create a series of thresholds matching the data index
+        # Default to nighttime threshold
+        thresholds = pd.Series(data=self.n_sigma_nt, index=s_to_test.index)
+        # Overwrite daytime indices with daytime threshold
+        thresholds.loc[self.is_daytime] = self.n_sigma_dt
+
+        # Detect outliers
+        # Limit = k * MAD * n_sigma
+        # k = 1.4826 (scaling factor for Gaussian consistency)
+        limit = self.k * rolling_mad * thresholds
+
+        upper_bound = rolling_median + limit
+        lower_bound = rolling_median - limit
+
+        is_outlier = (s_to_test > upper_bound) | (s_to_test < lower_bound)
+
+        # Formatting for return
+        # Get indices of True/False
+        ok = is_outlier[~is_outlier].index
+        rejected = is_outlier[is_outlier].index
+        n_outliers = len(rejected)
+
+        # Apply to flag (optional step for your specific return format logic)
+        # Note: FlagBase handles the actual '2' assignment
+        # based on the returned 'rejected' index list, so we just return indices
+
+        if self.verbose:
+            # 1. Align the global daytime mask to the current (possibly dropna'd) working series
+            # fill_value=False ensures dropped rows don't count
+            is_daytime_aligned = self.is_daytime.reindex(is_outlier.index, fill_value=False)
+
+            # 2. Calculate counts using .sum() (counts Trues) instead of .count() (counts rows)
+            n_dt = (is_outlier & is_daytime_aligned).sum()
+            n_nt = n_outliers - n_dt
+
+            print(f"ITERATION#{iteration}: Total found outliers: "
+                  f"{n_outliers} (total), "
+                  f"{n_dt} (daytime), "
+                  f"{n_nt} (nighttime)")
+
+        return ok, rejected, n_outliers
+
+
+@ConsoleOutputDecorator()
+class Hampel(FlagBase):
+    flagid = 'OUTLIER_HAMPEL'
+
+    def __init__(self,
+                 series: Series,
+                 window_length: int = 10,
+                 n_sigma: float = 5,
+                 k: float = 1.4826,
+                 idstr: str = None,
+                 showplot: bool = False,
+                 verbose: bool = False):
+
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.showplot = False
         self.verbose = False
@@ -310,28 +326,29 @@ def example_dtnt():
 
 
 def example_cha():
-    SOURCEDIR = r"F:\Sync\luhk_work\20 - CODING\21 - DIIVE\diive\__local_folders\__datasets\cha_fp2024.1_2005-2023\0_data\RESULTS-IRGA-Level-1_fluxnet_2005-2023"
-    FILENAME = r"CH-CHA_IRGA_Level-1_eddypro_fluxnet_2005-2023_availableVars.parquet"
+    SOURCEDIR = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-cha_flux_product\dataset_ch-cha_flux_product\notebooks\30_MERGE_DATA"
+    FILENAME = r"33.5_CH-CHA_IRGA+QCL+LGR+M10+MGMT_Level-1_eddypro_fluxnet_2005-2024.parquet"
     from pathlib import Path
     FILEPATH = Path(SOURCEDIR) / FILENAME
     print(f"Data will be loaded from the following file:\n{FILEPATH}")
     from diive.core.io.files import load_parquet
     maindf = load_parquet(filepath=FILEPATH)
     series = maindf['FC'].copy()
-    series = series[series.index.year == 2023].copy()
-    series = series[series.index.month == 6].copy()
+    # series = series[series.index.year == 2015].copy()
+    # series = series[series.index.month == 6].copy()
     ham = HampelDaytimeNighttime(
         series=series,
-        n_sigma_dt=5,
-        n_sigma_nt=4,
-        window_length=48 * 5,
+        n_sigma_dt=5.5,
+        n_sigma_nt=5.5,
+        window_length=48,
+        use_differencing=True,
         showplot=True,
         verbose=True,
         lat=47.286417,
         lon=7.733750,
         utc_offset=1
     )
-    ham.calc(repeat=False)
+    ham.calc(repeat=True)
 
 
 if __name__ == '__main__':
