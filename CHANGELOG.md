@@ -2,6 +2,7 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+- one random forest model for all years
 - self-heating correction
 - time shift detection fft
 

@@ -19,7 +19,22 @@ class FluxStorageCorrectionSinglePointEddyPro:
                  fluxcol: str,
                  basevar: str,
                  gapfill_storage_term: bool = False,
-                 idstr: str = 'L3.1'):
+                 idstr: str = 'L3.1',
+                 set_storage_to_zero: bool = False):
+        """
+
+        Args:
+            df:
+            fluxcol:
+            basevar:
+            gapfill_storage_term:
+            idstr:
+            set_storage_to_zero: If *True*, sets the storage term to zero, in which case
+                the storage data in *df* is ignored. Normally not needed, but can be useful
+                during testing or when developing a correction method for FC (the CO2 flux
+                not corrected for storage) but still needing outlier-removed values from
+                the FluxProcessingChain.
+        """
         self.df = df.copy()
         self.fluxcol = fluxcol
         self.basevar = basevar
@@ -27,6 +42,7 @@ class FluxStorageCorrectionSinglePointEddyPro:
         self.idstr = validate_id_string(idstr=idstr)
         self.flux_corrected_col, self.strgcol = self._detect_storage_var()
         self.flagname = f'FLAG{self.idstr}_{self.fluxcol}_{self.strgcol}-MISSING_TEST'
+        self.set_storage_to_zero = set_storage_to_zero
 
         # Name of gapfilled storage column and its flag
         self.gapfilled_strgcol = None
@@ -42,6 +58,29 @@ class FluxStorageCorrectionSinglePointEddyPro:
         if not isinstance(self._results, DataFrame):
             raise Exception('Results for storage are empty')
         return self._results
+
+    def storage_correction(self):
+        print(f"Calculating storage-corrected flux {self.flux_corrected_col} "
+              f"from flux {self.fluxcol} and storage term {self.strgcol} ...")
+
+        # Collect flux and storage term data
+        self._results = self.df[[self.fluxcol, self.strgcol]].copy()
+
+        if not self.set_storage_to_zero:
+            # Gap-fill storage term
+            if self.gapfill_storage_term:
+                gapfilled_df = self._gapfill_storage_term()
+                self._results = pd.concat([self._results, gapfilled_df], axis=1)
+
+                # Add gapfilled storage term to flux data
+                self._results[self.flux_corrected_col] = self._results[self.fluxcol].add(
+                    self._results[self.gapfilled_strgcol])
+            else:
+                # Add original (non-gapfilled) storage term to flux, this can result in NaNs
+                self._results[self.flux_corrected_col] = self._results[self.fluxcol].add(self._results[self.strgcol])
+        else:
+            # Add custom, constant storage value to all fluxes
+            self._results[self.flux_corrected_col] = self._results[self.fluxcol].add(0)
 
     def report(self):
         print(f"\n{'=' * 40}\nREPORT: STORAGE CORRECTION FOR {self.fluxcol}\n{'=' * 40}")
@@ -141,25 +180,6 @@ class FluxStorageCorrectionSinglePointEddyPro:
 
         return gapfilled_df
 
-    def storage_correction(self):
-        print(f"Calculating storage-corrected flux {self.flux_corrected_col} "
-              f"from flux {self.fluxcol} and storage term {self.strgcol} ...")
-
-        # Collect flux and storage term data
-        self._results = self.df[[self.fluxcol, self.strgcol]].copy()
-
-        # Gap-fill storage term
-        if self.gapfill_storage_term:
-            gapfilled_df = self._gapfill_storage_term()
-            self._results = pd.concat([self._results, gapfilled_df], axis=1)
-
-            # Add gapfilled storage term to flux data
-            self._results[self.flux_corrected_col] = self._results[self.fluxcol].add(
-                self._results[self.gapfilled_strgcol])
-        else:
-            # Add original (non-gapfilled) storage term to flux, this can result in NaNs
-            self._results[self.flux_corrected_col] = self._results[self.fluxcol].add(self._results[self.strgcol])
-
     def _detect_storage_var(self) -> tuple[str, str]:
         """Detect name of gas column that was used to calculate the flux, and set
         variable name for the storage-corrected flux.
@@ -222,12 +242,18 @@ class FluxStorageCorrectionSinglePointEddyPro:
                         cb_digits_after_comma=0).plot()
         HeatmapDateTime(ax=ax_flux_storage_corrected, series=self.results[self.flux_corrected_col], vmin=-maxflux,
                         vmax=maxflux, cb_digits_after_comma=0).plot()
-        HeatmapDateTime(ax=ax_storage_term, series=self.results[self.strgcol], vmin=-maxstrg, vmax=maxstrg,
-                        cb_digits_after_comma=1).plot()
-        HeatmapDateTime(ax=ax_storage_term_gf, series=self.results[self.gapfilled_strgcol], vmin=-maxstrg, vmax=maxstrg,
-                        cb_digits_after_comma=1).plot()
-        HeatmapDateTime(ax=ax_storage_term_flag, series=self.results[self.flag_isgapfilled],
-                        cb_digits_after_comma=0).plot()
+        if not self.set_storage_to_zero:
+            HeatmapDateTime(ax=ax_storage_term, series=self.results[self.strgcol], vmin=-maxstrg, vmax=maxstrg,
+                            cb_digits_after_comma=1).plot()
+        else:
+            _allzeros = pd.Series(0, index=self.results[self.strgcol].index, name='zero_storage')
+            HeatmapDateTime(ax=ax_storage_term, series=_allzeros,
+                            cb_digits_after_comma=0).plot()
+        if self.gapfilled_strgcol:
+            HeatmapDateTime(ax=ax_storage_term_gf, series=self.results[self.gapfilled_strgcol], vmin=-maxstrg, vmax=maxstrg,
+                            cb_digits_after_comma=1).plot()
+            HeatmapDateTime(ax=ax_storage_term_flag, series=self.results[self.flag_isgapfilled],
+                            cb_digits_after_comma=0).plot()
 
         plt.setp(ax_flux_storage_corrected.get_yticklabels(), visible=False)
         plt.setp(ax_storage_term.get_yticklabels(), visible=False)

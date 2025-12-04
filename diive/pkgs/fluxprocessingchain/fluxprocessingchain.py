@@ -778,6 +778,8 @@ class FluxProcessingChain:
         )
         self._filteredseries_level2_qcf = self.filteredseries.copy()  # Store filtered series as variable
 
+
+
     def finalize_level32(self):
         """Calculate overall quality flag QCF after Level-3.2"""
         self._level32_qcf = self._finalize_level(
@@ -981,7 +983,7 @@ class FluxProcessingChain:
         #     print(feature_importance_per_year)
         #     print(features_reduced_across_years)
 
-    def level31_storage_correction(self, gapfill_storage_term: bool = True):
+    def level31_storage_correction(self, gapfill_storage_term: bool = True, set_storage_to_zero: bool = False):
         """Correct flux with storage term from single point measurement."""
         idstr = 'L3.1'
         self._levelidstr.append(idstr)
@@ -989,16 +991,9 @@ class FluxProcessingChain:
                                                                 fluxcol=self.fluxcol,
                                                                 basevar=self.fluxbasevar,
                                                                 gapfill_storage_term=gapfill_storage_term,
-                                                                idstr=idstr)
+                                                                idstr=idstr,
+                                                                set_storage_to_zero=set_storage_to_zero)
         self._level31.storage_correction()
-
-    def finalize_level31(self):
-        newcols = detect_new_columns(df=self.level31.results, other=self.fpc_df)
-        self._fpc_df = pd.concat([self.fpc_df, self.level31.results[newcols]], axis=1)
-        [print(f"++Added new column {col}.") for col in newcols]
-
-        # Apply QCF also to Level-3.1 flux output
-        self._apply_level2_qcf_to_level31_flux()
 
     def _apply_level2_qcf_to_level31_flux(self):
         """Apply the overall quality flag QCF that was calculated in Level-2 to Level-3.1 fluxes."""
@@ -1023,6 +1018,14 @@ class FluxProcessingChain:
         self._filteredseries_hq = strg_corrected_flux_qcf0.copy()
 
         self._filteredseries_level31_qcf = self._filteredseries.copy()  # Store filtered series as variable
+
+    def finalize_level31(self):
+        newcols = detect_new_columns(df=self.level31.results, other=self.fpc_df)
+        self._fpc_df = pd.concat([self.fpc_df, self.level31.results[newcols]], axis=1)
+        [print(f"++Added new column {col}.") for col in newcols]
+
+        # Apply QCF also to Level-3.1 flux output
+        self._apply_level2_qcf_to_level31_flux()
 
     def level32_stepwise_outlier_detection(self):
         idstr = 'L3.2'
@@ -1492,7 +1495,8 @@ def example():
     # --------------------
     # Level-3.1
     # --------------------
-    fpc.level31_storage_correction(gapfill_storage_term=False)
+    fpc.level31_storage_correction(gapfill_storage_term=False, set_storage_to_zero=False)
+    # fpc.level31_storage_correction(gapfill_storage_term=False)
     fpc.finalize_level31()
     # fpc.level31.report()
     # fpc.level31.showplot()
