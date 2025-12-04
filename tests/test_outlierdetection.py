@@ -6,7 +6,7 @@ import pandas as pd
 import diive.configs.exampledata as ed
 from diive.pkgs.createvar.noise import add_impulse_noise
 from diive.pkgs.outlierdetection.absolutelimits import AbsoluteLimits, AbsoluteLimitsDaytimeNighttime
-from diive.pkgs.outlierdetection.hampel import Hampel, HampelDaytimeNighttime
+from diive.pkgs.outlierdetection.hampel import HampelDaytimeNighttime
 from diive.pkgs.outlierdetection.incremental import zScoreIncrements
 from diive.pkgs.outlierdetection.localsd import LocalSD
 from diive.pkgs.outlierdetection.lof import LocalOutlierFactorAllData
@@ -186,6 +186,56 @@ class TestOutlierDetection(unittest.TestCase):
         self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
         self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
         self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1396)
+
+    def test_hampel_filter_daytime_nighttime_doublediff(self):
+        df = ed.load_exampledata_parquet()
+        s = df['Tair_f'].copy()
+        s = s.loc[s.index.year == 2018].copy()
+        s = s.loc[s.index.month == 7].copy()
+        s_noise = add_impulse_noise(series=s,
+                                    factor_low=-12,
+                                    factor_high=17,
+                                    contamination=0.07,
+                                    seed=42)  # Add impulse noise (spikes)
+
+        # Checks on noise data, make sure we have outliers, i.e., greater or less than the specified limits
+        self.assertGreater(s_noise.max(), 22)
+        self.assertLess(s_noise.min(), 10)
+
+        ham = HampelDaytimeNighttime(
+            series=s_noise,
+            n_sigma_dt=100,
+            n_sigma_nt=100,
+            window_length=48,
+            use_differencing=True,
+            separate_day_night=True,
+            showplot=False,
+            verbose=False,
+            lat=47.286417,
+            lon=7.733750,
+            utc_offset=1
+        )
+        ham.calc(repeat=True)
+        flag = ham.get_flag()
+        frame = {'s_noise': s_noise, 'flag': flag}
+        checkdf = pd.DataFrame.from_dict(frame)
+
+        # Checks on bad data
+        baddata_stats = checkdf.loc[checkdf.flag == 2].describe()
+        self.assertEqual(baddata_stats.loc['max']['s_noise'], 420.37816376334473)
+        self.assertEqual(baddata_stats.loc['min']['s_noise'], -38.04507418841196)
+        self.assertEqual(baddata_stats.loc['count']['flag'], 227)
+        self.assertEqual(baddata_stats.loc['min']['flag'], 2)
+        self.assertEqual(baddata_stats.loc['max']['flag'], 2)
+        self.assertEqual(baddata_stats.loc['count']['s_noise'], 227)
+
+        # Checks on good data
+        gooddata_stats = checkdf.loc[checkdf.flag == 0].describe()
+        self.assertEqual(gooddata_stats.loc['max']['s_noise'], 53.93064794948049)
+        self.assertEqual(gooddata_stats.loc['min']['s_noise'], -24.68608044400628)
+        self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
+        self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
+        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1261)
 
     def test_hampel_filter(self):
         df = ed.load_exampledata_parquet()

@@ -14,7 +14,7 @@ from diive.core.funcs.funcs import validate_id_string
 from diive.core.plotting.timeseries import TimeSeries
 from diive.core.times.times import TimestampSanitizer
 from diive.pkgs.outlierdetection.absolutelimits import AbsoluteLimits, AbsoluteLimitsDaytimeNighttime
-from diive.pkgs.outlierdetection.hampel import Hampel, HampelDaytimeNighttime
+from diive.pkgs.outlierdetection.hampel import HampelDaytimeNighttime
 from diive.pkgs.outlierdetection.incremental import zScoreIncrements
 from diive.pkgs.outlierdetection.localsd import LocalSD
 from diive.pkgs.outlierdetection.lof import LocalOutlierFactorDaytimeNighttime, LocalOutlierFactorAllData

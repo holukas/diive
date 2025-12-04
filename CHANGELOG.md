@@ -8,7 +8,8 @@
 * Refactored `HampelDaytimeNighttime` outlier removal method, it now runs 100x faster. Also added parameter
   `use_differencing` to calculate outliers from the double-differenced time series instead of the original data (23).
   Also added parameter `separate_day_night` to run the filter without the separation into daytime/nighttime data. The
-  original Hampel class is therefore now implemented here and was removed (24).
+  original Hampel class is therefore now implemented here and was removed (24). Also added unit test for
+  double-difference option (25).
 
 ## v0.90.0 | XX Nov 2025
 
@@ -93,6 +94,7 @@
 * (22) `diive.pkgs.fluxprocessingchain.level31_storagecorrection.FluxStorageCorrectionSinglePointEddyPro`
 * (23) `diive.pkgs.outlierdetection.hampel.HampelDaytimeNighttime`
 * (24) `diive.pkgs.outlierdetection.hampel.Hampel`
+* (25) `tests.test_outlierdetection.TestOutlierDetection.test_hampel_filter_daytime_nighttime_doublediff`
 
 ## v0.89.0 | 23 Jul 2025
 
