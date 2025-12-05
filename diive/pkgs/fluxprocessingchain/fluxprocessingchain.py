@@ -1081,8 +1081,7 @@ class FluxProcessingChain:
                                                n_sigma_nt: float = 5.5,
                                                k: float = 1.4826, use_differencing: bool = True,
                                                separate_day_night: bool = True, showplot: bool = False,
-                                               verbose: bool = False,
-                                               repeat: bool = True):
+                                               verbose: bool = False, repeat: bool = True):
         self._level32.flag_outliers_hampel_dtnt_test(window_length=window_length, n_sigma_dt=n_sigma_dt,
                                                      n_sigma_nt=n_sigma_nt, k=k, use_differencing=use_differencing,
                                                      separate_day_night=separate_day_night,
