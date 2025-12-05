@@ -42,7 +42,6 @@ class StepwiseOutlierDetection:
     - `.flag_outliers_zscore_test()`:  Identify outliers based on the z-score
     - `.flag_outliers_lof_dtnt_test()`: Identify outliers based on local outlier factor, daytime nighttime separately
     - `.flag_outliers_lof_test()`: Identify outliers based on local outlier factor, across all data
-    - `.flag_outliers_hampel_test()`: Identify outliers in a sliding window based on the Hampel filter
     - `.flag_outliers_hampel_dtnt_test()`: Identify based on the Hampel filter, daytime nighttime separately
     - `.flag_outliers_trim_low_test()`: Remove values below threshold and remove an equal amount of records from high end of data
 
@@ -181,23 +180,15 @@ class StepwiseOutlierDetection:
         flagtest.calc()
         self._last_flag = flagtest.get_flag()
 
-    def flag_outliers_hampel_test(self, window_length: int = 10, n_sigma: float = 5, k: float = 1.4826,
-                                  showplot: bool = False, verbose: bool = False, repeat: bool = True):
-        """Identify outliers in a sliding window based on the Hampel filter"""
-        series_cleaned = self._series_hires_cleaned.copy()
-        flagtest = Hampel(series=series_cleaned, idstr=self.idstr,
-                          window_length=window_length, n_sigma=n_sigma, k=k,
-                          showplot=showplot, verbose=verbose)
-        flagtest.calc(repeat=repeat)
-        self._last_flag = flagtest.get_flag()
-
-    def flag_outliers_hampel_dtnt_test(self, window_length: int = 10, n_sigma_dt: float = 5,
-                                       n_sigma_nt: float = 5, k: float = 1.4826,
-                                       showplot: bool = False, verbose: bool = False, repeat: bool = True):
+    def flag_outliers_hampel_dtnt_test(self, window_length: int = 13, n_sigma_dt: float = 5.5, n_sigma_nt: float = 5.5,
+                                       k: float = 1.4826, use_differencing: bool = True,
+                                       separate_day_night: bool = True, showplot: bool = False, verbose: bool = False,
+                                       repeat: bool = True):
         """Identify outliers in a sliding window based on the Hampel filter for daytime/nighttime"""
         series_cleaned = self._series_hires_cleaned.copy()
         flagtest = HampelDaytimeNighttime(series=series_cleaned, idstr=self.idstr,
                                           lat=self.site_lat, lon=self.site_lon, utc_offset=self.utc_offset,
+                                          use_differencing=use_differencing, separate_day_night=separate_day_night,
                                           window_length=window_length, n_sigma_dt=n_sigma_dt, n_sigma_nt=n_sigma_nt,
                                           k=k, showplot=showplot, verbose=verbose)
         flagtest.calc(repeat=repeat)

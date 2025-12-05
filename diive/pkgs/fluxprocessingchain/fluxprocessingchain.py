@@ -778,8 +778,6 @@ class FluxProcessingChain:
         )
         self._filteredseries_level2_qcf = self.filteredseries.copy()  # Store filtered series as variable
 
-
-
     def finalize_level32(self):
         """Calculate overall quality flag QCF after Level-3.2"""
         self._level32_qcf = self._finalize_level(
@@ -1079,16 +1077,15 @@ class FluxProcessingChain:
                                                   lower_limit=lower_limit,
                                                   showplot=showplot, verbose=verbose)
 
-    def level32_flag_outliers_hampel_test(self, window_length: int = 10, n_sigma: float = 5, k: float = 1.4826,
-                                          showplot: bool = False, verbose: bool = False, repeat: bool = True):
-        self._level32.flag_outliers_hampel_test(window_length=window_length, n_sigma=n_sigma, k=k,
-                                                showplot=showplot, verbose=verbose, repeat=repeat)
-
-    def level32_flag_outliers_hampel_dtnt_test(self, window_length: int = 10, n_sigma_dt: float = 5,
-                                               n_sigma_nt: float = 5, k: float = 1.4826,
-                                               showplot: bool = False, verbose: bool = False, repeat: bool = True):
+    def level32_flag_outliers_hampel_dtnt_test(self, window_length: int = 13, n_sigma_dt: float = 5.5,
+                                               n_sigma_nt: float = 5.5,
+                                               k: float = 1.4826, use_differencing: bool = True,
+                                               separate_day_night: bool = True, showplot: bool = False,
+                                               verbose: bool = False,
+                                               repeat: bool = True):
         self._level32.flag_outliers_hampel_dtnt_test(window_length=window_length, n_sigma_dt=n_sigma_dt,
-                                                     n_sigma_nt=n_sigma_nt, k=k,
+                                                     n_sigma_nt=n_sigma_nt, k=k, use_differencing=use_differencing,
+                                                     separate_day_night=separate_day_night,
                                                      showplot=showplot, verbose=verbose, repeat=repeat)
 
     def level32_flag_outliers_zscore_rolling_test(self, thres_zscore: float = 4, showplot: bool = False,
@@ -1536,13 +1533,11 @@ def example():
     # fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=False, repeat=True)
     # fpc.level32_addflag()
 
-    # fpc.level32_flag_outliers_hampel_test(window_length=48 * 7, n_sigma=5, showplot=True, verbose=True, repeat=False)
-    # fpc.level32_addflag()
-
     # # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=False, verbose=False, repeat=False)
-    # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 13, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=True,
-    #                                            verbose=True, repeat=True)
-    # fpc.level32_addflag()
+    fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=1.5, n_sigma_nt=1.5, showplot=True,
+                                               verbose=True, use_differencing=True, separate_day_night=True,
+                                               repeat=True)
+    fpc.level32_addflag()
 
     # fpc.level32_flag_outliers_zscore_rolling_test(winsize=48 * 7, thres_zscore=4, showplot=False, verbose=True,
     #                                               repeat=True)

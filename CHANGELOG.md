@@ -9,9 +9,11 @@
   `use_differencing` to calculate outliers from the double-differenced time series instead of the original data (23).
   Also added parameter `separate_day_night` to run the filter without the separation into daytime/nighttime data. The
   original Hampel class is therefore now implemented here and was removed (24). Also added unit test for
-  double-difference option (25).
+  double-difference option (25). Also added unit test for basic Hampel filtering (26). Removed old Hampel test case (
+  27). The filter was also implemented in step-wise outlier detection (28) and in the flux processing chain (
+  Level-3.2) (29).
 
-## v0.90.0 | XX Nov 2025
+## v0.90.0 | XX Dec 2025
 
 **Feature Highlights and Logic Changes**
 
@@ -95,6 +97,10 @@
 * (23) `diive.pkgs.outlierdetection.hampel.HampelDaytimeNighttime`
 * (24) `diive.pkgs.outlierdetection.hampel.Hampel`
 * (25) `tests.test_outlierdetection.TestOutlierDetection.test_hampel_filter_daytime_nighttime_doublediff`
+* (26) `tests.test_outlierdetection.TestOutlierDetection.test_hampel_filter_basic`
+* (27) `tests.test_outlierdetection.TestOutlierDetection.test_hampel_filter`
+* (28) `diive.pkgs.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection.flag_outliers_hampel_dtnt_test`
+* (29) `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain.level32_flag_outliers_hampel_dtnt_test`
 
 ## v0.89.0 | 23 Jul 2025
 

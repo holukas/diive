@@ -21,9 +21,9 @@ class HampelDaytimeNighttime(FlagBase):
 
     def __init__(self,
                  series: Series,
-                 lat: float,
-                 lon: float,
-                 utc_offset: int,
+                 lat: float = None,
+                 lon: float = None,
+                 utc_offset: int = None,
                  window_length: int = 13,
                  n_sigma_dt: float = 5.5,
                  n_sigma_nt: float = 5.5,
@@ -33,58 +33,59 @@ class HampelDaytimeNighttime(FlagBase):
                  idstr: str = None,
                  showplot: bool = False,
                  verbose: bool = False):
-        """Identify outliers in a sliding window based on the Hampel filter,
-        separately for daytime and nighttime data.
+        """
+        Identify outliers using the Hampel filter (Median Absolute Deviation).
+
+        This class implements a robust outlier detection algorithm. It is designed to handle
+        ecological time series (like Eddy Covariance data) by offering two advanced modes:
+
+        1. **Papale Method (FLUXNET Standard):** If ``use_differencing=True``, the filter is
+           applied to the double-differenced time series ($d = (x_t - x_{t-1}) - (x_{t+1} - x_t)$).
+           This removes biological trends (e.g., morning temperature rise) and isolates
+           short-term spikes.
+        2. **Day/Night Separation:** If ``separate_day_night=True``, the code calculates solar
+           elevation to apply different strictness thresholds ($n\_sigma$) for daytime (high turbulence)
+           and nighttime (low turbulence) regimes.
+
+        The general formula for the detection interval is:
+        $$Limit = Median \pm (n\_sigma \times k \times MAD)$$
 
         Args:
-            series: Time series in which outliers are identified.
-            window_length: Size of sliding window.
-            n_sigma_dt: Number of standard deviations allowed for daytime data.
-                Daytime records with sd outside this value are flagged as outliers.
-            n_sigma_nt: Number of standard deviations allowed for nighttime data.
-                Nighttime records with sd outside this value are flagged as outliers.
-            k: constant scale factor, for Gaussian it is approximately 1.4826.
-            lat: Latitude of location as float, e.g. 46.583056
-            lon: Longitude of location as float, e.g. 9.790639
-            utc_offset: UTC offset of *timestamp_index*, e.g. 1 for UTC+01:00
-                The datetime index of the resulting Series will be in this timezone.
-            idstr: Identifier, added as suffix to output variable names.
-            showplot: Show plot with results from the outlier detection.
-            verbose: Print more text output.
+            series (pd.Series): The time series to analyze.
+            lat (float): Latitude of the site (Required if ``separate_day_night=True``).
+            lon (float): Longitude of the site (Required if ``separate_day_night=True``).
+            utc_offset (int): UTC offset in hours (Required if ``separate_day_night=True``).
+            window_length (int): The size of the sliding window centered on the point.
+                Default is 13 (approx. 6 hours for half-hourly data).
+            n_sigma_dt (float): The number of standard deviations for the threshold.
+                * If ``separate_day_night=True``: Used for **Daytime** records.
+                * If ``separate_day_night=False``: Used as the **Global** threshold for all records.
+            n_sigma_nt (float): The number of standard deviations for **Nighttime** records.
+                (Ignored if ``separate_day_night=False``).
+            k (float): Consistency constant to make MAD comparable to Standard Deviation.
+                For a Gaussian distribution, $k \approx 1.4826$.
+            use_differencing (bool): If ``True``, applies the filter to the double-differenced
+                time series (Papale et al. 2006 method). If ``False``, applies to raw values.
+            separate_day_night (bool): If ``True``, splits the dataset based on solar elevation
+                and applies `n_sigma_dt` and `n_sigma_nt` separately.
+            idstr (str, optional): Identifier suffix added to output variable names.
+            showplot (bool): If ``True``, displays a summary plot after calculation.
+            verbose (bool): If ``True``, prints iteration statistics to the console.
 
-        Returns:
-            Flag series that combines flags from all iterations in one single flag.
+        References:
+            * Papale, D. et al. (2006). "Towards a standardized processing of Net Ecosystem Exchange
+              measured with eddy covariance technique: algorithms and uncertainty estimation".
+              Biogeosciences, 3(4), 571-583.
+            * Hampel F. R. (1974). "The influence curve and its role in robust estimation".
+              Journal of the American Statistical Association, 69, 382-393.
 
-        """
-        """Identify outliers in a sliding window based on the Hampel filter.
-
-        The Hampel filter employs a moving window and utilizes the Median Absolute Deviation (MAD)
-        as a measure of data variability. MAD is calculated by taking the median of the absolute
-        differences between each data point and the median of the moving window.
-
-        kudos:
-        - https://www.sktime.net/en/latest/api_reference/auto_generated/sktime.transformations.series.outlier_detection.HampelFilter.html
-        - https://towardsdatascience.com/outlier-detection-with-hampel-filter-85ddf523c73d
-        - https://medium.com/@miguel.otero.pedrido.1993/hampel-filter-with-python-17db1d265375
-
-        Reference:
-            Hampel F. R., “The influence curve and its role in robust estimation”,
-            Journal of the American Statistical Association, 69, 382-393, 1974
-
-        Args:
-            series: Time series in which outliers are identified.
-            idstr: Identifier, added as suffix to output variable names.
-            window_length: Size of sliding window.
-            n_sigma: Number of standard deviations. Records with sd outside this value
-                are flagged as outliers.
-            k: constant scale factor, for Gaussian it is approximately 1.4826.
-            showplot: Show plot with removed data points.
-            verbose: More text output to console if *True*.
-
-        Returns:
-            Flag series that combines flags from all iterations in one single flag.
+        Kudos:
+            * https://www.sktime.net/en/latest/api_reference/auto_generated/sktime.transformations.series.outlier_detection.HampelFilter.html
+            * https://towardsdatascience.com/outlier-detection-with-hampel-filter-85ddf523c73d
+            * https://medium.com/@miguel.otero.pedrido.1993/hampel-filter-with-python-17db1d265375
 
         """
+
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.showplot = showplot
         self.verbose = verbose

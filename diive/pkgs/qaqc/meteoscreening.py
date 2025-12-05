@@ -386,16 +386,6 @@ class StepwiseMeteoScreeningDb:
                                                                             repeat=repeat,
                                                                             winsize=winsize)
 
-    def flag_outliers_hampel_test(self, window_length: int = 10, n_sigma: float = 5, k: float = 1.4826,
-                                  showplot: bool = False, verbose: bool = False, repeat: bool = True):
-        """Identify outliers in a sliding window based on the Hampel filter."""
-        for field in self.fields:
-            self.outlier_detection[field].flag_outliers_hampel_test(window_length=window_length,
-                                                                    n_sigma=n_sigma,
-                                                                    k=k,
-                                                                    showplot=showplot,
-                                                                    verbose=verbose,
-                                                                    repeat=repeat)
 
     def flag_outliers_hampel_dtnt_test(self, window_length: int = 10, n_sigma_dt: float = 5,
                                        n_sigma_nt: float = 5, k: float = 1.4826,
