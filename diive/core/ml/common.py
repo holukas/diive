@@ -16,7 +16,7 @@ from yellowbrick.regressor import PredictionError, ResidualsPlot
 import diive.core.dfun.frames as fr
 import diive.pkgs.createvar.laggedvariants
 from diive.core.times.times import TimestampSanitizer
-from diive.core.times.times import add_date_attributes
+from diive.core.times.times import vectorize_timestamps
 from diive.pkgs.gapfilling.scores import prediction_scores
 
 pd.set_option('display.max_rows', 50)
@@ -623,7 +623,7 @@ class MlRegressorGapFillingBase:
                 model_df = self._lag_features(features_lag_exclude_cols=self.features_lag_exclude_cols)
 
             if self.vectorize_timestamps:
-                model_df = add_date_attributes(df=model_df, txt="")
+                model_df = vectorize_timestamps(df=model_df, txt="")
                 # For cyclical variables, keep only the sine/cosine variants, drop linear versions
                 model_df = model_df.drop(columns=['.HOUR', '.SEASON', '.MONTH', '.WEEK', '.DOY'])
 
@@ -838,7 +838,7 @@ class MlRegressorGapFillingBase:
     def _predict_fallback(self, series: pd.Series):
         """Fill data gaps using timestamp features only, fallback for still existing gaps"""
         gf_fallback_df = pd.DataFrame(series)
-        gf_fallback_df = add_date_attributes(df=gf_fallback_df, txt="(ONLY FALLBACK)")
+        gf_fallback_df = vectorize_timestamps(df=gf_fallback_df, txt="(ONLY FALLBACK)")
 
         # Build model for target predictions *from timestamp*
         y_fallback, X_fallback, _, _ = \

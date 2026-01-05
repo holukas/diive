@@ -527,17 +527,22 @@ def build_timestamp_range(start_dt, df_len, freq):
     return date_rng
 
 
-def add_date_attributes(df,
-                        year: bool = True,
-                        season: bool = True,
-                        month: bool = True,
-                        week: bool = True,
-                        doy: bool = True,
-                        hour: bool = True,
-                        txt: str = "",
-                        verbose: int = 1) -> DataFrame:
+def vectorize_timestamps(df,
+                         year: bool = True,
+                         season: bool = True,
+                         month: bool = True,
+                         week: bool = True,
+                         doy: bool = True,
+                         hour: bool = True,
+                         txt: str = "",
+                         verbose: int = 1) -> DataFrame:
     """
-    Expands a DateTimeIndex into linear and cyclical (sin/cos) features.
+    Vectorizes a DatetimeIndex into linear and cyclical (sin/cos) numerical features.
+
+    This function "vectorizes" time by mapping periodic date components (like month or
+    hour) into 2D space using sine and cosine transformations. This ensures that
+    cyclical proximity (e.g., December and January, or 23:00 and 00:00) is preserved
+    geometrically for machine learning models.
 
     Kudos:
     - https://datascience.stackexchange.com/questions/60951/is-it-necessary-to-convert-labels-in-string-to-integer-for-scikit-learn-and-xgbo
