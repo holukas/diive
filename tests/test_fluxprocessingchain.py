@@ -154,8 +154,8 @@ class TestFluxProcessingChain(unittest.TestCase):
         fpc.level32_flag_outliers_zscore_dtnt_test(
             thres_zscore=4, repeat=True, **kwargs)
         fpc.level32_addflag()
-        fpc.level32_flag_outliers_hampel_test(
-            window_length=48 * 7, n_sigma=5, repeat=False, **kwargs)
+        fpc.level32_flag_outliers_hampel_dtnt_test(
+            window_length=48 * 7, repeat=False, **kwargs)
         fpc.level32_addflag()
         fpc.level32_flag_outliers_zscore_rolling_test(
             winsize=48 * 7, thres_zscore=5, repeat=True, **kwargs)
@@ -246,15 +246,15 @@ class TestFluxProcessingChain(unittest.TestCase):
         self.assertEqual(type(fpc.level41['long_term_random_forest']['CUT_16']), LongTermGapFillingRandomForestTS)
         self.assertEqual(type(fpc.level41['long_term_random_forest']['CUT_50']), LongTermGapFillingRandomForestTS)
         self.assertEqual(type(fpc.level41['long_term_random_forest']['CUT_84']), LongTermGapFillingRandomForestTS)
-        self.assertAlmostEqual(fpc.level41['long_term_random_forest']['CUT_16'].gapfilled_.sum(), -1033.9659976104333, places=5)
-        self.assertAlmostEqual(fpc.level41['long_term_random_forest']['CUT_50'].gapfilled_.sum(), -913.1028125973, places=5)
-        self.assertAlmostEqual(fpc.level41['long_term_random_forest']['CUT_84'].gapfilled_.sum(), 295.7628287814666, places=5)
+        self.assertAlmostEqual(fpc.level41['long_term_random_forest']['CUT_16'].gapfilled_.sum(), -1052.6700877483, places=5)
+        self.assertAlmostEqual(fpc.level41['long_term_random_forest']['CUT_50'].gapfilled_.sum(), -543.8551807127668, places=5)
+        self.assertAlmostEqual(fpc.level41['long_term_random_forest']['CUT_84'].gapfilled_.sum(), -337.4421570429, places=5)
         self.assertEqual(type(fpc.level41['mds']['CUT_16']), FluxMDS)
         self.assertEqual(type(fpc.level41['mds']['CUT_50']), FluxMDS)
         self.assertEqual(type(fpc.level41['mds']['CUT_84']), FluxMDS)
-        self.assertAlmostEqual(fpc.level41['mds']['CUT_16'].get_gapfilled_target().sum(), -1365.6178576567804, places=5)
-        self.assertAlmostEqual(fpc.level41['mds']['CUT_50'].get_gapfilled_target().sum(), -1316.896036847074, places=5)
-        self.assertAlmostEqual(fpc.level41['mds']['CUT_84'].get_gapfilled_target().sum(), -1292.5348297285425, places=5)
+        self.assertAlmostEqual(fpc.level41['mds']['CUT_16'].get_gapfilled_target().sum(), -1372.1043138550303, places=5)
+        self.assertAlmostEqual(fpc.level41['mds']['CUT_50'].get_gapfilled_target().sum(), -1323.1231981977835, places=5)
+        self.assertAlmostEqual(fpc.level41['mds']['CUT_84'].get_gapfilled_target().sum(), -1300.4652042901628, places=5)
         self.assertEqual(len(fpc.fpc_df.columns), 79)
         flagcols = [c for c in fpc.fpc_df.columns if str(c).startswith("FLAG_") and str(c).endswith("_TEST")]
         self.assertEqual(len(flagcols), 26)
