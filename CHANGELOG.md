@@ -5,34 +5,44 @@
 - self-heating correction
 - time shift detection fft
 
-* Refactored `HampelDaytimeNighttime` outlier removal method, it now runs 100x faster. Also added parameter
-  `use_differencing` to calculate outliers from the double-differenced time series instead of the original data (23).
-  Also added parameter `separate_day_night` to run the filter without the separation into daytime/nighttime data. The
-  original Hampel class is therefore now implemented here and was removed (24). Also added unit test for
-  double-difference option (25). Also added unit test for basic Hampel filtering (26). Removed old Hampel test case (
-  27). The filter was also implemented in step-wise outlier detection (28) and in the flux processing chain (
-  Level-3.2) (29).
-
-## v0.90.0 | XX Dec 2025
+## v0.90.0 | XX Jan 2026
 
 **Feature Highlights and Logic Changes**
 
 ### Time Series and Date Handling
 
-* **Refactor and Rename**: Renamed `include_timestamp_as_cols` to `add_date_attributes`. The function now supports
-  generating sine/cosine variants for cyclical timestamp attributes (e.g., DOY) (18). The same function is used as
-  parameter `vectorize_timestamps` in machine learning approaches to include timestamp attributes in feature vectors.
-  Notebooks that use XGBoost or random forest were upated accordingly.
+* **Vectorize timestamps**:
+    * Renamed function `include_timestamp_as_cols` to `vectorize_timestamps`.
+    * The function now supports generating sine/cosine variants for cyclical timestamp attributes (e.g., DOY) (18).
+    * Added new notebook `VectorizeTimestamps` (17).
+    * Added new unit test `test_vectorize_timestamps` (30).
+    * The same function is used as parameter `vectorize_timestamps` in machine learning approaches to include timestamp
+      attributes in feature vectors, i.e., timestamp info is converted to columns. Notebooks and unit tests that use
+      XGBoost or random forest were updated (if necessary) and re-run accordingly (31)(32)(33)(34)(35)(36).
+
+
 * **Optimization**: Refactored `insert_season` for better performance and stability (11).
-* **New Resources**: Added notebook `AddDateAttributes` (17).
 
-### Outlier Detection (LocalSD)
+### Outlier Detection
 
-* **Day/Night Separation**: Added an option to `LocalSD` to run the outlier filter separately for daytime and nighttime
-  periods (13).
-* **Harmonization**: Harmonized the creation of daytime/nighttime flags across all outlier detection methods (12).
-* **Integration**: Updated `FluxProcessingChain` (15) and `StepwiseMeteoScreeningFromDatabase` (16) notebooks, as well
-  as relevant unit tests (14), to support the new `LocalSD` functionality.
+* `LocalSD`:
+    * Added an option to `LocalSD` to run the outlier filter separately for daytime and nighttime
+      periods (13).
+    * Updated `FluxProcessingChain` (15) and `StepwiseMeteoScreeningFromDatabase` (16) notebooks, as well as relevant
+      unit tests (14), to support the new `LocalSD` functionality.
+* `HampelDaytimeNighttime`:
+    * Refactored `HampelDaytimeNighttime` outlier removal method, it now runs 100x faster.
+    * Also added parameter `use_differencing` to calculate outliers from the double-differenced time series instead of
+      the original data (23).
+    * Also added parameter `separate_day_night` to run the filter without the separation into daytime/nighttime data.
+    * The original Hampel class is therefore now implemented here and was removed (24).
+    * Also added unit test for double-difference option (25).
+    * Also added unit test for basic Hampel filtering (26).
+    * Removed old Hampel test case (27).
+    * The filter was also implemented in step-wise outlier detection (28) and in the flux processing chain (Level-3.2) (
+      29).
+* All outlier detection classes: Harmonized the creation of daytime/nighttime flags across all outlier detection
+  methods (12).
 
 ### Eddy Covariance and Flux Processing
 
@@ -50,27 +60,27 @@
 
 ### Physics and Variable Conversions
 
-* **New Function**: Added functionality to calculate air temperature derived from sonic temperature (5).
-* **New Resources**: Added `Calculate_air_temp_from_sonic_temp` notebook (7) and associated unit tests (6).
+* **New Function**: Added functionality to calculate air temperature derived from sonic temperature (5). Added
+  `Calculate_air_temp_from_sonic_temp` notebook (7) and associated unit tests (6).
 * Added new function `potrad_eot` for an alternative to `potrad` to calculate potential radiation. Takes into account
   the equation of time. (19)
 * Added new function to calculate `aerodynamic_resistance` (21)
 * Added new function to calculate `dry_air_density` (20)
 
-## System and Visualization Improvements
+### System and Visualization Improvements
 
-### Visualization
+#### Visualization
 
 * **Heatmaps**: Added `cb_extend` parameter to allow colorbar extensions in heatmap plots (3).
 * **Bugfix**: Fixed an issue with incorrect parameter naming for min/max ticks (1).
 
-### Quality Control and System
+#### Quality Control and System
 
 * **Thresholds**: Increased the percentage threshold required for a time resolution to be considered valid to 0.2% (2).
 * **Environment**: Updated all packages to the newest possible versions.
 * **Testing**: Currently, 69/69 unit tests are passing successfully.
 
-## References
+### References
 
 * (1) `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.showplot_resampled`
 * (2) `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb._validate_n_grouprecords`
@@ -88,8 +98,8 @@
 * (14) `tests.test_outlierdetection.TestOutlierDetection.test_localsd_daytime_nighttime`
 * (15) `notebooks/FluxProcessingChain/FluxProcessingChain.ipynb`
 * (16) `notebooks/MeteoScreening/StepwiseMeteoScreeningFromDatabase.ipynb`
-* (17) `notebooks/TimeFunctions/AddDateAttributes.ipynb`
-* (18) `diive.core.times.times.add_date_attributes`
+* (17) `notebooks/TimeFunctions/VectorizeTimestamps.ipynb`
+* (18) `diive.core.times.times.vectorize_timestamps`
 * (19) `diive.pkgs.createvar.potentialradiation.potrad_eot`
 * (20) `diive.pkgs.createvar.air.dry_air_density`
 * (21) `diive.pkgs.createvar.air.aerodynamic_resistance`
@@ -101,6 +111,13 @@
 * (27) `tests.test_outlierdetection.TestOutlierDetection.test_hampel_filter`
 * (28) `diive.pkgs.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection.flag_outliers_hampel_dtnt_test`
 * (29) `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain.level32_flag_outliers_hampel_dtnt_test`
+* (30) `tests.test_time.TestTime.test_vectorize_with_default_parameters`
+* (31) `notebooks/GapFilling/LongTermRandomForestGapFilling.ipynb`
+* (32) `notebooks/GapFilling/QuickRandomForestGapFilling.ipynb`
+* (33) `notebooks/GapFilling/RandomForestGapFilling.ipynb`
+* (34) `notebooks/GapFilling/RandomForestParamOptimization.ipynb`
+* (35) `notebooks/GapFilling/XGBoostGapFillingExtensive.ipynb`
+* (36) `notebooks/GapFilling/XGBoostGapFillingMinimal.ipynb`
 
 ## v0.89.0 | 23 Jul 2025
 
@@ -323,7 +340,7 @@ rp.plot()  # Generate basic plot
 See the notebook here for more examples:
 `notebooks/Plotting/RidgeLine.ipynb`
 
-## Additions
+### Additions
 
 - Additions to the flux processing chain:
     - Added two methods to get details about training and testing when using machine-learning models in the flux
@@ -580,19 +597,19 @@ need to install JupyterLab separately.
 
 ## v0.83.1 | 23 Oct 2024
 
-## Changes
+### Changes
 
 - When detecting the frequency from the time delta of records, the inferred frequency is accepted if the most frequent
   timedelta was found for more than 50% of records (`diive.core.times.times.timestamp_infer_freq_from_timedelta`)
 - Storage terms are now gap-filled using the rolling median in an expanding time window (
   `FluxStorageCorrectionSinglePointEddyPro._gapfill_storage_term`)
 
-## Notebooks
+### Notebooks
 
 - Added notebook example for using the flux processing chain for CH4 flux from a subcanopy eddy covariance station (
   `notebooks/Workbench/CH-DAS_2023_FluxProcessingChain/FluxProcessingChain_NEE_CH-DAS_2023.ipynb`)
 
-## Bugfixes
+### Bugfixes
 
 - Fixed info for storage term correction report to account for cases when more storage terms than flux records are
   available (`FluxStorageCorrectionSinglePointEddyPro.report`)
@@ -603,7 +620,7 @@ need to install JupyterLab separately.
 
 ## v0.83.0 | 4 Oct 2024
 
-## MDS gap-filling
+### MDS gap-filling
 
 Finally it is possible to use the `MDS` (`marginal distribution sampling`) gap-filling method in `diive`. This method is
 the current default and widely used gap-filling method for eddy covariance ecosystem fluxes. For a detailed description
@@ -620,7 +637,7 @@ updates.
 At the moment, `FluxMDS` is specifically tailored to gap-fill ecosystem fluxes, a more general implementation (e.g., to
 gap-fill meteorological data) will follow.
 
-## New features
+### New features
 
 - Added new gap-filling class `FluxMDS`:
     - `MDS` stands for `marginal distribution sampling`. The method uses a time window to first identify meteorological
@@ -672,13 +689,13 @@ gap-fill meteorological data) will follow.
 
 ## v0.82.1 | 22 Sep 2024
 
-## Notebooks
+### Notebooks
 
 - Added notebook showing an example for `LongTermGapFillingRandomForestTS` (
   `notebooks/GapFilling/LongTermRandomForestGapFilling.ipynb`)
 - Added notebook example for `MeasurementOffset` (`notebooks/Corrections/MeasurementOffset.ipynb`)
 
-## Tests
+### Tests
 
 - Added unittest for `LongTermGapFillingRandomForestTS` (
   `tests.test_gapfilling.TestGapFilling.test_gapfilling_longterm_randomforest`)
@@ -709,7 +726,7 @@ gap-fill meteorological data) will follow.
 
 ## v0.82.0 | 19 Sep 2024
 
-## Long-term gap-filling
+### Long-term gap-filling
 
 It is now possible to gap-fill multi-year datasets using the class `LongTermGapFillingRandomForestTS`. In this approach,
 data from neighboring years are pooled together before training the random forest model for gap-filling a specific year.
@@ -780,7 +797,7 @@ Here is an example for a dataset containing CO2 flux (`NEE`) measurements from 2
 
 ## v0.81.0 | 11 Sep 2024
 
-## Expanding Flux Processing Capabilities
+### Expanding Flux Processing Capabilities
 
 This update brings advancements for post-processing eddy covariance data in the context of the `FluxProcessingChain`.
 The goal is to offer a complete chain for post-processing ecosystem flux data, specifically designed to work seamlessly
