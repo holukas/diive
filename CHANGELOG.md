@@ -19,9 +19,7 @@
     * The same function is used as parameter `vectorize_timestamps` in machine learning approaches to include timestamp
       attributes in feature vectors, i.e., timestamp info is converted to columns. Notebooks and unit tests that use
       XGBoost or random forest were updated (if necessary) and re-run accordingly (31)(32)(33)(34)(35)(36).
-
-
-* **Optimization**: Refactored `insert_season` for better performance and stability (11).
+* **Insert season**: Refactored `insert_season` for better performance (11).
 
 ### Outlier Detection
 
@@ -50,7 +48,7 @@
   inverted to be more intuitive; a positive time lag now means the lagged variable (e.g., a gas) lags *behind* the
   reference variable (turbulent vertical wind) (9).
 * **Performance Boost**: Maximum covariance for high-res data is now calculated using the [polars](https://pola.rs/)
-  library. Expect ~3x speed improvements on half-hourly 10Hz data, depending on CPU (4).
+  library. ~3x speed improvements on half-hourly 10Hz data, depending on CPU (4).
 * **New Resources**: Added `Flux_detection_limit` notebook (8), associated unit tests (10), and generic 10Hz EC example
   data.
 * Added option to set storage to zero when applying storage correction in Level-31. If *True*, sets the storage term to
