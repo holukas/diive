@@ -2,9 +2,7 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-- self-heating correction
-
-## v0.90.0 | XX Jan 2026
+## v0.90.0 | 13 Jan 2026
 
 **Feature Highlights and Logic Changes**
 
