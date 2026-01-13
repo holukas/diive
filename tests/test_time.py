@@ -5,9 +5,44 @@ import pandas as pd
 import diive.configs.exampledata as ed
 from diive.core.times.resampling import resample_series_to_30MIN
 from diive.core.times.times import DetectFrequency, insert_timestamp
+from diive.core.times.times import vectorize_timestamps
 
 
 class TestTime(unittest.TestCase):
+
+    def test_vectorize_timestamps(self):
+        df, _ = ed.load_exampledata_DIIVE_CSV_30MIN()
+        result_df = vectorize_timestamps(df)
+        self.assertIn('.YEAR', result_df.columns)
+        self.assertIn('.SEASON_SIN', result_df.columns)
+        self.assertIn('.MONTH_SIN', result_df.columns)
+        self.assertIn('.WEEK_SIN', result_df.columns)
+        self.assertIn('.DOY_SIN', result_df.columns)
+        self.assertIn('.HOUR_SIN', result_df.columns)
+
+        result_df = vectorize_timestamps(df, year=False, season=False, month=False, week=False, doy=False, hour=False)
+        self.assertEqual(len(result_df.columns), len(df.columns))
+
+        result_df = vectorize_timestamps(df, year=True, season=False, month=False, week=False, doy=False, hour=False)
+        self.assertIn(".YEAR", result_df.columns)
+        self.assertEqual(result_df[".YEAR"].iloc[0], 2022)
+
+        result_df = vectorize_timestamps(df, year=False, season=False, month=True, week=False, doy=False, hour=False)
+        self.assertIn(".MONTH", result_df.columns)
+        self.assertIn(".MONTH_SIN", result_df.columns)
+        self.assertIn(".MONTH_COS", result_df.columns)
+
+        result_df = vectorize_timestamps(df, verbose=0)
+        self.assertGreater(len(result_df.columns), len(df.columns))
+
+        df_without_datetime_index = df.reset_index(drop=True)
+        with self.assertRaises(AttributeError):
+            vectorize_timestamps(df_without_datetime_index)
+
+        result_df = vectorize_timestamps(df, year=False, season=False, month=False, week=False, doy=False, hour=True)
+        self.assertIn(".HOUR", result_df.columns)
+        self.assertIn(".HOUR_SIN", result_df.columns)
+        self.assertIn(".HOUR_COS", result_df.columns)
 
     def test_detect_freq(self):
         df, metadata_df = ed.load_exampledata_DIIVE_CSV_30MIN()

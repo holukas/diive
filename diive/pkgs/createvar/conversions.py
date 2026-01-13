@@ -1,6 +1,37 @@
 import pandas as pd
 
 
+def air_temp_from_sonic_temp(sonic_temp: pd.Series, h2o: pd.Series) -> pd.Series:
+    """
+    Calculate air temperature from sonic temperature and water vapor concentration.
+
+    This function computes the air temperature from the provided sonic temperature
+    and water vapor concentration using a specific formula. The calculation takes
+    into account the relationship between sonic temperature, air temperature, and
+    the effect of water vapor on sonic wave speed.
+
+    Based on the code in:
+    Striednig, M., Graus, M., Märk, T. D., & Karl, T. G. (2020). InnFLUX – an open-source
+        code for conventional and disjunct eddy covariance analysis of trace gas measurements:
+        An urban test case. Atmospheric Measurement Techniques, 13(3), 1447–1465.
+        https://doi.org/10.5194/amt-13-1447-2020
+        Source code: https://www.atm-phys-chem.at/innflux/
+        Source code: https://git.uibk.ac.at/acinn/apc/innflux
+        Source code: https://git.uibk.ac.at/acinn/apc/innflux/-/blob/master/innFLUX_step1.m?ref_type=heads#L329
+
+
+    Args:
+        sonic_temp (pd.Series): Sonic temperature data in Kelvin.
+        h2o (pd.Series): Water vapor concentration in the air in mol mol-1.
+
+    Returns:
+        pd.Series: Air temperature data in Kelvin.
+    """
+    ta = sonic_temp / (1 + 0.32 * h2o)
+    ta.name = "TA_SONIC"
+    return ta
+
+
 def latent_heat_of_vaporization(ta: pd.Series) -> pd.Series:
     """Calculate latent heat of vaporization as a function of air temperature.
 

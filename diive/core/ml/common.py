@@ -16,7 +16,7 @@ from yellowbrick.regressor import PredictionError, ResidualsPlot
 import diive.core.dfun.frames as fr
 import diive.pkgs.createvar.laggedvariants
 from diive.core.times.times import TimestampSanitizer
-from diive.core.times.times import include_timestamp_as_cols
+from diive.core.times.times import vectorize_timestamps
 from diive.pkgs.gapfilling.scores import prediction_scores
 
 pd.set_option('display.max_rows', 50)
@@ -34,7 +34,7 @@ class MlRegressorGapFillingBase:
                  features_lag: list = None,
                  features_lag_stepsize: int = 1,
                  features_lag_exclude_cols: list = None,
-                 include_timestamp_as_features: bool = False,
+                 vectorize_timestamps: bool = False,
                  add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False,
                  perm_n_repeats: int = 10,
@@ -74,7 +74,7 @@ class MlRegressorGapFillingBase:
                 List of predictors for which no lagged variants are added.
                 Example: with ['A', 'B'] no lagged variants for variables 'A' and 'B' are added.
 
-            include_timestamp_as_features:
+            vectorize_timestamps:
                 Include timestamp info as integer data: year, season, month, week, doy, hour
 
             add_continuous_record_number:
@@ -102,7 +102,7 @@ class MlRegressorGapFillingBase:
         self.features_lag_stepsize = features_lag_stepsize
         self.features_lag_exclude_cols = features_lag_exclude_cols
         self.verbose = verbose
-        self.include_timestamp_as_features = include_timestamp_as_features
+        self.vectorize_timestamps = vectorize_timestamps
         self.add_continuous_record_number = add_continuous_record_number
         self.sanitize_timestamp = sanitize_timestamp
         self.kwargs = kwargs
@@ -616,14 +616,17 @@ class MlRegressorGapFillingBase:
         model_df = self.model_df.copy()
 
         # Additional data columns
-        if any([self.features_lag, self.include_timestamp_as_features,
+        if any([self.features_lag, self.vectorize_timestamps,
                 self.add_continuous_record_number]):
             print("\nAdding new data columns ...")
             if self.features_lag and (len(model_df.columns) > 1):
                 model_df = self._lag_features(features_lag_exclude_cols=self.features_lag_exclude_cols)
 
-            if self.include_timestamp_as_features:
-                model_df = include_timestamp_as_cols(df=model_df, txt="")
+            if self.vectorize_timestamps:
+                model_df = vectorize_timestamps(df=model_df, txt="")
+                # For cyclical variables, keep only the sine/cosine variants, drop linear versions
+                model_df = model_df.drop(columns=['.HOUR', '.SEASON', '.MONTH', '.WEEK', '.DOY'])
+
 
             if self.add_continuous_record_number:
                 model_df = fr.add_continuous_record_number(df=model_df)
@@ -835,7 +838,7 @@ class MlRegressorGapFillingBase:
     def _predict_fallback(self, series: pd.Series):
         """Fill data gaps using timestamp features only, fallback for still existing gaps"""
         gf_fallback_df = pd.DataFrame(series)
-        gf_fallback_df = include_timestamp_as_cols(df=gf_fallback_df, txt="(ONLY FALLBACK)")
+        gf_fallback_df = vectorize_timestamps(df=gf_fallback_df, txt="(ONLY FALLBACK)")
 
         # Build model for target predictions *from timestamp*
         y_fallback, X_fallback, _, _ = \

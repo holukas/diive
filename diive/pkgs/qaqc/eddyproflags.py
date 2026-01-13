@@ -3,9 +3,10 @@ Quality flags that depend on EddyPro output files.
 """
 import numpy as np
 import pandas as pd
+from pandas import DataFrame, Series
+
 from diive.core.funcs.funcs import validate_id_string
 from diive.pkgs.qaqc.flags import restrict_application
-from pandas import DataFrame, Series
 
 
 def flag_signal_strength_eddypro_test(df: DataFrame,
@@ -411,6 +412,28 @@ def flag_spectral_correction_factor_eddypro_test(
         thres_good: int = 2,
         thres_ok: int = 4,
         idstr: str = None):
+    """
+    Generates a spectral correction factor test flag based on results from EddyPro,
+    categorizing data quality into good, ok, and bad. The flag is created as a new Series
+    and values are based on the provided thresholds.
+
+    Args:
+        df (DataFrame): Input DataFrame containing columns for spectral correction factors.
+        flux (str): Name of the flux variable whose spectral correction factor is tested.
+        thres_good (int, optional): Threshold value below which the data quality is considered good.
+            Default is 2.
+        thres_ok (int, optional): Threshold value below which the data quality is considered ok,
+            but above the `thres_good`. Default is 4.
+        idstr (str, optional): Identifier string to customize the generated flag's variable name.
+            If None, default naming will be applied.
+
+    Returns:
+        Series: A new pandas Series containing the flag values:
+            - 0 for good values (below `thres_good`),
+            - 1 for ok values (between `thres_good` and `thres_ok`),
+            - 2 for bad values (equal to or above `thres_ok`).
+
+    """
     idstr = validate_id_string(idstr=idstr)
     flagname_out = f'FLAG{idstr}_{flux}_SCF_TEST'
     scf = df[f'{flux}_SCF'].copy()
@@ -446,6 +469,13 @@ def _exception_full_output_scf(flux: str, gas: str):
 def flag_ssitc_eddypro_test(df: DataFrame, flux: str, setflag_timeperiod: dict = None,
                             idstr: str = None) -> Series:
     """Create series based on the SSITC test flag variable from an EddyPro output file.
+
+    SSITC = Steady State and Integral Turbulence Characteristics test.
+
+    This method calls the external `flag_ssitc_eddypro_test` function, which
+    evaluates the flux data based on steady state and integral turbulence
+    criteria (Mauder & Foken, 2004). The resulting flag is added to the
+    internal `_results` dataframe.
 
     Args:
         df: A DataFrame containing EddyPro data from the _fluxnet_ or _full_output_ file.

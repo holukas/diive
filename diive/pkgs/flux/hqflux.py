@@ -8,6 +8,22 @@ from diive.pkgs.outlierdetection.lof import LocalOutlierFactorAllData
 
 
 def analyze_highest_quality_flux(flux: Series, nighttime_flag: Series, showplot: bool = True):
+    """
+    Analyzes and filters highest-quality flux data by separating out outliers and calculating
+    rolling median and standard deviation. The function operates on both daytime and nighttime
+    flux data, applies a Local Outlier Factor (LOF) to identify outliers, and provides detailed
+    output of both outliers and non-outliers within specified conditions. Optionally, it generates
+    plots to visualize the results.
+
+    Args:
+        flux (Series): A pandas Series containing the flux data to be analyzed and filtered.
+        nighttime_flag (Series): A pandas Series serving as a flag for nighttime (1) and daytime (0).
+        showplot (bool): Indicates whether to display plots for the processed data. Defaults to True.
+
+    Raises:
+        KeyError: Raised when expected data columns in the input are unavailable.
+        ValueError: Raised when the input flux or nighttime_flag Series are invalid or incompatible.
+    """
     hqdf_filtered = pd.DataFrame(index=flux.index)
     for d in range(0, 2):
         timeofday = 'NIGHTTIME' if d == 1 else 'DAYTIME'

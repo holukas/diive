@@ -1,12 +1,31 @@
 import unittest
 
+import pandas as pd
+
 import diive as dv
 from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
 from diive.configs.exampledata import load_exampledata_parquet
+from diive.pkgs.createvar.conversions import air_temp_from_sonic_temp
 from diive.pkgs.createvar.timesince import TimeSince
 
 
 class TestCreateVar(unittest.TestCase):
+
+    def test_air_temp_from_sonic_temp(self):
+        # Sonic temperature in Kelvin
+        sonic_temp = pd.Series([287.549, 287.540, 287.552, 287.556, 287.559,
+                                287.566, 287.560, 287.562, 287.557, 287.560],
+                               name='sonic_temp')
+        # H2O in mol mol-1
+        h2o = pd.Series([0.013417, 0.013453, 0.013492, 0.013419, 0.013476,
+                         0.013503, 0.013463, 0.013472, 0.013521, 0.013481],
+                        name='h2o')
+        # Pre-computed expected result
+        expected_air_temp = pd.Series([286.319673, 286.307446, 286.315829, 286.326464, 286.324287,
+                                       286.328795, 286.326439, 286.327595, 286.318199, 286.324774],
+                                      name='TA_SONIC')
+        air_temp = air_temp_from_sonic_temp(sonic_temp=sonic_temp, h2o=h2o)
+        pd.testing.assert_series_equal(expected_air_temp, air_temp)
 
     def test_conversion_et_from_le(self):
         """Calculate ET from LE and compare results to ET calculated by EddyPro."""

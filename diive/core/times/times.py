@@ -1,13 +1,23 @@
 import datetime as dt
 import fnmatch
 import time
+from ast import Index
 from typing import Literal
+from typing import Optional, List  # Import for robust typing
 
 import numpy as np
 import pandas as pd
-from jinja2.nodes import Keyword
 from pandas import DataFrame, Series, DatetimeIndex
 from pandas.tseries.frequencies import to_offset
+
+# Define the default mapping outside the function for clean reference and mutability safety
+DEFAULT_SEASON_MAP = {
+    # Season ID: [List of months (int)]
+    1: [3, 4, 5],  # Spring
+    2: [6, 7, 8],  # Summer
+    3: [9, 10, 11],  # Autumn
+    4: [12, 1, 2]  # Winter
+}
 
 
 def format_timestamp_to_fluxnet_format(df: DataFrame, timestamp_col: str) -> Series:
@@ -517,84 +527,129 @@ def build_timestamp_range(start_dt, df_len, freq):
     return date_rng
 
 
-def include_timestamp_as_cols(df,
-                              year: bool = True,
-                              season: bool = True,
-                              month: bool = True,
-                              week: bool = True,
-                              doy: bool = True,
-                              hour: bool = True,
-                              txt: str = "",
-                              verbose: int = 1) -> DataFrame:
+def vectorize_timestamps(df,
+                         year: bool = True,
+                         season: bool = True,
+                         month: bool = True,
+                         week: bool = True,
+                         doy: bool = True,
+                         hour: bool = True,
+                         txt: str = "",
+                         verbose: int = 1) -> DataFrame:
     """
-    Include timestamp info as data columns
+    Vectorizes a DatetimeIndex into linear and cyclical (sin/cos) numerical features.
+
+    This function "vectorizes" time by mapping periodic date components (like month or
+    hour) into 2D space using sine and cosine transformations. This ensures that
+    cyclical proximity (e.g., December and January, or 23:00 and 00:00) is preserved
+    geometrically for machine learning models.
 
     Kudos:
     - https://datascience.stackexchange.com/questions/60951/is-it-necessary-to-convert-labels-in-string-to-integer-for-scikit-learn-and-xgbo
     - https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.OneHotEncoder.html
 
+    Args:
+        df (DataFrame): Input DataFrame with a DatetimeIndex.
+        year (bool): Add linear year column.
+        season (bool): Add season (1-4) and sin/cos columns.
+        month (bool): Add month (1-12) and sin/cos columns.
+        week (bool): Add week (1-53) and sin/cos columns.
+        doy (bool): Add day of year (1-366) and sin/cos columns.
+        hour (bool): Add hour (0-23) and sin/cos columns.
+        txt (str): Optional suffix text for the verbose print statement.
+        verbose (int): If > 0, prints the list of added columns.
+
+    Returns:
+        DataFrame: A copy of the dataframe with the new columns appended.
     """
     df = df.copy()
     newcols = []
 
+    year_col = '.YEAR'
+    month_col = '.MONTH'
+    week_col = '.WEEK'
+    doy_col = '.DOY'
+    hour_col = '.HOUR'
+    season_col = '.SEASON'
+
     if year:
-        year_col = '.YEAR'
+        # Not cyclical
         newcols.append(year_col)
         df[year_col] = df.index.year.astype(int)
 
     if season:
-        season_col = '.SEASON'
-        newcols.append(season_col)
+        # Cyclical
+        season_sin_col = f'{season_col}_SIN'
+        season_cos_col = f'{season_col}_COS'
+        season_period = 4
         df[season_col] = insert_season(timestamp=df.index)
+        # Cast to float to ensure the division works smoothly even with Int64 types
+        df[season_sin_col] = np.sin(2 * np.pi * df[season_col].astype(float) / season_period)
+        df[season_cos_col] = np.cos(2 * np.pi * df[season_col].astype(float) / season_period)
+        newcols += [season_col, season_sin_col, season_cos_col]
 
     if month:
-        month_col = '.MONTH'
-        newcols.append(month_col)
+        # Cyclical
+        month_sin_col = f'{month_col}_SIN'
+        month_cos_col = f'{month_col}_COS'
+        month_period = 12
         df[month_col] = df.index.month.astype(int)
+        df[month_sin_col] = np.sin(2 * np.pi * df[month_col] / month_period)
+        df[month_cos_col] = np.cos(2 * np.pi * df[month_col] / month_period)
+        newcols += [month_col, month_sin_col, month_cos_col]
 
     if week:
-        week_col = '.WEEK'
-        newcols.append(week_col)
+        # Cyclical
+        # Use 53 weeks for week_period because ISO years can have up to 53 weeks.
+        # This ensures week 53 maps smoothly back toward week 1
+        week_sin_col = f'{week_col}_SIN'
+        week_cos_col = f'{week_col}_COS'
+        week_period = 53
         df[week_col] = df.index.isocalendar().week.astype(int)
+        df[week_sin_col] = np.sin(2 * np.pi * df[week_col] / week_period)
+        df[week_cos_col] = np.cos(2 * np.pi * df[week_col] / week_period)
+        newcols += [week_col, week_sin_col, week_cos_col]
 
     if doy:
-        doy_col = '.DOY'
-        newcols.append(doy_col)
+        # Cyclical
+        doy_sin_col = f'{doy_col}_SIN'
+        doy_cos_col = f'{doy_col}_COS'
+        year_period = 365.25  # Approx. days in a year
         df[doy_col] = df.index.dayofyear.astype(int)
+        df[doy_sin_col] = np.sin(2 * np.pi * df[doy_col] / year_period)
+        df[doy_cos_col] = np.cos(2 * np.pi * df[doy_col] / year_period)
+        newcols += [doy_col, doy_sin_col, doy_cos_col]
 
     if hour:
-        hour_col = '.HOUR'
-        newcols.append(hour_col)
+        # Cyclical
+        hour_sin_col = f'{hour_col}_SIN'
+        hour_cos_col = f'{hour_col}_COS'
+        hour_period = 24
         df[hour_col] = df.index.hour.astype(int)
+        df[hour_sin_col] = np.sin(2 * np.pi * df[hour_col] / hour_period)
+        df[hour_cos_col] = np.cos(2 * np.pi * df[hour_col] / hour_period)
+        newcols += [hour_col, hour_sin_col, hour_cos_col]
 
-    # Year and month: YEAR2023+MONTH8 = 20238
-    yearmonth_col = '.YEARMONTH'
-    newcols.append(yearmonth_col)
-    df[yearmonth_col] = (df[year_col].astype(str) + df[month_col].astype(str)).astype(int)
+    # Year + Month (Format: YYYYMM, e.g., 202308)
+    if year and month:
+        yearmonth_col = '.YEARMONTH'
+        newcols.append(yearmonth_col)
+        # Math is faster and cleaner than string conversion
+        df[yearmonth_col] = df[year_col] * 100 + df[month_col]
 
-    # Year and DOY: YEAR2023+DOY194 = 2023194
-    yeardoy_col = '.YEARDOY'
-    newcols.append(yeardoy_col)
-    df[yeardoy_col] = (df[year_col].astype(str) + df[doy_col].astype(str)).astype(int)
+    # Year + DOY (Format: YYYYDDD, e.g., 2023194)
+    if year and doy:
+        yeardoy_col = '.YEARDOY'
+        newcols.append(yeardoy_col)
+        # Multiply by 1000 to accommodate up to 366 days
+        df[yeardoy_col] = df[year_col] * 1000 + df[doy_col]
 
-    # Year and week: YEAR2023+WEEK15 = 202315
-    yearweek_col = '.YEARWEEK'
-    newcols.append(yearweek_col)
-    df[yearweek_col] = (df[year_col].astype(str) + df[week_col].astype(str)).astype(int)
-
-    # yearmonthweekdoy_col = '.YEARMONTHWEEKDOY'
-
-    # yearmonthweek_col = '.YEARMONTHWEEK'
-    # weekhour_col = '.WEEKHOUR'
-
-    # Combined variables
-
-    # Year and month and week: YEAR2023+MONTH8+WEEK15 = 2023815
-    # df[yearmonthweek_col] = (df[year_col].astype(str) + df[month_col].astype(str) + df[week_col].astype(str)).astype(
-    #     int)
-
-    # Week and hour: WEEK42+HOUR22 = 4222
-    # df[weekhour_col] = (df[week_col].astype(str) + df[hour_col].astype(str)).astype(int)
+    # Year + Week (Format: YYYYWW, e.g., 202315)
+    if year and week:
+        yearweek_col = '.YEARWEEK'
+        newcols.append(yearweek_col)
+        # Multiply by 100 to accommodate up to 53 weeks
+        df[yearweek_col] = df[year_col] * 100 + df[week_col]
 
     if verbose > 0:
         print(f"++ Added new columns with timestamp info: {newcols} {txt}")
@@ -602,39 +657,70 @@ def include_timestamp_as_cols(df,
     return df
 
 
-def insert_season(timestamp: DatetimeIndex) -> Series:
+def insert_season(
+        timestamp: DatetimeIndex,
+        spring: Optional[List[int]] = None,
+        summer: Optional[List[int]] = None,
+        autumn: Optional[List[int]] = None,
+        winter: Optional[List[int]] = None,
+) -> Index:
     """
-    Insert meteorological season as integer
-
-    spring = 1 (MAM)
-    summer = 2 (JJA)
-    autumn = 3 (SON)
-    winter = 4 (DJF)
+    Inserts seasonal labels into a pandas Timestamp index based on a customizable mapping
+    of months to seasons. The function allows for flexible assignment of months to seasons
+    and verifies robustness against overlapping or incomplete season definitions.
 
     Args:
-        timestamp: timestamp of time series
+        timestamp (DatetimeIndex): The pandas DatetimeIndex for which seasonal labels
+            are assigned based on the provided mapping.
+        spring (Optional[List[int]]): A list of month numbers (1 to 12) defining spring.
+            Defaults to a predefined season map if not provided.
+        summer (Optional[List[int]]): A list of month numbers (1 to 12) defining summer.
+            Defaults to a predefined season map if not provided.
+        autumn (Optional[List[int]]): A list of month numbers (1 to 12) defining autumn.
+            Defaults to a predefined season map if not provided.
+        winter (Optional[List[int]]): A list of month numbers (1 to 12) defining winter.
+            Defaults to a predefined season map if not provided.
 
     Returns:
-        season series with timestamp
+        Index: A pandas Index object with seasonal labels (as nullable integer dtype)
+            corresponding to the input DatetimeIndex. NaN values are returned for months
+            not mapped to any season.
+
+    Raises:
+        ValueError: If a month is assigned to multiple seasons, resulting in overlapping
+            definitions.
     """
+    # Handle Mutable Defaults
+    season_months = {
+        1: spring if spring is not None else DEFAULT_SEASON_MAP[1],
+        2: summer if summer is not None else DEFAULT_SEASON_MAP[2],
+        3: autumn if autumn is not None else DEFAULT_SEASON_MAP[3],
+        4: winter if winter is not None else DEFAULT_SEASON_MAP[4],
+    }
 
-    winter = [1, 2, 12]
-    spring = [3, 4, 5]
-    summer = [6, 7, 8]
-    autumn = [9, 10, 11]
-    season = pd.Series(data=timestamp.month, index=timestamp)
+    # Robustness Check: ensure no month is assigned to more than one season
+    all_months = [m for sublist in season_months.values() for m in sublist]
+    if len(all_months) != len(set(all_months)):
+        raise ValueError("Season definitions overlap: A month is assigned to multiple seasons.")
+    if len(all_months) != 12:
+        print("Warning: Not all 12 months are defined in the seasons. Unassigned months will be set to NaN.")
 
-    is_winter = season.isin(winter)
-    is_spring = season.isin(spring)
-    is_summer = season.isin(summer)
-    is_autumn = season.isin(autumn)
+    # Create a single Month-to-Season mapping dictionary
+    # Example: {3: 1, 4: 1, 5: 1, 6: 2, ...}
+    month_to_season_map = {}
+    for season_id, month_list in season_months.items():
+        for month in month_list:
+            month_to_season_map[month] = season_id
 
-    season[is_spring] = 1
-    season[is_summer] = 2
-    season[is_autumn] = 3
-    season[is_winter] = 4
+    # Extract the month numbers from the DatetimeIndex
+    month_series = timestamp.month
 
-    return season
+    # Use .map() for assignment operation
+    # The default return value for unmapped months is NaN
+    season_series = month_series.map(month_to_season_map)
+
+    # Convert the resulting Series back to Int64Dtype (pandas' nullable integer) to safely handle potential NaNs
+    return season_series.astype('Int64')
 
 
 class DetectFrequency:

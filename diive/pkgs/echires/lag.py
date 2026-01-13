@@ -1,17 +1,49 @@
+from matplotlib.transforms import blended_transform_factory
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import polars as pl
 from matplotlib.collections import LineCollection
+from matplotlib.figure import Figure
 from pandas import DataFrame
 from scipy.signal import find_peaks
 
 from diive.core.plotting.plotfuncs import default_format
+from diive.core.plotting.styles import LightTheme as theme
 
-
-# todo logger: setup_dyco
 
 class MaxCovariance:
+    """
+    Class to determine the time lag between two variables by finding the maximum covariance.
+
+    This class processes data to identify the lag between two variables by calculating their
+    covariance over a range of time lags. It includes functionality for automatic peak detection
+    and validation to improve reliability in identifying meaningful lags. Appropriate pre-processing
+    and lag search techniques are implemented to calculate lag-specific covariances and their
+    associated metrics.
+
+    Attributes:
+        df (DataFrame): Input data for processing.
+        var_reference (str): Name of the reference variable in `df`. The lag of the lagged variable
+            will be determined relative to this reference.
+        var_lagged (str): Name of the lagged variable in `df`. Its lag will be determined relative
+            to the reference variable.
+        lgs_winsize_from (int): Beginning of the lag search time window in terms of record count.
+        lgs_winsize_to (int): End of the lag search time window in terms of record count.
+        shift_stepsize (int): Step size for the lag search, representing the number of records
+            by which the data is shifted for each calculation.
+        segment_name (str): Segment identifier, used for labeling and differentiation in processed
+            results.
+        props_peak_auto (DataFrame, optional): Data describing the properties of automatically
+            detected peaks. Updated after running the process pipeline.
+        idx_peak_cov_abs_max (int, optional): Index of the row where the maximum absolute covariance
+            is found.
+        idx_peak_auto (int, optional): Index of the automatically detected peak in the covariance
+            data.
+        idx_instantaneous_default_lag (int, optional): Default lag index for instantaneous peak
+            detection.
+    """
 
     def __init__(
             self,
@@ -23,18 +55,23 @@ class MaxCovariance:
             shift_stepsize: int = 1,
             segment_name: str = "segment_name_here",
     ):
-        """ Determine the time lag between two variables by finding the maximum
-         covariance.
+        """
+        Initializes the class with data and configuration parameters for analyzing lagged
+        relationships and segments based on specific variables within a DataFrame.
+
+        Postive lag means *var_lagged* lags behind *var_reference* (arrives later).
+        Negative lag means *var_lagged* lags ahead of *var_reference* (arrives earlier).
 
         Args:
-            df: Input data.
-            var_reference: Name of reference variable in *df*. Lag of *var_lagged* will be determined in
-                relation to this reference.
-            var_lagged: Name of lagged variable in *df*. Lag will be determined in relation *var_reference*.
-            lgs_winsize_from: Start of lag search time window (in number of records).
-            lgs_winsize_to: End of lag search time window (in number of records).
-            shift_stepsize: Step-size for lag search (in number of records).
-            segment_name:
+            df (DataFrame): The input data containing columns relevant for analysis.
+            var_reference (str): The name of the reference column in the DataFrame.
+            var_lagged (str): The name of the lagged column in the DataFrame.
+            lgs_winsize_from (int): The starting size of the lagging window. Defaults to -1000.
+            lgs_winsize_to (int): The ending size of the lagging window. Defaults to 1000.
+            shift_stepsize (int): The step size for shifting lagged data. Defaults to 1. Negative
+                values move lagged values upwards in the column.
+            segment_name (str): The name of the segment for identification purposes. Defaults to
+                "segment_name_here".
         """
 
         self.df = df
@@ -84,8 +121,6 @@ class MaxCovariance:
             self.get_peak_idx(cov_df=self.cov_df, flag_col='flag_peak_max_cov_abs')
         self.idx_peak_auto = \
             self.get_peak_idx(cov_df=self.cov_df, flag_col='flag_peak_auto')
-        self.idx_instantaneous_default_lag = \
-            self.get_peak_idx(cov_df=self.cov_df, flag_col='flag_instantaneous_default_lag')
 
     def _setup_lagsearch_df(self) -> DataFrame:
         """
@@ -95,19 +130,17 @@ class MaxCovariance:
         -------
         pandas DataFrame prepared for storing segment lag search results
         """
-        df = DataFrame(columns=['index', 'segment_name', 'shift', 'cov', 'cov_abs',
+        df = DataFrame(columns=['segment_name', 'shift', 'cov', 'cov_abs',
                                 'flag_peak_max_cov_abs', 'flag_peak_auto'])
         df['shift'] = range(int(self.lgs_winsize_from),
                             int(self.lgs_winsize_to) + self.shift_stepsize,
                             self.shift_stepsize)
-        df['index'] = pd.NaT
-        # df['index'] = np.nan
+        # df['index'] = pd.NaT
         df['segment_name'] = self.segment_name
         df['cov'] = np.nan
         df['cov_abs'] = np.nan
         df['flag_peak_max_cov_abs'] = False  # Flag True = found peak
         df['flag_peak_auto'] = False
-        df['flag_instantaneous_default_lag'] = False
         return df
 
     def find_auto_peak(self):
@@ -172,66 +205,47 @@ class MaxCovariance:
         pandas DataFrame with segment lag search results
         """
 
-        cov_df = self.cov_df.copy()
+        # Convert inputs to Polars for processing
+        # We only need the core data columns and the shifts
+        pl_df = pl.DataFrame(self.df[[self.var_reference, self.var_lagged]])
+        pl_cov_df = pl.DataFrame(self.cov_df[['shift']])
 
-        _index = self.df.index.copy()
-        _var_lagged = self.df[self.var_lagged].copy()
-        _var_reference = self.df[self.var_reference].copy()
+        # Rename columns for clarity in Polars
+        ref_col = self.var_reference
+        lagged_col = self.var_lagged
+        pl_df = pl_df.rename({ref_col: "reference", lagged_col: "lagged"})
 
-        # Check if data column is empty
-        if _var_lagged.dropna().empty:
-            pass
+        # Join the shifts onto the main data (Cartesian product)
+        # This creates a row for every combination of (data point, shift value)
+        pl_with_shifts = pl_df.join(pl_cov_df, how="cross")
 
-        else:
+        # Group by the 'shift' value and calculate the covariance within each group
+        # for the lagged column relative to the reference column.
+        pl_results = (
+            pl_with_shifts.group_by("shift")
+            .agg(
+                # Calculate covariance between the 'reference' column and the 'lagged' column
+                # shifted by the current group's 'shift' value.
+                pl.cov("reference", pl.col("lagged").shift(-pl.first("shift"))).alias("cov")
+            )
+            # The 'index' and 'cov_abs' columns still need to be calculated/added
+            .with_columns(
+                # Calculate absolute covariance
+                pl.col("cov").abs().alias("cov_abs")
+            )
+            .sort("shift")  # Sort to match original output order
+        )
 
-            # start_time = time.time()
+        # Convert the results back to Pandas for the final steps
+        cov_df_new = pl_results.to_pandas()
 
-            for ix, row in cov_df.iterrows():
-                shift = int(row['shift'])
-                try:
-                    if shift < 0:
-                        index_shifted = _index[-shift]  # Note the negative sign
-                    else:
-                        # todo why time?
-                        index_shifted = pd.NaT
+        # Merge the new cov and cov_abs columns into the original cov_df structure
+        cov_df = self.cov_df.drop(columns=['cov', 'cov_abs'], errors='ignore')
+        cov_df = cov_df.merge(cov_df_new, on='shift', how='left')
 
-                    # Shift and calculate covariance (pandas)
-                    _scalar_data_shifted = _var_lagged.shift(shift)
-                    cov = _var_reference.cov(_scalar_data_shifted)
-
-                    # # Shift and calculate covariance (numpy)
-                    # # As an alternative, covariance can be calculated using numpy. While
-                    # # this approach might be faster in many cases, it is slower here, I
-                    # # assume because of the presence of NaNs in the data that have to be
-                    # # masked first.
-                    # # Requires masking the NaN values in _scalar_data_shifted_array.
-                    # _scalar_data_shifted = _var_lagged.shift(shift)
-                    # _var_reference_array = _var_reference.values
-                    # _scalar_data_shifted_array = _scalar_data_shifted.values
-                    # _masked_scalar_data_shifted_array = (
-                    #     np.ma.array(_scalar_data_shifted_array, mask=np.isnan(_scalar_data_shifted_array)))
-                    # # Calculating the covariance, extract from covariance matrix
-                    # cov = np.ma.cov(_var_reference_array, _masked_scalar_data_shifted_array)[0,1]
-
-                    cov_df.loc[cov_df['shift'] == row['shift'], 'cov'] = cov
-                    cov_df.loc[cov_df['shift'] == row['shift'], 'index'] = index_shifted
-
-                except IndexError:
-                    # If not enough data in the file to perform the shift, continue
-                    # to the next shift and try again. This can happen for the last
-                    # segments in each file, when there is no more data available
-                    # at the end.
-                    continue
-
-            # # Timing (for testing)
-            # end_time = time.time()
-            # execution_time = end_time - start_time
-            # print(f"Function execution time: {execution_time:.6f} seconds")
-
-            # Results
-            cov_df['cov_abs'] = cov_df['cov'].abs()
-            cov_max_ix = cov_df['cov_abs'].idxmax()
-            cov_df.loc[cov_max_ix, 'flag_peak_max_cov_abs'] = True
+        # Find the maximum absolute covariance
+        cov_max_ix = cov_df['cov_abs'].idxmax()
+        cov_df.loc[cov_max_ix, 'flag_peak_max_cov_abs'] = True
 
         return cov_df
 
@@ -258,7 +272,8 @@ class MaxCovariance:
             idx = False
         return idx
 
-    def plot_scatter_cov(self, title: str = None, txt_info: str = "", outpath: str = None, outname: str = None):
+    def plot_scatter_cov(self, title: str = None, txt_info: str = "", outpath: str = None,
+                         outname: str = None, showplot: bool = True) -> Figure:
         """Make scatter plot with z-values as colors and display found max covariance."""
 
         # Setup figure
@@ -292,6 +307,13 @@ class MaxCovariance:
         txt_info = self.mark_auto_detected_peak(ax=ax, txt_info=txt_info)
         txt_info = self.mark_instantaneous_default_lag(ax=ax, txt_info=txt_info)
 
+        arrow = r"$\rightarrow$"
+        # Create a blended transform: Data coordinates for X, Axes coordinates for Y
+        blended_trans = blended_transform_factory(ax.transData, ax.transAxes)
+        ax.text(0, 0.05, f"positive lag: {self.var_lagged} lags behind {self.var_reference} {arrow}",
+                transform=blended_trans, color='black', size=theme.AX_LABELS_FONTSIZE,
+                ha='left', va='bottom', zorder=99, backgroundcolor='white')
+
         # Add info text
         ax.text(0.02, 0.98, txt_info,
                 horizontalalignment='left', verticalalignment='top',
@@ -306,8 +328,11 @@ class MaxCovariance:
 
         if outpath:
             self._save_cov_plot(fig=fig, outpath=outpath, outname=outname)
-        else:
+
+        if showplot:
             fig.show()
+
+        return fig
 
     def _save_cov_plot(self, fig, outpath, outname):
         """
@@ -455,7 +480,6 @@ class MaxCovariance:
 
 def example():
     from pathlib import Path
-    from diive.core.io.filereader import ReadFileType
     from diive.core.io.filereader import search_files
 
     OUTDIR = r'P:\Flux\RDS_calculations\DEG_EddyMercury\Magic file for Diive\OUT'
@@ -537,6 +561,7 @@ def example():
         lag = cov_df.iloc[foundlag.index]['shift']
         lag = lag.tolist()[0]
         print(lag)
+
 
 if __name__ == '__main__':
     example()

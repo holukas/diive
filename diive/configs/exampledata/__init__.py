@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+import pandas as pd
 from pandas import DataFrame
 
 from diive.core.io.filereader import ReadFileType, MultiDataFileReader, search_files, DataFileReader
@@ -128,6 +129,13 @@ def load_exampledata_GENERIC_CSV_HEADER_1ROW_TS_MIDDLE_FULL_NS_20HZ():
                                 data_nrows=None)
     data_df, metadata_df = loaddatafile.get_filedata()
     return data_df, metadata_df
+
+
+def load_exampledata_GENERIC_TXT_EDDY_COVARIANCE_10Hz():
+    filepath = Path(
+        DIR_PATH) / 'exampledata_GENERIC-TXT-EDDY-COVARIANCE-10Hz-2023-06-24-03-30_LGRData.txt'
+    data_df = pd.read_csv(filepath, sep=',')
+    return data_df
 
 
 def load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN_with_datafilereader_parameters():

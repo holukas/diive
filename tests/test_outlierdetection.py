@@ -6,7 +6,7 @@ import pandas as pd
 import diive.configs.exampledata as ed
 from diive.pkgs.createvar.noise import add_impulse_noise
 from diive.pkgs.outlierdetection.absolutelimits import AbsoluteLimits, AbsoluteLimitsDaytimeNighttime
-from diive.pkgs.outlierdetection.hampel import Hampel, HampelDaytimeNighttime
+from diive.pkgs.outlierdetection.hampel import HampelDaytimeNighttime
 from diive.pkgs.outlierdetection.incremental import zScoreIncrements
 from diive.pkgs.outlierdetection.localsd import LocalSD
 from diive.pkgs.outlierdetection.lof import LocalOutlierFactorAllData
@@ -118,24 +118,24 @@ class TestOutlierDetection(unittest.TestCase):
 
         # Checks on bad data
         badmean = checkdf.loc[checkdf.flag == 2, 's_noise'].mean()
-        self.assertEqual(badmean, 19.926195230975953)
+        self.assertEqual(badmean, 19.90764864489646)
         baddata_stats = checkdf.loc[checkdf.flag == 2].describe()
         self.assertEqual(baddata_stats.loc['max']['s_noise'], 338.9234661966423)
         self.assertEqual(baddata_stats.loc['min']['s_noise'], -12.230067031003944)
-        self.assertEqual(baddata_stats.loc['count']['flag'], 380)
+        self.assertEqual(baddata_stats.loc['count']['flag'], 378)
         self.assertEqual(baddata_stats.loc['min']['flag'], 2)
         self.assertEqual(baddata_stats.loc['max']['flag'], 2)
-        self.assertEqual(baddata_stats.loc['count']['s_noise'], 380)
+        self.assertEqual(baddata_stats.loc['count']['s_noise'], 378)
 
         # Checks on good data
         goodmean = checkdf.loc[checkdf.flag == 0, 's_noise'].mean()
-        self.assertEqual(goodmean, 17.8173584698141)
+        self.assertEqual(goodmean, 17.82747404013876)
         gooddata_stats = checkdf.loc[checkdf.flag == 0].describe()
         self.assertEqual(gooddata_stats.loc['max']['s_noise'], 338.3652327597214)
         self.assertEqual(gooddata_stats.loc['min']['s_noise'], -40.33549755756406)
         self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
         self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
-        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1108)
+        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1110)
 
     def test_hampel_filter_daytime_nighttime(self):
         df = ed.load_exampledata_parquet()
@@ -154,9 +154,11 @@ class TestOutlierDetection(unittest.TestCase):
 
         ham = HampelDaytimeNighttime(
             series=s_noise,
-            n_sigma_dt=4,
-            n_sigma_nt=3,
-            window_length=48 * 9,
+            n_sigma_dt=5.5,
+            n_sigma_nt=5.5,
+            window_length=48 * 3,
+            use_differencing=False,
+            separate_day_night=True,
             showplot=False,
             verbose=False,
             lat=47.286417,
@@ -172,40 +174,46 @@ class TestOutlierDetection(unittest.TestCase):
         baddata_stats = checkdf.loc[checkdf.flag == 2].describe()
         self.assertEqual(baddata_stats.loc['max']['s_noise'], 420.37816376334473)
         self.assertEqual(baddata_stats.loc['min']['s_noise'], -38.04507418841196)
-        self.assertEqual(baddata_stats.loc['count']['flag'], 102)
+        self.assertEqual(baddata_stats.loc['count']['flag'], 92)
         self.assertEqual(baddata_stats.loc['min']['flag'], 2)
         self.assertEqual(baddata_stats.loc['max']['flag'], 2)
-        self.assertEqual(baddata_stats.loc['count']['s_noise'], 102)
+        self.assertEqual(baddata_stats.loc['count']['s_noise'], 92)
 
         # Checks on good data
         gooddata_stats = checkdf.loc[checkdf.flag == 0].describe()
-        self.assertEqual(gooddata_stats.loc['max']['s_noise'], 30.473344762824773)
-        self.assertEqual(gooddata_stats.loc['min']['s_noise'], 5.049)
+        self.assertEqual(gooddata_stats.loc['max']['s_noise'], 33.72896422933141)
+        self.assertEqual(gooddata_stats.loc['min']['s_noise'], -11.769722879346313)
         self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
         self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
-        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1386)
+        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1396)
 
-    def test_hampel_filter(self):
+    def test_hampel_filter_daytime_nighttime_doublediff(self):
         df = ed.load_exampledata_parquet()
         s = df['Tair_f'].copy()
         s = s.loc[s.index.year == 2018].copy()
         s = s.loc[s.index.month == 7].copy()
         s_noise = add_impulse_noise(series=s,
-                                    factor_low=-14,
-                                    factor_high=19,
-                                    contamination=0.06,
+                                    factor_low=-12,
+                                    factor_high=17,
+                                    contamination=0.07,
                                     seed=42)  # Add impulse noise (spikes)
 
         # Checks on noise data, make sure we have outliers, i.e., greater or less than the specified limits
         self.assertGreater(s_noise.max(), 22)
         self.assertLess(s_noise.min(), 10)
 
-        ham = Hampel(
+        ham = HampelDaytimeNighttime(
             series=s_noise,
-            n_sigma=4,
-            window_length=48 * 9,
+            n_sigma_dt=100,
+            n_sigma_nt=100,
+            window_length=48,
+            use_differencing=True,
+            separate_day_night=True,
             showplot=False,
-            verbose=False
+            verbose=False,
+            lat=47.286417,
+            lon=7.733750,
+            utc_offset=1
         )
         ham.calc(repeat=True)
         flag = ham.get_flag()
@@ -214,20 +222,70 @@ class TestOutlierDetection(unittest.TestCase):
 
         # Checks on bad data
         baddata_stats = checkdf.loc[checkdf.flag == 2].describe()
-        self.assertEqual(baddata_stats.loc['max']['s_noise'], 457.7993015844542)
-        self.assertEqual(baddata_stats.loc['min']['s_noise'], -47.71027579882934)
-        self.assertEqual(baddata_stats.loc['count']['flag'], 82)
+        self.assertEqual(baddata_stats.loc['max']['s_noise'], 420.37816376334473)
+        self.assertEqual(baddata_stats.loc['min']['s_noise'], -38.04507418841196)
+        self.assertEqual(baddata_stats.loc['count']['flag'], 227)
         self.assertEqual(baddata_stats.loc['min']['flag'], 2)
         self.assertEqual(baddata_stats.loc['max']['flag'], 2)
-        self.assertEqual(baddata_stats.loc['count']['s_noise'], 82)
+        self.assertEqual(baddata_stats.loc['count']['s_noise'], 227)
 
         # Checks on good data
         gooddata_stats = checkdf.loc[checkdf.flag == 0].describe()
-        self.assertEqual(gooddata_stats.loc['max']['s_noise'], 25.201551539241972)
-        self.assertEqual(gooddata_stats.loc['min']['s_noise'], 3.65795487099882)
+        self.assertEqual(gooddata_stats.loc['max']['s_noise'], 53.93064794948049)
+        self.assertEqual(gooddata_stats.loc['min']['s_noise'], -24.68608044400628)
         self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
         self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
-        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1406)
+        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1261)
+
+    def test_hampel_filter_basic(self):
+        df = ed.load_exampledata_parquet()
+        s = df['Tair_f'].copy()
+        s = s.loc[s.index.year == 2018].copy()
+        s = s.loc[s.index.month == 7].copy()
+        s_noise = add_impulse_noise(series=s,
+                                    factor_low=-12,
+                                    factor_high=17,
+                                    contamination=0.07,
+                                    seed=42)  # Add impulse noise (spikes)
+
+        # Checks on noise data, make sure we have outliers, i.e., greater or less than the specified limits
+        self.assertGreater(s_noise.max(), 22)
+        self.assertLess(s_noise.min(), 10)
+
+        ham = HampelDaytimeNighttime(
+            series=s_noise,
+            n_sigma_dt=5.5,
+            n_sigma_nt=5.5,
+            window_length=48,
+            use_differencing=False,
+            separate_day_night=False,
+            showplot=False,
+            verbose=False,
+            lat=47.286417,
+            lon=7.733750,
+            utc_offset=1
+        )
+        ham.calc(repeat=True)
+        flag = ham.get_flag()
+        frame = {'s_noise': s_noise, 'flag': flag}
+        checkdf = pd.DataFrame.from_dict(frame)
+
+        # Checks on bad data
+        baddata_stats = checkdf.loc[checkdf.flag == 2].describe()
+        self.assertEqual(baddata_stats.loc['max']['s_noise'], 420.37816376334473)
+        self.assertEqual(baddata_stats.loc['min']['s_noise'], -38.04507418841196)
+        self.assertEqual(baddata_stats.loc['count']['flag'], 92)
+        self.assertEqual(baddata_stats.loc['min']['flag'], 2)
+        self.assertEqual(baddata_stats.loc['max']['flag'], 2)
+        self.assertEqual(baddata_stats.loc['count']['s_noise'], 92)
+
+        # Checks on good data
+        gooddata_stats = checkdf.loc[checkdf.flag == 0].describe()
+        self.assertEqual(gooddata_stats.loc['max']['s_noise'], 51.98160999845608)
+        self.assertEqual(gooddata_stats.loc['min']['s_noise'], -7.383053125047635)
+        self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
+        self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
+        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1396)
 
     def test_zscore(self):
         df = ed.load_exampledata_parquet()
@@ -353,6 +411,61 @@ class TestOutlierDetection(unittest.TestCase):
         self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
         self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
         self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1441)
+
+    def test_localsd_daytime_nighttime(self):
+        df = ed.load_exampledata_parquet()
+        s = df['Tair_f'].copy()
+        s = s.loc[s.index.year == 2018].copy()
+        s = s.loc[s.index.month == 7].copy()
+        s_noise = add_impulse_noise(series=s,
+                                    factor_low=-11,
+                                    factor_high=9,
+                                    contamination=0.2,
+                                    seed=42)  # Add impulse noise (spikes)
+        lsd = LocalSD(
+            series=s_noise,
+            separate_daytime_nighttime=True,
+            n_sd=[3, 2],
+            winsize=[48 * 2, 48 * 1],
+            constant_sd=False,
+            lat=46.0,
+            lon=11.0,
+            utc_offset=1,
+            showplot=False,
+            verbose=False
+        )
+        lsd.calc(repeat=True)
+        flag = lsd.get_flag()
+        frame = {'s_noise': s_noise, 'flag': flag}
+        checkdf = pd.DataFrame.from_dict(frame)
+
+        # Get daytime and nighttime data
+        checkdf['FLAG_DAYTIME'] = lsd.flag_daytime
+        checkdf['FLAG_NIGHTTIME'] = lsd.flag_nighttime
+        good_dt = checkdf.loc[(checkdf['FLAG_DAYTIME'] == 1) & (checkdf['flag'] == 0)].copy()
+        bad_dt = checkdf.loc[(checkdf['FLAG_DAYTIME'] == 1) & (checkdf['flag'] == 2)].copy()
+        good_nt = checkdf.loc[(checkdf['FLAG_NIGHTTIME'] == 1) & (checkdf['flag'] == 0)].copy()
+        bad_nt = checkdf.loc[(checkdf['FLAG_NIGHTTIME'] == 1) & (checkdf['flag'] == 2)].copy()
+
+        # Checks on good data
+        good_dt_stats = good_dt.describe()
+        self.assertEqual(good_dt_stats.loc['max']['s_noise'], 31.87658379873561)
+        self.assertEqual(good_dt_stats.loc['min']['s_noise'], 4.3238046734031155)
+        self.assertEqual(good_dt_stats.loc['count']['s_noise'], 766)
+        good_nt_stats = good_nt.describe()
+        self.assertEqual(good_nt_stats.loc['max']['s_noise'], 17.073)
+        self.assertEqual(good_nt_stats.loc['min']['s_noise'], 5.345)
+        self.assertEqual(good_nt_stats.loc['count']['s_noise'], 371)
+
+        # Checks on bad data
+        bad_dt_stats = bad_dt.describe()
+        self.assertEqual(bad_dt_stats.loc['max']['s_noise'], 231.78475439289213)
+        self.assertEqual(bad_dt_stats.loc['min']['s_noise'], -38.52634400343396)
+        self.assertEqual(bad_dt_stats.loc['count']['s_noise'], 165)
+        bad_nt_stats = bad_nt.describe()
+        self.assertEqual(bad_nt_stats.loc['max']['s_noise'], 224.8390630344748)
+        self.assertEqual(bad_nt_stats.loc['min']['s_noise'], -36.84146979488223)
+        self.assertEqual(bad_nt_stats.loc['count']['s_noise'], 186)
 
     def test_localsd_with_constantsd(self):
         df = ed.load_exampledata_parquet()

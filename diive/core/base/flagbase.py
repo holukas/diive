@@ -14,6 +14,7 @@ import diive.core.plotting.styles.LightTheme as theme
 from diive.core.funcs.funcs import validate_id_string
 from diive.core.plotting.histogram import HistogramPlot
 from diive.core.plotting.plotfuncs import default_format, default_legend, nice_date_ticks
+from diive.core.times.times import DetectFrequency
 
 
 class FlagBase:
@@ -23,6 +24,12 @@ class FlagBase:
         self._flagid = flagid
         self._idstr = validate_id_string(idstr=idstr)
         self.verbose = verbose
+
+        # Make sure time series has frequency
+        # Freq is needed for the detection of daytime/nighttime from lat/lon
+        if not self.series.index.freq:
+            freq = DetectFrequency(index=self.series.index, verbose=True).get()
+            self.series = self.series.asfreq(freq)
 
         self._overall_flag = None
         self._filteredseries = None
@@ -107,10 +114,10 @@ class FlagBase:
         if isinstance(rejected, DatetimeIndex):
             self._filteredseries.loc[rejected] = np.nan
 
-    def reset(self):
-        self._filteredseries = self.series.copy()
-        # Generate flag series with NaNs
-        self._flag = pd.Series(index=self.series.index, data=np.nan, name=self.flagname)
+    # TODO delete def reset(self):
+    #     self._filteredseries = self.series.copy()
+    #     # Generate flag series with NaNs
+    #     self._flag = pd.Series(index=self.series.index, data=np.nan, name=self.flagname)
 
     def generate_flagname(self, iteration: int = None) -> str:
         """Generate standardized name for flag variable"""
@@ -142,7 +149,7 @@ class FlagBase:
             if not repeat:
                 break
 
-        # Calcualte the sum of all flags that show 2, for each data row
+        # Calculate the sum of all flags that show 2, for each data row
         overall_flag = iteration_flags_df[iteration_flags_df == 2].sum(axis=1)
         overall_flag.name = self.generate_flagname()
 

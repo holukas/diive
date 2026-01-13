@@ -102,7 +102,8 @@ class FlagSingleConstantUstarThreshold(FlagBase):
 
         if self.verbose:
             if self.verbose:
-                print(f"Total found outliers for USTAR threshold {self._idstr} {self.threshold}: {len(rejected)} values")
+                print(
+                    f"Total found outliers for USTAR threshold {self._idstr} {self.threshold}: {len(rejected)} values")
 
         return ok, rejected, n_outliers
 
@@ -280,8 +281,8 @@ class UstarDetectionMPT:
 
     """
 
-    flux_plateau_thres_perc = 99
-    ta_ustar_corr_thres = 0.4
+    flux_plateau_thres_perc = 95
+    ta_ustar_corr_thres = 0.6
     flux_plateau_method = 'NEE > 10+10 Higher USTAR Subclasses'
 
     thres_class_col = 'USTAR_MPT_THRES_IN_CLASS'  # in m s-1
@@ -398,6 +399,7 @@ class UstarDetectionMPT:
 
             # SAMPLE DATA
             sampledf = self.sample_data(df=self.workdf_nt)
+            print(f"{sampledf.shape} records ", end=" ")
             sampledf = sampledf.reset_index(inplace=False)  # Keeps timestamp as column in df
 
             # SEPARATE BY SEASON DATA POOL
@@ -417,8 +419,8 @@ class UstarDetectionMPT:
                 #     features_lag=None,
                 #     # features_lag=[-1, -1],
                 #     # features_lag_exclude_cols=['test', 'test2'],
-                #     include_timestamp_as_features=False,
-                #     # include_timestamp_as_features=True,
+                #     vectorize_timestamps=False,
+                #     # vectorize_timestamps=True,
                 #     add_continuous_record_number=False,
                 #     # add_continuous_record_number=True,
                 #     sanitize_timestamp=False,  # todo !!!
@@ -441,8 +443,8 @@ class UstarDetectionMPT:
                 # #     # features_lag=None,
                 # #     features_lag=[-1, -1],
                 # #     # features_lag_exclude_cols=['Rg_f', 'TA>0', 'TA>20', 'DAYTIME', 'NIGHTTIME'],
-                # #     # include_timestamp_as_features=False,
-                # #     include_timestamp_as_features=True,
+                # #     # vectorize_timestamps=False,
+                # #     vectorize_timestamps=True,
                 # #     # add_continuous_record_number=False,
                 # #     add_continuous_record_number=True,
                 # #     sanitize_timestamp=True,
@@ -774,15 +776,16 @@ class UstarDetectionMPT:
         # Reset_index is needed to avoid duplicates in index and columns during grouping
         # df.reset_index(drop=True, inplace=True)
 
-        # # todo testing plot
-        # class_grouped = df.groupby(ta_class_col)
-        # fig = plt.figure(figsize=(16, 9))
-        # gs = gridspec.GridSpec(1, 1)  # rows, cols
-        # # gs.update(wspace=.2, hspace=.5, left=.05, right=.95, top=.95, bottom=.05)
-        # ax = fig.add_subplot(gs[0, 0])
-        # for class_key, class_group_df in class_grouped:
-        #     class_group_df.plot.scatter('USTAR', 'NEE_L3.1_L3.2_QCF', title=f"TA: XXX", ax=ax)
-        # fig.show()
+        # todo testing plot
+        class_grouped = df.groupby(ta_class_col)
+        fig = plt.figure(figsize=(16, 9))
+        gs = gridspec.GridSpec(1, 1)  # rows, cols
+        # gs.update(wspace=.2, hspace=.5, left=.05, right=.95, top=.95, bottom=.05)
+        ax = fig.add_subplot(gs[0, 0])
+        for class_key, class_group_df in class_grouped:
+            # class_group_df.plot.scatter('W_SIGMA', 'FC', title=f"TA: XXX", ax=ax)
+            class_group_df.plot.scatter(self.ustar_col, self.nee_col, title=f"TA: XXX", ax=ax)
+        fig.show()
 
         # Loop TA classes and calculate the ustar threshold in each class
         class_grouped = df.groupby(ta_class_col)
@@ -1012,17 +1015,20 @@ class UstarDetectionMPT:
 
 
 def example():
-    from diive.core.io.files import load_parquet
-    filepath = r"L:\Sync\luhk_work\TMP\FluxProcessingChain_L3.2.parquet"
-    df = load_parquet(filepath=filepath)
-    locs = (df.index.year >= 2022) & (df.index.year <= 2022)
+    import diive as dv
+    filepath = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\30_FLUX_PROCESSING_CHAIN\31_USTAR_DETECTION\13_SUBSET_NEE_QCF11_IRGA72_2016-2024.parquet"
+    df = dv.load_parquet(filepath=filepath)
+    locs = (df.index.year >= 2016) & (df.index.year <= 2017)
     df = df.loc[locs].copy()
-    # [print(c) for c in df.columns if "TA" in c]
+    [print(c) for c in df.columns if "SIGMA" in c];
 
     NEE_COL = "NEE_L3.1_L3.2_QCF"
-    TA_COL = "TA_T1_2_1"
+    TA_COL = "TA_T1_47_1_gfXG"
     USTAR_COL = "USTAR"
-    SW_IN_POT_COL = None
+    SW_IN = "SW_IN_T1_47_1_gfXG"
+
+    df = df[[NEE_COL, TA_COL, USTAR_COL, SW_IN]].copy()
+    df = df.dropna()
 
     ust = UstarDetectionMPT(
         df=df,
@@ -1031,12 +1037,12 @@ def example():
         ustar_col=USTAR_COL,
         ta_n_classes=6,
         ustar_n_classes=20,
-        n_bootstraps=99,
-        swin_pot_col=SW_IN_POT_COL,
+        n_bootstraps=10,
+        swin_pot_col=SW_IN,
         nighttime_threshold=20,
         utc_offset=1,
-        lat=47.210227,
-        lon=8.410645
+        lat=47.478333,  # CH-LAE
+        lon=8.364389  # CH-LAE
     )
 
     ust.run()
@@ -1106,6 +1112,6 @@ def example_flag_constant_ustar_threshold():
 
 
 if __name__ == '__main__':
-    example_flag_constant_ustar_threshold()
-    # example()
+    # example_flag_constant_ustar_threshold()
+    example()
     # example_scenarios()
