@@ -20,7 +20,7 @@ class LongTermGapFillingBase:
                  features_lag: list = None,
                  features_lag_stepsize: int = 1,
                  features_lag_exclude_cols: list = None,
-                 include_timestamp_as_features: bool = False,
+                 vectorize_timestamps: bool = False,
                  add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False,
                  perm_n_repeats: int = 10,
@@ -56,7 +56,7 @@ class LongTermGapFillingBase:
         self.features_lag = features_lag
         self.features_lag_stepsize = features_lag_stepsize
         self.features_lag_exclude_cols = features_lag_exclude_cols
-        self.include_timestamp_as_features = include_timestamp_as_features
+        self.vectorize_timestamps = vectorize_timestamps
         self.add_continuous_record_number = add_continuous_record_number
         self.sanitize_timestamp = sanitize_timestamp
         self.kwargs = kwargs
@@ -165,7 +165,7 @@ class LongTermGapFillingBase:
             features_lag=self.features_lag,
             features_lag_stepsize=self.features_lag_stepsize,
             features_lag_exclude_cols=self.features_lag_exclude_cols,
-            include_timestamp_as_features=self.include_timestamp_as_features,
+            vectorize_timestamps=self.vectorize_timestamps,
             add_continuous_record_number=self.add_continuous_record_number,
             sanitize_timestamp=self.sanitize_timestamp,
             perm_n_repeats=self.perm_n_repeats,
@@ -202,7 +202,7 @@ class LongTermGapFillingBase:
                 perm_n_repeats=self.perm_n_repeats,
                 features_lag=None,  # Already considered across all years
                 features_lag_exclude_cols=None,  # Already considered across all years
-                include_timestamp_as_features=False,  # Already considered across all years
+                vectorize_timestamps=False,  # Already considered across all years
                 add_continuous_record_number=False,  # Already considered across all years
                 sanitize_timestamp=False,  # Already considered across all years
                 test_size=self.test_size,
@@ -332,7 +332,7 @@ class LongTermGapFillingRandomForestTS(LongTermGapFillingBase):
                  features_lag: list = None,
                  features_lag_stepsize: int = 1,
                  features_lag_exclude_cols: list = None,
-                 include_timestamp_as_features: bool = False,
+                 vectorize_timestamps: bool = False,
                  add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False,
                  perm_n_repeats: int = 10,
@@ -346,7 +346,7 @@ class LongTermGapFillingRandomForestTS(LongTermGapFillingBase):
             features_lag=features_lag,
             features_lag_stepsize=features_lag_stepsize,
             features_lag_exclude_cols=features_lag_exclude_cols,
-            include_timestamp_as_features=include_timestamp_as_features,
+            vectorize_timestamps=vectorize_timestamps,
             add_continuous_record_number=add_continuous_record_number,
             sanitize_timestamp=sanitize_timestamp,
             perm_n_repeats=perm_n_repeats,
@@ -363,7 +363,7 @@ class LongTermGapFillingXGBoostTS(LongTermGapFillingBase):
                  verbose: int = 0,
                  perm_n_repeats: int = 10,
                  features_lag: list = None,
-                 include_timestamp_as_features: bool = False,
+                 vectorize_timestamps: bool = False,
                  add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False,
                  **kwargs):
@@ -373,7 +373,7 @@ class LongTermGapFillingXGBoostTS(LongTermGapFillingBase):
             target_col=target_col,
             verbose=verbose,
             features_lag=features_lag,
-            include_timestamp_as_features=include_timestamp_as_features,
+            vectorize_timestamps=vectorize_timestamps,
             add_continuous_record_number=add_continuous_record_number,
             sanitize_timestamp=sanitize_timestamp,
             perm_n_repeats=perm_n_repeats,
@@ -403,8 +403,8 @@ def example_longterm_rfts():
         verbose=2,
         features_lag=[-1, -1],
         # features_lag=None,
-        include_timestamp_as_features=True,
-        # include_timestamp_as_features=False,
+        vectorize_timestamps=True,
+        # vectorize_timestamps=False,
         add_continuous_record_number=True,
         # add_continuous_record_number=False,
         sanitize_timestamp=True,
@@ -422,7 +422,7 @@ def example_longterm_rfts():
     #     target_col=TARGET_COL,
     #     verbose=0,
     #     # features_lag=[-1, -1],
-    #     # include_timestamp_as_features=True,
+    #     # vectorize_timestamps=True,
     #     # add_continuous_record_number=True,
     #     sanitize_timestamp=True,
     #     # n_estimators=3,

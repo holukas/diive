@@ -2,6 +2,154 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.90.0 | 13 Jan 2026
+
+**Feature Highlights and Logic Changes**
+
+### Time Series and Date Handling
+
+* **Vectorize timestamps**:
+    * Renamed function `include_timestamp_as_cols` to `vectorize_timestamps`.
+    * The function now supports generating sine/cosine variants for cyclical timestamp attributes (e.g., DOY) (18).
+    * Added new notebook `VectorizeTimestamps` (17).
+    * Added new unit test `test_vectorize_timestamps` (30).
+    * The same function is used as parameter `vectorize_timestamps` in machine learning approaches to include timestamp
+      attributes in feature vectors, i.e., timestamp info is converted to columns. Notebooks and unit tests that use
+      XGBoost or random forest were updated (if necessary) and re-run accordingly (31)(32)(33)(34)(35)(36).
+* **Insert season**: Refactored `insert_season` for better performance (11).
+
+### Outlier Detection
+
+* `LocalSD`:
+    * Added an option to `LocalSD` to run the outlier filter separately for daytime and nighttime
+      periods (13).
+    * Updated `FluxProcessingChain` (15) and `StepwiseMeteoScreeningFromDatabase` (16) notebooks, as well as relevant
+      unit tests (14), to support the new `LocalSD` functionality.
+* `HampelDaytimeNighttime`:
+    * Refactored `HampelDaytimeNighttime` outlier removal method, it now runs 100x faster.
+    * Also added parameter `use_differencing` to calculate outliers from the double-differenced time series instead of
+      the original data (23).
+    * Also added parameter `separate_day_night` to run the filter without the separation into daytime/nighttime data.
+    * The original Hampel class is therefore now implemented here and was removed (24).
+    * Updated notebook accordingly (37).
+    * Also added unit test for double-difference option (25).
+    * Also added unit test for basic Hampel filtering (26).
+    * Removed old Hampel test case (27).
+    * Removed old notebook for Hampel filtering.
+    * The filter was also implemented in step-wise outlier detection (28), flux processing chain (Level-3.2) (29) and in
+      meteoscreening from database (38).
+* All outlier detection classes: Harmonized the creation of daytime/nighttime flags across all outlier detection
+  methods (12).
+
+### Eddy Covariance and Flux Processing
+
+* **Flux detection limit**:
+    * Refactored `FluxDetectionLimit`.
+    * **Important**: The logic for time lags has been inverted to be more intuitive; a positive time lag now means the
+      lagged variable (e.g., a gas) lags *behind* the reference variable (turbulent vertical wind) (9).
+    * **Performance Boost**: Maximum covariance for high-res data is now calculated using the [polars](https://pola.rs/)
+      library. ~3x speed improvements on half-hourly 10Hz data, depending on CPU (4).
+    * Added new notebook `FluxDetectionLimit` (8)
+    * Added unit test (10)
+* **Self-heating correction for fluxes from open-path IRGAs (SCOP)**:
+    * Added classes in `selfheating.py` for the correction of the self-heating effect in open-path infrared gas
+      analyzers, based on parallel measurements from an (en)closed-path IRGA (40).
+    * Generally, the SCOP code implements a physics-based correction to remove spurious flux biases caused by instrument
+      surface heating observed for eddy covariance fluxes from open-path infrared gas analyzers. It calculates an
+      unscaled correction term based on environmental drivers like air temperature and wind speed, optimizes it using
+      parallel enclosed-path reference data through bootstrapping, and applies the final scaled correction to produce
+      corrected gas flux measurements.
+    * There are several classes: `ScopPhysics` implements the physical modeling of instrument self-heating for open-path
+      IRGAs,`ScopOptimizer` optimizes scaling factors for the self-heating correction using parallel enclosed-path
+      reference data and statistical minimization, and `ScopApplicator` applies the optimized scaling factors to
+      open-path flux data. These three classes are designed to be used in a pipeline, see notebook examples.
+    * Added 2 notebooks:
+        * `SelfHeatingCorrectionNEE_1_CreateScalingFactorsTable` shows how the table of scaling factors is created and
+          applied during a time period of parallel measurements (41).
+        * `SelfHeatingCorrectionNEE_2_ApplyScalingFactors` shows how a previously created scaling factors table is
+          applied to open-path flux data outside the time period of parallel measurements (42).
+* Update notebook `FluxProcessingChain` (15)
+* Added option to set storage to zero when applying storage correction in Level-3.1. If *True*, sets the storage term to
+  zero, in which case the storage data in the dataframe is ignored. Normally not needed, but can be useful during
+  testing or when developing a correction method for FC (the CO2 flux not corrected for storage) but still needing
+  outlier-removed values from the FluxProcessingChain. (22)
+
+### Physics and Variable Conversions
+
+* **New Function**: Added functionality to calculate air temperature derived from sonic temperature (5). Added
+  `Calculate_air_temp_from_sonic_temp` notebook (7) and associated unit tests (6).
+* Added new function `potrad_eot` for an alternative to `potrad` to calculate potential radiation. Takes into account
+  the equation of time. (19)
+* Added new function to calculate `aerodynamic_resistance` (21)
+* Added new function to calculate `dry_air_density` (20)
+
+### System and Visualization Improvements
+
+#### Visualization
+
+* **Heatmaps**: Added `cb_extend` parameter to allow colorbar extensions in heatmap plots (3).
+* **Bugfix**: Fixed an issue with incorrect parameter naming for min/max ticks (1).
+
+#### Quality Control and System
+
+* **Thresholds**: Increased the percentage threshold required for a time resolution to be considered valid to 0.2% (2).
+* **Environment**: Updated all packages to the newest possible versions.
+* **Testing**: Currently, 71/71 unit tests are passing successfully.
+
+### Experimental
+
+* I am testing a method to detect potential time shifts in time series data using FFT. The `execute_phase_shift_fft`
+  function detects time-series drift by using a targeted Discrete Fourier Transform to compare the phase angle of the
+  24-hour diurnal cycle in measured radiation against theoretical potential radiation. It quantifies these timing errors
+  and generates a visualization to analyze the distribution and seasonal patterns of the detected shifts.Looks promising
+  so far, but not fully tested.(39)
+
+### References
+
+* (1) `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.showplot_resampled`
+* (2) `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb._validate_n_grouprecords`
+* (3) `diive.core.plotting.heatmap_base.py`
+* (4) `diive.pkgs.echires.lag.MaxCovariance._find_max_cov_peak`
+* (5) `diive.pkgs.createvar.conversions.air_temp_from_sonic_temp`
+* (6) `tests.test_createvar.TestCreateVar.test_air_temp_from_sonic_temp`
+* (7) `notebooks/CalculateVariable/Calculate_air_temp_from_sonic_temp.ipynb`
+* (8) `notebooks/CalculateVariable/FluxDetectionLimit/FluxDetectionLimit.ipynb`
+* (9) `diive.pkgs.echires.fluxdetectionlimit.FluxDetectionLimit`
+* (10) `tests.test_echires.TestEcHires`
+* (11) `diive.core.times.times.insert_season`
+* (12) `diive.pkgs.outlierdetection.common.create_daytime_nighttime_flags`
+* (13) `diive.pkgs.outlierdetection.localsd.LocalSD`
+* (14) `tests.test_outlierdetection.TestOutlierDetection.test_localsd_daytime_nighttime`
+* (15) `notebooks/FluxProcessingChain/FluxProcessingChain.ipynb`
+* (16) `notebooks/MeteoScreening/StepwiseMeteoScreeningFromDatabase.ipynb`
+* (17) `notebooks/TimeFunctions/VectorizeTimestamps.ipynb`
+* (18) `diive.core.times.times.vectorize_timestamps`
+* (19) `diive.pkgs.createvar.potentialradiation.potrad_eot`
+* (20) `diive.pkgs.createvar.air.dry_air_density`
+* (21) `diive.pkgs.createvar.air.aerodynamic_resistance`
+* (22) `diive.pkgs.fluxprocessingchain.level31_storagecorrection.FluxStorageCorrectionSinglePointEddyPro`
+* (23) `diive.pkgs.outlierdetection.hampel.HampelDaytimeNighttime`
+* (24) `diive.pkgs.outlierdetection.hampel.Hampel`
+* (25) `tests.test_outlierdetection.TestOutlierDetection.test_hampel_filter_daytime_nighttime_doublediff`
+* (26) `tests.test_outlierdetection.TestOutlierDetection.test_hampel_filter_basic`
+* (27) `tests.test_outlierdetection.TestOutlierDetection.test_hampel_filter`
+* (28) `diive.pkgs.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection.flag_outliers_hampel_dtnt_test`
+* (29) `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain.level32_flag_outliers_hampel_dtnt_test`
+* (30) `tests.test_time.TestTime.test_vectorize_with_default_parameters`
+* (31) `notebooks/GapFilling/LongTermRandomForestGapFilling.ipynb`
+* (32) `notebooks/GapFilling/QuickRandomForestGapFilling.ipynb`
+* (33) `notebooks/GapFilling/RandomForestGapFilling.ipynb`
+* (34) `notebooks/GapFilling/RandomForestParamOptimization.ipynb`
+* (35) `notebooks/GapFilling/XGBoostGapFillingExtensive.ipynb`
+* (36) `notebooks/GapFilling/XGBoostGapFillingMinimal.ipynb`
+* (37) `notebooks/OutlierDetection/HampelDaytimeNighttime.ipynb`
+* (38) `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.flag_outliers_abslim_dtnt_test`
+* (39) `diive.pkgs.qaqc.experimental_indev.detect_timestamp_shifts.execute_phase_shift_fft`
+* (40) `diive/pkgs/flux/selfheating.py`
+* (41)
+  `notebooks/FluxProcessingChain/self-heating_correction/SelfHeatingCorrectionNEE_1_CreateScalingFactorsTable.ipynb`
+* (42) `notebooks/FluxProcessingChain/self-heating_correction/SelfHeatingCorrectionNEE_2_ApplyScalingFactorsTable.ipynb`
+
 ## v0.89.0 | 23 Jul 2025
 
 Version 0.89.0 introduces a new `GridAggregator` class for 2D data aggregation with support for quantile,
@@ -223,7 +371,7 @@ rp.plot()  # Generate basic plot
 See the notebook here for more examples:
 `notebooks/Plotting/RidgeLine.ipynb`
 
-## Additions
+### Additions
 
 - Additions to the flux processing chain:
     - Added two methods to get details about training and testing when using machine-learning models in the flux
@@ -480,19 +628,19 @@ need to install JupyterLab separately.
 
 ## v0.83.1 | 23 Oct 2024
 
-## Changes
+### Changes
 
 - When detecting the frequency from the time delta of records, the inferred frequency is accepted if the most frequent
   timedelta was found for more than 50% of records (`diive.core.times.times.timestamp_infer_freq_from_timedelta`)
 - Storage terms are now gap-filled using the rolling median in an expanding time window (
   `FluxStorageCorrectionSinglePointEddyPro._gapfill_storage_term`)
 
-## Notebooks
+### Notebooks
 
 - Added notebook example for using the flux processing chain for CH4 flux from a subcanopy eddy covariance station (
   `notebooks/Workbench/CH-DAS_2023_FluxProcessingChain/FluxProcessingChain_NEE_CH-DAS_2023.ipynb`)
 
-## Bugfixes
+### Bugfixes
 
 - Fixed info for storage term correction report to account for cases when more storage terms than flux records are
   available (`FluxStorageCorrectionSinglePointEddyPro.report`)
@@ -503,7 +651,7 @@ need to install JupyterLab separately.
 
 ## v0.83.0 | 4 Oct 2024
 
-## MDS gap-filling
+### MDS gap-filling
 
 Finally it is possible to use the `MDS` (`marginal distribution sampling`) gap-filling method in `diive`. This method is
 the current default and widely used gap-filling method for eddy covariance ecosystem fluxes. For a detailed description
@@ -520,7 +668,7 @@ updates.
 At the moment, `FluxMDS` is specifically tailored to gap-fill ecosystem fluxes, a more general implementation (e.g., to
 gap-fill meteorological data) will follow.
 
-## New features
+### New features
 
 - Added new gap-filling class `FluxMDS`:
     - `MDS` stands for `marginal distribution sampling`. The method uses a time window to first identify meteorological
@@ -572,13 +720,13 @@ gap-fill meteorological data) will follow.
 
 ## v0.82.1 | 22 Sep 2024
 
-## Notebooks
+### Notebooks
 
 - Added notebook showing an example for `LongTermGapFillingRandomForestTS` (
   `notebooks/GapFilling/LongTermRandomForestGapFilling.ipynb`)
 - Added notebook example for `MeasurementOffset` (`notebooks/Corrections/MeasurementOffset.ipynb`)
 
-## Tests
+### Tests
 
 - Added unittest for `LongTermGapFillingRandomForestTS` (
   `tests.test_gapfilling.TestGapFilling.test_gapfilling_longterm_randomforest`)
@@ -609,7 +757,7 @@ gap-fill meteorological data) will follow.
 
 ## v0.82.0 | 19 Sep 2024
 
-## Long-term gap-filling
+### Long-term gap-filling
 
 It is now possible to gap-fill multi-year datasets using the class `LongTermGapFillingRandomForestTS`. In this approach,
 data from neighboring years are pooled together before training the random forest model for gap-filling a specific year.
@@ -680,7 +828,7 @@ Here is an example for a dataset containing CO2 flux (`NEE`) measurements from 2
 
 ## v0.81.0 | 11 Sep 2024
 
-## Expanding Flux Processing Capabilities
+### Expanding Flux Processing Capabilities
 
 This update brings advancements for post-processing eddy covariance data in the context of the `FluxProcessingChain`.
 The goal is to offer a complete chain for post-processing ecosystem flux data, specifically designed to work seamlessly

@@ -25,7 +25,6 @@ References:
     [1] https://scikit-learn.org/stable/modules/generated/sklearn.neighbors.LocalOutlierFactor.html
 
 """
-
 import numpy as np
 import pandas as pd
 from numpy import where
@@ -34,7 +33,7 @@ from sklearn.neighbors import LocalOutlierFactor
 
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag
+from diive.pkgs.outlierdetection.common import create_daytime_nighttime_flags
 
 
 def lof(series: Series,
@@ -235,16 +234,8 @@ class LocalOutlierFactorDaytimeNighttime(FlagBase):
         self.n_jobs = n_jobs
 
         # Detect daytime and nighttime
-        dnf = DaytimeNighttimeFlag(
-            timestamp_index=self.series.index,
-            nighttime_threshold=50,
-            lat=lat,
-            lon=lon,
-            utc_offset=utc_offset)
-        flag_nighttime = dnf.get_nighttime_flag()  # 0/1 flag needed outside init
-        self.flag_daytime = dnf.get_daytime_flag()
-        self.is_nighttime = flag_nighttime == 1  # Convert 0/1 flag to False/True flag
-        self.is_daytime = self.flag_daytime == 1  # Convert 0/1 flag to False/True flag
+        self.flag_daytime, flag_nighttime, self.is_daytime, self.is_nighttime = (
+            create_daytime_nighttime_flags(timestamp_index=self.series.index, lat=lat, lon=lon, utc_offset=utc_offset))
 
     def calc(self, repeat: bool = True):
         """Calculate overall flag, based on individual flags from multiple iterations.

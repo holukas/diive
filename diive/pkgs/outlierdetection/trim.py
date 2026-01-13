@@ -11,9 +11,8 @@ import pandas as pd
 from pandas import DatetimeIndex, Series
 
 from diive.core.base.flagbase import FlagBase
-from diive.core.times.times import DetectFrequency
 from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag
+from diive.pkgs.outlierdetection.common import create_daytime_nighttime_flags
 
 
 @ConsoleOutputDecorator()
@@ -69,23 +68,9 @@ class TrimLow(FlagBase):
         self.trim_nighttime = trim_nighttime
         self.lower_limit = lower_limit
 
-        # Make sure time series has frequency
-        # Freq is needed for the detection of daytime/nighttime from lat/lon
-        if not self.series.index.freq:
-            freq = DetectFrequency(index=self.series.index, verbose=True).get()
-            self.series = self.series.asfreq(freq)
-
-        # Detect nighttime
-        dnf = DaytimeNighttimeFlag(
-            timestamp_index=self.series.index,
-            nighttime_threshold=50,
-            lat=lat,
-            lon=lon,
-            utc_offset=utc_offset)
-        self.flag_daytime = dnf.get_daytime_flag()
-        nighttime = dnf.get_nighttime_flag()
-        self.is_daytime = self.flag_daytime == 1  # Convert 0/1 flag to False/True flag
-        self.is_nighttime = nighttime == 1  # Convert 0/1 flag to False/True flag
+        # Detect daytime and nighttime
+        self.flag_daytime, flag_nighttime, self.is_daytime, self.is_nighttime = (
+            create_daytime_nighttime_flags(timestamp_index=self.series.index, lat=lat, lon=lon, utc_offset=utc_offset))
 
     def calc(self):
         """Calculate overall flag, based on individual flags from multiple iterations.

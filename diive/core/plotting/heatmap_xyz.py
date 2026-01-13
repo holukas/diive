@@ -59,6 +59,8 @@ class HeatmapXYZ(HeatmapBase):
         self.ytickpos = ytickpos
         self.yticklabels = yticklabels
 
+        self.p = None  # Collects the pcolormesh plot object
+
         self._prepare_data()
 
     def _prepare_data(self):
@@ -107,7 +109,7 @@ class HeatmapXYZ(HeatmapBase):
         optionally displaying values on the heatmap, and applying axis formatting
         including custom tick positions and labels if provided.
         """
-        p = self.plot_pcolormesh(shading='flat')
+        self.p = self.plot_pcolormesh(shading='flat')
 
         if self.show_values:
             self.show_vals_in_plot()
@@ -122,7 +124,7 @@ class HeatmapXYZ(HeatmapBase):
                 self.ax.set_yticklabels(self.yticklabels)
 
         self.format(
-            plot=p,
+            plot=self.p,
             ax_xlabel_txt=self.xlabel,
             ax_ylabel_txt=self.ylabel,
         )
