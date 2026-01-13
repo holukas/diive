@@ -1,13 +1,10 @@
-from dbc_influxdb import dbcInflux  # Needed for communicating with the database
 import calendar
 
 import matplotlib.gridspec as grid_spec
-import numpy as np
-import seaborn as sns
-from matplotlib.pyplot import cm
 import pandas as pd
-import diive as dv
-from diive.pkgs.createvar.potentialradiation import potrad, potrad_eot
+import seaborn as sns
+
+from diive.pkgs.createvar.potentialradiation import potrad
 
 # filepath = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\20_MERGE_DATA\21.4_FLUXES_L1_noSHC_IRGA75+METEO7.parquet"
 # filepath = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\20_MERGE_DATA\22.4_FLUXES_L1_IRGA72+METEO7_2016-2024.parquet"
@@ -31,7 +28,7 @@ swinpotcol = 'SW_IN_POT'
 
 # Test on raw data
 filepath = r"F:\TMP\CH-LAE_iDL_T1_47_1_TBL1_20210701-0000.dat"
-df = pd.read_csv(filepath, sep=',', skiprows=[0,2,3], index_col='TIMESTAMP')
+df = pd.read_csv(filepath, sep=',', skiprows=[0, 2, 3], index_col='TIMESTAMP')
 df.index = pd.to_datetime(df.index)
 varcol = 'SW_IN_T1_47_1_Avg'
 df = df[[varcol]].copy()
@@ -53,21 +50,25 @@ df = df[[varcol]].copy()
 
 # Testing resampling with middle timestamp
 from diive.core.times.resampling import resample_series_to_30MIN
+
 series = df[varcol].copy()
 from diive.core.times.times import DetectFrequency
+
 freq = DetectFrequency(index=series.index, verbose=True).get()
 series = series.asfreq(freq)
 series.index.name = 'TIMESTAMP_END'
 resampled = resample_series_to_30MIN(series=series)
 df = pd.DataFrame(resampled)
 from diive.core.times.times import insert_timestamp
+
 df = insert_timestamp(data=df, convention='middle', set_as_index=True)
 # df.loc["2022-08-01 09:15"]
 
 # Overwrite potential radiation
-df[swinpotcol] = potrad_eot(timestamp_index=df.index, lat=SITE_LAT, lon=SITE_LON, utc_offset=UTC_OFFSET)
-# df[swinpotcol] = potrad(timestamp_index=df.index, lat=SITE_LAT, lon=SITE_LON, utc_offset=UTC_OFFSET)
+# df[swinpotcol] = potrad_eot(timestamp_index=df.index, lat=SITE_LAT, lon=SITE_LON, utc_offset=UTC_OFFSET)
+df[swinpotcol] = potrad(timestamp_index=df.index, lat=SITE_LAT, lon=SITE_LON, utc_offset=UTC_OFFSET)
 print(df)
+
 
 # dc = DielCycle(series=series)
 # title = f'{var}'
@@ -75,7 +76,16 @@ print(df)
 # dc.plot(ax=None, title=title, txt_ylabel_units=units,
 #         each_month=True, legend_n_col=2)
 
+
 def execute_phase_shift_fft():
+    """
+    The execute_phase_shift_fft function detects time-series drift by using a targeted
+    Discrete Fourier Transform to compare the phase angle of the 24-hour diurnal cycle
+    in measured radiation against theoretical potential radiation.
+
+    It quantifies these timing errors and generates a visualization to analyze the
+    distribution and seasonal patterns of the detected shifts.
+    """
     # ==========================================
     # EXECUTION
     # ==========================================

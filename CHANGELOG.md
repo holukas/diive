@@ -3,7 +3,6 @@
 ![DIIVE](images/logo_diive1_256px.png)
 
 - self-heating correction
-- time shift detection fft
 
 ## v0.90.0 | XX Jan 2026
 
@@ -82,6 +81,14 @@
 * **Environment**: Updated all packages to the newest possible versions.
 * **Testing**: Currently, 71/71 unit tests are passing successfully.
 
+### Experimental
+
+* I am testing a method to detect potential time shifts in time series data using FFT. The `execute_phase_shift_fft`
+  function detects time-series drift by using a targeted Discrete Fourier Transform to compare the phase angle of the
+  24-hour diurnal cycle in measured radiation against theoretical potential radiation. It quantifies these timing errors
+  and generates a visualization to analyze the distribution and seasonal patterns of the detected shifts.Looks promising
+  so far, but not fully tested.(39)
+
 ### References
 
 * (1) `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.showplot_resampled`
@@ -122,6 +129,7 @@
 * (36) `notebooks/GapFilling/XGBoostGapFillingMinimal.ipynb`
 * (37) `notebooks/OutlierDetection/HampelDaytimeNighttime.ipynb`
 * (38) `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.flag_outliers_abslim_dtnt_test`
+* (39) `diive.pkgs.qaqc.experimental_indev.detect_timestamp_shifts.execute_phase_shift_fft`
 
 ## v0.89.0 | 23 Jul 2025
 
