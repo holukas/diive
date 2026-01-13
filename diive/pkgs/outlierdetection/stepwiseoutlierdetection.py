@@ -315,3 +315,41 @@ class StepwiseOutlierDetection:
         series_hires_orig = _series.copy()
 
         return hires_flags, series_hires_cleaned, series_hires_orig
+
+
+
+
+
+def _example():
+    """Example usage"""
+    import matplotlib.pyplot as plt
+    from diive.pkgs.createvar.noise import generate_noisy_timeseries
+
+    # Generate the data
+    df_noisy = generate_noisy_timeseries(
+        start_date='2024-01-01',
+        periods=48 * 30,  # Approx. 1 month of half-hourly data
+        freq='30min',  # Half-hourly data
+        trend_slope=0.01,  # Upward trend
+        seasonal_strength=9,  # Large waves
+        noise_level=2,  # Amount of "jitter"
+        outlier_fraction=0.1  # 10% of data are spikes
+    )
+
+    print(df_noisy.head())
+
+    # Visualize results
+    plt.figure(figsize=(12, 6))
+    plt.plot(df_noisy.index, df_noisy['base_signal'], label='True Signal (Trend + Season)', color='green',
+             linestyle='--')
+    plt.plot(df_noisy.index, df_noisy['observed_value'], label='Noisy Data', color='blue', alpha=0.6)
+    plt.title('Synthetic Time Series with Noise and Outliers')
+    plt.xlabel('Timestamp')
+    plt.ylabel('Value')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.show()
+
+
+if __name__ == '__main__':
+    _example()

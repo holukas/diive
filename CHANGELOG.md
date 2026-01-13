@@ -2,6 +2,14 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.90.1 | XX Jan 2026
+
+- Added new function to create noisy time series, primarily for testing purposes (1).
+
+###  
+
+- (1) `diive.pkgs.testing.create_noisy_time_series`
+
 ## v0.90.0 | 13 Jan 2026
 
 **Feature Highlights and Logic Changes**
