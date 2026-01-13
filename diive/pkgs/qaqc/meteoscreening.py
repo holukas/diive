@@ -58,7 +58,6 @@ class StepwiseMeteoScreeningDb:
     - `.flag_outliers_zscore_test()`:  Identify outliers based on the z-score
     - `.flag_outliers_lof_dtnt_test()`: Identify outliers based on local outlier factor, daytime nighttime separately
     - `.flag_outliers_lof_test()`: Identify outliers based on local outlier factor, across all data
-    - `.flag_outliers_hampel_test()`: Identify outliers in a sliding window based on the Hampel filter
     - `.flag_outliers_hampel_dtnt_test()`: Identify based on the Hampel filter, daytime nighttime separately
     - `.flag_outliers_abslim_dtnt_test()`: Generate flag that indicates if daytime and nighttime values in data are
         outside their respectively specified ranges
@@ -386,20 +385,17 @@ class StepwiseMeteoScreeningDb:
                                                                             repeat=repeat,
                                                                             winsize=winsize)
 
-
-    def flag_outliers_hampel_dtnt_test(self, window_length: int = 10, n_sigma_dt: float = 5,
-                                       n_sigma_nt: float = 5, k: float = 1.4826,
-                                       showplot: bool = False, verbose: bool = False, repeat: bool = True):
+    def flag_outliers_hampel_dtnt_test(self, window_length: int = 13, n_sigma_dt: float = 5.5, n_sigma_nt: float = 5.5,
+                                       k: float = 1.4826, use_differencing: bool = True,
+                                       separate_day_night: bool = True, showplot: bool = False, verbose: bool = False,
+                                       repeat: bool = True):
         """Identify outliers in a sliding window based on the Hampel filter,
         separately for daytime and nighttime data."""
         for field in self.fields:
-            self.outlier_detection[field].flag_outliers_hampel_dtnt_test(window_length=window_length,
-                                                                         n_sigma_dt=n_sigma_dt,
-                                                                         n_sigma_nt=n_sigma_nt,
-                                                                         k=k,
-                                                                         showplot=showplot,
-                                                                         verbose=verbose,
-                                                                         repeat=repeat)
+            self.outlier_detection[field].flag_outliers_hampel_dtnt_test(
+                window_length=window_length, n_sigma_dt=n_sigma_dt, n_sigma_nt=n_sigma_nt,
+                k=k, use_differencing=use_differencing, separate_day_night=separate_day_night,
+                showplot=showplot, verbose=verbose, repeat=repeat)
 
     def flag_outliers_trim_low_test(self, trim_daytime: bool = False, trim_nighttime: bool = False,
                                     lower_limit: float = None, showplot: bool = False, verbose: bool = False):
@@ -788,7 +784,7 @@ def _example():
     FIELDS = ['TA_NABEL_T1_35_1']
     MEASUREMENT = 'TA'
     START = '1997-01-01 00:00:01'
-    STOP = '2000-01-01 00:00:01'
+    STOP = '1998-01-01 00:00:01'
     RESAMPLING_AGG = 'mean'
     # RESAMPLING_AGG = 'sum'
     DATA_VERSION = 'raw'
@@ -861,7 +857,7 @@ def _example():
     # -----------------
     # OUTLIER DETECTION
     # -----------------
-    # mscr.start_outlier_detection()  # If needed
+    mscr.start_outlier_detection()  # If needed
     # REMOVE_DATES = [
     #     ['2010-12-24 07:15:00', '2011-01-01 00:00:15'],  # Remove time range
     #     # '2022-08-23 11:45:00',  # Remove data point
@@ -869,9 +865,9 @@ def _example():
     # ]
     # mscr.flag_manualremoval_test(remove_dates=REMOVE_DATES, showplot=True, verbose=True)
     # mscr.flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=True, repeat=True)
-    # mscr.flag_outliers_hampel_test(window_length=48 * 7, n_sigma=5.5, showplot=True, verbose=True, repeat=True)
-    # mscr.flag_outliers_hampel_dtnt_test(window_length=48 * 7, n_sigma_dt=5.5, n_sigma_nt=4.5, showplot=True,
-    #                                     verbose=True, repeat=True)
+    mscr.flag_outliers_hampel_dtnt_test(window_length=48 * 7, n_sigma_dt=5.5, n_sigma_nt=5.5,
+                                        use_differencing=True, separate_day_night=True,
+                                        showplot=True, verbose=True, repeat=True)
     # mscr.addflag()
     # mscr.flag_outliers_trim_low_test(trim_daytime=False, trim_nighttime=True, lower_limit=10,
     #                                  showplot=True, verbose=True)

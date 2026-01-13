@@ -184,13 +184,15 @@ class StepwiseOutlierDetection:
                                        k: float = 1.4826, use_differencing: bool = True,
                                        separate_day_night: bool = True, showplot: bool = False, verbose: bool = False,
                                        repeat: bool = True):
-        """Identify outliers in a sliding window based on the Hampel filter for daytime/nighttime"""
+        """Identify outliers in a sliding window based on the Hampel filter,
+        separately for daytime and nighttime data."""
         series_cleaned = self._series_hires_cleaned.copy()
-        flagtest = HampelDaytimeNighttime(series=series_cleaned, idstr=self.idstr,
-                                          lat=self.site_lat, lon=self.site_lon, utc_offset=self.utc_offset,
-                                          use_differencing=use_differencing, separate_day_night=separate_day_night,
-                                          window_length=window_length, n_sigma_dt=n_sigma_dt, n_sigma_nt=n_sigma_nt,
-                                          k=k, showplot=showplot, verbose=verbose)
+        flagtest = HampelDaytimeNighttime(
+            series=series_cleaned, idstr=self.idstr,
+            lat=self.site_lat, lon=self.site_lon, utc_offset=self.utc_offset,
+            use_differencing=use_differencing, separate_day_night=separate_day_night,
+            window_length=window_length, n_sigma_dt=n_sigma_dt, n_sigma_nt=n_sigma_nt,
+            k=k, showplot=showplot, verbose=verbose)
         flagtest.calc(repeat=repeat)
         self._last_flag = flagtest.get_flag()
 

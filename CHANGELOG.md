@@ -34,13 +34,13 @@
       the original data (23).
     * Also added parameter `separate_day_night` to run the filter without the separation into daytime/nighttime data.
     * The original Hampel class is therefore now implemented here and was removed (24).
+    * Updated notebook accordingly (37).
     * Also added unit test for double-difference option (25).
     * Also added unit test for basic Hampel filtering (26).
     * Removed old Hampel test case (27).
     * Removed old notebook for Hampel filtering.
-    * 
-    * The filter was also implemented in step-wise outlier detection (28) and in the flux processing chain (Level-3.2) (
-      29).
+    * The filter was also implemented in step-wise outlier detection (28), flux processing chain (Level-3.2) (29) and in
+      meteoscreening from database (38).
 * All outlier detection classes: Harmonized the creation of daytime/nighttime flags across all outlier detection
   methods (12).
 
@@ -80,7 +80,7 @@
 
 * **Thresholds**: Increased the percentage threshold required for a time resolution to be considered valid to 0.2% (2).
 * **Environment**: Updated all packages to the newest possible versions.
-* **Testing**: Currently, 69/69 unit tests are passing successfully.
+* **Testing**: Currently, 71/71 unit tests are passing successfully.
 
 ### References
 
@@ -120,6 +120,8 @@
 * (34) `notebooks/GapFilling/RandomForestParamOptimization.ipynb`
 * (35) `notebooks/GapFilling/XGBoostGapFillingExtensive.ipynb`
 * (36) `notebooks/GapFilling/XGBoostGapFillingMinimal.ipynb`
+* (37) `notebooks/OutlierDetection/HampelDaytimeNighttime.ipynb`
+* (38) `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.flag_outliers_abslim_dtnt_test`
 
 ## v0.89.0 | 23 Jul 2025
 

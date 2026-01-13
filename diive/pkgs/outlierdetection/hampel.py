@@ -37,9 +37,9 @@ class HampelDaytimeNighttime(FlagBase):
         Identify outliers using the Hampel filter (Median Absolute Deviation).
 
         This class implements a robust outlier detection algorithm. It is designed to handle
-        ecological time series (like Eddy Covariance data) by offering two advanced modes:
+        ecological time series (like eddy covariance data) by offering two modes:
 
-        1. **Papale Method (FLUXNET Standard):** If ``use_differencing=True``, the filter is
+        1. **similar Papale Method (FLUXNET Standard):** If ``use_differencing=True``, the filter is
            applied to the double-differenced time series ($d = (x_t - x_{t-1}) - (x_{t+1} - x_t)$).
            This removes biological trends (e.g., morning temperature rise) and isolates
            short-term spikes.
