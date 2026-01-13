@@ -37,6 +37,8 @@
     * Also added unit test for double-difference option (25).
     * Also added unit test for basic Hampel filtering (26).
     * Removed old Hampel test case (27).
+    * Removed old notebook for Hampel filtering.
+    * 
     * The filter was also implemented in step-wise outlier detection (28) and in the flux processing chain (Level-3.2) (
       29).
 * All outlier detection classes: Harmonized the creation of daytime/nighttime flags across all outlier detection
@@ -44,14 +46,16 @@
 
 ### Eddy Covariance and Flux Processing
 
-* **Logic Change (Flux Limits)**: Refactored `FluxDetectionLimit`. **Important**: The logic for time lags has been
-  inverted to be more intuitive; a positive time lag now means the lagged variable (e.g., a gas) lags *behind* the
-  reference variable (turbulent vertical wind) (9).
-* **Performance Boost**: Maximum covariance for high-res data is now calculated using the [polars](https://pola.rs/)
-  library. ~3x speed improvements on half-hourly 10Hz data, depending on CPU (4).
-* **New Resources**: Added `Flux_detection_limit` notebook (8), associated unit tests (10), and generic 10Hz EC example
-  data.
-* Added option to set storage to zero when applying storage correction in Level-31. If *True*, sets the storage term to
+* **Flux detection limit**:
+    * Refactored `FluxDetectionLimit`.
+    * **Important**: The logic for time lags has been inverted to be more intuitive; a positive time lag now means the
+      lagged variable (e.g., a gas) lags *behind* the reference variable (turbulent vertical wind) (9).
+    * **Performance Boost**: Maximum covariance for high-res data is now calculated using the [polars](https://pola.rs/)
+      library. ~3x speed improvements on half-hourly 10Hz data, depending on CPU (4).
+    * Added new notebook `FluxDetectionLimit` (8)
+    * Added unit test (10)
+* Update notebook `FluxProcessingChain` (15)
+* Added option to set storage to zero when applying storage correction in Level-3.1. If *True*, sets the storage term to
   zero, in which case the storage data in the dataframe is ignored. Normally not needed, but can be useful during
   testing or when developing a correction method for FC (the CO2 flux not corrected for storage) but still needing
   outlier-removed values from the FluxProcessingChain. (22)
@@ -87,7 +91,7 @@
 * (5) `diive.pkgs.createvar.conversions.air_temp_from_sonic_temp`
 * (6) `tests.test_createvar.TestCreateVar.test_air_temp_from_sonic_temp`
 * (7) `notebooks/CalculateVariable/Calculate_air_temp_from_sonic_temp.ipynb`
-* (8) `notebooks/CalculateVariable/FluxDetectionLimit/Flux_detection_limit.ipynb`
+* (8) `notebooks/CalculateVariable/FluxDetectionLimit/FluxDetectionLimit.ipynb`
 * (9) `diive.pkgs.echires.fluxdetectionlimit.FluxDetectionLimit`
 * (10) `tests.test_echires.TestEcHires`
 * (11) `diive.core.times.times.insert_season`
