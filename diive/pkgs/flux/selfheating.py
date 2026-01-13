@@ -4,18 +4,18 @@ SELF-HEATING CORRECTION FOR OPEN-PATH IRGAS (SCOP)
     Calculation of the flux correction term (FCT) for open-path infrared gas analyzers (IRGAs)
     based on scaling factors from parallel measurements with an (en)closed-path IRGA.
 
-    The correction can be applied to CO2 fluxes (NEE, µmol m-2 s-1).
-    It can be used for H2O fluxes (LE, W m-2), but the code has only been implemented for testing.
-    When LE from the open-path shows higher fluxes than LE from the closed-path, then this
-    correction is most likely the wrong approach. The self-heating correction always increases the
-    flux (it assumes heating lowers density, so it adds density back).
-
     This correction is designed to remove spurious CO2 flux measurements caused by the sun-induced
     heating of the open-path (OP) instrument surfaces. This self-heating warms the air passing the
     sensor head, creating a low-density thermal plume around the sampling volume. Since the OP-IRGA
     measures molar density, this plume artificially lowers the measured CO2 concentration, resulting
     in a systematic, non-biological uptake (negative flux) bias, especially prevalent during high
     solar radiation and low wind conditions.
+
+    The correction can be applied to CO2 fluxes (NEE, µmol m-2 s-1).
+    It can be used for H2O fluxes (LE, W m-2), but the code has only been implemented for testing.
+    When LE from the open-path shows higher fluxes than LE from the closed-path, then this
+    correction is most likely the wrong approach. The self-heating correction always increases the
+    flux (it assumes heating lowers density, so it adds density back).
 
 Core Correction Principle
 
@@ -135,6 +135,34 @@ class ColumnConfig:
 
 
 class ScopPhysics:
+    """
+    Implements the physical modeling of instrument self-heating for open-path IRGAs.
+
+    This class calculates the unscaled flux correction term (FCT_UNSC) by modeling
+    the thermal exchange between instrument surfaces and the passing air.
+    It accounts for boundary-layer dynamics and instrument-specific thermal properties
+    to estimate how self-heating artificially dilutes gas density measurements.
+
+    The physics engine supports multiple established methodologies, including
+    BUR06, JAR09, and the detailed multi-surface approach of BUR08.
+
+    Core Functionality:
+    * **Surface Temperature Modeling**: Estimates bulk or multi-surface temperatures
+      (Ts) based on ambient air temperature (Ta) and radiation-driven heating patterns.
+    * **Aerodynamic Resistance**: Calculates 'ra' (s m-1) using wind speed and friction
+      velocity to model heat transfer efficiency.
+    * **Thermal Conductivity**: Computes temperature-dependent air thermal conductivity
+      required for sensible heat flux modeling.
+    * **Gap-Filling**: Employs a hybrid approach using Random Forest and Mean Diurnal
+      Variation (MDV) to ensure a continuous record of the correction term.
+    * **Outlier Detection**: Uses Hampel filtering to remove physical artifacts from
+      aerodynamic resistance and unscaled flux terms.
+
+    Key Outputs:
+    * **FCT_UNSC**: The unscaled flux correction term in µmol m-2 s-1.
+    * **S**: Modeled sensible heat flux from instrument surfaces (W m-2).
+    * **TS**: Estimated instrument surface temperature (°C).
+    """
 
     def __init__(self,
                  flux_type: FluxType,
@@ -780,7 +808,31 @@ class ScopPhysics:
 
 class ScopOptimizer:
     """
-    Optimizes scaling factors using Block Bootstrapping and SciPy minimization.
+    Optimizes scaling factors for self-heating corrections using statistical minimization.
+
+    This class determines the scaling factor (SF or ξ) required to align corrected
+    open-path (OP) flux measurements with reference enclosed-path (CP) data.
+    It accounts for environmental variability by binning data into classes (e.g.,
+    friction velocity or humidity) and optimizing separately for daytime and
+    nighttime conditions.
+
+    Core Functionality:
+    * **Unit Synchronization**: Automatically converts unscaled correction terms
+      to match flux units (e.g., converting molar density shifts to Watts for
+      H2O fluxes).
+    * **Circular Block Bootstrapping**: Preserves temporal auto-correlation in
+      eddy covariance data by resampling contiguous blocks of time-series indices
+      during optimization.
+    * **L1-Norm Optimization**: Uses a vectorized cost function to minimize the
+      absolute difference between the cumulative sums of corrected OP fluxes
+      and reference CP fluxes.
+    * **Binning Strategy**: Uses quantiles (`qcut`) to ensure statistical
+      representativeness across different environmental regimes.
+
+    Key Outputs:
+    * **scaling_factors_df**: A summary table containing median scaling factors,
+      confidence intervals (1st, 25th, 75th, and 99th percentiles), and error
+      metrics for each class bin.
     """
 
     def __init__(self,
@@ -1082,6 +1134,30 @@ class ScopOptimizer:
 
 
 class ScopApplicator:
+    """
+    Applies optimized scaling factors to raw open-path flux data.
+
+    This class serves as the final stage of the SCOP workflow, merging the physical
+    modeling from `ScopPhysics` with the statistical weights derived in
+    `ScopOptimizer` to produce the final corrected flux product.
+
+    Core Functionality:
+    * **Scaling Factor Assignment**: Maps optimized scaling factors to the
+      time-series based on the environmental class variable (e.g., USTAR)
+      using a backward-searching `merge_asof`.
+    * **MDV Imputation**: Provides a fallback mechanism using Mean Diurnal
+      Variation (Month-Hour-Minute medians) to assign scaling factors when
+      primary environmental drivers are missing.
+    * **Flux Correction**: Calculates the final Flux Correction Term (FCT) and
+      adds it to the raw open-path flux: Flux_corr = Flux_raw + (FCT_unsc * SF).
+    * **Diagnostics**: Generates a comprehensive dashboard comparing uncorrected,
+      corrected, and reference fluxes across time-series, cumulative budgets,
+      and diel cycles.
+
+    Key Outputs:
+    * **Final Corrected Flux**: The corrected NEE (CO2) or LE (H2O) series.
+    * **FCT**: The final applied correction term in physical units.
+    """
 
     def __init__(self,
                  flux_type: FluxType,

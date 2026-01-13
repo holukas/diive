@@ -53,6 +53,23 @@
       library. ~3x speed improvements on half-hourly 10Hz data, depending on CPU (4).
     * Added new notebook `FluxDetectionLimit` (8)
     * Added unit test (10)
+* **Self-heating correction for fluxes from open-path IRGAs (SCOP)**:
+    * Added classes in `selfheating.py` for the correction of the self-heating effect in open-path infrared gas
+      analyzers, based on parallel measurements from an (en)closed-path IRGA (40).
+    * Generally, the SCOP code implements a physics-based correction to remove spurious flux biases caused by instrument
+      surface heating observed for eddy covariance fluxes from open-path infrared gas analyzers. It calculates an
+      unscaled correction term based on environmental drivers like air temperature and wind speed, optimizes it using
+      parallel enclosed-path reference data through bootstrapping, and applies the final scaled correction to produce
+      corrected gas flux measurements.
+    * There are several classes: `ScopPhysics` implements the physical modeling of instrument self-heating for open-path
+      IRGAs,`ScopOptimizer` optimizes scaling factors for the self-heating correction using parallel enclosed-path
+      reference data and statistical minimization, and `ScopApplicator` applies the optimized scaling factors to
+      open-path flux data. These three classes are designed to be used in a pipeline, see notebook examples.
+    * Added 2 notebooks:
+        * `SelfHeatingCorrectionNEE_1_CreateScalingFactorsTable` shows how the table of scaling factors is created and
+          applied during a time period of parallel measurements (41).
+        * `SelfHeatingCorrectionNEE_2_ApplyScalingFactors` shows how a previously created scaling factors table is
+          applied to open-path flux data outside the time period of parallel measurements (42).
 * Update notebook `FluxProcessingChain` (15)
 * Added option to set storage to zero when applying storage correction in Level-3.1. If *True*, sets the storage term to
   zero, in which case the storage data in the dataframe is ignored. Normally not needed, but can be useful during
@@ -130,6 +147,10 @@
 * (37) `notebooks/OutlierDetection/HampelDaytimeNighttime.ipynb`
 * (38) `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.flag_outliers_abslim_dtnt_test`
 * (39) `diive.pkgs.qaqc.experimental_indev.detect_timestamp_shifts.execute_phase_shift_fft`
+* (40) `diive/pkgs/flux/selfheating.py`
+* (41)
+  `notebooks/FluxProcessingChain/self-heating_correction/SelfHeatingCorrectionNEE_1_CreateScalingFactorsTable.ipynb`
+* (42) `notebooks/FluxProcessingChain/self-heating_correction/SelfHeatingCorrectionNEE_2_ApplyScalingFactorsTable.ipynb`
 
 ## v0.89.0 | 23 Jul 2025
 
