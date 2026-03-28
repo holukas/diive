@@ -12,6 +12,10 @@ value mapped to colour.  The typical use-case is visualising the output of
 :class:`~diive.pkgs.analyses.gridaggregator.GridAggregator` — e.g. mean NEP
 binned by temperature and VPD.
 
+**Important:** ``HeatmapXYZ`` expects **pre-aggregated input** where each unique
+(x, y) pair appears exactly once. Use :attr:`GridAggregator.df_agg_long` (not
+``df_long`` which contains raw observations) as the source.
+
 Top-level alias: ``dv.heatmapxyz(x, y, z, ...)``
 
 Example::
@@ -21,9 +25,9 @@ Example::
     q = dv.ga(x=df['Tair_f'], y=df['VPD_f'], z=df['NEE_CUT_REF_f'],
               binning_type='quantiles', n_bins=10,
               min_n_vals_per_bin=1, aggfunc='mean')
-    hm = dv.heatmapxyz(x=q.df_long['BIN_Tair_f'],
-                       y=q.df_long['BIN_VPD_f'],
-                       z=q.df_long['NEE_CUT_REF_f_mean'],
+    hm = dv.heatmapxyz(x=q.df_agg_long['BIN_Tair_f'],
+                       y=q.df_agg_long['BIN_VPD_f'],
+                       z=q.df_agg_long['NEE_CUT_REF_f'],
                        show_values=True, show_values_n_dec_places=2)
     hm.show()
 
@@ -39,6 +43,9 @@ from diive.core.plotting.heatmap_base import HeatmapBase
 
 class HeatmapXYZ(HeatmapBase):
     """Heatmap built from three parallel Series: x coordinates, y coordinates, and z values.
+
+    **Important:** Input Series must be **pre-aggregated**, with exactly one value per unique
+    (x, y) coordinate pair. The typical source is :attr:`GridAggregator.df_agg_long`.
 
     The three Series are combined into a long-format DataFrame and pivoted into
     a 2-D grid (y rows × x columns) whose cells are colour-coded by the z value.
@@ -135,11 +142,15 @@ class HeatmapXYZ(HeatmapBase):
     def _prepare_data(self):
         """Pivots the x/y/z Series into a 2-D grid and computes cell boundaries.
 
+        **Expected input:** Three Series with one value per unique (x, y) coordinate pair
+        (i.e., pre-aggregated data from :attr:`GridAggregator.df_agg_long`).
+
         Steps:
 
         1. Combines ``self.x``, ``self.y``, and ``self.z`` into a long-format
            DataFrame and pivots it so that unique x values form columns and
-           unique y values form rows.
+           unique y values form rows.  For pre-aggregated input, this is a
+           no-op reshape that creates the required 2-D grid structure.
         2. Extracts the numeric coordinate arrays and the 2-D value matrix.
         3. Computes cell **boundary** arrays for ``pcolormesh`` (which requires
            boundaries, not centres): the median step size across all unique
@@ -265,13 +276,13 @@ def _example():
         aggfunc='mean'
     )
 
-    # Pivoted dataframe, 2D grid (matrix)
-    df_long = q.df_long
+    # Pre-aggregated dataframe (one row per bin)
+    df_agg = q.df_agg_long
 
     hm = dv.heatmapxyz(
-        x=df_long['BIN_Tair_f_mean'],
-        y=df_long['BIN_VPD_f_mean'],
-        z=df_long['NEP_mean'],
+        x=df_agg['BIN_Tair_f_mean'],
+        y=df_agg['BIN_VPD_f_mean'],
+        z=df_agg['NEP_mean'],
         show_values=True,
         show_values_n_dec_places=2,
         show_values_fontsize=8,

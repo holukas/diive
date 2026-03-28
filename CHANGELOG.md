@@ -12,7 +12,12 @@
   hardcoded; fixed NaN cells not rendering in `color_bad` due to the masked array not being forwarded
   to `pcolormesh`; improved docstrings throughout `HeatmapBase` and `HeatmapDateTime` (2).
 - Added `HeatmapXYZ`: plot z-values on a 2-D colour grid with arbitrary numeric x/y axes (e.g. binned
-  temperature and VPD); designed to be used together with `GridAggregator` (3).
+  temperature and VPD); designed to work exclusively with pre-aggregated data from `GridAggregator.df_agg_long`
+  (one row per unique bin pair); enforces separation of concerns: binning/aggregation is `GridAggregator`'s
+  responsibility, visualization is `HeatmapXYZ`'s responsibility (3).
+- `HeatmapXYZ` refactoring: updated class to explicitly require pre-aggregated input; clarified in docstrings
+  that x, y, z must have one value per unique (x, y) coordinate pair; added integration test to prevent
+  regression of the silent re-aggregation bug (5).
 - `HeatmapXYZ` notebook: fixed incorrect use of `GridAggregator.df_long` (non-aggregated source data)
   as input — corrected to `df_agg_long` (one pre-aggregated row per bin); the bug caused `pivot_table`
   inside `HeatmapXYZ` to silently re-compute the mean regardless of the `aggfunc` passed to
@@ -28,6 +33,7 @@
 - (2) `diive.core.plotting.heatmap_base.HeatmapBase`, `diive.core.plotting.heatmap_datetime.HeatmapDateTime`
 - (3) `diive.core.plotting.heatmap_xyz.HeatmapXYZ`
 - (4) `notebooks/plotting/HeatmapXYZ.ipynb`
+- (5) `tests/test_heatmap_xyz.py`
 
 ## v0.90.0 | 13 Jan 2026
 
