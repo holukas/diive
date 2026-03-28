@@ -1,6 +1,34 @@
 """
-HEATMAP
-=======
+HEATMAP — XYZ variant
+=====================
+
+Contains :class:`HeatmapXYZ`, a heatmap that accepts three parallel Series
+(x, y, z) and pivots them into a 2-D colour grid.
+
+Unlike :class:`~diive.core.plotting.heatmap_datetime.HeatmapDateTime` (which
+reshapes a time series by date and time-of-day), ``HeatmapXYZ`` is fully
+generic: x and y can be any numeric or categorical coordinates, and z is the
+value mapped to colour.  The typical use-case is visualising the output of
+:class:`~diive.pkgs.analyses.gridaggregator.GridAggregator` — e.g. mean NEP
+binned by temperature and VPD.
+
+Top-level alias: ``dv.heatmapxyz(x, y, z, ...)``
+
+Example::
+
+    import diive as dv
+    df = dv.load_exampledata_parquet()
+    q = dv.ga(x=df['Tair_f'], y=df['VPD_f'], z=df['NEE_CUT_REF_f'],
+              binning_type='quantiles', n_bins=10,
+              min_n_vals_per_bin=1, aggfunc='mean')
+    hm = dv.heatmapxyz(x=q.df_long['BIN_Tair_f'],
+                       y=q.df_long['BIN_VPD_f'],
+                       z=q.df_long['NEE_CUT_REF_f_mean'],
+                       show_values=True, show_values_n_dec_places=2)
+    hm.show()
+
+References:
+    https://matplotlib.org/stable/gallery/images_contours_and_fields/pcolormesh_levels.html
 """
 
 import numpy as np
@@ -10,6 +38,22 @@ from diive.core.plotting.heatmap_base import HeatmapBase
 
 
 class HeatmapXYZ(HeatmapBase):
+    """Heatmap built from three parallel Series: x coordinates, y coordinates, and z values.
+
+    The three Series are combined into a long-format DataFrame and pivoted into
+    a 2-D grid (y rows × x columns) whose cells are colour-coded by the z value.
+    Cell boundaries are computed automatically from the coordinate spacing so
+    that ``pcolormesh`` renders each cell at the correct position.
+
+    Top-level alias: ``dv.heatmapxyz(x, y, z, ...)``
+
+    Example::
+
+        import diive as dv
+        hm = dv.heatmapxyz(x=series_x, y=series_y, z=series_z,
+                           show_values=True, show_values_n_dec_places=1)
+        hm.show()
+    """
 
     def __init__(self,
                  x: pd.Series,
@@ -23,37 +67,62 @@ class HeatmapXYZ(HeatmapBase):
                  ytickpos: list = None,
                  yticklabels: list = None,
                  **kwargs):
-        """
-        Initializes the HeatmapXYZ class for plotting heatmaps from X, Y, and Z Series data.
-
-        This class extends HeatmapBase to create a heatmap where the x-axis, y-axis,
-        and color values (z) are derived directly from input pandas Series. It pivots
-        the data to create the 2D grid for the heatmap.
+        """Creates the heatmap object and prepares the data grid.
 
         Args:
-            x: A pandas Series representing the x-coordinates (columns in the pivoted data).
-               Its name will be used as the x-axis label if `xlabel` is None.
-            y: A pandas Series representing the y-coordinates (index in the pivoted data).
-               Its name will be used as the y-axis label if `ylabel` is None.
-            z: A pandas Series representing the values (colors) for the heatmap cells.
-               Its name will be used as the colorbar label if `zlabel` is None.
-            xlabel: Optional string for the x-axis label. If None, `x.name` is used.
-            ylabel: Optional string for the y-axis label. If None, `y.name` is used.
-            zlabel: Optional string for the colorbar label. If None, `z.name` is used.
-            xtickpos: Optional list of x-axis tick positions.
-            xticklabels: Optional list of x-axis tick labels, corresponding to `xtickpos`.
-            ytickpos: Optional list of y-axis tick positions.
-            yticklabels: Optional list of y-axis tick labels, corresponding to `ytickpos`.
-            **kwargs: Additional keyword arguments passed to the `HeatmapBase` constructor.
+            x: Series of x-coordinates (becomes the column axis after pivoting).
+               Must have a non-``None`` name that is unique across x, y, and z.
+               The name is used as the x-axis label when ``xlabel`` is *None*.
+            y: Series of y-coordinates (becomes the row axis after pivoting).
+               Same naming requirements as ``x``.
+            z: Series of cell values mapped to colour.
+               Same naming requirements as ``x``.
+            xlabel: x-axis label.  When *None* ``x.name`` is used.
+            ylabel: y-axis label.  When *None* ``y.name`` is used.
+            zlabel: Colorbar label.  When *None* ``z.name`` is used.
+            xtickpos: Explicit x-axis tick positions.  *None* = auto.
+            xticklabels: Tick labels matching ``xtickpos``.  Ignored when
+                         ``xtickpos`` is *None*.
+            ytickpos: Explicit y-axis tick positions.  *None* = auto.
+            yticklabels: Tick labels matching ``ytickpos``.  Ignored when
+                         ``ytickpos`` is *None*.
+            **kwargs: All keyword arguments accepted by
+                      :class:`~diive.core.plotting.heatmap_base.HeatmapBase`,
+                      e.g. ``figsize``, ``cmap``, ``vmin``/``vmax``,
+                      ``show_values``, ``verbose``.
+
+        Raises:
+            ValueError: If x, y, or z has a ``None`` name.
+            ValueError: If x, y, and z do not all have distinct names.
+            ValueError: If x, y, and z do not have the same length.
         """
+        # Validate Series names before anything else so errors are clear
+        if x.name is None or y.name is None or z.name is None:
+            raise ValueError(
+                "x, y, and z Series must all have a non-None name. "
+                f"Got: x.name={x.name!r}, y.name={y.name!r}, z.name={z.name!r}."
+            )
+        if len({x.name, y.name, z.name}) < 3:
+            raise ValueError(
+                "x, y, and z Series must all have unique names. "
+                f"Got: x.name={x.name!r}, y.name={y.name!r}, z.name={z.name!r}."
+            )
+        if not (len(x) == len(y) == len(z)):
+            raise ValueError(
+                f"x, y, and z must have the same length "
+                f"(got {len(x)}, {len(y)}, {len(z)})."
+            )
+
         super().__init__(heatmaptype='xyz', **kwargs)
         self.x = x
         self.y = y
         self.z = z
 
-        self.xlabel = self.x.name if not xlabel else xlabel
-        self.ylabel = self.y.name if not ylabel else ylabel
-        self.zlabel = self.z.name if not zlabel else zlabel
+        # Use is None so that an explicit empty string is honoured
+        self.xlabel = x.name if xlabel is None else xlabel
+        self.ylabel = y.name if ylabel is None else ylabel
+        self.zlabel = z.name if zlabel is None else zlabel
+
         self.xtickpos = xtickpos
         self.xticklabels = xticklabels
         self.ytickpos = ytickpos
@@ -64,36 +133,43 @@ class HeatmapXYZ(HeatmapBase):
         self._prepare_data()
 
     def _prepare_data(self):
-        """
-        Prepare input x, y, and z Series into a pivoted DataFrame
-        suitable for heatmap plotting.
+        """Pivots the x/y/z Series into a 2-D grid and computes cell boundaries.
 
-        Creates a DataFrame from the three input Series,
-        then pivots it to form a 2D grid. Calculates the cell
-        edges for `pcolormesh` to ensure proper rendering with 'flat' shading.
-        The processed x, y, and z arrays are stored as instance variables.
-        """
+        Steps:
 
+        1. Combines ``self.x``, ``self.y``, and ``self.z`` into a long-format
+           DataFrame and pivots it so that unique x values form columns and
+           unique y values form rows.
+        2. Extracts the numeric coordinate arrays and the 2-D value matrix.
+        3. Computes cell **boundary** arrays for ``pcolormesh`` (which requires
+           boundaries, not centres): the median step size across all unique
+           coordinates is used to append one extra boundary beyond the last
+           data point.  A fallback of ``1.0`` is used when only a single unique
+           coordinate value is present.
+
+        After this method ``self.x``, ``self.y``, and ``self.z`` are replaced
+        with numpy arrays suitable for ``plot_pcolormesh``.
+        """
         data = {
             self.x.name: self.x,
             self.y.name: self.y,
-            self.z.name: self.z
+            self.z.name: self.z,
         }
         df = pd.DataFrame.from_dict(data, orient='columns')
-
         pivot_df = pd.pivot_table(df, index=self.y.name, columns=self.x.name, values=self.z.name)
 
-        # Extract x, y, and z values for pcolormesh
         x_coords = pivot_df.columns.values
         y_coords = pivot_df.index.values
         z_values = pivot_df.values
 
-        # For pcolormesh, it's generally better to define the *edges* of the cells
-        # rather than their centers. Needed for 'shading=flat'
-        dx = np.diff(x_coords)[-1]
-        dy = np.diff(y_coords)[-1]
+        # Compute cell step using the median diff so non-uniform grids are
+        # handled gracefully.  Fall back to 1.0 when only one unique value exists.
+        x_diffs = np.diff(x_coords)
+        dx = float(np.median(x_diffs)) if len(x_diffs) > 0 else 1.0
+        y_diffs = np.diff(y_coords)
+        dy = float(np.median(y_diffs)) if len(y_diffs) > 0 else 1.0
 
-        # Create cell boundaries for x and y
+        # Extend boundary arrays by one step beyond the last data point
         x_edges = np.append(x_coords, x_coords[-1] + dx)
         y_edges = np.append(y_coords, y_coords[-1] + dy)
 
@@ -102,25 +178,33 @@ class HeatmapXYZ(HeatmapBase):
         self.z = z_values
 
     def plot(self):
-        """
-        Generate HeatmapXYZ plot.
+        """Renders the heatmap and applies axis formatting.
 
-        This method orchestrates the plotting process by calling `plot_pcolormesh`,
-        optionally displaying values on the heatmap, and applying axis formatting
-        including custom tick positions and labels if provided.
+        Steps:
+
+        1. Calls :meth:`~diive.core.plotting.heatmap_base.HeatmapBase.plot_pcolormesh`
+           with ``shading='flat'`` to fill each cell with the colour of its
+           lower-left boundary value.
+        2. If ``show_values=True``, overlays each cell with its numeric z-value
+           via :meth:`~diive.core.plotting.heatmap_base.HeatmapBase.show_vals_in_plot`.
+        3. Applies custom tick positions and labels on x and/or y when
+           ``xtickpos`` / ``ytickpos`` were provided.
+        4. Calls :meth:`~diive.core.plotting.heatmap_base.HeatmapBase.format` to
+           attach the colorbar, set axis labels, and style the spines.
         """
         self.p = self.plot_pcolormesh(shading='flat')
 
         if self.show_values:
             self.show_vals_in_plot()
 
-        if self.xtickpos:
+        # Use is not None so an explicitly passed empty list is also honoured
+        if self.xtickpos is not None:
             self.ax.set_xticks(self.xtickpos)
-            if self.xticklabels:
+            if self.xticklabels is not None:
                 self.ax.set_xticklabels(self.xticklabels)
-        if self.ytickpos:
+        if self.ytickpos is not None:
             self.ax.set_yticks(self.ytickpos)
-            if self.yticklabels:
+            if self.yticklabels is not None:
                 self.ax.set_yticklabels(self.yticklabels)
 
         self.format(
@@ -137,32 +221,20 @@ def _example():
     nee_col = 'NEE_CUT_REF_f'
     nep_col = 'NEP'
     ta_col = 'Tair_f'
-    # nee_orig = 'NEE_CUT_REF_orig'
-    # gpp_dt_col = 'GPP_DT_CUT_REF'
-    # reco_dt_col = 'Reco_DT_CUT_REF'
-    # gpp_nt_col = 'GPP_CUT_REF_f'
-    # reco_nt_col = 'Reco_CUT_REF'
-    # ratio_dt_gpp_reco = 'RATIO_DT_GPP_RECO'
-    # rh_col = 'RH'
-    # swin_col = 'Rg_f'
 
     # Load data, using parquet for fast loading
     df_orig = dv.load_exampledata_parquet()
-    # df_orig = df_orig.loc[df_orig.index.year >= 2019].copy()
 
     # Data between May and Sep
     df_orig = df_orig.loc[(df_orig.index.month >= 5) & (df_orig.index.month <= 9)].copy()
 
     # Subset
     df = df_orig[[nee_col, vpd_col, ta_col]].copy()
-    # df[ratio_dt_gpp_reco] = df[gpp_dt_col].divide(df[reco_dt_col])
 
     # Convert units
     df[vpd_col] = df[vpd_col].multiply(0.1)  # hPa --> kPa
     df[nee_col] = df[nee_col].multiply(0.0792171)  # umol CO2 m-2 s-1 --> g CO2 m-2 30min-1
     df[nep_col] = df[nee_col].multiply(-1)  # Convert NEE to NEP, net uptake is now positive
-    # df[gpp_dt_col] = df[gpp_dt_col].multiply(0.0792171)  # umol CO2 m-2 s-1 --> g CO2 m-2 30min-1
-    # df[reco_dt_col] = df[reco_dt_col].multiply(0.0792171)  # umol CO2 m-2 s-1 --> g CO2 m-2 30min-1
 
     xcol = ta_col
     ycol = vpd_col
@@ -203,24 +275,9 @@ def _example():
         show_values=True,
         show_values_n_dec_places=2,
         show_values_fontsize=8,
-        # x=df[x],
-        # y=df[y],
-        # z=df[z],
-        # xtickpos=[0, 25, 50, 75],
-        # ytickpos=[0, 25, 50, 75],
-        # xticklabels=['0-25', '25-50', '50-75', '75-100'],
         cb_digits_after_comma=0
     )
-    hm.show(
-        # cb_digits_after_comma=0,
-        # tickpos=[10, 50, 90],
-        # tickpos=[16, 25, 50, 75, 84],
-        # ticklabels=['10', '50', '90']
-        # ticklabels=['16', '25', '50', '75', '84']
-        # xlabel=r'Percentile of daily maximum TA ($\mathrm{°C}$)',
-        # ylabel=r'Percentile of daily maximum VPD ($\mathrm{kPa}$)',
-        # zlabel=r'Net ecosystem productivity ($\mathrm{gCO_{2}\ m^{-2}\ d^{-1}}$)'
-    )
+    hm.show()
 
 
 if __name__ == '__main__':

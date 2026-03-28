@@ -11,11 +11,23 @@
   being silently ignored; made time-axis tick interval adaptive to the data frequency instead of
   hardcoded; fixed NaN cells not rendering in `color_bad` due to the masked array not being forwarded
   to `pcolormesh`; improved docstrings throughout `HeatmapBase` and `HeatmapDateTime` (2).
+- Added `HeatmapXYZ`: plot z-values on a 2-D colour grid with arbitrary numeric x/y axes (e.g. binned
+  temperature and VPD); designed to be used together with `GridAggregator` (3).
+- `HeatmapXYZ` notebook: fixed incorrect use of `GridAggregator.df_long` (non-aggregated source data)
+  as input — corrected to `df_agg_long` (one pre-aggregated row per bin); the bug caused `pivot_table`
+  inside `HeatmapXYZ` to silently re-compute the mean regardless of the `aggfunc` passed to
+  `GridAggregator`, so mean and std panels appeared identical (4).
+- Notebooks: reorganised the `notebooks/` directory from 17 topic folders into 9 domain folders that
+  mirror the scientific workflow (`io/`, `timeseries/`, `variables/`, `qc/`, `analyses/`,
+  `gapfilling/`, `flux/`, `plotting/`, `workbench/`); updated all relative links in `OVERVIEW.ipynb`
+  and all GitHub links in `README.md` accordingly.
 
 ###
 
 - (1) `diive.pkgs.testing.create_noisy_time_series`
 - (2) `diive.core.plotting.heatmap_base.HeatmapBase`, `diive.core.plotting.heatmap_datetime.HeatmapDateTime`
+- (3) `diive.core.plotting.heatmap_xyz.HeatmapXYZ`
+- (4) `notebooks/plotting/HeatmapXYZ.ipynb`
 
 ## v0.90.0 | 13 Jan 2026
 

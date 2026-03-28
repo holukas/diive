@@ -81,34 +81,34 @@ diive/
 
 - **Daily correlation**: calculate daily correlation between two time
   series · func:
-  `daily_correlation()` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/DailyCorrelation.ipynb))
+  `daily_correlation()` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/analyses/DailyCorrelation.ipynb))
 - **Decoupling**: Investigate binned aggregates (median) of a variable z in binned classes of x and
-  y ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/DecouplingSortingBins.ipynb))
+  y ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/analyses/DecouplingSortingBins.ipynb))
 - **Data gaps identification** · class:
-  `GapFinder` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/GapFinder.ipynb))
+  `GapFinder` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/analyses/GapFinder.ipynb))
 - **Grid aggregator**: calculate z-aggregates in bins (classes) of x and
   y · class:
-  `GridAggregator` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/GridAggregator.ipynb))
+  `GridAggregator` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/analyses/GridAggregator.ipynb))
 - **Histogram calculation**: calculate histogram from
-  Series ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/Histogram.ipynb))
+  Series ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/analyses/Histogram.ipynb))
 - **Optimum range**: find x range for optimum y
 - **Percentiles**: Calculate percentiles 0-100 for
-  series ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/Percentiles.ipynb))
+  series ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/analyses/Percentiles.ipynb))
 
 ### Corrections
 
 - **Offset correction for measurement**: correct measurement by offset in comparison to
   replicate · class:
-  `OffsetCorrection` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Corrections/MeasurementOffset.ipynb))
+  `OffsetCorrection` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/MeasurementOffset.ipynb))
 - **Offset correction radiation**: correct nighttime offset of radiation data and set nighttime to zero
 - **Offset correction relative humidity**: correct RH values > 100%
 - **Offset correction wind direction**: correct wind directions by offset, calculated based on reference time
   period · class:
-  `WindDirectionOffset` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Corrections/WindDirectionOffset.ipynb))
+  `WindDirectionOffset` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/WindDirectionOffset.ipynb))
 - **Set to threshold**: set values above or below a threshold value to threshold value · class: `SetToThreshold`
 - **Set exact values to missing**: set exact values to missing
   records · class:
-  `SetToMissing` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Corrections/SetExactValuesToMissing.ipynb))
+  `SetToMissing` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/SetExactValuesToMissing.ipynb))
 
 ### Create variable
 
@@ -116,18 +116,18 @@ _Functions to create various variables._
 
 - **Time since**: calculate time since last occurrence, e.g. since last
   precipitation · class:
-  `TimeSince` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/CalculateVariable/TimeSince.ipynb))
+  `TimeSince` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/variables/TimeSince.ipynb))
 - **Daytime/nighttime flag**: calculate daytime flag, nighttime flag and potential radiation from latitude and
   longitude · class:
-  `DaytimeNighttimeFlag` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/CalculateVariable/Daytime_and_nighttime_flag.ipynb))
+  `DaytimeNighttimeFlag` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/variables/Daytime_and_nighttime_flag.ipynb))
 - **Vapor pressure deficit**: calculate VPD from air temperature and
   RH · func:
-  `calc_vpd_from_ta_rh()` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/CalculateVariable/Calculate_VPD_from_TA_and_RH.ipynb))
+  `calc_vpd_from_ta_rh()` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/variables/Calculate_VPD_from_TA_and_RH.ipynb))
 - **Calculate ET from LE**: calculate evapotranspiration from latent heat
   flux · func:
-  `et_from_le()` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/CalculateVariable/Calculate_ET_from_LE.ipynb))
+  `et_from_le()` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/variables/Calculate_ET_from_LE.ipynb))
 - **Calculate air temperature from sonic anemometer temperature** · func:
-  `air_temp_from_sonic_temp()` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/CalculateVariable/Calculate_air_temp_from_sonic_temp.ipynb))
+  `air_temp_from_sonic_temp()` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/variables/Calculate_air_temp_from_sonic_temp.ipynb))
 
 ### Eddy covariance high-resolution
 
@@ -146,25 +146,25 @@ _Input/output functions._
   `FileSplitter`
 - **Read single data files**: read file using
   parameters · class:
-  `DataFileReader` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/ReadFiles/Read_single_EddyPro_fluxnet_output_file_with_DataFileReader.ipynb))
+  `DataFileReader` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/io/Read_single_EddyPro_fluxnet_output_file_with_DataFileReader.ipynb))
 - **Read single data files**: read file using pre-defined
   filetypes · class:
-  `ReadFileType` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/ReadFiles/Read_single_EddyPro_fluxnet_output_file_with_ReadFileType.ipynb))
+  `ReadFileType` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/io/Read_single_EddyPro_fluxnet_output_file_with_ReadFileType.ipynb))
 - **Read multiple data files**: read files using pre-defined
   filetype · class:
-  `MultiDataFileReader` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/ReadFiles/Read_multiple_EddyPro_fluxnet_output_files_with_MultiDataFileReader.ipynb))
+  `MultiDataFileReader` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/io/Read_multiple_EddyPro_fluxnet_output_files_with_MultiDataFileReader.ipynb))
 
 ### Fits
 
 - **Bin fitter** · class:
-  `BinFitterCP` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Fits/BinFitterCP.ipynb))
+  `BinFitterCP` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/analyses/BinFitterCP.ipynb))
 
 ### Flux
 
 _Function specifically for eddy covariance flux data._
 
 - **Flux processing chain** · class:
-  `FluxProcessingChain` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/FluxProcessingChain/FluxProcessingChain.ipynb))
+  `FluxProcessingChain` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/flux/FluxProcessingChain.ipynb))
     - The notebook example shows the application of:
         - _Post-processing of eddy covariance flux data._
         - Level-2 quality flags
@@ -175,16 +175,16 @@ _Function specifically for eddy covariance flux data._
         - _For info about the Swiss FluxNet flux levels,
           see [here](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/)._
 - **Quick flux processing chain
-  ** ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/FluxProcessingChain/QuickFluxProcessingChain.ipynb))
+  ** ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/flux/QuickFluxProcessingChain.ipynb))
 - **Flux detection limit**: calculate flux detection limit from high-resolution eddy covariance
   data · class:
-  `FluxDetectionLimit` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/CalculateVariable/FluxDetectionLimit/FluxDetectionLimit.ipynb))
+  `FluxDetectionLimit` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/flux/FluxDetectionLimit/FluxDetectionLimit.ipynb))
 - **Self-heating correction for open-path IRGA NEE fluxes**:
     - create scaling factors table and apply to correct open-path NEE fluxes during a time period of parallel
-      measurements ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/FluxProcessingChain/self-heating_correction/SelfHeatingCorrectionNEE_1_CreateScalingFactorsTable.ipynb))
+      measurements ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/flux/self-heating_correction/SelfHeatingCorrectionNEE_1_CreateScalingFactorsTable.ipynb))
     - apply previously created scaling factors table to long-term open-path NEE flux data, outside the time period of
       parallel
-      measurements ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/FluxProcessingChain/self-heating_correction/SelfHeatingCorrectionNEE_2_ApplyScalingFactorsTable.ipynb))
+      measurements ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/flux/self-heating_correction/SelfHeatingCorrectionNEE_2_ApplyScalingFactorsTable.ipynb))
 - **USTAR threshold scenarios**: display data availability under different USTAR threshold scenarios
 
 ### Formats
@@ -193,27 +193,27 @@ _Format data to specific formats._
 
 - **Format**: convert EddyPro fluxnet output files for upload to FLUXNET
   database · class:
-  `FormatEddyProFluxnetFileForUpload` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Formats/FormatEddyProFluxnetFileForUpload.ipynb))
+  `FormatEddyProFluxnetFileForUpload` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/io/FormatEddyProFluxnetFileForUpload.ipynb))
 - **Parquet files**: load and save parquet
   files · funcs: `load_parquet()`,
-  `save_parquet()` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Formats/LoadSaveParquetFile.ipynb))
+  `save_parquet()` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/io/LoadSaveParquetFile.ipynb))
 
 ### Gap-filling
 
 _Fill gaps in time series with various methods._
 
 - **XGBoostTS** · class:
-  `XGBoostTS` ([notebook example (minimal)](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/XGBoostGapFillingMinimal.ipynb), [notebook example (more extensive)](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/XGBoostGapFillingExtensive.ipynb))
+  `XGBoostTS` ([notebook example (minimal)](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/XGBoostGapFillingMinimal.ipynb), [notebook example (more extensive)](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/XGBoostGapFillingExtensive.ipynb))
 - **RandomForestTS** · class:
-  `RandomForestTS` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/RandomForestGapFilling.ipynb))
+  `RandomForestTS` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/RandomForestGapFilling.ipynb))
 - **Long-term gap-filling using RandomForestTS** · class:
-  `LongTermGapFillingBase` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/LongTermRandomForestGapFilling.ipynb))
+  `LongTermGapFillingBase` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/LongTermRandomForestGapFilling.ipynb))
 - **Linear interpolation** · func:
-  `linear_interpolation()` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/LinearInterpolation.ipynb))
+  `linear_interpolation()` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/LinearInterpolation.ipynb))
 - **Quick random forest gap-filling** · class:
-  `QuickFillRFTS` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/QuickRandomForestGapFilling.ipynb))
+  `QuickFillRFTS` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/QuickRandomForestGapFilling.ipynb))
 - **MDS gap-filling of ecosystem fluxes** · class:
-  `FluxMDS` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/GapFilling/FluxMDSGapFilling.ipynb)),
+  `FluxMDS` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/FluxMDSGapFilling.ipynb)),
   approach by [Reichstein et al., 2005](https://onlinelibrary.wiley.com/doi/10.1111/j.1365-2486.2005.001002.x)
 
 ### Outlier Detection
@@ -228,83 +228,85 @@ _Create single outlier flags where `0=OK` and `2=outlier`._
 
 - **Absolute limits**: define absolute
   limits · class:
-  `AbsoluteLimits` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/AbsoluteLimits.ipynb))
+  `AbsoluteLimits` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/AbsoluteLimits.ipynb))
 - **Absolute limits daytime/nighttime**: define absolute limits separately for daytime and nighttime
   data · class:
-  `AbsoluteLimitsDaytimeNighttime` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/AbsoluteLimitsDaytimeNighttime.ipynb))
+  `AbsoluteLimitsDaytimeNighttime` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/AbsoluteLimitsDaytimeNighttime.ipynb))
 - **Hampel filter daytime/nighttime**, separately for daytime and nighttime
   data · class:
-  `HampelDaytimeNighttime` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/HampelDaytimeNighttime.ipynb))
+  `HampelDaytimeNighttime` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/HampelDaytimeNighttime.ipynb))
 - **Local standard deviation**: Identify outliers based on the local standard deviation from a running
-  median ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/LocalSD.ipynb))
+  median ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/LocalSD.ipynb))
 - **Local outlier factor**: Identify outliers based on local outlier factor, across all
   data · class:
-  `LocalOutlierFactorAllData` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/LocalSD.ipynb))
+  `LocalOutlierFactorAllData` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/LocalOutlierFactorAllData.ipynb))
 - **Local outlier factor daytime/nighttime**: Identify outliers based on local outlier factor, daytime nighttime
-  separately ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/LocalOutlierFactorDaytimeNighttime.ipynb))
+  separately ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/LocalOutlierFactorDaytimeNighttime.ipynb))
 - **Manual removal**: Remove time periods (from-to) or single records from time
-  series ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/ManualRemoval.ipynb))
+  series ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/ManualRemoval.ipynb))
 - **Missing values**: Simply creates a flag that indicated available and missing data in a time
   series · class:
-  `MissingValues` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/MissingValues.ipynb))
+  `MissingValues` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/MissingValues.ipynb))
 - **Trimming**: Remove values below threshold and remove an equal amount of records from high end of
-  data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/TrimLow.ipynb))
+  data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/TrimLow.ipynb))
 - **z-score**: Identify outliers based on the z-score across all time series
   data · class:
-  `zScore` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/zScore.ipynb))
+  `zScore` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/zScore.ipynb))
 - **z-score increments daytime/nighttime**: Identify outliers based on the z-score of double
-  increments ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/zScoreIncremental.ipynb))
+  increments ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/zScoreIncremental.ipynb))
 - **z-score daytime/nighttime**: Identify outliers based on the z-score, separately for daytime and
   nighttime · class:
-  `zScoreDaytimeNighttime` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/zScoreDaytimeNighttime.ipynb))
+  `zScoreDaytimeNighttime` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/zScoreDaytimeNighttime.ipynb))
 - **z-score rolling**: Identify outliers based on the rolling
-  z-score ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/OutlierDetection/zScoreRolling.ipynb))
+  z-score ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/zScoreRolling.ipynb))
 
 ### Plotting
 
 - **Cumulatives across all years for multiple variables** · class:
-  `Cumulative` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/Cumulative.ipynb))
+  `Cumulative` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/Cumulative.ipynb))
 - **Cumulatives per year** · class:
-  `CumulativeYear` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/CumulativesPerYear.ipynb))
+  `CumulativeYear` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/CumulativesPerYear.ipynb))
 - **Diel cycle per month** · class:
-  `DielCycle` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/DielCycle.ipynb))
+  `DielCycle` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/DielCycle.ipynb))
 - **Heatmap date/time**: showing values (z) of time series as date (y) vs time (
   x) · class:
-  `HeatmapDateTime` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/HeatmapDateTime.ipynb))
+  `HeatmapDateTime` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/HeatmapDateTime.ipynb))
 - **Heatmap year/month**: plot monthly ranks across
   years · class:
-  `HeatmapYearMonth` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/HeatmapYearMonthRank.ipynb))
+  `HeatmapYearMonth` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/HeatmapYearMonth.ipynb))
+- **Heatmap XYZ**: show z-values in bins of x and y — pairs naturally with `GridAggregator` · class:
+  `HeatmapXYZ` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/HeatmapXYZ.ipynb))
 - **Histogram**: includes options to show z-score limits and to highlight the peak distribution
   bin · class:
-  `HistogramPlot` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/Histogram.ipynb))
+  `HistogramPlot` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/Histogram.ipynb))
 - **Long-term anomalies**: calculate and plot long-term anomaly for a variable, per year, compared to a reference
   period · class:
-  `LongtermAnomaliesYear` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/LongTermAnomalies.ipynb))
+  `LongtermAnomaliesYear` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/LongTermAnomalies.ipynb))
 - **Ridgeline plot**: looks a bit like a
   landscape · class:
-  `RidgeLinePlot` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/ridgeline.ipynb))
+  `RidgeLinePlot` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/RidgeLine.ipynb))
 - **Time series plot**: Simple (interactive) time series
   plot · class:
-  `TimeSeries` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/TimeSeries.ipynb))
+  `TimeSeries` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/TimeSeries.ipynb))
 - **ScatterXY plot** · class:
-  `ScatterXY` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Plotting/ScatterXY.ipynb))
+  `ScatterXY` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/ScatterXY.ipynb))
 - Various classes to generate heatmaps, bar plots, time series plots and scatter plots, among others
 
 ### Quality control
 
 - **Stepwise MeteoScreening from database** · class:
-  `StepwiseMeteoScreeningDb` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/MeteoScreening/StepwiseMeteoScreeningFromDatabase.ipynb))
+  `StepwiseMeteoScreeningDb` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/StepwiseMeteoScreeningFromDatabase.ipynb))
 
 ### Resampling
 
 - **Diel cycle**: calculate diel cycle per
   month · func:
-  `diel_cycle()` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Resampling/ResamplingDielCycle.ipynb))
+  `diel_cycle()` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/timeseries/ResamplingDielCycle.ipynb))
 
 ### Stats
 
 - **Time series stats** · func:
-  `sstats()` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Stats/TimeSeriesStats.ipynb))
+  `sstats()` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/timeseries/TimeSeriesStats.ipynb))
 
 ### Timestamps
 
@@ -312,12 +314,12 @@ _Create single outlier flags where `0=OK` and `2=outlier`._
   func: `continuous_timestamp_freq()`
 - **Time resolution**: detect time resolution from
   data · class:
-  `DetectFrequency` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/TimeStamps/Detect_time_resolution.ipynb))
+  `DetectFrequency` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/timeseries/Detect_time_resolution.ipynb))
 - **Timestamps**: create and insert additional timestamps in various formats · class: `TimestampSanitizer`
 - **Vectorize timestamps**: add date attributes as columns to dataframe, including sine/cosine variants fpr cyclical
   variables (e.g., day of
   year) · func:
-  `vectorize_timestamps()` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/TimeFunctions/VectorizeTimestamps.ipynb))
+  `vectorize_timestamps()` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/timeseries/VectorizeTimestamps.ipynb))
 
 ## Installation
 
