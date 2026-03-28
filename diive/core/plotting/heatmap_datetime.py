@@ -1,18 +1,28 @@
 """
-HEATMAP
-=======
+HEATMAP — Date/Time and Year/Month variants
+============================================
 
-Kudos:
-    - https://matplotlib.org/3.1.1/gallery/images_contours_and_fields/
-    pcolormesh_levels.html#sphx-glr-gallery-images-contours-and-fields-pcolormesh-levels-py
+Contains two public heatmap classes built on :class:`~diive.core.plotting.heatmap_base.HeatmapBase`:
 
+- :class:`HeatmapDateTime` — plots a time series as a 2-D grid of *date × time-of-day*
+  (or the transposed *time-of-day × date* in horizontal orientation).  The time axis
+  is stored as float hours (0–24) so that ``pcolormesh`` can handle it natively.
+
+- :class:`HeatmapYearMonth` — aggregates a time series to monthly resolution and
+  plots it as a *year × month* (or *month × year*) grid.  Supports arbitrary
+  aggregation functions and optional rank transformation.
+
+Both classes are exposed as top-level convenience aliases in the ``diive``
+namespace (``dv.heatmapdatetime`` and ``dv.heatmapyearmonth``).
+
+References:
+    https://matplotlib.org/stable/gallery/images_contours_and_fields/pcolormesh_levels.html
 """
 import datetime
 
 import numpy as np
 import pandas as pd
 from pandas import Series
-from pandas.plotting import register_matplotlib_converters
 
 import diive as dv
 from diive.core.plotting.heatmap_base import HeatmapBase
@@ -20,28 +30,50 @@ from diive.core.plotting.plotfuncs import nice_date_ticks
 
 
 class HeatmapDateTime(HeatmapBase):
-    """
-    A class for plotting heatmaps of time series data with date on the y-axis
-    and time on the x-axis, or vice-versa, depending on orientation.
+    """Heatmap of a time series arranged as a date × time-of-day grid.
 
-    This class extends HeatmapBase to specifically handle time series data,
-    transforming it into a format suitable for a 2D heatmap where one
-    dimension represents dates and the other represents times of day.
+    The series is pivoted so that every unique date forms one row and every
+    unique time-of-day forms one column (or the transpose in ``'horizontal'``
+    orientation).  Each cell color represents the measured value at that
+    date/time combination; NaN cells are filled with ``color_bad``.
+
+    The time-of-day axis is stored internally as **float hours** (e.g.
+    ``0.5`` for 00:30, ``6.0`` for 06:00) because ``pcolormesh`` requires
+    numeric coordinates.
+
+    Top-level alias: ``dv.heatmapdatetime(series, ...)``
+
+    Example::
+
+        import diive as dv
+        df = dv.load_exampledata_parquet()
+        hm = dv.heatmapdatetime(series=df['Tair_f'], zlabel='°C', figsize=(6, 9))
+        hm.show()
     """
 
     def __init__(self,
                  series: Series,
                  **kwargs):
-        """Initializes the HeatmapDateTime object.
+        """Creates the heatmap object and prepares the data grid.
+
+        The ``heatmaptype`` parameter (used internally for cell-centering in
+        :meth:`~diive.core.plotting.heatmap_base.HeatmapBase.show_vals_in_plot`)
+        is set automatically to ``'datetime'`` or ``'datetime_horizontal'``
+        based on ``ax_orientation`` and must not be passed in ``**kwargs``.
 
         Args:
-            series: A pandas Series with a datetime-like index, representing
-                    the time series data to be plotted.
-            **kwargs: Arbitrary keyword arguments passed to the HeatmapBase
-                      constructor. These can include plotting parameters like
-                      `ax_orientation`, `minticks`, `maxticks`, etc.
+            series: Pandas Series with a ``DatetimeIndex`` (or compatible
+                    datetime-like index following diive's timestamp naming
+                    convention).  Any temporal resolution is supported; the
+                    series will be sanitized and regularised automatically.
+            **kwargs: All keyword arguments accepted by
+                      :class:`~diive.core.plotting.heatmap_base.HeatmapBase`,
+                      e.g. ``figsize``, ``ax_orientation``, ``cmap``,
+                      ``vmin``/``vmax``, ``zlabel``, ``verbose``.
         """
-        super().__init__(**kwargs)
+        _orientation = kwargs.get('ax_orientation', 'vertical')
+        _heatmaptype = 'datetime' if _orientation == 'vertical' else 'datetime_horizontal'
+        super().__init__(heatmaptype=_heatmaptype, **kwargs)
         self.series = series.copy()
         self._prepare_data()
 
@@ -51,17 +83,13 @@ class HeatmapDateTime(HeatmapBase):
         This method performs several steps:
         1. Ensures the time series has a name, defaulting to "data" if none exists.
         2. Sets up the series index as a proper timestamp using `_setup_timestamp`.
-        3. Registers Matplotlib converters for datetime objects to ensure correct plotting.
-        4. Transforms the series into a pandas DataFrame, extracting date and time components.
-        5. Pivots the DataFrame to create the grid for the heatmap, with 'DATE' or 'TIME'
+        3. Transforms the series into a pandas DataFrame, extracting date and time components.
+        4. Pivots the DataFrame to create the grid for the heatmap, with 'DATE' or 'TIME'
            as the index and the other as columns, based on `self.ax_orientation`.
-        6. Calls `_set_bounds` to extend the x and y data for proper heatmap cell rendering.
+        5. Calls `_set_bounds` to extend the x and y data for proper heatmap cell rendering.
         """
         self.series.name = self.series.name if self.series.name else "data"  # Time series must have a name
         self.series = self._setup_timestamp(series=self.series)
-
-        # Needed for time plotting
-        register_matplotlib_converters()
 
         # Data for plotting
         self.plotdf = pd.DataFrame(self.series)
@@ -77,62 +105,92 @@ class HeatmapDateTime(HeatmapBase):
         # Extend
         self.x, self.y, self.z = self._set_bounds()
 
+    @staticmethod
+    def _time_to_hours(time_values) -> np.ndarray:
+        """Converts an array of ``datetime.time`` objects to float hours since midnight.
+
+        ``pcolormesh`` requires numeric coordinates; ``datetime.time`` objects are not
+        natively supported by matplotlib's unit converters.  Converting to float hours
+        (e.g. 00:30 → 0.5, 06:00 → 6.0) gives a clean numeric axis while preserving
+        the intuitive hourly scale for tick labels.
+
+        Args:
+            time_values: Array-like of ``datetime.time`` objects.
+
+        Returns:
+            np.ndarray: Float array of hours since midnight.
+        """
+        return np.array([t.hour + t.minute / 60 + t.second / 3600 for t in time_values])
+
     def _set_bounds(self):
         """Extends the x and y data arrays for accurate heatmap plotting.
 
-        In a `pcolormesh` plot, `x` and `y` represent the boundaries of the cells,
-        while `z` contains the values *inside* those cells. To ensure that the
-        last row/column of data is fully visible and correctly bounded, this
-        method extends the `x` and `y` arrays by adding one extra boundary point
-        beyond the last data point.
+        In a ``pcolormesh`` plot ``x`` and ``y`` represent the **boundaries** of the
+        cells while ``z`` contains the values *inside* those cells.  To ensure the
+        last row/column of data is fully visible an extra boundary point is added
+        beyond the last data point by repeating the uniform step size.
 
-        The extension is either by one day (for date axes) or by setting the time
-        to 23:59 (for time axes), depending on the `ax_orientation`.
+        The time axis (``datetime.time``) is converted to float hours so that
+        matplotlib can handle the numeric coordinates natively.  The date axis
+        (``datetime.date``) is left as-is; matplotlib's date converter handles it.
 
         Returns:
-            tuple: A tuple containing the extended x, y, and z data arrays,
-                   ready for `pcolormesh` plotting.
+            tuple: Extended ``(x, y, z)`` arrays ready for ``pcolormesh``.
         """
         x = self.plotdf.columns.values
         y = self.plotdf.index.values
         z = self.plotdf.values
 
-        # Add last entries for x and y
-        last_x = x[-1]  # Last record for x
-        last_y = y[-1]  # Last record for y
-
         if self.ax_orientation == "vertical":
-            # x = TIME, y = DATE
-            last_x = last_x.replace(hour=23, minute=59)  # x-axis shows hours 0, 1, 2 ... 23
-            last_y = last_y + datetime.timedelta(days=1)  # y-axis shows dates
+            # x = TIME → convert to float hours; y = DATE (keep as datetime.date)
+            x_hours = self._time_to_hours(x)
+            step = (x_hours[1] - x_hours[0]) if len(x_hours) > 1 else 0.5
+            x = np.append(x_hours, x_hours[-1] + step)
+            last_y = y[-1] + datetime.timedelta(days=1)
+            y = np.append(y, last_y)
 
         elif self.ax_orientation == "horizontal":
-            # x = DATE, y = TIME
-            last_x = last_x + datetime.timedelta(days=1)  # x-axis shows dates
-            last_y = last_y.replace(hour=23, minute=59)  # y-axis shows hours 0, 1, 2 ... 23
-
-        x = np.append(x, last_x)
-        y = np.append(y, last_y)
+            # x = DATE (keep as datetime.date); y = TIME → convert to float hours
+            last_x = x[-1] + datetime.timedelta(days=1)
+            x = np.append(x, last_x)
+            y_hours = self._time_to_hours(y)
+            step = (y_hours[1] - y_hours[0]) if len(y_hours) > 1 else 0.5
+            y = np.append(y_hours, y_hours[-1] + step)
 
         return x, y, z
 
-    @staticmethod
-    def _set_ticks():
-        """Defines the standard tick locations and labels for a 24-hour time axis.
+    def _set_ticks(self):
+        """Defines tick locations and labels for a 24-hour time axis.
 
-        This static method provides a consistent set of major tick marks
-        (every 3 hours) and their corresponding integer labels for time axes
-        in the heatmap.
+        The tick interval adapts to the inferred data frequency so that ticks
+        always fall on actual data boundaries.  Falls back to 3-hour ticks when
+        the frequency cannot be determined.  Returns float hours (e.g. ``3.0``,
+        ``6.0``) to match the numeric time axis produced by ``_set_bounds``.
 
         Returns:
             tuple: A tuple containing two lists:
-                   - `ticks_time`: A list of strings representing time points
-                                   (e.g., '3:00', '6:00') that serve as tick locations.
-                   - `ticklabels_time`: A list of integers representing the
-                                        hour labels (e.g., 3, 6) for the ticks.
+                   - ``ticks_time``: Float hours at each major tick (e.g. ``[3.0, 6.0, …]``).
+                   - ``ticklabels_time``: Integer hour labels for the ticks.
         """
-        ticks_time = ['3:00', '6:00', '9:00', '12:00', '15:00', '18:00', '21:00']
-        ticklabels_time = [3, 6, 9, 12, 15, 18, 21]
+        freq = self.series.index.freq
+        if freq is not None:
+            try:
+                freq_minutes = int(pd.tseries.frequencies.to_offset(freq).nanos / 1e9 / 60)
+            except Exception:
+                freq_minutes = 30  # safe fallback
+        else:
+            freq_minutes = 30  # safe fallback
+
+        # Pick the smallest interval (3h, 6h, 12h) that is a whole multiple of the data frequency
+        tick_interval_hours = 3
+        for candidate in [3, 6, 12]:
+            if (candidate * 60) % freq_minutes == 0:
+                tick_interval_hours = candidate
+                break
+
+        tick_hours = list(range(tick_interval_hours, 24, tick_interval_hours))
+        ticks_time = [float(h) for h in tick_hours]  # float hours match the numeric time axis
+        ticklabels_time = tick_hours
         return ticks_time, ticklabels_time
 
     def plot(self):
@@ -174,12 +232,16 @@ class HeatmapDateTime(HeatmapBase):
         else:
             raise NotImplementedError
 
-        # Format
+        if self.show_values:
+            self.show_vals_in_plot()
+
+        # Format — guard against freq being None (irregular or stripped series)
+        _freq = self.series.index.freqstr if self.series.index.freq is not None else None
         self.format(
             ax_xlabel_txt=xlabel,
             ax_ylabel_txt=ylabel,
             plot=p,
-            shown_freq=self.series.index.freqstr
+            shown_freq=_freq
         )
 
 
@@ -365,8 +427,8 @@ def _example_heatmap_datetime():
     series.iloc[100:120] = np.nan  # For testing
     series = series.dropna()  # For testing
 
-    # hm = dv.heatmapdatetime(series=series, title=None, vmin=-10, vmax=10, ax_orientation="vertical")
-    hm = dv.heatmapdatetime(series=series, title=None, vmin=-10, vmax=10, ax_orientation="horizontal")
+    hm = dv.heatmapdatetime(series=series, title=None, vmin=-10, vmax=10, ax_orientation="vertical")
+    # hm = dv.heatmapdatetime(series=series, title=None, vmin=-10, vmax=10, ax_orientation="horizontal")
     hm.show()
     # hm.export_borderless_heatmap(outpath=r"F:\TMP\heightmap_blender")
     # print(hm.get_ax())

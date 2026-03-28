@@ -2,13 +2,20 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.90.1 | XX Jan 2026
+## v0.91.0 | XX XXX 2026
 
 - Added new function to create noisy time series, primarily for testing purposes (1).
+- `HeatmapDateTime`: fixed `TypeError` caused by passing `datetime.time` objects to `pcolormesh` by
+  converting the time-of-day axis to float hours; removed the deprecated
+  `register_matplotlib_converters()` call that previously masked this issue; fixed `show_values=True`
+  being silently ignored; made time-axis tick interval adaptive to the data frequency instead of
+  hardcoded; fixed NaN cells not rendering in `color_bad` due to the masked array not being forwarded
+  to `pcolormesh`; improved docstrings throughout `HeatmapBase` and `HeatmapDateTime` (2).
 
-###  
+###
 
 - (1) `diive.pkgs.testing.create_noisy_time_series`
+- (2) `diive.core.plotting.heatmap_base.HeatmapBase`, `diive.core.plotting.heatmap_datetime.HeatmapDateTime`
 
 ## v0.90.0 | 13 Jan 2026
 
