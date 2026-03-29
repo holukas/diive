@@ -4,36 +4,45 @@
 
 ## v0.91.0 | XX XXX 2026
 
-- Added new function to create noisy time series, primarily for testing purposes (1).
-- `HeatmapDateTime`: fixed `TypeError` caused by passing `datetime.time` objects to `pcolormesh` by
-  converting the time-of-day axis to float hours; removed the deprecated
-  `register_matplotlib_converters()` call that previously masked this issue; fixed `show_values=True`
-  being silently ignored; made time-axis tick interval adaptive to the data frequency instead of
-  hardcoded; fixed NaN cells not rendering in `color_bad` due to the masked array not being forwarded
-  to `pcolormesh`; improved docstrings throughout `HeatmapBase` and `HeatmapDateTime` (2).
-- Added `HeatmapXYZ`: plot z-values on a 2-D colour grid with arbitrary numeric x/y axes (e.g. binned
-  temperature and VPD); designed to work exclusively with pre-aggregated data from `GridAggregator.df_agg_long`
-  (one row per unique bin pair); enforces separation of concerns: binning/aggregation is `GridAggregator`'s
-  responsibility, visualization is `HeatmapXYZ`'s responsibility (3).
-- `HeatmapXYZ` refactoring: updated class to explicitly require pre-aggregated input; clarified in docstrings
-  that x, y, z must have one value per unique (x, y) coordinate pair; added integration test to prevent
-  regression of the silent re-aggregation bug (5).
-- `HeatmapXYZ` notebook: fixed incorrect use of `GridAggregator.df_long` (non-aggregated source data)
-  as input — corrected to `df_agg_long` (one pre-aggregated row per bin); the bug caused `pivot_table`
-  inside `HeatmapXYZ` to silently re-compute the mean regardless of the `aggfunc` passed to
-  `GridAggregator`, so mean and std panels appeared identical (4).
-- Notebooks: reorganised the `notebooks/` directory from 17 topic folders into 9 domain folders that
-  mirror the scientific workflow (`io/`, `timeseries/`, `variables/`, `qc/`, `analyses/`,
-  `gapfilling/`, `flux/`, `plotting/`, `workbench/`); updated all relative links in `OVERVIEW.ipynb`
-  and all GitHub links in `README.md` accordingly.
+**Feature Highlights and Logic Changes**
 
-###
+### Plotting and Visualization
+
+* **HeatmapDateTime**: Fixed `TypeError` from passing `datetime.time` objects to `pcolormesh` by converting
+  time-of-day axis to float hours; removed deprecated `register_matplotlib_converters()` call; fixed
+  `show_values=True` being silently ignored; made time-axis tick interval adaptive to data frequency;
+  fixed NaN cells not rendering in `color_bad`; improved docstrings (2).
+* **HeatmapXYZ** (new): Plot z-values on 2-D colour grids with arbitrary numeric x/y axes (e.g., binned
+  temperature and VPD). Designed for pre-aggregated data from `GridAggregator.df_agg_long`; enforces
+  separation of concerns between binning/aggregation and visualization (3).
+* **HeatmapXYZ.from_gridaggregator()** (convenience method): Simplifies the common workflow of creating
+  heatmaps from GridAggregator output by automatically extracting pre-aggregated data and handling bin
+  column naming (6).
+* **HeatmapXYZ** (refactored): Explicitly requires pre-aggregated input; clarified docstrings; added
+  integration tests to prevent silent re-aggregation bugs (5).
+
+### Testing
+
+* Added `create_noisy_time_series()` function for generating test data (1).
+
+### Documentation and Notebooks
+
+* **HeatmapXYZ notebook**: Simplified from 5+ examples to 3 focused examples with descriptive text
+  (Quick Start, Traditional approach, Advanced); fixed bug where `GridAggregator.df_long` was used
+  instead of `df_agg_long`, causing silent re-aggregation to mean (4, 7).
+* **Notebook directory reorganization**: Consolidated from 17 topic folders into 9 domain folders
+  (`io/`, `timeseries/`, `variables/`, `qc/`, `analyses/`, `gapfilling/`, `flux/`, `plotting/`, `workbench/`);
+  updated all relative links in `OVERVIEW.ipynb` and GitHub links in `README.md`.
+
+### References
 
 - (1) `diive.pkgs.testing.create_noisy_time_series`
 - (2) `diive.core.plotting.heatmap_base.HeatmapBase`, `diive.core.plotting.heatmap_datetime.HeatmapDateTime`
 - (3) `diive.core.plotting.heatmap_xyz.HeatmapXYZ`
 - (4) `notebooks/plotting/HeatmapXYZ.ipynb`
 - (5) `tests/test_heatmap_xyz.py`
+- (6) `diive.core.plotting.heatmap_xyz.HeatmapXYZ.from_gridaggregator`
+- (7) `notebooks/plotting/HeatmapXYZ.ipynb` (notebook simplification and examples)
 
 ## v0.90.0 | 13 Jan 2026
 

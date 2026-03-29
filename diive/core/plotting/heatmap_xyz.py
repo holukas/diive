@@ -16,19 +16,19 @@ binned by temperature and VPD.
 (x, y) pair appears exactly once. Use :attr:`GridAggregator.df_agg_long` (not
 ``df_long`` which contains raw observations) as the source.
 
-Top-level alias: ``dv.heatmapxyz(x, y, z, ...)``
+Top-level aliases:
+    - ``dv.heatmapxyz(x, y, z, ...)`` — direct Series input
+    - ``dv.heatmapxyz.from_gridaggregator(q, x_col, y_col, z_col, ...)`` — from GridAggregator output
 
-Example::
+Example (recommended with GridAggregator)::
 
     import diive as dv
     df = dv.load_exampledata_parquet()
     q = dv.ga(x=df['Tair_f'], y=df['VPD_f'], z=df['NEE_CUT_REF_f'],
               binning_type='quantiles', n_bins=10,
               min_n_vals_per_bin=1, aggfunc='mean')
-    hm = dv.heatmapxyz(x=q.df_agg_long['BIN_Tair_f'],
-                       y=q.df_agg_long['BIN_VPD_f'],
-                       z=q.df_agg_long['NEE_CUT_REF_f'],
-                       show_values=True, show_values_n_dec_places=2)
+    hm = dv.heatmapxyz.from_gridaggregator(q, 'Tair_f', 'VPD_f', 'NEE_CUT_REF_f',
+                                           show_values=True, show_values_n_dec_places=2)
     hm.show()
 
 References:
@@ -138,6 +138,84 @@ class HeatmapXYZ(HeatmapBase):
         self.p = None  # Collects the pcolormesh plot object
 
         self._prepare_data()
+
+    @classmethod
+    def from_gridaggregator(cls,
+                            gridagg,
+                            x_col: str,
+                            y_col: str,
+                            z_col: str,
+                            xlabel: str = None,
+                            ylabel: str = None,
+                            zlabel: str = None,
+                            **kwargs) -> 'HeatmapXYZ':
+        """Create HeatmapXYZ from GridAggregator output.
+
+        Convenience constructor that automatically extracts pre-aggregated data from
+        ``GridAggregator.df_agg_long`` and handles bin column naming conventions,
+        eliminating the need for manual DataFrame extraction.
+
+        Args:
+            gridagg: GridAggregator instance with binned and aggregated output
+            x_col: Original x series name used when creating GridAggregator
+                   (e.g., 'Tair_f', not 'BIN_Tair_f'). Will be automatically
+                   converted to the bin column name 'BIN_Tair_f'.
+            y_col: Original y series name used when creating GridAggregator
+            z_col: Original z series name used when creating GridAggregator.
+                   The aggregated z-values in df_agg_long keep the original name
+                   (no BIN_ prefix).
+            xlabel: x-axis label. When *None*, uses ``x_col``.
+            ylabel: y-axis label. When *None*, uses ``y_col``.
+            zlabel: Colorbar label. When *None*, uses ``z_col``.
+            **kwargs: All keyword arguments accepted by :meth:`HeatmapXYZ.__init__`,
+                      e.g. ``figsize``, ``cmap``, ``vmin``/``vmax``,
+                      ``show_values``, ``verbose``.
+
+        Returns:
+            HeatmapXYZ instance ready to plot.
+
+        Raises:
+            AttributeError: If ``gridagg.df_agg_long`` is not available.
+            KeyError: If ``x_col``, ``y_col``, or ``z_col`` not found in df_agg_long.
+
+        Example::
+
+            import diive as dv
+
+            # Create and aggregate data
+            q = dv.ga(x=df['Tair_f'], y=df['VPD_f'], z=df['NEE_CUT_REF_f'],
+                      binning_type='quantiles', n_bins=10, aggfunc='mean')
+
+            # Create heatmap directly from GridAggregator output
+            hm = dv.heatmapxyz.from_gridaggregator(
+                q, 'Tair_f', 'VPD_f', 'NEE_CUT_REF_f',
+                show_values=True, show_values_n_dec_places=2
+            )
+            hm.show()
+        """
+        # Extract pre-aggregated long-format DataFrame
+        df_agg = gridagg.df_agg_long
+
+        # Construct bin column names from original series names
+        x_bin_col = f'BIN_{x_col}'
+        y_bin_col = f'BIN_{y_col}'
+
+        # Extract Series from aggregated DataFrame
+        x = df_agg[x_bin_col].copy()
+        x.name = x_col  # Use original name for validation in __init__
+
+        y = df_agg[y_bin_col].copy()
+        y.name = y_col
+
+        z = df_agg[z_col].copy()
+        z.name = z_col
+
+        # Infer axis labels from column names if not provided
+        xlabel = xlabel if xlabel is not None else x_col
+        ylabel = ylabel if ylabel is not None else y_col
+        zlabel = zlabel if zlabel is not None else z_col
+
+        return cls(x=x, y=y, z=z, xlabel=xlabel, ylabel=ylabel, zlabel=zlabel, **kwargs)
 
     def _prepare_data(self):
         """Pivots the x/y/z Series into a 2-D grid and computes cell boundaries.
