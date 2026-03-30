@@ -49,11 +49,18 @@ jobs:
 
       - name: Build documentation
         run: |
-          echo "Starting build..."
-          jupyter-book build docs/source -v
-          echo "Build complete, checking for output files..."
-          ls -la docs/source/_build/html/ 2>&1 | head -20
-          find docs/source -name "*.html" -type f 2>&1 | head -10
+          echo "Current directory: $(pwd)"
+          echo "Contents of docs/source:"
+          ls -la docs/source/
+          echo ""
+          echo "Building..."
+          jupyter-book build docs/source
+          echo ""
+          echo "Checking for _build directory:"
+          find docs -type d -name "_build"
+          echo ""
+          echo "Checking for HTML files:"
+          find docs -name "index.html" -type f
 
       - name: Deploy to GitHub Pages
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
