@@ -7,8 +7,6 @@ Core modules provide foundational utilities shared across diive.
 Base classes for flags and data handling.
 
 ```{autosummary}
-:toctree: _autosummary
-
 diive.core.base.FlagBase
 ```
 
@@ -17,8 +15,6 @@ diive.core.base.FlagBase
 Statistical utilities for DataFrames.
 
 ```{autosummary}
-:toctree: _autosummary
-
 diive.core.dfun.sstats
 diive.core.dfun.fit_to_bins_linreg
 diive.core.dfun.fit_to_bins_polyreg
@@ -29,8 +25,6 @@ diive.core.dfun.fit_to_bins_polyreg
 Reading and writing data files.
 
 ```{autosummary}
-:toctree: _autosummary
-
 diive.core.io.DataFileReader
 diive.core.io.MultiDataFileReader
 diive.core.io.ReadFileType
@@ -42,8 +36,6 @@ diive.core.io.FileSplitter
 Timestamp validation, frequency detection, and time utilities.
 
 ```{autosummary}
-:toctree: _autosummary
-
 diive.core.times.TimestampSanitizer
 diive.core.times.DetectFrequency
 ```
@@ -55,8 +47,6 @@ Publication-quality plotting classes.
 ### Heat Maps
 
 ```{autosummary}
-:toctree: _autosummary
-
 diive.core.plotting.HeatmapBase
 diive.core.plotting.HeatmapDateTime
 diive.core.plotting.HeatmapXYZ
@@ -67,8 +57,6 @@ diive.core.plotting.HexbinPlot
 ### Time Series & Scatter
 
 ```{autosummary}
-:toctree: _autosummary
-
 diive.core.plotting.TimeSeries
 diive.core.plotting.ScatterXY
 diive.core.plotting.HistogramPlot
@@ -77,8 +65,6 @@ diive.core.plotting.HistogramPlot
 ### Specialized Plots
 
 ```{autosummary}
-:toctree: _autosummary
-
 diive.core.plotting.DielCycle
 diive.core.plotting.RidgeLinePlot
 diive.core.plotting.Cumulative
@@ -89,8 +75,6 @@ diive.core.plotting.Cumulative
 ML-based utilities for gap-filling and analysis.
 
 ```{autosummary}
-:toctree: _autosummary
-
 diive.core.ml.MlRegressorGapFillingBase
 ```
 
@@ -99,8 +83,6 @@ diive.core.ml.MlRegressorGapFillingBase
 General-purpose helper functions.
 
 ```{autosummary}
-:toctree: _autosummary
-
 diive.core.funcs
 diive.core.utils
 ```
