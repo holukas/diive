@@ -2,6 +2,57 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.91.0 | XX XXX 2026
+
+**Feature Highlights and Logic Changes**
+
+### Plotting and Visualization
+
+* **HeatmapDateTime**: Fixed `TypeError` from passing `datetime.time` objects to `pcolormesh` by converting
+  time-of-day axis to float hours; removed deprecated `register_matplotlib_converters()` call; fixed
+  `show_values=True` being silently ignored; made time-axis tick interval adaptive to data frequency;
+  fixed NaN cells not rendering in `color_bad`; improved docstrings (2).
+* **HeatmapXYZ** (new): Plot z-values on 2-D colour grids with arbitrary numeric x/y axes (e.g., binned
+  temperature and VPD). Designed for pre-aggregated data from `GridAggregator.df_agg_long`; enforces
+  separation of concerns between binning/aggregation and visualization (3).
+* **HeatmapXYZ.from_gridaggregator()** (convenience method): Simplifies the common workflow of creating
+  heatmaps from GridAggregator output by automatically extracting pre-aggregated data and handling bin
+  column naming (6).
+* **HeatmapXYZ** (refactored): Explicitly requires pre-aggregated input; clarified docstrings; added
+  integration tests to prevent silent re-aggregation bugs (5).
+* **HexbinPlot** (new): Visualize flux values aggregated into 2D hexagonal bins of driver variables (e.g.,
+  temperature vs water-filled pore space). Supports optional percentile-based normalization (0-100 scale),
+  configurable aggregation functions (default: median), and variable gridsize; inherits from HeatmapBase for
+  consistent styling and colorbar handling (8).
+
+### Testing
+
+* Added `create_noisy_time_series()` function for generating test data (1).
+
+### Documentation and Notebooks
+
+* **HeatmapXYZ notebook**: Simplified from 5+ examples to 3 focused examples with descriptive text
+  (Quick Start, Traditional approach, Advanced); fixed bug where `GridAggregator.df_long` was used
+  instead of `df_agg_long`, causing silent re-aggregation to mean (4, 7).
+* **Notebook directory reorganization**: Consolidated from 17 topic folders into 9 domain folders
+  (`io/`, `timeseries/`, `variables/`, `qc/`, `analyses/`, `gapfilling/`, `flux/`, `plotting/`, `workbench/`);
+  updated all relative links in `OVERVIEW.ipynb` and GitHub links in `README.md`.
+
+### Unit tests
+
+* **Testing**: Currently, 102/102 unit tests are passing successfully.
+
+### References
+
+- (1) `diive.pkgs.testing.create_noisy_time_series`
+- (2) `diive.core.plotting.heatmap_base.HeatmapBase`, `diive.core.plotting.heatmap_datetime.HeatmapDateTime`
+- (3) `diive.core.plotting.heatmap_xyz.HeatmapXYZ`
+- (4) `notebooks/plotting/HeatmapXYZ.ipynb`
+- (5) `tests/test_heatmap_xyz.py`
+- (6) `diive.core.plotting.heatmap_xyz.HeatmapXYZ.from_gridaggregator`
+- (7) `notebooks/plotting/HeatmapXYZ.ipynb` (notebook simplification and examples)
+- (8) `diive.core.plotting.hexbin_plot.HexbinPlot`, `tests/test_hexbin_plot.py`
+
 ## v0.90.0 | 13 Jan 2026
 
 **Feature Highlights and Logic Changes**
@@ -2977,4 +3028,3 @@ which allows the calculation of the flux detection limit following Langford et a
 - Vekuri, H., Tuovinen, J.-P., Kulmala, L., Papale, D., Kolari, P., Aurela, M., Laurila, T., Liski, J., & Lohila, A. (
   2023). A widely-used eddy covariance gap-filling method creates systematic bias in carbon balance estimates.
   Scientific Reports, 13(1), 1720. https://doi.org/10.1038/s41598-023-28827-2
-

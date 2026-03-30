@@ -1,0 +1,54 @@
+name: Build and Deploy Documentation
+
+on:
+  push:
+    branches: [main, indev]
+    paths:
+      - 'diive/**'
+      - 'notebooks/**'
+      - 'docs/**'
+      - 'pyproject.toml'
+      - 'poetry.lock'
+
+  pull_request:
+    branches: [main, indev]
+    paths:
+      - 'diive/**'
+      - 'notebooks/**'
+      - 'docs/**'
+      - 'pyproject.toml'
+      - 'poetry.lock'
+
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry jupyter-book myst-parser sphinx sphinx-book-theme sphinx-autodoc-typehints
+
+      - name: Install project
+        run: |
+          poetry install --only main
+
+      - name: Build documentation
+        run: |
+          cd docs
+          jupyter-book build source/
+
+      - name: Deploy to GitHub Pages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs/source/_build/html

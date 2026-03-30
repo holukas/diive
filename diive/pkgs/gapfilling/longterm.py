@@ -380,6 +380,116 @@ class LongTermGapFillingXGBoostTS(LongTermGapFillingBase):
             **kwargs
         )
 
+def example_longterm_xgbts():
+    from diive.core.io.files import load_parquet
+    from diive.pkgs.createvar.potentialradiation import potrad
+
+    TARGET_COL = 'SW_IN_T1_47_1'
+
+    SITE_LAT = 47.478333  # CH-LAE
+    SITE_LON = 8.364389  # CH-LAE
+    TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
+
+    file = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\10_METEO\02_METEO6_NOT-GAPFILLED_2004-2025.parquet"
+    df: pd.DataFrame = load_parquet(filepath=file)
+    locs = (df.index.year >= 2019)
+    df = df[locs].copy()
+    subset = df[['SW_IN_T1_47_1']].copy()
+    subset['SW_IN_POT'] = potrad(timestamp_index=subset.index, lat=SITE_LAT, lon=SITE_LON,
+                                 utc_offset=TIMEZONE_OFFSET_TO_UTC_HOURS)
+    print(subset)
+
+    # https://xgboost.readthedocs.io/en/stable/python/python_api.html#module-xgboost.sklearn
+    ltxgb = LongTermGapFillingXGBoostTS(
+        input_df=subset,
+        target_col=TARGET_COL,
+        verbose=0,
+        # features_lag=[-1, -1],
+        vectorize_timestamps=True,
+        add_continuous_record_number=True,
+        sanitize_timestamp=True,
+        n_estimators=3,
+        random_state=42,
+        # booster='gbtree',  # gbtree (default), gblinear, dart
+        # device='cpu',
+        validate_parameters=True,
+        # disable_default_eval_metric=False,
+        early_stopping_rounds=10,
+        max_depth=6,
+        # max_delta_step=0,
+        # subsample=1,
+        learning_rate=0.3,
+        perm_n_repeats=1,
+        # min_split_loss=0,
+        # min_child_weight=1,
+        # colsample_bytree=1,
+        # colsample_bylevel=1,
+        # colsample_bynode=1,
+        # reg_lambda=1,
+        # reg_alpha=0,
+        tree_method='auto',  # auto, hist, approx, exact
+        # scale_pos_weight=1,
+        # grow_policy=0,
+        grow_policy='lossguide',  # depthwise, lossguide
+        # max_leaves=0,
+        # max_bin=256,
+        # num_parallel_tree=1,
+        n_jobs=-1
+    )
+
+    # Assign model data
+    ltxgb.create_yearpools()
+    # print(gf.yearpools)
+    ltxgb.initialize_yearly_models()
+
+    # Feature reduction
+    ltxgb.reduce_features_across_years()
+
+    # Train model and fill gaps
+    ltxgb.fillgaps()
+
+    ltxgb.showplot_feature_ranks_per_year()
+
+    gapfilled_ = ltxgb.gapfilled_
+    # gapfilling_df_ = gf.gapfilling_df_
+    # results_yearly_ = gf.results_yearly_
+    # scores_ = gf.scores_
+    # fi = ltxgb.feature_importances_yearly_
+    # features_reduced_across_years = ltxgb.features_reduced_across_years
+    # feature_ranks_per_year = gf.feature_ranks_per_year
+    # feature_importance_per_year = gf.feature_importance_per_year
+    ltxgb.showplot_feature_ranks_per_year()
+
+    # ltrf.run()
+
+    scores = []
+    for year, s in ltxgb.scores_.items():
+        print(f"{year}: r2 = {s['r2']}  MAE = {s['mae']}")
+        scores.append(s['mae'])
+    # from statistics import mean
+    # print(mean(scores))
+
+    # from diive.core.plotting.timeseries import TimeSeries
+    # TimeSeries(series=gapfilled_.cumsum().multiply(0.02161926)).plot()
+    # # TimeSeries(series=nee_mds.cumsum()).plot()
+
+    # from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+    # HeatmapDateTime(series=gapfilled_).show()
+    # # HeatmapDateTime(series=nee_mds).show()
+
+    from diive.core.plotting.cumulative import CumulativeYear
+    CumulativeYear(
+        series=gapfilled_.multiply(0.02161926),
+        series_units="X",
+        yearly_end_date=None,
+        # yearly_end_date='08-11',
+        start_year=2005,
+        end_year=2023,
+        show_reference=True,
+        # excl_years_from_reference=None,
+        excl_years_from_reference=[2008, 2009],
+        # highlight_year=2022,
+        highlight_year_color='#F44336').plot()
 
 def example_longterm_rfts():
     from diive.core.io.files import load_parquet
@@ -510,4 +620,5 @@ def example_longterm_rfts():
 
 
 if __name__ == '__main__':
-    example_longterm_rfts()
+    example_longterm_xgbts()
+    # example_longterm_rfts()

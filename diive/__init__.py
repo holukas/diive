@@ -7,6 +7,7 @@ from diive.core.io.files import save_parquet as save_parquet
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime as heatmapdatetime
 from diive.core.plotting.heatmap_datetime import HeatmapYearMonth as heatmapyearmonth
 from diive.core.plotting.heatmap_xyz import HeatmapXYZ as heatmapxyz
+from diive.core.plotting.hexbin_plot import HexbinPlot as hexbinplot
 from diive.core.plotting.ridgeline import RidgeLinePlot as ridgeline
 from diive.core.times.resampling import resample_to_monthly_agg_matrix as resample_to_monthly_agg_matrix
 from diive.pkgs.analyses.gridaggregator import GridAggregator as ga

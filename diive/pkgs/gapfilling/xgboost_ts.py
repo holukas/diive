@@ -52,7 +52,7 @@ class XGBoostTS(MlRegressorGapFillingBase):
                 List of integers (number of records), includes lagged variants of predictors.
                 If features_lag=None, no lagged variants are added.
                 Example:
-                    - features_lag=[-2, +2] includes variants that are lagged by -2, -1, +1 and
+                    - features_lag=[-2, +2] includes variants that are lagged by -2, -1, +1, and
                     +2 records in the dataset, for each feature already present in the data.
                      For a variable named *TA*, this created the following output:
                     TA    = [  5,   6,   7, 8  ]
