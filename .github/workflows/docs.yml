@@ -42,7 +42,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install poetry
-          pip install "jupyter-book>=1.0.0" "sphinx>=7.0" "sphinx-book-theme>=1.1.0" "jupytext" "nbconvert" "nbformat"
+          pip install jupyter-book ghp-import
 
       - name: Install project
         run: |
@@ -50,11 +50,10 @@ jobs:
 
       - name: Build documentation
         run: |
-          jupyter-book build docs/source
+          poetry run jupyter-book clean -a docs/source
+          poetry run jupyter-book build docs/source
 
       - name: Deploy to GitHub Pages
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./docs/source/_build/html
+        run: |
+          poetry run ghp-import -n -p -f docs/source/_build/html
