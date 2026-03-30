@@ -6,39 +6,31 @@ Core modules provide foundational utilities shared across diive.
 
 Base classes for flags and data handling.
 
-```{autosummary}
-diive.core.base.FlagBase
-```
+- `diive.core.base.FlagBase` - Base class for flag objects
 
 ## Data Frame Functions
 
 Statistical utilities for DataFrames.
 
-```{autosummary}
-diive.core.dfun.sstats
-diive.core.dfun.fit_to_bins_linreg
-diive.core.dfun.fit_to_bins_polyreg
-```
+- `diive.core.dfun.sstats` - Statistical functions for DataFrames
+- `diive.core.dfun.fit_to_bins_linreg` - Linear regression fitting to bins
+- `diive.core.dfun.fit_to_bins_polyreg` - Polynomial regression fitting to bins
 
 ## File I/O
 
 Reading and writing data files.
 
-```{autosummary}
-diive.core.io.DataFileReader
-diive.core.io.MultiDataFileReader
-diive.core.io.ReadFileType
-diive.core.io.FileSplitter
-```
+- `diive.core.io.DataFileReader` - Read single data files
+- `diive.core.io.MultiDataFileReader` - Read multiple data files
+- `diive.core.io.ReadFileType` - Determine file type and read accordingly
+- `diive.core.io.FileSplitter` - Split data files by time period
 
 ## Time Series Handling
 
 Timestamp validation, frequency detection, and time utilities.
 
-```{autosummary}
-diive.core.times.TimestampSanitizer
-diive.core.times.DetectFrequency
-```
+- `diive.core.times.TimestampSanitizer` - Validate and clean timestamp data
+- `diive.core.times.DetectFrequency` - Detect sampling frequency
 
 ## Plotting & Visualization
 
@@ -46,43 +38,33 @@ Publication-quality plotting classes.
 
 ### Heat Maps
 
-```{autosummary}
-diive.core.plotting.HeatmapBase
-diive.core.plotting.HeatmapDateTime
-diive.core.plotting.HeatmapXYZ
-diive.core.plotting.HeatmapYearMonth
-diive.core.plotting.HexbinPlot
-```
+- `diive.core.plotting.HeatmapBase` - Base class for heatmap plots
+- `diive.core.plotting.HeatmapDateTime` - Heatmap with datetime axes
+- `diive.core.plotting.HeatmapXYZ` - 3D heatmap visualization
+- `diive.core.plotting.HeatmapYearMonth` - Year-month heatmap
+- `diive.core.plotting.HexbinPlot` - Hexagonal bin plots
 
 ### Time Series & Scatter
 
-```{autosummary}
-diive.core.plotting.TimeSeries
-diive.core.plotting.ScatterXY
-diive.core.plotting.HistogramPlot
-```
+- `diive.core.plotting.TimeSeries` - Time series line plots
+- `diive.core.plotting.ScatterXY` - Scatter plots
+- `diive.core.plotting.HistogramPlot` - Histogram plots
 
 ### Specialized Plots
 
-```{autosummary}
-diive.core.plotting.DielCycle
-diive.core.plotting.RidgeLinePlot
-diive.core.plotting.Cumulative
-```
+- `diive.core.plotting.DielCycle` - Diurnal cycle plots
+- `diive.core.plotting.RidgeLinePlot` - Ridge line plots
+- `diive.core.plotting.Cumulative` - Cumulative distribution plots
 
 ## Machine Learning
 
 ML-based utilities for gap-filling and analysis.
 
-```{autosummary}
-diive.core.ml.MlRegressorGapFillingBase
-```
+- `diive.core.ml.MlRegressorGapFillingBase` - Base class for ML-based gap-filling
 
 ## Utility Functions
 
 General-purpose helper functions.
 
-```{autosummary}
-diive.core.funcs
-diive.core.utils
-```
+- `diive.core.funcs` - General utility functions
+- `diive.core.utils` - Utility helper functions
