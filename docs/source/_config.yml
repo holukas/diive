@@ -1,20 +1,17 @@
-# Jupyter Book configuration
-
+# Jupyter Book Configuration
 title: diive Documentation
-author: Lukas Hörtnagl, ETH Grassland Sciences
-copyright: "2024"
+author: Lukas Hörtnagl
+logo: null
 
+# Build settings
 format: jb-book
+root_doc: intro
 
+# Execution
 execute:
   execute_notebooks: "off"
 
+# Output
 html:
   use_issues_button: true
   use_repository_button: true
-  favicon: null
-
-sphinx:
-  config:
-    language: en
-    html_theme: sphinx_book_theme
