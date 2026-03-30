@@ -4,6 +4,8 @@
 
 ## v0.91.0 | XX XXX 2026
 
+todo HEXBIN todo
+
 **Feature Highlights and Logic Changes**
 
 ### Plotting and Visualization
@@ -20,6 +22,10 @@
   column naming (6).
 * **HeatmapXYZ** (refactored): Explicitly requires pre-aggregated input; clarified docstrings; added
   integration tests to prevent silent re-aggregation bugs (5).
+* **HexbinPlot** (new): Visualize flux values aggregated into 2D hexagonal bins of driver variables (e.g.,
+  temperature vs water-filled pore space). Supports optional percentile-based normalization (0-100 scale),
+  configurable aggregation functions (default: median), and variable gridsize; inherits from HeatmapBase for
+  consistent styling and colorbar handling (8).
 
 ### Testing
 
@@ -34,6 +40,10 @@
   (`io/`, `timeseries/`, `variables/`, `qc/`, `analyses/`, `gapfilling/`, `flux/`, `plotting/`, `workbench/`);
   updated all relative links in `OVERVIEW.ipynb` and GitHub links in `README.md`.
 
+### Unit tests
+
+* **Testing**: Currently, 97/97 unit tests are passing successfully.
+
 ### References
 
 - (1) `diive.pkgs.testing.create_noisy_time_series`
@@ -43,6 +53,7 @@
 - (5) `tests/test_heatmap_xyz.py`
 - (6) `diive.core.plotting.heatmap_xyz.HeatmapXYZ.from_gridaggregator`
 - (7) `notebooks/plotting/HeatmapXYZ.ipynb` (notebook simplification and examples)
+- (8) `diive.core.plotting.hexbin_plot.HexbinPlot`, `tests/test_hexbin_plot.py`
 
 ## v0.90.0 | 13 Jan 2026
 
