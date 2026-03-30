@@ -50,18 +50,9 @@ jobs:
 
       - name: Build documentation
         run: |
-          echo "Current directory: $(pwd)"
-          echo "Contents of docs/source:"
-          ls -la docs/source/
-          echo ""
-          echo "Building..."
-          jupyter-book build docs/source
-          echo ""
-          echo "Checking for _build directory:"
-          find docs -type d -name "_build"
-          echo ""
-          echo "Checking for HTML files:"
-          find docs -name "index.html" -type f
+          python docs/build_html.py
+          echo "Build complete"
+          ls -la docs/source/_build/html/
 
       - name: Deploy to GitHub Pages
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
