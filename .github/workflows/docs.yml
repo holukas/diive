@@ -47,7 +47,7 @@ jobs:
 
       - name: Build documentation
         run: |
-          jupyter-book build docs/source --keep-going
+          jupyter-book build docs/source
           echo "Build complete"
           find docs/source/_build -type f -name "*.html" | head -5
 
