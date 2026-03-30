@@ -1,43 +1,20 @@
-# Jupyter Book configuration for diive documentation
+# Jupyter Book configuration
 
-# Project information
 title: diive Documentation
 author: Lukas Hörtnagl, ETH Grassland Sciences
 copyright: "2024"
-logo: null  # Add logo path later if available
 
-# Build settings
 format: jb-book
-execute:
-  execute_notebooks: "off"  # Set to "force" to execute notebooks during build
 
-# HTML output
+execute:
+  execute_notebooks: "off"
+
 html:
   use_issues_button: true
   use_repository_button: true
-  baseurl: https://username.github.io/diive/  # Update with actual repo URL
   favicon: null
 
-# Sphinx extensions
 sphinx:
-  extra_extensions:
-    - sphinx.ext.autodoc
-    - sphinx.ext.intersphinx
-    - sphinx.ext.napoleon
-    - myst_parser
   config:
-    html_theme: sphinx_book_theme
     language: en
-    source_suffix:
-      ".rst": null
-      ".md": myst-nb
-    myst_enable_extensions:
-      - colon_fence
-      - dollarmath
-      - linkify
-      - substitution
-    intersphinx_mapping:
-      python: ["https://docs.python.org/3", null]
-      pandas: ["https://pandas.pydata.org/docs", null]
-      numpy: ["https://numpy.org/doc/stable/", null]
-      matplotlib: ["https://matplotlib.org/stable", null]
+    html_theme: sphinx_book_theme
