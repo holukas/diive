@@ -1,0 +1,75 @@
+name: Build and Deploy Documentation
+
+on:
+  push:
+    branches: [main, indev]
+    paths:
+      - 'diive/**'
+      - 'notebooks/**'
+      - 'docs/**'
+      - 'pyproject.toml'
+      - 'poetry.lock'
+
+  pull_request:
+    branches: [main, indev]
+    paths:
+      - 'diive/**'
+      - 'notebooks/**'
+      - 'docs/**'
+      - 'pyproject.toml'
+      - 'poetry.lock'
+
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Poetry
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install poetry
+
+      - name: Cache Poetry dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pypoetry
+          key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-
+
+      - name: Install dependencies
+        run: |
+          poetry config virtualenvs.in-project true
+          poetry install --with dev
+
+      - name: Build documentation
+        run: |
+          poetry run jupyter-book build docs/source/
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: html-docs
+          path: docs/source/_build/html/
+          retention-days: 30
+
+      - name: Deploy to GitHub Pages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs/source/_build/html
+          cname: diive.example.com  # Update with actual domain or remove for default
+          enable_jekyll: false
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
