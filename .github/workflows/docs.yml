@@ -39,7 +39,7 @@ jobs:
 
       - name: Install project
         run: |
-          poetry install --no-dev
+          poetry install --only main
 
       - name: Build documentation
         run: |
