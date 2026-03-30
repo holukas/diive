@@ -162,6 +162,34 @@ class TestHexbinPlot(unittest.TestCase):
         # Check name is preserved
         self.assertEqual(normalized.name, "test")
 
+    def test_show_values_parameter(self):
+        """Test initialization with show_values parameter."""
+        hb = HexbinPlot(self.x, self.y, self.z, show_values=True)
+        self.assertTrue(hb.show_values)
+
+    def test_show_values_n_dec_places(self):
+        """Test custom decimal places for displayed values."""
+        hb = HexbinPlot(self.x, self.y, self.z, show_values=True, show_values_n_dec_places=3)
+        self.assertEqual(hb.show_values_n_dec_places, 3)
+
+    def test_show_values_fontsize(self):
+        """Test custom font size for displayed values."""
+        hb = HexbinPlot(self.x, self.y, self.z, show_values=True, show_values_fontsize=10)
+        self.assertEqual(hb.show_values_fontsize, 10)
+
+    def test_show_values_color(self):
+        """Test custom color for displayed values."""
+        hb = HexbinPlot(self.x, self.y, self.z, show_values=True, show_values_color='red')
+        self.assertEqual(hb.show_values_color, 'red')
+
+    def test_plot_with_show_values(self):
+        """Test plot() with show_values enabled."""
+        hb = HexbinPlot(self.x, self.y, self.z, show_values=True, mincnt=2)
+        try:
+            hb.plot()
+        except Exception as e:
+            self.fail(f"plot() with show_values raised: {e}")
+
 
 class TestHexbinPlotEdgeCases(unittest.TestCase):
     """Test edge cases and special scenarios."""

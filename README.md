@@ -52,7 +52,7 @@ diive/
 | `diive.core.base`                | `FlagBase`                                                                                                                                    | Base class for building quality and outlier flags; provides flag encoding, filtering, and visualization                                  |
 | `diive.core.ml`                  | `MlRegressorGapFillingBase`                                                                                                                   | Base class for machine-learning gap-filling (Random Forest, XGBoost); handles feature engineering, training, evaluation, and prediction  |
 | `diive.core.io`                  | `DataFileReader`, `MultiDataFileReader`, `ReadFileType`, `FileSplitter`                                                                       | Read single or multiple instrument files (CSV, EddyPro, TOA5); detect file structure; split large files; load/save Parquet               |
-| `diive.core.plotting`            | `HeatmapDateTime`, `TimeSeries`, `ScatterXY`, `HistogramPlot`, `DielCycle`, `RidgeLinePlot`, `CumulativeYear`                                 | Comprehensive visualization suite covering heatmaps, time series, scatter, histograms, diurnal cycles, ridge lines, and cumulative plots |
+| `diive.core.plotting`            | `HeatmapDateTime`, `HeatmapXYZ`, `HexbinPlot`, `TimeSeries`, `ScatterXY`, `HistogramPlot`, `DielCycle`, `RidgeLinePlot`, `CumulativeYear`   | Comprehensive visualization suite covering heatmaps, time series, scatter, histograms, diurnal cycles, ridge lines, hexbin plots, and cumulative plots |
 | `diive.core.times`               | `TimestampSanitizer`, `DetectFrequency`, `vectorize_timestamps()`, `continuous_timestamp_freq()`                                              | Sanitize and validate timestamps, detect/infer data frequency, vectorize time attributes, resample diel cycles                           |
 | `diive.core.dfun`                | `sstats()`, `fit_to_bins_linreg()`, `fit_to_bins_polyreg()`                                                                                   | DataFrame statistics, linear/polynomial bin fitting, regression utilities                                                                |
 | `diive.pkgs.gapfilling`          | `XGBoostTS`, `RandomForestTS`, `QuickFillRFTS`, `LongTermGapFillingBase`, `FluxMDS`                                                           | Fill time series gaps with XGBoost, Random Forest (standard and long-term multi-year), MDS, or linear interpolation                      |
@@ -276,6 +276,8 @@ _Create single outlier flags where `0=OK` and `2=outlier`._
   `HeatmapYearMonth` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/HeatmapYearMonth.ipynb))
 - **Heatmap XYZ**: show z-values in bins of x and y — pairs naturally with `GridAggregator` · class:
   `HeatmapXYZ` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/HeatmapXYZ.ipynb))
+- **Hexbin plot**: aggregate flux values into 2D hexagonal bins of driver variables; supports percentile normalization and configurable aggregation functions · class:
+  `HexbinPlot` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/HexbinPlot.ipynb))
 - **Histogram**: includes options to show z-score limits and to highlight the peak distribution
   bin · class:
   `HistogramPlot` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/Histogram.ipynb))

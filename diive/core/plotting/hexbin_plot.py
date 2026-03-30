@@ -81,6 +81,10 @@ class HexbinPlot(HeatmapBase):
                  edgecolors='none',
                  vmin=None,
                  vmax=None,
+                 show_values=False,
+                 show_values_n_dec_places=2,
+                 show_values_fontsize=8,
+                 show_values_color='black',
                  **kwargs):
         """
         Args:
@@ -99,6 +103,10 @@ class HexbinPlot(HeatmapBase):
             edgecolors: Hexagon edge color (default 'none')
             vmin: Minimum value for color scale (default None, auto-scaled)
             vmax: Maximum value for color scale (default None, auto-scaled)
+            show_values: If True, overlay aggregated z-values on hexagons (default False)
+            show_values_n_dec_places: Number of decimal places for displayed values (default 2)
+            show_values_fontsize: Font size for displayed values (default 8)
+            show_values_color: Text color for displayed values (default 'black')
             **kwargs: Additional arguments passed to HeatmapBase
                 (figsize, cmap, title, cb_digits_after_comma, verbose, etc.)
                 cb_digits_after_comma: Decimal places for colorbar labels (default 2)
@@ -123,7 +131,7 @@ class HexbinPlot(HeatmapBase):
             if hasattr(self, 'verbose') and kwargs.get('verbose', False):
                 print(f"Info: Z Series contains {n_nan} NaN values (will be ignored during aggregation)")
 
-        # Store parameters before parent init
+        # Store parameters before parent init (except show_values which will be set after)
         self.gridsize = gridsize
         self.reduce_C_function = reduce_C_function
         self.normalize_axes = normalize_axes
@@ -178,7 +186,89 @@ class HexbinPlot(HeatmapBase):
         self.ylabel = ylabel
         self.zlabel = zlabel
 
+        # Set show_values parameters AFTER parent init (parent class resets them)
+        self.show_values = show_values
+        self.show_values_n_dec_places = show_values_n_dec_places
+        self.show_values_fontsize = show_values_fontsize
+        self.show_values_color = show_values_color
+
         self.p = None  # Hexbin collection object
+
+    def show_vals_in_plot(self):
+        """Overlay aggregated z-values on hexagon centers.
+
+        Extracts the hexagon centers from the plotted hexagons and places
+        text annotations showing aggregated values.
+        """
+        # Get the aggregated values (C array)
+        array = self.p.get_array()
+
+        if array is None or len(array) == 0:
+            return  # No data to display
+
+        # Get the individual polygon paths from the PolyCollection
+        # For hexbin, we need to extract vertices from each polygon
+        offsets = self.p.get_offsets()
+
+        # If offsets work, use them as centers
+        if offsets is not None and len(offsets) > 0:
+            centers = offsets
+        else:
+            # Fallback: extract from polygon vertices
+            try:
+                paths = self.p.get_paths()
+                centers = []
+
+                # If there's only one path, it might be a compound path
+                if len(paths) == 1:
+                    # Extract individual polygons from the compound path
+                    path = paths[0]
+                    codes = path.codes
+                    vertices = path.vertices
+
+                    # Find MOVETO commands which indicate new polygons
+                    if codes is not None:
+                        polygon_starts = [i for i, code in enumerate(codes) if code == 1]  # MOVETO = 1
+                        polygon_starts.append(len(vertices))  # Add end marker
+
+                        for j in range(len(polygon_starts) - 1):
+                            start = polygon_starts[j]
+                            end = polygon_starts[j + 1]
+                            hex_vertices = vertices[start:end]
+                            if len(hex_vertices) > 0:
+                                center = hex_vertices.mean(axis=0)
+                                centers.append(center)
+                    else:
+                        # No codes, try to split by fixed size (hexagon = 6 vertices + 1 close)
+                        vertices_per_hex = 7
+                        for j in range(0, len(vertices), vertices_per_hex):
+                            hex_vertices = vertices[j:j + vertices_per_hex]
+                            if len(hex_vertices) > 0:
+                                center = hex_vertices.mean(axis=0)
+                                centers.append(center)
+                else:
+                    # Multiple paths, each should be a hexagon
+                    for path in paths:
+                        center = path.vertices.mean(axis=0)
+                        centers.append(center)
+
+                centers = np.array(centers) if centers else np.array([])
+            except:
+                return  # If extraction fails, don't display values
+
+        # Place text at each hexagon center
+        if len(centers) > 0:
+            for center, val in zip(centers, array):
+                if not np.isnan(val):  # Skip NaN values
+                    x_center, y_center = center
+                    val_str = f"{val:.{self.show_values_n_dec_places}f}"
+                    self.ax.text(
+                        x_center, y_center, val_str,
+                        ha='center', va='center',
+                        fontsize=self.show_values_fontsize,
+                        color=self.show_values_color,
+                        zorder=10
+                    )
 
     @staticmethod
     def _percentile_normalize(series):
@@ -235,6 +325,10 @@ class HexbinPlot(HeatmapBase):
         self.ax.xaxis.set_tick_params(labelsize=self.ticks_labelsize)
         self.ax.yaxis.set_tick_params(labelsize=self.ticks_labelsize)
 
+        # Overlay values on hexagons if requested
+        if self.show_values:
+            self.show_vals_in_plot()
+
         # Apply base formatting (title, colorbar, spines, grid, etc.)
         # HeatmapBase.format() will handle the colorbar creation
         self.format(plot=self.p, ax_xlabel_txt=self.xlabel, ax_ylabel_txt=self.ylabel)
@@ -276,14 +370,19 @@ def _example():
         y=df['VPD_f'],
         z=df['NEE_CUT_REF_f'],
         normalize_axes=True,
-        gridsize=15,
+        gridsize=20,
         reduce_C_function=np.mean,
         xlabel='Air temperature (percentile)',
         ylabel='Vapor pressure deficit (percentile)',
         zlabel='Mean NEE (µmol m⁻² s⁻¹)',
         figsize=(8, 6),
         mincnt=5,
-        cb_digits_after_comma=2
+        cb_digits_after_comma=0,
+        show_values=True,
+        show_values_fontsize=8,
+        show_values_n_dec_places=0,
+        show_values_color='black',
+        cmap='RdYlBu_r'
     )
     hm2.show()
 
