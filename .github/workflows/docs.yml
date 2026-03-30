@@ -47,12 +47,12 @@ jobs:
 
       - name: Build documentation
         run: |
-          jupyter-book build docs/source/
-          ls -la docs/source/_build/html/
+          cd docs/source && jupyter-book build . --builder html
+          ls -la _build/html/
 
       - name: Deploy to GitHub Pages
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: docs/source/_build/html
+          publish_dir: ./docs/source/_build/html
