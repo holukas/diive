@@ -3028,4 +3028,3 @@ which allows the calculation of the flux detection limit following Langford et a
 - Vekuri, H., Tuovinen, J.-P., Kulmala, L., Papale, D., Kolari, P., Aurela, M., Laurila, T., Liski, J., & Lohila, A. (
   2023). A widely-used eddy covariance gap-filling method creates systematic bias in carbon balance estimates.
   Scientific Reports, 13(1), 1720. https://doi.org/10.1038/s41598-023-28827-2
-
