@@ -27,7 +27,7 @@ Build the documentation HTML:
 ```bash
 # From project root
 cd docs
-jupyter-book build source/
+poetry run jupyter-book build source/
 
 # View in browser
 start source/_build/html/index.html  # Windows
@@ -40,8 +40,9 @@ xdg-open source/_build/html/index.html  # Linux
 To remove old build artifacts and rebuild:
 
 ```bash
-jupyter-book clean source/
-jupyter-book build source/
+cd docs
+poetry run jupyter-book clean -a source/
+poetry run jupyter-book build source/
 ```
 
 ## Project Structure
@@ -108,55 +109,43 @@ jupyter-book build source/
 
 ## Deployment
 
-### GitHub Pages (Automated with GitHub Actions)
+Documentation is built locally and deployed manually to GitHub Pages using `ghp-import`.
 
-The project includes automated CI/CD for documentation deployment. When you push to `main` or `indev` branches, GitHub Actions automatically:
-
-1. Builds the documentation
-2. Deploys to GitHub Pages
-3. Makes it available at `https://username.github.io/diive/`
-
-**Setup Instructions:**
-
-1. **Ensure workflow file exists**: `.github/workflows/docs.yml` (already included)
-
-2. **Enable GitHub Pages**:
-   - Go to repository Settings → Pages
-   - Under "Build and deployment":
-     - Source: Select "GitHub Actions"
-     - (Do NOT select "Deploy from a branch")
-
-3. **Update domain (optional)**:
-   - Edit `.github/workflows/docs.yml` line with `cname:`
-   - Replace `diive.example.com` with your actual domain, or remove the line for default GitHub Pages URL
-
-4. **Verify deployment**:
-   - After pushing to `main`, check the "Actions" tab in GitHub
-   - Look for "Build and Deploy Documentation" workflow
-   - Once successful, visit `https://username.github.io/diive/`
-
-**Workflow triggers** (automatic deployment on):
-- Push to `main` or `indev` branches
-- Changes to `diive/`, `notebooks/`, `docs/`, `pyproject.toml`, or `poetry.lock`
-- Manual workflow dispatch (if needed)
-
-### Manual Deployment
-
-To deploy to GitHub Pages manually (if GitHub Actions is not available):
+### Local Build & Deploy Workflow
 
 ```bash
-# Install ghp-import (if not already installed)
-pip install ghp-import
+# From project root
+cd docs
+
+# Clean old build artifacts
+poetry run jupyter-book clean -a source/
 
 # Build documentation
-cd docs
-jupyter-book build source/
+poetry run jupyter-book build source/
 
 # Deploy to GitHub Pages
-ghp-import -n -p -f source/_build/html
+poetry run ghp-import -n -p -f source/_build/html
 ```
 
-This pushes the built HTML to the `gh-pages` branch and GitHub Pages serves it automatically.
+**What each step does:**
+- `jupyter-book clean -a` - Removes all build artifacts and cache
+- `jupyter-book build source/` - Builds HTML from markdown source files
+- `ghp-import -n -p -f` - Pushes built HTML to `gh-pages` branch and publishes to GitHub Pages
+  - `-n` - Include .nojekyll file (don't process with Jekyll)
+  - `-p` - Push to remote immediately
+  - `-f` - Force push (overwrite previous version)
+
+### GitHub Pages Setup (One-time)
+
+If you haven't set up GitHub Pages yet:
+
+1. Go to repository Settings → Pages
+2. Under "Build and deployment":
+   - Source: Select "Deploy from a branch"
+   - Branch: Select `gh-pages` and `/ (root)`
+3. Save
+
+The documentation will then be available at: `https://holukas.github.io/diive/`
 
 ## Documentation Workflow
 
