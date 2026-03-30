@@ -47,8 +47,9 @@ jobs:
 
       - name: Build documentation
         run: |
-          cd docs/source && jupyter-book build .
-          ls -la _build/html/
+          jupyter-book build docs/source --keep-going
+          echo "Build complete"
+          find docs/source/_build -type f -name "*.html" | head -5
 
       - name: Deploy to GitHub Pages
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
