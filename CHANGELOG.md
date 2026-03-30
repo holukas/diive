@@ -40,7 +40,7 @@
 
 ### Unit tests
 
-* **Testing**: Currently, 97/97 unit tests are passing successfully.
+* **Testing**: Currently, 102/102 unit tests are passing successfully.
 
 ### References
 

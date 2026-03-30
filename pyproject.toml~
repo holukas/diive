@@ -2,7 +2,9 @@
 name = "diive"
 version = "0.91.0"
 description = "Time series processing"
-authors = ["Lukas Hörtnagl <holukas@ethz.ch>"]
+authors = [
+    "Lukas Hörtnagl <holukas@ethz.ch>"
+]
 license = "GPL-3.0"
 readme = "README.md"
 
@@ -33,6 +35,11 @@ jupyter-bokeh = ">=4.0.5,<5.0.0"
 shap = ">=0.48.0,<0.49.0"
 shapiq = ">=1.3.1,<2.0.0"
 
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
 [tool.poetry.group.dev.dependencies]
 dbc-influxdb = { path = "../../22 - POET/dbc-influxdb", develop = true }
 ipywidgets = ">=8.1.5"
@@ -41,8 +48,3 @@ autopep8 = ">=2.3.2"
 ghp-import = ">=2.1.0"
 jupyter-book = ">=1.0.4.post1"
 ty = "^0.0.12"
-pytest = ">=8.0.0"
-
-[build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
