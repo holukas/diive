@@ -173,3 +173,4 @@ When adding new features or fixing bugs:
 - [Jupyter Book Documentation](https://jupyterbook.org)
 - [MyST Markdown Guide](https://myst-parser.readthedocs.io/)
 - [Sphinx Documentation](https://www.sphinx-doc.org/)
+
