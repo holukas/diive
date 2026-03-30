@@ -7,6 +7,21 @@ logo: null
 format: jb-book
 root_doc: intro
 
+# Sphinx extensions
+sphinx:
+  extra_extensions:
+    - sphinx.ext.autodoc
+    - sphinx.ext.autosummary
+    - sphinx.ext.napoleon
+    - sphinx_autodoc_typehints
+
+# MyST Markdown parsing
+myst:
+  enable_extensions:
+    - colon_fence
+    - dollarmath
+    - linkify
+
 # Execution
 execute:
   execute_notebooks: "off"
