@@ -4,8 +4,6 @@
 
 ## v0.91.0 | XX XXX 2026
 
-todo HEXBIN todo
-
 **Feature Highlights and Logic Changes**
 
 ### Plotting and Visualization
