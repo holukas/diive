@@ -7,7 +7,6 @@ Package modules provide domain-specific algorithms and workflows for ecosystem d
 Data analysis and aggregation utilities.
 
 ```{autosummary}
-:toctree: _autosummary
 
 diive.pkgs.analyses.GapFinder
 diive.pkgs.analyses.GridAggregator
@@ -18,7 +17,6 @@ diive.pkgs.analyses.GridAggregator
 Binary-encoded value handling.
 
 ```{autosummary}
-:toctree: _autosummary
 
 diive.pkgs.binary
 ```
@@ -28,7 +26,6 @@ diive.pkgs.binary
 Measurement corrections and offset handling.
 
 ```{autosummary}
-:toctree: _autosummary
 
 diive.pkgs.corrections.OffsetCorrection
 diive.pkgs.corrections.WindDirectionOffset
@@ -41,7 +38,6 @@ diive.pkgs.corrections.SetToMissing
 Derive new variables from measurements.
 
 ```{autosummary}
-:toctree: _autosummary
 
 diive.pkgs.createvar.DaytimeNighttimeFlag
 diive.pkgs.createvar.TimeSince
@@ -52,7 +48,6 @@ diive.pkgs.createvar.TimeSince
 High-frequency eddy covariance processing.
 
 ```{autosummary}
-:toctree: _autosummary
 
 diive.pkgs.echires.FluxDetectionLimit
 diive.pkgs.echires.WindRotation2D
@@ -64,7 +59,6 @@ diive.pkgs.echires.MaxCovariance
 Fitting utilities for binned data.
 
 ```{autosummary}
-:toctree: _autosummary
 
 diive.pkgs.fits.BinFitterCP
 ```
@@ -74,7 +68,6 @@ diive.pkgs.fits.BinFitterCP
 Flux quality control and processing chains.
 
 ```{autosummary}
-:toctree: _autosummary
 
 diive.pkgs.flux.FluxProcessingChain
 ```
@@ -84,7 +77,6 @@ diive.pkgs.flux.FluxProcessingChain
 Format conversion for data standards.
 
 ```{autosummary}
-:toctree: _autosummary
 
 diive.pkgs.formats.FormatEddyProFluxnetFileForUpload
 diive.pkgs.formats.FormatMeteoForEddyProFluxProcessing
@@ -95,7 +87,6 @@ diive.pkgs.formats.FormatMeteoForEddyProFluxProcessing
 Methods for filling missing data.
 
 ```{autosummary}
-:toctree: _autosummary
 
 diive.pkgs.gapfilling.XGBoostTS
 diive.pkgs.gapfilling.RandomForestTS
@@ -109,7 +100,6 @@ diive.pkgs.gapfilling.FluxMDS
 Automated outlier and anomaly detection.
 
 ```{autosummary}
-:toctree: _autosummary
 
 diive.pkgs.outlierdetection.HampelDaytimeNighttime
 diive.pkgs.outlierdetection.zScore
@@ -127,7 +117,6 @@ diive.pkgs.outlierdetection.TrimLow
 FLUXNET QC and data screening.
 
 ```{autosummary}
-:toctree: _autosummary
 
 diive.pkgs.qaqc.FlagQCF
 diive.pkgs.qaqc.StepwiseMeteoScreeningDb
