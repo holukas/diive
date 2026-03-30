@@ -224,8 +224,10 @@ class HexbinPlot(HeatmapBase):
         for spine in self.ax.spines.values():
             spine.set_linewidth(1)
 
-        # Set equal aspect ratio to make hexagons appear as regular hexagons
-        self.ax.set_aspect('equal', adjustable='box')
+        # Set equal aspect ratio to make hexagons appear as regular hexagons (not skewed)
+        # Use 'datalim' to adjust data limits so hexagons maintain 1:1 aspect in data space
+        self.ax.set_aspect('equal', adjustable='datalim')
+        self.ax.apply_aspect()
 
         # Format axes
         self.ax.set_xlabel(self.xlabel, fontsize=self.axlabels_fontsize)
@@ -273,17 +275,15 @@ def _example():
         x=df['Tair_f'],
         y=df['VPD_f'],
         z=df['NEE_CUT_REF_f'],
-        normalize_axes=False,
-        gridsize=30,
+        normalize_axes=True,
+        gridsize=15,
         reduce_C_function=np.mean,
-        xlabel='Air temperature (°C)',
-        ylabel='Vapor pressure deficit (hPa)',
+        xlabel='Air temperature (percentile)',
+        ylabel='Vapor pressure deficit (percentile)',
         zlabel='Mean NEE (µmol m⁻² s⁻¹)',
-        figsize=(18, 6),
-        mincnt=3,
-        vmin=-0.001,
-        vmax=0.001,
-        cb_digits_after_comma=3
+        figsize=(8, 6),
+        mincnt=5,
+        cb_digits_after_comma=2
     )
     hm2.show()
 
