@@ -23,7 +23,6 @@ class LongTermGapFillingBase:
                  vectorize_timestamps: bool = False,
                  add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False,
-                 perm_n_repeats: int = 10,
                  test_size: float = 0.25,
                  **kwargs):
         """
@@ -51,7 +50,6 @@ class LongTermGapFillingBase:
         self.input_df = input_df
         self.target_col = target_col
         self.verbose = verbose
-        self.perm_n_repeats = perm_n_repeats
         self.test_size = test_size
         self.features_lag = features_lag
         self.features_lag_stepsize = features_lag_stepsize
@@ -168,7 +166,6 @@ class LongTermGapFillingBase:
             vectorize_timestamps=self.vectorize_timestamps,
             add_continuous_record_number=self.add_continuous_record_number,
             sanitize_timestamp=self.sanitize_timestamp,
-            perm_n_repeats=self.perm_n_repeats,
             test_size=self.test_size,
             **self.kwargs
         )
@@ -199,8 +196,7 @@ class LongTermGapFillingBase:
                 input_df=df,
                 target_col=self.target_col,
                 verbose=self.verbose,
-                perm_n_repeats=self.perm_n_repeats,
-                features_lag=None,  # Already considered across all years
+                    features_lag=None,  # Already considered across all years
                 features_lag_exclude_cols=None,  # Already considered across all years
                 vectorize_timestamps=False,  # Already considered across all years
                 add_continuous_record_number=False,  # Already considered across all years
@@ -335,7 +331,6 @@ class LongTermGapFillingRandomForestTS(LongTermGapFillingBase):
                  vectorize_timestamps: bool = False,
                  add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False,
-                 perm_n_repeats: int = 10,
                  test_size: float = 0.25,
                  **kwargs):
         super().__init__(
@@ -349,7 +344,6 @@ class LongTermGapFillingRandomForestTS(LongTermGapFillingBase):
             vectorize_timestamps=vectorize_timestamps,
             add_continuous_record_number=add_continuous_record_number,
             sanitize_timestamp=sanitize_timestamp,
-            perm_n_repeats=perm_n_repeats,
             test_size=test_size,
             **kwargs
         )
@@ -361,7 +355,6 @@ class LongTermGapFillingXGBoostTS(LongTermGapFillingBase):
                  input_df: DataFrame,
                  target_col: str or tuple,
                  verbose: int = 0,
-                 perm_n_repeats: int = 10,
                  features_lag: list = None,
                  vectorize_timestamps: bool = False,
                  add_continuous_record_number: bool = False,
@@ -376,7 +369,6 @@ class LongTermGapFillingXGBoostTS(LongTermGapFillingBase):
             vectorize_timestamps=vectorize_timestamps,
             add_continuous_record_number=add_continuous_record_number,
             sanitize_timestamp=sanitize_timestamp,
-            perm_n_repeats=perm_n_repeats,
             **kwargs
         )
 
@@ -419,7 +411,6 @@ def example_longterm_xgbts():
         # max_delta_step=0,
         # subsample=1,
         learning_rate=0.3,
-        perm_n_repeats=1,
         # min_split_loss=0,
         # min_child_weight=1,
         # colsample_bytree=1,
@@ -518,7 +509,6 @@ def example_longterm_rfts():
         add_continuous_record_number=True,
         # add_continuous_record_number=False,
         sanitize_timestamp=True,
-        perm_n_repeats=1,
         n_estimators=99,
         random_state=42,
         min_samples_split=2,

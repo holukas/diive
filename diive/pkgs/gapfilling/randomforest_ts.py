@@ -156,7 +156,6 @@ class RandomForestTS(MlRegressorGapFillingBase):
                  input_df: DataFrame,
                  target_col: str or tuple,
                  verbose: bool = True,
-                 perm_n_repeats: int = 10,
                  test_size: float = 0.25,
                  features_lag: list = None,
                  features_lag_stepsize: int = 1,
@@ -174,9 +173,6 @@ class RandomForestTS(MlRegressorGapFillingBase):
 
             target_col:
                 Column name of variable in *input_df* that will be gap-filled.
-
-            perm_n_repeats:
-                Number of repeats for calculating permutation feature importance.
 
             test_size:
                 Proportion of the dataset to include in the test split,
@@ -219,7 +215,6 @@ class RandomForestTS(MlRegressorGapFillingBase):
             input_df=input_df,
             target_col=target_col,
             verbose=verbose,
-            perm_n_repeats=perm_n_repeats,
             test_size=test_size,
             features_lag=features_lag,
             features_lag_stepsize=features_lag_stepsize,

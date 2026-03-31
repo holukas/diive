@@ -17,7 +17,7 @@ def load_exampledata_parquet() -> DataFrame:
 
 
 def load_exampledata_parquet_long() -> DataFrame:
-    filepath = Path(DIR_PATH) / 'local/exampledata_PARQUET_CH-DAV_FP2022.5_1997-2022_ID20230206154316_30MIN.parquet'
+    filepath = Path(DIR_PATH) / 'exampledata_PARQUET_CH-DAV_FP2022.5_2013-2022_ID20230206154316_30MIN.parquet'
     data_df = load_parquet(filepath=filepath)
     return data_df
 

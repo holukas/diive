@@ -26,12 +26,12 @@ from diive.core.ml.common import MlRegressorGapFillingBase
 
 class XGBoostTS(MlRegressorGapFillingBase):
 
-    def __init__(self, input_df: DataFrame, target_col: str or tuple, verbose: int = 0, perm_n_repeats: int = 10,
+    def __init__(self, input_df: DataFrame, target_col: str or tuple, verbose: int = 0,
                  test_size: float = 0.25, features_lag: list = None, features_lag_exclude_cols: list = None,
                  vectorize_timestamps: bool = False, add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False, **kwargs):
         """
-        Gap-fill timeseries with predictions from random forest model
+        Gap-fill timeseries with predictions from XGBoost model
 
         Args:
             input_df:
@@ -39,10 +39,6 @@ class XGBoostTS(MlRegressorGapFillingBase):
 
             target_col:
                 Column name of variable in *input_df* that will be gap-filled.
-
-            perm_n_repeats:
-                Number of repeats for calculating permutation feature importance.
-                Must be greater than 0.
 
             test_size:
                 Proportion of the dataset to include in the test split,
@@ -92,7 +88,6 @@ class XGBoostTS(MlRegressorGapFillingBase):
             input_df=input_df,
             target_col=target_col,
             verbose=verbose,
-            perm_n_repeats=perm_n_repeats,
             test_size=test_size,
             features_lag=features_lag,
             features_lag_exclude_cols=features_lag_exclude_cols,
@@ -103,7 +98,7 @@ class XGBoostTS(MlRegressorGapFillingBase):
         )
 
 
-def example_xgbts():
+def _example_xgbts():
     """
     Kudos:
         https://xgboost.readthedocs.io/en/stable/parameter.html
@@ -115,7 +110,7 @@ def example_xgbts():
     from diive.configs.exampledata import load_exampledata_parquet_long
     df_orig = load_exampledata_parquet_long()
     df = df_orig.copy()
-    keep = (df.index.year >= 1997) & (df.index.year <= 2001)
+    keep = (df.index.year >= 2013) & (df.index.year <= 2013)
     df = df[keep].copy()
     df = df[subsetcols].copy()
 
@@ -137,7 +132,6 @@ def example_xgbts():
         vectorize_timestamps=True,
         add_continuous_record_number=True,
         sanitize_timestamp=True,
-        perm_n_repeats=3,
         n_estimators=200,
         # n_estimators=99,
         random_state=42,
@@ -222,4 +216,4 @@ def example_xgbts():
 
 
 if __name__ == '__main__':
-    example_xgbts()
+    _example_xgbts()

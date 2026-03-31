@@ -5,9 +5,9 @@ kudos: https://datascience.stackexchange.com/questions/15135/train-test-validati
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import shap
 from pandas import DataFrame
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.inspection import permutation_importance
 from sklearn.metrics import PredictionErrorDisplay
 from sklearn.model_selection import train_test_split
 from xgboost import XGBRegressor
@@ -37,7 +37,6 @@ class MlRegressorGapFillingBase:
                  vectorize_timestamps: bool = False,
                  add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False,
-                 perm_n_repeats: int = 10,
                  test_size: float = 0.25,
                  **kwargs):
         """
@@ -49,9 +48,6 @@ class MlRegressorGapFillingBase:
 
             target_col:
                 Column name of variable in *input_df* that will be gap-filled.
-
-            perm_n_repeats:
-                Number of repeats for calculating permutation feature importance.
 
             test_size:
                 Proportion of the dataset to include in the test split,
@@ -96,7 +92,6 @@ class MlRegressorGapFillingBase:
         self.regressor = regressor
         input_df = input_df.copy()
         self.target_col = target_col
-        self.perm_n_repeats = perm_n_repeats if perm_n_repeats > 0 else 1
         self.test_size = test_size
         self.features_lag = features_lag
         self.features_lag_stepsize = features_lag_stepsize
@@ -264,7 +259,7 @@ class MlRegressorGapFillingBase:
         for the next (final) model.
         """
 
-        series = self.feature_importances_reduction_['PERM_IMPORTANCE'].copy()
+        series = self.feature_importances_reduction_['SHAP_IMPORTANCE'].copy()
 
         # Threshold for feature reduction
         threshold = series.loc[self.random_col]
@@ -308,7 +303,7 @@ class MlRegressorGapFillingBase:
 
         Args:
             showplot_scores: shows plot of predicted vs observed
-            showplot_importance: shows plot of permutation importances
+            showplot_importance: shows plot of SHAP feature importances
 
         """
 
@@ -335,15 +330,14 @@ class MlRegressorGapFillingBase:
         print(f">>> Using model to predict target {self.target_col} in unseen test data ...")
         pred_y_test = self.model_.predict(X=X_test)
 
-        # Calculate permutation importance on test data and store in dataframe
-        print(f">>> Using model to calculate permutation importance based on unseen test data ...")
-        self._feature_importances_traintest = self._permutation_importance(
-            model=self.model_, X=X_test, y=y_test, X_names=X_names)
+        # Calculate SHAP-based feature importance on test data and store in dataframe
+        print(f">>> Using model to calculate SHAP feature importance based on unseen test data ...")
+        self._feature_importances_traintest = self._shap_importance(
+            model=self.model_, X=X_test, X_names=X_names)
 
         if showplot_importance:
-            print(">>> Plotting feature importances (permutation importance) ...")
-            plot_feature_importance(feature_importances=self.feature_importances_traintest_,
-                                    n_perm_repeats=self.perm_n_repeats)
+            print(">>> Plotting feature importances (SHAP) ...")
+            plot_feature_importance(feature_importances=self.feature_importances_traintest_)
 
         # Scores
         print(f">>> Calculating prediction scores based on predicting unseen test data of {self.target_col} ...")
@@ -411,8 +405,7 @@ class MlRegressorGapFillingBase:
             f"## FEATURE IMPORTANCES\n"
             f"  > feature importances were calculated based on unseen test data of {self.target_col} "
             f"({len(self.test_df[self.target_col])} records).\n"
-            f"  > feature importances are showing permutation importances from {self.perm_n_repeats} repeats"
-            f"\n"
+            f"  > feature importances show mean absolute SHAP values.\n"
             f"\n"
             f"{fi}"
             f"\n"
@@ -447,19 +440,19 @@ class MlRegressorGapFillingBase:
         self._fillgaps_combinepredictions()
 
     def reduce_features(self, factor: float = 1):
-        """Reduce number of features using permutation importance
+        """Reduce number of features using SHAP importance
 
-        A random variable is added to features and the permutation importances
-        are calculated. The permutation importance of the random variable is the
+        A random variable is added to features and SHAP importances
+        are calculated. The SHAP importance of the random variable is the
         benchmark to determine whether a feature is relevant. All features where
-        permutation importance is smaller or equal to the importance of the random
+        SHAP importance is smaller or equal to the importance of the random
         variable are rejected.
         """
 
         infotxt = "[ FEATURE REDUCTION ]"
 
         # Info
-        print(f"\n{infotxt} Feature reduction based on permutation importance ...")
+        print(f"\n{infotxt} Feature reduction based on SHAP importance ...")
 
         df = self.train_df.copy()
         df = df.dropna()
@@ -483,11 +476,10 @@ class MlRegressorGapFillingBase:
         # _ = tree.plot_tree(rf.estimators_[0], feature_names=X.columns, filled=True)
 
         # Calculate permutation importance for all data
-        print(
-            f"{infotxt} >>> Calculating feature importances (permutation importance, {self.perm_n_repeats} repeats) ...")
+        print(f"{infotxt} >>> Calculating feature importances (SHAP) ...")
         X_names = df.drop(self.target_col, axis=1).columns.tolist()
-        feature_importances = self._permutation_importance(model=model, X=X, y=y, X_names=X_names)
-        self._feature_importances_reduction = feature_importances.sort_values(by='PERM_IMPORTANCE', ascending=False)
+        feature_importances = self._shap_importance(model=model, X=X, X_names=X_names)
+        self._feature_importances_reduction = feature_importances.sort_values(by='SHAP_IMPORTANCE', ascending=False)
 
         # Remove variables where mean feature importance across all splits is smaller
         # than or equal to random variable
@@ -592,7 +584,7 @@ class MlRegressorGapFillingBase:
             f"## FEATURE IMPORTANCES\n"
             f"- names of features used in model:  {feature_names}\n"
             f"- number of features used in model:  {n_features}\n"
-            f"- permutation importances were calculated from {self.perm_n_repeats} repeats.\n"
+            f"- feature importances calculated using SHAP (TreeExplainer).\n"
             f"\n"
             f"{fi}"
             f"\n"
@@ -627,7 +619,6 @@ class MlRegressorGapFillingBase:
                 # For cyclical variables, keep only the sine/cosine variants, drop linear versions
                 model_df = model_df.drop(columns=['.HOUR', '.SEASON', '.MONTH', '.WEEK', '.DOY'])
 
-
             if self.add_continuous_record_number:
                 model_df = fr.add_continuous_record_number(df=model_df)
 
@@ -639,24 +630,48 @@ class MlRegressorGapFillingBase:
 
         return model_df
 
-    def _permutation_importance(self, model, X, y, X_names) -> DataFrame:
-        """Calculate permutation importance"""
+    def _shap_importance(self, model, X, X_names) -> DataFrame:
+        """
+        Calculate SHAP-based feature importance.
 
-        # https://scikit-learn.org/stable/modules/permutation_importance.html#permutation-feature-importance
+        Uses TreeExplainer for tree-based models (XGBoost, RandomForest).
+        Returns mean absolute SHAP values as feature importance.
+        """
 
-        fi = permutation_importance(estimator=model,
-                                    X=X, y=y,
-                                    n_repeats=self.perm_n_repeats,
-                                    random_state=self._random_state,
-                                    scoring='r2',
-                                    n_jobs=-1)
+        # Fix XGBoost base_score parameter format issue
+        # XGBoost may return base_score as string in scientific notation with brackets
+        # e.g., '[-4.121306E0]' which SHAP's TreeExplainer cannot parse
+        if hasattr(model, 'get_params') and hasattr(model, 'set_params'):
+            try:
+                params = model.get_params()
+                if 'base_score' in params and isinstance(params['base_score'], str):
+                    # Strip brackets and convert to float
+                    base_score_str = params['base_score'].strip('[]')
+                    model.set_params(base_score=float(base_score_str))
+            except (ValueError, AttributeError, TypeError):
+                pass  # If cleaning fails, let TreeExplainer handle it
 
-        # Store permutation importance
-        fidf = pd.DataFrame({'PERM_IMPORTANCE': fi.importances_mean,
-                             'PERM_SD': fi.importances_std},
-                            index=X_names)
+        # Create explainer and calculate SHAP values
+        explainer = shap.TreeExplainer(model)
+        shap_values = explainer.shap_values(X)
 
-        fidf = fidf.sort_values(by='PERM_IMPORTANCE', ascending=False)
+        # Handle case where shap_values is a list (for some model types)
+        if isinstance(shap_values, list):
+            shap_values = shap_values[0]
+
+        # Calculate mean absolute SHAP values as importance
+        importance_values = np.abs(shap_values).mean(axis=0)
+
+        # Calculate standard deviation for reference
+        importance_std = np.abs(shap_values).std(axis=0)
+
+        # Create DataFrame with feature importances
+        fidf = pd.DataFrame({
+            'SHAP_IMPORTANCE': importance_values,
+            'SHAP_SD': importance_std
+        }, index=X_names)
+
+        fidf = fidf.sort_values(by='SHAP_IMPORTANCE', ascending=False)
 
         return fidf
 
@@ -706,15 +721,14 @@ class MlRegressorGapFillingBase:
         print(f">>> Using final model on all data to predict target {self.target_col} ...")
         pred_y = self.model_.predict(X=X)
 
-        # Calculate permutation importance and store in dataframe
-        print(f">>> Using final model on all data to calculate permutation importance ...")
-        self._feature_importances = self._permutation_importance(
-            model=self._model, X=X, y=y, X_names=X_names)
+        # Calculate SHAP-based feature importance and store in dataframe
+        print(f">>> Using final model on all data to calculate SHAP feature importance ...")
+        self._feature_importances = self._shap_importance(
+            model=self._model, X=X, X_names=X_names)
 
         if showplot_importance:
-            print(">>> Plotting feature importances (permutation importance) ...")
-            plot_feature_importance(feature_importances=self.feature_importances_,
-                                    n_perm_repeats=self.perm_n_repeats)
+            print(">>> Plotting feature importances (SHAP) ...")
+            plot_feature_importance(feature_importances=self.feature_importances_)
 
         # Scores, using all targets
         print(f">>> Calculating prediction scores based on all data predicting {self.target_col} ...")
@@ -891,13 +905,13 @@ class MlRegressorGapFillingBase:
         self.target_gapfilled_cumu_col = ".GAPFILLED_CUMULATIVE"
 
 
-def plot_feature_importance(feature_importances: pd.DataFrame, n_perm_repeats: int):
+def plot_feature_importance(feature_importances: pd.DataFrame):
     fig, axs = plt.subplots(ncols=1, figsize=(9, 16))
-    _fidf = feature_importances.copy().sort_values(by='PERM_IMPORTANCE', ascending=True)
-    _fidf['PERM_IMPORTANCE'].plot.barh(color='#008bfb', yerr=_fidf['PERM_SD'], ax=axs)
-    axs.set_xlabel("Feature importance")
+    _fidf = feature_importances.copy().sort_values(by='SHAP_IMPORTANCE', ascending=True)
+    _fidf['SHAP_IMPORTANCE'].plot.barh(color='#008bfb', yerr=_fidf['SHAP_SD'], ax=axs)
+    axs.set_xlabel("Feature importance (mean |SHAP value|)")
     axs.set_ylabel("Feature")
-    axs.set_title(f"Permutation importance ({n_perm_repeats} permutations)")
+    axs.set_title("SHAP Feature Importance")
     axs.legend(loc='lower right')
     fig.tight_layout()
     fig.show()
