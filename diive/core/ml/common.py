@@ -638,21 +638,31 @@ class MlRegressorGapFillingBase:
         Returns mean absolute SHAP values as feature importance.
         """
 
-        # Fix XGBoost base_score parameter format issue
-        # XGBoost may return base_score as string in scientific notation with brackets
-        # e.g., '[-4.121306E0]' which SHAP's TreeExplainer cannot parse
-        if hasattr(model, 'get_params') and hasattr(model, 'set_params'):
-            try:
-                params = model.get_params()
-                if 'base_score' in params and isinstance(params['base_score'], str):
-                    # Strip brackets and convert to float
-                    base_score_str = params['base_score'].strip('[]')
-                    model.set_params(base_score=float(base_score_str))
-            except (ValueError, AttributeError, TypeError):
-                pass  # If cleaning fails, let TreeExplainer handle it
-
         # Create explainer and calculate SHAP values
-        explainer = shap.TreeExplainer(model)
+        # Handle XGBoost base_score parameter format issue with monkey-patch
+        # Some XGBoost/environment combinations return base_score as '[-4.121306E0]' which
+        # float() cannot parse. We monkey-patch float() to handle this.
+        _builtin_float = float
+
+        def _patched_float(x):
+            """float() that handles bracket-enclosed scientific notation like '[-4.121306E0]'"""
+            if isinstance(x, str):
+                x_stripped = x.strip('[]')
+                if x_stripped != x:  # Only use patched version if brackets were removed
+                    return _builtin_float(x_stripped)
+            return _builtin_float(x)
+
+        # Temporarily replace float in builtins
+        import builtins
+        original_float = builtins.float
+        builtins.float = _patched_float
+
+        try:
+            explainer = shap.TreeExplainer(model)
+        finally:
+            # Always restore original float
+            builtins.float = original_float
+
         shap_values = explainer.shap_values(X)
 
         # Handle case where shap_values is a list (for some model types)
