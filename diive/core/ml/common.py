@@ -272,8 +272,8 @@ class MlRegressorGapFillingBase:
         accepted_features = accepted_df.index.tolist()
         print(f"\n{infotxt} >>> Accepted features and their importance:\n{accepted_df}")
 
-        # Get rejected features
-        rejected_locs = ((series < threshold) | (series <= 0))
+        # Get rejected features (everything not accepted, incl. boundary and random col)
+        rejected_locs = ~accepted_locs
         rejected_df = pd.DataFrame(series[rejected_locs])
         rejected_features = rejected_df.index.tolist()
         print(f"\n{infotxt} >>> Rejected features and their importance:\n{rejected_df}")
@@ -475,7 +475,7 @@ class MlRegressorGapFillingBase:
         # todo from dtreeviz.trees import dtreeviz  # will be used for tree visualization
         # _ = tree.plot_tree(rf.estimators_[0], feature_names=X.columns, filled=True)
 
-        # Calculate permutation importance for all data
+        # Calculate SHAP importance for all data
         print(f"{infotxt} >>> Calculating feature importances (SHAP) ...")
         X_names = df.drop(self.target_col, axis=1).columns.tolist()
         feature_importances = self._shap_importance(model=model, X=X, X_names=X_names)
@@ -515,7 +515,7 @@ class MlRegressorGapFillingBase:
             f"- The random variable {self.random_col} was added to the original features, "
             f"used as benchmark for detecting relevant feature importances.\n"
             f"\n"
-            f"PERMUTATION IMPORTANCE (mean) across all splits of TimeSeriesSplit:\n"
+            f"SHAP IMPORTANCE (mean absolute SHAP values):\n"
             f"\n"
             f"{self.feature_importances_reduction_}"
             f"\n"
@@ -688,8 +688,7 @@ class MlRegressorGapFillingBase:
     def _add_random_variable(self, df: DataFrame) -> tuple[DataFrame, str]:
         # Add random variable as benchmark for relevant feature importances
         random_col = '.RANDOM'  # Random variable as benchmark for relevant importances
-        df[random_col] = np.random.RandomState(self._random_state).randn(df.shape[0], 1)
-        # df[random_col] = np.random.rand(df.shape[0], 1)
+        df[random_col] = np.random.RandomState(self._random_state).randn(df.shape[0])
         return df, random_col
 
     def _lag_features(self, features_lag_exclude_cols):
