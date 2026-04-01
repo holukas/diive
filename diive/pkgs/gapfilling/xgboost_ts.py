@@ -110,7 +110,7 @@ def _example_xgbts():
     from diive.configs.exampledata import load_exampledata_parquet_long
     df_orig = load_exampledata_parquet_long()
     df = df_orig.copy()
-    keep = (df.index.year >= 2013) & (df.index.year <= 2013)
+    keep = (df.index.year >= 2013) & (df.index.year <= 2015)
     df = df[keep].copy()
     df = df[subsetcols].copy()
 
@@ -132,7 +132,7 @@ def _example_xgbts():
         vectorize_timestamps=True,
         add_continuous_record_number=True,
         sanitize_timestamp=True,
-        n_estimators=200,
+        n_estimators=3,
         # n_estimators=99,
         random_state=42,
         # booster='gbtree',  # gbtree (default), gblinear, dart
@@ -175,42 +175,42 @@ def _example_xgbts():
     print(xgbts.scores_)
     print(xgbts.gapfilling_df_)
 
-    # Plot
-    from diive.core.plotting.timeseries import TimeSeries
-    import matplotlib.pyplot as plt
-    fig, ax = plt.subplots()
-    TimeSeries(series=gapfilled.multiply(0.02161926).cumsum(), ax=ax).plot(color='blue')
-    fig.suptitle('XGB', fontsize=16)
-    # ax.set_ylim(-2000, 200)
-    fig.show()
+    # # Plot
+    # from diive.core.plotting.timeseries import TimeSeries
+    # import matplotlib.pyplot as plt
+    # fig, ax = plt.subplots()
+    # TimeSeries(series=gapfilled.multiply(0.02161926).cumsum(), ax=ax).plot(color='blue')
+    # fig.suptitle('XGB', fontsize=16)
+    # # ax.set_ylim(-2000, 200)
+    # fig.show()
 
-    from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-    HeatmapDateTime(series=observed).show()
-    HeatmapDateTime(series=gapfilled).show()
+    # from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+    # HeatmapDateTime(series=observed).show()
+    # HeatmapDateTime(series=gapfilled).show()
 
-    from diive.core.plotting.cumulative import CumulativeYear
-    CumulativeYear(
-        series=gapfilled.multiply(0.02161926),
-        series_units="units",
-        yearly_end_date=None,
-        # yearly_end_date='08-11',
-        start_year=1997,
-        end_year=2022,
-        show_reference=True,
-        excl_years_from_reference=None,
-        # excl_years_from_reference=[2022],
-        # highlight_year=2022,
-        highlight_year_color='#F44336').plot(digits_after_comma=0)
+    # from diive.core.plotting.cumulative import CumulativeYear
+    # CumulativeYear(
+    #     series=gapfilled.multiply(0.02161926),
+    #     series_units="units",
+    #     yearly_end_date=None,
+    #     # yearly_end_date='08-11',
+    #     start_year=1997,
+    #     end_year=2022,
+    #     show_reference=True,
+    #     excl_years_from_reference=None,
+    #     # excl_years_from_reference=[2022],
+    #     # highlight_year=2022,
+    #     highlight_year_color='#F44336').plot(digits_after_comma=0)
 
-    from diive.core.plotting.dielcycle import DielCycle
-    series = gapfilled.multiply(0.02161926).copy()
-    # for yr in [2004, 2006, 2015, 2022]:
-    for yr in range(1997, 2002):
-        series1 = series.loc[series.index.year == yr].copy()
-        dc = DielCycle(series=series1)
-        dc.plot(ax=None, title=str(yr), txt_ylabel_units="units",
-                each_month=True, legend_n_col=2, ylim=[-0.4, 0.2])
-        # d = dc.get_data()
+    # from diive.core.plotting.dielcycle import DielCycle
+    # series = gapfilled.multiply(0.02161926).copy()
+    # # for yr in [2004, 2006, 2015, 2022]:
+    # for yr in range(2013, 2015):
+    #     series1 = series.loc[series.index.year == yr].copy()
+    #     dc = DielCycle(series=series1)
+    #     dc.plot(ax=None, title=str(yr), txt_ylabel_units="units",
+    #             each_month=True, legend_n_col=2, ylim=[-0.4, 0.2])
+    #     # d = dc.get_data()
 
     print("Finished.")
 

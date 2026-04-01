@@ -6,8 +6,27 @@
 
 **Feature Highlights and Logic Changes**
 
+### Gap-filling
+
+* **XGBoostTS / MlRegressorGapFillingBase**: Replaced permutation importance with SHAP-based
+  feature reduction using `TreeExplainer`; added monkey-patch to handle XGBoost `base_score`
+  bracket-enclosed scientific notation format (e.g. `[-4.12E0]`) that caused `float()` conversion
+  errors in some environments; fixed stale `"PERMUTATION IMPORTANCE"` label in
+  `report_feature_reduction()` (now correctly reads `"SHAP IMPORTANCE (mean absolute SHAP values)"`);
+  fixed boundary case in `_remove_rejected_features` where features with SHAP exactly equal to the
+  random-variable threshold were silently excluded from the rejection report (`rejected_locs` is now
+  `~accepted_locs`); fixed `_add_random_variable` returning a 2-D array `(n, 1)` instead of 1-D
+  `(n,)` (9).
+
 ### Plotting and Visualization
 
+* **DielCycle**: Fixed `ConversionError` when plotting time series whose timestamps fall on
+  non-hour boundaries (e.g. 30-min data with :15/:45 offsets). Root cause: matplotlib's
+  `StrCategoryConverter` registered `datetime.time` objects as categories; exact hour values such
+  as `time(3, 0)` were never present in the data, making `set_xticks` fail. Fix: convert the
+  `datetime.time` index to decimal hours (float) before calling `.plot()` and `fill_between()`,
+  giving a clean numeric x-axis; replaced string-based `set_xticks` / `set_xlim` calls with
+  their numeric equivalents `[3, 6, …, 21]` / `[0, 24]` (10).
 * **HeatmapDateTime**: Fixed `TypeError` from passing `datetime.time` objects to `pcolormesh` by converting
   time-of-day axis to float hours; removed deprecated `register_matplotlib_converters()` call; fixed
   `show_values=True` being silently ignored; made time-axis tick interval adaptive to data frequency;
@@ -31,6 +50,8 @@
 
 ### Documentation and Notebooks
 
+* **Jupyter Book documentation site** (new): Added full documentation site built with Jupyter Book,
+  deployed to GitHub Pages.
 * **HeatmapXYZ notebook**: Simplified from 5+ examples to 3 focused examples with descriptive text
   (Quick Start, Traditional approach, Advanced); fixed bug where `GridAggregator.df_long` was used
   instead of `df_agg_long`, causing silent re-aggregation to mean (4, 7).
@@ -52,6 +73,8 @@
 - (6) `diive.core.plotting.heatmap_xyz.HeatmapXYZ.from_gridaggregator`
 - (7) `notebooks/plotting/HeatmapXYZ.ipynb` (notebook simplification and examples)
 - (8) `diive.core.plotting.hexbin_plot.HexbinPlot`, `tests/test_hexbin_plot.py`
+- (9) `diive.core.ml.common.MlRegressorGapFillingBase`
+- (10) `diive.core.plotting.dielcycle.DielCycle`
 
 ## v0.90.0 | 13 Jan 2026
 

@@ -99,12 +99,20 @@ class DielCycle:
 
             # monthstr = calendar.month_name[month] if each_month else 'Mittelwert'
             monthstr = calendar.month_abbr[month] if each_month else 'mean'
-            means.plot(ax=self.ax, label=f'{monthstr}', color=color, zorder=99, lw=2, **kwargs)
+
+            # Convert datetime.time index to decimal hours for a clean numeric x-axis.
+            # Using datetime.time objects directly creates a categorical axis whose
+            # registered categories may not include exact hour boundaries (e.g. when
+            # timestamps are at :15/:45 offsets), causing set_xticks to fail.
+            x_decimal = [t.hour + t.minute / 60 + t.second / 3600 for t in means.index]
+            means_numeric = means.copy()
+            means_numeric.index = x_decimal
+            means_numeric.plot(ax=self.ax, label=f'{monthstr}', color=color, zorder=99, lw=2, **kwargs)
 
             # label = "Mittelwert ± 1 Standardabweichung"
             label = None
             # label = "mean±1sd" if counter == 0 else ""
-            self.ax.fill_between(means.index.values,
+            self.ax.fill_between(x_decimal,
                                  means_add_sd.values,
                                  means_sub_sd.values,
                                  alpha=alpha, zorder=0, color=color, edgecolor='none',
@@ -133,11 +141,11 @@ class DielCycle:
         if self.show_legend:
             default_legend(ax=self.ax, ncol=legend_n_col)
         add_zeroline_y(ax=self.ax, data=self.diel_cycles_df['mean'])
-        self.ax.set_xticks(['3:00', '6:00', '9:00', '12:00', '15:00', '18:00', '21:00'])
+        self.ax.set_xticks([3, 6, 9, 12, 15, 18, 21])
         self.ax.set_xticklabels([3, 6, 9, 12, 15, 18, 21])
         if not self.show_xticklabels:
             self.ax.set_xticklabels([])
-        self.ax.set_xlim(['0:00', '23:59:59'])
+        self.ax.set_xlim([0, 24])
         self.ax.set_ylim(ylim)
         if self.showplot:
             self.fig.tight_layout()
