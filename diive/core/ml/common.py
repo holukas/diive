@@ -931,26 +931,150 @@ def plot_observed_predicted(targets: np.ndarray,
                             scores: dict,
                             infotxt: str = "",
                             random_state: int = None):
-    # Plot observed and predicted
-    fig, axs = plt.subplots(ncols=2, figsize=(8, 4))
-    PredictionErrorDisplay.from_predictions(targets,
-                                            y_pred=predictions,
-                                            kind="actual_vs_predicted",
-                                            subsample=None,
-                                            ax=axs[0],
-                                            random_state=random_state)
-    axs[0].set_title("Actual vs. Predicted values")
-    PredictionErrorDisplay.from_predictions(targets,
-                                            y_pred=predictions,
-                                            kind="residual_vs_predicted",
-                                            subsample=None,
-                                            ax=axs[1],
-                                            random_state=random_state)
-    axs[1].set_title("Residuals vs. Predicted Values")
+    """
+    Plot observed vs. predicted values with enhanced visual styling.
+
+    Creates a 2-panel figure showing:
+    - Left: Actual vs. Predicted scatter with accuracy bands and perfect prediction line
+    - Right: Residuals vs. Predicted with zero line and error regions
+
+    Visual styling follows diive's Material Design theme with color-coded accuracy zones.
+    """
+    # Color palette aligned with diive theme
+    COLOR_SCATTER = '#39a7b3'      # Teal (COLOR_GPP)
+    COLOR_RESIDUAL = '#BA68C8'     # Purple 300
+    COLOR_PERFECT = '#607D8B'      # Bluegray 500 (reference lines)
+    COLOR_GOOD = '#4CAF50'         # Green (±10% error)
+    COLOR_WARN = '#FFB72B'         # Amber 400 (±20% error)
+    COLOR_ERROR = '#d95318'        # Orange/Red (>20% error)
+    COLOR_GRID = '#B0BEC5'         # Bluegray 200
+    COLOR_ZERO = '#000000'         # Black
+    COLOR_TEXT = '#455A64'         # Bluegray 700
+
+    fig, axs = plt.subplots(ncols=2, figsize=(14, 5.5), dpi=100)
+
+    # ==================== PANEL 1: Actual vs. Predicted ====================
+    ax = axs[0]
+
+    # Calculate data ranges for reference lines and zones
+    min_val = min(targets.min(), predictions.min())
+    max_val = max(targets.max(), predictions.max())
+    margin = (max_val - min_val) * 0.05
+    plot_min, plot_max = min_val - margin, max_val + margin
+
+    # Add accuracy zones (filled regions)
+    # Perfect prediction line (y=x) with ±10% and ±20% bands
+    x_ref = np.array([plot_min, plot_max])
+
+    # ±20% error zone (amber, widest)
+    ax.fill_between(x_ref, x_ref * 0.80, x_ref * 1.20,
+                     color=COLOR_WARN, alpha=0.12, zorder=0, label='±20% error band')
+
+    # ±10% error zone (green, narrower)
+    ax.fill_between(x_ref, x_ref * 0.90, x_ref * 1.10,
+                     color=COLOR_GOOD, alpha=0.15, zorder=1, label='±10% error band')
+
+    # Perfect prediction line (diagonal)
+    ax.plot(x_ref, x_ref, '--', color=COLOR_PERFECT, lw=1.5, alpha=0.8,
+            label='Perfect prediction', zorder=2)
+
+    # Scatter plot with custom styling
+    ax.scatter(targets, predictions,
+               c=COLOR_SCATTER, edgecolors=COLOR_PERFECT, s=40, alpha=0.65,
+               linewidth=0.5, zorder=3, label='Predictions')
+
+    # Formatting
+    ax.set_xlabel('Observed values', fontsize=16, color=COLOR_TEXT, fontweight='600')
+    ax.set_ylabel('Predicted values', fontsize=16, color=COLOR_TEXT, fontweight='600')
+    ax.set_title('Actual vs. Predicted', fontsize=15, fontweight='bold', color='black', pad=10)
+    ax.grid(True, alpha=0.3, color=COLOR_GRID, linestyle='-', linewidth=0.5)
+    ax.set_axisbelow(True)
+    ax.set_xlim([plot_min, plot_max])
+    ax.set_ylim([plot_min, plot_max])
+
+    # Tick styling
+    ax.tick_params(axis='both', which='major', labelsize=13,
+                   length=5, width=1, color=COLOR_TEXT)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_linewidth(1)
+    ax.spines['bottom'].set_linewidth(1)
+    ax.spines['left'].set_color(COLOR_TEXT)
+    ax.spines['bottom'].set_color(COLOR_TEXT)
+
+    # Add legend
+    ax.legend(loc='upper left', fontsize=11, framealpha=0.95, edgecolor=COLOR_GRID)
+
+    # ==================== PANEL 2: Residuals vs. Predicted ====================
+    ax = axs[1]
+    residuals = targets - predictions
+
+    # Calculate residual statistics
+    mean_residual = residuals.mean()
+    std_residual = residuals.std()
+
+    # Add reference bands (±1σ, ±2σ)
+    zero_line_y = [plot_min, plot_max]
+    ax.fill_between([plot_min, plot_max], -2*std_residual, 2*std_residual,
+                     color=COLOR_WARN, alpha=0.10, zorder=0, label='±2σ region')
+    ax.fill_between([plot_min, plot_max], -1*std_residual, 1*std_residual,
+                     color=COLOR_GOOD, alpha=0.15, zorder=1, label='±1σ region')
+
+    # Zero line (perfect predictions have zero residuals)
+    ax.axhline(y=0, color=COLOR_ZERO, linestyle='-', linewidth=1.2, alpha=0.7, zorder=2)
+
+    # Scatter plot for residuals
+    ax.scatter(predictions, residuals,
+               c=COLOR_RESIDUAL, edgecolors=COLOR_PERFECT, s=40, alpha=0.65,
+               linewidth=0.5, zorder=3, label='Residuals')
+
+    # Formatting
+    ax.set_xlabel('Predicted values', fontsize=16, color=COLOR_TEXT, fontweight='600')
+    ax.set_ylabel('Residuals (Observed − Predicted)', fontsize=16, color=COLOR_TEXT, fontweight='600')
+    ax.set_title('Residuals vs. Predicted', fontsize=15, fontweight='bold', color='black', pad=10)
+    ax.grid(True, alpha=0.3, color=COLOR_GRID, linestyle='-', linewidth=0.5)
+    ax.set_axisbelow(True)
+    ax.set_xlim([plot_min, plot_max])
+
+    # Tick styling
+    ax.tick_params(axis='both', which='major', labelsize=13,
+                   length=5, width=1, color=COLOR_TEXT)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_linewidth(1)
+    ax.spines['bottom'].set_linewidth(1)
+    ax.spines['left'].set_color(COLOR_TEXT)
+    ax.spines['bottom'].set_color(COLOR_TEXT)
+
+    # Add legend
+    ax.legend(loc='upper left', fontsize=11, framealpha=0.95, edgecolor=COLOR_GRID)
+
+    # ==================== Figure Title and Info Box ====================
     n_vals = len(predictions)
-    fig.suptitle(f"Plotting cross-validated predictions ({infotxt})\n"
-                 f"n_vals={n_vals}, MAE={scores['mae']:.3f}, RMSE={scores['rmse']:.3f}, r2={scores['r2']:.3f}")
-    plt.tight_layout()
+    mae = scores['mae']
+    rmse = scores['rmse']
+    r2 = scores['r2']
+
+    # Main title
+    title_text = f"Model Predictions: {infotxt}" if infotxt else "Model Predictions"
+    fig.suptitle(title_text, fontsize=18, fontweight='bold', color='black', y=0.99)
+
+    # Info box with metrics (positioned in figure space)
+    info_lines = [
+        f"n = {n_vals:,} samples",
+        f"MAE = {mae:.4f}",
+        f"RMSE = {rmse:.4f}",
+        f"R² = {r2:.4f}"
+    ]
+    info_text = '\n'.join(info_lines)
+
+    fig.text(0.99, 0.01, info_text,
+             fontsize=11, color=COLOR_TEXT, verticalalignment='bottom',
+             horizontalalignment='right', family='monospace',
+             bbox=dict(boxstyle='round,pad=0.6', facecolor='#F5F5F5',
+                      edgecolor=COLOR_GRID, linewidth=1.2, alpha=0.95))
+
+    plt.tight_layout(rect=[0, 0.05, 1, 0.97])
     plt.show()
 
 
