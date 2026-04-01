@@ -17,6 +17,18 @@
   random-variable threshold were silently excluded from the rejection report (`rejected_locs` is now
   `~accepted_locs`); fixed `_add_random_variable` returning a 2-D array `(n, 1)` instead of 1-D
   `(n,)` (9).
+* **ML Plotting functions** (enhanced): Redesigned three diagnostic plotting functions with Material
+  Design-inspired strong colors and professional typography (11):
+  - `plot_observed_predicted()`: Redesigned with dual-panel layout (actual vs. predicted + residuals);
+    added color-coded accuracy zones (±10%/±20% error bands); enhanced scatter styling with strong
+    teal color; added perfect prediction reference line; improved residuals panel with ±1σ/±2σ
+    bands; styled info box with metrics (n, MAE, RMSE, R²).
+  - `plot_feature_importance()`: Complete redesign with horizontal bar chart; strong orange error
+    bars; inline importance values; adaptive sizing based on feature count; professional typography
+    and grid styling.
+  - `plot_prediction_residuals_error_regr()`: Enhanced yellowbrick visualizers with custom color
+    styling (strong teal, green, orange); improved titles and documentation; consistent spine/grid
+    formatting; cleaner Q-Q plot and prediction error plots.
 
 ### Plotting and Visualization
 
@@ -75,6 +87,7 @@
 - (8) `diive.core.plotting.hexbin_plot.HexbinPlot`, `tests/test_hexbin_plot.py`
 - (9) `diive.core.ml.common.MlRegressorGapFillingBase`
 - (10) `diive.core.plotting.dielcycle.DielCycle`
+- (11) `diive.core.ml.common.plot_observed_predicted`, `plot_feature_importance`, `plot_prediction_residuals_error_regr`
 
 ## v0.90.0 | 13 Jan 2026
 

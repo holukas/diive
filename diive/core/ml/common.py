@@ -915,13 +915,66 @@ class MlRegressorGapFillingBase:
 
 
 def plot_feature_importance(feature_importances: pd.DataFrame):
-    fig, axs = plt.subplots(ncols=1, figsize=(9, 16))
+    """
+    Plot SHAP feature importance as horizontal bar chart with error bars.
+
+    Visualizes relative importance of features in the model with standard deviation
+    as error bars. Features are sorted by importance for easy interpretation.
+    """
+    # Scientific color palette
+    COLOR_BAR = '#003A70'          # Deep Blue
+    COLOR_ERROR = '#C41E3A'        # Crimson Red (error bars)
+    COLOR_GRID = '#BDC3C7'         # Cool Gray
+    COLOR_TEXT = '#2C3E50'         # Dark Slate Gray
+
+    fig, ax = plt.subplots(figsize=(10, max(8, len(feature_importances) * 0.35)), dpi=100)
+
+    # Prepare data
     _fidf = feature_importances.copy().sort_values(by='SHAP_IMPORTANCE', ascending=True)
-    _fidf['SHAP_IMPORTANCE'].plot.barh(color='#008bfb', yerr=_fidf['SHAP_SD'], ax=axs)
-    axs.set_xlabel("Feature importance (mean |SHAP value|)")
-    axs.set_ylabel("Feature")
-    axs.set_title("SHAP Feature Importance")
-    axs.legend(loc='lower right')
+    importances = _fidf['SHAP_IMPORTANCE']
+    errors = _fidf['SHAP_SD']
+    labels = _fidf.index
+
+    # Create horizontal bar chart
+    bars = ax.barh(range(len(importances)), importances,
+                   color=COLOR_BAR, alpha=0.85, edgecolor=COLOR_TEXT, linewidth=0.8)
+
+    # Add error bars
+    ax.errorbar(importances, range(len(importances)), xerr=errors,
+                fmt='none', ecolor=COLOR_ERROR, elinewidth=2, capsize=4,
+                capthick=2, alpha=0.8, zorder=3)
+
+    # Styling
+    ax.set_yticks(range(len(labels)))
+    ax.set_yticklabels(labels, fontsize=11, color=COLOR_TEXT)
+    ax.set_xlabel('Feature Importance (mean |SHAP value|)', fontsize=14,
+                  color=COLOR_TEXT, fontweight='600')
+    ax.set_ylabel('Feature', fontsize=14, color=COLOR_TEXT, fontweight='600')
+    ax.set_title('SHAP Feature Importance', fontsize=16, fontweight='bold',
+                 color='black', pad=15)
+
+    # Grid
+    ax.grid(True, axis='x', alpha=0.4, color=COLOR_GRID, linestyle='-', linewidth=0.5)
+    ax.set_axisbelow(True)
+
+    # Spine styling
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_linewidth(1)
+    ax.spines['bottom'].set_linewidth(1)
+    ax.spines['left'].set_color(COLOR_TEXT)
+    ax.spines['bottom'].set_color(COLOR_TEXT)
+
+    # Tick styling
+    ax.tick_params(axis='both', which='major', labelsize=11,
+                   length=4, width=1, color=COLOR_TEXT)
+    ax.tick_params(axis='x', labelsize=10)
+
+    # Add value labels on bars
+    for i, (imp, err) in enumerate(zip(importances, errors)):
+        ax.text(imp + err * 0.5, i, f'{imp:.3f}', va='center', fontsize=9.5,
+                color=COLOR_TEXT, fontweight='500')
+
     fig.tight_layout()
     fig.show()
 
@@ -940,16 +993,16 @@ def plot_observed_predicted(targets: np.ndarray,
 
     Visual styling follows diive's Material Design theme with color-coded accuracy zones.
     """
-    # Color palette aligned with diive theme
-    COLOR_SCATTER = '#39a7b3'      # Teal (COLOR_GPP)
-    COLOR_RESIDUAL = '#BA68C8'     # Purple 300
-    COLOR_PERFECT = '#607D8B'      # Bluegray 500 (reference lines)
-    COLOR_GOOD = '#4CAF50'         # Green (±10% error)
-    COLOR_WARN = '#FFB72B'         # Amber 400 (±20% error)
-    COLOR_ERROR = '#d95318'        # Orange/Red (>20% error)
-    COLOR_GRID = '#B0BEC5'         # Bluegray 200
+    # Scientific color palette - high contrast, publication-ready
+    COLOR_SCATTER = '#003A70'      # Deep Blue
+    COLOR_RESIDUAL = '#C41E3A'     # Crimson Red
+    COLOR_PERFECT = '#2C3E50'      # Dark Slate Blue-Gray
+    COLOR_GOOD = '#F4A300'         # Golden Yellow (±10% error)
+    COLOR_WARN = '#E67F0D'         # Deep Orange (±20% error)
+    COLOR_ERROR = '#C41E3A'        # Crimson Red (>20% error)
+    COLOR_GRID = '#BDC3C7'         # Cool Gray
     COLOR_ZERO = '#000000'         # Black
-    COLOR_TEXT = '#455A64'         # Bluegray 700
+    COLOR_TEXT = '#2C3E50'         # Dark Slate Gray
 
     fig, axs = plt.subplots(ncols=2, figsize=(14, 5.5), dpi=100)
 
@@ -966,22 +1019,22 @@ def plot_observed_predicted(targets: np.ndarray,
     # Perfect prediction line (y=x) with ±10% and ±20% bands
     x_ref = np.array([plot_min, plot_max])
 
-    # ±20% error zone (amber, widest)
+    # ±20% error zone (strong orange, widest)
     ax.fill_between(x_ref, x_ref * 0.80, x_ref * 1.20,
-                     color=COLOR_WARN, alpha=0.12, zorder=0, label='±20% error band')
+                     color=COLOR_WARN, alpha=0.18, zorder=0, label='±20% error band')
 
-    # ±10% error zone (green, narrower)
+    # ±10% error zone (strong green, narrower)
     ax.fill_between(x_ref, x_ref * 0.90, x_ref * 1.10,
-                     color=COLOR_GOOD, alpha=0.15, zorder=1, label='±10% error band')
+                     color=COLOR_GOOD, alpha=0.22, zorder=1, label='±10% error band')
 
     # Perfect prediction line (diagonal)
-    ax.plot(x_ref, x_ref, '--', color=COLOR_PERFECT, lw=1.5, alpha=0.8,
+    ax.plot(x_ref, x_ref, '--', color=COLOR_PERFECT, lw=2, alpha=0.9,
             label='Perfect prediction', zorder=2)
 
     # Scatter plot with custom styling
     ax.scatter(targets, predictions,
-               c=COLOR_SCATTER, edgecolors=COLOR_PERFECT, s=40, alpha=0.65,
-               linewidth=0.5, zorder=3, label='Predictions')
+               c=COLOR_SCATTER, edgecolors=COLOR_PERFECT, s=50, alpha=0.75,
+               linewidth=0.8, zorder=3, label='Predictions')
 
     # Formatting
     ax.set_xlabel('Observed values', fontsize=16, color=COLOR_TEXT, fontweight='600')
@@ -1016,17 +1069,17 @@ def plot_observed_predicted(targets: np.ndarray,
     # Add reference bands (±1σ, ±2σ)
     zero_line_y = [plot_min, plot_max]
     ax.fill_between([plot_min, plot_max], -2*std_residual, 2*std_residual,
-                     color=COLOR_WARN, alpha=0.10, zorder=0, label='±2σ region')
+                     color=COLOR_WARN, alpha=0.18, zorder=0, label='±2σ region')
     ax.fill_between([plot_min, plot_max], -1*std_residual, 1*std_residual,
-                     color=COLOR_GOOD, alpha=0.15, zorder=1, label='±1σ region')
+                     color=COLOR_GOOD, alpha=0.22, zorder=1, label='±1σ region')
 
     # Zero line (perfect predictions have zero residuals)
-    ax.axhline(y=0, color=COLOR_ZERO, linestyle='-', linewidth=1.2, alpha=0.7, zorder=2)
+    ax.axhline(y=0, color=COLOR_ZERO, linestyle='-', linewidth=1.5, alpha=0.85, zorder=2)
 
     # Scatter plot for residuals
     ax.scatter(predictions, residuals,
-               c=COLOR_RESIDUAL, edgecolors=COLOR_PERFECT, s=40, alpha=0.65,
-               linewidth=0.5, zorder=3, label='Residuals')
+               c=COLOR_RESIDUAL, edgecolors=COLOR_PERFECT, s=50, alpha=0.75,
+               linewidth=0.8, zorder=3, label='Residuals')
 
     # Formatting
     ax.set_xlabel('Predicted values', fontsize=16, color=COLOR_TEXT, fontweight='600')
@@ -1085,45 +1138,100 @@ def plot_prediction_residuals_error_regr(model,
                                          y_test: np.ndarray,
                                          infotxt: str):
     """
-    Plot residuals and prediction error
+    Plot residuals and prediction error diagnostics.
+
+    Creates two diagnostic plots using yellowbrick visualizers:
+    - Left: Q-Q plot of residuals to assess normality assumption
+    - Right: Actual vs. Predicted with prediction error visualization
 
     Args:
-        model:
-        X_train: predictors in training data
-        y_train: targets in training data
-        X_test: predictors in test data
-        y_test: targets in test data
-        infotxt: text displayed in figure header
+        model: Fitted regression model with predict() method
+        X_train: predictors in training data (n_samples, n_features)
+        y_train: targets in training data (n_samples,)
+        X_test: predictors in test data (n_samples, n_features)
+        y_test: targets in test data (n_samples,)
+        infotxt: text displayed in figure header for context
 
-    Kudos:
-    - https://www.scikit-yb.org/en/latest/api/regressor/residuals.html
-    - https://www.scikit-yb.org/en/latest/api/regressor/peplot.html
+    Notes:
+        - Q-Q plot: If residuals are normally distributed, points should fall on
+          the diagonal line. Deviations suggest non-normality.
+        - Prediction Error: Shows scatter of predictions vs. actual values with
+          perfect prediction line (y=x) and prediction confidence region.
 
+    References:
+        - https://www.scikit-yb.org/en/latest/api/regressor/residuals.html
+        - https://www.scikit-yb.org/en/latest/api/regressor/peplot.html
     """
 
-    # fig, axs = plt.subplots(ncols=2, figsize=(14, 4))
-    # fig, ax = plt.subplots()
+    # Scientific color palette for consistency
+    COLOR_POINTS = '#003A70'       # Deep Blue
+    COLOR_LINE = '#F4A300'         # Golden Yellow
+    COLOR_ERROR = '#C41E3A'        # Crimson Red
+    COLOR_TEXT = '#2C3E50'         # Dark Slate Gray
 
-    # Histogram can be replaced with a Q-Q plot, which is a common way
-    # to check that residuals are normally distributed. If the residuals
-    # are normally distributed, then their quantiles when plotted against
-    # quantiles of normal distribution should form a straight line.
-    fig, ax = plt.subplots()
-    fig.suptitle(f"{infotxt}")
+    # ==================== PLOT 1: Q-Q Plot (Residuals Normality) ====================
+    fig, ax = plt.subplots(figsize=(9, 6), dpi=100)
+    fig.suptitle(f"Residuals Analysis: {infotxt}", fontsize=15, fontweight='bold', y=0.98)
+
+    # Q-Q Plot detects normality violations
     vis = ResidualsPlot(model, hist=False, qqplot=True, ax=ax)
-    vis.fit(X_train, y_train)  # Fit the training data to the visualizer
-    vis.score(X_test, y_test)  # Evaluate the model on the test data
-    vis.show()  # Finalize and render the figure
+    vis.fit(X_train, y_train)
+    vis.score(X_test, y_test)
 
-    # difference between the observed value of the target variable (y)
-    # and the predicted value (ŷ), i.e. the error of the prediction
-    fig, ax = plt.subplots()
-    fig.suptitle(f"{infotxt}")
-    vis = PredictionError(model)
-    vis.fit(X_train, y_train)  # Fit the training data to the visualizer
-    vis.score(X_test, y_test)  # Evaluate the model on the test data
+    # Enhance styling
+    ax.set_title('Q-Q Plot (Normality Assessment)', fontsize=13, fontweight='600', pad=10)
+    ax.set_xlabel('Theoretical Quantiles', fontsize=12, color=COLOR_TEXT, fontweight='600')
+    ax.set_ylabel('Sample Quantiles', fontsize=12, color=COLOR_TEXT, fontweight='600')
+    ax.grid(True, alpha=0.3, linestyle='-', linewidth=0.5)
+    ax.set_axisbelow(True)
+
+    # Update line colors
+    for line in ax.get_lines():
+        if line.get_marker() in ['.', 'o']:
+            line.set_color(COLOR_POINTS)
+            line.set_alpha(0.7)
+        else:
+            line.set_color(COLOR_LINE)
+            line.set_linewidth(2)
+
+    plt.tight_layout()
     vis.show()
 
-    # fig.suptitle(f"{infotxt}")
-    # plt.tight_layout()
-    # fig.show()
+    # ==================== PLOT 2: Prediction Error Plot ====================
+    fig, ax = plt.subplots(figsize=(9, 6), dpi=100)
+    fig.suptitle(f"Prediction Error: {infotxt}", fontsize=15, fontweight='bold', y=0.98)
+
+    vis = PredictionError(model)
+    vis.fit(X_train, y_train)
+    vis.score(X_test, y_test)
+
+    # Enhance styling
+    ax.set_title('Actual vs. Predicted (with Confidence Region)', fontsize=13, fontweight='600', pad=10)
+    ax.set_xlabel('Actual Values', fontsize=12, color=COLOR_TEXT, fontweight='600')
+    ax.set_ylabel('Predicted Values', fontsize=12, color=COLOR_TEXT, fontweight='600')
+    ax.grid(True, alpha=0.3, linestyle='-', linewidth=0.5)
+    ax.set_axisbelow(True)
+
+    # Update scatter point colors
+    for collection in ax.collections:
+        collection.set_edgecolor(COLOR_TEXT)
+        collection.set_facecolor(COLOR_POINTS)
+        collection.set_alpha(0.7)
+        collection.set_linewidth(0.5)
+
+    # Update line colors
+    for line in ax.get_lines():
+        if line.get_marker() in ['.', 'o', 's']:
+            line.set_color(COLOR_POINTS)
+            line.set_alpha(0.7)
+        elif line.get_linestyle() == '--':
+            line.set_color(COLOR_LINE)
+            line.set_linewidth(2)
+            line.set_alpha(0.85)
+        else:
+            line.set_color(COLOR_ERROR)
+            line.set_linewidth(1.5)
+            line.set_alpha(0.7)
+
+    plt.tight_layout()
+    vis.show()
