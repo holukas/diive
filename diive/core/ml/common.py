@@ -624,25 +624,39 @@ class MlRegressorGapFillingBase:
     def _create_additional_datacols(self) -> pd.DataFrame:
         model_df = self.model_df.copy()
 
+        # Ignore columns
+        # Used for ignoring columns during certain steps, e.g. lagged cols do not
+        # need to be included in the rolling variants.
+        _ignorecols = []
+
+        # TODO
+        # TODO
+        # TODO work on orig input features only, not on newly created cols
+        self.original_input_features
+
         # Additional data columns
         if any([self.features_lag, self.features_rolling, self.vectorize_timestamps,
                 self.add_continuous_record_number]):
             print("\nAdding new data columns ...")
-            if self.features_lag and (len(model_df.columns) > 1):
-                model_df = self._lag_features(features_lag_exclude_cols=self.features_lag_exclude_cols)
 
-            if self.features_rolling and (len(model_df.columns) > 1):
-                model_df = self._rolling_features(df=model_df,
+        if self.features_lag and (len(model_df.columns) > 1):
+            model_df = self._lag_features(features_lag_exclude_cols=self.features_lag_exclude_cols)
+
+
+
+        if self.features_rolling and (len(model_df.columns) > 1):
+            self.features_rolling_exclude_cols.append(_ignorecols)
+            model_df = self._rolling_features(df=model_df,
                                                   windows=self.features_rolling,
                                                   exclude_cols=self.features_rolling_exclude_cols)
 
-            if self.vectorize_timestamps:
-                model_df = vectorize_timestamps(df=model_df, txt="")
-                # For cyclical variables, keep only the sine/cosine variants, drop linear versions
-                model_df = model_df.drop(columns=['.HOUR', '.SEASON', '.MONTH', '.WEEK', '.DOY'])
+        if self.vectorize_timestamps:
+            model_df = vectorize_timestamps(df=model_df, txt="")
+            # For cyclical variables, keep only the sine/cosine variants, drop linear versions
+            model_df = model_df.drop(columns=['.HOUR', '.SEASON', '.MONTH', '.WEEK', '.DOY'])
 
-            if self.add_continuous_record_number:
-                model_df = fr.add_continuous_record_number(df=model_df)
+        if self.add_continuous_record_number:
+            model_df = fr.add_continuous_record_number(df=model_df)
 
         # Timestamp sanitizer
         if self.sanitize_timestamp:
