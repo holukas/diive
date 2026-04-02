@@ -34,6 +34,8 @@ class MlRegressorGapFillingBase:
                  features_lag: list = None,
                  features_lag_stepsize: int = 1,
                  features_lag_exclude_cols: list = None,
+                 features_rolling: list = None,
+                 features_rolling_exclude_cols: list = None,
                  vectorize_timestamps: bool = False,
                  add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False,
@@ -70,6 +72,19 @@ class MlRegressorGapFillingBase:
                 List of predictors for which no lagged variants are added.
                 Example: with ['A', 'B'] no lagged variants for variables 'A' and 'B' are added.
 
+            features_rolling:
+                List of window sizes (in records) for rolling statistics.
+                For each window size, rolling mean and rolling std are added for every
+                feature column (excluding target and any cols in features_rolling_exclude_cols).
+                If None, no rolling statistics are added.
+                Example: features_rolling=[6, 48] with 30-min data adds 3-hour and 24-hour
+                rolling mean and std for each driver variable.
+                Column naming: '.{col}_mean{w}' and '.{col}_std{w}', e.g. '.Tair_f_mean6'.
+
+            features_rolling_exclude_cols:
+                List of column names excluded from rolling statistics.
+                Example: ['Rg_f'] skips rolling features for Rg_f.
+
             vectorize_timestamps:
                 Include timestamp info as integer data: year, season, month, week, doy, hour
 
@@ -96,6 +111,8 @@ class MlRegressorGapFillingBase:
         self.features_lag = features_lag
         self.features_lag_stepsize = features_lag_stepsize
         self.features_lag_exclude_cols = features_lag_exclude_cols
+        self.features_rolling = features_rolling
+        self.features_rolling_exclude_cols = features_rolling_exclude_cols
         self.verbose = verbose
         self.vectorize_timestamps = vectorize_timestamps
         self.add_continuous_record_number = add_continuous_record_number
@@ -608,11 +625,16 @@ class MlRegressorGapFillingBase:
         model_df = self.model_df.copy()
 
         # Additional data columns
-        if any([self.features_lag, self.vectorize_timestamps,
+        if any([self.features_lag, self.features_rolling, self.vectorize_timestamps,
                 self.add_continuous_record_number]):
             print("\nAdding new data columns ...")
             if self.features_lag and (len(model_df.columns) > 1):
                 model_df = self._lag_features(features_lag_exclude_cols=self.features_lag_exclude_cols)
+
+            if self.features_rolling and (len(model_df.columns) > 1):
+                model_df = self._rolling_features(df=model_df,
+                                                  windows=self.features_rolling,
+                                                  exclude_cols=self.features_rolling_exclude_cols)
 
             if self.vectorize_timestamps:
                 model_df = vectorize_timestamps(df=model_df, txt="")
@@ -701,6 +723,46 @@ class MlRegressorGapFillingBase:
                                                                    lag=self.features_lag,
                                                                    exclude_cols=exclude_cols,
                                                                    verbose=self.verbose)
+
+    def _rolling_features(self, df: pd.DataFrame, windows: list, exclude_cols: list = None) -> pd.DataFrame:
+        """Add rolling mean and std of feature columns at multiple window sizes.
+
+        For each window size w and each feature column col (excluding target and
+        any cols in exclude_cols), two new columns are added:
+            '.{col}_mean{w}' — rolling mean over the previous w records
+            '.{col}_std{w}'  — rolling std over the previous w records
+
+        Rolling statistics use min_periods=1 so no new NaN values are introduced
+        at the start of the series.
+
+        Args:
+            df: DataFrame with feature columns and DatetimeIndex.
+            windows: List of window sizes in records (e.g. [6, 48] for 3h and 24h
+                     at 30-min resolution).
+            exclude_cols: Column names to skip. Target column is always excluded.
+
+        Returns:
+            DataFrame with additional rolling feature columns appended.
+        """
+        exclude = [self.target_col] + (exclude_cols or [])
+        feature_cols = [c for c in df.columns if c not in exclude]
+        newcols = []
+
+        for w in windows:
+            rolled = df[feature_cols].rolling(window=w, min_periods=1)
+            mean_df = rolled.mean()
+            std_df = rolled.std(ddof=0)  # population std to avoid NaN for window=1
+
+            mean_df.columns = [f'.{c}_mean{w}' for c in feature_cols]
+            std_df.columns = [f'.{c}_std{w}' for c in feature_cols]
+
+            df = pd.concat([df, mean_df, std_df], axis=1)
+            newcols += mean_df.columns.tolist() + std_df.columns.tolist()
+
+        if self.verbose:
+            print(f"++ Added rolling features (windows={windows}) for {len(feature_cols)} columns: "
+                  f"{newcols}")
+        return df
 
     def _check_n_cols(self):
         """Check number of columns"""

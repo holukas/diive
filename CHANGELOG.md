@@ -8,6 +8,12 @@
 
 ### Gap-filling
 
+* **XGBoostTS / MlRegressorGapFillingBase**: Added `features_rolling` parameter for rolling window
+  statistics feature engineering. For each specified window size (in records), rolling mean and
+  rolling std are added for all driver columns, giving the model explicit short-term memory context.
+  `features_rolling_exclude_cols` allows excluding specific columns. Uses `min_periods=1` to avoid
+  introducing new NaN values. Column naming: `.{col}_mean{w}` / `.{col}_std{w}` (e.g. with 30-min
+  data, `features_rolling=[6, 48]` adds 3-hour and 24-hour rolling statistics) (12).
 * **XGBoostTS / MlRegressorGapFillingBase**: Replaced permutation importance with SHAP-based
   feature reduction using `TreeExplainer`; added monkey-patch to handle XGBoost `base_score`
   bracket-enclosed scientific notation format (e.g. `[-4.12E0]`) that caused `float()` conversion
@@ -88,6 +94,7 @@
 - (9) `diive.core.ml.common.MlRegressorGapFillingBase`
 - (10) `diive.core.plotting.dielcycle.DielCycle`
 - (11) `diive.core.ml.common.plot_observed_predicted`, `plot_feature_importance`, `plot_prediction_residuals_error_regr`
+- (12) `diive.core.ml.common.MlRegressorGapFillingBase._rolling_features`, `diive.pkgs.gapfilling.xgboost_ts.XGBoostTS`
 
 ## v0.90.0 | 13 Jan 2026
 

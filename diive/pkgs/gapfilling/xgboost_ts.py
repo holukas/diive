@@ -28,6 +28,7 @@ class XGBoostTS(MlRegressorGapFillingBase):
 
     def __init__(self, input_df: DataFrame, target_col: str or tuple, verbose: int = 0,
                  test_size: float = 0.25, features_lag: list = None, features_lag_exclude_cols: list = None,
+                 features_rolling: list = None, features_rolling_exclude_cols: list = None,
                  vectorize_timestamps: bool = False, add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False, **kwargs):
         """
@@ -61,6 +62,16 @@ class XGBoostTS(MlRegressorGapFillingBase):
                 List of predictors for which no lagged variants are added.
                 Example: with ['A', 'B'] no lagged variants for variables 'A' and 'B' are added.
 
+            features_rolling:
+                List of window sizes (in records) for rolling statistics.
+                For each window size, rolling mean and rolling std are added for every
+                feature column. If None, no rolling statistics are added.
+                Example: features_rolling=[6, 48] with 30-min data adds 3-hour and 24-hour
+                rolling mean and std for each driver variable.
+
+            features_rolling_exclude_cols:
+                List of column names excluded from rolling statistics.
+
             vectorize_timestamps:
                 Include timestamp info as integer data: year, season, month, week, doy, hour
 
@@ -91,6 +102,8 @@ class XGBoostTS(MlRegressorGapFillingBase):
             test_size=test_size,
             features_lag=features_lag,
             features_lag_exclude_cols=features_lag_exclude_cols,
+            features_rolling=features_rolling,
+            features_rolling_exclude_cols=features_rolling_exclude_cols,
             vectorize_timestamps=vectorize_timestamps,
             add_continuous_record_number=add_continuous_record_number,
             sanitize_timestamp=sanitize_timestamp,
@@ -129,10 +142,11 @@ def _example_xgbts():
         verbose=1,
         features_lag=[-1, -1],
         features_lag_exclude_cols=None,
+        features_rolling=[12, 24, 48],
         vectorize_timestamps=True,
         add_continuous_record_number=True,
         sanitize_timestamp=True,
-        n_estimators=3,
+        n_estimators=33,
         # n_estimators=99,
         random_state=42,
         # booster='gbtree',  # gbtree (default), gblinear, dart
@@ -162,7 +176,7 @@ def _example_xgbts():
     xgbts.reduce_features()
     xgbts.report_feature_reduction()
 
-    xgbts.trainmodel(showplot_scores=True, showplot_importance=True)
+    xgbts.trainmodel(showplot_scores=False, showplot_importance=False)
     xgbts.report_traintest()
 
     xgbts.fillgaps(showplot_scores=True, showplot_importance=True)
@@ -171,9 +185,9 @@ def _example_xgbts():
     observed = df[TARGET_COL]
     gapfilled = xgbts.get_gapfilled_target()
 
-    print(xgbts.feature_importances_)
-    print(xgbts.scores_)
-    print(xgbts.gapfilling_df_)
+    # print(xgbts.feature_importances_)
+    # print(xgbts.scores_)
+    # print(xgbts.gapfilling_df_)
 
     # # Plot
     # from diive.core.plotting.timeseries import TimeSeries
