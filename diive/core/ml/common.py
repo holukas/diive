@@ -8,15 +8,14 @@ import pandas as pd
 import shap
 from pandas import DataFrame
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import PredictionErrorDisplay
 from sklearn.model_selection import train_test_split
 from xgboost import XGBRegressor
 from yellowbrick.regressor import PredictionError, ResidualsPlot
 
 import diive.core.dfun.frames as fr
-import diive.pkgs.createvar.laggedvariants
 from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import vectorize_timestamps
+from diive.pkgs.createvar.laggedvariants import lagged_variants
 from diive.pkgs.gapfilling.scores import prediction_scores
 
 pd.set_option('display.max_rows', 50)
@@ -31,7 +30,7 @@ class MlRegressorGapFillingBase:
                  input_df: DataFrame,
                  target_col: str or tuple,
                  verbose: int = 0,
-                 features_lag: list = None,
+                 features_lag: list[int, int] = None,
                  features_lag_stepsize: int = 1,
                  features_lag_exclude_cols: list = None,
                  features_rolling: list = None,
@@ -134,12 +133,13 @@ class MlRegressorGapFillingBase:
         # Create model dataframe and Add additional data columns
         self.model_df = input_df.copy()
 
+        # Original input features (all features except target)
+        self.original_input_features = self.model_df.drop(columns=self.target_col).columns.tolist()
+
         # Create additional data columns
         self.model_df = self._create_additional_datacols()
 
         self._check_n_cols()
-
-        self.original_input_features = self.model_df.drop(columns=self.target_col).columns.tolist()
 
         # Check if features complete
         n_vals_index = len(self.model_df.index)
@@ -622,49 +622,49 @@ class MlRegressorGapFillingBase:
         )
 
     def _create_additional_datacols(self) -> pd.DataFrame:
+
+        # Dataframe that contains the target and all original features
         model_df = self.model_df.copy()
+        expanded_df = self.model_df.copy()
 
-        # Ignore columns
-        # Used for ignoring columns during certain steps, e.g. lagged cols do not
-        # need to be included in the rolling variants.
-        _ignorecols = []
+        # Add lagged cols
+        if self.features_lag:
+            _work_df = model_df[self.original_input_features].copy()
+            if len(_work_df.columns) == 0:
+                raise ValueError("Cannot add lagged features because there are no original features.")
+            _out_df = lagged_variants(df=_work_df,
+                                      stepsize=self.features_lag_stepsize,
+                                      lag=self.features_lag,
+                                      exclude_cols=self.features_lag_exclude_cols,
+                                      verbose=self.verbose)
+            newcols = [c for c in _out_df.columns if c not in expanded_df.columns]
+            expanded_df = expanded_df.join(_out_df[newcols])
 
-        # TODO
-        # TODO
-        # TODO work on orig input features only, not on newly created cols
-        self.original_input_features
-
-        # Additional data columns
-        if any([self.features_lag, self.features_rolling, self.vectorize_timestamps,
-                self.add_continuous_record_number]):
-            print("\nAdding new data columns ...")
-
-        if self.features_lag and (len(model_df.columns) > 1):
-            model_df = self._lag_features(features_lag_exclude_cols=self.features_lag_exclude_cols)
-
-
-
-        if self.features_rolling and (len(model_df.columns) > 1):
-            self.features_rolling_exclude_cols.append(_ignorecols)
-            model_df = self._rolling_features(df=model_df,
-                                                  windows=self.features_rolling,
-                                                  exclude_cols=self.features_rolling_exclude_cols)
+        if self.features_rolling:
+            _work_df = model_df[self.original_input_features].copy()
+            if len(_work_df.columns) == 0:
+                raise ValueError("Cannot add rolling features because there are no original features.")
+            _out_df = self._rolling_features(df=_work_df,
+                                             windows=self.features_rolling,
+                                             exclude_cols=self.features_rolling_exclude_cols)
+            newcols = [c for c in _out_df.columns if c not in expanded_df.columns]
+            expanded_df = expanded_df.join(_out_df[newcols])
 
         if self.vectorize_timestamps:
-            model_df = vectorize_timestamps(df=model_df, txt="")
+            expanded_df = vectorize_timestamps(df=expanded_df, txt="")
             # For cyclical variables, keep only the sine/cosine variants, drop linear versions
-            model_df = model_df.drop(columns=['.HOUR', '.SEASON', '.MONTH', '.WEEK', '.DOY'])
+            expanded_df = expanded_df.drop(columns=['.HOUR', '.SEASON', '.MONTH', '.WEEK', '.DOY'])
 
         if self.add_continuous_record_number:
-            model_df = fr.add_continuous_record_number(df=model_df)
+            expanded_df = fr.add_continuous_record_number(df=expanded_df)
 
         # Timestamp sanitizer
         if self.sanitize_timestamp:
             verbose = True if self.verbose > 0 else False
-            tss = TimestampSanitizer(data=model_df, output_middle_timestamp=True, verbose=verbose)
-            model_df = tss.get()
+            tss = TimestampSanitizer(data=expanded_df, output_middle_timestamp=True, verbose=verbose)
+            expanded_df = tss.get()
 
-        return model_df
+        return expanded_df
 
     def _shap_importance(self, model, X, X_names) -> DataFrame:
         """
@@ -727,16 +727,16 @@ class MlRegressorGapFillingBase:
         df[random_col] = np.random.RandomState(self._random_state).randn(df.shape[0])
         return df, random_col
 
-    def _lag_features(self, features_lag_exclude_cols):
-        """Add lagged variants of variables as new features"""
-        exclude_cols = [self.target_col]
-        if features_lag_exclude_cols:
-            exclude_cols += features_lag_exclude_cols
-        return diive.pkgs.createvar.laggedvariants.lagged_variants(df=self.model_df,
-                                                                   stepsize=self.features_lag_stepsize,
-                                                                   lag=self.features_lag,
-                                                                   exclude_cols=exclude_cols,
-                                                                   verbose=self.verbose)
+    # def _lag_features(self, features_lag_exclude_cols):
+    #     """Add lagged variants of variables as new features"""
+    #     exclude_cols = [self.target_col]
+    #     if features_lag_exclude_cols:
+    #         exclude_cols += features_lag_exclude_cols
+    #     return diive.pkgs.createvar.laggedvariants.lagged_variants(df=self.model_df,
+    #                                                                stepsize=self.features_lag_stepsize,
+    #                                                                lag=self.features_lag,
+    #                                                                exclude_cols=exclude_cols,
+    #                                                                verbose=self.verbose)
 
     def _rolling_features(self, df: pd.DataFrame, windows: list, exclude_cols: list = None) -> pd.DataFrame:
         """Add rolling mean and std of feature columns at multiple window sizes.
@@ -767,8 +767,8 @@ class MlRegressorGapFillingBase:
             mean_df = rolled.mean()
             std_df = rolled.std(ddof=0)  # population std to avoid NaN for window=1
 
-            mean_df.columns = [f'.{c}_mean{w}' for c in feature_cols]
-            std_df.columns = [f'.{c}_std{w}' for c in feature_cols]
+            mean_df.columns = [f'.{c}_MEAN{w}' for c in feature_cols]
+            std_df.columns = [f'.{c}_SD{w}' for c in feature_cols]
 
             df = pd.concat([df, mean_df, std_df], axis=1)
             newcols += mean_df.columns.tolist() + std_df.columns.tolist()
@@ -998,10 +998,10 @@ def plot_feature_importance(feature_importances: pd.DataFrame):
     as error bars. Features are sorted by importance for easy interpretation.
     """
     # Scientific color palette
-    COLOR_BAR = '#003A70'          # Deep Blue
-    COLOR_ERROR = '#C41E3A'        # Crimson Red (error bars)
-    COLOR_GRID = '#BDC3C7'         # Cool Gray
-    COLOR_TEXT = '#2C3E50'         # Dark Slate Gray
+    COLOR_BAR = '#003A70'  # Deep Blue
+    COLOR_ERROR = '#C41E3A'  # Crimson Red (error bars)
+    COLOR_GRID = '#BDC3C7'  # Cool Gray
+    COLOR_TEXT = '#2C3E50'  # Dark Slate Gray
 
     fig, ax = plt.subplots(figsize=(10, max(8, len(feature_importances) * 0.35)), dpi=100)
 
@@ -1070,15 +1070,15 @@ def plot_observed_predicted(targets: np.ndarray,
     Visual styling follows diive's Material Design theme with color-coded accuracy zones.
     """
     # Scientific color palette - high contrast, publication-ready
-    COLOR_SCATTER = '#003A70'      # Deep Blue
-    COLOR_RESIDUAL = '#C41E3A'     # Crimson Red
-    COLOR_PERFECT = '#2C3E50'      # Dark Slate Blue-Gray
-    COLOR_GOOD = '#F4A300'         # Golden Yellow (±10% error)
-    COLOR_WARN = '#E67F0D'         # Deep Orange (±20% error)
-    COLOR_ERROR = '#C41E3A'        # Crimson Red (>20% error)
-    COLOR_GRID = '#BDC3C7'         # Cool Gray
-    COLOR_ZERO = '#000000'         # Black
-    COLOR_TEXT = '#2C3E50'         # Dark Slate Gray
+    COLOR_SCATTER = '#003A70'  # Deep Blue
+    COLOR_RESIDUAL = '#C41E3A'  # Crimson Red
+    COLOR_PERFECT = '#2C3E50'  # Dark Slate Blue-Gray
+    COLOR_GOOD = '#F4A300'  # Golden Yellow (±10% error)
+    COLOR_WARN = '#E67F0D'  # Deep Orange (±20% error)
+    COLOR_ERROR = '#C41E3A'  # Crimson Red (>20% error)
+    COLOR_GRID = '#BDC3C7'  # Cool Gray
+    COLOR_ZERO = '#000000'  # Black
+    COLOR_TEXT = '#2C3E50'  # Dark Slate Gray
 
     fig, axs = plt.subplots(ncols=2, figsize=(14, 5.5), dpi=100)
 
@@ -1097,11 +1097,11 @@ def plot_observed_predicted(targets: np.ndarray,
 
     # ±20% error zone (strong orange, widest)
     ax.fill_between(x_ref, x_ref * 0.80, x_ref * 1.20,
-                     color=COLOR_WARN, alpha=0.18, zorder=0, label='±20% error band')
+                    color=COLOR_WARN, alpha=0.18, zorder=0, label='±20% error band')
 
     # ±10% error zone (strong green, narrower)
     ax.fill_between(x_ref, x_ref * 0.90, x_ref * 1.10,
-                     color=COLOR_GOOD, alpha=0.22, zorder=1, label='±10% error band')
+                    color=COLOR_GOOD, alpha=0.22, zorder=1, label='±10% error band')
 
     # Perfect prediction line (diagonal)
     ax.plot(x_ref, x_ref, '--', color=COLOR_PERFECT, lw=2, alpha=0.9,
@@ -1144,10 +1144,10 @@ def plot_observed_predicted(targets: np.ndarray,
 
     # Add reference bands (±1σ, ±2σ)
     zero_line_y = [plot_min, plot_max]
-    ax.fill_between([plot_min, plot_max], -2*std_residual, 2*std_residual,
-                     color=COLOR_WARN, alpha=0.18, zorder=0, label='±2σ region')
-    ax.fill_between([plot_min, plot_max], -1*std_residual, 1*std_residual,
-                     color=COLOR_GOOD, alpha=0.22, zorder=1, label='±1σ region')
+    ax.fill_between([plot_min, plot_max], -2 * std_residual, 2 * std_residual,
+                    color=COLOR_WARN, alpha=0.18, zorder=0, label='±2σ region')
+    ax.fill_between([plot_min, plot_max], -1 * std_residual, 1 * std_residual,
+                    color=COLOR_GOOD, alpha=0.22, zorder=1, label='±1σ region')
 
     # Zero line (perfect predictions have zero residuals)
     ax.axhline(y=0, color=COLOR_ZERO, linestyle='-', linewidth=1.5, alpha=0.85, zorder=2)
@@ -1201,7 +1201,7 @@ def plot_observed_predicted(targets: np.ndarray,
              fontsize=11, color=COLOR_TEXT, verticalalignment='bottom',
              horizontalalignment='right', family='monospace',
              bbox=dict(boxstyle='round,pad=0.6', facecolor='#F5F5F5',
-                      edgecolor=COLOR_GRID, linewidth=1.2, alpha=0.95))
+                       edgecolor=COLOR_GRID, linewidth=1.2, alpha=0.95))
 
     plt.tight_layout(rect=[0, 0.05, 1, 0.97])
     plt.show()
@@ -1240,10 +1240,10 @@ def plot_prediction_residuals_error_regr(model,
     """
 
     # Scientific color palette for consistency
-    COLOR_POINTS = '#003A70'       # Deep Blue
-    COLOR_LINE = '#F4A300'         # Golden Yellow
-    COLOR_ERROR = '#C41E3A'        # Crimson Red
-    COLOR_TEXT = '#2C3E50'         # Dark Slate Gray
+    COLOR_POINTS = '#003A70'  # Deep Blue
+    COLOR_LINE = '#F4A300'  # Golden Yellow
+    COLOR_ERROR = '#C41E3A'  # Crimson Red
+    COLOR_TEXT = '#2C3E50'  # Dark Slate Gray
 
     # ==================== PLOT 1: Q-Q Plot (Residuals Normality) ====================
     fig, ax = plt.subplots(figsize=(9, 6), dpi=100)
