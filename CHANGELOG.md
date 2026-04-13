@@ -14,6 +14,13 @@
   `features_rolling_exclude_cols` allows excluding specific columns. Uses `min_periods=1` to avoid
   introducing new NaN values. Column naming: `.{col}_mean{w}` / `.{col}_std{w}` (e.g. with 30-min
   data, `features_rolling=[6, 48]` adds 3-hour and 24-hour rolling statistics) (12).
+* **XGBoostTS / MlRegressorGapFillingBase**: Added `features_diff` parameter for temporal differencing
+  feature engineering. Computes 1st and higher-order differences for specified orders, creating columns
+  like `.{col}_DIFF1` (rate of change) and `.{col}_DIFF2` (acceleration/curvature). Captures temporal
+  momentum crucial for modeling flux ramp-ups/ramp-downs during sunrise/sunset transitions.
+  `features_diff_exclude_cols` allows excluding specific columns; differencing skips already-engineered
+  columns (those starting with `.`) to avoid compounding transformations. Column naming: `.{col}_DIFF{order}`
+  (e.g. `features_diff=[1, 2]` adds 1st and 2nd order differences for each driver) (13).
 * **XGBoostTS / MlRegressorGapFillingBase**: Replaced permutation importance with SHAP-based
   feature reduction using `TreeExplainer`; added monkey-patch to handle XGBoost `base_score`
   bracket-enclosed scientific notation format (e.g. `[-4.12E0]`) that caused `float()` conversion
@@ -95,6 +102,7 @@
 - (10) `diive.core.plotting.dielcycle.DielCycle`
 - (11) `diive.core.ml.common.plot_observed_predicted`, `plot_feature_importance`, `plot_prediction_residuals_error_regr`
 - (12) `diive.core.ml.common.MlRegressorGapFillingBase._rolling_features`, `diive.pkgs.gapfilling.xgboost_ts.XGBoostTS`
+- (13) `diive.core.ml.common.MlRegressorGapFillingBase._differencing_features`, `diive.pkgs.gapfilling.xgboost_ts.XGBoostTS`
 
 ## v0.90.0 | 13 Jan 2026
 
