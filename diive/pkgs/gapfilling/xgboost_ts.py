@@ -27,9 +27,12 @@ from diive.core.ml.common import MlRegressorGapFillingBase
 class XGBoostTS(MlRegressorGapFillingBase):
 
     def __init__(self, input_df: DataFrame, target_col: str or tuple, verbose: int = 0,
-                 test_size: float = 0.25, features_lag: list = None, features_lag_exclude_cols: list = None,
+                 test_size: float = 0.25, features_lag: list = None, features_lag_stepsize: int = 1,
+                 features_lag_exclude_cols: list = None,
                  features_rolling: list = None, features_rolling_exclude_cols: list = None,
+                 features_rolling_stats: list = None,
                  features_diff: list = None, features_diff_exclude_cols: list = None,
+                 features_poly_degree: int = None, features_poly_exclude_cols: list = None,
                  vectorize_timestamps: bool = False, add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False, **kwargs):
         """
@@ -82,6 +85,13 @@ class XGBoostTS(MlRegressorGapFillingBase):
             features_diff_exclude_cols:
                 List of column names excluded from differencing.
 
+            features_poly_degree:
+                Polynomial degree for feature expansion (e.g., 2 for squared terms).
+                If None, no polynomial features are added.
+
+            features_poly_exclude_cols:
+                List of column names excluded from polynomial expansion.
+
             vectorize_timestamps:
                 Include timestamp info as integer data: year, season, month, week, doy, hour
 
@@ -111,11 +121,15 @@ class XGBoostTS(MlRegressorGapFillingBase):
             verbose=verbose,
             test_size=test_size,
             features_lag=features_lag,
+            features_lag_stepsize=features_lag_stepsize,
             features_lag_exclude_cols=features_lag_exclude_cols,
             features_rolling=features_rolling,
             features_rolling_exclude_cols=features_rolling_exclude_cols,
+            features_rolling_stats=features_rolling_stats,
             features_diff=features_diff,
             features_diff_exclude_cols=features_diff_exclude_cols,
+            features_poly_degree=features_poly_degree,
+            features_poly_exclude_cols=features_poly_exclude_cols,
             vectorize_timestamps=vectorize_timestamps,
             add_continuous_record_number=add_continuous_record_number,
             sanitize_timestamp=sanitize_timestamp,
@@ -147,45 +161,27 @@ def _example_xgbts():
     # df['TIMESINCE_PREC_TOT_T1_25+20_1'] = ts_full_results['TIMESINCE_PREC_TOT_T1_25+20_1'].copy()
     # df = df.drop('PREC_TOT_T1_25+20_1', axis=1)
 
-    # XGBoost
+    # XGBoost with advanced feature engineering
     xgbts = XGBoostTS(
         input_df=df,
         target_col=TARGET_COL,
         verbose=1,
         features_lag=[-1, -1],
+        features_lag_stepsize=1,
         features_lag_exclude_cols=None,
         features_rolling=[12, 24],
+        features_rolling_exclude_cols=None,
         features_rolling_stats=['median', 'min', 'max', 'std', 'q25', 'q75'],
         features_diff=[1, 2],
         features_diff_exclude_cols=None,
+        features_poly_degree=2,
+        features_poly_exclude_cols=None,
         vectorize_timestamps=True,
         add_continuous_record_number=True,
         sanitize_timestamp=True,
         n_estimators=33,
-        # n_estimators=99,
         random_state=42,
-        # booster='gbtree',  # gbtree (default), gblinear, dart
-        # device='cpu',
-        # validate_parameters=True,
-        # disable_default_eval_metric=False,
         early_stopping_rounds=50,
-        # learning_rate=0.1,
-        # max_depth=9,
-        # max_delta_step=0,
-        # subsample=1,
-        # min_split_loss=0,
-        # min_child_weight=1,
-        # colsample_bytree=1,
-        # colsample_bylevel=1,
-        # colsample_bynode=1,
-        # reg_lambda=1,
-        # reg_alpha=0,
-        # tree_method='auto',  # auto, hist, approx, exact
-        # scale_pos_weight=1,
-        # grow_policy='depthwise',  # depthwise, lossguide
-        # max_leaves=0,
-        # max_bin=256,
-        # num_parallel_tree=1,
         n_jobs=-1
     )
     xgbts.reduce_features(shap_threshold_factor=0.5)

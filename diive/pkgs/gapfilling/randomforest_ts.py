@@ -165,6 +165,8 @@ class RandomForestTS(MlRegressorGapFillingBase):
                  features_rolling_stats: list = None,
                  features_diff: list = None,
                  features_diff_exclude_cols: list = None,
+                 features_poly_degree: int = None,
+                 features_poly_exclude_cols: list = None,
                  vectorize_timestamps: bool = False,
                  add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False,
@@ -227,6 +229,16 @@ class RandomForestTS(MlRegressorGapFillingBase):
                 List of column names excluded from differencing.
                 Example: ['RECORD_NUMBER'] skips differencing for continuous record number.
 
+            features_poly_degree:
+                Polynomial degree for feature expansion (e.g., 2 for squared terms).
+                If None, no polynomial features are added.
+                Creates features like `.{col}_POL2` for degree 2, `.{col}_POL3` for degree 3.
+                Example: features_poly_degree=2 creates squared terms for all driver variables.
+
+            features_poly_exclude_cols:
+                List of column names excluded from polynomial expansion.
+                Example: ['RECORD_NUMBER'] skips polynomial features for continuous record number.
+
             vectorize_timestamps:
                 Include timestamp info as integer data: year, season, month, week, doy, hour
 
@@ -260,6 +272,8 @@ class RandomForestTS(MlRegressorGapFillingBase):
             features_rolling_stats=features_rolling_stats,
             features_diff=features_diff,
             features_diff_exclude_cols=features_diff_exclude_cols,
+            features_poly_degree=features_poly_degree,
+            features_poly_exclude_cols=features_poly_exclude_cols,
             vectorize_timestamps=vectorize_timestamps,
             add_continuous_record_number=add_continuous_record_number,
             sanitize_timestamp=sanitize_timestamp,
@@ -390,7 +404,15 @@ def _example_rfts():
         target_col=TARGET_COL,
         verbose=1,
         features_lag=[-1, -1],
+        features_lag_stepsize=1,
         features_lag_exclude_cols=None,
+        features_rolling=None,
+        features_rolling_exclude_cols=None,
+        features_rolling_stats=None,
+        features_diff=None,
+        features_diff_exclude_cols=None,
+        features_poly_degree=None,
+        features_poly_exclude_cols=None,
         vectorize_timestamps=False,
         add_continuous_record_number=False,
         sanitize_timestamp=False,
@@ -469,6 +491,6 @@ def _example_optimize():
 
 
 if __name__ == '__main__':
-    # example_quickfill()
-    _example_rfts()
-    # example_optimize()
+    _example_quickfill()
+    # _example_rfts()
+    # _example_optimize()

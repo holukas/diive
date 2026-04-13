@@ -38,6 +38,8 @@ class MlRegressorGapFillingBase:
                  features_rolling_stats: list = None,
                  features_diff: list = None,
                  features_diff_exclude_cols: list = None,
+                 features_poly_degree: int = None,
+                 features_poly_exclude_cols: list = None,
                  vectorize_timestamps: bool = False,
                  add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False,
@@ -104,6 +106,17 @@ class MlRegressorGapFillingBase:
                 List of column names excluded from differencing.
                 Example: ['RECORD_NUMBER'] skips differencing for continuous record number.
 
+            features_poly_degree:
+                Polynomial degree for feature expansion (e.g., 2 for squared terms).
+                If None, no polynomial features are added.
+                Creates features like `.{col}²` for degree 2, `.{col}²` and `.{col}³` for degree 3.
+                Example: features_poly_degree=2 creates squared terms for all driver variables.
+                Column naming: `.{col}_POL{degree}` (e.g., `.Tair_f_POL2` for squared)
+
+            features_poly_exclude_cols:
+                List of column names excluded from polynomial expansion.
+                Example: ['RECORD_NUMBER'] skips polynomial features for continuous record number.
+
             vectorize_timestamps:
                 Include timestamp info as integer data: year, season, month, week, doy, hour
 
@@ -135,6 +148,8 @@ class MlRegressorGapFillingBase:
         self.features_rolling_stats = features_rolling_stats
         self.features_diff = features_diff
         self.features_diff_exclude_cols = features_diff_exclude_cols
+        self.features_poly_degree = features_poly_degree
+        self.features_poly_exclude_cols = features_poly_exclude_cols
         self.verbose = verbose
         self.vectorize_timestamps = vectorize_timestamps
         self.add_continuous_record_number = add_continuous_record_number
@@ -716,6 +731,9 @@ class MlRegressorGapFillingBase:
             expanded_df = self._create_differencing_features(work_df=self.model_df[self.original_input_features].copy(),
                                                              expanded_df=expanded_df)
 
+        if self.features_poly_degree:
+            expanded_df = self._create_polynomial_features(work_df=expanded_df)
+
         if self.vectorize_timestamps:
             expanded_df = vectorize_timestamps(df=expanded_df, txt="")
             # For cyclical variables, keep only the sine/cosine variants, drop linear versions
@@ -931,6 +949,44 @@ class MlRegressorGapFillingBase:
 
         if self.verbose:
             print(f"++ Added differencing features (orders={self.features_diff}) for {len(feature_cols)} columns: "
+                  f"{newcols}")
+        return df
+
+    def _create_polynomial_features(self, work_df: pd.DataFrame) -> pd.DataFrame:
+        """Wrapper for polynomial feature creation."""
+        _out_df = self._polynomial_features(df=work_df)
+        newcols = [c for c in _out_df.columns if c not in work_df.columns]
+        work_df = work_df.join(_out_df[newcols])
+        return work_df
+
+    def _polynomial_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Add polynomial features by expanding each feature to specified degree.
+
+        For each polynomial degree and each feature column, creates new columns:
+            '.{col}_POL{degree}' — feature raised to the specified degree
+
+        Polynomial features capture non-linear relationships.
+        Useful for modeling phenomena with squared or cubic relationships (e.g., radiation effects).
+
+        Returns:
+            DataFrame with additional polynomial feature columns appended.
+        """
+        if not self.features_poly_degree or self.features_poly_degree < 2:
+            return df
+
+        exclude = [self.target_col] + (self.features_poly_exclude_cols or [])
+        # Only create polynomial features for original and lagged features, not engineered ones starting with '.'
+        feature_cols = [c for c in df.columns if c not in exclude and not c.startswith('.')]
+        newcols = []
+
+        for degree in range(2, self.features_poly_degree + 1):
+            poly_df = df[feature_cols].copy() ** degree
+            poly_df.columns = [f'.{c}_POL{degree}' for c in feature_cols]
+            df = pd.concat([df, poly_df], axis=1)
+            newcols += poly_df.columns.tolist()
+
+        if self.verbose:
+            print(f"++ Added polynomial features (degree={self.features_poly_degree}) for {len(feature_cols)} columns: "
                   f"{newcols}")
         return df
 

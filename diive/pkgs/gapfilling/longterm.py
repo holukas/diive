@@ -25,6 +25,8 @@ class LongTermGapFillingBase:
                  features_rolling_stats: list = None,
                  features_diff: list = None,
                  features_diff_exclude_cols: list = None,
+                 features_poly_degree: int = None,
+                 features_poly_exclude_cols: list = None,
                  vectorize_timestamps: bool = False,
                  add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False,
@@ -64,6 +66,8 @@ class LongTermGapFillingBase:
         self.features_rolling_stats = features_rolling_stats
         self.features_diff = features_diff
         self.features_diff_exclude_cols = features_diff_exclude_cols
+        self.features_poly_degree = features_poly_degree
+        self.features_poly_exclude_cols = features_poly_exclude_cols
         self.vectorize_timestamps = vectorize_timestamps
         self.add_continuous_record_number = add_continuous_record_number
         self.sanitize_timestamp = sanitize_timestamp
@@ -178,6 +182,8 @@ class LongTermGapFillingBase:
             features_rolling_stats=self.features_rolling_stats,
             features_diff=self.features_diff,
             features_diff_exclude_cols=self.features_diff_exclude_cols,
+            features_poly_degree=self.features_poly_degree,
+            features_poly_exclude_cols=self.features_poly_exclude_cols,
             vectorize_timestamps=self.vectorize_timestamps,
             add_continuous_record_number=self.add_continuous_record_number,
             sanitize_timestamp=self.sanitize_timestamp,
@@ -218,6 +224,8 @@ class LongTermGapFillingBase:
                 features_rolling_stats=None,  # Already considered across all years
                 features_diff=None,  # Already considered across all years
                 features_diff_exclude_cols=None,  # Already considered across all years
+                features_poly_degree=None,  # Already considered across all years
+                features_poly_exclude_cols=None,  # Already considered across all years
                 vectorize_timestamps=False,  # Already considered across all years
                 add_continuous_record_number=False,  # Already considered across all years
                 sanitize_timestamp=False,  # Already considered across all years
@@ -354,6 +362,8 @@ class LongTermGapFillingRandomForestTS(LongTermGapFillingBase):
                  features_rolling_stats: list = None,
                  features_diff: list = None,
                  features_diff_exclude_cols: list = None,
+                 features_poly_degree: int = None,
+                 features_poly_exclude_cols: list = None,
                  vectorize_timestamps: bool = False,
                  add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False,
@@ -372,6 +382,8 @@ class LongTermGapFillingRandomForestTS(LongTermGapFillingBase):
             features_rolling_stats=features_rolling_stats,
             features_diff=features_diff,
             features_diff_exclude_cols=features_diff_exclude_cols,
+            features_poly_degree=features_poly_degree,
+            features_poly_exclude_cols=features_poly_exclude_cols,
             vectorize_timestamps=vectorize_timestamps,
             add_continuous_record_number=add_continuous_record_number,
             sanitize_timestamp=sanitize_timestamp,
@@ -394,6 +406,8 @@ class LongTermGapFillingXGBoostTS(LongTermGapFillingBase):
                  features_rolling_stats: list = None,
                  features_diff: list = None,
                  features_diff_exclude_cols: list = None,
+                 features_poly_degree: int = None,
+                 features_poly_exclude_cols: list = None,
                  vectorize_timestamps: bool = False,
                  add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False,
@@ -412,6 +426,8 @@ class LongTermGapFillingXGBoostTS(LongTermGapFillingBase):
             features_rolling_stats=features_rolling_stats,
             features_diff=features_diff,
             features_diff_exclude_cols=features_diff_exclude_cols,
+            features_poly_degree=features_poly_degree,
+            features_poly_exclude_cols=features_poly_exclude_cols,
             vectorize_timestamps=vectorize_timestamps,
             add_continuous_record_number=add_continuous_record_number,
             sanitize_timestamp=sanitize_timestamp,

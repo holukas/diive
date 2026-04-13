@@ -53,6 +53,11 @@
   e.g., `[-1, -1]`). Enhanced class docstring to clearly explain purpose (exploratory/quick testing,
   NOT production use). Documented minimal parameters for speed: `n_estimators=3`, no timestamp features,
   no rolling statistics or differencing. Suitable for rapid prototyping and gap-fill visualization.
+* **Polynomial Features** (new): Added `features_poly_degree` parameter for non-linear relationship modeling.
+  Creates polynomial terms (squared, cubed, etc.) for all feature columns. Example: `features_poly_degree=2`
+  creates `.{col}_POL2` squared terms. `features_poly_exclude_cols` allows excluding specific columns.
+  Integrated across RandomForestTS, XGBoostTS, and long-term gap-filling classes. Useful for modeling
+  non-linear phenomena like radiation or temperature effects with polynomial relationships.
 * **Test suite optimizations** (performance): Reduced `RandomForestTS` test execution time by 60-70%.
   `test_gapfilling_randomforest` now runs in ~2.8 seconds (was ~6 seconds); optimized hyperparameters
   (`n_estimators=3`, `min_samples_split/leaf=10/5`) and disabled expensive features (timestamp
