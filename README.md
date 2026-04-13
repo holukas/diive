@@ -42,7 +42,7 @@ diive/
     ├── flux/            # USTAR thresholds, self-heating correction, flux uncertainty
     ├── fluxprocessingchain/  # Orchestrated Level-2 through Level-4 flux workflows
     ├── formats/         # FLUXNET and EddyPro file format conversions
-    ├── gapfilling/      # XGBoostTS, RandomForestTS, FluxMDS, linear interpolation
+    ├── gapfilling/      # XGBoostTS, RandomForestTS, long-term multi-year gap-filling, FluxMDS, linear interpolation
     ├── outlierdetection/# Hampel, z-score, LOF, absolute limits, stepwise detection
     └── qaqc/            # FlagQCF, EddyPro flags, StepwiseMeteoScreeningDb
 ```
@@ -55,9 +55,9 @@ diive/
 | `diive.core.plotting`            | `HeatmapDateTime`, `HeatmapXYZ`, `HexbinPlot`, `TimeSeries`, `ScatterXY`, `HistogramPlot`, `DielCycle`, `RidgeLinePlot`, `CumulativeYear`   | Comprehensive visualization suite covering heatmaps, time series, scatter, histograms, diurnal cycles, ridge lines, hexbin plots, and cumulative plots |
 | `diive.core.times`               | `TimestampSanitizer`, `DetectFrequency`, `vectorize_timestamps()`, `continuous_timestamp_freq()`                                              | Sanitize and validate timestamps, detect/infer data frequency, vectorize time attributes, resample diel cycles                           |
 | `diive.core.dfun`                | `sstats()`, `fit_to_bins_linreg()`, `fit_to_bins_polyreg()`                                                                                   | DataFrame statistics, linear/polynomial bin fitting, regression utilities                                                                |
-| `diive.pkgs.gapfilling`          | `XGBoostTS`, `RandomForestTS`, `QuickFillRFTS`, `LongTermGapFillingBase`, `FluxMDS`                                                           | Fill time series gaps with XGBoost, Random Forest (standard and long-term multi-year), MDS, or linear interpolation                      |
+| `diive.pkgs.gapfilling`          | `XGBoostTS`, `RandomForestTS`, `QuickFillRFTS`, `LongTermGapFillingRandomForestTS`, `LongTermGapFillingXGBoostTS`, `FluxMDS`               | Fill time series gaps with XGBoost, Random Forest (standard and long-term multi-year), MDS, or linear interpolation                      |
 | `diive.pkgs.outlierdetection`    | `HampelDaytimeNighttime`, `zScore`, `zScoreDaytimeNighttime`, `LocalOutlierFactorAllData`, `AbsoluteLimits`, `AbsoluteLimitsDaytimeNighttime` | Detect and flag outliers using Hampel filter, z-score, LOF, absolute limits, local SD, manual removal, or stepwise combinations          |
-| `diive.pkgs.flux`                | `FluxProcessingChain`                                                                                                                         | Post-process eddy covariance fluxes: Level-2 quality flags, storage correction, USTAR filtering, self-heating correction                 |
+| `diive.pkgs.flux`                | `FluxProcessingChain`                                                                                                                         | Post-process eddy covariance fluxes: Level-2 quality flags, storage correction, USTAR filtering, gap-filling (RF/XGBoost/MDS), self-heating correction |
 | `diive.pkgs.fluxprocessingchain` | `FluxProcessingChain`                                                                                                                         | Orchestrate a complete Level-2 → Level-4 flux processing workflow in a single pipeline                                                   |
 | `diive.pkgs.analyses`            | `GapFinder`, `GridAggregator`, `daily_correlation()`                                                                                          | Locate data gaps, aggregate variables into 2-D grids, compute daily correlations, decoupling analysis, quantiles                         |
 | `diive.pkgs.corrections`         | `OffsetCorrection`, `WindDirectionOffset`, `SetToThreshold`, `SetToMissing`                                                                   | Apply measurement offsets, correct wind directions, clamp values to thresholds, set periods to missing                                   |
@@ -171,7 +171,7 @@ _Function specifically for eddy covariance flux data._
         - Level-3.1 storage correction
         - Level-3.2 outlier removal
         - Level-3.3: USTAR filtering using constant thresholds
-        - Level-4.1: gap-filling using long-term random forest and/or MDS
+        - Level-4.1: gap-filling using long-term random forest, XGBoost, and/or MDS
         - _For info about the Swiss FluxNet flux levels,
           see [here](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/)._
 - **Quick flux processing chain
@@ -207,7 +207,9 @@ _Fill gaps in time series with various methods._
 - **RandomForestTS** · class:
   `RandomForestTS` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/RandomForestGapFilling.ipynb))
 - **Long-term gap-filling using RandomForestTS** · class:
-  `LongTermGapFillingBase` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/LongTermRandomForestGapFilling.ipynb))
+  `LongTermGapFillingRandomForestTS` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/LongTermRandomForestGapFilling.ipynb))
+- **Long-term gap-filling using XGBoostTS** · class:
+  `LongTermGapFillingXGBoostTS` (for multi-year data with USTAR scenario support)
 - **Linear interpolation** · func:
   `linear_interpolation()` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/LinearInterpolation.ipynb))
 - **Quick random forest gap-filling** · class:

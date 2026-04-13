@@ -58,6 +58,16 @@
   creates `.{col}_POL2` squared terms. `features_poly_exclude_cols` allows excluding specific columns.
   Integrated across RandomForestTS, XGBoostTS, and long-term gap-filling classes. Useful for modeling
   non-linear phenomena like radiation or temperature effects with polynomial relationships.
+* **Long-term XGBoost gap-filling** (new): Implemented `level41_longterm_xgboost()` method in
+  `FluxProcessingChain` with feature parity to `level41_longterm_random_forest()`. Supports all feature
+  engineering parameters (lag, rolling stats, differencing, polynomial). Allows users to choose between
+  Random Forest and XGBoost gap-filling strategies for multi-year data with USTAR scenario support.
+  Results stored per scenario in `level41['long_term_xgboost']` dictionary. Default hyperparameters:
+  n_estimators=200, max_depth=6, learning_rate=0.3, early_stopping_rounds=10.
+* **FluxProcessingChain updates** (enhancements): Updated `level41_longterm_random_forest()` and new
+  `level41_longterm_xgboost()` to support all advanced feature engineering parameters. Both methods now
+  accept `features_rolling`, `features_rolling_stats`, `features_diff`, and `features_poly_degree`
+  for flexible model configuration. Test case covers both methods with all 3 USTAR scenarios.
 * **Test suite optimizations** (performance): Reduced `RandomForestTS` test execution time by 60-70%.
   `test_gapfilling_randomforest` now runs in ~2.8 seconds (was ~6 seconds); optimized hyperparameters
   (`n_estimators=3`, `min_samples_split/leaf=10/5`) and disabled expensive features (timestamp
