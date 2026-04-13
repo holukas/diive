@@ -219,7 +219,6 @@ class TestFluxProcessingChain(unittest.TestCase):
             reduce_features=False,
             vectorize_timestamps=True,
             add_continuous_record_number=True,
-            perm_n_repeats=1,
             verbose=True,
             n_estimators=3,
             # max_depth=3,

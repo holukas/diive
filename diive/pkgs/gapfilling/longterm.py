@@ -210,9 +210,9 @@ class LongTermGapFillingBase:
         """Reduce features and detect features that were selected in at least one year."""
         features_reduced_across_years = []
         for year, year_dict in self._yearpools.items():
-            print(f"---\nReducing features based on permutation importance for year {year} ...")
+            print(f"---\nReducing features based on SHAP importance for year {year} ...")
             rfts = self.results_yearly_[year]
-            rfts.reduce_features()
+            rfts.reduce_features(shap_threshold_factor=1.0)
             features_reduced_across_years.append(rfts.accepted_features_)
 
         # Flatten common_features (list of lists)
@@ -303,13 +303,13 @@ class LongTermGapFillingBase:
 
         idf = pd.DataFrame()
         for year, f in self.feature_importances_yearly_.items():
-            ff = f[['PERM_IMPORTANCE']].copy()
+            ff = f[['SHAP_IMPORTANCE']].copy()
             ff['YEAR'] = year
             ff['FEATURE'] = f.index
-            ff['RANK'] = ff['PERM_IMPORTANCE'].rank(ascending=False)
+            ff['RANK'] = ff['SHAP_IMPORTANCE'].rank(ascending=False)
             ff = ff.reset_index(drop=True, inplace=False)
             idf = pd.concat([idf, ff], axis=0, ignore_index=True)
-        fi_per_year = idf.pivot(columns='YEAR', index='FEATURE', values='PERM_IMPORTANCE')
+        fi_per_year = idf.pivot(columns='YEAR', index='FEATURE', values='SHAP_IMPORTANCE')
         fi_rank_per_year = idf.pivot(columns='YEAR', index='FEATURE', values='RANK')
         firstcol_name = fi_per_year.iloc[:, 0].name
         self._feature_importance_per_year = fi_per_year.sort_values(by=firstcol_name, ascending=False)

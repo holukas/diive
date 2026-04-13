@@ -891,7 +891,6 @@ class FluxProcessingChain:
             reduce_features: bool = False,
             vectorize_timestamps: bool = False,
             add_continuous_record_number: bool = False,
-            perm_n_repeats: int = 10,
             verbose: int = 0,
             **rf_kwargs
     ):
@@ -930,8 +929,7 @@ class FluxProcessingChain:
                 features_lag_stepsize=features_lag_stepsize,
                 features_lag_exclude_cols=features_lag_exclude_cols,
                 verbose=verbose,
-                sanitize_timestamp=sanitize_timestamp,
-                perm_n_repeats=perm_n_repeats
+                sanitize_timestamp=sanitize_timestamp
             )
 
             # Initialize random forest for this scenario

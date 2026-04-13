@@ -293,18 +293,21 @@ class MlRegressorGapFillingBase:
         fi_df = fi_df.mean(axis=1)
         return fi_df
 
-    def _remove_rejected_features(self, factor: float = 1, infotxt="[ FEATURE REDUCTION ]") -> list:
+    def _remove_rejected_features(self, shap_threshold_factor: float = 1.0, infotxt="[ FEATURE REDUCTION ]") -> list:
         """Remove features that are below importance threshold or that are below
         zero from model dataframe. The updated model dataframe will then be used
         for the next (final) model.
         """
 
-        series = self.feature_importances_reduction_['SHAP_IMPORTANCE'].copy()
+        fi_df = self.feature_importances_reduction_.copy()
+        series = fi_df['SHAP_IMPORTANCE'].copy()
 
-        # Threshold for feature reduction
-        threshold = series.loc[self.random_col]
-        threshold = threshold * factor if threshold > 0 else threshold / factor
+        # Threshold for feature reduction: random_importance + k * random_sd
+        random_importance = series.loc[self.random_col]
+        random_sd = fi_df.loc[self.random_col, 'SHAP_SD'] if 'SHAP_SD' in fi_df.columns else 0
+        threshold = random_importance + shap_threshold_factor * random_sd
         print(f"{infotxt} >>> Setting threshold for feature rejection to {threshold}.")
+        print(f"{infotxt} >>> Random variable importance: {random_importance:.6f}, SD: {random_sd:.6f}")
 
         # Get accepted features
         accepted_locs = ((series > threshold) & (series > 0))
@@ -479,14 +482,21 @@ class MlRegressorGapFillingBase:
         self._fillgaps_fallback()
         self._fillgaps_combinepredictions()
 
-    def reduce_features(self, factor: float = 1):
+    def reduce_features(self, shap_threshold_factor: float = 1.0):
         """Reduce number of features using SHAP importance
 
         A random variable is added to features and SHAP importances
         are calculated. The SHAP importance of the random variable is the
-        benchmark to determine whether a feature is relevant. All features where
-        SHAP importance is smaller or equal to the importance of the random
-        variable are rejected.
+        benchmark to determine whether a feature is relevant. Features where
+        SHAP importance is smaller or equal to (random_importance + k * random_sd)
+        are rejected, where k is shap_threshold_factor.
+
+        Args:
+            shap_threshold_factor:
+                Factor k for SHAP-based feature reduction threshold.
+                Threshold is calculated as: random_importance + k * random_sd
+                Default 1.0 uses 1-sigma confidence. Higher values are more conservative
+                (reject more features). Lower values are more lenient.
         """
 
         infotxt = "[ FEATURE REDUCTION ]"
@@ -524,7 +534,7 @@ class MlRegressorGapFillingBase:
         # Remove variables where mean feature importance across all splits is smaller
         # than or equal to random variable
         # Update dataframe for model building
-        accepted_cols = self._remove_rejected_features(factor=factor)
+        accepted_cols = self._remove_rejected_features(shap_threshold_factor=shap_threshold_factor)
 
         # Update model data, keep accepted features
         print(f"{infotxt} >>> Removing rejected features from model data ...")

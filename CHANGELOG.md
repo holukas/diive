@@ -14,6 +14,13 @@
   `features_rolling_exclude_cols` allows excluding specific columns. Uses `min_periods=1` to avoid
   introducing new NaN values. Column naming: `.{col}_mean{w}` / `.{col}_std{w}` (e.g. with 30-min
   data, `features_rolling=[6, 48]` adds 3-hour and 24-hour rolling statistics) (12).
+* **XGBoostTS / MlRegressorGapFillingBase**: Added `features_rolling_stats` parameter for advanced
+  rolling statistics beyond mean/std. Allows computation of median, min, max, standard deviation,
+  and percentiles (Q25, Q75) for all specified rolling windows. Provides richer statistical context
+  of local variability and distribution shape. Column naming: `.{col}_ROLLMEDIAN{w}`,
+  `.{col}_ROLLMIN{w}`, `.{col}_ROLLMAX{w}`, `.{col}_ROLLSD{w}`, `.{col}_ROLLQ25{w}`,
+  `.{col}_ROLLQ75{w}` (e.g. `features_rolling_stats=['median', 'min', 'max', 'q25', 'q75']`).
+  Backward compatible: defaults to None (only mean/std computed if not specified).
 * **XGBoostTS / MlRegressorGapFillingBase**: Added `features_diff` parameter for temporal differencing
   feature engineering. Computes 1st and higher-order differences for specified orders, creating columns
   like `.{col}_DIFF1` (rate of change) and `.{col}_DIFF2` (acceleration/curvature). Captures temporal
@@ -30,6 +37,13 @@
   random-variable threshold were silently excluded from the rejection report (`rejected_locs` is now
   `~accepted_locs`); fixed `_add_random_variable` returning a 2-D array `(n, 1)` instead of 1-D
   `(n,)` (9).
+* **XGBoostTS / MlRegressorGapFillingBase**: Added `shap_threshold_factor` parameter to
+  `reduce_features()` method for principled feature reduction threshold. Threshold is calculated as:
+  `random_importance + k * random_sd`, where k is `shap_threshold_factor` (default 1.0 for 1-sigma
+  confidence). This accounts for SHAP importance estimation uncertainty of the random baseline,
+  making feature selection more robust when random variable fluctuates. Allows tuning conservativeness:
+  k=0.5 (lenient), k=1.0 (default, standard), k=2.0 (conservative). Fixed rejected features
+  calculation to include all engineered features (not just original input features).
 * **ML Plotting functions** (enhanced): Redesigned three diagnostic plotting functions with Material
   Design-inspired strong colors and professional typography (11):
   - `plot_observed_predicted()`: Redesigned with dual-panel layout (actual vs. predicted + residuals);

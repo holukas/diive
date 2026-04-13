@@ -188,7 +188,7 @@ def _example_xgbts():
         # num_parallel_tree=1,
         n_jobs=-1
     )
-    xgbts.reduce_features()
+    xgbts.reduce_features(shap_threshold_factor=1.0)
     xgbts.report_feature_reduction()
 
     xgbts.trainmodel(showplot_scores=False, showplot_importance=False)
