@@ -482,7 +482,7 @@ class MlRegressorGapFillingBase:
         self._fillgaps_fallback()
         self._fillgaps_combinepredictions()
 
-    def reduce_features(self, shap_threshold_factor: float = 1.0):
+    def reduce_features(self, shap_threshold_factor: float = 0.5):
         """Reduce number of features using SHAP importance
 
         A random variable is added to features and SHAP importances
@@ -495,7 +495,7 @@ class MlRegressorGapFillingBase:
             shap_threshold_factor:
                 Factor k for SHAP-based feature reduction threshold.
                 Threshold is calculated as: random_importance + k * random_sd
-                Default 1.0 uses 1-sigma confidence. Higher values are more conservative
+                Default 0.5 uses 0.5-sigma confidence (lenient). Higher values are more conservative
                 (reject more features). Lower values are more lenient.
         """
 

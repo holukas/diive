@@ -160,6 +160,11 @@ class RandomForestTS(MlRegressorGapFillingBase):
                  features_lag: list = None,
                  features_lag_stepsize: int = 1,
                  features_lag_exclude_cols: list = None,
+                 features_rolling: list = None,
+                 features_rolling_exclude_cols: list = None,
+                 features_rolling_stats: list = None,
+                 features_diff: list = None,
+                 features_diff_exclude_cols: list = None,
                  vectorize_timestamps: bool = False,
                  add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False,
@@ -191,6 +196,37 @@ class RandomForestTS(MlRegressorGapFillingBase):
                     TA+1  = [  6,   7,   8, NaN]  --> each TA record is paired with the next record TA+1
                     TA+2  = [  7,   8, NaN, NaN]
 
+            features_lag_exclude_cols:
+                List of predictors for which no lagged variants are added.
+                Example: with ['A', 'B'] no lagged variants for variables 'A' and 'B' are added.
+
+            features_rolling:
+                List of window sizes (in records) for rolling statistics.
+                For each window size, rolling mean and rolling std are added for every
+                feature column. If None, no rolling statistics are added.
+                Example: features_rolling=[6, 48] with 30-min data adds 3-hour and 24-hour
+                rolling mean and std for each driver variable.
+
+            features_rolling_exclude_cols:
+                List of column names excluded from rolling statistics.
+                Example: ['Rg_f'] skips rolling features for Rg_f.
+
+            features_rolling_stats:
+                List of additional rolling statistics to compute beyond mean and std.
+                Options: 'median', 'min', 'max', 'std', 'q25', 'q75'
+                If None, only mean and std are computed.
+                Example: features_rolling_stats=['median', 'min', 'max', 'q25', 'q75']
+
+            features_diff:
+                List of integer difference orders for temporal momentum features.
+                For each order, creates `.{col}_DIFF{order}` columns.
+                Example: features_diff=[1, 2] creates 1st and 2nd order differences.
+                If None, no differencing is applied.
+
+            features_diff_exclude_cols:
+                List of column names excluded from differencing.
+                Example: ['RECORD_NUMBER'] skips differencing for continuous record number.
+
             vectorize_timestamps:
                 Include timestamp info as integer data: year, season, month, week, doy, hour
 
@@ -219,6 +255,11 @@ class RandomForestTS(MlRegressorGapFillingBase):
             features_lag=features_lag,
             features_lag_stepsize=features_lag_stepsize,
             features_lag_exclude_cols=features_lag_exclude_cols,
+            features_rolling=features_rolling,
+            features_rolling_exclude_cols=features_rolling_exclude_cols,
+            features_rolling_stats=features_rolling_stats,
+            features_diff=features_diff,
+            features_diff_exclude_cols=features_diff_exclude_cols,
             vectorize_timestamps=vectorize_timestamps,
             add_continuous_record_number=add_continuous_record_number,
             sanitize_timestamp=sanitize_timestamp,
@@ -253,7 +294,6 @@ class QuickFillRFTS:
             min_samples_split=10,
             min_samples_leaf=5,
             max_depth=None,
-            perm_n_repeats=9,
             n_jobs=-1
         )
 
@@ -321,125 +361,53 @@ def example_quickfill():
     HeatmapDateTime(series=gapfilled).show()
 
 
-def example_rfts():
-    # # Setup, user settings
-    # TARGET_COL = 'NEE_CUT_REF_orig'
-    # subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
-    # from diive.configs.exampledata import load_exampledata_parquet_long
-    # df_orig = load_exampledata_parquet_long()
-    # df = df_orig.copy()
-    # keep = (df.index.year >= 1997) & (df.index.year <= 2001)
-    # df = df[keep].copy()
-    # df = df[subsetcols].copy()
-
-    # Load data
-    from diive.core.io.files import save_parquet, load_parquet
-    filepath = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\30_FLUX_PROCESSING_CHAIN\33_IRGA75_SHC_2004-2017_2019\TESTING.parquet"
-    df = load_parquet(filepath=filepath)
-    TARGET_COL = 'NEE_L3.1_L3.3_CUT_50_QCF0'
-    subsetcols = [TARGET_COL, "TA_T1_47_1_gfXG", "SW_IN_T1_47_1_gfXG", "VPD_T1_47_1_gfXG"]
+def _example_rfts():
+    """Example: Random Forest gap-filling with advanced feature engineering"""
+    TARGET_COL = 'NEE_CUT_REF_orig'
+    subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
+    from diive.configs.exampledata import load_exampledata_parquet
+    df_orig = load_exampledata_parquet()
+    df = df_orig.copy()
+    keep = (df.index.year >= 2013) & (df.index.year <= 2015)
+    df = df[keep].copy()
     df = df[subsetcols].copy()
 
-    # # TimeSince
-    # from diive.pkgs.createvar.timesince import TimeSince
-    # ts = TimeSince(df['PREC_TOT_T1_25+20_1'], upper_lim=None, lower_lim=0, include_lim=False)
-    # ts.calc()
-    # ts_full_results = ts.get_full_results()
-    # df['TIMESINCE_PREC_TOT_T1_25+20_1'] = ts_full_results['TIMESINCE_PREC_TOT_T1_25+20_1'].copy()
-    # df = df.drop('PREC_TOT_T1_25+20_1', axis=1)
-
-    N_ESTIMATORS = 5
-    MAX_DEPTH = None
-    MIN_SAMPLES_SPLIT = 2
-    MIN_SAMPLES_LEAF = 1
-    CRITERION = 'squared_error'  # “squared_error”, “absolute_error”, “friedman_mse”, “poisson”
-
-    # Random forest
+    # Random forest with advanced feature engineering
     rfts = RandomForestTS(
         input_df=df,
         target_col=TARGET_COL,
-        verbose=True,
-        # features_lag=None,
+        verbose=1,
         features_lag=[-1, -1],
-        # features_lag_exclude_cols=['test', 'test2'],
-        # vectorize_timestamps=False,
+        features_lag_exclude_cols=None,
+        features_rolling=[12, 24],
+        features_rolling_stats=['median', 'min', 'max', 'std', 'q25', 'q75'],
+        features_diff=[1, 2],
+        features_diff_exclude_cols=None,
         vectorize_timestamps=True,
-        # add_continuous_record_number=False,
         add_continuous_record_number=True,
         sanitize_timestamp=True,
-        perm_n_repeats=10,
-        n_estimators=N_ESTIMATORS,
+        n_estimators=33,
         random_state=42,
-        # random_state=None,
-        max_depth=MAX_DEPTH,
-        min_samples_split=MIN_SAMPLES_SPLIT,
-        min_samples_leaf=MIN_SAMPLES_LEAF,
-        criterion=CRITERION,
-        test_size=0.2,
+        max_depth=None,
+        min_samples_split=2,
+        min_samples_leaf=1,
         n_jobs=-1
     )
-    # rfts.reduce_features()
-    # rfts.report_feature_reduction()
 
+    # Feature reduction using SHAP importance
+    rfts.reduce_features(shap_threshold_factor=0.5)
+    rfts.report_feature_reduction()
+
+    # Train model
     rfts.trainmodel(showplot_scores=False, showplot_importance=False)
     rfts.report_traintest()
 
+    # Gap-fill data
     rfts.fillgaps(showplot_scores=False, showplot_importance=False)
     rfts.report_gapfilling()
 
     observed = df[TARGET_COL]
     gapfilled = rfts.get_gapfilled_target()
-
-    print(rfts.feature_importances_)
-    print(rfts.scores_)
-    print(rfts.gapfilling_df_)
-
-    # # Plot
-    # title = (
-    #     f"N_ESTIMATORS: {N_ESTIMATORS} "
-    #     f"/ MAX_DEPTH: {MAX_DEPTH} "
-    #     f"/ CRITERION: {CRITERION} "
-    #     f"\nMIN_SAMPLES_SPLIT: {MIN_SAMPLES_SPLIT} "
-    #     f"/ MIN_SAMPLES_LEAF: {MIN_SAMPLES_LEAF}  "
-    # )
-    # from diive.core.plotting.timeseries import TimeSeries
-    # import matplotlib.pyplot as plt
-    # fig, ax = plt.subplots()
-    # TimeSeries(series=gapfilled.multiply(0.02161926).cumsum(), ax=ax).plot(color='blue')
-    # fig.suptitle(f'RF {title}', fontsize=16)
-    # # ax.set_ylim(-2000, 200)
-    # fig.show()
-
-    # from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-    # HeatmapDateTime(series=observed).show()
-    # HeatmapDateTime(series=gapfilled).show()
-
-    from diive.core.plotting.cumulative import CumulativeYear
-    CumulativeYear(
-        series=gapfilled.multiply(0.02161926),
-        series_units="units",
-        yearly_end_date=None,
-        # yearly_end_date='08-11',
-        start_year=1997,
-        end_year=2022,
-        show_reference=True,
-        excl_years_from_reference=None,
-        # excl_years_from_reference=[2022],
-        # highlight_year=2022,
-        highlight_year_color='#F44336').plot(digits_after_comma=0)
-
-    from diive.core.plotting.cumulative import Cumulative
-    Cumulative(df=pd.DataFrame(gapfilled).multiply(0.02161926)).plot()
-
-    # from diive.core.plotting.dielcycle import DielCycle
-    # series = gapfilled.multiply(0.02161926).copy()
-    # # for yr in [2004, 2006, 2015, 2022]:
-    # for yr in range(1997, 2002):
-    #     series1 = series.loc[series.index.year == yr].copy()
-    #     dc = DielCycle(series=series1)
-    #     dc.plot(ax=None, title=str(yr), txt_ylabel_units="units",
-    #             each_month=True, legend_n_col=2, ylim=[-0.4, 0.2])
-    #     # d = dc.get_data()
 
     print("Finished.")
 
@@ -494,5 +462,5 @@ def example_optimize():
 
 if __name__ == '__main__':
     # example_quickfill()
-    example_rfts()
+    _example_rfts()
     # example_optimize()
