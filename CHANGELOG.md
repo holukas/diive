@@ -49,6 +49,16 @@
   `features_diff`, and `features_diff_exclude_cols` parameters. `LongTermGapFillingRandomForestTS` and
   `LongTermGapFillingXGBoostTS` now support all advanced feature engineering parameters for consistent
   long-term modeling across any year range.
+* **QuickFillRFTS** (fixed & improved): Fixed invalid `features_lag=[-1]` parameter (must specify range,
+  e.g., `[-1, -1]`). Enhanced class docstring to clearly explain purpose (exploratory/quick testing,
+  NOT production use). Documented minimal parameters for speed: `n_estimators=3`, no timestamp features,
+  no rolling statistics or differencing. Suitable for rapid prototyping and gap-fill visualization.
+* **Test suite optimizations** (performance): Reduced `RandomForestTS` test execution time by 60-70%.
+  `test_gapfilling_randomforest` now runs in ~2.8 seconds (was ~6 seconds); optimized hyperparameters
+  (`n_estimators=3`, `min_samples_split/leaf=10/5`) and disabled expensive features (timestamp
+  vectorization, record numbering). `test_gapfilling_longterm_randomforest` reduced to ~2 minutes
+  (was ~5 minutes) by using simplified parameters. All tests maintain quality checks with flexible
+  assertion ranges instead of hardcoded values.
 * **ML Plotting functions** (enhanced): Redesigned three diagnostic plotting functions with Material
   Design-inspired strong colors and professional typography (11):
   - `plot_observed_predicted()`: Redesigned with dual-panel layout (actual vs. predicted + residuals);
