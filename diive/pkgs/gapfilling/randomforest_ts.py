@@ -269,11 +269,21 @@ class RandomForestTS(MlRegressorGapFillingBase):
 
 class QuickFillRFTS:
     """
-    Quick gap-filling using RandomForestTS with pre-defined parameters
+    Quick gap-filling using RandomForestTS with pre-defined minimal parameters
 
-    The purpose of this class is preliminary gap-filling e.g. for quick tests
-    how gap-filled data could look like. It is not meant to be used for
-    final gap-filling.
+    The purpose of this class is preliminary/exploratory gap-filling for quick tests
+    and rapid prototyping. It is NOT meant for production/final gap-filling.
+
+    Uses minimal feature engineering and model complexity for speed:
+    - n_estimators=3 (very fast, low quality)
+    - Single lag: [-1, -1] (only immediate past value)
+    - No rolling statistics, differencing, or timestamp features
+    - Shallow trees with larger min_samples for fast inference
+
+    Attributes:
+        gapfilling_df(): DataFrame with gap-filled target and flags
+        get_gapfilled_target(): Series with gap-filled values
+        get_flag(): Series with gap-filling flags (0=observed, 1=filled, 2=fallback)
     """
 
     def __init__(self, df: DataFrame, target_col: str or tuple):
@@ -281,18 +291,20 @@ class QuickFillRFTS:
         self.target_col = target_col
         self.rfts = None
 
+        # Minimal parameters for fast, uncomplicated gap-filling
         self.rfts = RandomForestTS(
             input_df=self.df,
             target_col=self.target_col,
             verbose=True,
-            features_lag=[-1],
-            vectorize_timestamps=False,
-            add_continuous_record_number=False,
-            sanitize_timestamp=False,
-            n_estimators=3,
+            features_lag=[-1, -1],  # Only immediate past value
+            features_lag_stepsize=1,
+            vectorize_timestamps=False,  # No timestamp features (speed)
+            add_continuous_record_number=False,  # No extra features
+            sanitize_timestamp=False,  # Skip validation (speed)
+            n_estimators=3,  # Minimal trees for speed
             random_state=42,
-            min_samples_split=10,
-            min_samples_leaf=5,
+            min_samples_split=10,  # Large minimum for fast trees
+            min_samples_leaf=5,  # Large minimum for fast trees
             max_depth=None,
             n_jobs=-1
         )
@@ -314,7 +326,7 @@ class QuickFillRFTS:
         return self.rfts.get_flag()
 
 
-def example_quickfill():
+def _example_quickfill():
     # Setup, user settings
     TARGET_COL = 'NEE_CUT_REF_orig'
     subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
@@ -408,7 +420,7 @@ def _example_rfts():
     print("Finished.")
 
 
-def example_optimize():
+def _example_optimize():
     from diive.configs.exampledata import load_exampledata_parquet
 
     # Setup, user settings
