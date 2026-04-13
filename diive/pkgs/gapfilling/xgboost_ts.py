@@ -36,81 +36,143 @@ class XGBoostTS(MlRegressorGapFillingBase):
                  vectorize_timestamps: bool = False, add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False, **kwargs):
         """
-        Gap-fill timeseries with predictions from XGBoost model
+        XGBoost-based gap-filling for time series data.
+
+        Trains an XGBoost gradient boosting model on complete (non-gap) observations to predict
+        missing values in a target time series. Suitable for modeling non-linear relationships
+        and complex temporal patterns. Supports comprehensive feature engineering with lagged
+        variants, rolling statistics, temporal differencing, and polynomial expansion.
+
+        XGBoost is particularly effective for:
+        - Non-linear flux dynamics (radiation, temperature effects)
+        - Complex temporal interactions between predictors
+        - Data with outliers (more robust than Random Forest)
+        - Settings where model interpretability is secondary to accuracy
+
+        Workflow:
+            1. Create instance with input data and feature engineering parameters
+            2. Call trainmodel() to fit on training data and evaluate on test data
+            3. Call fillgaps() to predict missing values and generate output
+            4. Optional: Call reduce_features() before fillgaps() for feature selection
 
         Args:
             input_df:
-                Contains timeseries of 1 target column and 1+ feature columns.
+                DataFrame with time series data. Must contain 1 target column and 1+ feature
+                columns. Timestamps should be in DataFrame index (DatetimeIndex).
 
             target_col:
-                Column name of variable in *input_df* that will be gap-filled.
+                Column name of variable to gap-fill (string or tuple for multi-level columns).
+
+            verbose:
+                Verbosity level: 0=silent, 1=progress updates, 2+=detailed output.
 
             test_size:
-                Proportion of the dataset to include in the test split,
-                between 0.0 and 1.0.
+                Proportion of complete data for testing (0.0-1.0). Default: 0.25.
+                Only complete (non-gap) rows are used for train/test split.
 
             features_lag:
-                List of integers (number of records), includes lagged variants of predictors.
-                If features_lag=None, no lagged variants are added.
-                Example:
-                    - features_lag=[-2, +2] includes variants that are lagged by -2, -1, +1, and
-                    +2 records in the dataset, for each feature already present in the data.
-                     For a variable named *TA*, this created the following output:
-                    TA    = [  5,   6,   7, 8  ]
-                    TA-2  = [NaN, NaN,   5, 6  ]
-                    TA-1  = [NaN,   5,   6, 7  ]  --> each TA record is paired with the preceding record TA-1
-                    TA+1  = [  6,   7,   8, NaN]  --> each TA record is paired with the next record TA+1
-                    TA+2  = [  7,   8, NaN, NaN]
+                List [min_lag, max_lag] specifying lag range. Creates lags at all integers
+                between min_lag and max_lag (excluding 0). Default: None.
+                Example: features_lag=[-2, 2] creates lags [-2, -1, +1, +2].
+
+            features_lag_stepsize:
+                Step size for lag generation (e.g., 2 creates every 2nd lag). Default: 1.
 
             features_lag_exclude_cols:
-                List of predictors for which no lagged variants are added.
-                Example: with ['A', 'B'] no lagged variants for variables 'A' and 'B' are added.
+                Column names to exclude from lagging. Default: None.
 
             features_rolling:
-                List of window sizes (in records) for rolling statistics.
-                For each window size, rolling mean and rolling std are added for every
-                feature column. If None, no rolling statistics are added.
+                List of window sizes (records) for rolling statistics. Each window computes
+                rolling mean and std. Default: None.
                 Example: features_rolling=[6, 48] with 30-min data adds 3-hour and 24-hour
-                rolling mean and std for each driver variable.
+                rolling statistics.
 
             features_rolling_exclude_cols:
-                List of column names excluded from rolling statistics.
+                Columns excluded from rolling statistics. Default: None.
+
+            features_rolling_stats:
+                Advanced rolling statistics: 'median', 'min', 'max', 'std', 'q25', 'q75'.
+                Default: None (only mean and std computed if features_rolling specified).
 
             features_diff:
-                List of difference orders for temporal momentum features.
-                For each order, creates `.{col}_DIFF{order}` columns.
+                List of difference orders for temporal momentum. Default: None.
                 Example: features_diff=[1, 2] creates 1st and 2nd order differences.
-                If None, no differencing is applied.
 
             features_diff_exclude_cols:
-                List of column names excluded from differencing.
+                Columns excluded from differencing. Default: None.
 
             features_poly_degree:
-                Polynomial degree for feature expansion (e.g., 2 for squared terms).
-                If None, no polynomial features are added.
+                Polynomial degree for non-linear expansion (2=squared, 3=cubed). Default: None.
+                Example: features_poly_degree=2 creates squared terms.
 
             features_poly_exclude_cols:
-                List of column names excluded from polynomial expansion.
+                Columns excluded from polynomial expansion. Default: None.
 
             vectorize_timestamps:
-                Include timestamp info as integer data: year, season, month, week, doy, hour
+                Add timestamp features (year, season, month, week, doy, hour). Default: False.
 
             add_continuous_record_number:
-                Add continuous record number as new column
+                Add sequential record numbering (1, 2, 3, ...). Default: False.
 
             sanitize_timestamp:
-                Validate and prepare timestamps for further processing
+                Validate and prepare timestamps. Default: False.
 
             **kwargs:
-                Keyword arguments for xgboost.XGBRegressor
+                XGBoost hyperparameters. Common settings:
+                - n_estimators: Number of boosting rounds (default ~100)
+                - max_depth: Tree depth (default 6, range 3-10)
+                - learning_rate: Step shrinkage (default 0.3, range 0.01-1)
+                - early_stopping_rounds: Stop if no improvement after N rounds (default 10)
+                See: https://xgboost.readthedocs.io/en/stable/parameter.html
+
+        Methods:
+            trainmodel(showplot_scores=False, showplot_importance=False)
+                Train on training data, evaluate on test data, compute SHAP importances.
+
+            fillgaps(showplot_scores=False, showplot_importance=False)
+                Train on all complete data, predict all missing values, generate output.
+
+            reduce_features(shap_threshold_factor=0.5)
+                Feature selection based on SHAP importance. Call before trainmodel().
+
+            report_traintest()
+                Print model evaluation metrics and details.
+
+            report_gapfilling()
+                Print gap-filling results and statistics.
+
+            get_gapfilled_target() -> Series
+                Return gap-filled target time series.
+
+            get_flag() -> Series
+                Return gap-filling flags (0=observed, 1=gap-filled, 2=fallback).
 
         Attributes:
-            gapfilled_df
-            - .PREDICTIONS_FULLMODEL uses the output from the full RF model where
-              all features where available.
-            - .PREDICTIONS_FALLBACK uses the output from the fallback RF model, which
-              was trained on the combined observed + .PREDICTIONS_FULLMODEL data, using
-              only the timestamp info as features.
+            model_: Trained XGBRegressor instance.
+            gapfilling_df_: DataFrame with gap-filled target and auxiliary variables.
+            feature_importances_: SHAP feature importance from gap-filling model.
+            scores_: Model performance metrics (MAE, RMSE, R²) for gap-filling.
+
+        Example:
+            >>> xgbts = XGBoostTS(
+            ...     input_df=df,
+            ...     target_col='NEE',
+            ...     verbose=1,
+            ...     features_lag=[-1, -1],
+            ...     features_rolling=[12, 24],
+            ...     features_rolling_stats=['median', 'min', 'max'],
+            ...     features_diff=[1],
+            ...     features_poly_degree=2,
+            ...     vectorize_timestamps=True,
+            ...     n_estimators=100,
+            ...     max_depth=6,
+            ...     learning_rate=0.1,
+            ...     early_stopping_rounds=10,
+            ...     random_state=42,
+            ... )
+            >>> xgbts.trainmodel(showplot_scores=True, showplot_importance=True)
+            >>> xgbts.fillgaps()
+            >>> gapfilled = xgbts.get_gapfilled_target()
         """
 
         # Args
