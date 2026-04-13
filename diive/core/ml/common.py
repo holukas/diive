@@ -35,6 +35,8 @@ class MlRegressorGapFillingBase:
                  features_lag_exclude_cols: list = None,
                  features_rolling: list = None,
                  features_rolling_exclude_cols: list = None,
+                 features_diff: list = None,
+                 features_diff_exclude_cols: list = None,
                  vectorize_timestamps: bool = False,
                  add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False,
@@ -84,6 +86,16 @@ class MlRegressorGapFillingBase:
                 List of column names excluded from rolling statistics.
                 Example: ['Rg_f'] skips rolling features for Rg_f.
 
+            features_diff:
+                List of integer difference orders for temporal momentum features.
+                For each order, creates `.{col}_DIFF{order}` columns.
+                Example: features_diff=[1, 2] creates 1st and 2nd order differences.
+                If None, no differencing is applied.
+
+            features_diff_exclude_cols:
+                List of column names excluded from differencing.
+                Example: ['RECORD_NUMBER'] skips differencing for continuous record number.
+
             vectorize_timestamps:
                 Include timestamp info as integer data: year, season, month, week, doy, hour
 
@@ -112,6 +124,8 @@ class MlRegressorGapFillingBase:
         self.features_lag_exclude_cols = features_lag_exclude_cols
         self.features_rolling = features_rolling
         self.features_rolling_exclude_cols = features_rolling_exclude_cols
+        self.features_diff = features_diff
+        self.features_diff_exclude_cols = features_diff_exclude_cols
         self.verbose = verbose
         self.vectorize_timestamps = vectorize_timestamps
         self.add_continuous_record_number = add_continuous_record_number
@@ -643,6 +657,14 @@ class MlRegressorGapFillingBase:
         expanded_df = expanded_df.join(_out_df[newcols])
         return expanded_df
 
+    def _create_differencing_features(self, work_df: pd.DataFrame, expanded_df: pd.DataFrame) -> pd.DataFrame:
+        if len(work_df.columns) == 0:
+            raise ValueError("Cannot add differencing features because there are no original features.")
+        _out_df = self._differencing_features(df=work_df)
+        newcols = [c for c in _out_df.columns if c not in expanded_df.columns]
+        expanded_df = expanded_df.join(_out_df[newcols])
+        return expanded_df
+
     def _create_additional_datacols(self) -> pd.DataFrame:
 
         # Dataframe that contains the target and all original features
@@ -656,6 +678,10 @@ class MlRegressorGapFillingBase:
         if self.features_rolling:
             expanded_df = self._create_rolling_features(work_df=self.model_df[self.original_input_features].copy(),
                                                         expanded_df=expanded_df)
+
+        if self.features_diff:
+            expanded_df = self._create_differencing_features(work_df=self.model_df[self.original_input_features].copy(),
+                                                             expanded_df=expanded_df)
 
         if self.vectorize_timestamps:
             expanded_df = vectorize_timestamps(df=expanded_df, txt="")
@@ -782,6 +808,41 @@ class MlRegressorGapFillingBase:
 
         if self.verbose:
             print(f"++ Added rolling features (windows={windows}) for {len(feature_cols)} columns: "
+                  f"{newcols}")
+        return df
+
+    def _differencing_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Add 1st and 2nd order differences for capturing temporal momentum.
+
+        For each difference order and each feature column, creates a new column:
+            '.{col}_DIFF{order}' — difference at the specified order
+
+        Higher order differences capture acceleration/curvature in feature changes.
+        Useful for flux data where momentum and rate-of-change are predictive.
+
+        Returns:
+            DataFrame with additional differencing feature columns appended.
+        """
+        if not self.features_diff:
+            return df
+
+        exclude = [self.target_col] + (self.features_diff_exclude_cols or [])
+        # Only difference original features, not engineered ones starting with '.'
+        feature_cols = [c for c in df.columns if c not in exclude and not c.startswith('.')]
+        newcols = []
+
+        for order in self.features_diff:
+            if order < 1:
+                continue
+            diff_df = df[feature_cols].copy()
+            for _ in range(order):
+                diff_df = diff_df.diff()
+            diff_df.columns = [f'.{c}_DIFF{order}' for c in feature_cols]
+            df = pd.concat([df, diff_df], axis=1)
+            newcols += diff_df.columns.tolist()
+
+        if self.verbose:
+            print(f"++ Added differencing features (orders={self.features_diff}) for {len(feature_cols)} columns: "
                   f"{newcols}")
         return df
 

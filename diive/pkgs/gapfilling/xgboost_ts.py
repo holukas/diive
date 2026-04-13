@@ -29,6 +29,7 @@ class XGBoostTS(MlRegressorGapFillingBase):
     def __init__(self, input_df: DataFrame, target_col: str or tuple, verbose: int = 0,
                  test_size: float = 0.25, features_lag: list = None, features_lag_exclude_cols: list = None,
                  features_rolling: list = None, features_rolling_exclude_cols: list = None,
+                 features_diff: list = None, features_diff_exclude_cols: list = None,
                  vectorize_timestamps: bool = False, add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False, **kwargs):
         """
@@ -72,6 +73,15 @@ class XGBoostTS(MlRegressorGapFillingBase):
             features_rolling_exclude_cols:
                 List of column names excluded from rolling statistics.
 
+            features_diff:
+                List of difference orders for temporal momentum features.
+                For each order, creates `.{col}_DIFF{order}` columns.
+                Example: features_diff=[1, 2] creates 1st and 2nd order differences.
+                If None, no differencing is applied.
+
+            features_diff_exclude_cols:
+                List of column names excluded from differencing.
+
             vectorize_timestamps:
                 Include timestamp info as integer data: year, season, month, week, doy, hour
 
@@ -104,6 +114,8 @@ class XGBoostTS(MlRegressorGapFillingBase):
             features_lag_exclude_cols=features_lag_exclude_cols,
             features_rolling=features_rolling,
             features_rolling_exclude_cols=features_rolling_exclude_cols,
+            features_diff=features_diff,
+            features_diff_exclude_cols=features_diff_exclude_cols,
             vectorize_timestamps=vectorize_timestamps,
             add_continuous_record_number=add_continuous_record_number,
             sanitize_timestamp=sanitize_timestamp,
@@ -143,6 +155,8 @@ def _example_xgbts():
         features_lag=[-1, -1],
         features_lag_exclude_cols=None,
         features_rolling=[12, 24, 48],
+        features_diff=[1, 2],
+        features_diff_exclude_cols=None,
         vectorize_timestamps=True,
         add_continuous_record_number=True,
         sanitize_timestamp=True,
