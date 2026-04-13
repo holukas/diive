@@ -39,11 +39,16 @@
   `(n,)` (9).
 * **XGBoostTS / MlRegressorGapFillingBase**: Added `shap_threshold_factor` parameter to
   `reduce_features()` method for principled feature reduction threshold. Threshold is calculated as:
-  `random_importance + k * random_sd`, where k is `shap_threshold_factor` (default 1.0 for 1-sigma
-  confidence). This accounts for SHAP importance estimation uncertainty of the random baseline,
-  making feature selection more robust when random variable fluctuates. Allows tuning conservativeness:
-  k=0.5 (lenient), k=1.0 (default, standard), k=2.0 (conservative). Fixed rejected features
-  calculation to include all engineered features (not just original input features).
+  `random_importance + k * random_sd`, where k is `shap_threshold_factor` (default 0.5 for 0.5-sigma
+  confidence, more lenient feature selection). This accounts for SHAP importance estimation uncertainty
+  of the random baseline, making feature selection more robust when random variable fluctuates. Allows
+  tuning conservativeness: k=0.5 (lenient), k=1.0 (standard), k=2.0 (conservative). Fixed rejected
+  features calculation to include all engineered features (not just original input features).
+* **RandomForestTS / LongTermGapFillingRandomForestTS**: Added feature parity with XGBoostTS.
+  `RandomForestTS` now accepts `features_rolling`, `features_rolling_exclude_cols`, `features_rolling_stats`,
+  `features_diff`, and `features_diff_exclude_cols` parameters. `LongTermGapFillingRandomForestTS` and
+  `LongTermGapFillingXGBoostTS` now support all advanced feature engineering parameters for consistent
+  long-term modeling across any year range.
 * **ML Plotting functions** (enhanced): Redesigned three diagnostic plotting functions with Material
   Design-inspired strong colors and professional typography (11):
   - `plot_observed_predicted()`: Redesigned with dual-panel layout (actual vs. predicted + residuals);
