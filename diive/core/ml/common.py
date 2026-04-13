@@ -621,34 +621,41 @@ class MlRegressorGapFillingBase:
             f"- R2:  {scores['r2']}\n"
         )
 
+    def _create_lagged_variants(self, work_df: pd.DataFrame, expanded_df: pd.DataFrame) -> pd.DataFrame:
+        if len(work_df.columns) == 0:
+            raise ValueError("Cannot add lagged features because there are no original features.")
+        _out_df = lagged_variants(df=work_df,
+                                  stepsize=self.features_lag_stepsize,
+                                  lag=self.features_lag,
+                                  exclude_cols=self.features_lag_exclude_cols,
+                                  verbose=self.verbose)
+        newcols = [c for c in _out_df.columns if c not in expanded_df.columns]
+        expanded_df = expanded_df.join(_out_df[newcols])
+        return expanded_df
+
+    def _create_rolling_features(self, work_df: pd.DataFrame, expanded_df: pd.DataFrame) -> pd.DataFrame:
+        if len(work_df.columns) == 0:
+            raise ValueError("Cannot add rolling features because there are no original features.")
+        _out_df = self._rolling_features(df=work_df,
+                                         windows=self.features_rolling,
+                                         exclude_cols=self.features_rolling_exclude_cols)
+        newcols = [c for c in _out_df.columns if c not in expanded_df.columns]
+        expanded_df = expanded_df.join(_out_df[newcols])
+        return expanded_df
+
     def _create_additional_datacols(self) -> pd.DataFrame:
 
         # Dataframe that contains the target and all original features
-        model_df = self.model_df.copy()
         expanded_df = self.model_df.copy()
 
         # Add lagged cols
         if self.features_lag:
-            _work_df = model_df[self.original_input_features].copy()
-            if len(_work_df.columns) == 0:
-                raise ValueError("Cannot add lagged features because there are no original features.")
-            _out_df = lagged_variants(df=_work_df,
-                                      stepsize=self.features_lag_stepsize,
-                                      lag=self.features_lag,
-                                      exclude_cols=self.features_lag_exclude_cols,
-                                      verbose=self.verbose)
-            newcols = [c for c in _out_df.columns if c not in expanded_df.columns]
-            expanded_df = expanded_df.join(_out_df[newcols])
+            expanded_df = self._create_lagged_variants(work_df=self.model_df[self.original_input_features].copy(),
+                                                       expanded_df=expanded_df)
 
         if self.features_rolling:
-            _work_df = model_df[self.original_input_features].copy()
-            if len(_work_df.columns) == 0:
-                raise ValueError("Cannot add rolling features because there are no original features.")
-            _out_df = self._rolling_features(df=_work_df,
-                                             windows=self.features_rolling,
-                                             exclude_cols=self.features_rolling_exclude_cols)
-            newcols = [c for c in _out_df.columns if c not in expanded_df.columns]
-            expanded_df = expanded_df.join(_out_df[newcols])
+            expanded_df = self._create_rolling_features(work_df=self.model_df[self.original_input_features].copy(),
+                                                        expanded_df=expanded_df)
 
         if self.vectorize_timestamps:
             expanded_df = vectorize_timestamps(df=expanded_df, txt="")
