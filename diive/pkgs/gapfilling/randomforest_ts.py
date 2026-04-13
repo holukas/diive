@@ -491,6 +491,6 @@ def _example_optimize():
 
 
 if __name__ == '__main__':
-    _example_quickfill()
-    # _example_rfts()
+    # _example_quickfill()
+    _example_rfts()
     # _example_optimize()
