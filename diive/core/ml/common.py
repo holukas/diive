@@ -46,93 +46,139 @@ class MlRegressorGapFillingBase:
                  test_size: float = 0.25,
                  **kwargs):
         """
-        Gap-fill timeseries with predictions from random forest model
+        Base class for machine-learning gap-filling using Random Forest or XGBoost.
+
+        Trains a predictive model on complete (non-gap) data to fill missing values in a target
+        time series. Includes comprehensive feature engineering pipeline with lagged variants,
+        rolling statistics, temporal differencing, and polynomial expansion. Features are extracted
+        from driver variables (temperature, radiation, VPD, etc.) to provide the model with temporal
+        context and non-linear patterns.
 
         Args:
+            regressor:
+                Sklearn-compatible regressor class (RandomForestRegressor or XGBRegressor).
+
             input_df:
-                Contains timeseries of 1 target column and 1+ feature columns.
+                Input DataFrame with time series data. Must contain 1 target column and 1+ feature
+                columns. Timestamps should be in DataFrame index (DatetimeIndex).
 
             target_col:
-                Column name of variable in *input_df* that will be gap-filled.
+                Column name of the variable to gap-fill (string or tuple for multi-level columns).
+
+            verbose:
+                Verbosity level: 0=silent, 1=progress updates, 2+=detailed output.
 
             test_size:
-                Proportion of the dataset to include in the test split,
-                between 0.0 and 1.0.
+                Proportion of complete (non-gap) data to reserve for testing, between 0.0-1.0.
+                Default: 0.25 (75% train, 25% test on non-gap data only).
 
             features_lag:
-                List of integers (number of records), includes lagged variants of predictors.
-                If features_lag=None, no lagged variants are added.
-                Example:
-                    - features_lag=[-2, +2] includes variants that are lagged by -2, -1, +1 and
-                    +2 records in the dataset, for each feature already present in the data.
-                     For a variable named *TA*, this created the following output:
+                List [min_lag, max_lag] specifying range of lagged variants to create.
+                Creates lagged copies at all integers between min_lag and max_lag (exclusive of 0).
+                Default: None (no lagging).
+
+                Example: features_lag=[-2, 2] creates lags [-2, -1, +1, +2]:
                     TA    = [  5,   6,   7, 8  ]
                     TA-2  = [NaN, NaN,   5, 6  ]
-                    TA-1  = [NaN,   5,   6, 7  ]  --> each TA record is paired with the preceding record TA-1
-                    TA+1  = [  6,   7,   8, NaN]  --> each TA record is paired with the next record TA+1
+                    TA-1  = [NaN,   5,   6, 7  ]  (each TA paired with preceding TA-1)
+                    TA+1  = [  6,   7,   8, NaN]  (each TA paired with next TA+1)
                     TA+2  = [  7,   8, NaN, NaN]
 
+                Column naming: '{col}{sign}{lag}' (e.g., 'Tair_f-1', 'Tair_f+1')
+
+            features_lag_stepsize:
+                Step size for creating lags within the specified range. Default: 1 (every record).
+                Example: features_lag=[-4, 4], features_lag_stepsize=2 creates lags [-4, -2, 2, 4].
+
             features_lag_exclude_cols:
-                List of predictors for which no lagged variants are added.
-                Example: with ['A', 'B'] no lagged variants for variables 'A' and 'B' are added.
+                List of column names to exclude from lagging.
+                Default: None (all feature columns are lagged).
+                Example: ['RECORD_NUMBER'] skips lagging for continuous record numbers.
 
             features_rolling:
-                List of window sizes (in records) for rolling statistics.
-                For each window size, rolling mean and rolling std are added for every
-                feature column (excluding target and any cols in features_rolling_exclude_cols).
-                If None, no rolling statistics are added.
-                Example: features_rolling=[6, 48] with 30-min data adds 3-hour and 24-hour
-                rolling mean and std for each driver variable.
-                Column naming: '.{col}_mean{w}' and '.{col}_std{w}', e.g. '.Tair_f_mean6'.
+                List of rolling window sizes (in records) for rolling statistics.
+                For each window, rolling mean and std are computed for every feature column
+                (except target and excluded columns). Default: None (no rolling statistics).
+
+                Example: features_rolling=[6, 48] with 30-min data creates 3-hour and 24-hour
+                rolling mean/std for each driver variable.
+                Column naming: '.{col}_mean{w}', '.{col}_std{w}' (e.g., '.Tair_f_mean6').
 
             features_rolling_exclude_cols:
-                List of column names excluded from rolling statistics.
+                List of column names excluded from rolling statistics computation.
+                Default: None.
                 Example: ['Rg_f'] skips rolling features for Rg_f.
 
             features_rolling_stats:
-                List of additional rolling statistics to compute beyond mean and std.
-                Options: 'median', 'min', 'max', 'std', 'q25', 'q75'
-                If None, only mean and std are computed.
-                Example: features_rolling_stats=['median', 'min', 'max', 'q25', 'q75']
-                Column naming: '.{col}_ROLLMEDIAN{w}', '.{col}_ROLLMIN{w}', etc.
+                List of advanced rolling statistics beyond mean and std.
+                Options: ['median', 'min', 'max', 'std', 'q25', 'q75'].
+                Default: None (only mean and std computed if features_rolling specified).
+
+                Provides richer statistical context of local variability and distribution shape.
+                Example: features_rolling_stats=['median', 'min', 'max', 'q25', 'q75'].
+                Column naming: '.{col}_ROLLMEDIAN{w}', '.{col}_ROLLMIN{w}', '.{col}_ROLLMAX{w}',
+                '.{col}_ROLLQ25{w}', '.{col}_ROLLQ75{w}', '.{col}_ROLLSD{w}'.
 
             features_diff:
-                List of integer difference orders for temporal momentum features.
-                For each order, creates `.{col}_DIFF{order}` columns.
+                List of difference orders for temporal momentum feature engineering.
+                Computes 1st-order differences (rate of change), 2nd-order (acceleration), etc.
+                Default: None (no differencing).
+
+                Captures temporal momentum crucial for modeling flux ramp-ups/ramp-downs during
+                sunrise/sunset transitions. Only applied to original features (not engineered cols).
                 Example: features_diff=[1, 2] creates 1st and 2nd order differences.
-                If None, no differencing is applied.
+                Column naming: '.{col}_DIFF{order}' (e.g., '.Tair_f_DIFF1', '.Tair_f_DIFF2').
 
             features_diff_exclude_cols:
                 List of column names excluded from differencing.
-                Example: ['RECORD_NUMBER'] skips differencing for continuous record number.
+                Default: None.
+                Example: ['RECORD_NUMBER'] skips differencing for continuous record numbers.
 
             features_poly_degree:
-                Polynomial degree for feature expansion (e.g., 2 for squared terms).
-                If None, no polynomial features are added.
-                Creates features like `.{col}²` for degree 2, `.{col}²` and `.{col}³` for degree 3.
-                Example: features_poly_degree=2 creates squared terms for all driver variables.
-                Column naming: `.{col}_POL{degree}` (e.g., `.Tair_f_POL2` for squared)
+                Polynomial degree for non-linear relationship modeling (2 for squared, 3 for cubed, etc.).
+                Default: None (no polynomial expansion).
+
+                Creates polynomial terms for all driver variables to capture non-linear phenomena
+                like radiation or temperature effects with polynomial relationships.
+                Example: features_poly_degree=2 creates squared terms for each driver variable.
+                Column naming: '.{col}_POL{degree}' (e.g., '.Tair_f_POL2' for squared).
 
             features_poly_exclude_cols:
                 List of column names excluded from polynomial expansion.
-                Example: ['RECORD_NUMBER'] skips polynomial features for continuous record number.
+                Default: None.
+                Example: ['RECORD_NUMBER'] skips polynomial features for record numbers.
 
             vectorize_timestamps:
-                Include timestamp info as integer data: year, season, month, week, doy, hour
+                Include timestamp attributes as numeric features: year, season, month, week, doy, hour.
+                Provides the model with annual and diurnal cycles. Default: False.
 
             add_continuous_record_number:
-                Add continuous record number as new column
+                Add continuous record numbering as a feature (1, 2, 3, ..., n).
+                Captures long-term trends and drift. Default: False.
 
             sanitize_timestamp:
-                Validate and prepare timestamps for further processing
+                Validate and prepare timestamps for further processing (check continuity, format, etc.).
+                Default: False.
+
+            **kwargs:
+                Regressor-specific hyperparameters passed to the sklearn regressor.
+                For RandomForestRegressor: n_estimators, max_depth, min_samples_split, etc.
+                For XGBRegressor: n_estimators, max_depth, learning_rate, early_stopping_rounds, etc.
 
         Attributes:
-            gapfilled_df
-            - .PREDICTIONS_FULLMODEL uses the output from the full RF model where
-              all features where available.
-            - .PREDICTIONS_FALLBACK uses the output from the fallback RF model, which
-              was trained on the combined observed + .PREDICTIONS_FULLMODEL data, using
-              only the timestamp info as features.
+            model_: Trained regressor instance.
+            gapfilling_df_: DataFrame with gap-filled target and auxiliary variables.
+            feature_importances_: SHAP feature importance from gap-filling model.
+            feature_importances_traintest_: SHAP feature importance from train/test model.
+            scores_: Model performance metrics (MAE, RMSE, R²) for gap-filling.
+            scores_traintest_: Model performance metrics from train/test split.
+
+        Feature Engineering Pipeline:
+            1. Lag features: temporal past/future context
+            2. Rolling statistics: short-term local variability
+            3. Differencing: temporal momentum and rate of change
+            4. Polynomial: non-linear relationships
+            5. Timestamp features: annual/diurnal cycles (optional)
         """
 
         # Args
