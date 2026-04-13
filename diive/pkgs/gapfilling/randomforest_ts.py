@@ -285,11 +285,11 @@ class QuickFillRFTS:
             input_df=self.df,
             target_col=self.target_col,
             verbose=True,
-            features_lag=[-1, -1],
-            vectorize_timestamps=True,
-            add_continuous_record_number=True,
-            sanitize_timestamp=True,
-            n_estimators=99,
+            features_lag=[-1],
+            vectorize_timestamps=False,
+            add_continuous_record_number=False,
+            sanitize_timestamp=False,
+            n_estimators=3,
             random_state=42,
             min_samples_split=10,
             min_samples_leaf=5,
@@ -362,35 +362,31 @@ def example_quickfill():
 
 
 def _example_rfts():
-    """Example: Random Forest gap-filling with advanced feature engineering"""
+    """Example: Random Forest gap-filling with minimal feature engineering"""
     TARGET_COL = 'NEE_CUT_REF_orig'
     subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
     from diive.configs.exampledata import load_exampledata_parquet
     df_orig = load_exampledata_parquet()
     df = df_orig.copy()
-    keep = (df.index.year >= 2013) & (df.index.year <= 2015)
+    keep = (df.index.year >= 2020) & (df.index.year <= 2020)
     df = df[keep].copy()
     df = df[subsetcols].copy()
 
-    # Random forest with advanced feature engineering
+    # Random forest with minimal parameters for speed
     rfts = RandomForestTS(
         input_df=df,
         target_col=TARGET_COL,
         verbose=1,
         features_lag=[-1, -1],
         features_lag_exclude_cols=None,
-        features_rolling=[12],
-        features_rolling_stats=['median'],
-        features_diff=[1],
-        features_diff_exclude_cols=None,
-        vectorize_timestamps=True,
-        add_continuous_record_number=True,
-        sanitize_timestamp=True,
+        vectorize_timestamps=False,
+        add_continuous_record_number=False,
+        sanitize_timestamp=False,
         n_estimators=3,
         random_state=42,
         max_depth=None,
-        min_samples_split=2,
-        min_samples_leaf=1,
+        min_samples_split=5,
+        min_samples_leaf=2,
         n_jobs=-1
     )
 
