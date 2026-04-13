@@ -234,6 +234,31 @@ class TestFluxProcessingChain(unittest.TestCase):
             random_state=42,
         )
 
+        fpc.level41_longterm_xgboost(
+            features=FEATURES,
+            sanitize_timestamp=True,
+            features_lag=[-1, -1],
+            features_lag_stepsize=1,
+            features_lag_exclude_cols=None,
+            features_rolling=None,
+            features_rolling_exclude_cols=None,
+            features_rolling_stats=None,
+            features_diff=None,
+            features_diff_exclude_cols=None,
+            features_poly_degree=None,
+            features_poly_exclude_cols=None,
+            reduce_features=False,
+            vectorize_timestamps=True,
+            add_continuous_record_number=True,
+            verbose=True,
+            n_estimators=3,
+            max_depth=3,
+            learning_rate=0.3,
+            early_stopping_rounds=10,
+            n_jobs=-1,
+            random_state=42,
+        )
+
         fpc.level41_mds(
             swin="SW_IN_1_1_1",
             ta="TA_1_1_1",
@@ -246,11 +271,14 @@ class TestFluxProcessingChain(unittest.TestCase):
 
         # fpc.showplot_gapfilled_heatmap()
         # fpc.showplot_gapfilled_cumulative()
-        from diive.pkgs.gapfilling.longterm import LongTermGapFillingRandomForestTS
+        from diive.pkgs.gapfilling.longterm import LongTermGapFillingRandomForestTS, LongTermGapFillingXGBoostTS
         from diive.pkgs.gapfilling.mds import FluxMDS
         self.assertEqual(type(fpc.level41['long_term_random_forest']['CUT_16']), LongTermGapFillingRandomForestTS)
         self.assertEqual(type(fpc.level41['long_term_random_forest']['CUT_50']), LongTermGapFillingRandomForestTS)
         self.assertEqual(type(fpc.level41['long_term_random_forest']['CUT_84']), LongTermGapFillingRandomForestTS)
+        self.assertEqual(type(fpc.level41['long_term_xgboost']['CUT_16']), LongTermGapFillingXGBoostTS)
+        self.assertEqual(type(fpc.level41['long_term_xgboost']['CUT_50']), LongTermGapFillingXGBoostTS)
+        self.assertEqual(type(fpc.level41['long_term_xgboost']['CUT_84']), LongTermGapFillingXGBoostTS)
         self.assertAlmostEqual(fpc.level41['long_term_random_forest']['CUT_16'].gapfilled_.sum(), -1052.6700877483, places=5)
         self.assertAlmostEqual(fpc.level41['long_term_random_forest']['CUT_50'].gapfilled_.sum(), -543.8551807127668, places=5)
         self.assertAlmostEqual(fpc.level41['long_term_random_forest']['CUT_84'].gapfilled_.sum(), -337.4421570429, places=5)
@@ -260,7 +288,7 @@ class TestFluxProcessingChain(unittest.TestCase):
         self.assertAlmostEqual(fpc.level41['mds']['CUT_16'].get_gapfilled_target().sum(), -1372.1043138550303, places=5)
         self.assertAlmostEqual(fpc.level41['mds']['CUT_50'].get_gapfilled_target().sum(), -1323.1231981977835, places=5)
         self.assertAlmostEqual(fpc.level41['mds']['CUT_84'].get_gapfilled_target().sum(), -1300.4652042901628, places=5)
-        self.assertEqual(len(fpc.fpc_df.columns), 79)
+        self.assertEqual(len(fpc.fpc_df.columns), 85)  # 79 (before XGB) + 6 (3 scenarios × 2 columns per scenario: flux + flag)
         flagcols = [c for c in fpc.fpc_df.columns if str(c).startswith("FLAG_") and str(c).endswith("_TEST")]
         self.assertEqual(len(flagcols), 26)
 

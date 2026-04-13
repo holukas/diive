@@ -33,7 +33,7 @@ from diive.pkgs.flux.hqflux import analyze_highest_quality_flux
 from diive.pkgs.flux.ustarthreshold import FlagMultipleConstantUstarThresholds
 from diive.pkgs.fluxprocessingchain.level2_qualityflags import FluxQualityFlagsEddyPro
 from diive.pkgs.fluxprocessingchain.level31_storagecorrection import FluxStorageCorrectionSinglePointEddyPro
-from diive.pkgs.gapfilling.longterm import LongTermGapFillingRandomForestTS
+from diive.pkgs.gapfilling.longterm import LongTermGapFillingRandomForestTS, LongTermGapFillingXGBoostTS
 from diive.pkgs.gapfilling.mds import FluxMDS
 from diive.pkgs.outlierdetection.stepwiseoutlierdetection import StepwiseOutlierDetection
 from diive.pkgs.qaqc.qcf import FlagQCF
@@ -993,6 +993,99 @@ class FluxProcessingChain:
         #     print(feature_importance_per_year)
         #     print(features_reduced_across_years)
 
+    def level41_longterm_xgboost(
+            self,
+            sanitize_timestamp: bool = True,
+            features: list = None,
+            features_lag: list = None,
+            features_lag_stepsize: int = 1,
+            features_lag_exclude_cols: list = None,
+            features_rolling: list = None,
+            features_rolling_exclude_cols: list = None,
+            features_rolling_stats: list = None,
+            features_diff: list = None,
+            features_diff_exclude_cols: list = None,
+            features_poly_degree: int = None,
+            features_poly_exclude_cols: list = None,
+            reduce_features: bool = False,
+            vectorize_timestamps: bool = False,
+            add_continuous_record_number: bool = False,
+            verbose: int = 0,
+            **xgb_kwargs
+    ):
+
+        idstr = 'L4.1'
+        if idstr not in self._levelidstr:
+            self._levelidstr.append(idstr)
+
+        # Store results in separate dict within Level-4.1
+        self._level41['long_term_xgboost'] = dict()
+
+        # Default parameters for XGBoost models
+        if not isinstance(xgb_kwargs, dict):
+            xgb_kwargs = {'n_estimators': 200,
+                          'random_state': 42,
+                          'early_stopping_rounds': 10,
+                          'max_depth': 6,
+                          'learning_rate': 0.3,
+                          'n_jobs': -1}
+
+        # Collect data and run model for each USTAR scenario for gapfilling
+        for ustar_scen, ustar_flux in self.filteredseries_level33_qcf.items():
+
+            # Get features from input data
+            this_ust_scen_df = self.df[features].copy()
+
+            # Add USTAR-filtered flux from recent results (Level-3.3)
+            this_ust_scen_df = pd.concat([this_ust_scen_df, self.fpc_df[ustar_flux.name]], axis=1)
+            this_ust_scen_df = this_ust_scen_df.copy()
+
+            general_kwargs = dict(
+                input_df=this_ust_scen_df,
+                target_col=ustar_flux.name,
+                vectorize_timestamps=vectorize_timestamps,
+                add_continuous_record_number=add_continuous_record_number,
+                features_lag=features_lag,
+                features_lag_stepsize=features_lag_stepsize,
+                features_lag_exclude_cols=features_lag_exclude_cols,
+                features_rolling=features_rolling,
+                features_rolling_exclude_cols=features_rolling_exclude_cols,
+                features_rolling_stats=features_rolling_stats,
+                features_diff=features_diff,
+                features_diff_exclude_cols=features_diff_exclude_cols,
+                features_poly_degree=features_poly_degree,
+                features_poly_exclude_cols=features_poly_exclude_cols,
+                verbose=verbose,
+                sanitize_timestamp=sanitize_timestamp
+            )
+
+            # Initialize XGBoost for this scenario
+            instance = LongTermGapFillingXGBoostTS(**general_kwargs, **xgb_kwargs)
+
+            # Assign model data
+            instance.create_yearpools()
+
+            # Init models
+            instance.initialize_yearly_models()
+
+            # Feature reduction *across all* years (not *per* year)
+            if reduce_features:
+                instance.reduce_features_across_years()
+
+            # Train model and fill gaps
+            instance.fillgaps()
+
+            # Add gap-filled flux and gap-filling flag to flux processing chain dataframe
+            fluxdata = instance.gapfilled_.copy()
+            flagname = [c for c in instance.gapfilling_df_
+                        if str(c).startswith("FLAG_") and str(c).endswith("_ISFILLED")]
+            flagname = flagname[0] if len(flagname) == 1 else None
+            flagdata = instance.gapfilling_df_[flagname].copy()
+            self._fpc_df = pd.concat([self.fpc_df, fluxdata, flagdata], axis=1)
+
+            # Save instance to Level-4.1
+            self._level41['long_term_xgboost'][ustar_scen] = instance
+
     def level31_storage_correction(self, gapfill_storage_term: bool = True, set_storage_to_zero: bool = False):
         """Correct flux with storage term from single point measurement."""
         idstr = 'L3.1'
@@ -1365,7 +1458,7 @@ class QuickFluxProcessingChain:
         return ep.maindf, ep.metadata
 
 
-def example_quick():
+def _example_quick():
     QuickFluxProcessingChain(
         # fluxvars=['FC'],
         fluxvars=['FC', 'LE', 'H'],
@@ -1383,7 +1476,7 @@ def example_quick():
     )
 
 
-def example():
+def _example():
     # Source data
     from pathlib import Path
     from diive.core.io.files import load_parquet
@@ -1670,6 +1763,33 @@ def example():
         random_state=42,
     )
     # fpc.level41['long_term_random_forest']['CUT_50']
+
+    # # XGBoost gap-filling (optional alternative to Random Forest)
+    # fpc.level41_longterm_xgboost(
+    #     features=FEATURES,
+    #     sanitize_timestamp=True,
+    #     features_lag=[-1, 1],
+    #     features_lag_stepsize=1,
+    #     features_lag_exclude_cols=None,
+    #     features_rolling=None,
+    #     features_rolling_exclude_cols=None,
+    #     features_rolling_stats=None,
+    #     features_diff=None,
+    #     features_diff_exclude_cols=None,
+    #     features_poly_degree=None,
+    #     features_poly_exclude_cols=None,
+    #     reduce_features=False,
+    #     vectorize_timestamps=True,
+    #     add_continuous_record_number=True,
+    #     verbose=True,
+    #     n_estimators=100,
+    #     max_depth=6,
+    #     learning_rate=0.3,
+    #     early_stopping_rounds=10,
+    #     n_jobs=-1,
+    #     random_state=42,
+    # )
+    # # fpc.level41['long_term_xgboost']['CUT_50']
 
     fpc.level41_mds(
         swin="SW_IN_T1_47_1_gfXG",
@@ -2047,5 +2167,5 @@ def example_cumu():
 
 if __name__ == '__main__':
     # example_quick()
-    example()
+    _example()
     # example_cumu()
