@@ -35,6 +35,7 @@ class MlRegressorGapFillingBase:
                  features_lag_exclude_cols: list = None,
                  features_rolling: list = None,
                  features_rolling_exclude_cols: list = None,
+                 features_rolling_stats: list = None,
                  features_diff: list = None,
                  features_diff_exclude_cols: list = None,
                  vectorize_timestamps: bool = False,
@@ -86,6 +87,13 @@ class MlRegressorGapFillingBase:
                 List of column names excluded from rolling statistics.
                 Example: ['Rg_f'] skips rolling features for Rg_f.
 
+            features_rolling_stats:
+                List of additional rolling statistics to compute beyond mean and std.
+                Options: 'median', 'min', 'max', 'std', 'q25', 'q75'
+                If None, only mean and std are computed.
+                Example: features_rolling_stats=['median', 'min', 'max', 'q25', 'q75']
+                Column naming: '.{col}_ROLLMEDIAN{w}', '.{col}_ROLLMIN{w}', etc.
+
             features_diff:
                 List of integer difference orders for temporal momentum features.
                 For each order, creates `.{col}_DIFF{order}` columns.
@@ -124,6 +132,7 @@ class MlRegressorGapFillingBase:
         self.features_lag_exclude_cols = features_lag_exclude_cols
         self.features_rolling = features_rolling
         self.features_rolling_exclude_cols = features_rolling_exclude_cols
+        self.features_rolling_stats = features_rolling_stats
         self.features_diff = features_diff
         self.features_diff_exclude_cols = features_diff_exclude_cols
         self.verbose = verbose
@@ -272,8 +281,8 @@ class MlRegressorGapFillingBase:
     @property
     def rejected_features_(self) -> list:
         """Return list of rejected features from feature reduction"""
-        if not self._rejected_features:
-            raise Exception(f'Not available: accepted features from feature reduction.')
+        if self._rejected_features is None:
+            raise Exception(f'Not available: rejected features from feature reduction.')
         return self._rejected_features
 
     @staticmethod
@@ -524,8 +533,7 @@ class MlRegressorGapFillingBase:
         self.model_df = self.model_df[accepted_cols].copy()
 
         self._accepted_features = self.train_df.drop(columns=self.target_col).columns.tolist()
-        self._rejected_features = [x for x in self.original_input_features if x not in self.accepted_features_]
-        self._rejected_features = 'None.' if not self._rejected_features else self._rejected_features
+        self._rejected_features = [x for x in X_names if x not in self.accepted_features_ and x != self.random_col]
 
     def report_feature_reduction(self):
         """Results from feature reduction"""
@@ -557,7 +565,7 @@ class MlRegressorGapFillingBase:
             f"--> {len(self.original_input_features)} original input features (before feature reduction): "
             f"{self.original_input_features}\n"
             f"--> {len(self.rejected_features_)} rejected features (during feature reduction): "
-            f"{self.rejected_features_}\n"
+            f"{self.rejected_features_ if self.rejected_features_ else 'None.'}\n"
             f"--> {len(self.accepted_features_)} accepted features (after feature reduction): "
             f"{self.accepted_features_}\n"
         )
@@ -657,6 +665,17 @@ class MlRegressorGapFillingBase:
         expanded_df = expanded_df.join(_out_df[newcols])
         return expanded_df
 
+    def _create_rolling_features_advanced(self, work_df: pd.DataFrame, expanded_df: pd.DataFrame) -> pd.DataFrame:
+        if len(work_df.columns) == 0:
+            raise ValueError("Cannot add advanced rolling features because there are no original features.")
+        _out_df = self._rolling_features_advanced(df=work_df,
+                                                  windows=self.features_rolling,
+                                                  stats=self.features_rolling_stats,
+                                                  exclude_cols=self.features_rolling_exclude_cols)
+        newcols = [c for c in _out_df.columns if c not in expanded_df.columns]
+        expanded_df = expanded_df.join(_out_df[newcols])
+        return expanded_df
+
     def _create_differencing_features(self, work_df: pd.DataFrame, expanded_df: pd.DataFrame) -> pd.DataFrame:
         if len(work_df.columns) == 0:
             raise ValueError("Cannot add differencing features because there are no original features.")
@@ -678,6 +697,10 @@ class MlRegressorGapFillingBase:
         if self.features_rolling:
             expanded_df = self._create_rolling_features(work_df=self.model_df[self.original_input_features].copy(),
                                                         expanded_df=expanded_df)
+
+        if self.features_rolling and self.features_rolling_stats:
+            expanded_df = self._create_rolling_features_advanced(work_df=self.model_df[self.original_input_features].copy(),
+                                                                 expanded_df=expanded_df)
 
         if self.features_diff:
             expanded_df = self._create_differencing_features(work_df=self.model_df[self.original_input_features].copy(),
@@ -809,6 +832,61 @@ class MlRegressorGapFillingBase:
         if self.verbose:
             print(f"++ Added rolling features (windows={windows}) for {len(feature_cols)} columns: "
                   f"{newcols}")
+        return df
+
+    def _rolling_features_advanced(self, df: pd.DataFrame, windows: list, stats: list,
+                                    exclude_cols: list = None) -> pd.DataFrame:
+        """Add advanced rolling statistics (median, min, max, percentiles) to features.
+
+        For each window size w, feature column col, and statistic stat, creates:
+            '.{col}_ROLL{STAT}{w}' — rolling statistic over the previous w records
+
+        Rolling statistics use min_periods=1 so no new NaN values are introduced
+        at the start of the series.
+
+        Args:
+            df: DataFrame with feature columns and DatetimeIndex.
+            windows: List of window sizes in records (e.g. [6, 48] for 3h and 24h
+                     at 30-min resolution).
+            stats: List of statistics to compute. Options: 'median', 'min', 'max',
+                   'std', 'q25', 'q75'
+            exclude_cols: Column names to skip. Target column is always excluded.
+
+        Returns:
+            DataFrame with additional rolling feature columns appended.
+        """
+        exclude = [self.target_col] + (exclude_cols or [])
+        feature_cols = [c for c in df.columns if c not in exclude]
+        newcols = []
+
+        stat_name_map = {
+            'median': ('MEDIAN', lambda x: x.median()),
+            'min': ('MIN', lambda x: x.min()),
+            'max': ('MAX', lambda x: x.max()),
+            'std': ('SD', lambda x: x.std(ddof=0)),
+            'q25': ('Q25', lambda x: x.quantile(0.25)),
+            'q75': ('Q75', lambda x: x.quantile(0.75)),
+        }
+
+        for w in windows:
+            rolled = df[feature_cols].rolling(window=w, min_periods=1)
+
+            for stat in stats:
+                if stat not in stat_name_map:
+                    if self.verbose:
+                        print(f"Warning: unknown rolling statistic '{stat}', skipping")
+                    continue
+
+                stat_display_name, stat_func = stat_name_map[stat]
+                stat_df = stat_func(rolled)
+                stat_df.columns = [f'.{c}_ROLL{stat_display_name}{w}' for c in feature_cols]
+
+                df = pd.concat([df, stat_df], axis=1)
+                newcols += stat_df.columns.tolist()
+
+        if self.verbose and newcols:
+            print(f"++ Added advanced rolling statistics (stats={stats}, windows={windows}) "
+                  f"for {len(feature_cols)} columns: {newcols}")
         return df
 
     def _differencing_features(self, df: pd.DataFrame) -> pd.DataFrame:
