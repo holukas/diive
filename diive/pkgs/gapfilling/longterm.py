@@ -20,6 +20,11 @@ class LongTermGapFillingBase:
                  features_lag: list = None,
                  features_lag_stepsize: int = 1,
                  features_lag_exclude_cols: list = None,
+                 features_rolling: list = None,
+                 features_rolling_exclude_cols: list = None,
+                 features_rolling_stats: list = None,
+                 features_diff: list = None,
+                 features_diff_exclude_cols: list = None,
                  vectorize_timestamps: bool = False,
                  add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False,
@@ -54,6 +59,11 @@ class LongTermGapFillingBase:
         self.features_lag = features_lag
         self.features_lag_stepsize = features_lag_stepsize
         self.features_lag_exclude_cols = features_lag_exclude_cols
+        self.features_rolling = features_rolling
+        self.features_rolling_exclude_cols = features_rolling_exclude_cols
+        self.features_rolling_stats = features_rolling_stats
+        self.features_diff = features_diff
+        self.features_diff_exclude_cols = features_diff_exclude_cols
         self.vectorize_timestamps = vectorize_timestamps
         self.add_continuous_record_number = add_continuous_record_number
         self.sanitize_timestamp = sanitize_timestamp
@@ -163,6 +173,11 @@ class LongTermGapFillingBase:
             features_lag=self.features_lag,
             features_lag_stepsize=self.features_lag_stepsize,
             features_lag_exclude_cols=self.features_lag_exclude_cols,
+            features_rolling=self.features_rolling,
+            features_rolling_exclude_cols=self.features_rolling_exclude_cols,
+            features_rolling_stats=self.features_rolling_stats,
+            features_diff=self.features_diff,
+            features_diff_exclude_cols=self.features_diff_exclude_cols,
             vectorize_timestamps=self.vectorize_timestamps,
             add_continuous_record_number=self.add_continuous_record_number,
             sanitize_timestamp=self.sanitize_timestamp,
@@ -196,8 +211,13 @@ class LongTermGapFillingBase:
                 input_df=df,
                 target_col=self.target_col,
                 verbose=self.verbose,
-                    features_lag=None,  # Already considered across all years
+                features_lag=None,  # Already considered across all years
                 features_lag_exclude_cols=None,  # Already considered across all years
+                features_rolling=None,  # Already considered across all years
+                features_rolling_exclude_cols=None,  # Already considered across all years
+                features_rolling_stats=None,  # Already considered across all years
+                features_diff=None,  # Already considered across all years
+                features_diff_exclude_cols=None,  # Already considered across all years
                 vectorize_timestamps=False,  # Already considered across all years
                 add_continuous_record_number=False,  # Already considered across all years
                 sanitize_timestamp=False,  # Already considered across all years
@@ -212,7 +232,7 @@ class LongTermGapFillingBase:
         for year, year_dict in self._yearpools.items():
             print(f"---\nReducing features based on SHAP importance for year {year} ...")
             rfts = self.results_yearly_[year]
-            rfts.reduce_features(shap_threshold_factor=1.0)
+            rfts.reduce_features(shap_threshold_factor=0.5)
             features_reduced_across_years.append(rfts.accepted_features_)
 
         # Flatten common_features (list of lists)
@@ -222,7 +242,7 @@ class LongTermGapFillingBase:
         self._features_reduced_across_years.sort()  # Important! For consistency when using random_state!
 
         print(f"---")
-        print(f"Finished reducing features based on permutation importance for all years.")
+        print(f"Finished reducing features based on SHAP importance for all years.")
         print(f"List of features after reduction: {self.features_reduced_across_years}.")
         print(f"Each feature was selected in at least one year.")
         print(f"---")
@@ -255,7 +275,8 @@ class LongTermGapFillingBase:
         verts = list(zip([-width, width, width, -width], [-height, -height, height, height]))
         colors = colorwheel_48()
         figheight = 6 if len(self.feature_ranks_per_year) <= 30 else 8
-        fig, ax = plt.subplots(figsize=(20, figheight), subplot_kw=dict(ylim=(0.5, 0.5 + len(self.feature_ranks_per_year))),
+        fig, ax = plt.subplots(figsize=(20, figheight),
+                               subplot_kw=dict(ylim=(0.5, 0.5 + len(self.feature_ranks_per_year))),
                                layout='constrained')
         color = -1
         for ix, row in self.feature_ranks_per_year.iterrows():
@@ -328,6 +349,11 @@ class LongTermGapFillingRandomForestTS(LongTermGapFillingBase):
                  features_lag: list = None,
                  features_lag_stepsize: int = 1,
                  features_lag_exclude_cols: list = None,
+                 features_rolling: list = None,
+                 features_rolling_exclude_cols: list = None,
+                 features_rolling_stats: list = None,
+                 features_diff: list = None,
+                 features_diff_exclude_cols: list = None,
                  vectorize_timestamps: bool = False,
                  add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False,
@@ -341,6 +367,11 @@ class LongTermGapFillingRandomForestTS(LongTermGapFillingBase):
             features_lag=features_lag,
             features_lag_stepsize=features_lag_stepsize,
             features_lag_exclude_cols=features_lag_exclude_cols,
+            features_rolling=features_rolling,
+            features_rolling_exclude_cols=features_rolling_exclude_cols,
+            features_rolling_stats=features_rolling_stats,
+            features_diff=features_diff,
+            features_diff_exclude_cols=features_diff_exclude_cols,
             vectorize_timestamps=vectorize_timestamps,
             add_continuous_record_number=add_continuous_record_number,
             sanitize_timestamp=sanitize_timestamp,
@@ -356,9 +387,17 @@ class LongTermGapFillingXGBoostTS(LongTermGapFillingBase):
                  target_col: str or tuple,
                  verbose: int = 0,
                  features_lag: list = None,
+                 features_lag_stepsize: int = 1,
+                 features_lag_exclude_cols: list = None,
+                 features_rolling: list = None,
+                 features_rolling_exclude_cols: list = None,
+                 features_rolling_stats: list = None,
+                 features_diff: list = None,
+                 features_diff_exclude_cols: list = None,
                  vectorize_timestamps: bool = False,
                  add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False,
+                 test_size: float = 0.25,
                  **kwargs):
         super().__init__(
             regressor=XGBRegressor,
@@ -366,13 +405,22 @@ class LongTermGapFillingXGBoostTS(LongTermGapFillingBase):
             target_col=target_col,
             verbose=verbose,
             features_lag=features_lag,
+            features_lag_stepsize=features_lag_stepsize,
+            features_lag_exclude_cols=features_lag_exclude_cols,
+            features_rolling=features_rolling,
+            features_rolling_exclude_cols=features_rolling_exclude_cols,
+            features_rolling_stats=features_rolling_stats,
+            features_diff=features_diff,
+            features_diff_exclude_cols=features_diff_exclude_cols,
             vectorize_timestamps=vectorize_timestamps,
             add_continuous_record_number=add_continuous_record_number,
             sanitize_timestamp=sanitize_timestamp,
+            test_size=test_size,
             **kwargs
         )
 
-def example_longterm_xgbts():
+
+def _example_longterm_xgbts():
     from diive.core.io.files import load_parquet
     from diive.pkgs.createvar.potentialradiation import potrad
 
@@ -482,7 +530,8 @@ def example_longterm_xgbts():
         # highlight_year=2022,
         highlight_year_color='#F44336').plot()
 
-def example_longterm_rfts():
+
+def _example_longterm_rfts():
     from diive.core.io.files import load_parquet
     origdf = load_parquet(
         filepath=r"L:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_cha_fp2024_2005-2023\50_FluxProcessingChain\51.1_NEE_L3.3.parquet")
@@ -610,5 +659,5 @@ def example_longterm_rfts():
 
 
 if __name__ == '__main__':
-    example_longterm_xgbts()
+    _example_longterm_xgbts()
     # example_longterm_rfts()
