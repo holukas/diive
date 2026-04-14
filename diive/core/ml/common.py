@@ -42,6 +42,11 @@ class MlRegressorGapFillingBase:
                  features_ema_exclude_cols: list = None,
                  features_poly_degree: int = None,
                  features_poly_exclude_cols: list = None,
+                 features_stl: bool = False,
+                 features_stl_method: str = 'stl',
+                 features_stl_seasonal_period: int = None,
+                 features_stl_exclude_cols: list = None,
+                 features_stl_components: list = None,
                  vectorize_timestamps: bool = False,
                  add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False,
@@ -225,6 +230,63 @@ class MlRegressorGapFillingBase:
                 Default: None.
                 Example: ['RECORD_NUMBER'] skips polynomial features for record numbers.
 
+            features_stl:
+                Enable STL (Seasonal-Trend Loess) decomposition feature engineering.
+                Default: False (disabled).
+
+                Why Implemented: Ecosystem fluxes exhibit multi-scale temporal structure:
+                long-term trends (phenology, instrument drift), recurring seasonal patterns
+                (diurnal/annual cycles), and residual variability (noise, anomalies). STL
+                separates these components, allowing the model to learn how each scale
+                contributes to the target flux.
+                Effect on Data: For each complete (gap-free) feature column, extracts trend
+                (slow changes), seasonal (periodic patterns), and residual (noise). Creates
+                3 new features per column per component: .{col}_STL_TREND, .{col}_STL_SEASONAL,
+                .{col}_STL_RESIDUAL.
+                Advantages: Reveals structure hidden in raw data; handles non-stationary
+                baseline (trend component); robust to outliers; no parameter tuning required
+                for seasonal period (auto-detected). Particularly effective for flux data
+                with strong seasonality.
+                Disadvantages: Only applies to complete columns (skips gap-filled data);
+                computationally more expensive than rolling statistics; extracted components
+                are smoothed (less granular). Can explode feature count if many features.
+                Example: features_stl=True extracts trend/seasonal/residual for all complete
+                driver variables.
+
+            features_stl_method:
+                Decomposition method for STL. Options: 'stl', 'classical', 'harmonic'.
+                Default: 'stl' (Seasonal-Trend Loess, most robust).
+
+                Why Options Exist:
+                - 'stl': Robust, handles gaps and non-stationary data (default, recommended)
+                - 'classical': Simple moving-average based, assumes stationarity
+                - 'harmonic': Fourier-based, reveals frequency-domain structure
+
+            features_stl_seasonal_period:
+                Seasonal period in observations for STL decomposition.
+                Default: None (auto-detect via periodogram).
+                Example: 365 for daily data (annual cycle), 48 for 30-min data (daily cycle).
+
+                Why Auto-detection: Many datasets don't have known periods. Auto-detection
+                finds the dominant frequency via spectral analysis.
+                Manual Specification: Provide if you know the period (e.g., 24h cycle for
+                hourly data = period of 24).
+
+            features_stl_exclude_cols:
+                List of column names excluded from STL decomposition.
+                Default: None.
+                Example: ['RECORD_NUMBER'] skips STL for record numbers (nonsensical to decompose).
+
+            features_stl_components:
+                List of STL components to extract. Options: 'trend', 'seasonal', 'residual'.
+                Default: None (extracts all three: ['trend', 'seasonal', 'residual']).
+                Example: ['trend', 'seasonal'] extracts only trend and seasonal, skipping residual.
+
+                Why Selective: Reduces feature dimensionality if residual/seasonal are noisy.
+                All components: Maximum information, risk of overfitting.
+                Trend only: Captures long-term baseline changes (useful for drifting data).
+                Seasonal only: Captures periodic patterns (useful if trend is stable).
+
             vectorize_timestamps:
                 Include timestamp attributes as numeric features: year, season, month, week, doy, hour.
                 Provides the model with annual and diurnal cycles. Default: False.
@@ -282,8 +344,9 @@ class MlRegressorGapFillingBase:
             3. Differencing: temporal momentum and rate of change (captures transitions)
             4. EMA: adaptive baseline with recent-value emphasis (tracks non-stationary level)
             5. Polynomial: non-linear relationships (captures acceleration/saturation)
-            6. Timestamp features: annual/diurnal cycles (captures seasonality)
-            7. Record number: long-term drift (captures monotonic trends)
+            6. STL decomposition: trend/seasonal/residual components (captures multi-scale patterns)
+            7. Timestamp features: annual/diurnal cycles (captures seasonality)
+            8. Record number: long-term drift (captures monotonic trends)
 
         Design Philosophy:
         All feature engineering parameters are optional (default None) to allow users to customize
@@ -313,6 +376,11 @@ class MlRegressorGapFillingBase:
         self.features_ema_exclude_cols = features_ema_exclude_cols
         self.features_poly_degree = features_poly_degree
         self.features_poly_exclude_cols = features_poly_exclude_cols
+        self.features_stl = features_stl
+        self.features_stl_method = features_stl_method
+        self.features_stl_seasonal_period = features_stl_seasonal_period
+        self.features_stl_exclude_cols = features_stl_exclude_cols
+        self.features_stl_components = features_stl_components
         self.verbose = verbose
         self.vectorize_timestamps = vectorize_timestamps
         self.add_continuous_record_number = add_continuous_record_number
@@ -909,6 +977,10 @@ class MlRegressorGapFillingBase:
         if self.features_poly_degree:
             expanded_df = self._create_polynomial_features(work_df=expanded_df)
 
+        if self.features_stl:
+            expanded_df = self._create_stl_features(work_df=self.model_df[self.original_input_features].copy(),
+                                                   expanded_df=expanded_df)
+
         if self.vectorize_timestamps:
             expanded_df = vectorize_timestamps(df=expanded_df, txt="")
             # For cyclical variables, keep only the sine/cosine variants, drop linear versions
@@ -1166,6 +1238,112 @@ class MlRegressorGapFillingBase:
         newcols = [c for c in _out_df.columns if c not in work_df.columns]
         work_df = work_df.join(_out_df[newcols])
         return work_df
+
+    def _create_stl_features(self, work_df: pd.DataFrame, expanded_df: pd.DataFrame) -> pd.DataFrame:
+        """Wrapper for STL decomposition feature creation."""
+        if len(work_df.columns) == 0:
+            raise ValueError("Cannot add STL features because there are no original features.")
+        _out_df = self._stl_features(df=work_df)
+        newcols = [c for c in _out_df.columns if c not in expanded_df.columns]
+        expanded_df = expanded_df.join(_out_df[newcols])
+        return expanded_df
+
+    def _stl_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Add STL (Seasonal-Trend Loess) decomposition components as features.
+
+        For each feature column (excluding target and specified exclude_cols), applies
+        Seasonal-Trend decomposition to extract trend, seasonal, and residual components.
+        Only applies to complete columns (no gaps) to avoid circular dependencies.
+
+        For each selected component, creates new columns:
+            '.{col}_STL_TREND' — trend component (long-term direction)
+            '.{col}_STL_SEASONAL' — seasonal component (recurring patterns)
+            '.{col}_STL_RESIDUAL' — residual component (noise/anomalies)
+
+        STL features capture:
+            - Trend: Slow, monotonic changes (instrument drift, seasonal baseline shifts)
+            - Seasonal: Recurring periodic patterns (diurnal, weekly, annual cycles)
+            - Residual: High-frequency noise and anomalies
+
+        Advantages:
+            - Robust to non-stationary data and gaps (uses only complete columns)
+            - Reveals structure without assumptions of stationarity
+            - Captures multi-scale temporal patterns (trend, seasonal, residual)
+            - Quality-weighted: can incorporate data quality flags
+
+        Disadvantages:
+            - Only applies to complete columns (skips columns with gaps)
+            - Requires seasonal period specification or auto-detection
+            - Higher computational cost than rolling statistics
+            - Extracted components are smoothed (less granular than original data)
+
+        Returns:
+            DataFrame with additional STL feature columns appended.
+        """
+        if not self.features_stl:
+            return df
+
+        from diive.pkgs.analyses.seasonaltrend import SeasonalTrendDecomposition
+
+        exclude = [self.target_col] + (self.features_stl_exclude_cols or [])
+        # Only decompose original features, not engineered ones starting with '.'
+        feature_cols = [c for c in df.columns if c not in exclude and not c.startswith('.')]
+        newcols = []
+
+        # Determine which components to extract
+        components_to_extract = self.features_stl_components or ['trend', 'seasonal', 'residual']
+        if not isinstance(components_to_extract, list):
+            components_to_extract = [components_to_extract]
+
+        # Filter to valid components
+        valid_components = {'trend', 'seasonal', 'residual'}
+        components_to_extract = [c for c in components_to_extract if c in valid_components]
+
+        if not components_to_extract:
+            if self.verbose:
+                print(f"Warning: No valid STL components specified. Valid options: {valid_components}")
+            return df
+
+        for col in feature_cols:
+            # Check if column is complete (no gaps)
+            if df[col].isna().sum() > 0:
+                if self.verbose:
+                    print(f"Skipping STL decomposition for {col} (contains {df[col].isna().sum()} gaps)")
+                continue
+
+            try:
+                # Apply STL decomposition
+                decomp = SeasonalTrendDecomposition(
+                    series=df[col],
+                    method=self.features_stl_method,
+                    seasonal_period=self.features_stl_seasonal_period,
+                    verbose=False
+                )
+
+                # Extract selected components
+                for component in components_to_extract:
+                    if component == 'trend':
+                        stl_df = decomp.trend.to_frame(name=f'.{col}_STL_TREND')
+                    elif component == 'seasonal':
+                        stl_df = decomp.seasonal.to_frame(name=f'.{col}_STL_SEASONAL')
+                    elif component == 'residual':
+                        stl_df = decomp.residual.to_frame(name=f'.{col}_STL_RESIDUAL')
+                    else:
+                        continue
+
+                    df = pd.concat([df, stl_df], axis=1)
+                    newcols += stl_df.columns.tolist()
+
+            except Exception as e:
+                if self.verbose:
+                    print(f"Warning: STL decomposition failed for {col}: {str(e)}")
+                continue
+
+        if self.verbose and newcols:
+            print(f"++ Added STL features (method={self.features_stl_method}, "
+                  f"components={components_to_extract}) for {len([c for c in feature_cols if any(nc.startswith(f'.{c}_STL') for nc in newcols)])} "
+                  f"complete columns: {newcols}")
+        return df
 
     def _polynomial_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """Add polynomial features by expanding each feature to specified degree.

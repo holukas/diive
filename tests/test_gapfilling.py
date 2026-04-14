@@ -283,6 +283,144 @@ class TestGapFilling(unittest.TestCase):
         self.assertGreater(fi['SHAP_IMPORTANCE']['Rg_f'], 2.5)
         self.assertLess(fi['SHAP_IMPORTANCE']['Rg_f'], 3.5)
 
+    def test_gapfilling_stl_features_randomforest(self):
+        """Test STL decomposition features with RandomForest gap-filling"""
+        df = ed.load_exampledata_parquet()
+        # Use longer time period for STL decomposition (requires substantial data)
+        df = df.loc[(df.index.year >= 2019) & (df.index.year <= 2019)].copy()
+
+        TARGET_COL = 'NEE_CUT_REF_orig'
+        subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
+
+        # Subset with target and features
+        lowquality = df["QCF_NEE"] > 0
+        df.loc[lowquality, TARGET_COL] = np.nan
+        df = df[subsetcols].copy()
+
+        # Test with STL features enabled (using harmonic method for compatibility)
+        rfts = RandomForestTS(
+            input_df=df,
+            target_col=TARGET_COL,
+            verbose=True,
+            features_lag=[-1, -1],
+            features_lag_stepsize=1,
+            features_rolling=[6],  # Short rolling window for testing
+            features_rolling_exclude_cols=None,
+            features_rolling_stats=None,
+            features_diff=None,
+            features_diff_exclude_cols=None,
+            features_ema=None,
+            features_ema_exclude_cols=None,
+            features_poly_degree=None,
+            features_poly_exclude_cols=None,
+            features_stl=True,  # Enable STL features
+            features_stl_method='harmonic',  # Use harmonic method for better compatibility
+            features_stl_seasonal_period=48,  # Daily cycle for 30-min data
+            features_stl_exclude_cols=None,
+            features_stl_components=['trend', 'seasonal', 'residual'],  # Extract all
+            vectorize_timestamps=False,
+            add_continuous_record_number=False,
+            sanitize_timestamp=False,
+            n_estimators=3,
+            random_state=42,
+            min_samples_split=10,
+            min_samples_leaf=5,
+            n_jobs=-1
+        )
+
+        # Verify that STL features were created in the model dataframe
+        model_df_cols = rfts.model_df.columns.tolist()
+        stl_cols = [c for c in model_df_cols if 'STL' in c]
+        self.assertGreater(len(stl_cols), 0, "No STL feature columns found in model dataframe")
+
+        # Verify STL column naming convention
+        for col in stl_cols:
+            self.assertIn('_STL_', col)
+            # Check that it ends with a component name
+            valid_endings = ['_STL_TREND', '_STL_SEASONAL', '_STL_RESIDUAL']
+            found_valid = any(col.endswith(ending) for ending in valid_endings)
+            self.assertTrue(found_valid, f"STL column {col} doesn't end with valid component name")
+
+        # Run gap-filling with STL features
+        rfts.trainmodel(showplot_scores=False, showplot_importance=False)
+        rfts.fillgaps(showplot_scores=False, showplot_importance=False)
+
+        scores = rfts.scores_
+        gapfilled = rfts.get_gapfilled_target()
+
+        # Verify results are reasonable
+        self.assertGreater(scores['mae'], 0.5)
+        self.assertLess(scores['mae'], 3.0)
+        self.assertGreater(scores['r2'], -0.5)
+        self.assertLess(scores['r2'], 1.0)
+        self.assertGreater(len(gapfilled), 0)
+
+    def test_gapfilling_stl_features_xgboost(self):
+        """Test STL decomposition features with XGBoost gap-filling"""
+        df = ed.load_exampledata_parquet()
+        # Use longer time period for STL decomposition
+        df = df.loc[(df.index.year >= 2019) & (df.index.year <= 2019)].copy()
+
+        TARGET_COL = 'NEE_CUT_REF_orig'
+        subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
+
+        # Subset with target and features
+        lowquality = df["QCF_NEE"] > 0
+        df.loc[lowquality, TARGET_COL] = np.nan
+        df = df[subsetcols].copy()
+
+        # Test with STL features enabled - selective components (using harmonic method)
+        xgbts = XGBoostTS(
+            input_df=df,
+            target_col=TARGET_COL,
+            verbose=1,
+            features_lag=[-1, -1],
+            features_lag_stepsize=1,
+            features_rolling=None,
+            features_rolling_exclude_cols=None,
+            features_rolling_stats=None,
+            features_diff=None,
+            features_diff_exclude_cols=None,
+            features_ema=None,
+            features_ema_exclude_cols=None,
+            features_poly_degree=None,
+            features_poly_exclude_cols=None,
+            features_stl=True,  # Enable STL features
+            features_stl_method='harmonic',  # Use harmonic method for better compatibility
+            features_stl_seasonal_period=48,  # Daily cycle for 30-min data
+            features_stl_exclude_cols=None,
+            features_stl_components=['trend', 'seasonal'],  # Only trend and seasonal
+            vectorize_timestamps=False,
+            add_continuous_record_number=False,
+            sanitize_timestamp=False,
+            n_estimators=3,
+            random_state=42,
+            validate_parameters=False,
+            early_stopping_rounds=5,
+            max_depth=3
+        )
+
+        # Verify that STL features were created
+        model_df_cols = xgbts.model_df.columns.tolist()
+        stl_cols = [c for c in model_df_cols if 'STL' in c]
+        self.assertGreater(len(stl_cols), 0, "No STL feature columns found in model dataframe")
+
+        # Should have trend and seasonal, but NOT residual
+        residual_cols = [c for c in stl_cols if c.endswith('_STL_RESIDUAL')]
+        self.assertEqual(len(residual_cols), 0, "Found residual STL columns when only trend/seasonal requested")
+
+        # Run gap-filling
+        xgbts.trainmodel(showplot_scores=False, showplot_importance=False)
+        xgbts.fillgaps(showplot_scores=False, showplot_importance=False)
+
+        scores = xgbts.scores_
+        gapfilled = xgbts.get_gapfilled_target()
+
+        # Verify results are reasonable
+        self.assertGreater(scores['mae'], 0.5)
+        self.assertLess(scores['mae'], 3.0)
+        self.assertGreater(len(gapfilled), 0)
+
 
 if __name__ == '__main__':
     unittest.main()

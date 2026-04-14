@@ -169,6 +169,11 @@ class RandomForestTS(MlRegressorGapFillingBase):
                  features_ema_exclude_cols: list = None,
                  features_poly_degree: int = None,
                  features_poly_exclude_cols: list = None,
+                 features_stl: bool = False,
+                 features_stl_method: str = 'stl',
+                 features_stl_seasonal_period: int = None,
+                 features_stl_exclude_cols: list = None,
+                 features_stl_components: list = None,
                  vectorize_timestamps: bool = False,
                  add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False,
@@ -261,6 +266,25 @@ class RandomForestTS(MlRegressorGapFillingBase):
                 Columns excluded from polynomial expansion. Default: None.
                 Example: ['RECORD_NUMBER'] skips polynomial features for record numbers.
 
+            features_stl:
+                Enable STL (Seasonal-Trend Loess) decomposition features. Default: False.
+                When True, extracts trend, seasonal, and residual components from complete
+                (gap-free) driver variables.
+
+            features_stl_method:
+                STL decomposition method: 'stl' (default), 'classical', or 'harmonic'.
+
+            features_stl_seasonal_period:
+                Seasonal period in observations for STL. Default: None (auto-detect).
+                Example: 365 for annual cycle with daily data, 48 for daily cycle with 30-min data.
+
+            features_stl_exclude_cols:
+                Columns excluded from STL decomposition. Default: None.
+
+            features_stl_components:
+                STL components to extract: 'trend', 'seasonal', 'residual'.
+                Default: None (extract all).
+
             vectorize_timestamps:
                 Add timestamp features (year, season, month, week, doy, hour). Default: False.
 
@@ -350,6 +374,11 @@ class RandomForestTS(MlRegressorGapFillingBase):
             features_ema_exclude_cols=features_ema_exclude_cols,
             features_poly_degree=features_poly_degree,
             features_poly_exclude_cols=features_poly_exclude_cols,
+            features_stl=features_stl,
+            features_stl_method=features_stl_method,
+            features_stl_seasonal_period=features_stl_seasonal_period,
+            features_stl_exclude_cols=features_stl_exclude_cols,
+            features_stl_components=features_stl_components,
             vectorize_timestamps=vectorize_timestamps,
             add_continuous_record_number=add_continuous_record_number,
             sanitize_timestamp=sanitize_timestamp,
@@ -491,6 +520,11 @@ def _example_rfts():
         features_ema_exclude_cols=None,
         features_poly_degree=None,
         features_poly_exclude_cols=None,
+        features_stl=False,
+        features_stl_method='harmonic',
+        features_stl_seasonal_period=None,
+        features_stl_exclude_cols=None,
+        features_stl_components=None,
         vectorize_timestamps=False,
         add_continuous_record_number=False,
         sanitize_timestamp=False,
