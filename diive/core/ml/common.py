@@ -52,9 +52,14 @@ class MlRegressorGapFillingBase:
 
         Trains a predictive model on complete (non-gap) data to fill missing values in a target
         time series. Includes comprehensive feature engineering pipeline with lagged variants,
-        rolling statistics, temporal differencing, and polynomial expansion. Features are extracted
-        from driver variables (temperature, radiation, VPD, etc.) to provide the model with temporal
-        context and non-linear patterns.
+        rolling statistics, temporal differencing, exponential moving averages, and polynomial
+        expansion. Features are extracted from driver variables (temperature, radiation, VPD, etc.)
+        to provide the model with temporal context and non-linear patterns.
+
+        Core Philosophy: Feature engineering is parameterizable to enable task-specific customization
+        while maintaining consistent methodology across implementations (RandomForest, XGBoost,
+        long-term gap-filling). Each parameter offers selective control over what temporal and
+        statistical contexts the model sees, balancing model complexity, interpretability, and accuracy.
 
         Args:
             regressor:
@@ -74,27 +79,44 @@ class MlRegressorGapFillingBase:
                 Proportion of complete (non-gap) data to reserve for testing, between 0.0-1.0.
                 Default: 0.25 (75% train, 25% test on non-gap data only).
 
+                Why: Separate train/test evaluation on complete data assesses real-world predictive
+                skill without contamination from gap-filled values.
+                Effect: Smaller test_size provides tighter train set but more noise in test metrics.
+                Trade-off: 0.25 is standard for balanced estimate stability vs training data size.
+
             features_lag:
                 List [min_lag, max_lag] specifying range of lagged variants to create.
                 Creates lagged copies at all integers between min_lag and max_lag (exclusive of 0).
                 Default: None (no lagging).
 
+                Why Implemented: Time series observations depend on recent history. Lagged features
+                capture autoregressive structure—how the target depends on itself at prior times.
+                Effect on Data: Encodes temporal autocorrelation; extends decision boundary by
+                allowing model to learn patterns from {t-1, t-2, t+1, t+2} alongside current {t}.
+                Advantages: Captures persistence/inertia in data (e.g., energy availability today
+                relates to yesterday's weather). Essential for accurate flux predictions.
+                Disadvantages: Reduces available training samples near gaps (lags create NaN);
+                can inflate feature count rapidly. Bidirectional lags (negative values) require
+                lookback capacity unavailable at gap boundaries.
                 Example: features_lag=[-2, 2] creates lags [-2, -1, +1, +2]:
                     TA    = [  5,   6,   7, 8  ]
                     TA-2  = [NaN, NaN,   5, 6  ]
                     TA-1  = [NaN,   5,   6, 7  ]  (each TA paired with preceding TA-1)
                     TA+1  = [  6,   7,   8, NaN]  (each TA paired with next TA+1)
                     TA+2  = [  7,   8, NaN, NaN]
-
                 Column naming: '{col}{sign}{lag}' (e.g., 'Tair_f-1', 'Tair_f+1')
 
             features_lag_stepsize:
                 Step size for creating lags within the specified range. Default: 1 (every record).
+                Why: Reduces feature dimensionality for large lag ranges without losing structure.
                 Example: features_lag=[-4, 4], features_lag_stepsize=2 creates lags [-4, -2, 2, 4].
+                Trade-off: Larger stepsize reduces overfitting risk but misses intermediate patterns.
 
             features_lag_exclude_cols:
                 List of column names to exclude from lagging.
                 Default: None (all feature columns are lagged).
+                Why: Some features (e.g., record numbers) are nonsensical lagged; time-invariant
+                attributes should not have temporal variants.
                 Example: ['RECORD_NUMBER'] skips lagging for continuous record numbers.
 
             features_rolling:
@@ -102,6 +124,16 @@ class MlRegressorGapFillingBase:
                 For each window, rolling mean and std are computed for every feature column
                 (except target and excluded columns). Default: None (no rolling statistics).
 
+                Why Implemented: Time series data exhibit local context—current conditions depend
+                on recent envelope of variability. Rolling windows capture "local stationarity."
+                Effect on Data: Mean represents recent baseline level; std represents recent
+                volatility/uncertainty. A narrow band (low std) vs wide band (high std) convey
+                different information about the observation environment.
+                Advantages: Computationally cheap; never introduces NaN (min_periods=1);
+                resistant to outliers in mean/std form; two window sizes (e.g., 3h and 24h)
+                capture both diurnal and daily cycles cheaply.
+                Disadvantages: Reduces time series stationarity further (derivatives of derivatives);
+                high correlation with trend-based features; may overweight short-term noise.
                 Example: features_rolling=[6, 48] with 30-min data creates 3-hour and 24-hour
                 rolling mean/std for each driver variable.
                 Column naming: '.{col}_mean{w}', '.{col}_std{w}' (e.g., '.Tair_f_mean6').
@@ -116,7 +148,14 @@ class MlRegressorGapFillingBase:
                 Options: ['median', 'min', 'max', 'std', 'q25', 'q75'].
                 Default: None (only mean and std computed if features_rolling specified).
 
-                Provides richer statistical context of local variability and distribution shape.
+                Why Implemented: Mean/std assume Gaussian distribution; real data may be
+                skewed or bimodal. Percentiles and extremes capture distribution shape.
+                Effect on Data: Median is robust to outliers; min/max bound the plausible range;
+                quartiles reveal asymmetry (e.g., q75-median vs median-q25).
+                Advantages: Provides fine-grained information about local data structure.
+                Disadvantages: Multiplies feature count (6-8 stats per window per variable);
+                increased computation; more features = higher overfitting risk; diminishing
+                returns after median/min/max.
                 Example: features_rolling_stats=['median', 'min', 'max', 'q25', 'q75'].
                 Column naming: '.{col}_ROLLMEDIAN{w}', '.{col}_ROLLMIN{w}', '.{col}_ROLLMAX{w}',
                 '.{col}_ROLLQ25{w}', '.{col}_ROLLQ75{w}', '.{col}_ROLLSD{w}'.
@@ -126,15 +165,17 @@ class MlRegressorGapFillingBase:
                 Computes 1st-order differences (rate of change), 2nd-order (acceleration), etc.
                 Default: None (no differencing).
 
-                Captures temporal momentum crucial for modeling flux ramp-ups/ramp-downs during
-                sunrise/sunset transitions. Only applied to original features (not engineered cols).
+                Why Implemented: Rate of change encodes temporal direction and speed—crucial for
+                transient events. Ecosystem fluxes ramp up/down steeply at sunrise/sunset; a
+                high DIFF captures "TA is rising fast" without requiring past values.
+                Effect on Data: De-trends data (removes level); DIFF1 makes I(1) series I(0);
+                DIFF2 captures acceleration (useful for curvature). Emphasizes transitions.
+                Advantages: Captures change velocity essential for forecasting turning points;
+                computationally trivial; no NaN inflation.
+                Disadvantages: Loses level information (absolute value); amplifies noise
+                (high-frequency components); DIFF2 extremely noisy unless data is smooth.
                 Example: features_diff=[1, 2] creates 1st and 2nd order differences.
                 Column naming: '.{col}_DIFF{order}' (e.g., '.Tair_f_DIFF1', '.Tair_f_DIFF2').
-
-            features_diff_exclude_cols:
-                List of column names excluded from differencing.
-                Default: None.
-                Example: ['RECORD_NUMBER'] skips differencing for continuous record numbers.
 
             features_ema:
                 List of span values for exponential moving average (EMA) feature engineering.
@@ -142,7 +183,16 @@ class MlRegressorGapFillingBase:
                 EMA applies exponential decay weighting where recent values are weighted more.
                 Default: None (no EMA features).
 
-                Useful for non-stationary time series where recent trends matter more.
+                Why Implemented: For non-stationary time series (seasonally evolving baselines),
+                EMA tracks the moving target better than fixed windows. Recent = more relevant.
+                Effect on Data: EMA smooths noise while respecting trends; acts as adaptive
+                baseline that responds to gradual regime shifts. Complements rolling stats by
+                emphasizing recent behavior over uniform weighting.
+                Advantages: Excellent for trending data; captures adaptive baseline without lag;
+                memory-efficient (only needs current observation and prior EMA, not full window);
+                span interpretation intuitive ("equivalent to N-period window").
+                Disadvantages: Requires parameter tuning (which spans?); produces correlated
+                features if overlapping spans; less robust to outliers than median-based stats.
                 Example: features_ema=[6, 24, 48] with 30-min data adds 3h, 12h, and 24h EMAs.
                 Column naming: '.{col}_EMA{span}' (e.g., '.Tair_f_EMA6', '.Tair_f_EMA24').
 
@@ -155,8 +205,18 @@ class MlRegressorGapFillingBase:
                 Polynomial degree for non-linear relationship modeling (2 for squared, 3 for cubed, etc.).
                 Default: None (no polynomial expansion).
 
-                Creates polynomial terms for all driver variables to capture non-linear phenomena
-                like radiation or temperature effects with polynomial relationships.
+                Why Implemented: Many physical processes are non-linear. Radiation drives flux via
+                square-law absorption; temperature effects are often cubic. Tree models (RF/XGB)
+                can approximate polynomials via splits, but explicit polynomial features help.
+                Effect on Data: Degree-2 expands feature space quadratically; enables the model
+                to learn u-shaped, inverse, or accelerating relationships directly.
+                Advantages: Captures obvious non-linearities (e.g., TA² for temperature stress);
+                tree models still benefit (shorter tree paths to optimal split); interpretable
+                (can compute d(flux)/d(TA) as linear combination of TA and TA²).
+                Disadvantages: Explodes feature count (d features become d + d² at degree-2);
+                high intercorrelation with original features; degree-3+ prone to overfitting;
+                less effective for tree models than for linear models (trees naturally approximate
+                polynomials), but still useful for complex relationships.
                 Example: features_poly_degree=2 creates squared terms for each driver variable.
                 Column naming: '.{col}_POL{degree}' (e.g., '.Tair_f_POL2' for squared).
 
@@ -169,13 +229,39 @@ class MlRegressorGapFillingBase:
                 Include timestamp attributes as numeric features: year, season, month, week, doy, hour.
                 Provides the model with annual and diurnal cycles. Default: False.
 
+                Why Implemented: Ecosystem processes are strongly seasonal and diurnal. Winter flux
+                ≠ summer flux; nighttime NEE ≠ daytime NEE. The model needs to know "which season?"
+                and "which hour?" to make context-aware predictions.
+                Effect on Data: Adds ~6 features capturing temporal phase. Diurnal cycle (hour)
+                often most predictive; day-of-year captures phenology. Season is binned month.
+                Advantages: Captures known periodic behavior without explicit formulas (let model
+                learn the phase relationships). Essential for multi-year datasets.
+                Disadvantages: Creates circular correlation (hour 23 is near hour 0, but as numbers
+                23≠0); may overfit if dataset spans <1 full seasonal cycle.
+
             add_continuous_record_number:
                 Add continuous record numbering as a feature (1, 2, 3, ..., n).
                 Captures long-term trends and drift. Default: False.
 
+                Why Implemented: Data quality, measurement stability, or environmental state may
+                drift over months/years. Record number as a feature allows the model to capture
+                linear or monotonic temporal trends without explicit detrending.
+                Effect on Data: Acts as a "time axis" feature; tree splits can partition into
+                "early dataset" vs "late dataset" regimes.
+                Advantages: Simple; captures instrument drift, aging, or seasonal ecosystem shifts.
+                Disadvantages: Only captures trends monotonic in time; not useful for cyclic patterns.
+
             sanitize_timestamp:
                 Validate and prepare timestamps for further processing (check continuity, format, etc.).
                 Default: False.
+
+                Why Implemented: Missing time steps, duplicates, or format mismatches break feature
+                engineering (lags, rolling windows assume regular frequency). Sanitization detects
+                and flags such issues before processing.
+                Effect on Data: May resample to regular frequency, warn about missing periods, or
+                reject data with gaps.
+                Advantages: Prevents silent failures; ensures consistent feature engineering behavior.
+                Disadvantages: May alter data; expensive if large dataset.
 
             **kwargs:
                 Regressor-specific hyperparameters passed to the sklearn regressor.
@@ -190,12 +276,24 @@ class MlRegressorGapFillingBase:
             scores_: Model performance metrics (MAE, RMSE, R²) for gap-filling.
             scores_traintest_: Model performance metrics from train/test split.
 
-        Feature Engineering Pipeline:
-            1. Lag features: temporal past/future context
-            2. Rolling statistics: short-term local variability
-            3. Differencing: temporal momentum and rate of change
-            4. Polynomial: non-linear relationships
-            5. Timestamp features: annual/diurnal cycles (optional)
+        Feature Engineering Pipeline Order:
+            1. Lag features: temporal past/future context (captures autoregression)
+            2. Rolling statistics: short-term local variability (captures envelope/volatility)
+            3. Differencing: temporal momentum and rate of change (captures transitions)
+            4. EMA: adaptive baseline with recent-value emphasis (tracks non-stationary level)
+            5. Polynomial: non-linear relationships (captures acceleration/saturation)
+            6. Timestamp features: annual/diurnal cycles (captures seasonality)
+            7. Record number: long-term drift (captures monotonic trends)
+
+        Design Philosophy:
+        All feature engineering parameters are optional (default None) to allow users to customize
+        based on their data characteristics:
+        - Highly periodic data: add vectorize_timestamps + rolling stats
+        - Trending data: add add_continuous_record_number + EMA
+        - Non-stationary flux data: add features_lag + features_diff + features_ema
+        - Nonlinear relationships: add features_poly_degree
+        Parameterization ensures each feature engineering type can be toggled without code changes,
+        enabling systematic comparison of engineering strategies (ablation studies).
         """
 
         # Args
