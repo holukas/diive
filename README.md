@@ -95,7 +95,7 @@ diive/
 - **Percentiles**: Calculate percentiles 0-100 for
   series ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/analyses/Percentiles.ipynb))
 - **Seasonal-Trend Decomposition**: Separate time series into trend, seasonal, and residual components using STL (Seasonal-Trend Loess), classical, or harmonic methods · class:
-  `SeasonalTrendDecomposition` ([documentation](https://diive.readthedocs.io/en/latest/analyses/seasonal_trend_decomposition.html))
+  `SeasonalTrendDecomposition` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/SeasonalTrendDecomposition.ipynb))
   
 ### Corrections
 

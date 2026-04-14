@@ -111,7 +111,13 @@
         - `diive.pkgs.timeseries.harmonic`: Fourier analysis (harmonic extraction, periodogram, FFT decomposition)
         - `diive.core.plotting.seasonaltrend`: Visualization (4-panel decomposition plots, spectral analysis, strength comparison)
     - **Example function**: `example_seasonaltrend_decomposition()` in `diive.pkgs.analyses.seasonaltrend` (17)
-    - **Notebook**: `notebooks/analyses/SeasonalTrendDecomposition.ipynb` with 4 examples (basic STL, method comparison, quality-weighting, multi-scale analysis) (17)
+    - **Notebook**: `notebooks/Analyses/SeasonalTrendDecomposition.ipynb` with comprehensive tutorial and 5 real-world examples:
+        1. Detrending for ML Gap-Filling
+        2. Anomaly Detection & Quality Control
+        3. Method Comparison (Harmonic vs Classical)
+        4. Climate Change Impact Analysis
+        5. Ecosystem Recovery Trends
+        Plus tutorial sections covering: imports, quick start, component access, visualization, quality-weighting, reconstruction (17)
 
 ### Plotting and Visualization
 
