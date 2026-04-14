@@ -11,78 +11,86 @@
 **Feature Engineering Parameters**
 
 * **Rolling window statistics** — Adds short-term memory to models.
-  - Parameter: `features_rolling` (list of window sizes in records)
-  - Computes rolling mean and std (never introduces new NaN)
-  - Excludes columns with `features_rolling_exclude_cols`
-  - Column names: `.{col}_mean{w}` / `.{col}_std{w}`
-  - Example: `features_rolling=[6, 48]` on 30-min data = 3h and 24h stats (12)
+    - Parameter: `features_rolling` (list of window sizes in records)
+    - Computes rolling mean and std (never introduces new NaN)
+    - Excludes columns with `features_rolling_exclude_cols`
+    - Column names: `.{col}_mean{w}` / `.{col}_std{w}`
+    - Example: `features_rolling=[6, 48]` on 30-min data = 3h and 24h stats (12)
 
 * **Advanced rolling statistics** — Richer local variability context.
-  - Parameter: `features_rolling_stats` (list: median, min, max, std, Q25, Q75)
-  - Column names: `.{col}_ROLLMEDIAN{w}`, `.{col}_ROLLMIN{w}`, etc.
-  - Backward compatible (defaults to None) (12)
+    - Parameter: `features_rolling_stats` (list: median, min, max, std, Q25, Q75)
+    - Column names: `.{col}_ROLLMEDIAN{w}`, `.{col}_ROLLMIN{w}`, etc.
+    - Backward compatible (defaults to None) (12)
 
 * **Temporal differencing** — Captures rate-of-change and momentum.
-  - Parameter: `features_diff` (list of difference orders)
-  - `.{col}_DIFF1` = rate of change; `.{col}_DIFF2` = acceleration
-  - Skips already-engineered columns (starting with `.`)
-  - Excludes columns with `features_diff_exclude_cols`
-  - Example: `features_diff=[1, 2]` (13)
+    - Parameter: `features_diff` (list of difference orders)
+    - `.{col}_DIFF1` = rate of change; `.{col}_DIFF2` = acceleration
+    - Skips already-engineered columns (starting with `.`)
+    - Excludes columns with `features_diff_exclude_cols`
+    - Example: `features_diff=[1, 2]` (13)
 
 * **Polynomial features** — Models non-linear relationships.
-  - Parameter: `features_poly_degree` (e.g., 2 for squared terms)
-  - Column names: `.{col}_POL2`, `.{col}_POL3`, etc.
-  - Excludes columns with `features_poly_exclude_cols` (12)
+    - Parameter: `features_poly_degree` (e.g., 2 for squared terms)
+    - Column names: `.{col}_POL2`, `.{col}_POL3`, etc.
+    - Excludes columns with `features_poly_exclude_cols` (12)
 
 * **Exponential Moving Average (EMA)** — Weighted trending with recent-value emphasis.
-  - Parameter: `features_ema` (list of span values)
-  - Column names: `.{col}_EMA{span}`
-  - Uses `adjust=False` for expanding window behavior
-  - Excludes columns with `features_ema_exclude_cols`
-  - Example: `features_ema=[6, 24, 48]` on 30-min data = 3h, 12h, 24h EMAs (15)
+    - Parameter: `features_ema` (list of span values)
+    - Column names: `.{col}_EMA{span}`
+    - Uses `adjust=False` for expanding window behavior
+    - Excludes columns with `features_ema_exclude_cols`
+    - Example: `features_ema=[6, 24, 48]` on 30-min data = 3h, 12h, 24h EMAs (15)
 
 **SHAP-Based Feature Reduction**
 
-* **SHAP feature importance** — Replaced permutation-based with SHAP values.
-  - Method: `TreeExplainer` for tree-based models
-  - Fixed `base_score` handling for XGBoost environments
-  - Fixed label: `"SHAP IMPORTANCE (mean absolute SHAP values)"` (9)
-  - Fixed boundary case: features with SHAP exactly equal to threshold now counted as rejected (9)
+* **SHAP feature importance** — Replaced permutation-based with SHAP values (SHapley Additive exPlanations).
+    - Method: SHAP `TreeExplainer` for tree-based models (XGBoost, Random Forest)
+    - Fixed `base_score` handling for XGBoost environments
+    - Fixed label: `"SHAP IMPORTANCE (mean absolute SHAP values)"` (9)
+    - Fixed boundary case: features with SHAP exactly equal to threshold now counted as rejected (9)
 
 * **Configurable threshold** — Control feature selection conservativeness.
-  - Parameter: `shap_threshold_factor` (default 0.5, lenient)
-  - Formula: `threshold = random_importance + k * random_sd`
-  - k=0.5 (lenient) → k=1.0 (standard) → k=2.0 (conservative) (9)
+    - Parameter: `shap_threshold_factor` (default 0.5, lenient)
+    - Formula: `threshold = random_importance + k * random_std` (baseline importance from random features + k × standard deviation)
+    - k=0.5 (lenient) → k=1.0 (standard) → k=2.0 (conservative) (9)
 
 **Model Implementations**
 
 * **RandomForestTS/LongTermGapFillingRandomForestTS** — Feature parity with XGBoostTS.
-  - Now supports: `features_rolling`, `features_rolling_stats`, `features_diff`, `features_poly_degree`
-  - Works across `LongTermGapFillingRandomForestTS` and `LongTermGapFillingXGBoostTS` (12)
+    - Now supports: `features_rolling`, `features_rolling_stats`, `features_diff`, `features_ema` (Exponential Moving
+      Average), `features_poly_degree`
+    - Works across `LongTermGapFillingRandomForestTS` and `LongTermGapFillingXGBoostTS` (12)
 
 * **Long-term XGBoost gap-filling** — New method for multi-year modeling.
-  - Method: `level41_longterm_xgboost()` in `FluxProcessingChain`
-  - Feature parity to `level41_longterm_random_forest()`
-  - Supports all feature engineering parameters
-  - Results per scenario in `level41['long_term_xgboost']`
-  - Defaults: n_estimators=200, max_depth=6, learning_rate=0.3, early_stopping_rounds=10 (12)
+    - Method: `level41_longterm_xgboost()` in `FluxProcessingChain`
+    - Feature parity to `level41_longterm_random_forest()`
+    - Supports all feature engineering parameters
+    - Results per scenario in `level41['long_term_xgboost']`
+    - Defaults: n_estimators=200, max_depth=6, learning_rate=0.3, early_stopping_rounds=10 (12)
+
+* **Exponential Moving Average (EMA) features in all gap-filling modules** — Consistent feature engineering across
+  implementations.
+    - `RandomForestTS`, `XGBoostTS`, `LongTermGapFillingRandomForestTS`, `LongTermGapFillingXGBoostTS`
+    - `FluxProcessingChain.level41_longterm_random_forest()` and `level41_longterm_xgboost()`
+    - All now support `features_ema` (list of span values) and `features_ema_exclude_cols`
+    - Feature pipeline: lag → rolling → differencing → EMA → polynomial → timestamps (15)
 
 * **QuickFillRFTS** — Fixed and improved for quick testing.
-  - Fixed: `features_lag` must be range (e.g., `[-1, -1]`, not `[-1]`)
-  - Purpose: exploratory testing only, not production
-  - Optimized for speed: `n_estimators=3`, no timestamp features (12)
+    - Fixed: `features_lag` must be range (e.g., `[-1, -1]`, not `[-1]`)
+    - Purpose: exploratory testing only, not production
+    - Optimized for speed: `n_estimators=3`, no timestamp features (12)
 
 **Improvements and Fixes**
 
 * **ML Plotting functions** — Redesigned with professional styling.
-  - `plot_observed_predicted()`: Dual-panel layout, accuracy bands, residuals
-  - `plot_feature_importance()`: Horizontal bars, error bars, value labels
-  - `plot_prediction_residuals_error_regr()`: Custom colors and cleaner formatting (11)
+    - `plot_observed_predicted()`: Dual-panel layout, accuracy bands, residuals
+    - `plot_feature_importance()`: Horizontal bars, error bars, value labels
+    - `plot_prediction_residuals_error_regr()`: Custom colors and cleaner formatting (11)
 
 * **Test optimizations** — 60-70% faster RandomForest tests.
-  - `test_gapfilling_randomforest`: ~2.8s (was ~6s)
-  - `test_gapfilling_longterm_randomforest`: ~2 minutes (was ~5 minutes)
-  - Optimized hyperparameters and feature settings (12)
+    - `test_gapfilling_randomforest`: ~2.8s (was ~6s)
+    - `test_gapfilling_longterm_randomforest`: ~2 minutes (was ~5 minutes)
+    - Optimized hyperparameters and feature settings (12)
 
 ### Plotting and Visualization
 
@@ -143,7 +151,8 @@
 - (10) `diive.core.plotting.dielcycle.DielCycle`
 - (11) `diive.core.ml.common.plot_observed_predicted`, `plot_feature_importance`, `plot_prediction_residuals_error_regr`
 - (12) `diive.core.ml.common.MlRegressorGapFillingBase._rolling_features`, `diive.pkgs.gapfilling.xgboost_ts.XGBoostTS`
-- (13) `diive.core.ml.common.MlRegressorGapFillingBase._differencing_features`, `diive.pkgs.gapfilling.xgboost_ts.XGBoostTS`
+- (13) `diive.core.ml.common.MlRegressorGapFillingBase._differencing_features`,
+  `diive.pkgs.gapfilling.xgboost_ts.XGBoostTS`
 - (15) `diive.core.ml.common.MlRegressorGapFillingBase._ema_features`, `diive.pkgs.gapfilling.xgboost_ts.XGBoostTS`
 
 ## v0.90.0 | 13 Jan 2026

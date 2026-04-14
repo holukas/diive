@@ -202,6 +202,15 @@ _Format data to specific formats._
 
 _Fill gaps in time series with various methods._
 
+**Feature engineering** (available in XGBoostTS, RandomForestTS, and long-term implementations):
+- Lagged features from past values
+- Rolling statistics (mean, std, median, min, max, quartiles)
+- Temporal differencing (1st and 2nd order momentum)
+- Exponential Moving Average (EMA) with recent-value emphasis
+- Polynomial expansion (squared, cubed terms)
+- Timestamp vectorization (season, month, hour, etc.)
+- Continuous record numbering for trend detection
+
 - **XGBoostTS** · class:
   `XGBoostTS` ([notebook example (minimal)](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/XGBoostGapFillingMinimal.ipynb), [notebook example (more extensive)](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/XGBoostGapFillingExtensive.ipynb))
 - **RandomForestTS** · class:
