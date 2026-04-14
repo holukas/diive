@@ -38,6 +38,8 @@ class MlRegressorGapFillingBase:
                  features_rolling_stats: list = None,
                  features_diff: list = None,
                  features_diff_exclude_cols: list = None,
+                 features_ema: list = None,
+                 features_ema_exclude_cols: list = None,
                  features_poly_degree: int = None,
                  features_poly_exclude_cols: list = None,
                  vectorize_timestamps: bool = False,
@@ -134,6 +136,21 @@ class MlRegressorGapFillingBase:
                 Default: None.
                 Example: ['RECORD_NUMBER'] skips differencing for continuous record numbers.
 
+            features_ema:
+                List of span values for exponential moving average (EMA) feature engineering.
+                For each span, creates '.{col}_EMA{span}' columns for all feature columns.
+                EMA applies exponential decay weighting where recent values are weighted more.
+                Default: None (no EMA features).
+
+                Useful for non-stationary time series where recent trends matter more.
+                Example: features_ema=[6, 24, 48] with 30-min data adds 3h, 12h, and 24h EMAs.
+                Column naming: '.{col}_EMA{span}' (e.g., '.Tair_f_EMA6', '.Tair_f_EMA24').
+
+            features_ema_exclude_cols:
+                List of column names excluded from EMA computation.
+                Default: None.
+                Example: ['RECORD_NUMBER'] skips EMA for continuous record numbers.
+
             features_poly_degree:
                 Polynomial degree for non-linear relationship modeling (2 for squared, 3 for cubed, etc.).
                 Default: None (no polynomial expansion).
@@ -194,6 +211,8 @@ class MlRegressorGapFillingBase:
         self.features_rolling_stats = features_rolling_stats
         self.features_diff = features_diff
         self.features_diff_exclude_cols = features_diff_exclude_cols
+        self.features_ema = features_ema
+        self.features_ema_exclude_cols = features_ema_exclude_cols
         self.features_poly_degree = features_poly_degree
         self.features_poly_exclude_cols = features_poly_exclude_cols
         self.verbose = verbose
@@ -755,6 +774,14 @@ class MlRegressorGapFillingBase:
         expanded_df = expanded_df.join(_out_df[newcols])
         return expanded_df
 
+    def _create_ema_features(self, work_df: pd.DataFrame, expanded_df: pd.DataFrame) -> pd.DataFrame:
+        if len(work_df.columns) == 0:
+            raise ValueError("Cannot add EMA features because there are no original features.")
+        _out_df = self._ema_features(df=work_df)
+        newcols = [c for c in _out_df.columns if c not in expanded_df.columns]
+        expanded_df = expanded_df.join(_out_df[newcols])
+        return expanded_df
+
     def _create_additional_datacols(self) -> pd.DataFrame:
 
         # Dataframe that contains the target and all original features
@@ -776,6 +803,10 @@ class MlRegressorGapFillingBase:
         if self.features_diff:
             expanded_df = self._create_differencing_features(work_df=self.model_df[self.original_input_features].copy(),
                                                              expanded_df=expanded_df)
+
+        if self.features_ema:
+            expanded_df = self._create_ema_features(work_df=self.model_df[self.original_input_features].copy(),
+                                                    expanded_df=expanded_df)
 
         if self.features_poly_degree:
             expanded_df = self._create_polynomial_features(work_df=expanded_df)
@@ -995,6 +1026,39 @@ class MlRegressorGapFillingBase:
 
         if self.verbose:
             print(f"++ Added differencing features (orders={self.features_diff}) for {len(feature_cols)} columns: "
+                  f"{newcols}")
+        return df
+
+    def _ema_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Add exponential moving average (EMA) of feature columns.
+
+        For each span value and each feature column, creates:
+            '.{col}_EMA{span}' — EMA with the specified span
+
+        EMA applies exponential decay weighting where recent values are weighted more.
+        Uses min_periods=1 to avoid introducing new NaN values.
+
+        Returns:
+            DataFrame with additional EMA feature columns appended.
+        """
+        if not self.features_ema:
+            return df
+
+        exclude = [self.target_col] + (self.features_ema_exclude_cols or [])
+        feature_cols = [c for c in df.columns if c not in exclude and not c.startswith('.')]
+        newcols = []
+
+        for span in self.features_ema:
+            if span < 1:
+                continue
+            # adjust=False uses expanding window behavior (more standard for time series)
+            ema_df = df[feature_cols].ewm(span=span, min_periods=1, adjust=False).mean()
+            ema_df.columns = [f'.{c}_EMA{span}' for c in feature_cols]
+            df = pd.concat([df, ema_df], axis=1)
+            newcols += ema_df.columns.tolist()
+
+        if self.verbose:
+            print(f"++ Added EMA features (spans={self.features_ema}) for {len(feature_cols)} columns: "
                   f"{newcols}")
         return df
 

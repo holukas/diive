@@ -32,6 +32,7 @@ class XGBoostTS(MlRegressorGapFillingBase):
                  features_rolling: list = None, features_rolling_exclude_cols: list = None,
                  features_rolling_stats: list = None,
                  features_diff: list = None, features_diff_exclude_cols: list = None,
+                 features_ema: list = None, features_ema_exclude_cols: list = None,
                  features_poly_degree: int = None, features_poly_exclude_cols: list = None,
                  vectorize_timestamps: bool = False, add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False, **kwargs):
@@ -100,6 +101,13 @@ class XGBoostTS(MlRegressorGapFillingBase):
 
             features_diff_exclude_cols:
                 Columns excluded from differencing. Default: None.
+
+            features_ema:
+                List of span values for exponential moving average. Default: None.
+                Example: features_ema=[6, 24, 48] with 30-min data adds 3h, 12h, 24h EMAs.
+
+            features_ema_exclude_cols:
+                Columns excluded from EMA computation. Default: None.
 
             features_poly_degree:
                 Polynomial degree for non-linear expansion (2=squared, 3=cubed). Default: None.
@@ -190,6 +198,8 @@ class XGBoostTS(MlRegressorGapFillingBase):
             features_rolling_stats=features_rolling_stats,
             features_diff=features_diff,
             features_diff_exclude_cols=features_diff_exclude_cols,
+            features_ema=features_ema,
+            features_ema_exclude_cols=features_ema_exclude_cols,
             features_poly_degree=features_poly_degree,
             features_poly_exclude_cols=features_poly_exclude_cols,
             vectorize_timestamps=vectorize_timestamps,
@@ -236,6 +246,8 @@ def _example_xgbts():
         features_rolling_stats=['median', 'min', 'max', 'std', 'q25', 'q75'],
         features_diff=[1, 2],
         features_diff_exclude_cols=None,
+        features_ema=[6, 24, 48],
+        features_ema_exclude_cols=None,
         features_poly_degree=2,
         features_poly_exclude_cols=None,
         vectorize_timestamps=True,

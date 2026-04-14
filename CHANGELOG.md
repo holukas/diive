@@ -34,6 +34,13 @@
   - Column names: `.{col}_POL2`, `.{col}_POL3`, etc.
   - Excludes columns with `features_poly_exclude_cols` (12)
 
+* **Exponential Moving Average (EMA)** — Weighted trending with recent-value emphasis.
+  - Parameter: `features_ema` (list of span values)
+  - Column names: `.{col}_EMA{span}`
+  - Uses `adjust=False` for expanding window behavior
+  - Excludes columns with `features_ema_exclude_cols`
+  - Example: `features_ema=[6, 24, 48]` on 30-min data = 3h, 12h, 24h EMAs (15)
+
 **SHAP-Based Feature Reduction**
 
 * **SHAP feature importance** — Replaced permutation-based with SHAP values.
@@ -137,6 +144,7 @@
 - (11) `diive.core.ml.common.plot_observed_predicted`, `plot_feature_importance`, `plot_prediction_residuals_error_regr`
 - (12) `diive.core.ml.common.MlRegressorGapFillingBase._rolling_features`, `diive.pkgs.gapfilling.xgboost_ts.XGBoostTS`
 - (13) `diive.core.ml.common.MlRegressorGapFillingBase._differencing_features`, `diive.pkgs.gapfilling.xgboost_ts.XGBoostTS`
+- (15) `diive.core.ml.common.MlRegressorGapFillingBase._ema_features`, `diive.pkgs.gapfilling.xgboost_ts.XGBoostTS`
 
 ## v0.90.0 | 13 Jan 2026
 
