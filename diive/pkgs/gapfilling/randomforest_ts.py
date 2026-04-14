@@ -165,6 +165,8 @@ class RandomForestTS(MlRegressorGapFillingBase):
                  features_rolling_stats: list = None,
                  features_diff: list = None,
                  features_diff_exclude_cols: list = None,
+                 features_ema: list = None,
+                 features_ema_exclude_cols: list = None,
                  features_poly_degree: int = None,
                  features_poly_exclude_cols: list = None,
                  vectorize_timestamps: bool = False,
@@ -240,6 +242,17 @@ class RandomForestTS(MlRegressorGapFillingBase):
                 Columns excluded from differencing. Default: None.
                 Example: ['RECORD_NUMBER'] skips differencing for continuous record numbers.
 
+            features_ema:
+                List of span values for exponential moving average (EMA).
+                For each span, creates `.{col}_EMA{span}` columns for all features.
+                EMA uses exponential decay weighting; recent values weighted more than older values.
+                If None, no EMA features are created.
+                Example: features_ema=[6, 24, 48] with 30-min data adds 3h, 12h, and 24h EMAs.
+
+            features_ema_exclude_cols:
+                List of column names excluded from EMA computation.
+                Example: ['RECORD_NUMBER'] skips EMA for continuous record number.
+
             features_poly_degree:
                 Polynomial degree for non-linear expansion (2=squared, 3=cubed). Default: None.
                 Example: features_poly_degree=2 creates squared terms.
@@ -303,6 +316,7 @@ class RandomForestTS(MlRegressorGapFillingBase):
             ...     features_rolling=[12, 24],
             ...     features_rolling_stats=['median', 'min', 'max'],
             ...     features_diff=[1],
+            ...     features_ema=[6, 24, 48],
             ...     features_poly_degree=2,
             ...     vectorize_timestamps=True,
             ...     n_estimators=100,
@@ -332,6 +346,8 @@ class RandomForestTS(MlRegressorGapFillingBase):
             features_rolling_stats=features_rolling_stats,
             features_diff=features_diff,
             features_diff_exclude_cols=features_diff_exclude_cols,
+            features_ema=features_ema,
+            features_ema_exclude_cols=features_ema_exclude_cols,
             features_poly_degree=features_poly_degree,
             features_poly_exclude_cols=features_poly_exclude_cols,
             vectorize_timestamps=vectorize_timestamps,
@@ -471,6 +487,8 @@ def _example_rfts():
         features_rolling_stats=None,
         features_diff=None,
         features_diff_exclude_cols=None,
+        features_ema=None,
+        features_ema_exclude_cols=None,
         features_poly_degree=None,
         features_poly_exclude_cols=None,
         vectorize_timestamps=False,

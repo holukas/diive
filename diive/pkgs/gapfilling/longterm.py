@@ -25,6 +25,8 @@ class LongTermGapFillingBase:
                  features_rolling_stats: list = None,
                  features_diff: list = None,
                  features_diff_exclude_cols: list = None,
+                 features_ema: list = None,
+                 features_ema_exclude_cols: list = None,
                  features_poly_degree: int = None,
                  features_poly_exclude_cols: list = None,
                  vectorize_timestamps: bool = False,
@@ -66,6 +68,8 @@ class LongTermGapFillingBase:
         self.features_rolling_stats = features_rolling_stats
         self.features_diff = features_diff
         self.features_diff_exclude_cols = features_diff_exclude_cols
+        self.features_ema = features_ema
+        self.features_ema_exclude_cols = features_ema_exclude_cols
         self.features_poly_degree = features_poly_degree
         self.features_poly_exclude_cols = features_poly_exclude_cols
         self.vectorize_timestamps = vectorize_timestamps
@@ -182,6 +186,8 @@ class LongTermGapFillingBase:
             features_rolling_stats=self.features_rolling_stats,
             features_diff=self.features_diff,
             features_diff_exclude_cols=self.features_diff_exclude_cols,
+            features_ema=self.features_ema,
+            features_ema_exclude_cols=self.features_ema_exclude_cols,
             features_poly_degree=self.features_poly_degree,
             features_poly_exclude_cols=self.features_poly_exclude_cols,
             vectorize_timestamps=self.vectorize_timestamps,
@@ -224,6 +230,8 @@ class LongTermGapFillingBase:
                 features_rolling_stats=None,  # Already considered across all years
                 features_diff=None,  # Already considered across all years
                 features_diff_exclude_cols=None,  # Already considered across all years
+                features_ema=None,  # Already considered across all years
+                features_ema_exclude_cols=None,  # Already considered across all years
                 features_poly_degree=None,  # Already considered across all years
                 features_poly_exclude_cols=None,  # Already considered across all years
                 vectorize_timestamps=False,  # Already considered across all years
@@ -362,6 +370,8 @@ class LongTermGapFillingRandomForestTS(LongTermGapFillingBase):
                  features_rolling_stats: list = None,
                  features_diff: list = None,
                  features_diff_exclude_cols: list = None,
+                 features_ema: list = None,
+                 features_ema_exclude_cols: list = None,
                  features_poly_degree: int = None,
                  features_poly_exclude_cols: list = None,
                  vectorize_timestamps: bool = False,
@@ -382,6 +392,8 @@ class LongTermGapFillingRandomForestTS(LongTermGapFillingBase):
             features_rolling_stats=features_rolling_stats,
             features_diff=features_diff,
             features_diff_exclude_cols=features_diff_exclude_cols,
+            features_ema=features_ema,
+            features_ema_exclude_cols=features_ema_exclude_cols,
             features_poly_degree=features_poly_degree,
             features_poly_exclude_cols=features_poly_exclude_cols,
             vectorize_timestamps=vectorize_timestamps,
@@ -406,6 +418,8 @@ class LongTermGapFillingXGBoostTS(LongTermGapFillingBase):
                  features_rolling_stats: list = None,
                  features_diff: list = None,
                  features_diff_exclude_cols: list = None,
+                 features_ema: list = None,
+                 features_ema_exclude_cols: list = None,
                  features_poly_degree: int = None,
                  features_poly_exclude_cols: list = None,
                  vectorize_timestamps: bool = False,
@@ -426,6 +440,8 @@ class LongTermGapFillingXGBoostTS(LongTermGapFillingBase):
             features_rolling_stats=features_rolling_stats,
             features_diff=features_diff,
             features_diff_exclude_cols=features_diff_exclude_cols,
+            features_ema=features_ema,
+            features_ema_exclude_cols=features_ema_exclude_cols,
             features_poly_degree=features_poly_degree,
             features_poly_exclude_cols=features_poly_exclude_cols,
             vectorize_timestamps=vectorize_timestamps,
@@ -460,7 +476,10 @@ def _example_longterm_xgbts():
         input_df=subset,
         target_col=TARGET_COL,
         verbose=0,
-        # features_lag=[-1, -1],
+        features_lag=[-1, -1],
+        features_rolling=[6, 24],
+        features_diff=[1],
+        features_ema=[6, 24],
         vectorize_timestamps=True,
         add_continuous_record_number=True,
         sanitize_timestamp=True,
@@ -569,6 +588,9 @@ def _example_longterm_rfts():
         verbose=2,
         features_lag=[-1, -1],
         # features_lag=None,
+        features_rolling=[6, 24],
+        features_diff=[1],
+        features_ema=[6, 24],
         vectorize_timestamps=True,
         # vectorize_timestamps=False,
         add_continuous_record_number=True,
