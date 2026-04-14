@@ -59,7 +59,7 @@ diive/
 | `diive.pkgs.outlierdetection`    | `HampelDaytimeNighttime`, `zScore`, `zScoreDaytimeNighttime`, `LocalOutlierFactorAllData`, `AbsoluteLimits`, `AbsoluteLimitsDaytimeNighttime` | Detect and flag outliers using Hampel filter, z-score, LOF, absolute limits, local SD, manual removal, or stepwise combinations          |
 | `diive.pkgs.flux`                | `FluxProcessingChain`                                                                                                                         | Post-process eddy covariance fluxes: Level-2 quality flags, storage correction, USTAR filtering, gap-filling (RF/XGBoost/MDS), self-heating correction |
 | `diive.pkgs.fluxprocessingchain` | `FluxProcessingChain`                                                                                                                         | Orchestrate a complete Level-2 → Level-4 flux processing workflow in a single pipeline                                                   |
-| `diive.pkgs.analyses`            | `GapFinder`, `GridAggregator`, `daily_correlation()`                                                                                          | Locate data gaps, aggregate variables into 2-D grids, compute daily correlations, decoupling analysis, quantiles                         |
+| `diive.pkgs.analyses`            | `GapFinder`, `GridAggregator`, `daily_correlation()`, `SeasonalTrendDecomposition`                                                         | Locate data gaps, aggregate variables into 2-D grids, compute daily correlations, decoupling analysis, quantiles, seasonal-trend decomposition |
 | `diive.pkgs.corrections`         | `OffsetCorrection`, `WindDirectionOffset`, `SetToThreshold`, `SetToMissing`                                                                   | Apply measurement offsets, correct wind directions, clamp values to thresholds, set periods to missing                                   |
 | `diive.pkgs.createvar`           | `DaytimeNighttimeFlag`, `TimeSince`, `calc_vpd_from_ta_rh()`, `et_from_le()`, `potrad()`                                                      | Derive new variables: daytime/nighttime flags, VPD, ET, time-since-event, potential radiation                                            |
 | `diive.pkgs.qaqc`                | `FlagQCF`, `StepwiseMeteoScreeningDb`                                                                                                         | Manage FLUXNET quality control flags; apply stepwise meteorological screening                                                            |
@@ -94,7 +94,9 @@ diive/
 - **Optimum range**: find x range for optimum y
 - **Percentiles**: Calculate percentiles 0-100 for
   series ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/analyses/Percentiles.ipynb))
-
+- **Seasonal-Trend Decomposition**: Separate time series into trend, seasonal, and residual components using STL (Seasonal-Trend Loess), classical, or harmonic methods · class:
+  `SeasonalTrendDecomposition` ([documentation](https://diive.readthedocs.io/en/latest/analyses/seasonal_trend_decomposition.html))
+  
 ### Corrections
 
 - **Offset correction for measurement**: correct measurement by offset in comparison to

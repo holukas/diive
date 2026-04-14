@@ -92,6 +92,27 @@
     - `test_gapfilling_longterm_randomforest`: ~2 minutes (was ~5 minutes)
     - Optimized hyperparameters and feature settings (12)
 
+### Time Series Analysis
+
+* **Seasonal-Trend Decomposition** (new analysis module) — Separate time series into trend, seasonal, and residual components.
+    - Class: `SeasonalTrendDecomposition` in `diive.pkgs.analyses.seasonaltrend`
+    - Methods: STL (Seasonal-Trend Loess), Classical (moving average), Harmonic (Fourier)
+    - **STL (default)**: Robust, handles gaps and non-stationary data; ideal for ecological time series
+    - **Classical**: Simple moving-average decomposition; assumes stationarity
+    - **Harmonic**: Frequency-domain Fourier analysis; reveals multi-scale seasonality
+    - **Quality-weighted fitting**: Incorporates quality flags during decomposition (not pre-filtering); preserves low-quality values in output
+    - **Lazy evaluation**: Components computed on first access and cached for efficiency
+    - **Auto-detection**: Automatically identifies seasonal period via periodogram if not specified
+    - Properties: `.trend` (long-term direction), `.seasonal` (recurring patterns), `.residual` (noise/anomalies)
+    - Methods: `.detrend()`, `.deseasonalize()`, `.reconstruct()`, `.summary()`
+    - **Use cases**: Analyze ecosystem recovery trends isolated from seasonal cycles; detect anomalous events in residuals; understand multi-scale seasonality
+    - **Utilities**:
+        - `diive.core.times.decomposition_utils`: Core decomposition functions (STL, classical, harmonic, quality-weighted, auto-detection)
+        - `diive.pkgs.timeseries.harmonic`: Fourier analysis (harmonic extraction, periodogram, FFT decomposition)
+        - `diive.core.plotting.seasonaltrend`: Visualization (4-panel decomposition plots, spectral analysis, strength comparison)
+    - **Example function**: `example_seasonaltrend_decomposition()` in `diive.pkgs.analyses.seasonaltrend` (17)
+    - **Notebook**: `notebooks/analyses/SeasonalTrendDecomposition.ipynb` with 4 examples (basic STL, method comparison, quality-weighting, multi-scale analysis) (17)
+
 ### Plotting and Visualization
 
 * **DielCycle**: Fixed `ConversionError` when plotting time series whose timestamps fall on
@@ -154,6 +175,8 @@
 - (13) `diive.core.ml.common.MlRegressorGapFillingBase._differencing_features`,
   `diive.pkgs.gapfilling.xgboost_ts.XGBoostTS`
 - (15) `diive.core.ml.common.MlRegressorGapFillingBase._ema_features`, `diive.pkgs.gapfilling.xgboost_ts.XGBoostTS`
+- (16) (reserved)
+- (17) `diive.pkgs.analyses.seasonaltrend.SeasonalTrendDecomposition`, `diive.pkgs.analyses.seasonaltrend.example_seasonaltrend_decomposition`, `diive.core.times.decomposition_utils`, `diive.pkgs.timeseries.harmonic`, `diive.core.plotting.seasonaltrend`, `notebooks/analyses/SeasonalTrendDecomposition.ipynb`
 
 ## v0.90.0 | 13 Jan 2026
 
