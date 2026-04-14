@@ -8,84 +8,74 @@
 
 ### Gap-filling
 
-* **XGBoostTS / MlRegressorGapFillingBase**: Added `features_rolling` parameter for rolling window
-  statistics feature engineering. For each specified window size (in records), rolling mean and
-  rolling std are added for all driver columns, giving the model explicit short-term memory context.
-  `features_rolling_exclude_cols` allows excluding specific columns. Uses `min_periods=1` to avoid
-  introducing new NaN values. Column naming: `.{col}_mean{w}` / `.{col}_std{w}` (e.g. with 30-min
-  data, `features_rolling=[6, 48]` adds 3-hour and 24-hour rolling statistics) (12).
-* **XGBoostTS / MlRegressorGapFillingBase**: Added `features_rolling_stats` parameter for advanced
-  rolling statistics beyond mean/std. Allows computation of median, min, max, standard deviation,
-  and percentiles (Q25, Q75) for all specified rolling windows. Provides richer statistical context
-  of local variability and distribution shape. Column naming: `.{col}_ROLLMEDIAN{w}`,
-  `.{col}_ROLLMIN{w}`, `.{col}_ROLLMAX{w}`, `.{col}_ROLLSD{w}`, `.{col}_ROLLQ25{w}`,
-  `.{col}_ROLLQ75{w}` (e.g. `features_rolling_stats=['median', 'min', 'max', 'q25', 'q75']`).
-  Backward compatible: defaults to None (only mean/std computed if not specified).
-* **XGBoostTS / MlRegressorGapFillingBase**: Added `features_diff` parameter for temporal differencing
-  feature engineering. Computes 1st and higher-order differences for specified orders, creating columns
-  like `.{col}_DIFF1` (rate of change) and `.{col}_DIFF2` (acceleration/curvature). Captures temporal
-  momentum crucial for modeling flux ramp-ups/ramp-downs during sunrise/sunset transitions.
-  `features_diff_exclude_cols` allows excluding specific columns; differencing skips already-engineered
-  columns (those starting with `.`) to avoid compounding transformations. Column naming: `.{col}_DIFF{order}`
-  (e.g. `features_diff=[1, 2]` adds 1st and 2nd order differences for each driver) (13).
-* **XGBoostTS / MlRegressorGapFillingBase**: Replaced permutation importance with SHAP-based
-  feature reduction using `TreeExplainer`; added monkey-patch to handle XGBoost `base_score`
-  bracket-enclosed scientific notation format (e.g. `[-4.12E0]`) that caused `float()` conversion
-  errors in some environments; fixed stale `"PERMUTATION IMPORTANCE"` label in
-  `report_feature_reduction()` (now correctly reads `"SHAP IMPORTANCE (mean absolute SHAP values)"`);
-  fixed boundary case in `_remove_rejected_features` where features with SHAP exactly equal to the
-  random-variable threshold were silently excluded from the rejection report (`rejected_locs` is now
-  `~accepted_locs`); fixed `_add_random_variable` returning a 2-D array `(n, 1)` instead of 1-D
-  `(n,)` (9).
-* **XGBoostTS / MlRegressorGapFillingBase**: Added `shap_threshold_factor` parameter to
-  `reduce_features()` method for principled feature reduction threshold. Threshold is calculated as:
-  `random_importance + k * random_sd`, where k is `shap_threshold_factor` (default 0.5 for 0.5-sigma
-  confidence, more lenient feature selection). This accounts for SHAP importance estimation uncertainty
-  of the random baseline, making feature selection more robust when random variable fluctuates. Allows
-  tuning conservativeness: k=0.5 (lenient), k=1.0 (standard), k=2.0 (conservative). Fixed rejected
-  features calculation to include all engineered features (not just original input features).
-* **RandomForestTS / LongTermGapFillingRandomForestTS**: Added feature parity with XGBoostTS.
-  `RandomForestTS` now accepts `features_rolling`, `features_rolling_exclude_cols`, `features_rolling_stats`,
-  `features_diff`, and `features_diff_exclude_cols` parameters. `LongTermGapFillingRandomForestTS` and
-  `LongTermGapFillingXGBoostTS` now support all advanced feature engineering parameters for consistent
-  long-term modeling across any year range.
-* **QuickFillRFTS** (fixed & improved): Fixed invalid `features_lag=[-1]` parameter (must specify range,
-  e.g., `[-1, -1]`). Enhanced class docstring to clearly explain purpose (exploratory/quick testing,
-  NOT production use). Documented minimal parameters for speed: `n_estimators=3`, no timestamp features,
-  no rolling statistics or differencing. Suitable for rapid prototyping and gap-fill visualization.
-* **Polynomial Features** (new): Added `features_poly_degree` parameter for non-linear relationship modeling.
-  Creates polynomial terms (squared, cubed, etc.) for all feature columns. Example: `features_poly_degree=2`
-  creates `.{col}_POL2` squared terms. `features_poly_exclude_cols` allows excluding specific columns.
-  Integrated across RandomForestTS, XGBoostTS, and long-term gap-filling classes. Useful for modeling
-  non-linear phenomena like radiation or temperature effects with polynomial relationships.
-* **Long-term XGBoost gap-filling** (new): Implemented `level41_longterm_xgboost()` method in
-  `FluxProcessingChain` with feature parity to `level41_longterm_random_forest()`. Supports all feature
-  engineering parameters (lag, rolling stats, differencing, polynomial). Allows users to choose between
-  Random Forest and XGBoost gap-filling strategies for multi-year data with USTAR scenario support.
-  Results stored per scenario in `level41['long_term_xgboost']` dictionary. Default hyperparameters:
-  n_estimators=200, max_depth=6, learning_rate=0.3, early_stopping_rounds=10.
-* **FluxProcessingChain updates** (enhancements): Updated `level41_longterm_random_forest()` and new
-  `level41_longterm_xgboost()` to support all advanced feature engineering parameters. Both methods now
-  accept `features_rolling`, `features_rolling_stats`, `features_diff`, and `features_poly_degree`
-  for flexible model configuration. Test case covers both methods with all 3 USTAR scenarios.
-* **Test suite optimizations** (performance): Reduced `RandomForestTS` test execution time by 60-70%.
-  `test_gapfilling_randomforest` now runs in ~2.8 seconds (was ~6 seconds); optimized hyperparameters
-  (`n_estimators=3`, `min_samples_split/leaf=10/5`) and disabled expensive features (timestamp
-  vectorization, record numbering). `test_gapfilling_longterm_randomforest` reduced to ~2 minutes
-  (was ~5 minutes) by using simplified parameters. All tests maintain quality checks with flexible
-  assertion ranges instead of hardcoded values.
-* **ML Plotting functions** (enhanced): Redesigned three diagnostic plotting functions with Material
-  Design-inspired strong colors and professional typography (11):
-  - `plot_observed_predicted()`: Redesigned with dual-panel layout (actual vs. predicted + residuals);
-    added color-coded accuracy zones (±10%/±20% error bands); enhanced scatter styling with strong
-    teal color; added perfect prediction reference line; improved residuals panel with ±1σ/±2σ
-    bands; styled info box with metrics (n, MAE, RMSE, R²).
-  - `plot_feature_importance()`: Complete redesign with horizontal bar chart; strong orange error
-    bars; inline importance values; adaptive sizing based on feature count; professional typography
-    and grid styling.
-  - `plot_prediction_residuals_error_regr()`: Enhanced yellowbrick visualizers with custom color
-    styling (strong teal, green, orange); improved titles and documentation; consistent spine/grid
-    formatting; cleaner Q-Q plot and prediction error plots.
+**Feature Engineering Parameters**
+
+* **Rolling window statistics** — Adds short-term memory to models.
+  - Parameter: `features_rolling` (list of window sizes in records)
+  - Computes rolling mean and std (never introduces new NaN)
+  - Excludes columns with `features_rolling_exclude_cols`
+  - Column names: `.{col}_mean{w}` / `.{col}_std{w}`
+  - Example: `features_rolling=[6, 48]` on 30-min data = 3h and 24h stats (12)
+
+* **Advanced rolling statistics** — Richer local variability context.
+  - Parameter: `features_rolling_stats` (list: median, min, max, std, Q25, Q75)
+  - Column names: `.{col}_ROLLMEDIAN{w}`, `.{col}_ROLLMIN{w}`, etc.
+  - Backward compatible (defaults to None) (12)
+
+* **Temporal differencing** — Captures rate-of-change and momentum.
+  - Parameter: `features_diff` (list of difference orders)
+  - `.{col}_DIFF1` = rate of change; `.{col}_DIFF2` = acceleration
+  - Skips already-engineered columns (starting with `.`)
+  - Excludes columns with `features_diff_exclude_cols`
+  - Example: `features_diff=[1, 2]` (13)
+
+* **Polynomial features** — Models non-linear relationships.
+  - Parameter: `features_poly_degree` (e.g., 2 for squared terms)
+  - Column names: `.{col}_POL2`, `.{col}_POL3`, etc.
+  - Excludes columns with `features_poly_exclude_cols` (12)
+
+**SHAP-Based Feature Reduction**
+
+* **SHAP feature importance** — Replaced permutation-based with SHAP values.
+  - Method: `TreeExplainer` for tree-based models
+  - Fixed `base_score` handling for XGBoost environments
+  - Fixed label: `"SHAP IMPORTANCE (mean absolute SHAP values)"` (9)
+  - Fixed boundary case: features with SHAP exactly equal to threshold now counted as rejected (9)
+
+* **Configurable threshold** — Control feature selection conservativeness.
+  - Parameter: `shap_threshold_factor` (default 0.5, lenient)
+  - Formula: `threshold = random_importance + k * random_sd`
+  - k=0.5 (lenient) → k=1.0 (standard) → k=2.0 (conservative) (9)
+
+**Model Implementations**
+
+* **RandomForestTS/LongTermGapFillingRandomForestTS** — Feature parity with XGBoostTS.
+  - Now supports: `features_rolling`, `features_rolling_stats`, `features_diff`, `features_poly_degree`
+  - Works across `LongTermGapFillingRandomForestTS` and `LongTermGapFillingXGBoostTS` (12)
+
+* **Long-term XGBoost gap-filling** — New method for multi-year modeling.
+  - Method: `level41_longterm_xgboost()` in `FluxProcessingChain`
+  - Feature parity to `level41_longterm_random_forest()`
+  - Supports all feature engineering parameters
+  - Results per scenario in `level41['long_term_xgboost']`
+  - Defaults: n_estimators=200, max_depth=6, learning_rate=0.3, early_stopping_rounds=10 (12)
+
+* **QuickFillRFTS** — Fixed and improved for quick testing.
+  - Fixed: `features_lag` must be range (e.g., `[-1, -1]`, not `[-1]`)
+  - Purpose: exploratory testing only, not production
+  - Optimized for speed: `n_estimators=3`, no timestamp features (12)
+
+**Improvements and Fixes**
+
+* **ML Plotting functions** — Redesigned with professional styling.
+  - `plot_observed_predicted()`: Dual-panel layout, accuracy bands, residuals
+  - `plot_feature_importance()`: Horizontal bars, error bars, value labels
+  - `plot_prediction_residuals_error_regr()`: Custom colors and cleaner formatting (11)
+
+* **Test optimizations** — 60-70% faster RandomForest tests.
+  - `test_gapfilling_randomforest`: ~2.8s (was ~6s)
+  - `test_gapfilling_longterm_randomforest`: ~2 minutes (was ~5 minutes)
+  - Optimized hyperparameters and feature settings (12)
 
 ### Plotting and Visualization
 
