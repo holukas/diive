@@ -6,9 +6,13 @@
 
 ### Highlights in this Release
 
-- **Seasonal-Trend Decomposition (new)** — Separate time series into trend, seasonal, and residual components using STL (Seasonal-Trend Loess), classical, or harmonic methods. Ideal for analyzing ecosystem recovery, climate impacts, and anomaly detection. Includes comprehensive notebook with 5 real-world examples.
+- **Seasonal-Trend Decomposition (new)** — Separate time series into trend, seasonal, and residual components using
+  STL (Seasonal-Trend Loess), classical, or harmonic methods. Notebook with 5 examples: detrending for ML, anomaly
+  detection, method comparison, climate change analysis, ecosystem recovery.
 
-- **HexbinPlot visualization (new)** — Visualize flux values aggregated into 2D hexagonal bins of driver variables (temperature vs water-filled pore space). Supports percentile-based normalization and configurable aggregation.
+- **HexbinPlot visualization (new)** — Plot flux values aggregated into 2D hexagonal bins of driver variables (
+  temperature vs water-filled pore space). Includes percentile-based normalization and configurable aggregation (median,
+  mean, etc.).
 
 ---
 
@@ -18,36 +22,31 @@
 
 **Feature Engineering Parameters**
 
-* **Rolling window statistics** — Adds short-term memory to models.
-    - Parameter: `features_rolling` (list of window sizes in records)
-    - Computes rolling mean and std (never introduces new NaN)
+* **Rolling window statistics** — Parameter: `features_rolling` (window sizes in records).
+    - Computes rolling mean and std (no new NaN introduced)
     - Excludes columns with `features_rolling_exclude_cols`
     - Column names: `.{col}_mean{w}` / `.{col}_std{w}`
-    - Example: `features_rolling=[6, 48]` on 30-min data = 3h and 24h stats (12)
+    - Example: `features_rolling=[6, 48]` on 30-min data = 3h and 24h windows (12)
 
-* **Advanced rolling statistics** — Richer local variability context.
-    - Parameter: `features_rolling_stats` (list: median, min, max, std, Q25, Q75)
+* **Advanced rolling statistics** — Parameter: `features_rolling_stats` (median, min, max, std, Q25, Q75).
     - Column names: `.{col}_ROLLMEDIAN{w}`, `.{col}_ROLLMIN{w}`, etc.
     - Backward compatible (defaults to None) (12)
 
-* **Temporal differencing** — Captures rate-of-change and momentum.
-    - Parameter: `features_diff` (list of difference orders)
-    - `.{col}_DIFF1` = rate of change; `.{col}_DIFF2` = acceleration
-    - Skips already-engineered columns (starting with `.`)
+* **Temporal differencing** — Parameter: `features_diff` (difference orders).
+    - `.{col}_DIFF1` = first difference; `.{col}_DIFF2` = second difference
+    - Skips already-engineered columns (prefix `.`)
     - Excludes columns with `features_diff_exclude_cols`
     - Example: `features_diff=[1, 2]` (13)
 
-* **Polynomial features** — Models non-linear relationships.
-    - Parameter: `features_poly_degree` (e.g., 2 for squared terms)
+* **Polynomial features** — Parameter: `features_poly_degree` (e.g., 2 for squared terms).
     - Column names: `.{col}_POL2`, `.{col}_POL3`, etc.
     - Excludes columns with `features_poly_exclude_cols` (12)
 
-* **Exponential Moving Average (EMA)** — Weighted trending with recent-value emphasis.
-    - Parameter: `features_ema` (list of span values)
+* **Exponential Moving Average (EMA)** — Parameter: `features_ema` (span values).
     - Column names: `.{col}_EMA{span}`
-    - Uses `adjust=False` for expanding window behavior
+    - Uses `adjust=False` for expanding window
     - Excludes columns with `features_ema_exclude_cols`
-    - Example: `features_ema=[6, 24, 48]` on 30-min data = 3h, 12h, 24h EMAs (15)
+    - Example: `features_ema=[6, 24, 48]` on 30-min data = 3h, 12h, 24h spans (15)
 
 **SHAP-Based Feature Reduction**
 
@@ -57,109 +56,90 @@
     - Fixed label: `"SHAP IMPORTANCE (mean absolute SHAP values)"` (9)
     - Fixed boundary case: features with SHAP exactly equal to threshold now counted as rejected (9)
 
-* **Configurable threshold** — Control feature selection conservativeness.
-    - Parameter: `shap_threshold_factor` (default 0.5, lenient)
-    - Formula: `threshold = random_importance + k * random_std` (baseline importance from random features + k × standard
-      deviation)
+* **Configurable threshold** — Parameter: `shap_threshold_factor` (default 0.5).
+    - Formula: `threshold = random_importance + k * random_std`
     - k=0.5 (lenient) → k=1.0 (standard) → k=2.0 (conservative) (9)
 
 **Model Implementations**
 
-* **RandomForestTS/LongTermGapFillingRandomForestTS** — Feature parity with XGBoostTS.
-    - Now supports: `features_rolling`, `features_rolling_stats`, `features_diff`, `features_ema` (Exponential Moving
-      Average), `features_poly_degree`
-    - Works across `LongTermGapFillingRandomForestTS` and `LongTermGapFillingXGBoostTS` (12)
+* **RandomForestTS/LongTermGapFillingRandomForestTS** — Added support for `features_rolling`, `features_rolling_stats`,
+  `features_diff`, `features_ema`, `features_poly_degree` (12)
 
-* **Long-term XGBoost gap-filling** — New method for multi-year modeling.
-    - Method: `level41_longterm_xgboost()` in `FluxProcessingChain`
-    - Feature parity to `level41_longterm_random_forest()`
-    - Supports all feature engineering parameters
-    - Results per scenario in `level41['long_term_xgboost']`
+* **Long-term XGBoost gap-filling** — Added `level41_longterm_xgboost()` in `FluxProcessingChain`.
+    - Method: `LongTermGapFillingXGBoostTS`
+    - Results stored in `level41['long_term_xgboost']`
     - Defaults: n_estimators=200, max_depth=6, learning_rate=0.3, early_stopping_rounds=10 (12)
 
-* **Exponential Moving Average (EMA) features in all gap-filling modules** — Consistent feature engineering across
-  implementations.
-    - `RandomForestTS`, `XGBoostTS`, `LongTermGapFillingRandomForestTS`, `LongTermGapFillingXGBoostTS`
-    - `FluxProcessingChain.level41_longterm_random_forest()` and `level41_longterm_xgboost()`
-    - All now support `features_ema` (list of span values) and `features_ema_exclude_cols`
+* **Exponential Moving Average (EMA) features** — Added to all gap-filling modules: `RandomForestTS`, `XGBoostTS`,
+  `LongTermGapFillingRandomForestTS`, `LongTermGapFillingXGBoostTS`.
+    - Also in `FluxProcessingChain.level41_longterm_random_forest()` and `level41_longterm_xgboost()`
+    - Parameter: `features_ema` (span values); excludes via `features_ema_exclude_cols`
     - Feature pipeline: lag → rolling → differencing → EMA → polynomial → timestamps (15)
 
-* **QuickFillRFTS** — Fixed and improved for quick testing.
-    - Fixed: `features_lag` must be range (e.g., `[-1, -1]`, not `[-1]`)
-    - Purpose: exploratory testing only, not production
-    - Optimized for speed: `n_estimators=3`, no timestamp features (12)
+* **QuickFillRFTS** — Fixed `features_lag` requirement to use range (e.g., `[-1, -1]` not `[-1]`).
+    - For exploratory testing only
+    - Optimized: `n_estimators=3`, no timestamp features (12)
 
 **Improvements and Fixes**
 
-* **ML Plotting functions** — Redesigned with professional styling.
-    - `plot_observed_predicted()`: Dual-panel layout, accuracy bands, residuals
-    - `plot_feature_importance()`: Horizontal bars, error bars, value labels
-    - `plot_prediction_residuals_error_regr()`: Custom colors and cleaner formatting (11)
+* **ML Plotting functions** — Refactored layouts and styling.
+    - `plot_observed_predicted()`: Dual-panel, accuracy bands, residuals
+    - `plot_feature_importance()`: Horizontal bars, error bars, labels
+    - `plot_prediction_residuals_error_regr()`: Updated colors and formatting (11)
 
-* **Test optimizations** — 60-70% faster RandomForest tests.
-    - `test_gapfilling_randomforest`: ~2.8s (was ~6s)
-    - `test_gapfilling_longterm_randomforest`: ~2 minutes (was ~5 minutes)
-    - Optimized hyperparameters and feature settings (12)
+* **Test optimizations** — RandomForest tests 60-70% faster.
+    - `test_gapfilling_randomforest`: 2.8s (was 6s)
+    - `test_gapfilling_longterm_randomforest`: 2 min (was 5 min)
+    - Optimized hyperparameters and features (12)
 
 ### Time Series Analysis
 
-* **Seasonal-Trend Decomposition** (new analysis module) — Separate time series into trend, seasonal, and residual
-  components.
+* **Seasonal-Trend Decomposition** (new analysis module) — Separate time series into trend, seasonal, and residual.
     - Class: `SeasonalTrendDecomposition` in `diive.pkgs.analyses.seasonaltrend`
-    - Methods: STL (Seasonal-Trend Loess), Classical (moving average), Harmonic (Fourier)
-    - **STL (default)**: Robust, handles gaps and non-stationary data; ideal for ecological time series
-    - **Classical**: Simple moving-average decomposition; assumes stationarity
-    - **Harmonic**: Frequency-domain Fourier analysis; reveals multi-scale seasonality
-    - **Quality-weighted fitting**: Incorporates quality flags during decomposition (not pre-filtering); preserves
-      low-quality values in output
-    - **Lazy evaluation**: Components computed on first access and cached for efficiency
-    - **Auto-detection**: Automatically identifies seasonal period via periodogram if not specified
-    - Properties: `.trend` (long-term direction), `.seasonal` (recurring patterns), `.residual` (noise/anomalies)
+    - Methods: STL (Seasonal-Trend Loess), Classical (moving average), Harmonic (FFT)
+    - **STL**: Handles gaps, non-stationary data
+    - **Classical**: Moving-average decomposition; assumes stationarity
+    - **Harmonic**: FFT-based frequency analysis
+    - **Quality-weighted fitting**: Uses quality flags during decomposition (not pre-filtering)
+    - **Lazy evaluation**: Components cached after first access
+    - **Auto-detection**: Detects seasonal period via periodogram if not specified
+    - Properties: `.trend`, `.seasonal`, `.residual`
     - Methods: `.detrend()`, `.deseasonalize()`, `.reconstruct()`, `.summary()`
-    - **Use cases**: Analyze ecosystem recovery trends isolated from seasonal cycles; detect anomalous events in
-      residuals; understand multi-scale seasonality
     - **Utilities**:
-        - `diive.core.times.decomposition_utils`: Core decomposition functions (STL, classical, harmonic,
-          quality-weighted, auto-detection)
-        - `diive.pkgs.timeseries.harmonic`: Fourier analysis (harmonic extraction, periodogram, FFT decomposition)
-        - `diive.core.plotting.seasonaltrend`: Visualization (4-panel decomposition plots, spectral analysis, strength
-          comparison)
-    - **Example function**: `example_seasonaltrend_decomposition()` in `diive.pkgs.analyses.seasonaltrend` (17)
-    - **Notebook**: `notebooks/Analyses/SeasonalTrendDecomposition.ipynb` with comprehensive tutorial and 5 real-world
-      examples:
+        - `diive.core.times.decomposition_utils`: Core functions (STL, classical, harmonic, quality-weighted)
+        - `diive.pkgs.timeseries.harmonic`: FFT analysis, periodogram, harmonic extraction
+        - `diive.core.plotting.seasonaltrend`: 4-panel plots, spectral analysis
+    - **Example function**: `example_seasonaltrend_decomposition()` (17)
+    - **Notebook**: `notebooks/Analyses/SeasonalTrendDecomposition.ipynb` with 5 examples:
         1. Detrending for ML Gap-Filling
         2. Anomaly Detection & Quality Control
         3. Method Comparison (Harmonic vs Classical)
         4. Climate Change Impact Analysis
         5. Ecosystem Recovery Trends
-           Plus tutorial sections covering: imports, quick start, component access, visualization, quality-weighting,
+           Plus tutorial sections on imports, quick start, component access, visualization, quality-weighting,
            reconstruction (17)
 
 ### Plotting and Visualization
 
-* **DielCycle**: Fixed `ConversionError` when plotting time series whose timestamps fall on
-  non-hour boundaries (e.g. 30-min data with :15/:45 offsets). Root cause: matplotlib's
-  `StrCategoryConverter` registered `datetime.time` objects as categories; exact hour values such
-  as `time(3, 0)` were never present in the data, making `set_xticks` fail. Fix: convert the
-  `datetime.time` index to decimal hours (float) before calling `.plot()` and `fill_between()`,
-  giving a clean numeric x-axis; replaced string-based `set_xticks` / `set_xlim` calls with
-  their numeric equivalents `[3, 6, …, 21]` / `[0, 24]` (10).
-* **HeatmapDateTime**: Fixed `TypeError` from passing `datetime.time` objects to `pcolormesh` by converting
-  time-of-day axis to float hours; removed deprecated `register_matplotlib_converters()` call; fixed
-  `show_values=True` being silently ignored; made time-axis tick interval adaptive to data frequency;
-  fixed NaN cells not rendering in `color_bad`; improved docstrings (2).
-* **HeatmapXYZ** (new): Plot z-values on 2-D colour grids with arbitrary numeric x/y axes (e.g., binned
-  temperature and VPD). Designed for pre-aggregated data from `GridAggregator.df_agg_long`; enforces
-  separation of concerns between binning/aggregation and visualization (3).
-* **HeatmapXYZ.from_gridaggregator()** (convenience method): Simplifies the common workflow of creating
-  heatmaps from GridAggregator output by automatically extracting pre-aggregated data and handling bin
-  column naming (6).
-* **HeatmapXYZ** (refactored): Explicitly requires pre-aggregated input; clarified docstrings; added
-  integration tests to prevent silent re-aggregation bugs (5).
-* **HexbinPlot** (new): Visualize flux values aggregated into 2D hexagonal bins of driver variables (e.g.,
-  temperature vs water-filled pore space). Supports optional percentile-based normalization (0-100 scale),
-  configurable aggregation functions (default: median), and variable gridsize; inherits from HeatmapBase for
-  consistent styling and colorbar handling (8).
+* **DielCycle**: Fixed `ConversionError` with non-hour-boundary timestamps (30-min data with :15/:45 offsets).
+  Root cause: matplotlib's `StrCategoryConverter` treated `datetime.time` as categories; exact hours like `time(3, 0)`
+  missing. Fix: convert `datetime.time` index to float hours before plotting; replace string-based `set_xticks`/
+  `set_xlim`
+  with numeric equivalents (10).
+* **HeatmapDateTime**: Fixed `TypeError` from `datetime.time` to `pcolormesh`; removed deprecated
+  `register_matplotlib_converters()`;
+  fixed `show_values=True` silently ignored; adaptive time-axis tick interval; fixed NaN rendering in `color_bad`;
+  improved docstrings (2).
+* **HeatmapXYZ** (new): Plot z-values on 2-D grids with arbitrary numeric x/y axes (binned temperature vs VPD).
+  Requires pre-aggregated data from `GridAggregator.df_agg_long` (3).
+* **HeatmapXYZ.from_gridaggregator()**: Convenience method to extract pre-aggregated data from GridAggregator output (
+  6).
+* **HeatmapXYZ** (refactored): Explicitly requires pre-aggregated input; added integration tests to prevent
+  silent re-aggregation bugs (5).
+* **HexbinPlot** (new): Plot flux values in 2D hexagonal bins of driver variables (temperature vs water-filled pore
+  space).
+  Percentile-based normalization (0-100), configurable aggregation (default: median), variable gridsize; inherits from
+  HeatmapBase (8).
 
 ### Testing
 
@@ -167,14 +147,16 @@
 
 ### Documentation and Notebooks
 
-* **Jupyter Book documentation site** (new): Added full documentation site built with Jupyter Book,
-  deployed to GitHub Pages.
-* **HeatmapXYZ notebook**: Simplified from 5+ examples to 3 focused examples with descriptive text
-  (Quick Start, Traditional approach, Advanced); fixed bug where `GridAggregator.df_long` was used
-  instead of `df_agg_long`, causing silent re-aggregation to mean (4, 7).
-* **Notebook directory reorganization**: Consolidated from 17 topic folders into 9 domain folders
-  (`io/`, `timeseries/`, `variables/`, `qc/`, `analyses/`, `gapfilling/`, `flux/`, `plotting/`, `workbench/`);
-  updated all relative links in `OVERVIEW.ipynb` and GitHub links in `README.md`.
+* **SeasonalTrendDecomposition notebook**: Restructured with proper example numbering and organization.
+  - Fixed undefined variable `nee_full` and STL parameter compatibility errors
+  - Changed STL calls with large seasonal periods to harmonic method (no series length constraints)
+  - Reorganized into tutorial section + 5 sequential examples (detrending, anomaly detection, method comparison, climate change, ecosystem recovery) (17)
+* **HeatmapXYZ notebook**: Simplified from 5+ examples to 3 (Quick Start, Traditional, Advanced). Fixed bug:
+  `GridAggregator.df_long`
+  → `df_agg_long` (was causing silent re-aggregation to mean) (4, 7).
+* **Notebook directory reorganization**: Consolidated 17 topic folders into 9 domain folders (`io/`, `timeseries/`,
+  `variables/`, `qc/`,
+  `analyses/`, `gapfilling/`, `flux/`, `plotting/`, `workbench/`); updated links in `OVERVIEW.ipynb` and `README.md`.
 
 ### Unit tests
 
