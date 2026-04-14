@@ -18,6 +18,20 @@ Recent releases: [Releases](https://github.com/holukas/diive/releases)
 
 ---
 
+## ✨ Latest Release Highlights (v0.91.0)
+
+### **Completely New Features**
+
+- **Seasonal-Trend Decomposition** — Separate time series into trend, seasonal, and residual components using STL (Seasonal-Trend Loess), classical, or harmonic methods. Ideal for analyzing ecosystem recovery, climate impacts, and anomaly detection. ([example notebook](https://github.com/holukas/diive/blob/main/notebooks/Analyses/SeasonalTrendDecomposition.ipynb))
+
+- **HeatmapXYZ visualization** — Plot z-values on 2-D color grids with arbitrary numeric x/y axes (e.g., binned temperature and VPD). Works seamlessly with `GridAggregator` output for pre-aggregated data visualization.
+
+- **HexbinPlot visualization** — Visualize flux values aggregated into 2D hexagonal bins of driver variables (temperature vs water-filled pore space). Supports percentile-based normalization and configurable aggregation.
+
+- **Long-term XGBoost gap-filling** — Multi-year flux gap-filling with `LongTermGapFillingXGBoostTS`, complementing existing Random Forest approach. Full feature parity including EMA, rolling statistics, differencing, and polynomial features.
+
+---
+
 ## Package Structure
 
 ```
