@@ -4,6 +4,18 @@
 
 ## v0.91.0 | XX XXX 2026
 
+### ✨ Completely New Features
+
+- **Seasonal-Trend Decomposition** — Separate time series into trend, seasonal, and residual components using STL (Seasonal-Trend Loess), classical, or harmonic methods. Ideal for analyzing ecosystem recovery, climate impacts, and anomaly detection. Includes comprehensive notebook with 5 real-world examples.
+
+- **HeatmapXYZ visualization** — Plot z-values on 2-D color grids with arbitrary numeric x/y axes (e.g., binned temperature and VPD). Works seamlessly with `GridAggregator` output for pre-aggregated data visualization.
+
+- **HexbinPlot visualization** — Visualize flux values aggregated into 2D hexagonal bins of driver variables (temperature vs water-filled pore space). Supports percentile-based normalization and configurable aggregation.
+
+- **Long-term XGBoost gap-filling** — Multi-year flux gap-filling with `LongTermGapFillingXGBoostTS`, complementing existing Random Forest approach. Full feature parity including EMA, rolling statistics, differencing, and polynomial features.
+
+---
+
 **Feature Highlights and Logic Changes**
 
 ### Gap-filling
@@ -51,7 +63,8 @@
 
 * **Configurable threshold** — Control feature selection conservativeness.
     - Parameter: `shap_threshold_factor` (default 0.5, lenient)
-    - Formula: `threshold = random_importance + k * random_std` (baseline importance from random features + k × standard deviation)
+    - Formula: `threshold = random_importance + k * random_std` (baseline importance from random features + k × standard
+      deviation)
     - k=0.5 (lenient) → k=1.0 (standard) → k=2.0 (conservative) (9)
 
 **Model Implementations**
@@ -94,30 +107,37 @@
 
 ### Time Series Analysis
 
-* **Seasonal-Trend Decomposition** (new analysis module) — Separate time series into trend, seasonal, and residual components.
+* **Seasonal-Trend Decomposition** (new analysis module) — Separate time series into trend, seasonal, and residual
+  components.
     - Class: `SeasonalTrendDecomposition` in `diive.pkgs.analyses.seasonaltrend`
     - Methods: STL (Seasonal-Trend Loess), Classical (moving average), Harmonic (Fourier)
     - **STL (default)**: Robust, handles gaps and non-stationary data; ideal for ecological time series
     - **Classical**: Simple moving-average decomposition; assumes stationarity
     - **Harmonic**: Frequency-domain Fourier analysis; reveals multi-scale seasonality
-    - **Quality-weighted fitting**: Incorporates quality flags during decomposition (not pre-filtering); preserves low-quality values in output
+    - **Quality-weighted fitting**: Incorporates quality flags during decomposition (not pre-filtering); preserves
+      low-quality values in output
     - **Lazy evaluation**: Components computed on first access and cached for efficiency
     - **Auto-detection**: Automatically identifies seasonal period via periodogram if not specified
     - Properties: `.trend` (long-term direction), `.seasonal` (recurring patterns), `.residual` (noise/anomalies)
     - Methods: `.detrend()`, `.deseasonalize()`, `.reconstruct()`, `.summary()`
-    - **Use cases**: Analyze ecosystem recovery trends isolated from seasonal cycles; detect anomalous events in residuals; understand multi-scale seasonality
+    - **Use cases**: Analyze ecosystem recovery trends isolated from seasonal cycles; detect anomalous events in
+      residuals; understand multi-scale seasonality
     - **Utilities**:
-        - `diive.core.times.decomposition_utils`: Core decomposition functions (STL, classical, harmonic, quality-weighted, auto-detection)
+        - `diive.core.times.decomposition_utils`: Core decomposition functions (STL, classical, harmonic,
+          quality-weighted, auto-detection)
         - `diive.pkgs.timeseries.harmonic`: Fourier analysis (harmonic extraction, periodogram, FFT decomposition)
-        - `diive.core.plotting.seasonaltrend`: Visualization (4-panel decomposition plots, spectral analysis, strength comparison)
+        - `diive.core.plotting.seasonaltrend`: Visualization (4-panel decomposition plots, spectral analysis, strength
+          comparison)
     - **Example function**: `example_seasonaltrend_decomposition()` in `diive.pkgs.analyses.seasonaltrend` (17)
-    - **Notebook**: `notebooks/Analyses/SeasonalTrendDecomposition.ipynb` with comprehensive tutorial and 5 real-world examples:
+    - **Notebook**: `notebooks/Analyses/SeasonalTrendDecomposition.ipynb` with comprehensive tutorial and 5 real-world
+      examples:
         1. Detrending for ML Gap-Filling
         2. Anomaly Detection & Quality Control
         3. Method Comparison (Harmonic vs Classical)
         4. Climate Change Impact Analysis
         5. Ecosystem Recovery Trends
-        Plus tutorial sections covering: imports, quick start, component access, visualization, quality-weighting, reconstruction (17)
+           Plus tutorial sections covering: imports, quick start, component access, visualization, quality-weighting,
+           reconstruction (17)
 
 ### Plotting and Visualization
 
@@ -182,7 +202,10 @@
   `diive.pkgs.gapfilling.xgboost_ts.XGBoostTS`
 - (15) `diive.core.ml.common.MlRegressorGapFillingBase._ema_features`, `diive.pkgs.gapfilling.xgboost_ts.XGBoostTS`
 - (16) (reserved)
-- (17) `diive.pkgs.analyses.seasonaltrend.SeasonalTrendDecomposition`, `diive.pkgs.analyses.seasonaltrend.example_seasonaltrend_decomposition`, `diive.core.times.decomposition_utils`, `diive.pkgs.timeseries.harmonic`, `diive.core.plotting.seasonaltrend`, `notebooks/analyses/SeasonalTrendDecomposition.ipynb`
+- (17) `diive.pkgs.analyses.seasonaltrend.SeasonalTrendDecomposition`,
+  `diive.pkgs.analyses.seasonaltrend.example_seasonaltrend_decomposition`, `diive.core.times.decomposition_utils`,
+  `diive.pkgs.timeseries.harmonic`, `diive.core.plotting.seasonaltrend`,
+  `notebooks/analyses/SeasonalTrendDecomposition.ipynb`
 
 ## v0.90.0 | 13 Jan 2026
 
