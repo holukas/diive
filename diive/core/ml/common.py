@@ -30,49 +30,31 @@ class MlRegressorGapFillingBase:
                  input_df: DataFrame,
                  target_col: str or tuple,
                  verbose: int = 0,
-                 features_lag: list[int, int] = None,
-                 features_lag_stepsize: int = 1,
-                 features_lag_exclude_cols: list = None,
-                 features_rolling: list = None,
-                 features_rolling_exclude_cols: list = None,
-                 features_rolling_stats: list = None,
-                 features_diff: list = None,
-                 features_diff_exclude_cols: list = None,
-                 features_ema: list = None,
-                 features_ema_exclude_cols: list = None,
-                 features_poly_degree: int = None,
-                 features_poly_exclude_cols: list = None,
-                 features_stl: bool = False,
-                 features_stl_method: str = 'stl',
-                 features_stl_seasonal_period: int = None,
-                 features_stl_exclude_cols: list = None,
-                 features_stl_components: list = None,
-                 vectorize_timestamps: bool = False,
-                 add_continuous_record_number: bool = False,
-                 sanitize_timestamp: bool = False,
                  test_size: float = 0.25,
                  **kwargs):
         """
         Base class for machine-learning gap-filling using Random Forest or XGBoost.
 
         Trains a predictive model on complete (non-gap) data to fill missing values in a target
-        time series. Includes comprehensive feature engineering pipeline with lagged variants,
-        rolling statistics, temporal differencing, exponential moving averages, and polynomial
-        expansion. Features are extracted from driver variables (temperature, radiation, VPD, etc.)
-        to provide the model with temporal context and non-linear patterns.
+        time series. Accepts PRE-ENGINEERED features to enable reuse across multiple models.
 
-        Core Philosophy: Feature engineering is parameterizable to enable task-specific customization
-        while maintaining consistent methodology across implementations (RandomForest, XGBoost,
-        long-term gap-filling). Each parameter offers selective control over what temporal and
-        statistical contexts the model sees, balancing model complexity, interpretability, and accuracy.
+        **Important:** Feature engineering is now performed EXTERNALLY using FeatureEngineer class.
+        See diive.core.ml.feature_engineer.FeatureEngineer for details.
+
+        Workflow:
+            1. Use FeatureEngineer to create features from raw time series
+            2. Pass engineered features to this class for model training and gap-filling
+            3. Same engineered features can be used with multiple models (RF, XGB, etc.)
 
         Args:
             regressor:
                 Sklearn-compatible regressor class (RandomForestRegressor or XGBRegressor).
 
             input_df:
-                Input DataFrame with time series data. Must contain 1 target column and 1+ feature
-                columns. Timestamps should be in DataFrame index (DatetimeIndex).
+                Input DataFrame with time series data. Must contain:
+                - 1 target column (to be gap-filled)
+                - 1+ feature columns (ALREADY ENGINEERED by FeatureEngineer)
+                Timestamps should be in DataFrame index (DatetimeIndex).
 
             target_col:
                 Column name of the variable to gap-fill (string or tuple for multi-level columns).
@@ -83,96 +65,14 @@ class MlRegressorGapFillingBase:
             test_size:
                 Proportion of complete (non-gap) data to reserve for testing, between 0.0-1.0.
                 Default: 0.25 (75% train, 25% test on non-gap data only).
+                - Smaller test_size: tighter train set but more noise in test metrics
+                - Larger test_size: looser train set but better estimate stability
+                Standard value 0.25 balances both considerations.
 
-                Why: Separate train/test evaluation on complete data assesses real-world predictive
-                skill without contamination from gap-filled values.
-                Effect: Smaller test_size provides tighter train set but more noise in test metrics.
-                Trade-off: 0.25 is standard for balanced estimate stability vs training data size.
-
-            features_lag:
-                List [min_lag, max_lag] specifying range of lagged variants to create.
-                Creates lagged copies at all integers between min_lag and max_lag (exclusive of 0).
-                Default: None (no lagging).
-
-                Why Implemented: Time series observations depend on recent history. Lagged features
-                capture autoregressive structure—how the target depends on itself at prior times.
-                Effect on Data: Encodes temporal autocorrelation; extends decision boundary by
-                allowing model to learn patterns from {t-1, t-2, t+1, t+2} alongside current {t}.
-                Advantages: Captures persistence/inertia in data (e.g., energy availability today
-                relates to yesterday's weather). Essential for accurate flux predictions.
-                Disadvantages: Reduces available training samples near gaps (lags create NaN);
-                can inflate feature count rapidly. Bidirectional lags (negative values) require
-                lookback capacity unavailable at gap boundaries.
-                Example: features_lag=[-2, 2] creates lags [-2, -1, +1, +2]:
-                    TA    = [  5,   6,   7, 8  ]
-                    TA-2  = [NaN, NaN,   5, 6  ]
-                    TA-1  = [NaN,   5,   6, 7  ]  (each TA paired with preceding TA-1)
-                    TA+1  = [  6,   7,   8, NaN]  (each TA paired with next TA+1)
-                    TA+2  = [  7,   8, NaN, NaN]
-                Column naming: '{col}{sign}{lag}' (e.g., 'Tair_f-1', 'Tair_f+1')
-
-            features_lag_stepsize:
-                Step size for creating lags within the specified range. Default: 1 (every record).
-                Why: Reduces feature dimensionality for large lag ranges without losing structure.
-                Example: features_lag=[-4, 4], features_lag_stepsize=2 creates lags [-4, -2, 2, 4].
-                Trade-off: Larger stepsize reduces overfitting risk but misses intermediate patterns.
-
-            features_lag_exclude_cols:
-                List of column names to exclude from lagging.
-                Default: None (all feature columns are lagged).
-                Why: Some features (e.g., record numbers) are nonsensical lagged; time-invariant
-                attributes should not have temporal variants.
-                Example: ['RECORD_NUMBER'] skips lagging for continuous record numbers.
-
-            features_rolling:
-                List of rolling window sizes (in records) for rolling statistics.
-                For each window, rolling mean and std are computed for every feature column
-                (except target and excluded columns). Default: None (no rolling statistics).
-
-                Why Implemented: Time series data exhibit local context—current conditions depend
-                on recent envelope of variability. Rolling windows capture "local stationarity."
-                Effect on Data: Mean represents recent baseline level; std represents recent
-                volatility/uncertainty. A narrow band (low std) vs wide band (high std) convey
-                different information about the observation environment.
-                Advantages: Computationally cheap; never introduces NaN (min_periods=1);
-                resistant to outliers in mean/std form; two window sizes (e.g., 3h and 24h)
-                capture both diurnal and daily cycles cheaply.
-                Disadvantages: Reduces time series stationarity further (derivatives of derivatives);
-                high correlation with trend-based features; may overweight short-term noise.
-                Example: features_rolling=[6, 48] with 30-min data creates 3-hour and 24-hour
-                rolling mean/std for each driver variable.
-                Column naming: '.{col}_mean{w}', '.{col}_std{w}' (e.g., '.Tair_f_mean6').
-
-            features_rolling_exclude_cols:
-                List of column names excluded from rolling statistics computation.
-                Default: None.
-                Example: ['Rg_f'] skips rolling features for Rg_f.
-
-            features_rolling_stats:
-                List of advanced rolling statistics beyond mean and std.
-                Options: ['median', 'min', 'max', 'std', 'q25', 'q75'].
-                Default: None (only mean and std computed if features_rolling specified).
-
-                Why Implemented: Mean/std assume Gaussian distribution; real data may be
-                skewed or bimodal. Percentiles and extremes capture distribution shape.
-                Effect on Data: Median is robust to outliers; min/max bound the plausible range;
-                quartiles reveal asymmetry (e.g., q75-median vs median-q25).
-                Advantages: Provides fine-grained information about local data structure.
-                Disadvantages: Multiplies feature count (6-8 stats per window per variable);
-                increased computation; more features = higher overfitting risk; diminishing
-                returns after median/min/max.
-                Example: features_rolling_stats=['median', 'min', 'max', 'q25', 'q75'].
-                Column naming: '.{col}_ROLLMEDIAN{w}', '.{col}_ROLLMIN{w}', '.{col}_ROLLMAX{w}',
-                '.{col}_ROLLQ25{w}', '.{col}_ROLLQ75{w}', '.{col}_ROLLSD{w}'.
-
-            features_diff:
-                List of difference orders for temporal momentum feature engineering.
-                Computes 1st-order differences (rate of change), 2nd-order (acceleration), etc.
-                Default: None (no differencing).
-
-                Why Implemented: Rate of change encodes temporal direction and speed—crucial for
-                transient events. Ecosystem fluxes ramp up/down steeply at sunrise/sunset; a
-                high DIFF captures "TA is rising fast" without requiring past values.
+            **kwargs:
+                Regressor-specific hyperparameters passed to the sklearn regressor.
+                For RandomForestRegressor: n_estimators, max_depth, min_samples_split, etc.
+                For XGBRegressor: n_estimators, max_depth, learning_rate, early_stopping_rounds, etc.
                 Effect on Data: De-trends data (removes level); DIFF1 makes I(1) series I(0);
                 DIFF2 captures acceleration (useful for curvature). Emphasizes transitions.
                 Advantages: Captures change velocity essential for forecasting turning points;
@@ -182,154 +82,6 @@ class MlRegressorGapFillingBase:
                 Example: features_diff=[1, 2] creates 1st and 2nd order differences.
                 Column naming: '.{col}_DIFF{order}' (e.g., '.Tair_f_DIFF1', '.Tair_f_DIFF2').
 
-            features_ema:
-                List of span values for exponential moving average (EMA) feature engineering.
-                For each span, creates '.{col}_EMA{span}' columns for all feature columns.
-                EMA applies exponential decay weighting where recent values are weighted more.
-                Default: None (no EMA features).
-
-                Why Implemented: For non-stationary time series (seasonally evolving baselines),
-                EMA tracks the moving target better than fixed windows. Recent = more relevant.
-                Effect on Data: EMA smooths noise while respecting trends; acts as adaptive
-                baseline that responds to gradual regime shifts. Complements rolling stats by
-                emphasizing recent behavior over uniform weighting.
-                Advantages: Excellent for trending data; captures adaptive baseline without lag;
-                memory-efficient (only needs current observation and prior EMA, not full window);
-                span interpretation intuitive ("equivalent to N-period window").
-                Disadvantages: Requires parameter tuning (which spans?); produces correlated
-                features if overlapping spans; less robust to outliers than median-based stats.
-                Example: features_ema=[6, 24, 48] with 30-min data adds 3h, 12h, and 24h EMAs.
-                Column naming: '.{col}_EMA{span}' (e.g., '.Tair_f_EMA6', '.Tair_f_EMA24').
-
-            features_ema_exclude_cols:
-                List of column names excluded from EMA computation.
-                Default: None.
-                Example: ['RECORD_NUMBER'] skips EMA for continuous record numbers.
-
-            features_poly_degree:
-                Polynomial degree for non-linear relationship modeling (2 for squared, 3 for cubed, etc.).
-                Default: None (no polynomial expansion).
-
-                Why Implemented: Many physical processes are non-linear. Radiation drives flux via
-                square-law absorption; temperature effects are often cubic. Tree models (RF/XGB)
-                can approximate polynomials via splits, but explicit polynomial features help.
-                Effect on Data: Degree-2 expands feature space quadratically; enables the model
-                to learn u-shaped, inverse, or accelerating relationships directly.
-                Advantages: Captures obvious non-linearities (e.g., TA² for temperature stress);
-                tree models still benefit (shorter tree paths to optimal split); interpretable
-                (can compute d(flux)/d(TA) as linear combination of TA and TA²).
-                Disadvantages: Explodes feature count (d features become d + d² at degree-2);
-                high intercorrelation with original features; degree-3+ prone to overfitting;
-                less effective for tree models than for linear models (trees naturally approximate
-                polynomials), but still useful for complex relationships.
-                Example: features_poly_degree=2 creates squared terms for each driver variable.
-                Column naming: '.{col}_POL{degree}' (e.g., '.Tair_f_POL2' for squared).
-
-            features_poly_exclude_cols:
-                List of column names excluded from polynomial expansion.
-                Default: None.
-                Example: ['RECORD_NUMBER'] skips polynomial features for record numbers.
-
-            features_stl:
-                Enable STL (Seasonal-Trend Loess) decomposition feature engineering.
-                Default: False (disabled).
-
-                Why Implemented: Ecosystem fluxes exhibit multi-scale temporal structure:
-                long-term trends (phenology, instrument drift), recurring seasonal patterns
-                (diurnal/annual cycles), and residual variability (noise, anomalies). STL
-                separates these components, allowing the model to learn how each scale
-                contributes to the target flux.
-                Effect on Data: For each complete (gap-free) feature column, extracts trend
-                (slow changes), seasonal (periodic patterns), and residual (noise). Creates
-                3 new features per column per component: .{col}_STL_TREND, .{col}_STL_SEASONAL,
-                .{col}_STL_RESIDUAL.
-                Advantages: Reveals structure hidden in raw data; handles non-stationary
-                baseline (trend component); robust to outliers; no parameter tuning required
-                for seasonal period (auto-detected). Particularly effective for flux data
-                with strong seasonality.
-                Disadvantages: Only applies to complete columns (skips gap-filled data);
-                computationally more expensive than rolling statistics; extracted components
-                are smoothed (less granular). Can explode feature count if many features.
-                Example: features_stl=True extracts trend/seasonal/residual for all complete
-                driver variables.
-
-            features_stl_method:
-                Decomposition method for STL. Options: 'stl', 'classical', 'harmonic'.
-                Default: 'stl' (Seasonal-Trend Loess, most robust).
-
-                Why Options Exist:
-                - 'stl': Robust, handles gaps and non-stationary data (default, recommended)
-                - 'classical': Simple moving-average based, assumes stationarity
-                - 'harmonic': Fourier-based, reveals frequency-domain structure
-
-            features_stl_seasonal_period:
-                Seasonal period in observations for STL decomposition.
-                Default: None (auto-detect via periodogram).
-                Example: 365 for daily data (annual cycle), 48 for 30-min data (daily cycle).
-
-                Why Auto-detection: Many datasets don't have known periods. Auto-detection
-                finds the dominant frequency via spectral analysis.
-                Manual Specification: Provide if you know the period (e.g., 24h cycle for
-                hourly data = period of 24).
-
-            features_stl_exclude_cols:
-                List of column names excluded from STL decomposition.
-                Default: None.
-                Example: ['RECORD_NUMBER'] skips STL for record numbers (nonsensical to decompose).
-
-            features_stl_components:
-                List of STL components to extract. Options: 'trend', 'seasonal', 'residual'.
-                Default: None (extracts all three: ['trend', 'seasonal', 'residual']).
-                Example: ['trend', 'seasonal'] extracts only trend and seasonal, skipping residual.
-
-                Why Selective: Reduces feature dimensionality if residual/seasonal are noisy.
-                All components: Maximum information, risk of overfitting.
-                Trend only: Captures long-term baseline changes (useful for drifting data).
-                Seasonal only: Captures periodic patterns (useful if trend is stable).
-
-            vectorize_timestamps:
-                Include timestamp attributes as numeric features: year, season, month, week, doy, hour.
-                Provides the model with annual and diurnal cycles. Default: False.
-
-                Why Implemented: Ecosystem processes are strongly seasonal and diurnal. Winter flux
-                ≠ summer flux; nighttime NEE ≠ daytime NEE. The model needs to know "which season?"
-                and "which hour?" to make context-aware predictions.
-                Effect on Data: Adds ~6 features capturing temporal phase. Diurnal cycle (hour)
-                often most predictive; day-of-year captures phenology. Season is binned month.
-                Advantages: Captures known periodic behavior without explicit formulas (let model
-                learn the phase relationships). Essential for multi-year datasets.
-                Disadvantages: Creates circular correlation (hour 23 is near hour 0, but as numbers
-                23≠0); may overfit if dataset spans <1 full seasonal cycle.
-
-            add_continuous_record_number:
-                Add continuous record numbering as a feature (1, 2, 3, ..., n).
-                Captures long-term trends and drift. Default: False.
-
-                Why Implemented: Data quality, measurement stability, or environmental state may
-                drift over months/years. Record number as a feature allows the model to capture
-                linear or monotonic temporal trends without explicit detrending.
-                Effect on Data: Acts as a "time axis" feature; tree splits can partition into
-                "early dataset" vs "late dataset" regimes.
-                Advantages: Simple; captures instrument drift, aging, or seasonal ecosystem shifts.
-                Disadvantages: Only captures trends monotonic in time; not useful for cyclic patterns.
-
-            sanitize_timestamp:
-                Validate and prepare timestamps for further processing (check continuity, format, etc.).
-                Default: False.
-
-                Why Implemented: Missing time steps, duplicates, or format mismatches break feature
-                engineering (lags, rolling windows assume regular frequency). Sanitization detects
-                and flags such issues before processing.
-                Effect on Data: May resample to regular frequency, warn about missing periods, or
-                reject data with gaps.
-                Advantages: Prevents silent failures; ensures consistent feature engineering behavior.
-                Disadvantages: May alter data; expensive if large dataset.
-
-            **kwargs:
-                Regressor-specific hyperparameters passed to the sklearn regressor.
-                For RandomForestRegressor: n_estimators, max_depth, min_samples_split, etc.
-                For XGBRegressor: n_estimators, max_depth, learning_rate, early_stopping_rounds, etc.
-
         Attributes:
             model_: Trained regressor instance.
             gapfilling_df_: DataFrame with gap-filled target and auxiliary variables.
@@ -338,53 +90,18 @@ class MlRegressorGapFillingBase:
             scores_: Model performance metrics (MAE, RMSE, R²) for gap-filling.
             scores_traintest_: Model performance metrics from train/test split.
 
-        Feature Engineering Pipeline Order:
-            1. Lag features: temporal past/future context (captures autoregression)
-            2. Rolling statistics: short-term local variability (captures envelope/volatility)
-            3. Differencing: temporal momentum and rate of change (captures transitions)
-            4. EMA: adaptive baseline with recent-value emphasis (tracks non-stationary level)
-            5. Polynomial: non-linear relationships (captures acceleration/saturation)
-            6. STL decomposition: trend/seasonal/residual components (captures multi-scale patterns)
-            7. Timestamp features: annual/diurnal cycles (captures seasonality)
-            8. Record number: long-term drift (captures monotonic trends)
-
-        Design Philosophy:
-        All feature engineering parameters are optional (default None) to allow users to customize
-        based on their data characteristics:
-        - Highly periodic data: add vectorize_timestamps + rolling stats
-        - Trending data: add add_continuous_record_number + EMA
-        - Non-stationary flux data: add features_lag + features_diff + features_ema
-        - Nonlinear relationships: add features_poly_degree
-        Parameterization ensures each feature engineering type can be toggled without code changes,
-        enabling systematic comparison of engineering strategies (ablation studies).
+        For Feature Engineering Parameters:
+            See diive.core.ml.feature_engineer.FeatureEngineer for comprehensive documentation
+            of the 8-stage feature engineering pipeline (lag, rolling, diff, EMA, poly, STL,
+            timestamps, record number).
         """
 
-        # Args
+        # Store arguments
         self.regressor = regressor
         input_df = input_df.copy()
         self.target_col = target_col
         self.test_size = test_size
-        self.features_lag = features_lag
-        self.features_lag_stepsize = features_lag_stepsize
-        self.features_lag_exclude_cols = features_lag_exclude_cols
-        self.features_rolling = features_rolling
-        self.features_rolling_exclude_cols = features_rolling_exclude_cols
-        self.features_rolling_stats = features_rolling_stats
-        self.features_diff = features_diff
-        self.features_diff_exclude_cols = features_diff_exclude_cols
-        self.features_ema = features_ema
-        self.features_ema_exclude_cols = features_ema_exclude_cols
-        self.features_poly_degree = features_poly_degree
-        self.features_poly_exclude_cols = features_poly_exclude_cols
-        self.features_stl = features_stl
-        self.features_stl_method = features_stl_method
-        self.features_stl_seasonal_period = features_stl_seasonal_period
-        self.features_stl_exclude_cols = features_stl_exclude_cols
-        self.features_stl_components = features_stl_components
         self.verbose = verbose
-        self.vectorize_timestamps = vectorize_timestamps
-        self.add_continuous_record_number = add_continuous_record_number
-        self.sanitize_timestamp = sanitize_timestamp
         self.kwargs = kwargs
 
         self._random_state = self.kwargs['random_state'] if 'random_state' in self.kwargs else None
@@ -399,14 +116,11 @@ class MlRegressorGapFillingBase:
         if verbose:
             print(f"\n\n{'=' * 60}\nStarting gap-filling for\n{self.target_col}\nusing {self.regressor}\n{'=' * 60}")
 
-        # Create model dataframe and Add additional data columns
+        # Model dataframe is the pre-engineered input (features are already computed)
         self.model_df = input_df.copy()
 
         # Original input features (all features except target)
         self.original_input_features = self.model_df.drop(columns=self.target_col).columns.tolist()
-
-        # Create additional data columns
-        self.model_df = self._create_additional_datacols()
 
         self._check_n_cols()
 
@@ -899,104 +613,6 @@ class MlRegressorGapFillingBase:
             f"- R2:  {scores['r2']}\n"
         )
 
-    def _create_lagged_variants(self, work_df: pd.DataFrame, expanded_df: pd.DataFrame) -> pd.DataFrame:
-        if len(work_df.columns) == 0:
-            raise ValueError("Cannot add lagged features because there are no original features.")
-        _out_df = lagged_variants(df=work_df,
-                                  stepsize=self.features_lag_stepsize,
-                                  lag=self.features_lag,
-                                  exclude_cols=self.features_lag_exclude_cols,
-                                  verbose=self.verbose)
-        newcols = [c for c in _out_df.columns if c not in expanded_df.columns]
-        expanded_df = expanded_df.join(_out_df[newcols])
-        return expanded_df
-
-    def _create_rolling_features(self, work_df: pd.DataFrame, expanded_df: pd.DataFrame) -> pd.DataFrame:
-        if len(work_df.columns) == 0:
-            raise ValueError("Cannot add rolling features because there are no original features.")
-        _out_df = self._rolling_features(df=work_df,
-                                         windows=self.features_rolling,
-                                         exclude_cols=self.features_rolling_exclude_cols)
-        newcols = [c for c in _out_df.columns if c not in expanded_df.columns]
-        expanded_df = expanded_df.join(_out_df[newcols])
-        return expanded_df
-
-    def _create_rolling_features_advanced(self, work_df: pd.DataFrame, expanded_df: pd.DataFrame) -> pd.DataFrame:
-        if len(work_df.columns) == 0:
-            raise ValueError("Cannot add advanced rolling features because there are no original features.")
-        _out_df = self._rolling_features_advanced(df=work_df,
-                                                  windows=self.features_rolling,
-                                                  stats=self.features_rolling_stats,
-                                                  exclude_cols=self.features_rolling_exclude_cols)
-        newcols = [c for c in _out_df.columns if c not in expanded_df.columns]
-        expanded_df = expanded_df.join(_out_df[newcols])
-        return expanded_df
-
-    def _create_differencing_features(self, work_df: pd.DataFrame, expanded_df: pd.DataFrame) -> pd.DataFrame:
-        if len(work_df.columns) == 0:
-            raise ValueError("Cannot add differencing features because there are no original features.")
-        _out_df = self._differencing_features(df=work_df)
-        newcols = [c for c in _out_df.columns if c not in expanded_df.columns]
-        expanded_df = expanded_df.join(_out_df[newcols])
-        return expanded_df
-
-    def _create_ema_features(self, work_df: pd.DataFrame, expanded_df: pd.DataFrame) -> pd.DataFrame:
-        if len(work_df.columns) == 0:
-            raise ValueError("Cannot add EMA features because there are no original features.")
-        _out_df = self._ema_features(df=work_df)
-        newcols = [c for c in _out_df.columns if c not in expanded_df.columns]
-        expanded_df = expanded_df.join(_out_df[newcols])
-        return expanded_df
-
-    def _create_additional_datacols(self) -> pd.DataFrame:
-
-        # Dataframe that contains the target and all original features
-        expanded_df = self.model_df.copy()
-
-        # Add lagged cols
-        if self.features_lag:
-            expanded_df = self._create_lagged_variants(work_df=self.model_df[self.original_input_features].copy(),
-                                                       expanded_df=expanded_df)
-
-        if self.features_rolling:
-            expanded_df = self._create_rolling_features(work_df=self.model_df[self.original_input_features].copy(),
-                                                        expanded_df=expanded_df)
-
-        if self.features_rolling and self.features_rolling_stats:
-            expanded_df = self._create_rolling_features_advanced(work_df=self.model_df[self.original_input_features].copy(),
-                                                                 expanded_df=expanded_df)
-
-        if self.features_diff:
-            expanded_df = self._create_differencing_features(work_df=self.model_df[self.original_input_features].copy(),
-                                                             expanded_df=expanded_df)
-
-        if self.features_ema:
-            expanded_df = self._create_ema_features(work_df=self.model_df[self.original_input_features].copy(),
-                                                    expanded_df=expanded_df)
-
-        if self.features_poly_degree:
-            expanded_df = self._create_polynomial_features(work_df=expanded_df)
-
-        if self.features_stl:
-            expanded_df = self._create_stl_features(work_df=self.model_df[self.original_input_features].copy(),
-                                                   expanded_df=expanded_df)
-
-        if self.vectorize_timestamps:
-            expanded_df = vectorize_timestamps(df=expanded_df, txt="")
-            # For cyclical variables, keep only the sine/cosine variants, drop linear versions
-            expanded_df = expanded_df.drop(columns=['.HOUR', '.SEASON', '.MONTH', '.WEEK', '.DOY'])
-
-        if self.add_continuous_record_number:
-            expanded_df = fr.add_continuous_record_number(df=expanded_df)
-
-        # Timestamp sanitizer
-        if self.sanitize_timestamp:
-            verbose = True if self.verbose > 0 else False
-            tss = TimestampSanitizer(data=expanded_df, output_middle_timestamp=True, verbose=verbose)
-            expanded_df = tss.get()
-
-        return expanded_df
-
     def _shap_importance(self, model, X, X_names) -> DataFrame:
         """
         Calculate SHAP-based feature importance.
@@ -1068,313 +684,6 @@ class MlRegressorGapFillingBase:
     #                                                                lag=self.features_lag,
     #                                                                exclude_cols=exclude_cols,
     #                                                                verbose=self.verbose)
-
-    def _rolling_features(self, df: pd.DataFrame, windows: list, exclude_cols: list = None) -> pd.DataFrame:
-        """Add rolling mean and std of feature columns at multiple window sizes.
-
-        For each window size w and each feature column col (excluding target and
-        any cols in exclude_cols), two new columns are added:
-            '.{col}_mean{w}' — rolling mean over the previous w records
-            '.{col}_std{w}'  — rolling std over the previous w records
-
-        Rolling statistics use min_periods=1 so no new NaN values are introduced
-        at the start of the series.
-
-        Args:
-            df: DataFrame with feature columns and DatetimeIndex.
-            windows: List of window sizes in records (e.g. [6, 48] for 3h and 24h
-                     at 30-min resolution).
-            exclude_cols: Column names to skip. Target column is always excluded.
-
-        Returns:
-            DataFrame with additional rolling feature columns appended.
-        """
-        exclude = [self.target_col] + (exclude_cols or [])
-        feature_cols = [c for c in df.columns if c not in exclude]
-        newcols = []
-
-        for w in windows:
-            rolled = df[feature_cols].rolling(window=w, min_periods=1)
-            mean_df = rolled.mean()
-            std_df = rolled.std(ddof=0)  # population std to avoid NaN for window=1
-
-            mean_df.columns = [f'.{c}_MEAN{w}' for c in feature_cols]
-            std_df.columns = [f'.{c}_SD{w}' for c in feature_cols]
-
-            df = pd.concat([df, mean_df, std_df], axis=1)
-            newcols += mean_df.columns.tolist() + std_df.columns.tolist()
-
-        if self.verbose:
-            print(f"++ Added rolling features (windows={windows}) for {len(feature_cols)} columns: "
-                  f"{newcols}")
-        return df
-
-    def _rolling_features_advanced(self, df: pd.DataFrame, windows: list, stats: list,
-                                    exclude_cols: list = None) -> pd.DataFrame:
-        """Add advanced rolling statistics (median, min, max, percentiles) to features.
-
-        For each window size w, feature column col, and statistic stat, creates:
-            '.{col}_ROLL{STAT}{w}' — rolling statistic over the previous w records
-
-        Rolling statistics use min_periods=1 so no new NaN values are introduced
-        at the start of the series.
-
-        Args:
-            df: DataFrame with feature columns and DatetimeIndex.
-            windows: List of window sizes in records (e.g. [6, 48] for 3h and 24h
-                     at 30-min resolution).
-            stats: List of statistics to compute. Options: 'median', 'min', 'max',
-                   'std', 'q25', 'q75'
-            exclude_cols: Column names to skip. Target column is always excluded.
-
-        Returns:
-            DataFrame with additional rolling feature columns appended.
-        """
-        exclude = [self.target_col] + (exclude_cols or [])
-        feature_cols = [c for c in df.columns if c not in exclude]
-        newcols = []
-
-        stat_name_map = {
-            'median': ('MEDIAN', lambda x: x.median()),
-            'min': ('MIN', lambda x: x.min()),
-            'max': ('MAX', lambda x: x.max()),
-            'std': ('SD', lambda x: x.std(ddof=0)),
-            'q25': ('Q25', lambda x: x.quantile(0.25)),
-            'q75': ('Q75', lambda x: x.quantile(0.75)),
-        }
-
-        for w in windows:
-            rolled = df[feature_cols].rolling(window=w, min_periods=1)
-
-            for stat in stats:
-                if stat not in stat_name_map:
-                    if self.verbose:
-                        print(f"Warning: unknown rolling statistic '{stat}', skipping")
-                    continue
-
-                stat_display_name, stat_func = stat_name_map[stat]
-                stat_df = stat_func(rolled)
-                stat_df.columns = [f'.{c}_ROLL{stat_display_name}{w}' for c in feature_cols]
-
-                df = pd.concat([df, stat_df], axis=1)
-                newcols += stat_df.columns.tolist()
-
-        if self.verbose and newcols:
-            print(f"++ Added advanced rolling statistics (stats={stats}, windows={windows}) "
-                  f"for {len(feature_cols)} columns: {newcols}")
-        return df
-
-    def _differencing_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add 1st and 2nd order differences for capturing temporal momentum.
-
-        For each difference order and each feature column, creates a new column:
-            '.{col}_DIFF{order}' — difference at the specified order
-
-        Higher order differences capture acceleration/curvature in feature changes.
-        Useful for flux data where momentum and rate-of-change are predictive.
-
-        Returns:
-            DataFrame with additional differencing feature columns appended.
-        """
-        if not self.features_diff:
-            return df
-
-        exclude = [self.target_col] + (self.features_diff_exclude_cols or [])
-        # Only difference original features, not engineered ones starting with '.'
-        feature_cols = [c for c in df.columns if c not in exclude and not c.startswith('.')]
-        newcols = []
-
-        for order in self.features_diff:
-            if order < 1:
-                continue
-            diff_df = df[feature_cols].copy()
-            for _ in range(order):
-                diff_df = diff_df.diff()
-            diff_df.columns = [f'.{c}_DIFF{order}' for c in feature_cols]
-            df = pd.concat([df, diff_df], axis=1)
-            newcols += diff_df.columns.tolist()
-
-        if self.verbose:
-            print(f"++ Added differencing features (orders={self.features_diff}) for {len(feature_cols)} columns: "
-                  f"{newcols}")
-        return df
-
-    def _ema_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add exponential moving average (EMA) of feature columns.
-
-        For each span value and each feature column, creates:
-            '.{col}_EMA{span}' — EMA with the specified span
-
-        EMA applies exponential decay weighting where recent values are weighted more.
-        Uses min_periods=1 to avoid introducing new NaN values.
-
-        Returns:
-            DataFrame with additional EMA feature columns appended.
-        """
-        if not self.features_ema:
-            return df
-
-        exclude = [self.target_col] + (self.features_ema_exclude_cols or [])
-        feature_cols = [c for c in df.columns if c not in exclude and not c.startswith('.')]
-        newcols = []
-
-        for span in self.features_ema:
-            if span < 1:
-                continue
-            # adjust=False uses expanding window behavior (more standard for time series)
-            ema_df = df[feature_cols].ewm(span=span, min_periods=1, adjust=False).mean()
-            ema_df.columns = [f'.{c}_EMA{span}' for c in feature_cols]
-            df = pd.concat([df, ema_df], axis=1)
-            newcols += ema_df.columns.tolist()
-
-        if self.verbose:
-            print(f"++ Added EMA features (spans={self.features_ema}) for {len(feature_cols)} columns: "
-                  f"{newcols}")
-        return df
-
-    def _create_polynomial_features(self, work_df: pd.DataFrame) -> pd.DataFrame:
-        """Wrapper for polynomial feature creation."""
-        _out_df = self._polynomial_features(df=work_df)
-        newcols = [c for c in _out_df.columns if c not in work_df.columns]
-        work_df = work_df.join(_out_df[newcols])
-        return work_df
-
-    def _create_stl_features(self, work_df: pd.DataFrame, expanded_df: pd.DataFrame) -> pd.DataFrame:
-        """Wrapper for STL decomposition feature creation."""
-        if len(work_df.columns) == 0:
-            raise ValueError("Cannot add STL features because there are no original features.")
-        _out_df = self._stl_features(df=work_df)
-        newcols = [c for c in _out_df.columns if c not in expanded_df.columns]
-        expanded_df = expanded_df.join(_out_df[newcols])
-        return expanded_df
-
-    def _stl_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add STL (Seasonal-Trend Loess) decomposition components as features.
-
-        For each feature column (excluding target and specified exclude_cols), applies
-        Seasonal-Trend decomposition to extract trend, seasonal, and residual components.
-        Only applies to complete columns (no gaps) to avoid circular dependencies.
-
-        For each selected component, creates new columns:
-            '.{col}_STL_TREND' — trend component (long-term direction)
-            '.{col}_STL_SEASONAL' — seasonal component (recurring patterns)
-            '.{col}_STL_RESIDUAL' — residual component (noise/anomalies)
-
-        STL features capture:
-            - Trend: Slow, monotonic changes (instrument drift, seasonal baseline shifts)
-            - Seasonal: Recurring periodic patterns (diurnal, weekly, annual cycles)
-            - Residual: High-frequency noise and anomalies
-
-        Advantages:
-            - Robust to non-stationary data and gaps (uses only complete columns)
-            - Reveals structure without assumptions of stationarity
-            - Captures multi-scale temporal patterns (trend, seasonal, residual)
-            - Quality-weighted: can incorporate data quality flags
-
-        Disadvantages:
-            - Only applies to complete columns (skips columns with gaps)
-            - Requires seasonal period specification or auto-detection
-            - Higher computational cost than rolling statistics
-            - Extracted components are smoothed (less granular than original data)
-
-        Returns:
-            DataFrame with additional STL feature columns appended.
-        """
-        if not self.features_stl:
-            return df
-
-        from diive.pkgs.analyses.seasonaltrend import SeasonalTrendDecomposition
-
-        exclude = [self.target_col] + (self.features_stl_exclude_cols or [])
-        # Only decompose original features, not engineered ones starting with '.'
-        feature_cols = [c for c in df.columns if c not in exclude and not c.startswith('.')]
-        newcols = []
-
-        # Determine which components to extract
-        components_to_extract = self.features_stl_components or ['trend', 'seasonal', 'residual']
-        if not isinstance(components_to_extract, list):
-            components_to_extract = [components_to_extract]
-
-        # Filter to valid components
-        valid_components = {'trend', 'seasonal', 'residual'}
-        components_to_extract = [c for c in components_to_extract if c in valid_components]
-
-        if not components_to_extract:
-            if self.verbose:
-                print(f"Warning: No valid STL components specified. Valid options: {valid_components}")
-            return df
-
-        for col in feature_cols:
-            # Check if column is complete (no gaps)
-            if df[col].isna().sum() > 0:
-                if self.verbose:
-                    print(f"Skipping STL decomposition for {col} (contains {df[col].isna().sum()} gaps)")
-                continue
-
-            try:
-                # Apply STL decomposition
-                decomp = SeasonalTrendDecomposition(
-                    series=df[col],
-                    method=self.features_stl_method,
-                    seasonal_period=self.features_stl_seasonal_period,
-                    verbose=False
-                )
-
-                # Extract selected components
-                for component in components_to_extract:
-                    if component == 'trend':
-                        stl_df = decomp.trend.to_frame(name=f'.{col}_STL_TREND')
-                    elif component == 'seasonal':
-                        stl_df = decomp.seasonal.to_frame(name=f'.{col}_STL_SEASONAL')
-                    elif component == 'residual':
-                        stl_df = decomp.residual.to_frame(name=f'.{col}_STL_RESIDUAL')
-                    else:
-                        continue
-
-                    df = pd.concat([df, stl_df], axis=1)
-                    newcols += stl_df.columns.tolist()
-
-            except Exception as e:
-                if self.verbose:
-                    print(f"Warning: STL decomposition failed for {col}: {str(e)}")
-                continue
-
-        if self.verbose and newcols:
-            print(f"++ Added STL features (method={self.features_stl_method}, "
-                  f"components={components_to_extract}) for {len([c for c in feature_cols if any(nc.startswith(f'.{c}_STL') for nc in newcols)])} "
-                  f"complete columns: {newcols}")
-        return df
-
-    def _polynomial_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add polynomial features by expanding each feature to specified degree.
-
-        For each polynomial degree and each feature column, creates new columns:
-            '.{col}_POL{degree}' — feature raised to the specified degree
-
-        Polynomial features capture non-linear relationships.
-        Useful for modeling phenomena with squared or cubic relationships (e.g., radiation effects).
-
-        Returns:
-            DataFrame with additional polynomial feature columns appended.
-        """
-        if not self.features_poly_degree or self.features_poly_degree < 2:
-            return df
-
-        exclude = [self.target_col] + (self.features_poly_exclude_cols or [])
-        # Only create polynomial features for original and lagged features, not engineered ones starting with '.'
-        feature_cols = [c for c in df.columns if c not in exclude and not c.startswith('.')]
-        newcols = []
-
-        for degree in range(2, self.features_poly_degree + 1):
-            poly_df = df[feature_cols].copy() ** degree
-            poly_df.columns = [f'.{c}_POL{degree}' for c in feature_cols]
-            df = pd.concat([df, poly_df], axis=1)
-            newcols += poly_df.columns.tolist()
-
-        if self.verbose:
-            print(f"++ Added polynomial features (degree={self.features_poly_degree}) for {len(feature_cols)} columns: "
-                  f"{newcols}")
-        return df
 
     def _check_n_cols(self):
         """Check number of columns"""

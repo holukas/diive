@@ -883,28 +883,8 @@ class FluxProcessingChain:
 
     def level41_longterm_random_forest(
             self,
-            sanitize_timestamp: bool = True,
             features: list = None,
-            features_lag: list = None,
-            features_lag_stepsize: int = 1,
-            features_lag_exclude_cols: list = None,
-            features_rolling: list = None,
-            features_rolling_exclude_cols: list = None,
-            features_rolling_stats: list = None,
-            features_diff: list = None,
-            features_diff_exclude_cols: list = None,
-            features_ema: list = None,
-            features_ema_exclude_cols: list = None,
-            features_poly_degree: int = None,
-            features_poly_exclude_cols: list = None,
-            features_stl: bool = False,
-            features_stl_method: str = 'stl',
-            features_stl_seasonal_period: int = None,
-            features_stl_exclude_cols: list = None,
-            features_stl_components: list = None,
             reduce_features: bool = False,
-            vectorize_timestamps: bool = False,
-            add_continuous_record_number: bool = False,
             verbose: int = 0,
             **rf_kwargs
     ):
@@ -937,27 +917,7 @@ class FluxProcessingChain:
             general_kwargs = dict(
                 input_df=this_ust_scen_df,
                 target_col=ustar_flux.name,
-                vectorize_timestamps=vectorize_timestamps,
-                add_continuous_record_number=add_continuous_record_number,
-                features_lag=features_lag,
-                features_lag_stepsize=features_lag_stepsize,
-                features_lag_exclude_cols=features_lag_exclude_cols,
-                features_rolling=features_rolling,
-                features_rolling_exclude_cols=features_rolling_exclude_cols,
-                features_rolling_stats=features_rolling_stats,
-                features_diff=features_diff,
-                features_diff_exclude_cols=features_diff_exclude_cols,
-                features_ema=features_ema,
-                features_ema_exclude_cols=features_ema_exclude_cols,
-                features_poly_degree=features_poly_degree,
-                features_poly_exclude_cols=features_poly_exclude_cols,
-                features_stl=features_stl,
-                features_stl_method=features_stl_method,
-                features_stl_seasonal_period=features_stl_seasonal_period,
-                features_stl_exclude_cols=features_stl_exclude_cols,
-                features_stl_components=features_stl_components,
-                verbose=verbose,
-                sanitize_timestamp=sanitize_timestamp
+                verbose=verbose
             )
 
             # Initialize random forest for this scenario
@@ -1009,28 +969,8 @@ class FluxProcessingChain:
 
     def level41_longterm_xgboost(
             self,
-            sanitize_timestamp: bool = True,
             features: list = None,
-            features_lag: list = None,
-            features_lag_stepsize: int = 1,
-            features_lag_exclude_cols: list = None,
-            features_rolling: list = None,
-            features_rolling_exclude_cols: list = None,
-            features_rolling_stats: list = None,
-            features_diff: list = None,
-            features_diff_exclude_cols: list = None,
-            features_ema: list = None,
-            features_ema_exclude_cols: list = None,
-            features_poly_degree: int = None,
-            features_poly_exclude_cols: list = None,
-            features_stl: bool = False,
-            features_stl_method: str = 'stl',
-            features_stl_seasonal_period: int = None,
-            features_stl_exclude_cols: list = None,
-            features_stl_components: list = None,
             reduce_features: bool = False,
-            vectorize_timestamps: bool = False,
-            add_continuous_record_number: bool = False,
             verbose: int = 0,
             **xgb_kwargs
     ):
@@ -1064,27 +1004,7 @@ class FluxProcessingChain:
             general_kwargs = dict(
                 input_df=this_ust_scen_df,
                 target_col=ustar_flux.name,
-                vectorize_timestamps=vectorize_timestamps,
-                add_continuous_record_number=add_continuous_record_number,
-                features_lag=features_lag,
-                features_lag_stepsize=features_lag_stepsize,
-                features_lag_exclude_cols=features_lag_exclude_cols,
-                features_rolling=features_rolling,
-                features_rolling_exclude_cols=features_rolling_exclude_cols,
-                features_rolling_stats=features_rolling_stats,
-                features_diff=features_diff,
-                features_diff_exclude_cols=features_diff_exclude_cols,
-                features_ema=features_ema,
-                features_ema_exclude_cols=features_ema_exclude_cols,
-                features_poly_degree=features_poly_degree,
-                features_poly_exclude_cols=features_poly_exclude_cols,
-                features_stl=features_stl,
-                features_stl_method=features_stl_method,
-                features_stl_seasonal_period=features_stl_seasonal_period,
-                features_stl_exclude_cols=features_stl_exclude_cols,
-                features_stl_components=features_stl_components,
-                verbose=verbose,
-                sanitize_timestamp=sanitize_timestamp
+                verbose=verbose
             )
 
             # Initialize XGBoost for this scenario

@@ -27,25 +27,16 @@ from diive.core.ml.common import MlRegressorGapFillingBase
 class XGBoostTS(MlRegressorGapFillingBase):
 
     def __init__(self, input_df: DataFrame, target_col: str or tuple, verbose: int = 0,
-                 test_size: float = 0.25, features_lag: list = None, features_lag_stepsize: int = 1,
-                 features_lag_exclude_cols: list = None,
-                 features_rolling: list = None, features_rolling_exclude_cols: list = None,
-                 features_rolling_stats: list = None,
-                 features_diff: list = None, features_diff_exclude_cols: list = None,
-                 features_ema: list = None, features_ema_exclude_cols: list = None,
-                 features_poly_degree: int = None, features_poly_exclude_cols: list = None,
-                 features_stl: bool = False, features_stl_method: str = 'stl',
-                 features_stl_seasonal_period: int = None, features_stl_exclude_cols: list = None,
-                 features_stl_components: list = None,
-                 vectorize_timestamps: bool = False, add_continuous_record_number: bool = False,
-                 sanitize_timestamp: bool = False, **kwargs):
+                 test_size: float = 0.25, **kwargs):
         """
         XGBoost-based gap-filling for time series data.
 
         Trains an XGBoost gradient boosting model on complete (non-gap) observations to predict
         missing values in a target time series. Suitable for modeling non-linear relationships
-        and complex temporal patterns. Supports comprehensive feature engineering with lagged
-        variants, rolling statistics, temporal differencing, and polynomial expansion.
+        and complex temporal patterns.
+
+        **IMPORTANT:** This class expects pre-engineered features. Use FeatureEngineer to
+        create features before passing data to XGBoostTS. See example below.
 
         XGBoost is particularly effective for:
         - Non-linear flux dynamics (radiation, temperature effects)
@@ -54,15 +45,17 @@ class XGBoostTS(MlRegressorGapFillingBase):
         - Settings where model interpretability is secondary to accuracy
 
         Workflow:
-            1. Create instance with input data and feature engineering parameters
-            2. Call trainmodel() to fit on training data and evaluate on test data
-            3. Call fillgaps() to predict missing values and generate output
-            4. Optional: Call reduce_features() before fillgaps() for feature selection
+            1. Use FeatureEngineer to create engineered features
+            2. Create XGBoostTS instance with pre-engineered data
+            3. Call trainmodel() to fit on training data and evaluate on test data
+            4. Call fillgaps() to predict missing values and generate output
+            5. Optional: Call reduce_features() before fillgaps() for feature selection
 
         Args:
             input_df:
                 DataFrame with time series data. Must contain 1 target column and 1+ feature
-                columns. Timestamps should be in DataFrame index (DatetimeIndex).
+                columns. **Features should be pre-engineered using FeatureEngineer.**
+                Timestamps should be in DataFrame index (DatetimeIndex).
 
             target_col:
                 Column name of variable to gap-fill (string or tuple for multi-level columns).
@@ -74,85 +67,13 @@ class XGBoostTS(MlRegressorGapFillingBase):
                 Proportion of complete data for testing (0.0-1.0). Default: 0.25.
                 Only complete (non-gap) rows are used for train/test split.
 
-            features_lag:
-                List [min_lag, max_lag] specifying lag range. Creates lags at all integers
-                between min_lag and max_lag (excluding 0). Default: None.
-                Example: features_lag=[-2, 2] creates lags [-2, -1, +1, +2].
-
-            features_lag_stepsize:
-                Step size for lag generation (e.g., 2 creates every 2nd lag). Default: 1.
-
-            features_lag_exclude_cols:
-                Column names to exclude from lagging. Default: None.
-
-            features_rolling:
-                List of window sizes (records) for rolling statistics. Each window computes
-                rolling mean and std. Default: None.
-                Example: features_rolling=[6, 48] with 30-min data adds 3-hour and 24-hour
-                rolling statistics.
-
-            features_rolling_exclude_cols:
-                Columns excluded from rolling statistics. Default: None.
-
-            features_rolling_stats:
-                Advanced rolling statistics: 'median', 'min', 'max', 'std', 'q25', 'q75'.
-                Default: None (only mean and std computed if features_rolling specified).
-
-            features_diff:
-                List of difference orders for temporal momentum. Default: None.
-                Example: features_diff=[1, 2] creates 1st and 2nd order differences.
-
-            features_diff_exclude_cols:
-                Columns excluded from differencing. Default: None.
-
-            features_ema:
-                List of span values for exponential moving average. Default: None.
-                Example: features_ema=[6, 24, 48] with 30-min data adds 3h, 12h, 24h EMAs.
-
-            features_ema_exclude_cols:
-                Columns excluded from EMA computation. Default: None.
-
-            features_poly_degree:
-                Polynomial degree for non-linear expansion (2=squared, 3=cubed). Default: None.
-                Example: features_poly_degree=2 creates squared terms.
-
-            features_poly_exclude_cols:
-                Columns excluded from polynomial expansion. Default: None.
-
-            features_stl:
-                Enable STL (Seasonal-Trend Loess) decomposition features. Default: False.
-                When True, extracts trend, seasonal, and residual components from complete
-                (gap-free) driver variables.
-
-            features_stl_method:
-                STL decomposition method: 'stl' (default), 'classical', or 'harmonic'.
-
-            features_stl_seasonal_period:
-                Seasonal period in observations for STL. Default: None (auto-detect).
-                Example: 365 for annual cycle with daily data, 48 for daily cycle with 30-min data.
-
-            features_stl_exclude_cols:
-                Columns excluded from STL decomposition. Default: None.
-
-            features_stl_components:
-                STL components to extract: 'trend', 'seasonal', 'residual'.
-                Default: None (extract all).
-
-            vectorize_timestamps:
-                Add timestamp features (year, season, month, week, doy, hour). Default: False.
-
-            add_continuous_record_number:
-                Add sequential record numbering (1, 2, 3, ...). Default: False.
-
-            sanitize_timestamp:
-                Validate and prepare timestamps. Default: False.
-
             **kwargs:
                 XGBoost hyperparameters. Common settings:
                 - n_estimators: Number of boosting rounds (default ~100)
                 - max_depth: Tree depth (default 6, range 3-10)
                 - learning_rate: Step shrinkage (default 0.3, range 0.01-1)
                 - early_stopping_rounds: Stop if no improvement after N rounds (default 10)
+                - random_state: Random seed for reproducibility
                 See: https://xgboost.readthedocs.io/en/stable/parameter.html
 
         Methods:
@@ -184,16 +105,23 @@ class XGBoostTS(MlRegressorGapFillingBase):
             scores_: Model performance metrics (MAE, RMSE, R²) for gap-filling.
 
         Example:
-            >>> xgbts = XGBoostTS(
-            ...     input_df=df,
+            >>> from diive.core.ml.feature_engineer import FeatureEngineer
+            >>> # Step 1: Create and apply feature engineer
+            >>> engineer = FeatureEngineer(
             ...     target_col='NEE',
-            ...     verbose=1,
             ...     features_lag=[-1, -1],
             ...     features_rolling=[12, 24],
             ...     features_rolling_stats=['median', 'min', 'max'],
             ...     features_diff=[1],
             ...     features_poly_degree=2,
-            ...     vectorize_timestamps=True,
+            ...     vectorize_timestamps=True
+            ... )
+            >>> df_engineered = engineer.fit_transform(df)
+            >>> # Step 2: Create gap-filling model with engineered features
+            >>> xgbts = XGBoostTS(
+            ...     input_df=df_engineered,
+            ...     target_col='NEE',
+            ...     verbose=1,
             ...     n_estimators=100,
             ...     max_depth=6,
             ...     learning_rate=0.1,
@@ -205,33 +133,13 @@ class XGBoostTS(MlRegressorGapFillingBase):
             >>> gapfilled = xgbts.get_gapfilled_target()
         """
 
-        # Args
+        # Pass to parent class
         super().__init__(
             regressor=xgb.XGBRegressor,
             input_df=input_df,
             target_col=target_col,
             verbose=verbose,
             test_size=test_size,
-            features_lag=features_lag,
-            features_lag_stepsize=features_lag_stepsize,
-            features_lag_exclude_cols=features_lag_exclude_cols,
-            features_rolling=features_rolling,
-            features_rolling_exclude_cols=features_rolling_exclude_cols,
-            features_rolling_stats=features_rolling_stats,
-            features_diff=features_diff,
-            features_diff_exclude_cols=features_diff_exclude_cols,
-            features_ema=features_ema,
-            features_ema_exclude_cols=features_ema_exclude_cols,
-            features_poly_degree=features_poly_degree,
-            features_poly_exclude_cols=features_poly_exclude_cols,
-            features_stl=features_stl,
-            features_stl_method=features_stl_method,
-            features_stl_seasonal_period=features_stl_seasonal_period,
-            features_stl_exclude_cols=features_stl_exclude_cols,
-            features_stl_components=features_stl_components,
-            vectorize_timestamps=vectorize_timestamps,
-            add_continuous_record_number=add_continuous_record_number,
-            sanitize_timestamp=sanitize_timestamp,
             **kwargs
         )
 
@@ -246,6 +154,8 @@ def _example_xgbts():
     TARGET_COL = 'NEE_CUT_REF_orig'
     subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
     from diive.configs.exampledata import load_exampledata_parquet_long
+    from diive.core.ml.feature_engineer import FeatureEngineer
+
     df_orig = load_exampledata_parquet_long()
     df = df_orig.copy()
     keep = (df.index.year >= 2013) & (df.index.year <= 2015)
@@ -260,11 +170,9 @@ def _example_xgbts():
     # df['TIMESINCE_PREC_TOT_T1_25+20_1'] = ts_full_results['TIMESINCE_PREC_TOT_T1_25+20_1'].copy()
     # df = df.drop('PREC_TOT_T1_25+20_1', axis=1)
 
-    # XGBoost with advanced feature engineering
-    xgbts = XGBoostTS(
-        input_df=df,
+    # Step 1: Engineer features with advanced configuration
+    engineer = FeatureEngineer(
         target_col=TARGET_COL,
-        verbose=1,
         features_lag=[-1, -1],
         features_lag_stepsize=1,
         features_lag_exclude_cols=None,
@@ -284,7 +192,15 @@ def _example_xgbts():
         features_stl_components=['trend', 'seasonal'],
         vectorize_timestamps=True,
         add_continuous_record_number=True,
-        sanitize_timestamp=True,
+        sanitize_timestamp=True
+    )
+    df_engineered = engineer.fit_transform(df)
+
+    # Step 2: Create XGBoost gap-filling model with engineered features
+    xgbts = XGBoostTS(
+        input_df=df_engineered,
+        target_col=TARGET_COL,
+        verbose=1,
         n_estimators=33,
         random_state=42,
         early_stopping_rounds=50,

@@ -157,34 +157,16 @@ class RandomForestTS(MlRegressorGapFillingBase):
                  target_col: str or tuple,
                  verbose: bool = True,
                  test_size: float = 0.25,
-                 features_lag: list = None,
-                 features_lag_stepsize: int = 1,
-                 features_lag_exclude_cols: list = None,
-                 features_rolling: list = None,
-                 features_rolling_exclude_cols: list = None,
-                 features_rolling_stats: list = None,
-                 features_diff: list = None,
-                 features_diff_exclude_cols: list = None,
-                 features_ema: list = None,
-                 features_ema_exclude_cols: list = None,
-                 features_poly_degree: int = None,
-                 features_poly_exclude_cols: list = None,
-                 features_stl: bool = False,
-                 features_stl_method: str = 'stl',
-                 features_stl_seasonal_period: int = None,
-                 features_stl_exclude_cols: list = None,
-                 features_stl_components: list = None,
-                 vectorize_timestamps: bool = False,
-                 add_continuous_record_number: bool = False,
-                 sanitize_timestamp: bool = False,
                  **kwargs):
         """
         Random Forest-based gap-filling for time series data.
 
         Trains a Random Forest model on complete (non-gap) observations to predict missing
         values in a target time series. Robust, interpretable approach suitable for ecosystem
-        flux data and other environmental time series. Supports comprehensive feature engineering
-        with lagged variants, rolling statistics, temporal differencing, and polynomial expansion.
+        flux data and other environmental time series.
+
+        **IMPORTANT:** This class expects pre-engineered features. Use FeatureEngineer to
+        create features before passing data to RandomForestTS. See example below.
 
         Random Forest is particularly effective for:
         - Interpretability via feature importance analysis
@@ -193,15 +175,17 @@ class RandomForestTS(MlRegressorGapFillingBase):
         - Parallel processing of large datasets
 
         Workflow:
-            1. Create instance with input data and feature engineering parameters
-            2. Call trainmodel() to fit on training data and evaluate on test data
-            3. Call fillgaps() to predict missing values and generate output
-            4. Optional: Call reduce_features() before fillgaps() for feature selection
+            1. Use FeatureEngineer to create engineered features
+            2. Create RandomForestTS instance with pre-engineered data
+            3. Call trainmodel() to fit on training data and evaluate on test data
+            4. Call fillgaps() to predict missing values and generate output
+            5. Optional: Call reduce_features() before fillgaps() for feature selection
 
         Args:
             input_df:
                 DataFrame with time series data. Must contain 1 target column and 1+ feature
-                columns. Timestamps should be in DataFrame index (DatetimeIndex).
+                columns. **Features should be pre-engineered using FeatureEngineer.**
+                Timestamps should be in DataFrame index (DatetimeIndex).
 
             target_col:
                 Column name of variable to gap-fill (string or tuple for multi-level columns).
@@ -214,86 +198,6 @@ class RandomForestTS(MlRegressorGapFillingBase):
                 Proportion of complete data for testing (0.0-1.0). Default: 0.25.
                 Only complete (non-gap) rows are used for train/test split.
 
-            features_lag:
-                List [min_lag, max_lag] specifying lag range. Creates lags at all integers
-                between min_lag and max_lag (excluding 0). Default: None.
-                Example: features_lag=[-2, 2] creates lags [-2, -1, +1, +2].
-
-            features_lag_stepsize:
-                Step size for lag generation (e.g., 2 creates every 2nd lag). Default: 1.
-
-            features_lag_exclude_cols:
-                Column names to exclude from lagging. Default: None.
-
-            features_rolling:
-                List of window sizes (records) for rolling statistics. Each window computes
-                rolling mean and std. Default: None.
-                Example: features_rolling=[6, 48] with 30-min data adds 3-hour and 24-hour
-                rolling statistics.
-
-            features_rolling_exclude_cols:
-                Columns excluded from rolling statistics. Default: None.
-                Example: ['Rg_f'] skips rolling features for Rg_f.
-
-            features_rolling_stats:
-                Advanced rolling statistics: 'median', 'min', 'max', 'std', 'q25', 'q75'.
-                Default: None (only mean and std computed if features_rolling specified).
-
-            features_diff:
-                List of difference orders for temporal momentum. Default: None.
-                Example: features_diff=[1, 2] creates 1st and 2nd order differences.
-
-            features_diff_exclude_cols:
-                Columns excluded from differencing. Default: None.
-                Example: ['RECORD_NUMBER'] skips differencing for continuous record numbers.
-
-            features_ema:
-                List of span values for exponential moving average (EMA).
-                For each span, creates `.{col}_EMA{span}` columns for all features.
-                EMA uses exponential decay weighting; recent values weighted more than older values.
-                If None, no EMA features are created.
-                Example: features_ema=[6, 24, 48] with 30-min data adds 3h, 12h, and 24h EMAs.
-
-            features_ema_exclude_cols:
-                List of column names excluded from EMA computation.
-                Example: ['RECORD_NUMBER'] skips EMA for continuous record number.
-
-            features_poly_degree:
-                Polynomial degree for non-linear expansion (2=squared, 3=cubed). Default: None.
-                Example: features_poly_degree=2 creates squared terms.
-
-            features_poly_exclude_cols:
-                Columns excluded from polynomial expansion. Default: None.
-                Example: ['RECORD_NUMBER'] skips polynomial features for record numbers.
-
-            features_stl:
-                Enable STL (Seasonal-Trend Loess) decomposition features. Default: False.
-                When True, extracts trend, seasonal, and residual components from complete
-                (gap-free) driver variables.
-
-            features_stl_method:
-                STL decomposition method: 'stl' (default), 'classical', or 'harmonic'.
-
-            features_stl_seasonal_period:
-                Seasonal period in observations for STL. Default: None (auto-detect).
-                Example: 365 for annual cycle with daily data, 48 for daily cycle with 30-min data.
-
-            features_stl_exclude_cols:
-                Columns excluded from STL decomposition. Default: None.
-
-            features_stl_components:
-                STL components to extract: 'trend', 'seasonal', 'residual'.
-                Default: None (extract all).
-
-            vectorize_timestamps:
-                Add timestamp features (year, season, month, week, doy, hour). Default: False.
-
-            add_continuous_record_number:
-                Add sequential record numbering (1, 2, 3, ...). Default: False.
-
-            sanitize_timestamp:
-                Validate and prepare timestamps. Default: False.
-
             **kwargs:
                 Random Forest hyperparameters. Common settings:
                 - n_estimators: Number of trees (default 100, range 10-500)
@@ -301,6 +205,7 @@ class RandomForestTS(MlRegressorGapFillingBase):
                 - min_samples_split: Minimum samples to split (default 2, range 2-20)
                 - min_samples_leaf: Minimum samples in leaf (default 1, range 1-20)
                 - random_state: Random seed for reproducibility
+                - n_jobs: Number of parallel jobs (-1 for all processors)
                 See: https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestRegressor.html
 
         Methods:
@@ -332,17 +237,24 @@ class RandomForestTS(MlRegressorGapFillingBase):
             scores_: Model performance metrics (MAE, RMSE, R²) for gap-filling.
 
         Example:
-            >>> rfts = RandomForestTS(
-            ...     input_df=df,
+            >>> from diive.core.ml.feature_engineer import FeatureEngineer
+            >>> # Step 1: Create and apply feature engineer
+            >>> engineer = FeatureEngineer(
             ...     target_col='NEE',
-            ...     verbose=1,
             ...     features_lag=[-1, -1],
             ...     features_rolling=[12, 24],
             ...     features_rolling_stats=['median', 'min', 'max'],
             ...     features_diff=[1],
             ...     features_ema=[6, 24, 48],
             ...     features_poly_degree=2,
-            ...     vectorize_timestamps=True,
+            ...     vectorize_timestamps=True
+            ... )
+            >>> df_engineered = engineer.fit_transform(df)
+            >>> # Step 2: Create gap-filling model with engineered features
+            >>> rfts = RandomForestTS(
+            ...     input_df=df_engineered,
+            ...     target_col='NEE',
+            ...     verbose=1,
             ...     n_estimators=100,
             ...     max_depth=15,
             ...     min_samples_split=5,
@@ -355,33 +267,13 @@ class RandomForestTS(MlRegressorGapFillingBase):
             >>> gapfilled = rfts.get_gapfilled_target()
         """
 
-        # Args
+        # Pass to parent class
         super().__init__(
             regressor=RandomForestRegressor,
             input_df=input_df,
             target_col=target_col,
             verbose=verbose,
             test_size=test_size,
-            features_lag=features_lag,
-            features_lag_stepsize=features_lag_stepsize,
-            features_lag_exclude_cols=features_lag_exclude_cols,
-            features_rolling=features_rolling,
-            features_rolling_exclude_cols=features_rolling_exclude_cols,
-            features_rolling_stats=features_rolling_stats,
-            features_diff=features_diff,
-            features_diff_exclude_cols=features_diff_exclude_cols,
-            features_ema=features_ema,
-            features_ema_exclude_cols=features_ema_exclude_cols,
-            features_poly_degree=features_poly_degree,
-            features_poly_exclude_cols=features_poly_exclude_cols,
-            features_stl=features_stl,
-            features_stl_method=features_stl_method,
-            features_stl_seasonal_period=features_stl_seasonal_period,
-            features_stl_exclude_cols=features_stl_exclude_cols,
-            features_stl_components=features_stl_components,
-            vectorize_timestamps=vectorize_timestamps,
-            add_continuous_record_number=add_continuous_record_number,
-            sanitize_timestamp=sanitize_timestamp,
             **kwargs
         )
 
@@ -493,21 +385,21 @@ def _example_quickfill():
 
 
 def _example_rfts():
-    """Example: Random Forest gap-filling with minimal feature engineering"""
+    """Example: Random Forest gap-filling with feature engineering"""
     TARGET_COL = 'NEE_CUT_REF_orig'
     subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
     from diive.configs.exampledata import load_exampledata_parquet
+    from diive.core.ml.feature_engineer import FeatureEngineer
+
     df_orig = load_exampledata_parquet()
     df = df_orig.copy()
     keep = (df.index.year >= 2020) & (df.index.year <= 2020)
     df = df[keep].copy()
     df = df[subsetcols].copy()
 
-    # Random forest with minimal parameters for speed
-    rfts = RandomForestTS(
-        input_df=df,
+    # Step 1: Engineer features
+    engineer = FeatureEngineer(
         target_col=TARGET_COL,
-        verbose=1,
         features_lag=[-1, -1],
         features_lag_stepsize=1,
         features_lag_exclude_cols=None,
@@ -527,7 +419,15 @@ def _example_rfts():
         features_stl_components=None,
         vectorize_timestamps=False,
         add_continuous_record_number=False,
-        sanitize_timestamp=False,
+        sanitize_timestamp=False
+    )
+    df_engineered = engineer.fit_transform(df)
+
+    # Step 2: Create gap-filling model with engineered features
+    rfts = RandomForestTS(
+        input_df=df_engineered,
+        target_col=TARGET_COL,
+        verbose=1,
         n_estimators=3,
         random_state=42,
         max_depth=None,

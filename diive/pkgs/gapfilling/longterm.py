@@ -17,26 +17,6 @@ class LongTermGapFillingBase:
                  input_df: DataFrame,
                  target_col: str or tuple,
                  verbose: int = 0,
-                 features_lag: list = None,
-                 features_lag_stepsize: int = 1,
-                 features_lag_exclude_cols: list = None,
-                 features_rolling: list = None,
-                 features_rolling_exclude_cols: list = None,
-                 features_rolling_stats: list = None,
-                 features_diff: list = None,
-                 features_diff_exclude_cols: list = None,
-                 features_ema: list = None,
-                 features_ema_exclude_cols: list = None,
-                 features_poly_degree: int = None,
-                 features_poly_exclude_cols: list = None,
-                 features_stl: bool = False,
-                 features_stl_method: str = 'stl',
-                 features_stl_seasonal_period: int = None,
-                 features_stl_exclude_cols: list = None,
-                 features_stl_components: list = None,
-                 vectorize_timestamps: bool = False,
-                 add_continuous_record_number: bool = False,
-                 sanitize_timestamp: bool = False,
                  test_size: float = 0.25,
                  **kwargs):
         """
@@ -65,26 +45,6 @@ class LongTermGapFillingBase:
         self.target_col = target_col
         self.verbose = verbose
         self.test_size = test_size
-        self.features_lag = features_lag
-        self.features_lag_stepsize = features_lag_stepsize
-        self.features_lag_exclude_cols = features_lag_exclude_cols
-        self.features_rolling = features_rolling
-        self.features_rolling_exclude_cols = features_rolling_exclude_cols
-        self.features_rolling_stats = features_rolling_stats
-        self.features_diff = features_diff
-        self.features_diff_exclude_cols = features_diff_exclude_cols
-        self.features_ema = features_ema
-        self.features_ema_exclude_cols = features_ema_exclude_cols
-        self.features_poly_degree = features_poly_degree
-        self.features_poly_exclude_cols = features_poly_exclude_cols
-        self.features_stl = features_stl
-        self.features_stl_method = features_stl_method
-        self.features_stl_seasonal_period = features_stl_seasonal_period
-        self.features_stl_exclude_cols = features_stl_exclude_cols
-        self.features_stl_components = features_stl_components
-        self.vectorize_timestamps = vectorize_timestamps
-        self.add_continuous_record_number = add_continuous_record_number
-        self.sanitize_timestamp = sanitize_timestamp
         self.kwargs = kwargs
 
         self._yearpools = None
@@ -182,38 +142,9 @@ class LongTermGapFillingBase:
         return self._feature_importance_per_year
 
     def _init_input_df(self):
-        # Add additional variables across all years
-        temp = MlRegressorGapFillingBase(
-            regressor=self.regressor,
-            input_df=self.input_df,
-            target_col=self.target_col,
-            verbose=self.verbose,
-            features_lag=self.features_lag,
-            features_lag_stepsize=self.features_lag_stepsize,
-            features_lag_exclude_cols=self.features_lag_exclude_cols,
-            features_rolling=self.features_rolling,
-            features_rolling_exclude_cols=self.features_rolling_exclude_cols,
-            features_rolling_stats=self.features_rolling_stats,
-            features_diff=self.features_diff,
-            features_diff_exclude_cols=self.features_diff_exclude_cols,
-            features_ema=self.features_ema,
-            features_ema_exclude_cols=self.features_ema_exclude_cols,
-            features_poly_degree=self.features_poly_degree,
-            features_poly_exclude_cols=self.features_poly_exclude_cols,
-            features_stl=self.features_stl,
-            features_stl_method=self.features_stl_method,
-            features_stl_seasonal_period=self.features_stl_seasonal_period,
-            features_stl_exclude_cols=self.features_stl_exclude_cols,
-            features_stl_components=self.features_stl_components,
-            vectorize_timestamps=self.vectorize_timestamps,
-            add_continuous_record_number=self.add_continuous_record_number,
-            sanitize_timestamp=self.sanitize_timestamp,
-            test_size=self.test_size,
-            **self.kwargs
-        )
-
-        # Update input data with added variables
-        self.input_df = temp.model_df
+        # Features should be pre-engineered before passing to LongTermGapFillingBase
+        # This method is now a no-op since feature engineering happens upstream
+        pass
 
     def create_yearpools(self):
         """For each year create a dataset comprising the respective year
@@ -226,8 +157,7 @@ class LongTermGapFillingBase:
         """Initialize model for each year"""
 
         # Initialize a separate model for each year
-        # Since additional variables were already added in the previous step,
-        # the respective kwargs can be set to False.
+        # Features are already engineered in input_df
         self._results_yearly = {}
         for year, _df in self._yearpools.items():
             print(f"Initializing model for {year} ...")
@@ -238,25 +168,6 @@ class LongTermGapFillingBase:
                 input_df=df,
                 target_col=self.target_col,
                 verbose=self.verbose,
-                features_lag=None,  # Already considered across all years
-                features_lag_exclude_cols=None,  # Already considered across all years
-                features_rolling=None,  # Already considered across all years
-                features_rolling_exclude_cols=None,  # Already considered across all years
-                features_rolling_stats=None,  # Already considered across all years
-                features_diff=None,  # Already considered across all years
-                features_diff_exclude_cols=None,  # Already considered across all years
-                features_ema=None,  # Already considered across all years
-                features_ema_exclude_cols=None,  # Already considered across all years
-                features_poly_degree=None,  # Already considered across all years
-                features_poly_exclude_cols=None,  # Already considered across all years
-                features_stl=False,  # Already considered across all years
-                features_stl_method=None,  # Already considered across all years
-                features_stl_seasonal_period=None,  # Already considered across all years
-                features_stl_exclude_cols=None,  # Already considered across all years
-                features_stl_components=None,  # Already considered across all years
-                vectorize_timestamps=False,  # Already considered across all years
-                add_continuous_record_number=False,  # Already considered across all years
-                sanitize_timestamp=False,  # Already considered across all years
                 test_size=self.test_size,
                 **self.kwargs
             )
@@ -382,26 +293,6 @@ class LongTermGapFillingRandomForestTS(LongTermGapFillingBase):
                  input_df: DataFrame,
                  target_col: str or tuple,
                  verbose: int = 0,
-                 features_lag: list = None,
-                 features_lag_stepsize: int = 1,
-                 features_lag_exclude_cols: list = None,
-                 features_rolling: list = None,
-                 features_rolling_exclude_cols: list = None,
-                 features_rolling_stats: list = None,
-                 features_diff: list = None,
-                 features_diff_exclude_cols: list = None,
-                 features_ema: list = None,
-                 features_ema_exclude_cols: list = None,
-                 features_poly_degree: int = None,
-                 features_poly_exclude_cols: list = None,
-                 features_stl: bool = False,
-                 features_stl_method: str = 'stl',
-                 features_stl_seasonal_period: int = None,
-                 features_stl_exclude_cols: list = None,
-                 features_stl_components: list = None,
-                 vectorize_timestamps: bool = False,
-                 add_continuous_record_number: bool = False,
-                 sanitize_timestamp: bool = False,
                  test_size: float = 0.25,
                  **kwargs):
         super().__init__(
@@ -409,26 +300,6 @@ class LongTermGapFillingRandomForestTS(LongTermGapFillingBase):
             input_df=input_df,
             target_col=target_col,
             verbose=verbose,
-            features_lag=features_lag,
-            features_lag_stepsize=features_lag_stepsize,
-            features_lag_exclude_cols=features_lag_exclude_cols,
-            features_rolling=features_rolling,
-            features_rolling_exclude_cols=features_rolling_exclude_cols,
-            features_rolling_stats=features_rolling_stats,
-            features_diff=features_diff,
-            features_diff_exclude_cols=features_diff_exclude_cols,
-            features_ema=features_ema,
-            features_ema_exclude_cols=features_ema_exclude_cols,
-            features_poly_degree=features_poly_degree,
-            features_poly_exclude_cols=features_poly_exclude_cols,
-            features_stl=features_stl,
-            features_stl_method=features_stl_method,
-            features_stl_seasonal_period=features_stl_seasonal_period,
-            features_stl_exclude_cols=features_stl_exclude_cols,
-            features_stl_components=features_stl_components,
-            vectorize_timestamps=vectorize_timestamps,
-            add_continuous_record_number=add_continuous_record_number,
-            sanitize_timestamp=sanitize_timestamp,
             test_size=test_size,
             **kwargs
         )
@@ -440,26 +311,6 @@ class LongTermGapFillingXGBoostTS(LongTermGapFillingBase):
                  input_df: DataFrame,
                  target_col: str or tuple,
                  verbose: int = 0,
-                 features_lag: list = None,
-                 features_lag_stepsize: int = 1,
-                 features_lag_exclude_cols: list = None,
-                 features_rolling: list = None,
-                 features_rolling_exclude_cols: list = None,
-                 features_rolling_stats: list = None,
-                 features_diff: list = None,
-                 features_diff_exclude_cols: list = None,
-                 features_ema: list = None,
-                 features_ema_exclude_cols: list = None,
-                 features_poly_degree: int = None,
-                 features_poly_exclude_cols: list = None,
-                 features_stl: bool = False,
-                 features_stl_method: str = 'stl',
-                 features_stl_seasonal_period: int = None,
-                 features_stl_exclude_cols: list = None,
-                 features_stl_components: list = None,
-                 vectorize_timestamps: bool = False,
-                 add_continuous_record_number: bool = False,
-                 sanitize_timestamp: bool = False,
                  test_size: float = 0.25,
                  **kwargs):
         super().__init__(
@@ -467,26 +318,6 @@ class LongTermGapFillingXGBoostTS(LongTermGapFillingBase):
             input_df=input_df,
             target_col=target_col,
             verbose=verbose,
-            features_lag=features_lag,
-            features_lag_stepsize=features_lag_stepsize,
-            features_lag_exclude_cols=features_lag_exclude_cols,
-            features_rolling=features_rolling,
-            features_rolling_exclude_cols=features_rolling_exclude_cols,
-            features_rolling_stats=features_rolling_stats,
-            features_diff=features_diff,
-            features_diff_exclude_cols=features_diff_exclude_cols,
-            features_ema=features_ema,
-            features_ema_exclude_cols=features_ema_exclude_cols,
-            features_poly_degree=features_poly_degree,
-            features_poly_exclude_cols=features_poly_exclude_cols,
-            features_stl=features_stl,
-            features_stl_method=features_stl_method,
-            features_stl_seasonal_period=features_stl_seasonal_period,
-            features_stl_exclude_cols=features_stl_exclude_cols,
-            features_stl_components=features_stl_components,
-            vectorize_timestamps=vectorize_timestamps,
-            add_continuous_record_number=add_continuous_record_number,
-            sanitize_timestamp=sanitize_timestamp,
             test_size=test_size,
             **kwargs
         )

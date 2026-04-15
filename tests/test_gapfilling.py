@@ -5,6 +5,7 @@ from numpy import mean
 
 import diive.configs.exampledata as ed
 from diive.core.ml.common import MlRegressorGapFillingBase
+from diive.core.ml.feature_engineer import FeatureEngineer
 from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
 from diive.pkgs.gapfilling.xgboost_ts import XGBoostTS
 
@@ -73,13 +74,13 @@ class TestGapFilling(unittest.TestCase):
         lowquality = df["QCF_NEE"] > 0
         df.loc[lowquality, TARGET_COL] = np.nan  # Set fluxes of lower quality to missing
         df = df[subsetcols].copy()  # Keep subset columns only
-        gf = LongTermGapFillingRandomForestTS(
-            input_df=df,
+
+        # Step 1: Engineer features
+        engineer = FeatureEngineer(
             target_col=TARGET_COL,
-            verbose=1,
             features_lag=[-1, -1],
-            features_lag_exclude_cols=None,
             features_lag_stepsize=1,
+            features_lag_exclude_cols=None,
             features_rolling=None,
             features_rolling_exclude_cols=None,
             features_rolling_stats=None,
@@ -89,7 +90,15 @@ class TestGapFilling(unittest.TestCase):
             features_poly_exclude_cols=None,
             vectorize_timestamps=False,
             add_continuous_record_number=False,
-            sanitize_timestamp=False,
+            sanitize_timestamp=False
+        )
+        df_engineered = engineer.fit_transform(df)
+
+        # Step 2: Create long-term gap-filling model with engineered features
+        gf = LongTermGapFillingRandomForestTS(
+            input_df=df_engineered,
+            target_col=TARGET_COL,
+            verbose=1,
             test_size=0.25,
             n_estimators=3,
             random_state=42,
@@ -160,10 +169,9 @@ class TestGapFilling(unittest.TestCase):
         df.loc[lowquality, TARGET_COL] = np.nan
         df = df[subsetcols].copy()
 
-        rfts = RandomForestTS(
-            input_df=df,
+        # Step 1: Engineer features
+        engineer = FeatureEngineer(
             target_col=TARGET_COL,
-            verbose=True,
             features_lag=[-1, -1],
             features_lag_stepsize=1,
             features_rolling=None,
@@ -175,7 +183,15 @@ class TestGapFilling(unittest.TestCase):
             features_poly_exclude_cols=None,
             vectorize_timestamps=False,
             add_continuous_record_number=False,
-            sanitize_timestamp=False,
+            sanitize_timestamp=False
+        )
+        df_engineered = engineer.fit_transform(df)
+
+        # Step 2: Create gap-filling model with engineered features
+        rfts = RandomForestTS(
+            input_df=df_engineered,
+            target_col=TARGET_COL,
+            verbose=True,
             n_estimators=3,
             random_state=42,
             min_samples_split=10,
@@ -226,10 +242,9 @@ class TestGapFilling(unittest.TestCase):
         df.loc[lowquality, TARGET_COL] = np.nan
         df = df[subsetcols].copy()
 
-        xgbts = XGBoostTS(
-            input_df=df,
+        # Step 1: Engineer features
+        engineer = FeatureEngineer(
             target_col=TARGET_COL,
-            verbose=1,
             features_lag=[-1, -1],
             features_lag_stepsize=1,
             features_rolling=None,
@@ -241,7 +256,15 @@ class TestGapFilling(unittest.TestCase):
             features_poly_exclude_cols=None,
             vectorize_timestamps=True,
             add_continuous_record_number=True,
-            sanitize_timestamp=True,
+            sanitize_timestamp=True
+        )
+        df_engineered = engineer.fit_transform(df)
+
+        # Step 2: Create gap-filling model with engineered features
+        xgbts = XGBoostTS(
+            input_df=df_engineered,
+            target_col=TARGET_COL,
+            verbose=1,
             n_estimators=9,
             random_state=42,
             validate_parameters=True,
@@ -297,11 +320,9 @@ class TestGapFilling(unittest.TestCase):
         df.loc[lowquality, TARGET_COL] = np.nan
         df = df[subsetcols].copy()
 
-        # Test with STL features enabled (using harmonic method for compatibility)
-        rfts = RandomForestTS(
-            input_df=df,
+        # Step 1: Engineer features with STL decomposition
+        engineer = FeatureEngineer(
             target_col=TARGET_COL,
-            verbose=True,
             features_lag=[-1, -1],
             features_lag_stepsize=1,
             features_rolling=[6],  # Short rolling window for testing
@@ -320,7 +341,15 @@ class TestGapFilling(unittest.TestCase):
             features_stl_components=['trend', 'seasonal', 'residual'],  # Extract all
             vectorize_timestamps=False,
             add_continuous_record_number=False,
-            sanitize_timestamp=False,
+            sanitize_timestamp=False
+        )
+        df_engineered = engineer.fit_transform(df)
+
+        # Step 2: Create gap-filling model with engineered features (STL included)
+        rfts = RandomForestTS(
+            input_df=df_engineered,
+            target_col=TARGET_COL,
+            verbose=True,
             n_estimators=3,
             random_state=42,
             min_samples_split=10,
@@ -369,11 +398,9 @@ class TestGapFilling(unittest.TestCase):
         df.loc[lowquality, TARGET_COL] = np.nan
         df = df[subsetcols].copy()
 
-        # Test with STL features enabled - selective components (using harmonic method)
-        xgbts = XGBoostTS(
-            input_df=df,
+        # Step 1: Engineer features with selective STL components
+        engineer = FeatureEngineer(
             target_col=TARGET_COL,
-            verbose=1,
             features_lag=[-1, -1],
             features_lag_stepsize=1,
             features_rolling=None,
@@ -392,7 +419,15 @@ class TestGapFilling(unittest.TestCase):
             features_stl_components=['trend', 'seasonal'],  # Only trend and seasonal
             vectorize_timestamps=False,
             add_continuous_record_number=False,
-            sanitize_timestamp=False,
+            sanitize_timestamp=False
+        )
+        df_engineered = engineer.fit_transform(df)
+
+        # Step 2: Create gap-filling model with engineered features (STL included)
+        xgbts = XGBoostTS(
+            input_df=df_engineered,
+            target_col=TARGET_COL,
+            verbose=1,
             n_estimators=3,
             random_state=42,
             validate_parameters=False,
