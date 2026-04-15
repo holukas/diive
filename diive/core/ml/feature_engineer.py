@@ -84,31 +84,240 @@ class FeatureEngineer:
                  add_continuous_record_number: bool = False,
                  sanitize_timestamp: bool = False):
         """
-        Initialize feature engineer with configuration parameters.
+        Initialize feature engineer with 8-stage composable pipeline.
 
+        The FeatureEngineer creates temporal and statistical features from time series data.
+        Set unused parameters to None/False to skip those stages. All features use naming
+        convention: `.{col}_{STAGE}_{detail}` (e.g., `.Tair_f-1` for lag, `.Tair_f_MEAN12`
+        for rolling mean with window 12).
+
+        === STAGE 1: LAG FEATURES (Temporal Context) ===
         Args:
-            target_col: Column name of target variable (excluded from engineered features)
-            verbose: Verbosity level (0=silent, 1+=progress updates)
-            features_lag: List [min_lag, max_lag] for lag feature range
-            features_lag_stepsize: Step size for lag generation
-            features_lag_exclude_cols: Columns to exclude from lagging
-            features_rolling: List of window sizes for rolling statistics
-            features_rolling_exclude_cols: Columns to exclude from rolling
-            features_rolling_stats: Advanced stats: 'median', 'min', 'max', 'std', 'q25', 'q75'
-            features_diff: List of difference orders [1, 2, ...]
-            features_diff_exclude_cols: Columns to exclude from differencing
-            features_ema: List of EMA spans [6, 24, ...]
-            features_ema_exclude_cols: Columns to exclude from EMA
-            features_poly_degree: Polynomial degree (2, 3, ...)
-            features_poly_exclude_cols: Columns to exclude from polynomial
-            features_stl: Enable STL decomposition
-            features_stl_method: STL method ('stl', 'classical', 'harmonic')
-            features_stl_seasonal_period: Period for seasonal component
-            features_stl_exclude_cols: Columns to exclude from STL
-            features_stl_components: Components to extract (['trend', 'seasonal', 'residual'])
-            vectorize_timestamps: Add timestamp features (year, season, month, etc.)
-            add_continuous_record_number: Add sequential record numbering
-            sanitize_timestamp: Validate and prepare timestamps
+            features_lag (list): [min_lag, max_lag] range for creating lag features.
+                Default: None (disabled)
+                Typical values:
+                  - None: Disable (very fast, but no temporal context)
+                  - [-1, -1]: Only past value (minimal, good for speed tests)
+                  - [-1, 1]: Past and future lags (captures local patterns)
+                  - [-2, 2]: Extended range for slower-moving signals
+                Effect on time series: Creates past/future context. Negative lag=past,
+                    positive lag=future. Example: [-1, 1] with stepsize=1 creates lags
+                    [-1, 0, 1] but 0 is excluded, resulting in [-1, 1].
+
+            features_lag_stepsize (int): Step between lags when range is large.
+                Default: 1 (every lag value)
+                Typical values:
+                  - 1: Include all lags in range ([-2,2,stepsize=1] → [-2,-1,1,2])
+                  - 2: Skip every other ([-4,4,stepsize=2] → [-4,-2,2,4], faster)
+                Effect: Reduces number of features for large lag ranges. Trades feature
+                    detail for speed.
+
+            features_lag_exclude_cols (list): Column names to exclude from lagging.
+                Default: None (lag all columns except target)
+                Typical use: Skip invariant columns like site ID, quality flags
+                Effect: None means "lag everything". Empty list [] means same (lag all).
+
+        === STAGE 2: ROLLING STATISTICS (Local Context Windows) ===
+        Args:
+            features_rolling (list): Window sizes for rolling aggregation.
+                Default: None (disabled)
+                Typical values:
+                  - None: Disable (very fast)
+                  - [12, 24]: 12 and 24 hour windows for 30-min flux data
+                  - [7, 30]: Weekly and monthly windows for daily data
+                Effect on time series: Creates local averages. For 30-min data, window=12
+                    means ~6-hour rolling window. Captures short-term trends and noise.
+
+            features_rolling_stats (list): Statistics to compute (beyond default mean/std).
+                Default: None (use mean + std only)
+                Typical values:
+                  - None: Just mean and std deviation (fast)
+                  - ['median', 'min', 'max']: Robust to outliers
+                  - ['median', 'min', 'max', 'q25', 'q75']: Full distribution
+                Effect: None means only mean+std computed. Other stats add robustness to
+                    outliers and capture asymmetric distributions.
+
+            features_rolling_exclude_cols (list): Exclude columns from rolling.
+                Default: None (roll all columns except target)
+                Typical use: Skip categorical or invariant columns
+                Effect: None means "roll everything".
+
+        === STAGE 3: TEMPORAL DIFFERENCING (Rate of Change) ===
+        Args:
+            features_diff (list): Difference orders [1, 2, ...].
+                Default: None (disabled)
+                Typical values:
+                  - None: Disable (no rate-of-change features)
+                  - [1]: First-order differences (rate of change)
+                  - [1, 2]: First and second differences (rate + acceleration)
+                Effect on time series: Order-1 differencing removes trends, reveals
+                    variability. Order-2 reveals acceleration. Essential for detecting
+                    rapidly changing signals (e.g., convection events, sensor failures).
+
+            features_diff_exclude_cols (list): Exclude from differencing.
+                Default: None (diff all columns except target)
+
+        === STAGE 4: EXPONENTIAL MOVING AVERAGE (Weighted Historical Context) ===
+        Args:
+            features_ema (list): EMA spans [6, 24, 48, ...].
+                Default: None (disabled)
+                Typical values:
+                  - None: Disable (no long-term memory)
+                  - [6, 24]: 6-hr and 24-hr exponential moving averages (for 30-min data)
+                  - [7, 30]: Weekly and monthly for daily data
+                Effect on time series: EMA gives more weight to recent values while
+                    remembering history. Span=6 means ~6 timesteps influence (20% decaying
+                    weight structure). Essential for multi-timescale patterns.
+
+            features_ema_exclude_cols (list): Exclude from EMA.
+                Default: None (apply EMA to all columns except target)
+
+        === STAGE 5: POLYNOMIAL EXPANSION (Non-linear Relationships) ===
+        Args:
+            features_poly_degree (int): Polynomial degree.
+                Default: None (disabled)
+                Typical values:
+                  - None: Disable (linear relationships only)
+                  - 2: Squared terms (quadratic relationships, most common)
+                  - 3: Cubic terms (rare, very non-linear)
+                Effect on time series: Degree=2 creates X² features for each column.
+                    Essential for capturing saturation effects (e.g., photosynthesis
+                    plateaus at high light). Quadratic relationships common in ecology.
+
+            features_poly_exclude_cols (list): Exclude from polynomial.
+                Default: None (apply to all columns except target)
+
+        === STAGE 6: STL DECOMPOSITION (Trend/Seasonal Separation) ===
+        Args:
+            features_stl (bool): Enable STL decomposition.
+                Default: False (disabled)
+                Set to: True or False
+                Effect if False: No decomposition, skip this stage entirely (fast).
+                Effect if True: Separates time series into trend, seasonal, residual
+                    components. Requires specifying seasonal_period and method.
+
+            features_stl_method (str): Decomposition algorithm.
+                Default: 'stl' (Seasonal-Trend Loess)
+                Options:
+                  - 'stl': Robust, handles gaps, works with non-stationary data (best)
+                  - 'classical': Moving average method, assumes stationarity
+                  - 'harmonic': FFT-based, no series length constraints, very fast
+                Effect: 'stl' recommended for flux data (has gaps, strong seasonality).
+                    'harmonic' for very long series or when speed critical.
+
+            features_stl_seasonal_period (int): Seasonal period in timesteps.
+                Default: None (auto-detect via periodogram if features_stl=True)
+                Typical values for 30-min flux data:
+                  - None: Auto-detect (recommended, ~48 for daily cycle)
+                  - 48: Daily cycle (30-min × 48 = 24 hours)
+                  - 336: Weekly cycle (30-min × 336 = 7 days)
+                  - 17520: Annual cycle (30-min × 17520 = 365 days)
+                Effect: None means auto-detect from data (slower but robust). Explicit
+                    value is faster. Wrong period produces useless seasonal component.
+
+            features_stl_exclude_cols (list): Exclude from STL.
+                Default: None (apply to all columns except target)
+                Typical use: Skip columns without strong seasonality
+
+            features_stl_components (list): Components to extract.
+                Default: None (extract all: trend, seasonal, residual)
+                Options:
+                  - None: All three components
+                  - ['trend']: Trend only (removes noise and seasonality)
+                  - ['trend', 'seasonal']: Trend and seasonal (removes residual noise)
+                  - ['trend', 'seasonal', 'residual']: All components (default)
+                Effect: None extracts all. Selecting subset reduces features but keeps
+                    what's needed. Trend alone useful for detrending, removes diurnal cycles.
+
+        === STAGE 7: TIMESTAMP FEATURES (Diurnal/Seasonal Cycles) ===
+        Args:
+            vectorize_timestamps (bool): Add timestamp-derived features.
+                Default: False (disabled, fast)
+                Set to: True or False
+                Effect if False: No timestamp features (skip stage, 2-3% speedup).
+                Effect if True: Creates 19 features: year, season, month, week, DOY
+                    (day-of-year), hour + sin/cos versions for circular encoding. Captures
+                    diurnal cycles (photosynthesis) and seasonal patterns (dormancy).
+                Typical use:
+                  - False: For fast testing or when temporal patterns already captured
+                  - True: Essential for gap-filling (captures daily/seasonal cycles)
+                Effect on time series: Sine/cosine encoding treats day-of-year as
+                    circular (Dec→Jan continuous). Creates cyclic features that models
+                    can learn (e.g., morning vs evening photosynthesis).
+
+        === STAGE 8: SEQUENTIAL RECORD NUMBERING (Temporal Ordering) ===
+        Args:
+            add_continuous_record_number (bool): Add sequential 1,2,3,... numbering.
+                Default: False (disabled)
+                Set to: True or False
+                Effect if False: No record number (skip stage).
+                Effect if True: Creates column .RECORDNUMBER = 1, 2, 3, ... Captures
+                    long-term drift (instrument drift, ecosystem changes).
+                Typical use:
+                  - False: Most cases (minimal benefit, adds collinearity)
+                  - True: When long-term drift is important (>1 year data)
+                Effect on time series: Linear feature captures systematic drift over
+                    time (e.g., accumulation, senescence).
+
+        === DATA QUALITY ===
+        Args:
+            sanitize_timestamp (bool): Validate and prepare timestamps.
+                Default: False (skip validation, assume clean timestamps)
+                Set to: True or False
+                Effect if False: Trust input timestamps (fast, assumes clean).
+                Effect if True: Validate and fix timestamp issues (duplicates, gaps,
+                    non-monotonic). Slightly slower but catches data problems.
+                Typical use:
+                  - False: When data already validated (production)
+                  - True: First-time data processing (safety check)
+
+        === METADATA ===
+        Args:
+            target_col (str): Column name of target variable.
+                Effect: Excluded from all engineered features. All features created from
+                    other columns, target preserved unchanged in output.
+
+            verbose (int): Progress reporting.
+                Default: 0 (silent)
+                Options:
+                  - 0: No output
+                  - 1: Progress updates (recommended)
+                  - 2+: Detailed logging (debugging)
+
+        === EXAMPLE SCENARIOS ===
+
+        Quick/Minimal (testing, fastest):
+            FeatureEngineer(
+                target_col='NEE',
+                features_lag=[-1, -1],  # Only past
+                # All others: None/False (disabled)
+            )  # ~5 features total
+
+        Fast/Standard (production, balanced):
+            FeatureEngineer(
+                target_col='NEE',
+                features_lag=[-1, 1],
+                features_rolling=[12, 24],
+                features_diff=[1],
+                vectorize_timestamps=True,
+            )  # ~15-20 features total
+
+        Comprehensive (research, most detailed):
+            FeatureEngineer(
+                target_col='NEE',
+                features_lag=[-2, 2],
+                features_rolling=[6, 12, 24],
+                features_rolling_stats=['median', 'min', 'max'],
+                features_diff=[1, 2],
+                features_ema=[6, 24],
+                features_poly_degree=2,
+                features_stl=True,
+                features_stl_seasonal_period=48,
+                vectorize_timestamps=True,
+            )  # ~50-100 features total
+
+        Returns:
+            None. Configure with __init__, call fit_transform(df) to engineer features.
         """
         # Store configuration (no data processing in __init__)
         self.target_col = target_col

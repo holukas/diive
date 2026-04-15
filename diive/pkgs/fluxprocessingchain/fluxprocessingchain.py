@@ -1645,35 +1645,52 @@ def _example_quick():
 def _example():
     # Source data
     from pathlib import Path
+
+    SOURCEDIR = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-hon_flux_product\dataset_ch-hon_flux_product\notebooks\0_data\OPENLAG-IRGA-Level-0_fluxnet_2024-2026.03"
+
+    # # Search files and store filepaths in list
+    # from diive.core.io.filereader import search_files, MultiDataFileReader
+    # sourcefiles = search_files(searchdirs=SOURCEDIR, pattern='*_fluxnet_*.csv')
+    # d = MultiDataFileReader(filepaths=sourcefiles,
+    #                         filetype='EDDYPRO-FLUXNET-CSV-30MIN',
+    #                         output_middle_timestamp=True)
+    # df = d.data_df
+    # from diive.core.io.files import save_parquet
+    # filepath = save_parquet(filename="FLUXES_L0_ALL", data=df, outpath=SOURCEDIR)
+
+    # Load from parquet
     from diive.core.io.files import load_parquet
-    SOURCEDIR = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\20_MERGE_DATA"
-    FILENAME = r"22.4_FLUXES_L1_IRGA72+METEO7_2016-2024.parquet"
+    FILENAME = r"FLUXES_L0_ALL.parquet"
     FILEPATH = Path(SOURCEDIR) / FILENAME
     maindf = load_parquet(filepath=str(FILEPATH))
-    # SOURCEDIRS = [r"L:\Sync\luhk_work\20 - CODING\21 - DIIVE\diive\notebooks\FluxProcessingChain\example_data"]
+
+    # # Or load EddyPro _fluxnet_ output files
+    # SOURCEDIRS = [r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-hon_flux_product\dataset_ch-hon_flux_product\notebooks\0_data\OPENLAG-IRGA-Level-0_fluxnet_2024-2026.03"]
     # ep = LoadEddyProOutputFiles(sourcedir=SOURCEDIRS, filetype='EDDYPRO-FLUXNET-CSV-30MIN')
     # ep.searchfiles()
     # ep.loadfiles()
     # maindf = ep.maindf
     # metadata = ep.metadata
 
-    locs = ((maindf.index.year >= 2023) & (maindf.index.year <= 2023)
-            & (maindf.index.month >= 6) & (maindf.index.month <= 7))
-    # locs = (maindf.index.year >= 2022) & (maindf.index.year <= 2022)
-    # locs = (maindf.index.year >= 2007) & (maindf.index.year <= 2011)
-    maindf = maindf.loc[locs, :].copy()
-    # locs = (maindf.index.month >= 7) & (maindf.index.month <= 7)
+    # # Restrict time range
+    # locs = ((maindf.index.year >= 2023) & (maindf.index.year <= 2023)
+    #         & (maindf.index.month >= 6) & (maindf.index.month <= 7))
     # maindf = maindf.loc[locs, :].copy()
-    # metadata = None
-    # print(maindf)
+    # # metadata = None
+    # # print(maindf)
+
+    # Restrict by wind direction (CH-HON)
+    import numpy as np
+    locs = (maindf['WD'] > 180) & (maindf['WD'] < 350)
+    maindf.loc[locs, :] = np.nan
 
     # Flux processing chain settings
     FLUXVAR = "FC"
-    SITE_LAT = 47.210227
-    SITE_LON = 8.410645
+    SITE_LAT = 47.41887  # CH-HON
+    SITE_LON = 8.491318  # CH-HON
     UTC_OFFSET = 1
     NIGHTTIME_THRESHOLD = 20  # Threshold for potential radiation in W m-2, conditions below threshold are nighttime
-    DAYTIME_ACCEPT_QCF_BELOW = 2
+    DAYTIME_ACCEPT_QCF_BELOW = 1
     NIGHTTIMETIME_ACCEPT_QCF_BELOW = 1
 
     # from diive.core.dfun.stats import sstats  # Time series stats
@@ -1700,9 +1717,9 @@ def _example():
     TEST_GAS_COMPLETENESS = False  # Default True
     TEST_SPECTRAL_CORRECTION_FACTOR = True  # Default True
     TEST_SIGNAL_STRENGTH = True
-    TEST_SIGNAL_STRENGTH_COL = 'CUSTOM_SIGNAL_STRENGTH_IRGA72_MEAN'
-    TEST_SIGNAL_STRENGTH_METHOD = 'discard below'
-    TEST_SIGNAL_STRENGTH_THRESHOLD = 60
+    TEST_SIGNAL_STRENGTH_COL = 'CUSTOM_AGC_MEAN'
+    TEST_SIGNAL_STRENGTH_METHOD = 'discard above'
+    TEST_SIGNAL_STRENGTH_THRESHOLD = 90
     # TimeSeries(series=maindf[TEST_SIGNAL_STRENGTH_COL]).plot()
     TEST_RAWDATA = True  # Default True
     TEST_RAWDATA_SPIKES = True  # Default True
@@ -1804,7 +1821,7 @@ def _example():
     # fpc.level32_addflag()
 
     # # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=False, verbose=False, repeat=False)
-    fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 13, n_sigma_dt=5.5, n_sigma_nt=5.5, showplot=True,
+    fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 13, n_sigma_dt=5.5, n_sigma_nt=5.5, showplot=False,
                                                verbose=True, use_differencing=True, separate_day_night=True,
                                                repeat=True)
     fpc.level32_addflag()
@@ -1869,7 +1886,7 @@ def _example():
     # ustar_scenarios = ['CUT_50']
     # ustar_thresholds = [0.069898]
     ustar_scenarios = ['CUT_50']
-    ustar_thresholds = [0.303628125]  # CH-LAE
+    ustar_thresholds = [0.09]  # CH-LAE
     # ustar_scenarios = ['CUT_16', 'CUT_50', 'CUT_84']
     # ustar_thresholds = [0.271619922, 0.303628125, 0.339684084]  # CH-LAE
     # ustar_scenarios = ['CUT_16', 'CUT_50', 'CUT_84']
@@ -1902,92 +1919,278 @@ def _example():
     # --------------------
     # Level-4.1
     # --------------------
-    FEATURES = ["TA_T1_47_1_gfXG", "SW_IN_T1_47_1_gfXG", "VPD_T1_47_1_gfXG"]
+    # FEATURES = ["TA_T1_47_1_gfXG", "SW_IN_T1_47_1_gfXG", "VPD_T1_47_1_gfXG"]
+    FEATURES = ["TA_EP", "SW_IN_POT", "VPD_EP"]
 
-    # Level-4.1 Random Forest Gap-Filling with Feature Engineering (v0.91.0)
-    fpc.level41_longterm_random_forest(
-        features=FEATURES,
-        # Feature Engineering Parameters (all configured via FeatureEngineer)
-        features_lag=[-1, 1],
-        features_lag_stepsize=1,
-        features_lag_exclude_cols=None,
-        features_rolling=[12],
-        features_rolling_exclude_cols=None,
-        features_rolling_stats=['median', 'min', 'max'],
-        features_diff=[1],
-        features_diff_exclude_cols=None,
-        features_ema=[6],
-        features_ema_exclude_cols=None,
-        features_poly_degree=2,
-        features_poly_exclude_cols=None,
-        features_stl=False,
-        features_stl_method='stl',
-        features_stl_seasonal_period=None,
-        features_stl_exclude_cols=None,
-        features_stl_components=None,
-        vectorize_timestamps=True,
-        add_continuous_record_number=True,
-        sanitize_timestamp=True,
-        # Gap-Filling Parameters
-        reduce_features=False,
-        verbose=True,
-        # Random Forest Hyperparameters
-        n_estimators=100,
-        max_depth=15,
-        min_samples_split=5,
-        min_samples_leaf=2,
-        n_jobs=-1,
-        random_state=42,
-    )
-    # Access results: fpc.level41['long_term_random_forest']['CUT_50']
 
-    # Level-4.1 XGBoost Gap-Filling with Feature Engineering (v0.91.0, alternative to Random Forest)
-    # Uncomment to use XGBoost instead of or in addition to Random Forest
+    # # ---------------------------
+    # # RANDOM FOREST WITH COMPREHENSIVE CO2 FLUX CONFIGURATION
+    # # ---------------------------
+    # # Level-4.1 Random Forest Gap-Filling optimized for CO2 half-hourly flux (NEE) data
+    # # Random Forest is interpretable, robust to outliers, and excellent for exploring
+    # # feature importance. It uses the SAME feature engineering as XGBoost for direct
+    # # comparison. RF often slightly underperforms XGBoost on non-linear patterns but
+    # # provides better uncertainty estimates and is less prone to overfitting.
+    # #
+    # # KEY TUNING FOR CO2 FLUX (30-min resolution):
+    # # - Lag features: Short windows (1-2 steps = 30-60 min) for fast response
+    # # - Rolling windows: 3-24 hours (6-48 steps) for diurnal pattern context
+    # # - Differencing: Order-1 for rate-of-change, helps detect flux transitions
+    # # - EMA: Multi-timescale (3-24 hours) captures memory effects from stomata/photosystem
+    # # - STL: CRITICAL for CO2 - strong daily cycle + seasonal dormancy/growth
+    # # - Timestamps: ESSENTIAL - diurnal photosynthesis is time-of-day dependent
+    # # - Polynomial: Captures non-linear light saturation (Michaelis-Menten kinetics)
+    # #
+    # # Feature count: ~45-50 engineered features (same as XGBoost for fair comparison)
+    # # Typical training time: 3-8 min per year per USTAR scenario (slower than XGBoost)
+    # # Expected model R²: 0.60-0.80 (slightly lower than XGBoost, but more robust)
+    # # Memory usage: ~2-3× higher than XGBoost for same feature count
+    # #
+    # # RANDOM FOREST VS XGBOOST:
+    # # - RF: More interpretable, robust to outliers, good for exploration
+    # # - XGB: Better on non-linear patterns, faster, smaller models
+    # # - Compare both on same data to identify which fits your site better
+    #
+    # fpc.level41_longterm_random_forest(
+    #     features=FEATURES,
+    #
+    #     # ===== FEATURE ENGINEERING PARAMETERS (Identical to XGBoost) =====
+    #
+    #     # Stage 1: LAG FEATURES (Immediate past context)
+    #     # For CO2: Short lags (1-2 steps = 30-60 min) as flux responds quickly to environment
+    #     features_lag=[-2, -1],          # Past 30-60 min only (no future, no current)
+    #     features_lag_stepsize=1,        # Include every lag (dense temporal context)
+    #     features_lag_exclude_cols=None, # Lag all input features
+    #
+    #     # Stage 2: ROLLING STATISTICS (Diurnal pattern capture)
+    #     # For CO2: 30-min, 1-hr, 2-hr, 6-hr, 12-hr, 24-hr windows to capture diurnal patterns
+    #     # Window sizes for 30-min data: 2=1hr, 4=2hr, 12=6hr, 24=12hr, 48=24hr
+    #     features_rolling=[2, 4, 12, 24, 48],  # 1hr, 2hr, 6hr, 12hr, 24hr windows
+    #     features_rolling_exclude_cols=None,   # Apply to all input features
+    #     # Advanced rolling stats: Median robust to outliers, min/max/quantiles capture asymmetry
+    #     features_rolling_stats=['median', 'min', 'max', 'std', 'q25', 'q75'],
+    #
+    #     # Stage 3: TEMPORAL DIFFERENCING (Rate of change, flux transitions)
+    #     # For CO2: Order-1 (rate) captures sunrise/sunset transitions and weather events
+    #     # Order-2 (acceleration) helps detect rapid state changes
+    #     features_diff=[1, 2],           # First and second-order differencing
+    #     features_diff_exclude_cols=None,
+    #
+    #     # Stage 4: EXPONENTIAL MOVING AVERAGE (Multi-timescale memory)
+    #     # For CO2: Captures stomatal/photosynthetic adjustment at multiple timescales
+    #     # Spans for 30-min data: 6=3hr, 12=6hr, 24=12hr, 48=24hr
+    #     features_ema=[6, 12, 24, 48],   # 3hr, 6hr, 12hr, 24hr exponential moving averages
+    #     features_ema_exclude_cols=None,
+    #
+    #     # Stage 5: POLYNOMIAL EXPANSION (Non-linear relationships)
+    #     # For CO2: Degree-2 essential for light saturation (Michaelis-Menten curve)
+    #     # Captures photosynthetic saturation and respiratory asymmetry
+    #     features_poly_degree=2,         # Quadratic terms (e.g., Tair², Rg² for saturation)
+    #     features_poly_exclude_cols=None,
+    #
+    #     # Stage 6: STL DECOMPOSITION (Trend/Seasonal separation)
+    #     # For CO2: CRITICAL - separates respiration trend from photosynthetic pattern
+    #     # Daily cycle: photosynthesis (daytime negative NEE), respiration (nighttime positive)
+    #     # Seasonal cycle: dormancy (winter respiration), growth (summer photosynthesis)
+    #     features_stl=True,                      # Enable STL decomposition
+    #     features_stl_method='stl',              # Robust LOESS method (handles gaps)
+    #     features_stl_seasonal_period=48,        # 30-min × 48 = 24 hours (daily cycle)
+    #     features_stl_exclude_cols=None,         # Apply to all input features
+    #     features_stl_components=['trend', 'seasonal', 'residual'],  # Extract all
+    #
+    #     # Stage 7: TIMESTAMP FEATURES (Diurnal/Seasonal cycles)
+    #     # For CO2: ESSENTIAL - photosynthesis depends on time-of-day (solar elevation)
+    #     # and season (leaf phenology, dormancy)
+    #     vectorize_timestamps=True,      # Creates ~19 features: year, season, DOY, hour, etc.
+    #
+    #     # Stage 8: SEQUENTIAL RECORD NUMBER (Long-term drift)
+    #     # For CO2: Useful if site shows long-term drift (instrument aging, vegetation change)
+    #     add_continuous_record_number=True,  # 1, 2, 3, ... for drift capture
+    #
+    #     # Data quality preprocessing
+    #     sanitize_timestamp=True,        # Validate timestamps (catch gaps/duplicates)
+    #
+    #     # ===== GAP-FILLING PARAMETERS =====
+    #     reduce_features=True,          # ENABLED: Apply SHAP-based feature selection
+    #                                     # Selects only important features across all years
+    #                                     # Reduces feature count from ~45-50 to ~10-20 features
+    #                                     # Benefits: Faster training, better generalization, smaller models
+    #                                     # Drawback: Removes potentially useful features
+    #     verbose=True,                   # Print progress and model scores
+    #
+    #     # ===== RANDOM FOREST HYPERPARAMETERS =====
+    #     # Tuned for flux data (non-linear, heteroscedastic, with clear diurnal cycle)
+    #     # RF typically needs more estimators than XGBoost to reach same performance
+    #
+    #     n_estimators=350,               # 350 trees (more than XGBoost due to bagging)
+    #                                     # Random Forest needs ~50% more trees than XGBoost
+    #                                     # Increase (400-500) if underfitting (R² too low)
+    #                                     # Decrease (200-300) if overfitting or memory-limited
+    #                                     # Training time ~linear with n_estimators
+    #
+    #     max_depth=15,                   # Tree depth (deeper than XGBoost)
+    #                                     # RF can use deeper trees without overfitting
+    #                                     # Default 15 balances complexity and stability
+    #                                     # Increase (20-25) for complex patterns
+    #                                     # Decrease (8-10) if overfitting
+    #
+    #     min_samples_split=5,            # Minimum samples required to split a node
+    #                                     # Higher values prevent overfitting to individual data points
+    #                                     # 5 = good balance for 30-min flux data (~hours of training data)
+    #                                     # Increase (10-15) if overfitting to noise
+    #                                     # Decrease (2-3) if underfitting
+    #
+    #     min_samples_leaf=2,             # Minimum samples required at leaf node
+    #                                     # Higher = smoother predictions, less overfitting
+    #                                     # 2 = permissive, allows feature detection
+    #                                     # Increase (5-10) if overfitting
+    #                                     # Decrease (1) if underfitting
+    #
+    #     n_jobs=-1,                      # Use all CPU cores (parallel tree building)
+    #     random_state=42,                # Reproducibility (same results every run)
+    # )
+    # # ===== ACCESS RESULTS =====
+    # # model = fpc.level41['long_term_random_forest']['CUT_50']
+    # # gapfilled_co2 = model.gapfilled_
+    # # scores = model.scores_  # R², MAE, RMSE on test data
+    # # feature_importance = model.feature_importances_  # SHAP importance per feature
+    # # yearly_models = model.results_yearly_  # Per-year model results (dict keyed by year)
+    # #
+    # # ===== COMPARE RF VS XGBOOST =====
+    # # rf_r2 = fpc.level41['long_term_random_forest']['CUT_50'].scores_['r2']
+    # # xgb_r2 = fpc.level41['long_term_xgboost']['CUT_50'].scores_['r2']
+    # # print(f"Random Forest R²: {rf_r2:.3f}")
+    # # print(f"XGBoost R²: {xgb_r2:.3f}")
+    # # print(f"Winner: {'XGBoost' if xgb_r2 > rf_r2 else 'Random Forest'}")
+
+    # ---------------------------
+    # XGBOOST WITH COMPREHENSIVE CO2 FLUX CONFIGURATION
+    # ---------------------------
+    # Level-4.1 XGBoost Gap-Filling optimized for CO2 half-hourly flux (NEE) data
+    # This configuration balances capture of diurnal photosynthetic patterns with
+    # computational efficiency. XGBoost often outperforms Random Forest on non-linear
+    # flux responses (light saturation, stomatal conductance).
+    #
+    # KEY TUNING FOR CO2 FLUX (30-min resolution):
+    # - Lag features: Short windows (1-2 steps = 30-60 min) for fast response
+    # - Rolling windows: 3-24 hours (6-48 steps) for diurnal pattern context
+    # - Differencing: Order-1 for rate-of-change, helps detect flux transitions
+    # - EMA: Multi-timescale (3-24 hours) captures memory effects from stomata/photosystem
+    # - STL: CRITICAL for CO2 - strong daily cycle + seasonal dormancy/growth
+    # - Timestamps: ESSENTIAL - diurnal photosynthesis is time-of-day dependent
+    # - Polynomial: Captures non-linear light saturation (Michaelis-Menten kinetics)
+    #
+    # Feature count: ~45-50 engineered features
+    # Typical training time: 2-5 min per year per USTAR scenario
+    # Expected model R²: 0.65-0.85 depending on site complexity
+
     fpc.level41_longterm_xgboost(
         features=FEATURES,
-        # Feature Engineering Parameters (all configured via FeatureEngineer)
-        features_lag=[-1, 1],
-        features_lag_stepsize=1,
-        features_lag_exclude_cols=None,
-        features_rolling=[12, 24],
-        features_rolling_exclude_cols=None,
-        features_rolling_stats=['median', 'min', 'max'],
-        features_diff=[1],
-        features_diff_exclude_cols=None,
-        features_ema=[6, 24],
-        features_ema_exclude_cols=None,
-        features_poly_degree=2,
-        features_poly_exclude_cols=None,
-        features_stl=False,
-        features_stl_method='stl',
-        features_stl_seasonal_period=None,
-        features_stl_exclude_cols=None,
-        features_stl_components=None,
-        vectorize_timestamps=True,
-        add_continuous_record_number=True,
-        sanitize_timestamp=True,
-        # Gap-Filling Parameters
-        reduce_features=False,
-        verbose=True,
-        # XGBoost Hyperparameters
-        n_estimators=200,
-        max_depth=6,
-        learning_rate=0.3,
-        early_stopping_rounds=10,
-        n_jobs=-1,
-        random_state=42,
-    )
-    # Access results: fpc.level41['long_term_xgboost']['CUT_50']
 
-    fpc.level41_mds(
-        swin="SW_IN_T1_47_1_gfXG",
-        ta="TA_T1_47_1_gfXG",
-        vpd="VPD_T1_47_1_gfXG",
-        swin_tol=[20, 50],
-        ta_tol=2.5,
-        vpd_tol=0.5,
-        avg_min_n_vals=5
+        # ===== FEATURE ENGINEERING PARAMETERS =====
+
+        # Stage 1: LAG FEATURES (Immediate past context)
+        # For CO2: Short lags (1-2 steps = 30-60 min) as flux responds quickly to environment
+        features_lag=[-2, -1],          # Past 30-60 min only (no future, no current)
+        features_lag_stepsize=1,        # Include every lag (dense temporal context)
+        features_lag_exclude_cols=None, # Lag all input features
+
+        # Stage 2: ROLLING STATISTICS (Diurnal pattern capture)
+        # For CO2: 30-min, 1-hr, 2-hr, 6-hr, 12-hr, 24-hr windows to capture diurnal patterns
+        # Window sizes for 30-min data: 2=1hr, 4=2hr, 12=6hr, 24=12hr, 48=24hr
+        features_rolling=[2, 4, 12, 24, 48],  # 1hr, 2hr, 6hr, 12hr, 24hr windows
+        features_rolling_exclude_cols=None,   # Apply to all input features
+        # Advanced rolling stats: Median robust to outliers, min/max/quantiles capture asymmetry
+        features_rolling_stats=['median', 'min', 'max', 'std', 'q25', 'q75'],
+
+        # Stage 3: TEMPORAL DIFFERENCING (Rate of change, flux transitions)
+        # For CO2: Order-1 (rate) captures sunrise/sunset transitions and weather events
+        # Order-2 (acceleration) helps detect rapid state changes
+        features_diff=[1, 2],           # First and second-order differencing
+        features_diff_exclude_cols=None,
+
+        # Stage 4: EXPONENTIAL MOVING AVERAGE (Multi-timescale memory)
+        # For CO2: Captures stomatal/photosynthetic adjustment at multiple timescales
+        # Spans for 30-min data: 6=3hr, 12=6hr, 24=12hr, 48=24hr
+        features_ema=[6, 12, 24, 48],   # 3hr, 6hr, 12hr, 24hr exponential moving averages
+        features_ema_exclude_cols=None,
+
+        # Stage 5: POLYNOMIAL EXPANSION (Non-linear relationships)
+        # For CO2: Degree-2 essential for light saturation (Michaelis-Menten curve)
+        # Captures photosynthetic saturation and respiratory asymmetry
+        features_poly_degree=2,         # Quadratic terms (e.g., Tair², Rg² for saturation)
+        features_poly_exclude_cols=None,
+
+        # Stage 6: STL DECOMPOSITION (Trend/Seasonal separation)
+        # For CO2: CRITICAL - separates respiration trend from photosynthetic pattern
+        # Daily cycle: photosynthesis (daytime negative NEE), respiration (nighttime positive)
+        # Seasonal cycle: dormancy (winter respiration), growth (summer photosynthesis)
+        features_stl=True,                      # Enable STL decomposition
+        features_stl_method='stl',              # Robust LOESS method (handles gaps)
+        features_stl_seasonal_period=48,        # 30-min × 48 = 24 hours (daily cycle)
+        features_stl_exclude_cols=None,         # Apply to all input features
+        features_stl_components=['trend', 'seasonal', 'residual'],  # Extract all
+
+        # Stage 7: TIMESTAMP FEATURES (Diurnal/Seasonal cycles)
+        # For CO2: ESSENTIAL - photosynthesis depends on time-of-day (solar elevation)
+        # and season (leaf phenology, dormancy)
+        vectorize_timestamps=True,      # Creates ~19 features: year, season, DOY, hour, etc.
+
+        # Stage 8: SEQUENTIAL RECORD NUMBER (Long-term drift)
+        # For CO2: Useful if site shows long-term drift (instrument aging, vegetation change)
+        add_continuous_record_number=True,  # 1, 2, 3, ... for drift capture
+
+        # Data quality preprocessing
+        sanitize_timestamp=True,        # Validate timestamps (catch gaps/duplicates)
+
+        # ===== GAP-FILLING PARAMETERS =====
+        reduce_features=True,          # ENABLED: Apply SHAP-based feature selection
+                                        # Selects only important features across all years
+                                        # Reduces feature count from ~45-50 to ~10-20 features
+                                        # Benefits: Faster training, better generalization, smaller models
+                                        # Drawback: Removes potentially useful features
+        verbose=True,                   # Print progress and model scores
+
+        # ===== XGBOOST HYPERPARAMETERS =====
+        # Tuned for flux data (non-linear, heteroscedastic, with clear diurnal cycle)
+
+        n_estimators=500,               # 250 boosting rounds (less than Random Forest)
+                                        # XGBoost needs fewer estimators than RF
+                                        # Increase if underfitting (R² too low)
+                                        # Decrease if overfitting (test R² << train R²)
+
+        max_depth=6,                    # Tree depth (shallow, prevents overfitting)
+                                        # Default 6 is good. Increase (7-8) for complex patterns
+                                        # Decrease (4-5) if overfitting
+
+        learning_rate=0.05,              # Shrinkage parameter (how fast to learn)
+                                        # 0.1 = standard, 0.05 = slower/safer, 0.3 = aggressive
+                                        # Smaller = better generalization, slower training
+
+        early_stopping_rounds=30,       # Stop if validation doesn't improve for 20 rounds
+                                        # Prevents overfitting, reduces training time
+                                        # Increase (30-50) for more aggressive training
+
+        n_jobs=-1,                      # Use all CPU cores (parallel training)
+        random_state=42,                # Reproducibility (same results every run)
+        min_child_weight=5,
     )
+    # ===== ACCESS RESULTS =====
+    # model = fpc.level41['long_term_xgboost']['CUT_50']
+    # gapfilled_co2 = model.gapfilled_
+    # scores = model.scores_  # R², MAE, RMSE on test data
+    # feature_importance = model.feature_importances_  # SHAP importance per feature
+    # yearly_models = model.results_yearly_  # Per-year model results (dict keyed by year)
+
+    # fpc.level41_mds(
+    #     swin="SW_IN_POT",
+    #     ta="TA_EP",
+    #     vpd="VPD_EP",
+    #     swin_tol=[20, 50],
+    #     ta_tol=2.5,
+    #     vpd_tol=0.5,
+    #     avg_min_n_vals=5
+    # )
 
     results = fpc.get_data()
     # gapfilled_names = fpc.get_gapfilled_names()
@@ -2004,17 +2207,27 @@ def _example():
 
     # todo get full data
 
-    fpc.showplot_gapfilled_heatmap(vmin=-5, vmax=50)
+    fpc.showplot_gapfilled_heatmap(vmin=-30, vmax=30)
     fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{µmol\ CO_2\ m^{-2}}$)', per_year=True)
     fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{g\ C\ m^{-2}}$)', per_year=False)
 
-    # # Only ML models:
-    fpc.showplot_feature_ranks_per_year()
 
-    # # Only MDS:
-    fpc.showplot_mds_gapfilling_qualities()
+    from diive.core.plotting.dielcycle import DielCycle
+    series = results['NEE_L3.1_L3.3_CUT_50_QCF_gfXG'].copy()
+    # series = results['NEE_L3.1_L3.3_CUT_50_QCF_gfMDS'].copy()
+    dc = DielCycle(series=series)
+    title = r'$\mathrm{Mean\ CO_2\ flux\ (Feb 2024 - Mar 2026)}$'
+    units = r'($\mathrm{µmol\ CO_2\ m^{-2}\ s^{-1}}$)'
+    dc.plot(ax=None, title=title, txt_ylabel_units=units,
+            each_month=True, legend_n_col=2)
 
-    # TODO heatmap of used model data pools
+    # # # Only ML models:
+    # fpc.showplot_feature_ranks_per_year()
+
+    # # # Only MDS:
+    # fpc.showplot_mds_gapfilling_qualities()
+
+
 
     print("END")
 

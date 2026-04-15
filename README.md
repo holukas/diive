@@ -235,6 +235,16 @@ _Fill gaps in time series with various methods._
   `FluxMDS` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/FluxMDSGapFilling.ipynb)),
   approach by [Reichstein et al., 2005](https://onlinelibrary.wiley.com/doi/10.1111/j.1365-2486.2005.001002.x)
 
+#### Comprehensive Examples for CO2 Flux Data
+
+- **FluxProcessingChain examples** for CO2 half-hourly flux (NEE) gap-filling:
+  - Both **Random Forest** and **XGBoost** examples are fully activated and comprehensively documented
+  - Optimized feature engineering for diurnal photosynthetic patterns (lag, rolling, EMA, STL decomposition)
+  - Feature reduction enabled by default (SHAP-based selection reduces ~45-50 features to ~10-20)
+  - Hyperparameters tuned for ecosystem flux data with detailed tuning guidance
+  - Model comparison code to select best algorithm for your site
+  - See `diive/pkgs/fluxprocessingchain/fluxprocessingchain.py` for detailed examples (~100 lines each)
+
 ### Outlier Detection
 
 #### Multiple tests combined

@@ -96,6 +96,44 @@
     - For exploratory testing only
     - Optimized: `n_estimators=3`, no timestamp features (12)
 
+**Comprehensive Documentation for CO2 Flux Gap-Filling (NEW)**
+
+* **Enhanced FeatureEngineer docstring** — Comprehensive parameter guidance for time series context.
+    - Added 8 sections describing each parameter with typical values, defaults, and time series effects
+    - Real flux data examples throughout (photosynthesis, respiration, light saturation, stomatal response)
+    - Three scenario examples:
+        1. **Quick/Minimal**: ~5 features, fastest, minimal temporal context
+        2. **Fast/Standard**: ~15-20 features, balanced production workflow
+        3. **Comprehensive**: ~50-100 features, detailed research analysis
+    - Each parameter explicitly documents: typical values for 30-min flux data, default behavior (None/False meaning), effect on time series data, typical use cases
+    - Guidance on choosing between scenarios and expected computational cost (18)
+
+* **Comprehensive CO2 flux examples in FluxProcessingChain** — Production-ready examples for RF and XGBoost.
+    - `level41_longterm_random_forest()` and `level41_longterm_xgboost()` now feature detailed CO2-optimized configurations
+    - Feature engineering tuned for 30-min flux data:
+        - `features_lag=[-2, -1]`: 30-60 min temporal context
+        - `features_rolling=[2, 4, 12, 24, 48]`: 1hr to 24hr rolling windows
+        - `features_rolling_stats=['median', 'min', 'max', 'std', 'q25', 'q75']`: Complete distributional context
+        - `features_diff=[1, 2]`: First and second-order rate of change (photosynthetic response)
+        - `features_ema=[6, 12, 24, 48]`: 3hr to 24hr exponential moving averages (stomatal memory)
+        - `features_poly_degree=2`: Michaelis-Menten light saturation curves
+        - `features_stl=True, features_stl_seasonal_period=48`: Daily photosynthetic cycle (48 × 30min = 24 hours)
+        - `vectorize_timestamps=True, add_continuous_record_number=True`: Annual and diurnal cycle capture
+    - Random Forest hyperparameters: n_estimators=350, max_depth=15, min_samples_split=5, min_samples_leaf=2
+    - XGBoost hyperparameters: n_estimators=250, max_depth=6, learning_rate=0.1, early_stopping_rounds=20
+    - **Feature reduction enabled** on both: SHAP-based selection reduces ~45-50 features to ~10-20 engineered features
+    - Inline documentation explaining CO2-specific tuning, ecological basis, and RF vs XGBoost comparison (19)
+
+* **Enhanced XGBoostTS hyperparameter documentation** — Complete `min_child_weight` guidance.
+    - New comprehensive documentation for tree regularization parameter
+    - Default: 1 (permissive, fine-grained splits); typical range: 1-10
+    - Flux-data-specific recommendations:
+        - `min_child_weight=1`: Exploration, fine-grained feature interactions
+        - `min_child_weight=3-5`: Moderate regularization, prevents overfitting to measurement noise
+        - `min_child_weight=10+`: Heavy regularization, smooth predictions, fewer splits
+    - Effect explanation: Higher values create shallower trees, reduce overfitting but may underfit if too restrictive
+    - Essential for noisy eddy covariance flux measurements (20)
+
 **Improvements and Fixes**
 
 * **ML Plotting functions** — Refactored layouts and styling.
@@ -176,7 +214,7 @@
 
 ### Unit tests
 
-* **Testing**: Currently, 102/102 unit tests are passing successfully.
+* **Testing**: Currently, 104/104 unit tests are passing successfully.
 
 ### References
 
@@ -200,6 +238,10 @@
   `diive.pkgs.analyses.seasonaltrend.example_seasonaltrend_decomposition`, `diive.core.times.decomposition_utils`,
   `diive.pkgs.timeseries.harmonic`, `diive.core.plotting.seasonaltrend`,
   `notebooks/analyses/SeasonalTrendDecomposition.ipynb`
+- (18) `diive.core.ml.feature_engineer.FeatureEngineer` (enhanced __init__ docstring with scenario guidance, typical values, time series context)
+- (19) `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain.level41_longterm_random_forest`,
+  `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain.level41_longterm_xgboost` (comprehensive CO2 flux examples)
+- (20) `diive.pkgs.gapfilling.xgboost_ts.XGBoostTS` (enhanced min_child_weight documentation)
 
 ## v0.90.0 | 13 Jan 2026
 

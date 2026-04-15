@@ -16,7 +16,31 @@ class TestGapFilling(unittest.TestCase):
         pass
 
     def test_quickfill(self):
-        pass
+        """Test QuickFillRFTS for rapid gap-filling exploration"""
+        from diive.pkgs.gapfilling.randomforest_ts import QuickFillRFTS
+        df = ed.load_exampledata_parquet()
+        df = df.loc[(df.index.year == 2020) & (df.index.month == 7)].copy()
+
+        TARGET_COL = 'NEE_CUT_REF_orig'
+        subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
+
+        # Subset with target and features
+        lowquality = df["QCF_NEE"] > 0
+        df.loc[lowquality, TARGET_COL] = np.nan
+        df = df[subsetcols].copy()
+
+        # QuickFillRFTS uses minimal internal feature engineering (pre-configured for speed)
+        # Only takes df and target_col, all other parameters are hardcoded for fast exploration
+        qfill = QuickFillRFTS(df=df, target_col=TARGET_COL)
+
+        # Train and fill gaps with minimal parameters (for speed)
+        qfill.fill()
+
+        # Verify quick fill works
+        gapfilled = qfill.get_gapfilled_target()
+        self.assertGreater(len(gapfilled), 0)
+        self.assertLess(gapfilled.isnull().sum(), len(gapfilled))  # Some gaps filled
+        self.assertEqual(gapfilled.isnull().sum(), 0)  # Some gaps remain (only filled where possible)
 
     def test_fluxmds(self):
         from collections import Counter

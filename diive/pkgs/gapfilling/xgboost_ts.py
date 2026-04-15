@@ -70,9 +70,25 @@ class XGBoostTS(MlRegressorGapFillingBase):
             **kwargs:
                 XGBoost hyperparameters. Common settings:
                 - n_estimators: Number of boosting rounds (default ~100)
+                  Increase if underfitting, decrease if overfitting or memory-limited.
                 - max_depth: Tree depth (default 6, range 3-10)
+                  Increase for complex patterns, decrease if overfitting.
                 - learning_rate: Step shrinkage (default 0.3, range 0.01-1)
+                  Lower = slower learning but better generalization, higher = faster but less stable.
+                - min_child_weight: Minimum sum of instance weights needed in a child node.
+                  Default: 1 (permissive, allows many splits)
+                  Range: 1-10 typical. For time series flux data:
+                    - 1: Default, fine-grained features (good for exploration)
+                    - 3-5: Moderate regularization (prevents overfitting to noise)
+                    - 10+: Heavy regularization (smooth predictions, fewer splits)
+                  Effect: Higher values create shallower trees, reduce overfitting but may
+                    underfit if too restrictive. Essential for noisy flux data.
+                - subsample: Fraction of samples used per tree (default 1.0)
+                  Range 0.5-1.0. Lower values add randomness, reduce overfitting.
+                - colsample_bytree: Fraction of features used per tree (default 1.0)
+                  Range 0.5-1.0. Lower values add diversity, reduce overfitting.
                 - early_stopping_rounds: Stop if no improvement after N rounds (default 10)
+                  Higher values allow more exploration, may overfit.
                 - random_state: Random seed for reproducibility
                 See: https://xgboost.readthedocs.io/en/stable/parameter.html
 
