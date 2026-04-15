@@ -20,6 +20,22 @@
 
 ### Gap-filling
 
+**Standalone Feature Engineering Architecture (NEW)**
+
+* **FeatureEngineer class** — Separated feature engineering from gap-filling for better composability and reusability.
+    - Class: `FeatureEngineer` in `diive.core.ml.feature_engineer`
+    - 8-stage composable pipeline: lag → rolling → diff → EMA → polynomial → STL → timestamps → record_number
+    - Pre-engineer features once, reuse across multiple models (RF + XGB simultaneously)
+    - Independent testing and debugging of feature engineering
+    - Benefits: Better separation of concerns, reusable features, cleaner API
+    - Usage: `engineer = FeatureEngineer(...); df_engineered = engineer.fit_transform(df); model = RandomForestTS(input_df=df_engineered, ...)`
+
+* **Simplified gap-filling API** — RandomForestTS, XGBoostTS, and long-term variants now accept PRE-ENGINEERED features only
+    - No longer need to pass feature parameters to gap-filling models
+    - Gap-filling models accept only: `input_df` (pre-engineered), `target_col`, model hyperparameters
+    - Cleaner, more intuitive composition-based workflow
+    - All tests updated to use new composition pattern
+
 **Feature Engineering Parameters**
 
 * **Rolling window statistics** — Parameter: `features_rolling` (window sizes in records).

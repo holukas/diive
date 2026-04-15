@@ -50,7 +50,7 @@ diive/
 | Package                          | Key classes / functions                                                                                                                       | Description                                                                                                                              |
 |----------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
 | `diive.core.base`                | `FlagBase`                                                                                                                                    | Base class for building quality and outlier flags; provides flag encoding, filtering, and visualization                                  |
-| `diive.core.ml`                  | `MlRegressorGapFillingBase`                                                                                                                   | Base class for machine-learning gap-filling (Random Forest, XGBoost); handles feature engineering, training, evaluation, and prediction  |
+| `diive.core.ml`                  | `FeatureEngineer`, `MlRegressorGapFillingBase`                                                                                               | Standalone feature engineering (8-stage pipeline) and base class for ML gap-filling (RF, XGBoost); separate feature engineering from model training for better reusability |
 | `diive.core.io`                  | `DataFileReader`, `MultiDataFileReader`, `ReadFileType`, `FileSplitter`                                                                       | Read single or multiple instrument files (CSV, EddyPro, TOA5); detect file structure; split large files; load/save Parquet               |
 | `diive.core.plotting`            | `HeatmapDateTime`, `HeatmapXYZ`, `HexbinPlot`, `TimeSeries`, `ScatterXY`, `HistogramPlot`, `DielCycle`, `RidgeLinePlot`, `CumulativeYear`   | Comprehensive visualization suite covering heatmaps, time series, scatter, histograms, diurnal cycles, ridge lines, hexbin plots, and cumulative plots |
 | `diive.core.times`               | `TimestampSanitizer`, `DetectFrequency`, `vectorize_timestamps()`, `continuous_timestamp_freq()`                                              | Sanitize and validate timestamps, detect/infer data frequency, vectorize time attributes, resample diel cycles                           |
@@ -204,19 +204,25 @@ _Format data to specific formats._
 
 _Fill gaps in time series with various methods._
 
-**Feature engineering** (available in XGBoostTS, RandomForestTS, and long-term implementations):
-- Lagged features from past values
-- Rolling statistics (mean, std, median, min, max, quartiles)
-- Temporal differencing (1st and 2nd order momentum)
-- Exponential Moving Average (EMA) with recent-value emphasis
-- Polynomial expansion (squared, cubed terms)
-- Timestamp vectorization (season, month, hour, etc.)
-- Continuous record numbering for trend detection
+**Feature Engineering (v0.91.0)** · class: `FeatureEngineer`
+- Standalone 8-stage feature engineering pipeline (composable, reusable across models)
+  - Stage 1: Lagged features from past and future values
+  - Stage 2: Rolling statistics (mean, std, median, min, max, quartiles)
+  - Stage 3: Temporal differencing (1st and 2nd order momentum)
+  - Stage 4: Exponential Moving Average (EMA) with recent-value emphasis
+  - Stage 5: Polynomial expansion (squared, cubed terms)
+  - Stage 6: STL decomposition (trend, seasonal, residual components)
+  - Stage 7: Timestamp vectorization (season, month, hour, etc.)
+  - Stage 8: Continuous record numbering for trend detection
+- Pre-engineer features once, reuse across multiple models (RF + XGB simultaneously)
+- Independent testing and debugging of feature engineering
 
 - **XGBoostTS** · class:
   `XGBoostTS` ([notebook example (minimal)](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/XGBoostGapFillingMinimal.ipynb), [notebook example (more extensive)](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/XGBoostGapFillingExtensive.ipynb))
+  - Use `FeatureEngineer` to create features, pass pre-engineered data to XGBoostTS
 - **RandomForestTS** · class:
   `RandomForestTS` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/RandomForestGapFilling.ipynb))
+  - Use `FeatureEngineer` to create features, pass pre-engineered data to RandomForestTS
 - **Long-term gap-filling using RandomForestTS** · class:
   `LongTermGapFillingRandomForestTS` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/LongTermRandomForestGapFilling.ipynb))
 - **Long-term gap-filling using XGBoostTS** · class:

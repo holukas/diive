@@ -24,6 +24,7 @@ from pandas import DataFrame, Series
 from diive.core.dfun.frames import detect_new_columns
 from diive.core.funcs.funcs import filter_strings_by_elements
 from diive.core.io.filereader import MultiDataFileReader, search_files
+from diive.core.ml.feature_engineer import FeatureEngineer
 from diive.core.plotting.cumulative import Cumulative, CumulativeYear
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
 from diive.pkgs.createvar.daynightflag import daytime_nighttime_flag_from_swinpot
@@ -886,8 +887,96 @@ class FluxProcessingChain:
             features: list = None,
             reduce_features: bool = False,
             verbose: int = 0,
+            features_lag: list = None,
+            features_lag_stepsize: int = 1,
+            features_lag_exclude_cols: list = None,
+            features_rolling: list = None,
+            features_rolling_exclude_cols: list = None,
+            features_rolling_stats: list = None,
+            features_diff: list = None,
+            features_diff_exclude_cols: list = None,
+            features_ema: list = None,
+            features_ema_exclude_cols: list = None,
+            features_poly_degree: int = None,
+            features_poly_exclude_cols: list = None,
+            features_stl: bool = False,
+            features_stl_method: str = 'stl',
+            features_stl_seasonal_period: int = None,
+            features_stl_exclude_cols: list = None,
+            features_stl_components: list = None,
+            vectorize_timestamps: bool = False,
+            add_continuous_record_number: bool = False,
+            sanitize_timestamp: bool = False,
             **rf_kwargs
     ):
+        """
+        Level-4.1 Gap-filling using long-term Random Forest with feature engineering (v0.91.0).
+
+        This method implements multi-year gap-filling using Random Forest with standalone
+        FeatureEngineer for composable feature engineering. Features are engineered once
+        and reused across all USTAR scenarios.
+
+        Workflow:
+            1. Create FeatureEngineer with feature engineering parameters
+            2. For each USTAR scenario:
+               a. Engineer features from input data
+               b. Create LongTermGapFillingRandomForestTS with pre-engineered data
+               c. Train yearly pooled models
+               d. Fill gaps and store results
+
+        Args:
+            features (list): Column names to use as feature inputs (gap-filling inputs).
+            reduce_features (bool): Whether to apply SHAP-based feature selection across all years.
+            verbose (int): Verbosity level (0=silent, 1+=progress).
+
+            **Feature Engineering Parameters (passed to FeatureEngineer):**
+            features_lag (list): [min_lag, max_lag] range for lag features.
+            features_lag_stepsize (int): Step size for lag generation (default 1).
+            features_lag_exclude_cols (list): Columns to exclude from lagging.
+            features_rolling (list): Window sizes for rolling statistics (e.g., [12, 24]).
+            features_rolling_exclude_cols (list): Columns to exclude from rolling.
+            features_rolling_stats (list): Advanced rolling stats (['median', 'min', 'max', 'std', 'q25', 'q75']).
+            features_diff (list): Difference orders [1, 2, ...] for temporal differencing.
+            features_diff_exclude_cols (list): Columns to exclude from differencing.
+            features_ema (list): EMA spans [6, 24, ...] for exponential moving averages.
+            features_ema_exclude_cols (list): Columns to exclude from EMA.
+            features_poly_degree (int): Polynomial degree (2, 3, ...) for non-linear terms.
+            features_poly_exclude_cols (list): Columns to exclude from polynomial.
+            features_stl (bool): Enable STL (Seasonal-Trend Loess) decomposition.
+            features_stl_method (str): STL method ('stl', 'classical', 'harmonic').
+            features_stl_seasonal_period (int): Seasonal period for STL decomposition.
+            features_stl_exclude_cols (list): Columns to exclude from STL.
+            features_stl_components (list): Components to extract (['trend', 'seasonal', 'residual']).
+            vectorize_timestamps (bool): Add timestamp features (year, month, hour, etc.).
+            add_continuous_record_number (bool): Add sequential record numbering for trend.
+            sanitize_timestamp (bool): Validate and prepare timestamps.
+
+            **Random Forest Hyperparameters (passed to sklearn RandomForestRegressor):**
+            **rf_kwargs: n_estimators, max_depth, min_samples_split, min_samples_leaf, random_state, n_jobs, etc.
+                Default: n_estimators=200, random_state=42, min_samples_split=2, min_samples_leaf=1, n_jobs=-1
+
+        Returns:
+            None. Results stored in self._level41['long_term_random_forest'] dict keyed by USTAR scenario.
+
+        Example:
+            fpc.level41_longterm_random_forest(
+                features=['TA', 'SW_IN', 'VPD'],
+                features_lag=[-1, 1],
+                features_rolling=[12, 24],
+                features_rolling_stats=['median', 'min', 'max'],
+                features_diff=[1],
+                features_ema=[6, 24],
+                features_poly_degree=2,
+                vectorize_timestamps=True,
+                add_continuous_record_number=True,
+                reduce_features=False,
+                verbose=1,
+                n_estimators=100,
+                max_depth=15,
+                random_state=42,
+                n_jobs=-1
+            )
+        """
 
         idstr = 'L4.1'
         if idstr not in self._levelidstr:
@@ -904,14 +993,42 @@ class FluxProcessingChain:
                          'min_samples_leaf': 1,
                          'n_jobs': -1}
 
-        # Collect data and run model for each USTAR scenario for gapfilling
+        # Step 1: Engineer features from input data
+        engineer = FeatureEngineer(
+            target_col='_temp_target_placeholder_',  # Temporary, will be replaced per scenario
+            features_lag=features_lag,
+            features_lag_stepsize=features_lag_stepsize,
+            features_lag_exclude_cols=features_lag_exclude_cols,
+            features_rolling=features_rolling,
+            features_rolling_exclude_cols=features_rolling_exclude_cols,
+            features_rolling_stats=features_rolling_stats,
+            features_diff=features_diff,
+            features_diff_exclude_cols=features_diff_exclude_cols,
+            features_ema=features_ema,
+            features_ema_exclude_cols=features_ema_exclude_cols,
+            features_poly_degree=features_poly_degree,
+            features_poly_exclude_cols=features_poly_exclude_cols,
+            features_stl=features_stl,
+            features_stl_method=features_stl_method,
+            features_stl_seasonal_period=features_stl_seasonal_period,
+            features_stl_exclude_cols=features_stl_exclude_cols,
+            features_stl_components=features_stl_components,
+            vectorize_timestamps=vectorize_timestamps,
+            add_continuous_record_number=add_continuous_record_number,
+            sanitize_timestamp=sanitize_timestamp
+        )
+
+        # Step 2: Collect data and run model for each USTAR scenario for gapfilling
         for ustar_scen, ustar_flux in self.filteredseries_level33_qcf.items():
 
-            # Get features from input data
+            # Get features from input data and engineer them
             this_ust_scen_df = self.df[features].copy()
 
+            # Engineer features on feature columns
+            feature_engineer_input = engineer.fit_transform(this_ust_scen_df)
+
             # Add USTAR-filtered flux from recent results (Level-3.3)
-            this_ust_scen_df = pd.concat([this_ust_scen_df, self.fpc_df[ustar_flux.name]], axis=1)
+            this_ust_scen_df = pd.concat([feature_engineer_input, self.fpc_df[ustar_flux.name]], axis=1)
             this_ust_scen_df = this_ust_scen_df.copy()
 
             general_kwargs = dict(
@@ -920,7 +1037,7 @@ class FluxProcessingChain:
                 verbose=verbose
             )
 
-            # Initialize random forest for this scenario
+            # Step 3: Initialize random forest for this scenario with pre-engineered data
             instance = LongTermGapFillingRandomForestTS(**general_kwargs, **rf_kwargs)
 
             # Assign model data
@@ -947,33 +1064,106 @@ class FluxProcessingChain:
             # Save instance to Level-4.1
             self._level41['long_term_random_forest'][ustar_scen] = instance
 
-        # # How to access data for each USTAR scenario:
-        # for ustar_scen, ustar_flux in self.filteredseries_level33_qcf.items():
-        #     fluxname = self.level41['random_forest'][ustar_scen].gapfilled_.name
-        #     gapfilled_ = self.level41['random_forest'][ustar_scen].gapfilled_
-        #     results_yearly_ = self.level41['random_forest'][ustar_scen].results_yearly_
-        #     scores_ = self.level41['random_forest'][ustar_scen].scores_
-        #     fi = self.level41['random_forest'][ustar_scen].feature_importances_yearly_
-        #     feature_ranks_per_year = self.level41['random_forest'][ustar_scen].feature_ranks_per_year
-        #     feature_importance_per_year = self.level41['random_forest'][ustar_scen].feature_importance_per_year
-        #     features_reduced_across_years = self.level41['random_forest'][ustar_scen].features_reduced_across_years
-        #     self.level41['random_forest'][ustar_scen].showplot_feature_ranks_per_year(title=f"{ustar_scen}")
-        #     print(fluxname)
-        #     print(gapfilled_)
-        #     print(results_yearly_)
-        #     print(scores_)
-        #     print(fi)
-        #     print(feature_ranks_per_year)
-        #     print(feature_importance_per_year)
-        #     print(features_reduced_across_years)
-
     def level41_longterm_xgboost(
             self,
             features: list = None,
             reduce_features: bool = False,
             verbose: int = 0,
+            features_lag: list = None,
+            features_lag_stepsize: int = 1,
+            features_lag_exclude_cols: list = None,
+            features_rolling: list = None,
+            features_rolling_exclude_cols: list = None,
+            features_rolling_stats: list = None,
+            features_diff: list = None,
+            features_diff_exclude_cols: list = None,
+            features_ema: list = None,
+            features_ema_exclude_cols: list = None,
+            features_poly_degree: int = None,
+            features_poly_exclude_cols: list = None,
+            features_stl: bool = False,
+            features_stl_method: str = 'stl',
+            features_stl_seasonal_period: int = None,
+            features_stl_exclude_cols: list = None,
+            features_stl_components: list = None,
+            vectorize_timestamps: bool = False,
+            add_continuous_record_number: bool = False,
+            sanitize_timestamp: bool = False,
             **xgb_kwargs
     ):
+        """
+        Level-4.1 Gap-filling using long-term XGBoost with feature engineering (v0.91.0).
+
+        This method implements multi-year gap-filling using XGBoost gradient boosting with
+        standalone FeatureEngineer for composable feature engineering. Features are engineered
+        once and reused across all USTAR scenarios. XGBoost often outperforms Random Forest
+        on non-linear patterns and is useful for comparison.
+
+        Workflow:
+            1. Create FeatureEngineer with feature engineering parameters
+            2. For each USTAR scenario:
+               a. Engineer features from input data
+               b. Create LongTermGapFillingXGBoostTS with pre-engineered data
+               c. Train yearly pooled models with early stopping
+               d. Fill gaps and store results
+
+        Args:
+            features (list): Column names to use as feature inputs (gap-filling inputs).
+            reduce_features (bool): Whether to apply SHAP-based feature selection across all years.
+            verbose (int): Verbosity level (0=silent, 1+=progress).
+
+            **Feature Engineering Parameters (passed to FeatureEngineer):**
+            features_lag (list): [min_lag, max_lag] range for lag features.
+            features_lag_stepsize (int): Step size for lag generation (default 1).
+            features_lag_exclude_cols (list): Columns to exclude from lagging.
+            features_rolling (list): Window sizes for rolling statistics (e.g., [12, 24]).
+            features_rolling_exclude_cols (list): Columns to exclude from rolling.
+            features_rolling_stats (list): Advanced rolling stats (['median', 'min', 'max', 'std', 'q25', 'q75']).
+            features_diff (list): Difference orders [1, 2, ...] for temporal differencing.
+            features_diff_exclude_cols (list): Columns to exclude from differencing.
+            features_ema (list): EMA spans [6, 24, ...] for exponential moving averages.
+            features_ema_exclude_cols (list): Columns to exclude from EMA.
+            features_poly_degree (int): Polynomial degree (2, 3, ...) for non-linear terms.
+            features_poly_exclude_cols (list): Columns to exclude from polynomial.
+            features_stl (bool): Enable STL (Seasonal-Trend Loess) decomposition.
+            features_stl_method (str): STL method ('stl', 'classical', 'harmonic').
+            features_stl_seasonal_period (int): Seasonal period for STL decomposition.
+            features_stl_exclude_cols (list): Columns to exclude from STL.
+            features_stl_components (list): Components to extract (['trend', 'seasonal', 'residual']).
+            vectorize_timestamps (bool): Add timestamp features (year, month, hour, etc.).
+            add_continuous_record_number (bool): Add sequential record numbering for trend.
+            sanitize_timestamp (bool): Validate and prepare timestamps.
+
+            **XGBoost Hyperparameters (passed to XGBRegressor):**
+            **xgb_kwargs: n_estimators, max_depth, learning_rate, early_stopping_rounds, subsample,
+                colsample_bytree, random_state, n_jobs, etc.
+                Default: n_estimators=200, random_state=42, max_depth=6, learning_rate=0.3,
+                early_stopping_rounds=10, n_jobs=-1
+
+        Returns:
+            None. Results stored in self._level41['long_term_xgboost'] dict keyed by USTAR scenario.
+
+        Example:
+            fpc.level41_longterm_xgboost(
+                features=['TA', 'SW_IN', 'VPD'],
+                features_lag=[-1, 1],
+                features_rolling=[12, 24],
+                features_rolling_stats=['median', 'min', 'max'],
+                features_diff=[1],
+                features_ema=[6, 24],
+                features_poly_degree=2,
+                vectorize_timestamps=True,
+                add_continuous_record_number=True,
+                reduce_features=False,
+                verbose=1,
+                n_estimators=200,
+                max_depth=6,
+                learning_rate=0.3,
+                early_stopping_rounds=10,
+                random_state=42,
+                n_jobs=-1
+            )
+        """
 
         idstr = 'L4.1'
         if idstr not in self._levelidstr:
@@ -991,14 +1181,42 @@ class FluxProcessingChain:
                           'learning_rate': 0.3,
                           'n_jobs': -1}
 
-        # Collect data and run model for each USTAR scenario for gapfilling
+        # Step 1: Engineer features from input data
+        engineer = FeatureEngineer(
+            target_col='_temp_target_placeholder_',  # Temporary, will be replaced per scenario
+            features_lag=features_lag,
+            features_lag_stepsize=features_lag_stepsize,
+            features_lag_exclude_cols=features_lag_exclude_cols,
+            features_rolling=features_rolling,
+            features_rolling_exclude_cols=features_rolling_exclude_cols,
+            features_rolling_stats=features_rolling_stats,
+            features_diff=features_diff,
+            features_diff_exclude_cols=features_diff_exclude_cols,
+            features_ema=features_ema,
+            features_ema_exclude_cols=features_ema_exclude_cols,
+            features_poly_degree=features_poly_degree,
+            features_poly_exclude_cols=features_poly_exclude_cols,
+            features_stl=features_stl,
+            features_stl_method=features_stl_method,
+            features_stl_seasonal_period=features_stl_seasonal_period,
+            features_stl_exclude_cols=features_stl_exclude_cols,
+            features_stl_components=features_stl_components,
+            vectorize_timestamps=vectorize_timestamps,
+            add_continuous_record_number=add_continuous_record_number,
+            sanitize_timestamp=sanitize_timestamp
+        )
+
+        # Step 2: Collect data and run model for each USTAR scenario for gapfilling
         for ustar_scen, ustar_flux in self.filteredseries_level33_qcf.items():
 
-            # Get features from input data
+            # Get features from input data and engineer them
             this_ust_scen_df = self.df[features].copy()
 
+            # Engineer features on feature columns
+            feature_engineer_input = engineer.fit_transform(this_ust_scen_df)
+
             # Add USTAR-filtered flux from recent results (Level-3.3)
-            this_ust_scen_df = pd.concat([this_ust_scen_df, self.fpc_df[ustar_flux.name]], axis=1)
+            this_ust_scen_df = pd.concat([feature_engineer_input, self.fpc_df[ustar_flux.name]], axis=1)
             this_ust_scen_df = this_ust_scen_df.copy()
 
             general_kwargs = dict(
@@ -1007,7 +1225,7 @@ class FluxProcessingChain:
                 verbose=verbose
             )
 
-            # Initialize XGBoost for this scenario
+            # Step 3: Initialize XGBoost for this scenario with pre-engineered data
             instance = LongTermGapFillingXGBoostTS(**general_kwargs, **xgb_kwargs)
 
             # Assign model data
@@ -1574,19 +1792,19 @@ def _example():
     #     showplot=False, verbose=True)
     # fpc.level32_addflag()
 
-    DAYTIME_MINMAX = [-50, 50]
-    NIGHTTIME_MINMAX = [-50, 50]
-    fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX,
-                                               showplot=False, verbose=False)
-    # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX, showplot=True, verbose=True)
-    fpc.level32_addflag()
-    # fpc.level32.results  # Stores Level-3.2 flags up to this point
+    # DAYTIME_MINMAX = [-50, 50]
+    # NIGHTTIME_MINMAX = [-50, 50]
+    # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX,
+    #                                            showplot=False, verbose=False)
+    # # fpc.level32_flag_outliers_abslim_dtnt_test(daytime_minmax=DAYTIME_MINMAX, nighttime_minmax=NIGHTTIME_MINMAX, showplot=True, verbose=True)
+    # fpc.level32_addflag()
+    # # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
     # fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=False, repeat=True)
     # fpc.level32_addflag()
 
     # # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=False, verbose=False, repeat=False)
-    fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=1.5, n_sigma_nt=1.5, showplot=True,
+    fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 13, n_sigma_dt=5.5, n_sigma_nt=5.5, showplot=True,
                                                verbose=True, use_differencing=True, separate_day_night=True,
                                                repeat=True)
     fpc.level32_addflag()
@@ -1639,7 +1857,7 @@ def _example():
     # # fpc.level32_qcf.report_qcf_flags()
     # fpc.level32_qcf.report_qcf_evolution()
     # # fpc.level32_qcf.report_qcf_series()
-    print("STOP")
+    # print("STOP")
     # -------------------------------------------------------------------------
 
     # --------------------
@@ -1686,58 +1904,80 @@ def _example():
     # --------------------
     FEATURES = ["TA_T1_47_1_gfXG", "SW_IN_T1_47_1_gfXG", "VPD_T1_47_1_gfXG"]
 
+    # Level-4.1 Random Forest Gap-Filling with Feature Engineering (v0.91.0)
     fpc.level41_longterm_random_forest(
         features=FEATURES,
-        sanitize_timestamp=True,
+        # Feature Engineering Parameters (all configured via FeatureEngineer)
         features_lag=[-1, 1],
         features_lag_stepsize=1,
         features_lag_exclude_cols=None,
-        features_rolling=None,
+        features_rolling=[12],
         features_rolling_exclude_cols=None,
-        features_rolling_stats=None,
-        features_diff=None,
+        features_rolling_stats=['median', 'min', 'max'],
+        features_diff=[1],
         features_diff_exclude_cols=None,
-        features_poly_degree=None,
+        features_ema=[6],
+        features_ema_exclude_cols=None,
+        features_poly_degree=2,
         features_poly_exclude_cols=None,
-        reduce_features=False,
+        features_stl=False,
+        features_stl_method='stl',
+        features_stl_seasonal_period=None,
+        features_stl_exclude_cols=None,
+        features_stl_components=None,
         vectorize_timestamps=True,
         add_continuous_record_number=True,
+        sanitize_timestamp=True,
+        # Gap-Filling Parameters
+        reduce_features=False,
         verbose=True,
-        n_estimators=3,
-        max_depth=3,
-        min_samples_split=10,
-        min_samples_leaf=5,
-        n_jobs=2,
+        # Random Forest Hyperparameters
+        n_estimators=100,
+        max_depth=15,
+        min_samples_split=5,
+        min_samples_leaf=2,
+        n_jobs=-1,
         random_state=42,
     )
-    # fpc.level41['long_term_random_forest']['CUT_50']
+    # Access results: fpc.level41['long_term_random_forest']['CUT_50']
 
-    # # XGBoost gap-filling (optional alternative to Random Forest)
-    # fpc.level41_longterm_xgboost(
-    #     features=FEATURES,
-    #     sanitize_timestamp=True,
-    #     features_lag=[-1, 1],
-    #     features_lag_stepsize=1,
-    #     features_lag_exclude_cols=None,
-    #     features_rolling=None,
-    #     features_rolling_exclude_cols=None,
-    #     features_rolling_stats=None,
-    #     features_diff=None,
-    #     features_diff_exclude_cols=None,
-    #     features_poly_degree=None,
-    #     features_poly_exclude_cols=None,
-    #     reduce_features=False,
-    #     vectorize_timestamps=True,
-    #     add_continuous_record_number=True,
-    #     verbose=True,
-    #     n_estimators=100,
-    #     max_depth=6,
-    #     learning_rate=0.3,
-    #     early_stopping_rounds=10,
-    #     n_jobs=-1,
-    #     random_state=42,
-    # )
-    # # fpc.level41['long_term_xgboost']['CUT_50']
+    # Level-4.1 XGBoost Gap-Filling with Feature Engineering (v0.91.0, alternative to Random Forest)
+    # Uncomment to use XGBoost instead of or in addition to Random Forest
+    fpc.level41_longterm_xgboost(
+        features=FEATURES,
+        # Feature Engineering Parameters (all configured via FeatureEngineer)
+        features_lag=[-1, 1],
+        features_lag_stepsize=1,
+        features_lag_exclude_cols=None,
+        features_rolling=[12, 24],
+        features_rolling_exclude_cols=None,
+        features_rolling_stats=['median', 'min', 'max'],
+        features_diff=[1],
+        features_diff_exclude_cols=None,
+        features_ema=[6, 24],
+        features_ema_exclude_cols=None,
+        features_poly_degree=2,
+        features_poly_exclude_cols=None,
+        features_stl=False,
+        features_stl_method='stl',
+        features_stl_seasonal_period=None,
+        features_stl_exclude_cols=None,
+        features_stl_components=None,
+        vectorize_timestamps=True,
+        add_continuous_record_number=True,
+        sanitize_timestamp=True,
+        # Gap-Filling Parameters
+        reduce_features=False,
+        verbose=True,
+        # XGBoost Hyperparameters
+        n_estimators=200,
+        max_depth=6,
+        learning_rate=0.3,
+        early_stopping_rounds=10,
+        n_jobs=-1,
+        random_state=42,
+    )
+    # Access results: fpc.level41['long_term_xgboost']['CUT_50']
 
     fpc.level41_mds(
         swin="SW_IN_T1_47_1_gfXG",
@@ -1776,319 +2016,7 @@ def _example():
 
     # TODO heatmap of used model data pools
 
-    print("XXX")
-    print("XXX")
-    print("XXX")
-
-    # newcols = [c for c in fpc.fpc_df.columns if c not in maindf.columns]
-    # maindf2 = pd.concat([maindf, fpc.fpc_df[newcols]], axis=1)
-    # # FLUXVAR33QCF = fpc.filteredseries_level33_qcf.name
-    # # maindf2 = maindf2[[FLUXVAR33QCF, "TA_T1_2_1", "SW_IN_T1_2_1", "VPD_T1_2_1"]].copy()
-
-    # # Collect data for each scenario for gapfilling
-    # ust_scen = {}
-    # for key, value in fpc.filteredseries_level33_qcf.items():
-    #     ust_scen[value.name] = maindf2[[value.name, "TA_T1_2_1", "SW_IN_T1_2_1", "VPD_T1_2_1"]].copy()
-
-    # import matplotlib.pyplot as plt
-    # maindf2.plot(subplots=True, x_compat=True, title="After USTAR Threshold", figsize=(12, 4.5))
-    # plt.show()
-
-    # df2 = df2.dropna()
-    # y = df2[FLUXVAR32QCF].copy()
-    #
-    # X = df2[["TA_T1_2_1", "SW_IN_T1_2_1", "VPD_T1_2_1"]].copy()
-    #
-    #
-    # # https://www.youtube.com/watch?v=aLOQD66Sj0g
-    # # https://github.com/liannewriting/YouTube-videos-public/blob/main/xgboost-python-tutorial-example/xgboost_python.ipynb
-    #
-    # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    # X_train = X_train.to_numpy()
-    # X_test = X_test.to_numpy()
-    # y_train = y_train.to_numpy()
-    # y_test = y_test.to_numpy()
-    #
-    # from sklearn.pipeline import Pipeline
-    # from category_encoders.target_encoder import TargetEncoder
-    # from xgboost import XGBRegressor
-    # estimators = [
-    #     ('encoder', TargetEncoder()),
-    #     ('clf', XGBRegressor(random_state=42))  # can customize objective function with the objective parameter
-    # ]
-    # pipe = Pipeline(steps=estimators)
-    # print(pipe)
-    #
-    # from skopt import BayesSearchCV
-    # from skopt.space import Real, Categorical, Integer
-    #
-    # search_space = {
-    #     'clf__max_depth': Integer(2, 8),
-    #     'clf__learning_rate': Real(0.001, 1.0, prior='log-uniform'),
-    #     'clf__subsample': Real(0.5, 1.0),
-    #     'clf__colsample_bytree': Real(0.5, 1.0),
-    #     'clf__colsample_bylevel': Real(0.5, 1.0),
-    #     'clf__colsample_bynode': Real(0.5, 1.0),
-    #     'clf__reg_alpha': Real(0.0, 10.0),
-    #     'clf__reg_lambda': Real(0.0, 10.0),
-    #     'clf__gamma': Real(0.0, 10.0),
-    #     'clf__n_estimators': Integer(2, 99)
-    # }
-    #
-    # # opt = BayesSearchCV(pipe, search_space, cv=5, n_iter=20, scoring='neg_mean_absolute_error', random_state=42)
-    # opt = BayesSearchCV(pipe, search_space, cv=5, n_iter=20, scoring='r2', random_state=42)
-    # # opt = BayesSearchCV(pipe, search_space, cv=3, n_iter=10, scoring='roc_auc', random_state=42)
-    #
-    # opt.fit(X_train, y_train)
-    #
-    # print(opt.best_estimator_)
-    # print(opt.best_score_)
-    # # print(opt.score(X_test, y_test))
-    # # print(opt.predict(X_test))
-    # # print(opt.predict_proba(X_test))
-
-    # -----
-    # GAP-FILLING
-    # use_gapfilling = 1
-    # N_ESTIMATORS = 99
-    # gf = None
-    # results = pd.DataFrame()
-    #
-    # for key, value in ust_scen.items():
-    #
-    #     if use_gapfilling == 1:
-    #         # Random forest
-    #         from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
-    #         MAX_DEPTH = None
-    #         MIN_SAMPLES_SPLIT = 2
-    #         MIN_SAMPLES_LEAF = 1
-    #         CRITERION = 'squared_error'  # “squared_error”, “absolute_error”, “friedman_mse”, “poisson”
-    #         gf = RandomForestTS(
-    #             input_df=ust_scen[key],
-    #             target_col=key,
-    #             verbose=True,
-    #             # features_lag=None,
-    #             features_lag=[-1, -1],
-    #             # features_lag_exclude_cols=['test', 'test2'],
-    #             # vectorize_timestamps=False,
-    #             vectorize_timestamps=True,
-    #             # add_continuous_record_number=False,
-    #             add_continuous_record_number=True,
-    #             sanitize_timestamp=True,
-    #             perm_n_repeats=3,
-    #             n_estimators=N_ESTIMATORS,
-    #             random_state=42,
-    #             # random_state=None,
-    #             max_depth=MAX_DEPTH,
-    #             min_samples_split=MIN_SAMPLES_SPLIT,
-    #             min_samples_leaf=MIN_SAMPLES_LEAF,
-    #             criterion=CRITERION,
-    #             test_size=0.2,
-    #             n_jobs=-1
-    #         )
-    #
-    #     elif use_gapfilling == 2:
-    #         # XGBoost
-    #         from diive.pkgs.gapfilling.xgboost_ts import XGBoostTS
-    #         gf = XGBoostTS(
-    #             input_df=maindf2,
-    #             target_col=FLUXVAR33QCF,
-    #             verbose=1,
-    #             # features_lag=None,
-    #             features_lag=[-1, -1],
-    #             # features_lag_exclude_cols=['TIMESINCE_PREC_TOT_T1_25+20_1'],
-    #             # features_lag_exclude_cols=['Rg_f', 'TA>0', 'TA>20', 'DAYTIME', 'NIGHTTIME'],
-    #             # vectorize_timestamps=False,
-    #             vectorize_timestamps=True,
-    #             # add_continuous_record_number=False,
-    #             add_continuous_record_number=True,
-    #             sanitize_timestamp=True,
-    #             perm_n_repeats=3,
-    #             n_estimators=N_ESTIMATORS,
-    #             random_state=42,
-    #             # booster='gbtree',  # gbtree (default), gblinear, dart
-    #             # device='cpu',
-    #             # validate_parameters=True,
-    #             # disable_default_eval_metric=False,
-    #             early_stopping_rounds=10,
-    #             # learning_rate=0.1,
-    #             max_depth=6,
-    #             # max_delta_step=0,
-    #             # subsample=1,
-    #             # min_split_loss=0,
-    #             # min_child_weight=1,
-    #             # colsample_bytree=1,
-    #             # colsample_bylevel=1,
-    #             # colsample_bynode=1,
-    #             # reg_lambda=1,
-    #             # reg_alpha=0,
-    #             # tree_method='auto',  # auto, hist, approx, exact
-    #             # scale_pos_weight=1,
-    #             # grow_policy='depthwise',  # depthwise, lossguide
-    #             # max_leaves=0,
-    #             # max_bin=256,
-    #             # num_parallel_tree=1,
-    #             n_jobs=-1
-    #         )
-    #
-    #     # c = gf.gapfilling_df_['NEE_L3.1_L3.3_QCF_gfXG'].copy()
-    #
-    #     # rfts.reduce_features()
-    #     # rfts.report_feature_reduction()
-    #     gf.trainmodel(showplot_scores=False, showplot_importance=False)
-    #     # rfts.report_traintest()
-    #     gf.fillgaps(showplot_scores=False, showplot_importance=False)
-    #     gf.report_gapfilling()
-    #
-    #     # c = gf.gapfilling_df_['LE_L3.1_L3.3_QCF_gfRF'].copy()
-    #     c = gf.gapfilling_df_[f"{key}_gfRF"].copy()
-    #     results[c.name] = c.multiply(0.02161926).copy()  # Save NEE in g C m-2 30min-1
-    #
-    # print(f"Sum in gC:\n{results.sum()}")
-
-    # import matplotlib.pyplot as plt
-    # rfts.gapfilling_df_['.GAPFILLED_CUMULATIVE'].plot(x_compat=True)
-    # rfts.gapfilling_df_['NEE_L3.1_L3.2_QCF_gfRF'].plot(x_compat=True)
-    # plt.show()
-
-    # c = c.multiply(0.02161926)
-    # from diive.core.io.files import save_parquet, load_parquet
-    # save_parquet(data=c.to_frame(), filename="test", outpath=r"F:\TMP")
-    # c = load_parquet(filepath=r"F:\TMP\test.parquet")
-    # c = c.loc[c.index.year < 2024].copy()
-
-    # import matplotlib.pyplot as plt
-    # for g in gapfilled_vars:
-    #     gapfilled_vars[g].cumsum().plot(x_compat=True)
-    # plt.legend()
-    # plt.show()
-
-    # from diive.core.plotting.cumulative import CumulativeYear
-    # for g in gapfilled_vars:
-    #     CumulativeYear(
-    #         series=gapfilled_vars[g],
-    #         series_units="X",
-    #         yearly_end_date=None,
-    #         # yearly_end_date='08-11',
-    #         start_year=2006,
-    #         end_year=2023,
-    #         show_reference=True,
-    #         # excl_years_from_reference=[2005, 2008, 2009, 2010, 2021, 2022, 2023],
-    #         excl_years_from_reference=None,
-    #         highlight_year=2023,
-    #         highlight_year_color='#F44336').plot()
-    # ---
-
-    # # https://fitter.readthedocs.io/en/latest/tuto.html
-    # # https://medium.com/the-researchers-guide/finding-the-best-distribution-that-fits-your-data-using-pythons-fitter-library-319a5a0972e9
-    # from fitter import Fitter, get_common_distributions
-    # f = Fitter(_test.dropna().to_numpy(), distributions=get_common_distributions())
-    # f.fit()
-    # f.summary()
-    #
-    # #          sumsquare_error          aic            bic    kl_div  ks_statistic      ks_pvalue
-    # # norm            0.006988  1403.489479 -377396.228381  0.057412      0.061269   4.660184e-82
-    # # lognorm         0.007025  1428.315952 -377253.532484  0.057257      0.063151   3.743164e-87
-    # # gamma           0.008857  1449.221743 -371458.509961  0.073552      0.077689  9.752981e-132
-    # # cauchy          0.009007  1025.350595 -371047.546496  0.064971      0.080458  2.817290e-141
-    # # chi2            0.010701  1420.444096 -366728.335918  0.092422      0.090688  1.948207e-179
-    #
-    # f.get_best(method='sumsquare_error')
-    # # {'norm': {'loc': -4.008143649847604, 'scale': 6.44354010359457}}
-    #
-    # f.fitted_param["norm"]
-    # # (-4.008143649847604, 6.44354010359457)
-    #
-    # pdf = f.fitted_pdf['norm']
-    #
-    # from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-    # HeatmapDateTime(series=_test, vmin=-20, vmax=20).show()
-    #
-    # import math
-    # import numpy as np
-    # from scipy.stats import shapiro
-    # from scipy.stats import lognorm
-    #
-    # # make this example reproducible
-    # np.random.seed(1)
-    #
-    # # generate dataset that contains 1000 log-normal distributed values
-    # lognorm_dataset = lognorm.rvs(s=.5, scale=math.exp(1), size=1000)
-    #
-    # # perform Shapiro-Wilk test for normality
-    # shapiro(lognorm_dataset)
-    #
-    # shapiro(_test.dropna().to_numpy())
-    #
-    # import math
-    # import numpy as np
-    # from scipy.stats import kstest
-    # from scipy.stats import lognorm
-    #
-    # # make this example reproducible
-    # np.random.seed(1)
-    #
-    # # generate dataset that contains 1000 log-normal distributed values
-    # lognorm_dataset = lognorm.rvs(s=.5, scale=math.exp(1), size=1000)
-    #
-    # # perform Kolmogorov-Smirnov test for normality
-    # kstest(lognorm_dataset, 'norm')
-    #
-    # kstest(_test.dropna().to_numpy(), 'norm')
-    #
-    # import math
-    # import numpy as np
-    # from scipy.stats import lognorm
-    # import statsmodels.api as sm
-    # import matplotlib.pyplot as plt
-    #
-    # # make this example reproducible
-    # np.random.seed(1)
-    #
-    # # generate dataset that contains 1000 log-normal distributed values
-    # lognorm_dataset = lognorm.rvs(s=.5, scale=math.exp(1), size=1000)
-    #
-    # # create Q-Q plot with 45-degree line added to plot
-    # fig = sm.qqplot(lognorm_dataset, line='45')
-    #
-    # fig = sm.qqplot(_test.dropna().to_numpy(), line='45')
-    #
-    # plt.show()
-    #
-    # import math
-    # import numpy as np
-    # from scipy.stats import lognorm
-    # import matplotlib.pyplot as plt
-    #
-    # # make this example reproducible
-    # np.random.seed(1)
-    #
-    # # generate dataset that contains 1000 log-normal distributed values
-    # lognorm_dataset = lognorm.rvs(s=.5, scale=math.exp(1), size=1000)
-    #
-    # # create histogram to visualize values in dataset
-    # plt.hist(lognorm_dataset, edgecolor='black', bins=20)
-    # plt.show()
-    #
-    # plt.hist(_test.dropna().to_numpy(), edgecolor='black', bins=20)
-    # plt.show()
-    #
-    # dt = _df['SW_IN_POT'] > 50
-    # plt.hist(_test.loc[dt].dropna().to_numpy(), edgecolor='black', bins=20)
-    # plt.show()
-    # fig = sm.qqplot(_test.loc[dt].dropna().to_numpy(), line='45')
-    # plt.show()
-    #
-    # nt = _df['SW_IN_POT'] < 50
-    # plt.hist(_test.loc[nt].dropna().to_numpy(), edgecolor='black', bins=20)
-    # plt.show()
-    # fig = sm.qqplot(_test.loc[nt].dropna().to_numpy(), line='45')
-    # plt.show()
-    #
-    # # https://www.statology.org/normality-test-python/
-    # # https://medium.com/the-researchers-guide/finding-the-best-distribution-that-fits-your-data-using-pythons-fitter-library-319a5a0972e9
-    #
-    # print("X")
+    print("END")
 
 
 def example_cumu():

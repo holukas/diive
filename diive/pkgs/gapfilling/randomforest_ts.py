@@ -286,9 +286,9 @@ class QuickFillRFTS:
     and rapid prototyping. It is NOT meant for production/final gap-filling.
 
     Uses minimal feature engineering and model complexity for speed:
-    - n_estimators=3 (very fast, low quality)
-    - Single lag: [-1, -1] (only immediate past value)
+    - FeatureEngineer with single lag: [-1, -1] (only immediate past value)
     - No rolling statistics, differencing, or timestamp features
+    - RandomForestTS with n_estimators=3 (very fast, low quality)
     - Shallow trees with larger min_samples for fast inference
 
     Attributes:
@@ -298,20 +298,43 @@ class QuickFillRFTS:
     """
 
     def __init__(self, df: DataFrame, target_col: str or tuple):
+        from diive.core.ml.feature_engineer import FeatureEngineer
+
         self.df = df.copy()
         self.target_col = target_col
         self.rfts = None
 
-        # Minimal parameters for fast, uncomplicated gap-filling
-        self.rfts = RandomForestTS(
-            input_df=self.df,
+        # Step 1: Engineer minimal features for fast gap-filling
+        engineer = FeatureEngineer(
             target_col=self.target_col,
-            verbose=True,
             features_lag=[-1, -1],  # Only immediate past value
             features_lag_stepsize=1,
+            features_lag_exclude_cols=None,
+            features_rolling=None,  # No rolling stats (speed)
+            features_rolling_exclude_cols=None,
+            features_rolling_stats=None,
+            features_diff=None,  # No differencing (speed)
+            features_diff_exclude_cols=None,
+            features_ema=None,  # No EMA (speed)
+            features_ema_exclude_cols=None,
+            features_poly_degree=None,  # No polynomial (speed)
+            features_poly_exclude_cols=None,
+            features_stl=False,  # No STL (speed)
+            features_stl_method='stl',
+            features_stl_seasonal_period=None,
+            features_stl_exclude_cols=None,
+            features_stl_components=None,
             vectorize_timestamps=False,  # No timestamp features (speed)
-            add_continuous_record_number=False,  # No extra features
+            add_continuous_record_number=False,  # No extra features (speed)
             sanitize_timestamp=False,  # Skip validation (speed)
+        )
+        df_engineered = engineer.fit_transform(self.df)
+
+        # Step 2: Create gap-filling model with engineered features
+        self.rfts = RandomForestTS(
+            input_df=df_engineered,
+            target_col=self.target_col,
+            verbose=True,
             n_estimators=3,  # Minimal trees for speed
             random_state=42,
             min_samples_split=10,  # Large minimum for fast trees
