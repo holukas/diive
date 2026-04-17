@@ -10,8 +10,8 @@ from diive.core.plotting.heatmap_datetime import HeatmapYearMonth as heatmapyear
 from diive.core.plotting.heatmap_datetime import HeatmapYearMonth
 from diive.core.plotting.heatmap_xyz import HeatmapXYZ as heatmapxyz
 from diive.core.plotting.heatmap_xyz import HeatmapXYZ
-from diive.core.plotting.hexbin_plot import HexbinPlot as hexbin
-from diive.core.plotting.hexbin_plot import HexbinPlot
+from diive.core.plotting.hexbin import HexbinPlot as hexbin
+from diive.core.plotting.hexbin import HexbinPlot
 from diive.core.plotting.ridgeline import RidgeLinePlot as ridgeline
 from diive.core.plotting.ridgeline import RidgeLinePlot
 from diive.core.plotting.timeseries import TimeSeries as timeseries

@@ -41,8 +41,6 @@ Example with absolute values::
 """
 
 import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
 
 from diive.core.plotting.heatmap_base import HeatmapBase
 
