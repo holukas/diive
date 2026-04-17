@@ -4,7 +4,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from diive.core.plotting.hexbin import HexbinPlot
+from diive.core.plotting.hexbin_plot import HexbinPlot
 
 
 class TestHexbinPlot(unittest.TestCase):
