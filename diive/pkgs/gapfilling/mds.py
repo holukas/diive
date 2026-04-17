@@ -518,7 +518,7 @@ class FluxMDS:
         return df
 
 
-def example():
+def _example():
     import time
     from diive.core.io.files import load_parquet
 
@@ -570,4 +570,4 @@ def example():
 
 
 if __name__ == '__main__':
-    example()
+    _example()

@@ -503,7 +503,8 @@ class FluxProcessingChain:
             fig.show()
 
     def showplot_gapfilled_cumulative(self, gain: float = 1, units: str = "", per_year: bool = True,
-                                      start_year: int = None, end_year: int = None):
+                                      start_year: int = None, end_year: int = None,
+                                      show_reference: bool = True, excl_years_from_reference: list = None,):
         """
         Plots cumulative data for gap-filled variables, either as a yearly cumulative plot or
         overall cumulative plot. This method processes gap-filled variables, scales them by the
@@ -529,9 +530,8 @@ class FluxProcessingChain:
                     # yearly_end_date='08-11',
                     start_year=start_year,
                     end_year=end_year,
-                    show_reference=True,
-                    # excl_years_from_reference=[2005, 2008, 2009, 2010, 2021, 2022, 2023],
-                    excl_years_from_reference=None,
+                    show_reference=show_reference,
+                    excl_years_from_reference=excl_years_from_reference,
                     highlight_year=None,
                     highlight_year_color='#F44336').plot()
         else:

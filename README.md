@@ -18,6 +18,52 @@ Recent releases: [Releases](https://github.com/holukas/diive/releases)
 
 ---
 
+## Quick Access to Common Classes
+
+All frequently-used classes are available directly from the `diive` namespace for convenient access in notebooks and scripts:
+
+### Interactive use (notebooks)
+```python
+import diive as dv
+
+# Plotting
+plot = dv.timeseries(series=data)
+plot = dv.cumulative(series=data)
+plot = dv.dielcycle(series=data)
+
+# Gap-filling
+rf_model = dv.randomforest_ts(input_df=df, target_col='NEE')
+xgb_model = dv.xgboost_ts(input_df=df, target_col='NEE')
+quick_fill = dv.quickfillrfts(input_df=df, target_col='NEE')
+
+# Analysis
+grid = dv.gridaggregator(x=x_series, y=y_series, z=z_series)
+decomp = dv.seasonaltrend(series=data)
+```
+
+### Explicit use (production code)
+```python
+from diive import TimeSeries, RandomForestTS, GridAggregator
+
+plot = TimeSeries(series=data)
+model = RandomForestTS(input_df=df, target_col='NEE')
+grid = GridAggregator(x=x_series, y=y_series, z=z_series)
+```
+
+### Available exports
+
+**Plotting:** `timeseries`, `TimeSeries`, `cumulative`, `Cumulative`, `dielcycle`, `DielCycle`, `heatmapdatetime`, `HeatmapDateTime`, and more
+
+**Gap-filling:** `randomforest_ts`, `RandomForestTS`, `xgboost_ts`, `XGBoostTS`, `quickfillrfts`, `QuickFillRFTS`, `fluxmds`, `FluxMDS`
+
+**Analysis:** `gridaggregator`, `GridAggregator`, `seasonaltrend`, `SeasonalTrendDecomposition`
+
+**I/O:** `load_parquet`, `save_parquet`, `load_exampledata_parquet`, `search_files`
+
+For the complete list of available aliases, see `diive.__all__`.
+
+---
+
 ## Package Structure
 
 ```

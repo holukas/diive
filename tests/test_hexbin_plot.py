@@ -4,7 +4,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from diive.core.plotting.hexbin_plot import HexbinPlot
+from diive.core.plotting.hexbin import HexbinPlot
 
 
 class TestHexbinPlot(unittest.TestCase):
@@ -107,7 +107,7 @@ class TestHexbinPlot(unittest.TestCase):
         # Create z with same length as x and y, with some NaN values
         z_with_nan = pd.Series(
             np.concatenate([np.array([1, 2, np.nan, 4]),
-                           np.random.uniform(-5, 5, len(self.x) - 4)]),
+                            np.random.uniform(-5, 5, len(self.x) - 4)]),
             name="Z"
         )
         try:
