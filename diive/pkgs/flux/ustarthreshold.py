@@ -282,7 +282,7 @@ class UstarDetectionMPT:
     """
 
     flux_plateau_thres_perc = 95
-    ta_ustar_corr_thres = 0.6
+    ta_ustar_corr_thres = 0.4  # Papale et al. 2006: |r| < 0.4 (was 0.6)
     flux_plateau_method = 'NEE > 10+10 Higher USTAR Subclasses'
 
     thres_class_col = 'USTAR_MPT_THRES_IN_CLASS'  # in m s-1
@@ -664,8 +664,8 @@ class UstarDetectionMPT:
         results_df.loc[filter_season, self.results_min_bts_col] = found_season_thresholds.min()
         results_df.loc[filter_season, self.results_median_bts_col] = np.median(found_season_thresholds)
         results_df.loc[filter_season, self.results_mean_bts_col] = found_season_thresholds.mean()
-        results_df.loc[filter_season, self.results_p16_bts_col] = np.quantile(found_season_thresholds, 0.16)
-        results_df.loc[filter_season, self.results_p84_bts_col] = np.quantile(found_season_thresholds, 0.84)
+        results_df.loc[filter_season, self.results_p16_bts_col] = np.quantile(found_season_thresholds, 0.05)  # Papale et al. 2006: 5th percentile (was 0.16)
+        results_df.loc[filter_season, self.results_p84_bts_col] = np.quantile(found_season_thresholds, 0.95)  # Papale et al. 2006: 95th percentile (was 0.84)
         results_df.loc[filter_season, self.results_bts_runs_col] = self.n_bootstraps
         results_df.loc[filter_season, self.results_bts_results_col] = len(found_season_thresholds)
 
@@ -776,20 +776,24 @@ class UstarDetectionMPT:
         # Reset_index is needed to avoid duplicates in index and columns during grouping
         # df.reset_index(drop=True, inplace=True)
 
-        # todo testing plot
-        class_grouped = df.groupby(ta_class_col)
-        fig = plt.figure(figsize=(16, 9))
-        gs = gridspec.GridSpec(1, 1)  # rows, cols
-        # gs.update(wspace=.2, hspace=.5, left=.05, right=.95, top=.95, bottom=.05)
-        ax = fig.add_subplot(gs[0, 0])
-        for class_key, class_group_df in class_grouped:
-            # class_group_df.plot.scatter('W_SIGMA', 'FC', title=f"TA: XXX", ax=ax)
-            class_group_df.plot.scatter(self.ustar_col, self.nee_col, title=f"TA: XXX", ax=ax)
-        fig.show()
+        # # todo testing plot
+        # class_grouped = df.groupby(ta_class_col)
+        # fig = plt.figure(figsize=(16, 9))
+        # gs = gridspec.GridSpec(1, 1)  # rows, cols
+        # # gs.update(wspace=.2, hspace=.5, left=.05, right=.95, top=.95, bottom=.05)
+        # ax = fig.add_subplot(gs[0, 0])
+        # for class_key, class_group_df in class_grouped:
+        #     # class_group_df.plot.scatter('W_SIGMA', 'FC', title=f"TA: XXX", ax=ax)
+        #     class_group_df.plot.scatter(self.ustar_col, self.nee_col, title=f"TA: XXX", ax=ax)
+        # fig.show()
 
         # Loop TA classes and calculate the ustar threshold in each class
         class_grouped = df.groupby(ta_class_col)
         for class_key, class_group_df in class_grouped:
+
+            # OPTIMIZATION: Calculate correlation once per TA class (not per subclass)
+            # Correlation between USTAR and TA is constant for all subclasses in a class
+            abs_corr = abs(class_group_df[self.ustar_col].corr(class_group_df[self.ta_col]))
 
             # SUBCLASSES
             n_subclasses = len(class_group_df)
@@ -836,8 +840,7 @@ class UstarDetectionMPT:
                     if not nxt_flux_perc > self.flux_plateau_thres_perc:
                         continue
 
-                # Check if correlation b/w TA and RH below threshold
-                abs_corr = abs(class_group_df[self.ustar_col].corr(class_group_df[self.ta_col]))
+                # Check if correlation b/w USTAR and TA below threshold (cached, not recalculated)
                 if not abs_corr < self.ta_ustar_corr_thres:
                     continue
 
@@ -888,7 +891,8 @@ class UstarDetectionMPT:
 
         """
 
-        medians_df = pd.DataFrame()
+        # OPTIMIZATION: Collect DataFrames in list, concat once at end (O(n) instead of O(n²))
+        temp_dfs = []
 
         # CLASSES (TA)
         class_grouped = season_df.groupby(ta_class_col)
@@ -903,10 +907,10 @@ class UstarDetectionMPT:
                 _temp_df = _temp_df.T  # Transpose: Series index will be column names
                 _temp_df.loc[:, self.season_col] = season_key
 
-                if (class_key == 0) & (subclass_key == 0):
-                    medians_df = _temp_df.copy()
-                else:
-                    medians_df = pd.concat([medians_df, _temp_df], axis=0)
+                temp_dfs.append(_temp_df)  # ← Collect instead of concat
+
+        # Single concat operation (much faster than concat in loop)
+        medians_df = pd.concat(temp_dfs, axis=0)
 
         # Insert season data pool, class and subclass as pandas MultiIndex and drop respective data cols from df
         multi_ix_cols = [self.season_col, ta_class_col, ustar_subclass_col]
@@ -941,12 +945,12 @@ class UstarDetectionMPT:
         # Quantile-based discretization function, the fact that .qcut exists is beautiful.
         df[ta_class_col] = pd.qcut(df[class_col], q=n_classes, labels=False, duplicates='drop')  # Series
 
-        # USTAR SUBCLASSES
+        # USTAR SUBCLASSES - OPTIMIZATION: Direct assignment instead of combine_first
+        # combine_first() does expensive index alignment; direct assignment is much faster
         class_grouped_df = df.groupby(ta_class_col)  # Group by TA class
         for class_key, class_df in class_grouped_df:  # Loop through data of each TA class
             ustar_subclass = pd.qcut(class_df[subclass_col], q=n_subclasses, labels=False, duplicates='drop')  # Series
-            df[ustar_subclass_col] = df[ustar_subclass_col].combine_first(
-                ustar_subclass)  # replaces NaN w/ class number
+            df.loc[class_df.index, ustar_subclass_col] = ustar_subclass.values  # ← Direct assignment (O(n) not O(n²))
 
         return df, ta_class_col, ustar_subclass_col
 
@@ -1015,21 +1019,26 @@ class UstarDetectionMPT:
 
 
 def example():
+    import time
     import diive as dv
-    filepath = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\30_FLUX_PROCESSING_CHAIN\31_USTAR_DETECTION\13_SUBSET_NEE_QCF11_IRGA72_2016-2024.parquet"
-    df = dv.load_parquet(filepath=filepath)
-    locs = (df.index.year >= 2016) & (df.index.year <= 2017)
-    df = df.loc[locs].copy()
-    [print(c) for c in df.columns if "SIGMA" in c];
 
-    NEE_COL = "NEE_L3.1_L3.2_QCF"
-    TA_COL = "TA_T1_47_1_gfXG"
+    t_start = time.perf_counter()
+
+    filepath = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-hon_flux_product\data\out\04_FluxProcessingChain_L4.1_FC.parquet"
+    df = dv.load_parquet(filepath=filepath)
+    locs = (df.index.year >= 2025) & (df.index.year <= 2025)
+    df = df.loc[locs].copy()
+    [print(c) for c in df.columns if "L3.2" in c];
+
+    NEE_COL = "NEE_L3.1_L3.2_QCF0"
+    TA_COL = "TA_EP"
     USTAR_COL = "USTAR"
-    SW_IN = "SW_IN_T1_47_1_gfXG"
+    SW_IN = "SW_IN_POT"
 
     df = df[[NEE_COL, TA_COL, USTAR_COL, SW_IN]].copy()
     df = df.dropna()
 
+    t_init_start = time.perf_counter()
     ust = UstarDetectionMPT(
         df=df,
         nee_col=NEE_COL,
@@ -1044,8 +1053,16 @@ def example():
         lat=47.478333,  # CH-LAE
         lon=8.364389  # CH-LAE
     )
+    t_init_end = time.perf_counter()
+    print(f"\n⏱️  Initialization: {t_init_end - t_init_start:.2f}s")
 
+    t_run_start = time.perf_counter()
     ust.run()
+    t_run_end = time.perf_counter()
+    print(f"⏱️  run() execution: {t_run_end - t_run_start:.2f}s")
+
+    t_total = time.perf_counter() - t_start
+    print(f"⏱️  Total time: {t_total:.2f}s")
 
 
 def example_scenarios():
