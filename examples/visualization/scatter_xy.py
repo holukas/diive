@@ -17,7 +17,7 @@ def example_scatter_temperature_vpd():
     """
     df = dv.load_exampledata_parquet()
 
-    scatter = dv.scatter_xy(
+    scatter = dv.plot_scatter_xy(
         x=df['Tair_f'],
         y=df['VPD_f']
     )
@@ -32,7 +32,7 @@ def example_scatter_nee_vpd():
     """
     df = dv.load_exampledata_parquet()
 
-    scatter = dv.scatter_xy(
+    scatter = dv.plot_scatter_xy(
         x=df['VPD_f'],
         y=df['NEE_CUT_REF_f'],
         z=df['Rg_f'],
@@ -55,7 +55,7 @@ def example_scatter_nee_vpd_binned():
     """
     df = dv.load_exampledata_parquet()
 
-    scatter = dv.scatter_xy(
+    scatter = dv.plot_scatter_xy(
         x=df['VPD_f'],
         y=df['NEE_CUT_REF_f'],
         z=df['Rg_f'],

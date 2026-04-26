@@ -18,7 +18,7 @@ def example_timeseries_basic():
     df = dv.load_exampledata_parquet()
     series = df['NEE_CUT_REF_f'].copy()
 
-    ts = dv.time_series(series=series, series_units=r'($\mathrm{µmol\ CO_2\ m^{-2}\ s^{-1}}$)')
+    ts = dv.plot_time_series(series=series, series_units=r'($\mathrm{µmol\ CO_2\ m^{-2}\ s^{-1}}$)')
     ts.plot()
 
 

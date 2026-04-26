@@ -22,7 +22,7 @@ def example_cumulative_overall():
     df = df.multiply(0.02161926)  # umol CO2 m-2 s-1 --> g C m-2 30min-1
     series_units = r'($\mathrm{gC\ m^{-2}}$)'
 
-    dv.Cumulative(
+    dv.plot_cumulative(
         df=df,
         units=series_units,
         start_year=2015,
@@ -42,7 +42,7 @@ def example_cumulative_year_simple():
     series = series.multiply(0.02161926)  # umol CO2 m-2 s-1 --> g C m-2 30min-1
     series_units = r'($\mathrm{gC\ m^{-2}}$)'
 
-    dv.CumulativeYear(
+    dv.plot_cumulative_year(
         series=series,
         series_units=series_units,
         yearly_end_date=None,
@@ -66,7 +66,7 @@ def example_cumulative_year_with_highlight():
     series = series.multiply(0.02161926)  # umol CO2 m-2 s-1 --> g C m-2 30min-1
     series_units = r'($\mathrm{gC\ m^{-2}}$)'
 
-    dv.CumulativeYear(
+    dv.plot_cumulative_year(
         series=series,
         series_units=series_units,
         yearly_end_date=None,

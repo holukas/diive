@@ -222,6 +222,14 @@
   Percentile-based normalization (0-100), configurable aggregation (default: median), variable gridsize; inherits from
   HeatmapBase (8).
 
+* **Plotting API refactoring**: All visualization class aliases now use `plot_` prefix for clarity and namespace separation.
+    - **Breaking change:** Old aliases deprecated in favor of `plot_*` pattern
+    - Old: `dv.scatter_xy()`, `dv.diel_cycle()`, `dv.histogram()`, `dv.ridgeline()`, `dv.cumulative()`, `dv.cumulative_year()`, `dv.longterm_anomalies_year()`, `dv.hexbin()`, `dv.time_series()`
+    - New: `dv.plot_scatter_xy()`, `dv.plot_diel_cycle()`, `dv.plot_histogram()`, `dv.plot_ridgeline()`, `dv.plot_cumulative()`, `dv.plot_cumulative_year()`, `dv.plot_longterm_anomalies_year()`, `dv.plot_hexbin()`, `dv.plot_time_series()`
+    - Removed duplicate class name exports (e.g., `HistogramPlot`, `ScatterXY`) from `__all__`; only `plot_*` aliases exported
+    - Disambiguates visualization functions from calculation functions (e.g., `dv.diel_cycle()` for calculation vs `dv.plot_diel_cycle()` for plotting)
+    - Updated all 10 example files to use new `plot_*` aliases
+
 * **ScatterXY** (enhanced): 3-variable scatter plots with optional color-coding and bin aggregation.
     - Add optional `z` Series parameter for color-coded third variable with customizable colormap
     - Refactor styling parameters (xlabel, ylabel, zlabel, xlim, ylim, cmap, show_colorbar) to `plot()` method

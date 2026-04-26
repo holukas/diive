@@ -18,7 +18,7 @@ def example_histogram_basic():
     df = dv.load_exampledata_parquet()
     series = df['NEE_CUT_REF_f'].copy()
 
-    hist = dv.histogram(
+    hist = dv.plot_histogram(
         s=series,
         method='n_bins',
         n_bins=20,
@@ -44,7 +44,7 @@ def example_histogram_yearly():
         if len(series) < 10:
             continue
 
-        hist = dv.histogram(
+        hist = dv.plot_histogram(
             s=series,
             method='n_bins',
             n_bins=15,

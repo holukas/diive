@@ -19,7 +19,7 @@ def example_dielcycle_monthly():
     df = dv.load_exampledata_parquet()
     series = df['NEE_CUT_REF_f'].copy()
 
-    dc = dv.diel_cycle(series=series)
+    dc = dv.plot_diel_cycle(series=series)
     title = r'$\mathrm{Mean\ CO_2\ flux\ (2013-2024)}$'
     units = r'($\mathrm{µmol\ CO_2\ m^{-2}\ s^{-1}}$)'
     dc.plot(ax=None, title=title, txt_ylabel_units=units,

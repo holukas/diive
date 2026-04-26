@@ -25,7 +25,7 @@ def example_hexbin_percentile_normalized():
     df = df.loc[(df.index.month >= 5) & (df.index.month <= 9)].copy()
     df = df[['Tair_f', 'VPD_f', 'NEE_CUT_REF_f']].dropna()
 
-    hm = dv.hexbin(
+    hm = dv.plot_hexbin(
         x=df['Tair_f'],
         y=df['VPD_f'],
         z=df['NEE_CUT_REF_f'],
@@ -52,7 +52,7 @@ def example_hexbin_absolute_values_with_mean():
     df = df.loc[(df.index.month >= 5) & (df.index.month <= 9)].copy()
     df = df[['Tair_f', 'VPD_f', 'NEE_CUT_REF_f']].dropna()
 
-    hm = dv.hexbin(
+    hm = dv.plot_hexbin(
         x=df['Tair_f'],
         y=df['VPD_f'],
         z=df['NEE_CUT_REF_f'],
@@ -81,7 +81,7 @@ def example_hexbin_with_value_overlay():
     df = df.loc[(df.index.month >= 5) & (df.index.month <= 9)].copy()
     df = df[['Tair_f', 'VPD_f', 'NEE_CUT_REF_f']].dropna()
 
-    hm = dv.hexbin(
+    hm = dv.plot_hexbin(
         x=df['Tair_f'],
         y=df['VPD_f'],
         z=df['NEE_CUT_REF_f'],

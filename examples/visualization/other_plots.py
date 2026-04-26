@@ -25,7 +25,7 @@ def example_longterm_anomalies_temperature():
 
     series_label = "CH-DAV: Air temperature"
 
-    dv.LongtermAnomaliesYear(
+    dv.plot_longterm_anomalies_year(
         series=series,
         series_label=series_label,
         series_units='(°C)',

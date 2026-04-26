@@ -4,30 +4,20 @@ from diive.core.io.filereader import ReadFileType as readfiletype
 from diive.core.io.filereader import search_files as search_files
 from diive.core.io.files import load_parquet as load_parquet
 from diive.core.io.files import save_parquet as save_parquet
-from diive.core.plotting.heatmap_datetime import HeatmapDateTime as heatmap_datetime
-from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-from diive.core.plotting.heatmap_datetime import HeatmapYearMonth as heatmap_year_month
-from diive.core.plotting.heatmap_datetime import HeatmapYearMonth
-from diive.core.plotting.heatmap_xyz import HeatmapXYZ as heatmap_xyz
-from diive.core.plotting.heatmap_xyz import HeatmapXYZ
-from diive.core.plotting.hexbin import HexbinPlot as hexbin
-from diive.core.plotting.hexbin import HexbinPlot
-from diive.core.plotting.ridgeline import RidgeLinePlot as ridgeline
-from diive.core.plotting.ridgeline import RidgeLinePlot
-from diive.core.plotting.timeseries import TimeSeries as time_series
-from diive.core.plotting.timeseries import TimeSeries
-from diive.core.plotting.cumulative import Cumulative as cumulative
-from diive.core.plotting.cumulative import Cumulative
-from diive.core.plotting.cumulative import CumulativeYear as cumulative_year
-from diive.core.plotting.cumulative import CumulativeYear
-from diive.core.plotting.dielcycle import DielCycle as diel_cycle
-from diive.core.plotting.dielcycle import DielCycle
-from diive.core.plotting.bar import LongtermAnomaliesYear as longterm_anomalies_year
-from diive.core.plotting.bar import LongtermAnomaliesYear
-from diive.core.plotting.histogram import HistogramPlot as histogram
-from diive.core.plotting.histogram import HistogramPlot
-from diive.core.plotting.scatter import ScatterXY as scatter_xy
-from diive.core.plotting.scatter import ScatterXY
+
+from diive.core.plotting.heatmap_datetime import HeatmapDateTime as plot_heatmap_datetime
+from diive.core.plotting.heatmap_datetime import HeatmapYearMonth as plot_heatmap_year_month
+from diive.core.plotting.heatmap_xyz import HeatmapXYZ as plot_heatmap_xyz
+from diive.core.plotting.hexbin import HexbinPlot as plot_hexbin
+from diive.core.plotting.ridgeline import RidgeLinePlot as plot_ridgeline
+from diive.core.plotting.timeseries import TimeSeries as plot_time_series
+from diive.core.plotting.cumulative import Cumulative as plot_cumulative
+from diive.core.plotting.cumulative import CumulativeYear as plot_cumulative_year
+from diive.core.plotting.dielcycle import DielCycle as plot_diel_cycle
+from diive.core.plotting.bar import LongtermAnomaliesYear as plot_longterm_anomalies_year
+from diive.core.plotting.histogram import HistogramPlot as plot_histogram
+from diive.core.plotting.scatter import ScatterXY as plot_scatter_xy
+
 from diive.core.times.resampling import resample_to_monthly_agg_matrix as resample_to_monthly_agg_matrix
 from diive.pkgs.analyses.gridaggregator import GridAggregator as ga
 from diive.pkgs.analyses.gridaggregator import GridAggregator as gridaggregator
@@ -60,35 +50,19 @@ __all__ = [
     'load_parquet',
     'save_parquet',
 
-    # Core: Plotting (existing)
-    'heatmap_datetime',
-    'HeatmapDateTime',
-    'heatmap_year_month',
-    'HeatmapYearMonth',
-    'heatmap_xyz',
-    'HeatmapXYZ',
-    'hexbin',
-    'HexbinPlot',
-    'ridgeline',
-    'RidgeLinePlot',
-
-    # Core: Plotting (Tier 1)
-    'time_series',
-    'TimeSeries',
-
-    # Core: Plotting (Tier 2)
-    'cumulative',
-    'Cumulative',
-    'cumulative_year',
-    'CumulativeYear',
-    'diel_cycle',
-    'DielCycle',
-    'longterm_anomalies_year',
-    'LongtermAnomaliesYear',
-    'histogram',
-    'HistogramPlot',
-    'scatter_xy',
-    'ScatterXY',
+    # Core: Plotting
+    'plot_heatmap_datetime',
+    'plot_heatmap_year_month',
+    'plot_heatmap_xyz',
+    'plot_hexbin',
+    'plot_ridgeline',
+    'plot_time_series',
+    'plot_cumulative',
+    'plot_cumulative_year',
+    'plot_diel_cycle',
+    'plot_longterm_anomalies_year',
+    'plot_histogram',
+    'plot_scatter_xy',
 
     # Core: Time Series
     'resample_to_monthly_agg_matrix',

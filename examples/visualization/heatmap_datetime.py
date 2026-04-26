@@ -29,7 +29,7 @@ def example_heatmap_datetime_vertical():
     series.iloc[100:120] = np.nan  # For testing
     series = series.dropna()  # For testing
 
-    hm = dv.heatmap_datetime(series=series, title=None, vmin=-10, vmax=10, ax_orientation="vertical")
+    hm = dv.plot_heatmap_datetime(series=series, title=None, vmin=-10, vmax=10, ax_orientation="vertical")
     hm.show()
 
 
@@ -47,7 +47,7 @@ def example_heatmap_datetime_horizontal():
     series.iloc[100:120] = np.nan
     series = series.dropna()
 
-    hm = dv.heatmap_datetime(series=series, title=None, vmin=-10, vmax=10, ax_orientation="horizontal")
+    hm = dv.plot_heatmap_datetime(series=series, title=None, vmin=-10, vmax=10, ax_orientation="horizontal")
     hm.show()
 
 
@@ -62,8 +62,8 @@ def example_heatmap_yearmonth_basic():
     series.index.freq = None  # For testing
     series.iloc[100:120] = np.nan
 
-    dv.heatmap_year_month(series=series, ax_orientation="horizontal", ranks=True, show_values=True).show()
-    dv.heatmap_year_month(series=series, ax_orientation="vertical", ranks=False, show_values=True).show()
+    dv.plot_heatmap_year_month(series=series, ax_orientation="horizontal", ranks=True, show_values=True).show()
+    dv.plot_heatmap_year_month(series=series, ax_orientation="vertical", ranks=False, show_values=True).show()
 
 
 def example_heatmap_yearmonth_multi_panel():
@@ -84,8 +84,8 @@ def example_heatmap_yearmonth_multi_panel():
                     show_values=True, show_values_n_dec_places=0)
     series = df['NEE_CUT_REF_f']
 
-    dv.heatmap_year_month(ax=ax1, series=series, agg='mean', **settings).plot()
-    dv.heatmap_year_month(ax=ax2, series=series, agg=np.ptp, **settings).plot()
+    dv.plot_heatmap_year_month(ax=ax1, series=series, agg='mean', **settings).plot()
+    dv.plot_heatmap_year_month(ax=ax2, series=series, agg=np.ptp, **settings).plot()
 
     ax1.set_xlabel("")
     ax1.set_xticklabels("")
@@ -109,7 +109,7 @@ def example_heatmap_yearmonth_colormaps():
 
     # Limit to first 5 colormaps for demo (uncomment to show all)
     for cmap in cmaps[:5]:
-        hm = dv.heatmap_year_month(series=series, cb_digits_after_comma=0, zlabel="degC",
+        hm = dv.plot_heatmap_year_month(series=series, cb_digits_after_comma=0, zlabel="degC",
                                  ax_orientation="vertical", figsize=(14, 10), cmap=cmap, title=cmap)
         hm.show()
         # Uncomment below to save to file:

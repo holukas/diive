@@ -22,7 +22,7 @@ def example_ridgeline_weekly():
     df = df[locs].copy()
     series = df['Tair_f'].copy()
 
-    rp = dv.ridgeline(series=series)
+    rp = dv.plot_ridgeline(series=series)
     rp.plot(
         how='weekly',
         kd_kwargs=None,
@@ -45,7 +45,7 @@ def example_ridgeline_monthly():
     df = dv.load_exampledata_parquet()
     series = df['Tair_f'].copy()
 
-    rp = dv.ridgeline(series=series)
+    rp = dv.plot_ridgeline(series=series)
     rp.plot(
         how='monthly',
         xlabel=r'Air temperature (°C)',
