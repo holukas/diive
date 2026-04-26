@@ -24,6 +24,7 @@
 ### Time Series Analysis
 
 - **DailyCorrelation (refactored)** — Class-based API with summary statistics (mean, median, skewness, kurtosis, normality test), anomaly detection (zscore/IQR), and visualization.
+- **StratifiedAnalysis** — Hierarchical binning for analyzing variable y across bins of x, stratified by z. Access results via `.results` property (DataFrame) or `.get_binaggs()` (dict). Use case: photosynthetic decoupling, ecosystem response functions.
 
 ### Plotting & Visualization
 

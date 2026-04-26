@@ -43,6 +43,11 @@ def example_ridgeline_monthly():
     Shows distribution of air temperature for each month across multiple years.
     """
     df = dv.load_exampledata_parquet()
+
+    # Use 2022 data
+    keeplocs = (df.index.year == 2022)
+    df = df.loc[keeplocs].copy()
+
     series = df['Tair_f'].copy()
 
     rp = dv.plot_ridgeline(series=series)

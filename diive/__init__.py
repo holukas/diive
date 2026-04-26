@@ -21,6 +21,8 @@ from diive.core.plotting.scatter import ScatterXY as plot_scatter_xy
 from diive.core.times.resampling import resample_to_monthly_agg_matrix as resample_to_monthly_agg_matrix
 from diive.pkgs.analyses.correlation import DailyCorrelation as DailyCorrelation
 from diive.pkgs.analyses.correlation import daily_correlation as daily_correlation
+from diive.pkgs.analyses.decoupling import StratifiedAnalysis as StratifiedAnalysis
+from diive.pkgs.analyses.decoupling import StratifiedAnalysis as stratified_analysis
 from diive.pkgs.analyses.gridaggregator import GridAggregator as ga
 from diive.pkgs.analyses.gridaggregator import GridAggregator as gridaggregator
 from diive.pkgs.analyses.gridaggregator import GridAggregator
@@ -72,6 +74,8 @@ __all__ = [
     # Packages: Analyses
     'DailyCorrelation',
     'daily_correlation',
+    'StratifiedAnalysis',
+    'stratified_analysis',
     'ga',
     'gridaggregator',
     'GridAggregator',

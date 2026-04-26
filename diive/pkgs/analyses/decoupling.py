@@ -24,7 +24,7 @@ from pandas import DataFrame
 from scipy.stats import zscore
 
 
-class SortingBinsMethod:
+class StratifiedAnalysis:
 
     def __init__(self,
                  df: DataFrame,
@@ -35,26 +35,32 @@ class SortingBinsMethod:
                  n_bins_x: int = 2,
                  conversion: str = None,
                  agg: str = 'median'):
-        """Investigate binned aggregates of a variable z in binned classes of x and y.
+        """Stratified binning analysis: analyze variable y across bins of x, stratified by z.
 
-        For example: show median GPP (y) in 5 classes of VPD (x), separate for 10 classes
-        of air temperature (z).
+        Creates hierarchical bins: stratifies data by variable z into quantile-based bins,
+        then within each z bin, further bins by variable x, and aggregates y within each bin.
 
         Args:
             df: Dataframe with variables
-            zvar: Name of the first binning variable, will be shown as colors (z) in the plot.
-            xvar: Name of the second binning variable, will be shown on the x-axis (x) in the plot.
+            zvar: Name of the stratification variable, will be shown as colors (z) in the plot.
+            xvar: Name of the x-axis binning variable, will be shown on the x-axis (x) in the plot.
             yvar: Name of the variable of interest, will be shown on the y-axis (y) in the plot.
-            n_bins_z: Number of bins for variable *var1_col*. Must be >0 and <= 120.
-            n_bins_x: Number of bins for variable *var2_col*. Must be >= 2.
+            n_bins_z: Number of stratification bins for zvar. Must be >0 and <= 120.
+            n_bins_x: Number of bins for xvar within each z bin. Must be >= 2.
             conversion: Convert to z-scores or percentiles. Options: 'z-score', 'percentile'
             agg: Aggregation method for binning, e.g. 'median', 'mean'.
 
-        Returns:
-            Dict with results stored as dataframes for each bin of *zvar*.
+        Properties:
+            .results: All binned results as a single DataFrame with z_bin_label column
+            .binaggs: Dict of DataFrames, one per z bin
 
-        - Example notebook available in:
-            notebooks/Analyses/DecouplingSortingBins.ipynb
+        Methods:
+            .calcbins(): Compute binned aggregates
+            .get_binaggs(): Return results dictionary
+            .showplot_decoupling_sbm(): Visualize results with line plot and error bars
+
+        Example:
+            See `examples/analyses/decoupling.py` for complete examples.
         """
         self._df = df.copy().dropna()
         self.zvar = zvar
@@ -95,6 +101,23 @@ class SortingBinsMethod:
     def get_binaggs(self) -> dict:
         """Return dict of dataframes with variable 1 group as key"""
         return self.binaggs
+
+    @property
+    def results(self) -> DataFrame:
+        """All binned results as a single DataFrame.
+
+        Concatenates all z-bins with a 'z_bin_label' column indicating bin membership.
+        """
+        dfs = []
+        for z_bin_label, df_bin in self.binaggs.items():
+            df_copy = df_bin.copy()
+            df_copy['z_bin_label'] = z_bin_label
+            dfs.append(df_copy)
+
+        if not dfs:
+            raise ValueError("No results available. Run .calcbins() first.")
+
+        return pd.concat(dfs, ignore_index=True)
 
     def _convert(self):
         if self.conversion == 'percentile':
@@ -282,53 +305,3 @@ class SortingBinsMethod:
                            textsize=textsize,
                            bbox_to_anchor=(1, 1.02))
         return ax
-
-
-def example():
-    # Variables
-    vpd_col = 'VPD_f'
-    nee_col = 'NEE_CUT_REF_f'
-    ta_col = 'Tair_f'
-    gpp_col = 'GPP_DT_CUT_REF'
-    reco_col = 'Reco_DT_CUT_REF'
-    # rh_col = 'RH'
-    swin_col = 'Rg_f'
-
-    from diive.configs.exampledata import load_exampledata_parquet  # Example data
-    data_df = load_exampledata_parquet()
-    data_df = data_df.loc[(data_df.index.month >= 6) & (data_df.index.month <= 9)].copy()
-    df = data_df[[nee_col, gpp_col, reco_col, vpd_col, ta_col, swin_col]].copy()
-    # df = data_df.copy()
-    daytime_locs = (df[swin_col] > 50) & (df[ta_col] > 5)
-    df = df[daytime_locs].copy()
-
-    rename_dict = {
-        ta_col: 'air_temperature',
-        vpd_col: 'vapor_pressure_deficit',
-        nee_col: 'net_ecosystem_productivity'
-    }
-    df = df.rename(columns=rename_dict, inplace=False)
-
-    ta_col = 'air_temperature'
-    vpd_col = 'vapor_pressure_deficit'
-    nee_col = 'net_ecosystem_productivity'
-    df = df[[ta_col, vpd_col, nee_col]].copy()
-    df[nee_col] = df[nee_col].multiply(-1)
-
-    sbm = SortingBinsMethod(df=df,
-                            zvar=ta_col,
-                            xvar=vpd_col,
-                            yvar=nee_col,
-                            n_bins_z=48,
-                            n_bins_x=2,
-                            conversion=False)
-    sbm.calcbins()
-    sbm.showplot_decoupling_sbm(marker='o', emphasize_lines=True)
-
-    binaggs = sbm.get_binaggs()
-    first = next(iter(binaggs))
-    print(binaggs[first])
-
-
-if __name__ == '__main__':
-    example()

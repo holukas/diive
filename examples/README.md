@@ -18,7 +18,8 @@ examples/
 │   ├── scatter_xy.py                  # ScatterXY scatter plots (3 examples)
 │   └── heatmap_xyz.py                 # HeatmapXYZ 3D scatter heatmaps (TODO)
 ├── analyses/               # Time series analysis examples
-│   └── correlation.py                 # DailyCorrelation analysis with statistics and anomaly detection (1 example)
+│   ├── correlation.py                 # DailyCorrelation analysis with statistics and anomaly detection (1 example)
+│   └── decoupling.py                  # StratifiedAnalysis for hierarchical binning analysis (1 example)
 └── gap_filling/           # Gap-filling workflow examples (TODO)
     ├── quick_start.py             # Simple interpolation + quickfill
     ├── randomforest_ts.py         # RandomForestTS examples
@@ -34,7 +35,7 @@ examples/
 python examples/run_all_examples.py
 ```
 
-Executes all 10 examples (9 visualization + 1 analysis) in parallel (4 concurrent workers) with execution time tracking.
+Executes all 11 examples (9 visualization + 2 analysis) in parallel (4 concurrent workers) with execution time tracking.
 - Shows individual timing for each example
 - Detailed error messages if any fail
 - ~2.7x faster than sequential execution
