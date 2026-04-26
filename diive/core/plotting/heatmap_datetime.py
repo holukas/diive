@@ -43,12 +43,9 @@ class HeatmapDateTime(HeatmapBase):
 
     Top-level alias: ``dv.heatmapdatetime(series, ...)``
 
-    Example::
-
-        import diive as dv
-        df = dv.load_exampledata_parquet()
-        hm = dv.heatmapdatetime(series=df['Tair_f'], zlabel='°C', figsize=(6, 9))
-        hm.show()
+    Example:
+        See `examples/visualization/heatmap_datetime.py` for complete examples
+        including vertical/horizontal orientations.
     """
 
     def __init__(self,
@@ -253,6 +250,10 @@ class HeatmapYearMonth(HeatmapBase):
     This class extends HeatmapBase to visualize monthly aggregated time series
     data, where one axis represents years and the other represents months.
     It supports different aggregation methods and the display of ranks instead of raw values.
+
+    Example:
+        See `examples/visualization/heatmap_datetime.py` for complete examples
+        including rank transformation, multi-panel layouts, and colormap options.
     """
 
     def __init__(self,
@@ -404,108 +405,3 @@ class HeatmapYearMonth(HeatmapBase):
             plot=p,
             shown_freq=f'{self.agg}, MS'
         )
-
-
-def _example_heatmap_datetime():
-    import diive as dv
-    df = dv.load_exampledata_parquet()
-
-    # from diive.core.io.filereader import ReadFileType
-    # filepath = r"F:\Sync\luhk_work\40 - DATA\DATASETS\2025_FORESTS\1-downloads\ICOSETC_CH-Dav_ARCHIVE_L2\ICOSETC_CH-Dav_FLUXNET_HH_L2.csv"
-    # loaddatafile = ReadFileType(filetype='FLUXNET-FULLSET-HH-CSV-30MIN',
-    #                             filepath=filepath,
-    #                             data_nrows=None)
-    # df, metadata_df = loaddatafile.get_filedata()
-
-    var = 'NEE_CUT_REF_f'
-    series = df[var].copy()
-    # series = series.resample('3h', label='left').mean()  # For testing
-    # series.index.name = "TIMESTAMP_START"  # For testing
-    # locs = (series.index.date >= datetime.date(2022, 6, 1)) & (series.index.date <= datetime.date(2022, 6, 5))
-    locs = series.index.year >= 2020
-    series = series.loc[locs]
-    series.iloc[100:120] = np.nan  # For testing
-    series = series.dropna()  # For testing
-
-    hm = dv.heatmapdatetime(series=series, title=None, vmin=-10, vmax=10, ax_orientation="vertical")
-    # hm = dv.heatmapdatetime(series=series, title=None, vmin=-10, vmax=10, ax_orientation="horizontal")
-    hm.show()
-    # hm.export_borderless_heatmap(outpath=r"F:\TMP\heightmap_blender")
-    # print(hm.get_ax())
-    # print(hm.get_plot_data())
-
-
-def _example_heatmap_yearmonth():
-    df = dv.load_exampledata_parquet()
-    series = df['Tair_f'].copy()
-    series.name = None  # For testing
-    series.index.freq = None  # For testing
-    series.iloc[100:120] = np.nan
-    dv.heatmapyearmonth(series=series, ax_orientation="horizontal", ranks=True, show_values=True).show()
-    dv.heatmapyearmonth(series=series, ax_orientation="vertical", ranks=False, show_values=True).show()
-    # dv.heatmapyearmonth(series_monthly=series, cb_digits_after_comma=0, zlabel="degC",
-    #                     ax_orientation="horizontal", figsize=(14, 10)).show()
-    # hm.export_borderless_heatmap(outpath=r"F:\TMP\heightmap_blender")
-    # print(hm.get_ax())
-    # print(hm.get_plot_data())
-
-
-def _example_multiple_heatmaps_yearmonth_horizontal():
-    # Figure (top-to-bottom, horizontal plots)
-    import matplotlib.pyplot as plt
-    import matplotlib.gridspec as gridspec
-    df = dv.load_exampledata_parquet()
-    fig = plt.figure(facecolor='white', figsize=(16, 9), layout="constrained", dpi=300)
-    gs = gridspec.GridSpec(2, 1, figure=fig)  # rows, cols
-    gs.update(wspace=0.5, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
-    ax1 = fig.add_subplot(gs[0, 0])
-    ax2 = fig.add_subplot(gs[1, 0])
-    zlabel = r'$\mathrm{\mu mol\ CO_2\ m^{-2}\ s^{-1}}$'
-    settings = dict(ax_orientation='horizontal', zlabel=zlabel, cb_digits_after_comma=0,
-                    show_values=True, show_values_n_dec_places=0)
-    series = df['NEE_CUT_REF_f']
-    dv.heatmapyearmonth(ax=ax1, series=series, agg='mean', **settings).plot()
-    dv.heatmapyearmonth(ax=ax2, series=series, agg=np.ptp, **settings).plot()
-    ax1.set_xlabel("")
-    ax1.set_xticklabels("")
-    ax1.set_title("")
-    ax2.set_title("")
-    fig.suptitle("NEE")
-    fig.show()
-
-
-def _example_colormaps():
-    """Creates heatmaps with all available colormaps and exports them to files."""
-    from heatmap_base import list_of_colormaps
-    cmaps = list_of_colormaps()
-    df = dv.load_exampledata_parquet()
-    series = df['Tair_f'].copy()
-    for cmap in cmaps:
-        hm = dv.heatmapyearmonth(series=series, cb_digits_after_comma=0, zlabel="degC",
-                                 ax_orientation="vertical", figsize=(14, 10), cmap=cmap, title=cmap)
-        hm.show()
-        outfile = rf"F:\Sync\luhk_work\20 - CODING\matplotlib_colormaps\{cmap}.png"
-        hm.fig.savefig(outfile)
-        print(f"Saved {outfile}")
-    # hm.export_borderless_heatmap(outpath=r"F:\TMP\heightmap_blender")
-    # print(hm.get_ax())
-    # print(hm.get_plot_data())
-
-
-if __name__ == '__main__':
-    _example_heatmap_datetime()
-    # _example_heatmap_yearmonth()
-    # _example_multiple_heatmaps_yearmonth_horizontal()
-    # _example_colormaps()
-
-# # from diive.core.io.files import load_parquet
-#     # f1 = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-cha_flux_product"
-#     # f2 = r"dataset_ch-cha_flux_product\notebooks\80_FINALIZE"
-#     # f3 = f"81.1_FLUXES_M15_MGMT_L4.2_NEE_GPP_RECO_LE_H_FN2O_FCH4.parquet"
-#     # f = f"{f1}\\{f2}\\{f3}"
-#     # df = load_parquet(f)
-#     # # [print(c) for c in df.columns if "FN2O" in c];
-#     # nee_monthly = df['NEE_L3.1_L3.3_CUT_50_QCF_gfRF'].resample('1MS', label='left').agg(
-#     #     {'mean'})  # numpy's ptp gives the data range
-#     # n2o_monthly = df['FN2O_L3.1_L3.3_CUT_50_QCF_gfRF'].resample('1MS', label='left').agg(
-#     #     {'mean'})  # numpy's ptp gives the data range
