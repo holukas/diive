@@ -25,6 +25,7 @@ EXAMPLE_FILES = [
     'visualization/histogram.py',
     'visualization/ridgeline.py',
     'visualization/scatter_xy.py',
+    'analyses/correlation.py',
 ]
 
 MAX_WORKERS = 4  # Number of parallel workers

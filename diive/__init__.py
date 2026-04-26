@@ -19,6 +19,8 @@ from diive.core.plotting.histogram import HistogramPlot as plot_histogram
 from diive.core.plotting.scatter import ScatterXY as plot_scatter_xy
 
 from diive.core.times.resampling import resample_to_monthly_agg_matrix as resample_to_monthly_agg_matrix
+from diive.pkgs.analyses.correlation import DailyCorrelation as DailyCorrelation
+from diive.pkgs.analyses.correlation import daily_correlation as daily_correlation
 from diive.pkgs.analyses.gridaggregator import GridAggregator as ga
 from diive.pkgs.analyses.gridaggregator import GridAggregator as gridaggregator
 from diive.pkgs.analyses.gridaggregator import GridAggregator
@@ -68,6 +70,8 @@ __all__ = [
     'resample_to_monthly_agg_matrix',
 
     # Packages: Analyses
+    'DailyCorrelation',
+    'daily_correlation',
     'ga',
     'gridaggregator',
     'GridAggregator',

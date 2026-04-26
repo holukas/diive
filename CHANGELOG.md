@@ -4,251 +4,48 @@
 
 ## v0.91.0 | XX XXX 2026
 
-### Highlights in this Release
+### Highlights
 
-- **Seasonal-Trend Decomposition (new)** — Separate time series into trend, seasonal, and residual components using
-  STL (Seasonal-Trend Loess), classical, or harmonic methods. Notebook with 5 examples: detrending for ML, anomaly
-  detection, method comparison, climate change analysis, ecosystem recovery.
-
-- **HexbinPlot visualization (new)** — Plot flux values aggregated into 2D hexagonal bins of driver variables (
-  temperature vs water-filled pore space). Includes percentile-based normalization and configurable aggregation (median,
-  mean, etc.).
+- **Seasonal-Trend Decomposition** — Separate time series into trend/seasonal/residual (STL, classical, harmonic). Notebook with 5 real-world examples.
+- **HexbinPlot visualization** — Plot flux values in 2D hexagonal bins of driver variables with percentile normalization.
 
 ---
 
-**Feature Highlights and Logic Changes**
+### Gap-Filling
 
-### Gap-filling
-
-**Standalone Feature Engineering Architecture (NEW)**
-
-* **FeatureEngineer class** — Separated feature engineering from gap-filling for better composability and reusability.
-    - Class: `FeatureEngineer` in `diive.core.ml.feature_engineer`
-    - 8-stage composable pipeline: lag → rolling → diff → EMA → polynomial → STL → timestamps → record_number
-    - Pre-engineer features once, reuse across multiple models (RF + XGB simultaneously)
-    - Independent testing and debugging of feature engineering
-    - Benefits: Better separation of concerns, reusable features, cleaner API
-    - Usage: `engineer = FeatureEngineer(...); df_engineered = engineer.fit_transform(df); model = RandomForestTS(input_df=df_engineered, ...)`
-
-* **Simplified gap-filling API** — RandomForestTS, XGBoostTS, and long-term variants now accept PRE-ENGINEERED features only
-    - No longer need to pass feature parameters to gap-filling models
-    - Gap-filling models accept only: `input_df` (pre-engineered), `target_col`, model hyperparameters
-    - Cleaner, more intuitive composition-based workflow
-    - All tests updated to use new composition pattern
-
-**Feature Engineering Parameters**
-
-* **Rolling window statistics** — Parameter: `features_rolling` (window sizes in records).
-    - Computes rolling mean and std (no new NaN introduced)
-    - Excludes columns with `features_rolling_exclude_cols`
-    - Column names: `.{col}_mean{w}` / `.{col}_std{w}`
-    - Example: `features_rolling=[6, 48]` on 30-min data = 3h and 24h windows (12)
-
-* **Advanced rolling statistics** — Parameter: `features_rolling_stats` (median, min, max, std, Q25, Q75).
-    - Column names: `.{col}_ROLLMEDIAN{w}`, `.{col}_ROLLMIN{w}`, etc.
-    - Backward compatible (defaults to None) (12)
-
-* **Temporal differencing** — Parameter: `features_diff` (difference orders).
-    - `.{col}_DIFF1` = first difference; `.{col}_DIFF2` = second difference
-    - Skips already-engineered columns (prefix `.`)
-    - Excludes columns with `features_diff_exclude_cols`
-    - Example: `features_diff=[1, 2]` (13)
-
-* **Polynomial features** — Parameter: `features_poly_degree` (e.g., 2 for squared terms).
-    - Column names: `.{col}_POL2`, `.{col}_POL3`, etc.
-    - Excludes columns with `features_poly_exclude_cols` (12)
-
-* **Exponential Moving Average (EMA)** — Parameter: `features_ema` (span values).
-    - Column names: `.{col}_EMA{span}`
-    - Uses `adjust=False` for expanding window
-    - Excludes columns with `features_ema_exclude_cols`
-    - Example: `features_ema=[6, 24, 48]` on 30-min data = 3h, 12h, 24h spans (15)
-
-**SHAP-Based Feature Reduction**
-
-* **SHAP feature importance** — Replaced permutation-based with SHAP values (SHapley Additive exPlanations).
-    - Method: SHAP `TreeExplainer` for tree-based models (XGBoost, Random Forest)
-    - Fixed `base_score` handling for XGBoost environments
-    - Fixed label: `"SHAP IMPORTANCE (mean absolute SHAP values)"` (9)
-    - Fixed boundary case: features with SHAP exactly equal to threshold now counted as rejected (9)
-
-* **Configurable threshold** — Parameter: `shap_threshold_factor` (default 0.5).
-    - Formula: `threshold = random_importance + k * random_std`
-    - k=0.5 (lenient) → k=1.0 (standard) → k=2.0 (conservative) (9)
-
-**Model Implementations**
-
-* **RandomForestTS/LongTermGapFillingRandomForestTS** — Added support for `features_rolling`, `features_rolling_stats`,
-  `features_diff`, `features_ema`, `features_poly_degree` (12)
-
-* **Long-term XGBoost gap-filling** — Added `level41_longterm_xgboost()` in `FluxProcessingChain`.
-    - Method: `LongTermGapFillingXGBoostTS`
-    - Results stored in `level41['long_term_xgboost']`
-    - Defaults: n_estimators=200, max_depth=6, learning_rate=0.3, early_stopping_rounds=10 (12)
-
-* **Exponential Moving Average (EMA) features** — Added to all gap-filling modules: `RandomForestTS`, `XGBoostTS`,
-  `LongTermGapFillingRandomForestTS`, `LongTermGapFillingXGBoostTS`.
-    - Also in `FluxProcessingChain.level41_longterm_random_forest()` and `level41_longterm_xgboost()`
-    - Parameter: `features_ema` (span values); excludes via `features_ema_exclude_cols`
-    - Feature pipeline: lag → rolling → differencing → EMA → polynomial → timestamps (15)
-
-* **QuickFillRFTS** — Fixed `features_lag` requirement to use range (e.g., `[-1, -1]` not `[-1]`).
-    - For exploratory testing only
-    - Optimized: `n_estimators=3`, no timestamp features (12)
-
-**Comprehensive Documentation for CO2 Flux Gap-Filling (NEW)**
-
-* **Enhanced FeatureEngineer docstring** — Comprehensive parameter guidance for time series context.
-    - Added 8 sections describing each parameter with typical values, defaults, and time series effects
-    - Real flux data examples throughout (photosynthesis, respiration, light saturation, stomatal response)
-    - Three scenario examples:
-        1. **Quick/Minimal**: ~5 features, fastest, minimal temporal context
-        2. **Fast/Standard**: ~15-20 features, balanced production workflow
-        3. **Comprehensive**: ~50-100 features, detailed research analysis
-    - Each parameter explicitly documents: typical values for 30-min flux data, default behavior (None/False meaning), effect on time series data, typical use cases
-    - Guidance on choosing between scenarios and expected computational cost (18)
-
-* **Comprehensive CO2 flux examples in FluxProcessingChain** — Production-ready examples for RF and XGBoost.
-    - `level41_longterm_random_forest()` and `level41_longterm_xgboost()` now feature detailed CO2-optimized configurations
-    - Feature engineering tuned for 30-min flux data:
-        - `features_lag=[-2, -1]`: 30-60 min temporal context
-        - `features_rolling=[2, 4, 12, 24, 48]`: 1hr to 24hr rolling windows
-        - `features_rolling_stats=['median', 'min', 'max', 'std', 'q25', 'q75']`: Complete distributional context
-        - `features_diff=[1, 2]`: First and second-order rate of change (photosynthetic response)
-        - `features_ema=[6, 12, 24, 48]`: 3hr to 24hr exponential moving averages (stomatal memory)
-        - `features_poly_degree=2`: Michaelis-Menten light saturation curves
-        - `features_stl=True, features_stl_seasonal_period=48`: Daily photosynthetic cycle (48 × 30min = 24 hours)
-        - `vectorize_timestamps=True, add_continuous_record_number=True`: Annual and diurnal cycle capture
-    - Random Forest hyperparameters: n_estimators=350, max_depth=15, min_samples_split=5, min_samples_leaf=2
-    - XGBoost hyperparameters: n_estimators=250, max_depth=6, learning_rate=0.1, early_stopping_rounds=20
-    - **Feature reduction enabled** on both: SHAP-based selection reduces ~45-50 features to ~10-20 engineered features
-    - Inline documentation explaining CO2-specific tuning, ecological basis, and RF vs XGBoost comparison (19)
-
-* **Enhanced XGBoostTS hyperparameter documentation** — Complete `min_child_weight` guidance.
-    - New comprehensive documentation for tree regularization parameter
-    - Default: 1 (permissive, fine-grained splits); typical range: 1-10
-    - Flux-data-specific recommendations:
-        - `min_child_weight=1`: Exploration, fine-grained feature interactions
-        - `min_child_weight=3-5`: Moderate regularization, prevents overfitting to measurement noise
-        - `min_child_weight=10+`: Heavy regularization, smooth predictions, fewer splits
-    - Effect explanation: Higher values create shallower trees, reduce overfitting but may underfit if too restrictive
-    - Essential for noisy eddy covariance flux measurements (20)
-
-**Improvements and Fixes**
-
-* **ML Plotting functions** — Refactored layouts and styling.
-    - `plot_observed_predicted()`: Dual-panel, accuracy bands, residuals
-    - `plot_feature_importance()`: Horizontal bars, error bars, labels
-    - `plot_prediction_residuals_error_regr()`: Updated colors and formatting (11)
-
-* **Test optimizations** — RandomForest tests 60-70% faster.
-    - `test_gapfilling_randomforest`: 2.8s (was 6s)
-    - `test_gapfilling_longterm_randomforest`: 2 min (was 5 min)
-    - Optimized hyperparameters and features (12)
-
-**Documentation and Examples**
-
-* **Examples folder consolidation** — Consolidated scattered examples into dedicated `examples/` folder.
-    - **Phase 1 (Complete)**: HeatmapDateTime, HeatmapYearMonth, HexbinPlot
-      - Created `examples/visualization/heatmap_datetime.py` (5 examples)
-      - Created `examples/visualization/hexbin.py` (3 examples)
-      - Removed 120+ lines from source files
-    - **Phase 2 (Complete)**: TimeSeries, DielCycle, HistogramPlot, RidgeLinePlot, ScatterXY
-      - Created `examples/visualization/timeseries.py` (1 example)
-      - Created `examples/visualization/dielcycle.py` (1 example)
-      - Created `examples/visualization/histogram.py` (2 examples)
-      - Created `examples/visualization/ridgeline.py` (2 examples)
-      - Created `examples/visualization/scatter_xy.py` (3 examples)
-      - Removed 80+ lines from source files
-      - Total: 21 executable visualization examples across 9 files
-    - Created `examples/README.md` with index and quick-start guide
-    - Updated main `README.md` with Examples section
-    - Updated docstrings to reference examples folder (all 7 visualization classes)
-    - Added exports: `HistogramPlot`, `ScatterXY` in `__init__.py`
-    - **Benefits**: Source code clean, examples discoverable, runnable as standalone scripts
-
-* **Example runner script** (`examples/run_all_examples.py`) — Run all examples in parallel with timing.
-    - Executes all 9 visualization examples concurrently (4 workers max)
-    - Per-example execution time tracking
-    - Sorted results by duration (slowest first)
-    - Detailed error messages for failures
-    - Exit code for CI/CD integration
-    - Performance: ~25s total (vs 67s sequential), ~2.7x speedup
-    - Useful for validation and performance benchmarking
-
-* **PEP 8 alias standardization** — All top-level aliases now follow PEP 8 snake_case convention.
-    - Updated aliases: `heatmap_datetime`, `heatmap_year_month`, `heatmap_xyz`, `diel_cycle`, `time_series`, `quick_fill_rfts`, `flux_detection_limit`, `flux_mds`
-    - Updated throughout: source files (7), examples (2), Jupyter notebooks (5)
-    - Maintains backward compatibility with class name exports (e.g., `HeatmapDateTime` still available)
-    - **Benefits**: Follows Python conventions, consistent with existing aliases like `randomforest_ts` and `xgboost_ts`
+- **Standalone FeatureEngineer class** — Separated from gap-filling for composability and reusability. 8-stage pipeline (lag→rolling→diff→EMA→poly→STL→timestamps→record_number). Pre-engineer once, reuse across multiple models.
+- **Simplified API** — RandomForestTS/XGBoostTS accept only pre-engineered data + model parameters (breaking change).
+- **Feature engineering support** — Added rolling stats, temporal differencing, polynomial features, EMA, STL decomposition.
+- **SHAP-based feature reduction** — Replaced permutation importance with SHAP values. Configurable threshold (default 0.5).
+- **Long-term XGBoost** — Added `level41_longterm_xgboost()` to FluxProcessingChain for fair RF vs XGB comparison.
+- **CO2 flux documentation** — Comprehensive examples with tuned parameters for 30-min flux data.
+- **Test optimizations** — RandomForest tests 60-70% faster (2.8s vs 6s).
 
 ### Time Series Analysis
 
-* **Seasonal-Trend Decomposition** (new analysis module) — Separate time series into trend, seasonal, and residual.
-    - Class: `SeasonalTrendDecomposition` in `diive.pkgs.analyses.seasonaltrend`
-    - Methods: STL (Seasonal-Trend Loess), Classical (moving average), Harmonic (FFT)
-    - **STL**: Handles gaps, non-stationary data
-    - **Classical**: Moving-average decomposition; assumes stationarity
-    - **Harmonic**: FFT-based frequency analysis
-    - **Quality-weighted fitting**: Uses quality flags during decomposition (not pre-filtering)
-    - **Lazy evaluation**: Components cached after first access
-    - **Auto-detection**: Detects seasonal period via periodogram if not specified
-    - Properties: `.trend`, `.seasonal`, `.residual`
-    - Methods: `.detrend()`, `.deseasonalize()`, `.reconstruct()`, `.summary()`
-    - **Utilities**:
-        - `diive.core.times.decomposition_utils`: Core functions (STL, classical, harmonic, quality-weighted)
-        - `diive.pkgs.timeseries.harmonic`: FFT analysis, periodogram, harmonic extraction
-        - `diive.core.plotting.seasonaltrend`: 4-panel plots, spectral analysis
-    - **Example function**: `example_seasonaltrend_decomposition()` (17)
-    - **Notebook**: `notebooks/Analyses/SeasonalTrendDecomposition.ipynb` with 5 examples:
-        1. Detrending for ML Gap-Filling
-        2. Anomaly Detection & Quality Control
-        3. Method Comparison (Harmonic vs Classical)
-        4. Climate Change Impact Analysis
-        5. Ecosystem Recovery Trends
-           Plus tutorial sections on imports, quick start, component access, visualization, quality-weighting,
-           reconstruction (17)
+- **DailyCorrelation (refactored)** — Class-based API with summary statistics (mean, median, skewness, kurtosis, normality test), anomaly detection (zscore/IQR), and visualization.
 
-### Plotting and Visualization
+### Plotting & Visualization
 
-* **DielCycle**: Fixed `ConversionError` with non-hour-boundary timestamps (30-min data with :15/:45 offsets).
-  Root cause: matplotlib's `StrCategoryConverter` treated `datetime.time` as categories; exact hours like `time(3, 0)`
-  missing. Fix: convert `datetime.time` index to float hours before plotting; replace string-based `set_xticks`/
-  `set_xlim`
-  with numeric equivalents (10).
-* **HeatmapDateTime**: Fixed `TypeError` from `datetime.time` to `pcolormesh`; removed deprecated
-  `register_matplotlib_converters()`;
-  fixed `show_values=True` silently ignored; adaptive time-axis tick interval; fixed NaN rendering in `color_bad`;
-  improved docstrings (2).
-* **HeatmapXYZ** (new): Plot z-values on 2-D grids with arbitrary numeric x/y axes (binned temperature vs VPD).
-  Requires pre-aggregated data from `GridAggregator.df_agg_long` (3).
-* **HeatmapXYZ.from_gridaggregator()**: Convenience method to extract pre-aggregated data from GridAggregator output (
-  6).
-* **HeatmapXYZ** (refactored): Explicitly requires pre-aggregated input; added integration tests to prevent
-  silent re-aggregation bugs (5).
-* **HexbinPlot** (new): Plot flux values in 2D hexagonal bins of driver variables (temperature vs water-filled pore
-  space).
-  Percentile-based normalization (0-100), configurable aggregation (default: median), variable gridsize; inherits from
-  HeatmapBase (8).
+- **ScatterXY (enhanced)** — 3-variable scatter with optional color-coding, bin aggregation with trend overlays, and confidence intervals.
+- **Plotting API refactoring** — All aliases now use `plot_` prefix (e.g., `plot_scatter_xy`, `plot_diel_cycle`). Breaking change; removes namespace ambiguity.
+- **HeatmapDateTime/HeatmapXYZ fixes** — Fixed datetime handling, show_values parameter, adaptive tick intervals. HeatmapXYZ requires pre-aggregated input.
+- **Examples consolidation** — Moved 21 scattered examples from source files into dedicated `examples/` folder. Added parallel runner script (~2.7x speedup).
 
-* **Plotting API refactoring**: All visualization class aliases now use `plot_` prefix for clarity and namespace separation.
-    - **Breaking change:** Old aliases deprecated in favor of `plot_*` pattern
-    - Old: `dv.scatter_xy()`, `dv.diel_cycle()`, `dv.histogram()`, `dv.ridgeline()`, `dv.cumulative()`, `dv.cumulative_year()`, `dv.longterm_anomalies_year()`, `dv.hexbin()`, `dv.time_series()`
-    - New: `dv.plot_scatter_xy()`, `dv.plot_diel_cycle()`, `dv.plot_histogram()`, `dv.plot_ridgeline()`, `dv.plot_cumulative()`, `dv.plot_cumulative_year()`, `dv.plot_longterm_anomalies_year()`, `dv.plot_hexbin()`, `dv.plot_time_series()`
-    - Removed duplicate class name exports (e.g., `HistogramPlot`, `ScatterXY`) from `__all__`; only `plot_*` aliases exported
-    - Disambiguates visualization functions from calculation functions (e.g., `dv.diel_cycle()` for calculation vs `dv.plot_diel_cycle()` for plotting)
-    - Updated all 10 example files to use new `plot_*` aliases
+### Documentation
 
-* **ScatterXY** (enhanced): 3-variable scatter plots with optional color-coding and bin aggregation.
-    - Add optional `z` Series parameter for color-coded third variable with customizable colormap
-    - Refactor styling parameters (xlabel, ylabel, zlabel, xlim, ylim, cmap, show_colorbar) to `plot()` method
-    - Add colorbar with custom zlabel support for z-variable visualization
-    - Add bin aggregation feature: group data by x-axis bins with trend overlays
-    - Show confidence intervals per bin: interquartile range (median) or std (mean)
-    - Initialize all styling attributes in `__init__` for predictable class state
-    - Fix matplotlib tight_layout incompatibility with colorbar
-    - Use full data range for x-axis (remove quantile trimming)
-    - Updated to 3 examples: basic scatter, 3-variable scatter with radiation coloring, binned aggregation (21)
+- **PEP 8 alias standardization** — Updated all top-level aliases to snake_case convention.
+- **Enhanced docstrings** — Added scenario guidance, typical parameter values, and ecological context.
+- **Notebook reorganization** — Consolidated 17 topic folders into 9 domain folders.
+
+---
+
+### Breaking Changes
+
+1. Gap-filling API: Feature parameters no longer accepted (moved to FeatureEngineer)
+2. Plotting aliases: Old names deprecated in favor of `plot_*` prefix
+3. DailyCorrelation: Refactored from function to class-based API
+4. HeatmapXYZ: Now requires pre-aggregated input
 
 ### Testing
 
