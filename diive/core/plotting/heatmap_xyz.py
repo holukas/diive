@@ -17,8 +17,8 @@ binned by temperature and VPD.
 ``df_long`` which contains raw observations) as the source.
 
 Top-level aliases:
-    - ``dv.heatmapxyz(x, y, z, ...)`` — direct Series input
-    - ``dv.heatmapxyz.from_gridaggregator(q, x_col, y_col, z_col, ...)`` — from GridAggregator output
+    - ``dv.heatmap_xyz(x, y, z, ...)`` — direct Series input
+    - ``dv.heatmap_xyz.from_gridaggregator(q, x_col, y_col, z_col, ...)`` — from GridAggregator output
 
 Example (recommended with GridAggregator)::
 
@@ -27,7 +27,7 @@ Example (recommended with GridAggregator)::
     q = dv.ga(x=df['Tair_f'], y=df['VPD_f'], z=df['NEE_CUT_REF_f'],
               binning_type='quantiles', n_bins=10,
               min_n_vals_per_bin=1, aggfunc='mean')
-    hm = dv.heatmapxyz.from_gridaggregator(q, 'Tair_f', 'VPD_f', 'NEE_CUT_REF_f',
+    hm = dv.heatmap_xyz.from_gridaggregator(q, 'Tair_f', 'VPD_f', 'NEE_CUT_REF_f',
                                            show_values=True, show_values_n_dec_places=2)
     hm.show()
 
@@ -52,12 +52,12 @@ class HeatmapXYZ(HeatmapBase):
     Cell boundaries are computed automatically from the coordinate spacing so
     that ``pcolormesh`` renders each cell at the correct position.
 
-    Top-level alias: ``dv.heatmapxyz(x, y, z, ...)``
+    Top-level alias: ``dv.heatmap_xyz(x, y, z, ...)``
 
     Example::
 
         import diive as dv
-        hm = dv.heatmapxyz(x=series_x, y=series_y, z=series_z,
+        hm = dv.heatmap_xyz(x=series_x, y=series_y, z=series_z,
                            show_values=True, show_values_n_dec_places=1)
         hm.show()
     """
@@ -187,7 +187,7 @@ class HeatmapXYZ(HeatmapBase):
                       binning_type='quantiles', n_bins=10, aggfunc='mean')
 
             # Create heatmap directly from GridAggregator output
-            hm = dv.heatmapxyz.from_gridaggregator(
+            hm = dv.heatmap_xyz.from_gridaggregator(
                 q, 'Tair_f', 'VPD_f', 'NEE_CUT_REF_f',
                 show_values=True, show_values_n_dec_places=2
             )
@@ -357,7 +357,7 @@ def _example():
     # Pre-aggregated dataframe (one row per bin)
     df_agg = q.df_agg_long
 
-    hm = dv.heatmapxyz(
+    hm = dv.heatmap_xyz(
         x=df_agg['BIN_Tair_f_mean'],
         y=df_agg['BIN_VPD_f_mean'],
         z=df_agg['NEP_mean'],

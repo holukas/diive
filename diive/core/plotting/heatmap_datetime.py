@@ -13,7 +13,7 @@ Contains two public heatmap classes built on :class:`~diive.core.plotting.heatma
   aggregation functions and optional rank transformation.
 
 Both classes are exposed as top-level convenience aliases in the ``diive``
-namespace (``dv.heatmapdatetime`` and ``dv.heatmapyearmonth``).
+namespace (``dv.heatmap_datetime`` and ``dv.heatmap_year_month``).
 
 References:
     https://matplotlib.org/stable/gallery/images_contours_and_fields/pcolormesh_levels.html
@@ -41,7 +41,7 @@ class HeatmapDateTime(HeatmapBase):
     ``0.5`` for 00:30, ``6.0`` for 06:00) because ``pcolormesh`` requires
     numeric coordinates.
 
-    Top-level alias: ``dv.heatmapdatetime(series, ...)``
+    Top-level alias: ``dv.heatmap_datetime(series, ...)``
 
     Example:
         See `examples/visualization/heatmap_datetime.py` for complete examples

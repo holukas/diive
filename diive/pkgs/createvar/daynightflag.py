@@ -99,7 +99,7 @@ class DaytimeNighttimeFlag:
                               utc_offset=self.utc_offset)
         # # Debug
         # import diive as dv
-        # hm = dv.heatmapdatetime(series=self.swinpot)
+        # hm = dv.heatmap_datetime(series=self.swinpot)
         # hm.show()
 
     def _calc_flags(self):

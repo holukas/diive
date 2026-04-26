@@ -506,7 +506,7 @@ def _example():
     # df_long.loc[df_long['SWC_FF0_0.15_1'] > 3].describe()
     # df_long.loc[df_long['SWC_FF0_0.15_1'] < -2.345]
 
-    hm = dv.heatmapxyz(
+    hm = dv.heatmap_xyz(
         x=df_agg_long[f'BIN_{vpd_col}'],
         y=df_agg_long[f'BIN_{swc_col}'],
         z=df_agg_long[f'{flux_col}'],

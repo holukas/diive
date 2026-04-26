@@ -6,6 +6,22 @@ import diive.core.plotting.styles.LightTheme as theme
 
 
 class LongtermAnomaliesYear:
+    """Calculate and plot long-term anomaly for a variable, per year, compared to a reference period.
+
+    Visualizes yearly anomalies as red/blue bars (above/below reference mean),
+    with reference period mean ± standard deviation band for context.
+
+    Args:
+        series: Time series for anomalies with one value per year.
+        reference_start_year: First year of the reference period.
+        reference_end_year: Last year of the reference period.
+        series_label: Label for *series* on the y-axis of the plot.
+        series_units: Units for *series* on the y-axis of the plot.
+
+    Example:
+        See `examples/visualization/other_plots.py` for complete examples
+        including temperature and other variable anomalies.
+    """
 
     def __init__(self,
                  series: Series,
@@ -13,18 +29,6 @@ class LongtermAnomaliesYear:
                  reference_end_year: int,
                  series_label: str = None,
                  series_units: str = None):
-        """Calculate and plot long-term anomaly for a variable, per year, compared to a reference period.
-
-        Args:
-            series: Time series for anomalies with one value per year.
-            reference_start_year: First year of the reference period.
-            reference_end_year: Last year of the reference period.
-            series_label: Label for *series* on the y-axis of the plot.
-            series_units: Units for *series* on the y-axis of the plot.
-
-        - Example notebook available in:
-            notebooks/Plotting/LongTermAnomalies.ipynb
-        """
         self.series = series
         self.series_units = series_units
         self.series_label = series_label
@@ -100,40 +104,3 @@ class LongtermAnomaliesYear:
 
         if showplot:
             self.fig.show()
-
-
-def example():
-    # ## Long-term TA
-    # ## space-separated data
-    # data_longterm_TA = r"L:\Sync\luhk_work\80 - SITES\CH-DAV\Data\Datasets\MeteoSwiss\CH-DAV_1864-2023_TA-YEARLY_Meteoswiss_order_120443_data.txt"
-    # df = pd.read_csv(data_longterm_TA, header=0, encoding='utf-8', delimiter=';',
-    #                  keep_date_col=False, index_col='time', dtype=None,
-    #                  engine='python')
-    # series = df['tre200y0'].copy()
-    # series_label = "Air temperature"
-    # LongtermAnomaliesYear(series=series,
-    #                       series_label=series_label,
-    #                       series_units='(°C)',
-    #                       reference_start_year=1961,
-    #                       reference_end_year=1990).plot()
-
-    from diive.core.io.files import load_parquet
-    df = load_parquet(
-        filepath=r"F:\Sync\luhk_work\40 - DATA\DATASETS\2025_FORESTS\2-parquet_merged\CH-Dav_ENF_ICOS+FXN_1997-2024.parquet",
-        output_middle_timestamp=True,
-        sanitize_timestamp=False
-    )
-
-    series = df['TA_F'].copy()
-    series = series.resample('YE').mean()
-    series.index = series.index.year
-    series_label = "CH-DAV: Air temperature"
-    LongtermAnomaliesYear(series=series,
-                          series_label=series_label,
-                          series_units='(°C)',
-                          reference_start_year=1997,
-                          reference_end_year=2024).plot()
-
-
-if __name__ == '__main__':
-    example()

@@ -226,7 +226,7 @@ def remove_radiation_zero_offset(series: Series,
 
     # Debug
     import diive as dv
-    hm = dv.heatmapdatetime(series=series)
+    hm = dv.heatmap_datetime(series=series)
     hm.show()
 
 

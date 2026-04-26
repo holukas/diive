@@ -27,14 +27,14 @@ All frequently-used classes are available directly from the `diive` namespace fo
 import diive as dv
 
 # Plotting
-plot = dv.timeseries(series=data)
+plot = dv.time_series(series=data)
 plot = dv.cumulative(series=data)
-plot = dv.dielcycle(series=data)
+plot = dv.diel_cycle(series=data)
 
 # Gap-filling
 rf_model = dv.randomforest_ts(input_df=df, target_col='NEE')
 xgb_model = dv.xgboost_ts(input_df=df, target_col='NEE')
-quick_fill = dv.quickfillrfts(input_df=df, target_col='NEE')
+quick_fill = dv.quick_fill_rfts(input_df=df, target_col='NEE')
 
 # Analysis
 grid = dv.gridaggregator(x=x_series, y=y_series, z=z_series)
@@ -52,9 +52,9 @@ grid = GridAggregator(x=x_series, y=y_series, z=z_series)
 
 ### Available exports
 
-**Plotting:** `timeseries`, `TimeSeries`, `cumulative`, `Cumulative`, `dielcycle`, `DielCycle`, `heatmapdatetime`, `HeatmapDateTime`, and more
+**Plotting:** `time_series`, `TimeSeries`, `cumulative`, `Cumulative`, `diel_cycle`, `DielCycle`, `heatmap_datetime`, `HeatmapDateTime`, and more
 
-**Gap-filling:** `randomforest_ts`, `RandomForestTS`, `xgboost_ts`, `XGBoostTS`, `quickfillrfts`, `QuickFillRFTS`, `fluxmds`, `FluxMDS`
+**Gap-filling:** `randomforest_ts`, `RandomForestTS`, `xgboost_ts`, `XGBoostTS`, `quick_fill_rfts`, `QuickFillRFTS`, `flux_mds`, `FluxMDS`
 
 **Analysis:** `gridaggregator`, `GridAggregator`, `seasonaltrend`, `SeasonalTrendDecomposition`
 

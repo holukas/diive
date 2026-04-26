@@ -7,6 +7,15 @@ from diive.core.times.times import remove_after_date, keep_years, doy_cumulative
 
 
 class CumulativeYear:
+    """Plot yearly cumulative sums with reference mean and standard deviation.
+
+    Visualizes cumulative sums for each year with optional reference period
+    mean and ±1 standard deviation band for comparison.
+
+    Example:
+        See `examples/visualization/timeseries_and_cumulative.py` for complete examples
+        including reference bands and year highlighting.
+    """
 
     def __init__(self,
                  series: Series,
@@ -146,20 +155,27 @@ class CumulativeYear:
 
 
 class Cumulative:
+    """Plot cumulative sums across all data.
+
+    Visualizes cumulative sums for each column in the input DataFrame
+    with values displayed at the end of each series.
+
+    Args:
+        df: Dataframe, cumulatives are plotted for each column.
+        units: Units shown in plot, LaTeX format is supported.
+        start_year: Start year of shown data.
+        end_year: End year of shown data.
+
+    Example:
+        See `examples/visualization/timeseries_and_cumulative.py` for complete examples
+        including multiple USTAR scenarios and year ranges.
+    """
 
     def __init__(self,
                  df: DataFrame,
                  units: str = None,
                  start_year: int = None,
                  end_year: int = None):
-        """Plot cumulative sums across all data.
-
-        Args:
-            df: Dataframe, cumulatives are plotted for each column.
-            units: Units shown in plot, LaTeX format is supported.
-            start_year: Start year of shown data.
-            end_year: End year of shown data.
-        """
         self.df = df
         self.units = units
         self.start_year = start_year if start_year else self.df.index.year.min()
@@ -249,81 +265,3 @@ class Cumulative:
 
         if showplot:
             self.fig.show()
-
-
-def _example_cum_overall():
-    # Test data
-    from diive.configs.exampledata import load_exampledata_parquet
-    df_orig = load_exampledata_parquet()
-    df = df_orig[['NEE_CUT_16_f', 'NEE_CUT_REF_f', 'NEE_CUT_84_f']].copy()
-    df = df.multiply(0.02161926)  # umol CO2 m-2 s-1 --> g C m-2 30min-1
-    series_units = r'($\mathrm{gC\ m^{-2}}$)'
-    Cumulative(
-        df=df,
-        units=series_units,
-        start_year=2015,
-        end_year=2019).plot()
-
-
-def _example_cum_year():
-    # # Test data
-    # from diive.configs.exampledata import load_exampledata_parquet
-    # df_orig = load_exampledata_parquet()
-
-    from pathlib import Path
-    from diive.core.io.filereader import ReadFileType
-    filepath = r"F:\Sync\luhk_work\40 - DATA\DATASETS\2025_FORESTS\1-downloads\ICOSETC_CH-Dav_ARCHIVE_L2\ICOSETC_CH-Dav_FLUXNET_HH_L2.csv"
-    loaddatafile = ReadFileType(filetype='FLUXNET-FULLSET-HH-CSV-30MIN',
-                                filepath=filepath,
-                                data_nrows=None)
-    df_orig, metadata_df = loaddatafile.get_filedata()
-
-    df = df_orig.copy()
-
-    # print(df_orig)
-
-    # # Keep daytime values only
-    # df = df.loc[df['PotRad_CUT_REF'] > 20, :].copy()
-
-    # # Short code snippet to check numbers in the ICOS Fluxes Bulletin 1 (2022)
-    # df = df.loc[(df.index.month >= 7) & (df.index.month <= 8)]
-    # series = df['NEE_CUT_REF_f'].dropna()
-    # series_longterm = series.loc[(series.index.year <= 2021)].copy()
-    # series_longterm = series_longterm.multiply(0.02161926)  # -> g C m-2 30min-1
-    # series_longterm = series_longterm.groupby(series_longterm.index.date).sum()  # daily sums
-    # series_longterm.index = pd.to_datetime(series_longterm.index)
-    # series_longterm = series_longterm.groupby(series_longterm.index.year).mean()  # yearly mean
-
-    # series = df['NEE_CUT_REF_f'].dropna()
-    # series = series.loc[(series.index.year >= 2015)&(series.index.year <= 2021)]
-    # series = series.multiply(0.02161926)  # -> g C m-2 30min-1
-    # series = series.groupby(series.index.date).sum()  # daily sums
-    # series.index = pd.to_datetime(series.index)
-    # series = series.groupby(series.index.year).mean()  # yearly mean
-
-    series = df['GPP_NT_CUT_50'].copy()
-    # series = df['NEE_CUT_REF_f'].copy()
-    series = series.multiply(0.02161926)  # umol CO2 m-2 s-1 --> g C m-2 30min-1
-    series_units = r'($\mathrm{gC\ m^{-2}}$)'
-    # series_units = '(umol CO2 m-2 s-1)'
-    # series = df['VPD_f'].copy()
-    # series_units = '(hPa)'
-    # series = df['Tair_f'].copy()
-    # series_units = '(°C)'
-    CumulativeYear(
-        series=series,
-        series_units=series_units,
-        yearly_end_date=None,
-        # yearly_end_date='08-11',
-        start_year=2020,
-        end_year=2024,
-        show_reference=True,
-        excl_years_from_reference=None,
-        # excl_years_from_reference=[2022],
-        # highlight_year=2022,
-        highlight_year_color='#F44336').plot()
-
-
-if __name__ == '__main__':
-    # _example_cum_overall()
-    _example_cum_year()

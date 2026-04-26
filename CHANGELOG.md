@@ -160,6 +160,12 @@
     - **Benefits**: Keeps source code clean, examples discoverable in one location, easy to run independently
     - **Future phases**: Gap-filling examples (Phase 2), other visualization examples (Phase 3)
 
+* **PEP 8 alias standardization** — All top-level aliases now follow PEP 8 snake_case convention.
+    - Updated aliases: `heatmap_datetime`, `heatmap_year_month`, `heatmap_xyz`, `diel_cycle`, `time_series`, `quick_fill_rfts`, `flux_detection_limit`, `flux_mds`
+    - Updated throughout: source files (7), examples (2), Jupyter notebooks (5)
+    - Maintains backward compatibility with class name exports (e.g., `HeatmapDateTime` still available)
+    - **Benefits**: Follows Python conventions, consistent with existing aliases like `randomforest_ts` and `xgboost_ts`
+
 ### Time Series Analysis
 
 * **Seasonal-Trend Decomposition** (new analysis module) — Separate time series into trend, seasonal, and residual.

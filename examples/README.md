@@ -7,12 +7,12 @@ Executable examples demonstrating how to use DIIVE for time series processing, g
 ```
 examples/
 ├── visualization/          # Plotting and visualization examples
-│   ├── heatmap_datetime.py        # HeatmapDateTime and HeatmapYearMonth
-│   ├── hexbin.py                  # HexbinPlot 2D hexagonal binning
-│   ├── heatmap_xyz.py             # HeatmapXYZ 3D scatter heatmaps (TODO)
-│   ├── dielcycle.py               # DielCycle diurnal analysis (TODO)
-│   ├── other_plots.py             # Ridgeline, histogram, scatter, bar (TODO)
-│   └── timeseries_and_cumulative.py # TimeSeries and CumulativeYear (TODO)
+│   ├── heatmap_datetime.py            # HeatmapDateTime and HeatmapYearMonth
+│   ├── hexbin.py                      # HexbinPlot 2D hexagonal binning
+│   ├── timeseries_and_cumulative.py   # Cumulative and CumulativeYear
+│   ├── other_plots.py                 # LongtermAnomaliesYear
+│   ├── heatmap_xyz.py                 # HeatmapXYZ 3D scatter heatmaps (TODO)
+│   └── dielcycle.py                   # DielCycle diurnal analysis (TODO)
 └── gap_filling/           # Gap-filling workflow examples (TODO)
     ├── quick_start.py             # Simple interpolation + quickfill
     ├── randomforest_ts.py         # RandomForestTS examples
@@ -63,9 +63,11 @@ When adding a new example:
 
 ## Phases
 
-- **Phase 1 (Complete):** Heatmap and hexbin visualization examples
+- **Phase 1 (Complete):** Core visualization examples
   - HeatmapDateTime, HeatmapYearMonth (5 examples)
   - HexbinPlot (3 examples)
-- **Phase 2 (Planned):** Other visualization examples (dielcycle, timeseries, cumulative, etc.)
+  - Cumulative, CumulativeYear (3 examples)
+  - LongtermAnomaliesYear (1 example)
+- **Phase 2 (Planned):** Additional visualization examples (dielcycle, heatmap_xyz)
 - **Phase 3 (Planned):** Gap-filling workflow examples
 - **Phase 4 (Future):** Feature engineering examples
