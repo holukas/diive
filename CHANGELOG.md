@@ -167,6 +167,15 @@
     - Added exports: `HistogramPlot`, `ScatterXY` in `__init__.py`
     - **Benefits**: Source code clean, examples discoverable, runnable as standalone scripts
 
+* **Example runner script** (`examples/run_all_examples.py`) — Run all examples in parallel with timing.
+    - Executes all 9 visualization examples concurrently (4 workers max)
+    - Per-example execution time tracking
+    - Sorted results by duration (slowest first)
+    - Detailed error messages for failures
+    - Exit code for CI/CD integration
+    - Performance: ~25s total (vs 67s sequential), ~2.7x speedup
+    - Useful for validation and performance benchmarking
+
 * **PEP 8 alias standardization** — All top-level aliases now follow PEP 8 snake_case convention.
     - Updated aliases: `heatmap_datetime`, `heatmap_year_month`, `heatmap_xyz`, `diel_cycle`, `time_series`, `quick_fill_rfts`, `flux_detection_limit`, `flux_mds`
     - Updated throughout: source files (7), examples (2), Jupyter notebooks (5)

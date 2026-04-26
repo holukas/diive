@@ -17,6 +17,9 @@ def example_scatter_temperature_vpd():
     """
     df = dv.load_exampledata_parquet()
 
+    keeplocs = df.index.year == 2022
+    df = df.loc[keeplocs].copy()
+
     scatter = dv.plot_scatter_xy(
         x=df['Tair_f'],
         y=df['VPD_f']
@@ -31,6 +34,9 @@ def example_scatter_nee_vpd():
     with solar radiation shown as point color (3-variable scatter).
     """
     df = dv.load_exampledata_parquet()
+
+    keeplocs = df.index.year == 2022
+    df = df.loc[keeplocs].copy()
 
     scatter = dv.plot_scatter_xy(
         x=df['VPD_f'],
@@ -54,6 +60,9 @@ def example_scatter_nee_vpd_binned():
     with median and interquartile range overlay (nbins=10).
     """
     df = dv.load_exampledata_parquet()
+
+    keeplocs = df.index.year == 2022
+    df = df.loc[keeplocs].copy()
 
     scatter = dv.plot_scatter_xy(
         x=df['VPD_f'],

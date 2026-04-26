@@ -27,6 +27,17 @@ examples/
 
 ## Running Examples
 
+**Run all examples at once:**
+```bash
+python examples/run_all_examples.py
+```
+
+Executes all 9 visualization examples in parallel (4 concurrent workers) with execution time tracking.
+- Shows individual timing for each example
+- Detailed error messages if any fail
+- ~2.7x faster than sequential execution
+
+**Run individual examples:**
 Each example file is standalone and executable:
 
 ```bash
