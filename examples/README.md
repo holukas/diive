@@ -7,12 +7,16 @@ Executable examples demonstrating how to use DIIVE for time series processing, g
 ```
 examples/
 ├── visualization/          # Plotting and visualization examples
-│   ├── heatmap_datetime.py            # HeatmapDateTime and HeatmapYearMonth
-│   ├── hexbin.py                      # HexbinPlot 2D hexagonal binning
-│   ├── timeseries_and_cumulative.py   # Cumulative and CumulativeYear
-│   ├── other_plots.py                 # LongtermAnomaliesYear
-│   ├── heatmap_xyz.py                 # HeatmapXYZ 3D scatter heatmaps (TODO)
-│   └── dielcycle.py                   # DielCycle diurnal analysis (TODO)
+│   ├── heatmap_datetime.py            # HeatmapDateTime and HeatmapYearMonth (5 examples)
+│   ├── hexbin.py                      # HexbinPlot 2D hexagonal binning (3 examples)
+│   ├── timeseries_and_cumulative.py   # Cumulative and CumulativeYear (3 examples)
+│   ├── other_plots.py                 # LongtermAnomaliesYear (1 example)
+│   ├── timeseries.py                  # TimeSeries interactive plots (1 example)
+│   ├── dielcycle.py                   # DielCycle diurnal analysis (1 example)
+│   ├── histogram.py                   # HistogramPlot distribution analysis (2 examples)
+│   ├── ridgeline.py                   # RidgeLinePlot kernel density plots (2 examples)
+│   ├── scatter_xy.py                  # ScatterXY scatter plots (2 examples)
+│   └── heatmap_xyz.py                 # HeatmapXYZ 3D scatter heatmaps (TODO)
 └── gap_filling/           # Gap-filling workflow examples (TODO)
     ├── quick_start.py             # Simple interpolation + quickfill
     ├── randomforest_ts.py         # RandomForestTS examples

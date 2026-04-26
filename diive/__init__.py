@@ -24,6 +24,10 @@ from diive.core.plotting.dielcycle import DielCycle as diel_cycle
 from diive.core.plotting.dielcycle import DielCycle
 from diive.core.plotting.bar import LongtermAnomaliesYear as longterm_anomalies_year
 from diive.core.plotting.bar import LongtermAnomaliesYear
+from diive.core.plotting.histogram import HistogramPlot as histogram
+from diive.core.plotting.histogram import HistogramPlot
+from diive.core.plotting.scatter import ScatterXY as scatter_xy
+from diive.core.plotting.scatter import ScatterXY
 from diive.core.times.resampling import resample_to_monthly_agg_matrix as resample_to_monthly_agg_matrix
 from diive.pkgs.analyses.gridaggregator import GridAggregator as ga
 from diive.pkgs.analyses.gridaggregator import GridAggregator as gridaggregator
@@ -81,6 +85,10 @@ __all__ = [
     'DielCycle',
     'longterm_anomalies_year',
     'LongtermAnomaliesYear',
+    'histogram',
+    'HistogramPlot',
+    'scatter_xy',
+    'ScatterXY',
 
     # Core: Time Series
     'resample_to_monthly_agg_matrix',

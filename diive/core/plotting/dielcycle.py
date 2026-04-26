@@ -17,6 +17,9 @@ class DielCycle:
         Args:
             series: Time series with datetime index.
                 The index must contain date and time info.
+
+        Example:
+            See `examples/visualization/dielcycle.py` for complete examples.
         """
         self.series = series
 
@@ -149,89 +152,3 @@ class DielCycle:
         self.ax.set_ylim(ylim)
         if self.showplot:
             self.fig.tight_layout()
-
-
-def example():
-    from diive.configs.exampledata import load_exampledata_parquet
-    df = load_exampledata_parquet()
-    series = df['NEE_CUT_REF_f'].copy()
-    dc = DielCycle(series=series)
-    title = r'$\mathrm{Mean\ CO_2\ flux\ (2013-2024)}$'
-    units = r'($\mathrm{µmol\ CO_2\ m^{-2}\ s^{-1}}$)'
-    dc.plot(ax=None, title=title, txt_ylabel_units=units,
-            each_month=True, legend_n_col=2)
-
-    # from diive.core.io.filereader import search_files, MultiDataFileReader
-    # filepaths = search_files(searchdirs=fr"F:\CURRENT\HON\2-FLUXRUN\out", pattern='*.csv')
-    # orig = MultiDataFileReader(filepaths=filepaths, filetype='EDDYPRO-FLUXNET-CSV-30MIN', output_middle_timestamp=True)
-    # origdf = orig.data_df
-    # origmeta = orig.metadata_df
-    # origfreq = origdf.index.freq  # Original frequency
-    # from diive.core.io.files import save_parquet
-    # save_parquet(filename="merged", data=origdf, outpath=r"F:\CURRENT\HON\2-FLUXRUN\out")
-
-    # import numpy as np
-    # from diive.core.io.files import load_parquet
-    # df = load_parquet(filepath=r"L:\Sync\luhk_work\CURRENT\HON\2-FLUXRUN\out\merged.parquet")
-    #
-    # # CO2
-    # co2 = df['FC'].copy()
-    # keep = (df['USTAR'] > 0.07) & (df['FC_SSITC_TEST'] <= 1)
-    # co2[~keep] = np.nan
-    # keep = (co2 < 50) & (co2 > -50)
-    # co2[~keep] = np.nan
-    # from diive.pkgs.outlierdetection.zscore import zScoreDaytimeNighttime
-    # zs = zScoreDaytimeNighttime(series=co2,
-    #                             lat=47.418861,
-    #                             lon=8.491361,
-    #                             utc_offset=1,
-    #                             thres_zscore=3,
-    #                             showplot=False)
-    # zs.calc()
-    # flag = zs.get_flag()
-    # remove = flag == 2
-    # co2[remove] = np.nan
-    # keep = (co2.index.month >= 3) & (co2.index.month <= 5)
-    # co2[~keep] = np.nan
-    # title = r'$\mathrm{CO_2\ flux}$ (Mar-May 2024)'
-    # units = r'($\mathrm{µmol\ CO_2\ m^{-2}\ s^{-1}}$)'
-    #
-    # h2o = df['FH2O'].copy()
-    # keep = df['FH2O_SSITC_TEST'] <= 1
-    # h2o[~keep] = np.nan
-    # keep = (h2o < 50) & (h2o > -50)
-    # h2o[~keep] = np.nan
-    #
-    # from diive.pkgs.outlierdetection.zscore import zScoreDaytimeNighttime
-    # zs = zScoreDaytimeNighttime(series=h2o,
-    #                             lat=47.418861,
-    #                             lon=8.491361,
-    #                             utc_offset=1,
-    #                             thres_zscore=3,
-    #                             showplot=False)
-    # zs.calc()
-    # flag = zs.get_flag()
-    # remove = flag == 2
-    # h2o[remove] = np.nan
-    # keep = (h2o.index.month >= 3) & (h2o.index.month <= 5)
-    # h2o[~keep] = np.nan
-    #
-    # import matplotlib.gridspec as gridspec
-    # fig = plt.figure(facecolor='white', figsize=(14, 14), dpi=200)
-    # gs = gridspec.GridSpec(2, 1)  # rows, cols
-    # gs.update(wspace=0.3, hspace=0.4, left=0.08, right=0.93, top=0.93, bottom=0.07)
-    # ax = fig.add_subplot(gs[0, 0])
-    # ax2 = fig.add_subplot(gs[1, 0])
-    # dc_co2 = DielCycle(series=co2)
-    # title = r'$\mathrm{CO_{2}\text{-}Austausch\ (März-Mai\ 2024)}$'
-    # units = r'($\mathrm{µmol\ CO_2\ m^{-2}\ s^{-1}}$)'
-    # dc_co2.plot(ax=ax, color='#388E3C', title=title, txt_ylabel_units=units)
-    # dc_h2o = DielCycle(series=h2o)
-    # title = r'$\mathrm{Wasserdampf\text{-}Austausch\ (März-Mai\ 2024)}$'
-    # units = r'($\mathrm{mmol\ H_2O\ m^{-2}\ s^{-1}}$)'
-    # dc_h2o.plot(ax=ax2, color='#1976D2', title=title, txt_ylabel_units=units)
-    # fig.show()
-
-
-if __name__ == '__main__':
-    example()

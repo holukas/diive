@@ -13,38 +13,42 @@ class ScatterXY:
             self,
             x: Series,
             y: Series,
-            xunits: str = None,
-            yunits: str = None,
+            z: Series = None,
             title: str = None,
             ax: plt.Axes = None,
             nbins: int = 0,
             binagg: Literal['mean', 'median'] = 'median',
-            xlim: list = None,
-            ylim: list or Literal['auto'] = None
     ):
-        """
+        """Scatter plot with optional third variable as color.
 
-        https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.scatter.html
+        Args:
+            x, y: Series to plot (required)
+            z: Optional Series for color coding third variable
+            title: Plot title (default: "{yname} vs. {xname}")
+            ax: Matplotlib axes (creates new if None)
+            nbins: Number of bins for aggregation (0 = no aggregation)
+            binagg: Aggregation method ('mean' or 'median')
 
+        Example:
+            See `examples/visualization/scatter_xy.py` for complete examples.
         """
         self.xname = x.name
         self.yname = y.name
-        self.xunits = xunits
-        self.yunits = yunits
+        self.zname = z.name if z is not None else None
         self.ax = ax
         self.nbins = nbins
         self.binagg = binagg
-        self.xlim = xlim
-        self.ylim = ylim
+        self.title = title if title else f"{self.yname} vs. {self.xname}"
+        self.fig = None
 
-        self.binagg = None if self.nbins == 0 else self.binagg
-
-        self.xy_df = pd.concat([x, y], axis=1)
+        # Prepare data
+        df_list = [x, y]
+        if z is not None:
+            df_list.append(z)
+        self.xy_df = pd.concat(df_list, axis=1)
         self.xy_df = self.xy_df.dropna()
 
-        self.title = title if title else f"{self.yname} vs. {self.xname}"
-
-        self.fig = None
+        self.binagg = None if self.nbins == 0 else self.binagg
 
         if self.nbins > 0:
             self._databinning()
@@ -55,29 +59,71 @@ class ScatterXY:
         self.xy_df[groupcol] = group
         self.xy_df_binned = self.xy_df.groupby(groupcol).agg({'mean', 'median', 'std', 'count', q25, q75})
 
-    def plot(self):
-        """Generate plot"""
+    def plot(
+            self,
+            xlabel: str = None,
+            ylabel: str = None,
+            zlabel: str = None,
+            xunits: str = None,
+            yunits: str = None,
+            xlim: list = None,
+            ylim: list or Literal['auto'] = None,
+            cmap: str = 'viridis',
+            show_colorbar: bool = True,
+    ):
+        """Generate plot with optional styling parameters.
+
+        Args:
+            xlabel, ylabel, zlabel: Axis label overrides
+            xunits, yunits: Unit labels
+            xlim, ylim: Axis limits
+            cmap: Colormap for z variable (default: 'viridis')
+            show_colorbar: Show colorbar if z provided (default: True)
+        """
+        self.xlabel = xlabel if xlabel else self.xname
+        self.ylabel = ylabel if ylabel else self.yname
+        self.zlabel = zlabel if zlabel else self.zname
+        self.xunits = xunits
+        self.yunits = yunits
+        self.xlim = xlim
+        self.ylim = ylim
+        self.cmap = cmap
+        self.show_colorbar = show_colorbar
+
         if not self.ax:
-            # Create ax if none is given
             self.fig, self.ax = pf.create_ax(figsize=(8, 8))
             self._plot()
-            plt.tight_layout()
+            # Skip tight_layout if colorbar is present (incompatible with new layout engine)
+            if self.zname is None or not self.show_colorbar:
+                plt.tight_layout()
             self.fig.show()
         else:
-            # Otherwise plot to given ax
             self._plot()
 
     def _plot(self, nbins: int = 10):
         """Generate plot on axis"""
         nbins += 1  # To include zero
-        label = self.yname
-        self.ax.scatter(x=self.xy_df[self.xname],
-                        y=self.xy_df[self.yname],
-                        c='none',
-                        s=40,
-                        marker='o',
-                        edgecolors='#607D8B',
-                        label=label)
+
+        # Scatter plot with optional color
+        if self.zname is not None:
+            scatter = self.ax.scatter(x=self.xy_df[self.xname],
+                                      y=self.xy_df[self.yname],
+                                      c=self.xy_df[self.zname],
+                                      s=40,
+                                      marker='o',
+                                      cmap=self.cmap,
+                                      label=self.yname)
+            if self.show_colorbar:
+                cbar = plt.colorbar(scatter, ax=self.ax)
+                cbar.set_label(self.zlabel if self.zlabel else self.zname, fontsize=12)
+        else:
+            self.ax.scatter(x=self.xy_df[self.xname],
+                            y=self.xy_df[self.yname],
+                            c='none',
+                            s=40,
+                            marker='o',
+                            edgecolors='#607D8B',
+                            label=self.yname)
 
         if self.nbins > 0:
 
@@ -88,8 +134,6 @@ class ScatterXY:
                          c='r', ms=10, marker='o', lw=2,
                          # c='none', ms=80, marker='o', edgecolors='r', lw=2,
                          label=f"binned data ({self.binagg}, {_min}-{_max} values per bin)")
-
-
 
             if self.binagg == 'median':
                 self.ax.fill_between(self.xy_df_binned[self.xname][self.binagg],
@@ -116,8 +160,8 @@ class ScatterXY:
             xmin = self.xlim[0]
             xmax = self.xlim[1]
         else:
-            xmin = self.xy_df[self.xname].quantile(0.01)
-            xmax = self.xy_df[self.xname].quantile(0.99)
+            xmin = self.xy_df[self.xname].min()
+            xmax = self.xy_df[self.xname].max()
         self.ax.set_xlim(xmin, xmax)
 
         if self.ylim == 'auto':
@@ -144,9 +188,8 @@ class ScatterXY:
         pf.add_zeroline_y(ax=self.ax, data=self.xy_df[self.yname])
 
         pf.default_format(ax=self.ax,
-                          ax_xlabel_txt=self.xname,
-                          ax_ylabel_txt=self.yname,
-                          # txt_ylabel_units=self.yunits,
+                          ax_xlabel_txt=self.xlabel,
+                          ax_ylabel_txt=self.ylabel,
                           txt_ylabel_units=self.yunits)
 
         pf.default_legend(ax=self.ax,
@@ -160,47 +203,3 @@ class ScatterXY:
         # if self.showplot:
         #     self.fig.suptitle(f"{self.title}", fontsize=theme.FIGHEADER_FONTSIZE)
         #     self.fig.tight_layout()
-
-
-def example():
-    from pathlib import Path
-    FOLDER = r"F:\Sync\luhk_work\20 - CODING\21 - DIIVE\diive\notebooks\Workbench\FLUXNET_CH4-N2O_Committee_WP2\data"
-
-    # from diive.core.io.filereader import search_files, MultiDataFileReader
-    # filepaths = search_files(FOLDER, "*.csv")
-    # filepaths = [fp for fp in filepaths if "_fluxnet_" in fp.stem and fp.stem.endswith("_adv")]
-    # print(filepaths)
-    # fr = MultiDataFileReader(filetype='EDDYPRO-FLUXNET-CSV-30MIN', filepaths=filepaths)
-    # df = fr.data_df
-    # from diive.core.io.files import save_parquet
-    # save_parquet(outpath=FOLDER, filename="data", data=df)
-
-    from diive.core.io.files import load_parquet
-    filepath = Path(FOLDER) / 'data.parquet'
-    df = load_parquet(filepath=filepath)
-
-    _filter = df['SW_IN_POT'] > 50
-    df = df[_filter].copy()
-
-    # fluxcol = 'FCH4'
-    xcol = 'Rg_1_1_1'
-    ycol = 'Ta_1_1_1'
-
-    x = df[xcol].copy()
-    y = df[ycol].copy()
-
-    # # Plot to given ax
-    # fig, ax = pf.create_ax()
-    # Scatter(x=x, y=y, ax=ax).plot()
-    # fig.tight_layout()
-    # fig.show()
-
-    # Plot without given ax
-    ScatterXY(x=x, y=y, nbins=10).plot()
-    # Scatter(x=x, y=y, nbins=10, ylim=[0, 2]).plot()
-
-    # series_units = r'($\mathrm{gC\ m^{-2}}$)'
-
-
-if __name__ == '__main__':
-    example()

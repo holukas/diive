@@ -148,17 +148,24 @@
 
 **Documentation and Examples**
 
-* **Examples folder consolidation** (Phase 1) — Consolidated scattered examples into dedicated `examples/` folder.
-    - Created `examples/visualization/heatmap_datetime.py` with 5 executable example functions
-      - Vertical/horizontal orientations, year-month aggregation with ranks, multi-panel layouts, colormap preview
-    - Created `examples/visualization/hexbin.py` with 3 executable example functions
-      - Percentile normalization, mean aggregation, value overlay on bins
-    - Removed `_example_*()` functions from source files (120+ lines removed total)
-    - Updated `HeatmapDateTime`, `HeatmapYearMonth`, and `HexbinPlot` docstrings to reference examples folder
+* **Examples folder consolidation** — Consolidated scattered examples into dedicated `examples/` folder.
+    - **Phase 1 (Complete)**: HeatmapDateTime, HeatmapYearMonth, HexbinPlot
+      - Created `examples/visualization/heatmap_datetime.py` (5 examples)
+      - Created `examples/visualization/hexbin.py` (3 examples)
+      - Removed 120+ lines from source files
+    - **Phase 2 (Complete)**: TimeSeries, DielCycle, HistogramPlot, RidgeLinePlot, ScatterXY
+      - Created `examples/visualization/timeseries.py` (1 example)
+      - Created `examples/visualization/dielcycle.py` (1 example)
+      - Created `examples/visualization/histogram.py` (2 examples)
+      - Created `examples/visualization/ridgeline.py` (2 examples)
+      - Created `examples/visualization/scatter_xy.py` (2 examples)
+      - Removed 80+ lines from source files
+      - Total: 20 executable visualization examples across 9 files
     - Created `examples/README.md` with index and quick-start guide
     - Updated main `README.md` with Examples section
-    - **Benefits**: Keeps source code clean, examples discoverable in one location, easy to run independently
-    - **Future phases**: Gap-filling examples (Phase 2), other visualization examples (Phase 3)
+    - Updated docstrings to reference examples folder (all 7 visualization classes)
+    - Added exports: `HistogramPlot`, `ScatterXY` in `__init__.py`
+    - **Benefits**: Source code clean, examples discoverable, runnable as standalone scripts
 
 * **PEP 8 alias standardization** — All top-level aliases now follow PEP 8 snake_case convention.
     - Updated aliases: `heatmap_datetime`, `heatmap_year_month`, `heatmap_xyz`, `diel_cycle`, `time_series`, `quick_fill_rfts`, `flux_detection_limit`, `flux_mds`

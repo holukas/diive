@@ -18,6 +18,9 @@ class RidgeLinePlot:
     RidgeLinePlot uses the kernel density estimator from scikit-learn, see here:
         - https://scikit-learn.org/stable/modules/generated/sklearn.neighbors.KernelDensity.html
         - https://scikit-learn.org/stable/modules/density.html#kernel-density
+
+    Example:
+        See `examples/visualization/ridgeline.py` for complete examples.
     """
 
     def __init__(self, series: pd.Series):
@@ -270,44 +273,3 @@ class RidgeLinePlot:
         # plt.tight_layout()
         if self.showplot:
             self.fig.show()
-
-
-def _example():
-    from diive.configs.exampledata import load_exampledata_parquet
-    import diive as dv
-    df = load_exampledata_parquet()
-    # yr = 2015
-    locs = (df.index.year >= 2019) & (df.index.year <= 2019)
-    df = df[locs].copy()
-    series = df['Tair_f'].copy()
-
-    rp = dv.ridgeline(series=series)
-    rp.plot(
-        how='weekly',
-        kd_kwargs=None,  # params from scikit KernelDensity as dict
-        xlim=None,  # min/max as list
-        ylim=None,  # min/max as list
-        hspace=-0.5,  # overlap between months
-        xlabel=r'Air temperature (°C)',
-        fig_width=8,
-        fig_height=10,
-        shade_percentile=0.5,
-        show_mean_line=False,
-        fig_title="Air temperatures per month (2019)",
-        fig_dpi=72,
-        showplot=True,
-        ascending=False
-    )
-    # rp.per_month()
-    # rp.per_year()
-    # rp.per_week()
-
-    print(rp.get_fig())
-    print(rp.xlim)
-    print(rp.ylim)
-
-    rp.kde
-
-
-if __name__ == '__main__':
-    _example()

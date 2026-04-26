@@ -16,6 +16,11 @@ from pandas import Series
 
 
 class HistogramPlot:
+    """Histogram plot with optional z-score overlay and peak highlighting.
+
+    Example:
+        See `examples/visualization/histogram.py` for complete examples.
+    """
 
     def __init__(self, s: Series, method, n_bins: int or list = None, ignore_fringe_bins: list = False,
                  highlight_peak: bool = True, xlabel: str = None, show_zscores: bool = True,
@@ -131,51 +136,3 @@ class HistogramPlot:
 
         if showplot:
             self.fig.show()
-
-
-def example():
-    from diive.configs.exampledata import load_exampledata_parquet
-    data_df = load_exampledata_parquet()
-    series = data_df['NEE_CUT_REF_f'].copy()
-
-    hist = HistogramPlot(
-        s=series,
-        method='n_bins',
-        n_bins=20,
-        xlabel='flux',
-        highlight_peak=True,
-        show_zscores=True,
-        show_zscore_values=True,
-        show_info=True
-        # ignore_fringe_bins=[1, 1]
-    )
-    hist.plot()
-    # hist.results
-    # hist.peakbins
-
-
-def example_per_year():
-    from diive.configs.exampledata import load_exampledata_parquet
-    data_df = load_exampledata_parquet()
-    years = data_df.index.year.unique()
-
-    for y in years:
-        series = data_df.loc[data_df.index.year == y, 'NEE_CUT_REF_f'].copy()
-        hist = HistogramPlot(
-            s=series,
-            method='n_bins',
-            n_bins=50,
-            xlabel='flux',
-            highlight_peak=True,
-            show_zscores=True,
-            show_info=True
-            # ignore_fringe_bins=[1, 1]
-        )
-        hist.plot()
-        # hist.results
-        # hist.peakbins
-
-
-if __name__ == '__main__':
-    # example_per_year()
-    example()

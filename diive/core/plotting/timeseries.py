@@ -24,6 +24,9 @@ class TimeSeries:
             series: Data for plotting
             ax: Axis to show the matplotlib plot
             series_units: Units of *series*
+
+        Example:
+            See `examples/visualization/timeseries.py` for complete examples.
         """
         self.series = series.copy()
         self.ax = ax  # todo should be required when calling .plot() instead of here
@@ -164,29 +167,3 @@ class TimeSeries:
             title = f"{self.series.name}"
             self.fig.suptitle(title, fontsize=theme.FIGHEADER_FONTSIZE)
             self.fig.tight_layout()
-
-
-def example():
-    # Test data
-    from diive.configs.exampledata import load_exampledata_DIIVE_CSV_30MIN
-    data_df, metadata_df = load_exampledata_DIIVE_CSV_30MIN()
-    # series_units = metadata_df.loc[series_col]['UNITS']
-
-    # # Plot to existing ax
-    # fig, ax = pf.create_ax()
-    # # series_units = r'($\mathrm{gC\ m^{-2}}$)'
-    # TimeSeries(ax=ax,
-    #            series=data_df['NEE_CUT_REF_f'],
-    #            series_units=None).plot()
-    # fig.tight_layout()
-    # fig.show()
-
-    # Plot interactive
-    from bokeh.plotting import output_file
-    # output_file(filename=r"F:\Downloads\_temp\bokeh.html", title="Static HTML file")
-    # TimeSeries(series=data_df['NEE_CUT_REF_f']).plot_interactive()
-    TimeSeries(series=data_df['NEE_CUT_REF_f']).plot()
-
-
-if __name__ == '__main__':
-    example()
