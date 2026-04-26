@@ -223,6 +223,9 @@ class RidgeLinePlot:
             rect = self.ax.patch
             rect.set_alpha(0)
 
+            # Disable gridlines explicitly
+            self.ax.grid(False)
+
             # Remove axis borders, axis ticks, and labels
             self.ax.set_yticklabels([])
             self.ax.set_yticks([])
@@ -237,9 +240,15 @@ class RidgeLinePlot:
                 self.ax.set_xticks([])
 
             # Hide axis spines
-            spines = ["top", "right", "left", "bottom"]
+            spines = ["top", "right", "left"]
             for s in spines:
                 self.ax.spines[s].set_visible(False)
+
+            # Hide bottom spine except for the last (bottom-most) axis
+            if i == len(self.ys_unique) - 1:
+                self.ax.spines["bottom"].set_visible(True)
+            else:
+                self.ax.spines["bottom"].set_visible(False)
 
             # Show year or month etc. on y axis
             self.ax.text(-0.02, 0.01, y_current, fontweight="normal", fontsize=14, ha="right",
