@@ -57,12 +57,9 @@ class HexbinPlot(HeatmapBase):
 
     Top-level alias: ``dv.hexbinplot(x, y, z, ...)``
 
-    Example::
-
-        import diive as dv
-        hm = dv.hexbinplot(x=df['Tair_f'], y=df['WFPS'], z=df['NEP'],
-                           normalize_axes=True, gridsize=11)
-        hm.show()
+    Example:
+        See `examples/visualization/hexbin.py` for complete examples
+        including percentile normalization, mean aggregation, and value overlay.
     """
 
     def __init__(self,
@@ -330,60 +327,3 @@ class HexbinPlot(HeatmapBase):
         # Apply base formatting (title, colorbar, spines, grid, etc.)
         # HeatmapBase.format() will handle the colorbar creation
         self.format(plot=self.p, ax_xlabel_txt=self.xlabel, ax_ylabel_txt=self.ylabel)
-
-
-def _example():
-    """Example usage of HexbinPlot class."""
-    import diive as dv
-
-    # Load example data
-    df = dv.load_exampledata_parquet()
-
-    # Select subset: growing season only
-    df = df.loc[(df.index.month >= 5) & (df.index.month <= 9)].copy()
-
-    df = df[['Tair_f', 'VPD_f', 'NEE_CUT_REF_f']]
-    df = df.dropna()
-
-    # # Example 1: Percentile normalization
-    # print("Creating HexbinPlot with percentile normalization...")
-    # hm1 = dv.hexbinplot(
-    #     x=df['Tair_f'],
-    #     y=df['VPD_f'],
-    #     z=df['NEE_CUT_REF_f'],
-    #     normalize_axes=True,
-    #     gridsize=11,
-    #     xlabel='Air temperature (percentile)',
-    #     ylabel='Vapor pressure deficit (percentile)',
-    #     zlabel='Net ecosystem exchange',
-    #     figsize=(8, 6),
-    #     cmap='RdYlBu_r'
-    # )
-    # hm1.show()
-
-    # Example 2: Absolute values with mean aggregation
-    print("Creating HexbinPlot with absolute values and mean aggregation...")
-    hm2 = dv.hexbinplot(
-        x=df['Tair_f'],
-        y=df['VPD_f'],
-        z=df['NEE_CUT_REF_f'],
-        normalize_axes=True,
-        gridsize=20,
-        reduce_C_function=np.mean,
-        xlabel='Air temperature (percentile)',
-        ylabel='Vapor pressure deficit (percentile)',
-        zlabel='Mean NEE (µmol m⁻² s⁻¹)',
-        figsize=(8, 6),
-        mincnt=5,
-        cb_digits_after_comma=0,
-        show_values=True,
-        show_values_fontsize=8,
-        show_values_n_dec_places=0,
-        show_values_color='black',
-        cmap='RdYlBu_r'
-    )
-    hm2.show()
-
-
-if __name__ == '__main__':
-    _example()

@@ -68,9 +68,16 @@ For the complete list of available aliases, see `diive.__all__`.
 
 Executable example scripts demonstrating common workflows are available in the `examples/` folder:
 
+**Visualization:**
 ```bash
-python examples/visualization/heatmap_datetime.py    # Heatmap visualization examples
-python examples/gap_filling/randomforest_ts.py       # Gap-filling workflows (Phase 2)
+python examples/visualization/heatmap_datetime.py    # HeatmapDateTime and HeatmapYearMonth
+python examples/visualization/hexbin.py              # HexbinPlot 2D hexagonal binning
+```
+
+**Gap-filling (Phase 2):**
+```bash
+python examples/gap_filling/randomforest_ts.py       # Random Forest gap-filling
+python examples/gap_filling/xgboost_ts.py            # XGBoost gap-filling
 ```
 
 See [examples/README.md](examples/README.md) for a complete index of all available examples organized by topic (visualization, gap-filling, feature engineering).
@@ -304,7 +311,8 @@ _Fill gaps in time series with various methods._
   - Feature reduction enabled by default (SHAP-based selection reduces ~45-50 features to ~10-20)
   - Hyperparameters tuned for ecosystem flux data with detailed tuning guidance
   - Model comparison code to select best algorithm for your site
-  - See `diive/pkgs/fluxprocessingchain/fluxprocessingchain.py` for detailed examples (~100 lines each)
+  - See `examples/gap_filling/` folder for standalone runnable examples (Phase 2, coming soon)
+  - Or see `diive/pkgs/fluxprocessingchain/fluxprocessingchain.py` for detailed inline examples
 
 ### Outlier Detection
 

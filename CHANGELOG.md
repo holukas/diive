@@ -150,10 +150,13 @@
 
 * **Examples folder consolidation** (Phase 1) — Consolidated scattered examples into dedicated `examples/` folder.
     - Created `examples/visualization/heatmap_datetime.py` with 5 executable example functions
-    - Functions: vertical/horizontal orientations, year-month aggregation with ranks, multi-panel layouts, colormap preview
-    - Removed 4 `_example_*()` functions from source file (111 lines removed)
-    - Updated `HeatmapDateTime` and `HeatmapYearMonth` docstrings to reference examples folder
+      - Vertical/horizontal orientations, year-month aggregation with ranks, multi-panel layouts, colormap preview
+    - Created `examples/visualization/hexbin.py` with 3 executable example functions
+      - Percentile normalization, mean aggregation, value overlay on bins
+    - Removed `_example_*()` functions from source files (120+ lines removed total)
+    - Updated `HeatmapDateTime`, `HeatmapYearMonth`, and `HexbinPlot` docstrings to reference examples folder
     - Created `examples/README.md` with index and quick-start guide
+    - Updated main `README.md` with Examples section
     - **Benefits**: Keeps source code clean, examples discoverable in one location, easy to run independently
     - **Future phases**: Gap-filling examples (Phase 2), other visualization examples (Phase 3)
 
