@@ -20,9 +20,11 @@ Recent releases: [Releases](https://github.com/holukas/diive/releases)
 
 ## Quick Access to Common Classes
 
-All frequently-used classes are available directly from the `diive` namespace for convenient access in notebooks and scripts:
+All frequently-used classes are available directly from the `diive` namespace for convenient access in notebooks and
+scripts:
 
 ### Interactive use (notebooks)
+
 ```python
 import diive as dv
 
@@ -42,6 +44,7 @@ decomp = dv.seasonaltrend(series=data)
 ```
 
 ### Explicit use (production code)
+
 ```python
 from diive import TimeSeries, RandomForestTS, GridAggregator
 
@@ -52,9 +55,11 @@ grid = GridAggregator(x=x_series, y=y_series, z=z_series)
 
 ### Available exports
 
-**Plotting:** `time_series`, `TimeSeries`, `cumulative`, `Cumulative`, `diel_cycle`, `DielCycle`, `heatmap_datetime`, `HeatmapDateTime`, and more
+**Plotting:** `time_series`, `TimeSeries`, `cumulative`, `Cumulative`, `diel_cycle`, `DielCycle`, `heatmap_datetime`,
+`HeatmapDateTime`, and more
 
-**Gap-filling:** `randomforest_ts`, `RandomForestTS`, `xgboost_ts`, `XGBoostTS`, `quick_fill_rfts`, `QuickFillRFTS`, `flux_mds`, `FluxMDS`
+**Gap-filling:** `randomforest_ts`, `RandomForestTS`, `xgboost_ts`, `XGBoostTS`, `quick_fill_rfts`, `QuickFillRFTS`,
+`flux_mds`, `FluxMDS`
 
 **Analysis:** `gridaggregator`, `GridAggregator`, `seasonaltrend`, `SeasonalTrendDecomposition`
 
@@ -69,20 +74,24 @@ For the complete list of available aliases, see `diive.__all__`.
 Executable example scripts demonstrating common workflows are available in the `examples/` folder:
 
 **Visualization:**
+
 ```bash
 python examples/visualization/heatmap_datetime.py    # HeatmapDateTime and HeatmapYearMonth
 python examples/visualization/hexbin.py              # HexbinPlot 2D hexagonal binning
 ```
 
 **Gap-filling (Phase 2):**
+
 ```bash
 python examples/gap_filling/randomforest_ts.py       # Random Forest gap-filling
 python examples/gap_filling/xgboost_ts.py            # XGBoost gap-filling
 ```
 
-See [examples/README.md](examples/README.md) for a complete index of all available examples organized by topic (visualization, gap-filling, feature engineering).
+See [examples/README.md](examples/README.md) for a complete index of all available examples organized by topic (
+visualization, gap-filling, feature engineering).
 
-Additional examples available in **Jupyter notebooks** at [notebooks/](notebooks/) with comprehensive workflows and tutorials.
+Additional examples available in **Jupyter notebooks** at [notebooks/](notebooks/) with comprehensive workflows and
+tutorials.
 
 ---
 
@@ -115,25 +124,25 @@ diive/
     └── qaqc/            # FlagQCF, EddyPro flags, StepwiseMeteoScreeningDb
 ```
 
-| Package                          | Key classes / functions                                                                                                                       | Description                                                                                                                              |
-|----------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
-| `diive.core.base`                | `FlagBase`                                                                                                                                    | Base class for building quality and outlier flags; provides flag encoding, filtering, and visualization                                  |
-| `diive.core.ml`                  | `FeatureEngineer`, `MlRegressorGapFillingBase`                                                                                               | Standalone feature engineering (8-stage pipeline) and base class for ML gap-filling (RF, XGBoost); separate feature engineering from model training for better reusability |
-| `diive.core.io`                  | `DataFileReader`, `MultiDataFileReader`, `ReadFileType`, `FileSplitter`                                                                       | Read single or multiple instrument files (CSV, EddyPro, TOA5); detect file structure; split large files; load/save Parquet               |
-| `diive.core.plotting`            | `HeatmapDateTime`, `HeatmapXYZ`, `HexbinPlot`, `TimeSeries`, `ScatterXY`, `HistogramPlot`, `DielCycle`, `RidgeLinePlot`, `CumulativeYear`   | Comprehensive visualization suite covering heatmaps, time series, scatter, histograms, diurnal cycles, ridge lines, hexbin plots, and cumulative plots |
-| `diive.core.times`               | `TimestampSanitizer`, `DetectFrequency`, `vectorize_timestamps()`, `continuous_timestamp_freq()`                                              | Sanitize and validate timestamps, detect/infer data frequency, vectorize time attributes, resample diel cycles                           |
-| `diive.core.dfun`                | `sstats()`, `fit_to_bins_linreg()`, `fit_to_bins_polyreg()`                                                                                   | DataFrame statistics, linear/polynomial bin fitting, regression utilities                                                                |
-| `diive.pkgs.gapfilling`          | `XGBoostTS`, `RandomForestTS`, `QuickFillRFTS`, `LongTermGapFillingRandomForestTS`, `LongTermGapFillingXGBoostTS`, `FluxMDS`               | Fill time series gaps with XGBoost, Random Forest (standard and long-term multi-year), MDS, or linear interpolation                      |
-| `diive.pkgs.outlierdetection`    | `HampelDaytimeNighttime`, `zScore`, `zScoreDaytimeNighttime`, `LocalOutlierFactorAllData`, `AbsoluteLimits`, `AbsoluteLimitsDaytimeNighttime` | Detect and flag outliers using Hampel filter, z-score, LOF, absolute limits, local SD, manual removal, or stepwise combinations          |
-| `diive.pkgs.flux`                | `FluxProcessingChain`                                                                                                                         | Post-process eddy covariance fluxes: Level-2 quality flags, storage correction, USTAR filtering, gap-filling (RF/XGBoost/MDS), self-heating correction |
-| `diive.pkgs.fluxprocessingchain` | `FluxProcessingChain`                                                                                                                         | Orchestrate a complete Level-2 → Level-4 flux processing workflow in a single pipeline                                                   |
-| `diive.pkgs.analyses`            | `GapFinder`, `GridAggregator`, `daily_correlation()`, `SeasonalTrendDecomposition`                                                         | Locate data gaps, aggregate variables into 2-D grids, compute daily correlations, decoupling analysis, quantiles, seasonal-trend decomposition |
-| `diive.pkgs.corrections`         | `OffsetCorrection`, `WindDirectionOffset`, `SetToThreshold`, `SetToMissing`                                                                   | Apply measurement offsets, correct wind directions, clamp values to thresholds, set periods to missing                                   |
-| `diive.pkgs.createvar`           | `DaytimeNighttimeFlag`, `TimeSince`, `calc_vpd_from_ta_rh()`, `et_from_le()`, `potrad()`                                                      | Derive new variables: daytime/nighttime flags, VPD, ET, time-since-event, potential radiation                                            |
-| `diive.pkgs.qaqc`                | `FlagQCF`, `StepwiseMeteoScreeningDb`                                                                                                         | Manage FLUXNET quality control flags; apply stepwise meteorological screening                                                            |
-| `diive.pkgs.echires`             | `FluxDetectionLimit`, `WindRotation2D`, `MaxCovariance`                                                                                       | Process 20 Hz eddy covariance data: detection limits, 2-D wind rotation, maximum covariance lag                                          |
-| `diive.pkgs.formats`             | `FormatEddyProFluxnetFileForUpload`, `FormatMeteoForEddyProFluxProcessing`                                                                    | Convert EddyPro output to FLUXNET submission format; prepare meteorological data for EddyPro                                             |
-| `diive.pkgs.fits`                | `BinFitterCP`                                                                                                                                 | Fit data to bins using cumulative-probability approach                                                                                   |
+| Package                          | Key classes / functions                                                                                                                       | Description                                                                                                                                                                |
+|----------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `diive.core.base`                | `FlagBase`                                                                                                                                    | Base class for building quality and outlier flags; provides flag encoding, filtering, and visualization                                                                    |
+| `diive.core.ml`                  | `FeatureEngineer`, `MlRegressorGapFillingBase`                                                                                                | Standalone feature engineering (8-stage pipeline) and base class for ML gap-filling (RF, XGBoost); separate feature engineering from model training for better reusability |
+| `diive.core.io`                  | `DataFileReader`, `MultiDataFileReader`, `ReadFileType`, `FileSplitter`                                                                       | Read single or multiple instrument files (CSV, EddyPro, TOA5); detect file structure; split large files; load/save Parquet                                                 |
+| `diive.core.plotting`            | `HeatmapDateTime`, `HeatmapXYZ`, `HexbinPlot`, `TimeSeries`, `ScatterXY`, `HistogramPlot`, `DielCycle`, `RidgeLinePlot`, `CumulativeYear`     | Comprehensive visualization suite covering heatmaps, time series, scatter, histograms, diurnal cycles, ridge lines, hexbin plots, and cumulative plots                     |
+| `diive.core.times`               | `TimestampSanitizer`, `DetectFrequency`, `vectorize_timestamps()`, `continuous_timestamp_freq()`                                              | Sanitize and validate timestamps, detect/infer data frequency, vectorize time attributes, resample diel cycles                                                             |
+| `diive.core.dfun`                | `sstats()`, `fit_to_bins_linreg()`, `fit_to_bins_polyreg()`                                                                                   | DataFrame statistics, linear/polynomial bin fitting, regression utilities                                                                                                  |
+| `diive.pkgs.gapfilling`          | `XGBoostTS`, `RandomForestTS`, `QuickFillRFTS`, `LongTermGapFillingRandomForestTS`, `LongTermGapFillingXGBoostTS`, `FluxMDS`                  | Fill time series gaps with XGBoost, Random Forest (standard and long-term multi-year), MDS, or linear interpolation                                                        |
+| `diive.pkgs.outlierdetection`    | `HampelDaytimeNighttime`, `zScore`, `zScoreDaytimeNighttime`, `LocalOutlierFactorAllData`, `AbsoluteLimits`, `AbsoluteLimitsDaytimeNighttime` | Detect and flag outliers using Hampel filter, z-score, LOF, absolute limits, local SD, manual removal, or stepwise combinations                                            |
+| `diive.pkgs.flux`                | `FluxProcessingChain`                                                                                                                         | Post-process eddy covariance fluxes: Level-2 quality flags, storage correction, USTAR filtering, gap-filling (RF/XGBoost/MDS), self-heating correction                     |
+| `diive.pkgs.fluxprocessingchain` | `FluxProcessingChain`                                                                                                                         | Orchestrate a complete Level-2 → Level-4 flux processing workflow in a single pipeline                                                                                     |
+| `diive.pkgs.analyses`            | `GapFinder`, `GridAggregator`, `daily_correlation()`, `SeasonalTrendDecomposition`                                                            | Locate data gaps, aggregate variables into 2-D grids, compute daily correlations, decoupling analysis, quantiles, seasonal-trend decomposition                             |
+| `diive.pkgs.corrections`         | `OffsetCorrection`, `WindDirectionOffset`, `SetToThreshold`, `SetToMissing`                                                                   | Apply measurement offsets, correct wind directions, clamp values to thresholds, set periods to missing                                                                     |
+| `diive.pkgs.createvar`           | `DaytimeNighttimeFlag`, `TimeSince`, `calc_vpd_from_ta_rh()`, `et_from_le()`, `potrad()`                                                      | Derive new variables: daytime/nighttime flags, VPD, ET, time-since-event, potential radiation                                                                              |
+| `diive.pkgs.qaqc`                | `FlagQCF`, `StepwiseMeteoScreeningDb`                                                                                                         | Manage FLUXNET quality control flags; apply stepwise meteorological screening                                                                                              |
+| `diive.pkgs.echires`             | `FluxDetectionLimit`, `WindRotation2D`, `MaxCovariance`                                                                                       | Process 20 Hz eddy covariance data: detection limits, 2-D wind rotation, maximum covariance lag                                                                            |
+| `diive.pkgs.formats`             | `FormatEddyProFluxnetFileForUpload`, `FormatMeteoForEddyProFluxProcessing`                                                                    | Convert EddyPro output to FLUXNET submission format; prepare meteorological data for EddyPro                                                                               |
+| `diive.pkgs.fits`                | `BinFitterCP`                                                                                                                                 | Fit data to bins using cumulative-probability approach                                                                                                                     |
 
 ---
 
@@ -162,9 +171,10 @@ diive/
 - **Optimum range**: find x range for optimum y
 - **Percentiles**: Calculate percentiles 0-100 for
   series ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/analyses/Percentiles.ipynb))
-- **Seasonal-Trend Decomposition**: Separate time series into trend, seasonal, and residual components using STL (Seasonal-Trend Loess), classical, or harmonic methods · class:
+- **Seasonal-Trend Decomposition**: Separate time series into trend, seasonal, and residual components using STL (
+  Seasonal-Trend Loess), classical, or harmonic methods · class:
   `SeasonalTrendDecomposition` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/SeasonalTrendDecomposition.ipynb))
-  
+
 ### Corrections
 
 - **Offset correction for measurement**: correct measurement by offset in comparison to
@@ -273,24 +283,25 @@ _Format data to specific formats._
 _Fill gaps in time series with various methods._
 
 **Feature Engineering (v0.91.0)** · class: `FeatureEngineer`
+
 - Standalone 8-stage feature engineering pipeline (composable, reusable across models)
-  - Stage 1: Lagged features from past and future values
-  - Stage 2: Rolling statistics (mean, std, median, min, max, quartiles)
-  - Stage 3: Temporal differencing (1st and 2nd order momentum)
-  - Stage 4: Exponential Moving Average (EMA) with recent-value emphasis
-  - Stage 5: Polynomial expansion (squared, cubed terms)
-  - Stage 6: STL decomposition (trend, seasonal, residual components)
-  - Stage 7: Timestamp vectorization (season, month, hour, etc.)
-  - Stage 8: Continuous record numbering for trend detection
+    - Stage 1: Lagged features from past and future values
+    - Stage 2: Rolling statistics (mean, std, median, min, max, quartiles)
+    - Stage 3: Temporal differencing (1st and 2nd order momentum)
+    - Stage 4: Exponential Moving Average (EMA) with recent-value emphasis
+    - Stage 5: Polynomial expansion (squared, cubed terms)
+    - Stage 6: STL decomposition (trend, seasonal, residual components)
+    - Stage 7: Timestamp vectorization (season, month, hour, etc.)
+    - Stage 8: Continuous record numbering for trend detection
 - Pre-engineer features once, reuse across multiple models (RF + XGB simultaneously)
 - Independent testing and debugging of feature engineering
 
 - **XGBoostTS** · class:
   `XGBoostTS` ([notebook example (minimal)](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/XGBoostGapFillingMinimal.ipynb), [notebook example (more extensive)](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/XGBoostGapFillingExtensive.ipynb))
-  - Use `FeatureEngineer` to create features, pass pre-engineered data to XGBoostTS
+    - Use `FeatureEngineer` to create features, pass pre-engineered data to XGBoostTS
 - **RandomForestTS** · class:
   `RandomForestTS` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/RandomForestGapFilling.ipynb))
-  - Use `FeatureEngineer` to create features, pass pre-engineered data to RandomForestTS
+    - Use `FeatureEngineer` to create features, pass pre-engineered data to RandomForestTS
 - **Long-term gap-filling using RandomForestTS** · class:
   `LongTermGapFillingRandomForestTS` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/LongTermRandomForestGapFilling.ipynb))
 - **Long-term gap-filling using XGBoostTS** · class:
@@ -306,13 +317,13 @@ _Fill gaps in time series with various methods._
 #### Comprehensive Examples for CO2 Flux Data
 
 - **FluxProcessingChain examples** for CO2 half-hourly flux (NEE) gap-filling:
-  - Both **Random Forest** and **XGBoost** examples are fully activated and comprehensively documented
-  - Optimized feature engineering for diurnal photosynthetic patterns (lag, rolling, EMA, STL decomposition)
-  - Feature reduction enabled by default (SHAP-based selection reduces ~45-50 features to ~10-20)
-  - Hyperparameters tuned for ecosystem flux data with detailed tuning guidance
-  - Model comparison code to select best algorithm for your site
-  - See `examples/gap_filling/` folder for standalone runnable examples (Phase 2, coming soon)
-  - Or see `diive/pkgs/fluxprocessingchain/fluxprocessingchain.py` for detailed inline examples
+    - Both **Random Forest** and **XGBoost** examples are fully activated and comprehensively documented
+    - Optimized feature engineering for diurnal photosynthetic patterns (lag, rolling, EMA, STL decomposition)
+    - Feature reduction enabled by default (SHAP-based selection reduces ~45-50 features to ~10-20)
+    - Hyperparameters tuned for ecosystem flux data with detailed tuning guidance
+    - Model comparison code to select best algorithm for your site
+    - See `examples/gap_filling/` folder for standalone runnable examples (Phase 2, coming soon)
+    - Or see `diive/pkgs/fluxprocessingchain/fluxprocessingchain.py` for detailed inline examples
 
 ### Outlier Detection
 
@@ -374,7 +385,8 @@ _Create single outlier flags where `0=OK` and `2=outlier`._
   `HeatmapYearMonth` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/HeatmapYearMonth.ipynb))
 - **Heatmap XYZ**: show z-values in bins of x and y — pairs naturally with `GridAggregator` · class:
   `HeatmapXYZ` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/HeatmapXYZ.ipynb))
-- **Hexbin plot**: aggregate flux values into 2D hexagonal bins of driver variables; supports percentile normalization and configurable aggregation functions · class:
+- **Hexbin plot**: aggregate flux values into 2D hexagonal bins of driver variables; supports percentile normalization
+  and configurable aggregation functions · class:
   `HexbinPlot` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/HexbinPlot.ipynb))
 - **Histogram**: includes options to show z-score limits and to highlight the peak distribution
   bin · class:
