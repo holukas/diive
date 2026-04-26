@@ -19,15 +19,28 @@ class ScatterXY:
             nbins: int = 0,
             binagg: Literal['mean', 'median'] = 'median',
     ):
-        """Scatter plot with optional third variable as color.
+        """Scatter plot with optional third variable as color and bin aggregation.
+
+        Visualize relationships between two variables (x, y) with optional color-coding
+        by a third variable (z). Supports optional binning and aggregation for trend
+        visualization with confidence intervals (median ± IQR or mean ± std).
 
         Args:
-            x, y: Series to plot (required)
-            z: Optional Series for color coding third variable
+            x: Series for x-axis
+            y: Series for y-axis
+            z: Optional Series for color-coding scatter points
             title: Plot title (default: "{yname} vs. {xname}")
             ax: Matplotlib axes (creates new if None)
-            nbins: Number of bins for aggregation (0 = no aggregation)
-            binagg: Aggregation method ('mean' or 'median')
+            nbins: Number of bins for x-axis aggregation (0 = no aggregation)
+            binagg: Aggregation method for bins ('mean' or 'median', default: 'median')
+
+        Features:
+            - 2-variable scatter: Basic x vs y plot
+            - 3-variable scatter: Color-code points by z variable with colorbar
+            - Bin aggregation: Group data by x-axis bins and overlay trends
+            - Confidence intervals: Show IQR (median) or std (mean) per bin
+
+        Call `plot()` to render with styling options (labels, limits, colormap).
 
         Example:
             See `examples/visualization/scatter_xy.py` for complete examples.
@@ -40,6 +53,17 @@ class ScatterXY:
         self.binagg = binagg
         self.title = title if title else f"{self.yname} vs. {self.xname}"
         self.fig = None
+
+        # Initialize styling attributes (set in plot() method)
+        self.xlabel = self.xname
+        self.ylabel = self.yname
+        self.zlabel = self.zname
+        self.xunits = None
+        self.yunits = None
+        self.xlim = None
+        self.ylim = None
+        self.cmap = 'viridis'
+        self.show_colorbar = True
 
         # Prepare data
         df_list = [x, y]
@@ -71,14 +95,27 @@ class ScatterXY:
             cmap: str = 'viridis',
             show_colorbar: bool = True,
     ):
-        """Generate plot with optional styling parameters.
+        """Generate plot with optional styling and formatting.
+
+        Renders scatter plot with all styling parameters. Can be called multiple
+        times with different parameters to explore different views of the same data.
 
         Args:
-            xlabel, ylabel, zlabel: Axis label overrides
-            xunits, yunits: Unit labels
-            xlim, ylim: Axis limits
-            cmap: Colormap for z variable (default: 'viridis')
-            show_colorbar: Show colorbar if z provided (default: True)
+            xlabel: X-axis label (default: series name)
+            ylabel: Y-axis label (default: series name)
+            zlabel: Colorbar label (default: z series name, ignored if no z)
+            xunits: X-axis units (appended to xlabel)
+            yunits: Y-axis units (appended to ylabel)
+            xlim: X-axis limits as [min, max] (default: data min/max)
+            ylim: Y-axis limits as [min, max] or 'auto' (default: data range)
+            cmap: Colormap name for z variable (default: 'viridis')
+                  Examples: 'plasma', 'viridis', 'coolwarm', 'RdYlBu'
+            show_colorbar: Display colorbar if z provided (default: True)
+
+        Notes:
+            - xlim always uses full data range (no quantile trimming)
+            - ylim='auto' with nbins: uses binned data limits
+            - Colorbar shown only if z is provided and show_colorbar=True
         """
         self.xlabel = xlabel if xlabel else self.xname
         self.ylabel = ylabel if ylabel else self.yname

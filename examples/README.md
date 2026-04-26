@@ -15,7 +15,7 @@ examples/
 │   ├── dielcycle.py                   # DielCycle diurnal analysis (1 example)
 │   ├── histogram.py                   # HistogramPlot distribution analysis (2 examples)
 │   ├── ridgeline.py                   # RidgeLinePlot kernel density plots (2 examples)
-│   ├── scatter_xy.py                  # ScatterXY scatter plots (2 examples)
+│   ├── scatter_xy.py                  # ScatterXY scatter plots (3 examples)
 │   └── heatmap_xyz.py                 # HeatmapXYZ 3D scatter heatmaps (TODO)
 └── gap_filling/           # Gap-filling workflow examples (TODO)
     ├── quick_start.py             # Simple interpolation + quickfill

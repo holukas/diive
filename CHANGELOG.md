@@ -158,9 +158,9 @@
       - Created `examples/visualization/dielcycle.py` (1 example)
       - Created `examples/visualization/histogram.py` (2 examples)
       - Created `examples/visualization/ridgeline.py` (2 examples)
-      - Created `examples/visualization/scatter_xy.py` (2 examples)
+      - Created `examples/visualization/scatter_xy.py` (3 examples)
       - Removed 80+ lines from source files
-      - Total: 20 executable visualization examples across 9 files
+      - Total: 21 executable visualization examples across 9 files
     - Created `examples/README.md` with index and quick-start guide
     - Updated main `README.md` with Examples section
     - Updated docstrings to reference examples folder (all 7 visualization classes)
@@ -221,6 +221,17 @@
   space).
   Percentile-based normalization (0-100), configurable aggregation (default: median), variable gridsize; inherits from
   HeatmapBase (8).
+
+* **ScatterXY** (enhanced): 3-variable scatter plots with optional color-coding and bin aggregation.
+    - Add optional `z` Series parameter for color-coded third variable with customizable colormap
+    - Refactor styling parameters (xlabel, ylabel, zlabel, xlim, ylim, cmap, show_colorbar) to `plot()` method
+    - Add colorbar with custom zlabel support for z-variable visualization
+    - Add bin aggregation feature: group data by x-axis bins with trend overlays
+    - Show confidence intervals per bin: interquartile range (median) or std (mean)
+    - Initialize all styling attributes in `__init__` for predictable class state
+    - Fix matplotlib tight_layout incompatibility with colorbar
+    - Use full data range for x-axis (remove quantile trimming)
+    - Updated to 3 examples: basic scatter, 3-variable scatter with radiation coloring, binned aggregation (21)
 
 ### Testing
 

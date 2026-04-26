@@ -47,6 +47,31 @@ def example_scatter_nee_vpd():
     )
 
 
+def example_scatter_nee_vpd_binned():
+    """ScatterXY: NEE vs VPD with bin aggregation.
+
+    Shows aggregated CO2 flux response to vapor pressure deficit
+    with median and interquartile range overlay (nbins=10).
+    """
+    df = dv.load_exampledata_parquet()
+
+    scatter = dv.scatter_xy(
+        x=df['VPD_f'],
+        y=df['NEE_CUT_REF_f'],
+        z=df['Rg_f'],
+        title='CO2 flux response to VPD (binned aggregation)',
+        nbins=10,
+        binagg='median'
+    )
+    scatter.plot(
+        xlabel='VPD (hPa)',
+        ylabel=r'NEE flux ($\mathrm{µmol\ CO_2\ m^{-2}\ s^{-1}}$)',
+        zlabel=r'Radiation ($\mathrm{W\ m^{-2}}$)',
+        cmap='plasma',
+        show_colorbar=True
+    )
+
+
 if __name__ == '__main__':
     print("Running ScatterXY examples...")
 
@@ -55,5 +80,8 @@ if __name__ == '__main__':
 
     print("\n2. NEE vs VPD colored by radiation...")
     example_scatter_nee_vpd()
+
+    print("\n3. NEE vs VPD binned aggregation with median and IQR...")
+    example_scatter_nee_vpd_binned()
 
     print("\nAll examples completed!")
