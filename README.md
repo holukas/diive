@@ -64,6 +64,21 @@ For the complete list of available aliases, see `diive.__all__`.
 
 ---
 
+## Examples
+
+Executable example scripts demonstrating common workflows are available in the `examples/` folder:
+
+```bash
+python examples/visualization/heatmap_datetime.py    # Heatmap visualization examples
+python examples/gap_filling/randomforest_ts.py       # Gap-filling workflows (Phase 2)
+```
+
+See [examples/README.md](examples/README.md) for a complete index of all available examples organized by topic (visualization, gap-filling, feature engineering).
+
+Additional examples available in **Jupyter notebooks** at [notebooks/](notebooks/) with comprehensive workflows and tutorials.
+
+---
+
 ## Package Structure
 
 ```

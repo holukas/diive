@@ -1,0 +1,68 @@
+# DIIVE Examples
+
+Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, and visualization.
+
+## Structure
+
+```
+examples/
+├── visualization/          # Plotting and visualization examples
+│   ├── heatmap_datetime.py        # HeatmapDateTime and HeatmapYearMonth
+│   ├── heatmap_xyz.py             # HeatmapXYZ 3D scatter heatmaps (TODO)
+│   ├── dielcycle.py               # DielCycle diurnal analysis (TODO)
+│   ├── other_plots.py             # Hexbin, ridgeline, histogram, scatter, bar (TODO)
+│   └── timeseries_and_cumulative.py # TimeSeries and CumulativeYear (TODO)
+└── gap_filling/           # Gap-filling workflow examples (TODO)
+    ├── quick_start.py             # Simple interpolation + quickfill
+    ├── randomforest_ts.py         # RandomForestTS examples
+    ├── xgboost_ts.py              # XGBoostTS examples
+    ├── longterm_models.py         # Long-term multi-year models
+    └── mds_filling.py             # MDS meteorological similarity
+```
+
+## Running Examples
+
+Each example file is standalone and executable:
+
+```bash
+python examples/visualization/heatmap_datetime.py
+python examples/gap_filling/randomforest_ts.py
+```
+
+## Quick Start
+
+**Visualization:**
+```bash
+python examples/visualization/heatmap_datetime.py
+```
+
+Displays heatmaps in vertical/horizontal orientations, year-month aggregations with ranks, and colormap previews.
+
+**Gap-Filling (TODO - Phase 2):**
+```bash
+python examples/gap_filling/quick_start.py
+```
+
+Demonstrates simple interpolation and quick Random Forest gap-filling.
+
+## Finding Help
+
+- **API documentation:** See class docstrings (e.g., `help(HeatmapDateTime)`)
+- **Examples:** Browse this folder for your use case
+- **Architecture:** See `CLAUDE.md` for design decisions and workflows
+
+## Contributing Examples
+
+When adding a new example:
+1. Create a function with a descriptive name: `example_<feature>_<variant>()`
+2. Add docstring explaining what it demonstrates
+3. Keep it runnable standalone: `python examples/<category>/<file>.py`
+4. Use `dv.load_exampledata_parquet()` for consistent test data
+5. Update this README with the new example
+
+## Phases
+
+- **Phase 1 (Complete):** Heatmap visualization examples
+- **Phase 2 (Planned):** Other visualization examples
+- **Phase 3 (Planned):** Gap-filling workflow examples
+- **Phase 4 (Future):** Feature engineering examples
