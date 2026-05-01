@@ -120,12 +120,12 @@
   Breaking change; removes namespace ambiguity.
 - **HeatmapDateTime/HeatmapXYZ fixes** — Fixed datetime handling, show_values parameter, adaptive tick intervals.
   HeatmapXYZ requires pre-aggregated input.
-- **Examples consolidation (Phase 1 complete)** — Consolidated **59 executable examples** from embedded source functions into 
+- **Examples consolidation (Phase 1 complete)** — Consolidated **62 executable examples** from embedded source functions into 
   dedicated `examples/` folder organized by topic:
   - **Visualization:** 22 examples (heatmap_datetime 6, hexbin 3, timeseries 1, cumulative 3, other 1, dielcycle 1, histogram 2, ridgeline 2, scatter 3)
   - **Analyses:** 8 examples (correlation 1, decoupling 1, gapfinder 1, gridaggregator 1, histogram 1, optimumrange 1, quantiles 1, seasonaltrend 1)
-  - **Data Processing:** 29 examples (binary 2, corrections 7, createvar 20)
-  - **Createvar breakdown:** air 2, conversions 3, daynightflag 1, laggedvariants 3, noise 4, potentialradiation 4, timesince 3
+  - **Data Processing:** 32 examples (binary 2, corrections 7, createvar 23)
+  - **Createvar breakdown:** air 2, conversions 3, daynightflag 1, laggedvariants 3, noise 4, potentialradiation 4, timesince 3, vpd 3
   - Includes parallel runner script `examples/run_all_examples.py` (~2.7x speedup vs sequential)
   - Each example file is standalone: `python examples/visualization/heatmap_datetime.py`
 
@@ -139,7 +139,7 @@
 - **Examples README:** Created dedicated `examples/README.md` with structure, quick start, finding help, and phase descriptions
 - **CLAUDE.md updates:** 
   - Updated `pkgs/createvar/` section to list all 8 modules (air, conversions, daynightflag, laggedvariants, noise, potentialradiation, timesince, vpd)
-  - Updated examples section: 27 examples → 59 examples with detailed breakdown
+  - Updated examples section: 27 examples → 62 examples with detailed breakdown
   - Added "Recent Implementations" items 11-12: TimeSince class and examples consolidation
 
 ---

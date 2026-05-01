@@ -71,7 +71,7 @@ For the complete list of available aliases, see `diive.__all__`.
 
 ## Examples
 
-**59 executable example scripts** demonstrating common workflows are organized by topic in the `examples/` folder:
+**62 executable example scripts** demonstrating common workflows are organized by topic in the `examples/` folder:
 
 **Run all examples at once (parallelized, ~2.7x speedup):**
 ```bash
@@ -87,10 +87,10 @@ python examples/createvar/potentialradiation.py      # Solar radiation (4 exampl
 python examples/corrections/offsetcorrection.py      # Data corrections (4 examples)
 ```
 
-**Example categories (59 total):**
+**Example categories (62 total):**
 - **Visualization** (22): heatmap_datetime, hexbin, timeseries, cumulative, dielcycle, histogram, ridgeline, scatter
 - **Analyses** (8): correlation, decoupling, gapfinder, gridaggregator, histogram, optimumrange, quantiles, seasonaltrend
-- **Data Processing** (29): binary extraction, corrections (setto, offsetcorrection), createvar (air, conversions, daynightflag, laggedvariants, noise, potentialradiation, timesince)
+- **Data Processing** (32): binary extraction, corrections (setto, offsetcorrection), createvar (air, conversions, daynightflag, laggedvariants, noise, potentialradiation, timesince, vpd)
 
 See [examples/README.md](examples/README.md) for a complete index of all examples with descriptions and quick start guides.
 

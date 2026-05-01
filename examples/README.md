@@ -38,7 +38,8 @@ examples/
 │   ├── [laggedvariants.py](createvar/laggedvariants.py)       # Create lagged variants for temporal analysis (3 examples)
 │   ├── [noise.py](createvar/noise.py)                         # Generate synthetic data and add noise (4 examples)
 │   ├── [potentialradiation.py](createvar/potentialradiation.py) # Calculate potential solar radiation (4 examples)
-│   └── [timesince.py](createvar/timesince.py)                 # Count records since condition met (3 examples)
+│   ├── [timesince.py](createvar/timesince.py)                 # Count records since condition met (3 examples)
+│   └── [vpd.py](createvar/vpd.py)                             # Vapor pressure deficit calculation and gap-filling (3 examples)
 └── gap_filling/           # Gap-filling workflow examples (TODO)
     ├── quick_start.py             # Simple interpolation + quickfill (TODO)
     ├── randomforest_ts.py         # RandomForestTS examples (TODO)
@@ -54,7 +55,7 @@ examples/
 python examples/run_all_examples.py
 ```
 
-Executes all 59 examples (22 visualization + 8 analysis + 2 binary + 7 corrections + 20 createvar) in parallel (4 concurrent workers) with execution time tracking.
+Executes all 62 examples (22 visualization + 8 analysis + 2 binary + 7 corrections + 23 createvar) in parallel (4 concurrent workers) with execution time tracking.
 - Shows individual timing for each example
 - Detailed error messages if any fail
 - ~2.7x faster than sequential execution
@@ -103,8 +104,8 @@ When adding a new example:
 - **Phase 1 (Complete):** Core examples across visualization, analysis, and data processing
   - **Visualization:** HeatmapDateTime/YearMonth (6), HexbinPlot (3), TimeSeries (1), Cumulative (3), Other (1), DielCycle (1), Histogram (2), RidgeLine (2), ScatterXY (3) = 22 examples
   - **Analysis:** DailyCorrelation, StratifiedAnalysis, GapFinder, GridAggregator, Histogram, FindOptimumRange, Quantiles, SeasonalTrendDecomposition = 8 examples
-  - **Data Processing:** Binary (2), Corrections (7), Variable creation (20) = 29 examples
-  - **Total:** 59 examples
+  - **Data Processing:** Binary (2), Corrections (7), Variable creation (23) = 32 examples
+  - **Total:** 62 examples
 - **Phase 2 (Planned):** Gap-filling workflow examples and HeatmapXYZ
   - Quick start interpolation + quickfill
   - RandomForestTS, XGBoostTS, long-term models, MDS gap-filling

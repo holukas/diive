@@ -57,6 +57,7 @@ from diive.pkgs.createvar.potentialradiation import potrad as potrad
 from diive.pkgs.createvar.potentialradiation import potrad_eot as potrad_eot
 from diive.pkgs.createvar.timesince import TimeSince as TimeSince
 from diive.pkgs.createvar.timesince import TimeSince as timesince
+from diive.pkgs.createvar.vpd import calc_vpd_from_ta_rh as calc_vpd_from_ta_rh
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit as fdl
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit as flux_detection_limit
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit
@@ -144,6 +145,7 @@ __all__ = [
     'potrad_eot',
     'TimeSince',
     'timesince',
+    'calc_vpd_from_ta_rh',
 
     # Packages: Flux
     'fdl',
