@@ -113,7 +113,48 @@ def example_measurement_offset_from_replicate():
     print(f"Mean absolute difference (after): {(measurement_corrected - replicate).abs().mean():.4f}\n")
 
 
+def example_wind_direction_offset():
+    """Detect and correct wind direction offset using reference years.
+
+    Demonstrates detecting and correcting wind direction measurement offset
+    by comparing yearly wind direction histograms to a reference histogram
+    built from known-correct reference years. Detects the offset that
+    maximizes correlation with the reference distribution.
+    """
+    from diive.configs.exampledata import load_exampledata_winddir
+
+    # Load wind direction data
+    df = load_exampledata_winddir()
+    winddir = df['wind_dir'].copy()
+
+    # Filter to reference period and remove NaN values
+    winddir = winddir.loc[winddir.index.year <= 2022]
+    winddir = winddir.dropna()
+
+    print("Example 4: Detect and correct wind direction offset")
+    print(f"Wind direction range: {winddir.min():.1f} to {winddir.max():.1f} degrees")
+    print(f"Years in data: {sorted(winddir.index.year.unique())}")
+
+    # Detect offset using reference years (2021, 2022 known correct)
+    offset_corrector = dv.WindDirOffset(
+        winddir=winddir,
+        hist_ref_years=[2021, 2022],
+        offset_start=-50,
+        offset_end=50,
+        hist_n_bins=360
+    )
+
+    # Get results
+    winddir_corrected = offset_corrector.get_corrected_wind_directions()
+    yearly_offsets = offset_corrector.get_yearly_offsets()
+
+    print("\nYearly wind direction offsets:")
+    print(yearly_offsets.to_string(index=False))
+    print(f"\nCorrected wind direction range: {winddir_corrected.min():.1f} to {winddir_corrected.max():.1f} degrees\n")
+
+
 if __name__ == '__main__':
-    # example_remove_relativehumidity_offset()
-    # example_remove_radiation_zero_offset()
+    example_remove_relativehumidity_offset()
+    example_remove_radiation_zero_offset()
     example_measurement_offset_from_replicate()
+    example_wind_direction_offset()

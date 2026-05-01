@@ -77,6 +77,9 @@
 - **remove_radiation_zero_offset** — Correct radiation measurements with nighttime offset using solar geometry.
   Sets nighttime radiation to zero after offset correction.
   Now exported via main package (`diive.remove_radiation_zero_offset`).
+- **WindDirOffset** — Detect and correct systematic wind direction offset by comparing yearly histograms to reference
+  years. Handles degree wrapping (0-360) automatically. Merged from separate module; now part of offsetcorrection.
+  Now exported via main package (`diive.WindDirOffset`, `diive.wind_dir_offset`).
 
 ### Plotting & Visualization
 
