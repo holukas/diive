@@ -24,7 +24,8 @@ examples/
 │   ├── gridaggregator.py              # GridAggregator for 2D grid-based aggregation (1 example)
 │   ├── histogram.py                   # Histogram for distribution analysis (1 example)
 │   ├── optimumrange.py                # FindOptimumRange for optimal condition analysis (1 example)
-│   └── quantiles.py                   # percentiles101 for distribution analysis (1 example)
+│   ├── quantiles.py                   # percentiles101 for distribution analysis (1 example)
+│   └── seasonaltrend.py               # SeasonalTrendDecomposition for time series decomposition (1 example)
 └── gap_filling/           # Gap-filling workflow examples (TODO)
     ├── quick_start.py             # Simple interpolation + quickfill
     ├── randomforest_ts.py         # RandomForestTS examples
@@ -40,7 +41,7 @@ examples/
 python examples/run_all_examples.py
 ```
 
-Executes all 16 examples (9 visualization + 7 analysis) in parallel (4 concurrent workers) with execution time tracking.
+Executes all 17 examples (9 visualization + 8 analysis) in parallel (4 concurrent workers) with execution time tracking.
 - Shows individual timing for each example
 - Detailed error messages if any fail
 - ~2.7x faster than sequential execution

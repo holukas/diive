@@ -32,6 +32,7 @@ EXAMPLE_FILES = [
     'analyses/histogram.py',
     'analyses/optimumrange.py',
     'analyses/quantiles.py',
+    'analyses/seasonaltrend.py',
 ]
 
 MAX_WORKERS = 4  # Number of parallel workers

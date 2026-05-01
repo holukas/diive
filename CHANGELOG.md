@@ -46,6 +46,10 @@
   visualization. Now exported via main package (`diive.FindOptimumRange`, `diive.find_optimum_range`).
 - **percentiles101** — Calculate percentiles 0-100 for distribution analysis. Includes visualization of percentile
   distribution with optional verbose output. Now exported via main package (`diive.percentiles101`).
+- **SeasonalTrendDecomposition (refactored)** — Decompose time series into trend, seasonal, and residual components
+  using STL, classical, or harmonic methods. Properties: `.trend`, `.seasonal`, `.residual`, `.seasonality_strength`.
+  Methods: `.detrend()`, `.deseasonalize()`, `.reconstruct()`, `.summary()`. Now fully exported via main package
+  (`diive.SeasonalTrendDecomposition`, `diive.seasonaltrend`).
 
 ### Plotting & Visualization
 

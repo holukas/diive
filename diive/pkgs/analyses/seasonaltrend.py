@@ -42,6 +42,9 @@ class SeasonalTrendDecomposition:
     - Harmonic: Fourier-based, reveals frequency-domain structure
 
     Lazy evaluation: Components are computed once on first access and cached.
+
+    Example:
+        See `examples/analyses/seasonaltrend.py` for complete examples.
     """
 
     def __init__(
@@ -391,74 +394,3 @@ class SeasonalTrendDecomposition:
     def __str__(self) -> str:
         """String representation (alias for summary)."""
         return self.summary()
-
-
-def _example_seasonaltrend_decomposition() -> Dict:
-    """
-    Simple example of seasonal-trend decomposition using STL method.
-
-    This example demonstrates how to:
-    1. Create synthetic time series with trend and seasonality
-    2. Decompose using STL method
-    3. Access components and analyze seasonality strength
-    4. Visualize results
-
-    Returns:
-        Dict with keys:
-            - 'decomp': SeasonalTrendDecomposition object
-            - 'series': Input time series (pd.Series)
-            - 'quality': Quality flags if applicable
-
-    Example:
-        >>> result = example_seasonaltrend_decomposition()
-        >>> decomp = result['decomp']
-        >>> print(decomp.summary())
-        >>> print(f"Seasonality strength: {decomp.seasonality_strength:.3f}")
-    """
-    import numpy as np
-    from diive.configs.exampledata import load_exampledata_parquet
-
-    print("Loading example NEE data...")
-    df = load_exampledata_parquet()
-
-    # Use NEE data (flux data with annual cycles)
-    # For faster example, use a 2-year subset and interpolate missing values
-    nee_series = df['NEE_CUT_REF_orig'].loc['2015':'2016'].copy()
-    nee_series = nee_series.interpolate(method='linear', limit_direction='both').fillna(method='bfill').fillna(
-        method='ffill')
-
-    print(f"Series length: {len(nee_series)} records")
-    print(f"Data range: {nee_series.index[0]} to {nee_series.index[-1]}")
-    print(f"Valid data after interpolation: {nee_series.notna().sum()}")
-
-    # Create quality flags (assuming all data is good quality for this example)
-    quality_flags = pd.Series(
-        0.8 * np.ones(len(nee_series)), index=nee_series.index
-    )
-
-    print("\nDecomposing with harmonic method (fast FFT-based)...")
-    decomp = SeasonalTrendDecomposition(
-        nee_series,
-        quality=quality_flags,
-        method='harmonic',
-        n_harmonics=10,
-        verbose=True
-    )
-
-    print("\nDecomposition results:")
-    print(decomp.summary())
-
-    print(f"\nSeasonality strength: {decomp.seasonality_strength:.4f}")
-    print(f"Trend range: {decomp.trend.min():.3f} to {decomp.trend.max():.3f}")
-    print(f"Seasonal amplitude (std): {decomp.seasonal.std():.3f}")
-    print(f"Residual std: {decomp.residual.std():.3f}")
-
-    return {
-        'decomp': decomp,
-        'series': nee_series,
-        'quality': quality_flags
-    }
-
-
-if __name__ == '__main__':
-    result = _example_seasonaltrend_decomposition()
