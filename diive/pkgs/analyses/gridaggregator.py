@@ -25,6 +25,9 @@ class GridAggregator:
     quantiles, equal-width bins, or custom bins. The class supports multiple aggregation
     functions, including built-in statistical measures and custom callable functions.
 
+    Example:
+        See `examples/analyses/gridaggregator.py` for complete examples.
+
     Attributes:
         x (pd.Series): X-axis data to be used in binning.
         y (pd.Series): Y-axis data to be used in binning.
@@ -453,70 +456,3 @@ class GridAggregator:
         # Only drop NaNs for non-custom binning in the long format to retain empty custom bins
         if self.binning_type != 'custom':
             self._df_agg_long.dropna(subset=[self.z_col_name], inplace=True)
-
-
-def _example():
-    import diive as dv
-
-    # Load example data
-    df = dv.load_exampledata_parquet()
-
-    # Make subset of three required columns
-    vpd_col = 'VPD_f'  # Vapor pressure deficit
-    ta_col = 'Tair_f'  # Air temperature
-    swin_col = 'Rg_f'  # Shortwave incoming radiation
-    swc_col = 'SWC_FF0_0.15_1'
-    flux_col = 'NEE_CUT_REF_f'
-    subset = df[[flux_col, vpd_col, ta_col, swc_col, swin_col]].copy()
-
-    # daytime_locs = (subset[swin_col] > 50)  # Use daytime data
-    # subset = subset[daytime_locs].copy()
-    # subset = subset.drop(swin_col, axis=1, inplace=False)  # Remove col from df
-
-    # Convert to z-scores, ignoring NaNs
-    from scipy.stats import zscore
-    subset = subset.apply(lambda x: zscore(x, nan_policy='omit'))
-
-    subset = subset.loc[(subset.index.month >= 5) & (subset.index.month <= 10)].copy()  # Use data May and Sep
-    subset = subset.dropna()
-
-    print(subset.describe())
-
-    q = dv.ga(
-        x=subset[vpd_col],
-        y=subset[swc_col],
-        z=subset[flux_col],
-        binning_type='custom',
-        custom_x_bins=list(range(-3, 5, 1)),
-        custom_y_bins=list(range(-3, 5, 1)),
-        # custom_y_bins=list(range(0, 5, 1)),
-        # binning_type='equal_width',
-        # binning_type='quantiles',
-        n_bins=10,
-        min_n_vals_per_bin=5,
-        aggfunc='mean'
-    )
-
-    df_agg_wide = q.df_agg_wide.copy()
-    print(df_agg_wide)
-    df_agg_long = q.df_agg_long.copy()
-    df_long = q.df_long.copy()
-    print(df_long)
-
-    # df_long.loc[df_long['SWC_FF0_0.15_1'] > 3].describe()
-    # df_long.loc[df_long['SWC_FF0_0.15_1'] < -2.345]
-
-    hm = dv.heatmap_xyz(
-        x=df_agg_long[f'BIN_{vpd_col}'],
-        y=df_agg_long[f'BIN_{swc_col}'],
-        z=df_agg_long[f'{flux_col}'],
-        cb_digits_after_comma=0,
-        xlabel=r'x data',
-        ylabel=r'y data',
-        zlabel=r'z data'
-    )
-    hm.show()
-
-
-if __name__ == '__main__':
-    _example()

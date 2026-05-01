@@ -20,7 +20,8 @@ examples/
 ├── analyses/               # Time series analysis examples
 │   ├── correlation.py                 # DailyCorrelation analysis with statistics and anomaly detection (1 example)
 │   ├── decoupling.py                  # StratifiedAnalysis for hierarchical binning analysis (1 example)
-│   └── gapfinder.py                   # GapFinder for gap detection and analysis (1 example)
+│   ├── gapfinder.py                   # GapFinder for gap detection and analysis (1 example)
+│   └── gridaggregator.py              # GridAggregator for 2D grid-based aggregation (1 example)
 └── gap_filling/           # Gap-filling workflow examples (TODO)
     ├── quick_start.py             # Simple interpolation + quickfill
     ├── randomforest_ts.py         # RandomForestTS examples
@@ -36,7 +37,7 @@ examples/
 python examples/run_all_examples.py
 ```
 
-Executes all 12 examples (9 visualization + 3 analysis) in parallel (4 concurrent workers) with execution time tracking.
+Executes all 13 examples (9 visualization + 4 analysis) in parallel (4 concurrent workers) with execution time tracking.
 - Shows individual timing for each example
 - Detailed error messages if any fail
 - ~2.7x faster than sequential execution

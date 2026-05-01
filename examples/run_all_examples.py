@@ -28,6 +28,7 @@ EXAMPLE_FILES = [
     'analyses/correlation.py',
     'analyses/decoupling.py',
     'analyses/gapfinder.py',
+    'analyses/gridaggregator.py',
 ]
 
 MAX_WORKERS = 4  # Number of parallel workers

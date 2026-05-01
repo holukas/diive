@@ -35,6 +35,9 @@
   response functions.
 - **GapFinder** — Detect and analyze consecutive missing values in time series. Access results via `.results` property (
   DataFrame). Now exported via main package (`diive.GapFinder`, `diive.gapfinder`).
+- **GridAggregator** — 2D grid-based aggregation of data across two driver variables (quantiles, equal-width, or custom
+  bins). Access results via `.df_agg_wide` (pivot table) or `.df_agg_long` (long format). Use case: ecosystem response
+  surfaces, driver-response relationships.
 
 ### Plotting & Visualization
 
