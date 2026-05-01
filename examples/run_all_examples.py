@@ -37,6 +37,7 @@ EXAMPLE_FILES = [
     'corrections/setto.py',
     'corrections/offsetcorrection.py',
     'createvar/air.py',
+    'createvar/conversions.py',
 ]
 
 MAX_WORKERS = 4  # Number of parallel workers

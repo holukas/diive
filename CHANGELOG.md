@@ -89,6 +89,12 @@
 - **dry_air_density** — Calculate partial density of dry air from moist air density and water vapor density.
   Uses gas mixture definition: rho_dry = rho_total - rho_vapor.
   Now exported via main package (`diive.dry_air_density`).
+- **air_temp_from_sonic_temp** — Convert sonic temperature to true air temperature accounting for water vapor effects.
+  Now exported via main package (`diive.air_temp_from_sonic_temp`).
+- **latent_heat_of_vaporization** — Calculate temperature-dependent latent heat of vaporization for evapotranspiration conversions.
+  Now exported via main package (`diive.latent_heat_of_vaporization`).
+- **et_from_le** — Convert latent energy flux (W/m²) to evapotranspiration rate (mm H₂O/h).
+  Now exported via main package (`diive.et_from_le`).
 
 ### Plotting & Visualization
 
@@ -98,7 +104,7 @@
   Breaking change; removes namespace ambiguity.
 - **HeatmapDateTime/HeatmapXYZ fixes** — Fixed datetime handling, show_values parameter, adaptive tick intervals.
   HeatmapXYZ requires pre-aggregated input.
-- **Examples consolidation** — Moved 23 examples from source files and added new examples into dedicated `examples/` folder. Added
+- **Examples consolidation** — Moved 26 examples from source files and added new examples into dedicated `examples/` folder. Added
   parallel runner script (~2.7x speedup).
 
 ### Documentation

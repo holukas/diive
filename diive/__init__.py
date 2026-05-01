@@ -45,6 +45,8 @@ from diive.pkgs.corrections.offsetcorrection import WindDirOffset as WindDirOffs
 from diive.pkgs.corrections.offsetcorrection import WindDirOffset as wind_dir_offset
 from diive.pkgs.createvar.air import aerodynamic_resistance as aerodynamic_resistance
 from diive.pkgs.createvar.air import dry_air_density as dry_air_density
+from diive.pkgs.createvar.conversions import air_temp_from_sonic_temp as air_temp_from_sonic_temp
+from diive.pkgs.createvar.conversions import latent_heat_of_vaporization as latent_heat_of_vaporization
 from diive.pkgs.createvar.conversions import et_from_le as et_from_le
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit as fdl
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit as flux_detection_limit
@@ -121,6 +123,8 @@ __all__ = [
     # Packages: Variables
     'aerodynamic_resistance',
     'dry_air_density',
+    'air_temp_from_sonic_temp',
+    'latent_heat_of_vaporization',
     'et_from_le',
 
     # Packages: Flux
