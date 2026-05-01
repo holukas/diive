@@ -31,6 +31,7 @@ EXAMPLE_FILES = [
     'analyses/gridaggregator.py',
     'analyses/histogram.py',
     'analyses/optimumrange.py',
+    'analyses/quantiles.py',
 ]
 
 MAX_WORKERS = 4  # Number of parallel workers

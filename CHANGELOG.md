@@ -44,6 +44,8 @@
 - **FindOptimumRange** — Identify optimal conditions for ecosystem responses (e.g., temperature range for maximum CO₂
   uptake). Bins driver variable and finds optimal range via rolling aggregation. Includes data distribution analysis and
   visualization. Now exported via main package (`diive.FindOptimumRange`, `diive.find_optimum_range`).
+- **percentiles101** — Calculate percentiles 0-100 for distribution analysis. Includes visualization of percentile
+  distribution with optional verbose output. Now exported via main package (`diive.percentiles101`).
 
 ### Plotting & Visualization
 

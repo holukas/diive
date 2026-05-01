@@ -32,6 +32,7 @@ from diive.pkgs.analyses.optimumrange import FindOptimumRange as find_optimum_ra
 from diive.pkgs.analyses.gridaggregator import GridAggregator as ga
 from diive.pkgs.analyses.gridaggregator import GridAggregator as gridaggregator
 from diive.pkgs.analyses.gridaggregator import GridAggregator
+from diive.pkgs.analyses.quantiles import percentiles101 as percentiles101
 from diive.pkgs.analyses.seasonaltrend import SeasonalTrendDecomposition as seasonaltrend
 from diive.pkgs.analyses.seasonaltrend import SeasonalTrendDecomposition
 from diive.pkgs.createvar.conversions import et_from_le as et_from_le
@@ -91,6 +92,7 @@ __all__ = [
     'ga',
     'gridaggregator',
     'GridAggregator',
+    'percentiles101',
     'seasonaltrend',
     'SeasonalTrendDecomposition',
 

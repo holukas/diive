@@ -16,8 +16,8 @@ def percentiles101(series: Series, showplot: bool = True, verbose: bool = True) 
     Returns:
         Dataframe with percentiles 0-100 for *series*.
 
-    - Example notebook available in:
-        notebooks/Analyses/Percentiles.ipynb
+    Example:
+        See `examples/analyses/quantiles.py` for complete examples.
     """
     percentiles_df = pd.DataFrame()
     percentiles_df['PERCENTILE'] = np.arange(0, 101, 1)
@@ -38,14 +38,3 @@ def percentiles101(series: Series, showplot: bool = True, verbose: bool = True) 
         scatter.plot()
 
     return percentiles_df
-
-
-def example():
-    from diive.configs.exampledata import load_exampledata_parquet
-    df = load_exampledata_parquet()
-    percentiles_df = percentiles101(series=df['Tair_f'], showplot=True, verbose=True)
-    print(percentiles_df)
-
-
-if __name__ == "__main__":
-    example()
