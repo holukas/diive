@@ -40,6 +40,7 @@ EXAMPLE_FILES = [
     'createvar/conversions.py',
     'createvar/daynightflag.py',
     'createvar/laggedvariants.py',
+    'createvar/noise.py',
 ]
 
 MAX_WORKERS = 4  # Number of parallel workers

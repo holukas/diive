@@ -51,6 +51,8 @@ from diive.pkgs.createvar.conversions import et_from_le as et_from_le
 from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag as DaytimeNighttimeFlag
 from diive.pkgs.createvar.daynightflag import daytime_nighttime_flag_from_swinpot as daytime_nighttime_flag_from_swinpot
 from diive.pkgs.createvar.laggedvariants import lagged_variants as lagged_variants
+from diive.pkgs.createvar.noise import generate_noisy_timeseries as generate_noisy_timeseries
+from diive.pkgs.createvar.noise import add_impulse_noise as add_impulse_noise
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit as fdl
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit as flux_detection_limit
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit
@@ -132,6 +134,8 @@ __all__ = [
     'DaytimeNighttimeFlag',
     'daytime_nighttime_flag_from_swinpot',
     'lagged_variants',
+    'generate_noisy_timeseries',
+    'add_impulse_noise',
 
     # Packages: Flux
     'fdl',
