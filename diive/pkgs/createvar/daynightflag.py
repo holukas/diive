@@ -38,8 +38,8 @@ class DaytimeNighttimeFlag:
             nighttime_threshold: Threshold for potential radiation below which data
                 are flagged as nighttime (W m-2)
 
-        - Example notebook available in:
-            notebooks/CalculateVariable/DaytimeNighttimeFlag.ipynb
+        Example:
+            See `examples/createvar/daynightflag.py` for complete examples.
         """
 
         self.timestamp_index = timestamp_index
@@ -138,29 +138,3 @@ def daytime_nighttime_flag_from_swinpot(swinpot: Series,
     return daytime, nighttime
 
 
-def example():
-    from diive.configs.exampledata import load_exampledata_parquet
-    df = load_exampledata_parquet()
-
-    dnf = DaytimeNighttimeFlag(
-        timestamp_index=df.index,
-        nighttime_threshold=50,
-        lat=47.286417,
-        lon=7.733750,
-        utc_offset=1)
-
-    results = dnf.get_results()
-    print(results)
-
-    # dnf.get_daytime_flag()
-    # dnf.get_nighttime_flag()
-    # dnf.get_swinpot()
-
-    from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-    HeatmapDateTime(series=results['DAYTIME']).show()
-    HeatmapDateTime(series=results['NIGHTTIME']).show()
-    HeatmapDateTime(series=results['SW_IN_POT']).show()
-
-
-if __name__ == '__main__':
-    example()

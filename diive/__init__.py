@@ -48,6 +48,8 @@ from diive.pkgs.createvar.air import dry_air_density as dry_air_density
 from diive.pkgs.createvar.conversions import air_temp_from_sonic_temp as air_temp_from_sonic_temp
 from diive.pkgs.createvar.conversions import latent_heat_of_vaporization as latent_heat_of_vaporization
 from diive.pkgs.createvar.conversions import et_from_le as et_from_le
+from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag as DaytimeNighttimeFlag
+from diive.pkgs.createvar.daynightflag import daytime_nighttime_flag_from_swinpot as daytime_nighttime_flag_from_swinpot
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit as fdl
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit as flux_detection_limit
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit
@@ -126,6 +128,8 @@ __all__ = [
     'air_temp_from_sonic_temp',
     'latent_heat_of_vaporization',
     'et_from_le',
+    'DaytimeNighttimeFlag',
+    'daytime_nighttime_flag_from_swinpot',
 
     # Packages: Flux
     'fdl',

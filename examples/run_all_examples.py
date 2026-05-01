@@ -38,6 +38,7 @@ EXAMPLE_FILES = [
     'corrections/offsetcorrection.py',
     'createvar/air.py',
     'createvar/conversions.py',
+    'createvar/daynightflag.py',
 ]
 
 MAX_WORKERS = 4  # Number of parallel workers

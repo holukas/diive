@@ -95,6 +95,9 @@
   Now exported via main package (`diive.latent_heat_of_vaporization`).
 - **et_from_le** — Convert latent energy flux (W/m²) to evapotranspiration rate (mm H₂O/h).
   Now exported via main package (`diive.et_from_le`).
+- **DaytimeNighttimeFlag** — Identify daytime/nighttime periods using solar geometry calculations.
+  Returns flags and potential radiation based on latitude, longitude, and threshold.
+  Now exported via main package (`diive.DaytimeNighttimeFlag`, `diive.daytime_nighttime_flag_from_swinpot`).
 
 ### Plotting & Visualization
 
@@ -104,7 +107,7 @@
   Breaking change; removes namespace ambiguity.
 - **HeatmapDateTime/HeatmapXYZ fixes** — Fixed datetime handling, show_values parameter, adaptive tick intervals.
   HeatmapXYZ requires pre-aggregated input.
-- **Examples consolidation** — Moved 26 examples from source files and added new examples into dedicated `examples/` folder. Added
+- **Examples consolidation** — Moved 27 examples from source files and added new examples into dedicated `examples/` folder. Added
   parallel runner script (~2.7x speedup).
 
 ### Documentation
