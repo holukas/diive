@@ -4,10 +4,13 @@ from pandas import DatetimeIndex, Series
 
 
 def potrad_eot(timestamp_index: pd.DatetimeIndex, lat: float, lon: float, utc_offset: int,
-           use_atmospheric_transmission=False) -> pd.Series:
+               use_atmospheric_transmission=False) -> pd.Series:
     """
     Calculate Potential Shortwave Radiation, uses equation of time. Alternative approach to `potrad`.
     Default is Top-of-Atmosphere (TOA). Set use_atmospheric_transmission=True for clear-sky surface approximation.
+
+    Example:
+        See `examples/createvar/potentialradiation.py` for complete examples.
     """
 
     # Input validation
@@ -92,6 +95,9 @@ def potrad(timestamp_index: DatetimeIndex, lat: float, lon: float, utc_offset: i
     - Calculations by Stull (1988), p.257
     - Based on code from the old MeteoScreening Tool
 
+    Example:
+        See `examples/createvar/potentialradiation.py` for complete examples.
+
     Args:
         timestamp_index: time series index
         lat: latitude
@@ -158,28 +164,6 @@ def potrad(timestamp_index: DatetimeIndex, lat: float, lon: float, utc_offset: i
     res['elevation'] = np.arcsin(res.sin_psi) * 180 / np.pi
 
     return res['SW_IN_POT']
-
-
-def example():
-    from diive.configs.exampledata import load_exampledata_parquet
-    from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-    df = load_exampledata_parquet()
-    f = df.index.year == 2018
-    df = df[f].copy()
-    sw_in_pot = potrad(timestamp_index=df.index,
-                       lat=47.286417,
-                       lon=7.733750,
-                       utc_offset=1)
-    # x = sw_in_pot.groupby([sw_in_pot.index.month, sw_in_pot.index.time]).mean().unstack().T
-    # x.plot()
-    HeatmapDateTime(series=sw_in_pot).show()
-    # import matplotlib.pyplot as plt
-    # sw_in_pot.plot()
-    # plt.show()
-
-
-if __name__ == '__main__':
-    example()
 
 # def solar(data, var, idx, param):
 #     """

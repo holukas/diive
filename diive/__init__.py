@@ -53,6 +53,8 @@ from diive.pkgs.createvar.daynightflag import daytime_nighttime_flag_from_swinpo
 from diive.pkgs.createvar.laggedvariants import lagged_variants as lagged_variants
 from diive.pkgs.createvar.noise import generate_noisy_timeseries as generate_noisy_timeseries
 from diive.pkgs.createvar.noise import add_impulse_noise as add_impulse_noise
+from diive.pkgs.createvar.potentialradiation import potrad as potrad
+from diive.pkgs.createvar.potentialradiation import potrad_eot as potrad_eot
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit as fdl
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit as flux_detection_limit
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit
@@ -136,6 +138,8 @@ __all__ = [
     'lagged_variants',
     'generate_noisy_timeseries',
     'add_impulse_noise',
+    'potrad',
+    'potrad_eot',
 
     # Packages: Flux
     'fdl',
