@@ -7,31 +7,31 @@ Executable examples demonstrating how to use DIIVE for time series processing, g
 ```
 examples/
 ├── visualization/          # Plotting and visualization examples
-│   ├── heatmap_datetime.py            # HeatmapDateTime and HeatmapYearMonth (5 examples)
-│   ├── hexbin.py                      # HexbinPlot 2D hexagonal binning (3 examples)
-│   ├── timeseries_and_cumulative.py   # Cumulative and CumulativeYear (3 examples)
-│   ├── other_plots.py                 # LongtermAnomaliesYear (1 example)
-│   ├── timeseries.py                  # TimeSeries interactive plots (1 example)
-│   ├── dielcycle.py                   # DielCycle diurnal analysis (1 example)
-│   ├── histogram.py                   # HistogramPlot distribution analysis (2 examples)
-│   ├── ridgeline.py                   # RidgeLinePlot kernel density plots (2 examples)
-│   ├── scatter_xy.py                  # ScatterXY scatter plots (3 examples)
+│   ├── [heatmap_datetime.py](visualization/heatmap_datetime.py)            # HeatmapDateTime and HeatmapYearMonth (5 examples)
+│   ├── [hexbin.py](visualization/hexbin.py)                      # HexbinPlot 2D hexagonal binning (3 examples)
+│   ├── [timeseries_and_cumulative.py](visualization/timeseries_and_cumulative.py)   # Cumulative and CumulativeYear (3 examples)
+│   ├── [other_plots.py](visualization/other_plots.py)                 # LongtermAnomaliesYear (1 example)
+│   ├── [timeseries.py](visualization/timeseries.py)                  # TimeSeries interactive plots (1 example)
+│   ├── [dielcycle.py](visualization/dielcycle.py)                   # DielCycle diurnal analysis (1 example)
+│   ├── [histogram.py](visualization/histogram.py)                   # HistogramPlot distribution analysis (2 examples)
+│   ├── [ridgeline.py](visualization/ridgeline.py)                   # RidgeLinePlot kernel density plots (2 examples)
+│   ├── [scatter_xy.py](visualization/scatter_xy.py)                  # ScatterXY scatter plots (3 examples)
 │   └── heatmap_xyz.py                 # HeatmapXYZ 3D scatter heatmaps (TODO)
 ├── analyses/               # Time series analysis examples
-│   ├── correlation.py                 # DailyCorrelation analysis with statistics and anomaly detection (1 example)
-│   ├── decoupling.py                  # StratifiedAnalysis for hierarchical binning analysis (1 example)
-│   ├── gapfinder.py                   # GapFinder for gap detection and analysis (1 example)
-│   ├── gridaggregator.py              # GridAggregator for 2D grid-based aggregation (1 example)
-│   ├── histogram.py                   # Histogram for distribution analysis (1 example)
-│   ├── optimumrange.py                # FindOptimumRange for optimal condition analysis (1 example)
-│   ├── quantiles.py                   # percentiles101 for distribution analysis (1 example)
-│   └── seasonaltrend.py               # SeasonalTrendDecomposition for time series decomposition (1 example)
+│   ├── [correlation.py](analyses/correlation.py)                 # DailyCorrelation analysis with statistics and anomaly detection (1 example)
+│   ├── [decoupling.py](analyses/decoupling.py)                  # StratifiedAnalysis for hierarchical binning analysis (1 example)
+│   ├── [gapfinder.py](analyses/gapfinder.py)                   # GapFinder for gap detection and analysis (1 example)
+│   ├── [gridaggregator.py](analyses/gridaggregator.py)              # GridAggregator for 2D grid-based aggregation (1 example)
+│   ├── [histogram.py](analyses/histogram.py)                   # Histogram for distribution analysis (1 example)
+│   ├── [optimumrange.py](analyses/optimumrange.py)                # FindOptimumRange for optimal condition analysis (1 example)
+│   ├── [quantiles.py](analyses/quantiles.py)                   # percentiles101 for distribution analysis (1 example)
+│   └── [seasonaltrend.py](analyses/seasonaltrend.py)               # SeasonalTrendDecomposition for time series decomposition (1 example)
 └── gap_filling/           # Gap-filling workflow examples (TODO)
-    ├── quick_start.py             # Simple interpolation + quickfill
-    ├── randomforest_ts.py         # RandomForestTS examples
-    ├── xgboost_ts.py              # XGBoostTS examples
-    ├── longterm_models.py         # Long-term multi-year models
-    └── mds_filling.py             # MDS meteorological similarity
+    ├── quick_start.py             # Simple interpolation + quickfill (TODO)
+    ├── randomforest_ts.py         # RandomForestTS examples (TODO)
+    ├── xgboost_ts.py              # XGBoostTS examples (TODO)
+    ├── longterm_models.py         # Long-term multi-year models (TODO)
+    └── mds_filling.py             # MDS meteorological similarity (TODO)
 ```
 
 ## Running Examples
