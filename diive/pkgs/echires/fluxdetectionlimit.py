@@ -84,78 +84,150 @@ class FluxDetectionLimit:
     2.  Calculate turbulent fluctuations (primes) via 2D wind rotation.
     3.  Compute the full cross-covariance function between vertical wind (w')
         and the scalar (c') over the specified `lag_range`.
-    4.  Convert covariance to physical flux units (e.g., nmol m-2 s-1)
-        using the mean air temperature and dry air pressure.
+    4.  Convert covariance to physical flux units using the ideal gas law
+        and the mean air temperature and dry air pressure.
     5.  Calculate the noise RMSE from the covariance function at the large
         lag windows defined by `lag_range` and `noise_range`.
     6.  Determine the FDL (3 * RMSE).
     7.  Find the maximum covariance (the flux signal) and calculate
         signal-to-noise ratios.
 
-    Args:
-        df (pd.DataFrame): High-resolution time series data,
-            e.g., a half-hourly eddy covariance raw data file.
-        u_col (str): Column name for the u component of wind speed (m s-1).
-        v_col (str): Column name for the v component of wind speed (m s-1).
-        w_col (str): Column name for the w component of wind speed (m s-1).
-        c_col (str): Column name for the scalar concentration
-            e.g., N2O in nmol mol-1, but it can also be any other scalar
-            such as CO2 in umol mol-1. The units affect the units of the
-            FDL, for N2O FDL would be nmol m-2 s-1, for CO2 it would be
-            umol m-2 s-1, etc.
-        ts_col (str): Column name for the sonic temperature (K).
-            Note: This is converted to air temperature internally.
-        h2o_col (str): Column name for the H2O mole fraction (mol mol-1).
-        press_col (str): Column name for the air pressure (Pa).
-        default_lag (int): The default time lag (in seconds) to use for the
-            calculation of the "signal" in the signal-to-noise ratio. A positive
-            number means turbulent departures of c lag behind turbulent w, i.e,
-            the c signal needs that much longer to reach the sensor than w, e.g.,
-            because it has to travel through an inlet tube.
-        noise_range (int): The width of the time window (in seconds) at the
-            edges of the lag range used to calculate noise (e.g., 20s).
-            This means that if the lag range is [-180, 180] (in seconds),
-            then the noise will be calculated between -180 and -160s and
-            then again between +160 and +180s.
-        lag_range (list): A two-element list specifying the total time lag
-            range [min, max] (in seconds) for the covariance calculation
-            (e.g., [-180, 180] will calculate all covariances between -180s
-            and +180s).
-        lag_stepsize (int): The step size (in records) for iterating
-            through the covariance lag search. Note that this is given as
-            number of records, not seconds.
-        sampling_rate (int): The data sampling rate (in Hz), e.g., 20 for 20Hz.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        High-resolution time series data, e.g., a half-hourly eddy covariance
+        raw data file.
+    u_col : str
+        Column name for the u component of wind speed (units: m s-1).
+    v_col : str
+        Column name for the v component of wind speed (units: m s-1).
+    w_col : str
+        Column name for the w component of wind speed (units: m s-1).
+    c_col : str
+        Column name for the scalar concentration. Examples: N2O in nmol mol-1,
+        CO2 in umol mol-1, CH4 in nmol mol-1. The scalar units directly affect
+        the output flux units. For example:
+        - If c_col is N2O in nmol mol-1, FDL will be in nmol m-2 s-1
+        - If c_col is CO2 in umol mol-1, FDL will be in umol m-2 s-1
+    ts_col : str
+        Column name for the sonic temperature (units: K).
+        Note: Internally converted to air temperature using H2O content.
+    h2o_col : str
+        Column name for the H2O mole fraction (units: mol mol-1).
+    press_col : str
+        Column name for the air pressure (units: Pa).
+    default_lag : float
+        Default time lag (units: seconds) for calculating the flux "signal"
+        in the signal-to-noise ratio. Positive lag means the scalar arrives
+        after the vertical wind (e.g., due to inlet tube transit time).
+    noise_range : int
+        Width of the time window (units: seconds) at the edges of lag_range
+        used to calculate noise. Example: if lag_range=[-180, 180] and
+        noise_range=20, then noise is calculated from -180 to -160s and
+        +160 to +180s.
+    lag_range : list
+        Two-element list [min, max] specifying the time lag range
+        (units: seconds) for the covariance calculation.
+        Typical default: [-180, 180] (calculates all covariances from -180s to +180s).
+        The noise windows for FDL calculation are defined at the edges of this range.
+        For example, with [-180, 180] and noise_range=20, noise is calculated from
+        -180 to -160s and +160 to +180s (LAN15).
+    lag_stepsize : int
+        Step size (units: records) for iterating through the covariance lag
+        search. Important: This parameter is in RECORDS, not seconds.
+        The relationship between lag_range (seconds) and lag_stepsize (records)
+        depends on sampling_rate. For example:
+        - If sampling_rate=10 Hz and lag_stepsize=10 records, then each step = 1 second
+        - If sampling_rate=20 Hz and lag_stepsize=20 records, then each step = 1 second
+    sampling_rate : int
+        Data sampling rate (units: Hz), e.g., 10 for 10Hz or 20 for 20Hz.
 
-    Attributes:
-        hires_df (pd.DataFrame): A copy of the input DataFrame with added
-            calculated columns (e.g., 'e', 'pd', primes for w and c).
-        cov_df (pd.DataFrame): A DataFrame holding the results of the
-            cross-covariance calculation, including shifts (lags in records),
-            covariance values, and flux-converted values.
-        results (dict): A dictionary containing the final calculated results
-            after `run()` is called. Keys include:
-            - 'flux_detection_limit'
-            - 'flux_noise_rmse'
-            - 'cov_max_ix' (index of max covariance)
-            - 'cov_max_shift' (lag in records of max covariance)
-            - 'flux_signal_at_cov_max_shift'
-            - 'signal_to_noise'
-            - 'signal_to_detection_limit'
+    Attributes
+    ----------
+    hires_df : pd.DataFrame
+        A copy of the input DataFrame with added calculated columns including:
+        'e' (partial pressure of water vapor in Pa),
+        'pd' (dry air partial pressure in Pa),
+        '{w_col}_TURB' (turbulent fluctuation of w),
+        '{c_col}_TURB' (turbulent fluctuation of scalar c).
+    cov_df : pd.DataFrame
+        DataFrame holding cross-covariance calculation results with columns:
+        'shift' (lag in records), 'cov' (covariance), 'cov_flux' (converted
+        to physical flux units using ideal gas law).
+    results : dict
+        Dictionary containing final results after `run()` is called. Keys:
+        - 'flux_detection_limit' : Detection limit (3 * RMSE), units depend
+          on scalar units (e.g., nmol m-2 s-1 for N2O in nmol mol-1)
+        - 'flux_noise_rmse' : Root mean square of noise, same units as flux
+        - 'cov_max_ix' : Index of maximum covariance in cov_df
+        - 'cov_max_shift' : Lag in records where max covariance occurs
+        - 'flux_signal_at_default_lag' : Flux at the specified default_lag,
+          same units as flux_detection_limit
+        - 'flux_signal_at_cov_max_lag' : Flux at the lag with max covariance,
+          same units as flux_detection_limit
+        - 'signal_to_noise' : Ratio (unitless) of signal to noise RMSE
+        - 'signal_to_detection_limit' : Ratio (unitless) of signal to FDL
 
-    References:
-        (LAN15) Langford, B., et al. (2015). Eddy-covariance
-            data with low signal-to-noise ratio: Time-lag determination,
-            uncertainties and limit of detection. Atmospheric Measurement
-            Techniques, 8(10), 4197–4213.
+    See Also
+    --------
+    examples/echires/fluxdetectionlimit.py : Complete usage examples
 
-        (SAB18) Sabbatini, S., et al. (2018). Eddy covariance raw data
-            processing for CO2 and energy fluxes calculation at ICOS
-            ecosystem stations. International Agrophysics, 32(4), 495–515.
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> import numpy as np
+    >>> import diive as dv
+    >>>
+    >>> # Create synthetic 10 Hz eddy covariance data (30 minutes = 18000 records)
+    >>> n_records = 18000
+    >>> np.random.seed(42)
+    >>> df = pd.DataFrame({
+    ...     'u': np.random.normal(2.0, 0.5, n_records),  # m/s
+    ...     'v': np.random.normal(0.1, 0.3, n_records),  # m/s
+    ...     'w': np.random.normal(0.0, 0.2, n_records),  # m/s
+    ...     'N2O': 300 + np.random.normal(0, 5, n_records),  # nmol mol-1
+    ...     'Ts': 290 + np.random.normal(0, 0.1, 18000),  # K (sonic temp)
+    ...     'H2O': 0.01 + 0.002 * np.random.normal(0, 1, n_records),  # mol mol-1
+    ...     'Pressure': np.full(n_records, 101325.0),  # Pa
+    ... })
+    >>>
+    >>> # Calculate flux detection limit
+    >>> fdl = dv.FluxDetectionLimit(
+    ...     df=df,
+    ...     u_col='u', v_col='v', w_col='w',
+    ...     c_col='N2O',  # N2O in nmol mol-1
+    ...     ts_col='Ts', h2o_col='H2O', press_col='Pressure',
+    ...     default_lag=1.0,  # seconds
+    ...     noise_range=20,  # seconds
+    ...     lag_range=[-180, 180],  # seconds (standard range)
+    ...     lag_stepsize=10,  # records
+    ...     sampling_rate=10,  # Hz
+    ...     create_covariance_plot=False
+    ... )
+    >>>
+    >>> fdl.run()
+    >>> results = fdl.get_detection_limit()
+    >>> print(f"FDL: {results['flux_detection_limit']:.6f} nmol m-2 s-1")
+    >>> print(f"SNR: {results['signal_to_noise']:.2f}")
 
-        (STR20) Striednig, M., et al. (2020). InnFLUX – an open-source
-            code for conventional and disjunct eddy covariance analysis of
-            trace gas measurements: An urban test case. Atmospheric
-            Measurement Techniques, 13(3), 1447–1465.
+    References
+    ----------
+    (LAN15) Langford, B., et al. (2015). Eddy-covariance
+        data with low signal-to-noise ratio: Time-lag determination,
+        uncertainties and limit of detection. Atmospheric Measurement
+        Techniques, 8(10), 4197–4213.
+        https://doi.org/10.5194/amt-8-4197-2015
+
+    (SAB18) Sabbatini, S., et al. (2018). Eddy covariance raw data
+        processing for CO2 and energy fluxes calculation at ICOS
+        ecosystem stations. International Agrophysics, 32(4), 495–515.
+        https://doi.org/10.1515/intag-2017-0043
+
+    (STR20) Striednig, M., et al. (2020). InnFLUX – an open-source
+        code for conventional and disjunct eddy covariance analysis of
+        trace gas measurements: An urban test case. Atmospheric
+        Measurement Techniques, 13(3), 1447–1465.
+        https://doi.org/10.5194/amt-13-1447-2020
     """
 
     def __init__(
