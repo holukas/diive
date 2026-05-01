@@ -63,6 +63,8 @@ from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit as flux_det
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit
 from diive.pkgs.echires.lag import MaxCovariance as MaxCovariance
 from diive.pkgs.echires.lag import MaxCovariance as max_covariance
+from diive.pkgs.echires.windrotation import WindRotation2D as WindRotation2D
+from diive.pkgs.echires.windrotation import WindRotation2D as wind_rotation_2d
 from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS as randomforest_ts
 from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
 from diive.pkgs.gapfilling.randomforest_ts import QuickFillRFTS as quick_fill_rfts
@@ -155,6 +157,8 @@ __all__ = [
     'FluxDetectionLimit',
     'MaxCovariance',
     'max_covariance',
+    'WindRotation2D',
+    'wind_rotation_2d',
 
     # Packages: Gap-filling (Tier 1)
     'randomforest_ts',

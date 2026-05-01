@@ -18,6 +18,17 @@ from pandas import Series
 
 
 class WindRotation2D:
+    """Coordinate rotation and tilt correction for eddy covariance measurements.
+
+    Performs double rotation of the coordinate system to align with mean wind
+    direction, enabling proper calculation of turbulent fluctuations. This is
+    essential for eddy covariance flux calculations.
+
+    Examples
+    --------
+    See `examples/echires/windrotation.py` for complete examples demonstrating
+    wind rotation with synthetic and real eddy covariance data.
+    """
 
     def __init__(self, u: Series, v: Series, w: Series, c: Series):
         """Coordinate rotation and calculation of turbulent fluctuations.
@@ -151,42 +162,3 @@ class WindRotation2D:
         w2 = -u1 * math.sin(self.phi) + w1 * math.cos(self.phi)
 
         return u2, v2, w2
-
-
-def example():
-    # from diive.pkgs.echires.windrotation import WindRotation2D
-    from diive.core.io.filereader import ReadFileType
-
-    from diive.core.io.filereader import search_files
-
-    filelist = search_files(searchdirs=r'F:\TMP\das_filesplitter\splits', pattern='CH-DAS_*.csv')
-
-    # Settings
-    U = 'U_[R350-B]'
-    V = 'V_[R350-B]'
-    W = 'W_[R350-B]'
-    C = 'CH4_DRY_[QCL-C2]'
-
-    for filepath in filelist:
-        # Read file
-        df, meta = ReadFileType(filepath=filepath,
-                                filetype='GENERIC-CSV-HEADER-1ROW-TS-MIDDLE-FULL-NS-20HZ',
-                                data_nrows=None,
-                                output_middle_timestamp=True).get_filedata()
-
-        # Wind rotation for turbulent fluctuations
-        u = df[U].copy()
-        v = df[V].copy()
-        w = df[W].copy()
-        c = df[C].copy()
-        wr = WindRotation2D(u=u, v=v, w=w, c=c)
-        w_prime, c_prime = wr.get_primes()
-
-        newdf = df.copy()
-        newdf[w_prime.name] = w_prime.copy()
-        newdf[c_prime.name] = c_prime.copy()
-        # subset = pd.concat([w_prime, c_prime], ignore_index=False, axis=1)
-
-
-if __name__ == '__main__':
-    example()
