@@ -34,6 +34,7 @@ EXAMPLE_FILES = [
     'analyses/quantiles.py',
     'analyses/seasonaltrend.py',
     'binary/extract.py',
+    'corrections/setto.py',
 ]
 
 MAX_WORKERS = 4  # Number of parallel workers

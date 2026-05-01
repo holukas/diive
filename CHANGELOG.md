@@ -59,6 +59,17 @@
 - **get_encoded_value_series** — Extract bit subranges from series of integers efficiently.
   Handles NaN values and applies gain scaling. Now exported via main package (`diive.get_encoded_value_series`).
 
+### Data Corrections
+
+- **set_exact_values_to_missing** — Set records matching exact values to NaN. Counts corrections and optionally
+  visualizes before/after. Now exported via main package (`diive.set_exact_values_to_missing`).
+- **setto_value** — Set values in specific time ranges to a constant. Accepts single dates or date ranges.
+  Now exported via main package (`diive.setto_value`).
+- **setto_threshold** — Constrain values to min/max thresholds (clipping). Reports accepted/corrected counts.
+  Now exported via main package (`diive.setto_threshold`).
+- **Consolidated into single module:** All three correction functions moved to `diive.pkgs.corrections.setto`
+  for cleaner organization.
+
 ### Plotting & Visualization
 
 - **ScatterXY (enhanced)** — 3-variable scatter with optional color-coding, bin aggregation with trend overlays, and

@@ -35,6 +35,9 @@ from diive.pkgs.analyses.gridaggregator import GridAggregator
 from diive.pkgs.analyses.quantiles import percentiles101 as percentiles101
 from diive.pkgs.analyses.seasonaltrend import SeasonalTrendDecomposition as seasonaltrend
 from diive.pkgs.analyses.seasonaltrend import SeasonalTrendDecomposition
+from diive.pkgs.corrections.setto import set_exact_values_to_missing as set_exact_values_to_missing
+from diive.pkgs.corrections.setto import setto_value as setto_value
+from diive.pkgs.corrections.setto import setto_threshold as setto_threshold
 from diive.pkgs.createvar.conversions import et_from_le as et_from_le
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit as fdl
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit as flux_detection_limit
@@ -97,6 +100,11 @@ __all__ = [
     'percentiles101',
     'seasonaltrend',
     'SeasonalTrendDecomposition',
+
+    # Packages: Corrections
+    'set_exact_values_to_missing',
+    'setto_value',
+    'setto_threshold',
 
     # Packages: Variables
     'et_from_le',
