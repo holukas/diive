@@ -61,6 +61,8 @@ from diive.pkgs.createvar.vpd import calc_vpd_from_ta_rh as calc_vpd_from_ta_rh
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit as fdl
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit as flux_detection_limit
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit
+from diive.pkgs.echires.lag import MaxCovariance as MaxCovariance
+from diive.pkgs.echires.lag import MaxCovariance as max_covariance
 from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS as randomforest_ts
 from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
 from diive.pkgs.gapfilling.randomforest_ts import QuickFillRFTS as quick_fill_rfts
@@ -151,6 +153,8 @@ __all__ = [
     'fdl',
     'flux_detection_limit',
     'FluxDetectionLimit',
+    'MaxCovariance',
+    'max_covariance',
 
     # Packages: Gap-filling (Tier 1)
     'randomforest_ts',
