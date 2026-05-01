@@ -98,6 +98,19 @@
 - **DaytimeNighttimeFlag** — Identify daytime/nighttime periods using solar geometry calculations.
   Returns flags and potential radiation based on latitude, longitude, and threshold.
   Now exported via main package (`diive.DaytimeNighttimeFlag`, `diive.daytime_nighttime_flag_from_swinpot`).
+- **lagged_variants** — Create lagged variants of variables for temporal feature engineering. Supports forward/backward lags,
+  step sizes, and column exclusion. Now exported via main package (`diive.lagged_variants`).
+- **generate_noisy_timeseries** — Generate synthetic time series with configurable noise (white, autocorrelated).
+  Supports outlier injection and visualization. Now exported via main package (`diive.generate_noisy_timeseries`).
+- **add_impulse_noise** — Add isolated impulse spikes to time series. Useful for testing gap-filling robustness.
+  Now exported via main package (`diive.add_impulse_noise`).
+- **potrad** — Calculate potential shortwave radiation using Stull (1988) method for a given location and UTC offset.
+  Now exported via main package (`diive.potrad`).
+- **potrad_eot** — Calculate potential radiation using Equation of Time method (TOA or clear-sky surface approximation).
+  Alternative to Stull method for more accurate solar calculations.
+  Now exported via main package (`diive.potrad_eot`).
+- **TimeSince** — Count records since last occurrence of a condition (e.g., time since last precipitation, time since freeze).
+  Supports upper/lower limits with inclusive/exclusive boundaries. Now exported via main package (`diive.TimeSince`, `diive.timesince`).
 
 ### Plotting & Visualization
 
@@ -107,14 +120,27 @@
   Breaking change; removes namespace ambiguity.
 - **HeatmapDateTime/HeatmapXYZ fixes** — Fixed datetime handling, show_values parameter, adaptive tick intervals.
   HeatmapXYZ requires pre-aggregated input.
-- **Examples consolidation** — Consolidated 56 examples from source files into dedicated `examples/` folder organized by topic
-  (visualization, analyses, corrections, createvar, binary). Includes parallel runner script (~2.7x speedup vs sequential).
+- **Examples consolidation (Phase 1 complete)** — Consolidated **59 executable examples** from embedded source functions into 
+  dedicated `examples/` folder organized by topic:
+  - **Visualization:** 22 examples (heatmap_datetime 6, hexbin 3, timeseries 1, cumulative 3, other 1, dielcycle 1, histogram 2, ridgeline 2, scatter 3)
+  - **Analyses:** 8 examples (correlation 1, decoupling 1, gapfinder 1, gridaggregator 1, histogram 1, optimumrange 1, quantiles 1, seasonaltrend 1)
+  - **Data Processing:** 29 examples (binary 2, corrections 7, createvar 20)
+  - **Createvar breakdown:** air 2, conversions 3, daynightflag 1, laggedvariants 3, noise 4, potentialradiation 4, timesince 3
+  - Includes parallel runner script `examples/run_all_examples.py` (~2.7x speedup vs sequential)
+  - Each example file is standalone: `python examples/visualization/heatmap_datetime.py`
 
 ### Documentation
 
 - **PEP 8 alias standardization** — Updated all top-level aliases to snake_case convention.
 - **Enhanced docstrings** — Added scenario guidance, typical parameter values, and ecological context.
+  - **TimeSince class:** Comprehensive NumPy-style docstring with Parameters, Attributes, Methods, Examples, and Notes sections
+  - **Examples:** Updated to reference class documentation and explain parameter choices
 - **Notebook reorganization** — Consolidated 17 topic folders into 9 domain folders.
+- **Examples README:** Created dedicated `examples/README.md` with structure, quick start, finding help, and phase descriptions
+- **CLAUDE.md updates:** 
+  - Updated `pkgs/createvar/` section to list all 8 modules (air, conversions, daynightflag, laggedvariants, noise, potentialradiation, timesince, vpd)
+  - Updated examples section: 27 examples → 59 examples with detailed breakdown
+  - Added "Recent Implementations" items 11-12: TimeSince class and examples consolidation
 
 ---
 

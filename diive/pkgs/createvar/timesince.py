@@ -2,6 +2,91 @@ import pandas as pd
 
 
 class TimeSince:
+    """Count consecutive records since last occurrence of a condition.
+
+    Counts the number of records elapsed since a time series last fell outside
+    a specified limit range. Useful for tracking dry periods (time since last rain),
+    frost periods (time since freezing), warm spells, or any event-based analysis.
+
+    The class maintains a flag indicating whether each record is inside or outside
+    the specified range, then counts consecutive "outside range" records backward
+    in time to get the time-since count.
+
+    Parameters
+    ----------
+    series : pd.Series
+        Input time series to analyze. Index should be datetime-like for proper
+        time-based interpretation.
+    upper_lim : float, optional
+        Upper limit of the range. Records <= upper_lim (or < upper_lim if
+        include_lim=False) are considered "inside range". If None, defaults to
+        series maximum (no upper constraint). Default is None.
+    lower_lim : float, optional
+        Lower limit of the range. Records >= lower_lim (or > lower_lim if
+        include_lim=False) are considered "inside range". If None, defaults to
+        series minimum (no lower constraint). Default is None.
+    include_lim : bool, optional
+        If True (default), limits are inclusive (<=, >=).
+        If False, limits are exclusive (<, >).
+        Example: include_lim=False with lower_lim=0 counts records where value > 0.
+
+    Attributes
+    ----------
+    series : pd.Series
+        Input time series.
+    upper_lim : float
+        Upper limit (or series max if not specified).
+    lower_lim : float
+        Lower limit (or series min if not specified).
+    include_lim : bool
+        Whether limits are inclusive.
+    timesince_col : str
+        Name of the output column (format: TIMESINCE_{series_name}).
+    flag_col : str
+        Name of the flag column ("FLAG_IS_OUTSIDE_RANGE").
+
+    Methods
+    -------
+    calc()
+        Calculate time-since counts based on limits. Must be called before
+        accessing results.
+    get_timesince() -> pd.Series
+        Get the time-since values as a Series.
+    get_full_results() -> pd.DataFrame
+        Get complete results including original series, flags, and time-since counts.
+
+    Examples
+    --------
+    **Time since last precipitation (dry period detection):**
+
+    >>> df = dv.load_exampledata_parquet()
+    >>> prec = df.loc[(df.index.year == 2022) & (df.index.month == 7),
+    ...               "PREC_TOT_T1_25+20_1"].copy()
+    >>> ts_prec = dv.TimeSince(prec, lower_lim=0, include_lim=False)
+    >>> ts_prec.calc()
+    >>> max_dry = ts_prec.get_timesince().max()
+    >>> print(f"Maximum dry period: {max_dry} records (~{max_dry * 0.5:.1f} hours)")
+
+    **Time since last freezing temperature:**
+
+    >>> temp = df.loc[(df.index.year == 2022) & (df.index.month == 3),
+    ...               "Tair_f"].copy()
+    >>> ts_temp = dv.TimeSince(temp, upper_lim=0, include_lim=True)
+    >>> ts_temp.calc()
+    >>> results = ts_temp.get_full_results()
+    >>> print(results.head(10))
+
+    See Also
+    --------
+    examples/createvar/timesince.py : Complete usage examples with visualizations.
+
+    Notes
+    -----
+    - Time-since counts reset whenever a record falls within the range.
+    - NaN values are treated as "outside range" to avoid artificial resets.
+    - Use include_lim=False for strict inequalities (e.g., precipitation > 0).
+    - Use include_lim=True for inclusive boundaries (e.g., temperature <= 0).
+    """
     upper_lim_col = "UPPER_LIMIT"
     lower_lim_col = "LOWER_LIMIT"
     flag_col = "FLAG_IS_OUTSIDE_RANGE"
@@ -11,6 +96,20 @@ class TimeSince:
                  upper_lim: float = None,
                  lower_lim: float = None,
                  include_lim: bool = True):
+        """Initialize TimeSince counter.
+
+        Parameters
+        ----------
+        series : pd.Series
+            Input time series to analyze.
+        upper_lim : float, optional
+            Upper limit threshold. Default None (no upper constraint).
+        lower_lim : float, optional
+            Lower limit threshold. Default None (no lower constraint).
+        include_lim : bool, optional
+            If True, use <= and >= (inclusive). If False, use < and > (exclusive).
+            Default is True.
+        """
         self.series = series
         self.upper_lim = upper_lim
         self.lower_lim = lower_lim
@@ -21,19 +120,74 @@ class TimeSince:
 
     @property
     def timesince_df(self):
-        """Get dataframe of merged files data"""
+        """Get internal results dataframe.
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame containing original series, limit columns, flag, and time-since counts.
+
+        Raises
+        ------
+        Exception
+            If data is empty or not initialized.
+        """
         if not isinstance(self._timesince_df, pd.DataFrame):
             raise Exception('data is empty')
         return self._timesince_df
 
     def get_timesince(self) -> pd.Series:
+        """Get time-since counts as a Series.
+
+        Must call calc() before accessing results.
+
+        Returns
+        -------
+        pd.Series
+            Integer count of records since last "outside range" occurrence.
+            Column name is TIMESINCE_{original_series_name}.
+        """
         return self._timesince_df[self.timesince_col].copy()
 
     def get_full_results(self) -> pd.DataFrame:
+        """Get complete results including series, flags, and time-since counts.
+
+        Must call calc() before accessing results.
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame with columns:
+            - {series_name}: Original input series
+            - UPPER_LIMIT: Upper limit values
+            - LOWER_LIMIT: Lower limit values
+            - FLAG_IS_OUTSIDE_RANGE: 0 if inside range, 1 if outside/NaN
+            - TIMESINCE_{series_name}: Record count since last inside-range occurrence
+        """
         return self.timesince_df.copy()
 
     def calc(self):
-        """Detect all values that are within the specified limit range, use 0/1 to mark values."""
+        """Calculate time-since counts.
+
+        Determines which records are inside/outside the specified range, creates
+        a binary flag, then counts consecutive records since the last inside-range
+        occurrence.
+
+        The algorithm:
+        1. Identifies records inside the limit range (flag=0)
+        2. Identifies records outside the limit range or with NaN values (flag=1)
+        3. Counts consecutive flag=1 records backward in time
+        4. Resets count to 0 when flag=0 (inside range) is encountered
+
+        Results are stored internally and accessible via get_timesince() or
+        get_full_results().
+
+        Returns
+        -------
+        None
+            Modifies internal state; results accessed via get_timesince() or
+            get_full_results().
+        """
 
         # Get locations where series is within the specified limits
         if self.include_lim:
@@ -82,46 +236,3 @@ class TimeSince:
 
         df[self.flag_col] = pd.NA
         return df
-
-
-def example_timesince():
-    # Setup, user settings
-    col = 'PREC_TOT_T1_25+20_1'
-
-    # Example data
-    from diive.configs.exampledata import load_exampledata_parquet
-    df_orig = load_exampledata_parquet()
-
-    # Subset
-    # keep = df_orig.index.year >= 2021
-    # df = df_orig[keep].copy()
-    df = df_orig.copy()
-    series = df[col].copy()
-
-    # Time since
-    ts = TimeSince(series, upper_lim=None, lower_lim=0, include_lim=False)
-    ts.calc()
-
-    ts_full_results = ts.get_full_results()
-
-    from pathlib import Path
-    outpath = Path(r"F:\TMP") / 'ts_full_results.csv'
-    ts_full_results.to_csv(outpath, index=False)
-    # ts_series = ts.get_timesince()
-
-    # from diive.core.plotting.timeseries import TimeSeries  # For simple (interactive) time series plotting
-    # TimeSeries(series=tsdata).plot()
-
-    # # Plot
-    # from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-    # HeatmapDateTime(series=observed).show()
-    # HeatmapDateTime(series=gapfilled).show()
-    #
-    # # from diive.core.plotting.timeseries import TimeSeries  # For simple (interactive) time series plotting
-    # # TimeSeries(series=df[TARGET_COL]).plot()
-    #
-    # print("Finished.")
-
-
-if __name__ == '__main__':
-    example_timesince()

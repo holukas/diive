@@ -71,24 +71,28 @@ For the complete list of available aliases, see `diive.__all__`.
 
 ## Examples
 
-Executable example scripts demonstrating common workflows are available in the `examples/` folder:
+**59 executable example scripts** demonstrating common workflows are organized by topic in the `examples/` folder:
 
-**Visualization:**
-
+**Run all examples at once (parallelized, ~2.7x speedup):**
 ```bash
-python examples/visualization/heatmap_datetime.py    # HeatmapDateTime and HeatmapYearMonth
-python examples/visualization/hexbin.py              # HexbinPlot 2D hexagonal binning
+python examples/run_all_examples.py
 ```
 
-**Gap-filling (Phase 2):**
-
+**Run individual examples:**
 ```bash
-python examples/gap_filling/randomforest_ts.py       # Random Forest gap-filling
-python examples/gap_filling/xgboost_ts.py            # XGBoost gap-filling
+python examples/visualization/heatmap_datetime.py    # HeatmapDateTime heatmaps (6 examples)
+python examples/analyses/seasonaltrend.py            # SeasonalTrendDecomposition (1 example)
+python examples/createvar/timesince.py               # TimeSince time tracking (3 examples)
+python examples/createvar/potentialradiation.py      # Solar radiation (4 examples)
+python examples/corrections/offsetcorrection.py      # Data corrections (4 examples)
 ```
 
-See [examples/README.md](examples/README.md) for a complete index of all available examples organized by topic (
-visualization, gap-filling, feature engineering).
+**Example categories (59 total):**
+- **Visualization** (22): heatmap_datetime, hexbin, timeseries, cumulative, dielcycle, histogram, ridgeline, scatter
+- **Analyses** (8): correlation, decoupling, gapfinder, gridaggregator, histogram, optimumrange, quantiles, seasonaltrend
+- **Data Processing** (29): binary extraction, corrections (setto, offsetcorrection), createvar (air, conversions, daynightflag, laggedvariants, noise, potentialradiation, timesince)
+
+See [examples/README.md](examples/README.md) for a complete index of all examples with descriptions and quick start guides.
 
 Additional examples available in **Jupyter notebooks** at [notebooks/](notebooks/) with comprehensive workflows and
 tutorials.
@@ -110,10 +114,10 @@ diive/
 │   └── utils/          # Helper utilities
 │
 └── pkgs/               # Domain-specific algorithms
-    ├── analyses/        # Correlation, GridAggregator, GapFinder, decoupling, quantiles
+    ├── analyses/        # Correlation, GridAggregator, GapFinder, decoupling, seasonaltrend, quantiles
     ├── binary/          # Binary-encoded value extraction
     ├── corrections/     # Offset, radiation, RH, wind direction corrections
-    ├── createvar/       # DaytimeNighttimeFlag, VPD, ET, TimeSince, potential radiation
+    ├── createvar/       # Derived variables: air properties, conversions, TimeSince, potential radiation, noise
     ├── echires/         # High-resolution eddy covariance: FluxDetectionLimit, WindRotation2D
     ├── fits/            # BinFitterCP
     ├── flux/            # USTAR thresholds, self-heating correction, flux uncertainty

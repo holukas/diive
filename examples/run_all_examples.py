@@ -42,6 +42,7 @@ EXAMPLE_FILES = [
     'createvar/laggedvariants.py',
     'createvar/noise.py',
     'createvar/potentialradiation.py',
+    'createvar/timesince.py',
 ]
 
 MAX_WORKERS = 4  # Number of parallel workers

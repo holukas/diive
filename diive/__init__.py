@@ -55,6 +55,8 @@ from diive.pkgs.createvar.noise import generate_noisy_timeseries as generate_noi
 from diive.pkgs.createvar.noise import add_impulse_noise as add_impulse_noise
 from diive.pkgs.createvar.potentialradiation import potrad as potrad
 from diive.pkgs.createvar.potentialradiation import potrad_eot as potrad_eot
+from diive.pkgs.createvar.timesince import TimeSince as TimeSince
+from diive.pkgs.createvar.timesince import TimeSince as timesince
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit as fdl
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit as flux_detection_limit
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit
@@ -140,6 +142,8 @@ __all__ = [
     'add_impulse_noise',
     'potrad',
     'potrad_eot',
+    'TimeSince',
+    'timesince',
 
     # Packages: Flux
     'fdl',
