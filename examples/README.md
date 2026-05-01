@@ -7,7 +7,7 @@ Executable examples demonstrating how to use DIIVE for time series processing, g
 ```
 examples/
 ├── visualization/          # Plotting and visualization examples
-│   ├── [heatmap_datetime.py](visualization/heatmap_datetime.py)            # HeatmapDateTime and HeatmapYearMonth (5 examples)
+│   ├── [heatmap_datetime.py](visualization/heatmap_datetime.py)            # HeatmapDateTime and HeatmapYearMonth (6 examples)
 │   ├── [hexbin.py](visualization/hexbin.py)                      # HexbinPlot 2D hexagonal binning (3 examples)
 │   ├── [timeseries_and_cumulative.py](visualization/timeseries_and_cumulative.py)   # Cumulative and CumulativeYear (3 examples)
 │   ├── [other_plots.py](visualization/other_plots.py)                 # LongtermAnomaliesYear (1 example)
@@ -50,7 +50,7 @@ examples/
 python examples/run_all_examples.py
 ```
 
-Executes all 27 examples (9 visualization + 8 analysis + 1 binary + 3 corrections + 6 createvar) in parallel (4 concurrent workers) with execution time tracking.
+Executes all 45 examples (22 visualization + 8 analysis + 2 binary + 7 corrections + 6 createvar) in parallel (4 concurrent workers) with execution time tracking.
 - Shows individual timing for each example
 - Detailed error messages if any fail
 - ~2.7x faster than sequential execution
@@ -96,11 +96,12 @@ When adding a new example:
 
 ## Phases
 
-- **Phase 1 (Complete):** Core visualization examples
-  - HeatmapDateTime, HeatmapYearMonth (5 examples)
-  - HexbinPlot (3 examples)
-  - Cumulative, CumulativeYear (3 examples)
-  - LongtermAnomaliesYear (1 example)
-- **Phase 2 (Planned):** Additional visualization examples (dielcycle, heatmap_xyz)
-- **Phase 3 (Planned):** Gap-filling workflow examples
-- **Phase 4 (Future):** Feature engineering examples
+- **Phase 1 (Complete):** Core examples across visualization, analysis, and data processing
+  - **Visualization:** HeatmapDateTime/YearMonth (6), HexbinPlot (3), TimeSeries (1), Cumulative (3), Other (1), DielCycle (1), Histogram (2), RidgeLine (2), ScatterXY (3) = 22 examples
+  - **Analysis:** DailyCorrelation, StratifiedAnalysis, GapFinder, GridAggregator, Histogram, FindOptimumRange, Quantiles, SeasonalTrendDecomposition = 8 examples
+  - **Data Processing:** Binary (2), Corrections (7), Variable creation (6) = 15 examples
+  - **Total:** 45 examples
+- **Phase 2 (Planned):** Gap-filling workflow examples and HeatmapXYZ
+  - Quick start interpolation + quickfill
+  - RandomForestTS, XGBoostTS, long-term models, MDS gap-filling
+- **Phase 3+ (Future):** Advanced feature engineering examples
