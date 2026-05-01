@@ -38,6 +38,9 @@ from diive.pkgs.analyses.seasonaltrend import SeasonalTrendDecomposition
 from diive.pkgs.corrections.setto import set_exact_values_to_missing as set_exact_values_to_missing
 from diive.pkgs.corrections.setto import setto_value as setto_value
 from diive.pkgs.corrections.setto import setto_threshold as setto_threshold
+from diive.pkgs.corrections.offsetcorrection import MeasurementOffsetFromReplicate as MeasurementOffsetFromReplicate
+from diive.pkgs.corrections.offsetcorrection import remove_relativehumidity_offset as remove_relativehumidity_offset
+from diive.pkgs.corrections.offsetcorrection import remove_radiation_zero_offset as remove_radiation_zero_offset
 from diive.pkgs.createvar.conversions import et_from_le as et_from_le
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit as fdl
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit as flux_detection_limit
@@ -105,6 +108,9 @@ __all__ = [
     'set_exact_values_to_missing',
     'setto_value',
     'setto_threshold',
+    'MeasurementOffsetFromReplicate',
+    'remove_relativehumidity_offset',
+    'remove_radiation_zero_offset',
 
     # Packages: Variables
     'et_from_le',

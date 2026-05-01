@@ -22,6 +22,18 @@ def load_exampledata_parquet_long() -> DataFrame:
     return data_df
 
 
+def load_exampledata_parquet_meteo_swin_1MIN() -> DataFrame:
+    filepath = Path(DIR_PATH) / 'exampledata_PARQUET_CH-LAE_METEO_SW_IN_1MIN.parquet'
+    data_df = load_parquet(filepath=filepath)
+    return data_df
+
+
+def load_exampledata_parquet_meteo_rh_1MIN() -> DataFrame:
+    filepath = Path(DIR_PATH) / 'exampledata_PARQUET_CH-LAE_METEO_RH_1MIN.parquet'
+    data_df = load_parquet(filepath=filepath)
+    return data_df
+
+
 def load_exampledata_DIIVE_CSV_30MIN():
     filepath = Path(DIR_PATH) / 'exampledata_DIIVE-CSV-30MIN_CH-DAV_FP2022.5_2022.07_ID20230206154316_30MIN.diive.csv'
     loaddatafile = ReadFileType(filetype='DIIVE-CSV-30MIN',

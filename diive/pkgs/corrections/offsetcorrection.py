@@ -16,8 +16,8 @@ class MeasurementOffsetFromReplicate:
     offset and gain in comparison to reference and correct measurement
     for offset and gain per year
 
-    - Example notebook available in:
-        notebooks/Corrections/WindDirectionOffset.ipynb
+    Example:
+        See `examples/corrections/offsetcorrection.py` for complete examples.
     """
 
     def __init__(self,
@@ -129,6 +129,9 @@ def remove_relativehumidity_offset(series: Series,
 
     Returns:
         Corrected series
+
+    Example:
+        See `examples/corrections/offsetcorrection.py` for complete examples.
     """
 
     # print(f"Removing RH offset from {series.name} ...")
@@ -209,6 +212,9 @@ def remove_radiation_zero_offset(series: Series,
 
     Returns:
         Corrected series
+
+    Example:
+        See `examples/corrections/offsetcorrection.py` for complete examples.
     """
 
     outname = series.name
@@ -224,11 +230,10 @@ def remove_radiation_zero_offset(series: Series,
     nighttimeflag = dnf.get_nighttime_flag()
     # daytime = dnf.get_daytime_flag()
 
-    # Debug
-    import diive as dv
-    hm = dv.heatmap_datetime(series=series)
-    hm.show()
-
+    # # Debug
+    # import diive as dv
+    # hm = dv.heatmap_datetime(series=series)
+    # hm.show()
 
     nighttime_ix = nighttimeflag == 1
 
@@ -282,85 +287,3 @@ def remove_radiation_zero_offset(series: Series,
     series_corr_settozero.rename(outname, inplace=True)
 
     return series_corr_settozero
-
-
-def example():
-    from dbc_influxdb import dbcInflux
-    SITE = 'ch-lae'
-    MEASUREMENTS = ['SW']
-    FIELDS = ['SW_IN_T1_47_1']
-    DIRCONF = r'F:\Sync\luhk_work\20 - CODING\22 - POET\configs'
-    BUCKET_RAW = f'{SITE}_processed'  # The 'bucket' where data are stored in the database, e.g., 'ch-lae_raw' contains all raw data for CH-LAE
-    dbc = dbcInflux(dirconf=DIRCONF)
-    data_simple, data_detailed, assigned_measurements = dbc.download(
-        bucket=BUCKET_RAW,
-        measurements=MEASUREMENTS,
-        fields=FIELDS,
-        start='2012-08-01 00:00:01',
-        stop='2012-09-01 00:00:01',
-        timezone_offset_to_utc_hours=1,
-        data_version=['meteoscreening_mst']
-    )
-    print(data_simple)
-    print(data_detailed)
-    print(assigned_measurements)
-
-    SITE_LAT = 47.478333  # CH-LAE
-    SITE_LON = 8.364389  # CH-LAE
-    corrected = remove_radiation_zero_offset(series=data_simple['SW_IN_T1_47_1'], lat=SITE_LAT, lon=SITE_LON,
-                                             utc_offset=1, showplot=True)
-
-    # import matplotlib.pyplot as plt
-    # # df.plot(x_compat=True)
-    # # plt.show()
-    # data_simple['SW_IN_T1_47_1'].plot(x_compat=True)
-    # plt.show()
-
-    # # Export data to parquet for fast testing
-    # from diive.core.io.files import save_parquet
-    # filepath = save_parquet(filename="meteodata_simple", data=data_simple, outpath=r"F:\TMP")
-
-    # from diive.core.io.files import load_parquet
-    # df = load_parquet(filepath=r"F:\TMP\meteodata_simple.parquet")
-    # df = df.dropna()
-
-    # import matplotlib.pyplot as plt
-    # # df.plot(x_compat=True)
-    # # plt.show()
-    # df.plot(x_compat=True)
-    # plt.show()
-
-    # off = MeasurementOffsetFromReplicate(measurement=df['TS_GF1_0.05_1'],
-    #                                      replicate=df['TS_LOWRES_GF1_0.05_3'],
-    #                                      offset_start=-10, offset_end=0, offset_stepsize=.1)
-    # corrected = off.get_corrected_measurement()
-    # offset = off.get_offset()
-    #
-    # print(f"The offset with minimum absolute difference between data points is {offset}")
-
-    # corrected.plot(x_compat=True, label=f"TS_GF1_0.05_1 corrected by offset {offset:.2f}")
-    # df['TS_LOWRES_GF1_0.05_3'].plot(x_compat=True, label="TS_LOWRES_GF1_0.05_3 (replicate)")
-    # plt.legend(loc='upper right')
-    # plt.show()
-
-    # col = 'WD'
-    # wd = df[col].copy()
-    #
-    # # # Prepare input data
-    # # wd = wd.loc[wd.index.year <= 2009]
-    # # wd = wd.dropna()
-    #
-    # wds = WindDirOffset(winddir=wd, offset_start=-50, offset_end=50, hist_ref_years=[2006, 2009], hist_n_bins=360)
-    # yearlyoffsets_df = wds.get_yearly_offsets()
-    # s_corrected = wds.get_corrected_wind_directions()
-    # print(yearlyoffsets_df)
-    # print(s_corrected)
-    # print(wd)
-    #
-    # from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-    # HeatmapDateTime(series=s_corrected).show()
-    # HeatmapDateTime(series=wd).show()
-
-
-if __name__ == '__main__':
-    example()

@@ -69,6 +69,14 @@
   Now exported via main package (`diive.setto_threshold`).
 - **Consolidated into single module:** All three correction functions moved to `diive.pkgs.corrections.setto`
   for cleaner organization.
+- **MeasurementOffsetFromReplicate** — Detect and correct constant measurement offset using replicate data.
+  Finds offset that minimizes absolute difference between measurement and reference.
+  Now exported via main package (`diive.MeasurementOffsetFromReplicate`).
+- **remove_relativehumidity_offset** — Correct RH values exceeding 100% using daily mean of excess values.
+  Now exported via main package (`diive.remove_relativehumidity_offset`).
+- **remove_radiation_zero_offset** — Correct radiation measurements with nighttime offset using solar geometry.
+  Sets nighttime radiation to zero after offset correction.
+  Now exported via main package (`diive.remove_radiation_zero_offset`).
 
 ### Plotting & Visualization
 
