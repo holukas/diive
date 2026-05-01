@@ -50,6 +50,7 @@ from diive.pkgs.createvar.conversions import latent_heat_of_vaporization as late
 from diive.pkgs.createvar.conversions import et_from_le as et_from_le
 from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag as DaytimeNighttimeFlag
 from diive.pkgs.createvar.daynightflag import daytime_nighttime_flag_from_swinpot as daytime_nighttime_flag_from_swinpot
+from diive.pkgs.createvar.laggedvariants import lagged_variants as lagged_variants
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit as fdl
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit as flux_detection_limit
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit
@@ -130,6 +131,7 @@ __all__ = [
     'et_from_le',
     'DaytimeNighttimeFlag',
     'daytime_nighttime_flag_from_swinpot',
+    'lagged_variants',
 
     # Packages: Flux
     'fdl',
