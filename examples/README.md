@@ -22,7 +22,8 @@ examples/
 │   ├── decoupling.py                  # StratifiedAnalysis for hierarchical binning analysis (1 example)
 │   ├── gapfinder.py                   # GapFinder for gap detection and analysis (1 example)
 │   ├── gridaggregator.py              # GridAggregator for 2D grid-based aggregation (1 example)
-│   └── histogram.py                   # Histogram for distribution analysis (1 example)
+│   ├── histogram.py                   # Histogram for distribution analysis (1 example)
+│   └── optimumrange.py                # FindOptimumRange for optimal condition analysis (1 example)
 └── gap_filling/           # Gap-filling workflow examples (TODO)
     ├── quick_start.py             # Simple interpolation + quickfill
     ├── randomforest_ts.py         # RandomForestTS examples
@@ -38,7 +39,7 @@ examples/
 python examples/run_all_examples.py
 ```
 
-Executes all 14 examples (9 visualization + 5 analysis) in parallel (4 concurrent workers) with execution time tracking.
+Executes all 15 examples (9 visualization + 6 analysis) in parallel (4 concurrent workers) with execution time tracking.
 - Shows individual timing for each example
 - Detailed error messages if any fail
 - ~2.7x faster than sequential execution

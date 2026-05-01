@@ -30,34 +30,31 @@ class FindOptimumRange:
                  ragg: Literal['mean'] = 'mean',
                  define_optimum: Literal['min', 'max'] = 'max'):
         """
-        Find x range for optimum y
+        Find x range for optimum y.
 
-        First, x data are aggregated in y bins. By default, the median
-        value of x is calculated for each y bin (*bins_agg*). The number
-        of bins that is used is defined by total length of data divided
-        by *n_vals_per_bin*, i.e., each bin should contain e.g. 300 values.
-        Then, the rolling mean (*ragg*) with window size *rwinsize* is
-        calculated across all binned values. Here, *rwinsize* is given as
-        the fraction of the total number of detected bins. The optimum is
-        detected as the maximum (or other, *define_optimum*) of the values
-        found in the rolling aggregation.
-
-        Example: VPD (x) range where NEE (y) carbon uptake is highest (=smallest number)
+        Bins x data and aggregates y values per bin, then applies rolling aggregation
+        to identify the range where y is optimized (min or max). Useful for finding
+        optimal conditions for ecosystem responses.
 
         Args:
-            df: Data
-            xcol: Column name of x in df
-            ycol: Column name of y in df
-            n_vals_per_bin: Number of values per x bin
-            bins_agg: How data in bins are aggregated
-            rwinsize: Window size for rolling aggregation, expressed as fraction of
-                the total number of bins. The total number of bins is calculated
-                from the total length of the data and *n_vals_per_bin*. The resulting
-                window size is then an integer value that is used in further calculations.
-                If the integer window size results in an even number, +1 is added since
-                the window size must be an odd number.
-            ragg: Rolling aggregation that is used in the rolling window.
-            define_optimum: Optimum can be based on 'min' or 'max'
+            df: Input DataFrame
+            xcol: Column name of driver variable (x)
+            ycol: Column name of response variable (y)
+            n_bins: Number of bins to divide x data into
+            bins_agg: Aggregation method for y values within bins (default: 'median')
+            rwinsize: Window size for rolling aggregation (as fraction of total bins)
+            ragg: Rolling aggregation method (default: 'mean')
+            define_optimum: Whether optimum is 'min' or 'max' of y
+
+        Properties:
+            .results_optrange: Dictionary with optimum range results and data
+
+        Methods:
+            .find_optimum(): Calculate optimum range
+            .showfig(): Display analysis visualizations
+
+        Example:
+            See `examples/analyses/optimumrange.py` for complete examples.
         """
         self.df = df[[xcol, ycol]].copy()
         self.xcol = xcol
@@ -407,37 +404,3 @@ class FindOptimumRange:
             numpoints=1,
             handler_map={tuple: HandlerTuple(ndivide=None)},
             ncol=2)
-
-
-def example():
-    pd.options.display.width = None
-    pd.options.display.max_columns = None
-    pd.set_option('display.max_rows', 3000)
-    pd.set_option('display.max_columns', 3000)
-
-    # Test data
-    from diive.configs.exampledata import load_exampledata_parquet
-    df_orig = load_exampledata_parquet()
-
-    # # Check columns
-    # import fnmatch
-    # [print(col) for col in alldata_df.columns if any(fnmatch.fnmatch(col, ids) for ids in ['NEE_CUT_50*'])]
-
-    # Select daytime data between May and September
-    df = df_orig.copy()
-    # df = df.loc[(df.index.month >= 5) & (df.index.month <= 9)]
-    df = df.loc[df['Rg_f'] > 20]
-
-    # import matplotlib.pyplot as plt
-    # df.plot.scatter(x='Tair_f', y='NEE_CUT_REF_f', alpha=.1)
-    # plt.show()
-
-    # Optimum range
-    optrange = FindOptimumRange(df=df, xcol='Tair_f', ycol='NEE_CUT_REF_f', define_optimum="min", rwinsize=0.05)
-    optrange.find_optimum()
-    optrange.showfig()
-
-
-
-if __name__ == '__main__':
-    example()

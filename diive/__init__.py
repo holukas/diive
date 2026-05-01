@@ -27,6 +27,8 @@ from diive.pkgs.analyses.gapfinder import GapFinder as GapFinder
 from diive.pkgs.analyses.gapfinder import GapFinder as gapfinder
 from diive.pkgs.analyses.histogram import Histogram as Histogram
 from diive.pkgs.analyses.histogram import Histogram as histogram
+from diive.pkgs.analyses.optimumrange import FindOptimumRange as FindOptimumRange
+from diive.pkgs.analyses.optimumrange import FindOptimumRange as find_optimum_range
 from diive.pkgs.analyses.gridaggregator import GridAggregator as ga
 from diive.pkgs.analyses.gridaggregator import GridAggregator as gridaggregator
 from diive.pkgs.analyses.gridaggregator import GridAggregator
@@ -84,6 +86,8 @@ __all__ = [
     'gapfinder',
     'Histogram',
     'histogram',
+    'FindOptimumRange',
+    'find_optimum_range',
     'ga',
     'gridaggregator',
     'GridAggregator',

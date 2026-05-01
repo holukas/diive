@@ -41,6 +41,9 @@
 - **Histogram** — Calculate and analyze value distributions with flexible binning (n_bins or unique values). Access
   results via `.results` property (DataFrame) or `.peakbins` property (top 5 bins). Now exported via main package
   (`diive.Histogram`, `diive.histogram`).
+- **FindOptimumRange** — Identify optimal conditions for ecosystem responses (e.g., temperature range for maximum CO₂
+  uptake). Bins driver variable and finds optimal range via rolling aggregation. Includes data distribution analysis and
+  visualization. Now exported via main package (`diive.FindOptimumRange`, `diive.find_optimum_range`).
 
 ### Plotting & Visualization
 
