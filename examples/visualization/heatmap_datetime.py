@@ -95,6 +95,48 @@ def example_heatmap_yearmonth_multi_panel():
     fig.show()
 
 
+def example_heatmap_datetime_multi_panel():
+    """HeatmapDateTime with three variables in a single figure.
+
+    Creates a figure with three panels showing different variables side-by-side
+    for easy visual comparison using constrained layout.
+    """
+    df = dv.load_exampledata_parquet()
+
+    # Select three different variables for comparison
+    series_nee = df['NEE_CUT_REF_f'].copy()
+    series_tair = df['Tair_f'].copy()
+    series_le = df['LE_f'].copy()
+
+    # Apply year filter for cleaner visualization
+    locs = series_nee.index.year >= 2020
+    series_nee = series_nee.loc[locs]
+    series_tair = series_tair.loc[locs]
+    series_le = series_le.loc[locs]
+
+    # Create figure with 3 subplots
+    fig, axes = plt.subplots(1, 3, figsize=(20, 9),
+                             gridspec_kw={'wspace': 0.2},
+                             constrained_layout=True)
+
+    # Plot each variable
+    dv.plot_heatmap_datetime(ax=axes[0], series=series_nee,
+                             zlabel="$\mathrm{\mu mol\ CO_2\ m^{-2}\ s^{-1}}$",
+                             vmin=-10, vmax=10).plot()
+    dv.plot_heatmap_datetime(ax=axes[1], series=series_tair,
+                             zlabel="°C",
+                             vmin=-10, vmax=30).plot()
+    dv.plot_heatmap_datetime(ax=axes[2], series=series_le,
+                             zlabel="$\mathrm{W\ m^{-2}}$",
+                             vmin=0, vmax=400).plot()
+
+    axes[0].set_title("NEE (CO₂ flux)")
+    axes[1].set_title("Air temperature")
+    axes[2].set_title("Latent heat flux")
+
+    fig.show()
+
+
 def example_heatmap_yearmonth_colormaps():
     """Demonstrates all available colormaps with HeatmapYearMonth.
 
@@ -126,13 +168,16 @@ if __name__ == '__main__':
     print("\n2. HeatmapDateTime (horizontal orientation)...")
     example_heatmap_datetime_horizontal()
 
-    print("\n3. HeatmapYearMonth (basic with ranks)...")
+    print("\n3. HeatmapDateTime (three variables side-by-side)...")
+    example_heatmap_datetime_multi_panel()
+
+    print("\n4. HeatmapYearMonth (basic with ranks)...")
     example_heatmap_yearmonth_basic()
 
-    print("\n4. HeatmapYearMonth (multi-panel layout)...")
+    print("\n5. HeatmapYearMonth (multi-panel layout)...")
     example_heatmap_yearmonth_multi_panel()
 
-    print("\n5. HeatmapYearMonth (colormap preview - limited to 5)...")
+    print("\n6. HeatmapYearMonth (colormap preview - limited to 5)...")
     example_heatmap_yearmonth_colormaps()
 
     print("\nAll examples completed!")

@@ -16,7 +16,6 @@ from diive.pkgs.createvar.potentialradiation import potrad
 
 
 class DaytimeNighttimeFlag:
-
     swinpot_col = 'SW_IN_POT'
     daytime_col = 'DAYTIME'
     nighttime_col = 'NIGHTTIME'
@@ -136,5 +135,3 @@ def daytime_nighttime_flag_from_swinpot(swinpot: Series,
     nighttime.loc[swinpot >= nighttime_threshold] = 0
     nighttime.loc[swinpot < nighttime_threshold] = 1
     return daytime, nighttime
-
-
