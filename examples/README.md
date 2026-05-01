@@ -40,6 +40,10 @@ examples/
 │   ├── [potentialradiation.py](createvar/potentialradiation.py) # Calculate potential solar radiation (4 examples)
 │   ├── [timesince.py](createvar/timesince.py)                 # Count records since condition met (3 examples)
 │   └── [vpd.py](createvar/vpd.py)                             # Vapor pressure deficit calculation and gap-filling (3 examples)
+├── echires/               # Eddy covariance high-resolution analysis examples
+│   ├── [fluxdetectionlimit.py](echires/fluxdetectionlimit.py) # FluxDetectionLimit for minimum detectable flux (2 examples)
+│   ├── [lag.py](echires/lag.py)                               # MaxCovariance for time lag detection (1 example)
+│   └── [windrotation.py](echires/windrotation.py)             # WindRotation2D for coordinate rotation and tilt correction (1 example)
 └── gap_filling/           # Gap-filling workflow examples (TODO)
     ├── quick_start.py             # Simple interpolation + quickfill (TODO)
     ├── randomforest_ts.py         # RandomForestTS examples (TODO)
@@ -55,7 +59,7 @@ examples/
 python examples/run_all_examples.py
 ```
 
-Executes all 62 examples (22 visualization + 8 analysis + 2 binary + 7 corrections + 23 createvar) in parallel (4 concurrent workers) with execution time tracking.
+Executes all 66 examples (22 visualization + 8 analysis + 2 binary + 7 corrections + 23 createvar + 4 echires) in parallel (4 concurrent workers) with execution time tracking.
 - Shows individual timing for each example
 - Detailed error messages if any fail
 - ~2.7x faster than sequential execution
@@ -105,7 +109,8 @@ When adding a new example:
   - **Visualization:** HeatmapDateTime/YearMonth (6), HexbinPlot (3), TimeSeries (1), Cumulative (3), Other (1), DielCycle (1), Histogram (2), RidgeLine (2), ScatterXY (3) = 22 examples
   - **Analysis:** DailyCorrelation, StratifiedAnalysis, GapFinder, GridAggregator, Histogram, FindOptimumRange, Quantiles, SeasonalTrendDecomposition = 8 examples
   - **Data Processing:** Binary (2), Corrections (7), Variable creation (23) = 32 examples
-  - **Total:** 62 examples
+  - **Eddy Covariance:** FluxDetectionLimit (2), MaxCovariance (1), WindRotation2D (1) = 4 examples
+  - **Total:** 66 examples
 - **Phase 2 (Planned):** Gap-filling workflow examples and HeatmapXYZ
   - Quick start interpolation + quickfill
   - RandomForestTS, XGBoostTS, long-term models, MDS gap-filling

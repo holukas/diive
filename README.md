@@ -63,6 +63,8 @@ grid = GridAggregator(x=x_series, y=y_series, z=z_series)
 
 **Analysis:** `gridaggregator`, `GridAggregator`, `seasonaltrend`, `SeasonalTrendDecomposition`
 
+**Eddy Covariance:** `FluxDetectionLimit`, `fdl`, `MaxCovariance`, `max_covariance`, `WindRotation2D`, `wind_rotation_2d`
+
 **I/O:** `load_parquet`, `save_parquet`, `load_exampledata_parquet`, `search_files`
 
 For the complete list of available aliases, see `diive.__all__`.
@@ -71,7 +73,7 @@ For the complete list of available aliases, see `diive.__all__`.
 
 ## Examples
 
-**62 executable example scripts** demonstrating common workflows are organized by topic in the `examples/` folder:
+**66 executable example scripts** demonstrating common workflows are organized by topic in the `examples/` folder:
 
 **Run all examples at once (parallelized, ~2.7x speedup):**
 ```bash
@@ -85,12 +87,16 @@ python examples/analyses/seasonaltrend.py            # SeasonalTrendDecompositio
 python examples/createvar/timesince.py               # TimeSince time tracking (3 examples)
 python examples/createvar/potentialradiation.py      # Solar radiation (4 examples)
 python examples/corrections/offsetcorrection.py      # Data corrections (4 examples)
+python examples/echires/fluxdetectionlimit.py        # Flux detection limits (2 examples)
+python examples/echires/lag.py                       # Time lag detection (1 example)
+python examples/echires/windrotation.py              # Wind rotation and tilt correction (1 example)
 ```
 
-**Example categories (62 total):**
+**Example categories (66 total):**
 - **Visualization** (22): heatmap_datetime, hexbin, timeseries, cumulative, dielcycle, histogram, ridgeline, scatter
 - **Analyses** (8): correlation, decoupling, gapfinder, gridaggregator, histogram, optimumrange, quantiles, seasonaltrend
 - **Data Processing** (32): binary extraction, corrections (setto, offsetcorrection), createvar (air, conversions, daynightflag, laggedvariants, noise, potentialradiation, timesince, vpd)
+- **Eddy Covariance** (4): fluxdetectionlimit, lag, windrotation
 
 See [examples/README.md](examples/README.md) for a complete index of all examples with descriptions and quick start guides.
 
