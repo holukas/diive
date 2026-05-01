@@ -5,13 +5,14 @@ from pandas import Series
 
 
 class GapFinder:
-    """Find gaps in Series
+    """Find gaps in time series.
 
-    Results are collected in a dataframe that gives info
-    about gap locations within the limit.
+    Detects consecutive missing values (NaN) and reports their locations,
+    duration, and statistics. Useful for understanding data quality and
+    planning gap-filling strategies.
 
-    - Example notebook available in:
-        notebooks/Analyses/GapFinder.ipynb
+    Example:
+        See `examples/analyses/gapfinder.py` for complete examples.
     """
     # Define column names
     gap_values = 'GAPVALUES'
@@ -116,18 +117,15 @@ class GapFinder:
         df = df[filter_above_lim]
         return df
 
-    def get_results(self) -> DataFrame:
+    @property
+    def results(self) -> DataFrame:
+        """Gap detection results as DataFrame.
+
+        Columns: GAP_START, GAP_END, GAP_LENGTH
+        Sorted by gap length (descending) if sort_results=True.
+        """
         return self.gapfinder_df
 
-
-def example():
-    from diive.configs.exampledata import load_exampledata_DIIVE_CSV_30MIN
-    data_df, metadata_df = load_exampledata_DIIVE_CSV_30MIN()
-    series = data_df['NEE_CUT_REF_orig']
-    gf = GapFinder(series=series, limit=1, sort_results=True)
-    gapfinder_df = gf.get_results()
-    print(gapfinder_df)
-
-
-if __name__ == '__main__':
-    example()
+    def get_results(self) -> DataFrame:
+        """Alias for .results property."""
+        return self.results

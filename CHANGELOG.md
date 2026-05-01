@@ -6,32 +6,46 @@
 
 ### Highlights
 
-- **Seasonal-Trend Decomposition** — Separate time series into trend/seasonal/residual (STL, classical, harmonic). Notebook with 5 real-world examples.
-- **HexbinPlot visualization** — Plot flux values in 2D hexagonal bins of driver variables with percentile normalization.
+- **Seasonal-Trend Decomposition** — Separate time series into trend/seasonal/residual (STL, classical, harmonic).
+  Notebook with 5 real-world examples.
+- **HexbinPlot visualization** — Plot flux values in 2D hexagonal bins of driver variables with percentile
+  normalization.
 
 ---
 
 ### Gap-Filling
 
-- **Standalone FeatureEngineer class** — Separated from gap-filling for composability and reusability. 8-stage pipeline (lag→rolling→diff→EMA→poly→STL→timestamps→record_number). Pre-engineer once, reuse across multiple models.
+- **Standalone FeatureEngineer class** — Separated from gap-filling for composability and reusability. 8-stage
+  pipeline (lag→rolling→diff→EMA→poly→STL→timestamps→record_number). Pre-engineer once, reuse across multiple models.
 - **Simplified API** — RandomForestTS/XGBoostTS accept only pre-engineered data + model parameters (breaking change).
-- **Feature engineering support** — Added rolling stats, temporal differencing, polynomial features, EMA, STL decomposition.
-- **SHAP-based feature reduction** — Replaced permutation importance with SHAP values. Configurable threshold (default 0.5).
+- **Feature engineering support** — Added rolling stats, temporal differencing, polynomial features, EMA, STL
+  decomposition.
+- **SHAP-based feature reduction** — Replaced permutation importance with SHAP values. Configurable threshold (default
+  0.5).
 - **Long-term XGBoost** — Added `level41_longterm_xgboost()` to FluxProcessingChain for fair RF vs XGB comparison.
 - **CO2 flux documentation** — Comprehensive examples with tuned parameters for 30-min flux data.
 - **Test optimizations** — RandomForest tests 60-70% faster (2.8s vs 6s).
 
 ### Time Series Analysis
 
-- **DailyCorrelation (refactored)** — Class-based API with summary statistics (mean, median, skewness, kurtosis, normality test), anomaly detection (zscore/IQR), and visualization.
-- **StratifiedAnalysis** — Hierarchical binning for analyzing variable y across bins of x, stratified by z. Access results via `.results` property (DataFrame) or `.get_binaggs()` (dict). Use case: photosynthetic decoupling, ecosystem response functions.
+- **DailyCorrelation (refactored)** — Class-based API with summary statistics (mean, median, skewness, kurtosis,
+  normality test), anomaly detection (zscore/IQR), and visualization.
+- **StratifiedAnalysis** — Hierarchical binning for analyzing variable y across bins of x, stratified by z. Access
+  results via `.results` property (DataFrame) or `.get_binaggs()` (dict). Use case: photosynthetic decoupling, ecosystem
+  response functions.
+- **GapFinder** — Detect and analyze consecutive missing values in time series. Access results via `.results` property (
+  DataFrame). Now exported via main package (`diive.GapFinder`, `diive.gapfinder`).
 
 ### Plotting & Visualization
 
-- **ScatterXY (enhanced)** — 3-variable scatter with optional color-coding, bin aggregation with trend overlays, and confidence intervals.
-- **Plotting API refactoring** — All aliases now use `plot_` prefix (e.g., `plot_scatter_xy`, `plot_diel_cycle`). Breaking change; removes namespace ambiguity.
-- **HeatmapDateTime/HeatmapXYZ fixes** — Fixed datetime handling, show_values parameter, adaptive tick intervals. HeatmapXYZ requires pre-aggregated input.
-- **Examples consolidation** — Moved 21 scattered examples from source files into dedicated `examples/` folder. Added parallel runner script (~2.7x speedup).
+- **ScatterXY (enhanced)** — 3-variable scatter with optional color-coding, bin aggregation with trend overlays, and
+  confidence intervals.
+- **Plotting API refactoring** — All aliases now use `plot_` prefix (e.g., `plot_scatter_xy`, `plot_diel_cycle`).
+  Breaking change; removes namespace ambiguity.
+- **HeatmapDateTime/HeatmapXYZ fixes** — Fixed datetime handling, show_values parameter, adaptive tick intervals.
+  HeatmapXYZ requires pre-aggregated input.
+- **Examples consolidation** — Moved 21 scattered examples from source files into dedicated `examples/` folder. Added
+  parallel runner script (~2.7x speedup).
 
 ### Documentation
 
@@ -55,9 +69,10 @@
 ### Documentation and Notebooks
 
 * **SeasonalTrendDecomposition notebook**: Restructured with proper example numbering and organization.
-  - Fixed undefined variable `nee_full` and STL parameter compatibility errors
-  - Changed STL calls with large seasonal periods to harmonic method (no series length constraints)
-  - Reorganized into tutorial section + 5 sequential examples (detrending, anomaly detection, method comparison, climate change, ecosystem recovery) (17)
+    - Fixed undefined variable `nee_full` and STL parameter compatibility errors
+    - Changed STL calls with large seasonal periods to harmonic method (no series length constraints)
+    - Reorganized into tutorial section + 5 sequential examples (detrending, anomaly detection, method comparison,
+      climate change, ecosystem recovery) (17)
 * **HeatmapXYZ notebook**: Simplified from 5+ examples to 3 (Quick Start, Traditional, Advanced). Fixed bug:
   `GridAggregator.df_long`
   → `df_agg_long` (was causing silent re-aggregation to mean) (4, 7).
@@ -91,9 +106,11 @@
   `diive.pkgs.analyses.seasonaltrend.example_seasonaltrend_decomposition`, `diive.core.times.decomposition_utils`,
   `diive.pkgs.timeseries.harmonic`, `diive.core.plotting.seasonaltrend`,
   `notebooks/analyses/SeasonalTrendDecomposition.ipynb`
-- (18) `diive.core.ml.feature_engineer.FeatureEngineer` (enhanced __init__ docstring with scenario guidance, typical values, time series context)
+- (18) `diive.core.ml.feature_engineer.FeatureEngineer` (enhanced __init__ docstring with scenario guidance, typical
+  values, time series context)
 - (19) `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain.level41_longterm_random_forest`,
-  `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain.level41_longterm_xgboost` (comprehensive CO2 flux examples)
+  `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain.level41_longterm_xgboost` (comprehensive CO2
+  flux examples)
 - (20) `diive.pkgs.gapfilling.xgboost_ts.XGBoostTS` (enhanced min_child_weight documentation)
 
 ## v0.90.0 | 13 Jan 2026

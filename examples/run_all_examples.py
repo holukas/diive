@@ -27,6 +27,7 @@ EXAMPLE_FILES = [
     'visualization/scatter_xy.py',
     'analyses/correlation.py',
     'analyses/decoupling.py',
+    'analyses/gapfinder.py',
 ]
 
 MAX_WORKERS = 4  # Number of parallel workers

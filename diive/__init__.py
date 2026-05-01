@@ -23,6 +23,8 @@ from diive.pkgs.analyses.correlation import DailyCorrelation as DailyCorrelation
 from diive.pkgs.analyses.correlation import daily_correlation as daily_correlation
 from diive.pkgs.analyses.decoupling import StratifiedAnalysis as StratifiedAnalysis
 from diive.pkgs.analyses.decoupling import StratifiedAnalysis as stratified_analysis
+from diive.pkgs.analyses.gapfinder import GapFinder as GapFinder
+from diive.pkgs.analyses.gapfinder import GapFinder as gapfinder
 from diive.pkgs.analyses.gridaggregator import GridAggregator as ga
 from diive.pkgs.analyses.gridaggregator import GridAggregator as gridaggregator
 from diive.pkgs.analyses.gridaggregator import GridAggregator
@@ -76,6 +78,8 @@ __all__ = [
     'daily_correlation',
     'StratifiedAnalysis',
     'stratified_analysis',
+    'GapFinder',
+    'gapfinder',
     'ga',
     'gridaggregator',
     'GridAggregator',
