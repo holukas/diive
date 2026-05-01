@@ -39,6 +39,9 @@ def get_encoded_value_from_int(integer: int,
 
      Returns:
          The converted and scaled value as a float.
+
+     Example:
+         See `examples/binary/extract.py` for complete examples.
      """
     bits = bin(integer).replace("0b", "")  # Convert to binary value
     bits = bits.zfill(n_bits)  # Add leading zeros, if needed
@@ -88,6 +91,8 @@ def get_encoded_value_series(
     Returns:
      Series of the converted and scaled values as a floats.
 
+    Example:
+        See `examples/binary/extract.py` for complete examples.
     """
     missing = int_series.isnull()
     available = ~missing
@@ -106,69 +111,3 @@ def get_encoded_value_series(
     int_series.loc[missing] = np.nan
 
     return int_series
-
-
-def example_series():
-    from pathlib import Path
-    import pandas as pd
-    from diive.core.io.filereader import ReadFileType, search_files
-
-    OUTDIR = r"F:\01-NEW\CH-FRU-FF202401\2023_rECord\raw_data_ascii_rECord_filesWithAGC"
-
-    batch = 4
-
-    df_all = pd.Series()
-    files = search_files(searchdirs=fr"F:\01-NEW\CH-FRU-FF202401\2023_rECord\raw_data_ascii_rECord_{batch}",
-                         pattern='*.dat')
-    # files = files[0:40]
-    for ix, f in enumerate(files):
-        rft = ReadFileType(filepath=f, filetype='RECORD_DAT_20HZ', output_middle_timestamp=True,
-                           data_nrows=None)
-        df, meta = rft.get_filedata()
-        series = df['GA_DIAG_VALUE'].copy()
-        df['AGC'] = get_encoded_value_series(int_series=series,
-                                             bit_start=4,
-                                             bit_end=8,
-                                             gain=6.25,
-                                             base=2,
-                                             n_bits=8)
-
-        filename = f.stem
-        suffix = f.suffix
-        outfilename = f"{filename}_withAGC{suffix}"
-        outfilepath = Path(OUTDIR) / outfilename
-
-        df.to_csv(outfilepath, index=False)
-        print(f"Saved file {outfilepath}.")
-
-        if ix == 0:
-            df_all = df.copy()
-        # elif ix == 10:
-        #     break
-        else:
-            df_all = pd.concat([df_all, df], ignore_index=True)
-
-    # Plot all variables across all files
-    for ix, v in enumerate(df_all.columns):
-        plot = df_all[v].plot(title=f"{v} @20Hz across all files", figsize=(20, 9)).get_figure()
-        outplotpath = Path(OUTDIR) / f"{ix}_{v}_timesseries_across_all_files_batch_{batch}.png"
-        plot.savefig(outplotpath)
-        plot.show()
-        # plt.close(plot)
-        print(f"Saved plot {outplotpath}.")
-
-
-def example_int():
-    value = get_encoded_value_from_int(integer=250,
-                                       bit_start=4,
-                                       bit_end=8,
-                                       gain=6.25,
-                                       base=2,
-                                       n_bits=8)
-
-    print(value)
-
-
-if __name__ == '__main__':
-    example_series()
-    # example_int()

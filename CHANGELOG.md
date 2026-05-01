@@ -51,6 +51,14 @@
   Methods: `.detrend()`, `.deseasonalize()`, `.reconstruct()`, `.summary()`. Now fully exported via main package
   (`diive.SeasonalTrendDecomposition`, `diive.seasonaltrend`).
 
+### Binary Data Processing
+
+- **get_encoded_value_from_int** — Extract subrange of bits from integer, converts to float with gain scaling.
+  Use case: Decode binary-encoded instrument parameters (e.g., automatic gain control from diagnostic values).
+  Now exported via main package (`diive.get_encoded_value_from_int`).
+- **get_encoded_value_series** — Extract bit subranges from series of integers efficiently.
+  Handles NaN values and applies gain scaling. Now exported via main package (`diive.get_encoded_value_series`).
+
 ### Plotting & Visualization
 
 - **ScatterXY (enhanced)** — 3-variable scatter with optional color-coding, bin aggregation with trend overlays, and

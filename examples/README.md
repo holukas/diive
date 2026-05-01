@@ -26,6 +26,8 @@ examples/
 │   ├── [optimumrange.py](analyses/optimumrange.py)                # FindOptimumRange for optimal condition analysis (1 example)
 │   ├── [quantiles.py](analyses/quantiles.py)                   # percentiles101 for distribution analysis (1 example)
 │   └── [seasonaltrend.py](analyses/seasonaltrend.py)               # SeasonalTrendDecomposition for time series decomposition (1 example)
+├── binary/                # Binary data processing examples
+│   └── [extract.py](binary/extract.py)                   # Binary bit extraction from integers (2 examples)
 └── gap_filling/           # Gap-filling workflow examples (TODO)
     ├── quick_start.py             # Simple interpolation + quickfill (TODO)
     ├── randomforest_ts.py         # RandomForestTS examples (TODO)
@@ -41,7 +43,7 @@ examples/
 python examples/run_all_examples.py
 ```
 
-Executes all 17 examples (9 visualization + 8 analysis) in parallel (4 concurrent workers) with execution time tracking.
+Executes all 18 examples (9 visualization + 8 analysis + 1 binary) in parallel (4 concurrent workers) with execution time tracking.
 - Shows individual timing for each example
 - Detailed error messages if any fail
 - ~2.7x faster than sequential execution
