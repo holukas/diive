@@ -81,6 +81,15 @@
   years. Handles degree wrapping (0-360) automatically. Merged from separate module; now part of offsetcorrection.
   Now exported via main package (`diive.WindDirOffset`, `diive.wind_dir_offset`).
 
+### Variable Creation (createvar)
+
+- **aerodynamic_resistance** — Calculate aerodynamic resistance (ra) from wind speed and friction velocity using momentum
+  transfer approximation: ra = u / ustar². Includes data validation and reporting.
+  Now exported via main package (`diive.aerodynamic_resistance`).
+- **dry_air_density** — Calculate partial density of dry air from moist air density and water vapor density.
+  Uses gas mixture definition: rho_dry = rho_total - rho_vapor.
+  Now exported via main package (`diive.dry_air_density`).
+
 ### Plotting & Visualization
 
 - **ScatterXY (enhanced)** — 3-variable scatter with optional color-coding, bin aggregation with trend overlays, and
@@ -89,7 +98,7 @@
   Breaking change; removes namespace ambiguity.
 - **HeatmapDateTime/HeatmapXYZ fixes** — Fixed datetime handling, show_values parameter, adaptive tick intervals.
   HeatmapXYZ requires pre-aggregated input.
-- **Examples consolidation** — Moved 21 scattered examples from source files into dedicated `examples/` folder. Added
+- **Examples consolidation** — Moved 23 examples from source files and added new examples into dedicated `examples/` folder. Added
   parallel runner script (~2.7x speedup).
 
 ### Documentation

@@ -43,6 +43,8 @@ from diive.pkgs.corrections.offsetcorrection import remove_relativehumidity_offs
 from diive.pkgs.corrections.offsetcorrection import remove_radiation_zero_offset as remove_radiation_zero_offset
 from diive.pkgs.corrections.offsetcorrection import WindDirOffset as WindDirOffset
 from diive.pkgs.corrections.offsetcorrection import WindDirOffset as wind_dir_offset
+from diive.pkgs.createvar.air import aerodynamic_resistance as aerodynamic_resistance
+from diive.pkgs.createvar.air import dry_air_density as dry_air_density
 from diive.pkgs.createvar.conversions import et_from_le as et_from_le
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit as fdl
 from diive.pkgs.echires.fluxdetectionlimit import FluxDetectionLimit as flux_detection_limit
@@ -117,6 +119,8 @@ __all__ = [
     'wind_dir_offset',
 
     # Packages: Variables
+    'aerodynamic_resistance',
+    'dry_air_density',
     'et_from_le',
 
     # Packages: Flux

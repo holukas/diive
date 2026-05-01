@@ -31,6 +31,8 @@ examples/
 ├── corrections/           # Data correction examples
 │   ├── [setto.py](corrections/setto.py)                  # Set values to missing, specific values, or thresholds (3 examples)
 │   └── [offsetcorrection.py](corrections/offsetcorrection.py)  # Correct RH, radiation, measurement, and wind direction offsets (4 examples)
+├── createvar/             # Derived variable creation examples
+│   └── [air.py](createvar/air.py)                       # Air properties: aerodynamic resistance and dry air density (2 examples)
 └── gap_filling/           # Gap-filling workflow examples (TODO)
     ├── quick_start.py             # Simple interpolation + quickfill (TODO)
     ├── randomforest_ts.py         # RandomForestTS examples (TODO)
@@ -46,7 +48,7 @@ examples/
 python examples/run_all_examples.py
 ```
 
-Executes all 21 examples (9 visualization + 8 analysis + 1 binary + 3 corrections) in parallel (4 concurrent workers) with execution time tracking.
+Executes all 23 examples (9 visualization + 8 analysis + 1 binary + 3 corrections + 2 createvar) in parallel (4 concurrent workers) with execution time tracking.
 - Shows individual timing for each example
 - Detailed error messages if any fail
 - ~2.7x faster than sequential execution
