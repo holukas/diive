@@ -38,6 +38,9 @@
 - **GridAggregator** — 2D grid-based aggregation of data across two driver variables (quantiles, equal-width, or custom
   bins). Access results via `.df_agg_wide` (pivot table) or `.df_agg_long` (long format). Use case: ecosystem response
   surfaces, driver-response relationships.
+- **Histogram** — Calculate and analyze value distributions with flexible binning (n_bins or unique values). Access
+  results via `.results` property (DataFrame) or `.peakbins` property (top 5 bins). Now exported via main package
+  (`diive.Histogram`, `diive.histogram`).
 
 ### Plotting & Visualization
 

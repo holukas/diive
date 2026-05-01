@@ -31,36 +31,13 @@ class Histogram:
                 If a list is provided, then the first i and last j number of
                 bins are removed from the results and ignored during
                 distribution analyses.
-                Example:
-                    - Results with 'ignore_fringe_bins=None':
-                         BIN_START_INCL     COUNTS
-                            0.00            218
-                            0.05            25
-                            0.10            22
-                            0.15            16
-                            0.20            17
-                             ...            ...
-                            9.75            5
-                            9.80            15
-                            9.85            10
-                            9.90            28
-                            9.95            194
-                    - Results with 'ignore_fringe_bins=[1, 5]':
-                        BIN_START_INCL      COUNTS
-                            0.05            25
-                            0.10            22
-                            0.15            16
-                            0.20            17
-                            0.25            12
-                             ...            ...
-                            9.50            7
-                            9.55            9
-                            9.60            4
-                            9.65            6
-                            9.70            16
 
-        - Example notebook available in:
-            notebooks/Analyses/Histogram.ipynb
+        Properties:
+            .results: Histogram results as DataFrame with BIN_START_INCL and COUNTS columns
+            .peakbins: Top 5 bins by count
+
+        Example:
+            See `examples/analyses/histogram.py` for complete examples.
         """
         self.method = method
         self.n_bins = n_bins
@@ -126,25 +103,3 @@ class Histogram:
 
         # df.plot.bar(x='BIN_START_INCL', y='COUNTS')
         # plt.show()
-
-
-def example():
-    from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
-    data_df, metadata_df = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
-    print(data_df.head())
-
-    series = data_df['CO2_TLAG_ACTUAL'].copy()
-
-    hist = Histogram(
-        s=series,
-        method='n_bins',
-        n_bins=10,
-        ignore_fringe_bins=[1, 1]
-    )
-
-    hist.results
-    hist.peakbins
-
-
-if __name__ == '__main__':
-    example()

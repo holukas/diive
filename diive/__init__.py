@@ -25,6 +25,8 @@ from diive.pkgs.analyses.decoupling import StratifiedAnalysis as StratifiedAnaly
 from diive.pkgs.analyses.decoupling import StratifiedAnalysis as stratified_analysis
 from diive.pkgs.analyses.gapfinder import GapFinder as GapFinder
 from diive.pkgs.analyses.gapfinder import GapFinder as gapfinder
+from diive.pkgs.analyses.histogram import Histogram as Histogram
+from diive.pkgs.analyses.histogram import Histogram as histogram
 from diive.pkgs.analyses.gridaggregator import GridAggregator as ga
 from diive.pkgs.analyses.gridaggregator import GridAggregator as gridaggregator
 from diive.pkgs.analyses.gridaggregator import GridAggregator
@@ -80,6 +82,8 @@ __all__ = [
     'stratified_analysis',
     'GapFinder',
     'gapfinder',
+    'Histogram',
+    'histogram',
     'ga',
     'gridaggregator',
     'GridAggregator',
