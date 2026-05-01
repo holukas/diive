@@ -107,8 +107,8 @@
   Breaking change; removes namespace ambiguity.
 - **HeatmapDateTime/HeatmapXYZ fixes** — Fixed datetime handling, show_values parameter, adaptive tick intervals.
   HeatmapXYZ requires pre-aggregated input.
-- **Examples consolidation** — Moved 27 examples from source files and added new examples into dedicated `examples/` folder. Added
-  parallel runner script (~2.7x speedup).
+- **Examples consolidation** — Consolidated 45 examples from source files into dedicated `examples/` folder organized by topic
+  (visualization, analyses, corrections, createvar, binary). Includes parallel runner script (~2.7x speedup vs sequential).
 
 ### Documentation
 
