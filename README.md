@@ -73,7 +73,7 @@ For the complete list of available aliases, see `diive.__all__`.
 
 ## Examples
 
-**66 executable example scripts** demonstrating common workflows are organized by topic in the `examples/` folder:
+**67 executable example scripts** demonstrating common workflows are organized by topic in the `examples/` folder:
 
 **Run all examples at once (parallelized, ~2.7x speedup):**
 ```bash
@@ -90,13 +90,15 @@ python examples/corrections/offsetcorrection.py      # Data corrections (4 examp
 python examples/echires/fluxdetectionlimit.py        # Flux detection limits (2 examples)
 python examples/echires/lag.py                       # Time lag detection (1 example)
 python examples/echires/windrotation.py              # Wind rotation and tilt correction (1 example)
+python examples/fits/fitter.py                       # Curve fitting with confidence intervals (1 example)
 ```
 
-**Example categories (66 total):**
+**Example categories (67 total):**
 - **Visualization** (22): heatmap_datetime, hexbin, timeseries, cumulative, dielcycle, histogram, ridgeline, scatter
 - **Analyses** (8): correlation, decoupling, gapfinder, gridaggregator, histogram, optimumrange, quantiles, seasonaltrend
 - **Data Processing** (32): binary extraction, corrections (setto, offsetcorrection), createvar (air, conversions, daynightflag, laggedvariants, noise, potentialradiation, timesince, vpd)
 - **Eddy Covariance** (4): fluxdetectionlimit, lag, windrotation
+- **Fits** (1): fitter
 
 See [examples/README.md](examples/README.md) for a complete index of all examples with descriptions and quick start guides.
 

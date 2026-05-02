@@ -44,6 +44,10 @@ EXAMPLE_FILES = [
     'createvar/potentialradiation.py',
     'createvar/timesince.py',
     'createvar/vpd.py',
+    'echires/fluxdetectionlimit.py',
+    'echires/lag.py',
+    'echires/windrotation.py',
+    'fits/fitter.py',
 ]
 
 MAX_WORKERS = 4  # Number of parallel workers

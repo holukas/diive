@@ -14,6 +14,17 @@ from diive.core.plotting.plotfuncs import default_legend, default_format, add_ze
 
 
 class BinFitterCP:
+    """Fit polynomial functions to binned data with confidence intervals and prediction bands.
+
+    Bins data into equal-width intervals along the x-axis, aggregates y-values within each bin,
+    and fits polynomial functions (linear, quadratic, cubic) with 95% confidence intervals and
+    prediction bands. Useful for analyzing driver-response relationships in ecosystem data.
+
+    Examples
+    --------
+    See `examples/fits/fitter.py` for complete examples demonstrating curve fitting
+    with real and synthetic ecosystem data.
+    """
 
     def __init__(
             self,
@@ -376,62 +387,3 @@ class BinFitterCP:
         # default_legend(ax=ax, ncol=1, loc=(.07, .75))
         fig.show()
         return line_xy, line_fit, line_fit_ci, line_fit_pb, line_highlight
-
-
-def example():
-    from diive.configs.exampledata import load_exampledata_parquet
-
-    df_orig = load_exampledata_parquet()
-    # df_orig = df_orig.loc[df_orig.index.year == 2021].copy()
-
-    # Variables
-    vpd_col = 'VPD_f'
-    ta_col = 'Tair_f'
-    nee_col = 'NEE_CUT_REF_f'
-    xcol = vpd_col
-    ycol = nee_col
-
-    subset = df_orig.loc[(df_orig.index.month >= 6) & (df_orig.index.month <= 9)].copy()
-    subset = subset.loc[subset['Rg_f'] > 200]
-
-    # Convert units
-    subset[vpd_col] = subset[vpd_col].multiply(0.1)  # hPa --> kPa
-    subset[nee_col] = subset[nee_col].multiply(0.0792171)  # umol CO2 m-2 s-1 --> g CO2 m-2 30min-1
-    # y_units = "kPa"
-    y_units = "gCO_{2}\ m^{-2}\ 30min^{-1}"
-    ylabel = f"NEE (${y_units}$)"
-    # ylabel = f"VPD (${y_units}$)"
-    x_units = "°C"
-    xlabel = f"air temperature (${x_units}$)"
-
-    bf = BinFitterCP(
-        df=subset,
-        # n_bootstraps=2,
-        xcol=xcol,
-        ycol=ycol,
-        # predict_max_x=None,
-        # predict_min_x=None,
-        n_predictions=1000,
-        n_bins_x=0,
-        bins_y_agg='mean',
-        fit_type='quadratic_offset'  # 'linear', 'quadratic_offset', 'quadratic', 'cubic'
-    )
-    bf.run()
-    fit_results = bf.fit_results
-    # bf.showplot_binfitter(highlight_year=None, xlabel=xlabel, ylabel=ylabel)
-
-    bf.showplot(
-        show_unbinned_data=True,
-        show_bin_variation=False,
-        showfit=True,
-        title='',
-        xlabel=xlabel,
-        ylabel=ylabel,
-        unbinned_alpha=.5
-        # xlim=(0, 30),
-        # ylim=(-1, 0)
-    )
-
-
-if __name__ == '__main__':
-    example()

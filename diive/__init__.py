@@ -65,6 +65,8 @@ from diive.pkgs.echires.lag import MaxCovariance as MaxCovariance
 from diive.pkgs.echires.lag import MaxCovariance as max_covariance
 from diive.pkgs.echires.windrotation import WindRotation2D as WindRotation2D
 from diive.pkgs.echires.windrotation import WindRotation2D as wind_rotation_2d
+from diive.pkgs.fits.fitter import BinFitterCP as BinFitterCP
+from diive.pkgs.fits.fitter import BinFitterCP as bin_fitter_cp
 from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS as randomforest_ts
 from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
 from diive.pkgs.gapfilling.randomforest_ts import QuickFillRFTS as quick_fill_rfts
@@ -159,6 +161,8 @@ __all__ = [
     'max_covariance',
     'WindRotation2D',
     'wind_rotation_2d',
+    'BinFitterCP',
+    'bin_fitter_cp',
 
     # Packages: Gap-filling (Tier 1)
     'randomforest_ts',

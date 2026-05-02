@@ -124,6 +124,12 @@
   Aligns coordinate system with mean wind direction and calculates turbulent fluctuations via Reynolds decomposition.
   Essential for proper eddy covariance flux calculations. Now exported via main package (`diive.WindRotation2D`, `diive.wind_rotation_2d`).
 
+### Fits & Curve Fitting
+
+- **BinFitterCP** — Fit polynomial functions (linear, quadratic, cubic) to binned or unbinned data with confidence intervals and 95% prediction bands.
+  Uses scipy's curve_fit with uncertainty propagation via uncertainties library. Useful for analyzing driver-response relationships in ecosystem data.
+  Includes visualization with bin variation (error bars for mean, IQR for median). Now exported via main package (`diive.BinFitterCP`, `diive.bin_fitter_cp`).
+
 ### Plotting & Visualization
 
 - **ScatterXY (enhanced)** — 3-variable scatter with optional color-coding, bin aggregation with trend overlays, and
@@ -132,13 +138,14 @@
   Breaking change; removes namespace ambiguity.
 - **HeatmapDateTime/HeatmapXYZ fixes** — Fixed datetime handling, show_values parameter, adaptive tick intervals.
   HeatmapXYZ requires pre-aggregated input.
-- **Examples consolidation (Phase 1 complete)** — Consolidated **66 executable examples** from embedded source functions into 
+- **Examples consolidation (Phase 1 complete)** — Consolidated **67 executable examples** from embedded source functions into 
   dedicated `examples/` folder organized by topic:
   - **Visualization:** 22 examples (heatmap_datetime 6, hexbin 3, timeseries 1, cumulative 3, other 1, dielcycle 1, histogram 2, ridgeline 2, scatter 3)
   - **Analyses:** 8 examples (correlation 1, decoupling 1, gapfinder 1, gridaggregator 1, histogram 1, optimumrange 1, quantiles 1, seasonaltrend 1)
   - **Data Processing:** 32 examples (binary 2, corrections 7, createvar 23)
   - **Createvar breakdown:** air 2, conversions 3, daynightflag 1, laggedvariants 3, noise 4, potentialradiation 4, timesince 3, vpd 3
   - **Eddy Covariance:** 4 examples (fluxdetectionlimit 2, lag 1, windrotation 1)
+  - **Fits:** 1 example (fitter 1)
   - Includes parallel runner script `examples/run_all_examples.py` (~2.7x speedup vs sequential)
   - Each example file is standalone: `python examples/visualization/heatmap_datetime.py`
 
