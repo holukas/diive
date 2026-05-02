@@ -28,6 +28,13 @@ def load_exampledata_parquet_cha() -> DataFrame:
     return data_df
 
 
+def load_exampledata_parquet_lae() -> DataFrame:
+    filepath = Path(
+        DIR_PATH) / 'exampledata_PARQUET_CH-LAE_FP2025.X_22_IRGA75+IRGA72_FPC_NEE-QCF11-L3.2_2016-2017.parquet'
+    data_df = load_parquet(filepath=filepath)
+    return data_df
+
+
 def load_exampledata_parquet_meteo_swin_1MIN() -> DataFrame:
     filepath = Path(DIR_PATH) / 'exampledata_PARQUET_CH-LAE_METEO_SW_IN_1MIN.parquet'
     data_df = load_parquet(filepath=filepath)

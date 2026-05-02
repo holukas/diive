@@ -170,6 +170,16 @@
   - **Backward compatible:** All new features opt-in via default parameters
   - Use case: Robust flux quality control with configurable validation and optional analysis summaries
 
+- **Self-Heating Correction Example Consolidation** (`examples/flux/selfheating.py`)
+  - Moved example from source to examples folder (single example: `example_selfheating_ch_lae()`)
+  - **Refactored source `_gapfill()` method** (`diive/pkgs/flux/selfheating.py`):
+    - Upgraded to XGBoostTS (faster training, better for non-linear patterns)
+    - Integrated FeatureEngineer (v0.91.0 composition pattern: lag → rolling → timestamps)
+    - Removed MDV fallback (not needed for derived physics variables)
+    - Removed RandomForestTS import (no longer used)
+  - **Performance:** XGBoost converges smoothly over 150 rounds (RMSE: 10.7→1.4 train, 2.6 test)
+  - **Example count:** 70 examples across 35 files (updated runner messaging for clarity)
+
 ### Documentation
 
 - **PEP 8 alias standardization** — Updated all top-level aliases to snake_case convention.

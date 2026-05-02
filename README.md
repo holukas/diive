@@ -123,7 +123,7 @@ The `dev_scripts/parquet_time_subset.py` script provides powerful tools for prep
 Example: Extract 3 months of CO2 flux data from large parquet file:
 
 ```python
-# Configuration in dev_scripts/parquet_time_subset.py
+# Configuration in dev_scripts/parquet_timerange_subset_ch-cha.py
 START_YEAR = 2015
 END_YEAR = 2015
 START_MONTH = 6

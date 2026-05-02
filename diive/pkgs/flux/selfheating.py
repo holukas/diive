@@ -99,7 +99,6 @@ from scipy.optimize import minimize_scalar
 
 from diive.pkgs.createvar.air import dry_air_density, aerodynamic_resistance
 from diive.pkgs.createvar.daynightflag import DaytimeNighttimeFlag
-from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
 from diive.pkgs.outlierdetection.hampel import HampelDaytimeNighttime
 
 pd.set_option('display.width', 2000)
@@ -363,11 +362,16 @@ class ScopPhysics:
 
     def _gapfill(self):
         """
-        Gap-fill unscaled flux correction term using a hybrid approach:
-        1. RandomForestTS (Machine Learning)
-        2. Mean Diurnal Variation (MDV) Lookup Table (Fallback)
+        Gap-fill unscaled flux correction term using XGBoostTS with engineered features.
+
+        Creates temporal lag and rolling features to capture diurnal and synoptic patterns
+        in the self-heating correction term. XGBoost handles non-linear relationships between
+        radiation, temperature, wind speed and flux correction efficiently.
         """
-        # 1. RANDOM FOREST GAP-FILLING
+        from diive.core.ml.feature_engineer import FeatureEngineer
+        from diive.pkgs.gapfilling.xgboost_ts import XGBoostTS
+
+        # Prepare input DataFrame with target and driver variables
         frame = {
             self.cols.fct_unsc: self.fct_unsc,
             self.ta.name: self.ta,
@@ -376,75 +380,50 @@ class ScopPhysics:
             self.u.name: self.u,
             self.ustar.name: self.ustar
         }
-        gfdf = pd.DataFrame.from_dict(frame).dropna()
+        df_input = pd.DataFrame.from_dict(frame).dropna()
 
-        # Run random forest
-        rfts = RandomForestTS(
-            input_df=gfdf, target_col=self.cols.fct_unsc, verbose=True,
-            features_lag=[-1, -1], vectorize_timestamps=True,
-            add_continuous_record_number=True, sanitize_timestamp=True,
-            perm_n_repeats=1, n_estimators=100, random_state=42,
-            max_depth=None, min_samples_split=10, min_samples_leaf=5,
-            criterion='squared_error', n_jobs=-1
+        # Engineer features: temporal lags + rolling stats for diurnal/synoptic patterns
+        engineer = FeatureEngineer(
+            target_col=self.cols.fct_unsc,
+            features_lag=[-1, 1],              # 30-min past/future context
+            features_rolling=[12, 24],         # 6-hr and 12-hr rolling windows
+            vectorize_timestamps=True,         # Capture diurnal cycle
+            add_continuous_record_number=False
         )
-        rfts.trainmodel(showplot_scores=False, showplot_importance=False)
-        rfts.fillgaps(showplot_scores=False, showplot_importance=False)
+        df_engineered = engineer.fit_transform(df_input)
 
-        # Initial result from RF
-        fct_rf = rfts.gapfilling_df_[self.cols.fct_unsc_gf].copy()
+        # Gap-fill with XGBoostTS (faster, handles non-linear patterns)
+        xgb = XGBoostTS(
+            input_df=df_engineered,
+            target_col=self.cols.fct_unsc,
+            verbose=True,
+            n_estimators=150,
+            max_depth=6,
+            learning_rate=0.1,
+            random_state=42,
+            n_jobs=-1
+        )
+        xgb.trainmodel(showplot_scores=False, showplot_importance=False)
+        xgb.fillgaps(showplot_scores=False, showplot_importance=False)
 
-        # 2. MDV LOOKUP TABLE (FILL REMAINING GAPS)
-        # Align RF result to original index (fill missing spots with NaN)
-        fct_hybrid = fct_rf.reindex(self.ta.index)
+        # Report model performance metrics
+        if hasattr(xgb, 'scores_'):
+            print(f"\n    XGBoost Performance Metrics:")
+            for metric_name, metric_value in xgb.scores_.items():
+                if isinstance(metric_value, (int, float)):
+                    print(f"      {metric_name}: {metric_value:.4f}")
 
-        # Identify gaps that RF missed (e.g., if drivers were missing)
-        missing_mask = fct_hybrid.isna()
+        # Get gap-filled result (XGBoost creates column with _gfXG suffix)
+        gf_col = f"{self.cols.fct_unsc}_gfXG"
+        fct_gf = xgb.gapfilling_df_[gf_col].copy()
+        fct_result = fct_gf.reindex(self.ta.index)
 
-        if missing_mask.any():
-            print(f"    (i) RF left {missing_mask.sum()} gaps. Filling with MDV Lookup Table...")
+        # Report remaining gaps
+        gaps_remaining = fct_result.isna().sum()
+        if gaps_remaining > 0:
+            print(f"    (i) XGBoost left {gaps_remaining} gaps (expected at edges with insufficient drivers)")
 
-            # Create a temporary DataFrame for grouping
-            df_lut = pd.DataFrame({'Target': fct_hybrid}, index=self.ta.index)
-
-            # Ensure DatetimeIndex
-            if not isinstance(df_lut.index, pd.DatetimeIndex):
-                df_lut.index = pd.to_datetime(df_lut.index)
-
-            # Add temporal features
-            df_lut['__MONTH'] = df_lut.index.month
-            df_lut['__HOUR'] = df_lut.index.hour
-            df_lut['__MINUTE'] = df_lut.index.minute
-
-            # Use pre-calculated daytime flag if available, else derive it
-            if self.daytime is not None:
-                # Ensure alignment
-                df_lut['__DAYTIME'] = self.daytime.reindex(df_lut.index).fillna(-1)
-            else:
-                # Fallback if daytime flag isn't ready (unlikely in this class flow)
-                df_lut['__DAYTIME'] = 0
-
-            # Define groupers
-            grouper_fine = ['__MONTH', '__DAYTIME', '__HOUR', '__MINUTE']
-            grouper_coarse = ['__MONTH', '__DAYTIME']
-
-            # Calculate medians (transform broadcasts back to original shape)
-            mdv_fine = df_lut.groupby(grouper_fine)['Target'].transform('median')
-            mdv_coarse = df_lut.groupby(grouper_coarse)['Target'].transform('median')
-            global_median = df_lut['Target'].median()
-
-            # Apply waterfall filling
-            # 1. Fill with fine-grained MDV
-            fct_hybrid = fct_hybrid.fillna(mdv_fine)
-
-            # 2. Fill remaining with coarse MDV (Month-Daytime)
-            fct_hybrid = fct_hybrid.fillna(mdv_coarse)
-
-            # 3. Fill any final edge cases with global median
-            fct_hybrid = fct_hybrid.fillna(global_median)
-
-            print(f"    > Gaps remaining after MDV: {fct_hybrid.isna().sum()}")
-
-        return fct_hybrid
+        return fct_result
 
     @staticmethod
     def _calc_air_thermal_conductivity(ta: pd.Series) -> pd.Series:
@@ -1668,136 +1647,3 @@ class ScopApplicator:
             cbar.outline.set_visible(False)
 
             plt.show()
-
-
-def _example():
-    from diive.core.io.files import load_parquet
-    df = load_parquet(
-        filepath=r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\30_FLUX_PROCESSING_CHAIN\31_SELF-HEATING_CORRECTION\22_MERGED_IRGA75-noSHC+IRGA72_FluxProcessingChain_after-L3.2_NEE-QCF10_LE-QCF11_2016-2017.parquet")
-    # [print(c) for c in df.columns if "RH" in c];
-
-    # Parallel measurements starting 27 May 2016
-    df = df.loc["2016-05-27 00:15:00":"2017-12-11 23:45:00"].copy()
-
-    # Variables from EddyPro _fluxnet_ output file
-    AIR_CP = "AIR_CP_IRGA72"  # air_heat_capacity (J kg-1 K-1)
-    AIR_DENSITY = "AIR_DENSITY_IRGA72"  # air_density (kg m-3)
-    VAPOR_DENSITY = "VAPOR_DENSITY_IRGA72"  # water_vapor_density (kg m-3)
-    U = "U_IRGA72"  # (m s-1)
-    USTAR = "USTAR_IRGA72"  # (m s-1)
-    TA = "TA_T1_47_1_gfXG_IRGA72"  # (degC)
-    SWIN = "SW_IN_T1_47_1_gfXG_IRGA72"  # (W m-2)
-    RH = "RH_T1_47_1_IRGA72"  # (RH)
-
-    FLUX_TYPE = "CO2"
-    GAS_DENSITY = "CO2_MOLAR_DENSITY_IRGA75"  # (originally in mmol m-3)
-    FLUX_72 = "NEE_L3.1_L3.2_QCF_IRGA72"  # (umol m-2 s-1)
-    FLUX_75 = "NEE_L3.1_L3.2_QCF_IRGA75"  # (umol m-2 s-1)
-    CLASSVAR = USTAR
-    # FLUX_TYPE = "H2O"
-    # GAS_DENSITY = "H2O_MOLAR_DENSITY_IRGA75"  # (originally in mmol m-3)
-    # FLUX_72 = "LE_L3.1_L3.2_QCF_IRGA72"  # (umol m-2 s-1)
-    # FLUX_75 = "LE_L3.1_L3.2_QCF_IRGA75"  # (umol m-2 s-1)
-    # CLASSVAR = RH
-
-    # Conversions
-    df[GAS_DENSITY] = df[GAS_DENSITY] * 1000  # Convert to umol m-3
-
-    tic = time.time()
-
-    # Calculate
-    physics = ScopPhysics(
-        flux_type=FLUX_TYPE,
-        ta=df[TA].copy(),
-        gas_density=df[GAS_DENSITY].copy(),
-        rho_a=df[AIR_DENSITY].copy(),
-        rho_v=df[VAPOR_DENSITY].copy(),
-        u=df[U].copy(),
-        c_p=df[AIR_CP].copy(),
-        ustar=df[USTAR].copy(),
-        lat=47.478333,  # CH–LAE
-        lon=8.364389,  # CH–LAE
-        utc_offset=1,
-    )
-    physics.run(correction_method_base="JAR09", gapfill=True)
-    physics.stats()
-    physics.plot_diel_cycles()
-    results_physics_df = physics.get_results()
-
-    optimizer = ScopOptimizer(
-        flux_type=FLUX_TYPE,
-        fct_unsc=results_physics_df["FCT_UNSC_gfRF"],
-        class_var=df[USTAR].copy(),
-        n_classes=5,
-        n_bootstrap_runs=5,
-        flux_openpath=df[FLUX_75].copy(),
-        flux_closedpath=df[FLUX_72].copy(),
-        daytime=results_physics_df["DAYTIME"],
-        latent_heat_vaporization=results_physics_df["LATENT_HEAT_VAPORIZATION_J_UMOL"],
-    )
-    scaling_factors_df = optimizer.run()
-    optimizer.stats()
-    optimizer.plot()
-
-    applicator = ScopApplicator(
-        flux_type=FLUX_TYPE,
-        fct_unsc=results_physics_df["FCT_UNSC_gfRF"],
-        scaling_factors_df=scaling_factors_df,
-        flux_openpath=df[FLUX_75].copy(),
-        classvar=df[CLASSVAR].copy(),
-        daytime=results_physics_df["DAYTIME"].copy()
-    )
-    applicator.run()
-    applicator.stats(flux_closedpath=df[FLUX_72].copy())
-    applicator.plot_dashboard(flux_closedpath=df[FLUX_72].copy())
-
-    toc = time.time()
-    print(f"Time elapsed: {toc - tic:.2f} seconds")
-
-    print("End.")
-
-
-def _example_lae():
-    import pandas as pd
-    from diive.core.io.files import load_parquet
-    # from diive.pkgs.flux.selfheating import ScopPhysics, ScopApplicator
-    FILEPATH = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\20_MERGE_DATA\21.4_FLUXES_L1_noSHC_IRGA75+METEO7.parquet"
-    print(f"Data will be loaded from the following file:\n{FILEPATH}")
-    df = load_parquet(filepath=FILEPATH)
-    # df = df.loc[df.index.year == 2014].copy()
-    physics = ScopPhysics(
-        flux_type="CO2",
-        ta=df["TA_T1_47_1"].copy(),
-        gas_density=df["CO2_MOLAR_DENSITY"].copy() * 1000,  # Requires umol m-3
-        rho_a=df["AIR_DENSITY"].copy(),
-        rho_v=df["VAPOR_DENSITY"].copy(),
-        u=df["U"].copy(),
-        c_p=df["AIR_CP"].copy(),
-        ustar=df["USTAR"].copy(),
-        lat=47.478333,  # CH–LAE
-        lon=8.364389,  # CH–LAE
-        utc_offset=1,
-    )
-    physics.run(correction_method_base="JAR09", gapfill=True)
-    results_physics_df = physics.get_results()
-    results_physics_df.describe()
-    physics.stats()
-    physics.plot_diel_cycles()
-    sfdf = pd.read_csv(
-        r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\30_FLUX_PROCESSING_CHAIN\31_SELF-HEATING_CORRECTION\32_SelfHeatingCorrection_ScalingFactors_NEE.csv")
-    applicator = ScopApplicator(
-        flux_type="CO2",
-        fct_unsc=results_physics_df["FCT_UNSC_gfRF"],
-        scaling_factors_df=sfdf,
-        flux_openpath=df["FC"].copy(),
-        classvar=df["USTAR"].copy(),
-        daytime=results_physics_df["DAYTIME"].copy()
-    )
-    applicator.run()
-    applicator.stats()
-    applicator.plot_dashboard()
-
-
-if __name__ == '__main__':
-    _example()
-    # _example_lae()

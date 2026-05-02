@@ -46,7 +46,8 @@ examples/
 │   └── [windrotation.py](echires/windrotation.py)             # WindRotation2D for coordinate rotation and tilt correction (1 example)
 ├── flux/                  # Flux quality and analysis examples
 │   ├── [common.py](flux/common.py)                            # Flux variable base detection (1 example)
-│   └── [hqflux.py](flux/hqflux.py)                            # High-quality CO2 flux analysis with Hampel filter (1 example)
+│   ├── [hqflux.py](flux/hqflux.py)                            # High-quality CO2 flux analysis with Hampel filter (1 example)
+│   └── [selfheating.py](flux/selfheating.py)                  # Self-heating correction with SCOP methodology (1 example)
 └── gap_filling/           # Gap-filling workflow examples (TODO)
     ├── quick_start.py             # Simple interpolation + quickfill (TODO)
     ├── randomforest_ts.py         # RandomForestTS examples (TODO)
@@ -62,7 +63,7 @@ examples/
 python examples/run_all_examples.py
 ```
 
-Executes all 69 examples (22 visualization + 8 analysis + 2 binary + 7 corrections + 23 createvar + 4 echires + 2 flux + 1 fits) in parallel (4 concurrent workers) with execution time tracking.
+Executes all 70 examples (22 visualization + 8 analysis + 2 binary + 7 corrections + 23 createvar + 4 echires + 3 flux + 1 fits) in parallel (4 concurrent workers) with execution time tracking.
 - Shows individual timing for each example
 - Detailed error messages if any fail
 - ~2.7x faster than sequential execution
@@ -119,9 +120,9 @@ When adding a new example:
   - **Visualization:** HeatmapDateTime/YearMonth (6), HexbinPlot (3), TimeSeries (1), Cumulative (3), Other (1), DielCycle (1), Histogram (2), RidgeLine (2), ScatterXY (3) = 22 examples
   - **Analysis:** DailyCorrelation, StratifiedAnalysis, GapFinder, GridAggregator, Histogram, FindOptimumRange, Quantiles, SeasonalTrendDecomposition = 8 examples
   - **Data Processing:** Binary (2), Corrections (7), Variable creation (23) = 32 examples
-  - **Eddy Covariance:** FluxDetectionLimit (2), MaxCovariance (1), WindRotation2D (1), Flux (2 - common + hqflux) = 6 examples
+  - **Eddy Covariance:** FluxDetectionLimit (2), MaxCovariance (1), WindRotation2D (1), Flux (3 - common + hqflux + selfheating) = 7 examples
   - **Fits:** BinFitterCP (1) = 1 example
-  - **Total:** 69 examples
+  - **Total:** 70 examples
 - **Phase 2 (Planned):** Gap-filling workflow examples and HeatmapXYZ
   - Quick start interpolation + quickfill
   - RandomForestTS, XGBoostTS, long-term models, MDS gap-filling

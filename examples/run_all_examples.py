@@ -50,6 +50,7 @@ EXAMPLE_FILES = [
     'fits/fitter.py',
     'flux/common.py',
     'flux/hqflux.py',
+    'flux/selfheating.py',
 ]
 
 MAX_WORKERS = 4  # Number of parallel workers
@@ -117,7 +118,7 @@ def run_all_examples():
     total_start = time.time()
 
     print("=" * 80)
-    print(f"Running {len(EXAMPLE_FILES)} examples in parallel (max {MAX_WORKERS} workers)...")
+    print(f"Running {len(EXAMPLE_FILES)} example files (70 functions total) in parallel (max {MAX_WORKERS} workers)...")
     print("=" * 80 + "\n")
 
     results = {'passed': [], 'failed': [], 'skipped': []}
