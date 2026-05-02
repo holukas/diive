@@ -7,7 +7,7 @@ This chain typically involves:
 3. Level-3.1: Storage correction using a single-point profile.
 4. Level-3.2: Stepwise Outlier detection.
 5. Level-3.3: USTAR threshold filtering for low-turbulence periods.
-6. Level-4.1: Gap-filling using methods like Random Forest or MDS.
+6. Level-4.1: Gap-filling using methods like XGBoost, Random Forest, and MDS.
 
 The `FluxProcessingChain` class manages the data flow and state across these levels.
 """

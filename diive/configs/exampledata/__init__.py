@@ -22,6 +22,12 @@ def load_exampledata_parquet_long() -> DataFrame:
     return data_df
 
 
+def load_exampledata_parquet_cha() -> DataFrame:
+    filepath = Path(DIR_PATH) / 'exampledata_PARQUET_CH-CHA_FP2025.3_subset_30MIN.parquet'
+    data_df = load_parquet(filepath=filepath)
+    return data_df
+
+
 def load_exampledata_parquet_meteo_swin_1MIN() -> DataFrame:
     filepath = Path(DIR_PATH) / 'exampledata_PARQUET_CH-LAE_METEO_SW_IN_1MIN.parquet'
     data_df = load_parquet(filepath=filepath)

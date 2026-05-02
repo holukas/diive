@@ -48,6 +48,8 @@ EXAMPLE_FILES = [
     'echires/lag.py',
     'echires/windrotation.py',
     'fits/fitter.py',
+    'flux/common.py',
+    'flux/hqflux.py',
 ]
 
 MAX_WORKERS = 4  # Number of parallel workers

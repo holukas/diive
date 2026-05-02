@@ -1,6 +1,9 @@
 # Folders not needed for repo (old)
 *.parquet
 
+# Development utilities (not for distribution)
+/dev_scripts/
+
 # e.g.: /src
 /.idea/
 /__local_folders

@@ -73,7 +73,7 @@ For the complete list of available aliases, see `diive.__all__`.
 
 ## Examples
 
-**67 executable example scripts** demonstrating common workflows are organized by topic in the `examples/` folder:
+**68 executable example scripts** demonstrating common workflows are organized by topic in the `examples/` folder:
 
 **Run all examples at once (parallelized, ~2.7x speedup):**
 ```bash
@@ -91,19 +91,80 @@ python examples/echires/fluxdetectionlimit.py        # Flux detection limits (2 
 python examples/echires/lag.py                       # Time lag detection (1 example)
 python examples/echires/windrotation.py              # Wind rotation and tilt correction (1 example)
 python examples/fits/fitter.py                       # Curve fitting with confidence intervals (1 example)
+python examples/flux/common.py                       # Flux variable detection (1 example)
+python examples/flux/hqflux.py                       # CO2 flux quality analysis with Hampel filter (1 example)
 ```
 
-**Example categories (67 total):**
+**Example categories (69 total):**
 - **Visualization** (22): heatmap_datetime, hexbin, timeseries, cumulative, dielcycle, histogram, ridgeline, scatter
 - **Analyses** (8): correlation, decoupling, gapfinder, gridaggregator, histogram, optimumrange, quantiles, seasonaltrend
 - **Data Processing** (32): binary extraction, corrections (setto, offsetcorrection), createvar (air, conversions, daynightflag, laggedvariants, noise, potentialradiation, timesince, vpd)
-- **Eddy Covariance** (4): fluxdetectionlimit, lag, windrotation
+- **Eddy Covariance** (6): fluxdetectionlimit, lag, windrotation, flux/common, flux/hqflux
 - **Fits** (1): fitter
 
 See [examples/README.md](examples/README.md) for a complete index of all examples with descriptions and quick start guides.
 
 Additional examples available in **Jupyter notebooks** at [notebooks/](notebooks/) with comprehensive workflows and
 tutorials.
+
+---
+
+## Data Preparation Tools
+
+### Parquet Subsetting with Flexible Column Filtering
+
+The `dev_scripts/parquet_time_subset.py` script provides powerful tools for preparing example datasets:
+
+- **Time range filtering**: Restrict data to specific year/month ranges
+- **Flexible column selection**: Keep only variables of interest (e.g., CO2 flux columns)
+- **Pattern-based filtering**: Exclude columns by pattern (e.g., remove quality flags)
+- **Configurable preprocessing**: Optional removal of intermediate processing columns
+
+Example: Extract 3 months of CO2 flux data from large parquet file:
+
+```python
+# Configuration in dev_scripts/parquet_time_subset.py
+START_YEAR = 2015
+END_YEAR = 2015
+START_MONTH = 6
+END_MONTH = 8
+COLUMN_PATTERN = "FC"  # Keep only FC (CO2 flux) columns
+REMOVE_DOT_COLUMNS = True
+EXCLUDE_PATTERNS = ["BADM"]  # Exclude bad measurement flags
+# Result: Lightweight parquet file ready for examples or analysis
+```
+
+---
+
+## Flux Quality Analysis
+
+### High-Quality Flux Extraction
+
+The `analyze_highest_quality_flux()` function robustly filters ecosystem fluxes using the Hampel method:
+
+- **Automatic day/night separation** based on solar geometry
+- **Robust outlier detection** using Median Absolute Deviation (MAD)
+- **Configurable strictness** with separate thresholds for daytime and nighttime
+- **Optional summary statistics** tracking records, outliers, and filter parameters
+- **Comprehensive input validation** with clear error messages
+
+Example: Analyze CO2 flux with Hampel filter and view quality summary:
+
+```python
+from diive.pkgs.flux.hqflux import analyze_highest_quality_flux
+
+results, summary = analyze_highest_quality_flux(
+    flux=df['FC'],
+    lat=47.286417, lon=8.010325, utc_offset=1,
+    window_length=48*13,  # 13 days at 30-min frequency
+    n_sigma_dt=5.5, n_sigma_nt=5.5,
+    use_differencing=True,
+    showplot=True,
+    return_summary=True  # Get detailed analysis
+)
+print(f"Outliers found: {summary['outliers_found']} "
+      f"({summary['outlier_pct']:.1f}%)")
+```
 
 ---
 

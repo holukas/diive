@@ -138,16 +138,37 @@
   Breaking change; removes namespace ambiguity.
 - **HeatmapDateTime/HeatmapXYZ fixes** — Fixed datetime handling, show_values parameter, adaptive tick intervals.
   HeatmapXYZ requires pre-aggregated input.
-- **Examples consolidation (Phase 1 complete)** — Consolidated **67 executable examples** from embedded source functions into 
+- **Examples consolidation (Phase 1 complete)** — Consolidated **69 executable examples** from embedded source functions into 
   dedicated `examples/` folder organized by topic:
   - **Visualization:** 22 examples (heatmap_datetime 6, hexbin 3, timeseries 1, cumulative 3, other 1, dielcycle 1, histogram 2, ridgeline 2, scatter 3)
   - **Analyses:** 8 examples (correlation 1, decoupling 1, gapfinder 1, gridaggregator 1, histogram 1, optimumrange 1, quantiles 1, seasonaltrend 1)
   - **Data Processing:** 32 examples (binary 2, corrections 7, createvar 23)
   - **Createvar breakdown:** air 2, conversions 3, daynightflag 1, laggedvariants 3, noise 4, potentialradiation 4, timesince 3, vpd 3
-  - **Eddy Covariance:** 4 examples (fluxdetectionlimit 2, lag 1, windrotation 1)
+  - **Eddy Covariance:** 6 examples (fluxdetectionlimit 2, lag 1, windrotation 1, flux/common 1, flux/hqflux 1)
   - **Fits:** 1 example (fitter 1)
   - Includes parallel runner script `examples/run_all_examples.py` (~2.7x speedup vs sequential)
   - Each example file is standalone: `python examples/visualization/heatmap_datetime.py`
+
+### Data Preparation & Quality Control
+
+- **Parquet Subsetting with Flexible Column Filtering** (`dev_scripts/parquet_time_subset.py`)
+  - Three-tier cascading filtering: dots → exclusions → inclusions
+  - **COLUMN_PATTERN** (string or list): Keep only columns matching pattern(s) (e.g., "FC", ["FC", "LE"])
+  - **EXCLUDE_PATTERNS** (string or list): Remove columns matching pattern(s) (e.g., "FLAG", ["FLAG", "SUM"])
+  - **REMOVE_DOT_COLUMNS** (bool): Optional removal of intermediate processing columns (default True)
+  - Enhanced statistics showing column counts at each filtering stage
+  - All columns printed alphabetically for verification
+  - Use case: Prepare lightweight example datasets from large parquet files
+
+- **Enhanced analyze_highest_quality_flux()** (`diive/pkgs/flux/hqflux.py`)
+  - **Comprehensive input validation:** 8-point validation (flux type, bounds, data availability, parameters)
+  - **Error handling:** Clear exception messages with context
+  - **Summary dict:** Optional return of analysis summary (`return_summary=True` returns tuple with dict)
+    - Tracks: total records, valid records, outliers found, outlier percentage, method parameters
+  - **Plot customization:** `figsize` parameter for custom dimensions, `show_percentiles` toggle
+  - **Robust data handling:** Graceful empty data checks before statistical operations
+  - **Backward compatible:** All new features opt-in via default parameters
+  - Use case: Robust flux quality control with configurable validation and optional analysis summaries
 
 ### Documentation
 
