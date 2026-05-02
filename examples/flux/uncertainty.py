@@ -50,21 +50,30 @@ def example_random_uncertainty_pas20():
     )
 
     # Run all 4 methods
+    print("Running 4-method hierarchical uncertainty quantification...")
     randunc.run()
+    print("✓ Uncertainty calculation complete\n")
 
     # Get results
     randunc_results = randunc.randunc_results
     randunc_series = randunc.randunc_series
     randunc_results_cumulatives = randunc.randunc_results_cumulatives
 
+    # Report: Method summary with distribution
+    randunc.report_method_summary()
+
     # Plot 1: Histogram of random uncertainties
-    x = randunc_results['NEE_CUT_REF_orig_RANDUNC']
-    fig, ax = plt.subplots(figsize=(10, 6))
-    ax.hist(x, bins=20, rwidth=0.9, color='#607c8e')
-    ax.grid(True, alpha=0.3)
-    ax.set_title('Distribution of Random Uncertainties (NEE)')
-    ax.set_xlabel('Random Uncertainty (μmol CO₂ m⁻² s⁻¹)')
-    ax.set_ylabel('Count')
+    x = randunc_results['NEE_CUT_REF_orig_RANDUNC'].dropna()
+    fig, ax = plt.subplots(figsize=(11, 5.5))
+    fig.subplots_adjust(left=0.08, right=0.97, top=0.93, bottom=0.1)
+    ax.hist(x, bins=25, rwidth=0.85, color='#607c8e', edgecolor='black', alpha=0.8)
+    ax.axvline(x.mean(), color='red', linestyle='--', linewidth=2.5, label=f'Mean = {x.mean():.4f}')
+    ax.axvline(x.median(), color='green', linestyle='--', linewidth=2.5, label=f'Median = {x.median():.4f}')
+    ax.grid(True, alpha=0.3, linestyle=':', axis='y')
+    ax.set_title('Distribution of Random Uncertainties (NEE)', fontsize=12, fontweight='bold')
+    ax.set_xlabel('Random Uncertainty (+/- sigma) (umol CO2 m-2 s-1)', fontsize=11)
+    ax.set_ylabel('Frequency (count)', fontsize=11)
+    ax.legend(loc='upper right', fontsize=10)
     fig.show()
 
     # Report cumulative uncertainty propagation

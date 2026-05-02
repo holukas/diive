@@ -180,17 +180,24 @@
   - **Performance:** XGBoost converges smoothly over 150 rounds (RMSE: 10.7→1.4 train, 2.6 test)
   - **Example count:** 70 examples across 35 files (updated runner messaging for clarity)
 
-- **Random Uncertainty Example Consolidation** (`examples/flux/uncertainty.py`)
-  - Moved example from source to examples folder (single example: `example_random_uncertainty_pas20()`)
+- **Random Uncertainty Example & Visualization Improvements** (`examples/flux/uncertainty.py`, `diive/pkgs/flux/uncertainty.py`)
+  - **Example consolidation:** Moved from source to examples folder (single example: `example_random_uncertainty_pas20()`)
   - **Demonstrates 4-method hierarchical uncertainty quantification:**
     - Method 1: Sliding window (±7 days, ±1 hr) with meteorological similarity
     - Method 2: Median of similar-flux uncertainties (±5 days, ±1 hr, ±20% similarity)
     - Method 3: Similar flux range without time window restrictions
     - Method 4: 5 nearest fluxes by magnitude (fallback for remaining gaps)
-  - **Cumulative uncertainty propagation** with upper/lower bounds using uncertainties package
-  - **Cleaned source** (`diive/pkgs/flux/uncertainty.py`): Removed example() and if __name__ block
-  - **Exports added to `diive/__init__.py`:**
-    - `RandomUncertaintyPAS20` (also as `random_uncertainty_pas20`)
+  - **Error propagation refactoring:** Explicit DataFrame creation, separated cumsum operations, improved efficiency
+  - **New reporting methods:**
+    - `report_method_summary()` — Formatted tables showing method distribution, record counts, uncertainty statistics
+    - `report_cumulative_uncertainty_propagation()` — Enhanced table with cumulative flux, bounds, and ranges
+  - **Plot improvements:**
+    - `showplot_random_uncertainty()` — Better spacing (hspace=0.25, wspace=0.25), explicit margins, descriptive titles
+    - `showplot_cumulative_uncertainty_propagation()` — Redesigned with fill_between for uncertainty bands, better legend
+  - **Console output:** Nicely formatted pandas DataFrames for all reports (ASCII-compatible units)
+  - **Spacing optimizations:** 17-29% reduction in whitespace, tighter subplots, better use of figure area
+  - **Cleaned source:** Removed example() and if __name__ block
+  - **Exports added:** `RandomUncertaintyPAS20` (also as `random_uncertainty_pas20`)
   - **Example count:** 71 examples across 36 files (PAS20/FLUXNET standard uncertainty quantification)
 
 ### Documentation
