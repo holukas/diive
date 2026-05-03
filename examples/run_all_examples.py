@@ -53,6 +53,7 @@ EXAMPLE_FILES = [
     'flux/selfheating.py',
     'flux/uncertainty.py',
     'flux/ustarthreshold.py',
+    'timeseries/harmonic.py',
 ]
 
 MAX_WORKERS = 4  # Number of parallel workers
@@ -120,7 +121,7 @@ def run_all_examples():
     total_start = time.time()
 
     print("=" * 80)
-    print(f"Running {len(EXAMPLE_FILES)} example files (71 functions total) in parallel (max {MAX_WORKERS} workers)...")
+    print(f"Running {len(EXAMPLE_FILES)} example files (73 functions total) in parallel (max {MAX_WORKERS} workers)...")
     print("=" * 80 + "\n")
 
     results = {'passed': [], 'failed': [], 'skipped': []}

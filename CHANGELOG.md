@@ -26,7 +26,20 @@
 - **CO2 flux documentation** — Comprehensive examples with tuned parameters for 30-min flux data.
 - **Test optimizations** — RandomForest tests 60-70% faster (2.8s vs 6s).
 
-### Time Series Analysis
+### Time Series Analysis & Spectral Analysis
+
+- **Harmonic Analysis & Spectral Examples** (`examples/timeseries/harmonic.py`)
+  - Two spectral analysis examples using CO₂ flux (NEE_CUT_REF_f):
+    - `example1_spectrogram_daily_pattern()` — 10-day spectrogram revealing persistent 24-hour photosynthesis cycle
+    - `example2_annual_spectrogram_phenology()` — Full-year spectrogram showing seasonal phenology changes
+  - **Frequency interpretation guide:** Identifies key periodicities:
+    - 0.02 (24h): Primary photosynthesis/respiration cycle (predictable, use in gap-filling)
+    - 0.04 (12h): Semi-diurnal secondary oscillation (temperature, respiration)
+    - 0.06 (8h): Tertiary atmospheric circulation / measurement artifacts
+    - 0.1 (5h): High-frequency weather/turbulence noise (ignore in gap-filling)
+  - **Harmonic bands:** Shows how secondary harmonics follow 24h intensity (weak in winter dormancy, strong in growing season)
+  - **Use case:** Understand ecosystem flux periodicities, validate gap-filling feature engineering (focus on predictable 24h cycle, ignore noise)
+  - **Visualization:** Short-time Fourier Transform spectrograms with bright yellow bands highlighting key frequencies
 
 - **DailyCorrelation (refactored)** — Class-based API with summary statistics (mean, median, skewness, kurtosis,
   normality test), anomaly detection (zscore/IQR), and visualization.
@@ -138,15 +151,16 @@
   Breaking change; removes namespace ambiguity.
 - **HeatmapDateTime/HeatmapXYZ fixes** — Fixed datetime handling, show_values parameter, adaptive tick intervals.
   HeatmapXYZ requires pre-aggregated input.
-- **Examples consolidation (Phase 1 complete)** — Consolidated **69 executable examples** from embedded source functions into 
+- **Examples consolidation (Phase 1 complete)** — Consolidated **76 executable examples** from embedded source functions into 
   dedicated `examples/` folder organized by topic:
   - **Visualization:** 22 examples (heatmap_datetime 6, hexbin 3, timeseries 1, cumulative 3, other 1, dielcycle 1, histogram 2, ridgeline 2, scatter 3)
   - **Analyses:** 8 examples (correlation 1, decoupling 1, gapfinder 1, gridaggregator 1, histogram 1, optimumrange 1, quantiles 1, seasonaltrend 1)
   - **Data Processing:** 32 examples (binary 2, corrections 7, createvar 23)
   - **Createvar breakdown:** air 2, conversions 3, daynightflag 1, laggedvariants 3, noise 4, potentialradiation 4, timesince 3, vpd 3
-  - **Eddy Covariance:** 6 examples (fluxdetectionlimit 2, lag 1, windrotation 1, flux/common 1, flux/hqflux 1)
+  - **Eddy Covariance & Flux:** 11 examples (fluxdetectionlimit 2, lag 1, windrotation 1, flux/common 1, flux/hqflux 1, flux/selfheating 1, flux/uncertainty 1, flux/ustarthreshold 3)
+  - **Spectral Analysis:** 2 examples (harmonic 2 — daily and annual CO₂ flux spectrograms)
   - **Fits:** 1 example (fitter 1)
-  - Includes parallel runner script `examples/run_all_examples.py` (~2.7x speedup vs sequential)
+  - Includes parallel runner script `examples/run_all_examples.py` (~2.7x speedup vs sequential, 38 example files)
   - Each example file is standalone: `python examples/visualization/heatmap_datetime.py`
 
 ### Data Preparation & Quality Control
@@ -209,6 +223,13 @@
   - **Use case:** Prepare filtered flux datasets for gap-filling with multiple turbulence thresholds
   - **Cleaned source:** Removed example(), example_scenarios(), example_flag_constant_ustar_threshold() and if __name__ block
   - **Example count:** 74 examples across 37 files (3 USTAR examples added to flux category)
+
+- **Harmonic (Spectral) Analysis Examples** (`examples/timeseries/harmonic.py`)
+  - Two spectral analysis examples for CO₂ flux (NEE_CUT_REF_f) time series
+  - Short-time Fourier transform spectrograms revealing temporal evolution of power spectral density
+  - Frequency interpretation: Primary 24h photosynthesis cycle (0.02) + secondary harmonics (0.04, 0.06) + weather noise (0.1)
+  - Seasonal context: Strong harmonic bands during growing season (Apr-Sep), weak during winter dormancy (Jan-Mar)
+  - **Updated example count:** 76 examples across 38 files (2 harmonic examples added to timeseries category)
 
 ### Documentation
 
