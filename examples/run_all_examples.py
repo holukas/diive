@@ -52,6 +52,7 @@ EXAMPLE_FILES = [
     'flux/hqflux.py',
     'flux/selfheating.py',
     'flux/uncertainty.py',
+    'flux/ustarthreshold.py',
 ]
 
 MAX_WORKERS = 4  # Number of parallel workers

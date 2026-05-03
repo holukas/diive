@@ -200,6 +200,16 @@
   - **Exports added:** `RandomUncertaintyPAS20` (also as `random_uncertainty_pas20`)
   - **Example count:** 71 examples across 36 files (PAS20/FLUXNET standard uncertainty quantification)
 
+- **USTAR Threshold Example Consolidation** (`examples/flux/ustarthreshold.py`)
+  - Moved 3 examples from source to examples folder:
+    - `example_ustar_detection_mpt()` — Papale et al. (2006) multiple temperature class threshold detection with bootstrapping
+    - `example_ustar_threshold_constant_scenarios()` — Create flux scenarios with 7 different USTAR thresholds
+    - `example_flag_multiple_constant_ustar_thresholds()` — Apply CUT_16/CUT_50/CUT_84 QA/QC flags for uncertainty scenarios
+  - **Demonstrates:** USTAR filtering workflow (detection → scenario creation → flagging)
+  - **Use case:** Prepare filtered flux datasets for gap-filling with multiple turbulence thresholds
+  - **Cleaned source:** Removed example(), example_scenarios(), example_flag_constant_ustar_threshold() and if __name__ block
+  - **Example count:** 74 examples across 37 files (3 USTAR examples added to flux category)
+
 ### Documentation
 
 - **PEP 8 alias standardization** — Updated all top-level aliases to snake_case convention.

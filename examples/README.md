@@ -48,7 +48,8 @@ examples/
 │   ├── [common.py](flux/common.py)                            # Flux variable base detection (1 example)
 │   ├── [hqflux.py](flux/hqflux.py)                            # High-quality CO2 flux analysis with Hampel filter (1 example)
 │   ├── [selfheating.py](flux/selfheating.py)                  # Self-heating correction with SCOP methodology (1 example)
-│   └── [uncertainty.py](flux/uncertainty.py)                  # Random uncertainty quantification (PAS20 method) (1 example)
+│   ├── [uncertainty.py](flux/uncertainty.py)                  # Random uncertainty quantification (PAS20 method) (1 example)
+│   └── [ustarthreshold.py](flux/ustarthreshold.py)            # USTAR threshold detection and multiple filtering scenarios (3 examples)
 └── gap_filling/           # Gap-filling workflow examples (TODO)
     ├── quick_start.py             # Simple interpolation + quickfill (TODO)
     ├── randomforest_ts.py         # RandomForestTS examples (TODO)
@@ -64,7 +65,7 @@ examples/
 python examples/run_all_examples.py
 ```
 
-Executes all 71 examples (22 visualization + 8 analysis + 2 binary + 7 corrections + 23 createvar + 4 echires + 4 flux + 1 fits) in parallel (4 concurrent workers) with execution time tracking.
+Executes all 74 examples (22 visualization + 8 analysis + 2 binary + 7 corrections + 23 createvar + 4 echires + 7 flux + 1 fits) in parallel (4 concurrent workers) with execution time tracking.
 - Shows individual timing for each example
 - Detailed error messages if any fail
 - ~2.7x faster than sequential execution
@@ -121,9 +122,9 @@ When adding a new example:
   - **Visualization:** HeatmapDateTime/YearMonth (6), HexbinPlot (3), TimeSeries (1), Cumulative (3), Other (1), DielCycle (1), Histogram (2), RidgeLine (2), ScatterXY (3) = 22 examples
   - **Analysis:** DailyCorrelation, StratifiedAnalysis, GapFinder, GridAggregator, Histogram, FindOptimumRange, Quantiles, SeasonalTrendDecomposition = 8 examples
   - **Data Processing:** Binary (2), Corrections (7), Variable creation (23) = 32 examples
-  - **Eddy Covariance:** FluxDetectionLimit (2), MaxCovariance (1), WindRotation2D (1), Flux (4 - common + hqflux + selfheating + uncertainty) = 8 examples
+  - **Eddy Covariance:** FluxDetectionLimit (2), MaxCovariance (1), WindRotation2D (1), Flux (7 - common + hqflux + selfheating + uncertainty + 3 ustarthreshold) = 11 examples
   - **Fits:** BinFitterCP (1) = 1 example
-  - **Total:** 71 examples
+  - **Total:** 74 examples
 - **Phase 2 (Planned):** Gap-filling workflow examples and HeatmapXYZ
   - Quick start interpolation + quickfill
   - RandomForestTS, XGBoostTS, long-term models, MDS gap-filling

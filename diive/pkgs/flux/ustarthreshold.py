@@ -379,7 +379,6 @@ class UstarDetectionMPT:
                         self.results_p84_bts_col, self.results_bts_runs_col, self.results_bts_results_col]
 
         results_df = pd.DataFrame(index=unique_years, columns=results_cols)  # Reset df
-        # results_df.columns = pd.MultiIndex.from_tuples(results_df.columns)
 
         return results_df
 
@@ -407,80 +406,6 @@ class UstarDetectionMPT:
             season_counter = -1  # Count if first, second, ... season in this bts run
             season_grouped_df = sampledf.groupby(self.season_col)
             for season_key, season_df in season_grouped_df:
-                # # todo---
-                # # todo testing XGB and RF
-                # # testdf = self.workdf['.SEASON'] == 1
-                # # testdf = self.workdf_nt.loc[testdf, ['USTAR', 'NEE_L3.1_L3.2_QCF']].copy()
-                # from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
-                # gf = RandomForestTS(
-                #     input_df=season_df[['USTAR', 'NEE_L3.1_L3.2_QCF']].copy(),
-                #     target_col='NEE_L3.1_L3.2_QCF',
-                #     verbose=True,
-                #     features_lag=None,
-                #     # features_lag=[-1, -1],
-                #     # features_lag_exclude_cols=['test', 'test2'],
-                #     vectorize_timestamps=False,
-                #     # vectorize_timestamps=True,
-                #     add_continuous_record_number=False,
-                #     # add_continuous_record_number=True,
-                #     sanitize_timestamp=False,  # todo !!!
-                #     perm_n_repeats=3,
-                #     n_estimators=9,
-                #     random_state=42,
-                #     # random_state=None,
-                #     max_depth=None,
-                #     min_samples_split=20,
-                #     min_samples_leaf=10,
-                #     # criterion=CRITERION,
-                #     test_size=0.2,
-                #     n_jobs=-1
-                # )
-                # # from diive.pkgs.gapfilling.xgboost_ts import XGBoostTS
-                # # gf = XGBoostTS(
-                # #     input_df=self.workdf_nt[['USTAR', 'NEE_L3.1_L3.2_QCF']].copy(),
-                # #     target_col='NEE_L3.1_L3.2_QCF',
-                # #     verbose=1,
-                # #     # features_lag=None,
-                # #     features_lag=[-1, -1],
-                # #     # features_lag_exclude_cols=['Rg_f', 'TA>0', 'TA>20', 'DAYTIME', 'NIGHTTIME'],
-                # #     # vectorize_timestamps=False,
-                # #     vectorize_timestamps=True,
-                # #     # add_continuous_record_number=False,
-                # #     add_continuous_record_number=True,
-                # #     sanitize_timestamp=True,
-                # #     perm_n_repeats=3,
-                # #     n_estimators=200,
-                # #     random_state=42,
-                # #     n_jobs=-1
-                # # )
-                # # xgbts.reduce_features()
-                # # xgbts.report_feature_reduction()
-                # gf.trainmodel(showplot_scores=False, showplot_importance=False)
-                # # xgbts.report_traintest()
-                # gf.fillgaps(showplot_scores=False, showplot_importance=False)
-                # gf.report_gapfilling()
-                # r = gf.gapfilling_df_
-                # rr = self.workdf_nt[['USTAR']].copy()
-                # pred = r['.PREDICTIONS_FULLMODEL']
-                # rr['pred'] = pred
-                # # rr.plot.scatter('USTAR', 'pred', alpha=.1)
-                # # plt.xlim([0, .4])
-                # # plt.ylim([0, 5])
-                # # plt.show()
-                #
-                # from diive.core.plotting.scatter import ScatterXY
-                # ScatterXY(x=rr['USTAR'], y=rr['pred'], nbins=20, ylim=[0, 20]).plot()
-                # ScatterXY(x=rr['USTAR'], y=rr['pred'], nbins=50, ylim=[0, 10]).plot()
-                #
-                # rrr = rr.copy()
-                # rrr = rrr.dropna()
-                # rrr = rrr.sort_values(by=['USTAR'], ascending=False)
-                # rrr = rrr.rolling(window=10, center=True).median()
-                # rrr = rrr.dropna()
-                # rrr.plot.scatter('USTAR', 'pred')
-                # plt.show()
-                # # todo---
-
                 season_counter += 1
 
                 # ASSIGN TA CLASSES and USTAR SUBCLASSES
@@ -514,20 +439,6 @@ class UstarDetectionMPT:
                 listt = [bts_run, season_key, this_ustar_thres_season, np.nan]
                 self.bts_results_df.loc[len(self.bts_results_df)] = listt
 
-                # self.bts_results_df.loc[season_key, 'BOOTSTRAP_RUN'] = bts_run
-                # self.bts_results_df.loc[season_key, 'SEASON'] = season_key
-                # self.bts_results_df.loc[season_key, 'SEASON_THRES_MEDIAN'] = this_ustar_thres_season
-
-                # COLLECT SEASON RESULTS
-                # this_bts_results_df = self.prepare_results_for_collection(df=season_subclass_median_df,
-                #                                                           bts_run=bts_run)
-                # self.bts_results_df = self.bts_results_df.append(this_bts_results_df)
-                # self.bts_results_df = pd.concat([self.bts_results_df, this_bts_results_df], axis=0)
-
-            # self.results_seasons_df = self.collect_season_results(bts_results_df=self.bts_results_df,
-            #                                                       season_key=season_key,
-            #                                                       results_df=self.results_seasons_df)
-
             locs = self.bts_results_df['BOOTSTRAP_RUN'] == bts_run
             season_max = self.bts_results_df.loc[locs, 'SEASON_THRES_MEDIAN'].max()
             self.bts_results_df.loc[locs, 'OVERALL_THRES_MAX'] = season_max
@@ -536,21 +447,10 @@ class UstarDetectionMPT:
             results_so_far.append(season_max)
             print(f"overall so far: {np.median(results_so_far):.3f}")
 
-        # print(self.bts_results_df)
-
         bts_thresholds = self.bts_results_df['OVERALL_THRES_MAX'].unique()
         print(np.quantile(bts_thresholds, .16))
         print(np.quantile(bts_thresholds, .50))
         print(np.quantile(bts_thresholds, .84))
-
-        # # CALCULATE YEARLY THRESHOLDS
-        # # After last season of current bts_run is reached, calculate the yearly threshold(s)
-        # self.daynight_ustar_fullres_df = self.set_yearly_thresholds(df=self.daynight_ustar_fullres_df)
-        #
-        # yearly_thresholds_df = self.collect_yearly_thresholds(bts_run=bts_run)
-        #
-        # self.results_years_df = self.collect_year_results(yearly_thresholds_df=yearly_thresholds_df,
-        #                                                   results_years_df=self.results_years_df)
 
     def set_yearly_thresholds(self, df):
         """Calculate yearly thresholds from season thresholds in full-resolution dataframe."""
@@ -664,8 +564,10 @@ class UstarDetectionMPT:
         results_df.loc[filter_season, self.results_min_bts_col] = found_season_thresholds.min()
         results_df.loc[filter_season, self.results_median_bts_col] = np.median(found_season_thresholds)
         results_df.loc[filter_season, self.results_mean_bts_col] = found_season_thresholds.mean()
-        results_df.loc[filter_season, self.results_p16_bts_col] = np.quantile(found_season_thresholds, 0.05)  # Papale et al. 2006: 5th percentile (was 0.16)
-        results_df.loc[filter_season, self.results_p84_bts_col] = np.quantile(found_season_thresholds, 0.95)  # Papale et al. 2006: 95th percentile (was 0.84)
+        results_df.loc[filter_season, self.results_p16_bts_col] = np.quantile(found_season_thresholds,
+                                                                              0.05)  # Papale et al. 2006: 5th percentile (was 0.16)
+        results_df.loc[filter_season, self.results_p84_bts_col] = np.quantile(found_season_thresholds,
+                                                                              0.95)  # Papale et al. 2006: 95th percentile (was 0.84)
         results_df.loc[filter_season, self.results_bts_runs_col] = self.n_bootstraps
         results_df.loc[filter_season, self.results_bts_results_col] = len(found_season_thresholds)
 
@@ -901,7 +803,6 @@ class UstarDetectionMPT:
             # SUBCLASSES (USTAR)
             subclass_grouped = class_group_df.groupby(ustar_subclass_col)
             for subclass_key, subclass_group_df in subclass_grouped:
-
                 median = subclass_group_df.median()
                 _temp_df = pd.DataFrame(data=median)  # Convert Series to df
                 _temp_df = _temp_df.T  # Transpose: Series index will be column names
@@ -1016,119 +917,3 @@ class UstarDetectionMPT:
         else:
             raise Exception("Latitude and longitude are required "
                             "if potential radiation is not in data.")
-
-
-def example():
-    import time
-    import diive as dv
-
-    t_start = time.perf_counter()
-
-    filepath = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-hon_flux_product\data\out\04_FluxProcessingChain_L4.1_FC.parquet"
-    df = dv.load_parquet(filepath=filepath)
-    locs = (df.index.year >= 2025) & (df.index.year <= 2025)
-    df = df.loc[locs].copy()
-    [print(c) for c in df.columns if "L3.2" in c];
-
-    NEE_COL = "NEE_L3.1_L3.2_QCF0"
-    TA_COL = "TA_EP"
-    USTAR_COL = "USTAR"
-    SW_IN = "SW_IN_POT"
-
-    df = df[[NEE_COL, TA_COL, USTAR_COL, SW_IN]].copy()
-    df = df.dropna()
-
-    t_init_start = time.perf_counter()
-    ust = UstarDetectionMPT(
-        df=df,
-        nee_col=NEE_COL,
-        ta_col=TA_COL,
-        ustar_col=USTAR_COL,
-        ta_n_classes=6,
-        ustar_n_classes=20,
-        n_bootstraps=10,
-        swin_pot_col=SW_IN,
-        nighttime_threshold=20,
-        utc_offset=1,
-        lat=47.478333,  # CH-LAE
-        lon=8.364389  # CH-LAE
-    )
-    t_init_end = time.perf_counter()
-    print(f"\n⏱️  Initialization: {t_init_end - t_init_start:.2f}s")
-
-    t_run_start = time.perf_counter()
-    ust.run()
-    t_run_end = time.perf_counter()
-    print(f"⏱️  run() execution: {t_run_end - t_run_start:.2f}s")
-
-    t_total = time.perf_counter() - t_start
-    print(f"⏱️  Total time: {t_total:.2f}s")
-
-
-def example_scenarios():
-    # Load data
-    from diive.core.io.files import load_pickle
-    df = load_pickle(filepath=r"F:\Sync\luhk_work\_temp\data.pickle")
-    ust = UstarThresholdConstantScenarios(series=df['FC'],
-                                          swinpot=df['SW_IN_POT'],
-                                          ustar=df['USTAR'])
-    ust.calc(ustarthresholds=[0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4], showplot=True, verbose=True)
-
-
-def example_flag_constant_ustar_threshold():
-    from diive.core.io.files import load_parquet
-    filepath = r"L:\Sync\luhk_work\TMP\FluxProcessingChain_L3.2.parquet"
-    df = load_parquet(filepath=filepath)
-    locs = (df.index.year >= 2022) & (df.index.year <= 2022)
-    df = df.loc[locs].copy()
-    # [print(c) for c in df.columns if "TA" in c]
-
-    NEE_COL = "NEE_L3.1"
-    USTAR_COL = "USTAR"
-    SERIES = df[NEE_COL].copy()
-    USTAR = df[USTAR_COL].copy()
-    # [0.0532449, 0.0709217, 0.0949867],
-
-    ust = FlagMultipleConstantUstarThresholds(
-        series=SERIES,
-        ustar=USTAR,
-        thresholds=[0.0532449, 0.0709217, 0.0949867],
-        threshold_labels=['CUT_16', 'CUT_50', 'CUT_84'],
-        showplot=True,
-        verbose=True
-    )
-    ust.calc()
-
-    # ust = FlagSingleConstantUstarThreshold(
-    #     series=SERIES,
-    #     ustar=USTAR,
-    #     threshold=0.0532449,  # 0.0532449, 0.0709217, 0.0949867
-    #     idstr="CUT_50",
-    #     showplot=True,
-    #     verbose=True
-    # )
-    ust.calc()
-    filteredseries = ust.filteredseries
-    flag = ust.get_flag()
-
-    # df[flag.name] = flag
-    #
-    # # Calculate overall quality flag QCF
-    # from diive.pkgs.qaqc.qcf import FlagQCF
-    # qcf = FlagQCF(series=df[NEE_COL],
-    #               df=df,
-    #               idstr="L3.3",
-    #               swinpot=df['SW_IN_POT'],
-    #               nighttime_threshold=50)
-    # qcf.calculate(daytime_accept_qcf_below=1,
-    #               nighttimetime_accept_qcf_below=1)
-    # qcf.get()
-    # qcf.report_qcf_evolution()
-
-    print("END")
-
-
-if __name__ == '__main__':
-    # example_flag_constant_ustar_threshold()
-    example()
-    # example_scenarios()

@@ -67,6 +67,10 @@ from diive.pkgs.echires.windrotation import WindRotation2D as WindRotation2D
 from diive.pkgs.echires.windrotation import WindRotation2D as wind_rotation_2d
 from diive.pkgs.flux.uncertainty import RandomUncertaintyPAS20 as RandomUncertaintyPAS20
 from diive.pkgs.flux.uncertainty import RandomUncertaintyPAS20 as random_uncertainty_pas20
+from diive.pkgs.flux.ustarthreshold import UstarDetectionMPT as UstarDetectionMPT
+from diive.pkgs.flux.ustarthreshold import UstarThresholdConstantScenarios as UstarThresholdConstantScenarios
+from diive.pkgs.flux.ustarthreshold import FlagMultipleConstantUstarThresholds as FlagMultipleConstantUstarThresholds
+from diive.pkgs.flux.ustarthreshold import FlagSingleConstantUstarThreshold as FlagSingleConstantUstarThreshold
 from diive.pkgs.fits.fitter import BinFitterCP as BinFitterCP
 from diive.pkgs.fits.fitter import BinFitterCP as bin_fitter_cp
 from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS as randomforest_ts
@@ -165,6 +169,10 @@ __all__ = [
     'wind_rotation_2d',
     'RandomUncertaintyPAS20',
     'random_uncertainty_pas20',
+    'UstarDetectionMPT',
+    'UstarThresholdConstantScenarios',
+    'FlagMultipleConstantUstarThresholds',
+    'FlagSingleConstantUstarThreshold',
     'BinFitterCP',
     'bin_fitter_cp',
 
