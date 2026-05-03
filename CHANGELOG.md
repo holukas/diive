@@ -4,305 +4,35 @@
 
 ## v0.91.0 | XX XXX 2026
 
-### Highlights
+### Major Changes
 
-- **Seasonal-Trend Decomposition** — Separate time series into trend/seasonal/residual (STL, classical, harmonic).
-  Notebook with 5 real-world examples.
-- **HexbinPlot visualization** — Plot flux values in 2D hexagonal bins of driver variables with percentile
-  normalization.
+- **Standalone FeatureEngineer** — Separated feature engineering from gap-filling. 8-stage pipeline (lag→rolling→diff→EMA→poly→STL→timestamps→record_number). Pre-engineer once, reuse across models. ⚠️ **Breaking change:** RandomForestTS/XGBoostTS now accept only pre-engineered data.
+- **Long-term XGBoost gap-filling** — Added `level41_longterm_xgboost()` with same architecture as Random Forest for fair comparison.
+- **SHAP-based feature reduction** — Replaced permutation importance with SHAP values.
+- **Harmonic spectral analysis** — Two examples showing CO₂ flux periodicities (24h photosynthesis, 12h/8h harmonics, 5h noise) with frequency interpretation for gap-filling validation.
+- **Time series analysis** — Refactored DailyCorrelation, StratifiedAnalysis, GapFinder, GridAggregator, FindOptimumRange, percentiles101, SeasonalTrendDecomposition.
+- **Examples consolidation** — 76 executable examples across 38 files (22 visualization + 8 analysis + 32 data processing + 11 flux/echires + 2 spectral + 1 fits).
+- **Test speedup** — RandomForest gap-filling tests 60-70% faster (2.8s vs 6s).
 
----
+### New Classes & Functions
+- **Binary data processing:** `get_encoded_value_from_int`, `get_encoded_value_series` (bit extraction)
+- **Data corrections:** `set_exact_values_to_missing`, `setto_value`, `setto_threshold`, `MeasurementOffsetFromReplicate`, `remove_relativehumidity_offset`, `remove_radiation_zero_offset`, `WindDirOffset`
+- **Variable creation:** `aerodynamic_resistance`, `dry_air_density`, `air_temp_from_sonic_temp`, `latent_heat_of_vaporization`, `et_from_le`, `DaytimeNighttimeFlag`, `lagged_variants`, `generate_noisy_timeseries`, `add_impulse_noise`, `potrad`, `potrad_eot`, `TimeSince`
+- **Eddy covariance:** `FluxDetectionLimit`, `MaxCovariance`, `WindRotation2D`
+- **Curve fitting:** `BinFitterCP` (polynomial fits with confidence intervals)
+- **Flux analysis:** Enhanced `analyze_highest_quality_flux()`, `RandomUncertaintyPAS20` reporting/plotting, `UstarDetectionMPT`, `UstarThresholdConstantScenarios`, `FlagMultipleConstantUstarThresholds`
 
-### Gap-Filling
-
-- **Standalone FeatureEngineer class** — Separated from gap-filling for composability and reusability. 8-stage
-  pipeline (lag→rolling→diff→EMA→poly→STL→timestamps→record_number). Pre-engineer once, reuse across multiple models.
-- **Simplified API** — RandomForestTS/XGBoostTS accept only pre-engineered data + model parameters (breaking change).
-- **Feature engineering support** — Added rolling stats, temporal differencing, polynomial features, EMA, STL
-  decomposition.
-- **SHAP-based feature reduction** — Replaced permutation importance with SHAP values. Configurable threshold (default
-  0.5).
-- **Long-term XGBoost** — Added `level41_longterm_xgboost()` to FluxProcessingChain for fair RF vs XGB comparison.
-- **CO2 flux documentation** — Comprehensive examples with tuned parameters for 30-min flux data.
-- **Test optimizations** — RandomForest tests 60-70% faster (2.8s vs 6s).
-
-### Time Series Analysis & Spectral Analysis
-
-- **Harmonic Analysis & Spectral Examples** (`examples/timeseries/harmonic.py`)
-  - Two spectral analysis examples using CO₂ flux (NEE_CUT_REF_f):
-    - `example1_spectrogram_daily_pattern()` — 10-day spectrogram revealing persistent 24-hour photosynthesis cycle
-    - `example2_annual_spectrogram_phenology()` — Full-year spectrogram showing seasonal phenology changes
-  - **Frequency interpretation guide:** Identifies key periodicities:
-    - 0.02 (24h): Primary photosynthesis/respiration cycle (predictable, use in gap-filling)
-    - 0.04 (12h): Semi-diurnal secondary oscillation (temperature, respiration)
-    - 0.06 (8h): Tertiary atmospheric circulation / measurement artifacts
-    - 0.1 (5h): High-frequency weather/turbulence noise (ignore in gap-filling)
-  - **Harmonic bands:** Shows how secondary harmonics follow 24h intensity (weak in winter dormancy, strong in growing season)
-  - **Use case:** Understand ecosystem flux periodicities, validate gap-filling feature engineering (focus on predictable 24h cycle, ignore noise)
-  - **Visualization:** Short-time Fourier Transform spectrograms with bright yellow bands highlighting key frequencies
-
-- **DailyCorrelation (refactored)** — Class-based API with summary statistics (mean, median, skewness, kurtosis,
-  normality test), anomaly detection (zscore/IQR), and visualization.
-- **StratifiedAnalysis** — Hierarchical binning for analyzing variable y across bins of x, stratified by z. Access
-  results via `.results` property (DataFrame) or `.get_binaggs()` (dict). Use case: photosynthetic decoupling, ecosystem
-  response functions.
-- **GapFinder** — Detect and analyze consecutive missing values in time series. Access results via `.results` property (
-  DataFrame). Now exported via main package (`diive.GapFinder`, `diive.gapfinder`).
-- **GridAggregator** — 2D grid-based aggregation of data across two driver variables (quantiles, equal-width, or custom
-  bins). Access results via `.df_agg_wide` (pivot table) or `.df_agg_long` (long format). Use case: ecosystem response
-  surfaces, driver-response relationships.
-- **Histogram** — Calculate and analyze value distributions with flexible binning (n_bins or unique values). Access
-  results via `.results` property (DataFrame) or `.peakbins` property (top 5 bins). Now exported via main package
-  (`diive.Histogram`, `diive.histogram`).
-- **FindOptimumRange** — Identify optimal conditions for ecosystem responses (e.g., temperature range for maximum CO₂
-  uptake). Bins driver variable and finds optimal range via rolling aggregation. Includes data distribution analysis and
-  visualization. Now exported via main package (`diive.FindOptimumRange`, `diive.find_optimum_range`).
-- **percentiles101** — Calculate percentiles 0-100 for distribution analysis. Includes visualization of percentile
-  distribution with optional verbose output. Now exported via main package (`diive.percentiles101`).
-- **SeasonalTrendDecomposition (refactored)** — Decompose time series into trend, seasonal, and residual components
-  using STL, classical, or harmonic methods. Properties: `.trend`, `.seasonal`, `.residual`, `.seasonality_strength`.
-  Methods: `.detrend()`, `.deseasonalize()`, `.reconstruct()`, `.summary()`. Now fully exported via main package
-  (`diive.SeasonalTrendDecomposition`, `diive.seasonaltrend`).
-
-### Binary Data Processing
-
-- **get_encoded_value_from_int** — Extract subrange of bits from integer, converts to float with gain scaling.
-  Use case: Decode binary-encoded instrument parameters (e.g., automatic gain control from diagnostic values).
-  Now exported via main package (`diive.get_encoded_value_from_int`).
-- **get_encoded_value_series** — Extract bit subranges from series of integers efficiently.
-  Handles NaN values and applies gain scaling. Now exported via main package (`diive.get_encoded_value_series`).
-
-### Data Corrections
-
-- **set_exact_values_to_missing** — Set records matching exact values to NaN. Counts corrections and optionally
-  visualizes before/after. Now exported via main package (`diive.set_exact_values_to_missing`).
-- **setto_value** — Set values in specific time ranges to a constant. Accepts single dates or date ranges.
-  Now exported via main package (`diive.setto_value`).
-- **setto_threshold** — Constrain values to min/max thresholds (clipping). Reports accepted/corrected counts.
-  Now exported via main package (`diive.setto_threshold`).
-- **Consolidated into single module:** All three correction functions moved to `diive.pkgs.corrections.setto`
-  for cleaner organization.
-- **MeasurementOffsetFromReplicate** — Detect and correct constant measurement offset using replicate data.
-  Finds offset that minimizes absolute difference between measurement and reference.
-  Now exported via main package (`diive.MeasurementOffsetFromReplicate`).
-- **remove_relativehumidity_offset** — Correct RH values exceeding 100% using daily mean of excess values.
-  Now exported via main package (`diive.remove_relativehumidity_offset`).
-- **remove_radiation_zero_offset** — Correct radiation measurements with nighttime offset using solar geometry.
-  Sets nighttime radiation to zero after offset correction.
-  Now exported via main package (`diive.remove_radiation_zero_offset`).
-- **WindDirOffset** — Detect and correct systematic wind direction offset by comparing yearly histograms to reference
-  years. Handles degree wrapping (0-360) automatically. Merged from separate module; now part of offsetcorrection.
-  Now exported via main package (`diive.WindDirOffset`, `diive.wind_dir_offset`).
-
-### Variable Creation (createvar)
-
-- **aerodynamic_resistance** — Calculate aerodynamic resistance (ra) from wind speed and friction velocity using momentum
-  transfer approximation: ra = u / ustar². Includes data validation and reporting.
-  Now exported via main package (`diive.aerodynamic_resistance`).
-- **dry_air_density** — Calculate partial density of dry air from moist air density and water vapor density.
-  Uses gas mixture definition: rho_dry = rho_total - rho_vapor.
-  Now exported via main package (`diive.dry_air_density`).
-- **air_temp_from_sonic_temp** — Convert sonic temperature to true air temperature accounting for water vapor effects.
-  Now exported via main package (`diive.air_temp_from_sonic_temp`).
-- **latent_heat_of_vaporization** — Calculate temperature-dependent latent heat of vaporization for evapotranspiration conversions.
-  Now exported via main package (`diive.latent_heat_of_vaporization`).
-- **et_from_le** — Convert latent energy flux (W/m²) to evapotranspiration rate (mm H₂O/h).
-  Now exported via main package (`diive.et_from_le`).
-- **DaytimeNighttimeFlag** — Identify daytime/nighttime periods using solar geometry calculations.
-  Returns flags and potential radiation based on latitude, longitude, and threshold.
-  Now exported via main package (`diive.DaytimeNighttimeFlag`, `diive.daytime_nighttime_flag_from_swinpot`).
-- **lagged_variants** — Create lagged variants of variables for temporal feature engineering. Supports forward/backward lags,
-  step sizes, and column exclusion. Now exported via main package (`diive.lagged_variants`).
-- **generate_noisy_timeseries** — Generate synthetic time series with configurable noise (white, autocorrelated).
-  Supports outlier injection and visualization. Now exported via main package (`diive.generate_noisy_timeseries`).
-- **add_impulse_noise** — Add isolated impulse spikes to time series. Useful for testing gap-filling robustness.
-  Now exported via main package (`diive.add_impulse_noise`).
-- **potrad** — Calculate potential shortwave radiation using Stull (1988) method for a given location and UTC offset.
-  Now exported via main package (`diive.potrad`).
-- **potrad_eot** — Calculate potential radiation using Equation of Time method (TOA or clear-sky surface approximation).
-  Alternative to Stull method for more accurate solar calculations.
-  Now exported via main package (`diive.potrad_eot`).
-- **TimeSince** — Count records since last occurrence of a condition (e.g., time since last precipitation, time since freeze).
-  Supports upper/lower limits with inclusive/exclusive boundaries. Now exported via main package (`diive.TimeSince`, `diive.timesince`).
-
-### Eddy Covariance High-Resolution Analysis
-
-- **FluxDetectionLimit** — Calculate minimum detectable flux based on noise in eddy covariance measurements.
-  Computes detection limit using 3-sigma criterion and signal-to-noise ratio. Includes covariance plot visualization.
-  Already exported via main package (`diive.FluxDetectionLimit`, `diive.fdl`, `diive.flux_detection_limit`).
-- **MaxCovariance** — Detect time lag between two variables (e.g., wind and scalar concentration) by finding maximum covariance.
-  Includes automatic peak detection with scipy's find_peaks and prominence-based scoring. Useful for identifying inlet tube delays.
-  Now exported via main package (`diive.MaxCovariance`, `diive.max_covariance`).
-- **WindRotation2D** — Perform coordinate rotation and tilt correction (double rotation) using Wilczak et al. (2001) method.
-  Aligns coordinate system with mean wind direction and calculates turbulent fluctuations via Reynolds decomposition.
-  Essential for proper eddy covariance flux calculations. Now exported via main package (`diive.WindRotation2D`, `diive.wind_rotation_2d`).
-
-### Fits & Curve Fitting
-
-- **BinFitterCP** — Fit polynomial functions (linear, quadratic, cubic) to binned or unbinned data with confidence intervals and 95% prediction bands.
-  Uses scipy's curve_fit with uncertainty propagation via uncertainties library. Useful for analyzing driver-response relationships in ecosystem data.
-  Includes visualization with bin variation (error bars for mean, IQR for median). Now exported via main package (`diive.BinFitterCP`, `diive.bin_fitter_cp`).
-
-### Plotting & Visualization
-
-- **ScatterXY (enhanced)** — 3-variable scatter with optional color-coding, bin aggregation with trend overlays, and
-  confidence intervals.
-- **Plotting API refactoring** — All aliases now use `plot_` prefix (e.g., `plot_scatter_xy`, `plot_diel_cycle`).
-  Breaking change; removes namespace ambiguity.
-- **HeatmapDateTime/HeatmapXYZ fixes** — Fixed datetime handling, show_values parameter, adaptive tick intervals.
-  HeatmapXYZ requires pre-aggregated input.
-- **Examples consolidation (Phase 1 complete)** — Consolidated **76 executable examples** from embedded source functions into 
-  dedicated `examples/` folder organized by topic:
-  - **Visualization:** 22 examples (heatmap_datetime 6, hexbin 3, timeseries 1, cumulative 3, other 1, dielcycle 1, histogram 2, ridgeline 2, scatter 3)
-  - **Analyses:** 8 examples (correlation 1, decoupling 1, gapfinder 1, gridaggregator 1, histogram 1, optimumrange 1, quantiles 1, seasonaltrend 1)
-  - **Data Processing:** 32 examples (binary 2, corrections 7, createvar 23)
-  - **Createvar breakdown:** air 2, conversions 3, daynightflag 1, laggedvariants 3, noise 4, potentialradiation 4, timesince 3, vpd 3
-  - **Eddy Covariance & Flux:** 11 examples (fluxdetectionlimit 2, lag 1, windrotation 1, flux/common 1, flux/hqflux 1, flux/selfheating 1, flux/uncertainty 1, flux/ustarthreshold 3)
-  - **Spectral Analysis:** 2 examples (harmonic 2 — daily and annual CO₂ flux spectrograms)
-  - **Fits:** 1 example (fitter 1)
-  - Includes parallel runner script `examples/run_all_examples.py` (~2.7x speedup vs sequential, 38 example files)
-  - Each example file is standalone: `python examples/visualization/heatmap_datetime.py`
-
-### Data Preparation & Quality Control
-
-- **Parquet Subsetting with Flexible Column Filtering** (`dev_scripts/parquet_time_subset.py`)
-  - Three-tier cascading filtering: dots → exclusions → inclusions
-  - **COLUMN_PATTERN** (string or list): Keep only columns matching pattern(s) (e.g., "FC", ["FC", "LE"])
-  - **EXCLUDE_PATTERNS** (string or list): Remove columns matching pattern(s) (e.g., "FLAG", ["FLAG", "SUM"])
-  - **REMOVE_DOT_COLUMNS** (bool): Optional removal of intermediate processing columns (default True)
-  - Enhanced statistics showing column counts at each filtering stage
-  - All columns printed alphabetically for verification
-  - Use case: Prepare lightweight example datasets from large parquet files
-
-- **Enhanced analyze_highest_quality_flux()** (`diive/pkgs/flux/hqflux.py`)
-  - **Comprehensive input validation:** 8-point validation (flux type, bounds, data availability, parameters)
-  - **Error handling:** Clear exception messages with context
-  - **Summary dict:** Optional return of analysis summary (`return_summary=True` returns tuple with dict)
-    - Tracks: total records, valid records, outliers found, outlier percentage, method parameters
-  - **Plot customization:** `figsize` parameter for custom dimensions, `show_percentiles` toggle
-  - **Robust data handling:** Graceful empty data checks before statistical operations
-  - **Backward compatible:** All new features opt-in via default parameters
-  - Use case: Robust flux quality control with configurable validation and optional analysis summaries
-
-- **Self-Heating Correction Example Consolidation** (`examples/flux/selfheating.py`)
-  - Moved example from source to examples folder (single example: `example_selfheating_ch_lae()`)
-  - **Refactored source `_gapfill()` method** (`diive/pkgs/flux/selfheating.py`):
-    - Upgraded to XGBoostTS (faster training, better for non-linear patterns)
-    - Integrated FeatureEngineer (v0.91.0 composition pattern: lag → rolling → timestamps)
-    - Removed MDV fallback (not needed for derived physics variables)
-    - Removed RandomForestTS import (no longer used)
-  - **Performance:** XGBoost converges smoothly over 150 rounds (RMSE: 10.7→1.4 train, 2.6 test)
-  - **Example count:** 70 examples across 35 files (updated runner messaging for clarity)
-
-- **Random Uncertainty Example & Visualization Improvements** (`examples/flux/uncertainty.py`, `diive/pkgs/flux/uncertainty.py`)
-  - **Example consolidation:** Moved from source to examples folder (single example: `example_random_uncertainty_pas20()`)
-  - **Demonstrates 4-method hierarchical uncertainty quantification:**
-    - Method 1: Sliding window (±7 days, ±1 hr) with meteorological similarity
-    - Method 2: Median of similar-flux uncertainties (±5 days, ±1 hr, ±20% similarity)
-    - Method 3: Similar flux range without time window restrictions
-    - Method 4: 5 nearest fluxes by magnitude (fallback for remaining gaps)
-  - **Error propagation refactoring:** Explicit DataFrame creation, separated cumsum operations, improved efficiency
-  - **New reporting methods:**
-    - `report_method_summary()` — Formatted tables showing method distribution, record counts, uncertainty statistics
-    - `report_cumulative_uncertainty_propagation()` — Enhanced table with cumulative flux, bounds, and ranges
-  - **Plot improvements:**
-    - `showplot_random_uncertainty()` — Better spacing (hspace=0.25, wspace=0.25), explicit margins, descriptive titles
-    - `showplot_cumulative_uncertainty_propagation()` — Redesigned with fill_between for uncertainty bands, better legend
-  - **Console output:** Nicely formatted pandas DataFrames for all reports (ASCII-compatible units)
-  - **Spacing optimizations:** 17-29% reduction in whitespace, tighter subplots, better use of figure area
-  - **Cleaned source:** Removed example() and if __name__ block
-  - **Exports added:** `RandomUncertaintyPAS20` (also as `random_uncertainty_pas20`)
-  - **Example count:** 71 examples across 36 files (PAS20/FLUXNET standard uncertainty quantification)
-
-- **USTAR Threshold Example Consolidation** (`examples/flux/ustarthreshold.py`)
-  - Moved 3 examples from source to examples folder:
-    - `example_ustar_detection_mpt()` — Papale et al. (2006) multiple temperature class threshold detection with bootstrapping
-    - `example_ustar_threshold_constant_scenarios()` — Create flux scenarios with 7 different USTAR thresholds
-    - `example_flag_multiple_constant_ustar_thresholds()` — Apply CUT_16/CUT_50/CUT_84 QA/QC flags for uncertainty scenarios
-  - **Demonstrates:** USTAR filtering workflow (detection → scenario creation → flagging)
-  - **Use case:** Prepare filtered flux datasets for gap-filling with multiple turbulence thresholds
-  - **Cleaned source:** Removed example(), example_scenarios(), example_flag_constant_ustar_threshold() and if __name__ block
-  - **Example count:** 74 examples across 37 files (3 USTAR examples added to flux category)
-
-- **Harmonic (Spectral) Analysis Examples** (`examples/timeseries/harmonic.py`)
-  - Two spectral analysis examples for CO₂ flux (NEE_CUT_REF_f) time series
-  - Short-time Fourier transform spectrograms revealing temporal evolution of power spectral density
-  - Frequency interpretation: Primary 24h photosynthesis cycle (0.02) + secondary harmonics (0.04, 0.06) + weather noise (0.1)
-  - Seasonal context: Strong harmonic bands during growing season (Apr-Sep), weak during winter dormancy (Jan-Mar)
-  - **Updated example count:** 76 examples across 38 files (2 harmonic examples added to timeseries category)
-
-### Documentation
-
-- **PEP 8 alias standardization** — Updated all top-level aliases to snake_case convention.
-- **Enhanced docstrings** — Added scenario guidance, typical parameter values, and ecological context.
-  - **TimeSince class:** Comprehensive NumPy-style docstring with Parameters, Attributes, Methods, Examples, and Notes sections
-  - **Examples:** Updated to reference class documentation and explain parameter choices
-- **Notebook reorganization** — Consolidated 17 topic folders into 9 domain folders.
-- **Examples README:** Created dedicated `examples/README.md` with structure, quick start, finding help, and phase descriptions
-- **CLAUDE.md updates:** 
-  - Updated `pkgs/createvar/` section to list all 8 modules (air, conversions, daynightflag, laggedvariants, noise, potentialradiation, timesince, vpd)
-  - Updated examples section: 27 examples → 62 examples with detailed breakdown
-  - Added "Recent Implementations" items 11-12: TimeSince class and examples consolidation
-
----
+### API & Visualization
+- **Plotting API:** All visualization aliases now use `plot_` prefix (breaking change)
+- **HeatmapXYZ:** Refactored to accept pre-aggregated input
+- **ScatterXY:** Enhanced with color-coding, bin aggregation, trend overlays
 
 ### Breaking Changes
 
-1. Gap-filling API: Feature parameters no longer accepted (moved to FeatureEngineer)
-2. Plotting aliases: Old names deprecated in favor of `plot_*` prefix
-3. DailyCorrelation: Refactored from function to class-based API
-4. HeatmapXYZ: Now requires pre-aggregated input
-
-### Testing
-
-* Added `create_noisy_time_series()` function for generating test data (1).
-
-### Documentation and Notebooks
-
-* **SeasonalTrendDecomposition notebook**: Restructured with proper example numbering and organization.
-    - Fixed undefined variable `nee_full` and STL parameter compatibility errors
-    - Changed STL calls with large seasonal periods to harmonic method (no series length constraints)
-    - Reorganized into tutorial section + 5 sequential examples (detrending, anomaly detection, method comparison,
-      climate change, ecosystem recovery) (17)
-* **HeatmapXYZ notebook**: Simplified from 5+ examples to 3 (Quick Start, Traditional, Advanced). Fixed bug:
-  `GridAggregator.df_long`
-  → `df_agg_long` (was causing silent re-aggregation to mean) (4, 7).
-* **Notebook directory reorganization**: Consolidated 17 topic folders into 9 domain folders (`io/`, `timeseries/`,
-  `variables/`, `qc/`,
-  `analyses/`, `gapfilling/`, `flux/`, `plotting/`, `workbench/`); updated links in `OVERVIEW.ipynb` and `README.md`.
-
-### Unit tests
-
-* **Testing**: Currently, 104/104 unit tests are passing successfully.
-
-### References
-
-- (1) `diive.pkgs.testing.create_noisy_time_series`
-- (2) `diive.core.plotting.heatmap_base.HeatmapBase`, `diive.core.plotting.heatmap_datetime.HeatmapDateTime`
-- (3) `diive.core.plotting.heatmap_xyz.HeatmapXYZ`
-- (4) `notebooks/plotting/HeatmapXYZ.ipynb`
-- (5) `tests/test_heatmap_xyz.py`
-- (6) `diive.core.plotting.heatmap_xyz.HeatmapXYZ.from_gridaggregator`
-- (7) `notebooks/plotting/HeatmapXYZ.ipynb` (notebook simplification and examples)
-- (8) `diive.core.plotting.hexbin_plot.HexbinPlot`, `tests/test_hexbin_plot.py`
-- (9) `diive.core.ml.common.MlRegressorGapFillingBase`
-- (10) `diive.core.plotting.dielcycle.DielCycle`
-- (11) `diive.core.ml.common.plot_observed_predicted`, `plot_feature_importance`, `plot_prediction_residuals_error_regr`
-- (12) `diive.core.ml.common.MlRegressorGapFillingBase._rolling_features`, `diive.pkgs.gapfilling.xgboost_ts.XGBoostTS`
-- (13) `diive.core.ml.common.MlRegressorGapFillingBase._differencing_features`,
-  `diive.pkgs.gapfilling.xgboost_ts.XGBoostTS`
-- (15) `diive.core.ml.common.MlRegressorGapFillingBase._ema_features`, `diive.pkgs.gapfilling.xgboost_ts.XGBoostTS`
-- (16) (reserved)
-- (17) `diive.pkgs.analyses.seasonaltrend.SeasonalTrendDecomposition`,
-  `diive.pkgs.analyses.seasonaltrend.example_seasonaltrend_decomposition`, `diive.core.times.decomposition_utils`,
-  `diive.pkgs.timeseries.harmonic`, `diive.core.plotting.seasonaltrend`,
-  `notebooks/analyses/SeasonalTrendDecomposition.ipynb`
-- (18) `diive.core.ml.feature_engineer.FeatureEngineer` (enhanced __init__ docstring with scenario guidance, typical
-  values, time series context)
-- (19) `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain.level41_longterm_random_forest`,
-  `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain.level41_longterm_xgboost` (comprehensive CO2
-  flux examples)
-- (20) `diive.pkgs.gapfilling.xgboost_ts.XGBoostTS` (enhanced min_child_weight documentation)
+- Gap-filling API: Feature parameters moved to FeatureEngineer (not accepted in models)
+- Plotting aliases: Old names deprecated in favor of `plot_*` prefix
+- DailyCorrelation: Refactored from function to class-based API
+- HeatmapXYZ: Now requires pre-aggregated input
 
 ## v0.90.0 | 13 Jan 2026
 
