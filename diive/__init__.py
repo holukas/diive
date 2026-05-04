@@ -82,6 +82,8 @@ from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS as randomforest
 from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
 from diive.pkgs.gapfilling.randomforest_ts import QuickFillRFTS as quick_fill_rfts
 from diive.pkgs.gapfilling.randomforest_ts import QuickFillRFTS
+from diive.pkgs.gapfilling.randomforest_ts import OptimizeParamsRFTS as optimize_params_rfts
+from diive.pkgs.gapfilling.randomforest_ts import OptimizeParamsRFTS
 from diive.pkgs.gapfilling.xgboost_ts import XGBoostTS as xgboost_ts
 from diive.pkgs.gapfilling.xgboost_ts import XGBoostTS
 from diive.pkgs.gapfilling.mds import FluxMDS as flux_mds
@@ -194,6 +196,8 @@ __all__ = [
     'RandomForestTS',
     'quick_fill_rfts',
     'QuickFillRFTS',
+    'optimize_params_rfts',
+    'OptimizeParamsRFTS',
 
     # Packages: Gap-filling (Tier 2)
     'xgboost_ts',

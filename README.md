@@ -73,7 +73,7 @@ For the complete list of available aliases, see `diive.__all__`.
 
 ## Examples
 
-**79 executable example scripts** demonstrating common workflows are organized by topic in the `examples/` folder:
+**80 executable example scripts** demonstrating common workflows are organized by topic in the `examples/` folder:
 
 **Run all examples at once (parallelized, ~2.7x speedup):**
 ```bash
@@ -96,11 +96,11 @@ python examples/flux/common.py                       # Flux variable detection (
 python examples/flux/hqflux.py                       # CO2 flux quality analysis with Hampel filter (1 example)
 ```
 
-**Example categories (79 total):**
+**Example categories (80 total):**
 - **Visualization** (22): heatmap_datetime, hexbin, timeseries, cumulative, dielcycle, histogram, ridgeline, scatter
 - **Analyses** (8): correlation, decoupling, gapfinder, gridaggregator, histogram, optimumrange, quantiles, seasonaltrend
 - **Data Processing** (32): binary extraction, corrections (setto, offsetcorrection), createvar (air, conversions, daynightflag, laggedvariants, noise, potentialradiation, timesince, vpd)
-- **Gap-Filling** (6): linear_interpolation, mds, mds_comparison, randomforest_ts (2 examples)
+- **Gap-Filling** (7): linear_interpolation, mds, mds_comparison, randomforest_ts (3 examples: full, quick, optimize)
 - **Eddy Covariance & Flux** (9): fluxdetectionlimit, lag, windrotation, hqflux, selfheating, uncertainty, ustarthreshold (3 examples)
 - **Spectral Analysis** (2): harmonic (spectrogram analysis)
 - **Fits** (1): fitter

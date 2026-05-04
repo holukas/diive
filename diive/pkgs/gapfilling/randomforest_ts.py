@@ -20,7 +20,6 @@ Kudos, optimization of hyper-parameters, grid search
 - https://www.kaggle.com/code/carloscliment/random-forest-regressor-and-gridsearch
 
 """
-import numpy as np
 import pandas as pd
 from pandas import DataFrame, Series
 from sklearn.ensemble import RandomForestRegressor  # Import the model we are using
@@ -45,23 +44,24 @@ class OptimizeParamsRFTS:
                  df: DataFrame,
                  target_col: str,
                  **rf_params: dict):
-        """
-        Args:
-            df: dataframe of target and predictor time series
-            target_col: name of target in *df*, all variables that are not *target* are
-                used as predictors
-            **rf_params: dict of parameters for random forest model, where parameter ranges are
-                provided as lists, e.g.
-                    rf_params = {
-                        'n_estimators': list(range(2, 12, 2)),
-                        'criterion': ['root_mean_squared_error'],
-                        'max_depth': [None],
-                        'min_samples_split': list(range(2, 12, 2)),
-                        'min_samples_leaf': [1, 3, 6]
-                    }
+        """Optimize Random Forest hyperparameters using GridSearchCV with time series CV.
 
-                For an overview of RF parameters see:
-                https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestRegressor.html
+        Args:
+            df: DataFrame with target and predictor time series (must have complete rows)
+            target_col: Column name of target variable
+            **rf_params: Parameter ranges to test as lists, e.g.:
+                {
+                    'n_estimators': [10, 50, 100, 200],
+                    'max_depth': [5, 10, 15, None],
+                    'min_samples_split': [2, 5, 10],
+                    'min_samples_leaf': [1, 2, 4]
+                }
+
+        Methods:
+            optimize(): Run GridSearchCV to find best parameters
+            report_optimization(top_n=5): Print comprehensive report with recommendations
+
+        See: https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestRegressor.html
         """
         self.model_df = df.copy()
         self.target_col = target_col
@@ -148,6 +148,97 @@ class OptimizeParamsRFTS:
         # Stats
         self._scores = prediction_scores(predictions=grid_predictions,
                                          targets=y_test)
+
+    def report_optimization(self, top_n: int = 5) -> None:
+        """Print comprehensive optimization report with recommendations.
+
+        Args:
+            top_n: Number of top parameter combinations to show (default 5)
+        """
+        if not self._best_params:
+            print("ERROR: Run optimize() first")
+            return
+
+        print("\n" + "=" * 80)
+        print("RANDOM FOREST HYPERPARAMETER OPTIMIZATION REPORT")
+        print("=" * 80)
+
+        # Tested parameter ranges
+        print("\n✓ PARAMETER RANGES TESTED")
+        print("-" * 80)
+        for param, values in sorted(self.params.items()):
+            if isinstance(values, list):
+                if len(values) > 5:
+                    print(f"  {param:<25} : {values[0]} to {values[-1]} ({len(values)} values)")
+                else:
+                    print(f"  {param:<25} : {values}")
+            else:
+                print(f"  {param:<25} : {values}")
+
+        # Best parameters section
+        print("\n✓ BEST PARAMETERS (GridSearchCV winner)")
+        print("-" * 80)
+        for param, value in sorted(self._best_params.items()):
+            print(f"  {param:<25} = {value}")
+
+        # Best performance section
+        print("\n✓ BEST MODEL PERFORMANCE (test set)")
+        print("-" * 80)
+        print(f"  R² Score              = {self._scores['r2']:>10.4f}  (0-1 scale, higher is better)")
+        print(f"  MAE                   = {self._scores['mae']:>10.4f}  (mean absolute error)")
+        print(f"  RMSE                  = {self._scores['rmse']:>10.4f}  (root mean squared error)")
+
+        # Top N combinations
+        print(f"\n✓ TOP {top_n} PARAMETER COMBINATIONS (by CV score)")
+        print("-" * 80)
+        top_results = self._cv_results.nsmallest(top_n, 'rank_test_score')
+        for idx, (_, row) in enumerate(top_results.iterrows(), 1):
+            print(f"\n  Rank {idx}:")
+            mean_score = -row['mean_test_score']  # Negate because neg_mean_squared_error
+            print(f"    CV Score: {mean_score:.6f} (lower MSE is better)")
+            for param in sorted(self.params.keys()):
+                param_key = f'param_{param}'
+                if param_key in row:
+                    print(f"    {param:<22} = {row[param_key]}")
+
+        # Parameter sensitivity analysis
+        print("\n✓ PARAMETER SENSITIVITY (which parameters matter most)")
+        print("-" * 80)
+        for param in sorted(self.params.keys()):
+            param_key = f'param_{param}'
+            if param_key in self._cv_results.columns:
+                unique_values = self._cv_results[param_key].unique()
+                if len(unique_values) > 1:
+                    print(f"  {param:<25} : {len(unique_values)} values tested")
+
+        # Recommendation section
+        print("\n" + "=" * 80)
+        print("RECOMMENDATION FOR PRODUCTION")
+        print("=" * 80)
+        n_est = self._best_params.get('n_estimators', 100)
+        max_d = self._best_params.get('max_depth', None)
+        min_split = self._best_params.get('min_samples_split', 5)
+        min_leaf = self._best_params.get('min_samples_leaf', 2)
+        r2 = self._scores['r2']
+
+        print(f"""
+Use these parameters for gap-filling:
+
+    rfts = RandomForestTS(
+        input_df=df_engineered,
+        target_col='<your_target>',
+        n_estimators={n_est},
+        max_depth={max_d},
+        min_samples_split={min_split},
+        min_samples_leaf={min_leaf},
+        verbose=1,
+        random_state=42
+    )
+
+Expected performance: R² ≈ {r2:.4f}
+"""
+        )
+        print("=" * 80 + "\n")
 
 
 class RandomForestTS(MlRegressorGapFillingBase):
@@ -358,59 +449,3 @@ class QuickFillRFTS:
 
     def get_flag(self) -> Series:
         return self.rfts.get_flag()
-
-
-def _example_optimize():
-    from diive.configs.exampledata import load_exampledata_parquet
-
-    # Setup, user settings
-    TARGET_COL = 'NEE_CUT_REF_orig'
-    subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
-
-    # Example data
-    df = load_exampledata_parquet()
-    subset = df[subsetcols].copy()
-    _subset = df.index.year >= 2020
-    subset = subset[_subset].copy()
-
-    # Random forest parameters
-    rf_params = {
-        'n_estimators': list(range(10, 20, 2)),
-        # 'n_estimators': list(range(100, 12, 2)),
-        'criterion': ['squared_error'],
-        'max_depth': [None],
-        'min_samples_split': [2, 4, 8, 16],
-        # 'min_samples_split': list(range(2, 12, 2)),
-        'min_samples_leaf': [1, 2, 4, 8],
-
-        # 'min_samples_leaf': list(range(1, 6, 1))
-    }
-
-    # Optimization
-    opt = OptimizeParamsRFTS(
-        df=subset,
-        target_col=TARGET_COL,
-        **rf_params
-    )
-
-    opt.optimize()
-
-    print(opt.best_params)
-    print(opt.scores['r2'])
-    # print(opt.cv_results)
-
-    best = opt.cv_results.copy()
-    best = best.sort_values(by='rank_test_score')
-    print(best)
-    # print(best.iloc[0].T)
-
-    # print(opt.best_score)
-    # print(opt.cv_n_splits)
-
-
-if __name__ == '__main__':
-    _example_quickfill()
-    # _example_rfts()
-    # _example_optimize()
-
-

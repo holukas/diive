@@ -12,7 +12,8 @@
 - **FluxMDS memory optimization** — 4.0x speedup through vectorization + in-place updates. Eliminated DataFrame copies at each quality level. Results bit-identical to original reference implementation.
 - **Harmonic spectral analysis** — Two examples showing CO₂ flux periodicities (24h photosynthesis, 12h/8h harmonics, 5h noise) with frequency interpretation for gap-filling validation.
 - **Time series analysis** — Refactored DailyCorrelation, StratifiedAnalysis, GapFinder, GridAggregator, FindOptimumRange, percentiles101, SeasonalTrendDecomposition.
-- **Examples consolidation (Phase 2)** — 79 executable examples across 39 files. Moved _example_rfts() and _example_quickfill() from source to `examples/gap_filling/randomforest_ts.py`: example_randomforest_nee_gapfilling() (production settings + cumulative flux plot) and example_quickfill_rapid_prototyping() (exploratory fast gap-filling).
+- **Examples consolidation (Phase 2+3)** — 80 executable examples across 39 files. Consolidated all RandomForestTS examples from source to `examples/gap_filling/randomforest_ts.py`: example_randomforest_nee_gapfilling() (production settings + cumulative flux), example_quickfill_rapid_prototyping() (fast exploratory), and example_randomforest_hyperparameter_optimization() (GridSearchCV tuning).
+- **OptimizeParamsRFTS enhancements** — Added `report_optimization()` method providing clear output with: tested parameter ranges, best parameters, performance metrics (R², MAE, RMSE), top N parameter combinations, parameter sensitivity, and production-ready code snippet with recommendations.
 - **Test speedup** — RandomForest gap-filling tests 60-70% faster (2.8s vs 6s).
 
 ### New Classes & Functions

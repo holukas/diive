@@ -160,6 +160,49 @@ def example_quickfill_rapid_prototyping():
     dv.HeatmapDateTime(series=gapfilled).show()
 
 
+def example_randomforest_hyperparameter_optimization():
+    """Hyperparameter optimization for Random Forest gap-filling.
+
+    Demonstrates OptimizeParamsRFTS for tuning Random Forest hyperparameters
+    using GridSearchCV with time series cross-validation. Tests multiple
+    parameter combinations to find optimal settings for gap-filling accuracy.
+
+    Uses 2020 data only for faster optimization testing.
+
+    Returns:
+        None (prints best parameters, R² score, and cross-validation results)
+    """
+    TARGET_COL = 'NEE_CUT_REF_orig'
+    subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
+
+    # Example data
+    df = dv.load_exampledata_parquet()
+    subset = df[subsetcols].copy()
+    _subset = df.index.year >= 2020
+    subset = subset[_subset].copy()
+
+    # Random forest parameters (minimal for speed: ~20 combinations × 10 CV = 200 fits)
+    rf_params = {
+        'n_estimators': [3, 6],
+        'max_depth': [4, 8],
+        'min_samples_split': [2, 10],
+        'min_samples_leaf': [1, 5],
+    }
+
+    # Optimization
+    opt = dv.OptimizeParamsRFTS(
+        df=subset,
+        target_col=TARGET_COL,
+        **rf_params
+    )
+
+    opt.optimize()
+
+    # Print comprehensive optimization report with recommendations
+    opt.report_optimization(top_n=3)
+
+
 if __name__ == '__main__':
     # example_randomforest_nee_gapfilling()
-    example_quickfill_rapid_prototyping()
+    # example_quickfill_rapid_prototyping()
+    example_randomforest_hyperparameter_optimization()
