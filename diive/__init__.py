@@ -1,16 +1,19 @@
 from diive.configs.exampledata import load_exampledata_parquet as load_exampledata_parquet
 from diive.core.dfun.frames import transform_yearmonth_matrix_to_longform as transform_yearmonth_matrix_to_longform
+from diive.core.dfun.stats import sstats as sstats
 from diive.core.io.filereader import ReadFileType as readfiletype
 from diive.core.io.filereader import search_files as search_files
 from diive.core.io.files import load_parquet as load_parquet
 from diive.core.io.files import save_parquet as save_parquet
 
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime as plot_heatmap_datetime
+from diive.core.plotting.heatmap_datetime import HeatmapDateTime
 from diive.core.plotting.heatmap_datetime import HeatmapYearMonth as plot_heatmap_year_month
 from diive.core.plotting.heatmap_xyz import HeatmapXYZ as plot_heatmap_xyz
 from diive.core.plotting.hexbin import HexbinPlot as plot_hexbin
 from diive.core.plotting.ridgeline import RidgeLinePlot as plot_ridgeline
 from diive.core.plotting.timeseries import TimeSeries as plot_time_series
+from diive.core.plotting.timeseries import TimeSeries
 from diive.core.plotting.cumulative import Cumulative as plot_cumulative
 from diive.core.plotting.cumulative import CumulativeYear as plot_cumulative_year
 from diive.core.plotting.dielcycle import DielCycle as plot_diel_cycle
@@ -93,14 +96,17 @@ __all__ = [
     'readfiletype',
     'search_files',
 
-    # Core: DataFrames
+    # Core: DataFrames & Statistics
     'transform_yearmonth_matrix_to_longform',
+    'sstats',
 
     # Core: I/O
     'load_parquet',
     'save_parquet',
 
     # Core: Plotting
+    'HeatmapDateTime',
+    'TimeSeries',
     'plot_heatmap_datetime',
     'plot_heatmap_year_month',
     'plot_heatmap_xyz',

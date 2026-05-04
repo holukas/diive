@@ -324,7 +324,7 @@ class QuickFillRFTS:
             features_stl_seasonal_period=None,
             features_stl_exclude_cols=None,
             features_stl_components=None,
-            vectorize_timestamps=False,  # No timestamp features (speed)
+            vectorize_timestamps=True,
             add_continuous_record_number=False,  # No extra features (speed)
             sanitize_timestamp=False,  # Skip validation (speed)
         )
@@ -335,7 +335,7 @@ class QuickFillRFTS:
             input_df=df_engineered,
             target_col=self.target_col,
             verbose=True,
-            n_estimators=3,  # Minimal trees for speed
+            n_estimators=9,  # Minimal trees for speed
             random_state=42,
             min_samples_split=10,  # Large minimum for fast trees
             min_samples_leaf=5,  # Large minimum for fast trees
@@ -358,53 +358,6 @@ class QuickFillRFTS:
 
     def get_flag(self) -> Series:
         return self.rfts.get_flag()
-
-
-def _example_quickfill():
-    # Setup, user settings
-    TARGET_COL = 'NEE_CUT_REF_orig'
-    subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
-
-    # Setup, imports
-    import numpy as np
-    import importlib.metadata
-    from datetime import datetime
-    from diive.configs.exampledata import load_exampledata_parquet
-    from diive.core.plotting.timeseries import TimeSeries  # For simple (interactive) time series plotting
-    from diive.core.dfun.stats import sstats  # Time series stats
-    from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-    # from diive.pkgs.gapfilling.randomforest_ts import QuickFillRFTS
-    dt_string = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"This page was last modified on: {dt_string}")
-    version_diive = importlib.metadata.version("diive")
-    print(f"diive version: v{version_diive}")
-
-    # Show docstring for QuickFillRFTS
-    print(QuickFillRFTS.__name__)
-    print(QuickFillRFTS.__doc__)
-
-    # Example data
-    df = load_exampledata_parquet()
-
-    # Subset with target and features
-    # Only High-quality (QCF=0) measured NEE used for model training in this example
-    lowquality = df["QCF_NEE"] > 0
-    df.loc[lowquality, TARGET_COL] = np.nan
-    df = df[subsetcols].copy()
-    df.describe()
-    statsdf = sstats(df[TARGET_COL])
-    print(statsdf)
-    TimeSeries(series=df[TARGET_COL]).plot()
-
-    # QuickFill example
-    qf = QuickFillRFTS(df=df, target_col=TARGET_COL)
-    qf.fill()
-    qf.report()
-    gapfilled = qf.get_gapfilled_target()
-
-    # Plot
-    HeatmapDateTime(series=df[TARGET_COL]).show()
-    HeatmapDateTime(series=gapfilled).show()
 
 
 def _example_optimize():

@@ -6,7 +6,7 @@ time series data. Effective for non-linear relationships and feature interaction
 import pandas as pd
 
 import diive as dv
-
+from diive.core.dfun.stats import sstats  # Time series stats
 
 def example_randomforest_nee_gapfilling():
     """Random Forest gap-filling for CO₂ flux (NEE) with feature engineering.
@@ -105,5 +105,61 @@ def example_randomforest_nee_gapfilling():
     print("Finished.")
 
 
+def example_quickfill_rapid_prototyping():
+    """QuickFill: rapid gap-filling using RandomForestTS with minimal features.
+
+    Demonstrates QuickFillRFTS for exploratory/preliminary gap-filling with speed.
+    Uses single lag feature only (immediate past value) and minimal tree complexity
+    for very fast execution (~3 seconds for typical dataset).
+
+    Quality: Low (exploratory only - not for production)
+    Speed: Very fast (~3 seconds)
+    Use case: Quick prototyping, testing, parameter exploration
+
+    Returns:
+        None (prints version info and gap-filling results)
+    """
+    import importlib.metadata
+    from datetime import datetime
+
+    TARGET_COL = 'NEE_CUT_REF_orig'
+    subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
+
+    dt_string = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"This page was last modified on: {dt_string}")
+    version_diive = importlib.metadata.version("diive")
+    print(f"diive version: v{version_diive}")
+
+    # Show docstring for QuickFillRFTS
+    print(dv.QuickFillRFTS.__name__)
+    print(dv.QuickFillRFTS.__doc__)
+
+    # Example data
+    df = dv.load_exampledata_parquet()
+    keep = (df.index.year >= 2020) & (df.index.year <= 2020)
+    df = df[keep].copy()
+
+    # Subset with target and features
+    # Only High-quality (QCF=0) measured NEE used for model training in this example
+    lowquality = df["QCF_NEE"] > 0
+    df.loc[lowquality, TARGET_COL] = pd.NA
+    df = df[subsetcols].copy()
+    df.describe()
+    statsdf = dv.sstats(df[TARGET_COL])
+    print(statsdf)
+    dv.TimeSeries(series=df[TARGET_COL]).plot()
+
+    # QuickFill example
+    qf = dv.QuickFillRFTS(df=df, target_col=TARGET_COL)
+    qf.fill()
+    qf.report()
+    gapfilled = qf.get_gapfilled_target()
+
+    # Plot
+    dv.HeatmapDateTime(series=df[TARGET_COL]).show()
+    dv.HeatmapDateTime(series=gapfilled).show()
+
+
 if __name__ == '__main__':
-    example_randomforest_nee_gapfilling()
+    # example_randomforest_nee_gapfilling()
+    example_quickfill_rapid_prototyping()
