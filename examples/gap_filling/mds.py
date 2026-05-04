@@ -31,7 +31,7 @@ def example_mds_flux_gapfilling():
     df = dv.load_exampledata_parquet()
 
     # Prepare data: use July 2022 for faster example execution
-    # df = df.loc[(df.index.year == 2022)].copy()
+    # df = df.loc[(df.index.year >= 2020) & (df.index.year <= 2023)].copy()
     df = df.loc[(df.index.year == 2022) & (df.index.month == 7)].copy()
 
     # Variables

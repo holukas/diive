@@ -407,76 +407,6 @@ def _example_quickfill():
     HeatmapDateTime(series=gapfilled).show()
 
 
-def _example_rfts():
-    """Example: Random Forest gap-filling with feature engineering"""
-    TARGET_COL = 'NEE_CUT_REF_orig'
-    subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
-    from diive.configs.exampledata import load_exampledata_parquet
-    from diive.core.ml.feature_engineer import FeatureEngineer
-
-    df_orig = load_exampledata_parquet()
-    df = df_orig.copy()
-    keep = (df.index.year >= 2020) & (df.index.year <= 2020)
-    df = df[keep].copy()
-    df = df[subsetcols].copy()
-
-    # Step 1: Engineer features
-    engineer = FeatureEngineer(
-        target_col=TARGET_COL,
-        features_lag=[-1, -1],
-        features_lag_stepsize=1,
-        features_lag_exclude_cols=None,
-        features_rolling=None,
-        features_rolling_exclude_cols=None,
-        features_rolling_stats=None,
-        features_diff=None,
-        features_diff_exclude_cols=None,
-        features_ema=None,
-        features_ema_exclude_cols=None,
-        features_poly_degree=None,
-        features_poly_exclude_cols=None,
-        features_stl=False,
-        features_stl_method='harmonic',
-        features_stl_seasonal_period=None,
-        features_stl_exclude_cols=None,
-        features_stl_components=None,
-        vectorize_timestamps=False,
-        add_continuous_record_number=False,
-        sanitize_timestamp=False
-    )
-    df_engineered = engineer.fit_transform(df)
-
-    # Step 2: Create gap-filling model with engineered features
-    rfts = RandomForestTS(
-        input_df=df_engineered,
-        target_col=TARGET_COL,
-        verbose=1,
-        n_estimators=3,
-        random_state=42,
-        max_depth=None,
-        min_samples_split=5,
-        min_samples_leaf=2,
-        n_jobs=-1
-    )
-
-    # Feature reduction using SHAP importance
-    rfts.reduce_features(shap_threshold_factor=0.5)
-    rfts.report_feature_reduction()
-
-    # Train model
-    rfts.trainmodel(showplot_scores=False, showplot_importance=False)
-    rfts.report_traintest()
-
-    # Gap-fill data
-    rfts.fillgaps(showplot_scores=False, showplot_importance=False)
-    rfts.report_gapfilling()
-
-    observed = df[TARGET_COL]
-    gapfilled = rfts.get_gapfilled_target()
-
-    print("Finished.")
-
-
 def _example_optimize():
     from diive.configs.exampledata import load_exampledata_parquet
 
@@ -529,3 +459,5 @@ if __name__ == '__main__':
     _example_quickfill()
     # _example_rfts()
     # _example_optimize()
+
+

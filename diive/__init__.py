@@ -73,6 +73,8 @@ from diive.pkgs.flux.ustarthreshold import FlagMultipleConstantUstarThresholds a
 from diive.pkgs.flux.ustarthreshold import FlagSingleConstantUstarThreshold as FlagSingleConstantUstarThreshold
 from diive.pkgs.fits.fitter import BinFitterCP as BinFitterCP
 from diive.pkgs.fits.fitter import BinFitterCP as bin_fitter_cp
+from diive.core.ml.feature_engineer import FeatureEngineer as feature_engineer
+from diive.core.ml.feature_engineer import FeatureEngineer
 from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS as randomforest_ts
 from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
 from diive.pkgs.gapfilling.randomforest_ts import QuickFillRFTS as quick_fill_rfts
@@ -176,6 +178,10 @@ __all__ = [
     'FlagSingleConstantUstarThreshold',
     'BinFitterCP',
     'bin_fitter_cp',
+
+    # Core: Machine Learning
+    'feature_engineer',
+    'FeatureEngineer',
 
     # Packages: Gap-filling (Tier 1)
     'randomforest_ts',

@@ -56,7 +56,7 @@ examples/
     ├── [interpolate.py](gap_filling/interpolate.py)            # Linear interpolation gap-filling (2 examples: conservative & generous limits)
     ├── [mds.py](gap_filling/mds.py)                            # Marginal Distribution Sampling (1 example)
     ├── [mds_comparison.py](gap_filling/mds_comparison.py)      # Performance comparison: Original vs Optimized MDS (1 example)
-    ├── randomforest_ts.py         # RandomForestTS examples (TODO - Phase 2)
+    ├── [randomforest_ts.py](gap_filling/randomforest_ts.py)    # Random Forest gap-filling with feature engineering (1 example)
     ├── xgboost_ts.py              # XGBoostTS examples (TODO - Phase 2)
     └── longterm_models.py         # Long-term multi-year models (TODO - Phase 2)
 ```
@@ -68,7 +68,7 @@ examples/
 python examples/run_all_examples.py
 ```
 
-Executes all 77 examples (22 visualization + 8 analysis + 2 binary + 7 corrections + 23 createvar + 4 echires + 7 flux + 4 gap_filling + 2 timeseries + 1 fits) in parallel (4 concurrent workers) with execution time tracking.
+Executes all 78 examples (22 visualization + 8 analysis + 2 binary + 7 corrections + 23 createvar + 4 echires + 7 flux + 5 gap_filling + 2 timeseries + 1 fits) in parallel (4 concurrent workers) with execution time tracking.
 - Shows individual timing for each example
 - Detailed error messages if any fail
 - ~2.7x faster than sequential execution

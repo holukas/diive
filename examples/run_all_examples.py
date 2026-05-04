@@ -56,6 +56,7 @@ EXAMPLE_FILES = [
     'gap_filling/interpolate.py',
     'gap_filling/mds.py',
     'gap_filling/mds_comparison.py',
+    'gap_filling/randomforest_ts.py',
     'timeseries/harmonic.py',
 ]
 
@@ -124,7 +125,7 @@ def run_all_examples():
     total_start = time.time()
 
     print("=" * 80)
-    print(f"Running {len(EXAMPLE_FILES)} example files (77 functions total) in parallel (max {MAX_WORKERS} workers)...")
+    print(f"Running {len(EXAMPLE_FILES)} example files (78 functions total) in parallel (max {MAX_WORKERS} workers)...")
     print("=" * 80 + "\n")
 
     results = {'passed': [], 'failed': [], 'skipped': []}
