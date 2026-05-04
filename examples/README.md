@@ -52,12 +52,12 @@ examples/
 │   ├── [selfheating.py](flux/selfheating.py)                  # Self-heating correction with SCOP methodology (1 example)
 │   ├── [uncertainty.py](flux/uncertainty.py)                  # Random uncertainty quantification (PAS20 method) (1 example)
 │   └── [ustarthreshold.py](flux/ustarthreshold.py)            # USTAR threshold detection and multiple filtering scenarios (3 examples)
-└── gap_filling/           # Gap-filling workflow examples (TODO)
-    ├── quick_start.py             # Simple interpolation + quickfill (TODO)
-    ├── randomforest_ts.py         # RandomForestTS examples (TODO)
-    ├── xgboost_ts.py              # XGBoostTS examples (TODO)
-    ├── longterm_models.py         # Long-term multi-year models (TODO)
-    └── mds_filling.py             # MDS meteorological similarity (TODO)
+└── gap_filling/           # Gap-filling workflow examples
+    ├── [interpolate.py](gap_filling/interpolate.py)            # Linear interpolation gap-filling (2 examples: conservative & generous limits)
+    ├── randomforest_ts.py         # RandomForestTS examples (TODO - Phase 2)
+    ├── xgboost_ts.py              # XGBoostTS examples (TODO - Phase 2)
+    ├── longterm_models.py         # Long-term multi-year models (TODO - Phase 2)
+    └── mds_filling.py             # MDS meteorological similarity (TODO - Phase 2)
 ```
 
 ## Running Examples
@@ -67,7 +67,7 @@ examples/
 python examples/run_all_examples.py
 ```
 
-Executes all 76 examples (22 visualization + 8 analysis + 2 binary + 7 corrections + 23 createvar + 4 echires + 7 flux + 2 timeseries + 1 fits) in parallel (4 concurrent workers) with execution time tracking.
+Executes all 75 examples (22 visualization + 8 analysis + 2 binary + 7 corrections + 23 createvar + 4 echires + 7 flux + 2 gap_filling + 2 timeseries + 1 fits) in parallel (4 concurrent workers) with execution time tracking.
 - Shows individual timing for each example
 - Detailed error messages if any fail
 - ~2.7x faster than sequential execution

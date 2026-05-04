@@ -81,6 +81,7 @@ from diive.pkgs.gapfilling.xgboost_ts import XGBoostTS as xgboost_ts
 from diive.pkgs.gapfilling.xgboost_ts import XGBoostTS
 from diive.pkgs.gapfilling.mds import FluxMDS as flux_mds
 from diive.pkgs.gapfilling.mds import FluxMDS
+from diive.pkgs.gapfilling.interpolate import linear_interpolation
 from diive.pkgs.binary.extract import get_encoded_value_from_int as get_encoded_value_from_int
 from diive.pkgs.binary.extract import get_encoded_value_series as get_encoded_value_series
 
