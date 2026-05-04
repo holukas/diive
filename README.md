@@ -96,7 +96,7 @@ python examples/flux/common.py                       # Flux variable detection (
 python examples/flux/hqflux.py                       # CO2 flux quality analysis with Hampel filter (1 example)
 ```
 
-**Example categories (80 total):**
+**Example categories (80 total, 42 files):**
 - **Visualization** (22): heatmap_datetime, hexbin, timeseries, cumulative, dielcycle, histogram, ridgeline, scatter
 - **Analyses** (8): correlation, decoupling, gapfinder, gridaggregator, histogram, optimumrange, quantiles, seasonaltrend
 - **Data Processing** (32): binary extraction, corrections (setto, offsetcorrection), createvar (air, conversions, daynightflag, laggedvariants, noise, potentialradiation, timesince, vpd)
