@@ -54,6 +54,8 @@ EXAMPLE_FILES = [
     'flux/uncertainty.py',
     'flux/ustarthreshold.py',
     'gap_filling/interpolate.py',
+    'gap_filling/mds.py',
+    'gap_filling/mds_comparison.py',
     'timeseries/harmonic.py',
 ]
 
@@ -122,7 +124,7 @@ def run_all_examples():
     total_start = time.time()
 
     print("=" * 80)
-    print(f"Running {len(EXAMPLE_FILES)} example files (75 functions total) in parallel (max {MAX_WORKERS} workers)...")
+    print(f"Running {len(EXAMPLE_FILES)} example files (77 functions total) in parallel (max {MAX_WORKERS} workers)...")
     print("=" * 80 + "\n")
 
     results = {'passed': [], 'failed': [], 'skipped': []}

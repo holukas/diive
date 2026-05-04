@@ -9,6 +9,7 @@
 - **Standalone FeatureEngineer** — Separated feature engineering from gap-filling. 8-stage pipeline (lag→rolling→diff→EMA→poly→STL→timestamps→record_number). Pre-engineer once, reuse across models. ⚠️ **Breaking change:** RandomForestTS/XGBoostTS now accept only pre-engineered data.
 - **Long-term XGBoost gap-filling** — Added `level41_longterm_xgboost()` with same architecture as Random Forest for fair comparison.
 - **SHAP-based feature reduction** — Replaced permutation importance with SHAP values.
+- **FluxMDS memory optimization** — 4.0x speedup through vectorization + in-place updates. Eliminated DataFrame copies at each quality level. Results bit-identical to original reference implementation.
 - **Harmonic spectral analysis** — Two examples showing CO₂ flux periodicities (24h photosynthesis, 12h/8h harmonics, 5h noise) with frequency interpretation for gap-filling validation.
 - **Time series analysis** — Refactored DailyCorrelation, StratifiedAnalysis, GapFinder, GridAggregator, FindOptimumRange, percentiles101, SeasonalTrendDecomposition.
 - **Examples consolidation** — 76 executable examples across 38 files (22 visualization + 8 analysis + 32 data processing + 11 flux/echires + 2 spectral + 1 fits).

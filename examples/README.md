@@ -54,10 +54,11 @@ examples/
 │   └── [ustarthreshold.py](flux/ustarthreshold.py)            # USTAR threshold detection and multiple filtering scenarios (3 examples)
 └── gap_filling/           # Gap-filling workflow examples
     ├── [interpolate.py](gap_filling/interpolate.py)            # Linear interpolation gap-filling (2 examples: conservative & generous limits)
+    ├── [mds.py](gap_filling/mds.py)                            # Marginal Distribution Sampling (1 example)
+    ├── [mds_comparison.py](gap_filling/mds_comparison.py)      # Performance comparison: Original vs Optimized MDS (1 example)
     ├── randomforest_ts.py         # RandomForestTS examples (TODO - Phase 2)
     ├── xgboost_ts.py              # XGBoostTS examples (TODO - Phase 2)
-    ├── longterm_models.py         # Long-term multi-year models (TODO - Phase 2)
-    └── mds_filling.py             # MDS meteorological similarity (TODO - Phase 2)
+    └── longterm_models.py         # Long-term multi-year models (TODO - Phase 2)
 ```
 
 ## Running Examples
@@ -67,7 +68,7 @@ examples/
 python examples/run_all_examples.py
 ```
 
-Executes all 75 examples (22 visualization + 8 analysis + 2 binary + 7 corrections + 23 createvar + 4 echires + 7 flux + 2 gap_filling + 2 timeseries + 1 fits) in parallel (4 concurrent workers) with execution time tracking.
+Executes all 77 examples (22 visualization + 8 analysis + 2 binary + 7 corrections + 23 createvar + 4 echires + 7 flux + 4 gap_filling + 2 timeseries + 1 fits) in parallel (4 concurrent workers) with execution time tracking.
 - Shows individual timing for each example
 - Detailed error messages if any fail
 - ~2.7x faster than sequential execution
@@ -89,12 +90,16 @@ python examples/visualization/heatmap_datetime.py
 
 Displays heatmaps in vertical/horizontal orientations, year-month aggregations with ranks, and colormap previews.
 
-**Gap-Filling (TODO - Phase 2):**
+**Gap-Filling:**
 ```bash
-python examples/gap_filling/quick_start.py
+python examples/gap_filling/mds.py
+python examples/gap_filling/mds_comparison.py
 ```
 
-Demonstrates simple interpolation and quick Random Forest gap-filling.
+Gap-filling methods with comprehensive examples:
+- Linear interpolation for conservative gap-filling
+- Marginal Distribution Sampling (MDS) with meteorological similarity
+- Performance comparison of optimized vs original MDS implementation (4.0x speedup with bit-identical results)
 
 **Flux Quality & Analysis (`examples/flux/`):**
 ```bash

@@ -168,6 +168,40 @@ print(f"Outliers found: {summary['outliers_found']} "
 
 ---
 
+## Gap-Filling Methods
+
+### Meteorological Data Similarity (FluxMDS)
+
+The optimized `FluxMDS` class uses meteorological similarity to fill ecosystem flux gaps:
+
+- **No model training required** — Pure meteorological approach without machine learning
+- **4.0x speedup** — Vectorized NumPy operations with memory-efficient in-place updates
+- **Hierarchical quality levels** — 60+ progressively relaxed criteria (7 days strict → 140+ days relaxed)
+- **Bit-identical results** — Backward compatible with original reference implementation
+- **Side-by-side validation** — Use `mds_comparison.py` example to benchmark performance
+
+Example: Gap-fill CO2 flux using meteorological similarity:
+
+```python
+from diive.pkgs.gapfilling.mds import FluxMDS
+
+mds = FluxMDS(
+    df=df,
+    flux='NEE_CUT_REF',
+    swin='SW_IN', ta='TA', vpd='VPD',
+    swin_tol=[20, 50],  # Low/high radiation tolerance
+    ta_tol=2.5, vpd_tol=0.5,
+    verbose=1
+)
+mds.run()
+
+# Gap-filled values and quality flags
+gapfilled = mds.get_gapfilled_target()
+quality_flags = mds.get_flag()
+```
+
+---
+
 ## Package Structure
 
 ```
@@ -205,7 +239,7 @@ diive/
 | `diive.core.plotting`            | `HeatmapDateTime`, `HeatmapXYZ`, `HexbinPlot`, `TimeSeries`, `ScatterXY`, `HistogramPlot`, `DielCycle`, `RidgeLinePlot`, `CumulativeYear`     | Comprehensive visualization suite covering heatmaps, time series, scatter, histograms, diurnal cycles, ridge lines, hexbin plots, and cumulative plots                     |
 | `diive.core.times`               | `TimestampSanitizer`, `DetectFrequency`, `vectorize_timestamps()`, `continuous_timestamp_freq()`                                              | Sanitize and validate timestamps, detect/infer data frequency, vectorize time attributes, resample diel cycles                                                             |
 | `diive.core.dfun`                | `sstats()`, `fit_to_bins_linreg()`, `fit_to_bins_polyreg()`                                                                                   | DataFrame statistics, linear/polynomial bin fitting, regression utilities                                                                                                  |
-| `diive.pkgs.gapfilling`          | `XGBoostTS`, `RandomForestTS`, `QuickFillRFTS`, `LongTermGapFillingRandomForestTS`, `LongTermGapFillingXGBoostTS`, `FluxMDS`                  | Fill time series gaps with XGBoost, Random Forest (standard and long-term multi-year), MDS, or linear interpolation                                                        |
+| `diive.pkgs.gapfilling`          | `XGBoostTS`, `RandomForestTS`, `QuickFillRFTS`, `LongTermGapFillingRandomForestTS`, `LongTermGapFillingXGBoostTS`, `FluxMDS`                  | Fill time series gaps with XGBoost, Random Forest (standard and long-term multi-year), MDS (4.0x optimized), or linear interpolation                                       |
 | `diive.pkgs.outlierdetection`    | `HampelDaytimeNighttime`, `zScore`, `zScoreDaytimeNighttime`, `LocalOutlierFactorAllData`, `AbsoluteLimits`, `AbsoluteLimitsDaytimeNighttime` | Detect and flag outliers using Hampel filter, z-score, LOF, absolute limits, local SD, manual removal, or stepwise combinations                                            |
 | `diive.pkgs.flux`                | `FluxProcessingChain`                                                                                                                         | Post-process eddy covariance fluxes: Level-2 quality flags, storage correction, USTAR filtering, gap-filling (RF/XGBoost/MDS), self-heating correction                     |
 | `diive.pkgs.fluxprocessingchain` | `FluxProcessingChain`                                                                                                                         | Orchestrate a complete Level-2 → Level-4 flux processing workflow in a single pipeline                                                                                     |
