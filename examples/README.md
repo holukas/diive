@@ -57,7 +57,7 @@ examples/
     ├── [mds.py](gap_filling/mds.py)                            # Marginal Distribution Sampling (1 example)
     ├── [mds_comparison.py](gap_filling/mds_comparison.py)      # Performance comparison: Original vs Optimized MDS (1 example)
     ├── [randomforest_ts.py](gap_filling/randomforest_ts.py)    # Random Forest gap-filling with harmonized feature engineering (3 examples)
-    ├── [xgboost_ts.py](gap_filling/xgboost_ts.py)              # XGBoost gap-filling with identical feature engineering for direct comparison (1 example)
+    ├── [xgboost_ts.py](gap_filling/xgboost_ts.py)              # XGBoost gap-filling with hyperparameter optimization (2 examples)
     ├── [comparison.py](gap_filling/comparison.py)              # Three-way comparison: MDS vs Random Forest vs XGBoost with heatmaps and cumulative curves (1 example)
     └── longterm_models.py         # Long-term multi-year models (TODO - Phase 2)
 ```
@@ -69,7 +69,7 @@ examples/
 python examples/run_all_examples.py
 ```
 
-Executes all 82 examples across 44 files (22 visualization + 8 analysis + 2 binary + 7 corrections + 23 createvar + 4 echires + 7 flux + 9 gap_filling + 2 timeseries + 1 fits) in parallel (4 concurrent workers) with execution time tracking.
+Executes all 83 examples across 44 files (22 visualization + 8 analysis + 2 binary + 7 corrections + 23 createvar + 4 echires + 7 flux + 10 gap_filling + 2 timeseries + 1 fits) in parallel (4 concurrent workers) with execution time tracking.
 - Shows individual timing for each example
 - Detailed error messages if any fail
 - ~2.7x faster than sequential execution

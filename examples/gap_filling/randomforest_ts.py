@@ -178,7 +178,7 @@ def example_quickfill_rapid_prototyping():
 def example_randomforest_hyperparameter_optimization():
     """Hyperparameter optimization for Random Forest gap-filling.
 
-    Demonstrates OptimizeParamsRFTS for tuning Random Forest hyperparameters
+    Demonstrates OptimizeParamsTS for tuning Random Forest hyperparameters
     using GridSearchCV with time series cross-validation. Tests multiple
     parameter combinations to find optimal settings for gap-filling accuracy.
 
@@ -187,6 +187,8 @@ def example_randomforest_hyperparameter_optimization():
     Returns:
         None (prints best parameters, R² score, and cross-validation results)
     """
+    from sklearn.ensemble import RandomForestRegressor
+
     TARGET_COL = 'NEE_CUT_REF_orig'
     subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
 
@@ -205,9 +207,10 @@ def example_randomforest_hyperparameter_optimization():
     }
 
     # Optimization
-    opt = dv.OptimizeParamsRFTS(
+    opt = dv.OptimizeParamsTS(
         df=subset,
         target_col=TARGET_COL,
+        regressor_class=RandomForestRegressor,
         **rf_params
     )
 

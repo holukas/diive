@@ -59,7 +59,7 @@ grid = GridAggregator(x=x_series, y=y_series, z=z_series)
 `HeatmapDateTime`, and more
 
 **Gap-filling:** `randomforest_ts`, `RandomForestTS`, `xgboost_ts`, `XGBoostTS`, `quick_fill_rfts`, `QuickFillRFTS`,
-`flux_mds`, `FluxMDS`
+`flux_mds`, `FluxMDS`, `optimize_params_ts`, `OptimizeParamsTS`, `optimize_params_rfts`, `OptimizeParamsRFTS`
 
 **Analysis:** `gridaggregator`, `GridAggregator`, `seasonaltrend`, `SeasonalTrendDecomposition`
 
@@ -73,7 +73,7 @@ For the complete list of available aliases, see `diive.__all__`.
 
 ## Examples
 
-**81 executable example scripts** demonstrating common workflows are organized by topic in the `examples/` folder:
+**83 executable examples** demonstrating common workflows are organized by topic in the `examples/` folder:
 
 **Run all examples at once (parallelized, ~2.7x speedup):**
 ```bash
@@ -84,7 +84,9 @@ python examples/run_all_examples.py
 ```bash
 python examples/visualization/heatmap_datetime.py    # HeatmapDateTime heatmaps (6 examples)
 python examples/analyses/seasonaltrend.py            # SeasonalTrendDecomposition (1 example)
-python examples/gap_filling/randomforest_ts.py       # Random Forest gap-filling with feature engineering (1 example)
+python examples/gap_filling/randomforest_ts.py       # Random Forest gap-filling & hyperparameter optimization (3 examples)
+python examples/gap_filling/xgboost_ts.py           # XGBoost gap-filling & hyperparameter optimization (2 examples)
+python examples/gap_filling/comparison.py           # Three-way comparison: MDS vs RF vs XGBoost (1 example)
 python examples/createvar/timesince.py               # TimeSince time tracking (3 examples)
 python examples/createvar/potentialradiation.py      # Solar radiation (4 examples)
 python examples/corrections/offsetcorrection.py      # Data corrections (4 examples)
@@ -96,11 +98,11 @@ python examples/flux/common.py                       # Flux variable detection (
 python examples/flux/hqflux.py                       # CO2 flux quality analysis with Hampel filter (1 example)
 ```
 
-**Example categories (81 total, 43 files):**
+**Example categories (83 total, 44 files):**
 - **Visualization** (22): heatmap_datetime, hexbin, timeseries, cumulative, dielcycle, histogram, ridgeline, scatter
 - **Analyses** (8): correlation, decoupling, gapfinder, gridaggregator, histogram, optimumrange, quantiles, seasonaltrend
 - **Data Processing** (32): binary extraction, corrections (setto, offsetcorrection), createvar (air, conversions, daynightflag, laggedvariants, noise, potentialradiation, timesince, vpd)
-- **Gap-Filling** (8): linear_interpolation, mds, mds_comparison, randomforest_ts (3 examples: full, quick, optimize), comparison (MDS vs RF)
+- **Gap-Filling** (10): linear_interpolation, mds, mds_comparison, randomforest_ts (3 examples: full, quick, optimize), xgboost_ts (2 examples: full, optimize), comparison (MDS vs RF vs XGB)
 - **Eddy Covariance & Flux** (9): fluxdetectionlimit, lag, windrotation, hqflux, selfheating, uncertainty, ustarthreshold (3 examples)
 - **Spectral Analysis** (2): harmonic (spectrogram analysis)
 - **Fits** (1): fitter

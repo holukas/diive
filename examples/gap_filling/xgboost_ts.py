@@ -120,5 +120,51 @@ def example_xgboost_nee_gapfilling():
     print("Finished.")
 
 
+def example_xgboost_hyperparameter_optimization():
+    """Hyperparameter optimization for XGBoost gap-filling.
+
+    Demonstrates OptimizeParamsTS for tuning XGBoost hyperparameters
+    using GridSearchCV with time series cross-validation. Tests multiple
+    parameter combinations to find optimal settings for gap-filling accuracy.
+
+    Uses 2020 data only for faster optimization testing.
+
+    Returns:
+        None (prints best parameters, R² score, and cross-validation results)
+    """
+    import xgboost as xgb
+
+    TARGET_COL = 'NEE_CUT_REF_orig'
+    subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
+
+    # Example data
+    df = dv.load_exampledata_parquet()
+    subset = df[subsetcols].copy()
+    _subset = df.index.year >= 2020
+    subset = subset[_subset].copy()
+
+    # XGBoost parameters (minimal for speed: ~20 combinations × 10 CV = 200 fits)
+    xgb_params = {
+        'n_estimators': [30, 50],
+        'max_depth': [4, 6],
+        'learning_rate': [0.05, 0.1],
+        'subsample': [0.8, 1.0],
+    }
+
+    # Optimization
+    opt = dv.OptimizeParamsTS(
+        df=subset,
+        target_col=TARGET_COL,
+        regressor_class=xgb.XGBRegressor,
+        **xgb_params
+    )
+
+    opt.optimize()
+
+    # Print comprehensive optimization report with recommendations
+    opt.report_optimization(top_n=3)
+
+
 if __name__ == '__main__':
-    example_xgboost_nee_gapfilling()
+    # example_xgboost_nee_gapfilling()
+    example_xgboost_hyperparameter_optimization()
