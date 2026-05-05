@@ -58,7 +58,7 @@ examples/
     ├── [mds_comparison.py](gap_filling/mds_comparison.py)      # Performance comparison: Original vs Optimized MDS (1 example)
     ├── [randomforest_ts.py](gap_filling/randomforest_ts.py)    # Random Forest gap-filling with harmonized feature engineering (3 examples)
     ├── [xgboost_ts.py](gap_filling/xgboost_ts.py)              # XGBoost gap-filling with identical feature engineering for direct comparison (1 example)
-    ├── [comparison.py](gap_filling/comparison.py)              # Method comparison: MDS vs Random Forest with cumulative curves (1 example)
+    ├── [comparison.py](gap_filling/comparison.py)              # Three-way comparison: MDS vs Random Forest vs XGBoost with heatmaps and cumulative curves (1 example)
     └── longterm_models.py         # Long-term multi-year models (TODO - Phase 2)
 ```
 

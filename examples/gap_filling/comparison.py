@@ -1,6 +1,6 @@
-"""Comparison of gap-filling methods: MDS vs Random Forest.
+"""Comparison of gap-filling methods: MDS, Random Forest, and XGBoost.
 
-Demonstrates side-by-side gap-filling comparison with cumulative flux curves.
+Demonstrates three gap-filling methods with cumulative flux curves.
 Uses one month of data for fast execution. Methods are evaluated on the same
 data with performance metrics and cumulative carbon flux visualization.
 """
@@ -13,24 +13,26 @@ from diive.core.ml.feature_engineer import FeatureEngineer
 
 
 def example_compare_mds_vs_randomforest():
-    """Compare MDS and Random Forest gap-filling methods.
+    """Compare three gap-filling methods: MDS, Random Forest, and XGBoost.
 
     Demonstrates gap-filling workflow comparison:
     1. Load one month of example ecosystem flux data
     2. Gap-fill using MDS method (meteorological similarity)
-    3. Gap-fill using Random Forest (machine learning)
-    4. Compare results with performance metrics
-    5. Visualize cumulative carbon flux from both methods
+    3. Gap-fill using Random Forest (machine learning - bagging)
+    4. Gap-fill using XGBoost (machine learning - boosting)
+    5. Compare results with performance metrics
+    6. Visualize cumulative carbon flux from all three methods
 
     Features MDS:
     - Fast, no training required
     - Uses meteorological similarity (SWIN, TA, VPD)
     - Hierarchical quality levels with relaxed constraints
 
-    Features Random Forest:
-    - Requires training on complete observations
-    - Uses feature engineering (lag, rolling, timestamps)
-    - Captures non-linear relationships
+    Features Random Forest & XGBoost:
+    - Require training on complete observations
+    - Use identical feature engineering (lag, rolling, STL, timestamps)
+    - RF: Bagging approach, interpretable, robust to outliers
+    - XGB: Boosting approach, often higher accuracy, smaller models
 
     Returns:
         None (displays plots and reports)
@@ -126,9 +128,9 @@ def example_compare_mds_vs_randomforest():
         verbose=0,
         n_estimators=50,
         random_state=42,
-        max_depth=12,
-        min_samples_split=5,
-        min_samples_leaf=2,
+        max_depth=None,
+        min_samples_split=10,
+        min_samples_leaf=5,
         n_jobs=-1
     )
 
@@ -144,6 +146,39 @@ def example_compare_mds_vs_randomforest():
     rfts.report_gapfilling()
 
     # =========================================================================
+    # METHOD 3: XGBOOST GAP-FILLING
+    # =========================================================================
+    print("\n" + "-" * 80)
+    print("METHOD 3: XGBOOST WITH FEATURE ENGINEERING")
+    print("-" * 80)
+
+    start_time = time.perf_counter()
+
+    # Reuse engineered features from Random Forest (same features for fair comparison)
+    xgbts = dv.XGBoostTS(
+        input_df=df_engineered,
+        target_col=TARGET_COL,
+        verbose=0,
+        n_estimators=50,
+        random_state=42,
+        max_depth=6,
+        learning_rate=0.1,
+        early_stopping_rounds=10,
+        n_jobs=-1
+    )
+
+    # Train model
+    xgbts.trainmodel(showplot_scores=False, showplot_importance=False)
+
+    # Gap-fill
+    xgbts.fillgaps(showplot_scores=False, showplot_importance=False)
+    xgb_gapfilled = xgbts.get_gapfilled_target()
+    xgb_time = time.perf_counter() - start_time
+
+    print(f"Execution time: {xgb_time:.2f}s")
+    xgbts.report_gapfilling()
+
+    # =========================================================================
     # PERFORMANCE COMPARISON
     # =========================================================================
     print("\n" + "=" * 80)
@@ -153,7 +188,8 @@ def example_compare_mds_vs_randomforest():
     comparison_data = {
         'Metric': ['Execution Time (s)', 'Training Required', 'Features Used', 'Approach'],
         'MDS': [f'{mds_time:.2f}', 'No', 'Meteorological', 'Similarity-based'],
-        'Random Forest': [f'{rf_time:.2f}', 'Yes', 'Engineered (45+)', 'ML-based']
+        'Random Forest': [f'{rf_time:.2f}', 'Yes', 'Engineered (45+)', 'Bagging'],
+        'XGBoost': [f'{xgb_time:.2f}', 'Yes', 'Engineered (45+)', 'Boosting']
     }
     print("\n" + pd.DataFrame(comparison_data).to_string(index=False))
 
@@ -169,7 +205,8 @@ def example_compare_mds_vs_randomforest():
     df_cumulative = pd.DataFrame({
         'Observed': observed,
         'MDS': mds_gapfilled,
-        'Random Forest': rf_gapfilled
+        'Random Forest': rf_gapfilled,
+        'XGBoost': xgb_gapfilled
     })
 
     # Convert from umol CO2 m-2 s-1 to g C m-2 30min-1
@@ -192,8 +229,8 @@ def example_compare_mds_vs_randomforest():
     print("-" * 80)
 
     import matplotlib.pyplot as plt
-    fig, axes = plt.subplots(1, 4, figsize=(24, 5),
-                             gridspec_kw={'wspace': 0.15},
+    fig, axes = plt.subplots(1, 4, figsize=(28, 5),
+                             gridspec_kw={'wspace': 0.12},
                              constrained_layout=True)
 
     # Observed
@@ -208,10 +245,9 @@ def example_compare_mds_vs_randomforest():
     dv.plot_heatmap_datetime(ax=axes[2], series=rf_gapfilled).plot()
     axes[2].set_title('Random Forest\nGap-Filled', fontsize=11, fontweight='bold')
 
-    # Difference: RF - MDS
-    diff = rf_gapfilled - mds_gapfilled
-    dv.plot_heatmap_datetime(ax=axes[3], series=diff).plot()
-    axes[3].set_title('Difference\n(RF - MDS)', fontsize=11, fontweight='bold')
+    # XGB gap-filled
+    dv.plot_heatmap_datetime(ax=axes[3], series=xgb_gapfilled).plot()
+    axes[3].set_title('XGBoost\nGap-Filled', fontsize=11, fontweight='bold')
 
     fig.suptitle('Gap-Filling Method Comparison', fontsize=13, fontweight='bold', y=1.00)
     plt.show()
