@@ -3,10 +3,11 @@
 Random Forest is a robust, interpretable machine learning approach for gap-filling
 time series data. Effective for non-linear relationships and feature interactions.
 """
+import matplotlib.pyplot as plt
 import pandas as pd
 
 import diive as dv
-from diive.core.dfun.stats import sstats  # Time series stats
+
 
 def example_randomforest_nee_gapfilling():
     """Random Forest gap-filling for CO₂ flux (NEE) with feature engineering.
@@ -66,8 +67,8 @@ def example_randomforest_nee_gapfilling():
         n_estimators=3,
         random_state=42,
         max_depth=None,
-        min_samples_split=5,
-        min_samples_leaf=2,
+        min_samples_split=10,
+        min_samples_leaf=5,
         n_jobs=-1
     )
 
@@ -85,6 +86,20 @@ def example_randomforest_nee_gapfilling():
 
     observed = df[TARGET_COL]
     gapfilled = rfts.get_gapfilled_target()
+
+    # Heatmap visualization: observed vs gap-filled
+    fig, axes = plt.subplots(1, 2, figsize=(16, 5),
+                             gridspec_kw={'wspace': 0.15},
+                             constrained_layout=True)
+
+    dv.plot_heatmap_datetime(ax=axes[0], series=observed).plot()
+    axes[0].set_title('Observed\n(with gaps)', fontsize=11, fontweight='bold')
+
+    dv.plot_heatmap_datetime(ax=axes[1], series=gapfilled).plot()
+    axes[1].set_title('Random Forest\nGap-Filled', fontsize=11, fontweight='bold')
+
+    fig.suptitle('Random Forest Gap-Filling Comparison', fontsize=13, fontweight='bold', y=1.00)
+    plt.show()
 
     # Plot cumulative carbon flux: observed vs gap-filled
     df_cumulative = pd.DataFrame({
@@ -203,6 +218,6 @@ def example_randomforest_hyperparameter_optimization():
 
 
 if __name__ == '__main__':
-    # example_randomforest_nee_gapfilling()
-    # example_quickfill_rapid_prototyping()
+    example_randomforest_nee_gapfilling()
+    example_quickfill_rapid_prototyping()
     example_randomforest_hyperparameter_optimization()

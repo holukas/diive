@@ -56,9 +56,9 @@ examples/
     ├── [interpolate.py](gap_filling/interpolate.py)            # Linear interpolation gap-filling (2 examples: conservative & generous limits)
     ├── [mds.py](gap_filling/mds.py)                            # Marginal Distribution Sampling (1 example)
     ├── [mds_comparison.py](gap_filling/mds_comparison.py)      # Performance comparison: Original vs Optimized MDS (1 example)
-    ├── [randomforest_ts.py](gap_filling/randomforest_ts.py)    # Random Forest gap-filling (3 examples: full, quick, optimize)
+    ├── [randomforest_ts.py](gap_filling/randomforest_ts.py)    # Random Forest gap-filling with harmonized feature engineering (3 examples)
+    ├── [xgboost_ts.py](gap_filling/xgboost_ts.py)              # XGBoost gap-filling with identical feature engineering for direct comparison (1 example)
     ├── [comparison.py](gap_filling/comparison.py)              # Method comparison: MDS vs Random Forest with cumulative curves (1 example)
-    ├── xgboost_ts.py              # XGBoostTS examples (TODO - Phase 2)
     └── longterm_models.py         # Long-term multi-year models (TODO - Phase 2)
 ```
 
@@ -69,7 +69,7 @@ examples/
 python examples/run_all_examples.py
 ```
 
-Executes all 81 examples across 43 files (22 visualization + 8 analysis + 2 binary + 7 corrections + 23 createvar + 4 echires + 7 flux + 8 gap_filling + 2 timeseries + 1 fits) in parallel (4 concurrent workers) with execution time tracking.
+Executes all 82 examples across 44 files (22 visualization + 8 analysis + 2 binary + 7 corrections + 23 createvar + 4 echires + 7 flux + 9 gap_filling + 2 timeseries + 1 fits) in parallel (4 concurrent workers) with execution time tracking.
 - Shows individual timing for each example
 - Detailed error messages if any fail
 - ~2.7x faster than sequential execution
@@ -93,14 +93,19 @@ Displays heatmaps in vertical/horizontal orientations, year-month aggregations w
 
 **Gap-Filling:**
 ```bash
+python examples/gap_filling/randomforest_ts.py
+python examples/gap_filling/xgboost_ts.py
 python examples/gap_filling/mds.py
-python examples/gap_filling/mds_comparison.py
 ```
 
 Gap-filling methods with comprehensive examples:
+- **Harmonized ML comparison:** Random Forest vs XGBoost with identical feature engineering on same data
+  - Both use 2020 data with harmonized 8-stage feature engineering (lag, rolling, STL, timestamps)
+  - Side-by-side heatmap visualizations (observed vs gap-filled)
+  - Cumulative flux plots for ecosystem carbon balance assessment
 - Linear interpolation for conservative gap-filling
 - Marginal Distribution Sampling (MDS) with meteorological similarity
-- Performance comparison of optimized vs original MDS implementation (4.0x speedup with bit-identical results)
+- MDS performance comparison (4.0x speedup with bit-identical results)
 
 **Flux Quality & Analysis (`examples/flux/`):**
 ```bash
@@ -126,15 +131,14 @@ When adding a new example:
 
 ## Phases
 
-- **Phase 1 (Complete):** Core examples across visualization, analysis, and data processing
+- **Phase 1 (Complete):** Core examples across visualization, analysis, and data processing (76 examples)
   - **Visualization:** HeatmapDateTime/YearMonth (6), HexbinPlot (3), TimeSeries (1), Cumulative (3), Other (1), DielCycle (1), Histogram (2), RidgeLine (2), ScatterXY (3) = 22 examples
   - **Analysis:** DailyCorrelation, StratifiedAnalysis, GapFinder, GridAggregator, Histogram, FindOptimumRange, Quantiles, SeasonalTrendDecomposition = 8 examples
   - **Data Processing:** Binary (2), Corrections (7), Variable creation (23) = 32 examples
   - **Eddy Covariance:** FluxDetectionLimit (2), MaxCovariance (1), WindRotation2D (1), Flux (7 - common + hqflux + selfheating + uncertainty + 3 ustarthreshold) = 11 examples
   - **Time Series:** Harmonic/Spectrogram (2 - daily pattern, annual phenology) = 2 examples
   - **Fits:** BinFitterCP (1) = 1 example
-  - **Total:** 76 examples
-- **Phase 2 (Planned):** Gap-filling workflow examples and HeatmapXYZ
-  - Quick start interpolation + quickfill
-  - RandomForestTS, XGBoostTS, long-term models, MDS gap-filling
+- **Phase 2 (In Progress):** Gap-filling workflow examples
+  - **Gap-filling:** Linear interpolation (2), MDS (1), MDS comparison (1), Random Forest (3), XGBoost (1), MDS vs RF comparison (1) = 9 examples
+  - TODO: Long-term multi-year models, HeatmapXYZ
 - **Phase 3+ (Future):** Advanced feature engineering examples

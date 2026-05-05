@@ -57,6 +57,7 @@ EXAMPLE_FILES = [
     'gap_filling/mds.py',
     'gap_filling/mds_comparison.py',
     'gap_filling/randomforest_ts.py',
+    'gap_filling/xgboost_ts.py',
     'gap_filling/comparison.py',
     'timeseries/harmonic.py',
 ]
