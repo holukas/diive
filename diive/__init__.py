@@ -1,4 +1,5 @@
 from diive.configs.exampledata import load_exampledata_parquet as load_exampledata_parquet
+from diive.configs.exampledata import load_exampledata_parquet_lae as load_exampledata_parquet_lae
 from diive.core.dfun.frames import transform_yearmonth_matrix_to_longform as transform_yearmonth_matrix_to_longform
 from diive.core.dfun.stats import sstats as sstats
 from diive.core.io.filereader import ReadFileType as readfiletype
@@ -74,6 +75,8 @@ from diive.pkgs.flux.ustarthreshold import UstarDetectionMPT as UstarDetectionMP
 from diive.pkgs.flux.ustarthreshold import UstarThresholdConstantScenarios as UstarThresholdConstantScenarios
 from diive.pkgs.flux.ustarthreshold import FlagMultipleConstantUstarThresholds as FlagMultipleConstantUstarThresholds
 from diive.pkgs.flux.ustarthreshold import FlagSingleConstantUstarThreshold as FlagSingleConstantUstarThreshold
+from diive.pkgs.flux.ustar_mp_detection import UstarMovingPointDetection as UstarMovingPointDetection
+from diive.pkgs.flux.ustar_mp_detection import UstarMovingPointDetection as ustar_mp_detection
 from diive.pkgs.fits.fitter import BinFitterCP as BinFitterCP
 from diive.pkgs.fits.fitter import BinFitterCP as bin_fitter_cp
 from diive.core.ml.feature_engineer import FeatureEngineer as feature_engineer
@@ -97,6 +100,7 @@ from diive.pkgs.binary.extract import get_encoded_value_series as get_encoded_va
 __all__ = [
     # Configs
     'load_exampledata_parquet',
+    'load_exampledata_parquet_lae',
     'readfiletype',
     'search_files',
 
@@ -186,6 +190,8 @@ __all__ = [
     'UstarThresholdConstantScenarios',
     'FlagMultipleConstantUstarThresholds',
     'FlagSingleConstantUstarThreshold',
+    'UstarMovingPointDetection',
+    'ustar_mp_detection',
     'BinFitterCP',
     'bin_fitter_cp',
 
