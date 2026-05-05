@@ -249,113 +249,44 @@ class RandomForestTS(MlRegressorGapFillingBase):
                  verbose: bool = True,
                  test_size: float = 0.25,
                  **kwargs):
-        """
-        Random Forest-based gap-filling for time series data.
+        """Gap-filling for time series using Random Forest regression.
 
-        Trains a Random Forest model on complete (non-gap) observations to predict missing
-        values in a target time series. Robust, interpretable approach suitable for ecosystem
-        flux data and other environmental time series.
-
-        **IMPORTANT:** This class expects pre-engineered features. Use FeatureEngineer to
-        create features before passing data to RandomForestTS. See example below.
-
-        Random Forest is particularly effective for:
-        - Interpretability via feature importance analysis
-        - Robustness to outliers and non-linear relationships
-        - Minimal hyperparameter tuning requirements
-        - Parallel processing of large datasets
-
-        Workflow:
-            1. Use FeatureEngineer to create engineered features
-            2. Create RandomForestTS instance with pre-engineered data
-            3. Call trainmodel() to fit on training data and evaluate on test data
-            4. Call fillgaps() to predict missing values and generate output
-            5. Optional: Call reduce_features() before fillgaps() for feature selection
+        Trains a Random Forest model on complete observations to predict missing values.
+        Combines robustness to outliers with interpretability through feature importance
+        analysis. Requires pre-engineered features from FeatureEngineer.
 
         Args:
-            input_df:
-                DataFrame with time series data. Must contain 1 target column and 1+ feature
-                columns. **Features should be pre-engineered using FeatureEngineer.**
-                Timestamps should be in DataFrame index (DatetimeIndex).
-
-            target_col:
-                Column name of variable to gap-fill (string or tuple for multi-level columns).
-
-            verbose:
-                Verbosity level: 0=silent, 1=progress updates, 2+=detailed output.
-                Default: True (equivalent to 1).
-
-            test_size:
-                Proportion of complete data for testing (0.0-1.0). Default: 0.25.
-                Only complete (non-gap) rows are used for train/test split.
-
-            **kwargs:
-                Random Forest hyperparameters. Common settings:
-                - n_estimators: Number of trees (default 100, range 10-500)
-                - max_depth: Tree depth (default None, range 5-30)
-                - min_samples_split: Minimum samples to split (default 2, range 2-20)
-                - min_samples_leaf: Minimum samples in leaf (default 1, range 1-20)
-                - random_state: Random seed for reproducibility
-                - n_jobs: Number of parallel jobs (-1 for all processors)
-                See: https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestRegressor.html
+            input_df: DataFrame with target and pre-engineered feature columns.
+                     Features should be created with FeatureEngineer.
+                     Timestamps in DatetimeIndex.
+            target_col: Column name of variable to gap-fill (string or tuple).
+            verbose: Verbosity level: 0=silent, 1=progress, 2+=detailed.
+                    Default: True (equivalent to 1).
+            test_size: Fraction of complete data for testing (0.0-1.0).
+                      Default: 0.25. Only complete rows used for split.
+            **kwargs: Random Forest hyperparameters (n_estimators, max_depth,
+                     min_samples_split, min_samples_leaf, random_state, n_jobs, etc).
+                     See scikit-learn RandomForestRegressor documentation.
 
         Methods:
-            trainmodel(showplot_scores=False, showplot_importance=False)
-                Train on training data, evaluate on test data, compute SHAP importances.
-
-            fillgaps(showplot_scores=False, showplot_importance=False)
-                Train on all complete data, predict all missing values, generate output.
-
-            reduce_features(shap_threshold_factor=0.5)
-                Feature selection based on SHAP importance. Call before trainmodel().
-
-            report_traintest()
-                Print model evaluation metrics and details.
-
-            report_gapfilling()
-                Print gap-filling results and statistics.
-
-            get_gapfilled_target() -> Series
-                Return gap-filled target time series.
-
-            get_flag() -> Series
-                Return gap-filling flags (0=observed, 1=gap-filled, 2=fallback).
+            trainmodel(): Train on training data, evaluate on test data.
+            fillgaps(): Train on all complete data, predict missing values.
+            reduce_features(): Feature selection based on SHAP importance.
+            report_traintest(): Print model evaluation metrics.
+            report_gapfilling(): Print gap-filling results.
+            get_gapfilled_target(): Return gap-filled series.
+            get_flag(): Return gap-filling flags (0=observed, 1=gap-filled, 2=fallback).
 
         Attributes:
             model_: Trained RandomForestRegressor instance.
-            gapfilling_df_: DataFrame with gap-filled target and auxiliary variables.
-            feature_importances_: SHAP feature importance from gap-filling model.
-            scores_: Model performance metrics (MAE, RMSE, R²) for gap-filling.
+            gapfilling_df_: DataFrame with gap-filled target.
+            feature_importances_: SHAP feature importance.
+            scores_: Model performance metrics (MAE, RMSE, R²).
 
-        Example:
-            >>> from diive.core.ml.feature_engineer import FeatureEngineer
-            >>> # Step 1: Create and apply feature engineer
-            >>> engineer = FeatureEngineer(
-            ...     target_col='NEE',
-            ...     features_lag=[-1, -1],
-            ...     features_rolling=[12, 24],
-            ...     features_rolling_stats=['median', 'min', 'max'],
-            ...     features_diff=[1],
-            ...     features_ema=[6, 24, 48],
-            ...     features_poly_degree=2,
-            ...     vectorize_timestamps=True
-            ... )
-            >>> df_engineered = engineer.fit_transform(df)
-            >>> # Step 2: Create gap-filling model with engineered features
-            >>> rfts = RandomForestTS(
-            ...     input_df=df_engineered,
-            ...     target_col='NEE',
-            ...     verbose=1,
-            ...     n_estimators=100,
-            ...     max_depth=15,
-            ...     min_samples_split=5,
-            ...     min_samples_leaf=2,
-            ...     random_state=42,
-            ...     n_jobs=-1,
-            ... )
-            >>> rfts.trainmodel(showplot_scores=True, showplot_importance=True)
-            >>> rfts.fillgaps()
-            >>> gapfilled = rfts.get_gapfilled_target()
+        Examples:
+            See examples/gap_filling/randomforest_ts.py for complete examples.
+            See examples/gap_filling/comparison.py for side-by-side comparison
+            with MDS gap-filling.
         """
 
         # Pass to parent class

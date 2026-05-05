@@ -22,30 +22,11 @@ def _calculate_gap_sizes(gap_df: pd.DataFrame, series: Series) -> np.ndarray:
 
 
 def linear_interpolation(series: Series, limit: int = 3, verbose: bool = False) -> Series:
-    """Fill gaps in series with linear interpolation up to a specified gap size.
+    """Fill gaps in series with linear interpolation up to a specified size.
 
-    Simple linear interpolation method for gap-filling that respects consecutive
-    gap limits. Gaps larger than the limit are left unfilled, making this suitable
-    for small gaps only. Uses GapFinder to identify gap regions and interpolates
-    only within the specified limit.
-
-    **Workflow:**
-    1. Validate input (type, emptiness, datetime index, limit value)
-    2. Detect all gap regions using GapFinder
-    3. Calculate gap sizes in records
-    4. Interpolate only gaps within the specified limit
-    5. Report statistics with optional verbose output
-
-    **Advantages:**
-    - Simple, fast interpolation for small gaps
-    - Preserves large gaps for more sophisticated methods (ML, MDS)
-    - Transparent statistics: shows what was filled vs. skipped
-    - Early returns for edge cases (no gaps, no missing data)
-
-    **Edge Cases Handled:**
-    - Series with no missing values: returns original series
-    - Series with no detected gap regions: returns original series
-    - All gaps exceed limit: returns original series with full report
+    Fills missing values in a time series using linear interpolation, with control
+    over the maximum consecutive gap size to fill. Gaps larger than the specified
+    limit are preserved for other gap-filling methods (ML, MDS).
 
     Args:
         series: Time series with missing values (NaN).
@@ -54,12 +35,8 @@ def linear_interpolation(series: Series, limit: int = 3, verbose: bool = False) 
                Must be ≥ 1. Default: 3.
                Example: limit=1 fills only isolated single-value gaps,
                        limit=5 fills gaps up to 5 consecutive records.
-        verbose: Print comprehensive summary statistics table showing:
-                 - Parameters (method, limit, time series length)
-                 - Input data (total records, missing count and %)
-                 - Gap analysis (total, fillable, skipped gap counts)
-                 - Output data (remaining gaps, recovery rate)
-                 - Gap size distribution (min/median/max/mean)
+        verbose: Print summary statistics table showing method parameters,
+                 input/output data, gap analysis, and gap size distribution.
                  Default: False.
 
     Returns:
@@ -72,15 +49,9 @@ def linear_interpolation(series: Series, limit: int = 3, verbose: bool = False) 
         TypeError: If series is not a pandas.Series.
         ValueError: If series is empty, limit < 1, or index is not DatetimeIndex.
 
-    Performance:
-        - Time complexity: O(n) where n is series length
-        - Space complexity: O(n) for temporary interpolated series
-        - Typical: 10-15% faster than iterative implementations
-                   ~3x faster than alternatives for large gap counts
-
-    Example:
-        See examples/gap_filling/interpolate.py for complete examples
-        demonstrating conservative (limit=1) vs. generous (limit=5) strategies.
+    Examples:
+        See examples/gap_filling/interpolate.py for examples demonstrating
+        conservative (limit=1) vs. generous (limit=5) gap-filling strategies.
     """
     # Input validation
     if not isinstance(series, Series):

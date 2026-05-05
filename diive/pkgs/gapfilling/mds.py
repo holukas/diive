@@ -599,18 +599,27 @@ class _FluxMDS:
 
 
 class FluxMDS:
-    """Optimized gap-filling for ecosystem fluxes using Marginal Distribution Sampling.
+    """Gap-filling for ecosystem fluxes using Marginal Distribution Sampling (MDS).
 
-    Gap-filling based on Reichstein et al. (2005) with vectorization and memory
-    optimizations. Replaces row-by-row .apply() operations with vectorized NumPy
-    operations using searchsorted() for O(log n) time-window lookups. Eliminates
-    DataFrame copies by using in-place updates with boolean masking instead of
-    creating copies at each quality level.
+    Fills missing flux data by matching similar meteorological conditions based on
+    solar radiation (SWIN), air temperature (TA), and vapor pressure deficit (VPD).
+    Uses the Reichstein et al. (2005) methodology with hierarchical quality levels
+    that progressively relax meteorological constraints to fill gaps while preserving
+    data quality.
 
-    Results are bit-identical to the original implementation while providing 3-4x
-    speedup. For the reference implementation, use _FluxMDS.
+    Gap-filling process:
+    - Matches missing observations to complete observations with similar meteorological
+      conditions within specified tolerance windows
+    - Uses multiple quality levels with increasingly relaxed time-window and variable
+      constraints to ensure coverage of all gaps
+    - Flags gap-filled values with quality information
 
     Reference: https://doi.org/10.1111/j.1365-2486.2005.001002.x
+
+    Examples:
+        See examples/gap_filling/mds.py for basic usage.
+        See examples/gap_filling/comparison.py for side-by-side comparison with
+        Random Forest gap-filling method.
     """
 
     gfsuffix = '_gfMDS'
