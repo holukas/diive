@@ -166,5 +166,5 @@ def example_xgboost_hyperparameter_optimization():
 
 
 if __name__ == '__main__':
-    # example_xgboost_nee_gapfilling()
+    example_xgboost_nee_gapfilling()
     example_xgboost_hyperparameter_optimization()

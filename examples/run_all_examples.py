@@ -127,7 +127,7 @@ def run_all_examples():
     total_start = time.time()
 
     print("=" * 80)
-    print(f"Running {len(EXAMPLE_FILES)} example files (80 functions total) in parallel (max {MAX_WORKERS} workers)...")
+    print(f"Running {len(EXAMPLE_FILES)} example files (83 functions total) in parallel (max {MAX_WORKERS} workers)...")
     print("=" * 80 + "\n")
 
     results = {'passed': [], 'failed': [], 'skipped': []}

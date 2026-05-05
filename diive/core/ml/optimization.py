@@ -177,7 +177,7 @@ class OptimizeParamsTS:
         print("=" * 80)
 
         # Tested parameter ranges
-        print("\n✓ PARAMETER RANGES TESTED")
+        print("\nOK PARAMETER RANGES TESTED")
         print("-" * 80)
         for param, values in sorted(self.params.items()):
             if isinstance(values, list):
@@ -189,20 +189,20 @@ class OptimizeParamsTS:
                 print(f"  {param:<25} : {values}")
 
         # Best parameters section
-        print("\n✓ BEST PARAMETERS (GridSearchCV winner)")
+        print("\nOK BEST PARAMETERS (GridSearchCV winner)")
         print("-" * 80)
         for param, value in sorted(self._best_params.items()):
             print(f"  {param:<25} = {value}")
 
         # Best performance section
-        print("\n✓ BEST MODEL PERFORMANCE (test set)")
+        print("\nOK BEST MODEL PERFORMANCE (test set)")
         print("-" * 80)
-        print(f"  R² Score              = {self._scores['r2']:>10.4f}  (0-1 scale, higher is better)")
+        print(f"  R2 Score              = {self._scores['r2']:>10.4f}  (0-1 scale, higher is better)")
         print(f"  MAE                   = {self._scores['mae']:>10.4f}  (mean absolute error)")
         print(f"  RMSE                  = {self._scores['rmse']:>10.4f}  (root mean squared error)")
 
         # Top N combinations
-        print(f"\n✓ TOP {top_n} PARAMETER COMBINATIONS (by CV score)")
+        print(f"\nOK TOP {top_n} PARAMETER COMBINATIONS (by CV score)")
         print("-" * 80)
         top_results = self._cv_results.nsmallest(top_n, 'rank_test_score')
         for idx, (_, row) in enumerate(top_results.iterrows(), 1):
@@ -215,7 +215,7 @@ class OptimizeParamsTS:
                     print(f"    {param:<22} = {row[param_key]}")
 
         # Parameter sensitivity analysis
-        print("\n✓ PARAMETER SENSITIVITY (which parameters matter most)")
+        print("\nOK PARAMETER SENSITIVITY (which parameters matter most)")
         print("-" * 80)
         for param in sorted(self.params.keys()):
             param_key = f'param_{param}'
@@ -254,7 +254,7 @@ Use these parameters for gap-filling with {model_name}:
         random_state=42
     )
 
-Expected performance: R² ≈ {r2:.4f}
+Expected performance: R2 ~ {r2:.4f}
 """
               )
         print("=" * 80 + "\n")
