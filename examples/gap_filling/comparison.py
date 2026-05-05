@@ -37,7 +37,8 @@ def example_compare_mds_vs_randomforest():
     """
     # Load data - use July 2022 for fast example execution
     df_orig = dv.load_exampledata_parquet()
-    df = df_orig.loc[(df_orig.index.year == 2022) & (df_orig.index.month == 7)].copy()
+    # df = df_orig.loc[(df_orig.index.year == 2022)].copy()
+    df = df_orig.loc[(df_orig.index.year == 2022) & (df_orig.index.month == 5)].copy()
 
     # Target and features
     TARGET_COL = 'NEE_CUT_REF_orig'
@@ -191,63 +192,28 @@ def example_compare_mds_vs_randomforest():
     print("-" * 80)
 
     import matplotlib.pyplot as plt
-    fig, axes = plt.subplots(2, 3, figsize=(20, 10),
-                             gridspec_kw={'wspace': 0.25, 'hspace': 0.3},
+    fig, axes = plt.subplots(1, 4, figsize=(24, 5),
+                             gridspec_kw={'wspace': 0.15},
                              constrained_layout=True)
 
     # Observed
-    dv.HeatmapDateTime(series=observed).show(ax=axes[0, 0])
-    axes[0, 0].set_title('Observed (with gaps)', fontsize=12, fontweight='bold')
+    dv.plot_heatmap_datetime(ax=axes[0], series=observed).plot()
+    axes[0].set_title('Observed\n(with gaps)', fontsize=11, fontweight='bold')
 
     # MDS gap-filled
-    dv.HeatmapDateTime(series=mds_gapfilled).show(ax=axes[0, 1])
-    axes[0, 1].set_title('MDS Gap-Filled', fontsize=12, fontweight='bold')
+    dv.plot_heatmap_datetime(ax=axes[1], series=mds_gapfilled).plot()
+    axes[1].set_title('MDS\nGap-Filled', fontsize=11, fontweight='bold')
 
     # RF gap-filled
-    dv.HeatmapDateTime(series=rf_gapfilled).show(ax=axes[0, 2])
-    axes[0, 2].set_title('Random Forest Gap-Filled', fontsize=12, fontweight='bold')
-
-    # Gap flags comparison
-    mds_flag = mds.get_flag()
-    rf_flag = rfts.get_flag()
-
-    axes[1, 0].hist([mds_flag, rf_flag], bins=3, label=['MDS', 'RF'], alpha=0.7)
-    axes[1, 0].set_xlabel('Flag (0=obs, 1=filled, 2=fallback)')
-    axes[1, 0].set_ylabel('Count')
-    axes[1, 0].legend()
-    axes[1, 0].set_title('Gap-Filling Distribution', fontsize=12, fontweight='bold')
+    dv.plot_heatmap_datetime(ax=axes[2], series=rf_gapfilled).plot()
+    axes[2].set_title('Random Forest\nGap-Filled', fontsize=11, fontweight='bold')
 
     # Difference: RF - MDS
     diff = rf_gapfilled - mds_gapfilled
-    dv.HeatmapDateTime(series=diff).show(ax=axes[1, 1])
-    axes[1, 1].set_title('Difference (RF - MDS)', fontsize=12, fontweight='bold')
+    dv.plot_heatmap_datetime(ax=axes[3], series=diff).plot()
+    axes[3].set_title('Difference\n(RF - MDS)', fontsize=11, fontweight='bold')
 
-    # Summary statistics
-    axes[1, 2].axis('off')
-    summary_text = f"""
-    SUMMARY STATISTICS
-
-    Data Period: {df.index.min().date()} to {df.index.max().date()}
-
-    Gaps in Original Data:
-      Total records: {len(df):,}
-      Missing values: {df[TARGET_COL].isnull().sum():,}
-      % Missing: {100*df[TARGET_COL].isnull().sum()/len(df):.1f}%
-
-    Execution Time:
-      MDS: {mds_time:.2f}s
-      RF: {rf_time:.2f}s
-      Speedup: {rf_time/mds_time:.1f}x
-
-    Method Characteristics:
-      MDS: Fast, deterministic, meteorological
-      RF: Slow, stochastic, data-driven
-    """
-    axes[1, 2].text(0.1, 0.5, summary_text, fontsize=10, family='monospace',
-                   verticalalignment='center')
-
-    fig.suptitle('Gap-Filling Method Comparison: MDS vs Random Forest',
-                fontsize=14, fontweight='bold', y=0.995)
+    fig.suptitle('Gap-Filling Method Comparison', fontsize=13, fontweight='bold', y=1.00)
     plt.show()
 
     print("\n✓ Comparison complete.")
