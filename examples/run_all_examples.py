@@ -43,6 +43,7 @@ EXAMPLE_FILES = [
     'outlierdetection/lof.py',
     'outlierdetection/manualremoval.py',
     'outlierdetection/trim.py',
+    'outlierdetection/zscore.py',
     'createvar/air.py',
     'createvar/conversions.py',
     'createvar/daynightflag.py',

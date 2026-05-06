@@ -1,13 +1,21 @@
 """
-OUTLIER DETECTION: Z-SCORE TESTS
-================================
+Outlier detection using Z-score methods.
+
+This module provides three z-score-based outlier detection approaches:
+
+- **Global:** Single z-score threshold for entire time series
+- **Daytime/Nighttime:** Separate z-score thresholds for different times of day
+- **Rolling:** Adaptive z-score using rolling mean and standard deviation
+
+Quality flags:
+  - flag=0: Value within acceptable range (valid)
+  - flag=2: Value detected as outlier (removed)
+  - NaN: Original missing data preserved
+
+See examples/outlierdetection/zscore.py for working examples.
 
 This module is part of the diive library:
 https://github.com/holukas/diive
-
-kudos:
-    - https://www.analyticsvidhya.com/blog/2022/08/outliers-pruning-using-python/
-
 """
 import numpy as np
 import pandas as pd
@@ -32,35 +40,42 @@ class zScoreDaytimeNighttime(FlagBase):
                  thres_zscore: float = 4,
                  showplot: bool = False,
                  verbose: bool = False):
-        """Identify outliers based on the z-score of series records, whereby the z-score
-        is calculated separately for daytime and nighttime records.
+        """Detect outliers using z-score with separate day/night thresholds.
 
-        Records with a z-score larger than the given threshold are flagged as outliers.
+        Calculates z-scores separately for daytime and nighttime periods,
+        useful when data characteristics vary significantly by time of day.
+
+        Example:
+            See `examples/outlierdetection/zscore.py` for complete examples.
 
         Args:
             series: Time series in which outliers are identified.
-            lat: Latitude of location as float, e.g. 46.583056
-            lon: Longitude of location as float, e.g. 9.790639
-            utc_offset: UTC offset of *timestamp_index*, e.g. 1 for UTC+01:00
-                The datetime index of the resulting Series will be in this timezone.
-            idstr: Identifier, added as suffix to output variable names.
-            thres_zscore: Threshold for z-score, scores above this value will be flagged as outlier.
-            showplot: Show plot with results from the outlier detection.
-            verbose: Print more text output.
-
-        Returns:
-            Flag series that combines flags from all iterations in one single flag.
-
+            lat: Latitude of location (e.g., 46.583056).
+                Used to detect daytime/nighttime.
+            lon: Longitude of location (e.g., 9.790639).
+                Used to detect daytime/nighttime.
+            utc_offset: UTC offset in hours (e.g., 1 for UTC+01:00).
+                Used to detect daytime/nighttime.
+            idstr: Identifier suffix for output variable names.
+            thres_zscore: Z-score threshold for outlier detection (default 4).
+                Values with |z-score| > threshold are flagged as outliers.
+            showplot: If True, display results plot.
+            verbose: If True, print iteration statistics.
         """
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
-        self.showplot = False
-        self.verbose = False
-        self.thres_zscore = thres_zscore
+
+        # Validate inputs
+        if thres_zscore <= 0:
+            raise ValueError('thres_zscore must be positive.')
+        if lat is None or lon is None or utc_offset is None:
+            raise ValueError('Location parameters (lat, lon, utc_offset) are required for day/night detection.')
+
         self.showplot = showplot
         self.verbose = verbose
+        self.thres_zscore = thres_zscore
 
         # Detect daytime and nighttime
-        self.flag_daytime, flag_nighttime, self.is_daytime, self.is_nighttime = (
+        self.flag_daytime, _, self.is_daytime, self.is_nighttime = (
             create_daytime_nighttime_flags(timestamp_index=self.series.index, lat=lat, lon=lon, utc_offset=utc_offset))
 
     def calc(self, repeat: bool = True):
@@ -86,21 +101,19 @@ class zScoreDaytimeNighttime(FlagBase):
 
         # Working data
         s = self.filteredseries.copy().dropna()
-        # s = self.series.copy().dropna()
         flag = pd.Series(index=s.index, data=np.nan)
-        # flag = pd.Series(index=self.series.index, data=np.nan)
 
         # Run for daytime (dt)
-        _s_dt = s[self.is_daytime].copy()  # Daytime data
-        _zscore_dt = funcs.zscore(series=_s_dt)
+        _s_dt = s[self.is_daytime].copy()
+        _zscore_dt = np.abs(funcs.zscore(series=_s_dt))
         _ok_dt = _zscore_dt <= self.thres_zscore
         _ok_dt = _ok_dt[_ok_dt].index
         _rejected_dt = _zscore_dt > self.thres_zscore
         _rejected_dt = _rejected_dt[_rejected_dt].index
 
         # Run for nighttime (nt)
-        _s_nt = s[self.is_nighttime].copy()  # Daytime data
-        _zscore_nt = funcs.zscore(series=_s_nt)
+        _s_nt = s[self.is_nighttime].copy()
+        _zscore_nt = np.abs(funcs.zscore(series=_s_nt))
         _ok_nt = _zscore_nt <= self.thres_zscore
         _ok_nt = _ok_nt[_ok_nt].index
         _rejected_nt = _zscore_nt > self.thres_zscore
@@ -139,28 +152,34 @@ class zScore(FlagBase):
                  showplot: bool = False,
                  plottitle: str = None,
                  verbose: bool = False):
-        """Identify outliers based on the z-score of records.
+        """Detect outliers using z-score with global threshold.
+
+        Single z-score threshold applied to entire time series.
+        Simpler and faster than day/night separation when time-of-day
+        variation is not critical.
+
+        Example:
+            See `examples/outlierdetection/zscore.py` for complete examples.
 
         Args:
             series: Time series in which outliers are identified.
-            idstr: Identifier, added as suffix to output variable names.
-            thres_zscore: Threshold for z-score, scores above this value will be flagged as outlier.
-            showplot: Show plot with results from the outlier detection.
-            plottitle: Title string for the plot.
-            verbose: Print more text output.
-
-        Returns:
-            Flag series that combines flags from all iterations in one single flag.
-
+            idstr: Identifier suffix for output variable names.
+            thres_zscore: Z-score threshold for outlier detection (default 4).
+                Values with |z-score| > threshold are flagged as outliers.
+            showplot: If True, display results plot.
+            plottitle: Optional title string for the plot.
+            verbose: If True, print iteration statistics.
         """
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
-        self.showplot = False
-        self.plottitle = None
-        self.verbose = False
-        self.thres_zscore = thres_zscore
+
+        # Validate inputs
+        if thres_zscore <= 0:
+            raise ValueError('thres_zscore must be positive.')
+
         self.showplot = showplot
         self.plottitle = plottitle
         self.verbose = verbose
+        self.thres_zscore = thres_zscore
 
     def calc(self, repeat: bool = True):
         """Calculate overall flag, based on individual flags from multiple iterations.
@@ -181,7 +200,7 @@ class zScore(FlagBase):
         s = self.filteredseries.copy().dropna()
 
         # Run with threshold
-        zscores = funcs.zscore(series=s)
+        zscores = np.abs(funcs.zscore(series=s))
         ok = zscores <= self.thres_zscore
         ok = ok[ok].index
         rejected = zscores > self.thres_zscore
@@ -191,7 +210,6 @@ class zScore(FlagBase):
 
         if self.verbose:
             print(f"ITERATION#{iteration}: Total found outliers: {len(rejected)} values")
-        # print(f"z-score of {threshold} corresponds to a prob of {100 * 2 * norm.sf(threshold):0.2f}%")
 
         return ok, rejected, n_outliers
 
@@ -208,33 +226,39 @@ class zScoreRolling(FlagBase):
                  showplot: bool = False,
                  plottitle: str = None,
                  verbose: bool = False):
-        """Identify outliers based on the rolling z-score of records.
+        """Detect outliers using rolling z-score (adaptive threshold).
 
-        For each record, the rolling z-score is calculated from the rolling
-        mean and rolling standard deviation, centered on the respective value.
+        Calculates z-score from rolling mean and rolling std dev, centered
+        on each value. Adapts threshold to local data characteristics,
+        useful for non-stationary time series.
+
+        Example:
+            See `examples/outlierdetection/zscore.py` for complete examples.
 
         Args:
             series: Time series in which outliers are identified.
-            idstr: Identifier, added as suffix to output variable names.
-            thres_zscore: Threshold for z-score, scores above this value will be flagged as outlier.
-            winsize: Size of time window in number of records to calculate the rolling z-score.
-            showplot: Show plot with results from the outlier detection.
-            plottitle: Title string for the plot.
-            verbose: Print more text output.
-
-        Returns:
-            Flag series that combines flags from all iterations in one single flag.
-
+            idstr: Identifier suffix for output variable names.
+            thres_zscore: Z-score threshold for outlier detection (default 4).
+                Values with |z-score| > threshold are flagged as outliers.
+            winsize: Window size in records for rolling statistics.
+                If None, defaults to len(series) / 20 (5% of data).
+            showplot: If True, display results plot.
+            plottitle: Optional title string for the plot.
+            verbose: If True, print iteration statistics.
         """
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
-        self.showplot = False
-        self.plottitle = None
-        self.verbose = False
-        self.thres_zscore = thres_zscore
-        self.winsize = winsize
+
+        # Validate inputs
+        if thres_zscore <= 0:
+            raise ValueError('thres_zscore must be positive.')
+        if winsize is not None and winsize < 3:
+            raise ValueError('winsize must be at least 3 records.')
+
         self.showplot = showplot
         self.plottitle = plottitle
         self.verbose = verbose
+        self.thres_zscore = thres_zscore
+        self.winsize = winsize
 
     def calc(self, repeat: bool = True):
         """Calculate overall flag, based on individual flags from multiple iterations.
@@ -265,7 +289,6 @@ class zScoreRolling(FlagBase):
         rzscore = np.abs((s - rmean) / rsd)
 
         # Run with threshold
-        # zscores = funcs.zscore(series=s)
         ok = rzscore <= self.thres_zscore
         ok = ok[ok].index
         rejected = rzscore > self.thres_zscore
@@ -277,38 +300,3 @@ class zScoreRolling(FlagBase):
             print(f"ITERATION#{iteration}: Total found outliers: {len(rejected)} values")
 
         return ok, rejected, n_outliers
-
-
-def example_zscore_daytime_nighttime():
-    from diive.configs.exampledata import load_exampledata_parquet
-    df = load_exampledata_parquet()
-    series = df['Tair_f'].copy()
-    zdn = zScoreDaytimeNighttime(
-        series=series,
-        lat=47.286417,
-        lon=7.733750,
-        utc_offset=1,
-        thres_zscore=2.5,
-        showplot=True,
-        verbose=True)
-    zdn.calc(repeat=True)
-    flag = zdn.get_flag()
-
-
-def example_zscore():
-    from diive.configs.exampledata import load_exampledata_parquet
-    df = load_exampledata_parquet()
-    series = df['Tair_f'].copy()
-    zsc = zScore(
-        series=series,
-        thres_zscore=2,
-        showplot=True,
-        plottitle="z-score",
-        verbose=True)
-    zsc.calc(repeat=False)
-    flag = zsc.get_flag()
-
-
-if __name__ == '__main__':
-    example_zscore()
-    # example_zscore_daytime_nighttime()

@@ -203,14 +203,17 @@ filled_flux = fpc.level41['long_term_random_forest']['CUT_50']
 
 ## Outlier Detection Methods
 
-7 built-in methods available:
+10 built-in methods available (11 classes with z-score variants):
 1. **AbsoluteLimits** — Min/max threshold
 2. **Hampel** — Robust spike detection (MAD-based)
 3. **LocalSD** — Local standard deviation (adaptive)
-4. **zScoreIncrements** — Abrupt change detection
-5. **LocalOutlierFactor** — Density-based anomalies
-6. **ManualRemoval** — Explicit data removal
-7. **TrimLow** — Symmetric removal (trimmed mean approach)
+4. **zScore** — Global z-score threshold
+5. **zScoreDaytimeNighttime** — Z-score with separate day/night thresholds
+6. **zScoreRolling** — Rolling z-score (adaptive threshold)
+7. **zScoreIncrements** — Abrupt change detection
+8. **LocalOutlierFactor** — Density-based anomalies
+9. **ManualRemoval** — Explicit data removal
+10. **TrimLow** — Symmetric removal (trimmed mean approach)
 
 ## Examples
 

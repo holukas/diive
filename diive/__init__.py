@@ -57,6 +57,12 @@ from diive.pkgs.outlierdetection.hampel import HampelDaytimeNighttime as HampelD
 from diive.pkgs.outlierdetection.hampel import HampelDaytimeNighttime as hampel_daytime_nighttime
 from diive.pkgs.outlierdetection.incremental import zScoreIncrements as zScoreIncrements
 from diive.pkgs.outlierdetection.incremental import zScoreIncrements as zscore_increments
+from diive.pkgs.outlierdetection.zscore import zScore as zScore
+from diive.pkgs.outlierdetection.zscore import zScore as zscore
+from diive.pkgs.outlierdetection.zscore import zScoreDaytimeNighttime as zScoreDaytimeNighttime
+from diive.pkgs.outlierdetection.zscore import zScoreDaytimeNighttime as zscore_daytime_nighttime
+from diive.pkgs.outlierdetection.zscore import zScoreRolling as zScoreRolling
+from diive.pkgs.outlierdetection.zscore import zScoreRolling as zscore_rolling
 from diive.pkgs.outlierdetection.localsd import LocalSD as LocalSD
 from diive.pkgs.outlierdetection.localsd import LocalSD as localsd
 from diive.pkgs.outlierdetection.lof import LocalOutlierFactor as LocalOutlierFactor
@@ -188,6 +194,12 @@ __all__ = [
     'hampel_daytime_nighttime',
     'zScoreIncrements',
     'zscore_increments',
+    'zScore',
+    'zscore',
+    'zScoreDaytimeNighttime',
+    'zscore_daytime_nighttime',
+    'zScoreRolling',
+    'zscore_rolling',
     'LocalSD',
     'localsd',
     'LocalOutlierFactor',
