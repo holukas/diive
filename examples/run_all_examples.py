@@ -40,6 +40,7 @@ EXAMPLE_FILES = [
     'outlierdetection/hampel.py',
     'outlierdetection/incremental.py',
     'outlierdetection/localsd.py',
+    'outlierdetection/lof.py',
     'createvar/air.py',
     'createvar/conversions.py',
     'createvar/daynightflag.py',
@@ -131,7 +132,7 @@ def run_all_examples():
     total_start = time.time()
 
     print("=" * 80)
-    print(f"Running {len(EXAMPLE_FILES)} example files (90 functions total) in parallel (max {MAX_WORKERS} workers)...")
+    print(f"Running {len(EXAMPLE_FILES)} example files (92 functions total) in parallel (max {MAX_WORKERS} workers)...")
     print("=" * 80 + "\n")
 
     results = {'passed': [], 'failed': [], 'skipped': []}

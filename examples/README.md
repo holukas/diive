@@ -35,7 +35,8 @@ examples/
 │   ├── [absolutelimits.py](outlierdetection/absolutelimits.py)  # Absolute value limits with separate day/night thresholds (2 examples)
 │   ├── [hampel.py](outlierdetection/hampel.py)                  # Hampel filter (Median Absolute Deviation) outlier detection (2 examples)
 │   ├── [incremental.py](outlierdetection/incremental.py)        # Z-score increments outlier detection (1 example)
-│   └── [localsd.py](outlierdetection/localsd.py)                # Local standard deviation rolling window outlier detection (2 examples)
+│   ├── [localsd.py](outlierdetection/localsd.py)                # Local standard deviation rolling window outlier detection (2 examples)
+│   └── [lof.py](outlierdetection/lof.py)                        # Local Outlier Factor density-based detection (2 examples)
 ├── createvar/             # Derived variable creation examples
 │   ├── [air.py](createvar/air.py)                             # Air properties: aerodynamic resistance and dry air density (2 examples)
 │   ├── [conversions.py](createvar/conversions.py)              # Unit conversions: air temperature, latent heat, evapotranspiration (3 examples)
@@ -74,7 +75,7 @@ examples/
 python examples/run_all_examples.py
 ```
 
-Executes all 90 examples across 48 files (22 visualization + 8 analysis + 2 binary + 7 corrections + 7 outlierdetection + 23 createvar + 4 echires + 7 flux + 10 gap_filling + 2 timeseries + 1 fits) in parallel (4 concurrent workers) with execution time tracking.
+Executes all 92 examples across 49 files (22 visualization + 8 analysis + 2 binary + 7 corrections + 9 outlierdetection + 23 createvar + 4 echires + 7 flux + 10 gap_filling + 2 timeseries + 1 fits) in parallel (4 concurrent workers) with execution time tracking.
 - Shows individual timing for each example
 - Detailed error messages if any fail
 - ~2.7x faster than sequential execution
@@ -136,14 +137,14 @@ When adding a new example:
 
 ## Phases
 
-- **Phase 1 (Complete):** Core examples across visualization, analysis, and data processing (76 examples)
+- **Phase 1 (Complete):** Core examples across visualization, analysis, and data processing (83 examples)
   - **Visualization:** HeatmapDateTime/YearMonth (6), HexbinPlot (3), TimeSeries (1), Cumulative (3), Other (1), DielCycle (1), Histogram (2), RidgeLine (2), ScatterXY (3) = 22 examples
   - **Analysis:** DailyCorrelation, StratifiedAnalysis, GapFinder, GridAggregator, Histogram, FindOptimumRange, Quantiles, SeasonalTrendDecomposition = 8 examples
-  - **Data Processing:** Binary (2), Corrections (7), Variable creation (23) = 32 examples
+  - **Data Processing:** Binary (2), Corrections (7), Outlierdetection (9 - absolutelimits + hampel + incremental + localsd + lof), Variable creation (23) = 41 examples
   - **Eddy Covariance:** FluxDetectionLimit (2), MaxCovariance (1), WindRotation2D (1), Flux (7 - common + hqflux + selfheating + uncertainty + 3 ustarthreshold) = 11 examples
   - **Time Series:** Harmonic/Spectrogram (2 - daily pattern, annual phenology) = 2 examples
   - **Fits:** BinFitterCP (1) = 1 example
-- **Phase 2 (In Progress):** Gap-filling workflow examples
-  - **Gap-filling:** Linear interpolation (2), MDS (1), MDS comparison (1), Random Forest (3), XGBoost (1), MDS vs RF comparison (1) = 9 examples
+- **Phase 2 (Complete):** Gap-filling workflow examples (9 examples)
+  - **Gap-filling:** Linear interpolation (2), MDS (1), MDS comparison (1), Random Forest (3), XGBoost (2), MDS vs RF vs XGB comparison (1) = 9 examples
   - TODO: Long-term multi-year models, HeatmapXYZ
 - **Phase 3+ (Future):** Advanced feature engineering examples

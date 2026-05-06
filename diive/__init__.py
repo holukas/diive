@@ -59,6 +59,9 @@ from diive.pkgs.outlierdetection.incremental import zScoreIncrements as zScoreIn
 from diive.pkgs.outlierdetection.incremental import zScoreIncrements as zscore_increments
 from diive.pkgs.outlierdetection.localsd import LocalSD as LocalSD
 from diive.pkgs.outlierdetection.localsd import LocalSD as localsd
+from diive.pkgs.outlierdetection.lof import LocalOutlierFactor as LocalOutlierFactor
+from diive.pkgs.outlierdetection.lof import LocalOutlierFactorAllData as LocalOutlierFactorAllData
+from diive.pkgs.outlierdetection.lof import LocalOutlierFactorDaytimeNighttime as LocalOutlierFactorDaytimeNighttime
 from diive.pkgs.createvar.air import aerodynamic_resistance as aerodynamic_resistance
 from diive.pkgs.createvar.air import dry_air_density as dry_air_density
 from diive.pkgs.createvar.conversions import air_temp_from_sonic_temp as air_temp_from_sonic_temp
@@ -184,6 +187,9 @@ __all__ = [
     'zscore_increments',
     'LocalSD',
     'localsd',
+    'LocalOutlierFactor',
+    'LocalOutlierFactorAllData',
+    'LocalOutlierFactorDaytimeNighttime',
 
     # Packages: Variables
     'aerodynamic_resistance',

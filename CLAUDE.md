@@ -1781,6 +1781,60 @@ ham = dv.HampelDaytimeNighttime(series=s, n_sigma=5.5, separate_day_night=True)
 - **Complete outlier detection consolidation:** All 4 main methods now have examples
   - absolutelimits (2), hampel (2), incremental (1), localsd (2) = 7 examples in 4 files
 
+### 33. Local Outlier Factor (LOF) Examples Consolidation (v0.91.0+)
+- **Files:** Modified `diive/pkgs/outlierdetection/lof.py`, NEW `examples/outlierdetection/lof.py`
+- **Examples moved:** 2 examples from source to examples folder
+  - `example_lof_with_impulse_noise()`: Day/night mode with separate contamination thresholds
+  - `example_lof_global()`: Global mode with single contamination rate
+- **Exports added to `diive/__init__.py`:**
+  - `LocalOutlierFactorAllData` (global mode)
+  - `LocalOutlierFactorDaytimeNighttime` (day/night mode)
+- **Updated documentation:**
+  - `examples/README.md`: Added lof.py entry (2 examples)
+  - `examples/run_all_examples.py`: Added lof.py, updated count 90 → 92
+- **Module docstring updated:** Added reference to examples folder
+- **Example count:** 92 total across 49 files
+- **Outlierdetection consolidation complete:** All 5 main methods now have examples
+  - absolutelimits (2), hampel (2), incremental (1), localsd (2), lof (2) = 9 examples in 5 files
+
+### 31. LOF Class Consolidation (v0.91.0+)
+- **File:** `diive/pkgs/outlierdetection/lof.py` (refactored from 2 classes to 1)
+- **Refactoring:**
+  - **Old:** Two separate classes `LocalOutlierFactorAllData` (global mode) and `LocalOutlierFactorDaytimeNighttime` (day/night mode)
+  - **New:** Single unified `LocalOutlierFactor` class with boolean mode parameter
+  - **Pattern:** Follows Hampel class consolidation approach (similar to architecture improvements made earlier in v0.91.0)
+- **New API:**
+  ```python
+  import diive as dv
+  
+  # Global mode (no day/night separation)
+  lof = dv.LocalOutlierFactor(series=s, n_neighbors=20, contamination=0.05, 
+                              separate_daytime_nighttime=False)
+  
+  # Day/night mode (separate thresholds)
+  lof = dv.LocalOutlierFactor(series=s, n_neighbors=20, contamination=0.05,
+                              separate_daytime_nighttime=True,
+                              lat=47.286417, lon=7.733750, utc_offset=1)
+  ```
+- **Key improvements:**
+  - **Single class:** Clearer intent and API
+  - **Boolean mode parameter:** `separate_daytime_nighttime` controls behavior
+  - **Optional location params:** lat, lon, utc_offset validated only when mode=True
+  - **Backward compatibility:** Aliases maintain old class names (`LocalOutlierFactorAllData = LocalOutlierFactor`, etc.)
+  - **Unified _flagtests():** Single method with if/else branching on mode flag
+- **Exports added to `diive/__init__.py`:**
+  - `LocalOutlierFactor` (new primary name, PascalCase)
+  - `LocalOutlierFactorAllData` (backward compatibility alias)
+  - `LocalOutlierFactorDaytimeNighttime` (backward compatibility alias)
+- **Examples updated:**
+  - Both examples in `examples/outlierdetection/lof.py` now use `LocalOutlierFactor`
+  - Added explicit `separate_daytime_nighttime=True/False` parameters
+  - Docstrings updated to reference new class name
+- **Updated documentation:**
+  - Examples maintained (2 examples in 1 file)
+  - Example count: 92 total across 49 files
+  - CLAUDE.md: This entry
+
 ## Troubleshooting Guide
 
 ### Setup Issues

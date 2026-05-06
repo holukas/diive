@@ -16,9 +16,15 @@
 - **Harmonized ML gap-filling examples** — RandomForest and XGBoost examples now use identical data (2020), identical 8-stage feature engineering, identical workflow for direct comparison. Both include heatmap (observed vs gap-filled) + cumulative flux visualizations. Results: RF R²=0.8185, XGB R²=0.8141 (comparable, different architectures).
 - **Simplified gap-filling docstrings** — Refactored `FluxMDS`, `RandomForestTS`, `XGBoostTS`, `linear_interpolation`, `prediction_scores` docstrings. Removed implementation details/optimization claims, focused on functionality, added example file references for better discoverability.
 - **Generalized hyperparameter optimization** — Refactored `OptimizeParamsRFTS` → `OptimizeParamsTS` for model-agnostic design. Works with any sklearn-compatible regressor (RandomForest, XGBoost, custom). Moved to `diive/core/ml/optimization.py`. Includes `report_optimization()` method with tested parameter ranges, best parameters, performance metrics (R², MAE, RMSE), top N parameter combinations, parameter sensitivity, and production-ready code snippet with auto-detected wrapper class.
+- **Outlier detection improvements:**
+  - **Class consolidation:** Unified `LocalOutlierFactorAllData` and `LocalOutlierFactorDaytimeNighttime` into single `LocalOutlierFactor` class with `separate_daytime_nighttime: bool` mode parameter (follows Hampel consolidation pattern). Location parameters (lat, lon, utc_offset) now optional. Old class names remain as backward-compatible aliases.
+  - **Hampel API refactoring:** Renamed `HampelDaytimeNighttime` → `Hampel` with clearer parameter API. Primary `n_sigma` parameter with optional `n_sigma_daytime`/`n_sigma_nighttime` overrides. Old class name remains as alias.
+  - **LocalSD code quality:** Fixed 4 critical bugs (redundant initialization, unsafe parameter checks, missing else branch, copy-paste error). 7 code quality improvements (safer type checks, simplified logic, removed dead code, improved type hints).
+  - **Examples consolidation:** All 5 main outlier detection methods now have consolidated examples (9 total: absolutelimits 2, hampel 2, incremental 1, localsd 2, lof 2).
 - **Test speedup** — RandomForest gap-filling tests 60-70% faster (2.8s vs 6s).
 
 ### New Classes & Functions
+- **Outlier detection:** `LocalOutlierFactor` (unified class with global/day-night modes, replacing LocalOutlierFactorAllData/LocalOutlierFactorDaytimeNighttime); `Hampel` (refactored with clearer API, replacing HampelDaytimeNighttime as primary name)
 - **Binary data processing:** `get_encoded_value_from_int`, `get_encoded_value_series` (bit extraction)
 - **Data corrections:** `set_exact_values_to_missing`, `setto_value`, `setto_threshold`, `MeasurementOffsetFromReplicate`, `remove_relativehumidity_offset`, `remove_radiation_zero_offset`, `WindDirOffset`
 - **Variable creation:** `aerodynamic_resistance`, `dry_air_density`, `air_temp_from_sonic_temp`, `latent_heat_of_vaporization`, `et_from_le`, `DaytimeNighttimeFlag`, `lagged_variants`, `generate_noisy_timeseries`, `add_impulse_noise`, `potrad`, `potrad_eot`, `TimeSince`
