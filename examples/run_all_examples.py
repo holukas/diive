@@ -42,6 +42,7 @@ EXAMPLE_FILES = [
     'outlierdetection/localsd.py',
     'outlierdetection/lof.py',
     'outlierdetection/manualremoval.py',
+    'outlierdetection/stepwise.py',
     'outlierdetection/trim.py',
     'outlierdetection/zscore.py',
     'createvar/air.py',

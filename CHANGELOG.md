@@ -23,7 +23,7 @@
   - **ManualRemoval improvements:** Fixed 4 code quality issues (redundant initialization, docstring corrections, improved index operations). Added dedicated examples for single-date and date-range removal workflows.
   - **TrimLow consolidation:** Moved example from source to `examples/outlierdetection/trim.py` (2 examples). Fixed redundant initialization, unused variables, added input validation. Added exports to `diive/__init__.py`.
   - **Z-Score consolidation:** Moved examples from source to `examples/outlierdetection/zscore.py` (3 examples: global, day/night, rolling). Fixed redundant initialization, added input validation. Improved docstrings for all 3 z-score classes. Added exports to `diive/__init__.py`.
-  - **Examples consolidation:** All 10 main outlier detection methods now have consolidated examples (19 total: absolutelimits 2, hampel 2, incremental 1, localsd 2, lof 2, manualremoval 2, trim 2, zscore 3 + zScoreIncrements already consolidated).
+  - **Examples consolidation:** All 10 main outlier detection methods now have consolidated examples (20 total: absolutelimits 2, hampel 2, incremental 1, localsd 2, lof 2, manualremoval 2, stepwise 1, trim 2, zscore 3). Added StepwiseOutlierDetection orchestration example demonstrating how to chain multiple detection methods sequentially.
 - **Test speedup** — RandomForest gap-filling tests 60-70% faster (2.8s vs 6s).
 
 ### New Classes & Functions

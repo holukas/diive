@@ -14,7 +14,7 @@ from diive.core.funcs.funcs import validate_id_string
 from diive.core.plotting.timeseries import TimeSeries
 from diive.core.times.times import TimestampSanitizer
 from diive.pkgs.outlierdetection.absolutelimits import AbsoluteLimits, AbsoluteLimitsDaytimeNighttime
-from diive.pkgs.outlierdetection.hampel import HampelDaytimeNighttime
+from diive.pkgs.outlierdetection.hampel import Hampel
 from diive.pkgs.outlierdetection.incremental import zScoreIncrements
 from diive.pkgs.outlierdetection.localsd import LocalSD
 from diive.pkgs.outlierdetection.lof import LocalOutlierFactorDaytimeNighttime, LocalOutlierFactorAllData
@@ -180,18 +180,18 @@ class StepwiseOutlierDetection:
         flagtest.calc()
         self._last_flag = flagtest.get_flag()
 
-    def flag_outliers_hampel_dtnt_test(self, window_length: int = 13, n_sigma_dt: float = 5.5, n_sigma_nt: float = 5.5,
+    def flag_outliers_hampel_dtnt_test(self, window_length: int = 13, n_sigma: float = 5.5, n_sigma_daytime: float = None, n_sigma_nighttime: float = None,
                                        k: float = 1.4826, use_differencing: bool = True,
                                        separate_day_night: bool = True, showplot: bool = False, verbose: bool = False,
                                        repeat: bool = True):
         """Identify outliers in a sliding window based on the Hampel filter,
         separately for daytime and nighttime data."""
         series_cleaned = self._series_hires_cleaned.copy()
-        flagtest = HampelDaytimeNighttime(
+        flagtest = Hampel(
             series=series_cleaned, idstr=self.idstr,
             lat=self.site_lat, lon=self.site_lon, utc_offset=self.utc_offset,
             use_differencing=use_differencing, separate_day_night=separate_day_night,
-            window_length=window_length, n_sigma_dt=n_sigma_dt, n_sigma_nt=n_sigma_nt,
+            window_length=window_length, n_sigma=n_sigma, n_sigma_daytime=n_sigma_daytime, n_sigma_nighttime=n_sigma_nighttime,
             k=k, showplot=showplot, verbose=verbose)
         flagtest.calc(repeat=repeat)
         self._last_flag = flagtest.get_flag()
@@ -315,41 +315,3 @@ class StepwiseOutlierDetection:
         series_hires_orig = _series.copy()
 
         return hires_flags, series_hires_cleaned, series_hires_orig
-
-
-
-
-
-def _example():
-    """Example usage"""
-    import matplotlib.pyplot as plt
-    from diive.pkgs.createvar.noise import generate_noisy_timeseries
-
-    # Generate the data
-    df_noisy = generate_noisy_timeseries(
-        start_date='2024-01-01',
-        periods=48 * 30,  # Approx. 1 month of half-hourly data
-        freq='30min',  # Half-hourly data
-        trend_slope=0.01,  # Upward trend
-        seasonal_strength=9,  # Large waves
-        noise_level=2,  # Amount of "jitter"
-        outlier_fraction=0.1  # 10% of data are spikes
-    )
-
-    print(df_noisy.head())
-
-    # Visualize results
-    plt.figure(figsize=(12, 6))
-    plt.plot(df_noisy.index, df_noisy['base_signal'], label='True Signal (Trend + Season)', color='green',
-             linestyle='--')
-    plt.plot(df_noisy.index, df_noisy['observed_value'], label='Noisy Data', color='blue', alpha=0.6)
-    plt.title('Synthetic Time Series with Noise and Outliers')
-    plt.xlabel('Timestamp')
-    plt.ylabel('Value')
-    plt.legend()
-    plt.grid(True, alpha=0.3)
-    plt.show()
-
-
-if __name__ == '__main__':
-    _example()

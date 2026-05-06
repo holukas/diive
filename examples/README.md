@@ -39,6 +39,7 @@ examples/
 │   ├── [localsd.py](outlierdetection/localsd.py)                # Local standard deviation rolling window outlier detection (2 examples)
 │   ├── [lof.py](outlierdetection/lof.py)                        # Local Outlier Factor density-based detection (2 examples)
 │   ├── [manualremoval.py](outlierdetection/manualremoval.py)    # Manual data point/range removal for known issues (2 examples)
+│   ├── [stepwise.py](outlierdetection/stepwise.py)              # Step-wise orchestration - chain multiple detection methods (1 example)
 │   └── [trim.py](outlierdetection/trim.py)                      # Trim filter - symmetric removal of low and high outliers (2 examples)
 ├── createvar/             # Derived variable creation examples
 │   ├── [air.py](createvar/air.py)                             # Air properties: aerodynamic resistance and dry air density (2 examples)
@@ -78,7 +79,7 @@ examples/
 python examples/run_all_examples.py
 ```
 
-Executes all 99 examples across 50 files (22 visualization + 8 analysis + 2 binary + 7 corrections + 16 outlierdetection + 23 createvar + 4 echires + 7 flux + 10 gap_filling + 2 timeseries + 1 fits) in parallel (4 concurrent workers) with execution time tracking.
+Executes all 100 examples across 51 files (22 visualization + 8 analysis + 2 binary + 7 corrections + 17 outlierdetection + 23 createvar + 4 echires + 7 flux + 10 gap_filling + 2 timeseries + 1 fits) in parallel (4 concurrent workers) with execution time tracking.
 - Shows individual timing for each example
 - Detailed error messages if any fail
 - ~2.7x faster than sequential execution
@@ -140,10 +141,10 @@ When adding a new example:
 
 ## Phases
 
-- **Phase 1 (Complete):** Core examples across visualization, analysis, and data processing (90 examples)
+- **Phase 1 (Complete):** Core examples across visualization, analysis, and data processing (91 examples)
   - **Visualization:** HeatmapDateTime/YearMonth (6), HexbinPlot (3), TimeSeries (1), Cumulative (3), Other (1), DielCycle (1), Histogram (2), RidgeLine (2), ScatterXY (3) = 22 examples
   - **Analysis:** DailyCorrelation, StratifiedAnalysis, GapFinder, GridAggregator, Histogram, FindOptimumRange, Quantiles, SeasonalTrendDecomposition = 8 examples
-  - **Data Processing:** Binary (2), Corrections (7), Outlierdetection (16 - absolutelimits 2 + hampel 2 + incremental 1 + localsd 2 + lof 2 + manualremoval 2 + trim 2 + zscore 3), Variable creation (23) = 48 examples
+  - **Data Processing:** Binary (2), Corrections (7), Outlierdetection (17 - absolutelimits 2 + hampel 2 + incremental 1 + localsd 2 + lof 2 + manualremoval 2 + stepwise 1 + trim 2 + zscore 3), Variable creation (23) = 49 examples
   - **Eddy Covariance:** FluxDetectionLimit (2), MaxCovariance (1), WindRotation2D (1), Flux (7 - common + hqflux + selfheating + uncertainty + 3 ustarthreshold) = 11 examples
   - **Time Series:** Harmonic/Spectrogram (2 - daily pattern, annual phenology) = 2 examples
   - **Fits:** BinFitterCP (1) = 1 example
