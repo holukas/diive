@@ -54,8 +54,8 @@ def example_hqflux_hampel_co2():
         lon=8.010325,
         utc_offset=1,  # CET
         window_length=48 * 13,  # 13 days at 30-min frequency
-        n_sigma_dt=5.5,
-        n_sigma_nt=5.5,
+        n_sigma_daytime=5.5,
+        n_sigma_nighttime=5.5,
         use_differencing=True,  # Papale method: isolate spikes from trends
         showplot=True
     )

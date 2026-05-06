@@ -61,6 +61,7 @@ EXAMPLE_FILES = [
     'flux/hqflux.py',
     'flux/selfheating.py',
     'flux/uncertainty.py',
+    'flux/ustar_mp_detection.py',
     'flux/ustarthreshold.py',
     'gap_filling/interpolate.py',
     'gap_filling/mds.py',
@@ -136,7 +137,7 @@ def run_all_examples():
     total_start = time.time()
 
     print("=" * 80)
-    print(f"Running {len(EXAMPLE_FILES)} example files (92 functions total) in parallel (max {MAX_WORKERS} workers)...")
+    print(f"Running {len(EXAMPLE_FILES)} example files (100+ functions total) in parallel (max {MAX_WORKERS} workers)...")
     print("=" * 80 + "\n")
 
     results = {'passed': [], 'failed': [], 'skipped': []}
