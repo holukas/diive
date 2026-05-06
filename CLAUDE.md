@@ -215,6 +215,30 @@ filled_flux = fpc.level41['long_term_random_forest']['CUT_50']
 9. **ManualRemoval** — Explicit data removal
 10. **TrimLow** — Symmetric removal (trimmed mean approach)
 
+**Step-wise Orchestration:** Chain multiple detection methods sequentially via `StepwiseOutlierDetection`. Each method operates on the previous result, progressively filtering outliers. Useful for multi-stage QA/QC workflows.
+
+```python
+from diive.pkgs.outlierdetection.stepwiseoutlierdetection import StepwiseOutlierDetection
+
+detector = StepwiseOutlierDetection(dfin=df, col='NEE', site_lat=46.8, site_lon=8.6, utc_offset=1)
+
+# Chain: aggressive first, then refine
+detector.flag_outliers_hampel_dtnt_test(n_sigma=5.5)
+detector.addflag()
+
+detector.flag_outliers_localsd_test(n_sd=[3.5, 3.5], winsize=[24, 24], separate_daytime_nighttime=True)
+detector.addflag()
+
+detector.flag_outliers_zscore_test(thres_zscore=4)
+detector.addflag()
+
+# View results
+print(detector.series_hires_cleaned)  # Cleaned series
+print(detector.flags)  # All flags from all steps
+```
+
+See `examples/outlierdetection/stepwise.py` for complete example (6 methods with full parameters).
+
 ## Examples
 
 Located in `examples/` organized by topic. Each is a self-contained, runnable Python file.
@@ -225,7 +249,11 @@ Located in `examples/` organized by topic. Each is a self-contained, runnable Py
 
 **Run individual:** `python examples/visualization/heatmap_datetime.py`
 
-See `examples/README.md` for full catalog (94+ examples across 50 files).
+**Coverage:** 100 examples across 51 files
+- Visualization: 22, Analysis: 8, Data Processing: 49 (Binary 2, Corrections 7, Outlierdetection 17 with consolidation, Variable creation 23)
+- Eddy Covariance: 11, Time Series: 2, Fits: 1, Gap-filling: 9
+
+See `examples/README.md` for full catalog.
 
 ## Common Workflows
 
