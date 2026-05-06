@@ -21,11 +21,12 @@
   - **Hampel API refactoring:** Renamed `HampelDaytimeNighttime` → `Hampel` with clearer parameter API. Primary `n_sigma` parameter with optional `n_sigma_daytime`/`n_sigma_nighttime` overrides. Old class name remains as alias.
   - **LocalSD code quality:** Fixed 4 critical bugs (redundant initialization, unsafe parameter checks, missing else branch, copy-paste error). 7 code quality improvements (safer type checks, simplified logic, removed dead code, improved type hints).
   - **ManualRemoval improvements:** Fixed 4 code quality issues (redundant initialization, docstring corrections, improved index operations). Added dedicated examples for single-date and date-range removal workflows.
-  - **Examples consolidation:** All 6 main outlier detection methods now have consolidated examples (11 total: absolutelimits 2, hampel 2, incremental 1, localsd 2, lof 2, manualremoval 2).
+  - **TrimLow consolidation:** Moved example from source to `examples/outlierdetection/trim.py` (2 examples). Updated module/class docstrings to reference examples folder. Fixed error message typo ("trim_daytime" → "trim_nighttime"). Added exports to `diive/__init__.py`.
+  - **Examples consolidation:** All 7 main outlier detection methods now have consolidated examples (13 total: absolutelimits 2, hampel 2, incremental 1, localsd 2, lof 2, manualremoval 2, trim 2).
 - **Test speedup** — RandomForest gap-filling tests 60-70% faster (2.8s vs 6s).
 
 ### New Classes & Functions
-- **Outlier detection:** `LocalOutlierFactor` (unified class with global/day-night modes, replacing LocalOutlierFactorAllData/LocalOutlierFactorDaytimeNighttime); `Hampel` (refactored with clearer API, replacing HampelDaytimeNighttime as primary name); `ManualRemoval` (explicit data point/range removal)
+- **Outlier detection:** `LocalOutlierFactor` (unified class with global/day-night modes, replacing LocalOutlierFactorAllData/LocalOutlierFactorDaytimeNighttime); `Hampel` (refactored with clearer API, replacing HampelDaytimeNighttime as primary name); `ManualRemoval` (explicit data point/range removal); `TrimLow` (symmetric outlier removal using trimmed mean approach)
 - **Binary data processing:** `get_encoded_value_from_int`, `get_encoded_value_series` (bit extraction)
 - **Data corrections:** `set_exact_values_to_missing`, `setto_value`, `setto_threshold`, `MeasurementOffsetFromReplicate`, `remove_relativehumidity_offset`, `remove_radiation_zero_offset`, `WindDirOffset`
 - **Variable creation:** `aerodynamic_resistance`, `dry_air_density`, `air_temp_from_sonic_temp`, `latent_heat_of_vaporization`, `et_from_le`, `DaytimeNighttimeFlag`, `lagged_variants`, `generate_noisy_timeseries`, `add_impulse_noise`, `potrad`, `potrad_eot`, `TimeSince`

@@ -1,10 +1,19 @@
 """
-OUTLIER DETECTION: TRIM
-=======================
+Outlier detection using the Trim filter (Trimmed Mean Approach).
+
+This module provides outlier detection by removing values below a threshold,
+then removing an equal number of values from the high end. This is based on
+the trimmed mean approach and is useful for symmetric outlier removal.
+
+Quality flags:
+  - flag=0: Value within acceptable range (valid)
+  - flag=2: Value detected as outlier (removed)
+  - NaN: Original missing data preserved
+
+See examples/outlierdetection/trim.py for working examples.
 
 This module is part of the diive library:
 https://github.com/holukas/diive
-
 """
 import numpy as np
 import pandas as pd
@@ -30,38 +39,42 @@ class TrimLow(FlagBase):
                  idstr: str = None,
                  showplot: bool = False,
                  verbose: bool = False):
-        """Flag values below a given absolute limit as outliers, then flag an
-        equal number of datapoints at the high end as outliers.
+        """Trim outliers using symmetric removal (trimmed mean approach).
 
-        For example, if *lower_limit=-3* removes 10 data points from the low
-        end of the data, then 10 data points are also removed from the high
-        end of the data.
+        Removes values below a threshold, then removes an equal number of values
+        from the high end. Supports separate processing for daytime/nighttime data.
 
-        Based on the trimmed mean approach.
+        Example:
+            See `examples/outlierdetection/trim.py` for complete examples.
 
         Args:
             series: Time series in which outliers are identified.
-            trim_daytime: *True* if daytime data should be filtered.
-            trim_nighttime: *True* if nighttime data should be filtered.
+            trim_daytime: If True, apply filtering to daytime data.
+            trim_nighttime: If True, apply filtering to nighttime data.
             lower_limit: Value below which values are considered outliers.
-            lat: Latitude of location as float, e.g. 46.583056.
-                Used to divide data into daytime and nighttime data.
-            lon: Longitude of location as float, e.g. 9.790639
-                Used to divide data into daytime and nighttime data.
-            utc_offset: UTC offset of *timestamp_index*, e.g. 1 for UTC+01:00
-                The datetime index of the resulting Series will be in this timezone.
-                Used to divide data into daytime and nighttime data.
-            idstr: Identifier, added as suffix to output variable names.
-            showplot: Show plot with results from the outlier detection.
-            verbose: Print more text output.
+            lat: Latitude of location (e.g., 46.583056).
+                Used to detect daytime/nighttime.
+            lon: Longitude of location (e.g., 9.790639).
+                Used to detect daytime/nighttime.
+            utc_offset: UTC offset in hours (e.g., 1 for UTC+01:00).
+                Used to detect daytime/nighttime.
+            idstr: Identifier suffix for output variable names.
+            showplot: If True, display results plot.
+            verbose: If True, print iteration statistics.
 
         Returns:
-            Flag series where 2=outlier and 0=not outlier.
-
+            Flag series where 2=outlier and 0=valid.
         """
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
-        self.showplot = False
-        self.verbose = False
+
+        # Validate inputs
+        if not trim_daytime and not trim_nighttime:
+            raise ValueError('Either trim_daytime or trim_nighttime must be True.')
+        if lower_limit is None:
+            raise ValueError('lower_limit must be specified (not None).')
+        if lat is None or lon is None or utc_offset is None:
+            raise ValueError('Location parameters (lat, lon, utc_offset) are required for day/night detection.')
+
         self.showplot = showplot
         self.verbose = verbose
         self.trim_daytime = trim_daytime
@@ -69,27 +82,39 @@ class TrimLow(FlagBase):
         self.lower_limit = lower_limit
 
         # Detect daytime and nighttime
-        self.flag_daytime, flag_nighttime, self.is_daytime, self.is_nighttime = (
+        self.flag_daytime, _, self.is_daytime, self.is_nighttime = (
             create_daytime_nighttime_flags(timestamp_index=self.series.index, lat=lat, lon=lon, utc_offset=utc_offset))
 
     def calc(self):
-        """Calculate overall flag, based on individual flags from multiple iterations.
+        """Calculate overall flag based on trim filter threshold testing.
 
-        Args:
-            repeat: If *True*, the outlier detection is repeated until all
-                outliers are removed.
-
+        Single-pass outlier detection (not iterative). Removes values below
+        lower_limit, then removes equal number of values from high end.
         """
-
         self._overall_flag, n_iterations = self.repeat(func=self.run_flagtests, repeat=False)
+
         if self.showplot:
             # Default plot for outlier tests, showing rejected values
             self.defaultplot(n_iterations=n_iterations)
-            title = (f"TrimLow filter daytime/nighttime: {self.series.name}, "
-                     f"n_iterations = {n_iterations}, "
+
+            # Determine filtering mode for plot title
+            if self.trim_daytime and self.trim_nighttime:
+                mode = "daytime/nighttime"
+            elif self.trim_daytime:
+                mode = "daytime only"
+            else:
+                mode = "nighttime only"
+
+            title = (f"TrimLow filter {mode}: {self.series.name}, "
                      f"n_outliers = {self.series[self.overall_flag == 2].count()}")
-            self.plot_outlier_daytime_nighttime(series=self.series, flag_daytime=self.flag_daytime,
-                                                flag_quality=self.overall_flag, title=title)
+
+            # Only plot day/night visualization if both day and night are enabled
+            if self.trim_daytime and self.trim_nighttime:
+                self.plot_outlier_daytime_nighttime(series=self.series, flag_daytime=self.flag_daytime,
+                                                    flag_quality=self.overall_flag, title=title)
+            else:
+                # Single-mode plot (no day/night separation visualization)
+                self.defaultplot(n_iterations=n_iterations)
 
     def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Perform tests required for this flag"""
@@ -105,21 +130,29 @@ class TrimLow(FlagBase):
         elif self.trim_nighttime:
             _s = s[self.is_nighttime].copy()
         else:
-            raise ValueError('(!)Either trim_daytime or trim_daytime must be True.')
+            raise ValueError('Either trim_daytime or trim_nighttime must be True.')
 
         s_sorted = _s.sort_values(ascending=False)
         s_sorted_below = s_sorted.loc[s_sorted < self.lower_limit].copy()
         n_vals_below = s_sorted_below.count()
-        s_sorted_top = s_sorted.iloc[0:n_vals_below].copy()
-        n_vals_top = s_sorted_top.count()
-        upper_lim = s_sorted_top.iloc[-1]
-        _ok = (_s >= self.lower_limit) & (_s < upper_lim)
-        _ok = _ok[_ok].index
-        _rejected = (_s <= self.lower_limit) | (_s >= upper_lim)
-        _rejected = _rejected[_rejected].index
-        # Collect nighttime flag in one overall flag
-        flag.loc[_ok] = 0
-        flag.loc[_rejected] = 2
+
+        # Handle case where no values fall below threshold
+        if n_vals_below == 0:
+            # No low outliers found, all values are valid
+            flag.loc[_s.index] = 0
+        else:
+            # Trim symmetric: remove top N values equal to number of low outliers
+            s_sorted_top = s_sorted.iloc[0:n_vals_below].copy()
+            upper_lim = s_sorted_top.iloc[-1]
+
+            # Classify: keep values in [lower_limit, upper_lim), reject others
+            _ok = (_s >= self.lower_limit) & (_s < upper_lim)
+            _ok = _ok[_ok].index
+            _rejected = (_s <= self.lower_limit) | (_s >= upper_lim)
+            _rejected = _rejected[_rejected].index
+
+            flag.loc[_ok] = 0
+            flag.loc[_rejected] = 2
 
         flag = flag.fillna(0)
 
@@ -136,48 +169,3 @@ class TrimLow(FlagBase):
                   f"maximum value: {_s.loc[flag == 0].max()}")
 
         return ok, rejected, n_outliers
-
-
-def example():
-    import importlib.metadata
-    import diive.configs.exampledata as ed
-    from diive.pkgs.createvar.noise import add_impulse_noise
-    from diive.core.plotting.timeseries import TimeSeries
-    import warnings
-    warnings.filterwarnings('ignore')
-    version_diive = importlib.metadata.version("diive")
-    print(f"diive version: v{version_diive}")
-    df = ed.load_exampledata_parquet()
-
-    # # Only nighttime data
-    # keep = df['Rg_f'] < 50
-    # df = df[keep].copy()
-
-    s = df['Tair_f'].copy()
-    s = s.loc[s.index.year == 2018].copy()
-    # s = s.loc[s.index.month == 7].copy()
-
-    s_noise = add_impulse_noise(series=s,
-                                factor_low=-10,
-                                factor_high=4,
-                                contamination=0.04,
-                                seed=42)  # Add impulse noise (spikes)
-    s_noise.name = f"{s.name}+noise"
-    TimeSeries(s_noise).plot()
-
-    lsd = TrimLow(
-        series=s_noise,
-        trim_daytime=False,
-        trim_nighttime=True,
-        lower_limit=-75,
-        showplot=True,
-        verbose=True,
-        lat=47.286417,
-        lon=7.733750,
-        utc_offset=1
-    )
-    lsd.calc()
-
-
-if __name__ == '__main__':
-    example()

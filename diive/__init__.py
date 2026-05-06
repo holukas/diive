@@ -63,6 +63,8 @@ from diive.pkgs.outlierdetection.lof import LocalOutlierFactor as LocalOutlierFa
 from diive.pkgs.outlierdetection.lof import LocalOutlierFactorAllData as LocalOutlierFactorAllData
 from diive.pkgs.outlierdetection.lof import LocalOutlierFactorDaytimeNighttime as LocalOutlierFactorDaytimeNighttime
 from diive.pkgs.outlierdetection.manualremoval import ManualRemoval as ManualRemoval
+from diive.pkgs.outlierdetection.trim import TrimLow as TrimLow
+from diive.pkgs.outlierdetection.trim import TrimLow as trim_low
 from diive.pkgs.createvar.air import aerodynamic_resistance as aerodynamic_resistance
 from diive.pkgs.createvar.air import dry_air_density as dry_air_density
 from diive.pkgs.createvar.conversions import air_temp_from_sonic_temp as air_temp_from_sonic_temp
@@ -191,6 +193,9 @@ __all__ = [
     'LocalOutlierFactor',
     'LocalOutlierFactorAllData',
     'LocalOutlierFactorDaytimeNighttime',
+    'ManualRemoval',
+    'TrimLow',
+    'trim_low',
 
     # Packages: Variables
     'aerodynamic_resistance',
