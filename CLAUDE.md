@@ -1737,6 +1737,50 @@ ham = dv.HampelDaytimeNighttime(series=s, n_sigma=5.5, separate_day_night=True)
   - Example count: 87 → 88 examples across 46 → 47 files
   - Outlierdetection examples: 4 → 5
 
+### 31. Hampel API Refactoring (v0.91.0+)
+- **File:** Modified `diive/pkgs/outlierdetection/hampel.py`
+- **Change:** Renamed `HampelDaytimeNighttime` → `Hampel` with clearer parameter API
+- **Problem addressed:** Old API confusing (n_sigma_dt/n_sigma_nt parameters, but only one used in global mode)
+- **Solution:** Primary parameter `n_sigma` with optional `n_sigma_daytime`/`n_sigma_nighttime` overrides
+  - Global mode: uses `n_sigma` for all records
+  - Day/night mode: uses `n_sigma_daytime`/`n_sigma_nighttime` if provided, else `n_sigma`
+- **Backward compatibility:** `HampelDaytimeNighttime = Hampel` alias maintains old code
+- **Flag renamed:** `OUTLIER_HAMPELDTNT` → `OUTLIER_HAMPEL` (matches class name)
+- **Exports:** `Hampel`/`hampel` (primary), `HampelDaytimeNighttime`/`hampel_daytime_nighttime` (compat)
+- **Example:** `examples/outlierdetection/hampel.py` with 2 examples (global + day/night modes)
+- **Benefits:** Clearer intent, more intuitive parameter usage, backward compatible
+
+### 32. LocalSD Code Quality & Visualization Improvements (v0.91.0+)
+- **Files:** Modified `diive/pkgs/outlierdetection/localsd.py`, NEW `examples/outlierdetection/localsd.py`
+- **Examples consolidation:** Moved 2 examples from source to examples folder
+  - `example_localsd_daytime_nighttime()`: Day/night mode with separate thresholds
+  - `example_localsd_global()`: Global mode with constant/rolling SD
+- **Bug fixes (4 critical errors):**
+  1. Removed redundant `self.showplot/self.verbose` initialization (lines overwritten)
+  2. Fixed validation: `if not lat:` → `if lat is None:` (allows valid zero coordinates)
+  3. Added else branch to initialize day/night attributes to None in global mode
+  4. Fixed plot title: "Absolute limits filter" → "Local SD filter" (copy-paste error)
+- **Code quality improvements (7 changes):**
+  1. Changed unsafe parameter check: `if not winsize` → `if winsize is None` (allows 0)
+  2. Simplified logic: nested if/if → if/else (clearer, more efficient)
+  3. Removed unnecessary variable initialization to None
+  4. Removed redundant `.copy()` calls on boolean-indexed subsets (3 instances)
+  5. Simplified color logic: nested if/else → ternary operator
+  6. Removed dead code (commented-out lines)
+  7. Improved type hints: `tuple[Any, Any, int]` → `tuple[DatetimeIndex, DatetimeIndex, int]`
+  8. Removed unused import: `typing.Any`
+- **Visualization enhancements:**
+  - Added legend labels for median and threshold lines (first iteration only to avoid duplicates)
+  - Added annotation for multi-iteration plots: "Multiple lines of same color = successive iterations"
+  - Appears in upper left corner only when n_iterations > 1
+- **Updated documentation:**
+  - `examples/README.md`: Added localsd entry (2 examples)
+  - `examples/run_all_examples.py`: Added localsd.py
+  - `README.md`: Updated example count 88 → 90, outlierdetection 5 → 7
+  - Example count: 90 total across 48 files
+- **Complete outlier detection consolidation:** All 4 main methods now have examples
+  - absolutelimits (2), hampel (2), incremental (1), localsd (2) = 7 examples in 4 files
+
 ## Troubleshooting Guide
 
 ### Setup Issues
