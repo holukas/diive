@@ -17,8 +17,17 @@
 /notebooks/Workbench/Comparisons
 /notebooks/Workbench/mercury
 /diive/configs/exampledata/local
-/.claude/
-CLAUDE.md
+
+# .claude local configuration (not shared)
+.claude/settings.local.json
+.claude/keybindings.json
+.claude/memory/
+.claude/worktrees/
+.claude/scheduled-tasks/
+
+# But DO commit these:
+# .claude/settings.json    ← shared harness config
+# .claude/launch.json      ← shared dev servers
 
 
 # Byte-compiled / optimized / DLL files
