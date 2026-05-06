@@ -1709,6 +1709,34 @@ ham = dv.Hampel(series=s, n_sigma=5.5, n_sigma_daytime=4.5, n_sigma_nighttime=6.
 ham = dv.HampelDaytimeNighttime(series=s, n_sigma=5.5, separate_day_night=True)
 ```
 
+### 30. Z-Score Increments Examples Consolidation (v0.91.0+)
+- **File:** NEW `examples/outlierdetection/incremental.py` (examples), modified `diive/pkgs/outlierdetection/incremental.py` (source)
+- **Module:** `diive.pkgs.outlierdetection.incremental`
+- **One example moved from source to examples folder:**
+  - `example_incremental_zscore()` — Detect outliers based on abrupt changes between consecutive values
+    - Demonstrates `zScoreIncrements` class with synthetic impulse noise
+    - Shows z-score calculation on forward, backward, and combined increments
+    - Use case: Robust detection of spikes in any time series data
+- **Key improvements:**
+  - Enabled plot (`showplot=True`) so users see visualization when running example
+  - Simplified output with clear statistics (original vs filtered)
+  - Added detailed docstring explaining algorithm (three increment types)
+  - Adapted hardcoded example data path to use `load_exampledata_parquet()`
+- **Exports added to `diive/__init__.py`:**
+  - `zScoreIncrements` / `zscore_increments`
+- **Cleaned source:**
+  - Removed `example()` function from source file
+  - Removed `if __name__ == '__main__':` block
+  - Updated module docstring with general description and quality flags
+  - Updated class docstring with algorithm explanation and reference to examples
+  - Removed flux-specific language (ecosystem data references)
+- **Updated documentation:**
+  - `examples/README.md`: Added incremental entry with 1 example
+  - `examples/run_all_examples.py`: Added incremental.py to EXAMPLE_FILES
+  - `README.md`: Updated example count 87 → 88, added to examples list and categories
+  - Example count: 87 → 88 examples across 46 → 47 files
+  - Outlierdetection examples: 4 → 5
+
 ## Troubleshooting Guide
 
 ### Setup Issues
@@ -2419,4 +2447,4 @@ Increment in CLAUDE.md header when releasing new version.
 ---
 
 **Last Updated:** 2026-05-06
-**Version:** v0.91.0+ (with Getting Started, .claude Configuration, Troubleshooting Guide, cross-machine setup, outlier detection examples consolidation, and Hampel API refactoring)
+**Version:** v0.91.0+ (with Getting Started, .claude Configuration, Troubleshooting Guide, cross-machine setup, outlier detection examples consolidation + API refactoring)

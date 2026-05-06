@@ -7,8 +7,6 @@ robust outlier detection with optional daytime/nighttime separation.
 
 See: diive.pkgs.outlierdetection.hampel
 """
-import numpy as np
-import pandas as pd
 import warnings
 
 import diive as dv
@@ -46,7 +44,7 @@ def example_hampel_with_impulse_noise():
     # Apply Hampel filter with day/night separation
     ham = dv.Hampel(
         series=s_noise,
-        n_sigma=5.5,           # Threshold for outlier detection
+        n_sigma=5.5,  # Threshold for outlier detection
         window_length=48 * 13,  # 13 days of half-hourly data
         use_differencing=True,  # Apply to double-differenced data
         separate_day_night=True,
@@ -100,7 +98,7 @@ def example_hampel_global_threshold():
     # Apply Hampel filter with global threshold (no day/night separation)
     ham = dv.Hampel(
         series=s_noise,
-        n_sigma=5.5,           # Global threshold applied to all records
+        n_sigma=5.5,  # Global threshold applied to all records
         window_length=48 * 13,  # 13-day rolling window
         use_differencing=True,
         separate_day_night=False,  # Single threshold for all

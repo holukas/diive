@@ -93,8 +93,10 @@ def example_absolute_limits_daytime_nighttime():
     daytime_outliers = ((flag == 2) & al.is_daytime).sum()
     nighttime_outliers = ((flag == 2) & al.is_nighttime).sum()
     print(f"\nOutliers by time of day:")
-    print(f"  Daytime: {daytime_outliers} outliers ({daytime_outliers/al.is_daytime.sum()*100:.1f}% of daytime records)")
-    print(f"  Nighttime: {nighttime_outliers} outliers ({nighttime_outliers/al.is_nighttime.sum()*100:.1f}% of nighttime records)")
+    print(
+        f"  Daytime: {daytime_outliers} outliers ({daytime_outliers / al.is_daytime.sum() * 100:.1f}% of daytime records)")
+    print(
+        f"  Nighttime: {nighttime_outliers} outliers ({nighttime_outliers / al.is_nighttime.sum() * 100:.1f}% of nighttime records)")
 
 
 if __name__ == '__main__':

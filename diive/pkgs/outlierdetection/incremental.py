@@ -1,10 +1,19 @@
 """
-OUTLIER DETECTION: INCREMENTAL
-==============================
+Outlier detection using z-score of record increments.
+
+This module provides outlier detection based on abrupt changes between consecutive values.
+The method calculates z-scores for three types of increments (forward, backward, combined)
+and flags values where all three exceed the threshold.
+
+Quality flags:
+  - flag=0: Value within acceptable range (valid)
+  - flag=2: Value detected as outlier (removed)
+  - NaN: Original missing data preserved
+
+See examples/outlierdetection/incremental.py for working examples.
 
 This module is part of the diive library:
 https://github.com/holukas/diive
-
 """
 from pandas import Series, DatetimeIndex
 
@@ -16,6 +25,23 @@ from diive.pkgs.outlierdetection.zscore import zScore
 
 @ConsoleOutputDecorator()
 class zScoreIncrements(FlagBase):
+    """Identify outliers based on z-score of record increments.
+
+    The algorithm detects outliers by analyzing abrupt changes between consecutive values.
+    Three types of increments are calculated for each record:
+
+    1. **Forward increment:** absolute difference from previous value
+    2. **Backward increment:** absolute difference to next value
+    3. **Combined increment:** sum of forward and backward increments
+
+    Z-scores are calculated for each increment type, and values are flagged as outliers
+    only when ALL THREE increments exceed the z-score threshold. This approach is robust
+    to isolated spikes while allowing gradual changes.
+
+    Example:
+        See `examples/outlierdetection/incremental.py` for complete examples.
+    """
+
     flagid = 'OUTLIER_INCRZ'
 
     def __init__(self,
@@ -24,40 +50,19 @@ class zScoreIncrements(FlagBase):
                  thres_zscore: float = 4,
                  showplot: bool = False,
                  verbose: bool = False):
-        """Identify outliers based on the z-score of record increments.
-
-        First, several absolute increments are calcualted for each data record at time t:
-            (1) increment1(t) = absolute( value(t) - value(t-1) )
-            (2) increment2(t) = absolute( value(t) - value(t+1) )
-            (3) increment1+2(t) = increment1(t) + increment2(t)
-
-        Second, z-scores are calculated for each of these increments:
-            (4) z-scores of increment1(t)
-            (5) z-scores of increment2(t)
-            (6) z-scores of increment1+2(t)
-
-        Third, all data records where z-score > *thres_zscore* are flagged:
-            (7) z-scores of increment1(t) > *thres_zscore* --> flag=2
-            (8) z-scores of increment2(t) > *thres_zscore* --> flag=2
-            (9) z-scores of increment1+2(t) > *thres_zscore* --> flag=2
-
-        Fourth, all data records where all three increments were flagged are flagged as outlier.
-            The sum of three flags in (7), (8) and (9) = 2 + 2 + 2 = 6 = outlier.
-
-        Only data records where all three flags were raised are flagged as outlier.
+        """Initialize z-score increments outlier detection.
 
         Args:
             series: Time series in which outliers are identified.
             idstr: Identifier, added as suffix to output variable names.
-            thres_zscore: Threshold for z-score, scores above this value will
-                be flagged as outlier. NOTE that in this case the z-scores are
-                calculated from the increments between data records in *series*.
-            showplot: Show plot with results from the outlier detection.
-            verbose: Print more text output.
+            thres_zscore: Threshold for z-score. Scores above this value are flagged.
+                Z-scores are calculated from increments between consecutive records.
+                Default 4 is conservative; lower values detect more outliers.
+            showplot: If True, displays visualization of detected outliers.
+            verbose: If True, prints iteration statistics to console.
 
         Returns:
             Flag series that combines flags from all iterations in one single flag.
-
         """
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.verbose = False
@@ -136,51 +141,3 @@ class zScoreIncrements(FlagBase):
         return ok, rejected, n_outliers
 
 
-def example():
-    import importlib.metadata
-    import pandas as pd
-    import matplotlib.pyplot as plt
-    import diive.configs.exampledata as ed
-    from diive.pkgs.createvar.noise import add_impulse_noise
-    from diive.core.plotting.timeseries import TimeSeries
-    import warnings
-    warnings.filterwarnings('ignore')
-    version_diive = importlib.metadata.version("diive")
-    print(f"diive version: v{version_diive}")
-    df = ed.load_exampledata_parquet()
-    s = df['Tair_f'].copy()
-    s = s.loc[s.index.year == 2018].copy()
-    s = s.loc[s.index.month == 7].copy()
-    s_noise = add_impulse_noise(series=s,
-                                factor_low=-10,
-                                factor_high=3,
-                                contamination=0.04,
-                                seed=42)  # Add impulse noise (spikes)
-    s_noise.name = f"{s.name}+noise"
-    TimeSeries(s_noise).plot()
-
-    zsi = zScoreIncrements(
-        series=s_noise,
-        thres_zscore=5.5,
-        showplot=True,
-        verbose=False)
-
-    zsi.calc(repeat=True)
-
-    flag = zsi.get_flag()
-
-    frame = {'s': s, 's_noise': s_noise, 'flag': flag}
-    checkdf = pd.DataFrame.from_dict(frame)
-    good_data = checkdf.loc[checkdf['flag'] == 0]['s_noise']
-    rejected_data = checkdf.loc[checkdf['flag'] == 2]['s_noise']
-
-    fig, ax = plt.subplots()
-    ax.plot(good_data, color="#42A5F5", label="not an outlier", lw=0, ms=5, marker="o")
-    ax.plot(rejected_data, color="red", label="outlier", lw=0, ms=7, marker="X")
-    plt.title("Result")
-    plt.legend()
-    plt.show()
-
-
-if __name__ == '__main__':
-    example()
