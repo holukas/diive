@@ -19,7 +19,11 @@ from diive.pkgs.outlierdetection.common import create_daytime_nighttime_flags
 class AbsoluteLimitsDaytimeNighttime(FlagBase):
     """Generate flag that indicates if values in data are outside
     the specified range, defined by providing allowed minimum and
-    maximum values, separately for daytime and nighttime data."""
+    maximum values, separately for daytime and nighttime data.
+
+    Example:
+        See `examples/outlierdetection/absolutelimits.py` for complete examples.
+    """
 
     flagid = 'OUTLIER_ABSLIM_DTNT'
 
@@ -128,7 +132,11 @@ class AbsoluteLimitsDaytimeNighttime(FlagBase):
 class AbsoluteLimits(FlagBase):
     """Generate flag that indicates if values in data are outside
     the specified range, defined by providing the allowed minimum and
-    maximum for values in *series*."""
+    maximum for values in *series*.
+
+    Example:
+        See `examples/outlierdetection/absolutelimits.py` for complete examples.
+    """
 
     flagid = 'OUTLIER_ABSLIM'
 
@@ -178,47 +186,3 @@ class AbsoluteLimits(FlagBase):
         rejected = rejected[rejected].index
         n_outliers = len(rejected)
         return ok, rejected, n_outliers
-
-
-def example():
-    np.random.seed(100)
-    rows = 1000
-    data = np.random.rand(rows) * 100  # Random numbers b/w 0 and 100
-    tidx = pd.date_range('2019-01-01 00:30:00', periods=rows, freq='30min')
-    series = pd.Series(data, index=tidx, name='TESTDATA')
-    al = AbsoluteLimits(series=series, minval=6, maxval=74, idstr='99', showplot=True, verbose=True)
-    al.calc()
-    print(series.describe())
-    filteredseries = al.filteredseries
-    print(filteredseries.describe())
-    flag = al.flag
-    print(flag.describe())
-
-
-def example_daytime_nighttime():
-    np.random.seed(100)
-    rows = 1000
-    data = np.random.rand(rows) * 100  # Random numbers b/w 0 and 100
-    tidx = pd.date_range('2019-01-01 00:30:00', periods=rows, freq='30min')
-    series = pd.Series(data, index=tidx, name='TESTDATA')
-    al = AbsoluteLimitsDaytimeNighttime(
-        series=series,
-        daytime_minmax=[6.2, 74.9],
-        nighttime_minmax=[29.5, 47.4],
-        idstr='99',
-        lat=47.286417,
-        lon=7.733750,
-        utc_offset=1,
-        showplot=True,
-        verbose=True)
-    al.calc()
-    print(series.describe())
-    filteredseries = al.filteredseries
-    print(filteredseries.describe())
-    flag = al.flag
-    print(flag.describe())
-
-
-if __name__ == '__main__':
-    example_daytime_nighttime()
-    # example()

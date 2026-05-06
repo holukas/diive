@@ -1587,6 +1587,35 @@ rfts = RandomForestTS(
   - Cross-checked against ONEFlux `ustar.c` and `types.h`
   - New method `get_annual_thresholds()` for conservative threshold retrieval
 
+### 27. Outlier Detection Examples Consolidation (v0.91.0+)
+- **File:** NEW `examples/outlierdetection/absolutelimits.py` (examples), modified `diive/pkgs/outlierdetection/absolutelimits.py` (source)
+- **Module:** `diive.pkgs.outlierdetection.absolutelimits`
+- **Two examples moved from source to examples folder:**
+  1. `example_absolute_limits_basic()` — simple min/max threshold filtering
+     - Demonstrates `AbsoluteLimits` class with fixed value range constraints
+     - Shows statistics comparison (original vs filtered)
+     - Use case: Simple value validation for any time series
+  2. `example_absolute_limits_daytime_nighttime()` — separate day/night thresholds
+     - Demonstrates `AbsoluteLimitsDaytimeNighttime` class with latitude/longitude-aware time detection
+     - Shows statistics and breakdown by time of day
+     - Use case: Flux data filtering (daytime variability vs nighttime stability)
+- **Key improvements:**
+  - Enabled plots (`showplot=True`) so users see visualizations when running examples
+  - Clarified output: shows "Valid values after filtering" to distinguish series length from actual data points
+  - Added percentage breakdown for day/night outlier rejection
+  - Class docstrings updated to reference `examples/outlierdetection/absolutelimits.py`
+- **Exports added to `diive/__init__.py`:**
+  - `AbsoluteLimits` / `absolute_limits`
+  - `AbsoluteLimitsDaytimeNighttime` / `absolute_limits_daytime_nighttime`
+- **Cleaned source:**
+  - Removed `example()` and `example_daytime_nighttime()` functions from source file
+  - Removed `if __name__ == '__main__':` block
+- **Updated documentation:**
+  - `examples/README.md`: Added outlierdetection section with 2 examples
+  - Example count: 83 → 85 examples across 44 → 45 files
+  - Parallel runner updated to include outlierdetection examples
+  - CLAUDE.md: This entry
+
 ## Troubleshooting Guide
 
 ### Setup Issues
@@ -2297,4 +2326,4 @@ Increment in CLAUDE.md header when releasing new version.
 ---
 
 **Last Updated:** 2026-05-06
-**Version:** v0.91.0+ (with Getting Started, .claude Configuration, Troubleshooting Guide, and cross-machine setup)
+**Version:** v0.91.0+ (with Getting Started, .claude Configuration, Troubleshooting Guide, cross-machine setup, and outlier detection examples consolidation)

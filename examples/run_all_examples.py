@@ -36,6 +36,7 @@ EXAMPLE_FILES = [
     'binary/extract.py',
     'corrections/setto.py',
     'corrections/offsetcorrection.py',
+    'outlierdetection/absolutelimits.py',
     'createvar/air.py',
     'createvar/conversions.py',
     'createvar/daynightflag.py',
@@ -127,7 +128,7 @@ def run_all_examples():
     total_start = time.time()
 
     print("=" * 80)
-    print(f"Running {len(EXAMPLE_FILES)} example files (83 functions total) in parallel (max {MAX_WORKERS} workers)...")
+    print(f"Running {len(EXAMPLE_FILES)} example files (85 functions total) in parallel (max {MAX_WORKERS} workers)...")
     print("=" * 80 + "\n")
 
     results = {'passed': [], 'failed': [], 'skipped': []}
