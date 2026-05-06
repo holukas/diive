@@ -1616,6 +1616,99 @@ rfts = RandomForestTS(
   - Parallel runner updated to include outlierdetection examples
   - CLAUDE.md: This entry
 
+### 28. Hampel Filter Examples Consolidation (v0.91.0+)
+- **File:** NEW `examples/outlierdetection/hampel.py` (examples), modified `diive/pkgs/outlierdetection/hampel.py` (source)
+- **Module:** `diive.pkgs.outlierdetection.hampel`
+- **Two examples moved from source to examples folder:**
+  1. `example_hampel_with_impulse_noise()` — day/night thresholds with synthetic spikes
+     - Demonstrates `HampelDaytimeNighttime` class with separate day/night Median Absolute Deviation (MAD) thresholds
+     - Shows iterative outlier removal until convergence
+     - Use case: Robust spike/outlier detection in time series with time-of-day variation
+  2. `example_hampel_global_threshold()` — single global threshold, iterative filtering
+     - Demonstrates global mode (no day/night separation)
+     - Shows single-pass vs iterative detection
+     - Use case: Simple, consistent outlier detection across entire time series
+- **Key improvements:**
+  - Enabled plots (`showplot=True`) so users see visualizations when running examples
+  - Adapted hardcoded example data paths to use `load_exampledata_parquet()`
+  - Simplified output with clear statistics (original vs filtered)
+  - Added detailed docstrings explaining Hampel algorithm and use cases
+- **Exports added to `diive/__init__.py`:**
+  - `HampelDaytimeNighttime` / `hampel_daytime_nighttime`
+- **Cleaned source:**
+  - Removed `_example_dtnt()` and `_example_cha()` functions from source file
+  - Removed `if __name__ == '__main__':` block
+  - Updated module docstring to universally describe algorithm (no domain-specific references)
+  - Updated class docstring to reference `examples/outlierdetection/hampel.py`
+- **Updated documentation:**
+  - `examples/README.md`: Added hampel entry with 2 examples
+  - `README.md`: Updated example count 85 → 87, added to examples list
+  - Example count: 85 → 87 examples across 45 → 46 files
+  - Parallel runner updated to include hampel examples
+  - CLAUDE.md: This entry
+
+### 29. Hampel Class API Refactoring (v0.91.0+)
+- **File:** Modified `diive/pkgs/outlierdetection/hampel.py` (class rename and parameter refactoring)
+- **Class:** Renamed `HampelDaytimeNighttime` → `Hampel` with clearer API
+- **Problem Addressed:**
+  - Old API was confusing: parameters `n_sigma_dt` and `n_sigma_nt` existed, but when `separate_day_night=False`, only `n_sigma_dt` was used and `n_sigma_nt` was ignored
+  - Unclear which parameter to use when (global mode vs day/night mode)
+- **Solution (Option 2):**
+  - Renamed class from `HampelDaytimeNighttime` to `Hampel` (simpler, clearer intent)
+  - Changed API to use `n_sigma` as primary parameter (used in all modes)
+  - Added optional `n_sigma_daytime` and `n_sigma_nighttime` parameters for day/night overrides
+  - When `separate_day_night=False`: uses `n_sigma` for global threshold
+  - When `separate_day_night=True`: uses `n_sigma_daytime` and `n_sigma_nighttime` if provided, otherwise falls back to `n_sigma`
+- **Backward Compatibility:**
+  - `HampelDaytimeNighttime = Hampel` alias added to source file
+  - Old class name still works for existing code
+  - Old parameter names (`n_sigma_dt`, `n_sigma_nt`) will cause AttributeError (users can migrate to new names)
+- **Exports updated in `diive/__init__.py`:**
+  - New: `Hampel` / `hampel` (primary name)
+  - Kept: `HampelDaytimeNighttime` / `hampel_daytime_nighttime` (backward compatibility)
+- **Examples updated (`examples/outlierdetection/hampel.py`):**
+  - Updated both examples to use `Hampel` class name
+  - Example 1: `n_sigma=5.5` (single parameter for day/night mode)
+  - Example 2: `n_sigma=5.5` (single parameter for global mode)
+  - Removed redundant `n_sigma_dt` and `n_sigma_nt` parameters
+- **Flagid Updated:**
+  - Changed from `OUTLIER_HAMPELDTNT` to `OUTLIER_HAMPEL` (matches class name)
+- **Key Improvements:**
+  - **Clearer intent:** Users see `n_sigma` and immediately understand it's the main threshold
+  - **Optional overrides:** Users can optionally specify different day/night thresholds without needing two parameters
+  - **Backward compatible:** Old code using `HampelDaytimeNighttime` still works
+  - **Consistent naming:** `Hampel` class name matches the algorithm name (Hampel filter)
+
+### Migration Guide (Hampel API Change)
+
+**Old Code (v0.90.0):**
+```python
+from diive.pkgs.outlierdetection.hampel import HampelDaytimeNighttime
+
+# Global mode (confusing: n_sigma_dt used, n_sigma_nt ignored)
+ham = HampelDaytimeNighttime(series=s, n_sigma_dt=5.5, separate_day_night=False)
+
+# Day/night mode (confusing: both parameters must be specified)
+ham = HampelDaytimeNighttime(series=s, n_sigma_dt=5.5, n_sigma_nt=5.5, separate_day_night=True)
+```
+
+**New Code (v0.91.0+):**
+```python
+import diive as dv
+
+# Global mode (clear: use n_sigma for all records)
+ham = dv.Hampel(series=s, n_sigma=5.5, separate_day_night=False)
+
+# Day/night mode with same threshold for both
+ham = dv.Hampel(series=s, n_sigma=5.5, separate_day_night=True)
+
+# Day/night mode with different thresholds (optional)
+ham = dv.Hampel(series=s, n_sigma=5.5, n_sigma_daytime=4.5, n_sigma_nighttime=6.5, separate_day_night=True)
+
+# Still works (backward compatibility)
+ham = dv.HampelDaytimeNighttime(series=s, n_sigma=5.5, separate_day_night=True)
+```
+
 ## Troubleshooting Guide
 
 ### Setup Issues
@@ -2326,4 +2419,4 @@ Increment in CLAUDE.md header when releasing new version.
 ---
 
 **Last Updated:** 2026-05-06
-**Version:** v0.91.0+ (with Getting Started, .claude Configuration, Troubleshooting Guide, cross-machine setup, and outlier detection examples consolidation)
+**Version:** v0.91.0+ (with Getting Started, .claude Configuration, Troubleshooting Guide, cross-machine setup, outlier detection examples consolidation, and Hampel API refactoring)

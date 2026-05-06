@@ -32,7 +32,8 @@ examples/
 │   ├── [setto.py](corrections/setto.py)                  # Set values to missing, specific values, or thresholds (3 examples)
 │   └── [offsetcorrection.py](corrections/offsetcorrection.py)  # Correct RH, radiation, measurement, and wind direction offsets (4 examples)
 ├── outlierdetection/      # Outlier detection and quality control examples
-│   └── [absolutelimits.py](outlierdetection/absolutelimits.py)  # Absolute value limits with separate day/night thresholds (2 examples)
+│   ├── [absolutelimits.py](outlierdetection/absolutelimits.py)  # Absolute value limits with separate day/night thresholds (2 examples)
+│   └── [hampel.py](outlierdetection/hampel.py)                  # Hampel filter (Median Absolute Deviation) outlier detection (2 examples)
 ├── createvar/             # Derived variable creation examples
 │   ├── [air.py](createvar/air.py)                             # Air properties: aerodynamic resistance and dry air density (2 examples)
 │   ├── [conversions.py](createvar/conversions.py)              # Unit conversions: air temperature, latent heat, evapotranspiration (3 examples)
@@ -71,7 +72,7 @@ examples/
 python examples/run_all_examples.py
 ```
 
-Executes all 85 examples across 45 files (22 visualization + 8 analysis + 2 binary + 7 corrections + 2 outlierdetection + 23 createvar + 4 echires + 7 flux + 10 gap_filling + 2 timeseries + 1 fits) in parallel (4 concurrent workers) with execution time tracking.
+Executes all 87 examples across 46 files (22 visualization + 8 analysis + 2 binary + 7 corrections + 4 outlierdetection + 23 createvar + 4 echires + 7 flux + 10 gap_filling + 2 timeseries + 1 fits) in parallel (4 concurrent workers) with execution time tracking.
 - Shows individual timing for each example
 - Detailed error messages if any fail
 - ~2.7x faster than sequential execution
