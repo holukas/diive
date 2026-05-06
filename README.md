@@ -20,37 +20,16 @@ Recent releases: [Releases](https://github.com/holukas/diive/releases)
 
 ## Quick Access to Common Classes
 
-All frequently-used classes are available directly from the `diive` namespace for convenient access in notebooks and
-scripts:
-
-### Interactive use (notebooks)
+Classes are available directly from the `diive` namespace with both PascalCase and snake_case names:
 
 ```python
-import diive as dv
-
-# Plotting
-plot = dv.time_series(series=data)
-plot = dv.cumulative(series=data)
-plot = dv.diel_cycle(series=data)
-
-# Gap-filling
-rf_model = dv.randomforest_ts(input_df=df, target_col='NEE')
-xgb_model = dv.xgboost_ts(input_df=df, target_col='NEE')
-quick_fill = dv.quick_fill_rfts(input_df=df, target_col='NEE')
-
-# Analysis
-grid = dv.gridaggregator(x=x_series, y=y_series, z=z_series)
-decomp = dv.seasonaltrend(series=data)
-```
-
-### Explicit use (production code)
-
-```python
-from diive import TimeSeries, RandomForestTS, GridAggregator
-
+# PascalCase (class name)
+from diive.core.plotting import TimeSeries
 plot = TimeSeries(series=data)
-model = RandomForestTS(input_df=df, target_col='NEE')
-grid = GridAggregator(x=x_series, y=y_series, z=z_series)
+
+# snake_case (alias)
+import diive as dv
+plot = dv.plot_time_series(series=data)
 ```
 
 ### Available exports
@@ -75,7 +54,7 @@ For the complete list of available aliases, see `diive.__all__`.
 
 **83 executable examples** demonstrating common workflows are organized by topic in the `examples/` folder:
 
-**Run all examples at once (parallelized, ~2.7x speedup):**
+**Run all examples at once (parallelized):**
 ```bash
 python examples/run_all_examples.py
 ```
@@ -112,151 +91,6 @@ See [examples/README.md](examples/README.md) for a complete index of all example
 Additional examples available in **Jupyter notebooks** at [notebooks/](notebooks/) with comprehensive workflows and
 tutorials.
 
----
-
-## Data Preparation Tools
-
-### Parquet Subsetting with Flexible Column Filtering
-
-The `dev_scripts/parquet_time_subset.py` script provides powerful tools for preparing example datasets:
-
-- **Time range filtering**: Restrict data to specific year/month ranges
-- **Flexible column selection**: Keep only variables of interest (e.g., CO2 flux columns)
-- **Pattern-based filtering**: Exclude columns by pattern (e.g., remove quality flags)
-- **Configurable preprocessing**: Optional removal of intermediate processing columns
-
-Example: Extract 3 months of CO2 flux data from large parquet file:
-
-```python
-# Configuration in dev_scripts/parquet_timerange_subset_ch-cha.py
-START_YEAR = 2015
-END_YEAR = 2015
-START_MONTH = 6
-END_MONTH = 8
-COLUMN_PATTERN = "FC"  # Keep only FC (CO2 flux) columns
-REMOVE_DOT_COLUMNS = True
-EXCLUDE_PATTERNS = ["BADM"]  # Exclude bad measurement flags
-# Result: Lightweight parquet file ready for examples or analysis
-```
-
----
-
-## Flux Quality Analysis
-
-### High-Quality Flux Extraction
-
-The `analyze_highest_quality_flux()` function robustly filters ecosystem fluxes using the Hampel method:
-
-- **Automatic day/night separation** based on solar geometry
-- **Robust outlier detection** using Median Absolute Deviation (MAD)
-- **Configurable strictness** with separate thresholds for daytime and nighttime
-- **Optional summary statistics** tracking records, outliers, and filter parameters
-- **Comprehensive input validation** with clear error messages
-
-Example: Analyze CO2 flux with Hampel filter and view quality summary:
-
-```python
-from diive.pkgs.flux.hqflux import analyze_highest_quality_flux
-
-results, summary = analyze_highest_quality_flux(
-    flux=df['FC'],
-    lat=47.286417, lon=8.010325, utc_offset=1,
-    window_length=48*13,  # 13 days at 30-min frequency
-    n_sigma_dt=5.5, n_sigma_nt=5.5,
-    use_differencing=True,
-    showplot=True,
-    return_summary=True  # Get detailed analysis
-)
-print(f"Outliers found: {summary['outliers_found']} "
-      f"({summary['outlier_pct']:.1f}%)")
-```
-
----
-
-## Gap-Filling Methods
-
-### Meteorological Data Similarity (FluxMDS)
-
-The optimized `FluxMDS` class uses meteorological similarity to fill ecosystem flux gaps:
-
-- **No model training required** — Pure meteorological approach without machine learning
-- **4.0x speedup** — Vectorized NumPy operations with memory-efficient in-place updates
-- **Hierarchical quality levels** — 60+ progressively relaxed criteria (7 days strict → 140+ days relaxed)
-- **Bit-identical results** — Backward compatible with original reference implementation
-- **Side-by-side validation** — Use `mds_comparison.py` example to benchmark performance
-
-Example: Gap-fill CO2 flux using meteorological similarity:
-
-```python
-from diive.pkgs.gapfilling.mds import FluxMDS
-
-mds = FluxMDS(
-    df=df,
-    flux='NEE_CUT_REF',
-    swin='SW_IN', ta='TA', vpd='VPD',
-    swin_tol=[20, 50],  # Low/high radiation tolerance
-    ta_tol=2.5, vpd_tol=0.5,
-    verbose=1
-)
-mds.run()
-
-# Gap-filled values and quality flags
-gapfilled = mds.get_gapfilled_target()
-quality_flags = mds.get_flag()
-```
-
----
-
-## Package Structure
-
-```
-diive/
-├── core/               # Foundational utilities shared across the library
-│   ├── base/           # FlagBase — base class for quality and outlier flags
-│   ├── dfun/           # DataFrame helpers: stats, regression, bin fitting
-│   ├── funcs/          # Miscellaneous utility functions
-│   ├── io/             # File detection, reading (CSV, EddyPro, TOA5), parquet I/O
-│   ├── ml/             # MlRegressorGapFillingBase — base class for RF/XGBoost gap-filling
-│   ├── plotting/       # Heatmaps, time series, scatter, histograms, ridge lines, cumulatives
-│   ├── times/          # Timestamp sanitization, frequency detection, vectorization, resampling
-│   └── utils/          # Helper utilities
-│
-└── pkgs/               # Domain-specific algorithms
-    ├── analyses/        # Correlation, GridAggregator, GapFinder, decoupling, seasonaltrend, quantiles
-    ├── binary/          # Binary-encoded value extraction
-    ├── corrections/     # Offset, radiation, RH, wind direction corrections
-    ├── createvar/       # Derived variables: air properties, conversions, TimeSince, potential radiation, noise
-    ├── echires/         # High-resolution eddy covariance: FluxDetectionLimit, WindRotation2D
-    ├── fits/            # BinFitterCP
-    ├── flux/            # USTAR thresholds, self-heating correction, flux uncertainty
-    ├── fluxprocessingchain/  # Orchestrated Level-2 through Level-4 flux workflows
-    ├── formats/         # FLUXNET and EddyPro file format conversions
-    ├── gapfilling/      # XGBoostTS, RandomForestTS, long-term multi-year gap-filling, FluxMDS, linear interpolation
-    ├── outlierdetection/# Hampel, z-score, LOF, absolute limits, stepwise detection
-    └── qaqc/            # FlagQCF, EddyPro flags, StepwiseMeteoScreeningDb
-```
-
-| Package                          | Key classes / functions                                                                                                                       | Description                                                                                                                                                                |
-|----------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `diive.core.base`                | `FlagBase`                                                                                                                                    | Base class for building quality and outlier flags; provides flag encoding, filtering, and visualization                                                                    |
-| `diive.core.ml`                  | `FeatureEngineer`, `MlRegressorGapFillingBase`                                                                                                | Standalone feature engineering (8-stage pipeline) and base class for ML gap-filling (RF, XGBoost); separate feature engineering from model training for better reusability |
-| `diive.core.io`                  | `DataFileReader`, `MultiDataFileReader`, `ReadFileType`, `FileSplitter`                                                                       | Read single or multiple instrument files (CSV, EddyPro, TOA5); detect file structure; split large files; load/save Parquet                                                 |
-| `diive.core.plotting`            | `HeatmapDateTime`, `HeatmapXYZ`, `HexbinPlot`, `TimeSeries`, `ScatterXY`, `HistogramPlot`, `DielCycle`, `RidgeLinePlot`, `CumulativeYear`     | Comprehensive visualization suite covering heatmaps, time series, scatter, histograms, diurnal cycles, ridge lines, hexbin plots, and cumulative plots                     |
-| `diive.core.times`               | `TimestampSanitizer`, `DetectFrequency`, `vectorize_timestamps()`, `continuous_timestamp_freq()`                                              | Sanitize and validate timestamps, detect/infer data frequency, vectorize time attributes, resample diel cycles                                                             |
-| `diive.core.dfun`                | `sstats()`, `fit_to_bins_linreg()`, `fit_to_bins_polyreg()`                                                                                   | DataFrame statistics, linear/polynomial bin fitting, regression utilities                                                                                                  |
-| `diive.pkgs.gapfilling`          | `XGBoostTS`, `RandomForestTS`, `QuickFillRFTS`, `LongTermGapFillingRandomForestTS`, `LongTermGapFillingXGBoostTS`, `FluxMDS`                  | Fill time series gaps with XGBoost, Random Forest (standard and long-term multi-year), MDS (4.0x optimized), or linear interpolation                                       |
-| `diive.pkgs.outlierdetection`    | `HampelDaytimeNighttime`, `zScore`, `zScoreDaytimeNighttime`, `LocalOutlierFactorAllData`, `AbsoluteLimits`, `AbsoluteLimitsDaytimeNighttime` | Detect and flag outliers using Hampel filter, z-score, LOF, absolute limits, local SD, manual removal, or stepwise combinations                                            |
-| `diive.pkgs.flux`                | `FluxProcessingChain`                                                                                                                         | Post-process eddy covariance fluxes: Level-2 quality flags, storage correction, USTAR filtering, gap-filling (RF/XGBoost/MDS), self-heating correction                     |
-| `diive.pkgs.fluxprocessingchain` | `FluxProcessingChain`                                                                                                                         | Orchestrate a complete Level-2 → Level-4 flux processing workflow in a single pipeline                                                                                     |
-| `diive.pkgs.analyses`            | `GapFinder`, `GridAggregator`, `daily_correlation()`, `SeasonalTrendDecomposition`                                                            | Locate data gaps, aggregate variables into 2-D grids, compute daily correlations, decoupling analysis, quantiles, seasonal-trend decomposition                             |
-| `diive.pkgs.corrections`         | `OffsetCorrection`, `WindDirectionOffset`, `SetToThreshold`, `SetToMissing`                                                                   | Apply measurement offsets, correct wind directions, clamp values to thresholds, set periods to missing                                                                     |
-| `diive.pkgs.createvar`           | `DaytimeNighttimeFlag`, `TimeSince`, `calc_vpd_from_ta_rh()`, `et_from_le()`, `potrad()`                                                      | Derive new variables: daytime/nighttime flags, VPD, ET, time-since-event, potential radiation                                                                              |
-| `diive.pkgs.qaqc`                | `FlagQCF`, `StepwiseMeteoScreeningDb`                                                                                                         | Manage FLUXNET quality control flags; apply stepwise meteorological screening                                                                                              |
-| `diive.pkgs.echires`             | `FluxDetectionLimit`, `WindRotation2D`, `MaxCovariance`                                                                                       | Process 20 Hz eddy covariance data: detection limits, 2-D wind rotation, maximum covariance lag                                                                            |
-| `diive.pkgs.formats`             | `FormatEddyProFluxnetFileForUpload`, `FormatMeteoForEddyProFluxProcessing`                                                                    | Convert EddyPro output to FLUXNET submission format; prepare meteorological data for EddyPro                                                                               |
-| `diive.pkgs.fits`                | `BinFitterCP`                                                                                                                                 | Fit data to bins using cumulative-probability approach                                                                                                                     |
-
----
 
 ## Overview of example notebooks
 
