@@ -1,10 +1,24 @@
 """
-OUTLIER DETECTION: ABSOLUTE LIMITS
-==================================
+Outlier detection using absolute value limits.
+
+This module provides simple, interpretable outlier detection by comparing values
+against fixed minimum and maximum thresholds. Two classes are available:
+
+- **AbsoluteLimits:** Single threshold range applied to all data
+  Fast, simple validation for any time series.
+
+- **AbsoluteLimitsDaytimeNighttime:** Separate threshold ranges for daytime and nighttime
+  Useful when data characteristics vary significantly by time of day.
+
+Both classes use the quality flag system:
+  - flag=0: Value within acceptable range (valid)
+  - flag=2: Value outside acceptable range (outlier, removed)
+  - NaN: Original missing data preserved
+
+See examples/outlierdetection/absolutelimits.py for working examples.
 
 This module is part of the diive library:
 https://github.com/holukas/diive
-
 """
 import numpy as np
 import pandas as pd
@@ -17,9 +31,27 @@ from diive.pkgs.outlierdetection.common import create_daytime_nighttime_flags
 
 @ConsoleOutputDecorator()
 class AbsoluteLimitsDaytimeNighttime(FlagBase):
-    """Generate flag that indicates if values in data are outside
-    the specified range, defined by providing allowed minimum and
-    maximum values, separately for daytime and nighttime data."""
+    """Outlier detection using absolute value limits with separate day/night thresholds.
+
+    Identifies values outside specified acceptable ranges, using different thresholds
+    for daytime and nighttime periods. Useful when data characteristics vary significantly
+    between day and night conditions.
+
+    **Algorithm:**
+    - Automatically detects daytime/nighttime from latitude, longitude, and UTC offset
+    - Applies daytime threshold range to daytime records
+    - Applies nighttime threshold range to nighttime records
+    - Marks records outside their respective ranges as outliers (flag=2)
+    - Supports iterative filtering: repeat detection until all outliers removed
+
+    **Quality Flags:**
+    - 0: Value within acceptable range (valid)
+    - 2: Value outside acceptable range (outlier, removed)
+    - NaN: Original missing data
+
+    Example:
+        See `examples/outlierdetection/absolutelimits.py` for complete examples.
+    """
 
     flagid = 'OUTLIER_ABSLIM_DTNT'
 
@@ -126,9 +158,25 @@ class AbsoluteLimitsDaytimeNighttime(FlagBase):
 
 @ConsoleOutputDecorator()
 class AbsoluteLimits(FlagBase):
-    """Generate flag that indicates if values in data are outside
-    the specified range, defined by providing the allowed minimum and
-    maximum for values in *series*."""
+    """Simple outlier detection using absolute minimum and maximum value limits.
+
+    Identifies values outside specified acceptable range. This is the simplest
+    outlier detection method: any value < minval or > maxval is flagged as outlier.
+    Useful for basic value validation without time-of-day or other context considerations.
+
+    **Algorithm:**
+    - Checks if each value is within [minval, maxval] range
+    - Marks values outside range as outliers (flag=2)
+    - Single-pass detection (no iteration)
+
+    **Quality Flags:**
+    - 0: Value within acceptable range (valid)
+    - 2: Value outside acceptable range (outlier, removed)
+    - NaN: Original missing data
+
+    Example:
+        See `examples/outlierdetection/absolutelimits.py` for complete examples.
+    """
 
     flagid = 'OUTLIER_ABSLIM'
 
@@ -178,47 +226,3 @@ class AbsoluteLimits(FlagBase):
         rejected = rejected[rejected].index
         n_outliers = len(rejected)
         return ok, rejected, n_outliers
-
-
-def example():
-    np.random.seed(100)
-    rows = 1000
-    data = np.random.rand(rows) * 100  # Random numbers b/w 0 and 100
-    tidx = pd.date_range('2019-01-01 00:30:00', periods=rows, freq='30min')
-    series = pd.Series(data, index=tidx, name='TESTDATA')
-    al = AbsoluteLimits(series=series, minval=6, maxval=74, idstr='99', showplot=True, verbose=True)
-    al.calc()
-    print(series.describe())
-    filteredseries = al.filteredseries
-    print(filteredseries.describe())
-    flag = al.flag
-    print(flag.describe())
-
-
-def example_daytime_nighttime():
-    np.random.seed(100)
-    rows = 1000
-    data = np.random.rand(rows) * 100  # Random numbers b/w 0 and 100
-    tidx = pd.date_range('2019-01-01 00:30:00', periods=rows, freq='30min')
-    series = pd.Series(data, index=tidx, name='TESTDATA')
-    al = AbsoluteLimitsDaytimeNighttime(
-        series=series,
-        daytime_minmax=[6.2, 74.9],
-        nighttime_minmax=[29.5, 47.4],
-        idstr='99',
-        lat=47.286417,
-        lon=7.733750,
-        utc_offset=1,
-        showplot=True,
-        verbose=True)
-    al.calc()
-    print(series.describe())
-    filteredseries = al.filteredseries
-    print(filteredseries.describe())
-    flag = al.flag
-    print(flag.describe())
-
-
-if __name__ == '__main__':
-    example_daytime_nighttime()
-    # example()

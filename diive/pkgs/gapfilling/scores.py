@@ -5,11 +5,27 @@ from sklearn.metrics import mean_absolute_error, median_absolute_error, mean_squ
 
 def prediction_scores(predictions: np.array,
                       targets: np.array) -> dict:
-    """
-    Calculate prediction scores
+    """Calculate regression performance metrics for model predictions.
 
-    See:
-    - https://scikit-learn.org/stable/modules/model_evaluation.html#regression-metrics
+    Computes seven standard regression quality metrics comparing predicted values
+    to observed targets. Useful for evaluating gap-filling models and other
+    regression tasks.
+
+    Args:
+        predictions: Array of predicted values.
+        targets: Array of observed target values (same length as predictions).
+
+    Returns:
+        dict: Performance metrics with keys:
+            - mae: Mean Absolute Error (average absolute difference)
+            - medae: Median Absolute Error (robust to outliers)
+            - mse: Mean Squared Error (penalizes larger errors more)
+            - rmse: Root Mean Squared Error (same units as targets)
+            - mape: Mean Absolute Percentage Error (relative error %)
+            - maxe: Maximum Error (largest single prediction error)
+            - r2: Coefficient of Determination (0-1, higher is better)
+
+    See: https://scikit-learn.org/stable/modules/model_evaluation.html#regression-metrics
     """
 
     # Calculate stats

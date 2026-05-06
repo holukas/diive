@@ -36,6 +36,14 @@ EXAMPLE_FILES = [
     'binary/extract.py',
     'corrections/setto.py',
     'corrections/offsetcorrection.py',
+    'outlierdetection/absolutelimits.py',
+    'outlierdetection/hampel.py',
+    'outlierdetection/incremental.py',
+    'outlierdetection/localsd.py',
+    'outlierdetection/lof.py',
+    'outlierdetection/manualremoval.py',
+    'outlierdetection/trim.py',
+    'outlierdetection/zscore.py',
     'createvar/air.py',
     'createvar/conversions.py',
     'createvar/daynightflag.py',
@@ -53,6 +61,12 @@ EXAMPLE_FILES = [
     'flux/selfheating.py',
     'flux/uncertainty.py',
     'flux/ustarthreshold.py',
+    'gap_filling/interpolate.py',
+    'gap_filling/mds.py',
+    'gap_filling/mds_comparison.py',
+    'gap_filling/randomforest_ts.py',
+    'gap_filling/xgboost_ts.py',
+    'gap_filling/comparison.py',
     'timeseries/harmonic.py',
 ]
 
@@ -121,7 +135,7 @@ def run_all_examples():
     total_start = time.time()
 
     print("=" * 80)
-    print(f"Running {len(EXAMPLE_FILES)} example files (73 functions total) in parallel (max {MAX_WORKERS} workers)...")
+    print(f"Running {len(EXAMPLE_FILES)} example files (92 functions total) in parallel (max {MAX_WORKERS} workers)...")
     print("=" * 80 + "\n")
 
     results = {'passed': [], 'failed': [], 'skipped': []}

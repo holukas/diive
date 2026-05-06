@@ -1,10 +1,29 @@
 """
-OUTLIER DETECTION: HAMPEL TEST
-==============================
+Outlier detection using the Hampel filter (Median Absolute Deviation).
+
+This module provides robust, window-based outlier detection using the Hampel filter,
+which relies on the Median Absolute Deviation (MAD). Two modes are available:
+
+- **Global Mode:** Single threshold applied to entire time series
+  Fast, simple outlier detection for any data.
+
+- **Daytime/Nighttime Mode:** Separate thresholds for different times of day
+  Useful when data characteristics vary significantly by time-of-day conditions.
+
+Both modes support:
+  - Double-differencing (Papale et al. 2006 method) to remove trends
+  - Raw value detection (if trends are not a concern)
+  - Iterative filtering until all outliers removed or single-pass detection
+
+Quality flags:
+  - flag=0: Value within acceptable range (valid)
+  - flag=2: Value detected as outlier (removed)
+  - NaN: Original missing data preserved
+
+See examples/outlierdetection/hampel.py for working examples.
 
 This module is part of the diive library:
 https://github.com/holukas/diive
-
 """
 import numpy as np
 import pandas as pd
@@ -16,8 +35,24 @@ from diive.pkgs.outlierdetection.common import create_daytime_nighttime_flags
 
 
 @ConsoleOutputDecorator()
-class HampelDaytimeNighttime(FlagBase):
-    flagid = 'OUTLIER_HAMPELDTNT'
+class Hampel(FlagBase):
+    """Robust outlier detection using the Hampel filter (Median Absolute Deviation).
+
+    The Hampel filter identifies outliers as values that deviate significantly from
+    the local median, making it robust to spikes and extreme values while preserving
+    underlying patterns. Works in two modes:
+
+    - **Global Mode:** Single threshold for entire time series (simple, fast)
+    - **Daytime/Nighttime Mode:** Separate thresholds for different times of day
+      (useful when data characteristics vary by time-of-day conditions)
+
+    Optional double-differencing (Papale et al. 2006) removes trends before detection.
+
+    Example:
+        See `examples/outlierdetection/hampel.py` for complete examples.
+    """
+
+    flagid = 'OUTLIER_HAMPEL'
 
     def __init__(self,
                  series: Series,
@@ -25,8 +60,9 @@ class HampelDaytimeNighttime(FlagBase):
                  lon: float = None,
                  utc_offset: int = None,
                  window_length: int = 13,
-                 n_sigma_dt: float = 5.5,
-                 n_sigma_nt: float = 5.5,
+                 n_sigma: float = 5.5,
+                 n_sigma_daytime: float = None,
+                 n_sigma_nighttime: float = None,
                  k: float = 1.4826,
                  use_differencing: bool = True,
                  separate_day_night: bool = True,
@@ -34,18 +70,16 @@ class HampelDaytimeNighttime(FlagBase):
                  showplot: bool = False,
                  verbose: bool = False):
         """
-        Identify outliers using the Hampel filter (Median Absolute Deviation).
+        Initialize Hampel filter for outlier detection.
 
-        This class implements a robust outlier detection algorithm. It is designed to handle
-        ecological time series (like eddy covariance data) by offering two modes:
+        The filter detects outliers using Median Absolute Deviation (MAD) with optional
+        day/night separation. Two analysis modes:
 
-        1. **similar Papale Method (FLUXNET Standard):** If ``use_differencing=True``, the filter is
-           applied to the double-differenced time series ($d = (x_t - x_{t-1}) - (x_{t+1} - x_t)$).
-           This removes biological trends (e.g., morning temperature rise) and isolates
-           short-term spikes.
-        2. **Day/Night Separation:** If ``separate_day_night=True``, the code calculates solar
-           elevation to apply different strictness thresholds ($n\_sigma$) for daytime (high turbulence)
-           and nighttime (low turbulence) regimes.
+        1. **Double-Differencing:** If ``use_differencing=True``, applies filter to
+           double-differenced data ($d = (x_t - x_{t-1}) - (x_{t+1} - x_t)$).
+           Removes trends and isolates short-term deviations/spikes.
+        2. **Day/Night Separation:** If ``separate_day_night=True``, uses solar elevation
+           to apply different thresholds for daytime and nighttime periods.
 
         The general formula for the detection interval is:
         $$Limit = Median \pm (n\_sigma \times k \times MAD)$$
@@ -57,17 +91,20 @@ class HampelDaytimeNighttime(FlagBase):
             utc_offset (int): UTC offset in hours (Required if ``separate_day_night=True``).
             window_length (int): The size of the sliding window centered on the point.
                 Default is 13 (approx. 6 hours for half-hourly data).
-            n_sigma_dt (float): The number of standard deviations for the threshold.
-                * If ``separate_day_night=True``: Used for **Daytime** records.
-                * If ``separate_day_night=False``: Used as the **Global** threshold for all records.
-            n_sigma_nt (float): The number of standard deviations for **Nighttime** records.
-                (Ignored if ``separate_day_night=False``).
+            n_sigma (float): The number of standard deviations for the threshold.
+                Default is 5.5. Used for:
+                * **Global mode (separate_day_night=False):** Applied to all records.
+                * **Day/Night mode:** Default for both daytime and nighttime (can be overridden).
+            n_sigma_daytime (float, optional): Override ``n_sigma`` for daytime records only.
+                Only used if ``separate_day_night=True``. If not provided, uses ``n_sigma``.
+            n_sigma_nighttime (float, optional): Override ``n_sigma`` for nighttime records only.
+                Only used if ``separate_day_night=True``. If not provided, uses ``n_sigma``.
             k (float): Consistency constant to make MAD comparable to Standard Deviation.
                 For a Gaussian distribution, $k \approx 1.4826$.
             use_differencing (bool): If ``True``, applies the filter to the double-differenced
                 time series (Papale et al. 2006 method). If ``False``, applies to raw values.
             separate_day_night (bool): If ``True``, splits the dataset based on solar elevation
-                and applies `n_sigma_dt` and `n_sigma_nt` separately.
+                and applies different thresholds for daytime and nighttime.
             idstr (str, optional): Identifier suffix added to output variable names.
             showplot (bool): If ``True``, displays a summary plot after calculation.
             verbose (bool): If ``True``, prints iteration statistics to the console.
@@ -90,8 +127,10 @@ class HampelDaytimeNighttime(FlagBase):
         self.showplot = showplot
         self.verbose = verbose
         self.window_length = window_length
-        self.n_sigma_dt = n_sigma_dt
-        self.n_sigma_nt = n_sigma_nt
+        self.n_sigma = n_sigma
+        # Use provided day/night overrides, or fall back to n_sigma
+        self.n_sigma_daytime = n_sigma_daytime if n_sigma_daytime is not None else n_sigma
+        self.n_sigma_nighttime = n_sigma_nighttime if n_sigma_nighttime is not None else n_sigma
         self.k = k
         self.use_differencing = use_differencing
         self.separate_day_night = separate_day_night
@@ -123,7 +162,8 @@ class HampelDaytimeNighttime(FlagBase):
         if self.showplot:
             # Default plot for outlier tests, showing rejected values
             self.defaultplot(n_iterations=n_iterations)
-            title = (f"Hampel filter daytime/nighttime: {self.series.name}, "
+            mode = "daytime/nighttime" if self.separate_day_night else "global"
+            title = (f"Hampel filter {mode}: {self.series.name}, "
                      f"n_iterations = {n_iterations}, "
                      f"n_outliers = {self.series[self.overall_flag == 2].count()}")
 
@@ -162,13 +202,13 @@ class HampelDaytimeNighttime(FlagBase):
         if self.separate_day_night:
             # Create a series of thresholds matching the data index
             # Default to nighttime threshold
-            thresholds = pd.Series(data=self.n_sigma_nt, index=s_to_test.index)
+            thresholds = pd.Series(data=self.n_sigma_nighttime, index=s_to_test.index)
             # Overwrite daytime indices with daytime threshold
             current_daytime = self.is_daytime.reindex(s_to_test.index, fill_value=False)
-            thresholds.loc[current_daytime] = self.n_sigma_dt
+            thresholds.loc[current_daytime] = self.n_sigma_daytime
         else:
             # Global mode, single threshold for all everything
-            thresholds = self.n_sigma_dt
+            thresholds = self.n_sigma
 
         # Detect outliers
         # Limit = k * MAD * n_sigma
@@ -222,68 +262,5 @@ class HampelDaytimeNighttime(FlagBase):
         return ok, rejected, n_outliers
 
 
-def _example_dtnt():
-    import importlib.metadata
-    import diive.configs.exampledata as ed
-    from diive.pkgs.createvar.noise import add_impulse_noise
-    from diive.core.plotting.timeseries import TimeSeries
-    import warnings
-    warnings.filterwarnings('ignore')
-    version_diive = importlib.metadata.version("diive")
-    print(f"diive version: v{version_diive}")
-    df = ed.load_exampledata_parquet()
-    s = df['Tair_f'].copy()
-    s = s.loc[s.index.year == 2018].copy()
-    # s = s.loc[s.index.month == 7].copy()
-    s_noise = add_impulse_noise(series=s,
-                                factor_low=-10,
-                                factor_high=4,
-                                contamination=0.04,
-                                seed=42)  # Add impulse noise (spikes)
-    s_noise.name = f"{s.name}+noise"
-    TimeSeries(s_noise).plot()
-    ham = HampelDaytimeNighttime(
-        series=s_noise,
-        n_sigma_dt=4,
-        n_sigma_nt=2,
-        window_length=48 * 7,
-        showplot=True,
-        verbose=True,
-        lat=47.286417,
-        lon=7.733750,
-        utc_offset=1
-    )
-    ham.calc(repeat=False)
-
-
-def _example_cha():
-    SOURCEDIR = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-cha_flux_product\dataset_ch-cha_flux_product\notebooks\30_MERGE_DATA"
-    FILENAME = r"33.5_CH-CHA_IRGA+QCL+LGR+M10+MGMT_Level-1_eddypro_fluxnet_2005-2024.parquet"
-    from pathlib import Path
-    FILEPATH = Path(SOURCEDIR) / FILENAME
-    print(f"Data will be loaded from the following file:\n{FILEPATH}")
-    from diive.core.io.files import load_parquet
-    maindf = load_parquet(filepath=FILEPATH)
-    series = maindf['FC'].copy()
-    series = series[series.index.year == 2015].copy()
-    series = series[series.index.month == 6].copy()
-    ham = HampelDaytimeNighttime(
-        series=series,
-        n_sigma_dt=5.5,
-        n_sigma_nt=5.5,
-        window_length=48 * 3,
-        use_differencing=True,
-        separate_day_night=True,
-        showplot=True,
-        verbose=True,
-        lat=47.286417,
-        lon=7.733750,
-        utc_offset=1
-    )
-    ham.calc(repeat=True)
-
-
-if __name__ == '__main__':
-    # example()
-    # example_dtnt()
-    _example_cha()
+# Backward compatibility alias
+HampelDaytimeNighttime = Hampel
