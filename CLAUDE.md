@@ -1835,6 +1835,34 @@ ham = dv.HampelDaytimeNighttime(series=s, n_sigma=5.5, separate_day_night=True)
   - Example count: 92 total across 49 files
   - CLAUDE.md: This entry
 
+### 32. ManualRemoval Code Quality Improvements & Examples (v0.91.0+)
+- **Files:** Modified `diive/pkgs/outlierdetection/manualremoval.py`, NEW `examples/outlierdetection/manualremoval.py`
+- **Module:** `diive.pkgs.outlierdetection.manualremoval`
+- **Class:** `ManualRemoval` — Explicit removal of specific data points or date ranges
+- **Code quality fixes (4 improvements):**
+  1. Removed redundant initialization of `self.showplot` and `self.verbose` (lines 52-54 overwritten)
+  2. Fixed `calc()` docstring that incorrectly documented non-existent 'repeat' parameter
+  3. Enhanced `_flagtests()` docstring with proper Args and Returns documentation
+  4. Improved index operations: changed `rejected = flag == 2; rejected = rejected[rejected]` to `rejected = flag[flag == 2].index`
+- **Examples moved to dedicated file (2 examples):**
+  - `example_manual_removal_single_dates()`: Remove individual datetime strings from time series
+  - `example_manual_removal_date_ranges()`: Remove entire date range periods from time series
+- **Use cases:**
+  - Known equipment failures or maintenance periods
+  - Measurement errors or sensor artifacts
+  - Manual QA/QC for specific data points
+  - Explicit data curation for quality control
+- **Exports added to `diive/__init__.py`:**
+  - `ManualRemoval` (PascalCase)
+- **Updated documentation:**
+  - `examples/README.md`: Added manualremoval.py entry (2 examples)
+  - `README.md`: Updated example count 92 → 94, example categories
+  - `examples/run_all_examples.py`: Added manualremoval.py
+  - Example count: 94 total across 50 files
+  - Outlierdetection examples: 9 → 11 (complete coverage of all 6 outlier detection methods)
+- **Complete outlier detection module coverage:**
+  - absolutelimits (2), hampel (2), incremental (1), localsd (2), lof (2), manualremoval (2) = 11 examples in 6 files
+
 ## Troubleshooting Guide
 
 ### Setup Issues

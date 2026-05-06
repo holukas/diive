@@ -52,7 +52,7 @@ For the complete list of available aliases, see `diive.__all__`.
 
 ## Examples
 
-**90 executable examples** demonstrating common workflows are organized by topic in the `examples/` folder:
+**94 executable examples** demonstrating common workflows are organized by topic in the `examples/` folder:
 
 **Run all examples at once (parallelized):**
 ```bash
@@ -72,6 +72,7 @@ python examples/outlierdetection/hampel.py           # Hampel filter robust outl
 python examples/outlierdetection/incremental.py      # Z-score increments outlier detection (1 example)
 python examples/outlierdetection/localsd.py          # Local standard deviation rolling window detection (2 examples)
 python examples/outlierdetection/lof.py              # Local Outlier Factor density-based detection (2 examples)
+python examples/outlierdetection/manualremoval.py    # Manual data point/range removal for known issues (2 examples)
 python examples/createvar/timesince.py               # TimeSince time tracking (3 examples)
 python examples/createvar/potentialradiation.py      # Solar radiation (4 examples)
 python examples/echires/fluxdetectionlimit.py        # Flux detection limits (2 examples)
@@ -82,10 +83,10 @@ python examples/flux/common.py                       # Flux variable detection (
 python examples/flux/hqflux.py                       # CO2 flux quality analysis with Hampel filter (1 example)
 ```
 
-**Example categories (92 total, 49 files):**
+**Example categories (94 total, 50 files):**
 - **Visualization** (22): heatmap_datetime, hexbin, timeseries, cumulative, dielcycle, histogram, ridgeline, scatter
 - **Analyses** (8): correlation, decoupling, gapfinder, gridaggregator, histogram, optimumrange, quantiles, seasonaltrend
-- **Data Processing** (41): binary extraction, corrections (setto, offsetcorrection), outlierdetection (absolutelimits, hampel, incremental, localsd, lof), createvar (air, conversions, daynightflag, laggedvariants, noise, potentialradiation, timesince, vpd)
+- **Data Processing** (43): binary extraction, corrections (setto, offsetcorrection), outlierdetection (absolutelimits, hampel, incremental, localsd, lof, manualremoval), createvar (air, conversions, daynightflag, laggedvariants, noise, potentialradiation, timesince, vpd)
 - **Gap-Filling** (10): linear_interpolation, mds, mds_comparison, randomforest_ts (3 examples: full, quick, optimize), xgboost_ts (2 examples: full, optimize), comparison (MDS vs RF vs XGB)
 - **Eddy Covariance & Flux** (9): fluxdetectionlimit, lag, windrotation, hqflux, selfheating, uncertainty, ustarthreshold (3 examples)
 - **Spectral Analysis** (2): harmonic (spectrogram analysis)

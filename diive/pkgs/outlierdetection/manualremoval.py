@@ -49,59 +49,45 @@ class ManualRemoval(FlagBase):
 
         """
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
-        self.showplot = False
-        self.verbose = False
         self.remove_dates = remove_dates
         self.showplot = showplot
         self.verbose = verbose
 
     def calc(self):
-        """Calculate overall flag, based on individual flags from multiple iterations.
-
-        Args:
-            repeat: If *True*, the outlier detection is repeated until all
-                outliers are removed.
-
-        """
+        """Calculate overall flag for manually removed data points."""
 
         self._overall_flag, n_iterations = self.repeat(func=self.run_flagtests, repeat=False)
         if self.showplot:
             self.defaultplot(n_iterations=n_iterations)
 
-    def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
-        """Perform tests required for this flag"""
+    def _flagtests(self, iteration: int) -> tuple[DatetimeIndex, DatetimeIndex, int]:
+        """Mark manually specified dates as outliers.
+
+        Args:
+            iteration: Current iteration number
+
+        Returns:
+            (ok_indices, rejected_indices, n_outliers) where:
+                - ok_indices: DatetimeIndex of records to keep
+                - rejected_indices: DatetimeIndex of manually removed records
+                - n_outliers: Total number of removed records
+        """
 
         flag = pd.Series(index=self.filteredseries.index, data=np.nan)
 
-        # Location of rejected records
-        for date in self.remove_dates:
-            if isinstance(date, str):
-                # Neat solution: even though here only data for a single datetime
-                # is removed, the >= and <= comparators are used to avoid an error
-                # in case the datetime is not found in the flag.index
-                date = (flag.index >= date) & (flag.index <= date)
-                flag.loc[date] = 2
-            elif isinstance(date, list):
-                dates = (flag.index >= date[0]) & (flag.index <= date[1])
-                flag.loc[dates] = 2
+        for date_spec in self.remove_dates:
+            if isinstance(date_spec, str):
+                date_mask = (flag.index >= date_spec) & (flag.index <= date_spec)
+                flag.loc[date_mask] = 2
+            elif isinstance(date_spec, list):
+                date_mask = (flag.index >= date_spec[0]) & (flag.index <= date_spec[1])
+                flag.loc[date_mask] = 2
 
-        rejected = flag == 2
-        rejected = rejected[rejected]
-
+        rejected = flag[flag == 2].index
         n_outliers = len(rejected)
-
-        # Index of rejected records
-        rejected = rejected.index
-
-        # All records that were not rejected are OK
         ok = flag.index.difference(rejected)
 
+        if self.verbose:
+            print(f"ITERATION#{iteration}: Manually removed {n_outliers} values")
+
         return ok, rejected, n_outliers
-
-
-def example():
-    pass
-
-
-if __name__ == '__main__':
-    example()

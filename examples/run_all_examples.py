@@ -41,6 +41,7 @@ EXAMPLE_FILES = [
     'outlierdetection/incremental.py',
     'outlierdetection/localsd.py',
     'outlierdetection/lof.py',
+    'outlierdetection/manualremoval.py',
     'createvar/air.py',
     'createvar/conversions.py',
     'createvar/daynightflag.py',
