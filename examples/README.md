@@ -34,7 +34,8 @@ examples/
 ├── outlierdetection/      # Outlier detection and quality control examples
 │   ├── [absolutelimits.py](outlierdetection/absolutelimits.py)  # Absolute value limits with separate day/night thresholds (2 examples)
 │   ├── [hampel.py](outlierdetection/hampel.py)                  # Hampel filter (Median Absolute Deviation) outlier detection (2 examples)
-│   └── [incremental.py](outlierdetection/incremental.py)        # Z-score increments outlier detection (1 example)
+│   ├── [incremental.py](outlierdetection/incremental.py)        # Z-score increments outlier detection (1 example)
+│   └── [localsd.py](outlierdetection/localsd.py)                # Local standard deviation rolling window outlier detection (2 examples)
 ├── createvar/             # Derived variable creation examples
 │   ├── [air.py](createvar/air.py)                             # Air properties: aerodynamic resistance and dry air density (2 examples)
 │   ├── [conversions.py](createvar/conversions.py)              # Unit conversions: air temperature, latent heat, evapotranspiration (3 examples)
@@ -73,7 +74,7 @@ examples/
 python examples/run_all_examples.py
 ```
 
-Executes all 88 examples across 47 files (22 visualization + 8 analysis + 2 binary + 7 corrections + 5 outlierdetection + 23 createvar + 4 echires + 7 flux + 10 gap_filling + 2 timeseries + 1 fits) in parallel (4 concurrent workers) with execution time tracking.
+Executes all 90 examples across 48 files (22 visualization + 8 analysis + 2 binary + 7 corrections + 7 outlierdetection + 23 createvar + 4 echires + 7 flux + 10 gap_filling + 2 timeseries + 1 fits) in parallel (4 concurrent workers) with execution time tracking.
 - Shows individual timing for each example
 - Detailed error messages if any fail
 - ~2.7x faster than sequential execution

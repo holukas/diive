@@ -57,6 +57,8 @@ from diive.pkgs.outlierdetection.hampel import HampelDaytimeNighttime as HampelD
 from diive.pkgs.outlierdetection.hampel import HampelDaytimeNighttime as hampel_daytime_nighttime
 from diive.pkgs.outlierdetection.incremental import zScoreIncrements as zScoreIncrements
 from diive.pkgs.outlierdetection.incremental import zScoreIncrements as zscore_increments
+from diive.pkgs.outlierdetection.localsd import LocalSD as LocalSD
+from diive.pkgs.outlierdetection.localsd import LocalSD as localsd
 from diive.pkgs.createvar.air import aerodynamic_resistance as aerodynamic_resistance
 from diive.pkgs.createvar.air import dry_air_density as dry_air_density
 from diive.pkgs.createvar.conversions import air_temp_from_sonic_temp as air_temp_from_sonic_temp
@@ -180,6 +182,8 @@ __all__ = [
     'hampel_daytime_nighttime',
     'zScoreIncrements',
     'zscore_increments',
+    'LocalSD',
+    'localsd',
 
     # Packages: Variables
     'aerodynamic_resistance',
