@@ -120,6 +120,7 @@ from diive.pkgs.gapfilling.mds import FluxMDS
 from diive.pkgs.gapfilling.interpolate import linear_interpolation
 from diive.pkgs.binary.extract import get_encoded_value_from_int as get_encoded_value_from_int
 from diive.pkgs.binary.extract import get_encoded_value_series as get_encoded_value_series
+from diive.pkgs.qaqc.qcf import FlagQCF as FlagQCF
 
 __all__ = [
     # Configs
@@ -268,4 +269,7 @@ __all__ = [
     # Packages: Binary
     'get_encoded_value_from_int',
     'get_encoded_value_series',
+
+    # Packages: QAQC
+    'FlagQCF',
 ]

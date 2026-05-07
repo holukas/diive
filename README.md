@@ -52,7 +52,7 @@ For the complete list of available aliases, see `diive.__all__`.
 
 ## Examples
 
-**94 executable examples** demonstrating common workflows are organized by topic in the `examples/` folder:
+**101 executable examples** demonstrating common workflows are organized by topic in the `examples/` folder:
 
 **Run all examples at once (parallelized):**
 ```bash
@@ -83,10 +83,10 @@ python examples/flux/common.py                       # Flux variable detection (
 python examples/flux/hqflux.py                       # CO2 flux quality analysis with Hampel filter (1 example)
 ```
 
-**Example categories (94 total, 50 files):**
+**Example categories (101 total, 51 files):**
 - **Visualization** (22): heatmap_datetime, hexbin, timeseries, cumulative, dielcycle, histogram, ridgeline, scatter
 - **Analyses** (8): correlation, decoupling, gapfinder, gridaggregator, histogram, optimumrange, quantiles, seasonaltrend
-- **Data Processing** (43): binary extraction, corrections (setto, offsetcorrection), outlierdetection (absolutelimits, hampel, incremental, localsd, lof, manualremoval), createvar (air, conversions, daynightflag, laggedvariants, noise, potentialradiation, timesince, vpd)
+- **Data Processing** (44): binary extraction, corrections (setto, offsetcorrection), outlierdetection (absolutelimits, hampel, incremental, localsd, lof, manualremoval, stepwise, trim), qaqc (FlagQCF), createvar (air, conversions, daynightflag, laggedvariants, noise, potentialradiation, timesince, vpd)
 - **Gap-Filling** (10): linear_interpolation, mds, mds_comparison, randomforest_ts (3 examples: full, quick, optimize), xgboost_ts (2 examples: full, optimize), comparison (MDS vs RF vs XGB)
 - **Eddy Covariance & Flux** (9): fluxdetectionlimit, lag, windrotation, hqflux, selfheating, uncertainty, ustarthreshold (3 examples)
 - **Spectral Analysis** (2): harmonic (spectrogram analysis)
@@ -358,6 +358,12 @@ _Create single outlier flags where `0=OK` and `2=outlier`._
 
 ### Quality control
 
+- **Overall Quality Control Flag (QCF)** · class:
+  `FlagQCF` ([example](examples/qaqc/qcf.py))
+    - Combines multiple individual test flags into a single overall quality indicator
+    - Supports daytime/nighttime separation and USTAR filtering scenarios
+    - Generates comprehensive reports: QCF distribution, test statistics, sequential impact analysis
+    - Visualizations: 4-panel heatmap (original, QC, flag sums, QCF flag)
 - **Stepwise MeteoScreening from database** · class:
   `StepwiseMeteoScreeningDb` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/StepwiseMeteoScreeningFromDatabase.ipynb))
 
