@@ -453,7 +453,6 @@ dependencies = [
     { name = "scikit-optimize" },
     { name = "seaborn" },
     { name = "shap" },
-    { name = "shapiq" },
     { name = "sktime" },
     { name = "statsmodels" },
     { name = "uncertainties" },
@@ -491,6 +490,16 @@ docs = [
     { name = "sphinx-gallery" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "furo" },
+    { name = "myst-parser" },
+    { name = "sphinx" },
+    { name = "sphinx-autodoc-typehints" },
+    { name = "sphinx-basic-ng" },
+    { name = "sphinx-gallery" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "autopep8", marker = "extra == 'dev'", specifier = ">=2.3.2" },
@@ -520,7 +529,6 @@ requires-dist = [
     { name = "scikit-optimize", specifier = ">=0.10.2,<0.11.0" },
     { name = "seaborn", specifier = ">=0.13.2,<0.14.0" },
     { name = "shap", specifier = ">=0.48.0,<0.49.0" },
-    { name = "shapiq", specifier = ">=1.3.1,<2.0.0" },
     { name = "sktime", specifier = ">=0.36.0,<0.37.0" },
     { name = "sphinx", marker = "extra == 'docs'", specifier = ">=9.1.0" },
     { name = "sphinx-autodoc-typehints", marker = "extra == 'docs'", specifier = ">=3.10.2" },
@@ -531,6 +539,16 @@ requires-dist = [
     { name = "yellowbrick", specifier = ">=1.5,<2.0" },
 ]
 provides-extras = ["dev", "docs", "all"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "furo", specifier = ">=2025.12.19" },
+    { name = "myst-parser", specifier = ">=5.0.0" },
+    { name = "sphinx", specifier = ">=9.1.0" },
+    { name = "sphinx-autodoc-typehints", specifier = ">=3.10.2" },
+    { name = "sphinx-basic-ng", specifier = ">=1.0.0b2" },
+    { name = "sphinx-gallery", specifier = ">=0.21.0" },
+]
 
 [[package]]
 name = "docutils"
@@ -642,20 +660,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ec/20/5f5ad4da6a5a27c80f2ed2ee9aee3f9e36c66e56e21c00fde467b2f8f88f/furo-2025.12.19.tar.gz", hash = "sha256:188d1f942037d8b37cd3985b955839fea62baa1730087dc29d157677c857e2a7", size = 1661473, upload-time = "2025-12-19T17:34:40.889Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f4/b2/50e9b292b5cac13e9e81272c7171301abc753a60460d21505b606e15cf21/furo-2025.12.19-py3-none-any.whl", hash = "sha256:bb0ead5309f9500130665a26bee87693c41ce4dbdff864dbfb6b0dae4673d24f", size = 339262, upload-time = "2025-12-19T17:34:38.905Z" },
-]
-
-[[package]]
-name = "galois"
-version = "0.4.11"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "numba" },
-    { name = "numpy" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/08/84/996f1c4a7e8fe973a7f8e4d7901e125a91d0abb62615e35076ff47e9383a/galois-0.4.11.tar.gz", hash = "sha256:f5055546c4b39d1e36decae9d4f21f3d66d9c6c7c9aec39189cb5d2284e9022f", size = 7402587, upload-time = "2026-05-02T18:21:28.615Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/05/89/dc69acbd34bde07b9dee9f9f88d7ce61ff97fd99d6d576d72d2db1461349/galois-0.4.11-py3-none-any.whl", hash = "sha256:d2e12a2b7fd44b108cc15d7de27dabcb8a98a556ea2c69c94fe695139629d9aa", size = 4197346, upload-time = "2026-05-02T18:21:26.868Z" },
 ]
 
 [[package]]
@@ -1436,15 +1440,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/83/f8/51569ac65d696c8ecbee95938f89d4abf00f47d58d48f6fbabfe8f0baefe/nest_asyncio-1.6.0.tar.gz", hash = "sha256:6f172d5449aca15afd6c646851f4e31e02c598d553a667e38cafa997cfec55fe", size = 7418, upload-time = "2024-01-21T14:25:19.227Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a0/c4/c2971a3ba4c6103a3d10c4b0f24f461ddc027f0f09763220cf35ca1401b3/nest_asyncio-1.6.0-py3-none-any.whl", hash = "sha256:87af6efd6b5e897c81050477ef65c62e2b2f35d51703cae01aff2905b1852e1c", size = 5195, upload-time = "2024-01-21T14:25:17.223Z" },
-]
-
-[[package]]
-name = "networkx"
-version = "3.6.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/6a/51/63fe664f3908c97be9d2e4f1158eb633317598cfa6e1fc14af5383f17512/networkx-3.6.1.tar.gz", hash = "sha256:26b7c357accc0c8cde558ad486283728b65b6a95d85ee1cd66bafab4c8168509", size = 2517025, upload-time = "2025-12-08T17:02:39.908Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/9e/c9/b2622292ea83fbb4ec318f5b9ab867d0a28ab43c5717bb85b0a5f6b3b0a4/networkx-3.6.1-py3-none-any.whl", hash = "sha256:d47fbf302e7d9cbbb9e2555a0d267983d2aa476bac30e90dfbe5669bd57f3762", size = 2068504, upload-time = "2025-12-08T17:02:38.159Z" },
 ]
 
 [[package]]
@@ -2311,30 +2306,6 @@ wheels = [
 ]
 
 [[package]]
-name = "shapiq"
-version = "1.4.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "colour" },
-    { name = "galois" },
-    { name = "joblib" },
-    { name = "matplotlib" },
-    { name = "networkx" },
-    { name = "numpy" },
-    { name = "pandas" },
-    { name = "pillow" },
-    { name = "requests" },
-    { name = "scikit-learn" },
-    { name = "scipy" },
-    { name = "sparse-transform" },
-    { name = "tqdm" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/a8/20/8e7bf8e1d2ad5e50c5ddb884760fe67657eee38b0ebe9d9996a0ab227221/shapiq-1.4.1.tar.gz", hash = "sha256:7f612c84fcfe4746ff826db72efa2944f9aa693c5c00c6e17a882613471534f8", size = 5781786, upload-time = "2025-11-10T19:43:31.882Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/af/cc/13fefd7203ffe71d5107221be939dd64945378b93f7c0a7cb82d7f281071/shapiq-1.4.1-py3-none-any.whl", hash = "sha256:c86667eb28ea0de56005fbe9fd072783242b74aa87fede11e07b6b915b93e7b3", size = 5871550, upload-time = "2025-11-10T19:43:29.858Z" },
-]
-
-[[package]]
 name = "six"
 version = "1.17.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2386,22 +2357,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/7b/ae/2d9c981590ed9999a0d91755b47fc74f74de286b0f5cee14c9269041e6c4/soupsieve-2.8.3.tar.gz", hash = "sha256:3267f1eeea4251fb42728b6dfb746edc9acaffc4a45b27e19450b676586e8349", size = 118627, upload-time = "2026-01-20T04:27:02.457Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/46/2c/1462b1d0a634697ae9e55b3cecdcb64788e8b7d63f54d923fcd0bb140aed/soupsieve-2.8.3-py3-none-any.whl", hash = "sha256:ed64f2ba4eebeab06cc4962affce381647455978ffc1e36bb79a545b91f45a95", size = 37016, upload-time = "2026-01-20T04:27:01.012Z" },
-]
-
-[[package]]
-name = "sparse-transform"
-version = "0.2.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "galois" },
-    { name = "numpy" },
-    { name = "scikit-learn" },
-    { name = "scipy" },
-    { name = "tqdm" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/d5/da/82132137fdc207c4a14abb52fedcd8cc3dd697175f548cfb8689bd2afab8/sparse_transform-0.2.1.tar.gz", hash = "sha256:470d54c884600d97254469a3d85fac775480d18a8aa2c43574350695e1015c66", size = 24803, upload-time = "2025-04-03T08:11:39.47Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/64/ec/c85f95289e4638faf889ca02b588ad3af0f3ef8f92b99bee3ce936ef3860/sparse_transform-0.2.1-py3-none-any.whl", hash = "sha256:d01b19f8add68e2b4c98a17272830af0e03d163667f03b1dc2b0c9eb8471727b", size = 27034, upload-time = "2025-04-03T08:11:38.551Z" },
 ]
 
 [[package]]
