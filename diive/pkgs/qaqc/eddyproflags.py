@@ -27,6 +27,34 @@ from diive.core.funcs.funcs import validate_id_string
 from diive.pkgs.qaqc.flags import restrict_application
 
 
+def _extract_and_convert_flag_from_multidigit(df: DataFrame, column_name: str,
+                                              position: int, is_hard_flag: bool = True) -> Series:
+    """Extract a single flag from a multi-digit integer column and convert to DIIVE format.
+
+    Helper function for extracting individual test results from multi-digit flag codes
+    (e.g., EddyPro VM97 codes) and converting to DIIVE standard format.
+
+    Args:
+        df: DataFrame containing the multi-digit flag column.
+        column_name: Name of the column containing multi-digit flag codes.
+        position: Position (digit index) to extract from the multi-digit code.
+        is_hard_flag: If True, convert 1->2 (hard fail); if False, keep 1 as-is (soft warning).
+
+    Returns:
+        A Series containing the extracted and converted flag (0=good, 1=soft warning, 2=bad).
+    """
+    flag = df[column_name].copy()
+    flag = flag.apply(pd.to_numeric, errors='coerce').astype(float)
+    flag = flag.fillna(899999999)  # 9 = missing flag (use multi-digit value to ensure proper string extraction)
+    flag = flag.astype(str)
+    flag = flag.str[int(position)]
+    flag = flag.apply(pd.to_numeric, errors='coerce')  # Use coerce to handle non-numeric characters like '.'
+    flag = flag.replace(9, np.nan)
+    if is_hard_flag:
+        flag = flag.replace(1, 2)  # Hard flag 1 corresponds to bad value (2)
+    return flag
+
+
 def flag_signal_strength_eddypro_test(df: DataFrame,
                                       signal_strength_col: str,
                                       var_col: str,
@@ -110,18 +138,16 @@ def flag_steadiness_horizontal_wind_eddypro_test(df: DataFrame,
     """
     idstr = validate_id_string(idstr=idstr)
     flagname_out = f"FLAG{idstr}_{flux}_VM97_NSHW_HF_TEST"
-    nshw_flag = df['VM97_NSHW_HF'].copy()  # Name of the flag in EddyPro output file
-    nshw_flag = nshw_flag.apply(pd.to_numeric, errors='coerce').astype(float)
-    nshw_flag = nshw_flag.fillna(89)  # 9 = missing flag
-    nshw_flag = nshw_flag.astype(str)
-    nshw_flag = nshw_flag.str[int(1)]
-    nshw_flag = nshw_flag.astype(float)
-    nshw_flag = nshw_flag.replace(9, np.nan)
-    nshw_flag = nshw_flag.replace(1, 2)  # Hard flag 1 corresponds to bad value
+    nshw_flag = _extract_and_convert_flag_from_multidigit(
+        df=df,
+        column_name='VM97_NSHW_HF',
+        position=1,
+        is_hard_flag=True
+    )
     nshw_flag.name = flagname_out
 
     print(f"STEADINESS OF HORIZONTAL WIND TEST: Generated new flag variable {flagname_out}, "
-          f"values taken from output variable {nshw_flag.name}, with "
+          f"values taken from output variable VM97_NSHW_HF, with "
           f"flag 0 (good values) where test passed, "
           f"flag 2 (bad values) where test failed ...")
 
@@ -156,14 +182,12 @@ def flag_angle_of_attack_eddypro_test(df: DataFrame,
         See examples/qaqc/eddyproflags.py for a complete working example.
     """
     flagname_out = f"FLAG{idstr}_{flux}_VM97_AOA_HF_TEST"
-    aoa_flag = df['VM97_AOA_HF'].copy()  # Name of the flag in EddyPro output file
-    aoa_flag = aoa_flag.apply(pd.to_numeric, errors='coerce').astype(float)
-    aoa_flag = aoa_flag.fillna(89)  # 9 = missing flag
-    aoa_flag = aoa_flag.astype(str)
-    aoa_flag = aoa_flag.str[int(1)]
-    aoa_flag = aoa_flag.astype(float)
-    aoa_flag = aoa_flag.replace(9, np.nan)
-    aoa_flag = aoa_flag.replace(1, 2)  # Hard flag 1 corresponds to bad value
+    aoa_flag = _extract_and_convert_flag_from_multidigit(
+        df=df,
+        column_name='VM97_AOA_HF',
+        position=1,
+        is_hard_flag=True
+    )
 
     # Apply flag only during certain time periods
     if application_dates:
@@ -174,7 +198,7 @@ def flag_angle_of_attack_eddypro_test(df: DataFrame,
                                         fill_value=np.nan)
 
     print(f"ANGLE OF ATTACK TEST: Generated new flag variable {flagname_out}, "
-          f"values taken from output variable {aoa_flag.name}, with "
+          f"values taken from output variable VM97_AOA_HF, with "
           f"flag 0 (good values) where test passed, "
           f"flag 2 (bad values) where test failed ...")
 
@@ -260,15 +284,15 @@ def flags_vm97_eddypro_fluxnetfile_tests(
     }
 
     # Extract 8 individual flags from VM97 multi-flag integer
-    flags_df = pd.DataFrame(index=df.index, data=vm97)
+    flags_df = pd.DataFrame(index=df.index)
     for i, c in flagnames_out.items():
-        _singleflag = vm97.astype(str)
-        _singleflag = _singleflag.str[int(i)]
-        _singleflag = _singleflag.astype(float)
-        _singleflag = _singleflag.replace(9, np.nan)
-        if '_HF_' in c:
-            # Hard flag 1 corresponds to bad value, set to 2
-            _singleflag = _singleflag.replace(1, 2)
+        is_hard_flag = '_HF_' in c
+        _singleflag = _extract_and_convert_flag_from_multidigit(
+            df=df,
+            column_name=f"{fluxbasevar}_VM97_TEST",
+            position=int(i),
+            is_hard_flag=is_hard_flag
+        )
         flags_df[c] = _singleflag
 
     # Select flags that are selected
