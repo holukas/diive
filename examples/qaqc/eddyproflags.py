@@ -1,8 +1,22 @@
 """
 Examples for EddyPro quality flags from raw data tests.
 
-Demonstrates how to extract and work with quality test flags from EddyPro output files,
-including signal strength, angle of attack, steadiness, and VM97 statistical tests.
+DIIVE uses a standard quality flag format where:
+    - 0 = good quality (passes test)
+    - 1 = soft warning (marginal, may indicate issues)
+    - 2 = bad quality / hard fail (fails test)
+
+EddyPro output files use different flag formats depending on the test type:
+    - Some flags are integers (0=pass, 1=fail) that need conversion to DIIVE format
+    - Some flags are multi-digit codes encoding multiple tests
+    - Signal strength values are continuous and require threshold comparison
+
+The functions in diive.pkgs.qaqc.eddyproflags extract information from EddyPro
+output and either:
+    - Calculate new quality flags by applying thresholds (e.g., signal strength)
+    - Extract existing test flags and convert them to DIIVE standard format
+
+This module demonstrates how to work with these functions and interpret their results.
 
 Run this script to see EddyPro flag extraction:
     python examples/qaqc/eddyproflags.py
@@ -57,12 +71,63 @@ def example_signal_strength_test():
     print()
 
 
+def example_steadiness_horizontal_wind_test():
+    """Extract and analyze wind steadiness quality flag from EddyPro output.
+
+    Demonstrates how to extract the wind steadiness test flag from EddyPro FluxNet
+    data and convert it to DIIVE format. The steadiness test evaluates whether
+    horizontal wind components (u and v) show systematic changes throughout the
+    measurement period, which indicates non-stationary conditions that degrade
+    flux measurement quality.
+
+    This example:
+    - Extracts the wind steadiness flag from EddyPro FluxNet output
+    - Converts EddyPro format (1=bad) to DIIVE format (2=bad)
+    - Reports retained and discarded record counts
+    """
+    from diive.pkgs.qaqc.eddyproflags import flag_steadiness_horizontal_wind_eddypro_test
+
+    # Load example EddyPro FluxNet data
+    df, metadata = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
+
+    flux = 'FC'
+
+    print(f"Loaded EddyPro FluxNet data: {len(df)} records")
+    print(f"Date range: {df.index[0]} to {df.index[-1]}\n")
+
+    # Extract steadiness flag
+    flag = flag_steadiness_horizontal_wind_eddypro_test(
+        df=df,
+        flux=flux,
+        idstr='_L41'
+    )
+
+    # Calculate flag statistics
+    n_retained = (flag == 0).sum()
+    n_discarded = (flag == 2).sum()
+
+    print("Wind Steadiness Quality Test Results")
+    print("-" * 60)
+    print(f"Retained records:           {n_retained:6d}")
+    print(f"Discarded records:          {n_discarded:6d}")
+    print()
+
+
 if __name__ == '__main__':
     print("=" * 80)
     print("EddyPro Quality Flag Examples")
     print("=" * 80)
     print()
 
-    print("[EXAMPLE: Signal Strength Quality Test]")
+    print("[EXAMPLE 1: Signal Strength Quality Test]")
     print("-" * 80)
     example_signal_strength_test()
+
+    print("[EXAMPLE 2: Wind Steadiness Quality Test]")
+    print("-" * 80)
+    example_steadiness_horizontal_wind_test()
+
+    print("\n" + "=" * 80)
+    print("Note: These examples use real EddyPro FluxNet data (July 2021).")
+    print("For your own EddyPro data, load your CSV and use the actual flag columns.")
+    print("=" * 80)

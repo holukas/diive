@@ -65,7 +65,10 @@ def flag_signal_strength_eddypro_test(df: DataFrame,
 def flag_steadiness_horizontal_wind_eddypro_test(df: DataFrame,
                                                  flux: str,
                                                  idstr: str = None) -> Series:
-    """Create flag for steadiness of horizontal wind u from the sonic anemometer.
+    """Extract wind steadiness flag from EddyPro output and convert to DIIVE format.
+
+    Extracts the wind steadiness test flag from EddyPro FluxNet output and converts
+    it to DIIVE standard format (0=good, 2=bad).
 
     From the EddyPro description:
         "This test assesses whether the along-wind and crosswind components of the wind vector undergo
@@ -73,11 +76,13 @@ def flag_steadiness_horizontal_wind_eddypro_test(df: DataFrame,
         systematic variations is beyond the user-selected limit, the flux averaging period is hard-flagged
         for instationary horizontal wind (Vickers and Mahrt, 1997, Par. 6g)."
 
-    - The flag looks the same in the _fluxnet_ and _full_output_ files, but has
-    different names.
-    - Flag = 1 means that the wind was not stationary.
-    - This is a hard flag, meaning that in EddyPro results flag 1 = bad values.
+    Args:
+        df: A dataframe containing EddyPro FluxNet output data with VM97_NSHW_HF column.
+        flux: Name of the flux variable (used only for naming the output flag column).
+        idstr: An optional identifier string to append to the flag name.
 
+    Returns:
+        A series containing the quality flag in DIIVE format, where 0=good values, 2=bad values.
     """
     idstr = validate_id_string(idstr=idstr)
     flagname_out = f"FLAG{idstr}_{flux}_VM97_NSHW_HF_TEST"
