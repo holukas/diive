@@ -1,5 +1,23 @@
 """
-Quality flags that depend on EddyPro output files.
+Quality flags extracted from and calculated based on EddyPro output files.
+
+DIIVE uses a standard quality flag format across all functions:
+    - 0 = good quality (passes test)
+    - 1 = soft warning (marginal, may indicate issues)
+    - 2 = bad quality / hard fail (fails test)
+
+EddyPro output files use different flag formats depending on the test type and file format:
+    - Some flags are simple integers (0=pass, 1=fail) that need conversion
+    - Some flags are multi-digit codes encoding multiple tests (e.g., VM97 8-digit codes)
+    - Some data (e.g., signal strength) are continuous values requiring threshold comparison
+
+This module provides functions to:
+    1. Extract test flags from EddyPro FluxNet and full output files
+    2. Convert EddyPro flag formats to DIIVE standard format
+    3. Calculate new quality flags by applying thresholds to raw data
+
+All functions return flags in DIIVE standard format (0=good, 1=soft warning, 2=bad)
+to ensure consistency across the library.
 """
 import numpy as np
 import pandas as pd
@@ -108,20 +126,25 @@ def flag_angle_of_attack_eddypro_test(df: DataFrame,
                                       flux: str,
                                       idstr: str = None,
                                       application_dates: list or None = None) -> Series:
-    """Flag from EddyPro output files is an integer and looks like this, e.g.: 81.
-    The integer contains angle-of-attack test results for the sonic anemometer.
+    """Extract angle of attack flag from EddyPro output and convert to DIIVE format.
 
-    Flag = 1 means that the angle was too large.
+    Extracts the angle of attack test flag from EddyPro FluxNet output and converts
+    it to DIIVE standard format (0=good, 2=bad). The angle of attack test evaluates
+    whether the wind vector relative to the sonic anemometer orientation is within
+    acceptable limits.
 
-    The flag looks the same in the _fluxnet_ and _full_output_ files, but has
-    different names.
+    The EddyPro flag is stored as a 2-digit integer (e.g., 81), where the second
+    digit contains the test result. Flag = 1 means the angle was too large (bad).
 
-    -- 1 digit:
-    attack_angle_hf	            8aa	                            80
+    Args:
+        df: A dataframe containing EddyPro FluxNet output data with VM97_AOA_HF column.
+        flux: Name of the flux variable (used only for naming the output flag column).
+        idstr: An optional identifier string to append to the flag name.
+        application_dates: Optional list of date ranges to restrict flag application.
+            Format: [['2022-01-01', '2022-12-31'], ...] for selective time periods.
 
-    This is a hard flag:
-    _HF_ = hard flag (flag 1 = bad values)
-
+    Returns:
+        A series containing the quality flag in DIIVE format, where 0=good values, 2=bad values.
     """
     flagname_out = f"FLAG{idstr}_{flux}_VM97_AOA_HF_TEST"
     aoa_flag = df['VM97_AOA_HF'].copy()  # Name of the flag in EddyPro output file

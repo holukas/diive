@@ -113,6 +113,48 @@ def example_steadiness_horizontal_wind_test():
     print()
 
 
+def example_angle_of_attack_test():
+    """Extract and analyze angle of attack quality flag from EddyPro output.
+
+    Demonstrates how to extract the angle of attack test flag from EddyPro FluxNet
+    data and convert it to DIIVE format. The angle of attack test evaluates whether
+    the wind vector relative to the sonic anemometer orientation is within acceptable
+    limits. Large angles of attack indicate that the wind is approaching the
+    anemometer at unfavorable angles, which can reduce measurement accuracy.
+
+    This example:
+    - Extracts the angle of attack flag from EddyPro FluxNet output
+    - Converts EddyPro format (1=bad) to DIIVE format (2=bad)
+    - Reports retained and discarded record counts
+    """
+    from diive.pkgs.qaqc.eddyproflags import flag_angle_of_attack_eddypro_test
+
+    # Load example EddyPro FluxNet data
+    df, metadata = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
+
+    flux = 'FC'
+
+    print(f"Loaded EddyPro FluxNet data: {len(df)} records")
+    print(f"Date range: {df.index[0]} to {df.index[-1]}\n")
+
+    # Extract angle of attack flag
+    flag = flag_angle_of_attack_eddypro_test(
+        df=df,
+        flux=flux,
+        idstr='_L41'
+    )
+
+    # Calculate flag statistics
+    n_retained = (flag == 0).sum()
+    n_discarded = (flag == 2).sum()
+
+    print("Angle of Attack Quality Test Results")
+    print("-" * 60)
+    print(f"Retained records:           {n_retained:6d}")
+    print(f"Discarded records:          {n_discarded:6d}")
+    print()
+
+
 if __name__ == '__main__':
     print("=" * 80)
     print("EddyPro Quality Flag Examples")
@@ -126,6 +168,10 @@ if __name__ == '__main__':
     print("[EXAMPLE 2: Wind Steadiness Quality Test]")
     print("-" * 80)
     example_steadiness_horizontal_wind_test()
+
+    print("[EXAMPLE 3: Angle of Attack Quality Test]")
+    print("-" * 80)
+    example_angle_of_attack_test()
 
     print("\n" + "=" * 80)
     print("Note: These examples use real EddyPro FluxNet data (July 2021).")
