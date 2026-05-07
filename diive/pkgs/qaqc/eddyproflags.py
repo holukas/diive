@@ -423,32 +423,35 @@ def flag_spectral_correction_factor_eddypro_test(
 
 def flag_ssitc_eddypro_test(df: DataFrame, flux: str, setflag_timeperiod: dict = None,
                             idstr: str = None) -> Series:
-    """Create series based on the SSITC test flag variable from an EddyPro output file.
+    """Extract Steady State and Integral Turbulence Characteristics (SSITC) test flag from EddyPro output.
 
-    SSITC = Steady State and Integral Turbulence Characteristics test.
+    SSITC test evaluates flux data quality based on steady state and integral turbulence
+    characteristics criteria (Mauder & Foken, 2004). This test assesses whether conditions
+    are sufficiently stationary for reliable flux measurements during the averaging period.
 
-    This method calls the external `flag_ssitc_eddypro_test` function, which
-    evaluates the flux data based on steady state and integral turbulence
-    criteria (Mauder & Foken, 2004). The resulting flag is added to the
-    internal `_results` dataframe.
+    The SSITC test flag is extracted from EddyPro FluxNet output and converted to DIIVE
+    standard format (0=good, 2=bad).
 
     Args:
-        df: A DataFrame containing EddyPro data from the _fluxnet_ or _full_output_ file.
-        flux: The name of the flux variable for which the SSITC test was performed. The name of the
-            SSITC test variable will be detected based on this variable.
-        setflag_timeperiod: Specifies time periods when the flag is set to given value.
-            Example:
-                Set flag 1 to value 2 between '2022-05-01' and '2023-09-30',
-                and between '2024-04-02' and '2024-04-19' (dates inclusive):
-                    {2: [
-                            [1, '2022-05-01', '2023-09-30'],
-                            [1, '2024-04-02', '2024-04-19']
-                        ]
-                    }
+        df: A DataFrame containing EddyPro FluxNet or full output data.
+        flux: The name of the flux variable (e.g., 'FC' for carbon dioxide flux).
+            The SSITC test variable name will be detected based on this variable.
+        setflag_timeperiod: Optional. Specify time periods to override flag values.
+            Dictionary format: {new_flag_value: [[original_flag, start_date, end_date], ...]}
+            Example - Set records with flag 1 to flag 2 between specific dates:
+                {2: [[1, '2022-05-01', '2023-09-30'], [1, '2024-04-02', '2024-04-19']]}
         idstr: An optional identifier string to append to the flag name.
 
     Returns:
-        A pandas Series containing the new flag variable.
+        A pandas Series containing the SSITC quality flag in DIIVE format
+        (0=good, 2=bad).
+
+    See Also:
+        See examples/qaqc/eddyproflags.py for a complete working example.
+
+    References:
+        Mauder, M., & Foken, T. (2004). Documentation and Instruction Manual of
+        the Eddy-Covariance Software Package TK2 (Vol. 26). Universität Bayreuth.
     """
     idstr = validate_id_string(idstr=idstr)
     flagname_out = f'FLAG{idstr}_{flux}_SSITC_TEST'

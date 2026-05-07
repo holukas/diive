@@ -275,6 +275,48 @@ def example_fluxbasevar_completeness_test():
     print()
 
 
+def example_ssitc_test():
+    """Extract and analyze Steady State and Integral Turbulence Characteristics (SSITC) flag.
+
+    Demonstrates how to extract the SSITC test flag from EddyPro FluxNet data and convert
+    it to DIIVE format. The SSITC test evaluates whether flux measurements were collected
+    under sufficiently steady state and stationary turbulence conditions (Mauder & Foken, 2004).
+    Poor SSITC results indicate that turbulence conditions were non-stationary, which can
+    compromise the reliability of flux estimates.
+
+    This example:
+    - Extracts the SSITC flag from EddyPro FluxNet output
+    - Converts EddyPro format to DIIVE format (2=bad)
+    - Reports steady state condition statistics
+    """
+    from diive.pkgs.qaqc.eddyproflags import flag_ssitc_eddypro_test
+
+    # Load example EddyPro FluxNet data
+    df, metadata = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
+
+    flux = 'FC'
+
+    print(f"Loaded EddyPro FluxNet data: {len(df)} records")
+    print(f"Date range: {df.index[0]} to {df.index[-1]}\n")
+
+    # Extract SSITC flag
+    flag = flag_ssitc_eddypro_test(
+        df=df,
+        flux=flux,
+        idstr='_L41'
+    )
+
+    # Calculate flag statistics
+    n_good = (flag == 0).sum()
+    n_bad = (flag == 2).sum()
+
+    print("Steady State and Integral Turbulence Characteristics (SSITC) Test Results")
+    print("-" * 60)
+    print(f"Good conditions (steady state):     {n_good:6d} records")
+    print(f"Bad conditions (non-stationary):    {n_bad:6d} records")
+    print()
+
+
 if __name__ == '__main__':
     print("=" * 80)
     print("EddyPro Quality Flag Examples")
@@ -300,3 +342,7 @@ if __name__ == '__main__':
     print("[EXAMPLE 5: Flux Base Variable Completeness]")
     print("-" * 80)
     example_fluxbasevar_completeness_test()
+
+    print("[EXAMPLE 6: Steady State and Integral Turbulence Characteristics]")
+    print("-" * 80)
+    example_ssitc_test()
