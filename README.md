@@ -8,6 +8,14 @@
 
 *`diive` is currently under active developement with frequent updates.*
 
+**Update 8 May 2026**  
+*`diive` is currently prepared for the first main release. There is still
+quite a bit missing, e.g., code examples for all public classes and functions.
+After that, the documentation will be created and hosted on ReadTheDocs.
+Most of the notebooks will be removed once the documentation is ready.
+New features are still added regularly, and existing functionality is
+continuously improved.*
+
 # Time series data processing
 
 `diive` is a Python library for time series processing, in particular ecosystem data. Originally developed
@@ -25,10 +33,12 @@ Classes are available directly from the `diive` namespace with both PascalCase a
 ```python
 # PascalCase (class name)
 from diive.core.plotting import TimeSeries
+
 plot = TimeSeries(series=data)
 
 # snake_case (alias)
 import diive as dv
+
 plot = dv.plot_time_series(series=data)
 ```
 
@@ -42,7 +52,8 @@ plot = dv.plot_time_series(series=data)
 
 **Analysis:** `gridaggregator`, `GridAggregator`, `seasonaltrend`, `SeasonalTrendDecomposition`
 
-**Eddy Covariance:** `FluxDetectionLimit`, `fdl`, `MaxCovariance`, `max_covariance`, `WindRotation2D`, `wind_rotation_2d`
+**Eddy Covariance:** `FluxDetectionLimit`, `fdl`, `MaxCovariance`, `max_covariance`, `WindRotation2D`,
+`wind_rotation_2d`
 
 **I/O:** `load_parquet`, `save_parquet`, `load_exampledata_parquet`, `search_files`
 
@@ -55,11 +66,13 @@ For the complete list of available aliases, see `diive.__all__`.
 **107 executable examples** demonstrating common workflows are organized by topic in the `examples/` folder:
 
 **Run all examples at once (parallelized):**
+
 ```bash
 python examples/run_all_examples.py
 ```
 
 **Run individual examples:**
+
 ```bash
 python examples/visualization/heatmap_datetime.py    # HeatmapDateTime heatmaps (6 examples)
 python examples/analyses/seasonaltrend.py            # SeasonalTrendDecomposition (1 example)
@@ -84,19 +97,25 @@ python examples/flux/hqflux.py                       # CO2 flux quality analysis
 ```
 
 **Example categories (107 total, 52 files):**
+
 - **Visualization** (22): heatmap_datetime, hexbin, timeseries, cumulative, dielcycle, histogram, ridgeline, scatter
-- **Analyses** (8): correlation, decoupling, gapfinder, gridaggregator, histogram, optimumrange, quantiles, seasonaltrend
-- **Data Processing** (50): binary extraction, corrections (setto, offsetcorrection), outlierdetection (absolutelimits, hampel, incremental, localsd, lof, manualremoval, stepwise, trim), qaqc (FlagQCF, 6 EddyProFlags examples), createvar (air, conversions, daynightflag, laggedvariants, noise, potentialradiation, timesince, vpd)
-- **Gap-Filling** (10): linear_interpolation, mds, mds_comparison, randomforest_ts (3 examples: full, quick, optimize), xgboost_ts (2 examples: full, optimize), comparison (MDS vs RF vs XGB)
-- **Eddy Covariance & Flux** (9): fluxdetectionlimit, lag, windrotation, hqflux, selfheating, uncertainty, ustarthreshold (3 examples)
+- **Analyses** (8): correlation, decoupling, gapfinder, gridaggregator, histogram, optimumrange, quantiles,
+  seasonaltrend
+- **Data Processing** (50): binary extraction, corrections (setto, offsetcorrection), outlierdetection (absolutelimits,
+  hampel, incremental, localsd, lof, manualremoval, stepwise, trim), qaqc (FlagQCF, 6 EddyProFlags examples),
+  createvar (air, conversions, daynightflag, laggedvariants, noise, potentialradiation, timesince, vpd)
+- **Gap-Filling** (10): linear_interpolation, mds, mds_comparison, randomforest_ts (3 examples: full, quick, optimize),
+  xgboost_ts (2 examples: full, optimize), comparison (MDS vs RF vs XGB)
+- **Eddy Covariance & Flux** (9): fluxdetectionlimit, lag, windrotation, hqflux, selfheating, uncertainty,
+  ustarthreshold (3 examples)
 - **Spectral Analysis** (2): harmonic (spectrogram analysis)
 - **Fits** (1): fitter
 
-See [examples/README.md](examples/README.md) for a complete index of all examples with descriptions and quick start guides.
+See [examples/README.md](examples/README.md) for a complete index of all examples with descriptions and quick start
+guides.
 
 Additional examples available in **Jupyter notebooks** at [notebooks/](notebooks/) with comprehensive workflows and
 tutorials.
-
 
 ## Overview of example notebooks
 
