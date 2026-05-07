@@ -424,7 +424,7 @@ Examples & Documentation
 
 **Q: Where are the examples?**
 
-A: Browse the :ref:`Example Gallery <auto_examples/index>` with 101 runnable examples across 52 files.
+A: Browse the :ref:`Example Gallery <auto_examples/index>` with 103 runnable examples across 52 files.
 
 Or clone and run locally:
 

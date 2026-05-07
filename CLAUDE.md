@@ -303,8 +303,8 @@ Located in `examples/` organized by topic. Each is a self-contained, runnable Py
 
 **Run individual:** `uv run python examples/visualization/heatmap_datetime.py`
 
-**Coverage:** 101 examples across 52 files
-- Visualization: 22, Analysis: 8, Data Processing: 50 (Binary 2, Corrections 7, QAQC 1, Outlierdetection 17, Variable creation 23)
+**Coverage:** 103 examples across 52 files
+- Visualization: 22, Analysis: 8, Data Processing: 52 (Binary 2, Corrections 7, QAQC 3, Outlierdetection 17, Variable creation 23)
 - Eddy Covariance: 11, Time Series: 2, Fits: 1, Gap-filling: 9
 
 See `examples/README.md` for full catalog.

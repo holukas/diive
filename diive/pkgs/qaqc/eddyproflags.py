@@ -15,18 +15,22 @@ def flag_signal_strength_eddypro_test(df: DataFrame,
                                       method: str,
                                       threshold: int,
                                       idstr: str = None) -> Series:
-    """Flag flux values where signal strength / AGC is not sufficient (too high or too low).
+    """Extract signal strength data and create a quality flag based on threshold comparison.
+
+    Creates a quality flag by comparing signal strength values from EddyPro output against
+    a user-defined threshold.
 
     Args:
-        df: A dataframe that contains <signal_strength_col> and <var>.
-        signal_strength_col: Name of signal strength or AGC variable.
-        var_col: Name of the variable for which the flag is created.
-        method: Can be 'discard above' or 'discard below' the <threshold>.
-        threshold: Threshold to remove data points.
+        df: A dataframe that contains <signal_strength_col> and <var_col>.
+        signal_strength_col: Name of signal strength column from EddyPro output.
+        var_col: Name of the flux variable being evaluated. <var_col> is only used
+            for naming the extracted flag.
+        method: Threshold comparison method: 'discard below' or 'discard above'.
+        threshold: Threshold value for quality assessment.
         idstr: An optional identifier string to append to the flag name.
 
     Returns:
-        A series containing the test flag, where 0=good values, 2=bad values.
+        A series containing the quality flag, where 0=good values, 2=bad values.
     """
     idstr = validate_id_string(idstr=idstr)
     flagname_out = f'FLAG{idstr}_{var_col}_SIGNAL_STRENGTH_TEST'
@@ -104,7 +108,7 @@ def flag_angle_of_attack_eddypro_test(df: DataFrame,
 
     Flag = 1 means that the angle was too large.
 
-    The flag looks the same in the _fluxnet_ and _full_output_ files, but have
+    The flag looks the same in the _fluxnet_ and _full_output_ files, but has
     different names.
 
     -- 1 digit:
@@ -139,114 +143,6 @@ def flag_angle_of_attack_eddypro_test(df: DataFrame,
 
     aoa_flag.name = flagname_out
     return aoa_flag
-
-
-def flags_vm97_eddypro_fulloutputfile_tests(
-        df: DataFrame,
-        units: dict,
-        flux: str,
-        gas: str,
-        idstr: str = None,
-        spikes: bool = True,
-        amplitude: bool = False,
-        dropout: bool = True,
-        abslim: bool = False,
-        skewkurt_hf: bool = False,
-        skewkurt_sf: bool = False,
-        discont_hf: bool = False,
-        discont_sf: bool = False) -> DataFrame:
-    """Flags from EddyPro full_output files that contain results from quality tests
-     on raw data, based on Vickers and Mahrt (1997).
-
-    The flags are stored in an integer and looks like this, e.g.: 800011199.
-    One integer contains *one test* for *multiple* gases. Each number except the
-    first one corresponds to the test result of the respective flag for the
-    variable given in the units.
-
-    EddyPro outputs the raw data flags as 0 or 1, whereby 1 can correspond to
-    bad data (if the selected flag is a hard flag, _hf) or to OK data (if the selected
-    flag is a soft flag, _sf). If the flag is 9 then the test result is missing
-    or not relevant, e.g. when no CH4 flux was calculated.
-
-    This function considers all 8-digit VM97 flags:
-    Flag name                   Units                           Flag results
-    spikes_hf                   8u/v/w/ts/co2/h2o/ch4/none	    800000099
-    amplitude_resolution_hf     8u/v/w/ts/co2/h2o/ch4/none	    800000099
-    drop_out_hf	                8u/v/w/ts/co2/h2o/ch4/none	    800000099
-    absolute_limits_hf	        8u/v/w/ts/co2/h2o/ch4/none	    800000199
-    skewness_kurtosis_hf	    8u/v/w/ts/co2/h2o/ch4/none	    800000099
-    skewness_kurtosis_sf	    8u/v/w/ts/co2/h2o/ch4/none	    800011199
-    discontinuities_hf	        8u/v/w/ts/co2/h2o/ch4/none	    800000000
-    discontinuities_sf	        8u/v/w/ts/co2/h2o/ch4/none	    800000000
-
-    The last digit can be various gases. For example, if N2O flux was calculated
-    then the last flag (none) will be n2o. The first number in the flag results
-    is always 8.
-
-    -- 4 digits:
-    timelag_hf	                8co2/h2o/ch4/none	            81000
-    timelag_sf	                8co2/h2o/ch4/none	            81100
-
-    -- 1 digit:
-    attack_angle_hf	            8aa	                            80
-    non_steady_wind_hf	        8U	                            80
-
-
-    """
-    idstr = validate_id_string(idstr=idstr)
-
-    used_flags = []
-    if spikes:
-        # Spike detection, hard flag
-        used_flags.append('spikes_hf')
-    if amplitude:
-        # Amplitude resolution, hard flag
-        used_flags.append('amplitude_resolution_hf')
-    if dropout:
-        # Drop-out, hard flag
-        used_flags.append('drop_out_hf')
-    if abslim:
-        # Absolute limits, hard flag
-        used_flags.append('absolute_limits_hf')
-    if skewkurt_hf:
-        # Skewness/kurtosis, hard flag
-        used_flags.append('skewness_kurtosis_hf')
-    if skewkurt_sf:
-        # Skewness/kurtosis, soft flag
-        used_flags.append('skewness_kurtosis_sf')
-    if discont_hf:
-        # Discontinuities, hard flag
-        used_flags.append('discontinuities_hf')
-    if discont_sf:
-        # Discontinuities, soft flag
-        used_flags.append('discontinuities_sf')
-
-    allflags_df = df[used_flags].copy()
-    allflags_df = allflags_df.fillna(899999999)  # Fill missing values, showing that all flags are missing (9)
-
-    usedflags_df = pd.DataFrame(index=df.index)
-    for _flag in allflags_df:
-        this_flag = allflags_df[_flag].astype(str)  # Complete flag
-        _units = units[_flag]  # Units string
-        _units = _units.replace('8', '')  # Remove number 8 from units string (not needed, has no flag meaning)
-        _units = _units.split('/')  # Divide units string
-        gas_idx = _units.index(gas)  # Get index of var
-        this_flag = this_flag.str.get(gas_idx)  # Extract element at the passed position, for all records
-        this_flag = this_flag.astype(int)
-        this_flag.loc[this_flag == 9] = np.nan
-        if _flag.endswith("_hf"):
-            this_flag.loc[this_flag == 1] = 2  # 2 = bad quality value
-        flagname_out = f"FLAG{idstr}_{flux}_{gas}_VM97_{_flag}_TEST"
-        usedflags_df[flagname_out] = this_flag
-
-        print(f"RAW DATA TEST: Generated new flag variable {flagname_out}, "
-              f"values taken from output variable {_flag} from position {gas_idx}, "
-              f"based on {gas}, with "
-              f"flag 0 (good values) where test passed, "
-              f"flag 2 (bad values) where test failed (for hard flags) or "
-              f"flag 1 (ok values) where test failed (for soft flags) ...")
-
-    return usedflags_df
 
 
 def flags_vm97_eddypro_fluxnetfile_tests(
@@ -449,21 +345,6 @@ def flag_spectral_correction_factor_eddypro_test(
           f"flag 2 (bad values) where {scf.name} >= {thres_ok}...")
 
     return scf_flag
-
-
-def _exception_full_output_scf(flux: str, gas: str):
-    """Find name of scf variable.
-    EddyPro is inconsistent in the _full_output_ file because
-    it uses the base variable (e.g. co2) as part of the scf name
-    for some fluxes, and the flux name (e.g. H) for others.
-    """
-    string = None
-    if any(n in flux for n in ['H', 'Tau', 'LE']):
-        string = flux
-    elif any(n in flux for n in ['co2_flux', 'n2o_flux', 'ch4_flux', 'h2o_flux']):
-        string = gas
-    scfname = f'{string}_scf'
-    return scfname
 
 
 def flag_ssitc_eddypro_test(df: DataFrame, flux: str, setflag_timeperiod: dict = None,

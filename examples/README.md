@@ -32,7 +32,8 @@ examples/
 │   ├── [setto.py](corrections/setto.py)                  # Set values to missing, specific values, or thresholds (3 examples)
 │   └── [offsetcorrection.py](corrections/offsetcorrection.py)  # Correct RH, radiation, measurement, and wind direction offsets (4 examples)
 ├── qaqc/                  # Quality assurance / Quality control examples
-│   └── [qcf.py](qaqc/qcf.py)                             # Overall Quality Control Flag (QCF) combining multiple test flags (1 example)
+│   ├── [qcf.py](qaqc/qcf.py)                             # Overall Quality Control Flag (QCF) combining multiple test flags (1 example)
+│   └── [eddyproflags.py](qaqc/eddyproflags.py)          # EddyPro quality flags from raw data tests (Vickers & Mahrt, 1997) (2 examples)
 ├── outlierdetection/      # Outlier detection and quality control examples
 │   ├── [absolutelimits.py](outlierdetection/absolutelimits.py)  # Absolute value limits with separate day/night thresholds (2 examples)
 │   ├── [hampel.py](outlierdetection/hampel.py)                  # Hampel filter (Median Absolute Deviation) outlier detection (2 examples)
@@ -81,7 +82,7 @@ examples/
 python examples/run_all_examples.py
 ```
 
-Executes all 101 examples across 52 files (22 visualization + 8 analysis + 2 binary + 7 corrections + 1 qaqc + 17 outlierdetection + 23 createvar + 4 echires + 7 flux + 10 gap_filling + 2 timeseries + 1 fits) in parallel (4 concurrent workers) with execution time tracking.
+Executes all 103 examples across 52 files (22 visualization + 8 analysis + 2 binary + 7 corrections + 3 qaqc + 17 outlierdetection + 23 createvar + 4 echires + 7 flux + 10 gap_filling + 2 timeseries + 1 fits) in parallel (4 concurrent workers) with execution time tracking.
 - Shows individual timing for each example
 - Detailed error messages if any fail
 - ~2.7x faster than sequential execution
@@ -143,15 +144,15 @@ When adding a new example:
 
 ## Phases
 
-- **Phase 1 (Complete):** Core examples across visualization, analysis, and data processing (92 examples)
+- **Phase 1 (Complete):** Core examples across visualization, analysis, and data processing (94 examples)
   - **Visualization:** HeatmapDateTime/YearMonth (6), HexbinPlot (3), TimeSeries (1), Cumulative (3), Other (1), DielCycle (1), Histogram (2), RidgeLine (2), ScatterXY (3) = 22 examples
   - **Analysis:** DailyCorrelation, StratifiedAnalysis, GapFinder, GridAggregator, Histogram, FindOptimumRange, Quantiles, SeasonalTrendDecomposition = 8 examples
-  - **Data Processing:** Binary (2), Corrections (7), QAQC (1 - FlagQCF), Outlierdetection (17 - absolutelimits 2 + hampel 2 + incremental 1 + localsd 2 + lof 2 + manualremoval 2 + stepwise 1 + trim 2 + zscore 3), Variable creation (23) = 50 examples
+  - **Data Processing:** Binary (2), Corrections (7), QAQC (3 - FlagQCF + EddyPro flags), Outlierdetection (17 - absolutelimits 2 + hampel 2 + incremental 1 + localsd 2 + lof 2 + manualremoval 2 + stepwise 1 + trim 2 + zscore 3), Variable creation (23) = 52 examples
   - **Eddy Covariance:** FluxDetectionLimit (2), MaxCovariance (1), WindRotation2D (1), Flux (7 - common + hqflux + selfheating + uncertainty + 3 ustarthreshold) = 11 examples
   - **Time Series:** Harmonic/Spectrogram (2 - daily pattern, annual phenology) = 2 examples
   - **Fits:** BinFitterCP (1) = 1 example
 - **Phase 2 (Complete):** Gap-filling workflow examples (9 examples)
   - **Gap-filling:** Linear interpolation (2), MDS (1), MDS comparison (1), Random Forest (3), XGBoost (2), MDS vs RF vs XGB comparison (1) = 9 examples
-  - **TOTAL Phase 1 + Phase 2:** 101 examples across 52 files
+  - **TOTAL Phase 1 + Phase 2:** 103 examples across 52 files
   - TODO: Long-term multi-year models, HeatmapXYZ
 - **Phase 3+ (Future):** Advanced feature engineering examples

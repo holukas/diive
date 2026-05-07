@@ -20,7 +20,7 @@ Quick Links
 
 - :doc:`installation` — Installation guide
 - :doc:`getting_started` — Quick start tutorial
-- :doc:`auto_examples/index` — Example gallery (101 examples)
+- :doc:`auto_examples/index` — Example gallery (103 examples)
 - :doc:`api_reference` — API reference
 
 .. toctree::
