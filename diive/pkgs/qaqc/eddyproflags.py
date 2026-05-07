@@ -49,6 +49,9 @@ def flag_signal_strength_eddypro_test(df: DataFrame,
 
     Returns:
         A series containing the quality flag, where 0=good values, 2=bad values.
+
+    See Also:
+        See examples/qaqc/eddyproflags.py for a complete working example.
     """
     idstr = validate_id_string(idstr=idstr)
     flagname_out = f'FLAG{idstr}_{var_col}_SIGNAL_STRENGTH_TEST'
@@ -101,6 +104,9 @@ def flag_steadiness_horizontal_wind_eddypro_test(df: DataFrame,
 
     Returns:
         A series containing the quality flag in DIIVE format, where 0=good values, 2=bad values.
+
+    See Also:
+        See examples/qaqc/eddyproflags.py for a complete working example.
     """
     idstr = validate_id_string(idstr=idstr)
     flagname_out = f"FLAG{idstr}_{flux}_VM97_NSHW_HF_TEST"
@@ -145,6 +151,9 @@ def flag_angle_of_attack_eddypro_test(df: DataFrame,
 
     Returns:
         A series containing the quality flag in DIIVE format, where 0=good values, 2=bad values.
+
+    See Also:
+        See examples/qaqc/eddyproflags.py for a complete working example.
     """
     flagname_out = f"FLAG{idstr}_{flux}_VM97_AOA_HF_TEST"
     aoa_flag = df['VM97_AOA_HF'].copy()  # Name of the flag in EddyPro output file
@@ -186,19 +195,51 @@ def flags_vm97_eddypro_fluxnetfile_tests(
         skewkurt_sf: bool = False,
         discont_hf: bool = False,
         discont_sf: bool = False) -> DataFrame:
-    """Flag from EddyPro fluxnet files is an integer and looks like this, e.g.: 801000100
-    One integer contains *multiple tests* for *one* gas.
+    """Extract VM97 (Vickers & Mahrt 1997) raw data quality test flags from EddyPro output.
 
-    There is one flag for each gas, which is different from the flag output in the
-    EddyPro full output file (there, one integer describes *one test* and then contains
-    flags for *multiple gases*).
+    EddyPro performs statistical quality tests on the raw high-frequency eddy covariance
+    data. These VM97 tests evaluate the quality and reliability of the raw measurements
+    before flux calculation. EddyPro FluxNet files store multiple raw data tests in a
+    single multi-digit integer (e.g., 80100010). This function extracts individual test
+    results from each digit position and converts them to DIIVE standard format.
 
-    _HF_ = hard flag (flag 0 = good values, flag 1 = bad values) --> will be converted to 2 = bad values
-    _SF_ = soft flag (flag 0 = good values, flag 1 = ok values) --> 1 remains 1 = ok values
+    The VM97 integer encodes 8 different quality tests in an 8-digit code:
+    - Position 0: Always 8 (constant, no meaning)
+    - Position 1: Spike detection (hard flag)
+    - Position 2: Amplitude resolution (hard flag)
+    - Position 3: Dropout detection (hard flag)
+    - Position 4: Absolute limits (hard flag)
+    - Position 5: Skewness/Kurtosis (hard flag)
+    - Position 6: Skewness/Kurtosis (soft flag)
+    - Position 7: Discontinuities (hard flag)
+    - Position 8: Discontinuities (soft flag)
 
-    See also the official EddyPro documentation:
-    https://www.licor.com/env/support/EddyPro/topics/despiking-raw-statistical-screening.html
+    Hard flags (_HF_) are converted from EddyPro format (1=bad) to DIIVE format (2=bad).
+    Soft flags (_SF_) retain value 1 to indicate marginal/warning conditions.
 
+    Args:
+        df: A dataframe containing EddyPro FluxNet output with {fluxbasevar}_VM97_TEST column.
+        flux: The flux variable being evaluated (e.g., 'FC' for carbon dioxide flux).
+        fluxbasevar: The base variable used to calculate the flux (e.g., 'CO2' for FC flux).
+        idstr: An optional identifier string to append to flag names.
+        spikes: Extract spike detection test (position 1).
+        amplitude: Extract amplitude resolution test (position 2).
+        dropout: Extract dropout detection test (position 3).
+        abslim: Extract absolute limits test (position 4).
+        skewkurt_hf: Extract skewness/kurtosis hard flag test (position 5).
+        skewkurt_sf: Extract skewness/kurtosis soft flag test (position 6).
+        discont_hf: Extract discontinuities hard flag test (position 7).
+        discont_sf: Extract discontinuities soft flag test (position 8).
+
+    Returns:
+        A dataframe containing selected quality flag columns in DIIVE format
+        (0=good, 1=soft warning, 2=bad).
+
+    See Also:
+        See examples/qaqc/eddyproflags.py for a complete working example.
+
+    References:
+        https://www.licor.com/env/support/EddyPro/topics/despiking-raw-statistical-screening.html
     """
     idstr = validate_id_string(idstr=idstr)
 

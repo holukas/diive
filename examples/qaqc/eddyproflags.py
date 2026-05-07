@@ -155,6 +155,78 @@ def example_angle_of_attack_test():
     print()
 
 
+def example_vm97_quality_tests():
+    """Extract and analyze VM97 (Vickers & Mahrt 1997) raw data quality test flags from EddyPro output.
+
+    Demonstrates how to extract multiple raw data quality test flags from a single EddyPro VM97 code.
+    VM97 tests are statistical quality assessments performed on the high-frequency raw eddy
+    covariance data before flux calculation. The VM97 code is an 8-digit integer where each
+    digit encodes results from a different quality test. This function extracts individual
+    test results and converts them to DIIVE standard format.
+
+    This example:
+    - Extracts all 8 VM97 raw data quality tests from EddyPro FluxNet output
+    - Converts EddyPro format to DIIVE format (hard flags: 2=bad, soft flags: 1=warning)
+    - Reports pass/fail statistics for each individual test
+    - Uses CO2 as the base variable (used to calculate FC flux)
+    """
+    from diive.pkgs.qaqc.eddyproflags import flags_vm97_eddypro_fluxnetfile_tests
+
+    # Load example EddyPro FluxNet data
+    df, metadata = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
+
+    flux = 'FC'
+    fluxbasevar = 'CO2'
+
+    print(f"Loaded EddyPro FluxNet data: {len(df)} records")
+    print(f"Date range: {df.index[0]} to {df.index[-1]}\n")
+
+    # Extract all 8 VM97 quality tests
+    flags_df = flags_vm97_eddypro_fluxnetfile_tests(
+        df=df,
+        flux=flux,
+        fluxbasevar=fluxbasevar,
+        idstr='_L41',
+        spikes=True,
+        amplitude=True,
+        dropout=True,
+        abslim=True,
+        skewkurt_hf=True,
+        skewkurt_sf=True,
+        discont_hf=True,
+        discont_sf=True
+    )
+
+    print("VM97 Quality Test Results (All 8 Tests)")
+    print("-" * 60)
+
+    # Calculate and display statistics for each test
+    test_info = [
+        ('Spike detection', 'SPIKE_HF'),
+        ('Amplitude resolution', 'AMPLITUDE_RESOLUTION_HF'),
+        ('Dropout detection', 'DROPOUT_TEST'),
+        ('Absolute limits', 'ABSOLUTE_LIMITS_HF'),
+        ('Skewness/Kurtosis (hard)', 'SKEWKURT_HF'),
+        ('Skewness/Kurtosis (soft)', 'SKEWKURT_SF'),
+        ('Discontinuities (hard)', 'DISCONTINUITIES_HF'),
+        ('Discontinuities (soft)', 'DISCONTINUITIES_SF'),
+    ]
+
+    for test_name, test_suffix in test_info:
+        # Find the corresponding flag column
+        flag_col = [col for col in flags_df.columns if test_suffix in col][0]
+        flag_series = flags_df[flag_col]
+
+        # Count results
+        n_pass = (flag_series == 0).sum()
+        n_fail = (flag_series == 2).sum()
+        n_warn = (flag_series == 1).sum()
+
+        print(f"{test_name:30s}  Pass: {n_pass:6d}  Fail: {n_fail:6d}  Warn: {n_warn:6d}")
+
+    print()
+
+
 if __name__ == '__main__':
     print("=" * 80)
     print("EddyPro Quality Flag Examples")
@@ -172,6 +244,10 @@ if __name__ == '__main__':
     print("[EXAMPLE 3: Angle of Attack Quality Test]")
     print("-" * 80)
     example_angle_of_attack_test()
+
+    print("[EXAMPLE 4: VM97 Quality Tests]")
+    print("-" * 80)
+    example_vm97_quality_tests()
 
     print("\n" + "=" * 80)
     print("Note: These examples use real EddyPro FluxNet data (July 2021).")
