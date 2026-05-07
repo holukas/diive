@@ -1,0 +1,1323 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>diive.pkgs.flux.ustarthreshold &#8212; DIIVE Documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/styles/sphinx-book-theme.css?v=3c74b3bc" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=fd6457a4" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../../../../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../../../../_static/documentation_options.js?v=7da8d472"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../../../../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/diive/pkgs/flux/ustarthreshold';</script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="0.91.0" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">DIIVE</p>
+  
+</a></div>
+        <div class="sidebar-primary-item">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="../../../../index.html">
+                    DIIVE
+                </a>
+            </li>
+        </ul>
+        <ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../api_reference.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contributing.html">Contributing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../faq.html">Frequently Asked Questions</a></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+<a href="https://github.com/holukas/diive/issues/new?title=Issue%20on%20page%20%2F_modules/diive/pkgs/flux/ustarthreshold.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button"
+   title="Open an issue"
+   data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+
+</a>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button pst-navbar-icon"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button>
+
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1></h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for diive.pkgs.flux.ustarthreshold</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.gridspec</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gridspec</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="kn">import</span> <span class="n">DatetimeIndex</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="kn">import</span> <span class="n">Series</span><span class="p">,</span> <span class="n">DataFrame</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">diive.core.plotting.plotfuncs</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pf</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">diive.core.plotting.styles.LightTheme</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">theme</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">diive.core.base.flagbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">FlagBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">diive.core.times.times</span><span class="w"> </span><span class="kn">import</span> <span class="n">insert_season</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">diive.core.utils.prints</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConsoleOutputDecorator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">diive.pkgs.createvar.daynightflag</span><span class="w"> </span><span class="kn">import</span> <span class="n">daytime_nighttime_flag_from_swinpot</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">diive.pkgs.createvar.potentialradiation</span><span class="w"> </span><span class="kn">import</span> <span class="n">potrad</span>
+
+
+<div class="viewcode-block" id="FlagMultipleConstantUstarThresholds">
+<a class="viewcode-back" href="../../../../api/pkgs/diive.pkgs.flux.ustarthreshold.html#diive.pkgs.flux.ustarthreshold.FlagMultipleConstantUstarThresholds">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">FlagMultipleConstantUstarThresholds</span><span class="p">:</span>
+
+<div class="viewcode-block" id="FlagMultipleConstantUstarThresholds.__init__">
+<a class="viewcode-back" href="../../../../api/pkgs/diive.pkgs.flux.ustarthreshold.html#diive.pkgs.flux.ustarthreshold.FlagMultipleConstantUstarThresholds.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">series</span><span class="p">,</span> <span class="n">ustar</span><span class="p">,</span> <span class="n">thresholds</span><span class="p">,</span> <span class="n">threshold_labels</span><span class="p">,</span>
+                 <span class="n">showplot</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="n">idstr</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">series</span> <span class="o">=</span> <span class="n">series</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ustar</span> <span class="o">=</span> <span class="n">ustar</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">thresholds</span> <span class="o">=</span> <span class="n">thresholds</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">threshold_labels</span> <span class="o">=</span> <span class="n">threshold_labels</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">showplot</span> <span class="o">=</span> <span class="n">showplot</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">=</span> <span class="n">verbose</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">idstr</span> <span class="o">=</span> <span class="n">idstr</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_results</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">series</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ustar</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">results</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DataFrame</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return high-resolution detailed data with tags as dict of DataFrames.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_results</span><span class="p">,</span> <span class="n">DataFrame</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;No USTAR flags available.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_results</span>
+
+<div class="viewcode-block" id="FlagMultipleConstantUstarThresholds.get_results">
+<a class="viewcode-back" href="../../../../api/pkgs/diive.pkgs.flux.ustarthreshold.html#diive.pkgs.flux.ustarthreshold.FlagMultipleConstantUstarThresholds.get_results">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_results</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DataFrame</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">results</span></div>
+
+
+<div class="viewcode-block" id="FlagMultipleConstantUstarThresholds.calc">
+<a class="viewcode-back" href="../../../../api/pkgs/diive.pkgs.flux.ustarthreshold.html#diive.pkgs.flux.ustarthreshold.FlagMultipleConstantUstarThresholds.calc">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">calc</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">ix</span><span class="p">,</span> <span class="n">threshold</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">thresholds</span><span class="p">):</span>
+            <span class="n">idstr</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">idstr</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">threshold_labels</span><span class="p">[</span><span class="n">ix</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">idstr</span> <span class="k">else</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">threshold_labels</span><span class="p">[</span><span class="n">ix</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="n">ust</span> <span class="o">=</span> <span class="n">FlagSingleConstantUstarThreshold</span><span class="p">(</span>
+                <span class="n">series</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">series</span><span class="o">.</span><span class="n">name</span><span class="p">],</span>
+                <span class="n">ustar</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">ustar</span><span class="o">.</span><span class="n">name</span><span class="p">],</span>
+                <span class="n">threshold</span><span class="o">=</span><span class="n">threshold</span><span class="p">,</span>
+                <span class="n">idstr</span><span class="o">=</span><span class="n">idstr</span><span class="p">,</span>
+                <span class="n">showplot</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">showplot</span><span class="p">,</span>
+                <span class="n">verbose</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">verbose</span>
+            <span class="p">)</span>
+            <span class="n">ust</span><span class="o">.</span><span class="n">calc</span><span class="p">()</span>
+            <span class="n">flag</span> <span class="o">=</span> <span class="n">ust</span><span class="o">.</span><span class="n">get_flag</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_results</span><span class="p">[</span><span class="n">flag</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">flag</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="FlagSingleConstantUstarThreshold">
+<a class="viewcode-back" href="../../../../api/pkgs/diive.pkgs.flux.ustarthreshold.html#diive.pkgs.flux.ustarthreshold.FlagSingleConstantUstarThreshold">[docs]</a>
+<span class="nd">@ConsoleOutputDecorator</span><span class="p">()</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">FlagSingleConstantUstarThreshold</span><span class="p">(</span><span class="n">FlagBase</span><span class="p">):</span>
+    <span class="n">flagid</span> <span class="o">=</span> <span class="s1">&#39;USTAR&#39;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
+                 <span class="n">series</span><span class="p">:</span> <span class="n">Series</span><span class="p">,</span>
+                 <span class="n">ustar</span><span class="p">:</span> <span class="n">Series</span><span class="p">,</span>
+                 <span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+                 <span class="n">idstr</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+                 <span class="n">showplot</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+                 <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;xxx&quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">series</span><span class="o">=</span><span class="n">series</span><span class="p">,</span> <span class="n">flagid</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">flagid</span><span class="p">,</span> <span class="n">idstr</span><span class="o">=</span><span class="n">idstr</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ustar</span> <span class="o">=</span> <span class="n">ustar</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">threshold</span> <span class="o">=</span> <span class="n">threshold</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">showplot</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">showplot</span> <span class="o">=</span> <span class="n">showplot</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">=</span> <span class="n">verbose</span>
+
+        <span class="c1"># if self.showplot:</span>
+        <span class="c1">#     self.fig, self.ax, self.ax2 = self._plot_init()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">calc</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Calculate overall flag, based on individual flags from multiple iterations.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            repeat: If *True*, the outlier detection is repeated until all</span>
+<span class="sd">                outliers are removed.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_overall_flag</span><span class="p">,</span> <span class="n">n_iterations</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">run_flagtests</span><span class="p">,</span> <span class="n">repeat</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">showplot</span><span class="p">:</span>
+            <span class="c1"># Default plot for outlier tests, showing rejected values</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">defaultplot</span><span class="p">(</span><span class="n">n_iterations</span><span class="o">=</span><span class="n">n_iterations</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_flagtests</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">iteration</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DatetimeIndex</span><span class="p">,</span> <span class="n">DatetimeIndex</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Perform tests required for this flag&quot;&quot;&quot;</span>
+
+        <span class="n">ok</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ustar</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="p">)</span>
+        <span class="n">ok</span> <span class="o">=</span> <span class="n">ok</span><span class="p">[</span><span class="n">ok</span><span class="p">]</span><span class="o">.</span><span class="n">index</span>
+        <span class="n">rejected</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ustar</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="p">)</span>
+        <span class="n">rejected</span> <span class="o">=</span> <span class="n">rejected</span><span class="p">[</span><span class="n">rejected</span><span class="p">]</span><span class="o">.</span><span class="n">index</span>
+        <span class="n">n_outliers</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">rejected</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Total found outliers for USTAR threshold </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_idstr</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">rejected</span><span class="p">)</span><span class="si">}</span><span class="s2"> values&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">ok</span><span class="p">,</span> <span class="n">rejected</span><span class="p">,</span> <span class="n">n_outliers</span></div>
+
+
+
+<div class="viewcode-block" id="UstarThresholdConstantScenarios">
+<a class="viewcode-back" href="../../../../api/pkgs/diive.pkgs.flux.ustarthreshold.html#diive.pkgs.flux.ustarthreshold.UstarThresholdConstantScenarios">[docs]</a>
+<span class="nd">@ConsoleOutputDecorator</span><span class="p">()</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">UstarThresholdConstantScenarios</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Check impact of different constant USTAR thresholds on available data</span>
+
+<span class="sd">    Constant means that the threshold is the same for all data, e.g. the same for</span>
+<span class="sd">    all years.</span>
+<span class="sd">    ...</span>
+
+<span class="sd">    Methods:</span>
+<span class="sd">        calc(ustarthresholds:list=None, showplot: bool = False, verbose: bool = False):</span>
+<span class="sd">            Creates timeseries of *series* in after application of different USTAR</span>
+<span class="sd">            thresholds given in *ustarthresholds*.</span>
+
+<span class="sd">    Properties:</span>
+<span class="sd">        scenariosdf: DataFrame of the timeseries of *series* in different USTAR</span>
+<span class="sd">            scenarios. Records of *series* where USTAR was below the respective</span>
+<span class="sd">            threshold are set to missing.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">series</span><span class="p">:</span> <span class="n">Series</span><span class="p">,</span> <span class="n">ustar</span><span class="p">:</span> <span class="n">Series</span><span class="p">,</span> <span class="n">swinpot</span><span class="p">:</span> <span class="n">Series</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">series</span> <span class="o">=</span> <span class="n">series</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ustar</span> <span class="o">=</span> <span class="n">ustar</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">swinpot</span> <span class="o">=</span> <span class="n">swinpot</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">showplot</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">=</span> <span class="kc">False</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_scenariosdf</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># Detect daytime and nighttime from potential radiation</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">daytime</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nighttime</span> <span class="o">=</span> \
+            <span class="n">daytime_nighttime_flag_from_swinpot</span><span class="p">(</span><span class="n">swinpot</span><span class="o">=</span><span class="n">swinpot</span><span class="p">,</span> <span class="n">nighttime_threshold</span><span class="o">=</span><span class="mi">50</span><span class="p">)</span>
+
+        <span class="c1"># Convert 0/1 flags to False/True flag</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">daytime</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">daytime</span> <span class="o">==</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nighttime</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">nighttime</span> <span class="o">==</span> <span class="mi">1</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">scenariosdf</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return timeseries of *series* of each USTAR threshold, values</span>
+<span class="sd">        below the respective threshold were removed&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_scenariosdf</span><span class="p">,</span> <span class="n">DataFrame</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;USTAR scenarios are empty. &#39;</span>
+                            <span class="sa">f</span><span class="s1">&#39;Solution: run .calc() to create USTAR scenarios for </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">series</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1">.&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scenariosdf</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">calc</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ustarthresholds</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">showplot</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Calculate flag&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">ustarthresholds</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ustarthresholds</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.3</span><span class="p">,</span> <span class="mf">0.4</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">showplot</span> <span class="o">=</span> <span class="n">showplot</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">=</span> <span class="n">verbose</span>
+        <span class="c1"># self.reset()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_scenariosdf</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">series</span><span class="p">)</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+        <span class="c1"># Create timeseries for each USTAR threshold</span>
+        <span class="k">for</span> <span class="n">u</span> <span class="ow">in</span> <span class="n">ustarthresholds</span><span class="p">:</span>
+            <span class="n">suffix</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;CUT</span><span class="si">{</span><span class="n">u</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="n">colname</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">series</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">suffix</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="n">series_cut</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">series</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+            <span class="n">series_cut</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">ustar</span> <span class="o">&lt;</span> <span class="n">u</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_scenariosdf</span><span class="p">[</span><span class="n">colname</span><span class="p">]</span> <span class="o">=</span> <span class="n">series_cut</span>
+
+        <span class="c1"># Get daytime and nighttime data separately</span>
+        <span class="n">_scenariosdf_daytime</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scenariosdf</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">daytime</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">_scenariosdf_nighttime</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scenariosdf</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">nighttime</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+        <span class="c1"># total_potential = len(self._scenariosdf)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">showplot</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_plot</span><span class="p">(</span><span class="n">daytimedf</span><span class="o">=</span><span class="n">_scenariosdf_daytime</span><span class="p">,</span> <span class="n">nighttimedf</span><span class="o">=</span><span class="n">_scenariosdf_nighttime</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_plot</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">daytimedf</span><span class="p">,</span> <span class="n">nighttimedf</span><span class="p">):</span>
+        <span class="c1"># Count available records for each USTAR threshold</span>
+        <span class="n">counts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scenariosdf</span><span class="o">.</span><span class="n">describe</span><span class="p">()</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="s1">&#39;count&#39;</span><span class="p">]</span>
+        <span class="n">counts_daytime</span> <span class="o">=</span> <span class="n">daytimedf</span><span class="o">.</span><span class="n">describe</span><span class="p">()</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="s1">&#39;count&#39;</span><span class="p">]</span>
+        <span class="n">counts_nighttime</span> <span class="o">=</span> <span class="n">nighttimedf</span><span class="o">.</span><span class="n">describe</span><span class="p">()</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="s1">&#39;count&#39;</span><span class="p">]</span>
+
+        <span class="c1"># Create new figure</span>
+        <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;white&#39;</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">16</span><span class="p">))</span>
+        <span class="n">gs</span> <span class="o">=</span> <span class="n">gridspec</span><span class="o">.</span><span class="n">GridSpec</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>  <span class="c1"># rows, cols</span>
+        <span class="n">gs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">wspace</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">hspace</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">left</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">right</span><span class="o">=</span><span class="mf">0.98</span><span class="p">,</span> <span class="n">top</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span> <span class="n">bottom</span><span class="o">=</span><span class="mf">0.05</span><span class="p">)</span>
+        <span class="n">ax_dtnt</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="n">gs</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+        <span class="n">ax_dt</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="n">gs</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">sharex</span><span class="o">=</span><span class="n">ax_dtnt</span><span class="p">)</span>
+        <span class="n">ax_nt</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="n">gs</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">sharex</span><span class="o">=</span><span class="n">ax_dtnt</span><span class="p">)</span>
+        <span class="n">ax_stacked</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="n">gs</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">sharex</span><span class="o">=</span><span class="n">ax_dtnt</span><span class="p">)</span>
+
+        <span class="c1"># Generate bar plots</span>
+        <span class="n">bar_dtnt</span> <span class="o">=</span> <span class="n">ax_dtnt</span><span class="o">.</span><span class="n">bar</span><span class="p">(</span><span class="n">counts</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">counts</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;daytime + nighttime&#39;</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mf">.9</span><span class="p">,</span> <span class="n">fc</span><span class="o">=</span><span class="s1">&#39;#9CCC65&#39;</span><span class="p">)</span>
+        <span class="n">bar_dt</span> <span class="o">=</span> <span class="n">ax_dt</span><span class="o">.</span><span class="n">bar</span><span class="p">(</span><span class="n">counts_daytime</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">counts_daytime</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;daytime&#39;</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mf">.9</span><span class="p">,</span> <span class="n">fc</span><span class="o">=</span><span class="s1">&#39;#FFA726&#39;</span><span class="p">)</span>
+        <span class="n">bar_nt</span> <span class="o">=</span> <span class="n">ax_nt</span><span class="o">.</span><span class="n">bar</span><span class="p">(</span><span class="n">counts_nighttime</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">counts_nighttime</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;nighttime&#39;</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mf">.9</span><span class="p">,</span> <span class="n">fc</span><span class="o">=</span><span class="s1">&#39;#42A5F5&#39;</span><span class="p">)</span>
+
+        <span class="c1"># Show text in bar plots</span>
+        <span class="n">axes_lst</span> <span class="o">=</span> <span class="p">[</span><span class="n">ax_dtnt</span><span class="p">,</span> <span class="n">ax_dt</span><span class="p">,</span> <span class="n">ax_nt</span><span class="p">]</span>
+        <span class="n">counts_lst</span> <span class="o">=</span> <span class="p">[</span><span class="n">counts</span><span class="p">,</span> <span class="n">counts_daytime</span><span class="p">,</span> <span class="n">counts_nighttime</span><span class="p">]</span>
+        <span class="n">bar_lst</span> <span class="o">=</span> <span class="p">[</span><span class="n">bar_dtnt</span><span class="p">,</span> <span class="n">bar_dt</span><span class="p">,</span> <span class="n">bar_nt</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">ix</span><span class="p">,</span> <span class="n">a</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">axes_lst</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_bartxt</span><span class="p">(</span><span class="n">ax</span><span class="o">=</span><span class="n">axes_lst</span><span class="p">[</span><span class="n">ix</span><span class="p">],</span> <span class="n">counts</span><span class="o">=</span><span class="n">counts_lst</span><span class="p">[</span><span class="n">ix</span><span class="p">],</span> <span class="n">bar</span><span class="o">=</span><span class="n">bar_lst</span><span class="p">[</span><span class="n">ix</span><span class="p">])</span>
+            <span class="n">pf</span><span class="o">.</span><span class="n">default_legend</span><span class="p">(</span><span class="n">ax</span><span class="o">=</span><span class="n">a</span><span class="p">)</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">setp</span><span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">get_xticklabels</span><span class="p">(),</span> <span class="n">visible</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+        <span class="c1"># Stacked bar</span>
+        <span class="n">bar_stacked</span> <span class="o">=</span> <span class="n">ax_stacked</span><span class="o">.</span><span class="n">bar</span><span class="p">(</span><span class="n">counts_nighttime</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">counts_nighttime</span><span class="p">,</span>
+                                     <span class="n">width</span><span class="o">=</span><span class="mf">.9</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;nighttime&#39;</span><span class="p">,</span> <span class="n">fc</span><span class="o">=</span><span class="s1">&#39;#42A5F5&#39;</span><span class="p">)</span>
+        <span class="n">bar_stacked</span> <span class="o">=</span> <span class="n">ax_stacked</span><span class="o">.</span><span class="n">bar</span><span class="p">(</span><span class="n">counts_daytime</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">counts_daytime</span><span class="p">,</span>
+                                     <span class="n">width</span><span class="o">=</span><span class="mf">.9</span><span class="p">,</span> <span class="n">bottom</span><span class="o">=</span><span class="n">counts_nighttime</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;daytime&#39;</span><span class="p">,</span> <span class="n">fc</span><span class="o">=</span><span class="s1">&#39;#FFA726&#39;</span><span class="p">)</span>
+        <span class="n">pf</span><span class="o">.</span><span class="n">default_legend</span><span class="p">(</span><span class="n">ax</span><span class="o">=</span><span class="n">ax_stacked</span><span class="p">)</span>
+
+        <span class="c1"># Figure title</span>
+        <span class="n">title</span> <span class="o">=</span> <span class="s2">&quot;Available values after applying different constant USTAR thresholds&quot;</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="n">title</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="n">theme</span><span class="o">.</span><span class="n">FIGHEADER_FONTSIZE</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.01</span><span class="p">,</span> <span class="s1">&#39;USTAR thresholds&#39;</span><span class="p">,</span> <span class="n">ha</span><span class="o">=</span><span class="s1">&#39;center&#39;</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="s1">&#39;Available values&#39;</span><span class="p">,</span> <span class="n">va</span><span class="o">=</span><span class="s1">&#39;center&#39;</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="s1">&#39;vertical&#39;</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
+
+        <span class="n">fig</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_bartxt</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ax</span><span class="p">,</span> <span class="n">counts</span><span class="p">,</span> <span class="n">bar</span><span class="p">):</span>
+        <span class="n">counts_perc</span> <span class="o">=</span> <span class="n">counts</span><span class="o">.</span><span class="n">div</span><span class="p">(</span><span class="n">counts</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">multiply</span><span class="p">(</span><span class="mi">100</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">ix</span><span class="p">,</span> <span class="n">rect</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">bar</span><span class="p">):</span>
+            <span class="n">height</span> <span class="o">=</span> <span class="n">rect</span><span class="o">.</span><span class="n">get_height</span><span class="p">()</span>
+            <span class="c1"># Number of values</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">rect</span><span class="o">.</span><span class="n">get_x</span><span class="p">()</span> <span class="o">+</span> <span class="n">rect</span><span class="o">.</span><span class="n">get_width</span><span class="p">()</span> <span class="o">/</span> <span class="mf">2.0</span><span class="p">,</span> <span class="n">height</span><span class="p">,</span>
+                    <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">height</span><span class="si">:</span><span class="s1">.0f</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">ha</span><span class="o">=</span><span class="s1">&#39;center&#39;</span><span class="p">,</span> <span class="n">va</span><span class="o">=</span><span class="s1">&#39;bottom&#39;</span><span class="p">)</span>
+            <span class="c1"># Percentage</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">rect</span><span class="o">.</span><span class="n">get_x</span><span class="p">()</span> <span class="o">+</span> <span class="n">rect</span><span class="o">.</span><span class="n">get_width</span><span class="p">()</span> <span class="o">/</span> <span class="mf">2.0</span><span class="p">,</span> <span class="n">height</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span>
+                    <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">counts_perc</span><span class="p">[</span><span class="n">ix</span><span class="p">]</span><span class="si">:</span><span class="s1">.0f</span><span class="si">}</span><span class="s1">%&#39;</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">ha</span><span class="o">=</span><span class="s1">&#39;center&#39;</span><span class="p">,</span> <span class="n">va</span><span class="o">=</span><span class="s1">&#39;bottom&#39;</span><span class="p">)</span></div>
+
+
+        <span class="c1"># _bottom = np.nan  # Needed for stacking multiple bars on top of each other</span>
+        <span class="c1">#</span>
+        <span class="c1">#         for flag, row in _plot_df.iterrows():</span>
+        <span class="c1">#             _flag_counts = _plot_df.loc[flag].replace(np.nan, 0)  # Needs 0 for correct counts</span>
+        <span class="c1">#             if flag == 0:</span>
+        <span class="c1">#                 ax.bar(labels, _flag_counts, width=0.8, label=flag)</span>
+        <span class="c1">#                 for bar_ix, bar in enumerate(ax.patches):</span>
+        <span class="c1">#                     # kudos: https://www.pythoncharts.com/matplotlib/stacked-bar-charts-labels/</span>
+        <span class="c1">#</span>
+        <span class="c1">#                     # Show flag 0 (best) counts in plot</span>
+        <span class="c1">#                     ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() / 2,</span>
+        <span class="c1">#                             f&quot;{round(bar.get_height())}&quot;, ha=&#39;center&#39;, color=&#39;w&#39;, weight=&#39;bold&#39;, size=6)</span>
+        <span class="c1">#</span>
+        <span class="c1">#                     # Show labels *inside* plot</span>
+        <span class="c1">#                     ax.text(bar.get_x() + bar.get_width() / 10, bar.get_y() / 2,</span>
+        <span class="c1">#                             f&quot;{labels[bar_ix]}&quot;, ha=&#39;left&#39;, color=&#39;white&#39;, weight=&#39;bold&#39;, size=7, rotation=90)</span>
+        <span class="c1">#</span>
+        <span class="c1">#                 _bottom = _flag_counts</span>
+        <span class="c1">#             else:</span>
+        <span class="c1">#                 ax.bar(labels, _flag_counts, width=0.8, bottom=_bottom, label=flag)</span>
+        <span class="c1">#                 _bottom = _flag_counts + _bottom</span>
+
+        <span class="c1"># ok, rejected = self._flagtests(threshold=threshold)</span>
+        <span class="c1"># self.setflag(ok=ok, rejected=rejected)</span>
+        <span class="c1"># self.setfiltered(rejected=rejected)</span>
+
+
+<div class="viewcode-block" id="UstarDetectionMPT">
+<a class="viewcode-back" href="../../../../api/pkgs/diive.pkgs.flux.ustarthreshold.html#diive.pkgs.flux.ustarthreshold.UstarDetectionMPT">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">UstarDetectionMPT</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">    USTAR THRESHOLD DETECTION</span>
+<span class="sd">    =========================</span>
+
+<span class="sd">    How thresholds are calculated</span>
+<span class="sd">    -----------------------------</span>
+<span class="sd">    - Data are divided into S seasons</span>
+<span class="sd">    - In each season, data are divided into X air temperature (TA) classes</span>
+<span class="sd">    - Each air temperature class is divided into Y ustar (USTAR) subclasses (data are binned per subclass)</span>
+<span class="sd">    - Thresholds are calculated in each TA class</span>
+<span class="sd">    - Season thresholds per bootstrapping run are calculated from all found TA class thresholds, e.g. the max of thresholds</span>
+<span class="sd">    - Overall season thresholds are calculated from all season thresholds from all bootstrapping runs, e.g. the median</span>
+<span class="sd">    - Yearly thresholds are calculated from overall season thresholds</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">flux_plateau_thres_perc</span> <span class="o">=</span> <span class="mi">95</span>
+    <span class="n">ta_ustar_corr_thres</span> <span class="o">=</span> <span class="mf">0.4</span>  <span class="c1"># Papale et al. 2006: |r| &lt; 0.4 (was 0.6)</span>
+    <span class="n">flux_plateau_method</span> <span class="o">=</span> <span class="s1">&#39;NEE &gt; 10+10 Higher USTAR Subclasses&#39;</span>
+
+    <span class="n">thres_class_col</span> <span class="o">=</span> <span class="s1">&#39;USTAR_MPT_THRES_IN_CLASS&#39;</span>  <span class="c1"># in m s-1</span>
+    <span class="n">thres_season_col</span> <span class="o">=</span> <span class="s1">&#39;USTAR_MPT_THRES_IN_SEASON&#39;</span>  <span class="c1"># in m s-1</span>
+    <span class="n">thres_year_col</span> <span class="o">=</span> <span class="s1">&#39;USTAR_MPT_THRES_IN_YEAR&#39;</span>  <span class="c1"># in m s-1</span>
+    <span class="n">bts_run_col</span> <span class="o">=</span> <span class="s1">&#39;BTS_RUN&#39;</span>  <span class="c1"># Bootstrapping run number</span>
+    <span class="n">results_max_bts_col</span> <span class="o">=</span> <span class="s1">&#39;MAX_BTS&#39;</span>  <span class="c1"># in m s-1</span>
+    <span class="n">results_min_bts_col</span> <span class="o">=</span> <span class="s1">&#39;MIN_BTS&#39;</span>  <span class="c1"># in m s-1</span>
+    <span class="n">results_median_bts_col</span> <span class="o">=</span> <span class="s1">&#39;MEDIAN_BTS&#39;</span>  <span class="c1"># in m s-1</span>
+    <span class="n">results_mean_bts_col</span> <span class="o">=</span> <span class="s1">&#39;MEAN_BTS&#39;</span>  <span class="c1"># in m s-1</span>
+    <span class="n">results_p16_bts_col</span> <span class="o">=</span> <span class="s1">&#39;P16_BTS&#39;</span>  <span class="c1"># in m s-1</span>
+    <span class="n">results_p84_bts_col</span> <span class="o">=</span> <span class="s1">&#39;P84_BTS&#39;</span>  <span class="c1"># in m s-1</span>
+    <span class="n">results_bts_runs_col</span> <span class="o">=</span> <span class="s1">&#39;BTS_RUNS&#39;</span>  <span class="c1"># in m s-1</span>
+    <span class="n">results_bts_results_col</span> <span class="o">=</span> <span class="s1">&#39;BTS_RESULTS&#39;</span>  <span class="c1"># in m s-1</span>
+
+    <span class="c1"># [&#39;Maximum of Class Thresholds&#39;, &#39;Minimum of Class Thresholds&#39;,</span>
+    <span class="c1">#  &#39;Median of Class Thresholds&#39;, &#39;Mean of Class Thresholds&#39;]</span>
+    <span class="n">define_bts_season_thres</span> <span class="o">=</span> <span class="s1">&#39;Median of Class Thresholds&#39;</span>
+    <span class="n">define_overall_season_thres</span> <span class="o">=</span> <span class="s1">&#39;Maximum Of Bootstrap Season Thresholds&#39;</span>
+
+<div class="viewcode-block" id="UstarDetectionMPT.__init__">
+<a class="viewcode-back" href="../../../../api/pkgs/diive.pkgs.flux.ustarthreshold.html#diive.pkgs.flux.ustarthreshold.UstarDetectionMPT.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">df</span><span class="p">:</span> <span class="n">DataFrame</span><span class="p">,</span>
+            <span class="n">nee_col</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+            <span class="n">ta_col</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+            <span class="n">ustar_col</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+            <span class="n">ta_n_classes</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">6</span><span class="p">,</span>
+            <span class="n">ustar_n_classes</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span><span class="p">,</span>
+            <span class="n">season_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">n_bootstraps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>
+            <span class="n">swin_pot_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">nighttime_threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mi">20</span><span class="p">,</span>
+            <span class="n">utc_offset</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">lat</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">lon</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nee_col</span> <span class="o">=</span> <span class="n">nee_col</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ta_col</span> <span class="o">=</span> <span class="n">ta_col</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ta_n_classes</span> <span class="o">=</span> <span class="n">ta_n_classes</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ustar_col</span> <span class="o">=</span> <span class="n">ustar_col</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ustar_n_classes</span> <span class="o">=</span> <span class="n">ustar_n_classes</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">season_col</span> <span class="o">=</span> <span class="n">season_col</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_bootstraps</span> <span class="o">=</span> <span class="n">n_bootstraps</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">swin_pot_col</span> <span class="o">=</span> <span class="n">swin_pot_col</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nighttime_threshold</span> <span class="o">=</span> <span class="n">nighttime_threshold</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lat</span> <span class="o">=</span> <span class="n">lat</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lon</span> <span class="o">=</span> <span class="n">lon</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">utc_offset</span> <span class="o">=</span> <span class="n">utc_offset</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">bts_results_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;BOOTSTRAP_RUN&#39;</span><span class="p">,</span> <span class="s1">&#39;SEASON&#39;</span><span class="p">,</span> <span class="s1">&#39;SEASON_THRES_MEDIAN&#39;</span><span class="p">,</span>
+                                                    <span class="s1">&#39;OVERALL_THRES_MAX&#39;</span><span class="p">])</span>  <span class="c1"># Collects detailed results from bootstrapping runs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">results_seasons_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">()</span>  <span class="c1"># Collects essential results from bts runs</span>
+
+        <span class="c1"># Setup</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">swin_pot_col</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">swin_pot_col</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_calc_swin_pot</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">flag_dt_col</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">flag_nt_col</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_calc_nighttime_flag</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">season_col</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_season_info</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">workdf</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">workdf_dt</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">workdf_nt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_assemble_work_dataframes</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="UstarDetectionMPT.sample_data">
+<a class="viewcode-back" href="../../../../api/pkgs/diive.pkgs.flux.ustarthreshold.html#diive.pkgs.flux.ustarthreshold.UstarDetectionMPT.sample_data">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">df</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Draw samples from data (bootstrapping).&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_bootstraps</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="c1"># w/o bootstrapping, the data are simply not sampled</span>
+            <span class="n">sampledf</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">num_rows</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">sampledf</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">num_rows</span><span class="p">),</span> <span class="n">replace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">sampledf</span><span class="o">.</span><span class="n">sort_index</span><span class="p">(</span><span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">sampledf</span></div>
+
+
+<div class="viewcode-block" id="UstarDetectionMPT.init_results_seasons_df">
+<a class="viewcode-back" href="../../../../api/pkgs/diive.pkgs.flux.ustarthreshold.html#diive.pkgs.flux.ustarthreshold.UstarDetectionMPT.init_results_seasons_df">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">init_results_seasons_df</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create dataframe that contains various threshold results for each season.&quot;&quot;&quot;</span>
+
+        <span class="n">unique_seasons</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">workdf_nt</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">season_col</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span>
+
+        <span class="n">results_cols</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">thres_season_col</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_max_bts_col</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_min_bts_col</span><span class="p">,</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">results_median_bts_col</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_mean_bts_col</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_p16_bts_col</span><span class="p">,</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">results_p84_bts_col</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_bts_runs_col</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_bts_results_col</span><span class="p">]</span>
+
+        <span class="n">results_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="n">unique_seasons</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="n">results_cols</span><span class="p">)</span>  <span class="c1"># Reset df</span>
+        <span class="c1"># results_df.columns = pd.MultiIndex.from_tuples(results_df.columns)</span>
+
+        <span class="k">return</span> <span class="n">results_df</span></div>
+
+
+<div class="viewcode-block" id="UstarDetectionMPT.init_results_years_df">
+<a class="viewcode-back" href="../../../../api/pkgs/diive.pkgs.flux.ustarthreshold.html#diive.pkgs.flux.ustarthreshold.UstarDetectionMPT.init_results_years_df">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">init_results_years_df</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create dataframe that contains various threshold results for each year.&quot;&quot;&quot;</span>
+
+        <span class="n">unique_years</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">workdf_nt</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">year</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span>
+
+        <span class="n">results_cols</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">thres_year_col</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_max_bts_col</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_min_bts_col</span><span class="p">,</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">results_median_bts_col</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_mean_bts_col</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_p16_bts_col</span><span class="p">,</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">results_p84_bts_col</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_bts_runs_col</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_bts_results_col</span><span class="p">]</span>
+
+        <span class="n">results_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="n">unique_years</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="n">results_cols</span><span class="p">)</span>  <span class="c1"># Reset df</span>
+
+        <span class="k">return</span> <span class="n">results_df</span></div>
+
+
+<div class="viewcode-block" id="UstarDetectionMPT.run">
+<a class="viewcode-back" href="../../../../api/pkgs/diive.pkgs.flux.ustarthreshold.html#diive.pkgs.flux.ustarthreshold.UstarDetectionMPT.run">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+
+        <span class="c1"># Collect essential results from all bts runs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">results_seasons_df</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_results_seasons_df</span><span class="p">()</span>  <span class="c1"># Reset df</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">results_years_df</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_results_years_df</span><span class="p">()</span>  <span class="c1"># Reset df</span>
+
+        <span class="c1"># If data are not bootstrapped, still use the bootstrap loop but don&#39;t sample</span>
+        <span class="n">overall_runs</span> <span class="o">=</span> <span class="mi">1</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_bootstraps</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_bootstraps</span>
+
+        <span class="n">results_so_far</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">for</span> <span class="n">bts_run</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">overall_runs</span><span class="p">):</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;BOOTSTRAP RUN #</span><span class="si">{</span><span class="n">bts_run</span><span class="si">}</span><span class="s2">: &quot;</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="s2">&quot; &quot;</span><span class="p">)</span>
+
+            <span class="c1"># SAMPLE DATA</span>
+            <span class="n">sampledf</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample_data</span><span class="p">(</span><span class="n">df</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">workdf_nt</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">sampledf</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2"> records &quot;</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="s2">&quot; &quot;</span><span class="p">)</span>
+            <span class="n">sampledf</span> <span class="o">=</span> <span class="n">sampledf</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>  <span class="c1"># Keeps timestamp as column in df</span>
+
+            <span class="c1"># SEPARATE BY SEASON DATA POOL</span>
+            <span class="c1"># Loop through all available seasons</span>
+            <span class="n">season_counter</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>  <span class="c1"># Count if first, second, ... season in this bts run</span>
+            <span class="n">season_grouped_df</span> <span class="o">=</span> <span class="n">sampledf</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">season_col</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">season_key</span><span class="p">,</span> <span class="n">season_df</span> <span class="ow">in</span> <span class="n">season_grouped_df</span><span class="p">:</span>
+                <span class="n">season_counter</span> <span class="o">+=</span> <span class="mi">1</span>
+
+                <span class="c1"># ASSIGN TA CLASSES and USTAR SUBCLASSES</span>
+                <span class="c1"># Create df with assigned TA and USTAR classes for this season.</span>
+                <span class="n">season_df</span><span class="p">,</span> <span class="n">ta_class_col</span><span class="p">,</span> <span class="n">ustar_subclass_col</span> <span class="o">=</span> \
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_assign_classes</span><span class="p">(</span><span class="n">season_df</span><span class="o">=</span><span class="n">season_df</span><span class="p">,</span>
+                                         <span class="n">class_col</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">ta_col</span><span class="p">,</span>
+                                         <span class="n">subclass_col</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">ustar_col</span><span class="p">,</span>
+                                         <span class="n">n_classes</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">ta_n_classes</span><span class="p">,</span>
+                                         <span class="n">n_subclasses</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">ustar_n_classes</span><span class="p">)</span>
+
+                <span class="c1"># CALCULATE SEASON THRESHOLDS</span>
+                <span class="c1"># Calculate average values in ustar subclasses</span>
+                <span class="n">season_subclass_median_df</span> <span class="o">=</span> \
+                    <span class="bp">self</span><span class="o">.</span><span class="n">calculate_subclass_medians</span><span class="p">(</span><span class="n">season_df</span><span class="o">=</span><span class="n">season_df</span><span class="p">,</span>
+                                                    <span class="n">ta_class_col</span><span class="o">=</span><span class="n">ta_class_col</span><span class="p">,</span>
+                                                    <span class="n">ustar_subclass_col</span><span class="o">=</span><span class="n">ustar_subclass_col</span><span class="p">,</span>
+                                                    <span class="n">season_key</span><span class="o">=</span><span class="n">season_key</span><span class="p">)</span>
+
+                <span class="c1"># Detect thresholds in each air temperature class</span>
+                <span class="n">season_subclass_median_df</span> <span class="o">=</span> \
+                    <span class="bp">self</span><span class="o">.</span><span class="n">detect_class_thresholds</span><span class="p">(</span><span class="n">season_subclass_avg_df</span><span class="o">=</span><span class="n">season_subclass_median_df</span><span class="p">,</span>
+                                                 <span class="n">ta_class_col</span><span class="o">=</span><span class="n">ta_class_col</span><span class="p">,</span>
+                                                 <span class="n">season_key</span><span class="o">=</span><span class="n">season_key</span><span class="p">)</span>
+
+                <span class="c1"># Set season thresholds based on results in temperature classes</span>
+                <span class="n">this_ustar_thres_season</span> <span class="o">=</span> \
+                    <span class="bp">self</span><span class="o">.</span><span class="n">set_season_threshold</span><span class="p">(</span><span class="n">season_subclass_avg_df</span><span class="o">=</span><span class="n">season_subclass_median_df</span><span class="p">,</span>
+                                              <span class="n">season_key</span><span class="o">=</span><span class="n">season_key</span><span class="p">)</span>
+
+                <span class="n">listt</span> <span class="o">=</span> <span class="p">[</span><span class="n">bts_run</span><span class="p">,</span> <span class="n">season_key</span><span class="p">,</span> <span class="n">this_ustar_thres_season</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">bts_results_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bts_results_df</span><span class="p">)]</span> <span class="o">=</span> <span class="n">listt</span>
+
+            <span class="n">locs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bts_results_df</span><span class="p">[</span><span class="s1">&#39;BOOTSTRAP_RUN&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="n">bts_run</span>
+            <span class="n">season_max</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bts_results_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">locs</span><span class="p">,</span> <span class="s1">&#39;SEASON_THRES_MEDIAN&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bts_results_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">locs</span><span class="p">,</span> <span class="s1">&#39;OVERALL_THRES_MAX&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">season_max</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">season_max</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> m s-1 &quot;</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="s2">&quot; &quot;</span><span class="p">)</span>
+
+            <span class="n">results_so_far</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">season_max</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;overall so far: </span><span class="si">{</span><span class="n">np</span><span class="o">.</span><span class="n">median</span><span class="p">(</span><span class="n">results_so_far</span><span class="p">)</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="n">bts_thresholds</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bts_results_df</span><span class="p">[</span><span class="s1">&#39;OVERALL_THRES_MAX&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">quantile</span><span class="p">(</span><span class="n">bts_thresholds</span><span class="p">,</span> <span class="mf">.16</span><span class="p">))</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">quantile</span><span class="p">(</span><span class="n">bts_thresholds</span><span class="p">,</span> <span class="mf">.50</span><span class="p">))</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">quantile</span><span class="p">(</span><span class="n">bts_thresholds</span><span class="p">,</span> <span class="mf">.84</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="UstarDetectionMPT.set_yearly_thresholds">
+<a class="viewcode-back" href="../../../../api/pkgs/diive.pkgs.flux.ustarthreshold.html#diive.pkgs.flux.ustarthreshold.UstarDetectionMPT.set_yearly_thresholds">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_yearly_thresholds</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">df</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Calculate yearly thresholds from season thresholds in full-resolution dataframe.&quot;&quot;&quot;</span>
+
+        <span class="n">_df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+        <span class="c1"># Group data by year</span>
+        <span class="n">grouped_df</span> <span class="o">=</span> <span class="n">_df</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">_df</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">year</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">year_key</span><span class="p">,</span> <span class="n">year_df</span> <span class="ow">in</span> <span class="n">grouped_df</span><span class="p">:</span>
+
+            <span class="c1"># Check which thresholds were found for this year</span>
+            <span class="n">found_season_thresholds</span> <span class="o">=</span> <span class="n">year_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[:,</span> <span class="bp">self</span><span class="o">.</span><span class="n">thres_season_col</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span>
+            <span class="n">found_season_thresholds</span> <span class="o">=</span> <span class="n">found_season_thresholds</span><span class="p">[</span><span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">found_season_thresholds</span><span class="p">)]</span>  <span class="c1"># Remove NaN</span>
+
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">found_season_thresholds</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="c1"># Set threshold for this year based on season results</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">define_year_thres</span> <span class="o">==</span> <span class="s1">&#39;Maximum Of Season Thresholds&#39;</span><span class="p">:</span>
+                    <span class="n">threshold</span> <span class="o">=</span> <span class="n">found_season_thresholds</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
+                <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">define_year_thres</span> <span class="o">==</span> <span class="s1">&#39;Minimum Of Season Thresholds&#39;</span><span class="p">:</span>
+                    <span class="n">threshold</span> <span class="o">=</span> <span class="n">found_season_thresholds</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
+                <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">define_year_thres</span> <span class="o">==</span> <span class="s1">&#39;Median Of Season Thresholds&#39;</span><span class="p">:</span>
+                    <span class="n">threshold</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">median</span><span class="p">(</span><span class="n">found_season_thresholds</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">define_year_thres</span> <span class="o">==</span> <span class="s1">&#39;Mean Of Season Thresholds&#39;</span><span class="p">:</span>
+                    <span class="n">threshold</span> <span class="o">=</span> <span class="n">found_season_thresholds</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">threshold</span> <span class="o">=</span> <span class="s1">&#39;-unknown-option-&#39;</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># If no season thresholds for this year were found, the threshold for the year</span>
+                <span class="c1"># is set to the selected percentile of the ustar data (Papale et al., 2006).</span>
+                <span class="n">threshold</span> <span class="o">=</span> <span class="n">_df</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">ustar_data_col</span><span class="p">]</span><span class="o">.</span><span class="n">quantile</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">set_to_ustar_data_percentile</span><span class="p">)</span>
+
+                <span class="c1"># Check if threshold is larger than the minimum allowed threshold.</span>
+                <span class="n">threshold</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">allowed_min_ustar_thres</span> <span class="k">if</span> <span class="n">threshold</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">allowed_min_ustar_thres</span> <span class="k">else</span> <span class="n">threshold</span>
+
+            <span class="n">_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">_df</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">year</span> <span class="o">==</span> <span class="n">year_key</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_thres_year_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">threshold</span>
+
+        <span class="c1"># Add flag integers</span>
+        <span class="c1"># Flag, season thresholds</span>
+        <span class="n">_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">_df</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">ustar_data_col</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">_df</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">out_thres_year_col</span><span class="p">],</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">out_qcflag_year_col</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1"># Good data</span>
+        <span class="n">_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">_df</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">ustar_data_col</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">_df</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">out_thres_year_col</span><span class="p">],</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">out_qcflag_year_col</span><span class="p">]</span> <span class="o">=</span> <span class="mi">2</span>  <span class="c1"># Hard flag</span>
+
+        <span class="k">return</span> <span class="n">_df</span></div>
+
+
+<div class="viewcode-block" id="UstarDetectionMPT.collect_year_results">
+<a class="viewcode-back" href="../../../../api/pkgs/diive.pkgs.flux.ustarthreshold.html#diive.pkgs.flux.ustarthreshold.UstarDetectionMPT.collect_year_results">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">collect_year_results</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">yearly_thresholds_df</span><span class="p">,</span> <span class="n">results_years_df</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Calculate different variants of year thresholds and the overall</span>
+<span class="sd">        year threshold, based on bts results. Calculations are done afer</span>
+<span class="sd">        each bts run.&quot;&quot;&quot;</span>
+
+        <span class="n">years</span> <span class="o">=</span> <span class="n">yearly_thresholds_df</span><span class="o">.</span><span class="n">columns</span>
+        <span class="k">for</span> <span class="n">year</span> <span class="ow">in</span> <span class="n">years</span><span class="p">:</span>
+            <span class="n">found_yearly_thresholds</span> <span class="o">=</span> <span class="n">yearly_thresholds_df</span><span class="p">[</span><span class="n">year</span><span class="p">]</span>
+
+            <span class="n">filter_year</span> <span class="o">=</span> <span class="n">results_years_df</span><span class="o">.</span><span class="n">index</span> <span class="o">==</span> <span class="n">year</span>
+
+            <span class="c1"># Different variants</span>
+            <span class="n">results_years_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_year</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_max_bts_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">found_yearly_thresholds</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
+            <span class="n">results_years_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_year</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_min_bts_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">found_yearly_thresholds</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
+            <span class="n">results_years_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_year</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_median_bts_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">median</span><span class="p">(</span><span class="n">found_yearly_thresholds</span><span class="p">)</span>
+            <span class="n">results_years_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_year</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_mean_bts_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">found_yearly_thresholds</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+            <span class="n">results_years_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_year</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_p25_bts_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">quantile</span><span class="p">(</span><span class="n">found_yearly_thresholds</span><span class="p">,</span> <span class="mf">0.25</span><span class="p">)</span>
+            <span class="n">results_years_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_year</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_p75_bts_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">quantile</span><span class="p">(</span><span class="n">found_yearly_thresholds</span><span class="p">,</span> <span class="mf">0.75</span><span class="p">)</span>
+            <span class="n">results_years_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_year</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_bts_runs_col</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_bootstrap_runs</span>
+            <span class="n">results_years_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_year</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_bts_results_col</span><span class="p">]</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">found_yearly_thresholds</span><span class="p">)</span>
+
+            <span class="c1"># Insert the overall season threshold, depending on selected option in dropdown menu</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">define_year_thres</span> <span class="o">==</span> <span class="s1">&#39;Maximum Of Season Thresholds&#39;</span><span class="p">:</span>
+                <span class="n">results_years_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_year</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">thres_year_col</span><span class="p">]</span> <span class="o">=</span> \
+                    <span class="n">results_years_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_year</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_max_bts_col</span><span class="p">]</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">define_year_thres</span> <span class="o">==</span> <span class="s1">&#39;Minimum Of Season Thresholds&#39;</span><span class="p">:</span>
+                <span class="n">results_years_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_year</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">thres_year_col</span><span class="p">]</span> <span class="o">=</span> \
+                    <span class="n">results_years_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_year</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_min_bts_col</span><span class="p">]</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">define_year_thres</span> <span class="o">==</span> <span class="s1">&#39;Median Of Season Thresholds&#39;</span><span class="p">:</span>
+                <span class="n">results_years_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_year</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">thres_year_col</span><span class="p">]</span> <span class="o">=</span> \
+                    <span class="n">results_years_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_year</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_median_bts_col</span><span class="p">]</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">define_year_thres</span> <span class="o">==</span> <span class="s1">&#39;Mean Of Season Thresholds&#39;</span><span class="p">:</span>
+                <span class="n">results_years_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_year</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">thres_year_col</span><span class="p">]</span> <span class="o">=</span> \
+                    <span class="n">results_years_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_year</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_mean_bts_col</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">results_years_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_year</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">thres_year_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+
+        <span class="k">return</span> <span class="n">results_years_df</span></div>
+
+
+<div class="viewcode-block" id="UstarDetectionMPT.collect_yearly_thresholds">
+<a class="viewcode-back" href="../../../../api/pkgs/diive.pkgs.flux.ustarthreshold.html#diive.pkgs.flux.ustarthreshold.UstarDetectionMPT.collect_yearly_thresholds">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">collect_yearly_thresholds</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bts_run</span><span class="p">):</span>
+        <span class="n">years</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">daynight_ustar_fullres_df</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">year</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">bts_run</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>  <span class="c1"># TODO hier weiter</span>
+            <span class="n">yearly_thresholds_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="n">years</span><span class="p">)</span>  <span class="c1"># Reset df</span>
+        <span class="n">grouped_df</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">daynight_ustar_fullres_df</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">daynight_ustar_fullres_df</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">year</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">year_key</span><span class="p">,</span> <span class="n">year_df</span> <span class="ow">in</span> <span class="n">grouped_df</span><span class="p">:</span>
+            <span class="n">threshold</span> <span class="o">=</span> <span class="n">year_df</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">thres_year_col</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span>
+            <span class="n">threshold</span> <span class="o">=</span> <span class="n">threshold</span><span class="p">[</span><span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">threshold</span><span class="p">)]</span>  <span class="c1"># Remove NaN</span>
+            <span class="n">yearly_thresholds_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">bts_run</span><span class="p">,</span> <span class="n">year_key</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">threshold</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">yearly_thresholds_df</span></div>
+
+
+<div class="viewcode-block" id="UstarDetectionMPT.collect_season_results">
+<a class="viewcode-back" href="../../../../api/pkgs/diive.pkgs.flux.ustarthreshold.html#diive.pkgs.flux.ustarthreshold.UstarDetectionMPT.collect_season_results">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">collect_season_results</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bts_results_df</span><span class="p">,</span> <span class="n">season_key</span><span class="p">,</span> <span class="n">results_df</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Calculate different variants of season thresholds and the overall</span>
+<span class="sd">        season threshold, based on bts results. Calculations are done after</span>
+<span class="sd">        each bts run.&quot;&quot;&quot;</span>
+
+        <span class="c1"># Calculate different variants of season thresholds</span>
+        <span class="n">found_season_thresholds</span> <span class="o">=</span> <span class="n">bts_results_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">season_key</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">thres_season_col</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span>
+        <span class="n">found_season_thresholds</span> <span class="o">=</span> <span class="n">found_season_thresholds</span><span class="p">[</span><span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">found_season_thresholds</span><span class="p">)]</span>  <span class="c1"># Remove NaN</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">found_season_thresholds</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">results_df</span>
+
+        <span class="n">filter_season</span> <span class="o">=</span> <span class="n">results_df</span><span class="o">.</span><span class="n">index</span> <span class="o">==</span> <span class="n">season_key</span>  <span class="c1"># Current season</span>
+
+        <span class="c1"># Different variants</span>
+        <span class="n">results_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_season</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_max_bts_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">found_season_thresholds</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
+        <span class="n">results_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_season</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_min_bts_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">found_season_thresholds</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
+        <span class="n">results_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_season</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_median_bts_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">median</span><span class="p">(</span><span class="n">found_season_thresholds</span><span class="p">)</span>
+        <span class="n">results_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_season</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_mean_bts_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">found_season_thresholds</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+        <span class="n">results_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_season</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_p16_bts_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">quantile</span><span class="p">(</span><span class="n">found_season_thresholds</span><span class="p">,</span>
+                                                                              <span class="mf">0.05</span><span class="p">)</span>  <span class="c1"># Papale et al. 2006: 5th percentile (was 0.16)</span>
+        <span class="n">results_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_season</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_p84_bts_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">quantile</span><span class="p">(</span><span class="n">found_season_thresholds</span><span class="p">,</span>
+                                                                              <span class="mf">0.95</span><span class="p">)</span>  <span class="c1"># Papale et al. 2006: 95th percentile (was 0.84)</span>
+        <span class="n">results_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_season</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_bts_runs_col</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_bootstraps</span>
+        <span class="n">results_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_season</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_bts_results_col</span><span class="p">]</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">found_season_thresholds</span><span class="p">)</span>
+
+        <span class="c1"># Insert the overall season threshold, depending on selected option in dropdown menu</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">define_overall_season_thres</span> <span class="o">==</span> <span class="s1">&#39;Maximum Of Bootstrap Season Thresholds&#39;</span><span class="p">:</span>
+            <span class="n">results_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_season</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">thres_season_col</span><span class="p">]</span> <span class="o">=</span> \
+                <span class="n">results_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_season</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_max_bts_col</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">define_overall_season_thres</span> <span class="o">==</span> <span class="s1">&#39;Minimum Of Bootstrap Season Thresholds&#39;</span><span class="p">:</span>
+            <span class="n">results_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_season</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">thres_season_col</span><span class="p">]</span> <span class="o">=</span> \
+                <span class="n">results_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_season</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_min_bts_col</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">define_overall_season_thres</span> <span class="o">==</span> <span class="s1">&#39;Median Of Bootstrap Season Thresholds&#39;</span><span class="p">:</span>
+            <span class="n">results_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_season</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">thres_season_col</span><span class="p">]</span> <span class="o">=</span> \
+                <span class="n">results_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_season</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_median_bts_col</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">define_overall_season_thres</span> <span class="o">==</span> <span class="s1">&#39;Mean Of Bootstrap Season Thresholds&#39;</span><span class="p">:</span>
+            <span class="n">results_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_season</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">thres_season_col</span><span class="p">]</span> <span class="o">=</span> \
+                <span class="n">results_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_season</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results_mean_bts_col</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">results_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">filter_season</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">thres_season_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+
+        <span class="k">return</span> <span class="n">results_df</span></div>
+
+
+<div class="viewcode-block" id="UstarDetectionMPT.prepare_results_for_collection">
+<a class="viewcode-back" href="../../../../api/pkgs/diive.pkgs.flux.ustarthreshold.html#diive.pkgs.flux.ustarthreshold.UstarDetectionMPT.prepare_results_for_collection">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">prepare_results_for_collection</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">df</span><span class="p">,</span> <span class="n">bts_run</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Narrow df to ustar results.&quot;&quot;&quot;</span>
+        <span class="c1"># Subset: only ustar results columns</span>
+        <span class="n">ustar_resultcolumns</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">thres_class_col</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">thres_season_col</span><span class="p">]</span>
+        <span class="n">results_ustar_df</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">ustar_resultcolumns</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="c1"># results_ustar_df = df.loc[self.ix_slice[:, :, :], ustar_resultcolumns]</span>
+        <span class="n">results_ustar_df</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">bts_run_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">bts_run</span>
+        <span class="k">return</span> <span class="n">results_ustar_df</span></div>
+
+
+<div class="viewcode-block" id="UstarDetectionMPT.set_season_threshold">
+<a class="viewcode-back" href="../../../../api/pkgs/diive.pkgs.flux.ustarthreshold.html#diive.pkgs.flux.ustarthreshold.UstarDetectionMPT.set_season_threshold">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_season_threshold</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">season_subclass_avg_df</span><span class="p">,</span> <span class="n">season_key</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set threshold for current season, based on class thresholds.</span>
+
+<span class="sd">        Season threshold is calculated from the class thresholds.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">df</span> <span class="o">=</span> <span class="n">season_subclass_avg_df</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">df</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">thres_season_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+        <span class="n">all_ustar_thres_classes</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">season_key</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">thres_class_col</span><span class="p">]</span><span class="o">.</span><span class="n">dropna</span><span class="p">()</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span>
+
+        <span class="c1"># Check if array has contents (i.e. not emtpy)</span>
+        <span class="k">if</span> <span class="n">all_ustar_thres_classes</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">define_bts_season_thres</span> <span class="o">==</span> <span class="s1">&#39;Median of Class Thresholds&#39;</span><span class="p">:</span>
+                <span class="n">ustar_thres_season</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">median</span><span class="p">(</span><span class="n">all_ustar_thres_classes</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">define_bts_season_thres</span> <span class="o">==</span> <span class="s1">&#39;Mean of Class Thresholds&#39;</span><span class="p">:</span>
+                <span class="n">ustar_thres_season</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">all_ustar_thres_classes</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">define_bts_season_thres</span> <span class="o">==</span> <span class="s1">&#39;Maximum of Class Thresholds&#39;</span><span class="p">:</span>
+                <span class="n">ustar_thres_season</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">all_ustar_thres_classes</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">define_bts_season_thres</span> <span class="o">==</span> <span class="s1">&#39;Minimum of Class Thresholds&#39;</span><span class="p">:</span>
+                <span class="n">ustar_thres_season</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">all_ustar_thres_classes</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">ustar_thres_season</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">median</span><span class="p">(</span><span class="n">all_ustar_thres_classes</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>  <span class="c1"># if empty</span>
+            <span class="n">ustar_thres_season</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+
+        <span class="c1"># df.loc[season_key, self.thres_season_col] = ustar_thres_season</span>
+
+        <span class="c1"># df.loc[self.ix_slice[season_key, :, :],</span>
+        <span class="c1">#        self.thres_season_col] = ustar_thres_season</span>
+
+        <span class="k">return</span> <span class="n">ustar_thres_season</span></div>
+
+
+        <span class="c1"># # OVERALL THRESHOLD</span>
+        <span class="c1"># # -----------------</span>
+        <span class="c1"># # The overall threshold is the max of the season thresholds todo per year?</span>
+        <span class="c1"># if df[self.thres_season_col].dropna().empty:</span>
+        <span class="c1">#     # If Series is empty, this means that no USTAR threshold was found in any</span>
+        <span class="c1">#     # of the seasons. Following Papale et al. (2006), the threshold for the year</span>
+        <span class="c1">#     # is then set to the 90th percentile of the USTAR data.</span>
+        <span class="c1">#     ustar_thres_overall = season_df[self.ustar_data_col].quantile(self.set_to_ustar_data_percentile)</span>
+        <span class="c1">#</span>
+        <span class="c1"># else:</span>
+        <span class="c1">#     ustar_thres_overall = self.get_ustar_overall_thres(method=self.define_overall_thres,</span>
+        <span class="c1">#                                                        df=df,</span>
+        <span class="c1">#                                                        ustar_thres_season_col=self.thres_season_col)</span>
+        <span class="c1">#</span>
+        <span class="c1"># # Finally, check if the overall USTAR threshold is below the allowed limit</span>
+        <span class="c1"># if ustar_thres_overall &gt; self.allowed_min_ustar_thres:</span>
+        <span class="c1">#     pass</span>
+        <span class="c1"># else:</span>
+        <span class="c1">#     ustar_thres_overall = self.allowed_min_ustar_thres</span>
+        <span class="c1">#</span>
+        <span class="c1"># df.loc[self.ix_slice[:, :, :], self.thres_year_col] = ustar_thres_overall</span>
+
+        <span class="c1"># return df, self.thres_year_col, self.thres_season_col, self.thres_class_col</span>
+
+<div class="viewcode-block" id="UstarDetectionMPT.detect_class_thresholds">
+<a class="viewcode-back" href="../../../../api/pkgs/diive.pkgs.flux.ustarthreshold.html#diive.pkgs.flux.ustarthreshold.UstarDetectionMPT.detect_class_thresholds">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">detect_class_thresholds</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">season_subclass_avg_df</span><span class="p">,</span> <span class="n">ta_class_col</span><span class="p">,</span> <span class="n">season_key</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Calculate ustar thresholds in air temperature classes</span>
+
+<span class="sd">        Detection is done for each USTAR subclass in each TA class separately</span>
+<span class="sd">        for each season.</span>
+
+<span class="sd">        Analysis is done using the pandas .groupby method. In addition, a</span>
+<span class="sd">        MultiIndex DataFrame that contains the subclass averages within each class</span>
+<span class="sd">        needs to be accessed. Since the index of the DataFrame is a MultiIndex,</span>
+<span class="sd">        it can be accessed via tuples, e.g. SEASON 3 with TA class 0 and with</span>
+<span class="sd">        USTAR subclass 4 is accessed with the tuple (3,0,4). Yes, this is a bit tricky,</span>
+<span class="sd">        but also very useful, isn&#39;t it.</span>
+
+<span class="sd">        This analysis could also have been done in an earlier step, but it</span>
+<span class="sd">        is useful to have all results in one DataFrame.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="c1"># Create df copy to work with</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="n">season_subclass_avg_df</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">df</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">thres_class_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>  <span class="c1"># Add column for class threhold</span>
+        <span class="c1"># Reset_index is needed to avoid duplicates in index and columns during grouping</span>
+        <span class="c1"># df.reset_index(drop=True, inplace=True)</span>
+
+        <span class="c1"># # todo testing plot</span>
+        <span class="c1"># class_grouped = df.groupby(ta_class_col)</span>
+        <span class="c1"># fig = plt.figure(figsize=(16, 9))</span>
+        <span class="c1"># gs = gridspec.GridSpec(1, 1)  # rows, cols</span>
+        <span class="c1"># # gs.update(wspace=.2, hspace=.5, left=.05, right=.95, top=.95, bottom=.05)</span>
+        <span class="c1"># ax = fig.add_subplot(gs[0, 0])</span>
+        <span class="c1"># for class_key, class_group_df in class_grouped:</span>
+        <span class="c1">#     # class_group_df.plot.scatter(&#39;W_SIGMA&#39;, &#39;FC&#39;, title=f&quot;TA: XXX&quot;, ax=ax)</span>
+        <span class="c1">#     class_group_df.plot.scatter(self.ustar_col, self.nee_col, title=f&quot;TA: XXX&quot;, ax=ax)</span>
+        <span class="c1"># fig.show()</span>
+
+        <span class="c1"># Loop TA classes and calculate the ustar threshold in each class</span>
+        <span class="n">class_grouped</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">ta_class_col</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">class_key</span><span class="p">,</span> <span class="n">class_group_df</span> <span class="ow">in</span> <span class="n">class_grouped</span><span class="p">:</span>
+
+            <span class="c1"># OPTIMIZATION: Calculate correlation once per TA class (not per subclass)</span>
+            <span class="c1"># Correlation between USTAR and TA is constant for all subclasses in a class</span>
+            <span class="n">abs_corr</span> <span class="o">=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">class_group_df</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">ustar_col</span><span class="p">]</span><span class="o">.</span><span class="n">corr</span><span class="p">(</span><span class="n">class_group_df</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">ta_col</span><span class="p">]))</span>
+
+            <span class="c1"># SUBCLASSES</span>
+            <span class="n">n_subclasses</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">class_group_df</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">cur_subclass_ix</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">n_subclasses</span><span class="p">)):</span>
+
+                <span class="c1"># Uses the refined method of Pastorello et al. (2020)</span>
+                <span class="n">cur_flux</span> <span class="o">=</span> <span class="n">class_group_df</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="n">cur_subclass_ix</span><span class="p">][</span><span class="bp">self</span><span class="o">.</span><span class="n">nee_col</span><span class="p">]</span>  <span class="c1"># Current subclass flux</span>
+                <span class="n">cur_ustar</span> <span class="o">=</span> <span class="n">class_group_df</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="n">cur_subclass_ix</span><span class="p">][</span><span class="bp">self</span><span class="o">.</span><span class="n">ustar_col</span><span class="p">]</span>
+                <span class="n">nxt_subclass</span> <span class="o">=</span> <span class="n">cur_subclass_ix</span> <span class="o">+</span> <span class="mi">1</span>
+                <span class="n">nxt_flux</span> <span class="o">=</span> <span class="n">class_group_df</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="n">nxt_subclass</span><span class="p">][</span><span class="bp">self</span><span class="o">.</span><span class="n">nee_col</span><span class="p">]</span>  <span class="c1"># Next flux</span>
+                <span class="n">nxt_nxt_subclass</span> <span class="o">=</span> <span class="n">cur_subclass_ix</span> <span class="o">+</span> <span class="mi">2</span>
+
+                <span class="c1"># Calculate percentage of current subclass flux in comparison to following subclasses</span>
+                <span class="k">if</span> <span class="n">nxt_nxt_subclass</span> <span class="o">&lt;</span> <span class="n">n_subclasses</span><span class="p">:</span>
+                    <span class="c1"># In comparison to mean of next 10 subclasses</span>
+                    <span class="n">cur_following_mean</span> <span class="o">=</span> \
+                        <span class="n">class_group_df</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="n">nxt_subclass</span><span class="p">:</span><span class="n">nxt_subclass</span> <span class="o">+</span> <span class="mi">10</span><span class="p">][</span><span class="bp">self</span><span class="o">.</span><span class="n">nee_col</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+                    <span class="n">cur_flux_perc</span> <span class="o">=</span> <span class="p">(</span><span class="n">cur_flux</span> <span class="o">/</span> <span class="n">cur_following_mean</span><span class="p">)</span> <span class="o">*</span> <span class="mi">100</span>
+                    <span class="c1"># Check also next subclass in comparison to its next 10 subclasses</span>
+                    <span class="n">nxt_following_mean</span> <span class="o">=</span> \
+                        <span class="n">class_group_df</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="n">nxt_nxt_subclass</span><span class="p">:</span><span class="n">nxt_nxt_subclass</span> <span class="o">+</span> <span class="mi">10</span><span class="p">][</span><span class="bp">self</span><span class="o">.</span><span class="n">nee_col</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+                    <span class="n">nxt_flux_perc</span> <span class="o">=</span> <span class="p">(</span><span class="n">nxt_flux</span> <span class="o">/</span> <span class="n">nxt_following_mean</span><span class="p">)</span> <span class="o">*</span> <span class="mi">100</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">cur_following_mean</span> <span class="o">=</span> <span class="n">cur_flux_perc</span> <span class="o">=</span> <span class="s1">&#39;-no-more-subclasses-&#39;</span>
+                    <span class="n">nxt_following_mean</span> <span class="o">=</span> <span class="n">nxt_flux_perc</span> <span class="o">=</span> <span class="s1">&#39;-no-more-next-subclasses-&#39;</span>
+
+                <span class="c1"># self.ustar_subclass_info(cur_season=season_key, cur_class=class_key,</span>
+                <span class="c1">#                          cur_subclass=cur_subclass_ix, cur_ustar=cur_ustar,</span>
+                <span class="c1">#                          cur_flux=cur_flux, cur_following_mean=cur_following_mean,</span>
+                <span class="c1">#                          cur_flux_perc=cur_flux_perc, nxt_flux=nxt_flux,</span>
+                <span class="c1">#                          nxt_following_mean=nxt_following_mean, nxt_flux_perc=nxt_flux_perc)</span>
+
+                <span class="k">if</span> <span class="n">nxt_nxt_subclass</span> <span class="o">==</span> <span class="n">n_subclasses</span><span class="p">:</span>
+                    <span class="c1"># When the last subclass is reached, stop for loop</span>
+                    <span class="c1"># print(f&quot;    *END* Last USTAR subclass {cur_subclass_ix} reached, moving to next class.&quot;)</span>
+                    <span class="k">break</span>
+
+                <span class="c1"># Check current flux and mean of 10 following</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">cur_flux_perc</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">flux_plateau_thres_perc</span><span class="p">:</span>
+                    <span class="k">continue</span>
+
+                <span class="c1"># Check next flux and mean of its 10 following</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">flux_plateau_method</span> <span class="o">==</span> <span class="s1">&#39;NEE &gt; 10+10 Higher USTAR Subclasses&#39;</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">nxt_flux_perc</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">flux_plateau_thres_perc</span><span class="p">:</span>
+                        <span class="k">continue</span>
+
+                <span class="c1"># Check if correlation b/w USTAR and TA below threshold (cached, not recalculated)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">abs_corr</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">ta_ustar_corr_thres</span><span class="p">:</span>
+                    <span class="k">continue</span>
+
+                <span class="c1"># Stop for loop once a ustar threshold was found</span>
+                <span class="c1"># df.loc[[season_key, class_key, :], self.thres_class_col] = cur_ustar</span>
+                <span class="n">df</span><span class="o">.</span><span class="n">loc</span><span class="p">[(</span><span class="nb">int</span><span class="p">(</span><span class="n">season_key</span><span class="p">),</span> <span class="n">class_key</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">thres_class_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">cur_ustar</span>
+
+                <span class="c1"># df.loc[self.ix_slice[season_key, class_key, :], self.thres_class_col] = cur_ustar</span>
+                <span class="c1"># print(f&quot;Season: {season_key}, TA class: {class_key}, USTAR threshold set to {cur_ustar:.3f} m s-1&quot;)</span>
+                <span class="k">break</span>
+
+        <span class="k">return</span> <span class="n">df</span></div>
+
+
+<div class="viewcode-block" id="UstarDetectionMPT.ustar_subclass_info">
+<a class="viewcode-back" href="../../../../api/pkgs/diive.pkgs.flux.ustarthreshold.html#diive.pkgs.flux.ustarthreshold.UstarDetectionMPT.ustar_subclass_info">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">ustar_subclass_info</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cur_season</span><span class="p">,</span> <span class="n">cur_class</span><span class="p">,</span> <span class="n">cur_subclass</span><span class="p">,</span> <span class="n">cur_flux</span><span class="p">,</span> <span class="n">cur_ustar</span><span class="p">,</span> <span class="n">cur_following_mean</span><span class="p">,</span>
+                            <span class="n">nxt_following_mean</span><span class="p">,</span> <span class="n">nxt_flux</span><span class="p">,</span> <span class="n">cur_flux_perc</span><span class="p">,</span> <span class="n">nxt_flux_perc</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">cur_following_mean</span> <span class="o">==</span> <span class="s1">&#39;-no-more-subclasses-&#39;</span><span class="p">:</span>
+            <span class="n">cur_following_mean</span> <span class="o">=</span> <span class="n">cur_flux_perc</span> <span class="o">=</span> <span class="n">nxt_following_mean</span> <span class="o">=</span> <span class="n">nxt_flux_perc</span> <span class="o">=</span> <span class="n">nxt_flux</span> <span class="o">=</span> <span class="o">-</span><span class="mi">9999</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">[SEASON] </span><span class="si">{</span><span class="n">cur_season</span><span class="si">}</span><span class="s2">  &quot;</span>
+                  <span class="sa">f</span><span class="s2">&quot;[TA CLASS] </span><span class="si">{</span><span class="n">cur_class</span><span class="si">}</span><span class="s2">  &quot;</span>
+                  <span class="sa">f</span><span class="s2">&quot;[USTAR SUBCLASS] </span><span class="si">{</span><span class="n">cur_subclass</span><span class="si">}</span><span class="s2">  &quot;</span>
+                  <span class="sa">f</span><span class="s2">&quot;USTAR  </span><span class="si">{</span><span class="n">cur_ustar</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">  &quot;</span>
+                  <span class="sa">f</span><span class="s2">&quot;FLUX  </span><span class="si">{</span><span class="n">cur_flux</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">  &quot;</span>
+                  <span class="sa">f</span><span class="s2">&quot;FLUX following mean </span><span class="si">{</span><span class="n">cur_following_mean</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">  &quot;</span>
+                  <span class="sa">f</span><span class="s2">&quot;FLUX/MEAN </span><span class="si">{</span><span class="n">cur_flux_perc</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">%  &quot;</span>
+                  <span class="sa">f</span><span class="s2">&quot;(NEXT) FLUX </span><span class="si">{</span><span class="n">nxt_flux</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">  &quot;</span>
+                  <span class="sa">f</span><span class="s2">&quot;(NEXT) FLUX following mean </span><span class="si">{</span><span class="n">nxt_following_mean</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">  &quot;</span>
+                  <span class="sa">f</span><span class="s2">&quot;(NEXT) FLUX/MEAN </span><span class="si">{</span><span class="n">nxt_flux_perc</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">  &quot;</span>
+                  <span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;-ValueError-&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="UstarDetectionMPT.calculate_subclass_medians">
+<a class="viewcode-back" href="../../../../api/pkgs/diive.pkgs.flux.ustarthreshold.html#diive.pkgs.flux.ustarthreshold.UstarDetectionMPT.calculate_subclass_medians">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">calculate_subclass_medians</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">season_df</span><span class="p">,</span> <span class="n">ta_class_col</span><span class="p">,</span> <span class="n">ustar_subclass_col</span><span class="p">,</span>
+                                   <span class="n">season_key</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;In each TA class, calculate the TA and FLUX medians in each USTAR subclass.</span>
+
+<span class="sd">        Create df that contains all the subclass medians per TA class and season.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            season_df: data for season</span>
+<span class="sd">            ta_class_col: column name of air temperature</span>
+<span class="sd">            ustar_subclass_col: column name of USTAR</span>
+<span class="sd">            season_key: season identifier</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            DataFrame with MultiIndex (3 levels)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="c1"># OPTIMIZATION: Collect DataFrames in list, concat once at end (O(n) instead of O(n²))</span>
+        <span class="n">temp_dfs</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="c1"># CLASSES (TA)</span>
+        <span class="n">class_grouped</span> <span class="o">=</span> <span class="n">season_df</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">ta_class_col</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">class_key</span><span class="p">,</span> <span class="n">class_group_df</span> <span class="ow">in</span> <span class="n">class_grouped</span><span class="p">:</span>
+
+            <span class="c1"># SUBCLASSES (USTAR)</span>
+            <span class="n">subclass_grouped</span> <span class="o">=</span> <span class="n">class_group_df</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">ustar_subclass_col</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">subclass_key</span><span class="p">,</span> <span class="n">subclass_group_df</span> <span class="ow">in</span> <span class="n">subclass_grouped</span><span class="p">:</span>
+                <span class="n">median</span> <span class="o">=</span> <span class="n">subclass_group_df</span><span class="o">.</span><span class="n">median</span><span class="p">()</span>
+                <span class="n">_temp_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">median</span><span class="p">)</span>  <span class="c1"># Convert Series to df</span>
+                <span class="n">_temp_df</span> <span class="o">=</span> <span class="n">_temp_df</span><span class="o">.</span><span class="n">T</span>  <span class="c1"># Transpose: Series index will be column names</span>
+                <span class="n">_temp_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[:,</span> <span class="bp">self</span><span class="o">.</span><span class="n">season_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">season_key</span>
+
+                <span class="n">temp_dfs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_temp_df</span><span class="p">)</span>  <span class="c1"># ← Collect instead of concat</span>
+
+        <span class="c1"># Single concat operation (much faster than concat in loop)</span>
+        <span class="n">medians_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">temp_dfs</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="c1"># Insert season data pool, class and subclass as pandas MultiIndex and drop respective data cols from df</span>
+        <span class="n">multi_ix_cols</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">season_col</span><span class="p">,</span> <span class="n">ta_class_col</span><span class="p">,</span> <span class="n">ustar_subclass_col</span><span class="p">]</span>
+        <span class="n">_multi_ix_df</span> <span class="o">=</span> <span class="n">medians_df</span><span class="p">[</span><span class="n">multi_ix_cols</span><span class="p">]</span>  <span class="c1"># df only used for creating MultiIndex</span>
+        <span class="n">_multi_ix</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">MultiIndex</span><span class="o">.</span><span class="n">from_frame</span><span class="p">(</span><span class="n">df</span><span class="o">=</span><span class="n">_multi_ix_df</span><span class="p">)</span>
+        <span class="n">medians_df</span> <span class="o">=</span> <span class="n">medians_df</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="n">_multi_ix</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">medians_df</span> <span class="o">=</span> <span class="n">medians_df</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">multi_ix_cols</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>  <span class="c1"># Remove data cols that are in MultiIndex</span>
+
+        <span class="k">return</span> <span class="n">medians_df</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_assign_classes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">season_df</span><span class="p">,</span> <span class="n">class_col</span><span class="p">,</span> <span class="n">subclass_col</span><span class="p">,</span> <span class="n">n_classes</span><span class="p">,</span> <span class="n">n_subclasses</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Generate TA classes for this season and generate USTAR subclasses for each TA class.</span>
+
+<span class="sd">        :param season_df: full resolution dataframe</span>
+<span class="sd">        :param class_col: column name to create classes</span>
+<span class="sd">        :param subclass_col: column name to create subclasses</span>
+<span class="sd">        :param n_classes: number of classes</span>
+<span class="sd">        :param n_subclasses: number of subclasses</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="n">season_df</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+        <span class="c1"># Insert new class and subclass columns in df</span>
+        <span class="n">ta_class_col</span> <span class="o">=</span> <span class="s1">&#39;TA_CLASS&#39;</span>
+        <span class="n">ustar_subclass_col</span> <span class="o">=</span> <span class="s1">&#39;USTAR_SUBCLASS&#39;</span>
+        <span class="n">df</span><span class="p">[</span><span class="n">ta_class_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+        <span class="n">df</span><span class="p">[</span><span class="n">ustar_subclass_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+
+        <span class="c1"># TA CLASSES</span>
+        <span class="c1"># Divide season TA data into q classes of TA.</span>
+        <span class="c1"># Quantile-based discretization function, the fact that .qcut exists is beautiful.</span>
+        <span class="n">df</span><span class="p">[</span><span class="n">ta_class_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">qcut</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="n">class_col</span><span class="p">],</span> <span class="n">q</span><span class="o">=</span><span class="n">n_classes</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">duplicates</span><span class="o">=</span><span class="s1">&#39;drop&#39;</span><span class="p">)</span>  <span class="c1"># Series</span>
+
+        <span class="c1"># USTAR SUBCLASSES - OPTIMIZATION: Direct assignment instead of combine_first</span>
+        <span class="c1"># combine_first() does expensive index alignment; direct assignment is much faster</span>
+        <span class="n">class_grouped_df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">ta_class_col</span><span class="p">)</span>  <span class="c1"># Group by TA class</span>
+        <span class="k">for</span> <span class="n">class_key</span><span class="p">,</span> <span class="n">class_df</span> <span class="ow">in</span> <span class="n">class_grouped_df</span><span class="p">:</span>  <span class="c1"># Loop through data of each TA class</span>
+            <span class="n">ustar_subclass</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">qcut</span><span class="p">(</span><span class="n">class_df</span><span class="p">[</span><span class="n">subclass_col</span><span class="p">],</span> <span class="n">q</span><span class="o">=</span><span class="n">n_subclasses</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">duplicates</span><span class="o">=</span><span class="s1">&#39;drop&#39;</span><span class="p">)</span>  <span class="c1"># Series</span>
+            <span class="n">df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">class_df</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">ustar_subclass_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">ustar_subclass</span><span class="o">.</span><span class="n">values</span>  <span class="c1"># ← Direct assignment (O(n) not O(n²))</span>
+
+        <span class="k">return</span> <span class="n">df</span><span class="p">,</span> <span class="n">ta_class_col</span><span class="p">,</span> <span class="n">ustar_subclass_col</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_add_season_info</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Add season info to data, used for grouping data.&quot;&quot;&quot;</span>
+        <span class="n">season_col</span> <span class="o">=</span> <span class="s1">&#39;.SEASON&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="p">[</span><span class="n">season_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">insert_season</span><span class="p">(</span><span class="n">timestamp</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">season_col</span>
+
+        <span class="c1"># else:</span>
+        <span class="c1">#     # Use already available season column.</span>
+        <span class="c1">#     data_df.loc[:, self.season_type_col] = self.data_df[self.season_type_col].copy()</span>
+        <span class="c1">#     data_df.loc[:, self.season_data_pool_col] = self.data_df[self.season_type_col].copy()</span>
+
+        <span class="c1"># if self.season_data_pool == &#39;Season Type&#39;:</span>
+        <span class="c1">#     # Calculate one threshold per season type, e.g. one for all summers. In this case,</span>
+        <span class="c1">#     # all data from all e.g. summers are first pooled, and then one single threshold is</span>
+        <span class="c1">#     # calculated based on the pooled data. The threshold is then valid for all summers across</span>
+        <span class="c1">#     # all years.</span>
+        <span class="c1">#     data_df.loc[:, self.season_data_pool_col] = self.data_df[self.season_grouping_col].copy()</span>
+        <span class="c1">#</span>
+        <span class="c1"># elif self.season_data_pool == &#39;Season&#39;:</span>
+        <span class="c1">#     # Calculate threshold for each season, e.g. summer 2018, summer 2019, etc. To differentiate</span>
+        <span class="c1">#     # between multiple summers, the year is added as additional information so the seasons</span>
+        <span class="c1">#     # can be grouped later during calcs.</span>
+        <span class="c1">#     data_df[&#39;year_aux&#39;] = data_df.index.year.astype(str)</span>
+        <span class="c1">#     data_df.loc[:, self.season_data_pool_col] = \</span>
+        <span class="c1">#         data_df[&#39;year_aux&#39;] + &#39;_&#39; + data_df.loc[:, self.season_data_pool_col].astype(str)</span>
+        <span class="c1">#     data_df.drop(&#39;year_aux&#39;, axis=1, inplace=True)</span>
+
+        <span class="c1"># return data_df</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_assemble_work_dataframes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">workdf</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="p">[[</span><span class="bp">self</span><span class="o">.</span><span class="n">nee_col</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ta_col</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ustar_col</span><span class="p">,</span>
+                          <span class="bp">self</span><span class="o">.</span><span class="n">swin_pot_col</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">flag_dt_col</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">flag_nt_col</span><span class="p">,</span>
+                          <span class="bp">self</span><span class="o">.</span><span class="n">season_col</span><span class="p">]]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">workdf</span> <span class="o">=</span> <span class="n">workdf</span><span class="o">.</span><span class="n">dropna</span><span class="p">()</span>
+        <span class="n">is_daytime</span> <span class="o">=</span> <span class="n">workdf</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">flag_dt_col</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span>
+        <span class="n">is_nighttime</span> <span class="o">=</span> <span class="n">workdf</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">flag_nt_col</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span>
+        <span class="n">workdf_dt</span> <span class="o">=</span> <span class="n">workdf</span><span class="p">[</span><span class="n">is_daytime</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">workdf_nt</span> <span class="o">=</span> <span class="n">workdf</span><span class="p">[</span><span class="n">is_nighttime</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">workdf</span><span class="p">,</span> <span class="n">workdf_dt</span><span class="p">,</span> <span class="n">workdf_nt</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_calc_nighttime_flag</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">flag_daytime</span><span class="p">,</span> <span class="n">flag_nighttime</span> <span class="o">=</span> <span class="n">daytime_nighttime_flag_from_swinpot</span><span class="p">(</span>
+            <span class="n">swinpot</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">swin_pot_col</span><span class="p">],</span>
+            <span class="n">nighttime_threshold</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">nighttime_threshold</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="p">[</span><span class="n">flag_daytime</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">flag_daytime</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="p">[</span><span class="n">flag_nighttime</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">flag_nighttime</span>
+        <span class="k">return</span> <span class="n">flag_daytime</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">flag_nighttime</span><span class="o">.</span><span class="n">name</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_calc_swin_pot</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Calculate potential radiation or get directly from data&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">lat</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">lon</span><span class="p">:</span>
+            <span class="n">swin_pot</span> <span class="o">=</span> <span class="n">potrad</span><span class="p">(</span><span class="n">timestamp_index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="p">,</span>
+                              <span class="n">lat</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">lat</span><span class="p">,</span>
+                              <span class="n">lon</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">lon</span><span class="p">,</span>
+                              <span class="n">utc_offset</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">utc_offset</span><span class="p">)</span>
+            <span class="n">swin_pot_col</span> <span class="o">=</span> <span class="n">swin_pot</span><span class="o">.</span><span class="n">name</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="p">[</span><span class="n">swin_pot_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">swin_pot</span>
+            <span class="k">return</span> <span class="n">swin_pot_col</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Latitude and longitude are required &quot;</span>
+                            <span class="s2">&quot;if potential radiation is not in data.&quot;</span><span class="p">)</span></div>
+
+</pre></div>
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By Lukas Hörtnagl
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2025, Lukas Hörtnagl.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

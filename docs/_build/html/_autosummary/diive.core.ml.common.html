@@ -1,0 +1,716 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="diive.core.ml.optimization" href="diive.core.ml.optimization.html"><link rel="prev" title="diive.core.ml.feature_engineer" href="diive.core.ml.feature_engineer.html">
+
+    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>diive.core.ml.common - DIIVE</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=fd6457a4" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  --color-brand-primary: #0066cc;
+  --color-brand-content: #0066cc;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #4da6ff;
+  --color-brand-content: #4da6ff;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #4da6ff;
+  --color-brand-content: #4da6ff;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../index.html"><div class="brand">DIIVE</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../index.html">
+  
+  <span class="sidebar-brand-text">DIIVE</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1 current has-children"><a class="reference internal" href="../api_reference.html">API Reference</a><input aria-label="Toggle navigation of API Reference" checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="diive.core.ml.feature_engineer.html">diive.core.ml.feature_engineer</a></li>
+<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">diive.core.ml.common</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.core.ml.optimization.html">diive.core.ml.optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.core.plotting.html">diive.core.plotting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.core.times.times.html">diive.core.times.times</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.core.dfun.frames.html">diive.core.dfun.frames</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.pkgs.gapfilling.randomforest_ts.html">diive.pkgs.gapfilling.randomforest_ts</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.pkgs.gapfilling.xgboost_ts.html">diive.pkgs.gapfilling.xgboost_ts</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.pkgs.gapfilling.mds.html">diive.pkgs.gapfilling.mds</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.pkgs.outlierdetection.absolutelimits.html">diive.pkgs.outlierdetection.absolutelimits</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.pkgs.outlierdetection.hampel.html">diive.pkgs.outlierdetection.hampel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.pkgs.outlierdetection.localsd.html">diive.pkgs.outlierdetection.localsd</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.pkgs.outlierdetection.zscore.html">diive.pkgs.outlierdetection.zscore</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.pkgs.outlierdetection.lof.html">diive.pkgs.outlierdetection.lof</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.pkgs.outlierdetection.stepwiseoutlierdetection.html">diive.pkgs.outlierdetection.stepwiseoutlierdetection</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.pkgs.analyses.correlation.html">diive.pkgs.analyses.correlation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.pkgs.analyses.decoupling.html">diive.pkgs.analyses.decoupling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.pkgs.createvar.laggedvariants.html">diive.pkgs.createvar.laggedvariants</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.configs.exampledata.html">diive.configs.exampledata</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../contributing.html">Contributing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../faq.html">Frequently Asked Questions</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="../_sources/_autosummary/diive.core.ml.common.rst.txt" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div>
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="module-diive.core.ml.common">
+<span id="diive-core-ml-common"></span><h1>diive.core.ml.common<a class="headerlink" href="#module-diive.core.ml.common" title="Link to this heading">¶</a></h1>
+<p>kudos: <a class="reference external" href="https://datascience.stackexchange.com/questions/15135/train-test-validation-set-splitting-in-sklearn">https://datascience.stackexchange.com/questions/15135/train-test-validation-set-splitting-in-sklearn</a></p>
+<p class="rubric">Functions</p>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#diive.core.ml.common.plot_feature_importance" title="diive.core.ml.common.plot_feature_importance"><code class="xref py py-obj docutils literal notranslate"><span class="pre">plot_feature_importance</span></code></a>(feature_importances)</p></td>
+<td><p>Plot SHAP feature importance as horizontal bar chart with error bars.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#diive.core.ml.common.plot_observed_predicted" title="diive.core.ml.common.plot_observed_predicted"><code class="xref py py-obj docutils literal notranslate"><span class="pre">plot_observed_predicted</span></code></a>(targets, ...[, ...])</p></td>
+<td><p>Plot observed vs. predicted values with enhanced visual styling.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#diive.core.ml.common.plot_prediction_residuals_error_regr" title="diive.core.ml.common.plot_prediction_residuals_error_regr"><code class="xref py py-obj docutils literal notranslate"><span class="pre">plot_prediction_residuals_error_regr</span></code></a>(model, ...)</p></td>
+<td><p>Plot residuals and prediction error diagnostics.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p class="rubric">Classes</p>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#diive.core.ml.common.MlRegressorGapFillingBase" title="diive.core.ml.common.MlRegressorGapFillingBase"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MlRegressorGapFillingBase</span></code></a>(regressor, ...[, ...])</p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<dl class="py class">
+<dt class="sig sig-object py" id="diive.core.ml.common.MlRegressorGapFillingBase">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">diive.core.ml.common.</span></span><span class="sig-name descname"><span class="pre">MlRegressorGapFillingBase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">regressor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_col</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">test_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.25</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/ml/common.html#MlRegressorGapFillingBase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.ml.common.MlRegressorGapFillingBase" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_df</strong> (<em>DataFrame</em>)</p></li>
+<li><p><strong>target_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
+<li><p><strong>verbose</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>)</p></li>
+<li><p><strong>test_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="diive.core.ml.common.MlRegressorGapFillingBase.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">regressor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_col</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">test_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.25</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/ml/common.html#MlRegressorGapFillingBase.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.ml.common.MlRegressorGapFillingBase.__init__" title="Link to this definition">¶</a></dt>
+<dd><p>Base class for machine-learning gap-filling using Random Forest or XGBoost.</p>
+<p>Trains a predictive model on complete (non-gap) data to fill missing values in a target
+time series. Accepts PRE-ENGINEERED features to enable reuse across multiple models.</p>
+<p><strong>Important:</strong> Feature engineering is now performed EXTERNALLY using FeatureEngineer class.
+See diive.core.ml.feature_engineer.FeatureEngineer for details.</p>
+<dl class="simple">
+<dt>Workflow:</dt><dd><ol class="arabic simple">
+<li><p>Use FeatureEngineer to create features from raw time series</p></li>
+<li><p>Pass engineered features to this class for model training and gap-filling</p></li>
+<li><p>Same engineered features can be used with multiple models (RF, XGB, etc.)</p></li>
+</ol>
+</dd>
+<dt>Args:</dt><dd><dl class="simple">
+<dt>regressor:</dt><dd><p>Sklearn-compatible regressor class (RandomForestRegressor or XGBRegressor).</p>
+</dd>
+<dt>input_df:</dt><dd><p>Input DataFrame with time series data. Must contain:
+- 1 target column (to be gap-filled)
+- 1+ feature columns (ALREADY ENGINEERED by FeatureEngineer)
+Timestamps should be in DataFrame index (DatetimeIndex).</p>
+</dd>
+<dt>target_col:</dt><dd><p>Column name of the variable to gap-fill (string or tuple for multi-level columns).</p>
+</dd>
+<dt>verbose:</dt><dd><p>Verbosity level: 0=silent, 1=progress updates, 2+=detailed output.</p>
+</dd>
+<dt>test_size:</dt><dd><p>Proportion of complete (non-gap) data to reserve for testing, between 0.0-1.0.
+Default: 0.25 (75% train, 25% test on non-gap data only).
+- Smaller test_size: tighter train set but more noise in test metrics
+- Larger test_size: looser train set but better estimate stability
+Standard value 0.25 balances both considerations.</p>
+</dd>
+<dt><a href="#id1"><span class="problematic" id="id2">**</span></a>kwargs:</dt><dd><p>Regressor-specific hyperparameters passed to the sklearn regressor.
+For RandomForestRegressor: n_estimators, max_depth, min_samples_split, etc.
+For XGBRegressor: n_estimators, max_depth, learning_rate, early_stopping_rounds, etc.
+Effect on Data: De-trends data (removes level); DIFF1 makes I(1) series I(0);
+DIFF2 captures acceleration (useful for curvature). Emphasizes transitions.
+Advantages: Captures change velocity essential for forecasting turning points;
+computationally trivial; no NaN inflation.
+Disadvantages: Loses level information (absolute value); amplifies noise
+(high-frequency components); DIFF2 extremely noisy unless data is smooth.
+Example: features_diff=[1, 2] creates 1st and 2nd order differences.
+Column naming: ‘.{col}_DIFF{order}’ (e.g., ‘.Tair_f_DIFF1’, ‘.Tair_f_DIFF2’).</p>
+</dd>
+</dl>
+</dd>
+<dt>Attributes:</dt><dd><p><a href="#id3"><span class="problematic" id="id4">model_</span></a>: Trained regressor instance.
+<a href="#id5"><span class="problematic" id="id6">gapfilling_df_</span></a>: DataFrame with gap-filled target and auxiliary variables.
+<a href="#id7"><span class="problematic" id="id8">feature_importances_</span></a>: SHAP feature importance from gap-filling model.
+<a href="#id9"><span class="problematic" id="id10">feature_importances_traintest_</span></a>: SHAP feature importance from train/test model.
+<a href="#id11"><span class="problematic" id="id12">scores_</span></a>: Model performance metrics (MAE, RMSE, R²) for gap-filling.
+<a href="#id13"><span class="problematic" id="id14">scores_traintest_</span></a>: Model performance metrics from train/test split.</p>
+</dd>
+<dt>For Feature Engineering Parameters:</dt><dd><p>See diive.core.ml.feature_engineer.FeatureEngineer for comprehensive documentation
+of the 8-stage feature engineering pipeline (lag, rolling, diff, EMA, poly, STL,
+timestamps, record number).</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_df</strong> (<em>DataFrame</em>)</p></li>
+<li><p><strong>target_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
+<li><p><strong>verbose</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>)</p></li>
+<li><p><strong>test_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="diive.core.ml.common.MlRegressorGapFillingBase.get_gapfilled_target">
+<span class="sig-name descname"><span class="pre">get_gapfilled_target</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/ml/common.html#MlRegressorGapFillingBase.get_gapfilled_target"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.ml.common.MlRegressorGapFillingBase.get_gapfilled_target" title="Link to this definition">¶</a></dt>
+<dd><p>Gap-filled target time series</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="diive.core.ml.common.MlRegressorGapFillingBase.get_flag">
+<span class="sig-name descname"><span class="pre">get_flag</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/ml/common.html#MlRegressorGapFillingBase.get_flag"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.ml.common.MlRegressorGapFillingBase.get_flag" title="Link to this definition">¶</a></dt>
+<dd><p>Gap-filling flag, where 0=observed, 1=gap-filled, 2=gap-filled with fallback</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="diive.core.ml.common.MlRegressorGapFillingBase.model_">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">model_</span></span><a class="headerlink" href="#diive.core.ml.common.MlRegressorGapFillingBase.model_" title="Link to this definition">¶</a></dt>
+<dd><p>Return model, trained on test data</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="diive.core.ml.common.MlRegressorGapFillingBase.feature_importances_">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">feature_importances_</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">DataFrame</span></span><a class="headerlink" href="#diive.core.ml.common.MlRegressorGapFillingBase.feature_importances_" title="Link to this definition">¶</a></dt>
+<dd><p>Return feature importance for model used in gap-filling</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="diive.core.ml.common.MlRegressorGapFillingBase.feature_importances_traintest_">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">feature_importances_traintest_</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">DataFrame</span></span><a class="headerlink" href="#diive.core.ml.common.MlRegressorGapFillingBase.feature_importances_traintest_" title="Link to this definition">¶</a></dt>
+<dd><p>Return feature importance from model training on training data,
+with importances calculated using test data (holdout set)</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="diive.core.ml.common.MlRegressorGapFillingBase.feature_importances_reduction_">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">feature_importances_reduction_</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">DataFrame</span></span><a class="headerlink" href="#diive.core.ml.common.MlRegressorGapFillingBase.feature_importances_reduction_" title="Link to this definition">¶</a></dt>
+<dd><p>Return feature importance from feature reduction, model training on training data,
+with importances calculated using test data (holdout set)</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="diive.core.ml.common.MlRegressorGapFillingBase.scores_">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">scores_</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><span class="pre">dict</span></a></span><a class="headerlink" href="#diive.core.ml.common.MlRegressorGapFillingBase.scores_" title="Link to this definition">¶</a></dt>
+<dd><p>Return model scores for model used in gap-filling</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="diive.core.ml.common.MlRegressorGapFillingBase.scores_traintest_">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">scores_traintest_</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><span class="pre">dict</span></a></span><a class="headerlink" href="#diive.core.ml.common.MlRegressorGapFillingBase.scores_traintest_" title="Link to this definition">¶</a></dt>
+<dd><p>Return model scores for model trained on training data,
+with scores calculated using test data (holdout set)</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="diive.core.ml.common.MlRegressorGapFillingBase.gapfilling_df_">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">gapfilling_df_</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">DataFrame</span></span><a class="headerlink" href="#diive.core.ml.common.MlRegressorGapFillingBase.gapfilling_df_" title="Link to this definition">¶</a></dt>
+<dd><p>Return gapfilled data and auxiliary variables</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="diive.core.ml.common.MlRegressorGapFillingBase.traintest_details_">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">traintest_details_</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><span class="pre">dict</span></a></span><a class="headerlink" href="#diive.core.ml.common.MlRegressorGapFillingBase.traintest_details_" title="Link to this definition">¶</a></dt>
+<dd><p>Return details from train/test splits</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="diive.core.ml.common.MlRegressorGapFillingBase.accepted_features_">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">accepted_features_</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a></span><a class="headerlink" href="#diive.core.ml.common.MlRegressorGapFillingBase.accepted_features_" title="Link to this definition">¶</a></dt>
+<dd><p>Return list of accepted features from feature reduction</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="diive.core.ml.common.MlRegressorGapFillingBase.rejected_features_">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">rejected_features_</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a></span><a class="headerlink" href="#diive.core.ml.common.MlRegressorGapFillingBase.rejected_features_" title="Link to this definition">¶</a></dt>
+<dd><p>Return list of rejected features from feature reduction</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="diive.core.ml.common.MlRegressorGapFillingBase.trainmodel">
+<span class="sig-name descname"><span class="pre">trainmodel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">showplot_scores</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">showplot_importance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/ml/common.html#MlRegressorGapFillingBase.trainmodel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.ml.common.MlRegressorGapFillingBase.trainmodel" title="Link to this definition">¶</a></dt>
+<dd><p>Train random forest model for gap-filling</p>
+<p>No gap-filling is done here, only the model is trained.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>showplot_scores: shows plot of predicted vs observed
+showplot_importance: shows plot of SHAP feature importances</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>showplot_scores</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+<li><p><strong>showplot_importance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="diive.core.ml.common.MlRegressorGapFillingBase.report_traintest">
+<span class="sig-name descname"><span class="pre">report_traintest</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/ml/common.html#MlRegressorGapFillingBase.report_traintest"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.ml.common.MlRegressorGapFillingBase.report_traintest" title="Link to this definition">¶</a></dt>
+<dd><p>Results from model training on test data</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="diive.core.ml.common.MlRegressorGapFillingBase.fillgaps">
+<span class="sig-name descname"><span class="pre">fillgaps</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">showplot_scores</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">showplot_importance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/ml/common.html#MlRegressorGapFillingBase.fillgaps"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.ml.common.MlRegressorGapFillingBase.fillgaps" title="Link to this definition">¶</a></dt>
+<dd><p>Gap-fill data with previously built model</p>
+<p>No new model is built here, instead the last model built in
+the preceding step .trainmodel() is used.</p>
+<p>y = target
+X = features</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>showplot_scores</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+<li><p><strong>showplot_importance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="diive.core.ml.common.MlRegressorGapFillingBase.reduce_features">
+<span class="sig-name descname"><span class="pre">reduce_features</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shap_threshold_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.5</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/ml/common.html#MlRegressorGapFillingBase.reduce_features"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.ml.common.MlRegressorGapFillingBase.reduce_features" title="Link to this definition">¶</a></dt>
+<dd><p>Reduce number of features using SHAP importance</p>
+<p>A random variable is added to features and SHAP importances
+are calculated. The SHAP importance of the random variable is the
+benchmark to determine whether a feature is relevant. Features where
+SHAP importance is smaller or equal to (random_importance + k * random_sd)
+are rejected, where k is shap_threshold_factor.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><dl class="simple">
+<dt>shap_threshold_factor:</dt><dd><p>Factor k for SHAP-based feature reduction threshold.
+Threshold is calculated as: random_importance + k * random_sd
+Default 0.5 uses 0.5-sigma confidence (lenient). Higher values are more conservative
+(reject more features). Lower values are more lenient.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>shap_threshold_factor</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="diive.core.ml.common.MlRegressorGapFillingBase.report_feature_reduction">
+<span class="sig-name descname"><span class="pre">report_feature_reduction</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/ml/common.html#MlRegressorGapFillingBase.report_feature_reduction"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.ml.common.MlRegressorGapFillingBase.report_feature_reduction" title="Link to this definition">¶</a></dt>
+<dd><p>Results from feature reduction</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="diive.core.ml.common.MlRegressorGapFillingBase.report_gapfilling">
+<span class="sig-name descname"><span class="pre">report_gapfilling</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/ml/common.html#MlRegressorGapFillingBase.report_gapfilling"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.ml.common.MlRegressorGapFillingBase.report_gapfilling" title="Link to this definition">¶</a></dt>
+<dd><p>Results from gap-filling</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.ml.common.plot_feature_importance">
+<span class="sig-prename descclassname"><span class="pre">diive.core.ml.common.</span></span><span class="sig-name descname"><span class="pre">plot_feature_importance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">feature_importances</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/ml/common.html#plot_feature_importance"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.ml.common.plot_feature_importance" title="Link to this definition">¶</a></dt>
+<dd><p>Plot SHAP feature importance as horizontal bar chart with error bars.</p>
+<p>Visualizes relative importance of features in the model with standard deviation
+as error bars. Features are sorted by importance for easy interpretation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>feature_importances</strong> (<em>DataFrame</em>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.ml.common.plot_observed_predicted">
+<span class="sig-prename descclassname"><span class="pre">diive.core.ml.common.</span></span><span class="sig-name descname"><span class="pre">plot_observed_predicted</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">targets</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">predictions</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scores</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">infotxt</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_state</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/ml/common.html#plot_observed_predicted"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.ml.common.plot_observed_predicted" title="Link to this definition">¶</a></dt>
+<dd><p>Plot observed vs. predicted values with enhanced visual styling.</p>
+<p>Creates a 2-panel figure showing:
+- Left: Actual vs. Predicted scatter with accuracy bands and perfect prediction line
+- Right: Residuals vs. Predicted with zero line and error regions</p>
+<p>Visual styling follows diive’s Material Design theme with color-coded accuracy zones.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>targets</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.4)"><em>ndarray</em></a>)</p></li>
+<li><p><strong>predictions</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.4)"><em>ndarray</em></a>)</p></li>
+<li><p><strong>scores</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>)</p></li>
+<li><p><strong>infotxt</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
+<li><p><strong>random_state</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.ml.common.plot_prediction_residuals_error_regr">
+<span class="sig-prename descclassname"><span class="pre">diive.core.ml.common.</span></span><span class="sig-name descname"><span class="pre">plot_prediction_residuals_error_regr</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">X_train</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_train</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">X_test</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_test</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">infotxt</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/ml/common.html#plot_prediction_residuals_error_regr"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.ml.common.plot_prediction_residuals_error_regr" title="Link to this definition">¶</a></dt>
+<dd><p>Plot residuals and prediction error diagnostics.</p>
+<p>Creates two diagnostic plots using yellowbrick visualizers:
+- Left: Q-Q plot of residuals to assess normality assumption
+- Right: Actual vs. Predicted with prediction error visualization</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>model: Fitted regression model with predict() method
+X_train: predictors in training data (n_samples, n_features)
+y_train: targets in training data (n_samples,)
+X_test: predictors in test data (n_samples, n_features)
+y_test: targets in test data (n_samples,)
+infotxt: text displayed in figure header for context</p>
+</dd>
+<dt>Notes:</dt><dd><ul class="simple">
+<li><p>Q-Q plot: If residuals are normally distributed, points should fall on
+the diagonal line. Deviations suggest non-normality.</p></li>
+<li><p>Prediction Error: Shows scatter of predictions vs. actual values with
+perfect prediction line (y=x) and prediction confidence region.</p></li>
+</ul>
+</dd>
+<dt>References:</dt><dd><ul class="simple">
+<li><p><a class="reference external" href="https://www.scikit-yb.org/en/latest/api/regressor/residuals.html">https://www.scikit-yb.org/en/latest/api/regressor/residuals.html</a></p></li>
+<li><p><a class="reference external" href="https://www.scikit-yb.org/en/latest/api/regressor/peplot.html">https://www.scikit-yb.org/en/latest/api/regressor/peplot.html</a></p></li>
+</ul>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>X_train</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.4)"><em>ndarray</em></a>)</p></li>
+<li><p><strong>y_train</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.4)"><em>ndarray</em></a>)</p></li>
+<li><p><strong>X_test</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.4)"><em>ndarray</em></a>)</p></li>
+<li><p><strong>y_test</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.4)"><em>ndarray</em></a>)</p></li>
+<li><p><strong>infotxt</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="diive.core.ml.optimization.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">diive.core.ml.optimization</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="diive.core.ml.feature_engineer.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">diive.core.ml.feature_engineer</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2025, Lukas Hörtnagl
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">diive.core.ml.common</a><ul>
+<li><a class="reference internal" href="#diive.core.ml.common.MlRegressorGapFillingBase"><code class="docutils literal notranslate"><span class="pre">MlRegressorGapFillingBase</span></code></a><ul>
+<li><a class="reference internal" href="#diive.core.ml.common.MlRegressorGapFillingBase.__init__"><code class="docutils literal notranslate"><span class="pre">MlRegressorGapFillingBase.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.ml.common.MlRegressorGapFillingBase.get_gapfilled_target"><code class="docutils literal notranslate"><span class="pre">MlRegressorGapFillingBase.get_gapfilled_target()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.ml.common.MlRegressorGapFillingBase.get_flag"><code class="docutils literal notranslate"><span class="pre">MlRegressorGapFillingBase.get_flag()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.ml.common.MlRegressorGapFillingBase.model_"><code class="docutils literal notranslate"><span class="pre">MlRegressorGapFillingBase.model_</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.ml.common.MlRegressorGapFillingBase.feature_importances_"><code class="docutils literal notranslate"><span class="pre">MlRegressorGapFillingBase.feature_importances_</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.ml.common.MlRegressorGapFillingBase.feature_importances_traintest_"><code class="docutils literal notranslate"><span class="pre">MlRegressorGapFillingBase.feature_importances_traintest_</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.ml.common.MlRegressorGapFillingBase.feature_importances_reduction_"><code class="docutils literal notranslate"><span class="pre">MlRegressorGapFillingBase.feature_importances_reduction_</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.ml.common.MlRegressorGapFillingBase.scores_"><code class="docutils literal notranslate"><span class="pre">MlRegressorGapFillingBase.scores_</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.ml.common.MlRegressorGapFillingBase.scores_traintest_"><code class="docutils literal notranslate"><span class="pre">MlRegressorGapFillingBase.scores_traintest_</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.ml.common.MlRegressorGapFillingBase.gapfilling_df_"><code class="docutils literal notranslate"><span class="pre">MlRegressorGapFillingBase.gapfilling_df_</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.ml.common.MlRegressorGapFillingBase.traintest_details_"><code class="docutils literal notranslate"><span class="pre">MlRegressorGapFillingBase.traintest_details_</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.ml.common.MlRegressorGapFillingBase.accepted_features_"><code class="docutils literal notranslate"><span class="pre">MlRegressorGapFillingBase.accepted_features_</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.ml.common.MlRegressorGapFillingBase.rejected_features_"><code class="docutils literal notranslate"><span class="pre">MlRegressorGapFillingBase.rejected_features_</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.ml.common.MlRegressorGapFillingBase.trainmodel"><code class="docutils literal notranslate"><span class="pre">MlRegressorGapFillingBase.trainmodel()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.ml.common.MlRegressorGapFillingBase.report_traintest"><code class="docutils literal notranslate"><span class="pre">MlRegressorGapFillingBase.report_traintest()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.ml.common.MlRegressorGapFillingBase.fillgaps"><code class="docutils literal notranslate"><span class="pre">MlRegressorGapFillingBase.fillgaps()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.ml.common.MlRegressorGapFillingBase.reduce_features"><code class="docutils literal notranslate"><span class="pre">MlRegressorGapFillingBase.reduce_features()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.ml.common.MlRegressorGapFillingBase.report_feature_reduction"><code class="docutils literal notranslate"><span class="pre">MlRegressorGapFillingBase.report_feature_reduction()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.ml.common.MlRegressorGapFillingBase.report_gapfilling"><code class="docutils literal notranslate"><span class="pre">MlRegressorGapFillingBase.report_gapfilling()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#diive.core.ml.common.plot_feature_importance"><code class="docutils literal notranslate"><span class="pre">plot_feature_importance()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.ml.common.plot_observed_predicted"><code class="docutils literal notranslate"><span class="pre">plot_observed_predicted()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.ml.common.plot_prediction_residuals_error_regr"><code class="docutils literal notranslate"><span class="pre">plot_prediction_residuals_error_regr()</span></code></a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../_static/documentation_options.js?v=65828fca"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
+    </body>
+</html>

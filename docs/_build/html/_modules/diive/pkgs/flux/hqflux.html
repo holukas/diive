@@ -1,0 +1,711 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>diive.pkgs.flux.hqflux &#8212; DIIVE Documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/styles/sphinx-book-theme.css?v=3c74b3bc" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=fd6457a4" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../../../../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../../../../_static/documentation_options.js?v=7da8d472"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../../../../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/diive/pkgs/flux/hqflux';</script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="0.91.0" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">DIIVE</p>
+  
+</a></div>
+        <div class="sidebar-primary-item">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="../../../../index.html">
+                    DIIVE
+                </a>
+            </li>
+        </ul>
+        <ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../api_reference.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contributing.html">Contributing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../faq.html">Frequently Asked Questions</a></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+<a href="https://github.com/holukas/diive/issues/new?title=Issue%20on%20page%20%2F_modules/diive/pkgs/flux/hqflux.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button"
+   title="Open an issue"
+   data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+
+</a>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button pst-navbar-icon"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button>
+
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1></h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for diive.pkgs.flux.hqflux</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.gridspec</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gridspec</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="kn">import</span> <span class="n">Series</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">diive.core.plotting.plotfuncs</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pf</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">diive.pkgs.outlierdetection.hampel</span><span class="w"> </span><span class="kn">import</span> <span class="n">Hampel</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">diive.pkgs.outlierdetection.lof</span><span class="w"> </span><span class="kn">import</span> <span class="n">LocalOutlierFactorAllData</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_deprecated_analyze_highest_quality_flux</span><span class="p">(</span><span class="n">flux</span><span class="p">:</span> <span class="n">Series</span><span class="p">,</span> <span class="n">nighttime_flag</span><span class="p">:</span> <span class="n">Series</span><span class="p">,</span> <span class="n">showplot</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Analyzes and filters highest-quality flux data by separating out outliers and calculating</span>
+<span class="sd">    rolling median and standard deviation. The function operates on both daytime and nighttime</span>
+<span class="sd">    flux data, applies a Local Outlier Factor (LOF) to identify outliers, and provides detailed</span>
+<span class="sd">    output of both outliers and non-outliers within specified conditions. Optionally, it generates</span>
+<span class="sd">    plots to visualize the results.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        flux (Series): A pandas Series containing the flux data to be analyzed and filtered.</span>
+<span class="sd">        nighttime_flag (Series): A pandas Series serving as a flag for nighttime (1) and daytime (0).</span>
+<span class="sd">        showplot (bool): Indicates whether to display plots for the processed data. Defaults to True.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        KeyError: Raised when expected data columns in the input are unavailable.</span>
+<span class="sd">        ValueError: Raised when the input flux or nighttime_flag Series are invalid or incompatible.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">hqdf_filtered</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="n">flux</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">):</span>
+        <span class="n">timeofday</span> <span class="o">=</span> <span class="s1">&#39;NIGHTTIME&#39;</span> <span class="k">if</span> <span class="n">d</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> <span class="s1">&#39;DAYTIME&#39;</span>
+
+        <span class="n">hq</span> <span class="o">=</span> <span class="n">flux</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">nighttime_flag</span> <span class="o">==</span> <span class="n">d</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="c1"># flux = self.flags.loc[self.nighttime == d, self.filteredseriescol_hq].copy()</span>
+        <span class="n">n_neighbors</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">hq</span><span class="o">.</span><span class="n">dropna</span><span class="p">()</span><span class="o">.</span><span class="n">count</span><span class="p">()</span> <span class="o">/</span> <span class="mi">200</span><span class="p">)</span>
+        <span class="n">n_neighbors</span> <span class="o">=</span> <span class="n">n_neighbors</span> <span class="k">if</span> <span class="n">n_neighbors</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mi">10</span>
+        <span class="n">contamination</span> <span class="o">=</span> <span class="s1">&#39;auto&#39;</span>
+        <span class="n">repeat</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&gt;&gt;&gt; Removing outliers from highest-quality </span><span class="si">{</span><span class="n">timeofday</span><span class="si">}</span><span class="s2"> fluxes (</span><span class="si">{</span><span class="n">hq</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&gt;&gt;&gt; Outlier removal method: Local outlier factor across all data (n_neighbors=</span><span class="si">{</span><span class="n">n_neighbors</span><span class="si">}</span><span class="s2">, &quot;</span>
+              <span class="sa">f</span><span class="s2">&quot;contamination=</span><span class="si">{</span><span class="n">contamination</span><span class="si">}</span><span class="s2">, repeat=</span><span class="si">{</span><span class="n">repeat</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+        <span class="n">lof</span> <span class="o">=</span> <span class="n">LocalOutlierFactorAllData</span><span class="p">(</span><span class="n">series</span><span class="o">=</span><span class="n">hq</span><span class="p">,</span> <span class="n">n_neighbors</span><span class="o">=</span><span class="n">n_neighbors</span><span class="p">,</span> <span class="n">contamination</span><span class="o">=</span><span class="n">contamination</span><span class="p">,</span>
+                                        <span class="n">showplot</span><span class="o">=</span><span class="n">showplot</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">n_jobs</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">lof</span><span class="o">.</span><span class="n">calc</span><span class="p">(</span><span class="n">repeat</span><span class="o">=</span><span class="n">repeat</span><span class="p">)</span>
+
+        <span class="n">flag</span> <span class="o">=</span> <span class="n">lof</span><span class="o">.</span><span class="n">get_flag</span><span class="p">()</span>
+        <span class="n">_flags</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">hq</span><span class="p">,</span> <span class="n">nighttime_flag</span><span class="p">,</span> <span class="n">flag</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">non_outlier_locs</span> <span class="o">=</span> <span class="p">(</span><span class="n">_flags</span><span class="p">[</span><span class="n">nighttime_flag</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">==</span> <span class="n">d</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">_flags</span><span class="p">[</span><span class="n">flag</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">non_outlier_s</span> <span class="o">=</span> <span class="n">_flags</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">non_outlier_locs</span><span class="p">,</span> <span class="n">hq</span><span class="o">.</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+        <span class="n">outlier_locs</span> <span class="o">=</span> <span class="p">(</span><span class="n">_flags</span><span class="p">[</span><span class="n">nighttime_flag</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">==</span> <span class="n">d</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">_flags</span><span class="p">[</span><span class="n">flag</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">==</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="n">outlier_s</span> <span class="o">=</span> <span class="n">_flags</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">outlier_locs</span><span class="p">,</span> <span class="n">hq</span><span class="o">.</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+        <span class="n">s_filtered</span> <span class="o">=</span> <span class="n">lof</span><span class="o">.</span><span class="n">filteredseries</span>
+        <span class="n">winsize</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">s_filtered</span><span class="o">.</span><span class="n">count</span><span class="p">()</span> <span class="o">/</span> <span class="mi">10</span><span class="p">)</span>
+        <span class="n">rmedian_filtered</span> <span class="o">=</span> <span class="n">s_filtered</span><span class="o">.</span><span class="n">rolling</span><span class="p">(</span><span class="n">window</span><span class="o">=</span><span class="n">winsize</span><span class="p">,</span> <span class="n">center</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">min_periods</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">median</span><span class="p">()</span>
+        <span class="n">sd_filtered</span> <span class="o">=</span> <span class="n">s_filtered</span><span class="o">.</span><span class="n">std</span><span class="p">()</span>
+
+        <span class="n">hqdf_filtered</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;FLUX_</span><span class="si">{</span><span class="n">timeofday</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">s_filtered</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">hqdf_filtered</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;ROLLING_MEDIAN_</span><span class="si">{</span><span class="n">timeofday</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">rmedian_filtered</span>
+        <span class="n">hqdf_filtered</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;SD_</span><span class="si">{</span><span class="n">timeofday</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">sd_filtered</span>
+        <span class="n">hqdf_filtered</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;WINSIZE_</span><span class="si">{</span><span class="n">timeofday</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">winsize</span>
+
+        <span class="n">non_outliers_s_above_zero</span> <span class="o">=</span> <span class="n">non_outlier_s</span><span class="p">[</span><span class="n">non_outlier_s</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&gt;&gt;&gt; Largest non-outlier flux &gt;= 0 </span><span class="si">{</span><span class="n">timeofday</span><span class="si">}</span><span class="s2">:   </span><span class="si">{</span><span class="n">non_outliers_s_above_zero</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&gt;&gt;&gt; Smallest non-outlier flux &gt;= 0 </span><span class="si">{</span><span class="n">timeofday</span><span class="si">}</span><span class="s2">:  </span><span class="si">{</span><span class="n">non_outliers_s_above_zero</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="n">non_outliers_s_below_zero</span> <span class="o">=</span> <span class="n">non_outlier_s</span><span class="p">[</span><span class="n">non_outlier_s</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&gt;&gt;&gt; Largest non-outlier flux &lt; 0 </span><span class="si">{</span><span class="n">timeofday</span><span class="si">}</span><span class="s2">:    </span><span class="si">{</span><span class="n">non_outliers_s_below_zero</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&gt;&gt;&gt; Smallest non-outlier flux &lt; 0 </span><span class="si">{</span><span class="n">timeofday</span><span class="si">}</span><span class="s2">:   </span><span class="si">{</span><span class="n">non_outliers_s_below_zero</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="n">outliers_s_above_zero</span> <span class="o">=</span> <span class="n">outlier_s</span><span class="p">[</span><span class="n">outlier_s</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&gt;&gt;&gt; Largest outlier flux &gt;= 0 </span><span class="si">{</span><span class="n">timeofday</span><span class="si">}</span><span class="s2">:   </span><span class="si">{</span><span class="n">outliers_s_above_zero</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&gt;&gt;&gt; Smallest outlier flux &gt;= 0 </span><span class="si">{</span><span class="n">timeofday</span><span class="si">}</span><span class="s2">:  </span><span class="si">{</span><span class="n">outliers_s_above_zero</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="n">outliers_s_below_zero</span> <span class="o">=</span> <span class="n">outlier_s</span><span class="p">[</span><span class="n">outlier_s</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&gt;&gt;&gt; Largest outlier flux &lt; 0 </span><span class="si">{</span><span class="n">timeofday</span><span class="si">}</span><span class="s2">:    </span><span class="si">{</span><span class="n">outliers_s_below_zero</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&gt;&gt;&gt; Smallest outlier flux &lt; 0 </span><span class="si">{</span><span class="n">timeofday</span><span class="si">}</span><span class="s2">:   </span><span class="si">{</span><span class="n">outliers_s_below_zero</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">showplot</span><span class="p">:</span>
+        <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;white&#39;</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="mi">7</span><span class="p">))</span>
+        <span class="n">gs</span> <span class="o">=</span> <span class="n">gridspec</span><span class="o">.</span><span class="n">GridSpec</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>  <span class="c1"># rows, cols</span>
+        <span class="c1"># gs.update(wspace=0.3, hspace=0.1, left=0.03, right=0.97, top=0.95, bottom=0.05)</span>
+        <span class="n">ax</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="n">gs</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+        <span class="n">ax_nt</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="n">gs</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+
+        <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;DAYTIME&#39;</span><span class="p">,</span> <span class="s1">&#39;NIGHTTIME&#39;</span><span class="p">]:</span>
+            <span class="n">t_ax</span> <span class="o">=</span> <span class="n">ax</span> <span class="k">if</span> <span class="n">t</span> <span class="o">==</span> <span class="s1">&#39;DAYTIME&#39;</span> <span class="k">else</span> <span class="n">ax_nt</span>
+            <span class="n">fluxcol</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;FLUX_</span><span class="si">{</span><span class="n">t</span><span class="si">}</span><span class="s1">&#39;</span>
+            <span class="n">rmediancol</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;ROLLING_MEDIAN_</span><span class="si">{</span><span class="n">t</span><span class="si">}</span><span class="s1">&#39;</span>
+            <span class="n">sdcol</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;SD_</span><span class="si">{</span><span class="n">t</span><span class="si">}</span><span class="s1">&#39;</span>
+            <span class="n">t_ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">hqdf_filtered</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">hqdf_filtered</span><span class="p">[</span><span class="n">fluxcol</span><span class="p">],</span>
+                      <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">t</span><span class="si">}</span><span class="s2"> flux&quot;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;#607D8B&quot;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;none&#39;</span><span class="p">,</span> <span class="n">markeredgewidth</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                      <span class="n">marker</span><span class="o">=</span><span class="s1">&#39;o&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">.5</span><span class="p">,</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span> <span class="n">markeredgecolor</span><span class="o">=</span><span class="s2">&quot;#607D8B&quot;</span><span class="p">,</span> <span class="n">fillstyle</span><span class="o">=</span><span class="s1">&#39;none&#39;</span><span class="p">)</span>
+            <span class="n">t_ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">hqdf_filtered</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">hqdf_filtered</span><span class="p">[</span><span class="n">rmediancol</span><span class="p">],</span>
+                      <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;rolling median&quot;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;#FF6F00&quot;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;solid&#39;</span><span class="p">,</span>
+                      <span class="n">marker</span><span class="o">=</span><span class="s1">&#39;none&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">.5</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+            <span class="n">style_sd</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;dashed&#39;</span><span class="p">,</span> <span class="n">marker</span><span class="o">=</span><span class="s1">&#39;none&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">.5</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+            <span class="n">t_ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">hqdf_filtered</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">hqdf_filtered</span><span class="p">[</span><span class="n">rmediancol</span><span class="p">]</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">hqdf_filtered</span><span class="p">[</span><span class="n">sdcol</span><span class="p">]</span> <span class="o">*</span> <span class="mi">3</span><span class="p">),</span>
+                      <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;rolling median + 3 SD&quot;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;#F44336&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">style_sd</span><span class="p">)</span>
+            <span class="n">t_ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">hqdf_filtered</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">hqdf_filtered</span><span class="p">[</span><span class="n">rmediancol</span><span class="p">]</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="n">hqdf_filtered</span><span class="p">[</span><span class="n">sdcol</span><span class="p">]</span> <span class="o">*</span> <span class="mi">3</span><span class="p">),</span>
+                      <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;rolling median - 3 SD&quot;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;#00BCD4&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">style_sd</span><span class="p">)</span>
+            <span class="n">t_ax</span><span class="o">.</span><span class="n">axhline</span><span class="p">(</span><span class="n">hqdf_filtered</span><span class="p">[</span><span class="n">fluxcol</span><span class="p">]</span><span class="o">.</span><span class="n">quantile</span><span class="p">(</span><span class="mf">.99</span><span class="p">),</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;dotted&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;99th percentile&quot;</span><span class="p">,</span>
+                         <span class="n">color</span><span class="o">=</span><span class="s2">&quot;#2196F3&quot;</span><span class="p">)</span>
+            <span class="n">t_ax</span><span class="o">.</span><span class="n">axhline</span><span class="p">(</span><span class="n">hqdf_filtered</span><span class="p">[</span><span class="n">fluxcol</span><span class="p">]</span><span class="o">.</span><span class="n">quantile</span><span class="p">(</span><span class="mf">.01</span><span class="p">),</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;dotted&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;1st percentile&quot;</span><span class="p">,</span>
+                         <span class="n">color</span><span class="o">=</span><span class="s2">&quot;#9C27B0&quot;</span><span class="p">)</span>
+            <span class="n">pf</span><span class="o">.</span><span class="n">default_legend</span><span class="p">(</span><span class="n">ax</span><span class="o">=</span><span class="n">t_ax</span><span class="p">,</span> <span class="n">labelspacing</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">ncol</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+            <span class="c1"># ax.set_ylim(hq.quantile(0.005), hq.quantile(0.995))</span>
+
+        <span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Highest-quality fluxes </span><span class="si">{</span><span class="n">flux</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> after preliminary outlier removal&quot;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+
+<div class="viewcode-block" id="analyze_highest_quality_flux">
+<a class="viewcode-back" href="../../../../api/pkgs/diive.pkgs.flux.hqflux.html#diive.pkgs.flux.hqflux.analyze_highest_quality_flux">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">analyze_highest_quality_flux</span><span class="p">(</span><span class="n">flux</span><span class="p">:</span> <span class="n">Series</span><span class="p">,</span>
+                                 <span class="n">lat</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+                                 <span class="n">lon</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+                                 <span class="n">utc_offset</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+                                 <span class="n">window_length</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+                                 <span class="n">n_sigma_daytime</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">5.5</span><span class="p">,</span>
+                                 <span class="n">n_sigma_nighttime</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">5.5</span><span class="p">,</span>
+                                 <span class="n">use_differencing</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+                                 <span class="n">showplot</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+                                 <span class="n">figsize</span><span class="p">:</span> <span class="nb">tuple</span> <span class="o">=</span> <span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="mi">7</span><span class="p">),</span>
+                                 <span class="n">show_percentiles</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+                                 <span class="n">return_summary</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Analyzes and filters highest-quality flux data using Hampel filter (robust Median Absolute Deviation).</span>
+<span class="sd">    Separates daytime and nighttime automatically via solar geometry, applies Hampel outlier detection,</span>
+<span class="sd">    and calculates rolling statistics.</span>
+
+<span class="sd">    Hampel filter:</span>
+<span class="sd">    - Uses Median Absolute Deviation (MAD), which is robust to extreme outliers</span>
+<span class="sd">    - Optionally applies double-differencing (Papale et al. 2006) to remove biological trends</span>
+<span class="sd">    - Automatically adapts thresholds for day/night turbulence regimes</span>
+<span class="sd">    - Avoids user-defined parameters like n_neighbors and contamination</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        flux (Series): A pandas Series containing the flux data to be analyzed and filtered.</span>
+<span class="sd">        lat (float): Latitude of measurement site in degrees (e.g., 47.286). Range: -90 to 90.</span>
+<span class="sd">        lon (float): Longitude of measurement site in degrees (e.g., 7.734). Range: -180 to 180.</span>
+<span class="sd">        utc_offset (int): UTC offset in hours (e.g., 1 for CET, -8 for PST).</span>
+<span class="sd">        window_length (int): Rolling window size for Hampel filter.</span>
+<span class="sd">            Default: None (auto = data_count / 100, minimum 13 for ~6 hours at 30-min frequency).</span>
+<span class="sd">        n_sigma_daytime (float): Hampel threshold for DAYTIME records (stricter for high turbulence).</span>
+<span class="sd">            Default is 5.5 (robust). Use 4.0 for stricter filtering.</span>
+<span class="sd">        n_sigma_nighttime (float): Hampel threshold for NIGHTTIME records (lenient for stable conditions).</span>
+<span class="sd">            Default is 5.5. Use 2.5 for stricter filtering.</span>
+<span class="sd">        use_differencing (bool): If True, applies double-differencing (Papale method) to remove</span>
+<span class="sd">            trends and isolate spikes. Default True. Set False to detect outliers in raw values.</span>
+<span class="sd">        showplot (bool): If True, displays outlier detection summary plots. Defaults to True.</span>
+<span class="sd">        figsize (tuple): Figure size for plots (width, height). Default: (16, 7).</span>
+<span class="sd">        show_percentiles (bool): If True, shows 1st and 99th percentiles on plot. Default: True.</span>
+<span class="sd">        return_summary (bool): If True, returns tuple (dataframe, summary_dict). Default: False.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        DataFrame with columns:</span>
+<span class="sd">        - FLUX_DAYTIME / FLUX_NIGHTTIME: Filtered flux after outlier removal</span>
+<span class="sd">        - ROLLING_MEDIAN_DAYTIME / ROLLING_MEDIAN_NIGHTTIME: 10% window rolling median</span>
+<span class="sd">        - SD_DAYTIME / SD_NIGHTTIME: Standard deviation of filtered data</span>
+<span class="sd">        - WINSIZE_DAYTIME / WINSIZE_NIGHTTIME: Rolling window size used</span>
+
+<span class="sd">        If return_summary=True, returns:</span>
+<span class="sd">        - tuple: (DataFrame, dict) where dict contains outlier statistics</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        TypeError: If flux is not a pandas Series</span>
+<span class="sd">        ValueError: If coordinates or thresholds are invalid</span>
+<span class="sd">        RuntimeError: If Hampel filter calculation fails</span>
+
+<span class="sd">    Notes:</span>
+<span class="sd">        Uses Hampel filter (Hampel, 1974) with Median Absolute Deviation for robust</span>
+<span class="sd">        outlier detection. Daytime/nighttime separation uses solar elevation angle</span>
+<span class="sd">        calculated from site coordinates and UTC offset.</span>
+
+<span class="sd">        Rolling window = 10% of valid data points (robust to sparse periods).</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; import diive as dv</span>
+<span class="sd">        &gt;&gt;&gt; from diive.pkgs.flux.hqflux import analyze_highest_quality_flux</span>
+<span class="sd">        &gt;&gt;&gt; df = dv.load_exampledata_parquet()</span>
+<span class="sd">        &gt;&gt;&gt; flux_hq = df[&#39;NEE_CUT_REF&#39;].copy()</span>
+<span class="sd">        &gt;&gt;&gt; results = analyze_highest_quality_flux(</span>
+<span class="sd">        ...     flux=flux_hq,</span>
+<span class="sd">        ...     lat=47.286,</span>
+<span class="sd">        ...     lon=7.734,</span>
+<span class="sd">        ...     utc_offset=1,</span>
+<span class="sd">        ...     window_length=48*7,  # ~7 days at 30-min frequency</span>
+<span class="sd">        ...     n_sigma_daytime=4.0,      # Stricter daytime</span>
+<span class="sd">        ...     n_sigma_nighttime=2.5,      # Lenient nighttime</span>
+<span class="sd">        ...     use_differencing=True,</span>
+<span class="sd">        ...     showplot=True,</span>
+<span class="sd">        ...     return_summary=True</span>
+<span class="sd">        ... )</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Input validation</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">flux</span><span class="p">,</span> <span class="n">Series</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;flux must be pd.Series, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">flux</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">flux</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;flux Series cannot be empty&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">flux</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">dtype</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;datetime&#39;</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;flux index must be datetime, got </span><span class="si">{</span><span class="n">flux</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">dtype</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="o">-</span><span class="mi">90</span> <span class="o">&lt;=</span> <span class="n">lat</span> <span class="o">&lt;=</span> <span class="mi">90</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;lat must be -90 to 90, got </span><span class="si">{</span><span class="n">lat</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="o">-</span><span class="mi">180</span> <span class="o">&lt;=</span> <span class="n">lon</span> <span class="o">&lt;=</span> <span class="mi">180</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;lon must be -180 to 180, got </span><span class="si">{</span><span class="n">lon</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">window_length</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">window_length</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;window_length must be positive, got </span><span class="si">{</span><span class="n">window_length</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">n_sigma_daytime</span> <span class="o">&lt;=</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">n_sigma_nighttime</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;n_sigma_daytime and n_sigma_nighttime must be positive, got </span><span class="si">{</span><span class="n">n_sigma_daytime</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">n_sigma_nighttime</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="n">hqdf_filtered</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="n">flux</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+    <span class="n">summary</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="c1"># Auto-configure window length if not provided</span>
+    <span class="k">if</span> <span class="n">window_length</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">window_length</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">flux</span><span class="o">.</span><span class="n">dropna</span><span class="p">()</span><span class="o">.</span><span class="n">count</span><span class="p">()</span> <span class="o">/</span> <span class="mi">100</span><span class="p">),</span> <span class="mi">13</span><span class="p">)</span>
+
+    <span class="c1"># Apply Hampel filter to entire series with built-in day/night separation</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&gt;&gt;&gt; Removing outliers from highest-quality fluxes (</span><span class="si">{</span><span class="n">flux</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&gt;&gt;&gt; Outlier removal method: Hampel filter (MAD-based)&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&gt;&gt;&gt; Parameters: window_length=</span><span class="si">{</span><span class="n">window_length</span><span class="si">}</span><span class="s2">, &quot;</span>
+          <span class="sa">f</span><span class="s2">&quot;n_sigma_daytime=</span><span class="si">{</span><span class="n">n_sigma_daytime</span><span class="si">}</span><span class="s2">, n_sigma_nighttime=</span><span class="si">{</span><span class="n">n_sigma_nighttime</span><span class="si">}</span><span class="s2">, &quot;</span>
+          <span class="sa">f</span><span class="s2">&quot;use_differencing=</span><span class="si">{</span><span class="n">use_differencing</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">hampel</span> <span class="o">=</span> <span class="n">Hampel</span><span class="p">(</span>
+            <span class="n">series</span><span class="o">=</span><span class="n">flux</span><span class="p">,</span>
+            <span class="n">lat</span><span class="o">=</span><span class="n">lat</span><span class="p">,</span>
+            <span class="n">lon</span><span class="o">=</span><span class="n">lon</span><span class="p">,</span>
+            <span class="n">utc_offset</span><span class="o">=</span><span class="n">utc_offset</span><span class="p">,</span>
+            <span class="n">window_length</span><span class="o">=</span><span class="n">window_length</span><span class="p">,</span>
+            <span class="n">n_sigma</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">n_sigma_daytime</span><span class="o">=</span><span class="n">n_sigma_daytime</span><span class="p">,</span>
+            <span class="n">n_sigma_nighttime</span><span class="o">=</span><span class="n">n_sigma_nighttime</span><span class="p">,</span>
+            <span class="n">use_differencing</span><span class="o">=</span><span class="n">use_differencing</span><span class="p">,</span>
+            <span class="n">separate_day_night</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">showplot</span><span class="o">=</span><span class="n">showplot</span><span class="p">,</span>
+            <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+        <span class="n">hampel</span><span class="o">.</span><span class="n">calc</span><span class="p">(</span><span class="n">repeat</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Hampel filter calculation failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+
+    <span class="c1"># Extract outlier flag</span>
+    <span class="n">flag</span> <span class="o">=</span> <span class="n">hampel</span><span class="o">.</span><span class="n">get_flag</span><span class="p">()</span>
+    <span class="n">s_filtered</span> <span class="o">=</span> <span class="n">hampel</span><span class="o">.</span><span class="n">filteredseries</span>
+
+    <span class="c1"># Calculate summary statistics</span>
+    <span class="n">n_total</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">flux</span><span class="p">)</span>
+    <span class="n">n_valid</span> <span class="o">=</span> <span class="p">(</span><span class="n">flag</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+    <span class="n">n_outliers</span> <span class="o">=</span> <span class="p">(</span><span class="n">flag</span> <span class="o">==</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+    <span class="n">pct_outliers</span> <span class="o">=</span> <span class="p">(</span><span class="n">n_outliers</span> <span class="o">/</span> <span class="n">n_total</span> <span class="o">*</span> <span class="mi">100</span><span class="p">)</span> <span class="k">if</span> <span class="n">n_total</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mi">0</span>
+
+    <span class="n">summary</span><span class="p">[</span><span class="s1">&#39;total_records&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">n_total</span>
+    <span class="n">summary</span><span class="p">[</span><span class="s1">&#39;valid_records&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">n_valid</span>
+    <span class="n">summary</span><span class="p">[</span><span class="s1">&#39;outliers_found&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">n_outliers</span>
+    <span class="n">summary</span><span class="p">[</span><span class="s1">&#39;outlier_pct&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pct_outliers</span>
+    <span class="n">summary</span><span class="p">[</span><span class="s1">&#39;window_length&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">window_length</span>
+    <span class="n">summary</span><span class="p">[</span><span class="s1">&#39;n_sigma_daytime&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">n_sigma_daytime</span>
+    <span class="n">summary</span><span class="p">[</span><span class="s1">&#39;n_sigma_nighttime&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">n_sigma_nighttime</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&gt;&gt;&gt; Outlier Detection Summary:&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&gt;&gt;&gt; Total records:     </span><span class="si">{</span><span class="n">n_total</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&gt;&gt;&gt; Valid records:     </span><span class="si">{</span><span class="n">n_valid</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="mi">100</span><span class="o">-</span><span class="n">pct_outliers</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">%)&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&gt;&gt;&gt; Outliers detected: </span><span class="si">{</span><span class="n">n_outliers</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">pct_outliers</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">%)&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Process daytime and nighttime separately for statistics</span>
+    <span class="k">for</span> <span class="n">d</span><span class="p">,</span> <span class="n">timeofday</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">([</span><span class="s1">&#39;DAYTIME&#39;</span><span class="p">,</span> <span class="s1">&#39;NIGHTTIME&#39;</span><span class="p">]):</span>
+        <span class="c1"># Determine period mask</span>
+        <span class="k">if</span> <span class="n">d</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">is_period</span> <span class="o">=</span> <span class="n">hampel</span><span class="o">.</span><span class="n">is_daytime</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">is_period</span> <span class="o">=</span> <span class="n">hampel</span><span class="o">.</span><span class="n">is_nighttime</span>
+
+        <span class="c1"># Filter by time of day and quality flag</span>
+        <span class="n">non_outlier_locs</span> <span class="o">=</span> <span class="n">is_period</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">flag</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">outlier_locs</span> <span class="o">=</span> <span class="n">is_period</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">flag</span> <span class="o">==</span> <span class="mi">2</span><span class="p">)</span>
+
+        <span class="n">non_outlier_s</span> <span class="o">=</span> <span class="n">flux</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">non_outlier_locs</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">outlier_s</span> <span class="o">=</span> <span class="n">flux</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">outlier_locs</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+        <span class="c1"># Filtered series for this period</span>
+        <span class="n">s_filtered_period</span> <span class="o">=</span> <span class="n">s_filtered</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">is_period</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+        <span class="c1"># Calculate rolling statistics on filtered data</span>
+        <span class="n">winsize</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">s_filtered_period</span><span class="o">.</span><span class="n">count</span><span class="p">()</span> <span class="o">/</span> <span class="mi">10</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">rmedian_filtered</span> <span class="o">=</span> <span class="n">s_filtered_period</span><span class="o">.</span><span class="n">rolling</span><span class="p">(</span><span class="n">window</span><span class="o">=</span><span class="n">winsize</span><span class="p">,</span> <span class="n">center</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">min_periods</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">median</span><span class="p">()</span>
+        <span class="n">sd_filtered</span> <span class="o">=</span> <span class="n">s_filtered_period</span><span class="o">.</span><span class="n">std</span><span class="p">()</span>
+
+        <span class="c1"># Store results</span>
+        <span class="n">hqdf_filtered</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;FLUX_</span><span class="si">{</span><span class="n">timeofday</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">s_filtered_period</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">hqdf_filtered</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;ROLLING_MEDIAN_</span><span class="si">{</span><span class="n">timeofday</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">rmedian_filtered</span>
+        <span class="n">hqdf_filtered</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;SD_</span><span class="si">{</span><span class="n">timeofday</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">sd_filtered</span>
+        <span class="n">hqdf_filtered</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;WINSIZE_</span><span class="si">{</span><span class="n">timeofday</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">winsize</span>
+
+        <span class="c1"># Calculate and print statistics</span>
+        <span class="n">non_outliers_s_above_zero</span> <span class="o">=</span> <span class="n">non_outlier_s</span><span class="p">[</span><span class="n">non_outlier_s</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">non_outliers_s_above_zero</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&gt;&gt;&gt; Largest non-outlier flux &gt;= 0 </span><span class="si">{</span><span class="n">timeofday</span><span class="si">}</span><span class="s2">:   </span><span class="si">{</span><span class="n">non_outliers_s_above_zero</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&gt;&gt;&gt; Smallest non-outlier flux &gt;= 0 </span><span class="si">{</span><span class="n">timeofday</span><span class="si">}</span><span class="s2">:  </span><span class="si">{</span><span class="n">non_outliers_s_above_zero</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&gt;&gt;&gt; No non-outlier flux &gt;= 0 </span><span class="si">{</span><span class="n">timeofday</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="n">non_outliers_s_below_zero</span> <span class="o">=</span> <span class="n">non_outlier_s</span><span class="p">[</span><span class="n">non_outlier_s</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">non_outliers_s_below_zero</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&gt;&gt;&gt; Largest non-outlier flux &lt; 0 </span><span class="si">{</span><span class="n">timeofday</span><span class="si">}</span><span class="s2">:    </span><span class="si">{</span><span class="n">non_outliers_s_below_zero</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&gt;&gt;&gt; Smallest non-outlier flux &lt; 0 </span><span class="si">{</span><span class="n">timeofday</span><span class="si">}</span><span class="s2">:   </span><span class="si">{</span><span class="n">non_outliers_s_below_zero</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&gt;&gt;&gt; No non-outlier flux &lt; 0 </span><span class="si">{</span><span class="n">timeofday</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="n">outliers_s_above_zero</span> <span class="o">=</span> <span class="n">outlier_s</span><span class="p">[</span><span class="n">outlier_s</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">outliers_s_above_zero</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&gt;&gt;&gt; Largest outlier flux &gt;= 0 </span><span class="si">{</span><span class="n">timeofday</span><span class="si">}</span><span class="s2">:   </span><span class="si">{</span><span class="n">outliers_s_above_zero</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&gt;&gt;&gt; Smallest outlier flux &gt;= 0 </span><span class="si">{</span><span class="n">timeofday</span><span class="si">}</span><span class="s2">:  </span><span class="si">{</span><span class="n">outliers_s_above_zero</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="n">outliers_s_below_zero</span> <span class="o">=</span> <span class="n">outlier_s</span><span class="p">[</span><span class="n">outlier_s</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">outliers_s_below_zero</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&gt;&gt;&gt; Largest outlier flux &lt; 0 </span><span class="si">{</span><span class="n">timeofday</span><span class="si">}</span><span class="s2">:    </span><span class="si">{</span><span class="n">outliers_s_below_zero</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&gt;&gt;&gt; Smallest outlier flux &lt; 0 </span><span class="si">{</span><span class="n">timeofday</span><span class="si">}</span><span class="s2">:   </span><span class="si">{</span><span class="n">outliers_s_below_zero</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">showplot</span><span class="p">:</span>
+        <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;white&#39;</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="n">figsize</span><span class="p">)</span>
+        <span class="n">gs</span> <span class="o">=</span> <span class="n">gridspec</span><span class="o">.</span><span class="n">GridSpec</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>  <span class="c1"># rows, cols</span>
+        <span class="n">ax</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="n">gs</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+        <span class="n">ax_nt</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="n">gs</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+
+        <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;DAYTIME&#39;</span><span class="p">,</span> <span class="s1">&#39;NIGHTTIME&#39;</span><span class="p">]:</span>
+            <span class="n">t_ax</span> <span class="o">=</span> <span class="n">ax</span> <span class="k">if</span> <span class="n">t</span> <span class="o">==</span> <span class="s1">&#39;DAYTIME&#39;</span> <span class="k">else</span> <span class="n">ax_nt</span>
+            <span class="n">fluxcol</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;FLUX_</span><span class="si">{</span><span class="n">t</span><span class="si">}</span><span class="s1">&#39;</span>
+            <span class="n">rmediancol</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;ROLLING_MEDIAN_</span><span class="si">{</span><span class="n">t</span><span class="si">}</span><span class="s1">&#39;</span>
+            <span class="n">sdcol</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;SD_</span><span class="si">{</span><span class="n">t</span><span class="si">}</span><span class="s1">&#39;</span>
+
+            <span class="c1"># Plot flux points</span>
+            <span class="n">t_ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">hqdf_filtered</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">hqdf_filtered</span><span class="p">[</span><span class="n">fluxcol</span><span class="p">],</span>
+                      <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">t</span><span class="si">}</span><span class="s2"> flux&quot;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;#607D8B&quot;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;none&#39;</span><span class="p">,</span> <span class="n">markeredgewidth</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                      <span class="n">marker</span><span class="o">=</span><span class="s1">&#39;o&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">.5</span><span class="p">,</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span> <span class="n">markeredgecolor</span><span class="o">=</span><span class="s2">&quot;#607D8B&quot;</span><span class="p">,</span> <span class="n">fillstyle</span><span class="o">=</span><span class="s1">&#39;none&#39;</span><span class="p">)</span>
+
+            <span class="c1"># Plot rolling median</span>
+            <span class="n">t_ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">hqdf_filtered</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">hqdf_filtered</span><span class="p">[</span><span class="n">rmediancol</span><span class="p">],</span>
+                      <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;rolling median&quot;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;#FF6F00&quot;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;solid&#39;</span><span class="p">,</span>
+                      <span class="n">marker</span><span class="o">=</span><span class="s1">&#39;none&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">.5</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+
+            <span class="c1"># Plot SD bands</span>
+            <span class="n">style_sd</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;dashed&#39;</span><span class="p">,</span> <span class="n">marker</span><span class="o">=</span><span class="s1">&#39;none&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">.5</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+            <span class="n">t_ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">hqdf_filtered</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">hqdf_filtered</span><span class="p">[</span><span class="n">rmediancol</span><span class="p">]</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">hqdf_filtered</span><span class="p">[</span><span class="n">sdcol</span><span class="p">]</span> <span class="o">*</span> <span class="mi">3</span><span class="p">),</span>
+                      <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;rolling median + 3 SD&quot;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;#F44336&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">style_sd</span><span class="p">)</span>
+            <span class="n">t_ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">hqdf_filtered</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">hqdf_filtered</span><span class="p">[</span><span class="n">rmediancol</span><span class="p">]</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="n">hqdf_filtered</span><span class="p">[</span><span class="n">sdcol</span><span class="p">]</span> <span class="o">*</span> <span class="mi">3</span><span class="p">),</span>
+                      <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;rolling median - 3 SD&quot;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;#00BCD4&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">style_sd</span><span class="p">)</span>
+
+            <span class="c1"># Optionally plot percentiles</span>
+            <span class="k">if</span> <span class="n">show_percentiles</span><span class="p">:</span>
+                <span class="n">t_ax</span><span class="o">.</span><span class="n">axhline</span><span class="p">(</span><span class="n">hqdf_filtered</span><span class="p">[</span><span class="n">fluxcol</span><span class="p">]</span><span class="o">.</span><span class="n">quantile</span><span class="p">(</span><span class="mf">.99</span><span class="p">),</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;dotted&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;99th percentile&quot;</span><span class="p">,</span>
+                             <span class="n">color</span><span class="o">=</span><span class="s2">&quot;#2196F3&quot;</span><span class="p">)</span>
+                <span class="n">t_ax</span><span class="o">.</span><span class="n">axhline</span><span class="p">(</span><span class="n">hqdf_filtered</span><span class="p">[</span><span class="n">fluxcol</span><span class="p">]</span><span class="o">.</span><span class="n">quantile</span><span class="p">(</span><span class="mf">.01</span><span class="p">),</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;dotted&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;1st percentile&quot;</span><span class="p">,</span>
+                             <span class="n">color</span><span class="o">=</span><span class="s2">&quot;#9C27B0&quot;</span><span class="p">)</span>
+
+            <span class="n">pf</span><span class="o">.</span><span class="n">default_legend</span><span class="p">(</span><span class="n">ax</span><span class="o">=</span><span class="n">t_ax</span><span class="p">,</span> <span class="n">labelspacing</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">ncol</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+
+        <span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Highest-quality fluxes </span><span class="si">{</span><span class="n">flux</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> after Hampel outlier removal&quot;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="n">return_summary</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">hqdf_filtered</span><span class="p">,</span> <span class="n">summary</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">hqdf_filtered</span></div>
+
+</pre></div>
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By Lukas Hörtnagl
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2025, Lukas Hörtnagl.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

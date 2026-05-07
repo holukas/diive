@@ -21,9 +21,29 @@ DEFAULT_SEASON_MAP = {
 
 
 def format_timestamp_to_fluxnet_format(df: DataFrame, timestamp_col: str) -> Series:
-    """Apply FLUXNET timestamp format (YYYYMMDDhhmm) to timestamp columns (not index).
+    """
+    Convert timestamp column to FLUXNET format (YYYYMMDDhhmm).
 
-    Timestamp must be available as data column.
+    Converts a datetime column in a DataFrame to the standard FLUXNET timestamp
+    format as a compressed string without separators. The timestamp must be
+    available as a data column (not as the DataFrame index).
+
+    Parameters
+    ----------
+    df : DataFrame
+        Input DataFrame containing the timestamp column.
+    timestamp_col : str
+        Name of the column containing datetime values to be formatted.
+
+    Returns
+    -------
+    Series
+        Series with timestamps formatted as strings in FLUXNET format (YYYYMMDDhhmm).
+        Example: '202307151430' for July 15, 2023 at 14:30.
+
+    Note
+    ----
+    The timestamp must exist as a data column in the DataFrame, not as the index.
     """
     print(f"\nFormatting timestamp column {timestamp_col} to %Y%m%d%H%M ...")
     timestamp = df[timestamp_col].dt.strftime('%Y%m%d%H%M')
@@ -157,6 +177,31 @@ def detect_freq_groups(index: DatetimeIndex) -> Series:
 
 
 class TimestampSanitizer:
+    """
+    Validate and prepare timestamps for time series data processing.
+
+    Performs comprehensive validation and sanitization of datetime indices through
+    a sequence of checks and transformations. Acts as a wrapper combining various
+    timestamp processing functions into a single, configurable interface.
+
+    The processing pipeline (in order):
+    1. Validate timestamp naming convention
+    2. Convert timestamp index to datetime format
+    3. Remove rows with missing timestamps (NaT)
+    4. Sort timestamp in ascending order
+    5. Remove duplicate timestamps (keep last)
+    6. Detect time resolution from timestamp
+    7. Validate detected frequency against expected frequency (if provided)
+    8. Make timestamp continuous without date gaps
+    9. Convert to middle-of-period timestamp (optional)
+
+    Attributes
+    ----------
+    data : Series or DataFrame
+        The processed data with validated timestamp index.
+    inferred_freq : str
+        Detected time resolution of the timestamp index.
+    """
 
     def __init__(self,
                  data: Series or DataFrame,
@@ -170,46 +215,38 @@ class TimestampSanitizer:
                  nominal_freq: str = None,
                  verbose: bool = False):
         """
-        Validate and prepare timestamps for further processing
+        Initialize TimestampSanitizer and process timestamp index.
 
-        Performs various checks on timestamps, in this order:
-        - Validate timestamp naming
-        - Convert timestamp to datetime
-        - Sort timestamp ascending
-        - Remove duplicates from timestamp index
-        - Detect time resolution from timestamp
-        - Compare nominal (expected) frequency with detected frequency (optional,
-            only if *nominal_freq* is given).
-        - Make timestamp continuous without date gaps
-        - Convert timestamp to show the middle of the averaging period (optional)
+        Parameters
+        ----------
+        data : Series or DataFrame
+            Data with timestamp index to be validated and processed.
+        output_middle_timestamp : bool, optional
+            Convert timestamp index to show middle of averaging period. Default is True.
+        validate_naming : bool, optional
+            Check if timestamp is correctly named. Allowed names are 'TIMESTAMP_END',
+            'TIMESTAMP_START', and 'TIMESTAMP_MIDDLE'. Default is True.
+        convert_to_datetime : bool, optional
+            Convert timestamp index to datetime format. Default is True.
+        remove_index_nat : bool, optional
+            Remove rows without timestamp (NaT values). Default is True.
+        sort_ascending : bool, optional
+            Sort timestamp in ascending order. Default is True.
+        remove_duplicates : bool, optional
+            Remove duplicate timestamps (keep last occurrence). Default is True.
+        regularize : bool, optional
+            Generate continuous timestamp without date gaps. Default is True.
+        nominal_freq : str, optional
+            Expected time resolution of data timestamp index. If provided, detected
+            frequency is validated against this. Raises ValueError if they don't match.
+            Examples: '10s', '5s', 's', '30min', '5min', 'min', '1h', '3h', 'h'.
+            Default is None (no frequency validation).
+        verbose : bool, optional
+            Print status messages during processing. Default is False.
 
-        The `TimestampSanitizer` class acts as a wrapper to combine various
-        timestamp functions.
-
-        Args:
-            data:
-            output_middle_timestamp: Convert the timestamp index to show middle of averaging period
-            validate_naming: Check if timestamp is correctly named, allowed names are 'TIMESTAMP_END',
-                'TIMESTAMP_START', and 'TIMESTAMP_MIDDLE'.
-            convert_to_datetime: Convert timestamp index to datetime format
-            remove_index_nat: Remove rows that do not have a timestamp index (NaT)
-            sort_ascending: Sort timestamp in ascending order
-            remove_duplicates: Remove duplicates in the timestamp index (keep last)
-            regularize: Generate continuous timestamp of given frequency between first and last date of index
-            nominal_freq: Expected time resolution of *data* timestamp index.
-                If given, the inferred frequency is compared to the nominal frequency. Both must
-                be equal, otherwise raises ValueError. See pandas DateOffset objects for allowed abbreviations.
-                Examples:
-                    '10s', '5s' etc. for seconds, but 's' for 1-second time resolution (no number)
-                    '30min', '5min' etc. for minutes, but 'min' for 1-minute time resolution (no number)
-                    '1h', '3h' etc. for hours, but 'h' for 1-hour time resolution (no number)
-            verbose: Generate more text output if *True*
-
-        For more info please refer to the docstring of the respective function.
-
-        Args:
-            data: Data with timestamp index
-            output_middle_timestamp:
+        Notes
+        -----
+        See individual timestamp processing functions for more details on each step.
         """
         self.data = data.copy()
         self.output_middle_timestamp = output_middle_timestamp
@@ -1268,6 +1305,29 @@ def doy_cumulatives_per_year(series: Series) -> DataFrame:
 
 def doy_mean_cumulative(cumulatives_per_year_df: DataFrame,
                         excl_years_from_reference: list = None) -> DataFrame:
+    """
+    Calculate mean cumulative values by day-of-year with confidence intervals.
+
+    Computes mean, standard deviation, and 95% confidence intervals for cumulative
+    values across multiple years, organized by day-of-year and intra-day time fraction.
+
+    Parameters
+    ----------
+    cumulatives_per_year_df : DataFrame
+        DataFrame with day-of-year time (DOY_TIME) as index and years as columns,
+        containing cumulative values for each year.
+    excl_years_from_reference : list, optional
+        Years to exclude from reference statistics. Default is None (use all years).
+
+    Returns
+    -------
+    DataFrame
+        Statistics by day-of-year with columns:
+        - MEAN_DOY_TIME: Mean cumulative value
+        - SD_DOY_TIME: Standard deviation
+        - MEAN+SD, MEAN-SD: ±1 SD confidence bounds
+        - MEAN+1.96_SD, MEAN-1.96_SD: ±1.96 SD (95%) confidence bounds
+    """
     reference_years_df = cumulatives_per_year_df.copy()
     if excl_years_from_reference:
         for yr in excl_years_from_reference:

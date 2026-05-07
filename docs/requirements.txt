@@ -1,0 +1,8 @@
+# Documentation dependencies for ReadTheDocs build
+# These are in addition to the main package dependencies (installed via setup.py/pyproject.toml)
+
+sphinx>=9.0
+furo>=2024.1.29
+myst-parser>=5.0
+sphinx-autodoc-typehints>=3.10
+sphinx-gallery>=0.21

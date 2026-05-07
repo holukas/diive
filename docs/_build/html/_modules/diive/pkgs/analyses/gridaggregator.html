@@ -1,0 +1,805 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>diive.pkgs.analyses.gridaggregator &#8212; DIIVE Documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/styles/sphinx-book-theme.css?v=3c74b3bc" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=fd6457a4" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../../../../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../../../../_static/documentation_options.js?v=7da8d472"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../../../../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/diive/pkgs/analyses/gridaggregator';</script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="0.91.0" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">DIIVE</p>
+  
+</a></div>
+        <div class="sidebar-primary-item">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="../../../../index.html">
+                    DIIVE
+                </a>
+            </li>
+        </ul>
+        <ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../api_reference.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contributing.html">Contributing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../faq.html">Frequently Asked Questions</a></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+<a href="https://github.com/holukas/diive/issues/new?title=Issue%20on%20page%20%2F_modules/diive/pkgs/analyses/gridaggregator.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button"
+   title="Open an issue"
+   data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+
+</a>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button pst-navbar-icon"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button>
+
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1></h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for diive.pkgs.analyses.gridaggregator</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Grid Aggregation Module</span>
+
+<span class="sd">This module provides the `GridAggregator` class, a tool for</span>
+<span class="sd">transforming and aggregating tabular data into a 2D grid structure. It</span>
+<span class="sd">supports flexible binning strategies and various aggregation methods,</span>
+<span class="sd">facilitating data analysis and visualization in grid-based formats.</span>
+
+<span class="sd">Author: Lukas Hörtnagl</span>
+<span class="sd">License: GPL-3.0</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">Callable</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+
+
+<div class="viewcode-block" id="GridAggregator">
+<a class="viewcode-back" href="../../../../api/pkgs/diive.pkgs.analyses.gridaggregator.html#diive.pkgs.analyses.gridaggregator.GridAggregator">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">GridAggregator</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Performs data aggregation over a 2D grid based on specified binning mechanisms.</span>
+
+<span class="sd">    The GridAggregator class facilitates the aggregation of Z-axis data over a</span>
+<span class="sd">    2D grid defined by X and Y axes. The binning can be configured through</span>
+<span class="sd">    quantiles, equal-width bins, or custom bins. The class supports multiple aggregation</span>
+<span class="sd">    functions, including built-in statistical measures and custom callable functions.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        See `examples/analyses/gridaggregator.py` for complete examples.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        x (pd.Series): X-axis data to be used in binning.</span>
+<span class="sd">        y (pd.Series): Y-axis data to be used in binning.</span>
+<span class="sd">        z (pd.Series): Z-axis data to be aggregated based on X and Y bins.</span>
+<span class="sd">        binning_type (Literal[&#39;quantiles&#39;, &#39;equal_width&#39;, &#39;custom&#39;]):</span>
+<span class="sd">            Type of binning method used (&#39;quantiles&#39;, &#39;equal_width&#39;, or &#39;custom&#39;).</span>
+<span class="sd">        n_bins (int): Number of bins for &#39;quantiles&#39; or &#39;equal_width&#39; binning. Ignored if the binning type is &#39;custom&#39;.</span>
+<span class="sd">        min_n_vals_per_bin (int): Minimum required values in a bin to include in aggregation.</span>
+<span class="sd">        custom_x_bins (Union[np.ndarray, list, None]):</span>
+<span class="sd">            Custom bin edges for the X-axis when binning type is &#39;custom&#39;.</span>
+<span class="sd">        custom_y_bins (Union[np.ndarray, list, None]):</span>
+<span class="sd">            Custom bin edges for the Y-axis when binning type is &#39;custom&#39;.</span>
+<span class="sd">        x_col_name (str): Name derived from the X data series or defaulted to &#39;x_data&#39;.</span>
+<span class="sd">        y_col_name (str): Name derived from the Y data series or defaulted to &#39;y_data&#39;.</span>
+<span class="sd">        z_col_name (str): Name derived from the Z data series or defaulted to &#39;z_data&#39;.</span>
+<span class="sd">        x_bin_col_name (str): Column name for X-axis binning results in the internal DataFrame.</span>
+<span class="sd">        y_bin_col_name (str): Column name for Y-axis binning results in the internal DataFrame.</span>
+<span class="sd">        aggfunc (Union[Literal[&#39;mean&#39;, &#39;min&#39;, &#39;max&#39;, &#39;median&#39;, &#39;sum&#39;, &#39;count&#39;], Callable]):</span>
+<span class="sd">            Aggregation function for binning operation. May be a string literal or custom callable.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="GridAggregator.__init__">
+<a class="viewcode-back" href="../../../../api/pkgs/diive.pkgs.analyses.gridaggregator.html#diive.pkgs.analyses.gridaggregator.GridAggregator.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
+                 <span class="n">x</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">,</span>
+                 <span class="n">y</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">,</span>
+                 <span class="n">z</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">,</span>
+                 <span class="n">binning_type</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s1">&#39;quantiles&#39;</span><span class="p">,</span> <span class="s1">&#39;equal_width&#39;</span><span class="p">,</span> <span class="s1">&#39;custom&#39;</span><span class="p">],</span>
+                 <span class="n">n_bins</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span>
+                 <span class="n">min_n_vals_per_bin</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+                 <span class="n">aggfunc</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Literal</span><span class="p">[</span><span class="s1">&#39;mean&#39;</span><span class="p">,</span> <span class="s1">&#39;min&#39;</span><span class="p">,</span> <span class="s1">&#39;max&#39;</span><span class="p">,</span> <span class="s1">&#39;median&#39;</span><span class="p">,</span> <span class="s1">&#39;sum&#39;</span><span class="p">,</span> <span class="s1">&#39;count&#39;</span><span class="p">],</span> <span class="n">Callable</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;mean&#39;</span><span class="p">,</span>
+                 <span class="n">custom_x_bins</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">list</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+                 <span class="n">custom_y_bins</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">list</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+                 <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initializes the class with input data, binning configurations, and aggregation setup.</span>
+<span class="sd">        Handles preparation of internal DataFrame for processing, determines column names,</span>
+<span class="sd">        validates inputs, and performs data binning and aggregation on initialization.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x (pd.Series): Input series for x-coordinates or independent variable.</span>
+<span class="sd">            y (pd.Series): Input series for y-coordinates or independent variable.</span>
+<span class="sd">            z (pd.Series): Input series for z-values or dependent variable to be aggregated.</span>
+<span class="sd">            binning_type (Literal[&#39;quantiles&#39;, &#39;equal_width&#39;, &#39;custom&#39;]): Type of binning strategy to apply</span>
+<span class="sd">                for x and y dimensions. Options include quantiles, equal-width, or custom boundaries.</span>
+<span class="sd">            n_bins (int, optional): Number of bins to create for x and y when using quantiles or</span>
+<span class="sd">                equal-width binning. Defaults to 10.</span>
+<span class="sd">            min_n_vals_per_bin (int, optional): Minimum number of values required in each bin. If bins</span>
+<span class="sd">                do not meet this threshold, outputs will reflect adjusted binning. Defaults to 1.</span>
+<span class="sd">            aggfunc (Union[Literal[&#39;mean&#39;, &#39;min&#39;, &#39;max&#39;, &#39;median&#39;, &#39;sum&#39;, &#39;count&#39;], Callable], optional):</span>
+<span class="sd">                Aggregation function to apply to z-values within each bin. Can be a predefined function</span>
+<span class="sd">                string (&#39;mean&#39;, &#39;min&#39;, &#39;max&#39;, &#39;median&#39;, &#39;sum&#39;, &#39;count&#39;) or a callable. Defaults to &#39;mean&#39;.</span>
+<span class="sd">            custom_x_bins (Union[np.ndarray, list, None], optional): Custom bin edges for x-dimension.</span>
+<span class="sd">                Must be a sorted array or list of values when provided. Defaults to None.</span>
+<span class="sd">            custom_y_bins (Union[np.ndarray, list, None], optional): Custom bin edges for y-dimension.</span>
+<span class="sd">                Must be a sorted array or list of values when provided. Defaults to None.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If input series lengths do not match, binning type is invalid,</span>
+<span class="sd">                or custom bins are not formatted correctly.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_init_inputs</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">,</span> <span class="n">binning_type</span><span class="p">,</span> <span class="n">n_bins</span><span class="p">,</span> <span class="n">min_n_vals_per_bin</span><span class="p">,</span>
+                                   <span class="n">custom_x_bins</span><span class="p">,</span> <span class="n">custom_y_bins</span><span class="p">)</span>
+
+        <span class="c1"># Initialize attributes</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">y</span> <span class="o">=</span> <span class="n">y</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">z</span> <span class="o">=</span> <span class="n">z</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">binning_type</span> <span class="o">=</span> <span class="n">binning_type</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_bins</span> <span class="o">=</span> <span class="n">n_bins</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">min_n_vals_per_bin</span> <span class="o">=</span> <span class="n">min_n_vals_per_bin</span>
+
+        <span class="c1"># Ensure custom bins are numpy arrays if provided</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">custom_x_bins</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">custom_x_bins</span><span class="p">)</span> <span class="k">if</span> <span class="n">custom_x_bins</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">custom_y_bins</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">custom_y_bins</span><span class="p">)</span> <span class="k">if</span> <span class="n">custom_y_bins</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+
+        <span class="c1"># Generate meaningful names for columns</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">x_col_name</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">name</span> <span class="k">if</span> <span class="n">x</span><span class="o">.</span><span class="n">name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s1">&#39;x_data&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">y_col_name</span> <span class="o">=</span> <span class="n">y</span><span class="o">.</span><span class="n">name</span> <span class="k">if</span> <span class="n">y</span><span class="o">.</span><span class="n">name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s1">&#39;y_data&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">z_col_name</span> <span class="o">=</span> <span class="n">z</span><span class="o">.</span><span class="n">name</span> <span class="k">if</span> <span class="n">z</span><span class="o">.</span><span class="n">name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s1">&#39;z_data&#39;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">x_bin_col_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;BIN_</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">x_col_name</span><span class="si">}</span><span class="s1">&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">y_bin_col_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;BIN_</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">y_col_name</span><span class="si">}</span><span class="s1">&#39;</span>
+
+        <span class="c1"># Map &#39;count&#39; string to numpy.size (more appropriate for counts than nonzero)</span>
+        <span class="c1"># For other aggregation strings, pandas handles them directly in pivot_table.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">aggfunc</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">size</span> <span class="k">if</span> <span class="n">aggfunc</span> <span class="o">==</span> <span class="s1">&#39;count&#39;</span> <span class="k">else</span> <span class="n">aggfunc</span>
+
+        <span class="c1"># Prepare the internal DataFrame for long format data</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">x_col_name</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">y_col_name</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">y</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">z_col_name</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">z</span>
+        <span class="p">})</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;INDEX&#39;</span>
+        <span class="c1"># Reset index to make the original index available as a column for counting</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_df_agg_wide</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_df_agg_long</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># Perform binning and aggregation immediately upon initialization</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_bin_and_aggregate</span><span class="p">()</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_init_inputs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">,</span> <span class="n">binning_type</span><span class="p">,</span> <span class="n">n_bins</span><span class="p">,</span> <span class="n">min_n_vals_per_bin</span><span class="p">,</span>
+                              <span class="n">custom_x_bins</span><span class="p">,</span> <span class="n">custom_y_bins</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Validates the input data for initialization parameters, ensuring consistency,</span>
+<span class="sd">        appropriate types, and logical correctness based on the specified binning</span>
+<span class="sd">        type. This function raises errors for invalid or inconsistent input parameters.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            TypeError: If x, y, or z is not a pandas Series, or if custom_x_bins or</span>
+<span class="sd">                custom_y_bins is not a numpy array or a list.</span>
+<span class="sd">            ValueError: If x, y, and z do not have the same length, or if binning_type</span>
+<span class="sd">                is invalid, or if n_bins or min_n_vals_per_bin is not a positive integer for</span>
+<span class="sd">                non-custom binning. Also raised if custom_x_bins or custom_y_bins is None,</span>
+<span class="sd">                contains fewer than two edges, or is not monotonically increasing</span>
+<span class="sd">                when binning_type is &#39;custom&#39;.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">)</span> <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="p">[</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">]):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;x, y, and z must be pandas Series.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">arg</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="p">[</span><span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">]):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;x, y, and z Series must have the same length.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">binning_type</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;quantiles&#39;</span><span class="p">,</span> <span class="s1">&#39;equal_width&#39;</span><span class="p">,</span> <span class="s1">&#39;custom&#39;</span><span class="p">]:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid binning_type: &#39;</span><span class="si">{</span><span class="n">binning_type</span><span class="si">}</span><span class="s2">&#39;. &quot;</span>
+                             <span class="s2">&quot;Must be &#39;quantiles&#39;, &#39;equal_width&#39;, or &#39;custom&#39;.&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">binning_type</span> <span class="o">!=</span> <span class="s1">&#39;custom&#39;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">n_bins</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="ow">or</span> <span class="n">n_bins</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;n_bins must be a positive integer for &#39;quantiles&#39; or &#39;equal_width&#39; binning.&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">min_n_vals_per_bin</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="ow">or</span> <span class="n">min_n_vals_per_bin</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;min_n_vals_per_bin must be a positive integer for &#39;quantiles&#39; or &#39;equal_width&#39; binning.&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>  <span class="c1"># binning_type == &#39;custom&#39;</span>
+            <span class="k">if</span> <span class="n">custom_x_bins</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">custom_y_bins</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;For &#39;custom&#39; binning, &#39;custom_x_bins&#39; and &#39;custom_y_bins&#39; must be provided.&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">custom_x_bins</span><span class="p">,</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">list</span><span class="p">))</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">custom_y_bins</span><span class="p">,</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">list</span><span class="p">)):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;&#39;custom_x_bins&#39; and &#39;custom_y_bins&#39; must be a numpy array or a list.&quot;</span><span class="p">)</span>
+
+            <span class="c1"># Convert to numpy arrays for consistent validation and operations</span>
+            <span class="n">custom_x_bins</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">custom_x_bins</span><span class="p">)</span>
+            <span class="n">custom_y_bins</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">custom_y_bins</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">custom_x_bins</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">custom_y_bins</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;&#39;custom_x_bins&#39; and &#39;custom_y_bins&#39; must contain at least two bin edges.&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">custom_x_bins</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;&#39;custom_x_bins&#39; must be monotonically increasing.&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">custom_y_bins</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;&#39;custom_y_bins&#39; must be monotonically increasing.&quot;</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">df_long</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        A property that retrieves a long-form (non-aggregated) pandas DataFrame.</span>
+
+<span class="sd">        The property ensures that the DataFrame is not empty and that</span>
+<span class="sd">        it contains columns. A copy of the DataFrame is returned to preserve data integrity and</span>
+<span class="sd">        prevent external modifications.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="o">.</span><span class="n">empty</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="o">.</span><span class="n">columns</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>  <span class="c1"># Check if empty but columns exist (e.g., after dropna leads to empty)</span>
+            <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span><span class="s2">&quot;Long (non-aggregated) DataFrame is not available.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>  <span class="c1"># Return a copy to prevent external modification</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">df_agg_wide</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Provides a read-only property to access the aggregated wide DataFrame.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_df_agg_wide</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_df_agg_wide</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span><span class="s2">&quot;Aggregated wide DataFrame is not available. Ensure binning was successful.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_df_agg_wide</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>  <span class="c1"># Return a copy</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">df_agg_long</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Property to access the aggregated long DataFrame. Ensures that the DataFrame is available</span>
+<span class="sd">        and not empty before returning a copy.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_df_agg_long</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_df_agg_long</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span><span class="s2">&quot;Aggregated long DataFrame is not available. Ensure binning was successful.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_df_agg_long</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>  <span class="c1"># Return a copy</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_bin_and_aggregate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Applies appropriate binning and aggregation to the data based on the specified</span>
+<span class="sd">        binning type. Supports multiple binning methods and transforms the data accordingly.</span>
+<span class="sd">        Raises an error when the binning type is not recognized.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Select the appropriate binning method</span>
+        <span class="n">binning_methods</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;quantiles&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_quantile_binning</span><span class="p">,</span>
+            <span class="s1">&#39;equal_width&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_equal_width_binning</span><span class="p">,</span>
+            <span class="s1">&#39;custom&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_custom_binning</span>
+        <span class="p">}</span>
+        <span class="n">binning_method</span> <span class="o">=</span> <span class="n">binning_methods</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">binning_type</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">binning_method</span><span class="p">:</span>
+            <span class="n">binning_method</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># This case should ideally be caught by __init__ validation, but good for robustness</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown binning type: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">binning_type</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># After binning, proceed to transform and aggregate</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_transform_and_pivot</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_apply_quantile_binning</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Applies quantile binning to specified columns in the DataFrame.</span>
+
+<span class="sd">        This method modifies the DataFrame by assigning quantile-based bin numbers to the</span>
+<span class="sd">        values in the specified columns. The bin assignments are based on percentiles</span>
+<span class="sd">        of the data, and they are stored in new columns within the DataFrame.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">x_bin_col_name</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_assign_bins_quantiles</span><span class="p">(</span><span class="n">series</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">x_col_name</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">y_bin_col_name</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_assign_bins_quantiles</span><span class="p">(</span><span class="n">series</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">y_col_name</span><span class="p">])</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_apply_equal_width_binning</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Applies equal-width binning to the specified columns in the DataFrame.</span>
+
+<span class="sd">        The method modifies the DataFrame `self._df_long` by assigning bins with equal</span>
+<span class="sd">        width to the columns specified by `self.x_col_name` and `self.y_col_name`, and</span>
+<span class="sd">        stores the binned results in columns named `self.x_bin_col_name` and</span>
+<span class="sd">        `self.y_bin_col_name`, respectively.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">x_bin_col_name</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_assign_bins_equal_width</span><span class="p">(</span><span class="n">series</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">x_col_name</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">y_bin_col_name</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_assign_bins_equal_width</span><span class="p">(</span><span class="n">series</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">y_col_name</span><span class="p">])</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_apply_custom_binning</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Applies custom binning to the dataframe columns specified by the configurations.</span>
+
+<span class="sd">        Sets up custom binning for x and y columns based on the provided custom bin</span>
+<span class="sd">        configuration and assigns the resulting bins to new columns.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">x_bin_col_name</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_assign_bins_custom</span><span class="p">(</span><span class="n">series</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">x_col_name</span><span class="p">],</span>
+                                                                      <span class="n">bins</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">custom_x_bins</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">y_bin_col_name</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_assign_bins_custom</span><span class="p">(</span><span class="n">series</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">y_col_name</span><span class="p">],</span>
+                                                                      <span class="n">bins</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">custom_y_bins</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_assign_bins_quantiles</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">series</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Assigns quantile-based bins to a given pandas Series based on the specified number of bins.</span>
+
+<span class="sd">        This method applies a quantile-based binning approach to divide the data into discrete bins</span>
+<span class="sd">        as defined by the number of quantiles (`n_bins`). If distinct quantile bins cannot be formed</span>
+<span class="sd">        due to repetitive or identical values, NaN is returned for all entries in the series.</span>
+<span class="sd">        The bin labels are represented as floating-point values, which denote the corresponding</span>
+<span class="sd">        quantile percentiles.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            pd.Series: A pandas Series where each value is replaced by its corresponding bin label.</span>
+<span class="sd">                       If quantile bins cannot be formed, the output series contains NaN for all indices.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Use a consistent name for the series in warnings</span>
+        <span class="n">series_name</span> <span class="o">=</span> <span class="n">series</span><span class="o">.</span><span class="n">name</span> <span class="k">if</span> <span class="n">series</span><span class="o">.</span><span class="n">name</span> <span class="k">else</span> <span class="s1">&#39;Unnamed Series&#39;</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># First, determine bins to get actual number of bins and drop duplicates if needed</span>
+            <span class="n">_</span><span class="p">,</span> <span class="n">bins</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">qcut</span><span class="p">(</span><span class="n">series</span><span class="p">,</span> <span class="n">q</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_bins</span><span class="p">,</span> <span class="n">retbins</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">duplicates</span><span class="o">=</span><span class="s1">&#39;drop&#39;</span><span class="p">)</span>
+            <span class="n">actual_n_bins</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">bins</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+
+            <span class="k">if</span> <span class="n">actual_n_bins</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Warning: No distinct quantile bins formed for &#39;</span><span class="si">{</span><span class="n">series_name</span><span class="si">}</span><span class="s2">&#39;. &quot;</span>
+                      <span class="s2">&quot;All values might be identical. Returning NaN for bin labels.&quot;</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">series</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;BIN_</span><span class="si">{</span><span class="n">series_name</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+            <span class="c1"># Generate labels as percentiles (0, 10, 20... 90 for 10 bins)</span>
+            <span class="n">labels</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">i</span> <span class="o">*</span> <span class="p">(</span><span class="mi">100</span> <span class="o">/</span> <span class="n">actual_n_bins</span><span class="p">))</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">actual_n_bins</span><span class="p">)]</span>
+
+            <span class="c1"># Apply qcut with the determined labels</span>
+            <span class="n">binned_series</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">qcut</span><span class="p">(</span><span class="n">series</span><span class="p">,</span> <span class="n">q</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_bins</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="n">labels</span><span class="p">,</span>
+                                    <span class="n">duplicates</span><span class="o">=</span><span class="s1">&#39;drop&#39;</span><span class="p">,</span> <span class="n">retbins</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>  <span class="c1"># retbins=False as we already have bins</span>
+
+            <span class="c1"># Convert to float to handle potential NaNs more gracefully than int</span>
+            <span class="k">return</span> <span class="n">binned_series</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
+
+        <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Warning: Could not apply quantile binning to &#39;</span><span class="si">{</span><span class="n">series_name</span><span class="si">}</span><span class="s2">&#39;. Error: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">. &quot;</span>
+                  <span class="s2">&quot;This might happen if there are too many duplicate values preventing distinct quantiles. &quot;</span>
+                  <span class="s2">&quot;Returning NaN for bin labels.&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">series</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;BIN_</span><span class="si">{</span><span class="n">series_name</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;An unexpected error occurred during quantile binning for &#39;</span><span class="si">{</span><span class="n">series_name</span><span class="si">}</span><span class="s2">&#39;: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">. &quot;</span>
+                  <span class="s2">&quot;Returning NaN for bin labels.&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">series</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;BIN_</span><span class="si">{</span><span class="n">series_name</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_assign_bins_equal_width</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">series</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Assigns equal-width bins to the values in the given pandas Series and labels them with the lower</span>
+<span class="sd">        bound of the corresponding bin. If bin creation fails or no distinct bins are formed, returns NaN</span>
+<span class="sd">        values for bin labels.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            pd.Series: A new pandas Series containing the numeric bin labels corresponding to the lower</span>
+<span class="sd">            bounds of the bins. If an error occurs or no bins are created, returns a Series of NaN values.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">series_name</span> <span class="o">=</span> <span class="n">series</span><span class="o">.</span><span class="n">name</span> <span class="k">if</span> <span class="n">series</span><span class="o">.</span><span class="n">name</span> <span class="k">else</span> <span class="s1">&#39;Unnamed Series&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Calculate bins and labels</span>
+            <span class="c1"># pd.cut automatically handles cases where n_bins might be too high for the data range</span>
+            <span class="n">binned_series</span><span class="p">,</span> <span class="n">bins</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">cut</span><span class="p">(</span><span class="n">series</span><span class="p">,</span> <span class="n">bins</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_bins</span><span class="p">,</span> <span class="n">right</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                                         <span class="n">retbins</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">include_lowest</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">duplicates</span><span class="o">=</span><span class="s1">&#39;drop&#39;</span><span class="p">)</span>
+
+            <span class="n">actual_n_bins</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">bins</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+
+            <span class="k">if</span> <span class="n">actual_n_bins</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Warning: No distinct equal-width bins formed for &#39;</span><span class="si">{</span><span class="n">series_name</span><span class="si">}</span><span class="s2">&#39;. &quot;</span>
+                      <span class="s2">&quot;All values might be identical or range too small. Returning NaN for bin labels.&quot;</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">series</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;BIN_</span><span class="si">{</span><span class="n">series_name</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+            <span class="c1"># Use the lower bound of each interval as the label</span>
+            <span class="n">binned_series_numeric_labels</span> <span class="o">=</span> <span class="n">binned_series</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">left</span> <span class="k">if</span> <span class="n">pd</span><span class="o">.</span><span class="n">notna</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
+
+            <span class="k">return</span> <span class="n">binned_series_numeric_labels</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
+
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Warning: Could not apply equal-width binning to &#39;</span><span class="si">{</span><span class="n">series_name</span><span class="si">}</span><span class="s2">&#39;. Error: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">. &quot;</span>
+                  <span class="s2">&quot;Returning NaN for bin labels.&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">series</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;BIN_</span><span class="si">{</span><span class="n">series_name</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_assign_bins_custom</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">series</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">,</span> <span class="n">bins</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Assigns provided custom bins to a given pandas Series and returns a new Series with bin labels as</span>
+<span class="sd">        float values, which represent the lower bounds of the bins. If an error occurs during bin assignment,</span>
+<span class="sd">        it returns a Series with NaN values for the bin labels.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            series (pd.Series): Input data series for which custom binning is applied.</span>
+<span class="sd">            bins (np.ndarray): An array of numerical bin edges to be applied for binning. If desired,</span>
+<span class="sd">                the bins must cover the range of the series to avoid generating NaN values for series elements.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            pd.Series: A pandas Series with assigned bin labels represented as float values, based on</span>
+<span class="sd">            the lower bounds of the provided bins.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">series_name</span> <span class="o">=</span> <span class="n">series</span><span class="o">.</span><span class="n">name</span> <span class="k">if</span> <span class="n">series</span><span class="o">.</span><span class="n">name</span> <span class="k">else</span> <span class="s1">&#39;Unnamed Series&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Custom bins are already validated in __init__</span>
+            <span class="c1"># Create labels based on the lower bound of each bin</span>
+            <span class="n">labels</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">bins</span><span class="p">[</span><span class="n">i</span><span class="p">])</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">bins</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span>
+
+            <span class="c1"># Use pd.cut with custom bins</span>
+            <span class="c1"># Ensure custom bins cover the data range to avoid NaNs, though NaNs are handled if they appear.</span>
+            <span class="n">binned_series</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">cut</span><span class="p">(</span><span class="n">series</span><span class="p">,</span> <span class="n">bins</span><span class="o">=</span><span class="n">bins</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="n">labels</span><span class="p">,</span> <span class="n">right</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">include_lowest</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">binned_series</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Warning: Could not apply custom binning to &#39;</span><span class="si">{</span><span class="n">series_name</span><span class="si">}</span><span class="s2">&#39;. Error: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">. &quot;</span>
+                  <span class="sa">f</span><span class="s2">&quot;Returning NaN for bin labels.&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">series</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;BIN_</span><span class="si">{</span><span class="n">series_name</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_transform_and_pivot</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Transforms the input data by filtering, pivoting, and reformatting it into</span>
+<span class="sd">        wide and long aggregate DataFrames based on binning configuration. Handles</span>
+<span class="sd">        both custom and default binning types. Provides warnings if data is mostly</span>
+<span class="sd">        filtered out.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Drop rows where binning failed (NaNs in bin columns)</span>
+        <span class="n">initial_rows</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="o">.</span><span class="n">dropna</span><span class="p">(</span><span class="n">subset</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">x_bin_col_name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">y_bin_col_name</span><span class="p">],</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">initial_rows</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Info: Dropped </span><span class="si">{</span><span class="n">initial_rows</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="p">)</span><span class="si">}</span><span class="s2"> rows due to NaN values &quot;</span>
+                  <span class="sa">f</span><span class="s2">&quot;in &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">x_bin_col_name</span><span class="si">}</span><span class="s2">&#39; or &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">y_bin_col_name</span><span class="si">}</span><span class="s2">&#39; after binning.&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Warning: No data remaining after dropping rows with failed binning. &quot;</span>
+                  <span class="s2">&quot;Aggregated DataFrames will be empty.&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_df_agg_wide</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_df_agg_long</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">()</span>
+            <span class="k">return</span>
+
+        <span class="c1"># Create a combined bin identifier string</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="p">[</span><span class="s1">&#39;BIN_COMBINED_STR&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">x_bin_col_name</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span> <span class="o">+</span>
+                                             <span class="s2">&quot;+&quot;</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">y_bin_col_name</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">))</span>
+
+        <span class="c1"># Filter out bins that don&#39;t meet the minimum value requirement</span>
+        <span class="c1"># Use &#39;original_index&#39; for accurate counts per bin from the initial dataset</span>
+        <span class="n">bin_counts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s1">&#39;BIN_COMBINED_STR&#39;</span><span class="p">)[</span><span class="s1">&#39;INDEX&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">count</span><span class="p">()</span>
+        <span class="n">valid_bins</span> <span class="o">=</span> <span class="n">bin_counts</span><span class="p">[</span><span class="n">bin_counts</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">min_n_vals_per_bin</span><span class="p">]</span><span class="o">.</span><span class="n">index</span>
+
+        <span class="c1"># Apply the filter to keep only rows belonging to valid bins</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="p">[</span><span class="s1">&#39;BIN_COMBINED_STR&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">valid_bins</span><span class="p">)]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Warning: No data remaining after filtering for minimum values per bin. &quot;</span>
+                  <span class="s2">&quot;Aggregated DataFrames will be empty.&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_df_agg_wide</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_df_agg_long</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">()</span>
+            <span class="k">return</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_df_agg_wide</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">pivot_table</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_df_long</span><span class="p">,</span>
+                                           <span class="n">index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">y_bin_col_name</span><span class="p">,</span>  <span class="c1"># Rows</span>
+                                           <span class="n">columns</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">x_bin_col_name</span><span class="p">,</span>  <span class="c1"># Columns</span>
+                                           <span class="n">values</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">z_col_name</span><span class="p">,</span>  <span class="c1"># Values to aggregate</span>
+                                           <span class="n">aggfunc</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">aggfunc</span><span class="p">)</span>
+
+        <span class="c1"># If binning_type is &#39;custom&#39;, reindex to ensure all custom bins are present</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">binning_type</span> <span class="o">==</span> <span class="s1">&#39;custom&#39;</span><span class="p">:</span>
+            <span class="n">expected_x_labels</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">custom_x_bins</span><span class="p">[</span><span class="n">i</span><span class="p">])</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">custom_x_bins</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span>
+            <span class="n">expected_y_labels</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">custom_y_bins</span><span class="p">[</span><span class="n">i</span><span class="p">])</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">custom_y_bins</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span>
+
+            <span class="c1"># Reindex the wide DataFrame, filling missing bins with NaN</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_df_agg_wide</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_df_agg_wide</span><span class="o">.</span><span class="n">reindex</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="n">expected_y_labels</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="n">expected_x_labels</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">pd</span><span class="o">.</span><span class="n">api</span><span class="o">.</span><span class="n">types</span><span class="o">.</span><span class="n">is_numeric_dtype</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_df_agg_wide</span><span class="o">.</span><span class="n">index</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_df_agg_wide</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_df_agg_wide</span><span class="o">.</span><span class="n">sort_index</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">pd</span><span class="o">.</span><span class="n">api</span><span class="o">.</span><span class="n">types</span><span class="o">.</span><span class="n">is_numeric_dtype</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_df_agg_wide</span><span class="o">.</span><span class="n">columns</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_df_agg_wide</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_df_agg_wide</span><span class="o">.</span><span class="n">sort_index</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># Melt the DataFrame to long format for easier plotting/analysis</span>
+        <span class="n">df_agg_long_temp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_df_agg_wide</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
+
+        <span class="c1"># Identify value columns to melt, which are all columns except the y-bin column</span>
+        <span class="n">value_vars_for_melt</span> <span class="o">=</span> <span class="p">[</span><span class="n">col</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">df_agg_long_temp</span><span class="o">.</span><span class="n">columns</span> <span class="k">if</span> <span class="n">col</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">y_bin_col_name</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_df_agg_long</span> <span class="o">=</span> <span class="n">df_agg_long_temp</span><span class="o">.</span><span class="n">melt</span><span class="p">(</span><span class="n">id_vars</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">y_bin_col_name</span><span class="p">],</span>
+                                                  <span class="n">value_vars</span><span class="o">=</span><span class="n">value_vars_for_melt</span><span class="p">,</span>
+                                                  <span class="n">var_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">x_bin_col_name</span><span class="p">,</span>
+                                                  <span class="n">value_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">z_col_name</span><span class="p">)</span>
+
+        <span class="c1"># Ensure bin columns in the long format DataFrame are float</span>
+        <span class="c1"># This is important for consistent data types after melting, especially if some bins might be NaN originally.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_df_agg_long</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">x_bin_col_name</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_df_agg_long</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">x_bin_col_name</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_df_agg_long</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">y_bin_col_name</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_df_agg_long</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">y_bin_col_name</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
+
+        <span class="c1"># Only drop NaNs for non-custom binning in the long format to retain empty custom bins</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">binning_type</span> <span class="o">!=</span> <span class="s1">&#39;custom&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_df_agg_long</span><span class="o">.</span><span class="n">dropna</span><span class="p">(</span><span class="n">subset</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">z_col_name</span><span class="p">],</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+
+</pre></div>
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By Lukas Hörtnagl
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2025, Lukas Hörtnagl.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

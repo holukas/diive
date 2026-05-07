@@ -1,0 +1,1501 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="diive.core.dfun.frames" href="diive.core.dfun.frames.html"><link rel="prev" title="diive.core.plotting" href="diive.core.plotting.html">
+
+    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>diive.core.times.times - DIIVE</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=fd6457a4" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  --color-brand-primary: #0066cc;
+  --color-brand-content: #0066cc;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #4da6ff;
+  --color-brand-content: #4da6ff;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #4da6ff;
+  --color-brand-content: #4da6ff;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../index.html"><div class="brand">DIIVE</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../index.html">
+  
+  <span class="sidebar-brand-text">DIIVE</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1 current has-children"><a class="reference internal" href="../api_reference.html">API Reference</a><input aria-label="Toggle navigation of API Reference" checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="diive.core.ml.feature_engineer.html">diive.core.ml.feature_engineer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.core.ml.common.html">diive.core.ml.common</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.core.ml.optimization.html">diive.core.ml.optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.core.plotting.html">diive.core.plotting</a></li>
+<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">diive.core.times.times</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.core.dfun.frames.html">diive.core.dfun.frames</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.pkgs.gapfilling.randomforest_ts.html">diive.pkgs.gapfilling.randomforest_ts</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.pkgs.gapfilling.xgboost_ts.html">diive.pkgs.gapfilling.xgboost_ts</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.pkgs.gapfilling.mds.html">diive.pkgs.gapfilling.mds</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.pkgs.outlierdetection.absolutelimits.html">diive.pkgs.outlierdetection.absolutelimits</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.pkgs.outlierdetection.hampel.html">diive.pkgs.outlierdetection.hampel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.pkgs.outlierdetection.localsd.html">diive.pkgs.outlierdetection.localsd</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.pkgs.outlierdetection.zscore.html">diive.pkgs.outlierdetection.zscore</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.pkgs.outlierdetection.lof.html">diive.pkgs.outlierdetection.lof</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.pkgs.outlierdetection.stepwiseoutlierdetection.html">diive.pkgs.outlierdetection.stepwiseoutlierdetection</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.pkgs.analyses.correlation.html">diive.pkgs.analyses.correlation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.pkgs.analyses.decoupling.html">diive.pkgs.analyses.decoupling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.pkgs.createvar.laggedvariants.html">diive.pkgs.createvar.laggedvariants</a></li>
+<li class="toctree-l2"><a class="reference internal" href="diive.configs.exampledata.html">diive.configs.exampledata</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../contributing.html">Contributing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../faq.html">Frequently Asked Questions</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="../_sources/_autosummary/diive.core.times.times.rst.txt" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div>
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="module-diive.core.times.times">
+<span id="diive-core-times-times"></span><h1>diive.core.times.times<a class="headerlink" href="#module-diive.core.times.times" title="Link to this heading">¶</a></h1>
+<p class="rubric">Functions</p>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#diive.core.times.times.add_timezone_info" title="diive.core.times.times.add_timezone_info"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_timezone_info</span></code></a>(timestamp_index, ...)</p></td>
+<td><p>Add timezone info to timestamp index</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#diive.core.times.times.build_timestamp_range" title="diive.core.times.times.build_timestamp_range"><code class="xref py py-obj docutils literal notranslate"><span class="pre">build_timestamp_range</span></code></a>(start_dt, df_len, freq)</p></td>
+<td><p>Builds timestamp column starting with start date and</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#diive.core.times.times.calc_doy_timefraction" title="diive.core.times.times.calc_doy_timefraction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">calc_doy_timefraction</span></code></a>(input_series)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#diive.core.times.times.calc_true_resolution" title="diive.core.times.times.calc_true_resolution"><code class="xref py py-obj docutils literal notranslate"><span class="pre">calc_true_resolution</span></code></a>(num_records, ...)</p></td>
+<td><p>Calculate the true resolution of the raw data</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#diive.core.times.times.continuous_timestamp_freq" title="diive.core.times.times.continuous_timestamp_freq"><code class="xref py py-obj docutils literal notranslate"><span class="pre">continuous_timestamp_freq</span></code></a>(data, freq[, verbose])</p></td>
+<td><p>Generate continuous timestamp of given frequency between first and last date of index</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#diive.core.times.times.convert_series_timestamp_to_middle" title="diive.core.times.times.convert_series_timestamp_to_middle"><code class="xref py py-obj docutils literal notranslate"><span class="pre">convert_series_timestamp_to_middle</span></code></a>(data[, ...])</p></td>
+<td><p>Convert the timestamp index to show middle of averaging period</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#diive.core.times.times.convert_timestamp_to_datetime" title="diive.core.times.times.convert_timestamp_to_datetime"><code class="xref py py-obj docutils literal notranslate"><span class="pre">convert_timestamp_to_datetime</span></code></a>(data[, verbose])</p></td>
+<td><p>Convert timestamp index to datetime format</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#diive.core.times.times.create_timestamp" title="diive.core.times.times.create_timestamp"><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_timestamp</span></code></a>(df, file_start, ...)</p></td>
+<td><p>Calculate the timestamp for each record in a dataframe.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#diive.core.times.times.current_date_str_condensed" title="diive.core.times.times.current_date_str_condensed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">current_date_str_condensed</span></code></a>()</p></td>
+<td><p>Current date as string</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#diive.core.times.times.current_datetime" title="diive.core.times.times.current_datetime"><code class="xref py py-obj docutils literal notranslate"><span class="pre">current_datetime</span></code></a>([str_format])</p></td>
+<td><p>Current datetime as datetime and string</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#diive.core.times.times.current_datetime_str_condensed" title="diive.core.times.times.current_datetime_str_condensed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">current_datetime_str_condensed</span></code></a>()</p></td>
+<td><p>Current datetime as string</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#diive.core.times.times.current_time_microseconds_str" title="diive.core.times.times.current_time_microseconds_str"><code class="xref py py-obj docutils literal notranslate"><span class="pre">current_time_microseconds_str</span></code></a>()</p></td>
+<td><p>Current time including microseconds as string</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#diive.core.times.times.current_unixtime" title="diive.core.times.times.current_unixtime"><code class="xref py py-obj docutils literal notranslate"><span class="pre">current_unixtime</span></code></a>()</p></td>
+<td><p>Current time as integer number of nanoseconds since the epoch</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#diive.core.times.times.detect_freq_groups" title="diive.core.times.times.detect_freq_groups"><code class="xref py py-obj docutils literal notranslate"><span class="pre">detect_freq_groups</span></code></a>(index)</p></td>
+<td><p>Analyze timestamp for records where the time resolution is absolutely certain</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#diive.core.times.times.doy_cumulatives_per_year" title="diive.core.times.times.doy_cumulatives_per_year"><code class="xref py py-obj docutils literal notranslate"><span class="pre">doy_cumulatives_per_year</span></code></a>(series)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#diive.core.times.times.doy_mean_cumulative" title="diive.core.times.times.doy_mean_cumulative"><code class="xref py py-obj docutils literal notranslate"><span class="pre">doy_mean_cumulative</span></code></a>(cumulatives_per_year_df)</p></td>
+<td><p>Calculate mean cumulative values by day-of-year with confidence intervals.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#diive.core.times.times.format_timestamp_to_fluxnet_format" title="diive.core.times.times.format_timestamp_to_fluxnet_format"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_timestamp_to_fluxnet_format</span></code></a>(df, ...)</p></td>
+<td><p>Apply FLUXNET timestamp format (YYYYMMDDhhmm) to timestamp columns (not index).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#diive.core.times.times.generate_freq_timedelta_from_freq" title="diive.core.times.times.generate_freq_timedelta_from_freq"><code class="xref py py-obj docutils literal notranslate"><span class="pre">generate_freq_timedelta_from_freq</span></code></a>(...)</p></td>
+<td><p>Generate timedelta with given duration and frequency</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#diive.core.times.times.insert_season" title="diive.core.times.times.insert_season"><code class="xref py py-obj docutils literal notranslate"><span class="pre">insert_season</span></code></a>(timestamp[, spring, summer, ...])</p></td>
+<td><p>Inserts seasonal labels into a pandas Timestamp index based on a customizable mapping of months to seasons.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#diive.core.times.times.insert_timestamp" title="diive.core.times.times.insert_timestamp"><code class="xref py py-obj docutils literal notranslate"><span class="pre">insert_timestamp</span></code></a>(data, convention[, ...])</p></td>
+<td><p>Insert timestamp column that shows the START, END or MIDDLE time of the averaging interval</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#diive.core.times.times.keep_years" title="diive.core.times.times.keep_years"><code class="xref py py-obj docutils literal notranslate"><span class="pre">keep_years</span></code></a>(data[, start_year, end_year])</p></td>
+<td><p>Keep data between start and end year</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#diive.core.times.times.make_run_id" title="diive.core.times.times.make_run_id"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_run_id</span></code></a>([prefix])</p></td>
+<td><p>Create string identifier that includes current datetime</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#diive.core.times.times.remove_after_date" title="diive.core.times.times.remove_after_date"><code class="xref py py-obj docutils literal notranslate"><span class="pre">remove_after_date</span></code></a>(data, yearly_end_date)</p></td>
+<td><p>Remove data after specifified date</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#diive.core.times.times.remove_index_duplicates" title="diive.core.times.times.remove_index_duplicates"><code class="xref py py-obj docutils literal notranslate"><span class="pre">remove_index_duplicates</span></code></a>(data[, keep, verbose])</p></td>
+<td><p>Remove index duplicates</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#diive.core.times.times.remove_rows_nat" title="diive.core.times.times.remove_rows_nat"><code class="xref py py-obj docutils literal notranslate"><span class="pre">remove_rows_nat</span></code></a>(df[, verbose])</p></td>
+<td><p>Remove rows that do not have a timestamp (NaT).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#diive.core.times.times.sort_timestamp_ascending" title="diive.core.times.times.sort_timestamp_ascending"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sort_timestamp_ascending</span></code></a>(data[, verbose])</p></td>
+<td><p>Sort timestamp in ascending order</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#diive.core.times.times.timestamp_infer_freq_from_fullset" title="diive.core.times.times.timestamp_infer_freq_from_fullset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">timestamp_infer_freq_from_fullset</span></code></a>(timestamp_ix)</p></td>
+<td><p>Infer data frequency from all timestamps in time series index</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#diive.core.times.times.timestamp_infer_freq_from_timedelta" title="diive.core.times.times.timestamp_infer_freq_from_timedelta"><code class="xref py py-obj docutils literal notranslate"><span class="pre">timestamp_infer_freq_from_timedelta</span></code></a>(timestamp_ix)</p></td>
+<td><p>Check DataFrame index for frequency by subtracting successive timestamps from each other and then checking the most frequent difference</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#diive.core.times.times.timestamp_infer_freq_progressively" title="diive.core.times.times.timestamp_infer_freq_progressively"><code class="xref py py-obj docutils literal notranslate"><span class="pre">timestamp_infer_freq_progressively</span></code></a>(timestamp_ix)</p></td>
+<td><p>Try to infer freq from first x and last x rows of data, if these match we can be relatively certain that the file has the same freq from start to finish.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#diive.core.times.times.validate_timestamp_naming" title="diive.core.times.times.validate_timestamp_naming"><code class="xref py py-obj docutils literal notranslate"><span class="pre">validate_timestamp_naming</span></code></a>(data[, verbose])</p></td>
+<td><p>Check if timestamp is correctly named</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#diive.core.times.times.vectorize_timestamps" title="diive.core.times.times.vectorize_timestamps"><code class="xref py py-obj docutils literal notranslate"><span class="pre">vectorize_timestamps</span></code></a>(df[, year, season, ...])</p></td>
+<td><p>Vectorizes a DatetimeIndex into linear and cyclical (sin/cos) numerical features.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p class="rubric">Classes</p>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#diive.core.times.times.DetectFrequency" title="diive.core.times.times.DetectFrequency"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DetectFrequency</span></code></a>(index[, verbose])</p></td>
+<td><p>Detect data time resolution from time series index</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#diive.core.times.times.TimestampSanitizer" title="diive.core.times.times.TimestampSanitizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TimestampSanitizer</span></code></a>(data[, ...])</p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.format_timestamp_to_fluxnet_format">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">format_timestamp_to_fluxnet_format</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timestamp_col</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#format_timestamp_to_fluxnet_format"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.format_timestamp_to_fluxnet_format" title="Link to this definition">¶</a></dt>
+<dd><p>Apply FLUXNET timestamp format (YYYYMMDDhhmm) to timestamp columns (not index).</p>
+<p>Timestamp must be available as data column.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.Series.html#pandas.Series" title="(in pandas v3.0.2)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Series</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>df</strong> (<em>DataFrame</em>)</p></li>
+<li><p><strong>timestamp_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.detect_freq_groups">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">detect_freq_groups</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#detect_freq_groups"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.detect_freq_groups" title="Link to this definition">¶</a></dt>
+<dd><p>Analyze timestamp for records where the time resolution is absolutely certain</p>
+<p>This function calculates the timedeltas (the time differences) between the current
+timestamp and the timestamp of the record before and after. For data records where
+the two differences are the same (in absolute terms) have an absolutely certain
+timestamp.</p>
+<p>The determined time resolution of each record is described in the newly created column
+‘FREQ_AUTO_SEC’ in terms of seconds. The column is added to <em>df</em> and can be used to
+access the different time resolution groups separately during later processing.</p>
+<p>Example:</p>
+<blockquote>
+<div><p>TIMESTAMP_CURRENT   TIMESTAMP_PREV      TIMESTAMP_NEXT           DELTA_PREV  DELTA_NEXT  DELTA_DIFF</p>
+</div></blockquote>
+<p>TIMESTAMP_CURRENT
+2020-10-01 00:20:00 2020-10-01 00:20:00 2020-10-01 00:10:00 2020-10-01 00:30:00      -600.0       600.0         0.0
+2020-10-01 00:30:00 2020-10-01 00:30:00 2020-10-01 00:20:00 2020-10-01 00:40:00      -600.0       600.0         0.0
+2020-10-01 00:40:00 2020-10-01 00:40:00 2020-10-01 00:30:00 2020-10-01 00:50:00      -600.0       600.0         0.0
+…                                 …                 …                 …         …         …         …
+2021-09-30 23:57:00 2021-09-30 23:57:00 2021-09-30 23:56:00 2021-09-30 23:58:00       -60.0        60.0         0.0
+2021-09-30 23:58:00 2021-09-30 23:58:00 2021-09-30 23:57:00 2021-09-30 23:59:00       -60.0        60.0         0.0
+2021-09-30 23:59:00 2021-09-30 23:59:00 2021-09-30 23:58:00 2021-10-01 00:00:00       -60.0        60.0         0.0</p>
+<p>The example shows a dataset that starts with 10MIN time resolution and ends with
+1MIN time resolution. For each record, the previous and next timestamp are detected
+and the delta between these two and the current timestamp are calculated. The sum
+of DELTA_PREV and DELTA_NEXT will yield DELTA_DIFF = 0 if the time differences
+were the same. DELTA_DIFF = 0 therefore describes locations where the time resolution
+is certain.</p>
+<p>For 10MIN time records, the ‘FREQ_AUTO_SEC’ will be set to ‘600’, for 1MIN records
+to ‘60’. The first and last records of each frequency group are added during processing,
+e.g., the timestamp ‘2020-10-01 00:10:00’ is the first timestamp for the ‘600’ group
+although it is not part of the main index (main index starts one record later with
+‘2020-10-01 00:20:00’ because ‘2020-10-01 00:10:00’ does not have a value for
+TIMESTAMP_PREV).</p>
+<dl class="simple">
+<dt>Note:</dt><dd><p>Sometimes there are transition periods between one time resolution and another.
+For example, when the time resolution changes from 10MIN to 1MIN, there might be
+several records in between that have neither 10MIN nor 1MIN, but e.g. 7S or 29MIN etc.
+For these transitional records, the time resolution is not clear and therefore they
+are discarded. This typically affects only a handful of records during the transition
+period(s).</p>
+</dd>
+<dt>Args:</dt><dd><p>index: Time series dataframe</p>
+</dd>
+<dt>Returns:</dt><dd><p>df: Time series dataframe with the new column ‘FREQ_AUTO_SEC’ added</p>
+</dd>
+</dl>
+<p>:: Added in v0.43.0</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.Series.html#pandas.Series" title="(in pandas v3.0.2)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Series</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>index</strong> (<em>DatetimeIndex</em>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="diive.core.times.times.TimestampSanitizer">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">TimestampSanitizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_middle_timestamp</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">validate_naming</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">convert_to_datetime</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">remove_index_nat</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sort_ascending</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">remove_duplicates</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">regularize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nominal_freq</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#TimestampSanitizer"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.TimestampSanitizer" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> (<em>Series</em>)</p></li>
+<li><p><strong>output_middle_timestamp</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+<li><p><strong>validate_naming</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+<li><p><strong>convert_to_datetime</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+<li><p><strong>remove_index_nat</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+<li><p><strong>sort_ascending</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+<li><p><strong>remove_duplicates</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+<li><p><strong>regularize</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+<li><p><strong>nominal_freq</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
+<li><p><strong>verbose</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="diive.core.times.times.TimestampSanitizer.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_middle_timestamp</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">validate_naming</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">convert_to_datetime</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">remove_index_nat</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sort_ascending</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">remove_duplicates</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">regularize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nominal_freq</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#TimestampSanitizer.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.TimestampSanitizer.__init__" title="Link to this definition">¶</a></dt>
+<dd><p>Validate and prepare timestamps for further processing</p>
+<p>Performs various checks on timestamps, in this order:
+- Validate timestamp naming
+- Convert timestamp to datetime
+- Sort timestamp ascending
+- Remove duplicates from timestamp index
+- Detect time resolution from timestamp
+- Compare nominal (expected) frequency with detected frequency (optional,</p>
+<blockquote>
+<div><p>only if <em>nominal_freq</em> is given).</p>
+</div></blockquote>
+<ul class="simple">
+<li><p>Make timestamp continuous without date gaps</p></li>
+<li><p>Convert timestamp to show the middle of the averaging period (optional)</p></li>
+</ul>
+<p>The <cite>TimestampSanitizer</cite> class acts as a wrapper to combine various
+timestamp functions.</p>
+<dl>
+<dt>Args:</dt><dd><p>data:
+output_middle_timestamp: Convert the timestamp index to show middle of averaging period
+validate_naming: Check if timestamp is correctly named, allowed names are ‘TIMESTAMP_END’,</p>
+<blockquote>
+<div><p>‘TIMESTAMP_START’, and ‘TIMESTAMP_MIDDLE’.</p>
+</div></blockquote>
+<p>convert_to_datetime: Convert timestamp index to datetime format
+remove_index_nat: Remove rows that do not have a timestamp index (NaT)
+sort_ascending: Sort timestamp in ascending order
+remove_duplicates: Remove duplicates in the timestamp index (keep last)
+regularize: Generate continuous timestamp of given frequency between first and last date of index
+nominal_freq: Expected time resolution of <em>data</em> timestamp index.</p>
+<blockquote>
+<div><p>If given, the inferred frequency is compared to the nominal frequency. Both must
+be equal, otherwise raises ValueError. See pandas DateOffset objects for allowed abbreviations.
+Examples:</p>
+<blockquote>
+<div><p>’10s’, ‘5s’ etc. for seconds, but ‘s’ for 1-second time resolution (no number)
+‘30min’, ‘5min’ etc. for minutes, but ‘min’ for 1-minute time resolution (no number)
+‘1h’, ‘3h’ etc. for hours, but ‘h’ for 1-hour time resolution (no number)</p>
+</div></blockquote>
+</div></blockquote>
+<p>verbose: Generate more text output if <em>True</em></p>
+</dd>
+</dl>
+<p>For more info please refer to the docstring of the respective function.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>data: Data with timestamp index
+output_middle_timestamp:</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> (<em>Series</em>)</p></li>
+<li><p><strong>output_middle_timestamp</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+<li><p><strong>validate_naming</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+<li><p><strong>convert_to_datetime</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+<li><p><strong>remove_index_nat</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+<li><p><strong>sort_ascending</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+<li><p><strong>remove_duplicates</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+<li><p><strong>regularize</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+<li><p><strong>nominal_freq</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
+<li><p><strong>verbose</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="diive.core.times.times.TimestampSanitizer.get">
+<span class="sig-name descname"><span class="pre">get</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#TimestampSanitizer.get"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.TimestampSanitizer.get" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.Series.html#pandas.Series" title="(in pandas v3.0.2)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Series</span></code></a></span></p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.sort_timestamp_ascending">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">sort_timestamp_ascending</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#sort_timestamp_ascending"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.sort_timestamp_ascending" title="Link to this definition">¶</a></dt>
+<dd><p>Sort timestamp in ascending order</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.Series.html#pandas.Series" title="(in pandas v3.0.2)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Series</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>data</strong> (<em>Series</em>)</p></li>
+<li><p><strong>verbose</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.remove_rows_nat">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">remove_rows_nat</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#remove_rows_nat"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.remove_rows_nat" title="Link to this definition">¶</a></dt>
+<dd><p>Remove rows that do not have a timestamp (NaT).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.2)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataFrame</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>df</strong> (<em>DataFrame</em>)</p></li>
+<li><p><strong>verbose</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.convert_timestamp_to_datetime">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">convert_timestamp_to_datetime</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#convert_timestamp_to_datetime"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.convert_timestamp_to_datetime" title="Link to this definition">¶</a></dt>
+<dd><p>Convert timestamp index to datetime format</p>
+<p>This acts as additional check to make sure that the timestamp
+index is in the required datetime format.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.Series.html#pandas.Series" title="(in pandas v3.0.2)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Series</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>data</strong> (<em>Series</em>)</p></li>
+<li><p><strong>verbose</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="simple">
+<dt>Args:</dt><dd><p>data: Data with timestamp index</p>
+</dd>
+<dt>Returns:</dt><dd><p>data with confirmed datetime index</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.validate_timestamp_naming">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">validate_timestamp_naming</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#validate_timestamp_naming"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.validate_timestamp_naming" title="Link to this definition">¶</a></dt>
+<dd><p>Check if timestamp is correctly named</p>
+<p>This check is done to make sure that the timestamp gives specific
+information if it refers to the start, middle or end of the averaging
+period.</p>
+<p>Allowed names are ‘TIMESTAMP_END’, ‘TIMESTAMP_START’, and ‘TIMESTAMP_MIDDLE’</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>data</strong> (<em>Series</em>)</p></li>
+<li><p><strong>verbose</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="simple">
+<dt>Args:</dt><dd><p>data: Data with timestamp index</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.current_unixtime">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">current_unixtime</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#current_unixtime"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.current_unixtime" title="Link to this definition">¶</a></dt>
+<dd><p>Current time as integer number of nanoseconds since the epoch</p>
+<ul class="simple">
+<li><dl class="simple">
+<dt>Example notebook available in:</dt><dd><p>notebooks/TimeFunctions/times.ipynb</p>
+</dd>
+</dl>
+</li>
+</ul>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a></span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.current_datetime">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">current_datetime</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">str_format</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'%Y-%m-%d</span> <span class="pre">%H:%M:%S'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#current_datetime"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.current_datetime" title="Link to this definition">¶</a></dt>
+<dd><p>Current datetime as datetime and string</p>
+<ul class="simple">
+<li><dl class="simple">
+<dt>Example notebook available in:</dt><dd><p>notebooks/TimeFunctions/times.ipynb</p>
+</dd>
+</dl>
+</li>
+</ul>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tuple</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/datetime.html#datetime.datetime" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">datetime</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>]</span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>str_format</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.current_date_str_condensed">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">current_date_str_condensed</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#current_date_str_condensed"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.current_date_str_condensed" title="Link to this definition">¶</a></dt>
+<dd><p>Current date as string</p>
+<ul class="simple">
+<li><dl class="simple">
+<dt>Example notebook available in:</dt><dd><ul>
+<li></li>
+</ul>
+</dd>
+</dl>
+</li>
+</ul>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.current_datetime_str_condensed">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">current_datetime_str_condensed</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#current_datetime_str_condensed"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.current_datetime_str_condensed" title="Link to this definition">¶</a></dt>
+<dd><p>Current datetime as string</p>
+<ul class="simple">
+<li><dl class="simple">
+<dt>Example notebook available in:</dt><dd><p>notebooks/TimeFunctions/times.ipynb</p>
+</dd>
+</dl>
+</li>
+</ul>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.current_time_microseconds_str">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">current_time_microseconds_str</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#current_time_microseconds_str"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.current_time_microseconds_str" title="Link to this definition">¶</a></dt>
+<dd><p>Current time including microseconds as string</p>
+<ul class="simple">
+<li><dl class="simple">
+<dt>Example notebook available in:</dt><dd><p>notebooks/TimeFunctions/times.ipynb</p>
+</dd>
+</dl>
+</li>
+</ul>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.make_run_id">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">make_run_id</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#make_run_id"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.make_run_id" title="Link to this definition">¶</a></dt>
+<dd><p>Create string identifier that includes current datetime</p>
+<ul class="simple">
+<li><dl class="simple">
+<dt>Example notebook available in:</dt><dd><p>notebooks/TimeFunctions/times.ipynb</p>
+</dd>
+</dl>
+</li>
+</ul>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>prefix</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.generate_freq_timedelta_from_freq">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">generate_freq_timedelta_from_freq</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">to_duration</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">to_freq</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#generate_freq_timedelta_from_freq"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.generate_freq_timedelta_from_freq" title="Link to this definition">¶</a></dt>
+<dd><p>Generate timedelta with given duration and frequency</p>
+<p>Does not really work with M or Y frequency b/c of their different number of days,
+e.g. August 31 days but September has 30 days.</p>
+<p>The Timedelta can be directly used in operations, e.g. when one single timestamp
+entry is available and it is needed to calculate the previous timestamp. With the
+Timedelta, the previous timestamp can be calculated by simply subtracting the
+Timedelta from the available timestamp.</p>
+<dl class="simple">
+<dt>Example:</dt><dd><p>&gt;&gt; to_duration = 1
+&gt;&gt; to_freq = ‘D’
+&gt;&gt; pd.to_timedelta(to_duration, unit=to_freq)
+Timedelta(‘1 days 00:00:00’)</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>to_duration</strong> – int</p></li>
+<li><p><strong>to_freq</strong> – pandas frequency string
+see here for options:
+<a class="reference external" href="https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#dateoffset-objects">https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#dateoffset-objects</a></p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Timedelta</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.build_timestamp_range">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">build_timestamp_range</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">start_dt</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">df_len</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">freq</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#build_timestamp_range"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.build_timestamp_range" title="Link to this definition">¶</a></dt>
+<dd><dl class="simple">
+<dt>Builds timestamp column starting with start date and</dt><dd><p>the given frequency.</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>df_len</strong> – int (number of rows)</p></li>
+<li><p><strong>freq</strong> – pandas freq string (e.g. ‘1s’ for 1 second steps)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.vectorize_timestamps">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">vectorize_timestamps</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">year</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">season</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">month</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">week</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">doy</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hour</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">txt</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#vectorize_timestamps"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.vectorize_timestamps" title="Link to this definition">¶</a></dt>
+<dd><p>Vectorizes a DatetimeIndex into linear and cyclical (sin/cos) numerical features.</p>
+<p>This function “vectorizes” time by mapping periodic date components (like month or
+hour) into 2D space using sine and cosine transformations. This ensures that
+cyclical proximity (e.g., December and January, or 23:00 and 00:00) is preserved
+geometrically for machine learning models.</p>
+<p>Kudos:
+- <a class="reference external" href="https://datascience.stackexchange.com/questions/60951/is-it-necessary-to-convert-labels-in-string-to-integer-for-scikit-learn-and-xgbo">https://datascience.stackexchange.com/questions/60951/is-it-necessary-to-convert-labels-in-string-to-integer-for-scikit-learn-and-xgbo</a>
+- <a class="reference external" href="https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.OneHotEncoder.html">https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.OneHotEncoder.html</a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.2)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataFrame</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>year</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+<li><p><strong>season</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+<li><p><strong>month</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+<li><p><strong>week</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+<li><p><strong>doy</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+<li><p><strong>hour</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+<li><p><strong>txt</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
+<li><p><strong>verbose</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="simple">
+<dt>Args:</dt><dd><p>df (DataFrame): Input DataFrame with a DatetimeIndex.
+year (bool): Add linear year column.
+season (bool): Add season (1-4) and sin/cos columns.
+month (bool): Add month (1-12) and sin/cos columns.
+week (bool): Add week (1-53) and sin/cos columns.
+doy (bool): Add day of year (1-366) and sin/cos columns.
+hour (bool): Add hour (0-23) and sin/cos columns.
+txt (str): Optional suffix text for the verbose print statement.
+verbose (int): If &gt; 0, prints the list of added columns.</p>
+</dd>
+<dt>Returns:</dt><dd><p>DataFrame: A copy of the dataframe with the new columns appended.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.insert_season">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">insert_season</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timestamp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">spring</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">summer</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">autumn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">winter</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#insert_season"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.insert_season" title="Link to this definition">¶</a></dt>
+<dd><p>Inserts seasonal labels into a pandas Timestamp index based on a customizable mapping
+of months to seasons. The function allows for flexible assignment of months to seasons
+and verifies robustness against overlapping or incomplete season definitions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">Index</span></code></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>timestamp</strong> (<em>DatetimeIndex</em>)</p></li>
+<li><p><strong>spring</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.14)"><em>List</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>] </em><em>| </em><em>None</em>)</p></li>
+<li><p><strong>summer</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.14)"><em>List</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>] </em><em>| </em><em>None</em>)</p></li>
+<li><p><strong>autumn</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.14)"><em>List</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>] </em><em>| </em><em>None</em>)</p></li>
+<li><p><strong>winter</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.14)"><em>List</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>] </em><em>| </em><em>None</em>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="simple">
+<dt>Args:</dt><dd><dl class="simple">
+<dt>timestamp (DatetimeIndex): The pandas DatetimeIndex for which seasonal labels</dt><dd><p>are assigned based on the provided mapping.</p>
+</dd>
+<dt>spring (Optional[List[int]]): A list of month numbers (1 to 12) defining spring.</dt><dd><p>Defaults to a predefined season map if not provided.</p>
+</dd>
+<dt>summer (Optional[List[int]]): A list of month numbers (1 to 12) defining summer.</dt><dd><p>Defaults to a predefined season map if not provided.</p>
+</dd>
+<dt>autumn (Optional[List[int]]): A list of month numbers (1 to 12) defining autumn.</dt><dd><p>Defaults to a predefined season map if not provided.</p>
+</dd>
+<dt>winter (Optional[List[int]]): A list of month numbers (1 to 12) defining winter.</dt><dd><p>Defaults to a predefined season map if not provided.</p>
+</dd>
+</dl>
+</dd>
+<dt>Returns:</dt><dd><dl class="simple">
+<dt>Index: A pandas Index object with seasonal labels (as nullable integer dtype)</dt><dd><p>corresponding to the input DatetimeIndex. NaN values are returned for months
+not mapped to any season.</p>
+</dd>
+</dl>
+</dd>
+<dt>Raises:</dt><dd><dl class="simple">
+<dt>ValueError: If a month is assigned to multiple seasons, resulting in overlapping</dt><dd><p>definitions.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="diive.core.times.times.DetectFrequency">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">DetectFrequency</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#DetectFrequency"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.DetectFrequency" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Detect data time resolution from time series index</p>
+<ul class="simple">
+<li><dl class="simple">
+<dt>Example notebook available in:</dt><dd><p>notebooks/TimeStamps/Detect_time_resolution.ipynb</p>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt>Unittest:</dt><dd><p>test_timestamps.TestTimestamps</p>
+</dd>
+</dl>
+</li>
+</ul>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>index</strong> (<em>DatetimeIndex</em>)</p></li>
+<li><p><strong>verbose</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="diive.core.times.times.DetectFrequency.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#DetectFrequency.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.DetectFrequency.__init__" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>index</strong> (<em>DatetimeIndex</em>)</p></li>
+<li><p><strong>verbose</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="diive.core.times.times.DetectFrequency.get">
+<span class="sig-name descname"><span class="pre">get</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#DetectFrequency.get"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.DetectFrequency.get" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></span></p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.timestamp_infer_freq_progressively">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">timestamp_infer_freq_progressively</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timestamp_ix</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#timestamp_infer_freq_progressively"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.timestamp_infer_freq_progressively" title="Link to this definition">¶</a></dt>
+<dd><p>Try to infer freq from first x and last x rows of data, if these
+match we can be relatively certain that the file has the same freq
+from start to finish.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tuple</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>timestamp_ix</strong> (<em>DatetimeIndex</em>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.timestamp_infer_freq_from_fullset">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">timestamp_infer_freq_from_fullset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timestamp_ix</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#timestamp_infer_freq_from_fullset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.timestamp_infer_freq_from_fullset" title="Link to this definition">¶</a></dt>
+<dd><p>Infer data frequency from all timestamps in time series index</p>
+<p>Minimum 10 values are required in timeseries index.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tuple</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>timestamp_ix</strong> (<em>DatetimeIndex</em>)</p>
+</dd>
+</dl>
+<dl class="simple">
+<dt>Args:</dt><dd><p>timestamp_ix: Timestamp index</p>
+</dd>
+<dt>Returns:</dt><dd><p>Frequency string, e.g. ‘10T’ for 10-minute time resolution</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.timestamp_infer_freq_from_timedelta">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">timestamp_infer_freq_from_timedelta</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timestamp_ix</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#timestamp_infer_freq_from_timedelta"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.timestamp_infer_freq_from_timedelta" title="Link to this definition">¶</a></dt>
+<dd><p>Check DataFrame index for frequency by subtracting successive timestamps from each other
+and then checking the most frequent difference</p>
+<ul class="simple">
+<li><p><a class="reference external" href="https://stackoverflow.com/questions/16777570/calculate-time-difference-between-pandas-dataframe-indices">https://stackoverflow.com/questions/16777570/calculate-time-difference-between-pandas-dataframe-indices</a></p></li>
+<li><p><a class="reference external" href="https://stackoverflow.com/questions/31469811/convert-pandas-freq-string-to-timedelta">https://stackoverflow.com/questions/31469811/convert-pandas-freq-string-to-timedelta</a></p></li>
+</ul>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tuple</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>timestamp_ix</strong> (<em>DatetimeIndex</em>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.remove_index_duplicates">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">remove_index_duplicates</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'last'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#remove_index_duplicates"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.remove_index_duplicates" title="Link to this definition">¶</a></dt>
+<dd><p>Remove index duplicates</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.Series.html#pandas.Series" title="(in pandas v3.0.2)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Series</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>data</strong> (<em>Series</em>)</p></li>
+<li><p><strong>keep</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><em>Literal</em></a><em>[</em><em>'first'</em><em>, </em><em>'last'</em><em>, </em><em>False</em><em>]</em>)</p></li>
+<li><p><strong>verbose</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.continuous_timestamp_freq">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">continuous_timestamp_freq</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">freq</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#continuous_timestamp_freq"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.continuous_timestamp_freq" title="Link to this definition">¶</a></dt>
+<dd><p>Generate continuous timestamp of given frequency between first and last date of index</p>
+<p>This makes df continuous w/o date gaps but w/ data gaps at filled-in timestamps.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.Series.html#pandas.Series" title="(in pandas v3.0.2)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Series</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>data</strong> (<em>Series</em>)</p></li>
+<li><p><strong>freq</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
+<li><p><strong>verbose</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.insert_timestamp">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">insert_timestamp</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">convention</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">insert_as_first_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">set_as_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#insert_timestamp"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.insert_timestamp" title="Link to this definition">¶</a></dt>
+<dd><p>Insert timestamp column that shows the START, END or MIDDLE time of the averaging interval</p>
+<p>The new timestamp column is added as data column, the current
+<em>data</em> index remains unchanged.</p>
+<p>The current <em>data</em> index must be a properly named timestamp index.
+Allowed names are: ‘TIMESTAMP_START’, ‘TIMESTAMP_MIDDLE’, ‘TIMESTAMP_END’.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.2)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataFrame</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>data</strong> (<em>DataFrame</em>)</p></li>
+<li><p><strong>convention</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><em>Literal</em></a><em>[</em><em>'start'</em><em>, </em><em>'middle'</em><em>, </em><em>'end'</em><em>]</em>)</p></li>
+<li><p><strong>insert_as_first_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+<li><p><strong>verbose</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+<li><p><strong>set_as_index</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl>
+<dt>Args:</dt><dd><p>data: Dataset to which the new timestamp is added as new column
+convention: Timestamp convention of the new timestamp column</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>‘start’: Timestamp denoting start of averaging interval</p></li>
+<li><p>‘middle’: Timestamp denoting middle of averaging interval</p></li>
+<li><p>‘end’: Timestamp denoting end of averaging interval</p></li>
+</ul>
+</div></blockquote>
+<dl class="simple">
+<dt>insert_as_first_col: If <em>True</em>, the new timestamp column is</dt><dd><p>added as the first column to <em>data</em>. If <em>False</em>, the new
+timestamp column is added as the last column to <em>data</em>.</p>
+</dd>
+</dl>
+<p>set_as_index: Sets the new timestamp column as dataframe index.
+verbose: If <em>True</em>, gives additional text output</p>
+</dd>
+<dt>Returns:</dt><dd><p><em>data</em> with newly added timestamp column</p>
+</dd>
+</dl>
+<p>Added in: v0.52.0</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.convert_series_timestamp_to_middle">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">convert_series_timestamp_to_middle</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#convert_series_timestamp_to_middle"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.convert_series_timestamp_to_middle" title="Link to this definition">¶</a></dt>
+<dd><p>Convert the timestamp index to show middle of averaging period</p>
+<p>This conversion makes it easier to handle timeseries data. One of the
+issues it solves is that it becomes straight forward to aggregate data
+correctly.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.Series.html#pandas.Series" title="(in pandas v3.0.2)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Series</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>data</strong> (<em>Series</em>)</p></li>
+<li><p><strong>verbose</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<p>The timestamp of <cite>data</cite> must have one of the following names:
+- <cite>TIMESTAMP_END</cite> when the timestamp refers to the END of the averaging period.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Example: <cite>2022-07-26 12:00</cite> refers to the time period between <cite>2022-07-26 11:30</cite> and <cite>2022-07-26 12:00</cite></p></li>
+</ul>
+</div></blockquote>
+<ul class="simple">
+<li><p><cite>TIMESTAMP_START</cite> when the timestamp refers to the START of the averaging period
+* Example: <cite>2022-07-26 12:00</cite> refers to the time period between <cite>2022-07-26 12:00</cite> and <cite>2022-07-26 12:30</cite></p></li>
+<li><dl class="simple">
+<dt><cite>TIMESTAMP_MID</cite> when the timestamp refers to the MIDDLE of the averaging period</dt><dd><ul>
+<li><p>Example: <cite>2022-07-26 12:15</cite> refers to the time period between <cite>2022-07-26 12:00</cite> and <cite>2022-07-26 12:30</cite></p></li>
+</ul>
+</dd>
+</dl>
+</li>
+</ul>
+<p>Note about timestamps:</p>
+<blockquote>
+<div><dl class="simple">
+<dt><cite>TIMESTAMP_END</cite> is widely used. However, aggregating data can</dt><dd><p>easily lead to wrong aggregation windows. For example, half-hourly
+data for the day 26 July 2022 would have <cite>2022-07-26 00:30</cite> as the
+first valid timestamp for this day, the last timestamp would be
+<cite>2022-07-27 00:00</cite>. When these data are simply aggregated by <em>date</em>
+(<cite>2022-07-26</cite>), then <cite>2022-07-26 00:00</cite> would be taken as the first
+timestamp, and <cite>2022-07-26 23:30</cite> as the last timestamp, both of
+which is not correct. This leads to a wrongly attributed  first data
+record and a missing last record in this example.</p>
+</dd>
+</dl>
+<p><cite>TIMESTAMP_MID</cite> solves this issue. Here, the first timestamp would be
+<cite>2022-07-26 00:15</cite>, and the last timestamp <cite>2022-07-26 23:45</cite>, both of
+which are correct when aggregating by <em>date</em>. The same is true for other
+aggregation windows, e.g., by month, year etc.</p>
+<p>The middle timestamp also helps in plotting the data correctly. Some plots
+set the ticks shown in the plot specifically at the start or end of the
+input timestamp, depending on the plot type. For example, plotting
+a heatmap might show the tick at <cite>12:00</cite> but then plots the respective
+data after the tick, which is not correct with <cite>TIMESTAMP_END</cite>. With the
+middle timestamp data are plotted correctly at <cite>12:15</cite>.</p>
+</div></blockquote>
+<dl class="simple">
+<dt>Args:</dt><dd><p>data: Data with timestamp index</p>
+</dd>
+<dt>Returns:</dt><dd><p>Data with timestamp index that shows the middle of the averaging period</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.add_timezone_info">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">add_timezone_info</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timestamp_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timezone_of_timestamp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#add_timezone_info"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.add_timezone_info" title="Link to this definition">¶</a></dt>
+<dd><p>Add timezone info to timestamp index</p>
+<p>No data are changed, only the timezone info is added to the timestamp.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Param<span class="colon">:</span></dt>
+<dd class="field-odd"><p>timezone_of_timestamp: If ‘None’, no timezone info is added. Otherwise
+can be <cite>str</cite> that describes the timezone in relation to UTC in the format:
+‘UTC+01:00’ (for CET), ‘UTC+02:00’ (for CEST), …
+InfluxDB uses this info to upload data (always) in UTC/GMT.</p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>timezone_of_timestamp</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p>
+</dd>
+</dl>
+<p>see: <a class="reference external" href="https://www.atmos.albany.edu/facstaff/ktyle/atm533/core/week5/04_Pandas_DateTime.html#note-that-the-timezone-is-missing-the-read-csv-method-does-not-provide-a-means-to-specify-the-timezone-we-can-take-care-of-that-though-with-the-tz-localize-method">https://www.atmos.albany.edu/facstaff/ktyle/atm533/core/week5/04_Pandas_DateTime.html#note-that-the-timezone-is-missing-the-read-csv-method-does-not-provide-a-means-to-specify-the-timezone-we-can-take-care-of-that-though-with-the-tz-localize-method</a></p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.remove_after_date">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">remove_after_date</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">yearly_end_date</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#remove_after_date"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.remove_after_date" title="Link to this definition">¶</a></dt>
+<dd><p>Remove data after specifified date</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.Series.html#pandas.Series" title="(in pandas v3.0.2)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Series</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>data</strong> (<em>Series</em>)</p></li>
+<li><p><strong>yearly_end_date</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl>
+<dt>Args:</dt><dd><p>data: Data with timestamp index
+yearly_end_date: Month and day after which all data will be removed</p>
+<blockquote>
+<div><dl class="simple">
+<dt>Example:</dt><dd><p>“08-11” means that all data after 11 August will be removed,
+this is done for each year in the dataset. For a dataset that
+contains data of multiple years, e.g. 2016, 2017 and 2018, the
+returned dataset will only contain data from all years, but
+data for each year will end on 1 August (i.e., 11 August 2016,
+11 August 2017 and 11 August 2018).</p>
+</dd>
+</dl>
+</div></blockquote>
+</dd>
+<dt>Returns:</dt><dd><p>Data with all data after <em>yearly_end_date</em> removed</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.keep_years">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">keep_years</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_year</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end_year</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#keep_years"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.keep_years" title="Link to this definition">¶</a></dt>
+<dd><p>Keep data between start and end year</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.Series.html#pandas.Series" title="(in pandas v3.0.2)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Series</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>data</strong> (<em>Series</em>)</p></li>
+<li><p><strong>start_year</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>)</p></li>
+<li><p><strong>end_year</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="simple">
+<dt>Args:</dt><dd><p>data: Data with timeseries index
+start_year: First year of kept data
+end_year: Last year of kept data</p>
+</dd>
+<dt>Returns:</dt><dd><p>Data between start year and end year</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.calc_doy_timefraction">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">calc_doy_timefraction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_series</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#calc_doy_timefraction"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.calc_doy_timefraction" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.2)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataFrame</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>input_series</strong> (<em>Series</em>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.doy_cumulatives_per_year">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">doy_cumulatives_per_year</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">series</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#doy_cumulatives_per_year"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.doy_cumulatives_per_year" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.2)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataFrame</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>series</strong> (<em>Series</em>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.doy_mean_cumulative">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">doy_mean_cumulative</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cumulatives_per_year_df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">excl_years_from_reference</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#doy_mean_cumulative"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.doy_mean_cumulative" title="Link to this definition">¶</a></dt>
+<dd><p>Calculate mean cumulative values by day-of-year with confidence intervals.</p>
+<p>Computes mean, standard deviation, and 95% confidence intervals for cumulative
+values across multiple years, organized by day-of-year and intra-day time fraction.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.2)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataFrame</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>cumulatives_per_year_df</strong> (<em>DataFrame</em>)</p></li>
+<li><p><strong>excl_years_from_reference</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><em>list</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<section id="parameters">
+<h2>Parameters<a class="headerlink" href="#parameters" title="Link to this heading">¶</a></h2>
+<dl class="simple">
+<dt>cumulatives_per_year_df<span class="classifier">DataFrame</span></dt><dd><p>DataFrame with day-of-year time (DOY_TIME) as index and years as columns,
+containing cumulative values for each year.</p>
+</dd>
+<dt>excl_years_from_reference<span class="classifier">list, optional</span></dt><dd><p>Years to exclude from reference statistics. Default is None (use all years).</p>
+</dd>
+</dl>
+</section>
+<section id="returns">
+<h2>Returns<a class="headerlink" href="#returns" title="Link to this heading">¶</a></h2>
+<dl class="simple">
+<dt>DataFrame</dt><dd><p>Statistics by day-of-year with columns:
+- MEAN_DOY_TIME: Mean cumulative value
+- SD_DOY_TIME: Standard deviation
+- MEAN+SD, MEAN-SD: ±1 SD confidence bounds
+- MEAN+1.96_SD, MEAN-1.96_SD: ±1.96 SD (95%) confidence bounds</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.calc_true_resolution">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">calc_true_resolution</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_records</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_nominal_res</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">expected_records</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">expected_duration</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#calc_true_resolution"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.calc_true_resolution" title="Link to this definition">¶</a></dt>
+<dd><p>Calculate the true resolution of the raw data</p>
+<section id="id1">
+<h2>Parameters<a class="headerlink" href="#id1" title="Link to this heading">¶</a></h2>
+<p>num_records: Number of raw data records.
+data_nominal_res: Nominal time resolution of the raw data, e.g. 0.05 for 20 Hz data</p>
+<blockquote>
+<div><p>(one measurement every 0.05 seconds)</p>
+</div></blockquote>
+<dl class="simple">
+<dt>expected_records: Expected number of records in the raw data file, based on the nominal</dt><dd><p>time resolution of the raw data.</p>
+</dd>
+</dl>
+<p>expected_duration: Expected duration of the raw data file in seconds.</p>
+</section>
+<section id="id2">
+<h2>Returns<a class="headerlink" href="#id2" title="Link to this heading">¶</a></h2>
+<p>float that gives the true resolution in seconds, e.g. 0.05s for 20 Hz (1/20 = 0.05)</p>
+</section>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>num_records</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>)</p></li>
+<li><p><strong>data_nominal_res</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>)</p></li>
+<li><p><strong>expected_records</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>)</p></li>
+<li><p><strong>expected_duration</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="diive.core.times.times.create_timestamp">
+<span class="sig-prename descclassname"><span class="pre">diive.core.times.times.</span></span><span class="sig-name descname"><span class="pre">create_timestamp</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">file_start</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_nominal_res</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">expected_duration</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/diive/core/times/times.html#create_timestamp"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#diive.core.times.times.create_timestamp" title="Link to this definition">¶</a></dt>
+<dd><p>Calculate the timestamp for each record in a dataframe.</p>
+<p>Insert true timestamp based on number of records in the file and the
+file duration.</p>
+<p>Files measured at a given time resolution may still produce
+more or less than the expected number of records.</p>
+<p>For example, a six-hour file with data recorded at 20Hz is expected to have
+432 000 records, but may in reality produce slightly more or less than that
+due to small inaccuracies in the measurements instrument’s internal clock.
+This in turn would mean that the defined time resolution of 20Hz is not
+completely accurate with the true frequency being slightly higher or lower.</p>
+<p>This causes a (minor) issue when merging mutliple data files due to overlapping
+record timestamps, i.e. the last timestamp in file #1 is the same as the first
+timestamp in file #2, resulting in duplicate entries in the timestamp index column
+during merging of files #1 and #2.</p>
+<p>In addition, sometimes more than one timestamp can overlap, resulting in more
+overlapping timestamps and therefore more data loss. Although this data loss is
+minor (e.g. 3 records per 432 000 records), missing records are not desirable when
+calculating covariances between times series. The time series must be as complete
+and without missing records as possible to avoid errors.</p>
+<dl>
+<dt>Args:</dt><dd><dl class="simple">
+<dt>df: Raw data without timestamp. In case data already have a timestamp, it</dt><dd><p>will be overwritten.</p>
+</dd>
+</dl>
+<p>file_start: Start time of the file.
+data_nominal_res: Nominal time resolution of the raw data, e.g. 0.05 (one measurement every</p>
+<blockquote>
+<div><p>0.05 seconds, 20 Hz).</p>
+</div></blockquote>
+<dl class="simple">
+<dt>expected_duration: Expected duration of the raw data file in seconds, e.g. 1800 for a</dt><dd><p>30-minute file.</p>
+</dd>
+</dl>
+</dd>
+<dt>Returns:</dt><dd><p>df: pandas DataFrame with timestamp index
+true_resolution: time resolution of raw data measurements</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="diive.core.dfun.frames.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">diive.core.dfun.frames</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="diive.core.plotting.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">diive.core.plotting</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2025, Lukas Hörtnagl
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">diive.core.times.times</a><ul>
+<li><a class="reference internal" href="#diive.core.times.times.format_timestamp_to_fluxnet_format"><code class="docutils literal notranslate"><span class="pre">format_timestamp_to_fluxnet_format()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.detect_freq_groups"><code class="docutils literal notranslate"><span class="pre">detect_freq_groups()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.TimestampSanitizer"><code class="docutils literal notranslate"><span class="pre">TimestampSanitizer</span></code></a><ul>
+<li><a class="reference internal" href="#diive.core.times.times.TimestampSanitizer.__init__"><code class="docutils literal notranslate"><span class="pre">TimestampSanitizer.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.TimestampSanitizer.get"><code class="docutils literal notranslate"><span class="pre">TimestampSanitizer.get()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#diive.core.times.times.sort_timestamp_ascending"><code class="docutils literal notranslate"><span class="pre">sort_timestamp_ascending()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.remove_rows_nat"><code class="docutils literal notranslate"><span class="pre">remove_rows_nat()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.convert_timestamp_to_datetime"><code class="docutils literal notranslate"><span class="pre">convert_timestamp_to_datetime()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.validate_timestamp_naming"><code class="docutils literal notranslate"><span class="pre">validate_timestamp_naming()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.current_unixtime"><code class="docutils literal notranslate"><span class="pre">current_unixtime()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.current_datetime"><code class="docutils literal notranslate"><span class="pre">current_datetime()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.current_date_str_condensed"><code class="docutils literal notranslate"><span class="pre">current_date_str_condensed()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.current_datetime_str_condensed"><code class="docutils literal notranslate"><span class="pre">current_datetime_str_condensed()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.current_time_microseconds_str"><code class="docutils literal notranslate"><span class="pre">current_time_microseconds_str()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.make_run_id"><code class="docutils literal notranslate"><span class="pre">make_run_id()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.generate_freq_timedelta_from_freq"><code class="docutils literal notranslate"><span class="pre">generate_freq_timedelta_from_freq()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.build_timestamp_range"><code class="docutils literal notranslate"><span class="pre">build_timestamp_range()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.vectorize_timestamps"><code class="docutils literal notranslate"><span class="pre">vectorize_timestamps()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.insert_season"><code class="docutils literal notranslate"><span class="pre">insert_season()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.DetectFrequency"><code class="docutils literal notranslate"><span class="pre">DetectFrequency</span></code></a><ul>
+<li><a class="reference internal" href="#diive.core.times.times.DetectFrequency.__init__"><code class="docutils literal notranslate"><span class="pre">DetectFrequency.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.DetectFrequency.get"><code class="docutils literal notranslate"><span class="pre">DetectFrequency.get()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#diive.core.times.times.timestamp_infer_freq_progressively"><code class="docutils literal notranslate"><span class="pre">timestamp_infer_freq_progressively()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.timestamp_infer_freq_from_fullset"><code class="docutils literal notranslate"><span class="pre">timestamp_infer_freq_from_fullset()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.timestamp_infer_freq_from_timedelta"><code class="docutils literal notranslate"><span class="pre">timestamp_infer_freq_from_timedelta()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.remove_index_duplicates"><code class="docutils literal notranslate"><span class="pre">remove_index_duplicates()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.continuous_timestamp_freq"><code class="docutils literal notranslate"><span class="pre">continuous_timestamp_freq()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.insert_timestamp"><code class="docutils literal notranslate"><span class="pre">insert_timestamp()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.convert_series_timestamp_to_middle"><code class="docutils literal notranslate"><span class="pre">convert_series_timestamp_to_middle()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.add_timezone_info"><code class="docutils literal notranslate"><span class="pre">add_timezone_info()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.remove_after_date"><code class="docutils literal notranslate"><span class="pre">remove_after_date()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.keep_years"><code class="docutils literal notranslate"><span class="pre">keep_years()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.calc_doy_timefraction"><code class="docutils literal notranslate"><span class="pre">calc_doy_timefraction()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.doy_cumulatives_per_year"><code class="docutils literal notranslate"><span class="pre">doy_cumulatives_per_year()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.doy_mean_cumulative"><code class="docutils literal notranslate"><span class="pre">doy_mean_cumulative()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.calc_true_resolution"><code class="docutils literal notranslate"><span class="pre">calc_true_resolution()</span></code></a></li>
+<li><a class="reference internal" href="#diive.core.times.times.create_timestamp"><code class="docutils literal notranslate"><span class="pre">create_timestamp()</span></code></a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../_static/documentation_options.js?v=65828fca"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
+    </body>
+</html>

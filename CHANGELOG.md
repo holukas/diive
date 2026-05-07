@@ -4,6 +4,9 @@
 
 ## v0.91.0 | XX XXX 2026
 
+- now developing under python 3.12
+- switched from poetry to uv dependency management
+
 ### Major Changes
 
 - **Standalone FeatureEngineer** — Separated feature engineering from gap-filling. 8-stage pipeline (lag→rolling→diff→EMA→poly→STL→timestamps→record_number). Pre-engineer once, reuse across models. ⚠️ **Breaking change:** RandomForestTS/XGBoostTS now accept only pre-engineered data.
