@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.plot_heatmap_year_month``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="HeatmapDateTime: Visualize time series as a date × time-of-day grid. HeatmapYearMonth: Visualize time series as a year × month grid with aggregation.">
+
+.. only:: html
+
+  .. image:: /auto_examples/visualization/images/thumb/sphx_glr_heatmap_datetime_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/visualization/heatmap_datetime`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for HeatmapDateTime and HeatmapYearMonth visualization.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/visualization/heatmap_datetime`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

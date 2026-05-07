@@ -1,0 +1,73 @@
+{
+ "__name__": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  }
+ ],
+ "dv.GapFinder": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs.analyses.gapfinder",
+   "module_short": "diive.pkgs.analyses.gapfinder",
+   "name": "GapFinder"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs.analyses",
+   "module_short": "diive.pkgs.analyses",
+   "name": "GapFinder"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs",
+   "module_short": "diive.pkgs",
+   "name": "GapFinder"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "GapFinder"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "GapFinder"
+  }
+ ],
+ "dv.load_exampledata_parquet": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "load_exampledata_parquet"
+  }
+ ],
+ "example_gapfinder_basic": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ]
+}

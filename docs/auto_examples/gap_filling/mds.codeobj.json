@@ -1,0 +1,89 @@
+{
+ "__name__": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  }
+ ],
+ "dv.FluxMDS": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs.gapfilling.mds",
+   "module_short": "diive.pkgs.gapfilling.mds",
+   "name": "FluxMDS"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs.gapfilling",
+   "module_short": "diive.pkgs.gapfilling",
+   "name": "FluxMDS"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs",
+   "module_short": "diive.pkgs",
+   "name": "FluxMDS"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "FluxMDS"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "FluxMDS"
+  }
+ ],
+ "dv.load_exampledata_parquet": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "load_exampledata_parquet"
+  }
+ ],
+ "example_mds_flux_gapfilling": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "time.perf_counter": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "time",
+   "module_short": "time",
+   "name": "perf_counter"
+  }
+ ]
+}

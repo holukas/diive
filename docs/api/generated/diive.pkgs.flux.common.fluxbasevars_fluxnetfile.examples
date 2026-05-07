@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.pkgs.flux.common.fluxbasevars_fluxnetfile``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Detects which base variable (e.g., CO2, H2O) was used to calculate a given flux variable (e.g., FC, FH2O, LE). Useful for understanding measurement nomenclature in eddy covariance data files.">
+
+.. only:: html
+
+  .. image:: /auto_examples/flux/images/thumb/sphx_glr_common_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/flux/common`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for flux variable utilities and base variable detection.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/flux/common`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

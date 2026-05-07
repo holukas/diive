@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.HistogramPlot``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="HistogramPlot: Distribution analysis with z-score overlay and peak highlighting.">
+
+.. only:: html
+
+  .. image:: /auto_examples/visualization/images/thumb/sphx_glr_histogram_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/visualization/histogram`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for HistogramPlot visualization.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/visualization/histogram`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

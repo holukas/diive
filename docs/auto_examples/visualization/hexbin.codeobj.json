@@ -1,0 +1,135 @@
+{
+ "__name__": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  }
+ ],
+ "dv.load_exampledata_parquet": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "load_exampledata_parquet"
+  }
+ ],
+ "dv.plot_hexbin": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core.plotting.hexbin",
+   "module_short": "diive.core.plotting.hexbin",
+   "name": "HexbinPlot"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core.plotting",
+   "module_short": "diive.core.plotting",
+   "name": "HexbinPlot"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core",
+   "module_short": "diive.core",
+   "name": "HexbinPlot"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "HexbinPlot"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core.plotting.heatmap_base",
+   "module_short": "diive.core.plotting.heatmap_base",
+   "name": "HeatmapBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core.plotting",
+   "module_short": "diive.core.plotting",
+   "name": "HeatmapBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core",
+   "module_short": "diive.core",
+   "name": "HeatmapBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "HeatmapBase"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "plot_hexbin"
+  }
+ ],
+ "example_hexbin_absolute_values_with_mean": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "example_hexbin_percentile_normalized": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "example_hexbin_with_value_overlay": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "np.mean": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "_ArrayFunctionDispatcher"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "mean"
+  }
+ ]
+}

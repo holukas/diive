@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.pkgs.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The StepwiseOutlierDetection class chains multiple outlier detection methods sequentially. Each method operates on results from the previous one, progressively filtering outliers. This example shows 6 methods with full parameter signatures:">
+
+.. only:: html
+
+  .. image:: /auto_examples/outlierdetection/images/thumb/sphx_glr_stepwise_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/outlierdetection/stepwise`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples demonstrating step-wise outlier detection orchestration.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/outlierdetection/stepwise`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

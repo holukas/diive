@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.dry_air_density``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Run this script to see air calculation results:     python examples/createvar/air.py">
+
+.. only:: html
+
+  .. image:: /auto_examples/createvar/images/thumb/sphx_glr_air_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/createvar/air`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for air variable calculations using air module.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/createvar/air`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

@@ -1,0 +1,63 @@
+
+
+Examples using ``diive.configs.exampledata.load_exampledata_parquet_lae``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates SCOP (Self-heating Correction for Open-Path) methodology to remove spurious CO2 flux measurements caused by sun-induced heating of instrument surfaces.">
+
+.. only:: html
+
+  .. image:: /auto_examples/flux/images/thumb/sphx_glr_selfheating_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/flux/selfheating`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Self-heating correction examples for open-path IRGA sensors.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/flux/selfheating`
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates USTAR (friction velocity) threshold determination using multiple temperature classes (Papale et al., 2006) and applying constant USTAR thresholds to create multiple flux scenarios for uncertainty analysis.">
+
+.. only:: html
+
+  .. image:: /auto_examples/flux/images/thumb/sphx_glr_ustarthreshold_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/flux/ustarthreshold`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">USTAR threshold detection and filtering for low-turbulence flux data.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/flux/ustarthreshold`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

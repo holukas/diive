@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.LocalSD``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Examples demonstrating the local standard deviation method for outlier detection. Identifies values that deviate significantly from rolling window statistics.">
+
+.. only:: html
+
+  .. image:: /auto_examples/outlierdetection/images/thumb/sphx_glr_localsd_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/outlierdetection/localsd`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Outlier Detection: Local Standard Deviation Examples</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/outlierdetection/localsd`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

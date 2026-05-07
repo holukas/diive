@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.potrad_eot``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Run this script to see potential radiation examples:     python examples/createvar/potentialradiation.py">
+
+.. only:: html
+
+  .. image:: /auto_examples/createvar/images/thumb/sphx_glr_potentialradiation_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/createvar/potentialradiation`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for potential radiation calculations using potentialradiation module.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/createvar/potentialradiation`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

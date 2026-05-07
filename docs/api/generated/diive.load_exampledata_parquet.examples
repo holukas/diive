@@ -1,0 +1,63 @@
+
+
+Examples using ``diive.load_exampledata_parquet``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Run this script to see histogram results:     python examples/analyses/histogram.py">
+
+.. only:: html
+
+  .. image:: /auto_examples/analyses/images/thumb/sphx_glr_histogram_distribution_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/analyses/histogram_distribution`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for histogram analysis using Histogram.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/analyses/histogram_distribution`
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="HistogramPlot: Distribution analysis with z-score overlay and peak highlighting.">
+
+.. only:: html
+
+  .. image:: /auto_examples/visualization/images/thumb/sphx_glr_histogram_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/visualization/histogram`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for HistogramPlot visualization.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/visualization/histogram`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

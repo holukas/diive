@@ -37,7 +37,7 @@ class Histogram:
             .peakbins: Top 5 bins by count
 
         Example:
-            See `examples/analyses/histogram.py` for complete examples.
+            See `examples/analyses/histogram_distribution.py` for complete examples.
         """
         self.method = method
         self.n_bins = n_bins

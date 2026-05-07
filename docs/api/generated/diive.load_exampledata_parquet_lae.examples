@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.load_exampledata_parquet_lae``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Comprehensive example demonstrating: - USTAR threshold detection with forward/back modes - Bootstrap uncertainty estimation - Visualization of NEE response to USTAR stratification">
+
+.. only:: html
+
+  .. image:: /auto_examples/flux/images/thumb/sphx_glr_ustar_mp_detection_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/flux/ustar_mp_detection`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">USTAR Moving Point Detection - Complete Workflow (Papale et al., 2006)</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/flux/ustar_mp_detection`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

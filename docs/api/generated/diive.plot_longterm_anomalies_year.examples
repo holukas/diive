@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.plot_longterm_anomalies_year``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="LongtermAnomaliesYear: Plot long-term anomalies per year compared to a reference period.">
+
+.. only:: html
+
+  .. image:: /auto_examples/visualization/images/thumb/sphx_glr_other_plots_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/visualization/other_plots`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for miscellaneous visualization plots.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/visualization/other_plots`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

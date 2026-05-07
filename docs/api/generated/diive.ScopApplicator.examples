@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.ScopApplicator``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates SCOP (Self-heating Correction for Open-Path) methodology to remove spurious CO2 flux measurements caused by sun-induced heating of instrument surfaces.">
+
+.. only:: html
+
+  .. image:: /auto_examples/flux/images/thumb/sphx_glr_selfheating_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/flux/selfheating`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Self-heating correction examples for open-path IRGA sensors.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/flux/selfheating`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

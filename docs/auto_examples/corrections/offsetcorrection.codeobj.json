@@ -1,0 +1,400 @@
+{
+ "__name__": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  }
+ ],
+ "dv.MeasurementOffsetFromReplicate": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs.corrections.offsetcorrection",
+   "module_short": "diive.pkgs.corrections.offsetcorrection",
+   "name": "MeasurementOffsetFromReplicate"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs.corrections",
+   "module_short": "diive.pkgs.corrections",
+   "name": "MeasurementOffsetFromReplicate"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs",
+   "module_short": "diive.pkgs",
+   "name": "MeasurementOffsetFromReplicate"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "MeasurementOffsetFromReplicate"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "MeasurementOffsetFromReplicate"
+  }
+ ],
+ "dv.WindDirOffset": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs.corrections.offsetcorrection",
+   "module_short": "diive.pkgs.corrections.offsetcorrection",
+   "name": "WindDirOffset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs.corrections",
+   "module_short": "diive.pkgs.corrections",
+   "name": "WindDirOffset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs",
+   "module_short": "diive.pkgs",
+   "name": "WindDirOffset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "WindDirOffset"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "WindDirOffset"
+  }
+ ],
+ "dv.remove_radiation_zero_offset": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "remove_radiation_zero_offset"
+  }
+ ],
+ "dv.remove_relativehumidity_offset": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "remove_relativehumidity_offset"
+  }
+ ],
+ "example_measurement_offset_from_replicate": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "example_remove_radiation_zero_offset": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "example_remove_relativehumidity_offset": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "example_wind_direction_offset": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "load_exampledata_parquet_meteo_rh_1MIN": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive.configs.exampledata",
+   "module_short": "diive.configs.exampledata",
+   "name": "load_exampledata_parquet_meteo_rh_1MIN"
+  }
+ ],
+ "load_exampledata_parquet_meteo_swin_1MIN": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive.configs.exampledata",
+   "module_short": "diive.configs.exampledata",
+   "name": "load_exampledata_parquet_meteo_swin_1MIN"
+  }
+ ],
+ "load_exampledata_winddir": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive.configs.exampledata",
+   "module_short": "diive.configs.exampledata",
+   "name": "load_exampledata_winddir"
+  }
+ ],
+ "np.arange": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "arange"
+  }
+ ],
+ "np.pi": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "pi"
+  }
+ ],
+ "np.sin": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ufunc"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "sin"
+  }
+ ],
+ "pd.Series": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas.core.series",
+   "module_short": "pandas.core.series",
+   "name": "Series"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas.core",
+   "module_short": "pandas.core",
+   "name": "Series"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas",
+   "module_short": "pandas",
+   "name": "Series"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas.core.base",
+   "module_short": "pandas.core.base",
+   "name": "IndexOpsMixin"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas.core",
+   "module_short": "pandas.core",
+   "name": "IndexOpsMixin"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas",
+   "module_short": "pandas",
+   "name": "IndexOpsMixin"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas.core.generic",
+   "module_short": "pandas.core.generic",
+   "name": "NDFrame"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas.core",
+   "module_short": "pandas.core",
+   "name": "NDFrame"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas",
+   "module_short": "pandas",
+   "name": "NDFrame"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas.core.arraylike",
+   "module_short": "pandas.core.arraylike",
+   "name": "OpsMixin"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas.core",
+   "module_short": "pandas.core",
+   "name": "OpsMixin"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas",
+   "module_short": "pandas",
+   "name": "OpsMixin"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas.core.base",
+   "module_short": "pandas.core.base",
+   "name": "PandasObject"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas.core",
+   "module_short": "pandas.core",
+   "name": "PandasObject"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas",
+   "module_short": "pandas",
+   "name": "PandasObject"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas.core.indexing",
+   "module_short": "pandas.core.indexing",
+   "name": "IndexingMixin"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas.core",
+   "module_short": "pandas.core",
+   "name": "IndexingMixin"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas",
+   "module_short": "pandas",
+   "name": "IndexingMixin"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas.core.accessor",
+   "module_short": "pandas.core.accessor",
+   "name": "DirNamesMixin"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas.core",
+   "module_short": "pandas.core",
+   "name": "DirNamesMixin"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas",
+   "module_short": "pandas",
+   "name": "DirNamesMixin"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "pandas",
+   "module_short": "pandas",
+   "name": "Series"
+  }
+ ],
+ "pd.date_range": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "pandas",
+   "module_short": "pandas",
+   "name": "date_range"
+  }
+ ]
+}

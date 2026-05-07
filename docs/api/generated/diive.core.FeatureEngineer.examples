@@ -1,0 +1,84 @@
+
+
+Examples using ``diive.core.FeatureEngineer``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="XGBoost is a gradient boosting approach for gap-filling time series data. Effective for non-linear relationships, complex temporal interactions, and data with outliers.">
+
+.. only:: html
+
+  .. image:: /auto_examples/gap_filling/images/thumb/sphx_glr_xgboost_ts_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/gap_filling/xgboost_ts`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">XGBoost gap-filling examples.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/gap_filling/xgboost_ts`
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Random Forest is a robust, interpretable machine learning approach for gap-filling time series data. Effective for non-linear relationships and feature interactions.">
+
+.. only:: html
+
+  .. image:: /auto_examples/gap_filling/images/thumb/sphx_glr_randomforest_ts_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/gap_filling/randomforest_ts`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Random Forest gap-filling examples.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/gap_filling/randomforest_ts`
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates three gap-filling methods with cumulative flux curves. Uses one month of data for fast execution. Methods are evaluated on the same data with performance metrics and cumulative carbon flux visualization.">
+
+.. only:: html
+
+  .. image:: /auto_examples/gap_filling/images/thumb/sphx_glr_comparison_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/gap_filling/comparison`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Comparison of gap-filling methods: MDS, Random Forest, and XGBoost.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/gap_filling/comparison`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

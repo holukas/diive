@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.pkgs.flux.hqflux.analyze_highest_quality_flux``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates robust outlier detection for CO2 flux (NEE) using Hampel filter (Median Absolute Deviation) with automatic day/night separation based on solar geometry. The Hampel method is ideal for removing measurement spikes while preserving ecosystem signal.">
+
+.. only:: html
+
+  .. image:: /auto_examples/flux/images/thumb/sphx_glr_hqflux_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/flux/hqflux`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for high-quality flux analysis with outlier detection.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/flux/hqflux`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

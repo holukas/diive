@@ -1,0 +1,42 @@
+
+
+Examples using ``diive._FluxMDS``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates the performance improvement of FluxMDS (optimized vectorization) compared to the original _FluxMDS implementation.">
+
+.. only:: html
+
+  .. image:: /auto_examples/gap_filling/images/thumb/sphx_glr_mds_comparison_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/gap_filling/mds_comparison`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">FluxMDS Performance Comparison: Original vs Optimized.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/gap_filling/mds_comparison`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

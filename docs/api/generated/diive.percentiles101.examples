@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.percentiles101``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Run this script to see percentile results and visualizations:     python examples/analyses/quantiles.py">
+
+.. only:: html
+
+  .. image:: /auto_examples/analyses/images/thumb/sphx_glr_quantiles_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/analyses/quantiles`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for percentile analysis using percentiles101.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/analyses/quantiles`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

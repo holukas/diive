@@ -1,0 +1,321 @@
+{
+ "__name__": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  }
+ ],
+ "dv.load_exampledata_parquet": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "load_exampledata_parquet"
+  }
+ ],
+ "dv.plot_heatmap_datetime": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core.plotting.heatmap_datetime",
+   "module_short": "diive.core.plotting.heatmap_datetime",
+   "name": "HeatmapDateTime"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core.plotting",
+   "module_short": "diive.core.plotting",
+   "name": "HeatmapDateTime"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core",
+   "module_short": "diive.core",
+   "name": "HeatmapDateTime"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "HeatmapDateTime"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core.plotting.heatmap_base",
+   "module_short": "diive.core.plotting.heatmap_base",
+   "name": "HeatmapBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core.plotting",
+   "module_short": "diive.core.plotting",
+   "name": "HeatmapBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core",
+   "module_short": "diive.core",
+   "name": "HeatmapBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "HeatmapBase"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "plot_heatmap_datetime"
+  }
+ ],
+ "dv.plot_heatmap_year_month": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core.plotting.heatmap_datetime",
+   "module_short": "diive.core.plotting.heatmap_datetime",
+   "name": "HeatmapYearMonth"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core.plotting",
+   "module_short": "diive.core.plotting",
+   "name": "HeatmapYearMonth"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core",
+   "module_short": "diive.core",
+   "name": "HeatmapYearMonth"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "HeatmapYearMonth"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core.plotting.heatmap_base",
+   "module_short": "diive.core.plotting.heatmap_base",
+   "name": "HeatmapBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core.plotting",
+   "module_short": "diive.core.plotting",
+   "name": "HeatmapBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core",
+   "module_short": "diive.core",
+   "name": "HeatmapBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "HeatmapBase"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "plot_heatmap_year_month"
+  }
+ ],
+ "example_heatmap_datetime_horizontal": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "example_heatmap_datetime_multi_panel": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "example_heatmap_datetime_vertical": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "example_heatmap_yearmonth_basic": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "example_heatmap_yearmonth_colormaps": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "example_heatmap_yearmonth_multi_panel": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "gridspec.GridSpec": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matplotlib.gridspec",
+   "module_short": "matplotlib.gridspec",
+   "name": "GridSpec"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "GridSpec"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matplotlib.gridspec",
+   "module_short": "matplotlib.gridspec",
+   "name": "GridSpecBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "GridSpecBase"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.gridspec",
+   "module_short": "matplotlib.gridspec",
+   "name": "GridSpec"
+  }
+ ],
+ "list_of_colormaps": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive.core.plotting.heatmap_base",
+   "module_short": "diive.core.plotting.heatmap_base",
+   "name": "list_of_colormaps"
+  }
+ ],
+ "np.nan": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "nan"
+  }
+ ],
+ "np.ptp": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "_ArrayFunctionDispatcher"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ptp"
+  }
+ ],
+ "plt.figure": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "figure"
+  }
+ ],
+ "plt.subplots": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "subplots"
+  }
+ ]
+}

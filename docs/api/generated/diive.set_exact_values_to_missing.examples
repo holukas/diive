@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.set_exact_values_to_missing``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Run this script to see correction results:     python examples/corrections/setto.py">
+
+.. only:: html
+
+  .. image:: /auto_examples/corrections/images/thumb/sphx_glr_setto_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/corrections/setto`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for data correction functions using setto module.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/corrections/setto`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

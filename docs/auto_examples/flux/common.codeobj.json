@@ -1,0 +1,47 @@
+{
+ "__name__": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  }
+ ],
+ "detect_fluxbasevar": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive.pkgs.flux.common",
+   "module_short": "diive.pkgs.flux.common",
+   "name": "detect_fluxbasevar"
+  }
+ ],
+ "example_detect_fluxbasevar": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "fluxbasevars_fluxnetfile": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive.pkgs.flux.common",
+   "module_short": "diive.pkgs.flux.common",
+   "name": "fluxbasevars_fluxnetfile"
+  }
+ ],
+ "fluxbasevars_fluxnetfile.keys": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive.pkgs.flux.common.fluxbasevars_fluxnetfile",
+   "module_short": "diive.pkgs.flux.common.fluxbasevars_fluxnetfile",
+   "name": "keys"
+  }
+ ]
+}

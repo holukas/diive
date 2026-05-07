@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.FindOptimumRange``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Run this script to see optimum range results and visualizations:     python examples/analyses/optimumrange.py">
+
+.. only:: html
+
+  .. image:: /auto_examples/analyses/images/thumb/sphx_glr_optimumrange_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/analyses/optimumrange`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for optimum range analysis using FindOptimumRange.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/analyses/optimumrange`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

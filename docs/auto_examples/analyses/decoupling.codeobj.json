@@ -1,0 +1,73 @@
+{
+ "__name__": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  }
+ ],
+ "dv.load_exampledata_parquet": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "load_exampledata_parquet"
+  }
+ ],
+ "dv.stratified_analysis": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs.analyses.decoupling",
+   "module_short": "diive.pkgs.analyses.decoupling",
+   "name": "StratifiedAnalysis"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs.analyses",
+   "module_short": "diive.pkgs.analyses",
+   "name": "StratifiedAnalysis"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs",
+   "module_short": "diive.pkgs",
+   "name": "StratifiedAnalysis"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "StratifiedAnalysis"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "stratified_analysis"
+  }
+ ],
+ "example_stratified_analysis_photosynthetic_decoupling": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ]
+}

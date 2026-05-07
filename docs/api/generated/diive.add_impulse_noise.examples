@@ -1,0 +1,147 @@
+
+
+Examples using ``diive.add_impulse_noise``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Run this script to see noise examples:     python examples/createvar/noise.py">
+
+.. only:: html
+
+  .. image:: /auto_examples/createvar/images/thumb/sphx_glr_noise_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/createvar/noise`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for noise generation and addition using noise module.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/createvar/noise`
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="This module demonstrates the LocalOutlierFactor class for identifying outliers based on local density deviations. Two modes are available: - Global mode: Single LOF threshold for entire series - Day/night mode: Separate thresholds for daytime/nighttime periods">
+
+.. only:: html
+
+  .. image:: /auto_examples/outlierdetection/images/thumb/sphx_glr_lof_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/outlierdetection/lof`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Local Outlier Factor (LOF) outlier detection examples.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/outlierdetection/lof`
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Examples demonstrating the z-score increments method for outlier detection. Identifies outliers based on abrupt changes between consecutive values.">
+
+.. only:: html
+
+  .. image:: /auto_examples/outlierdetection/images/thumb/sphx_glr_incremental_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/outlierdetection/incremental`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Outlier Detection: Z-Score Increments Examples</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/outlierdetection/incremental`
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Trim filter removes values below a threshold, then removes an equal number of values from the high end (trimmed mean approach).">
+
+.. only:: html
+
+  .. image:: /auto_examples/outlierdetection/images/thumb/sphx_glr_trim_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/outlierdetection/trim`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples: Trimming Outliers (Trim Filter)</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/outlierdetection/trim`
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Examples demonstrating the local standard deviation method for outlier detection. Identifies values that deviate significantly from rolling window statistics.">
+
+.. only:: html
+
+  .. image:: /auto_examples/outlierdetection/images/thumb/sphx_glr_localsd_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/outlierdetection/localsd`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Outlier Detection: Local Standard Deviation Examples</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/outlierdetection/localsd`
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Examples demonstrating the Hampel filter (Median Absolute Deviation) for robust outlier detection with optional daytime/nighttime separation.">
+
+.. only:: html
+
+  .. image:: /auto_examples/outlierdetection/images/thumb/sphx_glr_hampel_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/outlierdetection/hampel`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Outlier Detection: Hampel Filter Examples</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/outlierdetection/hampel`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

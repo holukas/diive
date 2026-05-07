@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.FluxDetectionLimit``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The flux detection limit (FDL) represents the minimum detectable flux for a given time period based on the noise in the eddy covariance measurements. This is useful for understanding measurement sensitivity and data quality.">
+
+.. only:: html
+
+  .. image:: /auto_examples/echires/images/thumb/sphx_glr_fluxdetectionlimit_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/echires/fluxdetectionlimit`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for flux detection limit calculations using FluxDetectionLimit class.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/echires/fluxdetectionlimit`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

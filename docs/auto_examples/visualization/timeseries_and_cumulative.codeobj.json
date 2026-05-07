@@ -1,0 +1,128 @@
+{
+ "__name__": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  }
+ ],
+ "dv.load_exampledata_parquet": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "load_exampledata_parquet"
+  }
+ ],
+ "dv.plot_cumulative": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core.plotting.cumulative",
+   "module_short": "diive.core.plotting.cumulative",
+   "name": "Cumulative"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core.plotting",
+   "module_short": "diive.core.plotting",
+   "name": "Cumulative"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core",
+   "module_short": "diive.core",
+   "name": "Cumulative"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "Cumulative"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "plot_cumulative"
+  }
+ ],
+ "dv.plot_cumulative_year": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core.plotting.cumulative",
+   "module_short": "diive.core.plotting.cumulative",
+   "name": "CumulativeYear"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core.plotting",
+   "module_short": "diive.core.plotting",
+   "name": "CumulativeYear"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core",
+   "module_short": "diive.core",
+   "name": "CumulativeYear"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "CumulativeYear"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "plot_cumulative_year"
+  }
+ ],
+ "example_cumulative_overall": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "example_cumulative_year_simple": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "example_cumulative_year_with_highlight": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ]
+}

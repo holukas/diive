@@ -1,0 +1,84 @@
+
+
+Examples using ``diive.FluxMDS``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Gap-filling after Reichstein et al (2005): https://doi.org/10.1111/j.1365-2486.2005.001002.x">
+
+.. only:: html
+
+  .. image:: /auto_examples/gap_filling/images/thumb/sphx_glr_mds_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/gap_filling/mds`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Marginal Distribution Sampling (MDS) gap-filling examples.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/gap_filling/mds`
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates three gap-filling methods with cumulative flux curves. Uses one month of data for fast execution. Methods are evaluated on the same data with performance metrics and cumulative carbon flux visualization.">
+
+.. only:: html
+
+  .. image:: /auto_examples/gap_filling/images/thumb/sphx_glr_comparison_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/gap_filling/comparison`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Comparison of gap-filling methods: MDS, Random Forest, and XGBoost.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/gap_filling/comparison`
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates the performance improvement of FluxMDS (optimized vectorization) compared to the original _FluxMDS implementation.">
+
+.. only:: html
+
+  .. image:: /auto_examples/gap_filling/images/thumb/sphx_glr_mds_comparison_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/gap_filling/mds_comparison`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">FluxMDS Performance Comparison: Original vs Optimized.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/gap_filling/mds_comparison`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

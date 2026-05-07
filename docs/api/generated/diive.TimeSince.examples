@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.TimeSince``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="TimeSince counts consecutive records since the last occurrence of a condition by tracking when values fall outside a specified limit range. Useful for: - Dry period detection (time since last precipitation &gt; 0) - Frost period detection (time since freezing temperature &lt;= 0°C) - Warm spell analysis - Event-based time tracking">
+
+.. only:: html
+
+  .. image:: /auto_examples/createvar/images/thumb/sphx_glr_timesince_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/createvar/timesince`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for time-since calculations using TimeSince class.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/createvar/timesince`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

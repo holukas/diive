@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.calc_vpd_from_ta_rh``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="VPD can be calculated from air temperature (TA) and relative humidity (RH), which are widely available measurements in ecosystem monitoring networks.">
+
+.. only:: html
+
+  .. image:: /auto_examples/createvar/images/thumb/sphx_glr_vpd_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/createvar/vpd`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for VPD (Vapor Pressure Deficit) calculations using calc_vpd_from_ta_rh.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/createvar/vpd`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+
