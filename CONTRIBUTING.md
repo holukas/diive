@@ -6,11 +6,11 @@ We welcome contributions! This guide explains how to set up your development env
 
 ### Prerequisites
 
-- Python 3.10 or 3.11 (3.11 recommended)
+- Python 3.12 or 3.13
 - Git
-- Conda (recommended) or pip
+- **uv** (modern, fast package manager) - [Install uv](https://docs.astral.sh/uv/getting-started/)
 
-### Setup Steps
+### Setup Steps with uv (Recommended)
 
 1. **Clone the repository:**
 
@@ -19,43 +19,62 @@ git clone https://github.com/holukas/diive.git
 cd diive
 ```
 
-2. **Create a conda environment:**
+2. **Install dependencies and development tools:**
 
 ```bash
-conda env create -f environment.yml
-conda activate diive
-```
-
-Or manually with pip:
-
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -e .[dev]
+uv sync                    # Install all dependencies from pyproject.toml
 ```
 
 3. **Verify installation:**
 
 ```bash
-pytest tests/ -v
+uv run pytest tests/ -v
 ```
 
 All tests should pass.
 
+### Alternative Setup with conda (Legacy)
+
+If you prefer conda:
+
+```bash
+conda env create -f environment.yml
+conda activate diive
+pip install -e .[dev]
+pytest tests/ -v
+```
+
+Or with pip and venv:
+
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -e .[dev]
+pytest tests/ -v
+```
+
 ## Running Tests
+
+Using uv (recommended):
 
 ```bash
 # Run all tests
-pytest tests/ -v
+uv run pytest tests/ -v
 
 # Run specific test file
-pytest tests/test_gapfilling.py -v
+uv run pytest tests/test_gapfilling.py -v
 
 # Run specific test
-pytest tests/test_gapfilling.py::TestRandomForest -v
+uv run pytest tests/test_gapfilling.py::TestRandomForest -v
 
 # Run with coverage
-pytest tests/ --cov=diive --cov-report=html
+uv run pytest tests/ --cov=diive --cov-report=html
+```
+
+Or directly with pytest (if environment is activated):
+
+```bash
+pytest tests/ -v
 ```
 
 **Expected times:**
@@ -285,6 +304,15 @@ if __name__ == '__main__':
 ## Documentation
 
 ### Building Docs Locally
+
+With uv:
+
+```bash
+cd docs
+uv run sphinx-build -b html . _build/html
+```
+
+Or if environment is activated:
 
 ```bash
 cd docs

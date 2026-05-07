@@ -14,8 +14,8 @@ System Requirements
 Installation Methods
 ====================
 
-Option 1: PyPI (Recommended)
-----------------------------
+Option 1: PyPI with pip (Recommended)
+-------------------------------------
 
 Install the latest released version using pip:
 
@@ -23,37 +23,43 @@ Install the latest released version using pip:
 
    pip install diive
 
-Option 2: Conda
----------------
+Option 2: Using uv (Modern, Fast)
+----------------------------------
 
-Create a new conda environment and install DIIVE:
+`uv <https://docs.astral.sh/uv/>`_ is a modern Python package installer that's 5-10x faster than pip:
 
 .. code-block:: bash
 
-   conda create -n diive python=3.12
-   conda activate diive
-   pip install diive
+   # Install diive with uv
+   uv pip install diive
 
-Option 3: Development Setup
----------------------------
+   # Or create a new project with uv
+   uv venv
+   source .venv/bin/activate    # On Windows: .venv\Scripts\activate
+   uv pip install diive
 
-For development and contributing to DIIVE, clone the repository:
+Option 3: Development Setup with uv
+------------------------------------
+
+For development and contributing to DIIVE, clone the repository and use uv:
 
 .. code-block:: bash
 
    git clone https://github.com/holukas/diive.git
    cd diive
+   uv sync                       # Install all dependencies
+   uv run pytest tests/          # Run tests
+   uv run python -m pip install -e .  # Install in editable mode
 
-Then install in editable mode:
+Option 4: Development Setup with conda (Legacy)
+------------------------------------------------
+
+If you prefer conda, use the provided environment file:
 
 .. code-block:: bash
 
-   pip install -e .
-
-Or using conda with the provided environment file:
-
-.. code-block:: bash
-
+   git clone https://github.com/holukas/diive.git
+   cd diive
    conda env create -f environment.yml
    conda activate diive
    pip install -e .

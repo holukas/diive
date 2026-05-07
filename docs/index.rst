@@ -20,7 +20,7 @@ Quick Links
 
 - :doc:`installation` — Installation guide
 - :doc:`getting_started` — Quick start tutorial
-- :doc:`auto_examples/index` — Example gallery (94+ examples)
+- :doc:`auto_examples/index` — Example gallery (101 examples)
 - :doc:`api_reference` — API reference
 
 .. toctree::
@@ -78,21 +78,22 @@ Install via pip:
 
    pip install diive
 
-Or via conda:
+Or with **uv** (modern, fast package manager):
 
 .. code-block:: bash
 
-   conda create -n diive python=3.11
-   conda activate diive
-   pip install diive
+   uv pip install diive
 
-For development, clone the repository and install with:
+For development, clone the repository and install with uv:
 
 .. code-block:: bash
 
    git clone https://github.com/holukas/diive.git
    cd diive
-   pip install -e .
+   uv sync                    # Install dependencies
+   uv run pytest tests/       # Run tests
+
+See :doc:`installation` for more options (conda, poetry, etc.).
 
 Quick Example
 =============

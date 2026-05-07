@@ -9,7 +9,7 @@ Installation & Setup
 
 **Q: What Python versions does DIIVE support?**
 
-A: DIIVE requires Python 3.10 or 3.11. We recommend 3.11 for the best experience.
+A: DIIVE requires Python 3.12 or 3.13. We recommend 3.13 for the best experience.
    Check your version:
 
    .. code-block:: bash
@@ -24,12 +24,19 @@ A: Make sure DIIVE is installed:
 
       pip install diive
 
-   Or for development:
+   Or with uv:
 
    .. code-block:: bash
 
+      uv pip install diive
+
+   For development, clone and install:
+
+   .. code-block:: bash
+
+      git clone https://github.com/holukas/diive.git
       cd diive
-      pip install -e .
+      uv sync
 
    If using conda, activate the environment:
 
@@ -417,14 +424,14 @@ Examples & Documentation
 
 **Q: Where are the examples?**
 
-A: Browse the :ref:`Example Gallery <auto_examples/index>` with 94+ runnable examples.
+A: Browse the :ref:`Example Gallery <auto_examples/index>` with 101 runnable examples across 52 files.
 
 Or clone and run locally:
 
 .. code-block:: bash
 
    cd diive
-   python examples/gap_filling/randomforest_ts.py
+   uv run python examples/gap_filling/randomforest_ts.py
 
 **Q: Can I run all examples at once?**
 
@@ -432,7 +439,7 @@ A: Yes, use the example runner (parallel):
 
    .. code-block:: bash
 
-      python examples/run_all_examples.py
+      uv run python examples/run_all_examples.py
 
 **Q: The example doesn't work for my use case**
 

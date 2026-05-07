@@ -393,29 +393,61 @@ _Create single outlier flags where `0=OK` and `2=outlier`._
 
 ## Installation
 
-`diive` is currently under active developement using **Python v3.11**.
+`diive` requires **Python 3.12-3.13**.
 
-### Using pip
+### Using pip (Recommended)
 
-`pip install diive`
+```bash
+pip install diive
+```
+
+### Using uv (Modern, Fast)
+
+[uv](https://docs.astral.sh/uv/) is a modern Python package installer and resolver (5-10x faster than pip):
+
+```bash
+uv pip install diive
+```
+
+Or create a project with uv:
+
+```bash
+uv venv
+source .venv/bin/activate    # On Windows: .venv\Scripts\activate
+uv pip install diive
+```
 
 ### Using poetry
 
-`poetry add diive`
+```bash
+poetry add diive
+```
 
-### From source
+### From source (Development)
 
-Directly use .tar.gz file of the desired version.
+Clone the repository and install in editable mode:
 
-`pip install https://github.com/holukas/diive/archive/refs/tags/v0.76.2.tar.gz`
+```bash
+git clone https://github.com/holukas/diive.git
+cd diive
+uv sync                       # Install dependencies with uv
+uv run pytest tests/          # Run tests
+```
 
-### Create and use a conda environment for diive
+### Legacy: Using conda
 
-One way to install and use `diive` with a specific Python version on a local machine:
+If you prefer conda, create a new environment:
 
-- Install [miniconda](https://docs.conda.io/en/latest/miniconda.html)
-- Start `miniconda` prompt
-- Create a environment named `diive-env` that contains Python 3.11: `conda create --name diive-env python=3.11`
-- Activate the new environment: `conda activate diive-env`
-- Install `diive` using pip: `pip install diive`
-- To start JupyterLab type `jupyter lab` in the prompt
+```bash
+conda create -n diive python=3.12
+conda activate diive
+pip install diive
+```
+
+For development with conda:
+
+```bash
+conda env create -f environment.yml
+conda activate diive
+pip install -e .
+```
