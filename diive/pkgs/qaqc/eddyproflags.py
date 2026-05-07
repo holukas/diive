@@ -1,5 +1,23 @@
 """
-Quality flags that depend on EddyPro output files.
+Quality flags extracted from and calculated based on EddyPro output files.
+
+DIIVE uses a standard quality flag format across all functions:
+    - 0 = good quality (passes test)
+    - 1 = soft warning (marginal, may indicate issues)
+    - 2 = bad quality / hard fail (fails test)
+
+EddyPro output files use different flag formats depending on the test type and file format:
+    - Some flags are simple integers (0=pass, 1=fail) that need conversion
+    - Some flags are multi-digit codes encoding multiple tests (e.g., VM97 8-digit codes)
+    - Some data (e.g., signal strength) are continuous values requiring threshold comparison
+
+This module provides functions to:
+    1. Extract test flags from EddyPro FluxNet and full output files
+    2. Convert EddyPro flag formats to DIIVE standard format
+    3. Calculate new quality flags by applying thresholds to raw data
+
+All functions return flags in DIIVE standard format (0=good, 1=soft warning, 2=bad)
+to ensure consistency across the library.
 """
 import numpy as np
 import pandas as pd
@@ -9,24 +27,59 @@ from diive.core.funcs.funcs import validate_id_string
 from diive.pkgs.qaqc.flags import restrict_application
 
 
+def _extract_and_convert_flag_from_multidigit(df: DataFrame, column_name: str,
+                                              position: int, is_hard_flag: bool = True) -> Series:
+    """Extract a single flag from a multi-digit integer column and convert to DIIVE format.
+
+    Helper function for extracting individual test results from multi-digit flag codes
+    (e.g., EddyPro VM97 codes) and converting to DIIVE standard format.
+
+    Args:
+        df: DataFrame containing the multi-digit flag column.
+        column_name: Name of the column containing multi-digit flag codes.
+        position: Position (digit index) to extract from the multi-digit code.
+        is_hard_flag: If True, convert 1->2 (hard fail); if False, keep 1 as-is (soft warning).
+
+    Returns:
+        A Series containing the extracted and converted flag (0=good, 1=soft warning, 2=bad).
+    """
+    flag = df[column_name].copy()
+    flag = flag.apply(pd.to_numeric, errors='coerce').astype(float)
+    flag = flag.fillna(899999999)  # 9 = missing flag (use multi-digit value to ensure proper string extraction)
+    flag = flag.astype(str)
+    flag = flag.str[int(position)]
+    flag = flag.apply(pd.to_numeric, errors='coerce')  # Use coerce to handle non-numeric characters like '.'
+    flag = flag.replace(9, np.nan)
+    if is_hard_flag:
+        flag = flag.replace(1, 2)  # Hard flag 1 corresponds to bad value (2)
+    return flag
+
+
 def flag_signal_strength_eddypro_test(df: DataFrame,
                                       signal_strength_col: str,
                                       var_col: str,
                                       method: str,
                                       threshold: int,
                                       idstr: str = None) -> Series:
-    """Flag flux values where signal strength / AGC is not sufficient (too high or too low).
+    """Extract signal strength data and create a quality flag based on threshold comparison.
+
+    Creates a quality flag by comparing signal strength values from EddyPro output against
+    a user-defined threshold.
 
     Args:
-        df: A dataframe that contains <signal_strength_col> and <var>.
-        signal_strength_col: Name of signal strength or AGC variable.
-        var_col: Name of the variable for which the flag is created.
-        method: Can be 'discard above' or 'discard below' the <threshold>.
-        threshold: Threshold to remove data points.
+        df: A dataframe that contains <signal_strength_col> and <var_col>.
+        signal_strength_col: Name of signal strength column from EddyPro output.
+        var_col: Name of the flux variable being evaluated. <var_col> is only used
+            for naming the extracted flag.
+        method: Threshold comparison method: 'discard below' or 'discard above'.
+        threshold: Threshold value for quality assessment.
         idstr: An optional identifier string to append to the flag name.
 
     Returns:
-        A series containing the test flag, where 0=good values, 2=bad values.
+        A series containing the quality flag, where 0=good values, 2=bad values.
+
+    See Also:
+        See examples/qaqc/eddyproflags.py for a complete working example.
     """
     idstr = validate_id_string(idstr=idstr)
     flagname_out = f'FLAG{idstr}_{var_col}_SIGNAL_STRENGTH_TEST'
@@ -61,7 +114,10 @@ def flag_signal_strength_eddypro_test(df: DataFrame,
 def flag_steadiness_horizontal_wind_eddypro_test(df: DataFrame,
                                                  flux: str,
                                                  idstr: str = None) -> Series:
-    """Create flag for steadiness of horizontal wind u from the sonic anemometer.
+    """Extract wind steadiness flag from EddyPro output and convert to DIIVE format.
+
+    Extracts the wind steadiness test flag from EddyPro FluxNet output and converts
+    it to DIIVE standard format (0=good, 2=bad).
 
     From the EddyPro description:
         "This test assesses whether the along-wind and crosswind components of the wind vector undergo
@@ -69,26 +125,29 @@ def flag_steadiness_horizontal_wind_eddypro_test(df: DataFrame,
         systematic variations is beyond the user-selected limit, the flux averaging period is hard-flagged
         for instationary horizontal wind (Vickers and Mahrt, 1997, Par. 6g)."
 
-    - The flag looks the same in the _fluxnet_ and _full_output_ files, but has
-    different names.
-    - Flag = 1 means that the wind was not stationary.
-    - This is a hard flag, meaning that in EddyPro results flag 1 = bad values.
+    Args:
+        df: A dataframe containing EddyPro FluxNet output data with VM97_NSHW_HF column.
+        flux: Name of the flux variable (used only for naming the output flag column).
+        idstr: An optional identifier string to append to the flag name.
 
+    Returns:
+        A series containing the quality flag in DIIVE format, where 0=good values, 2=bad values.
+
+    See Also:
+        See examples/qaqc/eddyproflags.py for a complete working example.
     """
     idstr = validate_id_string(idstr=idstr)
     flagname_out = f"FLAG{idstr}_{flux}_VM97_NSHW_HF_TEST"
-    nshw_flag = df['VM97_NSHW_HF'].copy()  # Name of the flag in EddyPro output file
-    nshw_flag = nshw_flag.apply(pd.to_numeric, errors='coerce').astype(float)
-    nshw_flag = nshw_flag.fillna(89)  # 9 = missing flag
-    nshw_flag = nshw_flag.astype(str)
-    nshw_flag = nshw_flag.str[int(1)]
-    nshw_flag = nshw_flag.astype(float)
-    nshw_flag = nshw_flag.replace(9, np.nan)
-    nshw_flag = nshw_flag.replace(1, 2)  # Hard flag 1 corresponds to bad value
+    nshw_flag = _extract_and_convert_flag_from_multidigit(
+        df=df,
+        column_name='VM97_NSHW_HF',
+        position=1,
+        is_hard_flag=True
+    )
     nshw_flag.name = flagname_out
 
     print(f"STEADINESS OF HORIZONTAL WIND TEST: Generated new flag variable {flagname_out}, "
-          f"values taken from output variable {nshw_flag.name}, with "
+          f"values taken from output variable VM97_NSHW_HF, with "
           f"flag 0 (good values) where test passed, "
           f"flag 2 (bad values) where test failed ...")
 
@@ -99,30 +158,36 @@ def flag_angle_of_attack_eddypro_test(df: DataFrame,
                                       flux: str,
                                       idstr: str = None,
                                       application_dates: list or None = None) -> Series:
-    """Flag from EddyPro output files is an integer and looks like this, e.g.: 81.
-    The integer contains angle-of-attack test results for the sonic anemometer.
+    """Extract angle of attack flag from EddyPro output and convert to DIIVE format.
 
-    Flag = 1 means that the angle was too large.
+    Extracts the angle of attack test flag from EddyPro FluxNet output and converts
+    it to DIIVE standard format (0=good, 2=bad). The angle of attack test evaluates
+    whether the wind vector relative to the sonic anemometer orientation is within
+    acceptable limits.
 
-    The flag looks the same in the _fluxnet_ and _full_output_ files, but have
-    different names.
+    The EddyPro flag is stored as a 2-digit integer (e.g., 81), where the second
+    digit contains the test result. Flag = 1 means the angle was too large (bad).
 
-    -- 1 digit:
-    attack_angle_hf	            8aa	                            80
+    Args:
+        df: A dataframe containing EddyPro FluxNet output data with VM97_AOA_HF column.
+        flux: Name of the flux variable (used only for naming the output flag column).
+        idstr: An optional identifier string to append to the flag name.
+        application_dates: Optional list of date ranges to restrict flag application.
+            Format: [['2022-01-01', '2022-12-31'], ...] for selective time periods.
 
-    This is a hard flag:
-    _HF_ = hard flag (flag 1 = bad values)
+    Returns:
+        A series containing the quality flag in DIIVE format, where 0=good values, 2=bad values.
 
+    See Also:
+        See examples/qaqc/eddyproflags.py for a complete working example.
     """
     flagname_out = f"FLAG{idstr}_{flux}_VM97_AOA_HF_TEST"
-    aoa_flag = df['VM97_AOA_HF'].copy()  # Name of the flag in EddyPro output file
-    aoa_flag = aoa_flag.apply(pd.to_numeric, errors='coerce').astype(float)
-    aoa_flag = aoa_flag.fillna(89)  # 9 = missing flag
-    aoa_flag = aoa_flag.astype(str)
-    aoa_flag = aoa_flag.str[int(1)]
-    aoa_flag = aoa_flag.astype(float)
-    aoa_flag = aoa_flag.replace(9, np.nan)
-    aoa_flag = aoa_flag.replace(1, 2)  # Hard flag 1 corresponds to bad value
+    aoa_flag = _extract_and_convert_flag_from_multidigit(
+        df=df,
+        column_name='VM97_AOA_HF',
+        position=1,
+        is_hard_flag=True
+    )
 
     # Apply flag only during certain time periods
     if application_dates:
@@ -133,120 +198,12 @@ def flag_angle_of_attack_eddypro_test(df: DataFrame,
                                         fill_value=np.nan)
 
     print(f"ANGLE OF ATTACK TEST: Generated new flag variable {flagname_out}, "
-          f"values taken from output variable {aoa_flag.name}, with "
+          f"values taken from output variable VM97_AOA_HF, with "
           f"flag 0 (good values) where test passed, "
           f"flag 2 (bad values) where test failed ...")
 
     aoa_flag.name = flagname_out
     return aoa_flag
-
-
-def flags_vm97_eddypro_fulloutputfile_tests(
-        df: DataFrame,
-        units: dict,
-        flux: str,
-        gas: str,
-        idstr: str = None,
-        spikes: bool = True,
-        amplitude: bool = False,
-        dropout: bool = True,
-        abslim: bool = False,
-        skewkurt_hf: bool = False,
-        skewkurt_sf: bool = False,
-        discont_hf: bool = False,
-        discont_sf: bool = False) -> DataFrame:
-    """Flags from EddyPro full_output files that contain results from quality tests
-     on raw data, based on Vickers and Mahrt (1997).
-
-    The flags are stored in an integer and looks like this, e.g.: 800011199.
-    One integer contains *one test* for *multiple* gases. Each number except the
-    first one corresponds to the test result of the respective flag for the
-    variable given in the units.
-
-    EddyPro outputs the raw data flags as 0 or 1, whereby 1 can correspond to
-    bad data (if the selected flag is a hard flag, _hf) or to OK data (if the selected
-    flag is a soft flag, _sf). If the flag is 9 then the test result is missing
-    or not relevant, e.g. when no CH4 flux was calculated.
-
-    This function considers all 8-digit VM97 flags:
-    Flag name                   Units                           Flag results
-    spikes_hf                   8u/v/w/ts/co2/h2o/ch4/none	    800000099
-    amplitude_resolution_hf     8u/v/w/ts/co2/h2o/ch4/none	    800000099
-    drop_out_hf	                8u/v/w/ts/co2/h2o/ch4/none	    800000099
-    absolute_limits_hf	        8u/v/w/ts/co2/h2o/ch4/none	    800000199
-    skewness_kurtosis_hf	    8u/v/w/ts/co2/h2o/ch4/none	    800000099
-    skewness_kurtosis_sf	    8u/v/w/ts/co2/h2o/ch4/none	    800011199
-    discontinuities_hf	        8u/v/w/ts/co2/h2o/ch4/none	    800000000
-    discontinuities_sf	        8u/v/w/ts/co2/h2o/ch4/none	    800000000
-
-    The last digit can be various gases. For example, if N2O flux was calculated
-    then the last flag (none) will be n2o. The first number in the flag results
-    is always 8.
-
-    -- 4 digits:
-    timelag_hf	                8co2/h2o/ch4/none	            81000
-    timelag_sf	                8co2/h2o/ch4/none	            81100
-
-    -- 1 digit:
-    attack_angle_hf	            8aa	                            80
-    non_steady_wind_hf	        8U	                            80
-
-
-    """
-    idstr = validate_id_string(idstr=idstr)
-
-    used_flags = []
-    if spikes:
-        # Spike detection, hard flag
-        used_flags.append('spikes_hf')
-    if amplitude:
-        # Amplitude resolution, hard flag
-        used_flags.append('amplitude_resolution_hf')
-    if dropout:
-        # Drop-out, hard flag
-        used_flags.append('drop_out_hf')
-    if abslim:
-        # Absolute limits, hard flag
-        used_flags.append('absolute_limits_hf')
-    if skewkurt_hf:
-        # Skewness/kurtosis, hard flag
-        used_flags.append('skewness_kurtosis_hf')
-    if skewkurt_sf:
-        # Skewness/kurtosis, soft flag
-        used_flags.append('skewness_kurtosis_sf')
-    if discont_hf:
-        # Discontinuities, hard flag
-        used_flags.append('discontinuities_hf')
-    if discont_sf:
-        # Discontinuities, soft flag
-        used_flags.append('discontinuities_sf')
-
-    allflags_df = df[used_flags].copy()
-    allflags_df = allflags_df.fillna(899999999)  # Fill missing values, showing that all flags are missing (9)
-
-    usedflags_df = pd.DataFrame(index=df.index)
-    for _flag in allflags_df:
-        this_flag = allflags_df[_flag].astype(str)  # Complete flag
-        _units = units[_flag]  # Units string
-        _units = _units.replace('8', '')  # Remove number 8 from units string (not needed, has no flag meaning)
-        _units = _units.split('/')  # Divide units string
-        gas_idx = _units.index(gas)  # Get index of var
-        this_flag = this_flag.str.get(gas_idx)  # Extract element at the passed position, for all records
-        this_flag = this_flag.astype(int)
-        this_flag.loc[this_flag == 9] = np.nan
-        if _flag.endswith("_hf"):
-            this_flag.loc[this_flag == 1] = 2  # 2 = bad quality value
-        flagname_out = f"FLAG{idstr}_{flux}_{gas}_VM97_{_flag}_TEST"
-        usedflags_df[flagname_out] = this_flag
-
-        print(f"RAW DATA TEST: Generated new flag variable {flagname_out}, "
-              f"values taken from output variable {_flag} from position {gas_idx}, "
-              f"based on {gas}, with "
-              f"flag 0 (good values) where test passed, "
-              f"flag 2 (bad values) where test failed (for hard flags) or "
-              f"flag 1 (ok values) where test failed (for soft flags) ...")
-
-    return usedflags_df
 
 
 def flags_vm97_eddypro_fluxnetfile_tests(
@@ -262,19 +219,51 @@ def flags_vm97_eddypro_fluxnetfile_tests(
         skewkurt_sf: bool = False,
         discont_hf: bool = False,
         discont_sf: bool = False) -> DataFrame:
-    """Flag from EddyPro fluxnet files is an integer and looks like this, e.g.: 801000100
-    One integer contains *multiple tests* for *one* gas.
+    """Extract VM97 (Vickers & Mahrt 1997) raw data quality test flags from EddyPro output.
 
-    There is one flag for each gas, which is different from the flag output in the
-    EddyPro full output file (there, one integer describes *one test* and then contains
-    flags for *multiple gases*).
+    EddyPro performs statistical quality tests on the raw high-frequency eddy covariance
+    data. These VM97 tests evaluate the quality and reliability of the raw measurements
+    before flux calculation. EddyPro FluxNet files store multiple raw data tests in a
+    single multi-digit integer (e.g., 80100010). This function extracts individual test
+    results from each digit position and converts them to DIIVE standard format.
 
-    _HF_ = hard flag (flag 0 = good values, flag 1 = bad values) --> will be converted to 2 = bad values
-    _SF_ = soft flag (flag 0 = good values, flag 1 = ok values) --> 1 remains 1 = ok values
+    The VM97 integer encodes 8 different quality tests in an 8-digit code:
+    - Position 0: Always 8 (constant, no meaning)
+    - Position 1: Spike detection (hard flag)
+    - Position 2: Amplitude resolution (hard flag)
+    - Position 3: Dropout detection (hard flag)
+    - Position 4: Absolute limits (hard flag)
+    - Position 5: Skewness/Kurtosis (hard flag)
+    - Position 6: Skewness/Kurtosis (soft flag)
+    - Position 7: Discontinuities (hard flag)
+    - Position 8: Discontinuities (soft flag)
 
-    See also the official EddyPro documentation:
-    https://www.licor.com/env/support/EddyPro/topics/despiking-raw-statistical-screening.html
+    Hard flags (_HF_) are converted from EddyPro format (1=bad) to DIIVE format (2=bad).
+    Soft flags (_SF_) retain value 1 to indicate marginal/warning conditions.
 
+    Args:
+        df: A dataframe containing EddyPro FluxNet output with {fluxbasevar}_VM97_TEST column.
+        flux: The flux variable being evaluated (e.g., 'FC' for carbon dioxide flux).
+        fluxbasevar: The base variable used to calculate the flux (e.g., 'CO2' for FC flux).
+        idstr: An optional identifier string to append to flag names.
+        spikes: Extract spike detection test (position 1).
+        amplitude: Extract amplitude resolution test (position 2).
+        dropout: Extract dropout detection test (position 3).
+        abslim: Extract absolute limits test (position 4).
+        skewkurt_hf: Extract skewness/kurtosis hard flag test (position 5).
+        skewkurt_sf: Extract skewness/kurtosis soft flag test (position 6).
+        discont_hf: Extract discontinuities hard flag test (position 7).
+        discont_sf: Extract discontinuities soft flag test (position 8).
+
+    Returns:
+        A dataframe containing selected quality flag columns in DIIVE format
+        (0=good, 1=soft warning, 2=bad).
+
+    See Also:
+        See examples/qaqc/eddyproflags.py for a complete working example.
+
+    References:
+        https://www.licor.com/env/support/EddyPro/topics/despiking-raw-statistical-screening.html
     """
     idstr = validate_id_string(idstr=idstr)
 
@@ -295,15 +284,15 @@ def flags_vm97_eddypro_fluxnetfile_tests(
     }
 
     # Extract 8 individual flags from VM97 multi-flag integer
-    flags_df = pd.DataFrame(index=df.index, data=vm97)
+    flags_df = pd.DataFrame(index=df.index)
     for i, c in flagnames_out.items():
-        _singleflag = vm97.astype(str)
-        _singleflag = _singleflag.str[int(i)]
-        _singleflag = _singleflag.astype(float)
-        _singleflag = _singleflag.replace(9, np.nan)
-        if '_HF_' in c:
-            # Hard flag 1 corresponds to bad value, set to 2
-            _singleflag = _singleflag.replace(1, 2)
+        is_hard_flag = '_HF_' in c
+        _singleflag = _extract_and_convert_flag_from_multidigit(
+            df=df,
+            column_name=f"{fluxbasevar}_VM97_TEST",
+            position=int(i),
+            is_hard_flag=is_hard_flag
+        )
         flags_df[c] = _singleflag
 
     # Select flags that are selected
@@ -348,40 +337,45 @@ def flag_fluxbasevar_completeness_eddypro_test(df: DataFrame, flux: str,
                                                thres_good: float = 0.99,
                                                thres_ok: float = 0.97,
                                                idstr: str = None) -> Series:
-    """Check completeness of the variable that was used to calculate the respective flux.
+    """Extract and evaluate completeness of the base variable used to calculate flux.
 
-    Default threshold values from Sabbatini et al. (2018).
+    Evaluates the completeness of the base variable that was used to calculate the flux
+    in EddyPro. For example, if CO2 was used to calculate FC (carbon dioxide flux), this
+    test evaluates what percentage of CO2 measurements were available in each averaging
+    interval. High completeness indicates reliable flux calculations.
 
-    Example:
-        `CO2` is the base variable that was used to calculate flux `FC`, the test is therefore
-         run on `CO2`.
+    Calculates completeness flag based on the percentage of available base variable records
+    in each averaging period, using default thresholds from Sabbatini et al. (2018):
+    - Flag 0 (good): >= 99% of base variable records available
+    - Flag 1 (ok): >= 97% and < 99% of base variable records available
+    - Flag 2 (bad): < 97% of base variable records available
 
-    Checks number of records of the relevant base variable available for each averaging interval
-    and calculates completeness flag as follows (default):
-    - `0` for files where >= 99% of base variable are available
-    - `1` for files where >= 97% and < 99% of base variable are available
-    - `2` for files where < 97% of base variable are available
-
-    List of flux base variables and the corresponding fluxes:
-    - `CO2`: used to calculate `FC`
-    - `H2O`: used to calculate `FH2O`
-    - `H2O`: used to calculate `LE`
-    - `H2O`: used to calculate `ET`
-    - `T_SONIC`: used to calculate `H`
-    - `N2O`: used to calculate `FN2O`
-    - `CH4`: used to calculate `FCH4`
+    Common flux and base variable pairings:
+    - `CO2` -> `FC` (carbon dioxide flux)
+    - `H2O` -> `FH2O` (water vapor flux)
+    - `H2O` -> `LE` (latent energy flux)
+    - `H2O` -> `ET` (evapotranspiration)
+    - `T_SONIC` -> `H` (sensible heat flux)
+    - `N2O` -> `FN2O` (nitrous oxide flux)
+    - `CH4` -> `FCH4` (methane flux)
 
     Args:
-        df: A DataFrame containing EddyPro data from the _fluxnet_ file.
-        flux: The name of the flux variable for which the completeness info is available in *df*.
-        fluxbasevar: The name of the variable that was used to calculate *flux* in EddyPro.
-        thres_good: The threshold for a good flag (default: 0.99, corresponds to 99%, meaning that
-            99% of potential records of *gas* were available to calculate *flux*).
-        thres_ok: The threshold for an ok flag (default: 0.97, corresponds to 97%).
+        df: A DataFrame containing EddyPro FluxNet output data.
+        flux: The name of the flux variable being evaluated (e.g., 'FC').
+        fluxbasevar: The name of the base variable used to calculate the flux (e.g., 'CO2').
+        thres_good: Threshold for good flag (default: 0.99 = 99% completeness required).
+        thres_ok: Threshold for ok flag (default: 0.97 = 97% completeness required).
         idstr: An optional identifier string to append to the flag name.
 
     Returns:
-        A pandas Series containing the completeness flag variable.
+        A pandas Series containing the completeness flag in DIIVE format
+        (0=good, 1=ok, 2=bad).
+
+    See Also:
+        See examples/qaqc/eddyproflags.py for a complete working example.
+
+    References:
+        Sabbatini, S., et al. (2018). Eddy covariance raw data processing for CO2 and energy fluxes...
     """
 
     idstr = validate_id_string(idstr=idstr)
@@ -451,49 +445,37 @@ def flag_spectral_correction_factor_eddypro_test(
     return scf_flag
 
 
-def _exception_full_output_scf(flux: str, gas: str):
-    """Find name of scf variable.
-    EddyPro is inconsistent in the _full_output_ file because
-    it uses the base variable (e.g. co2) as part of the scf name
-    for some fluxes, and the flux name (e.g. H) for others.
-    """
-    string = None
-    if any(n in flux for n in ['H', 'Tau', 'LE']):
-        string = flux
-    elif any(n in flux for n in ['co2_flux', 'n2o_flux', 'ch4_flux', 'h2o_flux']):
-        string = gas
-    scfname = f'{string}_scf'
-    return scfname
-
-
 def flag_ssitc_eddypro_test(df: DataFrame, flux: str, setflag_timeperiod: dict = None,
                             idstr: str = None) -> Series:
-    """Create series based on the SSITC test flag variable from an EddyPro output file.
+    """Extract Steady State and Integral Turbulence Characteristics (SSITC) test flag from EddyPro output.
 
-    SSITC = Steady State and Integral Turbulence Characteristics test.
+    SSITC test evaluates flux data quality based on steady state and integral turbulence
+    characteristics criteria (Mauder & Foken, 2004). This test assesses whether conditions
+    are sufficiently stationary for reliable flux measurements during the averaging period.
 
-    This method calls the external `flag_ssitc_eddypro_test` function, which
-    evaluates the flux data based on steady state and integral turbulence
-    criteria (Mauder & Foken, 2004). The resulting flag is added to the
-    internal `_results` dataframe.
+    The SSITC test flag is extracted from EddyPro FluxNet output and converted to DIIVE
+    standard format (0=good, 2=bad).
 
     Args:
-        df: A DataFrame containing EddyPro data from the _fluxnet_ or _full_output_ file.
-        flux: The name of the flux variable for which the SSITC test was performed. The name of the
-            SSITC test variable will be detected based on this variable.
-        setflag_timeperiod: Specifies time periods when the flag is set to given value.
-            Example:
-                Set flag 1 to value 2 between '2022-05-01' and '2023-09-30',
-                and between '2024-04-02' and '2024-04-19' (dates inclusive):
-                    {2: [
-                            [1, '2022-05-01', '2023-09-30'],
-                            [1, '2024-04-02', '2024-04-19']
-                        ]
-                    }
+        df: A DataFrame containing EddyPro FluxNet or full output data.
+        flux: The name of the flux variable (e.g., 'FC' for carbon dioxide flux).
+            The SSITC test variable name will be detected based on this variable.
+        setflag_timeperiod: Optional. Specify time periods to override flag values.
+            Dictionary format: {new_flag_value: [[original_flag, start_date, end_date], ...]}
+            Example - Set records with flag 1 to flag 2 between specific dates:
+                {2: [[1, '2022-05-01', '2023-09-30'], [1, '2024-04-02', '2024-04-19']]}
         idstr: An optional identifier string to append to the flag name.
 
     Returns:
-        A pandas Series containing the new flag variable.
+        A pandas Series containing the SSITC quality flag in DIIVE format
+        (0=good, 2=bad).
+
+    See Also:
+        See examples/qaqc/eddyproflags.py for a complete working example.
+
+    References:
+        Mauder, M., & Foken, T. (2004). Documentation and Instruction Manual of
+        the Eddy-Covariance Software Package TK2 (Vol. 26). Universität Bayreuth.
     """
     idstr = validate_id_string(idstr=idstr)
     flagname_out = f'FLAG{idstr}_{flux}_SSITC_TEST'

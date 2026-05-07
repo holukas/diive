@@ -4,7 +4,7 @@ import pandas as pd
 from pandas import Series
 
 import diive.core.plotting.plotfuncs as pf
-from diive.pkgs.outlierdetection.hampel import HampelDaytimeNighttime
+from diive.pkgs.outlierdetection.hampel import Hampel
 from diive.pkgs.outlierdetection.lof import LocalOutlierFactorAllData
 
 
@@ -117,8 +117,8 @@ def analyze_highest_quality_flux(flux: Series,
                                  lon: float,
                                  utc_offset: int,
                                  window_length: int = None,
-                                 n_sigma_dt: float = 5.5,
-                                 n_sigma_nt: float = 5.5,
+                                 n_sigma_daytime: float = 5.5,
+                                 n_sigma_nighttime: float = 5.5,
                                  use_differencing: bool = True,
                                  showplot: bool = True,
                                  figsize: tuple = (16, 7),
@@ -142,9 +142,9 @@ def analyze_highest_quality_flux(flux: Series,
         utc_offset (int): UTC offset in hours (e.g., 1 for CET, -8 for PST).
         window_length (int): Rolling window size for Hampel filter.
             Default: None (auto = data_count / 100, minimum 13 for ~6 hours at 30-min frequency).
-        n_sigma_dt (float): Hampel threshold for DAYTIME records (stricter for high turbulence).
+        n_sigma_daytime (float): Hampel threshold for DAYTIME records (stricter for high turbulence).
             Default is 5.5 (robust). Use 4.0 for stricter filtering.
-        n_sigma_nt (float): Hampel threshold for NIGHTTIME records (lenient for stable conditions).
+        n_sigma_nighttime (float): Hampel threshold for NIGHTTIME records (lenient for stable conditions).
             Default is 5.5. Use 2.5 for stricter filtering.
         use_differencing (bool): If True, applies double-differencing (Papale method) to remove
             trends and isolate spikes. Default True. Set False to detect outliers in raw values.
@@ -186,8 +186,8 @@ def analyze_highest_quality_flux(flux: Series,
         ...     lon=7.734,
         ...     utc_offset=1,
         ...     window_length=48*7,  # ~7 days at 30-min frequency
-        ...     n_sigma_dt=4.0,      # Stricter daytime
-        ...     n_sigma_nt=2.5,      # Lenient nighttime
+        ...     n_sigma_daytime=4.0,      # Stricter daytime
+        ...     n_sigma_nighttime=2.5,      # Lenient nighttime
         ...     use_differencing=True,
         ...     showplot=True,
         ...     return_summary=True
@@ -206,8 +206,8 @@ def analyze_highest_quality_flux(flux: Series,
         raise ValueError(f"lon must be -180 to 180, got {lon}")
     if window_length is not None and window_length < 1:
         raise ValueError(f"window_length must be positive, got {window_length}")
-    if n_sigma_dt <= 0 or n_sigma_nt <= 0:
-        raise ValueError(f"n_sigma_dt and n_sigma_nt must be positive, got {n_sigma_dt}, {n_sigma_nt}")
+    if n_sigma_daytime <= 0 or n_sigma_nighttime <= 0:
+        raise ValueError(f"n_sigma_daytime and n_sigma_nighttime must be positive, got {n_sigma_daytime}, {n_sigma_nighttime}")
 
     hqdf_filtered = pd.DataFrame(index=flux.index)
     summary = {}
@@ -220,18 +220,19 @@ def analyze_highest_quality_flux(flux: Series,
     print(f"\n>>> Removing outliers from highest-quality fluxes ({flux.name})")
     print(f">>> Outlier removal method: Hampel filter (MAD-based)")
     print(f">>> Parameters: window_length={window_length}, "
-          f"n_sigma_dt={n_sigma_dt}, n_sigma_nt={n_sigma_nt}, "
+          f"n_sigma_daytime={n_sigma_daytime}, n_sigma_nighttime={n_sigma_nighttime}, "
           f"use_differencing={use_differencing}")
 
     try:
-        hampel = HampelDaytimeNighttime(
+        hampel = Hampel(
             series=flux,
             lat=lat,
             lon=lon,
             utc_offset=utc_offset,
             window_length=window_length,
-            n_sigma_dt=n_sigma_dt,
-            n_sigma_nt=n_sigma_nt,
+            n_sigma=None,
+            n_sigma_daytime=n_sigma_daytime,
+            n_sigma_nighttime=n_sigma_nighttime,
             use_differencing=use_differencing,
             separate_day_night=True,
             showplot=showplot,
@@ -256,8 +257,8 @@ def analyze_highest_quality_flux(flux: Series,
     summary['outliers_found'] = n_outliers
     summary['outlier_pct'] = pct_outliers
     summary['window_length'] = window_length
-    summary['n_sigma_dt'] = n_sigma_dt
-    summary['n_sigma_nt'] = n_sigma_nt
+    summary['n_sigma_daytime'] = n_sigma_daytime
+    summary['n_sigma_nighttime'] = n_sigma_nighttime
 
     print(f"\n>>> Outlier Detection Summary:")
     print(f">>> Total records:     {n_total}")

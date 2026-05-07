@@ -1,0 +1,82 @@
+{
+ "__name__": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  }
+ ],
+ "dv.load_exampledata_parquet": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "load_exampledata_parquet"
+  }
+ ],
+ "dv.plot_histogram": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core.plotting.histogram",
+   "module_short": "diive.core.plotting.histogram",
+   "name": "HistogramPlot"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core.plotting",
+   "module_short": "diive.core.plotting",
+   "name": "HistogramPlot"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core",
+   "module_short": "diive.core",
+   "name": "HistogramPlot"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "HistogramPlot"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "plot_histogram"
+  }
+ ],
+ "example_histogram_basic": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "example_histogram_yearly": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ]
+}

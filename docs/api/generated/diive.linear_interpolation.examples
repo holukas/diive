@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.linear_interpolation``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates simple linear interpolation for filling small gaps in time series data, with configurable limits on gap size. Includes two examples showing conservative (limit=1) vs. generous (limit=5) gap-filling strategies.">
+
+.. only:: html
+
+  .. image:: /auto_examples/gap_filling/images/thumb/sphx_glr_interpolate_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/gap_filling/interpolate`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Linear interpolation gap-filling examples.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/gap_filling/interpolate`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

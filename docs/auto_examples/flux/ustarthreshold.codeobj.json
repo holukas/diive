@@ -1,0 +1,162 @@
+{
+ "__name__": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  }
+ ],
+ "dv.FlagMultipleConstantUstarThresholds": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs.flux.ustarthreshold",
+   "module_short": "diive.pkgs.flux.ustarthreshold",
+   "name": "FlagMultipleConstantUstarThresholds"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs.flux",
+   "module_short": "diive.pkgs.flux",
+   "name": "FlagMultipleConstantUstarThresholds"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs",
+   "module_short": "diive.pkgs",
+   "name": "FlagMultipleConstantUstarThresholds"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "FlagMultipleConstantUstarThresholds"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "FlagMultipleConstantUstarThresholds"
+  }
+ ],
+ "dv.UstarDetectionMPT": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs.flux.ustarthreshold",
+   "module_short": "diive.pkgs.flux.ustarthreshold",
+   "name": "UstarDetectionMPT"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs.flux",
+   "module_short": "diive.pkgs.flux",
+   "name": "UstarDetectionMPT"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs",
+   "module_short": "diive.pkgs",
+   "name": "UstarDetectionMPT"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "UstarDetectionMPT"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "UstarDetectionMPT"
+  }
+ ],
+ "dv.UstarThresholdConstantScenarios": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "UstarThresholdConstantScenarios"
+  }
+ ],
+ "example_flag_multiple_constant_ustar_thresholds": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "example_ustar_detection_mpt": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "example_ustar_threshold_constant_scenarios": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "load_exampledata_parquet_cha": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive.configs.exampledata",
+   "module_short": "diive.configs.exampledata",
+   "name": "load_exampledata_parquet_cha"
+  }
+ ],
+ "load_exampledata_parquet_lae": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive.configs.exampledata",
+   "module_short": "diive.configs.exampledata",
+   "name": "load_exampledata_parquet_lae"
+  }
+ ],
+ "time.perf_counter": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "time",
+   "module_short": "time",
+   "name": "perf_counter"
+  }
+ ]
+}

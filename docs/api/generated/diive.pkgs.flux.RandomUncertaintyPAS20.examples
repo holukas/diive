@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.pkgs.flux.RandomUncertaintyPAS20``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates the RandomUncertaintyPAS20 class for computing flux measurement uncertainty across multiple error sources (instrumental, statistical, gap-filling).">
+
+.. only:: html
+
+  .. image:: /auto_examples/flux/images/thumb/sphx_glr_uncertainty_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/flux/uncertainty`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Random uncertainty quantification for eddy covariance flux measurements.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/flux/uncertainty`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

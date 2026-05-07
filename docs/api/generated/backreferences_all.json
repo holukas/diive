@@ -1,0 +1,20 @@
+{
+ "diive.UstarMovingPointDetection": [
+  [
+   "ustar_mp_detection.py",
+   "F:\\Sync\\luhk_work\\20 - CODING\\21 - DIIVE\\diive\\examples\\flux",
+   "F:\\Sync\\luhk_work\\20 - CODING\\21 - DIIVE\\diive\\docs\\auto_examples/flux",
+   "Comprehensive example demonstrating: - USTAR threshold detection with forward/back modes - Bootstrap uncertainty estimation - Visualization of NEE response to USTAR stratification",
+   "USTAR Moving Point Detection - Complete Workflow (Papale et al., 2006)"
+  ]
+ ],
+ "diive.load_exampledata_parquet_lae": [
+  [
+   "ustar_mp_detection.py",
+   "F:\\Sync\\luhk_work\\20 - CODING\\21 - DIIVE\\diive\\examples\\flux",
+   "F:\\Sync\\luhk_work\\20 - CODING\\21 - DIIVE\\diive\\docs\\auto_examples/flux",
+   "Comprehensive example demonstrating: - USTAR threshold detection with forward/back modes - Bootstrap uncertainty estimation - Visualization of NEE response to USTAR stratification",
+   "USTAR Moving Point Detection - Complete Workflow (Papale et al., 2006)"
+  ]
+ ]
+}

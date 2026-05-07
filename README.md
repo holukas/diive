@@ -52,7 +52,7 @@ For the complete list of available aliases, see `diive.__all__`.
 
 ## Examples
 
-**94 executable examples** demonstrating common workflows are organized by topic in the `examples/` folder:
+**107 executable examples** demonstrating common workflows are organized by topic in the `examples/` folder:
 
 **Run all examples at once (parallelized):**
 ```bash
@@ -83,10 +83,10 @@ python examples/flux/common.py                       # Flux variable detection (
 python examples/flux/hqflux.py                       # CO2 flux quality analysis with Hampel filter (1 example)
 ```
 
-**Example categories (94 total, 50 files):**
+**Example categories (107 total, 52 files):**
 - **Visualization** (22): heatmap_datetime, hexbin, timeseries, cumulative, dielcycle, histogram, ridgeline, scatter
 - **Analyses** (8): correlation, decoupling, gapfinder, gridaggregator, histogram, optimumrange, quantiles, seasonaltrend
-- **Data Processing** (43): binary extraction, corrections (setto, offsetcorrection), outlierdetection (absolutelimits, hampel, incremental, localsd, lof, manualremoval), createvar (air, conversions, daynightflag, laggedvariants, noise, potentialradiation, timesince, vpd)
+- **Data Processing** (50): binary extraction, corrections (setto, offsetcorrection), outlierdetection (absolutelimits, hampel, incremental, localsd, lof, manualremoval, stepwise, trim), qaqc (FlagQCF, 6 EddyProFlags examples), createvar (air, conversions, daynightflag, laggedvariants, noise, potentialradiation, timesince, vpd)
 - **Gap-Filling** (10): linear_interpolation, mds, mds_comparison, randomforest_ts (3 examples: full, quick, optimize), xgboost_ts (2 examples: full, optimize), comparison (MDS vs RF vs XGB)
 - **Eddy Covariance & Flux** (9): fluxdetectionlimit, lag, windrotation, hqflux, selfheating, uncertainty, ustarthreshold (3 examples)
 - **Spectral Analysis** (2): harmonic (spectrogram analysis)
@@ -358,6 +358,12 @@ _Create single outlier flags where `0=OK` and `2=outlier`._
 
 ### Quality control
 
+- **Overall Quality Control Flag (QCF)** · class:
+  `FlagQCF` ([example](examples/qaqc/qcf.py))
+    - Combines multiple individual test flags into a single overall quality indicator
+    - Supports daytime/nighttime separation and USTAR filtering scenarios
+    - Generates comprehensive reports: QCF distribution, test statistics, sequential impact analysis
+    - Visualizations: 4-panel heatmap (original, QC, flag sums, QCF flag)
 - **Stepwise MeteoScreening from database** · class:
   `StepwiseMeteoScreeningDb` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/StepwiseMeteoScreeningFromDatabase.ipynb))
 
@@ -387,29 +393,61 @@ _Create single outlier flags where `0=OK` and `2=outlier`._
 
 ## Installation
 
-`diive` is currently under active developement using **Python v3.11**.
+`diive` requires **Python 3.12-3.13**.
 
-### Using pip
+### Using pip (Recommended)
 
-`pip install diive`
+```bash
+pip install diive
+```
+
+### Using uv (Modern, Fast)
+
+[uv](https://docs.astral.sh/uv/) is a modern Python package installer and resolver (5-10x faster than pip):
+
+```bash
+uv pip install diive
+```
+
+Or create a project with uv:
+
+```bash
+uv venv
+source .venv/bin/activate    # On Windows: .venv\Scripts\activate
+uv pip install diive
+```
 
 ### Using poetry
 
-`poetry add diive`
+```bash
+poetry add diive
+```
 
-### From source
+### From source (Development)
 
-Directly use .tar.gz file of the desired version.
+Clone the repository and install in editable mode:
 
-`pip install https://github.com/holukas/diive/archive/refs/tags/v0.76.2.tar.gz`
+```bash
+git clone https://github.com/holukas/diive.git
+cd diive
+uv sync                       # Install dependencies with uv
+uv run pytest tests/          # Run tests
+```
 
-### Create and use a conda environment for diive
+### Legacy: Using conda
 
-One way to install and use `diive` with a specific Python version on a local machine:
+If you prefer conda, create a new environment:
 
-- Install [miniconda](https://docs.conda.io/en/latest/miniconda.html)
-- Start `miniconda` prompt
-- Create a environment named `diive-env` that contains Python 3.11: `conda create --name diive-env python=3.11`
-- Activate the new environment: `conda activate diive-env`
-- Install `diive` using pip: `pip install diive`
-- To start JupyterLab type `jupyter lab` in the prompt
+```bash
+conda create -n diive python=3.12
+conda activate diive
+pip install diive
+```
+
+For development with conda:
+
+```bash
+conda env create -f environment.yml
+conda activate diive
+pip install -e .
+```

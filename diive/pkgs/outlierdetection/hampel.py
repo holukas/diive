@@ -82,7 +82,7 @@ class Hampel(FlagBase):
            to apply different thresholds for daytime and nighttime periods.
 
         The general formula for the detection interval is:
-        $$Limit = Median \pm (n\_sigma \times k \times MAD)$$
+        $$Limit = \\text{Median} \\pm (n\\_sigma \\times k \\times MAD)$$
 
         Args:
             series (pd.Series): The time series to analyze.

@@ -1,0 +1,91 @@
+{
+ "__name__": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  }
+ ],
+ "dv.load_exampledata_parquet": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "load_exampledata_parquet"
+  }
+ ],
+ "dv.plot_scatter_xy": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core.plotting.scatter",
+   "module_short": "diive.core.plotting.scatter",
+   "name": "ScatterXY"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core.plotting",
+   "module_short": "diive.core.plotting",
+   "name": "ScatterXY"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.core",
+   "module_short": "diive.core",
+   "name": "ScatterXY"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "ScatterXY"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "plot_scatter_xy"
+  }
+ ],
+ "example_scatter_nee_vpd": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "example_scatter_nee_vpd_binned": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "example_scatter_temperature_vpd": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ]
+}

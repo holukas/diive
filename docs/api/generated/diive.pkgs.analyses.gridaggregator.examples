@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.pkgs.analyses.GridAggregator``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Run this script to see grid aggregation results:     python examples/analyses/gridaggregator.py">
+
+.. only:: html
+
+  .. image:: /auto_examples/analyses/images/thumb/sphx_glr_gridaggregator_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/analyses/gridaggregator`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for grid aggregation analysis using GridAggregator.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/analyses/gridaggregator`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

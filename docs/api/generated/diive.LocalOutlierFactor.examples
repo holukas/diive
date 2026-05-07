@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.LocalOutlierFactor``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="This module demonstrates the LocalOutlierFactor class for identifying outliers based on local density deviations. Two modes are available: - Global mode: Single LOF threshold for entire series - Day/night mode: Separate thresholds for daytime/nighttime periods">
+
+.. only:: html
+
+  .. image:: /auto_examples/outlierdetection/images/thumb/sphx_glr_lof_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/outlierdetection/lof`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Local Outlier Factor (LOF) outlier detection examples.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/outlierdetection/lof`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.Hampel``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Examples demonstrating the Hampel filter (Median Absolute Deviation) for robust outlier detection with optional daytime/nighttime separation.">
+
+.. only:: html
+
+  .. image:: /auto_examples/outlierdetection/images/thumb/sphx_glr_hampel_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/outlierdetection/hampel`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Outlier Detection: Hampel Filter Examples</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/outlierdetection/hampel`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

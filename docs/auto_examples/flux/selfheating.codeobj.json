@@ -1,0 +1,156 @@
+{
+ "ScopApplicator": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs.flux.selfheating",
+   "module_short": "diive.pkgs.flux.selfheating",
+   "name": "ScopApplicator"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs.flux",
+   "module_short": "diive.pkgs.flux",
+   "name": "ScopApplicator"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs",
+   "module_short": "diive.pkgs",
+   "name": "ScopApplicator"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "ScopApplicator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive.pkgs.flux.selfheating",
+   "module_short": "diive.pkgs.flux.selfheating",
+   "name": "ScopApplicator"
+  }
+ ],
+ "ScopOptimizer": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs.flux.selfheating",
+   "module_short": "diive.pkgs.flux.selfheating",
+   "name": "ScopOptimizer"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs.flux",
+   "module_short": "diive.pkgs.flux",
+   "name": "ScopOptimizer"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs",
+   "module_short": "diive.pkgs",
+   "name": "ScopOptimizer"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "ScopOptimizer"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive.pkgs.flux.selfheating",
+   "module_short": "diive.pkgs.flux.selfheating",
+   "name": "ScopOptimizer"
+  }
+ ],
+ "ScopPhysics": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs.flux.selfheating",
+   "module_short": "diive.pkgs.flux.selfheating",
+   "name": "ScopPhysics"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs.flux",
+   "module_short": "diive.pkgs.flux",
+   "name": "ScopPhysics"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive.pkgs",
+   "module_short": "diive.pkgs",
+   "name": "ScopPhysics"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "ScopPhysics"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive.pkgs.flux.selfheating",
+   "module_short": "diive.pkgs.flux.selfheating",
+   "name": "ScopPhysics"
+  }
+ ],
+ "__name__": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  }
+ ],
+ "example_selfheating_ch_lae": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "load_exampledata_parquet_lae": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive.configs.exampledata",
+   "module_short": "diive.configs.exampledata",
+   "name": "load_exampledata_parquet_lae"
+  }
+ ],
+ "time.time": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "time",
+   "module_short": "time",
+   "name": "time"
+  }
+ ]
+}

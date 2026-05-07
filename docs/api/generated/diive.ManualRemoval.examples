@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.ManualRemoval``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="This module demonstrates the ManualRemoval class for explicitly removing data points or date ranges from a time series.">
+
+.. only:: html
+
+  .. image:: /auto_examples/outlierdetection/images/thumb/sphx_glr_manualremoval_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/outlierdetection/manualremoval`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Manual Outlier Removal examples.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/outlierdetection/manualremoval`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

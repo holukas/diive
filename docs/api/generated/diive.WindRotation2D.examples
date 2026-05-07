@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.WindRotation2D``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Wind rotation (tilt correction) aligns the coordinate system with mean wind direction, enabling proper calculation of turbulent fluctuations for eddy covariance flux calculations.">
+
+.. only:: html
+
+  .. image:: /auto_examples/echires/images/thumb/sphx_glr_windrotation_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/echires/windrotation`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for wind rotation and coordinate system transformation.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/echires/windrotation`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

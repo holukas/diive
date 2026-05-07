@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.zScoreRolling``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Z-score detects outliers as values that deviate significantly from the mean (measured in standard deviations). Supports global, daytime/nighttime, and rolling window approaches.">
+
+.. only:: html
+
+  .. image:: /auto_examples/outlierdetection/images/thumb/sphx_glr_zscore_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/outlierdetection/zscore`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples: Z-Score Outlier Detection</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/outlierdetection/zscore`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

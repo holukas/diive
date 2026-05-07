@@ -1,0 +1,232 @@
+{
+ "__name__": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  }
+ ],
+ "dv.load_exampledata_parquet": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "diive",
+   "module_short": "diive",
+   "name": "load_exampledata_parquet"
+  }
+ ],
+ "example1_spectrogram_daily_pattern": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "example2_annual_spectrogram_phenology": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "np.log10": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ufunc"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "log10"
+  }
+ ],
+ "pd.Timestamp": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas._libs.tslibs.timestamps",
+   "module_short": "pandas",
+   "name": "Timestamp"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas._libs.tslibs",
+   "module_short": "pandas",
+   "name": "Timestamp"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas._libs",
+   "module_short": "pandas",
+   "name": "Timestamp"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas",
+   "module_short": "pandas",
+   "name": "Timestamp"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas._libs.tslibs.timestamps",
+   "module_short": "pandas._libs.tslibs.timestamps",
+   "name": "_Timestamp"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas._libs.tslibs",
+   "module_short": "pandas._libs.tslibs",
+   "name": "_Timestamp"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas._libs",
+   "module_short": "pandas._libs",
+   "name": "_Timestamp"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas",
+   "module_short": "pandas",
+   "name": "_Timestamp"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas._libs.tslibs.base",
+   "module_short": "pandas._libs.tslibs.base",
+   "name": "ABCTimestamp"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas._libs.tslibs",
+   "module_short": "pandas._libs.tslibs",
+   "name": "ABCTimestamp"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas._libs",
+   "module_short": "pandas._libs",
+   "name": "ABCTimestamp"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pandas",
+   "module_short": "pandas",
+   "name": "ABCTimestamp"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "datetime",
+   "module_short": "datetime",
+   "name": "datetime"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "datetime",
+   "module_short": "datetime",
+   "name": "date"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "pandas",
+   "module_short": "pandas",
+   "name": "Timestamp"
+  }
+ ],
+ "plt.colorbar": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "colorbar"
+  }
+ ],
+ "plt.show": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "show"
+  }
+ ],
+ "plt.subplots": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "subplots"
+  }
+ ],
+ "signal.spectrogram": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "scipy.signal",
+   "module_short": "scipy.signal",
+   "name": "spectrogram"
+  }
+ ]
+}

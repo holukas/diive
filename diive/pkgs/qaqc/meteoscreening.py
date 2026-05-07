@@ -26,9 +26,7 @@ from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import detect_freq_groups
 from diive.pkgs.analyses.correlation import daily_correlation
 from diive.pkgs.corrections.offsetcorrection import remove_radiation_zero_offset, remove_relativehumidity_offset
-from diive.pkgs.corrections.setto_missing import set_exact_values_to_missing
-from diive.pkgs.corrections.setto_threshold import setto_threshold
-from diive.pkgs.corrections.setto_value import setto_value
+from diive.pkgs.corrections.setto import set_exact_values_to_missing, setto_threshold, setto_value
 from diive.pkgs.createvar.potentialradiation import potrad
 from diive.pkgs.outlierdetection.stepwiseoutlierdetection import StepwiseOutlierDetection
 from diive.pkgs.qaqc.flags import MissingValues

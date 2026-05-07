@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.core.ScatterXY``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="ScatterXY: Scatter plot of two variables with optional third variable as color.">
+
+.. only:: html
+
+  .. image:: /auto_examples/visualization/images/thumb/sphx_glr_scatter_xy_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/visualization/scatter_xy`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for ScatterXY visualization.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/visualization/scatter_xy`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

@@ -1,0 +1,238 @@
+{
+ "EXAMPLE_FILES": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "list"
+  }
+ ],
+ "MAX_WORKERS": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
+ "Path": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pathlib",
+   "module_short": "pathlib",
+   "name": "Path"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "pathlib",
+   "module_short": "pathlib",
+   "name": "PurePath"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "pathlib",
+   "module_short": "pathlib",
+   "name": "Path"
+  }
+ ],
+ "ThreadPoolExecutor": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "concurrent.futures.thread",
+   "module_short": "concurrent.futures",
+   "name": "ThreadPoolExecutor"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "concurrent.futures",
+   "module_short": "concurrent.futures",
+   "name": "ThreadPoolExecutor"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "concurrent",
+   "module_short": "concurrent",
+   "name": "ThreadPoolExecutor"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "concurrent.futures._base",
+   "module_short": "concurrent.futures",
+   "name": "Executor"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "concurrent.futures",
+   "module_short": "concurrent.futures",
+   "name": "Executor"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "concurrent",
+   "module_short": "concurrent",
+   "name": "Executor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "concurrent.futures",
+   "module_short": "concurrent.futures",
+   "name": "ThreadPoolExecutor"
+  }
+ ],
+ "__name__": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  }
+ ],
+ "as_completed": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "concurrent.futures",
+   "module_short": "concurrent.futures",
+   "name": "as_completed"
+  }
+ ],
+ "run_all_examples": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "run_example": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "subprocess.TimeoutExpired": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "subprocess",
+   "module_short": "subprocess",
+   "name": "TimeoutExpired"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "subprocess",
+   "module_short": "subprocess",
+   "name": "SubprocessError"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "Exception"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "BaseException"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "subprocess",
+   "module_short": "subprocess",
+   "name": "TimeoutExpired"
+  }
+ ],
+ "subprocess.run": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "subprocess",
+   "module_short": "subprocess",
+   "name": "run"
+  }
+ ],
+ "sys.executable": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "sys",
+   "module_short": "sys",
+   "name": "executable"
+  }
+ ],
+ "sys.exit": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "sys",
+   "module_short": "sys",
+   "name": "exit"
+  }
+ ],
+ "time.time": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "time",
+   "module_short": "time",
+   "name": "time"
+  }
+ ]
+}

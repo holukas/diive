@@ -1,0 +1,17 @@
+/* Hide "See Also" sections from sidebar while keeping them in main content */
+aside .toctree-l1 + .section > dl.simple,
+aside dt:has(+ dd > p:has(em)),
+aside .sidebar-see-also {
+    display: none;
+}
+
+/* Suppress "See Also" headings and their content in sidebar navigation */
+.sidebar-scroll dl.simple dt,
+.sidebar-scroll dl.simple dd {
+    display: none;
+}
+
+/* Hide definition list items that appear to be "See Also" cross-references in sidebar */
+aside dl.simple {
+    display: none;
+}

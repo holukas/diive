@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.zScoreIncrements``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Examples demonstrating the z-score increments method for outlier detection. Identifies outliers based on abrupt changes between consecutive values.">
+
+.. only:: html
+
+  .. image:: /auto_examples/outlierdetection/images/thumb/sphx_glr_incremental_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/outlierdetection/incremental`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Outlier Detection: Z-Score Increments Examples</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/outlierdetection/incremental`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

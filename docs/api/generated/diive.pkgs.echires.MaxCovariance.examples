@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.pkgs.echires.MaxCovariance``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The time lag between two variables (e.g., wind and scalar concentration) can be determined by finding the maximum covariance at different lag times. This is useful for detecting inlet tube delays and other measurement timing issues in eddy covariance data.">
+
+.. only:: html
+
+  .. image:: /auto_examples/echires/images/thumb/sphx_glr_lag_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/echires/lag`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for MaxCovariance lag detection using time series covariance analysis.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/echires/lag`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

@@ -1,0 +1,210 @@
+
+
+Examples using ``diive.HeatmapDateTime``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Run this script to see daytime/nighttime flag results:     python examples/createvar/daynightflag.py">
+
+.. only:: html
+
+  .. image:: /auto_examples/createvar/images/thumb/sphx_glr_daynightflag_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/createvar/daynightflag`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for daytime/nighttime flag calculation using daynightflag module.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/createvar/daynightflag`
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="VPD can be calculated from air temperature (TA) and relative humidity (RH), which are widely available measurements in ecosystem monitoring networks.">
+
+.. only:: html
+
+  .. image:: /auto_examples/createvar/images/thumb/sphx_glr_vpd_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/createvar/vpd`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for VPD (Vapor Pressure Deficit) calculations using calc_vpd_from_ta_rh.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/createvar/vpd`
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Run this script to see potential radiation examples:     python examples/createvar/potentialradiation.py">
+
+.. only:: html
+
+  .. image:: /auto_examples/createvar/images/thumb/sphx_glr_potentialradiation_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/createvar/potentialradiation`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for potential radiation calculations using potentialradiation module.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/createvar/potentialradiation`
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="TimeSince counts consecutive records since the last occurrence of a condition by tracking when values fall outside a specified limit range. Useful for: - Dry period detection (time since last precipitation &gt; 0) - Frost period detection (time since freezing temperature &lt;= 0°C) - Warm spell analysis - Event-based time tracking">
+
+.. only:: html
+
+  .. image:: /auto_examples/createvar/images/thumb/sphx_glr_timesince_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/createvar/timesince`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for time-since calculations using TimeSince class.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/createvar/timesince`
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates simple linear interpolation for filling small gaps in time series data, with configurable limits on gap size. Includes two examples showing conservative (limit=1) vs. generous (limit=5) gap-filling strategies.">
+
+.. only:: html
+
+  .. image:: /auto_examples/gap_filling/images/thumb/sphx_glr_interpolate_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/gap_filling/interpolate`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Linear interpolation gap-filling examples.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/gap_filling/interpolate`
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="XGBoost is a gradient boosting approach for gap-filling time series data. Effective for non-linear relationships, complex temporal interactions, and data with outliers.">
+
+.. only:: html
+
+  .. image:: /auto_examples/gap_filling/images/thumb/sphx_glr_xgboost_ts_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/gap_filling/xgboost_ts`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">XGBoost gap-filling examples.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/gap_filling/xgboost_ts`
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Random Forest is a robust, interpretable machine learning approach for gap-filling time series data. Effective for non-linear relationships and feature interactions.">
+
+.. only:: html
+
+  .. image:: /auto_examples/gap_filling/images/thumb/sphx_glr_randomforest_ts_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/gap_filling/randomforest_ts`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Random Forest gap-filling examples.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/gap_filling/randomforest_ts`
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates three gap-filling methods with cumulative flux curves. Uses one month of data for fast execution. Methods are evaluated on the same data with performance metrics and cumulative carbon flux visualization.">
+
+.. only:: html
+
+  .. image:: /auto_examples/gap_filling/images/thumb/sphx_glr_comparison_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/gap_filling/comparison`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Comparison of gap-filling methods: MDS, Random Forest, and XGBoost.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/gap_filling/comparison`
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="HeatmapDateTime: Visualize time series as a date × time-of-day grid. HeatmapYearMonth: Visualize time series as a year × month grid with aggregation.">
+
+.. only:: html
+
+  .. image:: /auto_examples/visualization/images/thumb/sphx_glr_heatmap_datetime_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/visualization/heatmap_datetime`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for HeatmapDateTime and HeatmapYearMonth visualization.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/visualization/heatmap_datetime`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.pkgs.SeasonalTrendDecomposition``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Run this script to see decomposition results and analysis:     python examples/analyses/seasonaltrend.py">
+
+.. only:: html
+
+  .. image:: /auto_examples/analyses/images/thumb/sphx_glr_seasonaltrend_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/analyses/seasonaltrend`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for seasonal-trend decomposition using SeasonalTrendDecomposition.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/analyses/seasonaltrend`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

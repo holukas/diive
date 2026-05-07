@@ -1,11 +1,32 @@
 """
-
-==================================
 QCF - OVERALL QUALITY CONTROL FLAG
-==================================
 
-Combine multiple flags in one single QCF flag.
+Calculate overall quality flag (QCF) by combining multiple individual test flags
+into a single quality indicator. Supports daytime/nighttime separation and USTAR
+filtering scenarios.
 
+Key concepts:
+    - QCF flag values: 0 (good), 1 (marginal), 2 (poor/rejected)
+    - Hard flags (value 2) indicate critical quality issues
+    - Soft flags (value 1) indicate minor quality concerns
+    - Flag sums drive the overall QCF decision logic
+
+Typical workflow:
+    1. Create FlagQCF instance with DataFrame containing individual test flags
+    2. Call calculate() to compute QCF from flag combinations
+    3. Access results via properties: flagqcf, filteredseries, filteredseries_hq
+    4. Use reporting methods for diagnostics: report_qcf_flags(), report_qcf_evolution()
+
+Example:
+    >>> qcf = FlagQCF(
+    ...     df=data_with_flags,
+    ...     series=flux_series,
+    ...     outname='NEE',
+    ...     swinpot=sw_in_pot  # Optional: enables daytime/nighttime separation
+    ... )
+    >>> qcf.calculate(daytime_accept_qcf_below=2, nighttimetime_accept_qcf_below=2)
+    >>> quality_controlled_flux = qcf.filteredseries  # NaN for rejected values
+    >>> highest_quality_flux = qcf.filteredseries_hq  # NaN for any QCF > 0
 """
 from cmath import isnan
 
@@ -22,22 +43,88 @@ from diive.pkgs.createvar.daynightflag import daytime_nighttime_flag_from_swinpo
 
 
 class FlagQCF:
-    """Calculate overall quality flag QCF"""
+    """Calculate overall quality flag (QCF) from individual test flags.
+
+    **REQUIRED:** Input DataFrame must contain individual test flag columns with
+    naming pattern FLAG_*_TEST (e.g., FLAG_L41_NEE_RANGE_TEST, FLAG_L41_NEE_SONIC_TEST).
+    Each test flag column must have values: 0=pass, 1=soft warning, 2=hard fail.
+
+    This class automatically identifies all FLAG_*_TEST columns, counts hard/soft
+    flags for each record, and calculates QCF based on flag sums. Supports optional
+    daytime/nighttime separation and USTAR filtering scenarios.
+
+    Flag Values & Sums:
+        Individual flags: 0=pass, 1=soft warning (minor issue), 2=hard fail (critical)
+        Flag sums count how many tests raised flags:
+            - Sum of all flags: Total number of raised flags
+            - Sum of hard flags: Count of critical issues (value 2)
+            - Sum of soft flags: Count of minor issues (value 1)
+
+    QCF Decision Logic (based on sums):
+        QCF = 0: All flags pass (total flag sum = 0)
+        QCF = 1: 1-3 soft flags raised AND no hard flags
+        QCF = 2: >3 soft flags OR >=2 hard flags OR rejected by daytime/nighttime logic
+
+    Data Access:
+        - flagqcf: Overall QCF flag for each record
+        - filteredseries: Data with QCF=2 records set to NaN (general use)
+        - filteredseries_hq: Only QCF=0 records (strict quality)
+        - flags: Full DataFrame with all individual flags, flag sums, and QCF results
+    """
 
     def __init__(self,
                  df: DataFrame,
-                 series: Series,
+                 target_col: str,
                  outname: str = None,
-                 swinpot: Series = None,
+                 swinpot_col: str = None,
                  idstr: str = None,
                  nighttime_threshold: float = 50,
                  ustar_scenarios: list = None
                  ):
+        """Initialize QCF calculator.
+
+        Args:
+            df: DataFrame containing individual test flag columns following pattern
+                FLAG_*_{idstr}_{target_col}_TEST (e.g., FLAG_TEST1_L41_NEE_TEST). Values must be 0/1/2.
+            target_col: Column name of the target variable to calculate QCF for (e.g., 'NEE' or 'FC').
+                This name must appear in flag column names for proper identification.
+            outname: Output name for QCF flag columns. If None, uses target_col name.
+            idstr: ID string identifier that appears in flag column names. This string
+                is used to identify which flags belong together and to name output
+                columns. Examples: '_L41', '_L41_FC', '_L4.1'. If None, auto-detected
+                from flag columns. All FLAG_*_{idstr}_{target_col}_TEST columns are identified
+                and used for QCF calculation.
+            swinpot_col: Column name of solar potential radiation for daytime/nighttime
+                separation. If provided, enables separate acceptance thresholds for day/night.
+            nighttime_threshold: Solar radiation threshold (W/m²) below which records
+                are considered nighttime. Default 50 W/m².
+            ustar_scenarios: List of USTAR filtering scenario names (e.g., ['CUT_50', 'CUT_75']).
+                If provided, automatically excludes irrelevant USTAR flags for current scenario.
+
+        Raises:
+            ValueError: If multiple USTAR scenarios are detected in idstr.
+            KeyError: If target_col or swinpot_col column not found in DataFrame.
+
+        Example:
+            >>> qcf = FlagQCF(
+            ...     df=data,  # Must contain FLAG_TEST1_L41_NEE_TEST, FLAG_TEST2_L41_NEE_TEST, etc.
+            ...     target_col='NEE',  # Column name of variable to check
+            ...     swinpot_col='SW_IN_POT',  # Optional: for daytime/nighttime separation
+            ...     idstr='_L41'  # Identifies flags as FLAG_*_L41_NEE_TEST pattern
+            ... )
+        """
+        if target_col not in df.columns:
+            raise KeyError(f"Column '{target_col}' not found in DataFrame")
+        if swinpot_col and swinpot_col not in df.columns:
+            raise KeyError(f"Column '{swinpot_col}' not found in DataFrame")
+
         self.df = df.copy()  # Original data
-        self.series = series.copy()
+        self.series = df[target_col].copy()
+        self.series_name = target_col
+        self.swinpot_data = df[swinpot_col].copy() if swinpot_col else None
         self.ustar_scenarios = ustar_scenarios  # Required to get the correct USTAR FLAG_ columns for each scenario
 
-        self.outname = outname if outname else series.name
+        self.outname = outname if outname else target_col
 
         self.idstr = validate_id_string(idstr=idstr)
 
@@ -62,13 +149,13 @@ class FlagQCF:
             exclude_ustar_ids = None
             # current_ustar_scenario = None
 
-        flagcols = identify_flagcols(df=df, seriescol=str(series.name), exclude_ustar_ids=exclude_ustar_ids)
+        flagcols = identify_flagcols(df=df, seriescol=target_col, exclude_ustar_ids=exclude_ustar_ids)
         self._flags_df = df[flagcols].copy()
 
         # Detect daytime and nighttime
-        if isinstance(swinpot, Series):
+        if self.swinpot_data is not None:
             self.daytime, self.nighttime = \
-                daytime_nighttime_flag_from_swinpot(swinpot=swinpot, nighttime_threshold=nighttime_threshold)
+                daytime_nighttime_flag_from_swinpot(swinpot=self.swinpot_data, nighttime_threshold=nighttime_threshold)
         else:
             self.daytime = None
             self.nighttime = None
@@ -86,28 +173,68 @@ class FlagQCF:
 
     @property
     def flags(self) -> DataFrame:
-        """Return dataframe containing flags"""
+        """Return dataframe containing all test flags and calculated QCF results.
+
+        Returns:
+            DataFrame with original test flags plus calculated QCF columns:
+                - FLAG*_QCF: Overall quality flag (0/1/2)
+                - SUM*_FLAGS: Total flag count
+                - SUM*_HARDFLAGS: Count of hard flags (value 2)
+                - SUM*_SOFTFLAGS: Count of soft flags (value 1)
+                - *_QCF: Quality-controlled series (NaN for QCF=2)
+                - *_QCF0: Highest-quality series (NaN for QCF>0)
+        """
         if not isinstance(self._flags_df, DataFrame):
             raise Exception('Results for flags are empty')
         return self._flags_df
 
     @property
     def filteredseries(self) -> Series:
-        """Return series with rejected values set to missing"""
+        """Return quality-controlled series with rejected records as NaN.
+
+        Records with QCF=2 (poor quality) are set to NaN. Use this for general
+        analysis where marginal data (QCF=1) is acceptable.
+
+        Returns:
+            Series with original values where QCF<2, NaN elsewhere.
+        """
         return self.flags[self.filteredseriescol]
 
     @property
     def filteredseries_hq(self) -> Series:
-        """Return series with highest-quality fluxes only"""
+        """Return highest-quality series with only QCF=0 records.
+
+        Records with QCF>0 (any flags) are set to NaN. Use this for stringent
+        analyses requiring only the best-quality data.
+
+        Returns:
+            Series with original values where QCF=0, NaN elsewhere.
+        """
         return self.flags[self.filteredseriescol_hq]
 
     @property
     def flagqcf(self) -> Series:
-        """Return QCF flag for series"""
+        """Return overall QCF flag for each record.
+
+        QCF values:
+            0 = Good quality (all flags pass)
+            1 = Marginal quality (minor issues, 1-3 soft flags)
+            2 = Poor quality (critical issues or too many soft flags)
+
+        Returns:
+            Series with QCF values (0, 1, 2, or NaN if no flags available).
+        """
         return self.flags[self.flagqcfcol]
 
     def get(self) -> DataFrame:
-        """Return original data with QCF flag"""
+        """Return original DataFrame with calculated QCF results appended.
+
+        Combines the original input data with all new QCF-related columns:
+        QCF flag, flag sums, and quality-controlled series variants.
+
+        Returns:
+            DataFrame with original columns plus new QCF columns.
+        """
         returndf = self.df.copy()  # Main data
         newcols = [col for col in self.flags.columns if col not in returndf]
         newcolsdf = self.flags[newcols].copy()
@@ -118,6 +245,24 @@ class FlagQCF:
     def calculate(self,
                   daytime_accept_qcf_below: int = 2,
                   nighttimetime_accept_qcf_below: int = 2):
+        """Calculate QCF from test flags and generate quality-controlled series.
+
+        Orchestrates the complete QCF workflow:
+        1. Sum hard (value 2) and soft (value 1) flags
+        2. Apply QCF decision logic
+        3. Apply daytime/nighttime-specific thresholds if swinpot was provided
+        4. Generate filtered series with rejected values as NaN
+
+        Args:
+            daytime_accept_qcf_below: Accept daytime records where QCF < this value.
+                Default 2 (rejects only QCF=2). Set to 1 to also reject QCF=1.
+            nighttimetime_accept_qcf_below: Accept nighttime records where QCF < this value.
+                Default 2. Separate threshold useful for day/night quality differences.
+
+        Note:
+            Only applies daytime/nighttime logic if swinpot was provided at init.
+            Otherwise, all records with QCF>=2 are rejected uniformly.
+        """
         self.daytime_accept_qcf_below = daytime_accept_qcf_below
         self.nighttimetime_accept_qcf_below = nighttimetime_accept_qcf_below
         self._flags_df = self._calculate_flagsums(df=self._flags_df)
@@ -126,172 +271,260 @@ class FlagQCF:
         self._calculate_series_qcf()
 
     def _add_series(self):
-        self._flags_df[self.series.name] = self.series.copy()
+        """Add original series to flags dataframe for QC processing."""
+        self._flags_df[self.series_name] = self.series.copy()
 
     def _calculate_series_qcf(self):
-        """Create quality-checked time series"""
+        """Generate quality-controlled series variants (QCF and QCF0)."""
         # Accepted-quality fluxes
-        self._flags_df[self.filteredseriescol] = self._flags_df[self.series.name].copy()
+        self._flags_df[self.filteredseriescol] = self._flags_df[self.series_name].copy()
         ix = self._flags_df[self.flagqcfcol] == 2
         self._flags_df.loc[ix, self.filteredseriescol] = np.nan
 
         # Highest-quality fluxes
-        self._flags_df[self.filteredseriescol_hq] = self._flags_df[self.series.name].copy()
+        self._flags_df[self.filteredseriescol_hq] = self._flags_df[self.series_name].copy()
         ix = self._flags_df[self.flagqcfcol] > 0
         self._flags_df.loc[ix, self.filteredseriescol_hq] = np.nan
 
     def report_qcf_flags(self):
+        """Print detailed statistics for each test flag.
 
-        flagcols = identify_flagcols(df=self.flags, seriescol=str(self.series.name))
+        Generates comprehensive breakdown of each test flag:
+        - Individual test statistics (pass/warn/fail counts)
+        - Two reports: WITH and FOR available records
+        - Optional daytime/nighttime separation
 
-        # Report for individual flags
-        print(f"\n{'=' * 40}\nREPORT: FLAGS INCL. MISSING VALUES\n{'=' * 40}")
-        print("Stats with missing values in the dataset")
-        for col in flagcols:
+        Shows which tests are raising flags and their impact.
+        """
+        print(f"\n\n{'=' * 80}")
+        print(f"INDIVIDUAL TEST FLAG STATISTICS: {self.series_name}")
+        print(f"{'=' * 80}")
+
+        flagcols = identify_flagcols(df=self.flags, seriescol=self.series_name)
+
+        # Filter to only test flags (exclude QCF)
+        test_flagcols = [c for c in flagcols if str(c).endswith('_TEST')]
+
+        if not test_flagcols:
+            print("No test flags found.")
+            return
+
+        print(f"Number of test flags: {len(test_flagcols)}\n")
+
+        # === REPORT 1: FLAGS WITH MISSING VALUES ===
+        print(f"[REPORT 1A: ALL RECORDS (INCLUDING MISSING VALUES)]")
+        print(f"{'-' * 80}")
+        for col in test_flagcols:
             self._flagstats_dt_nt(col=col, df=self.flags)
 
-        # Report for available values (missing values are ignored)
-        # Flags
-        print(f"\n{'=' * 40}\nREPORT: FLAGS FOR AVAILABLE RECORDS\n{'=' * 40}")
-        print("Stats after removal of missing values")
+        # === REPORT 2: FLAGS FOR AVAILABLE RECORDS ===
+        print(f"[REPORT 1B: AVAILABLE RECORDS ONLY (EXCLUDING MISSING VALUES)]")
+        print(f"{'-' * 80}")
         _df = self.flags.copy()
-        ix_missing_vals = _df[self.series.name].isnull()
+        ix_missing_vals = _df[self.series_name].isnull()
         _df = _df[~ix_missing_vals].copy()
-        for col in flagcols:
+        for col in test_flagcols:
             self._flagstats_dt_nt(col=col, df=_df)
 
+        # === SUMMARY ===
+        print(f"\n{'=' * 80}\n")
+
     def _flagstats_dt_nt(self, col: str, df: DataFrame):
-        print(f"{col}:")
+        """Print flag statistics overall, daytime, and nighttime (if available)."""
+        # Extract test name from column
+        test_name = col.replace('FLAG_', '').replace('_TEST', '')
+        print(f"\n{test_name}")
+        print(f"  {'Period':<15} {'Pass (0)':<12} {'Warn (1)':<12} {'Fail (2)':<12} {'Missing':<10}")
+        print(f"  {'-' * 60}")
+
         flag = df[col]
         self._flagstats(flag=flag, prefix="OVERALL")
+
         if isinstance(self.daytime, Series):
             flag = df[col].loc[self.daytime == 1]
-            self._flagstats(flag=flag, prefix="DAYTIME")
+            if len(flag) > 0:
+                self._flagstats(flag=flag, prefix="DAYTIME")
+
         if isinstance(self.nighttime, Series):
             flag = df[col].loc[self.nighttime == 1]
-            self._flagstats(flag=flag, prefix="NIGHTTIME")
+            if len(flag) > 0:
+                self._flagstats(flag=flag, prefix="NIGHTTIME")
 
     def report_qcf_evolution(self):
-        """Apply multiple test flags sequentially"""
-        # QCF flag evolution
-        print(f"\n\n{'=' * 40}\nQCF FLAG EVOLUTION\n{'=' * 40}\n"
-              f"This output shows the evolution of the QCF overall quality flag\n"
-              f"when test flags are applied sequentially to the variable {self.series.name}.")
+        """Print how QCF evolves as tests are applied sequentially.
 
-        flagcols = identify_flagcols(df=self.flags, seriescol=str(self.series.name))
+        Shows cumulative impact of each test flag: how many additional records get
+        flagged as you add each test. Helps identify which tests are most impactful
+        on data rejection and understand QC filtering progression.
+
+        Output:
+            - Sequential table: for each test, new rejections and cumulative QCF distribution
+            - Impact summary: tests ranked by number of records they newly reject
+            - Impact levels: HIGH (>=5 records), MODERATE (>=2), LOW (<2)
+        """
+        print(f"\n\n{'=' * 80}")
+        print(f"QCF EVOLUTION: SEQUENTIAL TEST APPLICATION")
+        print(f"{'=' * 80}")
+        print(f"Shows how QCF flag distribution changes as tests are applied sequentially")
+        print(f"Target variable: {self.series_name}\n")
+
+        flagcols = identify_flagcols(df=self.flags, seriescol=self.series_name)
         flagcols = [c for c in flagcols if str(c).startswith('FLAG_') and (str(c).endswith('_TEST'))]
         allflags_df = self.flags[flagcols].copy()
 
-        ix_missing_vals = self.df[self.series.name].isnull()
+        ix_missing_vals = self.df[self.series_name].isnull()
         allflags_df = allflags_df[~ix_missing_vals].copy()  # Ignore missing values
 
-        n_tests = len(allflags_df.columns) + 1  # +1 b/c for loop
-        ix_first_test = 0
-        n_vals_total_rejected = 0
-        n_flag2 = 0
-        n_flag1 = 0
-        n_flag0 = 0
-        perc_flag2 = 0
         n_vals = len(allflags_df)
-        prog_df = pd.DataFrame()
-        print(f"\nNumber of {self.series.name} records before QC: {n_vals}")
-        for ix_last_test in range(1, n_tests):
-            prog_testcols = flagcols[ix_first_test:ix_last_test]
+        print(f"Measured records (excluding missing): {n_vals}\n")
+
+        # Track impact of each test
+        test_impacts = []
+        n_flag2_prev = 0
+
+        print(f"{'Step':<5} {'Test Name':<45} {'New Rej.':<10} {'QCF=0':<8} {'QCF=1':<8} {'QCF=2':<8}")
+        print(f"{'-' * 80}")
+
+        for ix_test, test_col in enumerate(flagcols, 1):
+            prog_testcols = flagcols[:ix_test]
             prog_df = allflags_df[prog_testcols].copy()
 
-            # Calculate QCF (so far)
+            # Calculate QCF with tests so far
             prog_df = self._calculate_flagsums(df=prog_df)
             prog_df = self._calculate_flag_qcf(df=prog_df)
 
-            # Count flag occurrences
-            n_flag0 = prog_df[self.flagqcfcol].loc[prog_df[self.flagqcfcol] == 0].count()
-            n_flag1 = prog_df[self.flagqcfcol].loc[prog_df[self.flagqcfcol] == 1].count()
-            n_flag2 = prog_df[self.flagqcfcol].loc[prog_df[self.flagqcfcol] == 2].count()
+            # Count QCF distribution
+            n_flag0 = (prog_df[self.flagqcfcol] == 0).sum()
+            n_flag1 = (prog_df[self.flagqcfcol] == 1).sum()
+            n_flag2 = (prog_df[self.flagqcfcol] == 2).sum()
 
+            # New rejections from this test
+            n_new_rejected = n_flag2 - n_flag2_prev
 
-            # Calculate some flag stats
-            n_vals_test_rejected = n_flag2 - n_vals_total_rejected
-            perc_vals_test_rejected = (n_vals_test_rejected / n_vals) * 100
-            perc_flag0 = (n_flag0 / n_vals) * 100
-            perc_flag1 = (n_flag1 / n_vals) * 100
-            perc_flag2 = (n_flag2 / n_vals) * 100
+            # Extract test name (remove FLAG_, _TEST)
+            test_name = test_col.replace('FLAG_', '').replace('_TEST', '')
+            if len(test_name) > 40:
+                test_name = test_name[:37] + "..."
 
-            print(f"+++ {prog_testcols[ix_last_test - 1]} rejected {n_vals_test_rejected} values "
-                  f"(+{perc_vals_test_rejected:.2f}%)      "
-                  f"TOTALS: flag 0: {n_flag0} ({perc_flag0:.2f}%) / "
-                  f"flag 1: {n_flag1} ({perc_flag1:.2f}%) / "
-                  f"flag 2: {n_flag2} ({perc_flag2:.2f}%)")
+            print(f"{ix_test:<5} {test_name:<45} {n_new_rejected:<10} {n_flag0:<8} {n_flag1:<8} {n_flag2:<8}")
 
-            n_vals_total_rejected = n_flag2
+            test_impacts.append((test_name, n_new_rejected))
+            n_flag2_prev = n_flag2
 
-        # Compare last overall flag from evolution with previously calculated overall flag
-        # Progressive flag must be the same as previously calculated overall flag
-        _is_equal = prog_df[self.flagqcfcol].equals(self.flags[self.flagqcfcol][~ix_missing_vals])
-        _checkdf = self.flags[self.flagqcfcol][~ix_missing_vals]
-        _n_flag0 = _checkdf.loc[_checkdf == 0].count()
-        _n_flag1 = _checkdf.loc[_checkdf == 1].count()
-        _n_flag2 = _checkdf.loc[_checkdf == 2].count()
-        a = True if n_flag0 == _n_flag0 else False
-        b = True if n_flag1 == _n_flag1 else False
-        c = True if n_flag2 == _n_flag2 else False
-        # countflags = dict(Counter(self.flags[self.flagqcfcol]))
-        # n_missing = self.series.isnull().sum()
-        # c = True if (countflags[2] - n_missing) == n_flag2 else False
-        # b = True if countflags[1] == n_flag1 else False
-        # a = True if countflags[0] == n_flag0 else False
-        if not all([a, b, c]):
-            raise ValueError("(!)Results from QCF evolution are different from the previously "
-                             "calculated overall flag.")
+        # Summary: Most impactful tests
+        print(f"\n{'=' * 80}")
+        print(f"[TEST IMPACT SUMMARY]")
+        print(f"Ranked by number of newly rejected records:\n")
 
-        # # Test output containing flags from progressive evolution flag and previous overall
-        # pd.concat([self.flags, prog_df.add_suffix("_PROG")], axis=1).to_csv(r"F:\TMP\test.csv")
+        test_impacts_sorted = sorted(test_impacts, key=lambda x: x[1], reverse=True)
+        for rank, (test_name, n_rejected) in enumerate(test_impacts_sorted, 1):
+            perc = (n_rejected / n_vals) * 100 if n_vals > 0 else 0
+            impact_level = "HIGH" if n_rejected >= 5 else ("MODERATE" if n_rejected >= 2 else "LOW")
+            print(f"  {rank}. {test_name:<40} {n_rejected:>3} records ({perc:>5.2f}%) [{impact_level}]")
 
-        print(f"\nIn total, {n_flag2} ({perc_flag2:.2f}%) of the available records were rejected in this step.")
-        print(f"INFO Rejected DAYTIME records where QCF flag >= {self.daytime_accept_qcf_below}")
-        print(f"INFO Rejected NIGHTTIME records where QCF flag >= {self.nighttimetime_accept_qcf_below}")
+        print(f"\n{'=' * 80}\n")
 
 
     def _flagstats(self, flag: Series, prefix: str):
+        """Print flag value counts in table format (0=pass, 1=warn, 2=fail)."""
         n_values = len(flag)
-        flagcounts = flag.groupby(flag).count()
+        flagcounts = flag.value_counts().to_dict()
         flagmissing = flag.isnull().sum()
-        flagmissing_perc = (flagmissing / n_values) * 100
-        for flagvalue in flagcounts.index:
-            _counts = flagcounts[flagvalue]
-            _counts_perc = (_counts / n_values) * 100
-            print(f"    {prefix} flag {flagvalue}: {_counts} values ({_counts_perc:.2f}%)  ")
-        print(f"    {prefix} flag missing: {flagmissing} values ({flagmissing_perc:.2f}%)  ")
-        print("")
+
+        # Count each flag value
+        n_pass = flagcounts.get(0, 0)
+        n_warn = flagcounts.get(1, 0)
+        n_fail = flagcounts.get(2, 0)
+
+        # Calculate percentages
+        perc_pass = (n_pass / n_values) * 100 if n_values > 0 else 0
+        perc_warn = (n_warn / n_values) * 100 if n_values > 0 else 0
+        perc_fail = (n_fail / n_values) * 100 if n_values > 0 else 0
+        perc_miss = (flagmissing / n_values) * 100 if n_values > 0 else 0
+
+        # Format as table row
+        pass_str = f"{n_pass} ({perc_pass:5.1f}%)"
+        warn_str = f"{n_warn} ({perc_warn:5.1f}%)"
+        fail_str = f"{n_fail} ({perc_fail:5.1f}%)"
+        miss_str = f"{flagmissing} ({perc_miss:5.1f}%)"
+
+        print(f"  {prefix:<15} {pass_str:<12} {warn_str:<12} {fail_str:<12} {miss_str:<10}")
 
     def report_qcf_series(self):
+        """Print comprehensive summary statistics for quality-controlled series.
 
-        print(f"\n\n{'=' * 40}\nSUMMARY: {self.flagqcfcol}, QCF FLAG FOR {self.series.name}\n{'=' * 40}")
+        Shows data availability, QCF distribution, and quality assessment:
+        - Time period coverage
+        - Data availability at each filtering stage
+        - QCF flag distribution (good/marginal/poor)
+        - Data loss breakdown and quality assessment
+        - Useful for overall data quality assessment
 
-        series = self.flags[self.series.name]
+        Useful for quickly assessing overall data quality and coverage impact.
+        """
+        print(f"\n\n{'=' * 70}")
+        print(f"QCF QUALITY CONTROL REPORT: {self.series_name}")
+        print(f"{'=' * 70}")
+
+        series = self.flags[self.series_name]
         seriesqcf = self.flags[self.filteredseriescol]
+        qcf_flags = self.flags[self.flagqcfcol]
 
+        # === TIME PERIOD ===
+        start = series.index[0].strftime('%Y-%m-%d %H:%M')
+        end = series.index[-1].strftime('%Y-%m-%d %H:%M')
+        duration_days = (series.index[-1] - series.index[0]).days
+
+        print(f"\n[1] TIME PERIOD")
+        print(f"    Start:  {start}")
+        print(f"    End:    {end}")
+        print(f"    Duration: {duration_days} days ({len(series)} records)")
+
+        # === DATA AVAILABILITY STAGES ===
         n_potential = len(series)
         n_measured = len(series.dropna())
         n_missed = n_potential - n_measured
-        n_available = len(seriesqcf.dropna())  # Available after QC
-        n_rejected = n_measured - n_available  # Rejected measured values
+        n_available = len(seriesqcf.dropna())
+        n_rejected = n_measured - n_available
 
         perc_measured = (n_measured / n_potential) * 100
         perc_missed = (n_missed / n_potential) * 100
-        perc_available = (n_available / n_measured) * 100
-        perc_rejected = (n_rejected / n_measured) * 100
+        perc_available = (n_available / n_measured) * 100 if n_measured > 0 else 0
+        perc_rejected = (n_rejected / n_measured) * 100 if n_measured > 0 else 0
 
-        start = series.index[0].strftime('%Y-%m-%d %H:%M')
-        end = series.index[-1].strftime('%Y-%m-%d %H:%M')
-        print(f"Between {start} and {end} ...\n"
-              f"    Total flux records BEFORE quality checks: {n_measured} ({perc_measured:.2f}% of potential)\n"
-              f"    Available flux records AFTER quality checks: {n_available} ({perc_available:.2f}% of total)\n"
-              f"    Rejected flux records: {n_rejected} ({perc_rejected:.2f}% of total)\n"
-              f"    Potential flux records: {n_potential}\n"
-              f"    Potential flux records missed: {n_missed} ({perc_missed:.2f}% of potential)\n")
+        print(f"\n[2] DATA AVAILABILITY STAGES")
+        print(f"    Potential records (all time slots): {n_potential}")
+        print(f"    Measured records (data exists):     {n_measured:>4} ({perc_measured:>6.2f}% of potential)")
+        print(f"    Missing records (gaps/gaps):        {n_missed:>4} ({perc_missed:>6.2f}% of potential)")
+        print(f"    |__ After QC (QCF < 2):             {n_available:>4} ({perc_available:>6.2f}% of measured)")
+        print(f"    |__ Rejected by QC (QCF >= 2):      {n_rejected:>4} ({perc_rejected:>6.2f}% of measured)")
+
+        # === QCF FLAG DISTRIBUTION ===
+        n_qcf0 = (qcf_flags == 0).sum()
+        n_qcf1 = (qcf_flags == 1).sum()
+        n_qcf2 = (qcf_flags == 2).sum()
+
+        perc_qcf0 = (n_qcf0 / n_measured * 100) if n_measured > 0 else 0
+        perc_qcf1 = (n_qcf1 / n_measured * 100) if n_measured > 0 else 0
+        perc_qcf2 = (n_qcf2 / n_measured * 100) if n_measured > 0 else 0
+
+        print(f"\n[3] QCF FLAG DISTRIBUTION (for measured records)")
+        print(f"    QCF=0 (Good quality):     {n_qcf0:>4} ({perc_qcf0:>6.2f}%) - All tests pass")
+        print(f"    QCF=1 (Marginal quality): {n_qcf1:>4} ({perc_qcf1:>6.2f}%) - Minor quality issues")
+        print(f"    QCF=2 (Poor quality):     {n_qcf2:>4} ({perc_qcf2:>6.2f}%) - Critical issues or too many warnings")
+
+        # === DATA LOSS ANALYSIS ===
+        data_loss_perc = (n_rejected / n_measured * 100) if n_measured > 0 else 0
+
+        print(f"\n[4] DATA LOSS ANALYSIS")
+        print(f"    Records retained after QC: {n_available}/{n_measured} ({perc_available:.2f}%)")
+        print(f"    Data loss from QC:         {n_rejected}/{n_measured} ({data_loss_perc:.2f}%)")
+        print(f"    Final data coverage:       {n_available}/{n_potential} ({(n_available/n_potential)*100:.2f}% of potential)")
+
+        print(f"\n{'=' * 70}\n")
 
     def _calculate_flag_qcf(self, df: DataFrame) -> DataFrame:
-        """Calculate overall QCF flag from flag sums"""
+        """Calculate QCF flag (0/1/2) using hierarchical decision rules and apply day/night thresholds."""
 
         # QCF is NaN if no flag is available
         df[self.flagqcfcol] = np.nan
@@ -334,7 +567,7 @@ class FlagQCF:
         return df
 
     def _calculate_flagsums(self, df: DataFrame) -> DataFrame:
-        """Calculate sums of all individual flags"""
+        """Sum hard flags (value 2) and soft flags (value 1) across all FLAG_*_TEST columns."""
 
         # Get variables that contain flag data (individual quality test results)
         onlyflagtests = [c for c in df.columns if str(c).startswith('FLAG_') and str(c).endswith('_TEST')]
@@ -352,7 +585,21 @@ class FlagQCF:
         return df
 
     def showplot_qcf_heatmaps(self, maxabsval: float = None, figsize: tuple = (18, 8)):
+        """Display 4-panel heatmap showing data before/after QC and flag distribution.
 
+        Panels (left to right):
+        1. Original series (before QC)
+        2. Quality-controlled series (after QC, NaN where QCF=2)
+        3. Flag sums (total count of raised flags)
+        4. QCF overall flag (0=good, 1=marginal, 2=poor)
+
+        Uses datetime heatmap layout (e.g., day-of-year vs hour-of-day) for visual patterns.
+
+        Args:
+            maxabsval: Max absolute value for colorbar symmetry. If None, auto-scales.
+                Useful for comparing multiple panels with same scale.
+            figsize: Figure dimensions (width, height) in inches. Default (18, 8).
+        """
         fig = plt.figure(facecolor='white', figsize=figsize)
         gs = gridspec.GridSpec(1, 4)  # rows, cols
         gs.update(wspace=0.4, hspace=0, left=0.03, right=0.97, top=0.9, bottom=0.1)
@@ -364,7 +611,7 @@ class FlagQCF:
         # Heatmaps
         vmin = -maxabsval if maxabsval else None
         vmax = maxabsval if maxabsval else None
-        HeatmapDateTime(ax=ax_before, series=self.flags[self.series.name], vmin=vmin, vmax=vmax,
+        HeatmapDateTime(ax=ax_before, series=self.flags[self.series_name], vmin=vmin, vmax=vmax,
                         cb_digits_after_comma=0).plot()
         HeatmapDateTime(ax=ax_after, series=self.flags[self.filteredseriescol], vmin=vmin, vmax=vmax,
                         cb_digits_after_comma=0).plot()
@@ -382,5 +629,13 @@ class FlagQCF:
         fig.show()
 
     def showplot_qcf_timeseries(self, figsize=(16, 20)):
+        """Display all QCF data columns as individual time series subplots.
+
+        Creates subplots for: original series, test flags, flag sums, and QCF flag.
+        Useful for detailed inspection of temporal patterns and data quality.
+
+        Args:
+            figsize: Figure dimensions (width, height) in inches. Default (16, 20).
+        """
         self.flags.plot(subplots=True, figsize=figsize)
         plt.show()

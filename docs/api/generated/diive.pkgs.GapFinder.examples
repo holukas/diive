@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.pkgs.GapFinder``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Run this script to see gap detection results:     python examples/analyses/gapfinder.py">
+
+.. only:: html
+
+  .. image:: /auto_examples/analyses/images/thumb/sphx_glr_gapfinder_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/analyses/gapfinder`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for gap detection and analysis using GapFinder.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/analyses/gapfinder`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.pkgs.corrections.offsetcorrection.WindDirOffset``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Run this script to see offset correction results:     python examples/corrections/offsetcorrection.py">
+
+.. only:: html
+
+  .. image:: /auto_examples/corrections/images/thumb/sphx_glr_offsetcorrection_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/corrections/offsetcorrection`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for offset correction functions using offsetcorrection module.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/corrections/offsetcorrection`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

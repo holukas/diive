@@ -19,7 +19,7 @@ class HistogramPlot:
     """Histogram plot with optional z-score overlay and peak highlighting.
 
     Example:
-        See `examples/visualization/histogram.py` for complete examples.
+        See `examples/visualization/histogram_distribution.py` for complete examples.
     """
 
     def __init__(self, s: Series, method, n_bins: int or list = None, ignore_fringe_bins: list = False,

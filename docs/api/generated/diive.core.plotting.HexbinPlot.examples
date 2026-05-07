@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.core.plotting.HexbinPlot``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="HexbinPlot aggregates flux values into 2D hexagonal bins of driver variables (e.g., soil temperature vs water-filled pore space).">
+
+.. only:: html
+
+  .. image:: /auto_examples/visualization/images/thumb/sphx_glr_hexbin_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/visualization/hexbin`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for HexbinPlot visualization.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/visualization/hexbin`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+

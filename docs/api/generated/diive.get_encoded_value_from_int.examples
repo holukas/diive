@@ -1,0 +1,42 @@
+
+
+Examples using ``diive.get_encoded_value_from_int``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. start-sphx-glr-thumbnails
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Run this script to see binary extraction results:     python examples/binary/extract.py">
+
+.. only:: html
+
+  .. image:: /auto_examples/binary/images/thumb/sphx_glr_extract_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/binary/extract`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Examples for binary value extraction using get_encoded_value_from_int and get_encoded_value_series.</div>
+    </div>
+
+
+.. only:: not html
+
+ * :doc:`/auto_examples/binary/extract`
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+
