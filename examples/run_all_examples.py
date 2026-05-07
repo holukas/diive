@@ -45,6 +45,8 @@ EXAMPLE_FILES = [
     'outlierdetection/stepwise.py',
     'outlierdetection/trim.py',
     'outlierdetection/zscore.py',
+    'qaqc/qcf.py',
+    'qaqc/eddyproflags.py',
     'createvar/air.py',
     'createvar/conversions.py',
     'createvar/daynightflag.py',

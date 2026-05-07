@@ -52,7 +52,7 @@ For the complete list of available aliases, see `diive.__all__`.
 
 ## Examples
 
-**103 executable examples** demonstrating common workflows are organized by topic in the `examples/` folder:
+**107 executable examples** demonstrating common workflows are organized by topic in the `examples/` folder:
 
 **Run all examples at once (parallelized):**
 ```bash
@@ -83,10 +83,10 @@ python examples/flux/common.py                       # Flux variable detection (
 python examples/flux/hqflux.py                       # CO2 flux quality analysis with Hampel filter (1 example)
 ```
 
-**Example categories (103 total, 52 files):**
+**Example categories (107 total, 52 files):**
 - **Visualization** (22): heatmap_datetime, hexbin, timeseries, cumulative, dielcycle, histogram, ridgeline, scatter
 - **Analyses** (8): correlation, decoupling, gapfinder, gridaggregator, histogram, optimumrange, quantiles, seasonaltrend
-- **Data Processing** (46): binary extraction, corrections (setto, offsetcorrection), outlierdetection (absolutelimits, hampel, incremental, localsd, lof, manualremoval, stepwise, trim), qaqc (FlagQCF, EddyProFlags), createvar (air, conversions, daynightflag, laggedvariants, noise, potentialradiation, timesince, vpd)
+- **Data Processing** (50): binary extraction, corrections (setto, offsetcorrection), outlierdetection (absolutelimits, hampel, incremental, localsd, lof, manualremoval, stepwise, trim), qaqc (FlagQCF, 6 EddyProFlags examples), createvar (air, conversions, daynightflag, laggedvariants, noise, potentialradiation, timesince, vpd)
 - **Gap-Filling** (10): linear_interpolation, mds, mds_comparison, randomforest_ts (3 examples: full, quick, optimize), xgboost_ts (2 examples: full, optimize), comparison (MDS vs RF vs XGB)
 - **Eddy Covariance & Flux** (9): fluxdetectionlimit, lag, windrotation, hqflux, selfheating, uncertainty, ustarthreshold (3 examples)
 - **Spectral Analysis** (2): harmonic (spectrogram analysis)

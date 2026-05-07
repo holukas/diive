@@ -255,6 +255,64 @@ qcf.report_qcf_evolution()                   # Sequential impact analysis
 qcf.showplot_qcf_heatmaps()                  # Visualization
 ```
 
+## EddyPro Quality Flag Functions
+
+**Module:** `diive.pkgs.qaqc.eddyproflags`
+
+Extracts and converts quality flags from EddyPro output files. EddyPro uses different flag formats than DIIVE's standard (0=good, 1=warning, 2=bad):
+- Some tests output binary flags (1=fail) requiring conversion
+- Multi-digit codes encode multiple tests (e.g., VM97 8-digit integer)
+- Signal strength is continuous and requires threshold-based classification
+
+**7 Functions:**
+
+1. **`flag_signal_strength_eddypro_test()`** — Signal strength threshold classification
+   - Continuous values (0-100 or 0-1 range) thresholded to DIIVE flags
+   - Good for open-path IRGA and sonic anemometer data
+
+2. **`flag_steadiness_horizontal_wind_eddypro_test()`** — Wind steadiness test
+   - Converts EddyPro 1=bad to DIIVE 2=bad
+   - Detects non-stationary wind conditions
+
+3. **`flag_angle_of_attack_eddypro_test()`** — Angle of attack assessment
+   - Wind vector relative to anemometer orientation
+   - Converts 1=bad to 2=bad
+
+4. **`flags_vm97_eddypro_fluxnetfile_tests()`** — Vickers & Mahrt (1997) raw data tests
+   - Extracts 8 individual tests from single 8-digit integer code
+   - Tests: spikes, amplitude, dropout, absolute limits, skewness/kurtosis (hard + soft), discontinuities (hard + soft)
+   - Each test returns 0=pass, 1=warning (soft), 2=fail (hard)
+
+5. **`flag_fluxbasevar_completeness_eddypro_test()`** — Base variable data completeness
+   - Completeness percentage → DIIVE flags
+   - Example: CO2 completeness for FC flux calculation
+
+6. **`flag_ssitc_eddypro_test()`** — Steady State and Integral Turbulence Characteristics
+   - Evaluates measurement stationarity conditions
+   - Converts 1=bad to 2=bad
+
+**Helper Consolidation Pattern:**
+
+Multi-digit flag extraction consolidated into `_extract_and_convert_flag_from_multidigit()`:
+```python
+def _extract_and_convert_flag_from_multidigit(df, column_name, position, is_hard_flag=True):
+    """Extract single flag from multi-digit integer and convert to DIIVE format."""
+    flag = df[column_name].copy()
+    flag = flag.apply(pd.to_numeric, errors='coerce').astype(float)
+    flag = flag.fillna(899999999)  # 9 = missing flag
+    flag = flag.astype(str)
+    flag = flag.str[int(position)]  # Extract digit at position
+    flag = flag.apply(pd.to_numeric, errors='coerce')  # Handle non-numeric chars like '.'
+    flag = flag.replace(9, np.nan)  # Restore missing flags
+    if is_hard_flag:
+        flag = flag.replace(1, 2)  # Convert hard flag 1 to DIIVE format 2
+    return flag
+```
+
+Used by: `flag_steadiness_horizontal_wind_eddypro_test()`, `flag_angle_of_attack_eddypro_test()`, `flags_vm97_eddypro_fluxnetfile_tests()`
+
+**Examples:** 6 examples in `examples/qaqc/eddyproflags.py`
+
 ## Outlier Detection Methods
 
 10 built-in methods available (11 classes with z-score variants):
@@ -303,8 +361,8 @@ Located in `examples/` organized by topic. Each is a self-contained, runnable Py
 
 **Run individual:** `uv run python examples/visualization/heatmap_datetime.py`
 
-**Coverage:** 103 examples across 52 files
-- Visualization: 22, Analysis: 8, Data Processing: 52 (Binary 2, Corrections 7, QAQC 3, Outlierdetection 17, Variable creation 23)
+**Coverage:** 107 examples across 52 files
+- Visualization: 22, Analysis: 8, Data Processing: 56 (Binary 2, Corrections 7, QAQC 7, Outlierdetection 17, Variable creation 23)
 - Eddy Covariance: 11, Time Series: 2, Fits: 1, Gap-filling: 9
 
 See `examples/README.md` for full catalog.
