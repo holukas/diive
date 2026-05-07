@@ -313,40 +313,45 @@ def flag_fluxbasevar_completeness_eddypro_test(df: DataFrame, flux: str,
                                                thres_good: float = 0.99,
                                                thres_ok: float = 0.97,
                                                idstr: str = None) -> Series:
-    """Check completeness of the variable that was used to calculate the respective flux.
+    """Extract and evaluate completeness of the base variable used to calculate flux.
 
-    Default threshold values from Sabbatini et al. (2018).
+    Evaluates the completeness of the base variable that was used to calculate the flux
+    in EddyPro. For example, if CO2 was used to calculate FC (carbon dioxide flux), this
+    test evaluates what percentage of CO2 measurements were available in each averaging
+    interval. High completeness indicates reliable flux calculations.
 
-    Example:
-        `CO2` is the base variable that was used to calculate flux `FC`, the test is therefore
-         run on `CO2`.
+    Calculates completeness flag based on the percentage of available base variable records
+    in each averaging period, using default thresholds from Sabbatini et al. (2018):
+    - Flag 0 (good): >= 99% of base variable records available
+    - Flag 1 (ok): >= 97% and < 99% of base variable records available
+    - Flag 2 (bad): < 97% of base variable records available
 
-    Checks number of records of the relevant base variable available for each averaging interval
-    and calculates completeness flag as follows (default):
-    - `0` for files where >= 99% of base variable are available
-    - `1` for files where >= 97% and < 99% of base variable are available
-    - `2` for files where < 97% of base variable are available
-
-    List of flux base variables and the corresponding fluxes:
-    - `CO2`: used to calculate `FC`
-    - `H2O`: used to calculate `FH2O`
-    - `H2O`: used to calculate `LE`
-    - `H2O`: used to calculate `ET`
-    - `T_SONIC`: used to calculate `H`
-    - `N2O`: used to calculate `FN2O`
-    - `CH4`: used to calculate `FCH4`
+    Common flux and base variable pairings:
+    - `CO2` -> `FC` (carbon dioxide flux)
+    - `H2O` -> `FH2O` (water vapor flux)
+    - `H2O` -> `LE` (latent energy flux)
+    - `H2O` -> `ET` (evapotranspiration)
+    - `T_SONIC` -> `H` (sensible heat flux)
+    - `N2O` -> `FN2O` (nitrous oxide flux)
+    - `CH4` -> `FCH4` (methane flux)
 
     Args:
-        df: A DataFrame containing EddyPro data from the _fluxnet_ file.
-        flux: The name of the flux variable for which the completeness info is available in *df*.
-        fluxbasevar: The name of the variable that was used to calculate *flux* in EddyPro.
-        thres_good: The threshold for a good flag (default: 0.99, corresponds to 99%, meaning that
-            99% of potential records of *gas* were available to calculate *flux*).
-        thres_ok: The threshold for an ok flag (default: 0.97, corresponds to 97%).
+        df: A DataFrame containing EddyPro FluxNet output data.
+        flux: The name of the flux variable being evaluated (e.g., 'FC').
+        fluxbasevar: The name of the base variable used to calculate the flux (e.g., 'CO2').
+        thres_good: Threshold for good flag (default: 0.99 = 99% completeness required).
+        thres_ok: Threshold for ok flag (default: 0.97 = 97% completeness required).
         idstr: An optional identifier string to append to the flag name.
 
     Returns:
-        A pandas Series containing the completeness flag variable.
+        A pandas Series containing the completeness flag in DIIVE format
+        (0=good, 1=ok, 2=bad).
+
+    See Also:
+        See examples/qaqc/eddyproflags.py for a complete working example.
+
+    References:
+        Sabbatini, S., et al. (2018). Eddy covariance raw data processing for CO2 and energy fluxes...
     """
 
     idstr = validate_id_string(idstr=idstr)

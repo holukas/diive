@@ -227,6 +227,54 @@ def example_vm97_quality_tests():
     print()
 
 
+def example_fluxbasevar_completeness_test():
+    """Extract and analyze flux base variable completeness flag from EddyPro output.
+
+    Demonstrates how to evaluate the completeness of the base variable used to calculate
+    flux. For example, CO2 is the base variable used to calculate FC (carbon dioxide flux).
+    High completeness indicates that the necessary measurements were available during
+    the entire averaging period, which is essential for reliable flux calculation.
+
+    This example:
+    - Evaluates completeness of CO2 measurements (base variable for FC flux)
+    - Converts completeness percentage to DIIVE quality flags
+    - Reports completeness statistics (good/ok/bad quality)
+    - Uses standard thresholds: 99% for good, 97% for ok
+    """
+    from diive.pkgs.qaqc.eddyproflags import flag_fluxbasevar_completeness_eddypro_test
+
+    # Load example EddyPro FluxNet data
+    df, metadata = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
+
+    flux = 'FC'
+    fluxbasevar = 'CO2'
+
+    print(f"Loaded EddyPro FluxNet data: {len(df)} records")
+    print(f"Date range: {df.index[0]} to {df.index[-1]}\n")
+
+    # Evaluate flux base variable completeness
+    flag = flag_fluxbasevar_completeness_eddypro_test(
+        df=df,
+        flux=flux,
+        fluxbasevar=fluxbasevar,
+        thres_good=0.99,  # 99% completeness required for good flag
+        thres_ok=0.97,    # 97% completeness required for ok flag
+        idstr='_L41'
+    )
+
+    # Calculate flag statistics
+    n_good = (flag == 0).sum()
+    n_ok = (flag == 1).sum()
+    n_bad = (flag == 2).sum()
+
+    print(f"Base Variable Completeness Results ({fluxbasevar} for {flux} flux)")
+    print("-" * 60)
+    print(f"Good (>= 99% complete):     {n_good:6d} records")
+    print(f"Ok (97-99% complete):       {n_ok:6d} records")
+    print(f"Bad (< 97% complete):       {n_bad:6d} records")
+    print()
+
+
 if __name__ == '__main__':
     print("=" * 80)
     print("EddyPro Quality Flag Examples")
@@ -249,7 +297,6 @@ if __name__ == '__main__':
     print("-" * 80)
     example_vm97_quality_tests()
 
-    print("\n" + "=" * 80)
-    print("Note: These examples use real EddyPro FluxNet data (July 2021).")
-    print("For your own EddyPro data, load your CSV and use the actual flag columns.")
-    print("=" * 80)
+    print("[EXAMPLE 5: Flux Base Variable Completeness]")
+    print("-" * 80)
+    example_fluxbasevar_completeness_test()
