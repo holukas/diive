@@ -1,7 +1,7 @@
-﻿diive.pkgs.corrections.offsetcorrection
+﻿diive.pkgs.preprocessing.corrections.offsetcorrection
 =======================================
 
-.. automodule:: diive.pkgs.corrections.offsetcorrection
+.. automodule:: diive.pkgs.preprocessing.corrections.offsetcorrection
 
    
    .. rubric:: Functions

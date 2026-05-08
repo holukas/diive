@@ -155,19 +155,19 @@
 
 ### References
 
-* (1) `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.showplot_resampled`
-* (2) `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb._validate_n_grouprecords`
+* (1) `diive.pkgs.preprocessing.qaqc.meteoscreening.StepwiseMeteoScreeningDb.showplot_resampled`
+* (2) `diive.pkgs.preprocessing.qaqc.meteoscreening.StepwiseMeteoScreeningDb._validate_n_grouprecords`
 * (3) `diive.core.plotting.heatmap_base.py`
-* (4) `diive.pkgs.echires.lag.MaxCovariance._find_max_cov_peak`
+* (4) `diive.pkgs.flux.hires.lag.MaxCovariance._find_max_cov_peak`
 * (5) `diive.pkgs.createvar.conversions.air_temp_from_sonic_temp`
 * (6) `tests.test_createvar.TestCreateVar.test_air_temp_from_sonic_temp`
 * (7) `notebooks/CalculateVariable/Calculate_air_temp_from_sonic_temp.ipynb`
 * (8) `notebooks/CalculateVariable/FluxDetectionLimit/FluxDetectionLimit.ipynb`
-* (9) `diive.pkgs.echires.fluxdetectionlimit.FluxDetectionLimit`
+* (9) `diive.pkgs.flux.hires.fluxdetectionlimit.FluxDetectionLimit`
 * (10) `tests.test_echires.TestEcHires`
 * (11) `diive.core.times.times.insert_season`
-* (12) `diive.pkgs.outlierdetection.common.create_daytime_nighttime_flags`
-* (13) `diive.pkgs.outlierdetection.localsd.LocalSD`
+* (12) `diive.pkgs.preprocessing.outlierdetection.common.create_daytime_nighttime_flags`
+* (13) `diive.pkgs.preprocessing.outlierdetection.localsd.LocalSD`
 * (14) `tests.test_outlierdetection.TestOutlierDetection.test_localsd_daytime_nighttime`
 * (15) `notebooks/FluxProcessingChain/FluxProcessingChain.ipynb`
 * (16) `notebooks/MeteoScreening/StepwiseMeteoScreeningFromDatabase.ipynb`
@@ -177,12 +177,12 @@
 * (20) `diive.pkgs.createvar.air.dry_air_density`
 * (21) `diive.pkgs.createvar.air.aerodynamic_resistance`
 * (22) `diive.pkgs.fluxprocessingchain.level31_storagecorrection.FluxStorageCorrectionSinglePointEddyPro`
-* (23) `diive.pkgs.outlierdetection.hampel.HampelDaytimeNighttime`
-* (24) `diive.pkgs.outlierdetection.hampel.Hampel`
+* (23) `diive.pkgs.preprocessing.outlierdetection.hampel.HampelDaytimeNighttime`
+* (24) `diive.pkgs.preprocessing.outlierdetection.hampel.Hampel`
 * (25) `tests.test_outlierdetection.TestOutlierDetection.test_hampel_filter_daytime_nighttime_doublediff`
 * (26) `tests.test_outlierdetection.TestOutlierDetection.test_hampel_filter_basic`
 * (27) `tests.test_outlierdetection.TestOutlierDetection.test_hampel_filter`
-* (28) `diive.pkgs.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection.flag_outliers_hampel_dtnt_test`
+* (28) `diive.pkgs.preprocessing.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection.flag_outliers_hampel_dtnt_test`
 * (29) `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain.level32_flag_outliers_hampel_dtnt_test`
 * (30) `tests.test_time.TestTime.test_vectorize_with_default_parameters`
 * (31) `notebooks/GapFilling/LongTermRandomForestGapFilling.ipynb`
@@ -192,8 +192,8 @@
 * (35) `notebooks/GapFilling/XGBoostGapFillingExtensive.ipynb`
 * (36) `notebooks/GapFilling/XGBoostGapFillingMinimal.ipynb`
 * (37) `notebooks/OutlierDetection/HampelDaytimeNighttime.ipynb`
-* (38) `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.flag_outliers_abslim_dtnt_test`
-* (39) `diive.pkgs.qaqc.experimental_indev.detect_timestamp_shifts.execute_phase_shift_fft`
+* (38) `diive.pkgs.preprocessing.qaqc.meteoscreening.StepwiseMeteoScreeningDb.flag_outliers_abslim_dtnt_test`
+* (39) `diive.pkgs.preprocessing.qaqc.experimental_indev.detect_timestamp_shifts.execute_phase_shift_fft`
 * (40) `diive/pkgs/flux/selfheating.py`
 * (41)
   `notebooks/FluxProcessingChain/self-heating_correction/SelfHeatingCorrectionNEE_1_CreateScalingFactorsTable.ipynb`
@@ -279,7 +279,7 @@ their core functionality.
 ### New features
 
 - Added new function `.set_exact_values_to_missing()` to set specific values in a time series to missing values (
-  `diive.pkgs.corrections.setto_missing.set_exact_values_to_missing`)
+  `diive.pkgs.preprocessing.corrections.setto_missing.set_exact_values_to_missing`)
 
 ### Additions
 
@@ -364,7 +364,7 @@ See the notebook here for more examples:
     - Sometimes the required number of bins cannot be generated, in this case the stats for the respective bin are now
       skipped and the bin is missing from the output (`.calcbins`)
     - All parameters were renamed to better reflect what is going on
-    - (`diive.pkgs.analyses.decoupling.SortingBinsMethod`)
+    - (`diive.pkgs.analysis.decoupling.SortingBinsMethod`)
     - Added `agg` parameter to define aggregation method used in binning the data
     - Renamed and reworked `conversion` paramater, now allows conversion to z-scores in addition to percentiles
 - Added new filetype `FLUXNET-FULLSET-HR-CSV-60MIN` for reading FLUXNET files with 60MIN time resolution
@@ -432,7 +432,7 @@ See the notebook here for more examples:
       Set flag 1 to value 2 between '2022-05-01' and '2023-09-30', and between 
       '2024-04-02' and '2024-04-19' (dates inclusive): 
       setflag_timeperiod={2: [ [1, '2022-05-01', '2023-09-30'], [1, '2024-04-02', '2024-04-19'] ]}
-      ``` (`diive.pkgs.qaqc.eddyproflags.flag_ssitc_eddypro_test`)
+      ``` (`diive.pkgs.preprocessing.qaqc.eddyproflags.flag_ssitc_eddypro_test`)
     - Added params to export some gap-filling results (e.g. model scores) to csv files (e.g.,
       `.report_gapfilling_model_scores(outpath=...)`)
     - (`diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain`)
@@ -596,7 +596,7 @@ meteorological conditions.
 
 - The setting for features that should not be lagged was not properly implemented (
   `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain._get_ml_feature_settings`)
-- Fixed bug when plotting (`diive.pkgs.outlierdetection.localsd.LocalSD`)
+- Fixed bug when plotting (`diive.pkgs.preprocessing.outlierdetection.localsd.LocalSD`)
 
 ## v0.84.2 | 8 Nov 2024
 
@@ -673,7 +673,7 @@ need to install JupyterLab separately.
 ### Changes
 
 - Adjusted flags check in QCF flag report, the progressive flag must be the same as the previously calculated overall
-  flag (`diive.pkgs.qaqc.qcf.FlagQCF.report_qcf_evolution`)
+  flag (`diive.pkgs.preprocessing.qaqc.qcf.FlagQCF.report_qcf_evolution`)
 
 ## v0.83.1 | 23 Oct 2024
 
@@ -748,10 +748,10 @@ gap-fill meteorological data) will follow.
 ### Bugfixes
 
 - Fixed bug: overall quality flag `QCF` was not created correctly for the different USTAR scenarios (
-  `diive.core.base.identify.identify_flagcols`) (`diive.pkgs.qaqc.qcf.FlagQCF`)
+  `diive.core.base.identify.identify_flagcols`) (`diive.pkgs.preprocessing.qaqc.qcf.FlagQCF`)
 - Fixed bug: calculation of `QCF` flag sums is now strictly done on flag columns. Before, sums were calculated across
   all columns in the flags dataframe, which resulted in erroneous overall flags after USTAR filtering (
-  `diive.pkgs.qaqc.qcf.FlagQCF._calculate_flagsums`)
+  `diive.pkgs.preprocessing.qaqc.qcf.FlagQCF._calculate_flagsums`)
 
 ### Environment
 
@@ -802,7 +802,7 @@ gap-fill meteorological data) will follow.
     - To keep the order of elements consistent it was necessary to `output_list.sort()`.
     - (`diive.pkgs.gapfilling.longterm.LongTermGapFillingBase.reduce_features_across_years`)
 - Corrected wind direction could be 360°, but will now be 0° (
-  `diive.pkgs.corrections.winddiroffset.WindDirOffset._correct_degrees`)
+  `diive.pkgs.preprocessing.corrections.winddiroffset.WindDirOffset._correct_degrees`)
 
 ## v0.82.0 | 19 Sep 2024
 
@@ -848,7 +848,7 @@ Here is an example for a dataset containing CO2 flux (`NEE`) measurements from 2
 - Added class for plotting cumulative sums across all data, for multiple columns (
   `diive.core.plotting.cumulative.Cumulative`)
 - Added class to detect a constant offset between two measurements (
-  `diive.pkgs.corrections.measurementoffset.MeasurementOffset`)
+  `diive.pkgs.preprocessing.corrections.measurementoffset.MeasurementOffset`)
 
 ### Changes
 
@@ -918,11 +918,11 @@ With this update, the `FluxProcessingChain` class can handle various data proces
 - `LocalSD` outlier detection can now use a constant SD:
     - Added parameter to use standard deviation across all data (constant) instead of the rolling SD to calculate the
       upper and lower limits that define outliers in the median rolling window (
-      `diive.pkgs.outlierdetection.localsd.LocalSD`)
+      `diive.pkgs.preprocessing.outlierdetection.localsd.LocalSD`)
     - Added to step-wise outlier detection (
-      `diive.pkgs.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection.flag_outliers_localsd_test`)
+      `diive.pkgs.preprocessing.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection.flag_outliers_localsd_test`)
     - Added to meteoscreening from database (
-      `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.flag_outliers_localsd_test`)
+      `diive.pkgs.preprocessing.qaqc.meteoscreening.StepwiseMeteoScreeningDb.flag_outliers_localsd_test`)
     - Added to flux processing chain (
       `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain.level32_flag_outliers_localsd_test`)
 
@@ -962,7 +962,7 @@ With this update, the `FluxProcessingChain` class can handle various data proces
 ### Additions
 
 - Added outlier tests to step-wise meteoscreening from database: `Hampel`, `HampelDaytimeNighttime` and `TrimLow` (
-  `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb`)
+  `diive.pkgs.preprocessing.qaqc.meteoscreening.StepwiseMeteoScreeningDb`)
 - Added parameter to control whether or not to output the middle timestamp when loading parquet files with
   `load_parquet()`. By default, `output_middle_timestamp=True`. (`diive.core.io.files.load_parquet`)
 
@@ -987,13 +987,13 @@ With this update, the `FluxProcessingChain` class can handle various data proces
 ### Bugfixes
 
 - Fixed links in README, needed absolute links to notebooks
-- Fixed issue with return list in (`diive.pkgs.analyses.histogram.Histogram.peakbins`)
+- Fixed issue with return list in (`diive.pkgs.analysis.histogram.Histogram.peakbins`)
 
 ## v0.79.1 | 26 Aug 2024
 
 ### Additions
 
-- Added new function to apply quality flags to certain time periods only (`diive.pkgs.qaqc.flags.restrict_application`)
+- Added new function to apply quality flags to certain time periods only (`diive.pkgs.preprocessing.qaqc.flags.restrict_application`)
 - Added to option to restrict the application of the angle-of-attack flag to certain time periods (
   `diive.pkgs.fluxprocessingchain.level2_qualityflags.FluxQualityFlagsEddyPro.angle_of_attack_test`)
 
@@ -1033,11 +1033,11 @@ time series. The bin with most counts is highlighted orange.*
 
 - Added histogram plots to `FlagBase`, histograms are now shown for all outlier methods (
   `diive.core.base.flagbase.FlagBase.defaultplot`)
-- Added daytime/nighttime histogram plots to (`diive.pkgs.outlierdetection.hampel.HampelDaytimeNighttime`)
-- Added daytime/nighttime histogram plots to (`diive.pkgs.outlierdetection.zscore.zScoreDaytimeNighttime`)
-- Added daytime/nighttime histogram plots to (`diive.pkgs.outlierdetection.lof.LocalOutlierFactorDaytimeNighttime`)
+- Added daytime/nighttime histogram plots to (`diive.pkgs.preprocessing.outlierdetection.hampel.HampelDaytimeNighttime`)
+- Added daytime/nighttime histogram plots to (`diive.pkgs.preprocessing.outlierdetection.zscore.zScoreDaytimeNighttime`)
+- Added daytime/nighttime histogram plots to (`diive.pkgs.preprocessing.outlierdetection.lof.LocalOutlierFactorDaytimeNighttime`)
 - Added daytime/nighttime histogram plots to (
-  `diive.pkgs.outlierdetection.absolutelimits.AbsoluteLimitsDaytimeNighttime`)
+  `diive.pkgs.preprocessing.outlierdetection.absolutelimits.AbsoluteLimitsDaytimeNighttime`)
 - Added option to calculate the z-score with sign instead of absolute (`diive.core.funcs.funcs.zscore`)
 
 ### Changes
@@ -1072,7 +1072,7 @@ time series. The bin with most counts is highlighted orange.*
 ### Changes
 
 - Added option to set different `n_sigma` for daytime and nightime data
-  in `HampelDaytimeNighttime` (`diive.pkgs.outlierdetection.hampel.HampelDaytimeNighttime`)
+  in `HampelDaytimeNighttime` (`diive.pkgs.preprocessing.outlierdetection.hampel.HampelDaytimeNighttime`)
 - Updated `flag_outliers_hampel_dtnt_test` in step-wise outlier detection
 - Updated `level32_flag_outliers_hampel_dtnt_test` in flux processing chain
 
@@ -1092,12 +1092,12 @@ time series. The bin with most counts is highlighted orange.*
 
 - Added new class for outlier removal, based on the rolling z-score. It can also be used in step-wise outlier detection
   and during meteoscreening from the
-  database. (`diive.pkgs.outlierdetection.zscore.zScoreRolling`,
-  `diive.pkgs.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection`,
-  `diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb`).
-- Added Hampel filter for outlier removal (`diive.pkgs.outlierdetection.hampel.Hampel`)
+  database. (`diive.pkgs.preprocessing.outlierdetection.zscore.zScoreRolling`,
+  `diive.pkgs.preprocessing.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection`,
+  `diive.pkgs.preprocessing.qaqc.meteoscreening.StepwiseMeteoScreeningDb`).
+- Added Hampel filter for outlier removal (`diive.pkgs.preprocessing.outlierdetection.hampel.Hampel`)
 - Added Hampel filter (separate daytime, nighttime) for outlier
-  removal (`diive.pkgs.outlierdetection.hampel.HampelDaytimeNighttime`)
+  removal (`diive.pkgs.preprocessing.outlierdetection.hampel.HampelDaytimeNighttime`)
 - Added function to plot daytime and nighttime outliers during outlier
   tests (`diive.core.plotting.outlier_dtnt.outlier_daytime_nighttime`)
 
@@ -1121,9 +1121,9 @@ time series. The bin with most counts is highlighted orange.*
       test does not necessarily require a gas (e.g. `T_SONIC` is used to calculate the completeness for sensible heat
       flux) (`flag_fluxbasevar_completeness_eddypro_test`)
 - Removing the radiation offset now uses `0.001` (W m-2) instead of `50` as the threshold value to flag nighttime values
-  for the correction (`diive.pkgs.corrections.offsetcorrection.remove_radiation_zero_offset`)
+  for the correction (`diive.pkgs.preprocessing.corrections.offsetcorrection.remove_radiation_zero_offset`)
 - The database tag for meteo data screened with `diive` is
-  now `meteoscreening_diive` (`diive.pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.resample`)
+  now `meteoscreening_diive` (`diive.pkgs.preprocessing.qaqc.meteoscreening.StepwiseMeteoScreeningDb.resample`)
 - During noise generation, function now uses the absolute values of the min/max of a series to calculate minimum noise
   and maximum noise (`diive.pkgs.createvar.noise.add_impulse_noise`)
 
@@ -1179,7 +1179,7 @@ time series. The bin with most counts is highlighted orange.*
     - refactored code
     - beautified console output
 - When correcting for relative humidity values above 100%, the maximum of the corrected time series is now set to 100,
-  after the (daily) offset was removed (`diive.pkgs.corrections.offsetcorrection.remove_relativehumidity_offset`)
+  after the (daily) offset was removed (`diive.pkgs.preprocessing.corrections.offsetcorrection.remove_relativehumidity_offset`)
 - During feature reduction in machine learning regressors, features with permutation importance < 0 are now always
   removed (`diive.core.ml.common.MlRegressorGapFillingBase._remove_rejected_features`)
 - Changed default parameters for quick random forest gap-filling (`diive.pkgs.gapfilling.randomforest_ts.QuickFillRFTS`)
@@ -1218,7 +1218,7 @@ time series. The bin with most counts is highlighted orange.*
 
 - Changed the algorithm for outlier detection when using `zScoreIncrements`. Data points are now flagged as outliers if
   the z-scores of three absolute differences (previous record, next record and the sum of both) all exceed a specified
-  threshold.  (`diive.pkgs.outlierdetection.incremental.zScoreIncrements`)
+  threshold.  (`diive.pkgs.preprocessing.outlierdetection.incremental.zScoreIncrements`)
 
 ### Notebooks
 
@@ -1242,7 +1242,7 @@ time series. The bin with most counts is highlighted orange.*
 - In class `zScoreIncrements`, outliers are now detected by calculating the sum of the absolute differences between a
   data point and its respective preceding and next data point. Before, only the non-absolute difference of the preceding
   data point was considered. The sum of absolute differences is then used to calculate the z-score and in further
-  consequence to flag outliers. (`diive.pkgs.outlierdetection.incremental.zScoreIncrements`)
+  consequence to flag outliers. (`diive.pkgs.preprocessing.outlierdetection.incremental.zScoreIncrements`)
 
 ### Notebooks
 
@@ -1443,7 +1443,7 @@ multiple outlier tests into one single overall outlier flag.
 
 ### Additions
 
-- Added more info in comments of class `WindRotation2D` (`diive.pkgs.echires.windrotation.WindRotation2D`)
+- Added more info in comments of class `WindRotation2D` (`diive.pkgs.flux.hires.windrotation.WindRotation2D`)
 - Added example data for EddyPro full_output
   files (`diive.configs.exampledata.load_exampledata_eddypro_full_output_CSV_30MIN`)
 - Added code in an attempt to harmonize frequency detection from data: in class `DetectFrequency` the detected
@@ -1525,7 +1525,7 @@ multiple outlier tests into one single overall outlier flag.
 
 ### Changes
 
-- Updated notebook for `SortingBinsMethod` (`diive.pkgs.analyses.decoupling.SortingBinsMethod`)
+- Updated notebook for `SortingBinsMethod` (`diive.pkgs.analysis.decoupling.SortingBinsMethod`)
 
 ![DIIVE](images/analysesDecoupling_sortingBinsMethod_diive_v0.71.5.png)
 
@@ -1551,7 +1551,7 @@ interquartile range for the respective class. Plot was generated using the class
 
 - Refactored class `SortingBinsMethod`: Allows to investigate binned aggregates of a variable z in binned classes of x
   and y. All bins now show medians and interquartile
-  ranges. (`diive.pkgs.analyses.decoupling.SortingBinsMethod`)
+  ranges. (`diive.pkgs.analysis.decoupling.SortingBinsMethod`)
 
 ### Notebooks
 
@@ -1575,7 +1575,7 @@ interquartile range for the respective class. Plot was generated using the class
 ### Bugfixes & changes
 
 - Daily correlations are now returned with daily (`1d`) timestamp
-  index (`diive.pkgs.analyses.correlation.daily_correlation`)
+  index (`diive.pkgs.analysis.correlation.daily_correlation`)
 - Updated README
 - Environment: Added [ruff](https://github.com/astral-sh/ruff) to dev dependencies for linting
 
@@ -1614,7 +1614,7 @@ covariance was calculated using the `MaxCovariance` class.*
 ### New features
 
 - Added new class `MaxCovariance` to find the maximum covariance between two
-  variables (`diive.pkgs.echires.lag.MaxCovariance`)
+  variables (`diive.pkgs.flux.hires.lag.MaxCovariance`)
 - Added new class `FileDetector` to detect expected and unexpected files from a list of
   files (`diive.core.io.filesdetector.FileDetector`)
 - Added new class `FileSplitter` to split file into multiple smaller parts and export them as multiple CSV
@@ -1639,7 +1639,7 @@ covariance was calculated using the `MaxCovariance` class.*
 
 - Renamed class `TurbFlux` to `WindRotation2D` and updated code a bit, e.g., now it is possible to get
   rotated values for all three wind components (`u'`, `v'`, `w'`) in addition to the rotated
-  scalar `c'`. (`diive.pkgs.echires.windrotation.WindRotation2D`)
+  scalar `c'`. (`diive.pkgs.flux.hires.windrotation.WindRotation2D`)
 - Renamed filetypes: all filetypes now use the dash instead of an underscore
 - Renamed filetype to `ETH-RECORD-DAT-20HZ`: this filetype originates from the new eddy covariance real-time
   logging script `rECord` (currently not open source)
@@ -1661,7 +1661,7 @@ covariance was calculated using the `MaxCovariance` class.*
   settings) then the name of the flag of this second run is `FLAG_TA_T1_2_1_OUTLIER_ZSCOREDTNT_2_TEST`,
   etc ... The script now checks whether a flag of the same name was already created, in which case an
   integer is added to the flag name. These re-runs are now available in addition to the `repeat=True` keyword.
-  (`diive.pkgs.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection.addflag`)
+  (`diive.pkgs.preprocessing.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection.addflag`)
   Example:
     - `METHOD` with `SETTINGS` is applied with `repeat=True` and therefore repeated until no more outliers
       were found with these settings. The name of the flag produced is `TEST_METHOD_FLAG`.
@@ -1745,7 +1745,7 @@ the updated `FluxProcessingChain`notebook (`notebooks/FluxProcessingChain/FluxPr
   a first time and then repeated until no more outliers are found. Each iteration outputs a flag. This is now used in
   the `StepwiseOutlierDetection` and thus the flux processing chain Level-3.2 (outlier detection) and the meteoscreening
   in `StepwiseMeteoScreeningDb` (not yet checked in this update). To repeat an outlier method use the `repeat` keyword
-  arg (see the `FluxProcessingChain` notebook for examples).(`diive.pkgs.outlierdetection.repeater.repeater`)
+  arg (see the `FluxProcessingChain` notebook for examples).(`diive.pkgs.preprocessing.outlierdetection.repeater.repeater`)
 - Added new function `filter_strings_by_elements`: Returns a list of strings from list1 that contain all of the elements
   in list2.(`core.funcs.funcs.filter_strings_by_elements`)
 - Added new function `flag_steadiness_horizontal_wind_eddypro_test`: Create flag for steadiness of horizontal wind u

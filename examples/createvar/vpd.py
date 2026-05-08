@@ -11,8 +11,6 @@ See Also
 --------
 diive.calc_vpd_from_ta_rh : VPD calculation function documentation.
 """
-import matplotlib.gridspec as gridspec
-import matplotlib.pyplot as plt
 
 import diive as dv
 
@@ -29,7 +27,7 @@ def example_vpd_basic():
 
     # Variables
     ta_col = 'Tair_f'  # Gap-filled air temperature
-    rh_col = 'RH'      # Relative humidity
+    rh_col = 'RH'  # Relative humidity
     vpd_col = 'VPD_calculated'
 
     # Subset data
@@ -60,7 +58,7 @@ def example_vpd_with_gapfilling():
 
     # Variables
     ta_col = 'Tair_f'  # Gap-filled air temperature
-    rh_col = 'RH'      # Relative humidity
+    rh_col = 'RH'  # Relative humidity
     vpd_col = 'VPD_hPa'
 
     # Subset data - use 1 year to keep example quick

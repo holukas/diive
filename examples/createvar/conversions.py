@@ -36,14 +36,14 @@ def example_air_temp_from_sonic_temp():
 
     print("Example 1: Calculate air temperature from sonic temperature")
     print(f"Sonic temperature range: {sonic_temp.min():.2f} to {sonic_temp.max():.2f} K "
-          f"({sonic_temp.min()-273.15:.1f} to {sonic_temp.max()-273.15:.1f}°C)")
+          f"({sonic_temp.min() - 273.15:.1f} to {sonic_temp.max() - 273.15:.1f}°C)")
     print(f"Water vapor concentration: {h2o.min():.4f} to {h2o.max():.4f} mol/mol")
 
     # Calculate air temperature
     ta = dv.air_temp_from_sonic_temp(sonic_temp=sonic_temp, h2o=h2o)
 
     print(f"Air temperature range: {ta.min():.2f} to {ta.max():.2f} K "
-          f"({ta.min()-273.15:.1f} to {ta.max()-273.15:.1f}°C)")
+          f"({ta.min() - 273.15:.1f} to {ta.max() - 273.15:.1f}°C)")
     print(f"Temperature correction: {(sonic_temp - ta).mean():.3f} K on average\n")
 
 

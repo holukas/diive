@@ -1,7 +1,7 @@
-﻿diive.pkgs.analyses.gapfinder
+﻿diive.pkgs.analysis.gapfinder
 =============================
 
-.. automodule:: diive.pkgs.analyses.gapfinder
+.. automodule:: diive.pkgs.analysis.gapfinder
 
    
    .. rubric:: Classes

@@ -30,14 +30,14 @@ Domain-Specific Packages
    diive.pkgs.gapfilling.randomforest_ts
    diive.pkgs.gapfilling.xgboost_ts
    diive.pkgs.gapfilling.mds
-   diive.pkgs.outlierdetection.absolutelimits
-   diive.pkgs.outlierdetection.hampel
-   diive.pkgs.outlierdetection.localsd
-   diive.pkgs.outlierdetection.zscore
-   diive.pkgs.outlierdetection.lof
-   diive.pkgs.outlierdetection.stepwiseoutlierdetection
-   diive.pkgs.analyses.correlation
-   diive.pkgs.analyses.decoupling
+   diive.pkgs.preprocessing.outlierdetection.absolutelimits
+   diive.pkgs.preprocessing.outlierdetection.hampel
+   diive.pkgs.preprocessing.outlierdetection.localsd
+   diive.pkgs.preprocessing.outlierdetection.zscore
+   diive.pkgs.preprocessing.outlierdetection.lof
+   diive.pkgs.preprocessing.outlierdetection.stepwiseoutlierdetection
+   diive.pkgs.analysis.correlation
+   diive.pkgs.analysis.decoupling
    diive.pkgs.createvar.laggedvariants
    diive.configs.exampledata
 

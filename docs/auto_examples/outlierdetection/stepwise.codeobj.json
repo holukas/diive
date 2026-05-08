@@ -3,8 +3,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "diive.pkgs.outlierdetection.stepwiseoutlierdetection",
-   "module_short": "diive.pkgs.outlierdetection.stepwiseoutlierdetection",
+   "module": "diive.pkgs.preprocessing.outlierdetection.stepwiseoutlierdetection",
+   "module_short": "diive.pkgs.preprocessing.outlierdetection.stepwiseoutlierdetection",
    "name": "StepwiseOutlierDetection"
   }
  ],

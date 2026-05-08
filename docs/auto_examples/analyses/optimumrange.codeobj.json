@@ -12,15 +12,15 @@
   {
    "is_class": true,
    "is_explicit": false,
-   "module": "diive.pkgs.analyses.optimumrange",
-   "module_short": "diive.pkgs.analyses.optimumrange",
+   "module": "diive.pkgs.analysis.optimumrange",
+   "module_short": "diive.pkgs.analysis.optimumrange",
    "name": "FindOptimumRange"
   },
   {
    "is_class": true,
    "is_explicit": false,
-   "module": "diive.pkgs.analyses",
-   "module_short": "diive.pkgs.analyses",
+   "module": "diive.pkgs.analysis",
+   "module_short": "diive.pkgs.analysis",
    "name": "FindOptimumRange"
   },
   {

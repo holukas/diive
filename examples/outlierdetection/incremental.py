@@ -5,7 +5,7 @@ Outlier Detection: Z-Score Increments Examples
 Examples demonstrating the z-score increments method for outlier detection.
 Identifies outliers based on abrupt changes between consecutive values.
 
-See: diive.pkgs.outlierdetection.incremental
+See: diive.pkgs.preprocessing.outlierdetection.incremental
 """
 import warnings
 

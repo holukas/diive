@@ -34,15 +34,17 @@ def example_timesince_precipitation():
     # Load example data - July 2022 precipitation
     df = dv.load_exampledata_parquet()
     series_prec = df.loc[(df.index.year == 2022) & (df.index.month == 7),
-                         "PREC_TOT_T1_25+20_1"].copy()
+    "PREC_TOT_T1_25+20_1"].copy()
 
     # Create TimeSince counter: count records since last precipitation > 0 mm
     ts_prec = dv.TimeSince(series_prec, lower_lim=0, include_lim=False)
     ts_prec.calc()
 
     print("Time since last precipitation (July 2022):")
-    print(f"Maximum dry period: {ts_prec.get_timesince().max()} records (~{ts_prec.get_timesince().max() * 0.5:.1f} hours)")
-    print(f"Mean dry period: {ts_prec.get_timesince().mean():.1f} records (~{ts_prec.get_timesince().mean() * 0.5:.1f} hours)")
+    print(
+        f"Maximum dry period: {ts_prec.get_timesince().max()} records (~{ts_prec.get_timesince().max() * 0.5:.1f} hours)")
+    print(
+        f"Mean dry period: {ts_prec.get_timesince().mean():.1f} records (~{ts_prec.get_timesince().mean() * 0.5:.1f} hours)")
     print(f"\nFirst 10 rows:")
     print(ts_prec.get_full_results().head(10))
 
@@ -84,15 +86,17 @@ def example_timesince_temperature():
     # Load example data - March 2022 temperature
     df = dv.load_exampledata_parquet()
     series_ta = df.loc[(df.index.year == 2022) & (df.index.month == 3),
-                       "Tair_f"].copy()
+    "Tair_f"].copy()
 
     # Create TimeSince counter: count records since last freezing temperature <= 0°C
     ts_ta = dv.TimeSince(series_ta, upper_lim=0, include_lim=True)
     ts_ta.calc()
 
     print("Time since last freezing temperature (March 2022):")
-    print(f"Maximum warm period: {ts_ta.get_timesince().max()} records (~{ts_ta.get_timesince().max() * 0.5:.1f} hours)")
-    print(f"Mean warm period: {ts_ta.get_timesince().mean():.1f} records (~{ts_ta.get_timesince().mean() * 0.5:.1f} hours)")
+    print(
+        f"Maximum warm period: {ts_ta.get_timesince().max()} records (~{ts_ta.get_timesince().max() * 0.5:.1f} hours)")
+    print(
+        f"Mean warm period: {ts_ta.get_timesince().mean():.1f} records (~{ts_ta.get_timesince().mean() * 0.5:.1f} hours)")
     print(f"\nTemperature range: {series_ta.min():.1f}°C to {series_ta.max():.1f}°C")
 
     # Visualize 3-panel time series
@@ -133,7 +137,7 @@ def example_timesince_heatmap_comparison():
     # Load example data - July 2022 precipitation
     df = dv.load_exampledata_parquet()
     series_prec = df.loc[(df.index.year == 2022) & (df.index.month == 7),
-                         "PREC_TOT_T1_25+20_1"].copy()
+    "PREC_TOT_T1_25+20_1"].copy()
 
     # Create TimeSince counter
     ts_prec = dv.TimeSince(series_prec, lower_lim=0, include_lim=False)

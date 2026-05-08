@@ -1,6 +1,6 @@
-﻿diive.pkgs.outlierdetection.hampel.Hampel
+﻿diive.pkgs.preprocessing.outlierdetection.hampel.Hampel
 =========================================
 
-.. currentmodule:: diive.pkgs.outlierdetection.hampel
+.. currentmodule:: diive.pkgs.preprocessing.outlierdetection.hampel
 
 .. autofunction:: Hampel

@@ -325,7 +325,7 @@ class LongTermGapFillingXGBoostTS(LongTermGapFillingBase):
 
 def _example_longterm_xgbts():
     from diive.core.io.files import load_parquet
-    from diive.pkgs.createvar.potentialradiation import potrad
+    from diive.pkgs.features.variables.potentialradiation import potrad
 
     TARGET_COL = 'SW_IN_T1_47_1'
 

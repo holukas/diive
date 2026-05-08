@@ -1,7 +1,7 @@
-﻿diive.pkgs.analyses.gridaggregator
+﻿diive.pkgs.analysis.gridaggregator
 ==================================
 
-.. automodule:: diive.pkgs.analyses.gridaggregator
+.. automodule:: diive.pkgs.analysis.gridaggregator
 
    
    .. rubric:: Classes

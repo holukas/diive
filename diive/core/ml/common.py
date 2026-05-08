@@ -13,9 +13,7 @@ from xgboost import XGBRegressor
 from yellowbrick.regressor import PredictionError, ResidualsPlot
 
 import diive.core.dfun.frames as fr
-from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import vectorize_timestamps
-from diive.pkgs.createvar.laggedvariants import lagged_variants
 from diive.pkgs.gapfilling.scores import prediction_scores
 
 pd.set_option('display.max_rows', 50)

@@ -195,7 +195,7 @@ result.to_csv('output.csv')
 
 ### Adding an Outlier Detection Method
 
-1. Inherit from appropriate base class (see `diive.pkgs.outlierdetection`)
+1. Inherit from appropriate base class (see `diive.pkgs.preprocessing.outlierdetection`)
 2. Implement required methods (`flag_outliers()`, `get_flagged_data()`)
 3. Add comprehensive docstring with parameters
 4. Create example in `examples/outlierdetection/`

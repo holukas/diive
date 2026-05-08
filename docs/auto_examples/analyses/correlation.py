@@ -5,7 +5,7 @@ Run this script to see example plots:
     python examples/analyses/correlation.py
 """
 import diive as dv
-from diive.pkgs.createvar.potentialradiation import potrad
+from diive.pkgs.features.variables.potentialradiation import potrad
 
 
 def example_daily_correlation_radiation():

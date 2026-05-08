@@ -1,7 +1,7 @@
-﻿diive.pkgs.analyses.decoupling
+﻿diive.pkgs.analysis.decoupling
 ==============================
 
-.. automodule:: diive.pkgs.analyses.decoupling
+.. automodule:: diive.pkgs.analysis.decoupling
 
    
    .. rubric:: Classes

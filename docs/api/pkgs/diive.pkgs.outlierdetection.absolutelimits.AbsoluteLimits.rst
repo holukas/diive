@@ -1,6 +1,6 @@
-﻿diive.pkgs.outlierdetection.absolutelimits.AbsoluteLimits
+﻿diive.pkgs.preprocessing.outlierdetection.absolutelimits.AbsoluteLimits
 =========================================================
 
-.. currentmodule:: diive.pkgs.outlierdetection.absolutelimits
+.. currentmodule:: diive.pkgs.preprocessing.outlierdetection.absolutelimits
 
 .. autofunction:: AbsoluteLimits

@@ -12,15 +12,15 @@
   {
    "is_class": true,
    "is_explicit": false,
-   "module": "diive.pkgs.analyses.correlation",
-   "module_short": "diive.pkgs.analyses.correlation",
+   "module": "diive.pkgs.analysis.correlation",
+   "module_short": "diive.pkgs.analysis.correlation",
    "name": "DailyCorrelation"
   },
   {
    "is_class": true,
    "is_explicit": false,
-   "module": "diive.pkgs.analyses",
-   "module_short": "diive.pkgs.analyses",
+   "module": "diive.pkgs.analysis",
+   "module_short": "diive.pkgs.analysis",
    "name": "DailyCorrelation"
   },
   {

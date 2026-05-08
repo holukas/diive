@@ -12,15 +12,15 @@
   {
    "is_class": true,
    "is_explicit": false,
-   "module": "diive.pkgs.analyses.histogram",
-   "module_short": "diive.pkgs.analyses.histogram",
+   "module": "diive.pkgs.analysis.histogram",
+   "module_short": "diive.pkgs.analysis.histogram",
    "name": "Histogram"
   },
   {
    "is_class": true,
    "is_explicit": false,
-   "module": "diive.pkgs.analyses",
-   "module_short": "diive.pkgs.analyses",
+   "module": "diive.pkgs.analysis",
+   "module_short": "diive.pkgs.analysis",
    "name": "Histogram"
   },
   {

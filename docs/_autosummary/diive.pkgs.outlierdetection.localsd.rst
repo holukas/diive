@@ -1,7 +1,7 @@
-﻿diive.pkgs.outlierdetection.localsd
+﻿diive.pkgs.preprocessing.outlierdetection.localsd
 ===================================
 
-.. automodule:: diive.pkgs.outlierdetection.localsd
+.. automodule:: diive.pkgs.preprocessing.outlierdetection.localsd
 
    
    .. rubric:: Functions

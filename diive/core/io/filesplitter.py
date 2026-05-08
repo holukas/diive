@@ -11,7 +11,7 @@ from diive.core.io.filereader import ReadFileType
 from diive.core.io.filereader import search_files
 from diive.core.io.files import save_parquet
 from diive.core.times.times import create_timestamp
-from diive.pkgs.echires.windrotation import WindRotation2D
+from diive.pkgs.flux.hires.windrotation import WindRotation2D
 
 
 class FileSplitter:

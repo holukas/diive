@@ -251,7 +251,7 @@ result.to_csv('output.csv')  # ← Remove this from examples
 Complete flux processing with quality control, storage correction, USTAR filtering, and gap-filling.
 
 ```python
-from diive.pkgs.fluxprocessingchain import FluxProcessingChain
+from diive.pkgs.flux.fluxprocessingchain import FluxProcessingChain
 
 fpc = FluxProcessingChain(df, site_lat=47.286, site_lon=7.734)
 
@@ -266,11 +266,11 @@ fpc.level33_ustarfiltering(...)
 
 # Level 4.1: Gap-filling
 fpc.level41_longterm_random_forest(
-    features=['TA', 'SW_IN', 'VPD'],
-    features_lag=[-1, 1],
-    features_rolling=[12, 24],
-    # ... other feature parameters
-    n_estimators=100,
+   features=['TA', 'SW_IN', 'VPD'],
+   features_lag=[-1, 1],
+   features_rolling=[12, 24],
+   # ... other feature parameters
+   n_estimators=100,
 )
 
 # Access results
@@ -312,7 +312,7 @@ qcf.showplot_qcf_heatmaps()                  # Visualization
 
 ## EddyPro Quality Flag Functions
 
-**Module:** `diive.pkgs.qaqc.eddyproflags`
+**Module:** `diive.pkgs.preprocessing.qaqc.eddyproflags`
 
 Extracts and converts quality flags from EddyPro output files. EddyPro uses different flag formats than DIIVE's standard (0=good, 1=warning, 2=bad):
 - Some tests output binary flags (1=fail) requiring conversion
@@ -385,7 +385,7 @@ Used by: `flag_steadiness_horizontal_wind_eddypro_test()`, `flag_angle_of_attack
 **Step-wise Orchestration:** Chain multiple detection methods sequentially via `StepwiseOutlierDetection`. Each method operates on the previous result, progressively filtering outliers. Useful for multi-stage QA/QC workflows.
 
 ```python
-from diive.pkgs.outlierdetection.stepwiseoutlierdetection import StepwiseOutlierDetection
+from diive.pkgs.preprocessing.outlierdetection import StepwiseOutlierDetection
 
 detector = StepwiseOutlierDetection(dfin=df, col='NEE', site_lat=46.8, site_lon=8.6, utc_offset=1)
 

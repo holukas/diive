@@ -11,7 +11,7 @@ EddyPro output files use different flag formats depending on the test type:
     - Some flags are multi-digit codes encoding multiple tests
     - Signal strength values are continuous and require threshold comparison
 
-The functions in diive.pkgs.qaqc.eddyproflags extract information from EddyPro
+The functions in diive.pkgs.preprocessing.qaqc.eddyproflags extract information from EddyPro
 output and either:
     - Calculate new quality flags by applying thresholds (e.g., signal strength)
     - Extract existing test flags and convert them to DIIVE standard format
@@ -39,7 +39,7 @@ def example_signal_strength_test():
     - Reports data quality impact and retention rate
     - Provides quality assessment summary
     """
-    from diive.pkgs.qaqc.eddyproflags import flag_signal_strength_eddypro_test
+    from diive.pkgs.preprocessing.qaqc import flag_signal_strength_eddypro_test
 
     # Load example EddyPro FluxNet data
     df, metadata = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
@@ -85,7 +85,7 @@ def example_steadiness_horizontal_wind_test():
     - Converts EddyPro format (1=bad) to DIIVE format (2=bad)
     - Reports retained and discarded record counts
     """
-    from diive.pkgs.qaqc.eddyproflags import flag_steadiness_horizontal_wind_eddypro_test
+    from diive.pkgs.preprocessing.qaqc import flag_steadiness_horizontal_wind_eddypro_test
 
     # Load example EddyPro FluxNet data
     df, metadata = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
@@ -127,7 +127,7 @@ def example_angle_of_attack_test():
     - Converts EddyPro format (1=bad) to DIIVE format (2=bad)
     - Reports retained and discarded record counts
     """
-    from diive.pkgs.qaqc.eddyproflags import flag_angle_of_attack_eddypro_test
+    from diive.pkgs.preprocessing.qaqc import flag_angle_of_attack_eddypro_test
 
     # Load example EddyPro FluxNet data
     df, metadata = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
@@ -170,7 +170,7 @@ def example_vm97_quality_tests():
     - Reports pass/fail statistics for each individual test
     - Uses CO2 as the base variable (used to calculate FC flux)
     """
-    from diive.pkgs.qaqc.eddyproflags import flags_vm97_eddypro_fluxnetfile_tests
+    from diive.pkgs.preprocessing.qaqc import flags_vm97_eddypro_fluxnetfile_tests
 
     # Load example EddyPro FluxNet data
     df, metadata = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
@@ -241,7 +241,7 @@ def example_fluxbasevar_completeness_test():
     - Reports completeness statistics (good/ok/bad quality)
     - Uses standard thresholds: 99% for good, 97% for ok
     """
-    from diive.pkgs.qaqc.eddyproflags import flag_fluxbasevar_completeness_eddypro_test
+    from diive.pkgs.preprocessing.qaqc import flag_fluxbasevar_completeness_eddypro_test
 
     # Load example EddyPro FluxNet data
     df, metadata = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
@@ -289,7 +289,7 @@ def example_ssitc_test():
     - Converts EddyPro format to DIIVE format (2=bad)
     - Reports steady state condition statistics
     """
-    from diive.pkgs.qaqc.eddyproflags import flag_ssitc_eddypro_test
+    from diive.pkgs.preprocessing.qaqc import flag_ssitc_eddypro_test
 
     # Load example EddyPro FluxNet data
     df, metadata = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()

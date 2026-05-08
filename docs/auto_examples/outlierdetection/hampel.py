@@ -5,7 +5,7 @@ Outlier Detection: Hampel Filter Examples
 Examples demonstrating the Hampel filter (Median Absolute Deviation) for
 robust outlier detection with optional daytime/nighttime separation.
 
-See: diive.pkgs.outlierdetection.hampel
+See: diive.pkgs.preprocessing.outlierdetection.hampel
 """
 import warnings
 

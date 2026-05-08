@@ -9,7 +9,7 @@ Unlike :class:`~diive.core.plotting.heatmap_datetime.HeatmapDateTime` (which
 reshapes a time series by date and time-of-day), ``HeatmapXYZ`` is fully
 generic: x and y can be any numeric or categorical coordinates, and z is the
 value mapped to colour.  The typical use-case is visualising the output of
-:class:`~diive.pkgs.analyses.gridaggregator.GridAggregator` — e.g. mean NEP
+:class:`~diive.pkgs.analysis.gridaggregator.GridAggregator` — e.g. mean NEP
 binned by temperature and VPD.
 
 **Important:** ``HeatmapXYZ`` expects **pre-aggregated input** where each unique

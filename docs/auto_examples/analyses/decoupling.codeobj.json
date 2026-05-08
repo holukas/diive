@@ -28,15 +28,15 @@
   {
    "is_class": true,
    "is_explicit": false,
-   "module": "diive.pkgs.analyses.decoupling",
-   "module_short": "diive.pkgs.analyses.decoupling",
+   "module": "diive.pkgs.analysis.decoupling",
+   "module_short": "diive.pkgs.analysis.decoupling",
    "name": "StratifiedAnalysis"
   },
   {
    "is_class": true,
    "is_explicit": false,
-   "module": "diive.pkgs.analyses",
-   "module_short": "diive.pkgs.analyses",
+   "module": "diive.pkgs.analysis",
+   "module_short": "diive.pkgs.analysis",
    "name": "StratifiedAnalysis"
   },
   {

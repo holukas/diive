@@ -13,8 +13,7 @@ See Also
 --------
 diive.pkgs.flux.hqflux : High-quality flux analysis and outlier detection functions.
 """
-import diive as dv
-from diive.pkgs.flux.hqflux import analyze_highest_quality_flux
+from diive.pkgs.flux.lowres.hqflux import analyze_highest_quality_flux
 
 
 def example_hqflux_hampel_co2():

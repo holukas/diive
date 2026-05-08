@@ -5,7 +5,7 @@ Outlier Detection: Absolute Limits Examples
 Examples demonstrating absolute value limits for outlier detection,
 with separate daytime/nighttime thresholds.
 
-See: diive.pkgs.outlierdetection.absolutelimits
+See: diive.pkgs.preprocessing.outlierdetection.absolutelimits
 """
 import numpy as np
 import pandas as pd

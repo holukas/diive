@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from pandas import Series
 
-from diive.pkgs.analyses import gapfinder
+from diive.pkgs.analysis import gapfinder
 
 
 def _calculate_gap_sizes(gap_df: pd.DataFrame, series: Series) -> np.ndarray:

@@ -5,7 +5,7 @@ class TestFluxProcessingChain(unittest.TestCase):
 
     def test_fluxprocessingchain(self):
         from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
-        from diive.pkgs.fluxprocessingchain.fluxprocessingchain import FluxProcessingChain
+        from diive.pkgs.flux.fluxprocessingchain import FluxProcessingChain
         df, meta = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
 
         # Meteo variables have 1 missing value, fill
@@ -94,7 +94,7 @@ class TestFluxProcessingChain(unittest.TestCase):
         }
         fpc.level2_quality_flag_expansion(**LEVEL2_SETTINGS)
         fpc.finalize_level2()
-        from diive.pkgs.fluxprocessingchain.level2_qualityflags import FluxQualityFlagsEddyPro
+        from diive.pkgs.flux.fluxprocessingchain.level2_qualityflags import FluxQualityFlagsEddyPro
         self.assertEqual(type(fpc.level2), FluxQualityFlagsEddyPro)
         # fpc.level2_qcf.showplot_qcf_heatmaps()
         # fpc.level2_qcf.report_qcf_evolution()
@@ -123,7 +123,7 @@ class TestFluxProcessingChain(unittest.TestCase):
         # --------------------
         fpc.level31_storage_correction(gapfill_storage_term=True)
         fpc.finalize_level31()
-        from diive.pkgs.fluxprocessingchain.level31_storagecorrection import FluxStorageCorrectionSinglePointEddyPro
+        from diive.pkgs.flux.fluxprocessingchain import FluxStorageCorrectionSinglePointEddyPro
         self.assertEqual(type(fpc.level31), FluxStorageCorrectionSinglePointEddyPro)
         self.assertEqual(fpc.level31.gapfilled_strgcol, "SC_SINGLE_gfRMED_L3.1")
         self.assertEqual(fpc.filteredseries.dropna().count(), 778)
@@ -184,7 +184,7 @@ class TestFluxProcessingChain(unittest.TestCase):
         fpc.level32_flag_outliers_trim_low_test(trim_nighttime=True, lower_limit=-2.5, **kwargs)
         fpc.level32_addflag()
         fpc.finalize_level32()
-        from diive.pkgs.outlierdetection.stepwiseoutlierdetection import StepwiseOutlierDetection
+        from diive.pkgs.preprocessing.outlierdetection import StepwiseOutlierDetection
         self.assertEqual(type(fpc.level32), StepwiseOutlierDetection)
         self.assertEqual(len(fpc.fpc_df.columns), 46)
         flagcols = [c for c in fpc.fpc_df.columns if str(c).startswith("FLAG_") and str(c).endswith("_TEST")]
@@ -200,7 +200,7 @@ class TestFluxProcessingChain(unittest.TestCase):
                                    showplot=False)
         # Finalize: stores results for each USTAR scenario in a dict
         fpc.finalize_level33()
-        from diive.pkgs.flux.ustarthreshold import FlagMultipleConstantUstarThresholds
+        from diive.pkgs.flux.lowres.ustarthreshold import FlagMultipleConstantUstarThresholds
         self.assertEqual(type(fpc.level33), FlagMultipleConstantUstarThresholds)
         self.assertEqual(len(fpc.fpc_df.columns), 67)
         flagcols = [c for c in fpc.fpc_df.columns if str(c).startswith("FLAG_") and str(c).endswith("_TEST")]
