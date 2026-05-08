@@ -74,7 +74,7 @@ python examples/run_all_examples.py
 **Run individual examples:**
 
 ```bash
-python examples/timeseries/timestamp_sanitizer.py    # Timestamp validation & cleaning (5 levels: clean to corrupted)
+python examples/timeseries/timestamp_sanitizer.py    # TimestampSanitizer with confidence & diagnostics (5 levels: clean to corrupted)
 python examples/visualization/heatmap_datetime.py    # HeatmapDateTime heatmaps (6 examples)
 python examples/analyses/seasonaltrend.py            # SeasonalTrendDecomposition (1 example)
 python examples/gap_filling/randomforest_ts.py       # Random Forest gap-filling & hyperparameter optimization (3 examples)
@@ -99,7 +99,8 @@ python examples/flux/hqflux.py                       # CO2 flux quality analysis
 
 **Example categories (112 total, 53 files):**
 
-- **Time Series** (7): timestamp_sanitizer (5 levels), harmonic (spectrogram analysis with 2 examples)
+- **Time Series** (7): timestamp_sanitizer (5 levels with confidence scoring & frequency diagnostics), harmonic (
+  spectrogram analysis with 2 examples)
 - **Visualization** (22): heatmap_datetime, hexbin, timeseries, cumulative, dielcycle, histogram, ridgeline, scatter
 - **Analyses** (8): correlation, decoupling, gapfinder, gridaggregator, histogram, optimumrange, quantiles,
   seasonaltrend

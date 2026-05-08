@@ -29,7 +29,7 @@ EXAMPLE_FILES = [
     'analyses/decoupling.py',
     'analyses/gapfinder.py',
     'analyses/gridaggregator.py',
-    'analyses/histogram.py',
+    'analyses/histogram_distribution.py',
     'analyses/optimumrange.py',
     'analyses/quantiles.py',
     'analyses/seasonaltrend.py',
@@ -75,7 +75,7 @@ EXAMPLE_FILES = [
     'timeseries/harmonic.py',
 ]
 
-MAX_WORKERS = 4  # Number of parallel workers
+MAX_WORKERS = 8  # Number of parallel workers
 
 
 def run_example(example_file, examples_dir):
@@ -96,7 +96,7 @@ def run_example(example_file, examples_dir):
             [sys.executable, str(example_path)],
             capture_output=True,
             text=True,
-            timeout=60
+            timeout=120
         )
         elapsed = time.time() - start_time
 

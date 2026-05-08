@@ -182,6 +182,11 @@ class TimestampSanitizer:
         except AttributeError:
             self.inferred_freq = None
 
+        self._freq_confidence = None  # Confidence in frequency detection (0-1)
+        self._freq_detection_method = None  # Which method detected the frequency
+        self._freq_percent_matching = None  # % of intervals matching detected frequency
+        self._freq_alternatives = []  # Alternative frequencies detected
+
         self._run()
 
     def get(self) -> Union[Series, DataFrame]:
@@ -206,13 +211,17 @@ class TimestampSanitizer:
             - 'rows_added_by_regularization': Rows added to fill gaps
             - 'net_rows': Final row count minus original row count (can be negative)
             - 'inferred_frequency': Detected time resolution
+            - 'frequency_confidence': Confidence score for detected frequency (0.0-1.0)
+            - 'frequency_detection_method': Method used to detect frequency
+            - 'frequency_percent_matching': % of intervals matching detected frequency
+            - 'frequency_alternatives': Alternative frequencies detected by other methods
             - 'timestamp_format': Index name (TIMESTAMP_END, TIMESTAMP_START, or TIMESTAMP_MIDDLE)
 
         Example
         -------
         >>> sanitizer = dv.TimestampSanitizer(data=df, verbose=False)
         >>> status = sanitizer.get_status()
-        >>> print(f"Removed {status['rows_removed']} rows, added {status['rows_added_by_regularization']}")
+        >>> print(f"Removed {status['rows_removed']} rows, frequency confidence: {status['frequency_confidence']:.0%}")
         """
         return {
             'original_shape': self._original_shape,
@@ -223,6 +232,10 @@ class TimestampSanitizer:
             'rows_added_by_regularization': self._rows_added_by_regularization,
             'net_rows': len(self.data) - self._original_rows,
             'inferred_frequency': self.inferred_freq,
+            'frequency_confidence': self._freq_confidence,
+            'frequency_detection_method': self._freq_detection_method,
+            'frequency_percent_matching': self._freq_percent_matching,
+            'frequency_alternatives': self._freq_alternatives,
             'timestamp_format': self.data.index.name,
         }
 
@@ -267,14 +280,29 @@ class TimestampSanitizer:
 
         # Remove index duplicates
         if self.remove_duplicates:
-            self.data, self._duplicates_removed = remove_index_duplicates(data=self.data, keep='last', verbose=self.verbose)
+            self.data, self._duplicates_removed = remove_index_duplicates(data=self.data, keep='last',
+                                                                          verbose=self.verbose)
 
         # Validate monotonicity (only if sorting was enabled)
         if self.sort_ascending:
             _ = validate_timestamp_monotonic(data=self.data, verbose=self.verbose)
 
+        # Check if data is empty before frequency detection
+        if len(self.data) == 0:
+            raise ValueError(
+                "Data is empty after cleaning (all rows removed by NaT/duplicate removal). "
+                "Check your input data: (1) verify timestamps are valid, "
+                "(2) try remove_index_nat=False to keep rows with NaT, or "
+                "(3) check that no duplicates consumed all rows."
+            )
+
         # Detect time resolution from data
-        detected_freq = DetectFrequency(index=self.data.index, verbose=self.verbose).get()
+        freq_detector = DetectFrequency(index=self.data.index, verbose=self.verbose)
+        detected_freq = freq_detector.get()
+        self._freq_confidence = freq_detector.confidence
+        self._freq_detection_method = freq_detector.detection_method
+        self._freq_percent_matching = freq_detector.percent_matching
+        self._freq_alternatives = freq_detector.alternatives
 
         # If data had pre-existing freq, validate consistency
         if self.inferred_freq and detected_freq != str(self.inferred_freq):
@@ -313,6 +341,140 @@ class TimestampSanitizer:
                 "(1) verify timestamps are valid, (2) try remove_index_nat=False to keep "
                 "rows with NaT, or (3) check that no other step removed all data."
             )
+
+
+class DetectFrequency:
+    """Detect data time resolution from time series index
+
+
+    - Example notebook available in:
+        notebooks/TimeStamps/Detect_time_resolution.ipynb
+    - Unittest:
+        test_timestamps.TestTimestamps
+
+    """
+
+    def __init__(self, index: pd.DatetimeIndex, verbose: bool = False):
+        self.index = index
+        self.verbose = verbose
+        # self.freq_expected = freq_expected
+        self.num_datarows = self.index.__len__()
+        self.freq = None
+        self.confidence = None  # Confidence score (0-1)
+        self.detection_method = None  # Which method detected the frequency
+        self.percent_matching = None  # % of intervals matching detected frequency
+        self.alternatives = []  # Alternative frequencies detected by other methods
+        self._run()
+
+    def _run(self):
+        if self.verbose:
+            print(f"  Detect frequency: ", end="")
+
+        freq_full, freqinfo_full = timestamp_infer_freq_from_fullset(timestamp_ix=self.index)
+        freq_timedelta, freqinfo_timedelta = timestamp_infer_freq_from_timedelta(timestamp_ix=self.index)
+        freq_progressive, freqinfo_progressive = timestamp_infer_freq_progressively(timestamp_ix=self.index)
+
+        # Add number to frequency string, needed for Timedelta: e.g. 'min' --> '1min'
+        # Check if frequency strings contain a number, b/c Timedelta explicitely needs a number,
+        # e.g. '1min' for data in 1-minute time resolution.
+        # Note that .infer_freq() that is used in the functions above outputs frequency strings
+        # for data with e.g. 1-minute time resolution as `min` (no number), while for higher
+        # minute-time resolutions the frequency string contains a number, e.g. '30min'.
+        # Same is true for hourly etc... data.
+        if freq_full:
+            freq_full = f'1{freq_full}' if not any(digit.isdigit() for digit in freq_full) else freq_full
+        if freq_timedelta:
+            freq_timedelta = f'1{freq_timedelta}' if not any(
+                digit.isdigit() for digit in freq_timedelta) else freq_timedelta
+        if freq_progressive:
+            freq_progressive = f'1{freq_progressive}' if not any(
+                digit.isdigit() for digit in freq_progressive) else freq_progressive
+
+        # Harmonize frequency strings
+        # This also removes the number in case of e.g. 1-minute time resolution: '1min' --> 'min'.
+        # This will yield the frequency string as seen by (the current version of) pandas. The idea
+        # is to harmonize between different representations e.g. `T` or `min` for minutes.
+        if freq_full:
+            freq_full = to_offset(pd.Timedelta(freq_full)).freqstr
+        if freq_timedelta:
+            freq_timedelta = to_offset(pd.Timedelta(freq_timedelta)).freqstr
+        if freq_progressive:
+            freq_progressive = to_offset(pd.Timedelta(freq_progressive)).freqstr
+
+        list_of_found_freqs = [freq_full, freq_timedelta, freq_progressive]
+        if all(i == list_of_found_freqs[0] for i in list_of_found_freqs):
+            # if all(f for f in [freq_full, freq_timedelta, freq_progressive]):
+
+            # List of {Set of detected freqs}
+            freq_list = list({freq_timedelta, freq_full, freq_progressive})
+
+            if len(freq_list) == 1 and freq_list[0] is not None:
+                # Maximum certainty, one single freq found across all checks
+                self.freq = freq_list[0]
+                self.confidence = 1.0
+                self.detection_method = "all_methods_agree"
+                # Extract % matching from timedelta if available
+                try:
+                    conf_str = freqinfo_timedelta.split('%')[0]
+                    self.percent_matching = float(conf_str)
+                except (ValueError, IndexError):
+                    self.percent_matching = 100.0
+                if self.verbose:
+                    print(f"{self.freq} (all methods agree)")
+
+        elif freq_full:
+            # High certainty, freq found from full range of dataset
+            self.freq = freq_full
+            self.confidence = 0.95
+            self.detection_method = "full_dataset"
+            self.percent_matching = 100.0
+            # Track alternatives
+            if freq_timedelta:
+                self.alternatives.append(freq_timedelta)
+            if freq_progressive:
+                self.alternatives.append(freq_progressive)
+            if self.verbose:
+                print(f"{self.freq} (full data)")
+
+        elif freq_timedelta:
+            # High certainty, freq found from most frequent timestep that
+            # occurred at least 90% of the time
+            self.freq = freq_timedelta
+            self.detection_method = "timedelta"
+            # Extract confidence from freqinfo like '75% occurrence'
+            try:
+                conf_str = freqinfo_timedelta.split('%')[0]
+                self.confidence = float(conf_str) / 100.0
+                self.percent_matching = float(conf_str)
+            except (ValueError, IndexError):
+                self.confidence = 0.75
+                self.percent_matching = 75.0
+            # Track alternatives
+            if freq_progressive:
+                self.alternatives.append(freq_progressive)
+            if self.verbose:
+                print(f"{self.freq} (timedelta, {self.confidence*100:.0f}% match)")
+
+        elif freq_progressive:
+            # Medium certainty, freq found from start and end of dataset
+            self.freq = freq_progressive
+            self.confidence = 0.70
+            self.detection_method = "start_end_chunks"
+            self.percent_matching = None  # Not calculated for progressive method
+            if self.verbose:
+                print(f"{self.freq} (start/end)")
+
+        else:
+            raise RuntimeError(
+                "Could not detect timestamp frequency using any method. This typically "
+                "means your timestamps are highly irregular or have too many gaps. "
+                "To fix: (1) verify data quality (check for irregular gaps/duplicates), "
+                "(2) try regularize=True to fill gaps automatically, or "
+                "(3) skip frequency detection with nominal_freq=None."
+            )
+
+    def get(self) -> str:
+        return self.freq
 
 
 def format_timestamp_to_fluxnet_format(df: DataFrame, timestamp_col: str) -> Series:
@@ -499,7 +661,7 @@ def sort_timestamp_ascending(data: Union[Series, DataFrame], verbose: bool = Fal
     return data
 
 
-def remove_rows_nat(df: DataFrame, verbose: bool = False) -> tuple[DataFrame, int]:
+def remove_rows_nat(df: Union[Series, DataFrame], verbose: bool = False) -> tuple[Union[Series, DataFrame], int]:
     """
     Remove rows that do not have a timestamp (NaT).
 
@@ -508,15 +670,15 @@ def remove_rows_nat(df: DataFrame, verbose: bool = False) -> tuple[DataFrame, in
 
     Parameters
     ----------
-    df : DataFrame
+    df : Union[Series, DataFrame]
         Data with timestamp index.
     verbose : bool, optional
         Print status messages. Default is False.
 
     Returns
     -------
-    tuple[DataFrame, int]
-        - DataFrame: Data with NaT rows removed
+    tuple[Union[Series, DataFrame], int]
+        - Union[Series, DataFrame]: Data with NaT rows removed
         - int: Number of rows removed
 
     Raises
@@ -531,9 +693,10 @@ def remove_rows_nat(df: DataFrame, verbose: bool = False) -> tuple[DataFrame, in
     """
     no_date = df.index.isnull()
     n_rows = no_date.sum()
+    original_length = len(df)
     if n_rows > 0:
         df = df.loc[df.index[~no_date]].copy()
-        pct_removed = 100 * n_rows / len(df.index)
+        pct_removed = 100 * n_rows / original_length
         if verbose:
             print(f"  Remove NaT values: {n_rows} removed", end="")
             if pct_removed > 10:
@@ -1083,112 +1246,13 @@ def insert_season(
     return season_series.astype('Int64')
 
 
-class DetectFrequency:
-    """Detect data time resolution from time series index
-
-
-    - Example notebook available in:
-        notebooks/TimeStamps/Detect_time_resolution.ipynb
-    - Unittest:
-        test_timestamps.TestTimestamps
-
-    """
-
-    def __init__(self, index: pd.DatetimeIndex, verbose: bool = False):
-        self.index = index
-        self.verbose = verbose
-        # self.freq_expected = freq_expected
-        self.num_datarows = self.index.__len__()
-        self.freq = None
-        self._run()
-
-    def _run(self):
-        if self.verbose:
-            print(f"  Detect frequency: ", end="")
-
-        freq_full, freqinfo_full = timestamp_infer_freq_from_fullset(timestamp_ix=self.index)
-        freq_timedelta, freqinfo_timedelta = timestamp_infer_freq_from_timedelta(timestamp_ix=self.index)
-        freq_progressive, freqinfo_progressive = timestamp_infer_freq_progressively(timestamp_ix=self.index)
-
-        # Add number to frequency string, needed for Timedelta: e.g. 'min' --> '1min'
-        # Check if frequency strings contain a number, b/c Timedelta explicitely needs a number,
-        # e.g. '1min' for data in 1-minute time resolution.
-        # Note that .infer_freq() that is used in the functions above outputs frequency strings
-        # for data with e.g. 1-minute time resolution as `min` (no number), while for higher
-        # minute-time resolutions the frequency string contains a number, e.g. '30min'.
-        # Same is true for hourly etc... data.
-        if freq_full:
-            freq_full = f'1{freq_full}' if not any(digit.isdigit() for digit in freq_full) else freq_full
-        if freq_timedelta:
-            freq_timedelta = f'1{freq_timedelta}' if not any(
-                digit.isdigit() for digit in freq_timedelta) else freq_timedelta
-        if freq_progressive:
-            freq_progressive = f'1{freq_progressive}' if not any(
-                digit.isdigit() for digit in freq_progressive) else freq_progressive
-
-        # Harmonize frequency strings
-        # This also removes the number in case of e.g. 1-minute time resolution: '1min' --> 'min'.
-        # This will yield the frequency string as seen by (the current version of) pandas. The idea
-        # is to harmonize between different representations e.g. `T` or `min` for minutes.
-        if freq_full:
-            freq_full = to_offset(pd.Timedelta(freq_full)).freqstr
-        if freq_timedelta:
-            freq_timedelta = to_offset(pd.Timedelta(freq_timedelta)).freqstr
-        if freq_progressive:
-            freq_progressive = to_offset(pd.Timedelta(freq_progressive)).freqstr
-
-        list_of_found_freqs = [freq_full, freq_timedelta, freq_progressive]
-        if all(i == list_of_found_freqs[0] for i in list_of_found_freqs):
-            # if all(f for f in [freq_full, freq_timedelta, freq_progressive]):
-
-            # List of {Set of detected freqs}
-            freq_list = list({freq_timedelta, freq_full, freq_progressive})
-
-            if len(freq_list) == 1:
-                # Maximum certainty, one single freq found across all checks
-                self.freq = freq_list[0]
-                if self.verbose:
-                    print(f"{self.freq} (all methods agree)")
-
-        elif freq_full:
-            # High certainty, freq found from full range of dataset
-            self.freq = freq_full
-            if self.verbose:
-                print(f"{self.freq} (full data)")
-
-        elif freq_timedelta:
-            # High certainty, freq found from most frequent timestep that
-            # occurred at least 90% of the time
-            self.freq = freq_timedelta
-            if self.verbose:
-                print(f"{self.freq} (timedelta)")
-
-        elif freq_progressive:
-            # Medium certainty, freq found from start and end of dataset
-            self.freq = freq_progressive
-            if self.verbose:
-                print(f"{self.freq} (start/end)")
-
-        else:
-            raise RuntimeError(
-                "Could not detect timestamp frequency using any method. This typically "
-                "means your timestamps are highly irregular or have too many gaps. "
-                "To fix: (1) verify data quality (check for irregular gaps/duplicates), "
-                "(2) try regularize=True to fill gaps automatically, or "
-                "(3) skip frequency detection with nominal_freq=None."
-            )
-
-    def get(self) -> str:
-        return self.freq
-
-
 def timestamp_infer_freq_progressively(timestamp_ix: pd.DatetimeIndex) -> tuple:
     """Try to infer freq from first x and last x rows of data, if these
     match we can be relatively certain that the file has the same freq
     from start to finish.
     """
     MAX_CHECK_RANGE = 1000  # Start with up to 1000 rows from each end
-    MIN_CHECK_RANGE = 3    # Minimum rows needed for frequency detection
+    MIN_CHECK_RANGE = 3  # Minimum rows needed for frequency detection
 
     n_datarows = timestamp_ix.__len__()
     inferred_freq = None
@@ -1326,7 +1390,8 @@ def remove_index_duplicates(data: Union[Series, DataFrame],
     return data, n_duplicates
 
 
-def continuous_timestamp_freq(data: Union[Series, DataFrame], freq: str, verbose: bool = False) -> Union[Series, DataFrame]:
+def continuous_timestamp_freq(data: Union[Series, DataFrame], freq: str, verbose: bool = False) -> Union[
+    Series, DataFrame]:
     """
     Generate continuous timestamp index without gaps.
 
@@ -1515,7 +1580,8 @@ def insert_timestamp(
     return data
 
 
-def convert_series_timestamp_to_middle(data: Union[Series, DataFrame], verbose: bool = False) -> Union[Series, DataFrame]:
+def convert_series_timestamp_to_middle(data: Union[Series, DataFrame], verbose: bool = False) -> Union[
+    Series, DataFrame]:
     """
     Convert timestamp index to show middle of averaging period.
 

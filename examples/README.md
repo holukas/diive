@@ -58,7 +58,7 @@ examples/
 │   ├── [lag.py](echires/lag.py)                               # MaxCovariance for time lag detection (1 example)
 │   └── [windrotation.py](echires/windrotation.py)             # WindRotation2D for coordinate rotation and tilt correction (1 example)
 ├── timeseries/            # Time series data preparation and analysis examples
-│   ├── [timestamp_sanitizer.py](timeseries/timestamp_sanitizer.py)  # Comprehensive timestamp validation and cleaning (5 levels, clean to severely corrupted data)
+│   ├── [timestamp_sanitizer.py](timeseries/timestamp_sanitizer.py)  # TimestampSanitizer: comprehensive validation with confidence scoring and frequency diagnostics (5 levels: clean to corrupted)
 │   └── [harmonic.py](timeseries/harmonic.py)                  # Spectrogram analysis - daily and annual CO2 patterns (2 examples)
 ├── flux/                  # Flux quality and analysis examples
 │   ├── [common.py](flux/common.py)                            # Flux variable base detection (1 example)
@@ -97,6 +97,20 @@ python examples/gap_filling/randomforest_ts.py
 ```
 
 ## Quick Start
+
+**Timestamp Validation:**
+```bash
+python examples/timeseries/timestamp_sanitizer.py
+```
+
+Demonstrates comprehensive timestamp validation through 5 progressively severe issue levels:
+- Level 1: Clean data baseline
+- Level 2: Minor issues (3 NaT + 1 duplicate)
+- Level 3: Moderate issues (20 NaT + 5 duplicates + shuffled data)
+- Level 4: Severe issues (50 NaT + 10 duplicates + wrong format/name + reversed chunks)
+- Level 5: Minimal processing (all steps disabled except frequency detection)
+
+Shows frequency confidence scoring and detection diagnostics at each level.
 
 **Visualization:**
 ```bash

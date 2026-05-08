@@ -139,6 +139,12 @@ sanitizer = TimestampSanitizer(
 clean_df = sanitizer.get()
 status = sanitizer.get_status()  # Track what changed
 print(f"Removed {status['rows_removed']} rows, added {status['rows_added_by_regularization']}")
+print(f"Frequency: {status['inferred_frequency']} (confidence: {status['frequency_confidence']:.0%})")
+print(f"  Detection method: {status['frequency_detection_method']}")
+if status['frequency_percent_matching']:
+    print(f"  Intervals matching: {status['frequency_percent_matching']:.1f}%")
+if status['frequency_alternatives']:
+    print(f"  Alternatives: {', '.join(status['frequency_alternatives'])}")
 ```
 
 **Pipeline (10 steps, all optional except monotonicity):**
@@ -148,12 +154,20 @@ print(f"Removed {status['rows_removed']} rows, added {status['rows_added_by_regu
 4. Sort ascending
 5. Remove duplicates
 6. Validate monotonicity (if sorting enabled)
-7. Detect frequency (3 methods)
-8. Validate frequency
-9. Regularize gaps
-10. Convert to middle-of-period
+7. Detect frequency with confidence scoring (3 detection methods)
+8. Validate frequency against expected (if provided)
+9. Regularize gaps to create continuous time series
+10. Convert to middle-of-period timestamp
 
-**Example:** `examples/timeseries/timestamp_sanitizer.py` shows 5 progressively severe data issues from clean to badly corrupted, demonstrating error handling and selective processing.
+**Status tracking via `get_status()`:**
+Returns comprehensive diagnostics including:
+- Rows removed/added statistics
+- Detected frequency and confidence score (0-1)
+- Detection method used (all_methods_agree, full_dataset, timedelta, start_end_chunks)
+- % of intervals matching detected frequency
+- Alternative frequencies detected by other methods
+
+**Example:** `examples/timeseries/timestamp_sanitizer.py` demonstrates 5 progressively severe data issues (clean → corrupted), showing robustness and diagnostic output at each level.
 
 ## Gap-Filling Methods
 

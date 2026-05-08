@@ -73,6 +73,12 @@ print(f"  Rows removed: {status['rows_removed']} (NaT: {status['rows_removed_nat
       f"duplicates: {status['rows_removed_duplicates']})")
 print(f"  Rows added by regularization: {status['rows_added_by_regularization']}")
 print(f"  Net change: {status['net_rows']:+d} rows")
+print(f"  Frequency: {status['inferred_frequency']} (confidence: {status['frequency_confidence']:.0%})")
+if status['frequency_percent_matching']:
+    print(f"    - Detection method: {status['frequency_detection_method']}")
+    print(f"    - Intervals matching: {status['frequency_percent_matching']:.1f}%")
+if status['frequency_alternatives']:
+    print(f"    - Alternatives detected: {', '.join(status['frequency_alternatives'])}")
 
 # ==============================================================================
 # LEVEL 2: MINOR ISSUES (few NaTs + 1 duplicate)
@@ -119,7 +125,8 @@ print_data_info(result, "AFTER sanitization")
 status = sanitizer.get_status()
 print(f"\nStatus: removed {status['rows_removed']} rows (NaT: {status['rows_removed_nat']}, "
       f"duplicates: {status['rows_removed_duplicates']}), "
-      f"net change: {status['net_rows']:+d} rows")
+      f"net change: {status['net_rows']:+d} rows, "
+      f"frequency confidence: {status['frequency_confidence']:.0%}")
 
 # ==============================================================================
 # LEVEL 3: MODERATE ISSUES (many NaTs + multiple duplicates + partial sorting)
@@ -181,7 +188,8 @@ print_data_info(result, "AFTER sanitization")
 status = sanitizer.get_status()
 print(f"\nStatus: removed {status['rows_removed']} rows (NaT: {status['rows_removed_nat']}, "
       f"duplicates: {status['rows_removed_duplicates']}), "
-      f"net change: {status['net_rows']:+d} rows")
+      f"net change: {status['net_rows']:+d} rows, "
+      f"frequency confidence: {status['frequency_confidence']:.0%}")
 
 # ==============================================================================
 # LEVEL 4: SEVERE ISSUES (almost everything wrong)
