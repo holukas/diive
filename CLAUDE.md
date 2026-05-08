@@ -27,6 +27,7 @@ python -m pytest tests/test_gapfilling.py -v
 **DIIVE** — Data Integration and Interactive Visualization Engine for time series processing (ecosystem flux data).
 
 **Core capabilities:**
+- **Timestamp sanitization** (10-step validation, monotonicity check, frequency detection)
 - Feature engineering (8-stage composable pipeline)
 - ML gap-filling (Random Forest, XGBoost)
 - Flux processing chain (Levels 2-4.1)
@@ -113,6 +114,46 @@ gapfilled = model.get_gapfilled_target()
 - Cleaner separation of concerns
 - Pre-engineered data can be used with other algorithms
 - All feature engineering parameters go to `FeatureEngineer`, not gap-filling classes
+
+## Timestamp Sanitization (TimestampSanitizer)
+
+Comprehensive validation and cleaning of datetime indices through 10 configurable steps.
+
+```python
+from diive import TimestampSanitizer
+
+# Clean timestamps with validation
+sanitizer = TimestampSanitizer(
+    data=df,
+    output_middle_timestamp=True,      # Convert to middle-of-period
+    validate_naming=True,              # Check TIMESTAMP_END/START/MIDDLE
+    convert_to_datetime=True,          # Ensure datetime format
+    remove_index_nat=True,             # Remove NaT rows
+    sort_ascending=True,               # Sort chronologically
+    remove_duplicates=True,            # Remove duplicate timestamps
+    regularize=True,                   # Fill gaps with NaN rows
+    nominal_freq='30min',              # Expected frequency (optional)
+    verbose=True
+)
+
+clean_df = sanitizer.get()
+status = sanitizer.get_status()  # Track what changed
+print(f"Removed {status['rows_removed']} rows, added {status['rows_added_by_regularization']}")
+```
+
+**Pipeline (10 steps, all optional except monotonicity):**
+1. Validate naming convention (TIMESTAMP_END/START/MIDDLE)
+2. Convert to datetime format
+3. Remove NaT rows
+4. Sort ascending
+5. Remove duplicates
+6. Validate monotonicity (if sorting enabled)
+7. Detect frequency (3 methods)
+8. Validate frequency
+9. Regularize gaps
+10. Convert to middle-of-period
+
+**Example:** `examples/timeseries/timestamp_sanitizer.py` shows 5 progressively severe data issues from clean to badly corrupted, demonstrating error handling and selective processing.
 
 ## Gap-Filling Methods
 

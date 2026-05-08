@@ -22,6 +22,7 @@ from diive.core.plotting.bar import LongtermAnomaliesYear as plot_longterm_anoma
 from diive.core.plotting.histogram import HistogramPlot as plot_histogram
 from diive.core.plotting.scatter import ScatterXY as plot_scatter_xy
 
+from diive.core.times.times import TimestampSanitizer as TimestampSanitizer
 from diive.core.times.resampling import resample_to_monthly_agg_matrix as resample_to_monthly_agg_matrix
 from diive.pkgs.analyses.correlation import DailyCorrelation as DailyCorrelation
 from diive.pkgs.analyses.correlation import daily_correlation as daily_correlation
@@ -154,6 +155,7 @@ __all__ = [
     'plot_scatter_xy',
 
     # Core: Time Series
+    'TimestampSanitizer',
     'resample_to_monthly_agg_matrix',
 
     # Packages: Analyses

@@ -1,13 +1,11 @@
 import datetime as dt
 import fnmatch
 import time
-from ast import Index
-from typing import Literal
-from typing import Optional, List  # Import for robust typing
+from typing import Literal, Union, Optional, List
 
 import numpy as np
 import pandas as pd
-from pandas import DataFrame, Series, DatetimeIndex
+from pandas import DataFrame, Series, DatetimeIndex, Index
 from pandas.tseries.frequencies import to_offset
 
 # Define the default mapping outside the function for clean reference and mutability safety
@@ -24,9 +22,10 @@ class TimestampSanitizer:
     """
     Validate and prepare timestamps for time series data processing.
 
-    Performs comprehensive validation and sanitization of datetime indices through
-    a sequence of checks and transformations. Acts as a wrapper combining various
-    timestamp processing functions into a single, configurable interface.
+    Cleans and validates datetime indices in 10 steps: naming convention, format
+    conversion, NaT/duplicate removal, sorting, monotonicity validation, frequency
+    detection, gap filling (optional), and middle-of-period conversion (optional).
+    Each step can be enabled or disabled independently.
 
     The processing pipeline (in order):
     1. Validate timestamp naming convention
@@ -34,21 +33,49 @@ class TimestampSanitizer:
     3. Remove rows with missing timestamps (NaT)
     4. Sort timestamp in ascending order
     5. Remove duplicate timestamps (keep last)
-    6. Detect time resolution from timestamp
-    7. Validate detected frequency against expected frequency (if provided)
-    8. Make timestamp continuous without date gaps
-    9. Convert to middle-of-period timestamp (optional)
+    6. Validate timestamp monotonicity (if sorting enabled)
+    7. Detect time resolution from timestamp
+    8. Validate detected frequency against expected frequency (if provided)
+    9. Make timestamp continuous without date gaps
+    10. Convert to middle-of-period timestamp (optional)
 
     Attributes
     ----------
-    data : Series or DataFrame
+    data : Union[Series, DataFrame]
         The processed data with validated timestamp index.
     inferred_freq : str
         Detected time resolution of the timestamp index.
+
+    Raises
+    ------
+    TypeError
+        If data is None or not a Series/DataFrame.
+    ValueError
+        If data is empty, has no valid index, or timestamp naming is invalid.
+    ValueError
+        If nominal_freq does not match detected frequency.
+    RuntimeError
+        If any processing step fails unexpectedly.
+
+    Warnings
+    --------
+    - **Data modification**: Input data is modified in place. Use ``data.copy()``
+      before passing to TimestampSanitizer if you need the original data.
+    - **Regularization side effect**: When regularize=True, gaps are filled with
+      NaN data rows. This may increase the number of rows significantly.
+    - **No rollback**: If processing fails mid-pipeline, data is partially
+      transformed and returned as-is (not rolled back to original state).
+    - **Frequency detection**: Detection may fail if timestamps are irregular.
+      Use nominal_freq=None to skip frequency validation in such cases.
+
+    See Also
+    --------
+    examples/timeseries/timestamp_sanitizer.py : Examples with clean data,
+        minor issues, and badly broken timestamps.
     """
 
     def __init__(self,
-                 data: Series or DataFrame,
+                 data: Union[Series, DataFrame],
                  output_middle_timestamp: bool = True,
                  validate_naming: bool = True,
                  convert_to_datetime: bool = True,
@@ -63,7 +90,7 @@ class TimestampSanitizer:
 
         Parameters
         ----------
-        data : Series or DataFrame
+        data : Union[Series, DataFrame]
             Data with timestamp index to be validated and processed.
         output_middle_timestamp : bool, optional
             Convert timestamp index to show middle of averaging period. Default is True.
@@ -88,10 +115,50 @@ class TimestampSanitizer:
         verbose : bool, optional
             Print status messages during processing. Default is False.
 
-        Notes
-        -----
-        See individual timestamp processing functions for more details on each step.
+        Examples
+        --------
+        **Basic usage with default settings:**
+
+        >>> import pandas as pd
+        >>> import diive as dv
+        >>> df = dv.load_exampledata_parquet()
+        >>> series = df['NEE_CUT_REF_f'].copy()
+        >>> sanitizer = dv.TimestampSanitizer(data=series, verbose=False)
+        >>> clean_series = sanitizer.get()
+
+        **With frequency validation:**
+
+        >>> sanitizer = dv.TimestampSanitizer(
+        ...     data=series,
+        ...     nominal_freq='30min',  # Expect 30-minute resolution
+        ...     verbose=True
+        ... )
+        >>> clean_series = sanitizer.get()
+
+        **Selective processing (skip some steps):**
+
+        >>> sanitizer = dv.TimestampSanitizer(
+        ...     data=series,
+        ...     regularize=False,                    # Keep gaps in data
+        ...     output_middle_timestamp=False,       # Keep end-of-period format
+        ...     remove_index_nat=True,
+        ...     verbose=True
+        ... )
+        >>> result = sanitizer.get()
+
+        **Error handling for corrupted data:**
+
+        >>> try:
+        ...     sanitizer = dv.TimestampSanitizer(
+        ...         data=corrupted_data,
+        ...         nominal_freq='30min',
+        ...         validate_naming=True
+        ...     )
+        ... except ValueError as e:
+        ...     print(f"Timestamp validation failed: {e}")
+        ...     # Handle error: fix data or re-run without nominal_freq
         """
+        self._validate_input(data)
         self.data = data.copy()
         self.output_middle_timestamp = output_middle_timestamp
         self.validate_naming = validate_naming
@@ -103,6 +170,13 @@ class TimestampSanitizer:
         self.nominal_freq = nominal_freq
         self.verbose = verbose
 
+        # Track data modifications for status reporting
+        self._original_shape = data.shape
+        self._original_rows = len(data)
+        self._nat_removed = 0
+        self._duplicates_removed = 0
+        self._rows_added_by_regularization = 0
+
         try:
             self.inferred_freq = None if not data.index.freq else data.index.freq
         except AttributeError:
@@ -110,12 +184,70 @@ class TimestampSanitizer:
 
         self._run()
 
-    def get(self) -> Series or DataFrame:
+    def get(self) -> Union[Series, DataFrame]:
         return self.data
+
+    def get_status(self) -> dict:
+        """
+        Return processing status and summary of changes made.
+
+        Returns a dictionary with information about what was modified during
+        timestamp sanitization, useful for understanding data loss or changes.
+
+        Returns
+        -------
+        dict
+            Dictionary with keys:
+            - 'original_shape': Original data shape (rows, columns)
+            - 'final_shape': Final data shape after processing
+            - 'rows_removed': Total rows removed during cleaning
+            - 'rows_removed_nat': Rows removed due to NaT values
+            - 'rows_removed_duplicates': Duplicate rows removed
+            - 'rows_added_by_regularization': Rows added to fill gaps
+            - 'net_rows': Final row count minus original row count (can be negative)
+            - 'inferred_frequency': Detected time resolution
+            - 'timestamp_format': Index name (TIMESTAMP_END, TIMESTAMP_START, or TIMESTAMP_MIDDLE)
+
+        Example
+        -------
+        >>> sanitizer = dv.TimestampSanitizer(data=df, verbose=False)
+        >>> status = sanitizer.get_status()
+        >>> print(f"Removed {status['rows_removed']} rows, added {status['rows_added_by_regularization']}")
+        """
+        return {
+            'original_shape': self._original_shape,
+            'final_shape': self.data.shape,
+            'rows_removed': self._nat_removed + self._duplicates_removed,
+            'rows_removed_nat': self._nat_removed,
+            'rows_removed_duplicates': self._duplicates_removed,
+            'rows_added_by_regularization': self._rows_added_by_regularization,
+            'net_rows': len(self.data) - self._original_rows,
+            'inferred_frequency': self.inferred_freq,
+            'timestamp_format': self.data.index.name,
+        }
+
+    def _validate_input(self, data: Union[Series, DataFrame]) -> None:
+        """Validate input data before processing.
+
+        Raises
+        ------
+        TypeError
+            If data is None or not a Series/DataFrame
+        ValueError
+            If data is empty or has no valid index
+        """
+        if data is None:
+            raise TypeError("data cannot be None")
+        if not isinstance(data, (Series, DataFrame)):
+            raise TypeError(f"data must be a Union[Series, DataFrame], got {type(data).__name__}")
+        if data.empty:
+            raise ValueError("data cannot be empty")
+        if data.index is None or len(data.index) == 0:
+            raise ValueError("data must have a valid index with at least one element")
 
     def _run(self):
         if self.verbose:
-            print("\nSanitizing timestamp ...")
+            print("\nTimestamp sanitization:")
 
         # Validate timestamp name
         if self.validate_naming:
@@ -127,7 +259,7 @@ class TimestampSanitizer:
 
         # Remove rows that do not have a timestamp
         if self.remove_index_nat:
-            self.data = remove_rows_nat(df=self.data, verbose=self.verbose)
+            self.data, self._nat_removed = remove_rows_nat(df=self.data, verbose=self.verbose)
 
         # Sort timestamp index ascending
         if self.sort_ascending:
@@ -135,25 +267,52 @@ class TimestampSanitizer:
 
         # Remove index duplicates
         if self.remove_duplicates:
-            self.data = remove_index_duplicates(data=self.data, keep='last', verbose=self.verbose)
+            self.data, self._duplicates_removed = remove_index_duplicates(data=self.data, keep='last', verbose=self.verbose)
+
+        # Validate monotonicity (only if sorting was enabled)
+        if self.sort_ascending:
+            _ = validate_timestamp_monotonic(data=self.data, verbose=self.verbose)
 
         # Detect time resolution from data
-        if not self.inferred_freq:
-            self.inferred_freq = DetectFrequency(index=self.data.index, verbose=self.verbose).get()
+        detected_freq = DetectFrequency(index=self.data.index, verbose=self.verbose).get()
+
+        # If data had pre-existing freq, validate consistency
+        if self.inferred_freq and detected_freq != str(self.inferred_freq):
+            if self.verbose:
+                print(f"  WARNING: Frequency mismatch ({self.inferred_freq} → {detected_freq})")
+
+        # Always use detected frequency as it's more reliable
+        self.inferred_freq = detected_freq
 
         # Compare nominal with detected time resolution
         if self.nominal_freq:
             if self.inferred_freq != self.nominal_freq:
-                raise ValueError(f"Inferred frequency {self.inferred_freq} does not match "
-                                 f"nominal frequency {self.nominal_freq}.")
+                raise ValueError(
+                    f"Timestamp frequency validation failed: detected frequency "
+                    f"'{self.inferred_freq}' does not match expected frequency "
+                    f"'{self.nominal_freq}'. Either: (1) your data has an incorrect "
+                    f"frequency (check for gaps, duplicates, or irregular spacing), "
+                    f"or (2) set nominal_freq=None to skip frequency validation."
+                )
 
         # Make timestamp continuous w/o date gaps
         if self.regularize:
+            rows_before = len(self.data)
             self.data = continuous_timestamp_freq(data=self.data, freq=self.inferred_freq, verbose=self.verbose)
+            self._rows_added_by_regularization = len(self.data) - rows_before
 
         # Convert timestamp to middle
         if self.output_middle_timestamp:
             self.data = convert_series_timestamp_to_middle(data=self.data, verbose=self.verbose)
+
+        # Check if data is empty after processing
+        if len(self.data) == 0:
+            raise ValueError(
+                "Data is empty after timestamp sanitization. This likely means all rows "
+                "were removed (e.g., all timestamps were NaT). Check your input data: "
+                "(1) verify timestamps are valid, (2) try remove_index_nat=False to keep "
+                "rows with NaT, or (3) check that no other step removed all data."
+            )
 
 
 def format_timestamp_to_fluxnet_format(df: DataFrame, timestamp_col: str) -> Series:
@@ -312,82 +471,246 @@ def detect_freq_groups(index: DatetimeIndex) -> Series:
     return groups_ser
 
 
-def sort_timestamp_ascending(data: Series or DataFrame, verbose: bool = False) -> Series or DataFrame:
-    """Sort timestamp in ascending order"""
+def sort_timestamp_ascending(data: Union[Series, DataFrame], verbose: bool = False) -> Union[Series, DataFrame]:
+    """
+    Sort timestamp index in ascending order.
+
+    Reorders data rows so that timestamps increase from first to last row.
+
+    Parameters
+    ----------
+    data : Union[Series, DataFrame]
+        Data with timestamp index to be sorted.
+    verbose : bool, optional
+        Print status message. Default is False.
+
+    Returns
+    -------
+    Union[Series, DataFrame]
+        Data with sorted timestamp index.
+
+    Examples
+    --------
+    >>> df_sorted = sort_timestamp_ascending(df, verbose=True)
+    """
     if verbose:
-        print(f">>> Sorting timestamp {data.index.name} ascending ...")
+        print(f"  Sort ascending: OK")
     data = data.sort_index()
     return data
 
 
-def remove_rows_nat(df: DataFrame, verbose: bool = False) -> DataFrame:
-    """Remove rows that do not have a timestamp (NaT)."""
+def remove_rows_nat(df: DataFrame, verbose: bool = False) -> tuple[DataFrame, int]:
+    """
+    Remove rows that do not have a timestamp (NaT).
+
+    Identifies and removes any rows with missing timestamp values (NaT) in the index.
+    Issues a warning if more than 10% of rows are removed.
+
+    Parameters
+    ----------
+    df : DataFrame
+        Data with timestamp index.
+    verbose : bool, optional
+        Print status messages. Default is False.
+
+    Returns
+    -------
+    tuple[DataFrame, int]
+        - DataFrame: Data with NaT rows removed
+        - int: Number of rows removed
+
+    Raises
+    ------
+    ValueError
+        If all rows are removed (all timestamps are NaT).
+
+    Examples
+    --------
+    >>> df_clean, n_removed = remove_rows_nat(df, verbose=True)
+    >>> print(f"Removed {n_removed} NaT rows")
+    """
     no_date = df.index.isnull()
     n_rows = no_date.sum()
     if n_rows > 0:
         df = df.loc[df.index[~no_date]].copy()
+        pct_removed = 100 * n_rows / len(df.index)
         if verbose:
-            print(f">>> Removed {n_rows} rows without timestamp from {df.index.name}.")
+            print(f"  Remove NaT values: {n_rows} removed", end="")
+            if pct_removed > 10:
+                print(f" [WARNING: {pct_removed:.1f}% of data]")
+            else:
+                print()
     else:
         if verbose:
-            print(f">>> All rows have timestamp {df.index.name}, no rows removed.")
-        pass
-    return df
+            print(f"  Remove NaT values: none")
+    return df, n_rows
 
 
-def convert_timestamp_to_datetime(data: Series or DataFrame, verbose: bool = False) -> Series or DataFrame:
+def convert_timestamp_to_datetime(data: Union[Series, DataFrame], verbose: bool = False) -> Union[Series, DataFrame]:
     """
-    Convert timestamp index to datetime format
+    Convert timestamp index to datetime format.
 
-    This acts as additional check to make sure that the timestamp
-    index is in the required datetime format.
+    Ensures the timestamp index is in pandas DatetimeIndex format. This is an
+    important validation step since data may have timestamps as strings or other
+    types. Uses pandas.to_datetime with coercion to handle various timestamp formats.
 
-    Args:
-        data: Data with timestamp index
+    Parameters
+    ----------
+    data : Union[Series, DataFrame]
+        Data with timestamp index to be converted.
+    verbose : bool, optional
+        Print status message. Default is False.
 
-    Returns:
-        data with confirmed datetime index
+    Returns
+    -------
+    Union[Series, DataFrame]
+        Data with DatetimeIndex timestamp index.
 
+    Raises
+    ------
+    ValueError
+        If timestamp index cannot be converted to datetime format.
+
+    Examples
+    --------
+    >>> df_dt = convert_timestamp_to_datetime(df, verbose=True)
     """
     if verbose:
-        print(f">>> Converting timestamp {data.index.name} to datetime ...", end=" ")
+        print(f"  Convert to datetime: ", end="")
     try:
         data.index = pd.to_datetime(data.index, errors='coerce')
         if verbose:
             print("OK")
-    except:
-        raise Exception("Conversion of timestamp to datetime format failed.")
+    except (ValueError, TypeError) as e:
+        raise ValueError(
+            f"Failed to convert timestamp to datetime format. "
+            f"Original error: {e}"
+        ) from e
     return data
 
 
-def validate_timestamp_naming(data: Series or DataFrame, verbose: bool = False) -> str:
+def validate_timestamp_naming(data: Union[Series, DataFrame], verbose: bool = False) -> str:
     """
-    Check if timestamp is correctly named
+    Check if timestamp is correctly named.
 
-    This check is done to make sure that the timestamp gives specific
-    information if it refers to the start, middle or end of the averaging
-    period.
+    Validates that the timestamp index has a required name indicating whether it
+    refers to the START, MIDDLE, or END of the averaging period. This is important
+    for correct data aggregation and interpretation.
 
-    Allowed names are 'TIMESTAMP_END', 'TIMESTAMP_START', and 'TIMESTAMP_MIDDLE'
+    Parameters
+    ----------
+    data : Union[Series, DataFrame]
+        Data with timestamp index to be validated.
+    verbose : bool, optional
+        Print status message. Default is False.
 
-    Args:
-        data: Data with timestamp index
+    Returns
+    -------
+    str
+        The validated timestamp index name ('TIMESTAMP_END', 'TIMESTAMP_START',
+        or 'TIMESTAMP_MIDDLE').
 
+    Raises
+    ------
+    ValueError
+        If timestamp index has no name or name is not one of the allowed values.
+
+    Notes
+    -----
+    Allowed names are:
+    - 'TIMESTAMP_END': Timestamp marks the END of the averaging period
+    - 'TIMESTAMP_START': Timestamp marks the START of the averaging period
+    - 'TIMESTAMP_MIDDLE': Timestamp marks the MIDDLE of the averaging period
+
+    Examples
+    --------
+    >>> df.index.name = 'TIMESTAMP_END'
+    >>> name = validate_timestamp_naming(df, verbose=True)
+    >>> print(f"Valid timestamp format: {name}")
     """
     timestamp_name = data.index.name
     allowed_timestamp_names = ['TIMESTAMP_END', 'TIMESTAMP_START', 'TIMESTAMP_MIDDLE']
     if verbose:
-        print(f">>> Validating timestamp naming of timestamp column {timestamp_name} ...", end=" ")
+        print(f"  Validate naming ({timestamp_name}): ", end="")
+
+    # Check if timestamp name is None
+    if timestamp_name is None:
+        raise ValueError(
+            "Timestamp index has no name. Expected one of "
+            f"{allowed_timestamp_names}. Set the index name to indicate "
+            "whether the timestamp represents END, START, or MIDDLE of the "
+            "averaging period. Example: data.index.name = 'TIMESTAMP_END'"
+        )
 
     # First check if timestamp already has one of the required names
     if any(fnmatch.fnmatch(timestamp_name, allowed_name) for allowed_name in allowed_timestamp_names):
         if verbose:
-            print("Timestamp name OK.")
+            print("OK")
         return timestamp_name
 
     else:
-        raise Exception(f"Name of timestamp index must be one of the following: {allowed_timestamp_names} "
-                        f"('{timestamp_name}' is not allowed)")
+        raise ValueError(
+            f"Timestamp index naming validation failed: index name is '{timestamp_name}' "
+            f"but must be one of {allowed_timestamp_names}. This indicates whether the "
+            f"timestamp refers to the END, START, or MIDDLE of the averaging period. "
+            f"Either: (1) rename your index before passing to TimestampSanitizer "
+            f"(e.g., data.index.name = 'TIMESTAMP_END'), or (2) set validate_naming=False "
+            f"if you've already validated the naming yourself."
+        )
+
+
+def validate_timestamp_monotonic(data: Union[Series, DataFrame], verbose: bool = False) -> None:
+    """
+    Validate that timestamp index is strictly monotonic increasing.
+
+    Ensures timestamps are in strict ascending order with no duplicates or
+    backward time jumps. This check should occur after sorting and duplicate
+    removal to catch any remaining issues before frequency detection.
+
+    Parameters
+    ----------
+    data : Union[Series, DataFrame]
+        Data with timestamp index to be validated.
+    verbose : bool, optional
+        Print status message. Default is False.
+
+    Raises
+    ------
+    ValueError
+        If timestamp index is not strictly monotonic increasing.
+
+    Notes
+    -----
+    "Strictly monotonic" means no two timestamps are equal and all are in
+    ascending order. After sorting and duplicate removal, data should always
+    pass this check. If it fails, it indicates a data or processing error.
+
+    Examples
+    --------
+    >>> validate_timestamp_monotonic(df, verbose=True)
+    """
+    if verbose:
+        print(f"  Validate monotonicity: ", end="")
+
+    if not data.index.is_monotonic_increasing:
+        # Find where monotonicity breaks to help debugging
+        diffs = data.index.to_series().diff()
+        backward_jumps = diffs[diffs <= pd.Timedelta(0)]
+        n_issues = len(backward_jumps)
+        first_issue_idx = backward_jumps.index[0] if len(backward_jumps) > 0 else None
+
+        raise ValueError(
+            f"Timestamp index is not strictly monotonic increasing. Found {n_issues} "
+            f"non-increasing intervals. First issue at index position "
+            f"{data.index.get_loc(first_issue_idx) if first_issue_idx else '?'}: "
+            f"{first_issue_idx}. This should not occur after sorting and duplicate "
+            f"removal. Check for: (1) remaining duplicates with identical timestamps, "
+            f"(2) data from multiple sources with conflicting times, or "
+            f"(3) sorting/duplicate removal errors."
+        )
+
+    if verbose:
+        print("OK")
 
 
 def current_unixtime() -> int:
@@ -781,7 +1104,7 @@ class DetectFrequency:
 
     def _run(self):
         if self.verbose:
-            print(f"Detecting time resolution from timestamp {self.index.name} ...", end=" ")
+            print(f"  Detect frequency: ", end="")
 
         freq_full, freqinfo_full = timestamp_infer_freq_from_fullset(timestamp_ix=self.index)
         freq_timedelta, freqinfo_timedelta = timestamp_infer_freq_from_timedelta(timestamp_ix=self.index)
@@ -825,51 +1148,35 @@ class DetectFrequency:
                 # Maximum certainty, one single freq found across all checks
                 self.freq = freq_list[0]
                 if self.verbose:
-                    print(f"OK\n"
-                          f"   Detected {self.freq} time resolution with MAXIMUM confidence.\n"
-                          f"   All approaches yielded the same result:\n"
-                          f"       from full data = {freq_full} / {freqinfo_full} (OK)\n"
-                          f"       from timedelta = {freq_timedelta} / {freqinfo_timedelta} (OK)\n"
-                          f"       from progressive = {freq_progressive} / {freqinfo_progressive} (OK)\n")
+                    print(f"{self.freq} (all methods agree)")
 
         elif freq_full:
             # High certainty, freq found from full range of dataset
             self.freq = freq_full
             if self.verbose:
-                print(f"OK\n"
-                      f"   Detected {self.freq} time resolution with MAXIMUM confidence.\n"
-                      f"   Full data has consistent timestamp:\n"
-                      f"       from full data = {freq_full} / {freqinfo_full} (OK)\n"
-                      f"       from timedelta = {freq_timedelta} / {freqinfo_timedelta} (not used)\n"
-                      f"       from progressive = {freq_progressive} / {freqinfo_progressive} (not used)\n")
+                print(f"{self.freq} (full data)")
 
         elif freq_timedelta:
             # High certainty, freq found from most frequent timestep that
             # occurred at least 90% of the time
             self.freq = freq_timedelta
             if self.verbose:
-                print(f"OK\n"
-                      f"   Detected {self.freq} time resolution with HIGH confidence.\n"
-                      f"   Resolution detected from most frequent timestep (timedelta):\n"
-                      f"       from full data = {freq_full} / {freqinfo_full} (not used)\n"
-                      f"       from timedelta = {freq_timedelta} / {freqinfo_timedelta} (OK)\n"
-                      f"       from progressive = {freq_progressive} / {freqinfo_progressive} (not used)\n")
+                print(f"{self.freq} (timedelta)")
 
         elif freq_progressive:
             # Medium certainty, freq found from start and end of dataset
             self.freq = freq_progressive
             if self.verbose:
-                print(f"OK (detected {self.freq} time resolution {self.freq} with MEDIUM confidence)")
-            if self.verbose:
-                print(f"OK\n"
-                      f"   Detected {self.freq} time resolution with MEDIUM confidence.\n"
-                      f"   Records at start and end of file have consistent timestamp:\n"
-                      f"       from full data = {freq_full} / {freqinfo_full} (not used)\n"
-                      f"       from timedelta = {freq_timedelta} / {freqinfo_timedelta} (not used)\n"
-                      f"       from progressive = {freq_progressive} / {freqinfo_progressive} (OK)\n")
+                print(f"{self.freq} (start/end)")
 
         else:
-            raise Exception("Frequency detection failed.")
+            raise RuntimeError(
+                "Could not detect timestamp frequency using any method. This typically "
+                "means your timestamps are highly irregular or have too many gaps. "
+                "To fix: (1) verify data quality (check for irregular gaps/duplicates), "
+                "(2) try regularize=True to fill gaps automatically, or "
+                "(3) skip frequency detection with nominal_freq=None."
+            )
 
     def get(self) -> str:
         return self.freq
@@ -880,13 +1187,15 @@ def timestamp_infer_freq_progressively(timestamp_ix: pd.DatetimeIndex) -> tuple:
     match we can be relatively certain that the file has the same freq
     from start to finish.
     """
-    # Try to infer freq, starting from first 1000 and last 1000 rows of data, must match
+    MAX_CHECK_RANGE = 1000  # Start with up to 1000 rows from each end
+    MIN_CHECK_RANGE = 3    # Minimum rows needed for frequency detection
+
     n_datarows = timestamp_ix.__len__()
     inferred_freq = None
     freqinfo = None
-    checkrange = 1000
+
     if n_datarows > 0:
-        for ndr in range(checkrange, 3, -1):  # ndr = number of data rows
+        for ndr in range(MAX_CHECK_RANGE, MIN_CHECK_RANGE, -1):
             if n_datarows >= ndr * 2:  # Same amount of ndr needed for start and end of file
                 _inferred_freq_start = pd.infer_freq(timestamp_ix[0:ndr])
                 _inferred_freq_end = pd.infer_freq(timestamp_ix[-ndr:])
@@ -965,37 +1274,102 @@ def timestamp_infer_freq_from_timedelta(timestamp_ix: pd.DatetimeIndex) -> tuple
         return inferred_freq, freqinfo
 
 
-def remove_index_duplicates(data: Series or DataFrame,
+def remove_index_duplicates(data: Union[Series, DataFrame],
                             keep: Literal["first", "last", False] = "last",
-                            verbose: bool = False) -> Series or DataFrame:
-    """Remove index duplicates"""
-    if verbose:
-        print(">>> Removing data records with duplicate indexes ...", end=" ")
+                            verbose: bool = False) -> tuple[Union[Series, DataFrame], int]:
+    """
+    Remove index duplicates.
+
+    Identifies and removes duplicate timestamp entries, keeping the first or last
+    occurrence as specified. Issues a warning if more than 10% of rows are duplicates.
+
+    Parameters
+    ----------
+    data : Union[Series, DataFrame]
+        Data with timestamp index.
+    keep : {'first', 'last'}, optional
+        Which duplicate to keep. 'first' keeps the first occurrence, 'last' keeps the
+        last (default).
+    verbose : bool, optional
+        Print status messages. Default is False.
+
+    Returns
+    -------
+    tuple[Union[Series, DataFrame], int]
+        - Union[Series, DataFrame]: Data with duplicates removed
+        - int: Number of duplicate rows removed
+
+    Examples
+    --------
+    >>> df_clean, n_removed = remove_index_duplicates(df, keep='last', verbose=True)
+    >>> print(f"Removed {n_removed} duplicate timestamps")
+
+    Notes
+    -----
+    Duplicate detection is based on the index only, not data values.
+    """
     n_duplicates = data.index.duplicated().sum()
+    if verbose:
+        if n_duplicates > 0:
+            print(f"  Remove duplicates: {n_duplicates} removed", end="")
+            pct_removed = 100 * n_duplicates / len(data)
+            if pct_removed > 10:
+                print(f" [WARNING: {pct_removed:.1f}% of data]")
+            else:
+                print()
+        else:
+            print(f"  Remove duplicates: none")
+
     if n_duplicates > 0:
-        # Duplicates found
         data = data[~data.index.duplicated(keep=keep)]
-        if verbose:
-            print(f"OK (removed {n_duplicates} rows with duplicate timestamps)")
-        return data
-    else:
-        # No duplicates found
-        if verbose:
-            print(f"OK (no duplicates found in timestamp index)")
-        return data
+
+    return data, n_duplicates
 
 
-def continuous_timestamp_freq(data: Series or DataFrame, freq: str, verbose: bool = False) -> Series or DataFrame:
-    """Generate continuous timestamp of given frequency between first and last date of index
+def continuous_timestamp_freq(data: Union[Series, DataFrame], freq: str, verbose: bool = False) -> Union[Series, DataFrame]:
+    """
+    Generate continuous timestamp index without gaps.
 
-    This makes df continuous w/o date gaps but w/ data gaps at filled-in timestamps.
+    Creates a regular timestamp grid from first to last date at the specified frequency,
+    then reindexes data to this grid. Gaps in the original data are filled with NaN
+    rows. Useful for time series analysis that requires uniform timesteps.
+
+    Parameters
+    ----------
+    data : Union[Series, DataFrame]
+        Data with timestamp index.
+    freq : str
+        Target frequency string (e.g., '30min', '1h', '1D'). Must be a valid pandas
+        frequency string.
+    verbose : bool, optional
+        Print status message. Default is False.
+
+    Returns
+    -------
+    Union[Series, DataFrame]
+        Data with continuous timestamp index at specified frequency. Rows added to
+        fill gaps will have NaN values.
+
+    Raises
+    ------
+    ValueError
+        If freq is not a valid pandas frequency string.
+
+    Notes
+    -----
+    - Original timestamp index name is preserved
+    - Data values are NaN for any timestamps not in original data
+    - The number of rows will increase if there are gaps in the original data
+
+    Examples
+    --------
+    >>> df_continuous = continuous_timestamp_freq(df, freq='30min', verbose=True)
     """
     first_date = data.index[0]
     last_date = data.index[-1]
 
     if verbose:
-        print(f">>> Creating continuous {freq} timestamp index for timestamp {data.index.name} "
-              f"between {first_date} and {last_date} ...")
+        print(f"  Regularize gaps: ", end="")
 
     # Original timestamp name
     idx_name = data.index.name
@@ -1009,7 +1383,8 @@ def continuous_timestamp_freq(data: Series or DataFrame, freq: str, verbose: boo
     # Set freq
     data.index = pd.to_datetime(data.index)
     data = data.asfreq(freq=freq)
-    # df.sort_index(inplace=True)
+    if verbose:
+        print("OK")
     return data
 
 
@@ -1054,8 +1429,12 @@ def insert_timestamp(
     # Check if current index timestamp properly named
     allowed_timestamp_names = ['TIMESTAMP_END', 'TIMESTAMP_START', 'TIMESTAMP_MIDDLE']
     if timestamp_index_name not in allowed_timestamp_names:
-        raise Exception("Timestamp index of the Series must be "
-                        "named 'TIMESTAMP_END', 'TIMESTAMP_START' or 'TIMESTAMP_MIDDLE'.")
+        raise ValueError(
+            f"Invalid timestamp index name: '{timestamp_index_name}'. "
+            f"Expected one of {allowed_timestamp_names}. The index name indicates "
+            f"whether the timestamp represents the END, START, or MIDDLE of the "
+            f"averaging period. Rename your index before calling this function."
+        )
 
     # Name of new timestamp series
     new_timestamp_col = None
@@ -1136,51 +1515,56 @@ def insert_timestamp(
     return data
 
 
-def convert_series_timestamp_to_middle(data: Series or DataFrame, verbose: bool = False) -> Series or DataFrame:
+def convert_series_timestamp_to_middle(data: Union[Series, DataFrame], verbose: bool = False) -> Union[Series, DataFrame]:
     """
-    Convert the timestamp index to show middle of averaging period
+    Convert timestamp index to show middle of averaging period.
 
-    This conversion makes it easier to handle timeseries data. One of the
-    issues it solves is that it becomes straight forward to aggregate data
-    correctly.
+    Adjusts the timestamp index to represent the MIDDLE of the averaging period,
+    which simplifies data aggregation and plotting. If timestamps already represent
+    the middle, no conversion is performed.
 
-    The timestamp of `data` must have one of the following names:
-    - `TIMESTAMP_END` when the timestamp refers to the END of the averaging period.
-      * Example: `2022-07-26 12:00` refers to the time period between `2022-07-26 11:30` and `2022-07-26 12:00`
-    - `TIMESTAMP_START` when the timestamp refers to the START of the averaging period
-      * Example: `2022-07-26 12:00` refers to the time period between `2022-07-26 12:00` and `2022-07-26 12:30`
-    - `TIMESTAMP_MID` when the timestamp refers to the MIDDLE of the averaging period
-        * Example: `2022-07-26 12:15` refers to the time period between `2022-07-26 12:00` and `2022-07-26 12:30`
+    Parameters
+    ----------
+    data : Union[Series, DataFrame]
+        Data with timestamp index. Index name must be one of 'TIMESTAMP_END',
+        'TIMESTAMP_START', or 'TIMESTAMP_MIDDLE'.
+    verbose : bool, optional
+        Print status message. Default is False.
 
-    Note about timestamps:
+    Returns
+    -------
+    Union[Series, DataFrame]
+        Data with index converted to TIMESTAMP_MIDDLE format.
 
-        `TIMESTAMP_END` is widely used. However, aggregating data can
-         easily lead to wrong aggregation windows. For example, half-hourly
-         data for the day 26 July 2022 would have `2022-07-26 00:30` as the
-         first valid timestamp for this day, the last timestamp would be
-         `2022-07-27 00:00`. When these data are simply aggregated by *date*
-         (`2022-07-26`), then `2022-07-26 00:00` would be taken as the first
-         timestamp, and `2022-07-26 23:30` as the last timestamp, both of
-         which is not correct. This leads to a wrongly attributed  first data
-         record and a missing last record in this example.
+    Raises
+    ------
+    ValueError
+        If timestamp index name is not one of the recognized conventions.
 
-        `TIMESTAMP_MID` solves this issue. Here, the first timestamp would be
-        `2022-07-26 00:15`, and the last timestamp `2022-07-26 23:45`, both of
-        which are correct when aggregating by *date*. The same is true for other
-        aggregation windows, e.g., by month, year etc.
+    Notes
+    -----
+    **Why middle-of-period timestamps?**
 
-        The middle timestamp also helps in plotting the data correctly. Some plots
-        set the ticks shown in the plot specifically at the start or end of the
-        input timestamp, depending on the plot type. For example, plotting
-        a heatmap might show the tick at `12:00` but then plots the respective
-        data after the tick, which is not correct with `TIMESTAMP_END`. With the
-        middle timestamp data are plotted correctly at `12:15`.
+    Using TIMESTAMP_END can lead to incorrect aggregation windows. For example,
+    half-hourly data on 2022-07-26 with END timestamps starts at 2022-07-26 00:30
+    and ends at 2022-07-27 00:00. When aggregated by date, this includes data
+    outside the calendar day, leading to misaligned first and last records.
 
-    Args:
-        data: Data with timestamp index
+    With TIMESTAMP_MIDDLE, the first timestamp is 2022-07-26 00:15 and the last is
+    2022-07-26 23:45, which correctly represent the full calendar day.
 
-    Returns:
-        Data with timestamp index that shows the middle of the averaging period
+    **Timestamp conversions** (assuming 30-minute period):
+
+    - TIMESTAMP_END 12:00   → TIMESTAMP_MIDDLE 11:45
+    - TIMESTAMP_START 12:00 → TIMESTAMP_MIDDLE 12:15
+    - TIMESTAMP_MIDDLE 12:15 → (no change)
+
+    Examples
+    --------
+    >>> df.index.name = 'TIMESTAMP_END'
+    >>> df_middle = convert_series_timestamp_to_middle(df, verbose=True)
+    >>> print(df_middle.index.name)
+    TIMESTAMP_MIDDLE
     """
     timestamp_name_before = data.index.name
     timestamp_name_after = 'TIMESTAMP_MIDDLE'
@@ -1191,13 +1575,14 @@ def convert_series_timestamp_to_middle(data: Series or DataFrame, verbose: bool 
     timestamp_freq = data.index.freq
 
     if verbose:
-        print(f">>> Converting timestamp index {timestamp_name_before} to show middle of averaging period ...")
+        print(f"  Convert to middle-of-period: ", end="")
 
     first_timestamp_before = data.index[0]
     last_timestamp_before = data.index[-1]
 
     if timestamp_name_before == 'TIMESTAMP_MIDDLE':
-        pass
+        if verbose:
+            print("OK (already middle)")
     else:
         timedelta = pd.to_timedelta(timestamp_freq) / 2
         if timestamp_name_before == 'TIMESTAMP_END':
@@ -1205,20 +1590,16 @@ def convert_series_timestamp_to_middle(data: Series or DataFrame, verbose: bool 
         elif timestamp_name_before == 'TIMESTAMP_START':
             data.index = data.index + pd.Timedelta(timedelta)
         else:
-            raise Exception("Timestamp index of the Series must be "
-                            "named 'TIMESTAMP_END', 'TIMESTAMP_START' or 'TIMESTAMP_MIDDLE'.")
+            raise ValueError(
+                f"Cannot convert timestamp format: index name '{timestamp_name_before}' "
+                f"is not recognized. Expected one of 'TIMESTAMP_END', 'TIMESTAMP_START', "
+                f"or 'TIMESTAMP_MIDDLE'. This indicates the time period the timestamp "
+                f"represents. Check your data or rename the index before processing."
+            )
 
     data.index.name = 'TIMESTAMP_MIDDLE'
-    first_timestamp_after = data.index[0]
-    last_timestamp_after = data.index[-1]
-
-    if verbose:
-        print(f"    {timestamp_name_before} was converted to {timestamp_name_after}")
-        print(f"    First and last dates:")
-        print(f"        Before conversion: "
-              f"{timestamp_name_before} from {first_timestamp_before} to {last_timestamp_before}")
-        print(f"         After conversion: "
-              f"{timestamp_name_after} from {first_timestamp_after} to {last_timestamp_after}")
+    if verbose and timestamp_name_before != 'TIMESTAMP_MIDDLE':
+        print("OK")
 
     return data
 
@@ -1239,7 +1620,7 @@ def add_timezone_info(timestamp_index, timezone_of_timestamp: str):
     return timestamp_index.tz_localize(timezone_of_timestamp)  # v0.3.1
 
 
-def remove_after_date(data: Series or DataFrame, yearly_end_date: str) -> Series or DataFrame:
+def remove_after_date(data: Union[Series, DataFrame], yearly_end_date: str) -> Union[Series, DataFrame]:
     """
     Remove data after specifified date
 
@@ -1265,9 +1646,9 @@ def remove_after_date(data: Series or DataFrame, yearly_end_date: str) -> Series
     return data
 
 
-def keep_years(data: Series or DataFrame,
+def keep_years(data: Union[Series, DataFrame],
                start_year: int = None,
-               end_year: int = None) -> Series or DataFrame:
+               end_year: int = None) -> Union[Series, DataFrame]:
     """
     Keep data between start and end year
 

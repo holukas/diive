@@ -71,6 +71,7 @@ EXAMPLE_FILES = [
     'gap_filling/randomforest_ts.py',
     'gap_filling/xgboost_ts.py',
     'gap_filling/comparison.py',
+    'timeseries/timestamp_sanitizer.py',
     'timeseries/harmonic.py',
 ]
 

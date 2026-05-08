@@ -57,7 +57,8 @@ examples/
 │   ├── [fluxdetectionlimit.py](echires/fluxdetectionlimit.py) # FluxDetectionLimit for minimum detectable flux (2 examples)
 │   ├── [lag.py](echires/lag.py)                               # MaxCovariance for time lag detection (1 example)
 │   └── [windrotation.py](echires/windrotation.py)             # WindRotation2D for coordinate rotation and tilt correction (1 example)
-├── timeseries/            # Time series spectral analysis examples
+├── timeseries/            # Time series data preparation and analysis examples
+│   ├── [timestamp_sanitizer.py](timeseries/timestamp_sanitizer.py)  # Comprehensive timestamp validation and cleaning (5 levels, clean to severely corrupted data)
 │   └── [harmonic.py](timeseries/harmonic.py)                  # Spectrogram analysis - daily and annual CO2 patterns (2 examples)
 ├── flux/                  # Flux quality and analysis examples
 │   ├── [common.py](flux/common.py)                            # Flux variable base detection (1 example)
@@ -82,7 +83,7 @@ examples/
 python examples/run_all_examples.py
 ```
 
-Executes all 107 examples across 52 files (22 visualization + 8 analysis + 2 binary + 7 corrections + 7 qaqc + 17 outlierdetection + 23 createvar + 4 echires + 7 flux + 10 gap_filling + 2 timeseries + 1 fits) in parallel (4 concurrent workers) with execution time tracking.
+Executes all 112 examples across 53 files (22 visualization + 8 analysis + 2 binary + 7 corrections + 7 qaqc + 17 outlierdetection + 23 createvar + 4 echires + 7 flux + 10 gap_filling + 7 timeseries + 1 fits) in parallel (4 concurrent workers) with execution time tracking.
 - Shows individual timing for each example
 - Detailed error messages if any fail
 - ~2.7x faster than sequential execution

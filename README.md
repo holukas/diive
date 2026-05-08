@@ -63,7 +63,7 @@ For the complete list of available aliases, see `diive.__all__`.
 
 ## Examples
 
-**107 executable examples** demonstrating common workflows are organized by topic in the `examples/` folder:
+**112 executable examples** demonstrating common workflows are organized by topic in the `examples/` folder:
 
 **Run all examples at once (parallelized):**
 
@@ -74,6 +74,7 @@ python examples/run_all_examples.py
 **Run individual examples:**
 
 ```bash
+python examples/timeseries/timestamp_sanitizer.py    # Timestamp validation & cleaning (5 levels: clean to corrupted)
 python examples/visualization/heatmap_datetime.py    # HeatmapDateTime heatmaps (6 examples)
 python examples/analyses/seasonaltrend.py            # SeasonalTrendDecomposition (1 example)
 python examples/gap_filling/randomforest_ts.py       # Random Forest gap-filling & hyperparameter optimization (3 examples)
@@ -96,8 +97,9 @@ python examples/flux/common.py                       # Flux variable detection (
 python examples/flux/hqflux.py                       # CO2 flux quality analysis with Hampel filter (1 example)
 ```
 
-**Example categories (107 total, 52 files):**
+**Example categories (112 total, 53 files):**
 
+- **Time Series** (7): timestamp_sanitizer (5 levels), harmonic (spectrogram analysis with 2 examples)
 - **Visualization** (22): heatmap_datetime, hexbin, timeseries, cumulative, dielcycle, histogram, ridgeline, scatter
 - **Analyses** (8): correlation, decoupling, gapfinder, gridaggregator, histogram, optimumrange, quantiles,
   seasonaltrend
@@ -108,7 +110,6 @@ python examples/flux/hqflux.py                       # CO2 flux quality analysis
   xgboost_ts (2 examples: full, optimize), comparison (MDS vs RF vs XGB)
 - **Eddy Covariance & Flux** (9): fluxdetectionlimit, lag, windrotation, hqflux, selfheating, uncertainty,
   ustarthreshold (3 examples)
-- **Spectral Analysis** (2): harmonic (spectrogram analysis)
 - **Fits** (1): fitter
 
 See [examples/README.md](examples/README.md) for a complete index of all examples with descriptions and quick start
