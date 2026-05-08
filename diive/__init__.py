@@ -59,6 +59,8 @@ from diive.pkgs.features.variables.potentialradiation import potrad_eot as potra
 from diive.pkgs.features.variables.vpd import calc_vpd_from_ta_rh as calc_vpd_from_ta_rh
 from diive.pkgs.fits.fitter import BinFitterCP as BinFitterCP
 from diive.pkgs.fits.fitter import BinFitterCP as bin_fitter_cp
+from diive.pkgs.flux.fluxprocessingchain.fluxprocessingchain import FluxProcessingChain as FluxProcessingChain
+from diive.pkgs.flux.fluxprocessingchain.fluxprocessingchain import FluxProcessingChain as flux_processing_chain
 from diive.pkgs.flux.hires.fluxdetectionlimit import FluxDetectionLimit
 from diive.pkgs.flux.hires.fluxdetectionlimit import FluxDetectionLimit as fdl
 from diive.pkgs.flux.hires.fluxdetectionlimit import FluxDetectionLimit as flux_detection_limit
@@ -248,6 +250,8 @@ __all__ = [
     'ustar_mp_detection',
     'BinFitterCP',
     'bin_fitter_cp',
+    'FluxProcessingChain',
+    'flux_processing_chain',
 
     # Core: Machine Learning
     'feature_engineer',

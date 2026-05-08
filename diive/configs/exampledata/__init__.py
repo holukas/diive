@@ -84,6 +84,13 @@ def load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN():
     return data_df, metadata_df
 
 
+def load_exampledata_parquet_lae_level1_30MIN():
+    filepath = Path(
+        DIR_PATH) / 'exampledata_PARQUET_CH-LAE_22.4_FLUXES_LEVEL-1_IRGA72+METEO7_2024_SUBSET.parquet'
+    data_df = load_parquet(filepath=filepath)
+    return data_df
+
+
 def load_exampledata_multiple_EDDYPRO_FLUXNET_CSV_30MIN():
     filepaths = search_files(
         searchdirs=DIR_PATH,

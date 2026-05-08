@@ -134,27 +134,27 @@
 
 | Example | What You'll Learn |
 |---------|------------------|
-| [**hqflux.py**](pkgs/flux/hqflux/hqflux.py) | Extract highest-quality flux using Hampel filter |
-| [**uncertainty.py**](pkgs/flux/uncertainty/uncertainty.py) | Random uncertainty estimation (PAS20 method) |
+| [**hqflux.py**](pkgs/flux/lowres/hqflux/hqflux.py) | Extract highest-quality flux using Hampel filter |
+| [**uncertainty.py**](pkgs/flux/lowres/uncertainty/uncertainty.py) | Random uncertainty estimation (PAS20 method) |
 
 ### **USTAR Filtering (Low-Turbulence)**
 
 | Example | What You'll Learn |
 |---------|------------------|
-| [**ustarthreshold.py**](pkgs/flux/ustarthreshold/ustarthreshold.py) | USTAR threshold detection and filtering |
-| [**ustar_mp_detection.py**](pkgs/flux/ustar_mp_detection/ustar_mp_detection.py) | Moving Point (MP) USTAR method |
+| [**ustarthreshold.py**](pkgs/flux/lowres/ustarthreshold/ustarthreshold.py) | USTAR threshold detection and filtering |
+| [**ustar_mp_detection.py**](pkgs/flux/lowres/ustar_mp_detection/ustar_mp_detection.py) | Moving Point (MP) USTAR method |
 
 ### **Corrections**
 
 | Example | What You'll Learn |
 |---------|------------------|
-| [**selfheating.py**](pkgs/flux/selfheating/selfheating.py) | Oxygen sensor self-heating correction |
+| [**selfheating.py**](pkgs/flux/lowres/selfheating/selfheating.py) | Oxygen sensor self-heating correction |
 
 ### **Common Utilities**
 
 | Example | What You'll Learn |
 |---------|------------------|
-| [**common.py**](pkgs/flux/common.py) | Helper functions and utilities for flux processing |
+| [**common.py**](pkgs/flux/lowres/common.py) | Helper functions and utilities for flux processing |
 
 **See also:** [pkgs/flux/README.md](pkgs/flux/README.md)
 
@@ -210,7 +210,7 @@
 1. [gapfinder.py](pkgs/analysis/gapfinder.py) — Where are the gaps?
 2. [eddyproflags.py](pkgs/preprocessing/qaqc/eddyproflags.py) — What does EddyPro say?
 3. [qcf.py](pkgs/preprocessing/qaqc/qcf.py) — Overall quality assessment
-4. [hqflux.py](pkgs/flux/hqflux/hqflux.py) — Extract only the best data
+4. [hqflux.py](pkgs/flux/lowres/hqflux/hqflux.py) — Extract only the best data
 
 ### **"I want to compare gap-filling methods"**
 1. [comparison.py](pkgs/gapfilling/comparison.py) — Benchmark all methods

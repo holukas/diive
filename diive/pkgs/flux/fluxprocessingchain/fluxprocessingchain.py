@@ -752,10 +752,10 @@ class FluxProcessingChain:
         [print(f"++Added new column {col}.") for col in newcols]
 
         # Calculate overall quality flag QCF
-        qcf = FlagQCF(series=self.fpc_df[run_qcf_on_col],
+        qcf = FlagQCF(target_col=self.fpc_df[run_qcf_on_col],
                       df=self.fpc_df,
                       idstr=idstr,
-                      swinpot=self.fpc_df['SW_IN_POT'],  # Calculated during init
+                      swinpot_col=self.fpc_df['SW_IN_POT'],  # Calculated during init
                       nighttime_threshold=self.nighttime_threshold,
                       ustar_scenarios=ustar_scenarios  # Required to get correct USTAR FLAG_ columns for each scenario
                       )
@@ -1645,6 +1645,7 @@ def _example_quick():
 
 
 def _example():
+
     # Source data
     from pathlib import Path
 
