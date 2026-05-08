@@ -18,8 +18,8 @@ class DielCycle:
             series: Time series with datetime index.
                 The index must contain date and time info.
 
-        Example:
-            See `examples/visualization/dielcycle.py` for complete examples.
+        See Also:
+            examples/visualization/dielcycle.py — Diurnal cycle analysis and visualization
         """
         self.series = series
 

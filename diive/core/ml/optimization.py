@@ -28,6 +28,10 @@ class OptimizeParamsTS:
 
     Supports Random Forest, XGBoost, and any model implementing the sklearn regressor interface.
     Uses GridSearchCV with TimeSeriesSplit to avoid data leakage on time series data.
+
+    See Also:
+        examples/gap_filling/randomforest_ts.py — Random Forest hyperparameter optimization
+        examples/gap_filling/xgboost_ts.py — XGBoost hyperparameter optimization
     """
 
     def __init__(self,

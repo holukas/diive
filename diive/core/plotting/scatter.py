@@ -42,8 +42,8 @@ class ScatterXY:
 
         Call `plot()` to render with styling options (labels, limits, colormap).
 
-        Example:
-            See `examples/visualization/scatter_xy.py` for complete examples.
+        See Also:
+            examples/visualization/scatter_xy.py — Scatter plot variations with 2D and 3D coloring
         """
         self.xname = x.name
         self.yname = y.name

@@ -57,9 +57,8 @@ class HexbinPlot(HeatmapBase):
 
     Top-level alias: ``dv.hexbinplot(x, y, z, ...)``
 
-    Example:
-        See `examples/visualization/hexbin.py` for complete examples
-        including percentile normalization, mean aggregation, and value overlay.
+    See Also:
+        examples/visualization/hexbin.py — Hexbin variations (percentile normalization, aggregation, overlay)
     """
 
     def __init__(self,

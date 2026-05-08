@@ -20,6 +20,142 @@ DEFAULT_SEASON_MAP = {
 }
 
 
+class TimestampSanitizer:
+    """
+    Validate and prepare timestamps for time series data processing.
+
+    Performs comprehensive validation and sanitization of datetime indices through
+    a sequence of checks and transformations. Acts as a wrapper combining various
+    timestamp processing functions into a single, configurable interface.
+
+    The processing pipeline (in order):
+    1. Validate timestamp naming convention
+    2. Convert timestamp index to datetime format
+    3. Remove rows with missing timestamps (NaT)
+    4. Sort timestamp in ascending order
+    5. Remove duplicate timestamps (keep last)
+    6. Detect time resolution from timestamp
+    7. Validate detected frequency against expected frequency (if provided)
+    8. Make timestamp continuous without date gaps
+    9. Convert to middle-of-period timestamp (optional)
+
+    Attributes
+    ----------
+    data : Series or DataFrame
+        The processed data with validated timestamp index.
+    inferred_freq : str
+        Detected time resolution of the timestamp index.
+    """
+
+    def __init__(self,
+                 data: Series or DataFrame,
+                 output_middle_timestamp: bool = True,
+                 validate_naming: bool = True,
+                 convert_to_datetime: bool = True,
+                 remove_index_nat: bool = True,
+                 sort_ascending: bool = True,
+                 remove_duplicates: bool = True,
+                 regularize: bool = True,
+                 nominal_freq: str = None,
+                 verbose: bool = False):
+        """
+        Initialize TimestampSanitizer and process timestamp index.
+
+        Parameters
+        ----------
+        data : Series or DataFrame
+            Data with timestamp index to be validated and processed.
+        output_middle_timestamp : bool, optional
+            Convert timestamp index to show middle of averaging period. Default is True.
+        validate_naming : bool, optional
+            Check if timestamp is correctly named. Allowed names are 'TIMESTAMP_END',
+            'TIMESTAMP_START', and 'TIMESTAMP_MIDDLE'. Default is True.
+        convert_to_datetime : bool, optional
+            Convert timestamp index to datetime format. Default is True.
+        remove_index_nat : bool, optional
+            Remove rows without timestamp (NaT values). Default is True.
+        sort_ascending : bool, optional
+            Sort timestamp in ascending order. Default is True.
+        remove_duplicates : bool, optional
+            Remove duplicate timestamps (keep last occurrence). Default is True.
+        regularize : bool, optional
+            Generate continuous timestamp without date gaps. Default is True.
+        nominal_freq : str, optional
+            Expected time resolution of data timestamp index. If provided, detected
+            frequency is validated against this. Raises ValueError if they don't match.
+            Examples: '10s', '5s', 's', '30min', '5min', 'min', '1h', '3h', 'h'.
+            Default is None (no frequency validation).
+        verbose : bool, optional
+            Print status messages during processing. Default is False.
+
+        Notes
+        -----
+        See individual timestamp processing functions for more details on each step.
+        """
+        self.data = data.copy()
+        self.output_middle_timestamp = output_middle_timestamp
+        self.validate_naming = validate_naming
+        self.convert_to_datetime = convert_to_datetime
+        self.remove_index_nat = remove_index_nat
+        self.sort_ascending = sort_ascending
+        self.remove_duplicates = remove_duplicates
+        self.regularize = regularize
+        self.nominal_freq = nominal_freq
+        self.verbose = verbose
+
+        try:
+            self.inferred_freq = None if not data.index.freq else data.index.freq
+        except AttributeError:
+            self.inferred_freq = None
+
+        self._run()
+
+    def get(self) -> Series or DataFrame:
+        return self.data
+
+    def _run(self):
+        if self.verbose:
+            print("\nSanitizing timestamp ...")
+
+        # Validate timestamp name
+        if self.validate_naming:
+            _ = validate_timestamp_naming(data=self.data, verbose=self.verbose)
+
+        # Convert timestamp to datetime
+        if self.convert_to_datetime:
+            self.data = convert_timestamp_to_datetime(self.data, verbose=self.verbose)
+
+        # Remove rows that do not have a timestamp
+        if self.remove_index_nat:
+            self.data = remove_rows_nat(df=self.data, verbose=self.verbose)
+
+        # Sort timestamp index ascending
+        if self.sort_ascending:
+            self.data = sort_timestamp_ascending(self.data, verbose=self.verbose)
+
+        # Remove index duplicates
+        if self.remove_duplicates:
+            self.data = remove_index_duplicates(data=self.data, keep='last', verbose=self.verbose)
+
+        # Detect time resolution from data
+        if not self.inferred_freq:
+            self.inferred_freq = DetectFrequency(index=self.data.index, verbose=self.verbose).get()
+
+        # Compare nominal with detected time resolution
+        if self.nominal_freq:
+            if self.inferred_freq != self.nominal_freq:
+                raise ValueError(f"Inferred frequency {self.inferred_freq} does not match "
+                                 f"nominal frequency {self.nominal_freq}.")
+
+        # Make timestamp continuous w/o date gaps
+        if self.regularize:
+            self.data = continuous_timestamp_freq(data=self.data, freq=self.inferred_freq, verbose=self.verbose)
+
+        # Convert timestamp to middle
+        if self.output_middle_timestamp:
+            self.data = convert_series_timestamp_to_middle(data=self.data, verbose=self.verbose)
+
+
 def format_timestamp_to_fluxnet_format(df: DataFrame, timestamp_col: str) -> Series:
     """
     Convert timestamp column to FLUXNET format (YYYYMMDDhhmm).
@@ -174,142 +310,6 @@ def detect_freq_groups(index: DatetimeIndex) -> Series:
         delta_counts_df.loc[d, 'LAST_DATE'] = last_date
 
     return groups_ser
-
-
-class TimestampSanitizer:
-    """
-    Validate and prepare timestamps for time series data processing.
-
-    Performs comprehensive validation and sanitization of datetime indices through
-    a sequence of checks and transformations. Acts as a wrapper combining various
-    timestamp processing functions into a single, configurable interface.
-
-    The processing pipeline (in order):
-    1. Validate timestamp naming convention
-    2. Convert timestamp index to datetime format
-    3. Remove rows with missing timestamps (NaT)
-    4. Sort timestamp in ascending order
-    5. Remove duplicate timestamps (keep last)
-    6. Detect time resolution from timestamp
-    7. Validate detected frequency against expected frequency (if provided)
-    8. Make timestamp continuous without date gaps
-    9. Convert to middle-of-period timestamp (optional)
-
-    Attributes
-    ----------
-    data : Series or DataFrame
-        The processed data with validated timestamp index.
-    inferred_freq : str
-        Detected time resolution of the timestamp index.
-    """
-
-    def __init__(self,
-                 data: Series or DataFrame,
-                 output_middle_timestamp: bool = True,
-                 validate_naming: bool = True,
-                 convert_to_datetime: bool = True,
-                 remove_index_nat: bool = True,
-                 sort_ascending: bool = True,
-                 remove_duplicates: bool = True,
-                 regularize: bool = True,
-                 nominal_freq: str = None,
-                 verbose: bool = False):
-        """
-        Initialize TimestampSanitizer and process timestamp index.
-
-        Parameters
-        ----------
-        data : Series or DataFrame
-            Data with timestamp index to be validated and processed.
-        output_middle_timestamp : bool, optional
-            Convert timestamp index to show middle of averaging period. Default is True.
-        validate_naming : bool, optional
-            Check if timestamp is correctly named. Allowed names are 'TIMESTAMP_END',
-            'TIMESTAMP_START', and 'TIMESTAMP_MIDDLE'. Default is True.
-        convert_to_datetime : bool, optional
-            Convert timestamp index to datetime format. Default is True.
-        remove_index_nat : bool, optional
-            Remove rows without timestamp (NaT values). Default is True.
-        sort_ascending : bool, optional
-            Sort timestamp in ascending order. Default is True.
-        remove_duplicates : bool, optional
-            Remove duplicate timestamps (keep last occurrence). Default is True.
-        regularize : bool, optional
-            Generate continuous timestamp without date gaps. Default is True.
-        nominal_freq : str, optional
-            Expected time resolution of data timestamp index. If provided, detected
-            frequency is validated against this. Raises ValueError if they don't match.
-            Examples: '10s', '5s', 's', '30min', '5min', 'min', '1h', '3h', 'h'.
-            Default is None (no frequency validation).
-        verbose : bool, optional
-            Print status messages during processing. Default is False.
-
-        Notes
-        -----
-        See individual timestamp processing functions for more details on each step.
-        """
-        self.data = data.copy()
-        self.output_middle_timestamp = output_middle_timestamp
-        self.validate_naming = validate_naming
-        self.convert_to_datetime = convert_to_datetime
-        self.remove_index_nat = remove_index_nat
-        self.sort_ascending = sort_ascending
-        self.remove_duplicates = remove_duplicates
-        self.regularize = regularize
-        self.nominal_freq = nominal_freq
-        self.verbose = verbose
-
-        try:
-            self.inferred_freq = None if not data.index.freq else data.index.freq
-        except AttributeError:
-            self.inferred_freq = None
-
-        self._run()
-
-    def get(self) -> Series or DataFrame:
-        return self.data
-
-    def _run(self):
-        if self.verbose:
-            print("\nSanitizing timestamp ...")
-
-        # Validate timestamp name
-        if self.validate_naming:
-            _ = validate_timestamp_naming(data=self.data, verbose=self.verbose)
-
-        # Convert timestamp to datetime
-        if self.convert_to_datetime:
-            self.data = convert_timestamp_to_datetime(self.data, verbose=self.verbose)
-
-        # Remove rows that do not have a timestamp
-        if self.remove_index_nat:
-            self.data = remove_rows_nat(df=self.data, verbose=self.verbose)
-
-        # Sort timestamp index ascending
-        if self.sort_ascending:
-            self.data = sort_timestamp_ascending(self.data, verbose=self.verbose)
-
-        # Remove index duplicates
-        if self.remove_duplicates:
-            self.data = remove_index_duplicates(data=self.data, keep='last', verbose=self.verbose)
-
-        # Detect time resolution from data
-        if not self.inferred_freq:
-            self.inferred_freq = DetectFrequency(index=self.data.index, verbose=self.verbose).get()
-
-        # Compare nominal with detected time resolution
-        if self.nominal_freq:
-            if self.inferred_freq != self.nominal_freq:
-                raise ValueError(f"Inferred frequency {self.inferred_freq} does not match "
-                                 f"nominal frequency {self.nominal_freq}.")
-
-        # Make timestamp continuous w/o date gaps
-        if self.regularize:
-            self.data = continuous_timestamp_freq(data=self.data, freq=self.inferred_freq, verbose=self.verbose)
-
-        # Convert timestamp to middle
-        if self.output_middle_timestamp:
-            self.data = convert_series_timestamp_to_middle(data=self.data, verbose=self.verbose)
 
 
 def sort_timestamp_ascending(data: Series or DataFrame, verbose: bool = False) -> Series or DataFrame:

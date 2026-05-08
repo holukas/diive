@@ -18,9 +18,8 @@ class LongtermAnomaliesYear:
         series_label: Label for *series* on the y-axis of the plot.
         series_units: Units for *series* on the y-axis of the plot.
 
-    Example:
-        See `examples/visualization/other_plots.py` for complete examples
-        including temperature and other variable anomalies.
+    See Also:
+        examples/visualization/other_plots.py — Long-term anomaly bar plots
     """
 
     def __init__(self,

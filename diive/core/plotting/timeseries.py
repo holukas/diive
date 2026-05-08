@@ -25,8 +25,10 @@ class TimeSeries:
             ax: Axis to show the matplotlib plot
             series_units: Units of *series*
 
-        Example:
-            See `examples/visualization/timeseries.py` for complete examples.
+        See Also:
+            examples/visualization/timeseries.py — Interactive time series visualization
+            examples/visualization/timeseries_and_cumulative.py — Time series with cumulative plots
+            examples/gap_filling/randomforest_ts.py — Time series in gap-filling context
         """
         self.series = series.copy()
         self.ax = ax  # todo should be required when calling .plot() instead of here

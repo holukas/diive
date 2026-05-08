@@ -43,9 +43,10 @@ class HeatmapDateTime(HeatmapBase):
 
     Top-level alias: ``dv.heatmap_datetime(series, ...)``
 
-    Example:
-        See `examples/visualization/heatmap_datetime.py` for complete examples
-        including vertical/horizontal orientations.
+    See Also:
+        examples/visualization/heatmap_datetime.py — DateTime heatmap variations (vertical/horizontal)
+        examples/gap_filling/interpolate.py — Heatmap in gap-filling context
+        examples/gap_filling/randomforest_ts.py — Heatmap for model output visualization
     """
 
     def __init__(self,
@@ -251,9 +252,8 @@ class HeatmapYearMonth(HeatmapBase):
     data, where one axis represents years and the other represents months.
     It supports different aggregation methods and the display of ranks instead of raw values.
 
-    Example:
-        See `examples/visualization/heatmap_datetime.py` for complete examples
-        including rank transformation, multi-panel layouts, and colormap options.
+    See Also:
+        examples/visualization/heatmap_datetime.py — Year/Month heatmap variations (rank, multi-panel, colormaps)
     """
 
     def __init__(self,
