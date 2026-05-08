@@ -63,44 +63,42 @@ For the complete list of available aliases, see `diive.__all__`.
 
 ## Examples
 
-**112 executable examples** demonstrating common workflows are organized by topic in the `examples/` folder:
+**58 executable examples** organized to mirror the codebase structure in the `examples/` folder.
 
-**Run all examples at once (parallelized):**
+**Quick links:**
+- 📖 **[CATALOG.md](examples/CATALOG.md)** — Find examples by use case (workflows, methods, difficulty levels)
+- 📊 **[EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md)** — Dataset documentation (37 variables, gaps, quality)
+- 🚀 **[examples/README.md](examples/README.md)** — Quick start and structure overview
+
+**Run all examples (parallelized, 8 workers):**
 
 ```bash
-python examples/run_all_examples.py
+uv run python examples/run_all_examples.py
 ```
 
 **Run individual examples:**
 
 ```bash
-python examples/timeseries/timestamp_sanitizer.py    # TimestampSanitizer with confidence & diagnostics (5 levels: clean to corrupted)
-python examples/visualization/heatmap_datetime.py    # HeatmapDateTime heatmaps (6 examples)
-python examples/analyses/seasonaltrend.py            # SeasonalTrendDecomposition (1 example)
-python examples/gap_filling/randomforest_ts.py       # Random Forest gap-filling & hyperparameter optimization (3 examples)
-python examples/gap_filling/xgboost_ts.py           # XGBoost gap-filling & hyperparameter optimization (2 examples)
-python examples/gap_filling/comparison.py           # Three-way comparison: MDS vs RF vs XGBoost (1 example)
-python examples/corrections/offsetcorrection.py      # Data corrections (4 examples)
-python examples/outlierdetection/absolutelimits.py   # Absolute limits filtering day/night thresholds (2 examples)
-python examples/outlierdetection/hampel.py           # Hampel filter robust outlier detection (2 examples)
-python examples/outlierdetection/incremental.py      # Z-score increments outlier detection (1 example)
-python examples/outlierdetection/localsd.py          # Local standard deviation rolling window detection (2 examples)
-python examples/outlierdetection/lof.py              # Local Outlier Factor density-based detection (2 examples)
-python examples/outlierdetection/manualremoval.py    # Manual data point/range removal for known issues (2 examples)
-python examples/createvar/timesince.py               # TimeSince time tracking (3 examples)
-python examples/createvar/potentialradiation.py      # Solar radiation (4 examples)
-python examples/echires/fluxdetectionlimit.py        # Flux detection limits (2 examples)
-python examples/echires/lag.py                       # Time lag detection (1 example)
-python examples/echires/windrotation.py              # Wind rotation and tilt correction (1 example)
-python examples/fits/fitter.py                       # Curve fitting with confidence intervals (1 example)
-python examples/flux/common.py                       # Flux variable detection (1 example)
-python examples/flux/hqflux.py                       # CO2 flux quality analysis with Hampel filter (1 example)
+# Quick visualization
+uv run python examples/core/visualization/heatmap_datetime.py
+
+# Time series analysis
+uv run python examples/pkgs/analysis/seasonaltrend.py
+
+# Gap-filling
+uv run python examples/pkgs/gapfilling/randomforest_ts.py
+uv run python examples/pkgs/gapfilling/comparison.py      # Compare methods
+
+# Quality control
+uv run python examples/pkgs/preprocessing/outlierdetection/hampel.py
+uv run python examples/pkgs/preprocessing/qaqc/qcf.py
+
+# Flux processing
+uv run python examples/pkgs/flux/hires/lag.py             # Time lag detection
+uv run python examples/pkgs/flux/ustarthreshold/ustarthreshold.py
 ```
 
-**Example categories (112 total, 53 files):**
-
-- **Time Series** (7): timestamp_sanitizer (5 levels with confidence scoring & frequency diagnostics), harmonic (
-  spectrogram analysis with 2 examples)
+**Example categories:**
 - **Visualization** (22): heatmap_datetime, hexbin, timeseries, cumulative, dielcycle, histogram, ridgeline, scatter
 - **Analyses** (8): correlation, decoupling, gapfinder, gridaggregator, histogram, optimumrange, quantiles,
   seasonaltrend

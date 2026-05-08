@@ -60,7 +60,7 @@ class StratifiedAnalysis:
             .showplot_decoupling_sbm(): Visualize results with line plot and error bars
 
         Example:
-            See `examples/analyses/decoupling.py` for complete examples.
+            See `examples/analysis/decoupling.py` for complete examples.
         """
         self._df = df.copy().dropna()
         self.zvar = zvar

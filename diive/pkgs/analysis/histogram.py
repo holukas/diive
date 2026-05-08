@@ -30,14 +30,14 @@ class Histogram:
             ignore_fringe_bins: List of integers [i, j] with length 2
                 If a list is provided, then the first i and last j number of
                 bins are removed from the results and ignored during
-                distribution analyses.
+                distribution analysis.
 
         Properties:
             .results: Histogram results as DataFrame with BIN_START_INCL and COUNTS columns
             .peakbins: Top 5 bins by count
 
         Example:
-            See `examples/analyses/histogram_distribution.py` for complete examples.
+            See `examples/analysis/histogram_distribution.py` for complete examples.
         """
         self.method = method
         self.n_bins = n_bins

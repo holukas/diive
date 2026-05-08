@@ -113,7 +113,7 @@ def fix_execution_times_references(app, env, docnames):
     from pathlib import Path
 
     categories = [
-        'analyses', 'binary', 'corrections', 'createvar', 'echires',
+        'analysis', 'binary', 'corrections', 'createvar', 'echires',
         'fits', 'flux', 'gap_filling', 'outlierdetection', 'timeseries', 'visualization'
     ]
 

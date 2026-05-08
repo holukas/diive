@@ -250,7 +250,7 @@ examples/
 ├── outlierdetection/    # Outlier detection
 ├── visualization/       # Plotting examples
 ├── createvar/          # Variable creation
-├── analyses/           # Time series analysis
+├── analysis/           # Time series analysis
 ├── corrections/        # Data corrections
 ├── flux/               # Flux-specific analysis
 ├── echires/            # High-resolution EC data

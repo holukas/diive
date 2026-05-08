@@ -21,9 +21,7 @@ import numpy as np
 import pandas as pd
 from pandas import DataFrame, Series
 
-from diive.core.dfun.frames import detect_new_columns
 from diive.core.funcs.funcs import filter_strings_by_elements
-from diive.core.io.filereader import MultiDataFileReader, search_files
 from diive.core.ml.feature_engineer import FeatureEngineer
 from diive.core.plotting.cumulative import Cumulative, CumulativeYear
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
@@ -748,6 +746,7 @@ class FluxProcessingChain:
                         ustar_scenarios: list = None) -> FlagQCF:
 
         # Detect new columns
+        from diive.core.dfun.frames import detect_new_columns
         newcols = detect_new_columns(df=level_df, other=self.fpc_df)
         self._fpc_df = pd.concat([self.fpc_df, level_df[newcols]], axis=1)
         [print(f"++Added new column {col}.") for col in newcols]
@@ -1289,6 +1288,7 @@ class FluxProcessingChain:
         self._filteredseries_level31_qcf = self._filteredseries.copy()  # Store filtered series as variable
 
     def finalize_level31(self):
+        from diive.core.dfun.frames import detect_new_columns
         newcols = detect_new_columns(df=self.level31.results, other=self.fpc_df)
         self._fpc_df = pd.concat([self.fpc_df, self.level31.results[newcols]], axis=1)
         [print(f"++Added new column {col}.") for col in newcols]
@@ -1435,6 +1435,7 @@ class LoadEddyProOutputFiles:
 
     def searchfiles(self, extension: str = '*.csv'):
         """Search CSV files in source folder and keep selected filetypes."""
+        from diive.core.io.filereader import search_files
         fileids = self._init_filetype()
         self._filepaths = search_files(self.sourcedir, extension)
         self._filepaths = filter_strings_by_elements(list1=self.filepaths, list2=fileids)
@@ -1443,6 +1444,7 @@ class LoadEddyProOutputFiles:
 
     def loadfiles(self):
         """Load data files"""
+        from diive.core.io.filereader import MultiDataFileReader
         loaddatafile = MultiDataFileReader(filetype=self.filetype, filepaths=self.filepaths)
         self._maindf = loaddatafile.data_df
         self._metadata = loaddatafile.metadata_df

@@ -9,7 +9,6 @@ from pandas import DataFrame, Series
 from uncertainties import ufloat
 
 import diive.core.plotting.styles.LightTheme as theme
-from diive.core.dfun.frames import df_between_two_dates
 from diive.core.plotting.plotfuncs import default_format, default_legend, nice_date_ticks
 from diive.core.plotting.scatter import ScatterXY
 
@@ -391,6 +390,7 @@ class RandomUncertaintyPAS20:
             endtime = (cur_dt + dt.timedelta(hours=winsize_hours)).time()
 
             # Window data, datetime range
+            from diive.core.dfun.frames import df_between_two_dates
             subset_win = df_between_two_dates(df=self.subset, start_date=start_dt, end_date=end_dt).copy()
 
             # Window data, limit datetime range to +/- 1 hour
@@ -461,6 +461,7 @@ class RandomUncertaintyPAS20:
             endtime = (cur_dt + dt.timedelta(hours=winsize_hours)).time()
 
             # Window data, datetime range
+            from diive.core.dfun.frames import df_between_two_dates
             subset_win = df_between_two_dates(df=subset, start_date=start_dt, end_date=end_dt).copy()
 
             # Window data, limit datetime range to +/- 1 hour

@@ -408,19 +408,42 @@ See `examples/outlierdetection/stepwise.py` for complete example (6 methods with
 
 ## Examples
 
-Located in `examples/` organized by topic. Each is a self-contained, runnable Python file.
+Located in `examples/` organized to mirror `diive/pkgs` and `diive/core` structure.
 
-**Structure:** `examples/{category}/{module}.py` with 1-4 examples per file
+**Structure:**
+```
+examples/
+├── core/               # System-level utilities
+│   ├── visualization/  # Plotting (9 examples)
+│   └── times/          # Timestamps (1 example)
+└── pkgs/               # Domain packages
+    ├── analysis/       # Time series analysis (9 examples)
+    ├── features/       # Variable creation (8 examples)
+    ├── flux/           # Flux processing (11 examples)
+    ├── gapfilling/     # Gap-filling methods (6 examples)
+    └── preprocessing/  # QC & corrections (16 examples)
+```
 
-**Run all:** `uv run python examples/run_all_examples.py` (parallel, ~2.7x faster)
+**Documentation:**
+- **`examples/CATALOG.md`** — Find examples by use case (workflows, methods, difficulty levels)
+- **`examples/EXAMPLE_DATASET.md`** — Complete dataset documentation (37 variables, gaps, availability)
+- **`examples/README.md`** — Quick start and structure overview
+- **Category READMEs** — One per folder with descriptions and usage
 
-**Run individual:** `uv run python examples/visualization/heatmap_datetime.py`
+**Running Examples:**
+- Run all: `uv run python examples/run_all_examples.py` (parallel, 8 workers)
+- Run category: `uv run python examples/pkgs/gapfilling/randomforest_ts.py`
+- Coverage: 58 examples across 18 organized folders
 
-**Coverage:** 107 examples across 52 files
-- Visualization: 22, Analysis: 8, Data Processing: 56 (Binary 2, Corrections 7, QAQC 7, Outlierdetection 17, Variable creation 23)
-- Eddy Covariance: 11, Time Series: 2, Fits: 1, Gap-filling: 9
+**Maintaining Examples (IMPORTANT):**
+When adding/modifying examples:
+1. Update **category README.md** with file description
+2. Update **examples/CATALOG.md** with use case/workflow info
+3. Update **examples/run_all_examples.py** with file path
+4. Update **CHANGELOG.md** to note changes
+5. Keep **examples/EXAMPLE_DATASET.md** in sync if data changes
 
-See `examples/README.md` for full catalog.
+The examples catalog and dataset docs are user-facing—keep them accurate and in sync.
 
 ## Common Workflows
 

@@ -203,7 +203,7 @@ class FlagQCF:
         """Return highest-quality series with only QCF=0 records.
 
         Records with QCF>0 (any flags) are set to NaN. Use this for stringent
-        analyses requiring only the best-quality data.
+        analysis requiring only the best-quality data.
 
         Returns:
             Series with original values where QCF=0, NaN elsewhere.

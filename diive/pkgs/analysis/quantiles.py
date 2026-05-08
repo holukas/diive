@@ -17,7 +17,7 @@ def percentiles101(series: Series, showplot: bool = True, verbose: bool = True) 
         Dataframe with percentiles 0-100 for *series*.
 
     Example:
-        See `examples/analyses/quantiles.py` for complete examples.
+        See `examples/analysis/quantiles.py` for complete examples.
     """
     percentiles_df = pd.DataFrame()
     percentiles_df['PERCENTILE'] = np.arange(0, 101, 1)

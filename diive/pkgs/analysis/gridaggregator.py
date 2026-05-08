@@ -26,7 +26,7 @@ class GridAggregator:
     functions, including built-in statistical measures and custom callable functions.
 
     Example:
-        See `examples/analyses/gridaggregator.py` for complete examples.
+        See `examples/analysis/gridaggregator.py` for complete examples.
 
     Attributes:
         x (pd.Series): X-axis data to be used in binning.

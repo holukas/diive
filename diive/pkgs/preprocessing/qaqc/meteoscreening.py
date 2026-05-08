@@ -69,7 +69,7 @@ class StepwiseMeteoScreeningDb:
     - `.correction_setto_value()`: Set records in time range(s) to constant value
     - `.correction_set_exact_value_to_missing()`: Set records with exact value to missing values (NaN)
 
-    Implemented analyses:
+    Implemented analysis:
     - `.analysis_potential_radiation_correlation()`: Analyzes time series daily correlation with potential radiation
 
     **Outlier tests**

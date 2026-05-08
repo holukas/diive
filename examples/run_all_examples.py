@@ -1,7 +1,7 @@
 """
 Run all examples in parallel and report results with execution time.
 
-Executes all example scripts in examples/visualization/ in parallel and reports
+Executes all example scripts in examples/ (core and pkgs) in parallel and reports
 success/failure with detailed error messages and execution times.
 
 Usage:
@@ -14,65 +14,75 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-# Example files to run
+# Example files to run (organized by core/ and pkgs/ structure)
 EXAMPLE_FILES = [
-    'visualization/heatmap_datetime.py',
-    'visualization/hexbin.py',
-    'visualization/timeseries_and_cumulative.py',
-    'visualization/other_plots.py',
-    'visualization/timeseries.py',
-    'visualization/dielcycle.py',
-    'visualization/histogram.py',
-    'visualization/ridgeline.py',
-    'visualization/scatter_xy.py',
-    'analyses/correlation.py',
-    'analyses/decoupling.py',
-    'analyses/gapfinder.py',
-    'analyses/gridaggregator.py',
-    'analyses/histogram_distribution.py',
-    'analyses/optimumrange.py',
-    'analyses/quantiles.py',
-    'analyses/seasonaltrend.py',
-    'binary/extract.py',
-    'corrections/setto.py',
-    'corrections/offsetcorrection.py',
-    'outlierdetection/absolutelimits.py',
-    'outlierdetection/hampel.py',
-    'outlierdetection/incremental.py',
-    'outlierdetection/localsd.py',
-    'outlierdetection/lof.py',
-    'outlierdetection/manualremoval.py',
-    'outlierdetection/stepwise.py',
-    'outlierdetection/trim.py',
-    'outlierdetection/zscore.py',
-    'qaqc/qcf.py',
-    'qaqc/eddyproflags.py',
-    'createvar/air.py',
-    'createvar/conversions.py',
-    'createvar/daynightflag.py',
-    'createvar/laggedvariants.py',
-    'createvar/noise.py',
-    'createvar/potentialradiation.py',
-    'createvar/timesince.py',
-    'createvar/vpd.py',
-    'echires/fluxdetectionlimit.py',
-    'echires/lag.py',
-    'echires/windrotation.py',
-    'fits/fitter.py',
-    'flux/common.py',
-    'flux/hqflux.py',
-    'flux/selfheating.py',
-    'flux/uncertainty.py',
-    'flux/ustar_mp_detection.py',
-    'flux/ustarthreshold.py',
-    'gap_filling/interpolate.py',
-    'gap_filling/mds.py',
-    'gap_filling/mds_comparison.py',
-    'gap_filling/randomforest_ts.py',
-    'gap_filling/xgboost_ts.py',
-    'gap_filling/comparison.py',
-    'timeseries/timestamp_sanitizer.py',
-    'timeseries/harmonic.py',
+    # CORE: Visualization and times
+    'core/visualization/heatmap_datetime.py',
+    'core/visualization/hexbin.py',
+    'core/visualization/timeseries_and_cumulative.py',
+    'core/visualization/other_plots.py',
+    'core/visualization/timeseries.py',
+    'core/visualization/dielcycle.py',
+    'core/visualization/histogram.py',
+    'core/visualization/ridgeline.py',
+    'core/visualization/scatter_xy.py',
+    'core/times/timestamp_sanitizer.py',
+    # PKGS: Analysis
+    'pkgs/analysis/correlation.py',
+    'pkgs/analysis/decoupling.py',
+    'pkgs/analysis/gapfinder.py',
+    'pkgs/analysis/gridaggregator.py',
+    'pkgs/analysis/histogram_distribution.py',
+    'pkgs/analysis/optimumrange.py',
+    'pkgs/analysis/quantiles.py',
+    'pkgs/analysis/seasonaltrend.py',
+    # PKGS: IO
+    'pkgs/io/extract.py',
+    # PKGS: Preprocessing - Corrections
+    'pkgs/preprocessing/corrections/setto.py',
+    'pkgs/preprocessing/corrections/offsetcorrection.py',
+    # PKGS: Preprocessing - Outlier Detection
+    'pkgs/preprocessing/outlierdetection/absolutelimits.py',
+    'pkgs/preprocessing/outlierdetection/hampel.py',
+    'pkgs/preprocessing/outlierdetection/incremental.py',
+    'pkgs/preprocessing/outlierdetection/localsd.py',
+    'pkgs/preprocessing/outlierdetection/lof.py',
+    'pkgs/preprocessing/outlierdetection/manualremoval.py',
+    'pkgs/preprocessing/outlierdetection/stepwise.py',
+    'pkgs/preprocessing/outlierdetection/trim.py',
+    'pkgs/preprocessing/outlierdetection/zscore.py',
+    # PKGS: Preprocessing - QA/QC
+    'pkgs/preprocessing/qaqc/qcf.py',
+    'pkgs/preprocessing/qaqc/eddyproflags.py',
+    # PKGS: Features (formerly createvar)
+    'pkgs/features/air.py',
+    'pkgs/features/conversions.py',
+    'pkgs/features/daynightflag.py',
+    'pkgs/features/laggedvariants.py',
+    'pkgs/features/noise.py',
+    'pkgs/features/potentialradiation.py',
+    'pkgs/features/timesince.py',
+    'pkgs/features/vpd.py',
+    # PKGS: Fits
+    'pkgs/fits/fitter.py',
+    # PKGS: Flux - Common and methods
+    'pkgs/flux/common.py',
+    'pkgs/flux/hqflux/hqflux.py',
+    'pkgs/flux/selfheating/selfheating.py',
+    'pkgs/flux/uncertainty/uncertainty.py',
+    'pkgs/flux/ustar_mp_detection/ustar_mp_detection.py',
+    'pkgs/flux/ustarthreshold/ustarthreshold.py',
+    # PKGS: Flux - High-resolution (echires)
+    'pkgs/flux/hires/fluxdetectionlimit.py',
+    'pkgs/flux/hires/lag.py',
+    'pkgs/flux/hires/windrotation.py',
+    # PKGS: Gap-filling
+    'pkgs/gapfilling/interpolate.py',
+    'pkgs/gapfilling/mds.py',
+    'pkgs/gapfilling/mds_comparison.py',
+    'pkgs/gapfilling/randomforest_ts.py',
+    'pkgs/gapfilling/xgboost_ts.py',
+    'pkgs/gapfilling/comparison.py',
 ]
 
 MAX_WORKERS = 8  # Number of parallel workers

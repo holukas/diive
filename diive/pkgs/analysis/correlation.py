@@ -35,7 +35,7 @@ class DailyCorrelation:
         plot(): Interactive visualization with correlation distribution and day examples
 
     Example:
-        See `examples/analyses/correlation.py` for complete examples.
+        See `examples/analysis/correlation.py` for complete examples.
     """
 
     def __init__(self, s1: Series, s2: Series, mincorr: float = 0.8):
@@ -276,7 +276,7 @@ def daily_correlation(s1: Series,
         series with correlations for each day
 
     Example:
-        See `examples/analyses/correlation.py` for complete examples.
+        See `examples/analysis/correlation.py` for complete examples.
     """
     dc = DailyCorrelation(s1=s1, s2=s2, mincorr=mincorr)
     if showplot:

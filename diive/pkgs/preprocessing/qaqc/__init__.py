@@ -5,6 +5,7 @@ from diive.pkgs.preprocessing.qaqc.eddyproflags import (
     flag_angle_of_attack_eddypro_test,
     flags_vm97_eddypro_fluxnetfile_tests,
     flag_fluxbasevar_completeness_eddypro_test,
+    flag_spectral_correction_factor_eddypro_test,
     flag_ssitc_eddypro_test,
 )
 from diive.pkgs.preprocessing.qaqc.qcf import FlagQCF
@@ -18,6 +19,7 @@ __all__ = [
     'flag_angle_of_attack_eddypro_test',
     'flags_vm97_eddypro_fluxnetfile_tests',
     'flag_fluxbasevar_completeness_eddypro_test',
+    'flag_spectral_correction_factor_eddypro_test',
     'flag_ssitc_eddypro_test',
     'FlagQCF',
     'StepwiseMeteoScreeningDb',

@@ -2,7 +2,6 @@ from pathlib import Path
 
 import pandas as pd
 
-from diive.core.dfun.frames import rename_cols_to_multiindex
 from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import current_date_str_condensed
 from diive.core.times.times import format_timestamp_to_fluxnet_format
@@ -39,6 +38,7 @@ class FormatMeteoForEddyProFluxProcessing:
 
     def _rename_columns(self):
         print("Renaming columns ...")
+        from diive.core.dfun.frames import rename_cols_to_multiindex
         df = self._df.copy()
         df = rename_cols_to_multiindex(df=df, renaming_dict=self.cols)
         return df
