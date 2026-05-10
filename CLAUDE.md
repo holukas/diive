@@ -638,6 +638,74 @@ When adding/modifying examples:
 
 The examples catalog and dataset docs are user-facing—keep them accurate and in sync.
 
+### Sphinx Gallery Format (v0.91.0+)
+
+Examples are now structured as **executable Python scripts** designed for Sphinx Gallery documentation generation:
+
+**File naming:**
+- `correction_*.py` — Data correction methods (e.g., `correction_relativehumidity_offset.py`)
+- `example_*.py` or `plot_*.py` — General examples (follows convention of content type)
+- `fluxprocessingchain.py` — Complete multi-level workflow
+
+**Structure within files:**
+- Top docstring with title and overview
+- `# %%` separators between logical sections (becomes separate cells when rendered)
+- Explanatory text blocks before code sections (non-executed comments)
+- Code that executes top-to-bottom
+- Inline prints and outputs visible to readers
+
+**Benefits:**
+- ✓ Pure Python — version control friendly (no notebook JSON)
+- ✓ Readable diffs — changes to code are clear
+- ✓ Auto-execution — Sphinx Gallery runs scripts, captures plots/output
+- ✓ Professional docs — generates beautiful HTML with code + output side-by-side
+- ✓ Reproducible — no hidden state, no kernel issues
+
+**Example structure:**
+```python
+"""
+=================
+Example Title
+=================
+
+One-line summary. Detailed explanation of what this example demonstrates.
+"""
+
+# %%
+# Section 1: Load data
+# ^^^^^^^^^^^^^^^^^^^^
+# Explanatory text before code
+
+import diive as dv
+data = dv.load_example_data()
+
+# %%
+# Section 2: Process
+# ^^^^^^^^^^^^^^^^^^
+# More explanation
+
+results = dv.process(data)
+print(results)
+```
+
+### Recent Example Updates (v0.91.0+)
+
+**Flux Processing Chain (`pkgs/flux/fluxprocessingchain/`)**
+- Restructured as Sphinx Gallery example (`fluxprocessingchain.py`)
+- Demonstrates all 5 processing levels (L2-L4.1) with real output
+- Shows both Random Forest and XGBoost gap-filling methods
+- Shared `GAPFILLING_PARAMS` dict reduces code duplication
+- Uses 1 month of data for faster demonstration
+
+**Data Offset Corrections (`pkgs/preprocessing/corrections/`)**
+- Split from monolithic `offsetcorrection.py` into 4 focused examples:
+  - `correction_relativehumidity_offset.py` — RH saturation fix
+  - `correction_radiation_offset.py` — Radiation nighttime offset
+  - `correction_measurement_offset_replicate.py` — Instrument offset detection
+  - `correction_winddir_offset.py` — Wind direction calibration
+- Each as standalone Sphinx Gallery example
+- Domain-specific `correction_` prefix (not `plot_`) reflects actual content
+
 ## Common Workflows
 
 ### Adding New Feature Engineering Stage

@@ -1,18 +1,23 @@
 # Outlier Detection Methods Examples
 
-Examples demonstrating various outlier detection methods for quality control and data cleaning.
+Examples demonstrating 10 outlier detection methods for quality control, anomaly identification, and data cleaning.
 
-## Contents
+## Methods by Complexity
 
-- **absolutelimits.py** — Min/max threshold-based outlier detection
-- **hampel.py** — Robust Hampel filter (Median Absolute Deviation)
-- **incremental.py** — Incremental/differencing-based outlier detection
-- **localsd.py** — Local standard deviation adaptive threshold
-- **lof.py** — Local Outlier Factor (density-based)
-- **manualremoval.py** — Explicit manual data removal
-- **stepwise.py** — Sequential multi-method outlier detection
-- **trim.py** — Symmetric trimmed mean approach (TrimLow)
-- **zscore.py** — Z-score and rolling z-score methods
+**Beginner (simple, deterministic):**
+- **outlier_absolutelimits.py** — Enforce physical min/max constraints
+- **outlier_manualremoval.py** — Explicitly flag known problematic timestamps or periods
+- **outlier_trim.py** — Symmetric trimmed mean approach (TrimLow)
+
+**Intermediate (statistical, adaptive):**
+- **outlier_hampel.py** — Median Absolute Deviation (MAD) in rolling windows
+- **outlier_zscore.py** — Z-score thresholding (global, rolling, day/night, increments)
+- **outlier_localsd.py** — Local standard deviation with adaptive windows
+- **outlier_incremental.py** — Detect spikes via abrupt changes between records
+
+**Advanced (machine learning, multi-method):**
+- **outlier_lof.py** — Local Outlier Factor (density-based anomalies)
+- **outlier_stepwise.py** — Chain multiple methods for progressive filtering
 
 ## Related Documentation
 

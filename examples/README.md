@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
 
-**58 examples across 18 organized folders, mirroring the `diive` package structure.**
+**62 examples across 18 organized folders, mirroring the `diive` package structure.**
 
 ## Structure
 
@@ -56,19 +56,24 @@ examples/pkgs/
 │   └── ... (see README)
 ├── io/                    # File I/O (1 example)
 │   └── extract.py
-└── preprocessing/         # Data quality & corrections (16 examples)
-    ├── corrections/       # Offset & bias corrections (2 examples)
-    │   ├── offsetcorrection.py
-    │   └── setto.py
-    ├── outlierdetection/  # 9 detection methods (8 examples)
-    │   ├── hampel.py
-    │   ├── zscore.py
-    │   ├── localsd.py
-    │   ├── lof.py
+└── preprocessing/         # Data quality & corrections (20 examples)
+    ├── corrections/       # Offset & bias corrections (8 examples)
+    │   ├── correction_relativehumidity_offset.py
+    │   ├── correction_radiation_offset.py
+    │   ├── correction_measurement_offset_replicate.py
+    │   ├── correction_winddir_offset.py
+    │   ├── correction_set_exact_values_to_missing.py
+    │   ├── correction_setto_value.py
+    │   └── correction_setto_threshold.py
+    ├── outlierdetection/  # 9 detection methods (9 examples)
+    │   ├── outlier_hampel.py
+    │   ├── outlier_zscore.py
+    │   ├── outlier_localsd.py
+    │   ├── outlier_lof.py
     │   └── ... (see README)
     └── qaqc/              # Quality flags & EddyPro QC (2 examples)
-        ├── qcf.py
-        └── eddyproflags.py
+        ├── qc_overall_flag.py
+        └── qc_eddypro_flags.py
 ```
 
 ## Quick Start
@@ -111,14 +116,14 @@ Browse by topic:
 | Category | Files | Topics |
 |----------|-------|--------|
 | **Core** | 10 | Visualization (9), timestamp handling (1) |
-| **Analysis** | 9 | Correlation, decomposition, gap detection, spatial aggregation |
+| **Analysis** | 8 | Correlation, decomposition, gap detection, spatial aggregation |
 | **Features** | 8 | Air properties, unit conversions, day/night flags, VPD |
 | **Fits** | 1 | Polynomial fitting |
-| **Flux** | 11 | HQ filtering, USTAR detection, self-heating correction, uncertainty |
-| **Gapfilling** | 6 | RandomForest, XGBoost, MDS, linear interpolation |
+| **Flux** | 10 | Processing chain, HQ filtering, USTAR detection, self-heating, uncertainty, high-res analysis |
+| **Gapfilling** | 6 | RandomForest, XGBoost, MDS, linear interpolation, comparisons |
 | **IO** | 1 | Binary file operations |
-| **Preprocessing** | 16 | Corrections (2), outlier detection (8), QA/QC (2) |
-| **TOTAL** | **58** | **~100+ individual functions demonstrated** |
+| **Preprocessing** | 19 | Corrections (8), outlier detection (9), QA/QC (2) |
+| **TOTAL** | **62** | **~100+ individual functions demonstrated** |
 
 ## Running Options
 

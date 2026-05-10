@@ -79,7 +79,7 @@ def flag_signal_strength_eddypro_test(df: DataFrame,
         A series containing the quality flag, where 0=good values, 2=bad values.
 
     See Also:
-        See examples/qaqc/eddyproflags.py for a complete working example.
+        See examples/pkgs/preprocessing/qaqc/qc_eddypro_flags.py for a complete working example.
     """
     idstr = validate_id_string(idstr=idstr)
     flagname_out = f'FLAG{idstr}_{var_col}_SIGNAL_STRENGTH_TEST'
@@ -134,7 +134,7 @@ def flag_steadiness_horizontal_wind_eddypro_test(df: DataFrame,
         A series containing the quality flag in DIIVE format, where 0=good values, 2=bad values.
 
     See Also:
-        See examples/qaqc/eddyproflags.py for a complete working example.
+        See examples/pkgs/preprocessing/qaqc/qc_eddypro_flags.py for a complete working example.
     """
     idstr = validate_id_string(idstr=idstr)
     flagname_out = f"FLAG{idstr}_{flux}_VM97_NSHW_HF_TEST"
@@ -179,7 +179,7 @@ def flag_angle_of_attack_eddypro_test(df: DataFrame,
         A series containing the quality flag in DIIVE format, where 0=good values, 2=bad values.
 
     See Also:
-        See examples/qaqc/eddyproflags.py for a complete working example.
+        See examples/pkgs/preprocessing/qaqc/qc_eddypro_flags.py for a complete working example.
     """
     flagname_out = f"FLAG{idstr}_{flux}_VM97_AOA_HF_TEST"
     aoa_flag = _extract_and_convert_flag_from_multidigit(
@@ -260,7 +260,7 @@ def flags_vm97_eddypro_fluxnetfile_tests(
         (0=good, 1=soft warning, 2=bad).
 
     See Also:
-        See examples/qaqc/eddyproflags.py for a complete working example.
+        See examples/pkgs/preprocessing/qaqc/qc_eddypro_flags.py for a complete working example.
 
     References:
         https://www.licor.com/env/support/EddyPro/topics/despiking-raw-statistical-screening.html
@@ -372,7 +372,7 @@ def flag_fluxbasevar_completeness_eddypro_test(df: DataFrame, flux: str,
         (0=good, 1=ok, 2=bad).
 
     See Also:
-        See examples/qaqc/eddyproflags.py for a complete working example.
+        See examples/pkgs/preprocessing/qaqc/qc_eddypro_flags.py for a complete working example.
 
     References:
         Sabbatini, S., et al. (2018). Eddy covariance raw data processing for CO2 and energy fluxes...
@@ -471,7 +471,7 @@ def flag_ssitc_eddypro_test(df: DataFrame, flux: str, setflag_timeperiod: dict =
         (0=good, 2=bad).
 
     See Also:
-        See examples/qaqc/eddyproflags.py for a complete working example.
+        See examples/pkgs/preprocessing/qaqc/qc_eddypro_flags.py for a complete working example.
 
     References:
         Mauder, M., & Foken, T. (2004). Documentation and Instruction Manual of

@@ -18,7 +18,7 @@ class MeasurementOffsetFromReplicate:
     for offset and gain per year
 
     Example:
-        See `examples/corrections/offsetcorrection.py` for complete examples.
+        See `examples/pkgs/preprocessing/corrections/correction_measurement_offset_replicate.py`
     """
 
     def __init__(self,
@@ -132,7 +132,7 @@ def remove_relativehumidity_offset(series: Series,
         Corrected series
 
     Example:
-        See `examples/corrections/offsetcorrection.py` for complete examples.
+        See `examples/pkgs/preprocessing/corrections/correction_relativehumidity_offset.py`
     """
 
     # print(f"Removing RH offset from {series.name} ...")
@@ -215,7 +215,7 @@ def remove_radiation_zero_offset(series: Series,
         Corrected series
 
     Example:
-        See `examples/corrections/offsetcorrection.py` for complete examples.
+        See `examples/pkgs/preprocessing/corrections/correction_radiation_offset.py`
     """
 
     outname = series.name
@@ -297,7 +297,7 @@ class WindDirOffset:
     for offset per year
 
     Example:
-        See `examples/corrections/offsetcorrection.py` for complete examples.
+        See `examples/pkgs/preprocessing/corrections/correction_winddir_offset.py`
     """
 
     def __init__(self,

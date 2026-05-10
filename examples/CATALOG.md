@@ -58,10 +58,22 @@
 
 **Clean, correct, and transform data for quality and usability.**
 
+### **Offset Corrections**
+
 | Example | What You'll Learn | When to Use |
 |---------|------------------|------------|
-| [**offsetcorrection.py**](pkgs/preprocessing/corrections/offsetcorrection.py) | Correct systematic offsets in sensors | Temperature, humidity, radiation drift |
-| [**setto.py**](pkgs/preprocessing/corrections/setto.py) | Replace values, set to missing, apply thresholds | Known measurement errors, maintenance periods |
+| [**correction_relativehumidity_offset.py**](pkgs/preprocessing/corrections/correction_relativehumidity_offset.py) | Fix RH measurements exceeding 100% | RH saturation issues from sensor drift |
+| [**correction_radiation_offset.py**](pkgs/preprocessing/corrections/correction_radiation_offset.py) | Correct radiation nighttime offset | Non-zero radiation readings at night |
+| [**correction_measurement_offset_replicate.py**](pkgs/preprocessing/corrections/correction_measurement_offset_replicate.py) | Detect offset vs. reference replicate | Compare two instruments, constant bias |
+| [**correction_winddir_offset.py**](pkgs/preprocessing/corrections/correction_winddir_offset.py) | Correct wind direction drift | Anemometer misalignment over time |
+
+### **Value Replacement & Validation**
+
+| Example | What You'll Learn | When to Use |
+|---------|------------------|------------|
+| [**correction_set_exact_values_to_missing.py**](pkgs/preprocessing/corrections/correction_set_exact_values_to_missing.py) | Set exact values to NaN | Remove error codes or sentinel values |
+| [**correction_setto_value.py**](pkgs/preprocessing/corrections/correction_setto_value.py) | Replace values in time periods with constant | Known malfunction periods or instrument errors |
+| [**correction_setto_threshold.py**](pkgs/preprocessing/corrections/correction_setto_threshold.py) | Clip values to min/max thresholds | Enforce physically realistic limits |
 | [**timestamp_sanitizer.py**](core/times/timestamp_sanitizer.py) | Clean, validate, regularize datetime indices | Ensure monotonic, regular time series |
 
 **See also:** 
@@ -78,22 +90,22 @@
 
 | Example | Method | Best For | Difficulty |
 |---------|--------|----------|------------|
-| [**hampel.py**](pkgs/preprocessing/outlierdetection/hampel.py) | Hampel filter (MAD-based) | Robust spike detection | Beginner ⭐ |
-| [**zscore.py**](pkgs/preprocessing/outlierdetection/zscore.py) | Z-score (global, day/night, rolling) | Statistical thresholding | Beginner ⭐ |
-| [**localsd.py**](pkgs/preprocessing/outlierdetection/localsd.py) | Local standard deviation | Adaptive thresholds | Intermediate ⭐⭐ |
-| [**absolutelimits.py**](pkgs/preprocessing/outlierdetection/absolutelimits.py) | Min/max thresholds | Known physical limits | Beginner ⭐ |
-| [**incremental.py**](pkgs/preprocessing/outlierdetection/incremental.py) | Increment-based detection | Abrupt changes | Intermediate ⭐⭐ |
-| [**lof.py**](pkgs/preprocessing/outlierdetection/lof.py) | Local Outlier Factor | Density-based anomalies | Advanced ⭐⭐⭐ |
-| [**manualremoval.py**](pkgs/preprocessing/outlierdetection/manualremoval.py) | Manual point/range removal | Known issues | Simple ⭐ |
-| [**trim.py**](pkgs/preprocessing/outlierdetection/trim.py) | Trimmed mean approach | Symmetric removal | Beginner ⭐ |
-| [**stepwise.py**](pkgs/preprocessing/outlierdetection/stepwise.py) | Chain multiple methods | Multi-stage QA/QC | Advanced ⭐⭐⭐ |
+| [**outlier_hampel.py**](pkgs/preprocessing/outlierdetection/outlier_hampel.py) | Hampel filter (MAD-based) | Robust spike detection | Beginner ⭐ |
+| [**outlier_zscore.py**](pkgs/preprocessing/outlierdetection/outlier_zscore.py) | Z-score (global, day/night, rolling) | Statistical thresholding | Beginner ⭐ |
+| [**outlier_localsd.py**](pkgs/preprocessing/outlierdetection/outlier_localsd.py) | Local standard deviation | Adaptive thresholds | Intermediate ⭐⭐ |
+| [**outlier_absolutelimits.py**](pkgs/preprocessing/outlierdetection/outlier_absolutelimits.py) | Min/max thresholds | Known physical limits | Beginner ⭐ |
+| [**outlier_incremental.py**](pkgs/preprocessing/outlierdetection/outlier_incremental.py) | Increment-based detection | Abrupt changes | Intermediate ⭐⭐ |
+| [**outlier_lof.py**](pkgs/preprocessing/outlierdetection/outlier_lof.py) | Local Outlier Factor | Density-based anomalies | Advanced ⭐⭐⭐ |
+| [**outlier_manualremoval.py**](pkgs/preprocessing/outlierdetection/outlier_manualremoval.py) | Manual point/range removal | Known issues | Simple ⭐ |
+| [**outlier_trim.py**](pkgs/preprocessing/outlierdetection/outlier_trim.py) | Trimmed mean approach | Symmetric removal | Beginner ⭐ |
+| [**outlier_stepwise.py**](pkgs/preprocessing/outlierdetection/outlier_stepwise.py) | Chain multiple methods | Multi-stage QA/QC | Advanced ⭐⭐⭐ |
 
 ### **Overall Quality Flags**
 
 | Example | What You'll Learn |
 |---------|------------------|
-| [**qcf.py**](pkgs/preprocessing/qaqc/qcf.py) | Combine multiple test flags into overall QCF |
-| [**eddyproflags.py**](pkgs/preprocessing/qaqc/eddyproflags.py) | EddyPro quality flags (VM97, signal strength, SSITC) |
+| [**qc_overall_flag.py**](pkgs/preprocessing/qaqc/qc_overall_flag.py) | Combine multiple test flags into overall QCF |
+| [**qc_eddypro_flags.py**](pkgs/preprocessing/qaqc/qc_eddypro_flags.py) | EddyPro quality flags (VM97, signal strength, completeness) |
 
 **See also:** [pkgs/preprocessing/outlierdetection/README.md](pkgs/preprocessing/outlierdetection/README.md)
 
@@ -194,7 +206,7 @@
 ### **"I need to process raw flux data"**
 1. Load data: `dv.load_exampledata_parquet()`
 2. Clean timestamps: [timestamp_sanitizer.py](core/times/timestamp_sanitizer.py)
-3. Correct offsets: [offsetcorrection.py](pkgs/preprocessing/corrections/offsetcorrection.py)
+3. Correct offsets: [correction_*.py](pkgs/preprocessing/corrections/) — RH, radiation, wind direction, or measurement bias
 4. Detect outliers: [hampel.py](pkgs/preprocessing/outlierdetection/hampel.py) or [stepwise.py](pkgs/preprocessing/outlierdetection/stepwise.py)
 5. Flag quality: [qcf.py](pkgs/preprocessing/qaqc/qcf.py)
 6. Fill gaps: [randomforest_ts.py](pkgs/gapfilling/randomforest_ts.py) or [xgboost_ts.py](pkgs/gapfilling/xgboost_ts.py)

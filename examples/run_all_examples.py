@@ -39,21 +39,26 @@ EXAMPLE_FILES = [
     # PKGS: IO
     'pkgs/io/extract.py',
     # PKGS: Preprocessing - Corrections
-    'pkgs/preprocessing/corrections/setto.py',
-    'pkgs/preprocessing/corrections/offsetcorrection.py',
+    'pkgs/preprocessing/corrections/correction_relativehumidity_offset.py',
+    'pkgs/preprocessing/corrections/correction_radiation_offset.py',
+    'pkgs/preprocessing/corrections/correction_measurement_offset_replicate.py',
+    'pkgs/preprocessing/corrections/correction_winddir_offset.py',
+    'pkgs/preprocessing/corrections/correction_set_exact_values_to_missing.py',
+    'pkgs/preprocessing/corrections/correction_setto_value.py',
+    'pkgs/preprocessing/corrections/correction_setto_threshold.py',
     # PKGS: Preprocessing - Outlier Detection
-    'pkgs/preprocessing/outlierdetection/absolutelimits.py',
-    'pkgs/preprocessing/outlierdetection/hampel.py',
-    'pkgs/preprocessing/outlierdetection/incremental.py',
-    'pkgs/preprocessing/outlierdetection/localsd.py',
-    'pkgs/preprocessing/outlierdetection/lof.py',
-    'pkgs/preprocessing/outlierdetection/manualremoval.py',
-    'pkgs/preprocessing/outlierdetection/stepwise.py',
-    'pkgs/preprocessing/outlierdetection/trim.py',
-    'pkgs/preprocessing/outlierdetection/zscore.py',
+    'pkgs/preprocessing/outlierdetection/outlier_absolutelimits.py',
+    'pkgs/preprocessing/outlierdetection/outlier_hampel.py',
+    'pkgs/preprocessing/outlierdetection/outlier_incremental.py',
+    'pkgs/preprocessing/outlierdetection/outlier_localsd.py',
+    'pkgs/preprocessing/outlierdetection/outlier_lof.py',
+    'pkgs/preprocessing/outlierdetection/outlier_manualremoval.py',
+    'pkgs/preprocessing/outlierdetection/outlier_stepwise.py',
+    'pkgs/preprocessing/outlierdetection/outlier_trim.py',
+    'pkgs/preprocessing/outlierdetection/outlier_zscore.py',
     # PKGS: Preprocessing - QA/QC
-    'pkgs/preprocessing/qaqc/qcf.py',
-    'pkgs/preprocessing/qaqc/eddyproflags.py',
+    'pkgs/preprocessing/qaqc/qc_overall_flag.py',
+    'pkgs/preprocessing/qaqc/qc_eddypro_flags.py',
     # PKGS: Features (formerly createvar)
     'pkgs/features/air.py',
     'pkgs/features/conversions.py',
@@ -65,6 +70,8 @@ EXAMPLE_FILES = [
     'pkgs/features/vpd.py',
     # PKGS: Fits
     'pkgs/fits/fitter.py',
+    # PKGS: Flux - Processing chain
+    'pkgs/flux/fluxprocessingchain/fluxprocessingchain.py',
     # PKGS: Flux - Common and methods
     'pkgs/flux/common.py',
     'pkgs/flux/hqflux/hqflux.py',

@@ -4,8 +4,8 @@ Examples demonstrating quality control methods, flag generation, and data qualit
 
 ## Contents
 
-- **qcf.py** — Overall Quality Control Flag (QCF) generation combining multiple QC tests
-- **eddyproflags.py** — EddyPro-specific quality flags (VM97, signal strength, SSITC, etc.)
+- **qc_overall_flag.py** — Overall Quality Control Flag (QCF) combining multiple test flags
+- **qc_eddypro_flags.py** — EddyPro quality flag extraction (signal strength, VM97 tests, completeness)
 
 ## Related Documentation
 
@@ -19,8 +19,8 @@ See `diive.pkgs.preprocessing.qaqc` for:
 ## Usage
 
 ```bash
-uv run python examples/pkgs/preprocessing/qaqc/qcf.py
-uv run python examples/pkgs/preprocessing/qaqc/eddyproflags.py
+uv run python examples/pkgs/preprocessing/qaqc/qc_overall_flag.py
+uv run python examples/pkgs/preprocessing/qaqc/qc_eddypro_flags.py
 ```
 
 Or run all QA/QC examples:
