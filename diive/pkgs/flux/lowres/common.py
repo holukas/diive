@@ -22,8 +22,28 @@ fluxbasevars_fulloutputfile = {
 
 
 def detect_fluxbasevar(fluxcol: str) -> str:
-    """Detect name of base variable that was used to calculate
-    the respective flux."""
+    """
+    Detect name of base variable that was used to calculate the respective flux.
+
+    Maps flux variable names (e.g., 'FC', 'LE', 'H') to their base gas/variable
+    names (e.g., 'CO2', 'H2O', 'T_SONIC').
+
+    Args:
+        fluxcol (str): Name of the flux column (e.g., 'FC', 'FH2O', 'LE', 'H', 'FN2O', 'FCH4').
+
+    Returns:
+        str: The base variable name (e.g., 'CO2', 'H2O', 'T_SONIC').
+
+    Raises:
+        KeyError: If the flux variable name is not found in the mapping.
+
+    See Also:
+        analyze_highest_quality_flux : Filter highest-quality flux data using Hampel filter.
+
+    Example:
+        See `examples/pkgs/flux/lowres/flux_common.py` for examples of flux variable
+        detection and nomenclature mapping.
+    """
     fluxbasevar = fluxbasevars_fluxnetfile[fluxcol]
     if not fluxbasevar:
         raise KeyError(f'No base variable for {fluxcol} could be detected.')

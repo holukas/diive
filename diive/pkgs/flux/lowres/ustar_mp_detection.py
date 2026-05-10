@@ -113,7 +113,13 @@ class UstarMovingPointDetection:
 
     See Also
     --------
-    diive.UstarDetectionMPT : DIIVE's native multi-temperature class detection
+    FlagMultipleConstantUstarThresholds : Apply detected USTAR thresholds to filter data.
+    FluxProcessingChain : Complete multi-level flux processing workflow.
+
+    Example
+    -------
+    See `examples/pkgs/flux/lowres/flux_ustar_mp_detection.py` for complete examples
+    of USTAR threshold detection using the moving point method with bootstrap uncertainty estimation.
     """
 
     # Constants from ONEFlux (types.h) - DO NOT MODIFY without consulting Papale et al. (2006)

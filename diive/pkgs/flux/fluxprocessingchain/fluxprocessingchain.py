@@ -58,6 +58,19 @@ class FluxProcessingChain:
         fluxbasevar (str): The base gas/variable name used for the flux (e.g., 'CO2').
         ustarcol (str): The column name for friction velocity (USTAR).
         outname (str): The output name for the final flux (e.g., 'NEE' for 'FC').
+
+    See Also:
+        FluxQualityFlagsEddyPro : Level-2 quality flag expansion.
+        FluxStorageCorrectionSinglePointEddyPro : Level-3.1 storage correction.
+        StepwiseOutlierDetection : Level-3.2 stepwise outlier detection.
+        FlagMultipleConstantUstarThresholds : Level-3.3 USTAR filtering.
+        LongTermGapFillingRandomForestTS : Level-4.1 gap-filling with Random Forest.
+        LongTermGapFillingXGBoostTS : Level-4.1 gap-filling with XGBoost.
+        FluxMDS : Level-4.1 gap-filling with Meteorological Data Similarity.
+
+    Example:
+        See `examples/pkgs/flux/fluxprocessingchain/fluxprocessingchain.py` for a complete
+        multi-level processing workflow including all 5 levels (L2-L4.1) with real output.
         """
 
     def __init__(

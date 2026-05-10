@@ -83,6 +83,12 @@
   Total gapfilling examples increased from 6 to 10 (67 total examples, up from 63). Updated 10 file references across 
   run_all_examples.py, gapfilling/README.md, CATALOG.md, CLAUDE.md, and 4 source code docstrings in RandomForestTS, 
   XGBoostTS, FluxMDS, and linear_interpolation functions.
+- **Analysis, features & fits examples restructure:** Converted all 9 analysis examples (correlation, decoupling, gapfinder, 
+  gridaggregator, harmonic, histogram_distribution, optimumrange, quantiles, seasonaltrend) to Sphinx Gallery format with 
+  analysis_* prefix. Converted 8 feature examples (air, conversions, daynightflag, laggedvariants, noise, 
+  potentialradiation, timesince, vpd) with feature_* prefix, and 1 fits example (fitter) with fit_* prefix. All 18 files 
+  now have # %% section separators for clarity. Updated example file references across run_all_examples.py, category 
+  READMEs, examples/README.md, and source code docstrings (9 analysis modules, 1 feature module, 1 fits module).
 
 ### New Classes & Functions
 

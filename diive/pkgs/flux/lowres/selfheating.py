@@ -160,6 +160,14 @@ class ScopPhysics:
     * **FCT_UNSC**: The unscaled flux correction term in µmol m-2 s-1.
     * **S**: Modeled sensible heat flux from instrument surfaces (W m-2).
     * **TS**: Estimated instrument surface temperature (°C).
+
+    See Also:
+        ScopOptimizer : Determine scaling factors from parallel IRGA measurements.
+        ScopApplicator : Apply final flux correction using optimization results.
+
+    Example:
+        See `examples/pkgs/flux/lowres/flux_selfheating.py` for complete self-heating
+        correction workflow using ScopPhysics, ScopOptimizer, and ScopApplicator classes.
     """
 
     def __init__(self,
@@ -811,6 +819,14 @@ class ScopOptimizer:
     * **scaling_factors_df**: A summary table containing median scaling factors,
       confidence intervals (1st, 25th, 75th, and 99th percentiles), and error
       metrics for each class bin.
+
+    See Also:
+        ScopPhysics : Calculate unscaled flux correction term.
+        ScopApplicator : Apply final flux correction using optimization results.
+
+    Example:
+        See `examples/pkgs/flux/lowres/flux_selfheating.py` for complete self-heating
+        correction workflow using ScopPhysics, ScopOptimizer, and ScopApplicator classes.
     """
 
     def __init__(self,
@@ -1135,6 +1151,14 @@ class ScopApplicator:
     Key Outputs:
     * **Final Corrected Flux**: The corrected NEE (CO2) or LE (H2O) series.
     * **FCT**: The final applied correction term in physical units.
+
+    See Also:
+        ScopPhysics : Calculate unscaled flux correction term.
+        ScopOptimizer : Determine scaling factors from parallel IRGA measurements.
+
+    Example:
+        See `examples/pkgs/flux/lowres/flux_selfheating.py` for complete self-heating
+        correction workflow using ScopPhysics, ScopOptimizer, and ScopApplicator classes.
     """
 
     def __init__(self,

@@ -43,10 +43,15 @@ class MaxCovariance:
         idx_instantaneous_default_lag (int, optional): Default lag index for instantaneous peak
             detection.
 
-    Examples
+    See Also
     --------
-    See `examples/echires/lag.py` for complete examples demonstrating lag detection
-    with synthetic and real eddy covariance data.
+    WindRotation2D : Coordinate transformation and tilt correction for wind data.
+    FluxDetectionLimit : Calculate minimum detectable flux based on measurement noise.
+
+    Example
+    -------
+    See `examples/pkgs/flux/hires/flux_lag.py` for complete examples demonstrating lag
+    detection between wind and scalars using covariance analysis with synthetic data.
     """
 
     def __init__(

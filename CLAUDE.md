@@ -259,6 +259,23 @@ result = model.fillgaps()
 result.to_csv('output.csv')  # ← Remove this from examples
 ```
 
+## Development Workflow
+
+**[CRITICAL] NEVER COMMIT CHANGES.** User commits and stages changes themselves.
+
+**[CRITICAL] NEVER ADD CLAUDE AS CO-AUTHOR IN COMMIT MESSAGES.** When writing commit messages, do not include:
+```
+Co-Authored-By: Claude Haiku 4.5 <noreply@anthropic.com>
+```
+Only the user is the author.
+
+**Do NOT run `examples/run_all_examples.py` proactively.** User will run this themselves to validate the full suite.
+Only run individual example files for validation during development (e.g., `uv run python examples/pkgs/analysis/analysis_correlation.py`).
+
+**Do NOT perform git operations** (git add/commit/push). User commits and stages changes themselves.
+
+**Do NOT run pre-commit hooks** (skip with --no-verify) unless explicitly requested.
+
 ## FluxProcessingChain (Swiss FluxNet Multi-Level Workflow)
 
 Complete eddy covariance flux post-processing
@@ -886,6 +903,125 @@ Before considering an example complete:
 □ Source code docstring "See Also" section added if related functions exist
 □ All documentation cross-references are consistent (no broken links)
 ```
+
+### Subdirectory Organization Strategy
+
+**Key Principle:** Example subdirectories must mirror the source code organization in `diive/pkgs/`.
+
+#### Why Mirror Source Structure?
+
+- **Consistency:** Users familiar with the package structure can immediately find related examples
+- **Discoverability:** Grouping examples by function (hires, lowres, corrections) makes sense both in source and docs
+- **Maintainability:** When source code is refactored, the example organization stays aligned
+- **Scalability:** New examples naturally fit into existing categorical folders
+
+#### Example: Flux Processing (`examples/pkgs/flux/`)
+
+Source code structure (`diive/pkgs/flux/`):
+```
+flux/
+├── fluxprocessingchain/    # Multi-level processing workflow
+├── hires/                  # High-resolution analysis (10Hz)
+├── lowres/                 # Low-resolution processing (30min)
+└── io/                     # File I/O (if applicable)
+```
+
+Examples structure MUST match:
+```
+examples/pkgs/flux/
+├── fluxprocessingchain/
+│   └── fluxprocessingchain.py        (no prefix needed, already in subfolder)
+├── hires/
+│   ├── flux_lag.py
+│   ├── flux_windrotation.py
+│   └── flux_fluxdetectionlimit.py
+└── lowres/
+    ├── flux_common.py
+    ├── flux_hqflux.py
+    ├── flux_selfheating.py
+    ├── flux_uncertainty.py
+    ├── flux_ustar_mp_detection.py
+    └── flux_ustarthreshold.py
+```
+
+#### Naming Convention with Subdirectories
+
+- **No prefix needed for top-level files** in single-purpose folders (e.g., `correction_*.py` at `examples/pkgs/preprocessing/corrections/`)
+- **With subdirectories:** Use prefix to clarify domain (e.g., `flux_lag.py` in `hires/` subdirectory)
+- **Exception:** Root-level module examples use prefix (e.g., `flux_common.py` instead of just `common.py`)
+
+**Formula:**
+```
+examples/pkgs/{category}/{optional_subfolder}/{domain_prefix}_{function}.py
+                                                ↑ Add prefix when in subfolder with other domains
+```
+
+#### Updating Documentation When Adding Subdirectory Examples
+
+When examples are organized in subdirectories, update these files:
+
+**1. Category README.md**
+```markdown
+### Subfolder Name
+- **subdirectory/flux_lag.py** — Time lag detection description
+- **subdirectory/flux_windrotation.py** — Wind rotation description
+```
+
+**2. examples/run_all_examples.py**
+```python
+# PKGS: Category - Subfolder
+'pkgs/category/subfolder/flux_lag.py',
+'pkgs/category/subfolder/flux_windrotation.py',
+```
+
+**3. examples/README.md structure**
+```
+├── category/              # Category (N examples)
+│   ├── subfolder1/        # Subfolder A (3 examples)
+│   │   ├── example1.py
+│   │   ├── example2.py
+│   │   └── example3.py
+│   └── subfolder2/        # Subfolder B (2 examples)
+│       ├── example4.py
+│       └── example5.py
+```
+
+#### Complete Subdirectory Example Workflow
+
+**Task:** Convert 10 flux examples organized into 3 source subdirectories
+
+**Process:**
+
+1. **Create subdirectory structure** in examples/ matching source
+   ```bash
+   mkdir -p examples/pkgs/flux/{fluxprocessingchain,hires,lowres}
+   ```
+
+2. **Create Sphinx Gallery files** with domain prefix (flux_) for clarity
+   - `flux_lag.py` in `hires/`
+   - `flux_common.py` in `lowres/`
+
+3. **Update run_all_examples.py** with full paths including subdirectories
+   ```python
+   'pkgs/flux/hires/flux_lag.py',
+   'pkgs/flux/lowres/flux_common.py',
+   ```
+
+4. **Update category README.md** with subsections showing subdirectories
+   ```markdown
+   ### High-Resolution Analysis
+   - **hires/flux_lag.py** — Time lag detection
+   ```
+
+5. **Verify examples work:**
+   ```bash
+   uv run python examples/pkgs/flux/hires/flux_lag.py
+   ```
+
+6. **Validate syntax** for all new files
+   ```bash
+   cd examples/pkgs/flux && find . -name "*.py" -exec python3 -m py_compile {} \;
+   ```
 
 ## Common Workflows
 

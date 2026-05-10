@@ -12,7 +12,10 @@ class GapFinder:
     planning gap-filling strategies.
 
     Example:
-        See `examples/analysis/gapfinder.py` for complete examples.
+        See `examples/pkgs/analysis/analysis_gapfinder.py` for complete examples.
+
+    See Also:
+        GapFinder : This class.
     """
     # Define column names
     gap_values = 'GAPVALUES'

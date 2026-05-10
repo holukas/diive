@@ -54,7 +54,10 @@ class FindOptimumRange:
             .showfig(): Display analysis visualizations
 
         Example:
-            See `examples/analysis/optimumrange.py` for complete examples.
+            See `examples/pkgs/analysis/analysis_optimumrange.py` for complete examples.
+
+        See Also:
+            find_optimum_range : Convenience function.
         """
         self.df = df[[xcol, ycol]].copy()
         self.xcol = xcol

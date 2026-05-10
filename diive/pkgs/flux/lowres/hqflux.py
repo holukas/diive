@@ -175,23 +175,14 @@ def analyze_highest_quality_flux(flux: Series,
 
         Rolling window = 10% of valid data points (robust to sparse periods).
 
+    See Also:
+        Hampel : Underlying robust outlier detection method using Median Absolute Deviation.
+        FluxProcessingChain : Complete multi-level flux processing workflow.
+        detect_fluxbasevar : Detect base variable for a given flux.
+
     Example:
-        >>> import diive as dv
-        >>> from diive.pkgs.flux.hqflux import analyze_highest_quality_flux
-        >>> df = dv.load_exampledata_parquet()
-        >>> flux_hq = df['NEE_CUT_REF'].copy()
-        >>> results = analyze_highest_quality_flux(
-        ...     flux=flux_hq,
-        ...     lat=47.286,
-        ...     lon=7.734,
-        ...     utc_offset=1,
-        ...     window_length=48*7,  # ~7 days at 30-min frequency
-        ...     n_sigma_daytime=4.0,      # Stricter daytime
-        ...     n_sigma_nighttime=2.5,      # Lenient nighttime
-        ...     use_differencing=True,
-        ...     showplot=True,
-        ...     return_summary=True
-        ... )
+        See `examples/pkgs/flux/lowres/flux_hqflux.py` for complete examples demonstrating
+        highest-quality flux filtering with day/night separation and result visualization.
     """
     # Input validation
     if not isinstance(flux, Series):

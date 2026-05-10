@@ -15,6 +15,37 @@ from diive.pkgs.features.variables.potentialradiation import potrad
 
 
 class FlagMultipleConstantUstarThresholds:
+    """
+    Apply multiple constant USTAR thresholds to filter low-turbulence flux data.
+
+    USTAR (friction velocity) threshold filtering removes unreliable nighttime flux
+    measurements during low-turbulence conditions when turbulent mixing is insufficient
+    to properly represent true surface exchange. This class applies multiple threshold
+    scenarios (e.g., 16th, 50th, 84th percentiles) to quantify uncertainty in
+    the filtering decision.
+
+    Critical Note (FLUXNET Standard):
+    USTAR filtering should ONLY be applied to scalar fluxes (CO2, CH4, N2O),
+    NOT to energy fluxes (H sensible heat, LE latent heat) because advective
+    fluxes don't proportionally affect energy balance at night.
+
+    Args:
+        series: pandas Series containing flux data
+        ustar: pandas Series containing USTAR (friction velocity) data
+        thresholds: list of float threshold values (e.g., [0.05, 0.07, 0.09])
+        threshold_labels: list of str labels for each threshold scenario
+        showplot: If True, displays filtering results. Default True.
+        verbose: If True, prints filtering statistics. Default True.
+        idstr: Optional identifier string for output columns
+
+    See Also:
+        FluxProcessingChain : Complete multi-level flux processing workflow.
+        FlagMultipleConstantUstarThresholds : Apply multiple USTAR thresholds.
+
+    Example:
+        See `examples/pkgs/flux/lowres/flux_ustarthreshold.py` for complete examples
+        of USTAR threshold detection and data filtering.
+    """
 
     def __init__(self, series, ustar, thresholds, threshold_labels,
                  showplot: bool = True, verbose: bool = True, idstr: str = None):

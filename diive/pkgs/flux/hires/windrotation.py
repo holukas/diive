@@ -24,10 +24,15 @@ class WindRotation2D:
     direction, enabling proper calculation of turbulent fluctuations. This is
     essential for eddy covariance flux calculations.
 
-    Examples
+    See Also
     --------
-    See `examples/echires/windrotation.py` for complete examples demonstrating
-    wind rotation with synthetic and real eddy covariance data.
+    MaxCovariance : Detect time lag between wind and scalars using covariance.
+    FluxDetectionLimit : Calculate minimum detectable flux based on measurement noise.
+
+    Example
+    -------
+    See `examples/pkgs/flux/hires/flux_windrotation.py` for complete examples demonstrating
+    wind rotation and tilt correction with synthetic eddy covariance data.
     """
 
     def __init__(self, u: Series, v: Series, w: Series, c: Series):

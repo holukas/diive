@@ -4,15 +4,15 @@ Examples demonstrating analysis functions for time series decomposition, correla
 
 ## Contents
 
-- **correlation.py** — Cross-correlation and autocorrelation analysis
-- **decoupling.py** — Flux decoupling and canopy-level analysis
-- **gapfinder.py** — Detection and analysis of data gaps
-- **gridaggregator.py** — Spatial gridding and aggregation of point measurements
-- **histogram_distribution.py** — Distribution analysis and histograms
-- **optimumrange.py** — Optimal range detection for data subsets
-- **quantiles.py** — Quantile-based analysis and percentile calculations
-- **seasonaltrend.py** — Seasonal decomposition and trend analysis
-- **harmonic.py** — Harmonic analysis (Fourier decomposition)
+- **analysis_correlation.py** — Daily cross-correlation analysis between measured and potential radiation
+- **analysis_decoupling.py** — Photosynthetic decoupling across temperature gradients
+- **analysis_gapfinder.py** — Gap detection and characterization
+- **analysis_gridaggregator.py** — Grid aggregation and multidimensional binning
+- **analysis_histogram_distribution.py** — Distribution analysis via histograms
+- **analysis_optimumrange.py** — Optimal range detection for ecosystem responses
+- **analysis_quantiles.py** — Percentile and quantile analysis
+- **analysis_seasonaltrend.py** — Seasonal-trend decomposition
+- **analysis_harmonic.py** — Spectral analysis and Fourier decomposition
 
 ## Related Documentation
 
@@ -21,8 +21,8 @@ See `diive.pkgs.analysis` for available analysis classes and functions.
 ## Running Examples
 
 ```bash
-uv run python examples/pkgs/analysis/correlation.py
-uv run python examples/pkgs/analysis/seasonaltrend.py
+uv run python examples/pkgs/analysis/analysis_correlation.py
+uv run python examples/pkgs/analysis/analysis_seasonaltrend.py
 ```
 
 Or run all analysis examples:

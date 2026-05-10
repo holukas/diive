@@ -26,17 +26,17 @@ examples/core/
 ```
 examples/pkgs/
 ├── analysis/              # Time series analysis (9 examples)
-│   ├── correlation.py
-│   ├── seasonaltrend.py
-│   ├── gapfinder.py
+│   ├── analysis_correlation.py
+│   ├── analysis_seasonaltrend.py
+│   ├── analysis_gapfinder.py
 │   └── ... (see README)
 ├── features/              # Variable creation & engineering (8 examples)
-│   ├── vpd.py
-│   ├── daynightflag.py
-│   ├── conversions.py
+│   ├── feature_vpd.py
+│   ├── feature_daynightflag.py
+│   ├── feature_conversions.py
 │   └── ... (see README)
 ├── fits/                  # Data fitting (1 example)
-│   └── fitter.py
+│   └── fit_fitter.py
 ├── flux/                  # Eddy covariance flux processing (10 examples)
 │   ├── fluxprocessingchain/
 │   │   └── fluxprocessingchain.py

@@ -25,6 +25,23 @@ from diive.core.plotting.scatter import ScatterXY
 
 class RandomUncertaintyPAS20:
     """
+    Hierarchical random uncertainty quantification for eddy covariance flux data.
+
+    Implements the PAS20 (Pastorello et al. 2020) uncertainty methodology
+    which applies four hierarchical methods to estimate random measurement uncertainty
+    in flux measurements. The approach fills gaps and propagates uncertainties through
+    gap-filling to produce cumulative uncertainty estimates.
+
+    Core Methods:
+    * **Method 1** — Similarity-based uncertainty (Ta, VPD, SW_IN window matching)
+    * **Method 2** — Rolling window standard deviation
+    * **Method 3** — Expanded rolling window (iterative until all records covered)
+    * **Method 4** — Global fallback standard deviation
+
+    Key Features:
+    * Hierarchical approach ensures all records have uncertainty estimates
+    * Proper error propagation through cumulative calculations using uncertainties package
+    * Separate day/night or combined uncertainty depending on data quality
 
     References:
         Hollinger, D. Y., & Richardson, A. D. (2005). Uncertainty in eddy covariance measurements
@@ -33,9 +50,12 @@ class RandomUncertaintyPAS20:
         Pastorello, G. et al. (2020). The FLUXNET2015 dataset and the ONEFlux processing
             pipeline for eddy covariance data. 27. https://doi.org/10.1038/s41597-020-0534-3
 
-        https://cran.r-project.org/web/packages/REddyProc/vignettes/aggUncertainty.html
-        https://pythonhosted.org/uncertainties/user_guide.html#correlated-variables
+    See Also:
+        FluxProcessingChain : Complete multi-level flux processing workflow.
 
+    Example:
+        See `examples/pkgs/flux/lowres/flux_uncertainty.py` for complete examples of
+        random uncertainty calculation and cumulative uncertainty propagation.
     """
 
     def __init__(self,

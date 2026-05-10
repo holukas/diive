@@ -170,45 +170,13 @@ class FluxDetectionLimit:
 
     See Also
     --------
-    examples/echires/fluxdetectionlimit.py : Complete usage examples
+    MaxCovariance : Detect time lag between wind and scalars using covariance.
+    WindRotation2D : Coordinate transformation and tilt correction for wind data.
 
-    Examples
-    --------
-    >>> import pandas as pd
-    >>> import numpy as np
-    >>> import diive as dv
-    >>>
-    >>> # Create synthetic 10 Hz eddy covariance data (30 minutes = 18000 records)
-    >>> n_records = 18000
-    >>> np.random.seed(42)
-    >>> df = pd.DataFrame({
-    ...     'u': np.random.normal(2.0, 0.5, n_records),  # m/s
-    ...     'v': np.random.normal(0.1, 0.3, n_records),  # m/s
-    ...     'w': np.random.normal(0.0, 0.2, n_records),  # m/s
-    ...     'N2O': 300 + np.random.normal(0, 5, n_records),  # nmol mol-1
-    ...     'Ts': 290 + np.random.normal(0, 0.1, 18000),  # K (sonic temp)
-    ...     'H2O': 0.01 + 0.002 * np.random.normal(0, 1, n_records),  # mol mol-1
-    ...     'Pressure': np.full(n_records, 101325.0),  # Pa
-    ... })
-    >>>
-    >>> # Calculate flux detection limit
-    >>> fdl = dv.FluxDetectionLimit(
-    ...     df=df,
-    ...     u_col='u', v_col='v', w_col='w',
-    ...     c_col='N2O',  # N2O in nmol mol-1
-    ...     ts_col='Ts', h2o_col='H2O', press_col='Pressure',
-    ...     default_lag=1.0,  # seconds
-    ...     noise_range=20,  # seconds
-    ...     lag_range=[-180, 180],  # seconds (standard range)
-    ...     lag_stepsize=10,  # records
-    ...     sampling_rate=10,  # Hz
-    ...     create_covariance_plot=False
-    ... )
-    >>>
-    >>> fdl.run()
-    >>> results = fdl.get_detection_limit()
-    >>> print(f"FDL: {results['flux_detection_limit']:.6f} nmol m-2 s-1")
-    >>> print(f"SNR: {results['signal_to_noise']:.2f}")
+    Example
+    -------
+    See `examples/pkgs/flux/hires/flux_fluxdetectionlimit.py` for complete examples
+    demonstrating flux detection limit calculation from high-resolution eddy covariance data.
 
     References
     ----------
