@@ -214,9 +214,9 @@ def _example():
         early_stopping_rounds=30,  # Stop if validation doesn't improve
         min_child_weight=5,
     )
-    # model = fpc.level41['long_term_xgboost']['CUT_50']
+    model = fpc.level41['long_term_xgboost']['CUT_50']
+    scores = model.scores_  # R², MAE, RMSE
     # gapfilled = model.gapfilled_
-    # scores = model.scores_  # R², MAE, RMSE
     # feature_importance = model.feature_importances_
     #
     # # fpc.level41_mds(
