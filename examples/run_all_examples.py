@@ -73,17 +73,17 @@ EXAMPLE_FILES = [
     'pkgs/fits/fitter.py',
     # PKGS: Flux - Processing chain
     'pkgs/flux/fluxprocessingchain/fluxprocessingchain.py',
-    # PKGS: Flux - Common and methods
-    'pkgs/flux/common.py',
-    'pkgs/flux/hqflux/hqflux.py',
-    'pkgs/flux/selfheating/selfheating.py',
-    'pkgs/flux/uncertainty/uncertainty.py',
-    'pkgs/flux/ustar_mp_detection/ustar_mp_detection.py',
-    'pkgs/flux/ustarthreshold/ustarthreshold.py',
-    # PKGS: Flux - High-resolution (echires)
-    'pkgs/flux/hires/fluxdetectionlimit.py',
-    'pkgs/flux/hires/lag.py',
-    'pkgs/flux/hires/windrotation.py',
+    # PKGS: Flux - Low-resolution processing
+    'pkgs/flux/lowres/flux_common.py',
+    'pkgs/flux/lowres/flux_hqflux.py',
+    'pkgs/flux/lowres/flux_selfheating.py',
+    'pkgs/flux/lowres/flux_uncertainty.py',
+    'pkgs/flux/lowres/flux_ustar_mp_detection.py',
+    'pkgs/flux/lowres/flux_ustarthreshold.py',
+    # PKGS: Flux - High-resolution analysis
+    'pkgs/flux/hires/flux_fluxdetectionlimit.py',
+    'pkgs/flux/hires/flux_lag.py',
+    'pkgs/flux/hires/flux_windrotation.py',
     # PKGS: Gap-filling
     'pkgs/gapfilling/gapfill_interpolate_generous.py',
     'pkgs/gapfilling/gapfill_interpolate_conservative.py',

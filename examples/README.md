@@ -37,17 +37,20 @@ examples/pkgs/
 │   └── ... (see README)
 ├── fits/                  # Data fitting (1 example)
 │   └── fitter.py
-├── flux/                  # Eddy covariance flux processing (11 examples)
-│   ├── common.py
-│   ├── hires/             # High-resolution analysis (3 examples)
-│   │   ├── lag.py
-│   │   ├── windrotation.py
-│   │   └── fluxdetectionlimit.py
-│   ├── hqflux/            # Highest-quality flux filtering (1 example)
-│   ├── selfheating/       # Sensor correction (1 example)
-│   ├── uncertainty/       # Random uncertainty (1 example)
-│   ├── ustarthreshold/    # USTAR filtering (1 example)
-│   └── ustar_mp_detection/ # Moving Point USTAR (1 example)
+├── flux/                  # Eddy covariance flux processing (10 examples)
+│   ├── fluxprocessingchain/
+│   │   └── fluxprocessingchain.py
+│   ├── lowres/            # Low-resolution processing (6 examples)
+│   │   ├── flux_common.py
+│   │   ├── flux_hqflux.py
+│   │   ├── flux_selfheating.py
+│   │   ├── flux_uncertainty.py
+│   │   ├── flux_ustar_mp_detection.py
+│   │   └── flux_ustarthreshold.py
+│   └── hires/             # High-resolution analysis (3 examples)
+│       ├── flux_fluxdetectionlimit.py
+│       ├── flux_lag.py
+│       └── flux_windrotation.py
 ├── gapfilling/            # Gap-filling methods (10 examples)
 │   ├── gapfill_interpolate_generous.py
 │   ├── gapfill_interpolate_conservative.py
