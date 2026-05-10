@@ -294,9 +294,9 @@ class FlagQCF:
 
         Shows which tests are raising flags and their impact.
         """
-        print(f"\n\n{'=' * 80}")
-        print(f"INDIVIDUAL TEST FLAG STATISTICS: {self.series_name}")
-        print(f"{'=' * 80}")
+        print(f"\n\n{'═' * 100}")
+        print(f"  INDIVIDUAL TEST FLAG STATISTICS: {self.series_name}")
+        print(f"{'═' * 100}")
 
         flagcols = identify_flagcols(df=self.flags, seriescol=self.series_name)
 
@@ -307,17 +307,17 @@ class FlagQCF:
             print("No test flags found.")
             return
 
-        print(f"Number of test flags: {len(test_flagcols)}\n")
+        print(f"\n  Total test flags: {len(test_flagcols)}")
 
         # === REPORT 1: FLAGS WITH MISSING VALUES ===
-        print(f"[REPORT 1A: ALL RECORDS (INCLUDING MISSING VALUES)]")
-        print(f"{'-' * 80}")
+        print(f"\n\n  ┌─ REPORT 1A: ALL RECORDS (INCLUDING MISSING VALUES)")
+        print(f"  │")
         for col in test_flagcols:
             self._flagstats_dt_nt(col=col, df=self.flags)
 
         # === REPORT 2: FLAGS FOR AVAILABLE RECORDS ===
-        print(f"[REPORT 1B: AVAILABLE RECORDS ONLY (EXCLUDING MISSING VALUES)]")
-        print(f"{'-' * 80}")
+        print(f"\n  ┌─ REPORT 1B: AVAILABLE RECORDS ONLY (EXCLUDING MISSING VALUES)")
+        print(f"  │")
         _df = self.flags.copy()
         ix_missing_vals = _df[self.series_name].isnull()
         _df = _df[~ix_missing_vals].copy()
@@ -325,28 +325,28 @@ class FlagQCF:
             self._flagstats_dt_nt(col=col, df=_df)
 
         # === SUMMARY ===
-        print(f"\n{'=' * 80}\n")
+        print(f"\n{'═' * 100}\n")
 
     def _flagstats_dt_nt(self, col: str, df: DataFrame):
         """Print flag statistics overall, daytime, and nighttime (if available)."""
         # Extract test name from column
         test_name = col.replace('FLAG_', '').replace('_TEST', '')
-        print(f"\n{test_name}")
-        print(f"  {'Period':<15} {'Pass (0)':<12} {'Warn (1)':<12} {'Fail (2)':<12} {'Missing':<10}")
-        print(f"  {'-' * 60}")
+        print(f"\n  ├─ {test_name}")
+        print(f"  │  {'Period':<15} │ {'Pass (0)':<15} │ {'Warn (1)':<15} │ {'Fail (2)':<15} │ {'Missing':<12}")
+        print(f"  │  {'-' * 85}")
 
         flag = df[col]
-        self._flagstats(flag=flag, prefix="OVERALL")
+        self._flagstats(flag=flag, prefix="OVERALL", indent="  │  ")
 
         if isinstance(self.daytime, Series):
             flag = df[col].loc[self.daytime == 1]
             if len(flag) > 0:
-                self._flagstats(flag=flag, prefix="DAYTIME")
+                self._flagstats(flag=flag, prefix="DAYTIME", indent="  │  ")
 
         if isinstance(self.nighttime, Series):
             flag = df[col].loc[self.nighttime == 1]
             if len(flag) > 0:
-                self._flagstats(flag=flag, prefix="NIGHTTIME")
+                self._flagstats(flag=flag, prefix="NIGHTTIME", indent="  │  ")
 
     def report_qcf_evolution(self):
         """Print how QCF evolves as tests are applied sequentially.
@@ -356,13 +356,13 @@ class FlagQCF:
         on data rejection and understand QC filtering progression.
 
         Output:
-            - Sequential table: for each test, new rejections and cumulative QCF distribution
+            - Sequential table: for each test, available vs rejected records with percentages
             - Impact summary: tests ranked by number of records they newly reject
             - Impact levels: HIGH (>=5 records), MODERATE (>=2), LOW (<2)
         """
-        print(f"\n\n{'=' * 80}")
+        print(f"\n\n{'=' * 120}")
         print(f"QCF EVOLUTION: SEQUENTIAL TEST APPLICATION")
-        print(f"{'=' * 80}")
+        print(f"{'=' * 120}")
         print(f"Shows how QCF flag distribution changes as tests are applied sequentially")
         print(f"Target variable: {self.series_name}\n")
 
@@ -376,12 +376,13 @@ class FlagQCF:
         n_vals = len(allflags_df)
         print(f"Measured records (excluding missing): {n_vals}\n")
 
-        # Track impact of each test
-        test_impacts = []
+        # Track cumulative rejections
         n_flag2_prev = 0
 
-        print(f"{'Step':<5} {'Test Name':<45} {'New Rej.':<10} {'QCF=0':<8} {'QCF=1':<8} {'QCF=2':<8}")
-        print(f"{'-' * 80}")
+        # Header for combined results table
+        print(f"{'Step':<5} {'Test Name':<38} {'New Rej':<8} {'Available':<12} {'Rejected':<12} {'Avail %':<9} {'Rej %':<9} {'QCF Distribution':<15}")
+        print(f"{'':5} {'':38} {'':8} {'(count)':<12} {'(count)':<12} {'':9} {'':9} {'0/1/2':<15}")
+        print(f"{'-' * 120}")
 
         for ix_test, test_col in enumerate(flagcols, 1):
             prog_testcols = flagcols[:ix_test]
@@ -396,34 +397,29 @@ class FlagQCF:
             n_flag1 = (prog_df[self.flagqcfcol] == 1).sum()
             n_flag2 = (prog_df[self.flagqcfcol] == 2).sum()
 
+            # Available (pass) vs Rejected records
+            n_available = n_flag0 + n_flag1
+            n_rejected = n_flag2
+            perc_available = (n_available / n_vals) * 100 if n_vals > 0 else 0
+            perc_rejected = (n_rejected / n_vals) * 100 if n_vals > 0 else 0
+
             # New rejections from this test
             n_new_rejected = n_flag2 - n_flag2_prev
 
             # Extract test name (remove FLAG_, _TEST)
             test_name = test_col.replace('FLAG_', '').replace('_TEST', '')
-            if len(test_name) > 40:
-                test_name = test_name[:37] + "..."
+            if len(test_name) > 35:
+                test_name = test_name[:32] + "..."
 
-            print(f"{ix_test:<5} {test_name:<45} {n_new_rejected:<10} {n_flag0:<8} {n_flag1:<8} {n_flag2:<8}")
+            qcf_dist = f"{n_flag0}/{n_flag1}/{n_flag2}"
+            print(f"{ix_test:<5} {test_name:<38} {n_new_rejected:<8} {n_available:<12} {n_rejected:<12} {perc_available:<9.2f} {perc_rejected:<9.2f} {qcf_dist:<15}")
 
-            test_impacts.append((test_name, n_new_rejected))
             n_flag2_prev = n_flag2
 
-        # Summary: Most impactful tests
-        print(f"\n{'=' * 80}")
-        print(f"[TEST IMPACT SUMMARY]")
-        print(f"Ranked by number of newly rejected records:\n")
-
-        test_impacts_sorted = sorted(test_impacts, key=lambda x: x[1], reverse=True)
-        for rank, (test_name, n_rejected) in enumerate(test_impacts_sorted, 1):
-            perc = (n_rejected / n_vals) * 100 if n_vals > 0 else 0
-            impact_level = "HIGH" if n_rejected >= 5 else ("MODERATE" if n_rejected >= 2 else "LOW")
-            print(f"  {rank}. {test_name:<40} {n_rejected:>3} records ({perc:>5.2f}%) [{impact_level}]")
-
-        print(f"\n{'=' * 80}\n")
+        print(f"\n{'=' * 120}\n")
 
 
-    def _flagstats(self, flag: Series, prefix: str):
+    def _flagstats(self, flag: Series, prefix: str, indent: str = "  "):
         """Print flag value counts in table format (0=pass, 1=warn, 2=fail)."""
         n_values = len(flag)
         flagcounts = flag.value_counts().to_dict()
@@ -440,13 +436,13 @@ class FlagQCF:
         perc_fail = (n_fail / n_values) * 100 if n_values > 0 else 0
         perc_miss = (flagmissing / n_values) * 100 if n_values > 0 else 0
 
-        # Format as table row
-        pass_str = f"{n_pass} ({perc_pass:5.1f}%)"
-        warn_str = f"{n_warn} ({perc_warn:5.1f}%)"
-        fail_str = f"{n_fail} ({perc_fail:5.1f}%)"
-        miss_str = f"{flagmissing} ({perc_miss:5.1f}%)"
+        # Format as table row with better spacing
+        pass_str = f"{n_pass:>5} ({perc_pass:>5.1f}%)"
+        warn_str = f"{n_warn:>5} ({perc_warn:>5.1f}%)"
+        fail_str = f"{n_fail:>5} ({perc_fail:>5.1f}%)"
+        miss_str = f"{flagmissing:>4} ({perc_miss:>5.1f}%)"
 
-        print(f"  {prefix:<15} {pass_str:<12} {warn_str:<12} {fail_str:<12} {miss_str:<10}")
+        print(f"{indent}{prefix:<15} │ {pass_str:<15} │ {warn_str:<15} │ {fail_str:<15} │ {miss_str:<12}")
 
     def report_qcf_series(self):
         """Print comprehensive summary statistics for quality-controlled series.

@@ -5,12 +5,14 @@ Examples demonstrating flux processing, quality control, and high-resolution ana
 ## Contents
 
 - **common.py** — Common utilities and helper functions for flux processing
-- **hqflux/** — Highest-quality flux filtering and analysis
+- **fluxprocessingchain/** — Multi-level Swiss FluxNet processing workflow (QC, storage correction, outlier detection, USTAR filtering, gap-filling)
 - **hires/** — High-resolution flux analysis (MaxCovariance, WindRotation, FluxDetectionLimit)
-- **selfheating/** — Oxygen sensor self-heating correction
-- **uncertainty/** — Random uncertainty estimation (PAS20 method)
-- **ustarthreshold/** — USTAR threshold detection and filtering
-- **ustar_mp_detection/** — Moving Point (MP) USTAR detection method
+- **lowres/** — Low-resolution flux processing
+  - **hqflux/** — Highest-quality flux filtering with Hampel outlier detection
+  - **selfheating/** — Oxygen sensor self-heating correction
+  - **uncertainty/** — Random uncertainty estimation (PAS20 method)
+  - **ustarthreshold/** — USTAR threshold detection and filtering
+  - **ustar_mp_detection/** — Moving Point (MP) USTAR detection method
 
 ## Related Documentation
 
@@ -23,8 +25,9 @@ See `diive.pkgs.flux` for available processing classes and functions:
 ## Running Examples
 
 ```bash
-uv run python examples/pkgs/flux/common.py
-uv run python examples/pkgs/flux/hqflux/hqflux.py
+uv run python examples/pkgs/flux/fluxprocessingchain/fluxprocessingchain.py
+uv run python examples/pkgs/flux/lowres/hqflux/hqflux.py
+uv run python examples/pkgs/flux/lowres/ustarthreshold/ustarthreshold.py
 uv run python examples/pkgs/flux/hires/lag.py
 ```
 

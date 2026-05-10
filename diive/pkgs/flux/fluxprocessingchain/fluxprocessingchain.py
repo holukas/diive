@@ -27,11 +27,11 @@ from diive.core.plotting.cumulative import Cumulative, CumulativeYear
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
 from diive.pkgs.features.variables import daytime_nighttime_flag_from_swinpot
 from diive.pkgs.features.variables.potentialradiation import potrad
+from diive.pkgs.flux.fluxprocessingchain.level2_qualityflags import FluxQualityFlagsEddyPro
+from diive.pkgs.flux.fluxprocessingchain.level31_storagecorrection import FluxStorageCorrectionSinglePointEddyPro
 from diive.pkgs.flux.lowres.common import detect_fluxbasevar
 from diive.pkgs.flux.lowres.hqflux import analyze_highest_quality_flux
 from diive.pkgs.flux.lowres.ustarthreshold import FlagMultipleConstantUstarThresholds
-from diive.pkgs.flux.fluxprocessingchain.level2_qualityflags import FluxQualityFlagsEddyPro
-from diive.pkgs.flux.fluxprocessingchain.level31_storagecorrection import FluxStorageCorrectionSinglePointEddyPro
 from diive.pkgs.gapfilling.longterm import LongTermGapFillingRandomForestTS, LongTermGapFillingXGBoostTS
 from diive.pkgs.gapfilling.mds import FluxMDS
 from diive.pkgs.preprocessing.outlierdetection import StepwiseOutlierDetection
@@ -502,7 +502,7 @@ class FluxProcessingChain:
 
     def showplot_gapfilled_cumulative(self, gain: float = 1, units: str = "", per_year: bool = True,
                                       start_year: int = None, end_year: int = None,
-                                      show_reference: bool = True, excl_years_from_reference: list = None,):
+                                      show_reference: bool = True, excl_years_from_reference: list = None, ):
         """
         Plots cumulative data for gap-filled variables, either as a yearly cumulative plot or
         overall cumulative plot. This method processes gap-filled variables, scales them by the
@@ -752,10 +752,10 @@ class FluxProcessingChain:
         [print(f"++Added new column {col}.") for col in newcols]
 
         # Calculate overall quality flag QCF
-        qcf = FlagQCF(target_col=self.fpc_df[run_qcf_on_col],
+        qcf = FlagQCF(target_col=run_qcf_on_col,
                       df=self.fpc_df,
                       idstr=idstr,
-                      swinpot_col=self.fpc_df['SW_IN_POT'],  # Calculated during init
+                      swinpot_col='SW_IN_POT',  # Calculated during init
                       nighttime_threshold=self.nighttime_threshold,
                       ustar_scenarios=ustar_scenarios  # Required to get correct USTAR FLAG_ columns for each scenario
                       )
@@ -1353,8 +1353,8 @@ class FluxProcessingChain:
                                                k: float = 1.4826, use_differencing: bool = True,
                                                separate_day_night: bool = True, showplot: bool = False,
                                                verbose: bool = False, repeat: bool = True):
-        self._level32.flag_outliers_hampel_dtnt_test(window_length=window_length, n_sigma_dt=n_sigma_dt,
-                                                     n_sigma_nt=n_sigma_nt, k=k, use_differencing=use_differencing,
+        self._level32.flag_outliers_hampel_dtnt_test(window_length=window_length, n_sigma_daytime=n_sigma_dt,
+                                                     n_sigma_nighttime=n_sigma_nt, k=k, use_differencing=use_differencing,
                                                      separate_day_night=separate_day_night,
                                                      showplot=showplot, verbose=verbose, repeat=repeat)
 
@@ -1393,7 +1393,9 @@ class FluxProcessingChain:
 
     def analyze_highest_quality_flux(self, showplot: bool = True):
         analyze_highest_quality_flux(flux=self.fpc_df[self.filteredseries_hq.name],
-                                     nighttime_flag=self.fpc_df['NIGHTTIME'],
+                                     lat=self.site_lat,
+                                     lon=self.site_lon,
+                                     utc_offset=self.utc_offset,
                                      showplot=showplot)
 
 
@@ -1645,7 +1647,6 @@ def _example_quick():
 
 
 def _example():
-
     # Source data
     from pathlib import Path
 
@@ -1925,7 +1926,6 @@ def _example():
     # FEATURES = ["TA_T1_47_1_gfXG", "SW_IN_T1_47_1_gfXG", "VPD_T1_47_1_gfXG"]
     FEATURES = ["TA_EP", "SW_IN_POT", "VPD_EP"]
 
-
     # # ---------------------------
     # # RANDOM FOREST WITH COMPREHENSIVE CO2 FLUX CONFIGURATION
     # # ---------------------------
@@ -2094,88 +2094,88 @@ def _example():
 
         # Stage 1: LAG FEATURES (Immediate past context)
         # For CO2: Short lags (1-2 steps = 30-60 min) as flux responds quickly to environment
-        features_lag=[-2, -1],          # Past 30-60 min only (no future, no current)
-        features_lag_stepsize=1,        # Include every lag (dense temporal context)
-        features_lag_exclude_cols=None, # Lag all input features
+        features_lag=[-2, -1],  # Past 30-60 min only (no future, no current)
+        features_lag_stepsize=1,  # Include every lag (dense temporal context)
+        features_lag_exclude_cols=None,  # Lag all input features
 
         # Stage 2: ROLLING STATISTICS (Diurnal pattern capture)
         # For CO2: 30-min, 1-hr, 2-hr, 6-hr, 12-hr, 24-hr windows to capture diurnal patterns
         # Window sizes for 30-min data: 2=1hr, 4=2hr, 12=6hr, 24=12hr, 48=24hr
         features_rolling=[2, 4, 12, 24, 48],  # 1hr, 2hr, 6hr, 12hr, 24hr windows
-        features_rolling_exclude_cols=None,   # Apply to all input features
+        features_rolling_exclude_cols=None,  # Apply to all input features
         # Advanced rolling stats: Median robust to outliers, min/max/quantiles capture asymmetry
         features_rolling_stats=['median', 'min', 'max', 'std', 'q25', 'q75'],
 
         # Stage 3: TEMPORAL DIFFERENCING (Rate of change, flux transitions)
         # For CO2: Order-1 (rate) captures sunrise/sunset transitions and weather events
         # Order-2 (acceleration) helps detect rapid state changes
-        features_diff=[1, 2],           # First and second-order differencing
+        features_diff=[1, 2],  # First and second-order differencing
         features_diff_exclude_cols=None,
 
         # Stage 4: EXPONENTIAL MOVING AVERAGE (Multi-timescale memory)
         # For CO2: Captures stomatal/photosynthetic adjustment at multiple timescales
         # Spans for 30-min data: 6=3hr, 12=6hr, 24=12hr, 48=24hr
-        features_ema=[6, 12, 24, 48],   # 3hr, 6hr, 12hr, 24hr exponential moving averages
+        features_ema=[6, 12, 24, 48],  # 3hr, 6hr, 12hr, 24hr exponential moving averages
         features_ema_exclude_cols=None,
 
         # Stage 5: POLYNOMIAL EXPANSION (Non-linear relationships)
         # For CO2: Degree-2 essential for light saturation (Michaelis-Menten curve)
         # Captures photosynthetic saturation and respiratory asymmetry
-        features_poly_degree=2,         # Quadratic terms (e.g., Tair², Rg² for saturation)
+        features_poly_degree=2,  # Quadratic terms (e.g., Tair², Rg² for saturation)
         features_poly_exclude_cols=None,
 
         # Stage 6: STL DECOMPOSITION (Trend/Seasonal separation)
         # For CO2: CRITICAL - separates respiration trend from photosynthetic pattern
         # Daily cycle: photosynthesis (daytime negative NEE), respiration (nighttime positive)
         # Seasonal cycle: dormancy (winter respiration), growth (summer photosynthesis)
-        features_stl=True,                      # Enable STL decomposition
-        features_stl_method='stl',              # Robust LOESS method (handles gaps)
-        features_stl_seasonal_period=48,        # 30-min × 48 = 24 hours (daily cycle)
-        features_stl_exclude_cols=None,         # Apply to all input features
+        features_stl=True,  # Enable STL decomposition
+        features_stl_method='stl',  # Robust LOESS method (handles gaps)
+        features_stl_seasonal_period=48,  # 30-min × 48 = 24 hours (daily cycle)
+        features_stl_exclude_cols=None,  # Apply to all input features
         features_stl_components=['trend', 'seasonal', 'residual'],  # Extract all
 
         # Stage 7: TIMESTAMP FEATURES (Diurnal/Seasonal cycles)
         # For CO2: ESSENTIAL - photosynthesis depends on time-of-day (solar elevation)
         # and season (leaf phenology, dormancy)
-        vectorize_timestamps=True,      # Creates ~19 features: year, season, DOY, hour, etc.
+        vectorize_timestamps=True,  # Creates ~19 features: year, season, DOY, hour, etc.
 
         # Stage 8: SEQUENTIAL RECORD NUMBER (Long-term drift)
         # For CO2: Useful if site shows long-term drift (instrument aging, vegetation change)
         add_continuous_record_number=True,  # 1, 2, 3, ... for drift capture
 
         # Data quality preprocessing
-        sanitize_timestamp=True,        # Validate timestamps (catch gaps/duplicates)
+        sanitize_timestamp=True,  # Validate timestamps (catch gaps/duplicates)
 
         # ===== GAP-FILLING PARAMETERS =====
-        reduce_features=True,          # ENABLED: Apply SHAP-based feature selection
-                                        # Selects only important features across all years
-                                        # Reduces feature count from ~45-50 to ~10-20 features
-                                        # Benefits: Faster training, better generalization, smaller models
-                                        # Drawback: Removes potentially useful features
-        verbose=True,                   # Print progress and model scores
+        reduce_features=True,  # ENABLED: Apply SHAP-based feature selection
+        # Selects only important features across all years
+        # Reduces feature count from ~45-50 to ~10-20 features
+        # Benefits: Faster training, better generalization, smaller models
+        # Drawback: Removes potentially useful features
+        verbose=True,  # Print progress and model scores
 
         # ===== XGBOOST HYPERPARAMETERS =====
         # Tuned for flux data (non-linear, heteroscedastic, with clear diurnal cycle)
 
-        n_estimators=500,               # 250 boosting rounds (less than Random Forest)
-                                        # XGBoost needs fewer estimators than RF
-                                        # Increase if underfitting (R² too low)
-                                        # Decrease if overfitting (test R² << train R²)
+        n_estimators=500,  # 250 boosting rounds (less than Random Forest)
+        # XGBoost needs fewer estimators than RF
+        # Increase if underfitting (R² too low)
+        # Decrease if overfitting (test R² << train R²)
 
-        max_depth=6,                    # Tree depth (shallow, prevents overfitting)
-                                        # Default 6 is good. Increase (7-8) for complex patterns
-                                        # Decrease (4-5) if overfitting
+        max_depth=6,  # Tree depth (shallow, prevents overfitting)
+        # Default 6 is good. Increase (7-8) for complex patterns
+        # Decrease (4-5) if overfitting
 
-        learning_rate=0.05,              # Shrinkage parameter (how fast to learn)
-                                        # 0.1 = standard, 0.05 = slower/safer, 0.3 = aggressive
-                                        # Smaller = better generalization, slower training
+        learning_rate=0.05,  # Shrinkage parameter (how fast to learn)
+        # 0.1 = standard, 0.05 = slower/safer, 0.3 = aggressive
+        # Smaller = better generalization, slower training
 
-        early_stopping_rounds=30,       # Stop if validation doesn't improve for 20 rounds
-                                        # Prevents overfitting, reduces training time
-                                        # Increase (30-50) for more aggressive training
+        early_stopping_rounds=30,  # Stop if validation doesn't improve for 20 rounds
+        # Prevents overfitting, reduces training time
+        # Increase (30-50) for more aggressive training
 
-        n_jobs=-1,                      # Use all CPU cores (parallel training)
-        random_state=42,                # Reproducibility (same results every run)
+        n_jobs=-1,  # Use all CPU cores (parallel training)
+        random_state=42,  # Reproducibility (same results every run)
         min_child_weight=5,
     )
     # ===== ACCESS RESULTS =====
@@ -2214,7 +2214,6 @@ def _example():
     fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{µmol\ CO_2\ m^{-2}}$)', per_year=True)
     fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{g\ C\ m^{-2}}$)', per_year=False)
 
-
     from diive.core.plotting.dielcycle import DielCycle
     series = results['NEE_L3.1_L3.3_CUT_50_QCF_gfXG'].copy()
     # series = results['NEE_L3.1_L3.3_CUT_50_QCF_gfMDS'].copy()
@@ -2229,8 +2228,6 @@ def _example():
 
     # # # Only MDS:
     # fpc.showplot_mds_gapfilling_qualities()
-
-
 
     print("END")
 
