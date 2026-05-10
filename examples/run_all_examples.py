@@ -32,12 +32,13 @@ EXAMPLE_FILES = [
     'pkgs/analysis/decoupling.py',
     'pkgs/analysis/gapfinder.py',
     'pkgs/analysis/gridaggregator.py',
+    'pkgs/analysis/harmonic.py',
     'pkgs/analysis/histogram_distribution.py',
     'pkgs/analysis/optimumrange.py',
     'pkgs/analysis/quantiles.py',
     'pkgs/analysis/seasonaltrend.py',
     # PKGS: IO
-    'pkgs/io/extract.py',
+    'pkgs/io/io_extract.py',
     # PKGS: Preprocessing - Corrections
     'pkgs/preprocessing/corrections/correction_relativehumidity_offset.py',
     'pkgs/preprocessing/corrections/correction_radiation_offset.py',
@@ -84,12 +85,16 @@ EXAMPLE_FILES = [
     'pkgs/flux/hires/lag.py',
     'pkgs/flux/hires/windrotation.py',
     # PKGS: Gap-filling
-    'pkgs/gapfilling/interpolate.py',
-    'pkgs/gapfilling/mds.py',
-    'pkgs/gapfilling/mds_comparison.py',
-    'pkgs/gapfilling/randomforest_ts.py',
-    'pkgs/gapfilling/xgboost_ts.py',
-    'pkgs/gapfilling/comparison.py',
+    'pkgs/gapfilling/gapfill_interpolate_generous.py',
+    'pkgs/gapfilling/gapfill_interpolate_conservative.py',
+    'pkgs/gapfilling/gapfill_mds.py',
+    'pkgs/gapfilling/gapfill_mds_comparison.py',
+    'pkgs/gapfilling/gapfill_randomforest.py',
+    'pkgs/gapfilling/gapfill_quickfill.py',
+    'pkgs/gapfilling/gapfill_optimize_randomforest.py',
+    'pkgs/gapfilling/gapfill_xgboost.py',
+    'pkgs/gapfilling/gapfill_optimize_xgboost.py',
+    'pkgs/gapfilling/gapfill_comparison.py',
 ]
 
 MAX_WORKERS = 8  # Number of parallel workers

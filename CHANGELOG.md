@@ -74,6 +74,15 @@
   example file references across run_all_examples.py, 3 category READMEs, CATALOG.md, and 6 docstrings in source code.
   Examples now 20 preprocessing files (was 18), 64 total examples (was 62). Sphinx Gallery format is version-control
   friendly (pure Python, readable diffs) and auto-executable for documentation generation.
+- **Gap-filling & I/O examples restructure:** Converted all gap-filling and I/O examples to Sphinx Gallery format with 
+  consistent prefixes: gapfill_* (10 files) and io_* (1 file). **Split combined functions into separate files:** Linear 
+  interpolation (gapfill_interpolate_generous.py, gapfill_interpolate_conservative.py); Random Forest 
+  (gapfill_randomforest.py, gapfill_quickfill.py, gapfill_optimize_randomforest.py); XGBoost 
+  (gapfill_xgboost.py, gapfill_optimize_xgboost.py); MDS (gapfill_mds.py, gapfill_mds_comparison.py); Comparison 
+  (gapfill_comparison.py); I/O (io_extract.py). Each file now has # %% section separators for pedagogical clarity. 
+  Total gapfilling examples increased from 6 to 10 (67 total examples, up from 63). Updated 10 file references across 
+  run_all_examples.py, gapfilling/README.md, CATALOG.md, CLAUDE.md, and 4 source code docstrings in RandomForestTS, 
+  XGBoostTS, FluxMDS, and linear_interpolation functions.
 
 ### New Classes & Functions
 

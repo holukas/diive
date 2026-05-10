@@ -178,12 +178,12 @@
 
 | Example | Method | Training | Speed | Accuracy | Best For |
 |---------|--------|----------|-------|----------|----------|
-| [**interpolate.py**](pkgs/gapfilling/interpolate.py) | Linear interpolation | No | ⚡ Very fast | ⭐ Simple | Small gaps (<1 day) |
-| [**randomforest_ts.py**](pkgs/gapfilling/randomforest_ts.py) | Random Forest | Yes | 🔄 Medium | ⭐⭐⭐⭐ Good | General purpose |
-| [**xgboost_ts.py**](pkgs/gapfilling/xgboost_ts.py) | XGBoost | Yes | 🔄 Medium | ⭐⭐⭐⭐⭐ Excellent | High accuracy |
-| [**mds.py**](pkgs/gapfilling/mds.py) | Meteorological Data Similarity | No | ⚡ Fast | ⭐⭐ Moderate | No training data |
-| [**mds_comparison.py**](pkgs/gapfilling/mds_comparison.py) | MDS variants | No | ⚡ Fast | Variable | Method comparison |
-| [**comparison.py**](pkgs/gapfilling/comparison.py) | Benchmark multiple methods | Mixed | - | - | Performance evaluation |
+| [**gapfill_interpolate.py**](pkgs/gapfilling/gapfill_interpolate.py) | Linear interpolation | No | ⚡ Very fast | ⭐ Simple | Small gaps (<1 day) |
+| [**gapfill_randomforest_ts.py**](pkgs/gapfilling/gapfill_randomforest_ts.py) | Random Forest | Yes | 🔄 Medium | ⭐⭐⭐⭐ Good | General purpose |
+| [**gapfill_xgboost_ts.py**](pkgs/gapfilling/gapfill_xgboost_ts.py) | XGBoost | Yes | 🔄 Medium | ⭐⭐⭐⭐⭐ Excellent | High accuracy |
+| [**gapfill_mds.py**](pkgs/gapfilling/gapfill_mds.py) | Meteorological Data Similarity | No | ⚡ Fast | ⭐⭐ Moderate | No training data |
+| [**gapfill_mds_comparison.py**](pkgs/gapfilling/gapfill_mds_comparison.py) | MDS variants | No | ⚡ Fast | Variable | Method comparison |
+| [**gapfill_comparison.py**](pkgs/gapfilling/gapfill_comparison.py) | Benchmark multiple methods | Mixed | - | - | Performance evaluation |
 
 **See also:** [pkgs/gapfilling/README.md](pkgs/gapfilling/README.md)
 

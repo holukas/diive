@@ -617,9 +617,9 @@ class FluxMDS:
     Reference: https://doi.org/10.1111/j.1365-2486.2005.001002.x
 
     Examples:
-        See examples/gap_filling/mds.py for basic usage.
-        See examples/gap_filling/comparison.py for side-by-side comparison with
-        Random Forest gap-filling method.
+        See examples/pkgs/gapfilling/gapfill_mds.py for basic usage.
+        See examples/pkgs/gapfilling/gapfill_comparison.py for side-by-side comparison with
+        Random Forest and XGBoost gap-filling methods.
     """
 
     gfsuffix = '_gfMDS'
@@ -1268,5 +1268,5 @@ class FluxMDS:
 
         return predictions, sds, counts
 
-# See examples/gap_filling/mds.py for usage examples.
+# See examples/pkgs/gapfilling/gapfill_mds.py for usage examples.
 # For the original unoptimized implementation, use _FluxMDS.

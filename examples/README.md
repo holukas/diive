@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
 
-**62 examples across 18 organized folders, mirroring the `diive` package structure.**
+**67 examples across 18 organized folders, mirroring the `diive` package structure.**
 
 ## Structure
 
@@ -48,14 +48,19 @@ examples/pkgs/
 │   ├── uncertainty/       # Random uncertainty (1 example)
 │   ├── ustarthreshold/    # USTAR filtering (1 example)
 │   └── ustar_mp_detection/ # Moving Point USTAR (1 example)
-├── gapfilling/            # Gap-filling methods (6 examples)
-│   ├── randomforest_ts.py
-│   ├── xgboost_ts.py
-│   ├── mds.py
-│   ├── comparison.py
-│   └── ... (see README)
+├── gapfilling/            # Gap-filling methods (10 examples)
+│   ├── gapfill_interpolate_generous.py
+│   ├── gapfill_interpolate_conservative.py
+│   ├── gapfill_randomforest.py
+│   ├── gapfill_quickfill.py
+│   ├── gapfill_optimize_randomforest.py
+│   ├── gapfill_xgboost.py
+│   ├── gapfill_optimize_xgboost.py
+│   ├── gapfill_mds.py
+│   ├── gapfill_mds_comparison.py
+│   └── gapfill_comparison.py
 ├── io/                    # File I/O (1 example)
-│   └── extract.py
+│   └── io_extract.py
 └── preprocessing/         # Data quality & corrections (20 examples)
     ├── corrections/       # Offset & bias corrections (8 examples)
     │   ├── correction_relativehumidity_offset.py
@@ -82,7 +87,7 @@ examples/pkgs/
 
 ```bash
 uv run python examples/core/visualization/heatmap_datetime.py
-uv run python examples/pkgs/gapfilling/randomforest_ts.py
+uv run python examples/pkgs/gapfilling/gapfill_randomforest_ts.py
 ```
 
 **Run all examples in parallel:**
@@ -91,7 +96,7 @@ uv run python examples/pkgs/gapfilling/randomforest_ts.py
 uv run python examples/run_all_examples.py
 ```
 
-This runs all 58 examples in parallel with 8 workers, reporting execution time and any errors.
+This runs all 67 examples in parallel with 8 workers, reporting execution time and any errors.
 
 ## Finding Examples
 
@@ -116,14 +121,14 @@ Browse by topic:
 | Category | Files | Topics |
 |----------|-------|--------|
 | **Core** | 10 | Visualization (9), timestamp handling (1) |
-| **Analysis** | 8 | Correlation, decomposition, gap detection, spatial aggregation |
+| **Analysis** | 9 | Correlation, decomposition, gap detection, spatial aggregation |
 | **Features** | 8 | Air properties, unit conversions, day/night flags, VPD |
 | **Fits** | 1 | Polynomial fitting |
 | **Flux** | 10 | Processing chain, HQ filtering, USTAR detection, self-heating, uncertainty, high-res analysis |
-| **Gapfilling** | 6 | RandomForest, XGBoost, MDS, linear interpolation, comparisons |
+| **Gapfilling** | 10 | Linear interpolation (2), Random Forest (3), XGBoost (2), MDS (2), comparison (1) |
 | **IO** | 1 | Binary file operations |
-| **Preprocessing** | 19 | Corrections (8), outlier detection (9), QA/QC (2) |
-| **TOTAL** | **62** | **~100+ individual functions demonstrated** |
+| **Preprocessing** | 18 | Corrections (7), outlier detection (9), QA/QC (2) |
+| **TOTAL** | **67** | **~100+ individual functions demonstrated** |
 
 ## Running Options
 

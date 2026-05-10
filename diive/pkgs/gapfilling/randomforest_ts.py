@@ -80,9 +80,9 @@ class RandomForestTS(MlRegressorGapFillingBase):
             scores_: Model performance metrics (MAE, RMSE, R²).
 
         Examples:
-            See examples/gap_filling/randomforest_ts.py for complete examples.
-            See examples/gap_filling/comparison.py for side-by-side comparison
-            with MDS gap-filling.
+            See examples/pkgs/gapfilling/gapfill_randomforest_ts.py for complete examples.
+            See examples/pkgs/gapfilling/gapfill_comparison.py for side-by-side comparison
+            with MDS and XGBoost gap-filling.
         """
 
         # Pass to parent class

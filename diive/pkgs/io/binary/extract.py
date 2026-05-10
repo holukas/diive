@@ -40,8 +40,11 @@ def get_encoded_value_from_int(integer: int,
      Returns:
          The converted and scaled value as a float.
 
+     See Also:
+         get_encoded_value_series : Apply bit extraction to a series of integers.
+
      Example:
-         See `examples/binary/extract.py` for complete examples.
+         See `examples/pkgs/io/io_extract.py` for complete examples.
      """
     bits = bin(integer).replace("0b", "")  # Convert to binary value
     bits = bits.zfill(n_bits)  # Add leading zeros, if needed
@@ -91,8 +94,11 @@ def get_encoded_value_series(
     Returns:
      Series of the converted and scaled values as a floats.
 
+    See Also:
+        get_encoded_value_from_int : Extract bits from a single integer value.
+
     Example:
-        See `examples/binary/extract.py` for complete examples.
+        See `examples/pkgs/io/io_extract.py` for complete examples.
     """
     missing = int_series.isnull()
     available = ~missing

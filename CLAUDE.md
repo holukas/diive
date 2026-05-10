@@ -624,8 +624,8 @@ examples/
 **Running Examples:**
 
 - Run all: `uv run python examples/run_all_examples.py` (parallel, 8 workers)
-- Run category: `uv run python examples/pkgs/gapfilling/randomforest_ts.py`
-- Coverage: 58 examples across 18 organized folders
+- Run category: `uv run python examples/pkgs/gapfilling/gapfill_randomforest_ts.py`
+- Coverage: 62 examples across 18 organized folders
 
 **Maintaining Examples (IMPORTANT):**
 When adding/modifying examples:
@@ -634,7 +634,8 @@ When adding/modifying examples:
 2. Update **examples/CATALOG.md** with use case/workflow info
 3. Update **examples/run_all_examples.py** with file path
 4. Update **CHANGELOG.md** to note changes
-5. Keep **examples/EXAMPLE_DATASET.md** in sync if data changes
+5. Update **source code docstrings** (see checklist below)
+6. Keep **examples/EXAMPLE_DATASET.md** in sync if data changes
 
 The examples catalog and dataset docs are user-facing—keep them accurate and in sync.
 
@@ -644,7 +645,10 @@ Examples are now structured as **executable Python scripts** designed for Sphinx
 
 **File naming:**
 - `correction_*.py` — Data correction methods (e.g., `correction_relativehumidity_offset.py`)
-- `example_*.py` or `plot_*.py` — General examples (follows convention of content type)
+- `outlier_*.py` — Outlier detection methods (e.g., `outlier_hampel.py`)
+- `qc_*.py` — Quality control methods (e.g., `qc_overall_flag.py`)
+- `gapfill_*.py` — Gap-filling methods (e.g., `gapfill_randomforest_ts.py`)
+- `io_*.py` — File I/O operations (e.g., `io_extract.py`)
 - `fluxprocessingchain.py` — Complete multi-level workflow
 
 **Structure within files:**
@@ -705,6 +709,183 @@ print(results)
   - `correction_winddir_offset.py` — Wind direction calibration
 - Each as standalone Sphinx Gallery example
 - Domain-specific `correction_` prefix (not `plot_`) reflects actual content
+
+**Outlier Detection & QA/QC (`pkgs/preprocessing/outlierdetection/` and `qaqc/`)**
+- 9 outlier detection methods converted to Sphinx Gallery format with consistent `outlier_*` naming
+- 2 QA/QC examples (`qc_overall_flag.py`, `qc_eddypro_flags.py`)
+- Organized by complexity level (beginner, intermediate, advanced)
+
+**Gap-Filling Methods (`pkgs/gapfilling/`)**
+- All 6 gap-filling examples converted to Sphinx Gallery format with consistent `gapfill_*` naming:
+  - `gapfill_randomforest_ts.py` — Random Forest with 3 sub-workflows
+  - `gapfill_xgboost_ts.py` — XGBoost with hyperparameter optimization
+  - `gapfill_mds.py` — Meteorological Data Similarity
+  - `gapfill_mds_comparison.py` — Original vs. optimized MDS performance
+  - `gapfill_interpolate.py` — Linear interpolation (conservative & generous)
+  - `gapfill_comparison.py` — Benchmark all three methods side-by-side
+
+**File I/O (`pkgs/io/`)**
+- Binary value extraction example renamed to `io_extract.py` with Sphinx Gallery format
+
+### Example File Structure & Documentation Checklist
+
+**Every example file must follow this structure:**
+
+#### 1. File Naming Convention
+- Prefix by domain: `correction_`, `outlier_`, `qc_`, `gapfill_`, `io_`, `feature_`, `analysis_`, etc.
+- Suffix with function/method name: `correction_relativehumidity_offset.py`, `gapfill_randomforest.py`
+- **ONE function/workflow per file** — no combined functions in single files
+- Lowercase with underscores (snake_case)
+
+#### 2. File Content Structure
+
+**Top-level docstring (reStructuredText format):**
+```python
+"""
+=================
+Descriptive Title
+=================
+
+One-line summary. Clear explanation of what this example demonstrates and when to use it.
+
+Best for: [specific use case or condition]
+"""
+```
+
+**Sections within file:**
+- Use `# %%` separators between logical sections (becomes cells in Sphinx Gallery)
+- Each section starts with a header comment block:
+  ```python
+  # %%
+  # Section Title
+  # ^^^^^^^^^^^^^^
+  #
+  # Explanatory narrative text (non-executed comments describing what follows)
+  ```
+- Code follows immediately after narrative
+- Include `print()` statements to show outputs to readers
+- **No file I/O** (no `.to_csv()`, `.to_parquet()`, etc.) — show API only
+
+**Example structure:**
+```python
+"""
+============================
+Gap-Filling with Random Forest
+============================
+
+Demonstrates training and applying Random Forest for time series gap-filling.
+
+Best for: Medium-sized gaps with diurnal/seasonal patterns.
+"""
+
+# %%
+# Load and prepare data
+# ^^^^^^^^^^^^^^^^^^^^^
+
+import diive as dv
+df = dv.load_exampledata_parquet()
+
+# %%
+# Train model
+# ^^^^^^^^^^^
+# Create feature engineering pipeline...
+
+from diive.core.ml.feature_engineer import FeatureEngineer
+engineer = FeatureEngineer(...)
+```
+
+#### 3. Source Code Docstring Updates
+
+Update the function/class docstring in the source code to reference the example:
+
+**Add to docstring sections (in order):**
+1. **Description** — What the function does
+2. **Parameters** — Argument details (Args:)
+3. **Returns** — Return value details
+4. **See Also** — Related functions
+   ```python
+   See Also:
+       other_function : Brief description of related function.
+   ```
+5. **Example** — Reference the example file
+   ```python
+   Example:
+       See `examples/pkgs/gapfilling/gapfill_randomforest.py` for complete examples.
+   ```
+
+#### 4. Documentation Files to Update (7-point checklist)
+
+For each new/modified example, update:
+
+**A. Category README** (`examples/pkgs/{category}/README.md`)
+   - Add file under appropriate subsection (e.g., "Machine Learning Methods")
+   - Format: `- **filename.py** — One-line description`
+   - Example:
+     ```markdown
+     ### Machine Learning Methods
+     - **gapfill_randomforest.py** — Random Forest gap-filling with feature engineering
+     - **gapfill_xgboost.py** — XGBoost gradient boosting gap-filling
+     ```
+
+**B. Running Examples section** (in same README)
+   - Add bash command for single example:
+     ```bash
+     uv run python examples/pkgs/gapfilling/gapfill_randomforest.py
+     ```
+
+**C. examples/run_all_examples.py**
+   - Add file path to `EXAMPLE_FILES` list in correct section:
+     ```python
+     # PKGS: Gap-filling
+     'pkgs/gapfilling/gapfill_randomforest.py',
+     'pkgs/gapfilling/gapfill_xgboost.py',
+     ```
+
+**D. examples/README.md**
+   - Update total example count in header
+   - Update example folder structure if new category
+   - Update coverage table with file count per category
+
+**E. examples/CATALOG.md**
+   - Add file reference under appropriate workflow/use case
+   - Link to category README for more details
+
+**F. CHANGELOG.md**
+   - Note new/updated examples in version entry
+   - Example: `- New gap-filling examples: gapfill_randomforest.py, gapfill_xgboost.py`
+
+**G. Source Code Docstrings** (in `diive/pkgs/{module}/{file}.py`)
+   - Update "Example" section with new example path
+   - Add "See Also" section linking to related functions
+   - Format: `` `examples/pkgs/gapfilling/gapfill_randomforest.py` ``
+
+#### 5. Common Mistakes to Avoid
+
+- ❌ **Multiple functions in one file** — Create separate files for each function
+- ❌ **Forgetting to update source code docstrings** — Always update Example and See Also sections
+- ❌ **Including file I/O** — Don't add `.to_csv()` or `.to_parquet()` to examples
+- ❌ **Updating only examples/, forgetting source docstrings** — Both must be synchronized
+- ❌ **Inconsistent file naming** — Must use correct domain prefix (gapfill_, io_, etc.)
+- ❌ **Updating examples/run_all_examples.py but not README** — Update all 7 documentation files
+
+#### 6. Verification Checklist
+
+Before considering an example complete:
+
+```
+□ File created with correct naming: {prefix}_{function}.py
+□ File follows Sphinx Gallery structure (docstring, # %%, narrative, code)
+□ No file I/O operations included
+□ Examples run without errors: uv run python examples/pkgs/{category}/{file}.py
+□ Category README.md updated with file description and running example
+□ examples/run_all_examples.py updated with file path
+□ examples/README.md example count and structure updated
+□ examples/CATALOG.md updated with workflow references
+□ CHANGELOG.md updated with new example entry
+□ Source code docstring "Example" section updated with path
+□ Source code docstring "See Also" section added if related functions exist
+□ All documentation cross-references are consistent (no broken links)
+```
 
 ## Common Workflows
 
