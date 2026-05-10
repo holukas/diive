@@ -75,5 +75,7 @@ print(ga.df_agg_long)
 # Data coverage
 # ^^^^^^^^^^^^^
 
-print(f"\n\nData coverage: {ga.df_agg_long['n_vals'].sum()} records aggregated")
-print(f"Bins with data: {(ga.df_agg_long['n_vals'] > 0).sum()} out of {len(ga.df_agg_long)} bins")
+# Count non-NaN values in aggregated results
+n_bins_with_data = ga.df_agg_long[flux_col].notna().sum()
+print(f"\n\nBins with data: {n_bins_with_data} out of {len(ga.df_agg_long)} bins")
+print(f"Coverage: {100 * n_bins_with_data / len(ga.df_agg_long):.1f}%")

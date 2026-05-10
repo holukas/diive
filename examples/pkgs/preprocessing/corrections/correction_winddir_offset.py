@@ -76,5 +76,5 @@ print(f"  Original range: {winddir.min():.1f} to {winddir.max():.1f} degrees")
 print(f"\nData availability by year:")
 for year in sorted(winddir.index.year.unique()):
     n_records = len(winddir[winddir.index.year == year])
-    offset = yearly_offsets[yearly_offsets['year'] == year]['offset'].values[0]
+    offset = yearly_offsets[yearly_offsets['YEAR'] == year]['OFFSET'].values[0]
     print(f"  {year}: {n_records:5d} records, offset: {offset:+6.1f}°")

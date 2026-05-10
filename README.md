@@ -8,11 +8,9 @@
 
 *`diive` is under active development with frequent updates and improvements.*
 
-**Update 8 May 2026**  
-diive is currently prepared for the first main release. There is still quite a bit missing, e.g., code examples for all
-public classes and functions. After that, the documentation will be created and hosted on ReadTheDocs. Most of the
-notebooks will be removed once the documentation is ready. New features are still added regularly, and existing
-functionality is continuously improved.
+**Update 11 May 2026**  
+diive is currently prepared for the first main release. Code examples have been expanded to 62+ examples across 18 organized
+folders with comprehensive documentation (CATALOG.md, EXAMPLE_DATASET.md). Documentation will be created and hosted on ReadTheDocs after the initial release. New features are still added regularly, and existing functionality is continuously improved.
 
 # Time series data processing
 
@@ -65,7 +63,7 @@ model.fillgaps()
 
 ### Next Steps
 
-- **📖 [58 Executable Examples](examples/README.md)** — Learn by doing
+- **📖 [62+ Executable Examples](examples/README.md)** — Learn by doing
     - Find examples by use case: [CATALOG.md](examples/CATALOG.md)
     - Dataset documentation: [EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md)
 - **💻 [Development Setup](CLAUDE.md)** — Contribute or work with the source
@@ -101,38 +99,36 @@ For the complete list, see `diive.__all__`.
 
 ---
 
-## 58 Executable Examples
+## 62+ Executable Examples
 
-Organized to mirror the codebase structure. Examples range from quick visualizations to multi-year workflows.
+Organized to mirror the codebase structure. All examples follow Sphinx Gallery format (executable Python scripts with # %% sections) for version control friendliness and auto-documentation generation.
 
 **Quick start:**
 
 ```bash
-# Run all examples in parallel
-uv run python examples/run_all_examples.py
-
 # Run individual examples
 uv run python examples/core/visualization/heatmap_datetime.py
-uv run python examples/pkgs/gapfilling/randomforest_ts.py
+uv run python examples/pkgs/analysis/analysis_correlation.py
+uv run python examples/pkgs/gapfilling/gapfill_randomforest.py
 uv run python examples/pkgs/flux/fluxprocessingchain/fluxprocessingchain.py
 ```
 
 **Find your way:**
 
-- **[CATALOG.md](examples/CATALOG.md)** — Organized by use case (visualization, analysis, gap-filling, etc.)
-- **[EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md)** — Complete dataset documentation (37 variables, availability,
-  quality)
+- **[CATALOG.md](examples/CATALOG.md)** — Organized by use case with workflows (visualization, analysis, gap-filling, etc.)
+- **[EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md)** — Complete dataset documentation (37 variables, availability, quality)
 - **[examples/README.md](examples/README.md)** — Quick start and folder structure
 
 **Example categories:**
 
 - **Visualization** (9 examples) — Heatmaps, time series, diel cycles, cumulative plots, histograms
-- **Analysis** (9 examples) — Correlation, seasonal decomposition, gap detection, gridding
-- **Data Processing** (16 examples) — Corrections, outlier detection (8 methods), quality flags
-- **Feature Engineering** (8 examples) — VPD, unit conversions, day/night flags, lagged features
-- **Gap-Filling** (6 examples) — Linear interpolation, Random Forest, XGBoost, MDS, method comparison
-- **Flux Processing** (11 examples) — Time lag, wind rotation, USTAR filtering, uncertainty, self-heating
+- **Analysis** (9 examples) — Correlation, seasonal decomposition, gap detection, gridding, spectral analysis
+- **Data Processing** (19 examples) — Corrections (8), outlier detection (9), quality flags (2)
+- **Feature Engineering** (8 examples) — VPD, unit conversions, day/night flags, lagged features, potential radiation
+- **Gap-Filling** (10 examples) — Linear interpolation, Random Forest, XGBoost, MDS, comparisons, optimization
+- **Flux Processing** (10 examples) — Time lag, wind rotation, USTAR filtering, uncertainty, self-heating, fluxchain
 - **Curve Fitting** (1 example) — Polynomial fitting
+- **I/O & Utilities** (1 example) — Binary value extraction
 
 Browse [examples/README.md](examples/README.md) for the full index with descriptions.
 

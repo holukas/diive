@@ -2,10 +2,10 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.91.0 | XX XXX 2026
+## v0.91.0 | 11 May 2026
 
-- now developing under python 3.12
-- switched from poetry to uv dependency management
+- Now developing under Python 3.12
+- Switched from poetry to `uv` dependency management (modern, fast, deterministic)
 
 ### Major Changes
 
@@ -21,14 +21,14 @@
   noise) with frequency interpretation for gap-filling validation.
 - **Time series analysis** — Refactored DailyCorrelation, StratifiedAnalysis, GapFinder, GridAggregator,
   FindOptimumRange, percentiles101, SeasonalTrendDecomposition.
-- **Examples reorganization & documentation** — Restructured 58 examples to mirror `diive/pkgs` and `diive/core`
+- **Examples reorganization & documentation** — Restructured 62+ examples to mirror `diive/pkgs` and `diive/core`
   architecture (18 organized folders). Created 3 comprehensive user-facing guides:
     - **`examples/CATALOG.md`** — Find examples by use case/workflow (8 categories, difficulty levels, cross-referenced)
     - **`examples/EXAMPLE_DATASET.md`** — Complete dataset documentation (37 variables, gaps %, availability, quality
       notes, USTAR scenarios)
     - **17 category READMEs** — One per folder with file descriptions and usage examples
     - Fixed critical import issues: lazy imports for circular dependencies, corrected export names in __init__.py files
-- **Examples consolidation** — 58 examples across organized folders (was 107 across 52 files). Consolidated all
+- **Examples consolidation** — 62+ examples across organized folders (was 107 across 52 files). Consolidated all
   RandomForestTS/XGBoostTS examples to `pkgs/gapfilling/`. RandomForestTS includes: randomforest_ts.py (production
   settings + heatmap + cumulative flux). XGBoostTS includes: xgboost_ts.py (harmonized with RF for direct comparison).
   Three-way gap-filling comparison: `examples/pkgs/gapfilling/comparison.py` comparing MDS vs Random Forest vs XGBoost.
@@ -89,6 +89,21 @@
   potentialradiation, timesince, vpd) with feature_* prefix, and 1 fits example (fitter) with fit_* prefix. All 18 files 
   now have # %% section separators for clarity. Updated example file references across run_all_examples.py, category 
   READMEs, examples/README.md, and source code docstrings (9 analysis modules, 1 feature module, 1 fits module).
+
+### Bug Fixes
+
+- **Example validation fixes:** Fixed 5 examples that had API mismatches or incorrect column names:
+    - `analysis_gridaggregator.py`: Fixed KeyError on non-existent 'n_vals' column; now computes coverage from actual returned columns
+    - `analysis_quantiles.py`: Fixed column name from 'Tair_f' to 'VALUE' in percentiles dataframe access
+    - `correction_winddir_offset.py`: Fixed column names from lowercase 'year'/'offset' to uppercase 'YEAR'/'OFFSET' in yearly offsets dataframe
+    - `outlier_stepwise.py`: Fixed attribute names from `lat`/`lon` to `site_lat`/`site_lon` in StepwiseOutlierDetection
+    - `outlier_zscore.py`: Fixed parameter name from `thres_zscore_increments` to `thres_zscore` in zScoreIncrements initialization
+- **Import fixes in __init__.py:** Corrected 7 import path errors where functions were imported from wrong modules:
+    - `latent_heat_of_vaporization`, `et_from_le` moved to `conversions` module (was `air`)
+    - `DaytimeNighttimeFlag`, `daytime_nighttime_flag_from_swinpot` moved to `daynightflag` module
+    - `lagged_variants` moved to `laggedvariants` module (was `air`)
+    - `generate_noisy_timeseries`, `add_impulse_noise` moved to `noise` module (was `air`)
+    - `read_file_type` alias corrected for consistency with snake_case convention
 
 ### New Classes & Functions
 

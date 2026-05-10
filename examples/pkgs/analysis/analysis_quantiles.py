@@ -39,8 +39,8 @@ print(percentiles_df)
 # ^^^^^^^^^^^^^^^^^^
 
 print(f"\nSummary of Tair_f:")
-print(f"  0th percentile (min):   {percentiles_df.iloc[0]['Tair_f']:.2f} C")
-print(f"  25th percentile:        {percentiles_df[percentiles_df.index == 25]['Tair_f'].values[0]:.2f} C")
-print(f"  50th percentile (median): {percentiles_df[percentiles_df.index == 50]['Tair_f'].values[0]:.2f} C")
-print(f"  75th percentile:        {percentiles_df[percentiles_df.index == 75]['Tair_f'].values[0]:.2f} C")
-print(f"  100th percentile (max): {percentiles_df.iloc[-1]['Tair_f']:.2f} C")
+print(f"  0th percentile (min):   {percentiles_df.iloc[0]['VALUE']:.2f} C")
+print(f"  25th percentile:        {percentiles_df[percentiles_df['PERCENTILE'] == 25]['VALUE'].values[0]:.2f} C")
+print(f"  50th percentile (median): {percentiles_df[percentiles_df['PERCENTILE'] == 50]['VALUE'].values[0]:.2f} C")
+print(f"  75th percentile:        {percentiles_df[percentiles_df['PERCENTILE'] == 75]['VALUE'].values[0]:.2f} C")
+print(f"  100th percentile (max): {percentiles_df.iloc[-1]['VALUE']:.2f} C")

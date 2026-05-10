@@ -52,7 +52,7 @@ detector = StepwiseOutlierDetection(
 
 print("\nStepwise orchestrator initialized")
 print(f"  Column: {detector.col}")
-print(f"  Site lat/lon: {detector.lat}, {detector.lon}")
+print(f"  Site lat/lon: {detector.site_lat}, {detector.site_lon}")
 
 # %%
 # Apply detection methods sequentially

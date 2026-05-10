@@ -96,7 +96,7 @@ print(f"  Data retained: {(flag_rolling != 2).sum()}")
 
 detector_incr = dv.zScoreIncrements(
     series=series,
-    thres_zscore_increments=2.5,
+    thres_zscore=2.5,
     showplot=False,
     verbose=1
 )

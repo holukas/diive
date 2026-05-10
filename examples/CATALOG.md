@@ -41,14 +41,15 @@
 
 | Example | What You'll Learn | Use Case |
 |---------|------------------|----------|
-| [**correlation.py**](pkgs/analysis/correlation.py) | Cross-correlation, autocorrelation, anomaly detection | Identify lagged relationships |
-| [**seasonaltrend.py**](pkgs/analysis/seasonaltrend.py) | Seasonal decomposition (STL method) | Isolate trend from seasonality |
-| [**decoupling.py**](pkgs/analysis/decoupling.py) | Stratified analysis, canopy-scale processes | Analyze by vegetation layers |
-| [**gapfinder.py**](pkgs/analysis/gapfinder.py) | Detect and visualize data gaps | Assess data completeness |
-| [**gridaggregator.py**](pkgs/analysis/gridaggregator.py) | 2D spatial gridding and aggregation | Aggregate point measurements to grids |
-| [**histogram_distribution.py**](pkgs/analysis/histogram_distribution.py) | Distribution analysis, percentiles | Quantile-based analysis |
-| [**optimumrange.py**](pkgs/analysis/optimumrange.py) | Find optimal value ranges in data | Condition-based filtering |
-| [**quantiles.py**](pkgs/analysis/quantiles.py) | Percentile and quantile calculations | Non-parametric statistics |
+| [**analysis_correlation.py**](pkgs/analysis/analysis_correlation.py) | Cross-correlation, autocorrelation, anomaly detection | Identify lagged relationships |
+| [**analysis_seasonaltrend.py**](pkgs/analysis/analysis_seasonaltrend.py) | Seasonal decomposition (STL method) | Isolate trend from seasonality |
+| [**analysis_decoupling.py**](pkgs/analysis/analysis_decoupling.py) | Stratified analysis, canopy-scale processes | Analyze by vegetation layers |
+| [**analysis_gapfinder.py**](pkgs/analysis/analysis_gapfinder.py) | Detect and visualize data gaps | Assess data completeness |
+| [**analysis_gridaggregator.py**](pkgs/analysis/analysis_gridaggregator.py) | 2D spatial gridding and aggregation | Aggregate point measurements to grids |
+| [**analysis_histogram_distribution.py**](pkgs/analysis/analysis_histogram_distribution.py) | Distribution analysis, percentiles | Quantile-based analysis |
+| [**analysis_optimumrange.py**](pkgs/analysis/analysis_optimumrange.py) | Find optimal value ranges in data | Condition-based filtering |
+| [**analysis_quantiles.py**](pkgs/analysis/analysis_quantiles.py) | Percentile and quantile calculations | Non-parametric statistics |
+| [**analysis_harmonic.py**](pkgs/analysis/analysis_harmonic.py) | Spectral analysis and Fourier decomposition | Frequency content analysis |
 
 **See also:** [pkgs/analysis/README.md](pkgs/analysis/README.md)
 
@@ -117,14 +118,14 @@
 
 | Example | What You'll Learn | Output Variables |
 |---------|------------------|------------------|
-| [**daynightflag.py**](pkgs/features/daynightflag.py) | Daytime/nighttime classification from solar geometry | Day/night boolean flag |
-| [**vpd.py**](pkgs/features/vpd.py) | Vapor Pressure Deficit calculation | VPD (hPa) |
-| [**air.py**](pkgs/features/air.py) | Air properties (density, resistance, heat capacity) | Aerodynamic properties |
-| [**conversions.py**](pkgs/features/conversions.py) | Unit conversions (temperature, energy, water) | Derived units |
-| [**potentialradiation.py**](pkgs/features/potentialradiation.py) | Clear-sky radiation calculation | Potential radiation (W/m²) |
-| [**laggedvariants.py**](pkgs/features/laggedvariants.py) | Create lagged and shifted variables | Lag features for models |
-| [**timesince.py**](pkgs/features/timesince.py) | Time-since-event features | Relative time metrics |
-| [**noise.py**](pkgs/features/noise.py) | Synthetic noise generation | Test noise robustness |
+| [**feature_daynightflag.py**](pkgs/features/feature_daynightflag.py) | Daytime/nighttime classification from solar geometry | Day/night boolean flag |
+| [**feature_vpd.py**](pkgs/features/feature_vpd.py) | Vapor Pressure Deficit calculation | VPD (hPa) |
+| [**feature_air.py**](pkgs/features/feature_air.py) | Air properties (density, resistance, heat capacity) | Aerodynamic properties |
+| [**feature_conversions.py**](pkgs/features/feature_conversions.py) | Unit conversions (temperature, energy, water) | Derived units |
+| [**feature_potentialradiation.py**](pkgs/features/feature_potentialradiation.py) | Clear-sky radiation calculation | Potential radiation (W/m²) |
+| [**feature_laggedvariants.py**](pkgs/features/feature_laggedvariants.py) | Create lagged and shifted variables | Lag features for models |
+| [**feature_timesince.py**](pkgs/features/feature_timesince.py) | Time-since-event features | Relative time metrics |
+| [**feature_noise.py**](pkgs/features/feature_noise.py) | Synthetic noise generation | Test noise robustness |
 
 **See also:** [pkgs/features/README.md](pkgs/features/README.md)
 
@@ -195,7 +196,7 @@
 
 | Example | What You'll Learn |
 |---------|------------------|
-| [**fitter.py**](pkgs/fits/fitter.py) | Polynomial and custom function fitting |
+| [**fit_fitter.py**](pkgs/fits/fit_fitter.py) | Polynomial and custom function fitting |
 
 **See also:** [pkgs/fits/README.md](pkgs/fits/README.md)
 
@@ -213,30 +214,30 @@
 7. Visualize: [heatmap_datetime.py](core/visualization/heatmap_datetime.py) or [timeseries.py](core/visualization/timeseries.py)
 
 ### **"I want to analyze seasonal patterns"**
-1. [seasonaltrend.py](pkgs/analysis/seasonaltrend.py) — Decompose trend + seasonal
+1. [analysis_seasonaltrend.py](pkgs/analysis/analysis_seasonaltrend.py) — Decompose trend + seasonal
 2. [dielcycle.py](core/visualization/dielcycle.py) — Diurnal cycles
 3. [heatmap_datetime.py](core/visualization/heatmap_datetime.py) — Monthly/seasonal heatmaps
-4. [correlation.py](pkgs/analysis/correlation.py) — Cross-seasonal correlations
+4. [analysis_correlation.py](pkgs/analysis/analysis_correlation.py) — Cross-seasonal correlations
 
 ### **"I need to understand measurement quality"**
-1. [gapfinder.py](pkgs/analysis/gapfinder.py) — Where are the gaps?
-2. [eddyproflags.py](pkgs/preprocessing/qaqc/eddyproflags.py) — What does EddyPro say?
-3. [qcf.py](pkgs/preprocessing/qaqc/qcf.py) — Overall quality assessment
-4. [hqflux.py](pkgs/flux/lowres/hqflux/hqflux.py) — Extract only the best data
+1. [analysis_gapfinder.py](pkgs/analysis/analysis_gapfinder.py) — Where are the gaps?
+2. [qc_eddypro_flags.py](pkgs/preprocessing/qaqc/qc_eddypro_flags.py) — What does EddyPro say?
+3. [qc_overall_flag.py](pkgs/preprocessing/qaqc/qc_overall_flag.py) — Overall quality assessment
+4. [flux_hqflux.py](pkgs/flux/lowres/flux_hqflux.py) — Extract only the best data
 
 ### **"I want to compare gap-filling methods"**
-1. [comparison.py](pkgs/gapfilling/comparison.py) — Benchmark all methods
-2. [randomforest_ts.py](pkgs/gapfilling/randomforest_ts.py) — Random Forest details
-3. [xgboost_ts.py](pkgs/gapfilling/xgboost_ts.py) — XGBoost details
-4. [mds_comparison.py](pkgs/gapfilling/mds_comparison.py) — MDS variants
+1. [gapfill_comparison.py](pkgs/gapfilling/gapfill_comparison.py) — Benchmark all methods
+2. [gapfill_randomforest.py](pkgs/gapfilling/gapfill_randomforest.py) — Random Forest details
+3. [gapfill_xgboost.py](pkgs/gapfilling/gapfill_xgboost.py) — XGBoost details
+4. [gapfill_mds_comparison.py](pkgs/gapfilling/gapfill_mds_comparison.py) — MDS variants
 
 ### **"I'm new to DIIVE"**
 **Start with these beginner-friendly examples:**
 1. [timestamp_sanitizer.py](core/times/timestamp_sanitizer.py) — Data cleaning basics
 2. [heatmap_datetime.py](core/visualization/heatmap_datetime.py) — First visualization
-3. [vpd.py](pkgs/features/vpd.py) — Simple variable creation
-4. [hampel.py](pkgs/preprocessing/outlierdetection/hampel.py) — Basic outlier detection
-5. [randomforest_ts.py](pkgs/gapfilling/randomforest_ts.py) — ML gap-filling
+3. [feature_vpd.py](pkgs/features/feature_vpd.py) — Simple variable creation
+4. [outlier_hampel.py](pkgs/preprocessing/outlierdetection/outlier_hampel.py) — Basic outlier detection
+5. [gapfill_randomforest.py](pkgs/gapfilling/gapfill_randomforest.py) — ML gap-filling
 
 ---
 
@@ -244,4 +245,4 @@
 
 - [**EXAMPLE_DATASET.md**](EXAMPLE_DATASET.md) — Detailed documentation of the example data
 - [**README.md**](README.md) — Examples overview and quick start
-- [**run_all_examples.py**](run_all_examples.py) — Run all 58 examples in parallel
+- [**run_all_examples.py**](run_all_examples.py) — Run all examples in parallel (user can execute for full validation)

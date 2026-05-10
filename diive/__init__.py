@@ -2,7 +2,7 @@ from diive.configs.exampledata import load_exampledata_parquet as load_exampleda
 from diive.configs.exampledata import load_exampledata_parquet_lae as load_exampledata_parquet_lae
 from diive.core.dfun.frames import transform_yearmonth_matrix_to_longform as transform_yearmonth_matrix_to_longform
 from diive.core.dfun.stats import sstats as sstats
-from diive.core.io.filereader import ReadFileType as readfiletype
+from diive.core.io.filereader import ReadFileType as read_file_type
 from diive.core.io.filereader import search_files as search_files
 from diive.core.io.files import load_parquet as load_parquet
 from diive.core.io.files import save_parquet as save_parquet
@@ -44,16 +44,16 @@ from diive.pkgs.analysis.seasonaltrend import SeasonalTrendDecomposition
 from diive.pkgs.analysis.seasonaltrend import SeasonalTrendDecomposition as seasonaltrend
 from diive.pkgs.features.variables import TimeSince as TimeSince
 from diive.pkgs.features.variables import TimeSince as timesince
-from diive.pkgs.features.variables.air import DaytimeNighttimeFlag as DaytimeNighttimeFlag
-from diive.pkgs.features.variables.air import add_impulse_noise as add_impulse_noise
 from diive.pkgs.features.variables.air import aerodynamic_resistance as aerodynamic_resistance
-from diive.pkgs.features.variables.air import daytime_nighttime_flag_from_swinpot as daytime_nighttime_flag_from_swinpot
 from diive.pkgs.features.variables.air import dry_air_density as dry_air_density
-from diive.pkgs.features.variables.air import et_from_le as et_from_le
-from diive.pkgs.features.variables.air import generate_noisy_timeseries as generate_noisy_timeseries
-from diive.pkgs.features.variables.air import lagged_variants as lagged_variants
-from diive.pkgs.features.variables.air import latent_heat_of_vaporization as latent_heat_of_vaporization
 from diive.pkgs.features.variables.conversions import air_temp_from_sonic_temp as air_temp_from_sonic_temp
+from diive.pkgs.features.variables.conversions import et_from_le as et_from_le
+from diive.pkgs.features.variables.conversions import latent_heat_of_vaporization as latent_heat_of_vaporization
+from diive.pkgs.features.variables.daynightflag import DaytimeNighttimeFlag as DaytimeNighttimeFlag
+from diive.pkgs.features.variables.daynightflag import daytime_nighttime_flag_from_swinpot as daytime_nighttime_flag_from_swinpot
+from diive.pkgs.features.variables.laggedvariants import lagged_variants as lagged_variants
+from diive.pkgs.features.variables.noise import add_impulse_noise as add_impulse_noise
+from diive.pkgs.features.variables.noise import generate_noisy_timeseries as generate_noisy_timeseries
 from diive.pkgs.features.variables.potentialradiation import potrad as potrad
 from diive.pkgs.features.variables.potentialradiation import potrad_eot as potrad_eot
 from diive.pkgs.features.variables.vpd import calc_vpd_from_ta_rh as calc_vpd_from_ta_rh
@@ -130,7 +130,7 @@ __all__ = [
     # Configs
     'load_exampledata_parquet',
     'load_exampledata_parquet_lae',
-    'readfiletype',
+    'read_file_type',
     'search_files',
 
     # Core: DataFrames & Statistics
