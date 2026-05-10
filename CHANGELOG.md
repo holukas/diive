@@ -9,42 +9,96 @@
 
 ### Major Changes
 
-- **Standalone FeatureEngineer** — Separated feature engineering from gap-filling. 8-stage pipeline (lag→rolling→diff→EMA→poly→STL→timestamps→record_number). Pre-engineer once, reuse across models. ⚠️ **Breaking change:** RandomForestTS/XGBoostTS now accept only pre-engineered data.
-- **Long-term XGBoost gap-filling** — Added `level41_longterm_xgboost()` with same architecture as Random Forest for fair comparison.
+- **Standalone FeatureEngineer** — Separated feature engineering from gap-filling. 8-stage pipeline (
+  lag→rolling→diff→EMA→poly→STL→timestamps→record_number). Pre-engineer once, reuse across models. ⚠️ **Breaking change:
+  ** RandomForestTS/XGBoostTS now accept only pre-engineered data.
+- **Long-term XGBoost gap-filling** — Added `level41_longterm_xgboost()` with same architecture as Random Forest for
+  fair comparison.
 - **SHAP-based feature reduction** — Replaced permutation importance with SHAP values.
-- **FluxMDS memory optimization** — 4.0x speedup through vectorization + in-place updates. Eliminated DataFrame copies at each quality level. Results bit-identical to original reference implementation.
-- **Harmonic spectral analysis** — Two examples showing CO₂ flux periodicities (24h photosynthesis, 12h/8h harmonics, 5h noise) with frequency interpretation for gap-filling validation.
-- **Time series analysis** — Refactored DailyCorrelation, StratifiedAnalysis, GapFinder, GridAggregator, FindOptimumRange, percentiles101, SeasonalTrendDecomposition.
-- **Examples reorganization & documentation** — Restructured 58 examples to mirror `diive/pkgs` and `diive/core` architecture (18 organized folders). Created 3 comprehensive user-facing guides:
-  - **`examples/CATALOG.md`** — Find examples by use case/workflow (8 categories, difficulty levels, cross-referenced)
-  - **`examples/EXAMPLE_DATASET.md`** — Complete dataset documentation (37 variables, gaps %, availability, quality notes, USTAR scenarios)
-  - **17 category READMEs** — One per folder with file descriptions and usage examples
-  - Fixed critical import issues: lazy imports for circular dependencies, corrected export names in __init__.py files
-- **Examples consolidation** — 58 examples across organized folders (was 107 across 52 files). Consolidated all RandomForestTS/XGBoostTS examples to `pkgs/gapfilling/`. RandomForestTS includes: randomforest_ts.py (production settings + heatmap + cumulative flux). XGBoostTS includes: xgboost_ts.py (harmonized with RF for direct comparison). Three-way gap-filling comparison: `examples/pkgs/gapfilling/comparison.py` comparing MDS vs Random Forest vs XGBoost. All 10 outlier detection methods have examples in `pkgs/preprocessing/outlierdetection/` (9 files). **EddyPro quality flags:** Examples in `pkgs/preprocessing/qaqc/eddyproflags.py` demonstrating all 7 EddyPro flag extraction functions (signal strength, wind steadiness, angle of attack, VM97 raw data tests, flux base variable completeness, SSITC).
-- **Harmonized ML gap-filling examples** — RandomForest and XGBoost examples now use identical data (2020), identical 8-stage feature engineering, identical workflow for direct comparison. Both include heatmap (observed vs gap-filled) + cumulative flux visualizations. Results: RF R²=0.8185, XGB R²=0.8141 (comparable, different architectures).
-- **Simplified gap-filling docstrings** — Refactored `FluxMDS`, `RandomForestTS`, `XGBoostTS`, `linear_interpolation`, `prediction_scores` docstrings. Removed implementation details/optimization claims, focused on functionality, added example file references for better discoverability.
-- **Generalized hyperparameter optimization** — Refactored `OptimizeParamsRFTS` → `OptimizeParamsTS` for model-agnostic design. Works with any sklearn-compatible regressor (RandomForest, XGBoost, custom). Moved to `diive/core/ml/optimization.py`. Includes `report_optimization()` method with tested parameter ranges, best parameters, performance metrics (R², MAE, RMSE), top N parameter combinations, parameter sensitivity, and production-ready code snippet with auto-detected wrapper class.
+- **FluxMDS memory optimization** — 4.0x speedup through vectorization + in-place updates. Eliminated DataFrame copies
+  at each quality level. Results bit-identical to original reference implementation.
+- **Harmonic spectral analysis** — Two examples showing CO₂ flux periodicities (24h photosynthesis, 12h/8h harmonics, 5h
+  noise) with frequency interpretation for gap-filling validation.
+- **Time series analysis** — Refactored DailyCorrelation, StratifiedAnalysis, GapFinder, GridAggregator,
+  FindOptimumRange, percentiles101, SeasonalTrendDecomposition.
+- **Examples reorganization & documentation** — Restructured 58 examples to mirror `diive/pkgs` and `diive/core`
+  architecture (18 organized folders). Created 3 comprehensive user-facing guides:
+    - **`examples/CATALOG.md`** — Find examples by use case/workflow (8 categories, difficulty levels, cross-referenced)
+    - **`examples/EXAMPLE_DATASET.md`** — Complete dataset documentation (37 variables, gaps %, availability, quality
+      notes, USTAR scenarios)
+    - **17 category READMEs** — One per folder with file descriptions and usage examples
+    - Fixed critical import issues: lazy imports for circular dependencies, corrected export names in __init__.py files
+- **Examples consolidation** — 58 examples across organized folders (was 107 across 52 files). Consolidated all
+  RandomForestTS/XGBoostTS examples to `pkgs/gapfilling/`. RandomForestTS includes: randomforest_ts.py (production
+  settings + heatmap + cumulative flux). XGBoostTS includes: xgboost_ts.py (harmonized with RF for direct comparison).
+  Three-way gap-filling comparison: `examples/pkgs/gapfilling/comparison.py` comparing MDS vs Random Forest vs XGBoost.
+  All 10 outlier detection methods have examples in `pkgs/preprocessing/outlierdetection/` (9 files). **EddyPro quality
+  flags:** Examples in `pkgs/preprocessing/qaqc/eddyproflags.py` demonstrating all 7 EddyPro flag extraction functions (
+  signal strength, wind steadiness, angle of attack, VM97 raw data tests, flux base variable completeness, SSITC).
+- **Harmonized ML gap-filling examples** — RandomForest and XGBoost examples now use identical data (2020), identical
+  8-stage feature engineering, identical workflow for direct comparison. Both include heatmap (observed vs gap-filled) +
+  cumulative flux visualizations. Results: RF R²=0.8185, XGB R²=0.8141 (comparable, different architectures).
+- **Simplified gap-filling docstrings** — Refactored `FluxMDS`, `RandomForestTS`, `XGBoostTS`, `linear_interpolation`,
+  `prediction_scores` docstrings. Removed implementation details/optimization claims, focused on functionality, added
+  example file references for better discoverability.
+- **Generalized hyperparameter optimization** — Refactored `OptimizeParamsRFTS` → `OptimizeParamsTS` for model-agnostic
+  design. Works with any sklearn-compatible regressor (RandomForest, XGBoost, custom). Moved to
+  `diive/core/ml/optimization.py`. Includes `report_optimization()` method with tested parameter ranges, best
+  parameters, performance metrics (R², MAE, RMSE), top N parameter combinations, parameter sensitivity, and
+  production-ready code snippet with auto-detected wrapper class.
 - **Outlier detection improvements:**
-  - **Class consolidation:** Unified `LocalOutlierFactorAllData` and `LocalOutlierFactorDaytimeNighttime` into single `LocalOutlierFactor` class with `separate_daytime_nighttime: bool` mode parameter (follows Hampel consolidation pattern). Location parameters (lat, lon, utc_offset) now optional. Old class names remain as backward-compatible aliases.
-  - **Hampel API refactoring:** Renamed `HampelDaytimeNighttime` → `Hampel` with clearer parameter API. Primary `n_sigma` parameter with optional `n_sigma_daytime`/`n_sigma_nighttime` overrides. Old class name remains as alias.
-  - **LocalSD code quality:** Fixed 4 critical bugs (redundant initialization, unsafe parameter checks, missing else branch, copy-paste error). 7 code quality improvements (safer type checks, simplified logic, removed dead code, improved type hints).
-  - **ManualRemoval improvements:** Fixed 4 code quality issues (redundant initialization, docstring corrections, improved index operations). Added dedicated examples for single-date and date-range removal workflows.
-  - **TrimLow consolidation:** Moved example from source to `examples/outlierdetection/trim.py` (2 examples). Fixed redundant initialization, unused variables, added input validation. Added exports to `diive/__init__.py`.
-  - **Z-Score consolidation:** Moved examples from source to `examples/outlierdetection/zscore.py` (3 examples: global, day/night, rolling). Fixed redundant initialization, added input validation. Improved docstrings for all 3 z-score classes. Added exports to `diive/__init__.py`.
-  - **Examples consolidation:** All 10 main outlier detection methods now have consolidated examples (20 total: absolutelimits 2, hampel 2, incremental 1, localsd 2, lof 2, manualremoval 2, stepwise 1, trim 2, zscore 3). Added StepwiseOutlierDetection orchestration example demonstrating how to chain multiple detection methods sequentially.
+    - **Class consolidation:** Unified `LocalOutlierFactorAllData` and `LocalOutlierFactorDaytimeNighttime` into single
+      `LocalOutlierFactor` class with `separate_daytime_nighttime: bool` mode parameter (follows Hampel consolidation
+      pattern). Location parameters (lat, lon, utc_offset) now optional. Old class names remain as backward-compatible
+      aliases.
+    - **Hampel API refactoring:** Renamed `HampelDaytimeNighttime` → `Hampel` with clearer parameter API. Primary
+      `n_sigma` parameter with optional `n_sigma_daytime`/`n_sigma_nighttime` overrides. Old class name remains as
+      alias.
+    - **LocalSD code quality:** Fixed 4 critical bugs (redundant initialization, unsafe parameter checks, missing else
+      branch, copy-paste error). 7 code quality improvements (safer type checks, simplified logic, removed dead code,
+      improved type hints).
+    - **ManualRemoval improvements:** Fixed 4 code quality issues (redundant initialization, docstring corrections,
+      improved index operations). Added dedicated examples for single-date and date-range removal workflows.
+    - **TrimLow consolidation:** Moved example from source to `examples/outlierdetection/trim.py` (2 examples). Fixed
+      redundant initialization, unused variables, added input validation. Added exports to `diive/__init__.py`.
+    - **Z-Score consolidation:** Moved examples from source to `examples/outlierdetection/zscore.py` (3 examples:
+      global, day/night, rolling). Fixed redundant initialization, added input validation. Improved docstrings for all 3
+      z-score classes. Added exports to `diive/__init__.py`.
+    - **Examples consolidation:** All 10 main outlier detection methods now have consolidated examples (20 total:
+      absolutelimits 2, hampel 2, incremental 1, localsd 2, lof 2, manualremoval 2, stepwise 1, trim 2, zscore 3). Added
+      StepwiseOutlierDetection orchestration example demonstrating how to chain multiple detection methods sequentially.
 - **Test speedup** — RandomForest gap-filling tests 60-70% faster (2.8s vs 6s).
+- **Examples restructure:** Split setto.py into 3 focused examples (set_exact_values, setto_value, setto_threshold).
+  Converted all 9 outlier detection methods + 2 QA/QC examples to Sphinx Gallery format (executable Python with # %%
+  sections instead of monolithic functions). Renamed with consistent prefixes: correction_*, outlier_*, qc_*. Updated 18
+  example file references across run_all_examples.py, 3 category READMEs, CATALOG.md, and 6 docstrings in source code.
+  Examples now 20 preprocessing files (was 18), 64 total examples (was 62). Sphinx Gallery format is version-control
+  friendly (pure Python, readable diffs) and auto-executable for documentation generation.
 
 ### New Classes & Functions
-- **Outlier detection:** `LocalOutlierFactor` (unified class with global/day-night modes, replacing LocalOutlierFactorAllData/LocalOutlierFactorDaytimeNighttime); `Hampel` (refactored with clearer API, replacing HampelDaytimeNighttime as primary name); `ManualRemoval` (explicit data point/range removal); `TrimLow` (symmetric outlier removal using trimmed mean approach); `zScore` (global z-score threshold), `zScoreDaytimeNighttime` (z-score with day/night separation), `zScoreRolling` (rolling z-score with adaptive threshold)
-- **EddyPro quality flags:** `flag_signal_strength_eddypro_test()`, `flag_steadiness_horizontal_wind_eddypro_test()`, `flag_angle_of_attack_eddypro_test()`, `flags_vm97_eddypro_fluxnetfile_tests()`, `flag_fluxbasevar_completeness_eddypro_test()`, `flag_ssitc_eddypro_test()` (Vickers & Mahrt 1997 raw data quality testing); private helper `_extract_and_convert_flag_from_multidigit()` consolidates multi-digit flag extraction logic
+
+- **Outlier detection:** `LocalOutlierFactor` (unified class with global/day-night modes, replacing
+  LocalOutlierFactorAllData/LocalOutlierFactorDaytimeNighttime); `Hampel` (refactored with clearer API, replacing
+  HampelDaytimeNighttime as primary name); `ManualRemoval` (explicit data point/range removal); `TrimLow` (symmetric
+  outlier removal using trimmed mean approach); `zScore` (global z-score threshold), `zScoreDaytimeNighttime` (z-score
+  with day/night separation), `zScoreRolling` (rolling z-score with adaptive threshold)
+- **EddyPro quality flags:** `flag_signal_strength_eddypro_test()`, `flag_steadiness_horizontal_wind_eddypro_test()`,
+  `flag_angle_of_attack_eddypro_test()`, `flags_vm97_eddypro_fluxnetfile_tests()`,
+  `flag_fluxbasevar_completeness_eddypro_test()`, `flag_ssitc_eddypro_test()` (Vickers & Mahrt 1997 raw data quality
+  testing); private helper `_extract_and_convert_flag_from_multidigit()` consolidates multi-digit flag extraction logic
 - **Binary data processing:** `get_encoded_value_from_int`, `get_encoded_value_series` (bit extraction)
-- **Data corrections:** `set_exact_values_to_missing`, `setto_value`, `setto_threshold`, `MeasurementOffsetFromReplicate`, `remove_relativehumidity_offset`, `remove_radiation_zero_offset`, `WindDirOffset`
-- **Variable creation:** `aerodynamic_resistance`, `dry_air_density`, `air_temp_from_sonic_temp`, `latent_heat_of_vaporization`, `et_from_le`, `DaytimeNighttimeFlag`, `lagged_variants`, `generate_noisy_timeseries`, `add_impulse_noise`, `potrad`, `potrad_eot`, `TimeSince`
+- **Data corrections:** `set_exact_values_to_missing`, `setto_value`, `setto_threshold`,
+  `MeasurementOffsetFromReplicate`, `remove_relativehumidity_offset`, `remove_radiation_zero_offset`, `WindDirOffset`
+- **Variable creation:** `aerodynamic_resistance`, `dry_air_density`, `air_temp_from_sonic_temp`,
+  `latent_heat_of_vaporization`, `et_from_le`, `DaytimeNighttimeFlag`, `lagged_variants`, `generate_noisy_timeseries`,
+  `add_impulse_noise`, `potrad`, `potrad_eot`, `TimeSince`
 - **Eddy covariance:** `FluxDetectionLimit`, `MaxCovariance`, `WindRotation2D`
 - **Curve fitting:** `BinFitterCP` (polynomial fits with confidence intervals)
-- **Flux analysis:** Enhanced `analyze_highest_quality_flux()`, `RandomUncertaintyPAS20` reporting/plotting, `UstarDetectionMPT`, `UstarThresholdConstantScenarios`, `FlagMultipleConstantUstarThresholds`
+- **Flux analysis:** Enhanced `analyze_highest_quality_flux()`, `RandomUncertaintyPAS20` reporting/plotting,
+  `UstarDetectionMPT`, `UstarThresholdConstantScenarios`, `FlagMultipleConstantUstarThresholds`
 
 ### API & Visualization
+
 - **Plotting API:** All visualization aliases now use `plot_` prefix (breaking change)
 - **HeatmapXYZ:** Refactored to accept pre-aggregated input
 - **ScatterXY:** Enhanced with color-coding, bin aggregation, trend overlays
@@ -187,7 +241,8 @@
 * (25) `tests.test_outlierdetection.TestOutlierDetection.test_hampel_filter_daytime_nighttime_doublediff`
 * (26) `tests.test_outlierdetection.TestOutlierDetection.test_hampel_filter_basic`
 * (27) `tests.test_outlierdetection.TestOutlierDetection.test_hampel_filter`
-* (28) `diive.pkgs.preprocessing.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection.flag_outliers_hampel_dtnt_test`
+* (28)
+  `diive.pkgs.preprocessing.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection.flag_outliers_hampel_dtnt_test`
 * (29) `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain.level32_flag_outliers_hampel_dtnt_test`
 * (30) `tests.test_time.TestTime.test_vectorize_with_default_parameters`
 * (31) `notebooks/GapFilling/LongTermRandomForestGapFilling.ipynb`
@@ -998,7 +1053,8 @@ With this update, the `FluxProcessingChain` class can handle various data proces
 
 ### Additions
 
-- Added new function to apply quality flags to certain time periods only (`diive.pkgs.preprocessing.qaqc.flags.restrict_application`)
+- Added new function to apply quality flags to certain time periods only (
+  `diive.pkgs.preprocessing.qaqc.flags.restrict_application`)
 - Added to option to restrict the application of the angle-of-attack flag to certain time periods (
   `diive.pkgs.fluxprocessingchain.level2_qualityflags.FluxQualityFlagsEddyPro.angle_of_attack_test`)
 
@@ -1040,7 +1096,8 @@ time series. The bin with most counts is highlighted orange.*
   `diive.core.base.flagbase.FlagBase.defaultplot`)
 - Added daytime/nighttime histogram plots to (`diive.pkgs.preprocessing.outlierdetection.hampel.HampelDaytimeNighttime`)
 - Added daytime/nighttime histogram plots to (`diive.pkgs.preprocessing.outlierdetection.zscore.zScoreDaytimeNighttime`)
-- Added daytime/nighttime histogram plots to (`diive.pkgs.preprocessing.outlierdetection.lof.LocalOutlierFactorDaytimeNighttime`)
+- Added daytime/nighttime histogram plots to (
+  `diive.pkgs.preprocessing.outlierdetection.lof.LocalOutlierFactorDaytimeNighttime`)
 - Added daytime/nighttime histogram plots to (
   `diive.pkgs.preprocessing.outlierdetection.absolutelimits.AbsoluteLimitsDaytimeNighttime`)
 - Added option to calculate the z-score with sign instead of absolute (`diive.core.funcs.funcs.zscore`)
@@ -1184,7 +1241,8 @@ time series. The bin with most counts is highlighted orange.*
     - refactored code
     - beautified console output
 - When correcting for relative humidity values above 100%, the maximum of the corrected time series is now set to 100,
-  after the (daily) offset was removed (`diive.pkgs.preprocessing.corrections.offsetcorrection.remove_relativehumidity_offset`)
+  after the (daily) offset was removed (
+  `diive.pkgs.preprocessing.corrections.offsetcorrection.remove_relativehumidity_offset`)
 - During feature reduction in machine learning regressors, features with permutation importance < 0 are now always
   removed (`diive.core.ml.common.MlRegressorGapFillingBase._remove_rejected_features`)
 - Changed default parameters for quick random forest gap-filling (`diive.pkgs.gapfilling.randomforest_ts.QuickFillRFTS`)
@@ -1750,7 +1808,8 @@ the updated `FluxProcessingChain`notebook (`notebooks/FluxProcessingChain/FluxPr
   a first time and then repeated until no more outliers are found. Each iteration outputs a flag. This is now used in
   the `StepwiseOutlierDetection` and thus the flux processing chain Level-3.2 (outlier detection) and the meteoscreening
   in `StepwiseMeteoScreeningDb` (not yet checked in this update). To repeat an outlier method use the `repeat` keyword
-  arg (see the `FluxProcessingChain` notebook for examples).(`diive.pkgs.preprocessing.outlierdetection.repeater.repeater`)
+  arg (see the `FluxProcessingChain` notebook for examples).(
+  `diive.pkgs.preprocessing.outlierdetection.repeater.repeater`)
 - Added new function `filter_strings_by_elements`: Returns a list of strings from list1 that contain all of the elements
   in list2.(`core.funcs.funcs.filter_strings_by_elements`)
 - Added new function `flag_steadiness_horizontal_wind_eddypro_test`: Create flag for steadiness of horizontal wind u
