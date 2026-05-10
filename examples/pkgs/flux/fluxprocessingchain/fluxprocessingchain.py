@@ -156,166 +156,68 @@ def _example():
     # --------------------
     FEATURES = ["TA_T1_47_1_gfXG", "SW_IN_T1_47_1_gfXG", "VPD_T1_47_1_gfXG"]
 
+    # Shared gap-filling parameters (RF and XGB)
+    GAPFILLING_PARAMS = {
+        'features': FEATURES,
+        # Feature Engineering (8-stage pipeline)
+        'features_lag': [-2, -1],
+        'features_lag_stepsize': 1,
+        'features_lag_exclude_cols': None,
+        'features_rolling': [2, 4, 12, 24, 48],
+        'features_rolling_exclude_cols': None,
+        'features_rolling_stats': ['median', 'min', 'max', 'std', 'q25', 'q75'],
+        'features_diff': [1, 2],
+        'features_diff_exclude_cols': None,
+        'features_ema': [6, 12, 24, 48],
+        'features_ema_exclude_cols': None,
+        'features_poly_degree': 2,
+        'features_poly_exclude_cols': None,
+        'features_stl': True,
+        'features_stl_method': 'stl',
+        'features_stl_seasonal_period': 48,
+        'features_stl_exclude_cols': None,
+        'features_stl_components': ['trend', 'seasonal', 'residual'],
+        'vectorize_timestamps': True,
+        'add_continuous_record_number': True,
+        'sanitize_timestamp': True,
+        'reduce_features': True,
+        'verbose': True,
+        'n_jobs': -1,
+        'random_state': 42,
+    }
+
     # --------------------
     # Level-4.1: Random Forest Gap-Filling
     # --------------------
-
     fpc.level41_longterm_random_forest(
-        features=FEATURES,
-        # Feature Engineering (8-stage pipeline)
-        features_lag=[-2, -1],
-        features_lag_stepsize=1,
-        features_lag_exclude_cols=None,
-        features_rolling=[2, 4, 12, 24, 48],
-        features_rolling_exclude_cols=None,
-        features_rolling_stats=['median', 'min', 'max', 'std', 'q25', 'q75'],
-        features_diff=[1, 2],
-        features_diff_exclude_cols=None,
-        features_ema=[6, 12, 24, 48],
-        features_ema_exclude_cols=None,
-        features_poly_degree=2,
-        features_poly_exclude_cols=None,
-        features_stl=True,
-        features_stl_method='stl',
-        features_stl_seasonal_period=48,
-        features_stl_exclude_cols=None,
-        features_stl_components=['trend', 'seasonal', 'residual'],
-        vectorize_timestamps=True,
-        add_continuous_record_number=True,
-        sanitize_timestamp=True,
-        # Gap-filling & model tuning
-        reduce_features=True,
-        verbose=True,
+        **GAPFILLING_PARAMS,
+        # RF-specific hyperparameters
         n_estimators=2,
-        max_depth=None,
+        max_depth=1,
         min_samples_split=5,
         min_samples_leaf=2,
-        n_jobs=-1,
-        random_state=42,
     )
     # model = fpc.level41['long_term_random_forest']['CUT_50']
     # gapfilled = model.gapfilled_
     # scores = model.scores_  # R², MAE, RMSE
     # feature_importance = model.feature_importances_
 
-    # # ---------------------------
-    # # XGBOOST WITH COMPREHENSIVE CO2 FLUX CONFIGURATION
-    # # ---------------------------
-    # # Level-4.1 XGBoost Gap-Filling optimized for CO2 half-hourly flux (NEE) data
-    # # This configuration balances capture of diurnal photosynthetic patterns with
-    # # computational efficiency. XGBoost often outperforms Random Forest on non-linear
-    # # flux responses (light saturation, stomatal conductance).
-    # #
-    # # KEY TUNING FOR CO2 FLUX (30-min resolution):
-    # # - Lag features: Short windows (1-2 steps = 30-60 min) for fast response
-    # # - Rolling windows: 3-24 hours (6-48 steps) for diurnal pattern context
-    # # - Differencing: Order-1 for rate-of-change, helps detect flux transitions
-    # # - EMA: Multi-timescale (3-24 hours) captures memory effects from stomata/photosystem
-    # # - STL: CRITICAL for CO2 - strong daily cycle + seasonal dormancy/growth
-    # # - Timestamps: ESSENTIAL - diurnal photosynthesis is time-of-day dependent
-    # # - Polynomial: Captures non-linear light saturation (Michaelis-Menten kinetics)
-    # #
-    # # Feature count: ~45-50 engineered features
-    # # Typical training time: 2-5 min per year per USTAR scenario
-    # # Expected model R²: 0.65-0.85 depending on site complexity
-    #
-    # fpc.level41_longterm_xgboost(
-    #     features=FEATURES,
-    #
-    #     # ===== FEATURE ENGINEERING PARAMETERS =====
-    #
-    #     # Stage 1: LAG FEATURES (Immediate past context)
-    #     # For CO2: Short lags (1-2 steps = 30-60 min) as flux responds quickly to environment
-    #     features_lag=[-2, -1],  # Past 30-60 min only (no future, no current)
-    #     features_lag_stepsize=1,  # Include every lag (dense temporal context)
-    #     features_lag_exclude_cols=None,  # Lag all input features
-    #
-    #     # Stage 2: ROLLING STATISTICS (Diurnal pattern capture)
-    #     # For CO2: 30-min, 1-hr, 2-hr, 6-hr, 12-hr, 24-hr windows to capture diurnal patterns
-    #     # Window sizes for 30-min data: 2=1hr, 4=2hr, 12=6hr, 24=12hr, 48=24hr
-    #     features_rolling=[2, 4, 12, 24, 48],  # 1hr, 2hr, 6hr, 12hr, 24hr windows
-    #     features_rolling_exclude_cols=None,  # Apply to all input features
-    #     # Advanced rolling stats: Median robust to outliers, min/max/quantiles capture asymmetry
-    #     features_rolling_stats=['median', 'min', 'max', 'std', 'q25', 'q75'],
-    #
-    #     # Stage 3: TEMPORAL DIFFERENCING (Rate of change, flux transitions)
-    #     # For CO2: Order-1 (rate) captures sunrise/sunset transitions and weather events
-    #     # Order-2 (acceleration) helps detect rapid state changes
-    #     features_diff=[1, 2],  # First and second-order differencing
-    #     features_diff_exclude_cols=None,
-    #
-    #     # Stage 4: EXPONENTIAL MOVING AVERAGE (Multi-timescale memory)
-    #     # For CO2: Captures stomatal/photosynthetic adjustment at multiple timescales
-    #     # Spans for 30-min data: 6=3hr, 12=6hr, 24=12hr, 48=24hr
-    #     features_ema=[6, 12, 24, 48],  # 3hr, 6hr, 12hr, 24hr exponential moving averages
-    #     features_ema_exclude_cols=None,
-    #
-    #     # Stage 5: POLYNOMIAL EXPANSION (Non-linear relationships)
-    #     # For CO2: Degree-2 essential for light saturation (Michaelis-Menten curve)
-    #     # Captures photosynthetic saturation and respiratory asymmetry
-    #     features_poly_degree=2,  # Quadratic terms (e.g., Tair², Rg² for saturation)
-    #     features_poly_exclude_cols=None,
-    #
-    #     # Stage 6: STL DECOMPOSITION (Trend/Seasonal separation)
-    #     # For CO2: CRITICAL - separates respiration trend from photosynthetic pattern
-    #     # Daily cycle: photosynthesis (daytime negative NEE), respiration (nighttime positive)
-    #     # Seasonal cycle: dormancy (winter respiration), growth (summer photosynthesis)
-    #     features_stl=True,  # Enable STL decomposition
-    #     features_stl_method='stl',  # Robust LOESS method (handles gaps)
-    #     features_stl_seasonal_period=48,  # 30-min × 48 = 24 hours (daily cycle)
-    #     features_stl_exclude_cols=None,  # Apply to all input features
-    #     features_stl_components=['trend', 'seasonal', 'residual'],  # Extract all
-    #
-    #     # Stage 7: TIMESTAMP FEATURES (Diurnal/Seasonal cycles)
-    #     # For CO2: ESSENTIAL - photosynthesis depends on time-of-day (solar elevation)
-    #     # and season (leaf phenology, dormancy)
-    #     vectorize_timestamps=True,  # Creates ~19 features: year, season, DOY, hour, etc.
-    #
-    #     # Stage 8: SEQUENTIAL RECORD NUMBER (Long-term drift)
-    #     # For CO2: Useful if site shows long-term drift (instrument aging, vegetation change)
-    #     add_continuous_record_number=True,  # 1, 2, 3, ... for drift capture
-    #
-    #     # Data quality preprocessing
-    #     sanitize_timestamp=True,  # Validate timestamps (catch gaps/duplicates)
-    #
-    #     # ===== GAP-FILLING PARAMETERS =====
-    #     reduce_features=True,  # ENABLED: Apply SHAP-based feature selection
-    #     # Selects only important features across all years
-    #     # Reduces feature count from ~45-50 to ~10-20 features
-    #     # Benefits: Faster training, better generalization, smaller models
-    #     # Drawback: Removes potentially useful features
-    #     verbose=True,  # Print progress and model scores
-    #
-    #     # ===== XGBOOST HYPERPARAMETERS =====
-    #     # Tuned for flux data (non-linear, heteroscedastic, with clear diurnal cycle)
-    #
-    #     n_estimators=500,  # 250 boosting rounds (less than Random Forest)
-    #     # XGBoost needs fewer estimators than RF
-    #     # Increase if underfitting (R² too low)
-    #     # Decrease if overfitting (test R² << train R²)
-    #
-    #     max_depth=6,  # Tree depth (shallow, prevents overfitting)
-    #     # Default 6 is good. Increase (7-8) for complex patterns
-    #     # Decrease (4-5) if overfitting
-    #
-    #     learning_rate=0.05,  # Shrinkage parameter (how fast to learn)
-    #     # 0.1 = standard, 0.05 = slower/safer, 0.3 = aggressive
-    #     # Smaller = better generalization, slower training
-    #
-    #     early_stopping_rounds=30,  # Stop if validation doesn't improve for 20 rounds
-    #     # Prevents overfitting, reduces training time
-    #     # Increase (30-50) for more aggressive training
-    #
-    #     n_jobs=-1,  # Use all CPU cores (parallel training)
-    #     random_state=42,  # Reproducibility (same results every run)
-    #     min_child_weight=5,
-    # )
-    # # ===== ACCESS RESULTS =====
-    # # model = fpc.level41['long_term_xgboost']['CUT_50']
-    # # gapfilled_co2 = model.gapfilled_
-    # # scores = model.scores_  # R², MAE, RMSE on test data
-    # # feature_importance = model.feature_importances_  # SHAP importance per feature
-    # # yearly_models = model.results_yearly_  # Per-year model results (dict keyed by year)
+    # --------------------
+    # Level-4.1: XGBoost Gap-Filling
+    # --------------------
+    fpc.level41_longterm_xgboost(
+        **GAPFILLING_PARAMS,
+        # XGB-specific hyperparameters
+        n_estimators=2,  # Demo setting
+        max_depth=1,  # Demo setting
+        learning_rate=0.05,  # Shrinkage parameter
+        early_stopping_rounds=30,  # Stop if validation doesn't improve
+        min_child_weight=5,
+    )
+    # model = fpc.level41['long_term_xgboost']['CUT_50']
+    # gapfilled = model.gapfilled_
+    # scores = model.scores_  # R², MAE, RMSE
+    # feature_importance = model.feature_importances_
     #
     # # fpc.level41_mds(
     # #     swin="SW_IN_POT",
@@ -342,8 +244,8 @@ def _example():
     #
     # # todo get full data
     #
-    # fpc.showplot_gapfilled_heatmap(vmin=-30, vmax=30)
-    # fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{µmol\ CO_2\ m^{-2}}$)', per_year=True)
+    fpc.showplot_gapfilled_heatmap(vmin=-30, vmax=30)
+    fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{µmol\ CO_2\ m^{-2}}$)', per_year=True)
     # fpc.showplot_gapfilled_cumulative(gain=0.02161926, units=r'($\mathrm{g\ C\ m^{-2}}$)', per_year=False)
     #
     # from diive.core.plotting.dielcycle import DielCycle
@@ -849,27 +751,14 @@ def _example_orig():
         verbose=True,  # Print progress and model scores
 
         # ===== XGBOOST HYPERPARAMETERS =====
-        # Tuned for flux data (non-linear, heteroscedastic, with clear diurnal cycle)
+        # Demo settings (similar to Random Forest above for comparison)
 
-        n_estimators=500,  # 250 boosting rounds (less than Random Forest)
-        # XGBoost needs fewer estimators than RF
-        # Increase if underfitting (R² too low)
-        # Decrease if overfitting (test R² << train R²)
-
-        max_depth=6,  # Tree depth (shallow, prevents overfitting)
-        # Default 6 is good. Increase (7-8) for complex patterns
-        # Decrease (4-5) if overfitting
-
-        learning_rate=0.05,  # Shrinkage parameter (how fast to learn)
-        # 0.1 = standard, 0.05 = slower/safer, 0.3 = aggressive
-        # Smaller = better generalization, slower training
-
-        early_stopping_rounds=30,  # Stop if validation doesn't improve for 20 rounds
-        # Prevents overfitting, reduces training time
-        # Increase (30-50) for more aggressive training
-
-        n_jobs=-1,  # Use all CPU cores (parallel training)
-        random_state=42,  # Reproducibility (same results every run)
+        n_estimators=2,  # Boosting rounds (demo setting)
+        max_depth=1,  # Tree depth (demo setting)
+        learning_rate=0.05,  # Shrinkage parameter
+        early_stopping_rounds=30,  # Stop if validation doesn't improve
+        n_jobs=-1,  # Use all CPU cores
+        random_state=42,  # Reproducibility
         min_child_weight=5,
     )
     # ===== ACCESS RESULTS =====

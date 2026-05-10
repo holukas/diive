@@ -153,9 +153,9 @@ fpc.filteredseries_level31_qcf     # After Level-3.1
 
 ## Gap-Filling Details
 
-All three gap-filling methods (Random Forest, XGBoost, MDS) use the same 8-stage feature engineering pipeline. The difference is in how the model uses these features.
+Random Forest and XGBoost both use the same 8-stage feature engineering pipeline. MDS doesn't use feature engineering—it matches records based on meteorological similarity instead.
 
-### Feature Engineering (8 Stages, Shared by All Methods)
+### Feature Engineering (8 Stages: Random Forest & XGBoost)
 
 1. **Lag features** (`features_lag=[-2, -1]`): Past 30-60 min context
    - Step size 1 means use every timestep, not every 2nd
