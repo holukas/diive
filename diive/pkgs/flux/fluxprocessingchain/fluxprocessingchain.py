@@ -508,8 +508,8 @@ class FluxProcessingChain:
                 series_ngf = series_ngf.loc[:, ~series_ngf.columns.duplicated()].copy()
                 series_ngf = series_ngf.squeeze()
 
-            hm = HeatmapDateTime(ax=ax_ngf, series=series_ngf, vmin=vmin, vmax=vmax).plot()
-            hm = HeatmapDateTime(ax=ax_gf, series=gfvars[g], vmin=vmin, vmax=vmax).plot()
+            HeatmapDateTime(series=series_ngf).plot(ax=ax_ngf, vmin=vmin, vmax=vmax)
+            HeatmapDateTime(series=gfvars[g]).plot(ax=ax_gf, vmin=vmin, vmax=vmax)
             fig.tight_layout()
             fig.show()
 

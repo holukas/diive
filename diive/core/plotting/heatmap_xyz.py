@@ -39,6 +39,7 @@ import numpy as np
 import pandas as pd
 
 from diive.core.plotting.heatmap_base import HeatmapBase
+from diive.core.plotting.styles import LightTheme as theme
 
 
 class HeatmapXYZ(HeatmapBase):
@@ -73,35 +74,30 @@ class HeatmapXYZ(HeatmapBase):
                  xticklabels: list = None,
                  ytickpos: list = None,
                  yticklabels: list = None,
-                 **kwargs):
-        """Creates the heatmap object and prepares the data grid.
+                 verbose: bool = False):
+        """Prepare 2D grid data for heatmap plotting (Phase 1 of two-phase design).
 
         Args:
-            x: Series of x-coordinates (becomes the column axis after pivoting).
-               Must have a non-``None`` name that is unique across x, y, and z.
-               The name is used as the x-axis label when ``xlabel`` is *None*.
-            y: Series of y-coordinates (becomes the row axis after pivoting).
-               Same naming requirements as ``x``.
+            x: Series of x-coordinates (becomes column axis after pivoting).
+               Must have a non-``None`` name unique across x, y, z.
+            y: Series of y-coordinates (becomes row axis after pivoting).
+               Must have a non-``None`` name unique across x, y, z.
             z: Series of cell values mapped to colour.
-               Same naming requirements as ``x``.
-            xlabel: x-axis label.  When *None* ``x.name`` is used.
-            ylabel: y-axis label.  When *None* ``y.name`` is used.
-            zlabel: Colorbar label.  When *None* ``z.name`` is used.
-            xtickpos: Explicit x-axis tick positions.  *None* = auto.
-            xticklabels: Tick labels matching ``xtickpos``.  Ignored when
-                         ``xtickpos`` is *None*.
-            ytickpos: Explicit y-axis tick positions.  *None* = auto.
-            yticklabels: Tick labels matching ``ytickpos``.  Ignored when
-                         ``ytickpos`` is *None*.
-            **kwargs: All keyword arguments accepted by
-                      :class:`~diive.core.plotting.heatmap_base.HeatmapBase`,
-                      e.g. ``figsize``, ``cmap``, ``vmin``/``vmax``,
-                      ``show_values``, ``verbose``.
+               Must have a non-``None`` name unique across x, y, z.
+            xlabel: x-axis label. If None, uses ``x.name``.
+            ylabel: y-axis label. If None, uses ``y.name``.
+            zlabel: Colorbar label. If None, uses ``z.name``.
+            xtickpos: Explicit x-axis tick positions (None = auto).
+            xticklabels: Tick labels matching xtickpos (ignored if xtickpos is None).
+            ytickpos: Explicit y-axis tick positions (None = auto).
+            yticklabels: Tick labels matching ytickpos (ignored if ytickpos is None).
+            verbose: Print progress and diagnostic messages. Defaults to False.
 
         Raises:
-            ValueError: If x, y, or z has a ``None`` name.
-            ValueError: If x, y, and z do not all have distinct names.
-            ValueError: If x, y, and z do not have the same length.
+            ValueError: If x, y, or z has None name, non-unique names, or different lengths.
+
+        See Also:
+            plot : Render the heatmap with matplotlib styling options
         """
         # Validate Series names before anything else so errors are clear
         if x.name is None or y.name is None or z.name is None:
@@ -120,10 +116,12 @@ class HeatmapXYZ(HeatmapBase):
                 f"(got {len(x)}, {len(y)}, {len(z)})."
             )
 
-        super().__init__(heatmaptype='xyz', **kwargs)
-        self.x = x
-        self.y = y
-        self.z = z
+        super().__init__(heatmaptype='xyz', verbose=verbose)
+
+        # Store input Series for _prepare_data
+        self._x_series = x
+        self._y_series = y
+        self._z_series = z
 
         # Use is None so that an explicit empty string is honoured
         self.xlabel = x.name if xlabel is None else xlabel
@@ -225,10 +223,9 @@ class HeatmapXYZ(HeatmapBase):
 
         Steps:
 
-        1. Combines ``self.x``, ``self.y``, and ``self.z`` into a long-format
-           DataFrame and pivots it so that unique x values form columns and
-           unique y values form rows.  For pre-aggregated input, this is a
-           no-op reshape that creates the required 2-D grid structure.
+        1. Combines input Series into a long-format DataFrame and pivots it so that
+           unique x values form columns and unique y values form rows.  For pre-aggregated
+           input, this is a no-op reshape that creates the required 2-D grid structure.
         2. Extracts the numeric coordinate arrays and the 2-D value matrix.
         3. Computes cell **boundary** arrays for ``pcolormesh`` (which requires
            boundaries, not centres): the median step size across all unique
@@ -240,12 +237,12 @@ class HeatmapXYZ(HeatmapBase):
         with numpy arrays suitable for ``plot_pcolormesh``.
         """
         data = {
-            self.x.name: self.x,
-            self.y.name: self.y,
-            self.z.name: self.z,
+            self._x_series.name: self._x_series,
+            self._y_series.name: self._y_series,
+            self._z_series.name: self._z_series,
         }
         df = pd.DataFrame.from_dict(data, orient='columns')
-        pivot_df = pd.pivot_table(df, index=self.y.name, columns=self.x.name, values=self.z.name)
+        pivot_df = pd.pivot_table(df, index=self._y_series.name, columns=self._x_series.name, values=self._z_series.name)
 
         x_coords = pivot_df.columns.values
         y_coords = pivot_df.index.values
@@ -266,27 +263,99 @@ class HeatmapXYZ(HeatmapBase):
         self.y = y_edges
         self.z = z_values
 
-    def plot(self):
-        """Renders the heatmap and applies axis formatting.
+    def plot(self,
+             ax=None,
+             fig=None,
+             figsize: tuple = None,
+             figdpi: int = 72,
+             title: str = None,
+             vmin: float = None,
+             vmax: float = None,
+             cmap: str = 'RdYlBu_r',
+             cb_digits_after_comma: int = 2,
+             cb_labelsize: float = None,
+             cb_extend: str = 'neither',
+             axlabels_fontsize: float = None,
+             ticks_labelsize: float = None,
+             color_bad: str = 'grey',
+             show_colormap: bool = True,
+             show_values: bool = False,
+             show_values_fontsize: float = None,
+             show_values_n_dec_places: int = 0,
+             show_grid: bool = False):
+        """Render HeatmapXYZ with matplotlib styling (Phase 2 of two-phase design).
 
-        Steps:
+        All styling and presentation parameters go here. Can be called multiple times
+        on the same HeatmapXYZ object to plot on different axes with different styling.
 
-        1. Calls :meth:`~diive.core.plotting.heatmap_base.HeatmapBase.plot_pcolormesh`
-           with ``shading='flat'`` to fill each cell with the colour of its
-           lower-left boundary value.
-        2. If ``show_values=True``, overlays each cell with its numeric z-value
-           via :meth:`~diive.core.plotting.heatmap_base.HeatmapBase.show_vals_in_plot`.
-        3. Applies custom tick positions and labels on x and/or y when
-           ``xtickpos`` / ``ytickpos`` were provided.
-        4. Calls :meth:`~diive.core.plotting.heatmap_base.HeatmapBase.format` to
-           attach the colorbar, set axis labels, and style the spines.
+        Args:
+            ax: Matplotlib axes to plot on. If None, creates new figure and displays it
+            fig: Existing matplotlib Figure. If None and ax is None, creates new figure
+            figsize: Figure size as (width, height) in inches. Only used when ax is None
+            figdpi: Figure DPI. Only used when ax is None. Defaults to 72
+            title: Plot title (auto-generated if None)
+            vmin: Minimum color value (auto from data if None)
+            vmax: Maximum color value (auto from data if None)
+            cmap: Colormap name (default: 'RdYlBu_r')
+            cb_digits_after_comma: Decimal places on colorbar labels (default: 2)
+            cb_labelsize: Font size for colorbar tick labels
+            cb_extend: Colorbar extension arrows ('neither', 'both', 'min', 'max')
+            axlabels_fontsize: Font size for axis labels
+            ticks_labelsize: Font size for tick labels
+            color_bad: Color for NaN cells (default: 'grey')
+            show_colormap: Whether to show colorbar (default: True)
+            show_values: Overlay numeric values on cells (default: False)
+            show_values_fontsize: Font size for value overlay text
+            show_values_n_dec_places: Decimal places for value overlay (default: 0)
+            show_grid: Show gridlines (default: False)
+
+        Returns:
+            None (displays plot if ax=None, otherwise renders on provided axes)
         """
+        from diive.core.plotting.styles import LightTheme as theme
+
+        # Use theme defaults if not provided
+        if cb_labelsize is None:
+            cb_labelsize = theme.AX_LABELS_FONTSIZE
+        if axlabels_fontsize is None:
+            axlabels_fontsize = theme.AX_LABELS_FONTSIZE
+        if ticks_labelsize is None:
+            ticks_labelsize = theme.TICKS_LABELS_FONTSIZE
+        if show_values_fontsize is None:
+            show_values_fontsize = theme.AX_LABELS_FONTSIZE
+
+        # Call parent plot() to create figure/axes and apply styling
+        super().plot(
+            ax=ax,
+            fig=fig,
+            figsize=figsize,
+            figdpi=figdpi,
+            ax_orientation='vertical',  # Not used for XYZ heatmaps, but required by parent
+            title=title,
+            vmin=vmin,
+            vmax=vmax,
+            cmap=cmap,
+            zlabel=self.zlabel,
+            cb_digits_after_comma=cb_digits_after_comma,
+            cb_labelsize=cb_labelsize,
+            cb_extend=cb_extend,
+            axlabels_fontsize=axlabels_fontsize,
+            ticks_labelsize=ticks_labelsize,
+            color_bad=color_bad,
+            show_colormap=show_colormap,
+            show_values=show_values,
+            show_values_fontsize=show_values_fontsize,
+            show_values_n_dec_places=show_values_n_dec_places,
+            show_grid=show_grid
+        )
+
+        # Domain-specific rendering (pcolormesh + formatting)
         self.p = self.plot_pcolormesh(shading='flat')
 
         if self.show_values:
             self.show_vals_in_plot()
 
-        # Use is not None so an explicitly passed empty list is also honoured
+        # Apply custom tick positions and labels if provided
         if self.xtickpos is not None:
             self.ax.set_xticks(self.xtickpos)
             if self.xticklabels is not None:
@@ -301,6 +370,10 @@ class HeatmapXYZ(HeatmapBase):
             ax_xlabel_txt=self.xlabel,
             ax_ylabel_txt=self.ylabel,
         )
+
+        if self.showplot:
+            self.fig.patch.set_facecolor('white')
+            self.fig.show()
 
 
 def _example():

@@ -460,6 +460,44 @@ plotter.plot(ax=axes[1], title='View 2', xlabel='Custom X')
 plotter.plot()  # Creates new figure
 ```
 
+### Refactoring Status (May 2026)
+
+**Completed ✅**
+- HeatmapBase, HeatmapDateTime, HeatmapYearMonth, HeatmapXYZ fully refactored to two-phase design
+- **HexbinPlot refactored to two-phase design** — now follows pattern: __init__() data only, plot() styling
+- Examples: All heatmap examples (plot_heatmap_datetime_basic.py, plot_heatmap_advanced.py) updated
+- Examples: All hexbin examples (plot_hexbin_basic.py, plot_hexbin_advanced.py) updated with non-blocking display
+- Theme imports added to heatmap_datetime.py, heatmap_xyz.py, hexbin.py
+- **All 16 visualization examples PASS** (100% compliance with two-phase design pattern)
+- **Source code fixes:** 
+  - `diive/pkgs/analysis/quantiles.py` — ScatterXY API fixed
+  - `diive/pkgs/flux/fluxprocessingchain/fluxprocessingchain.py` — HeatmapDateTime API fixed (2 calls)
+  - `diive/pkgs/flux/fluxprocessingchain/level31_storagecorrection.py` — HeatmapDateTime API fixed (5 calls)
+
+**Known Issues to Fix (Priority Order)**
+
+1. **Gapfilling examples with old API** (12 example failures)
+   - Files: `examples/pkgs/gapfilling/*.py` and `examples/pkgs/features/feature_*.py`
+   - Issue: Examples use `dv.plot_heatmap_datetime(ax=axes[0], series=...)` instead of correct pattern
+   - Correct pattern: `dv.plot_heatmap_datetime(series=...).plot(ax=axes[0], ...)`
+   - Impact: 12 examples in gapfilling, features modules
+
+2. **Unicode encoding issues** (2 example failures, low priority)
+   - Files: `diive/pkgs/preprocessing/qaqc/qcf.py` (source code issue)
+   - Issue: Windows cp1252 encoding cannot print box-drawing characters
+   - Examples affected: qc_overall_flag.py, qc_eddypro_flags.py
+
+3. **Other failures** (7 unknown, 2 timeouts)
+   - Some examples have unidentified errors requiring individual investigation
+   - 2 examples timeout (likely computationally intensive)
+
+**Test Results (73 examples)**
+- Pass: 48 (65.8%)
+- Fail: 25 (34.2%)
+- Timeout: 2 (2.7%)
+
+Run full scan with: `uv run python examples/run_all_examples.py`
+
 ## Development Workflow
 
 **[CRITICAL] NEVER COMMIT CHANGES.** User commits and stages changes themselves.

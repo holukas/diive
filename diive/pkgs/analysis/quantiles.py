@@ -33,8 +33,7 @@ def percentiles101(series: Series, showplot: bool = True, verbose: bool = True) 
 
     if showplot:
         scatter = ScatterXY(x=percentiles_df['PERCENTILE'],
-                            y=percentiles_df['VALUE'],
-                            title=f"Percentile values: {series.name}")
-        scatter.plot()
+                            y=percentiles_df['VALUE'])
+        scatter.plot(title=f"Percentile values: {series.name}")
 
     return percentiles_df

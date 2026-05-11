@@ -8,6 +8,7 @@ Advanced Hexbin Plots
 Best for: Detailed density visualization with actual values and custom aggregation
 """
 
+import matplotlib.pyplot as plt
 import numpy as np
 import diive as dv
 
@@ -33,17 +34,21 @@ hm = dv.plot_hexbin(
     x=data['Tair_f'],
     y=data['VPD_f'],
     z=data['NEE_CUT_REF_f'],
-    normalize_axes=False,              # Use original data values (not percentile)
-    gridsize=15,                       # Number of hexagons per side
+    normalize_axes=False,              # Data: use original data values (not percentile)
+    gridsize=15,                       # Data: number of hexagons per side
     xlabel='Air temperature (°C)',
     ylabel='Vapor pressure deficit (hPa)',
     zlabel='Mean NEE',
-    cmap='RdYlBu_r',                   # Colormap name
-    reduce_C_function=np.mean,         # Use mean aggregation (not median)
-    show_values=False,                 # Don't show values on hexagons
-    cb_digits_after_comma=0            # Colorbar decimal places
+    reduce_C_function=np.mean          # Data: use mean aggregation (not median)
 )
-hm.show()
+hm.plot(
+    ax=None,                           # Create new figure
+    cmap='RdYlBu_r',                   # Styling: colormap name
+    show_values=False,                 # Styling: don't show values on hexagons
+    cb_digits_after_comma=0            # Styling: colorbar decimal places
+)
+
+plt.show(block=False)
 
 print("Plotted hexbin with absolute values and mean aggregation")
 
@@ -57,18 +62,22 @@ hm = dv.plot_hexbin(
     x=data['Tair_f'],
     y=data['VPD_f'],
     z=data['NEE_CUT_REF_f'],
-    normalize_axes=True,               # Use percentile scale (0-100)
-    gridsize=20,                       # Number of hexagons per side
+    normalize_axes=True,               # Data: use percentile scale (0-100)
+    gridsize=20,                       # Data: number of hexagons per side
     xlabel='Temperature (percentile)',
     ylabel='VPD (percentile)',
     zlabel='Mean NEE',
-    cmap='RdYlBu_r',                   # Colormap name
-    reduce_C_function=np.mean,         # Use mean aggregation
-    show_values=True,                  # Display values on hexagon centers
-    show_values_fontsize=8,            # Font size for overlay values
-    show_values_n_dec_places=0,        # Decimal places in overlay
-    cb_digits_after_comma=1            # Colorbar decimal places
+    reduce_C_function=np.mean          # Data: use mean aggregation
 )
-hm.show()
+hm.plot(
+    ax=None,                           # Create new figure
+    cmap='RdYlBu_r',                   # Styling: colormap name
+    show_values=True,                  # Styling: display values on hexagon centers
+    show_values_fontsize=8,            # Styling: font size for overlay values
+    show_values_n_dec_places=0,        # Styling: decimal places in overlay
+    cb_digits_after_comma=1            # Styling: colorbar decimal places
+)
+
+plt.show(block=False)
 
 print("Plotted hexbin with value overlays on hexagon centers")

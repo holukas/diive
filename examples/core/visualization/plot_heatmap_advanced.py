@@ -29,15 +29,17 @@ series_temp = series_temp.dropna()
 
 hm = dv.plot_heatmap_year_month(
     series=series_temp,
-    ax_orientation="horizontal",       # Months on y-axis, years on x-axis
-    ranks=False,                        # Use actual values (not ranks)
-    show_values=True,                  # Display values on cells
-    zlabel="°C",                        # Colorbar label
-    vmin=None,                         # Auto min
-    vmax=None,                         # Auto max
-    cmap='RdYlBu_r'                    # Colormap
+    ax_orientation="vertical",       # Data computation: months on y-axis, years on x-axis
+    ranks=False                         # Data computation: use actual values (not ranks)
 )
-hm.show()
+hm.plot(
+    ax=None,                            # Create new figure
+    show_values=True,                   # Display values on cells
+    zlabel="°C",                        # Colorbar label
+    vmin=None,                          # Auto min
+    vmax=None,                          # Auto max
+    cmap='RdYlBu_r'                     # Colormap
+)
 
 print("Plotted HeatmapYearMonth with aggregation")
 
@@ -60,37 +62,40 @@ series_le = series_le.loc[locs]
 fig, axes = plt.subplots(1, 3, figsize=(20, 6), constrained_layout=True)
 
 dv.plot_heatmap_datetime(
-    ax=axes[0],
     series=series_nee,
+    ax_orientation="vertical"        # Data: time on y-axis
+).plot(
+    ax=axes[0],                         # Render on first subplot
     zlabel=r"$\mathrm{\mu mol\ CO_2\ m^{-2}\ s^{-1}}$",
-    vmin=-10,                          # Minimum color value
-    vmax=10,                           # Maximum color value
-    ax_orientation="horizontal",       # Time on y-axis
-    show_values=False,                 # Don't show cell values
-    cmap='RdBu_r'                      # Colormap
-).plot()
+    vmin=-10,                           # Minimum color value
+    vmax=10,                            # Maximum color value
+    show_values=False,                  # Don't show cell values
+    cmap='RdBu_r'                       # Colormap
+)
 
 dv.plot_heatmap_datetime(
-    ax=axes[1],
     series=series_tair,
+    ax_orientation="vertical"
+).plot(
+    ax=axes[1],                         # Render on second subplot
     zlabel="°C",
     vmin=-10,
     vmax=30,
-    ax_orientation="horizontal",
     show_values=False,
     cmap='RdYlBu_r'
-).plot()
+)
 
 dv.plot_heatmap_datetime(
-    ax=axes[2],
     series=series_le,
+    ax_orientation="vertical"
+).plot(
+    ax=axes[2],                         # Render on third subplot
     zlabel=r"$\mathrm{W\ m^{-2}}$",
     vmin=0,
     vmax=400,
-    ax_orientation="horizontal",
     show_values=False,
     cmap='YlOrRd'
-).plot()
+)
 
 axes[0].set_title("NEE (CO₂ flux)")
 axes[1].set_title("Air temperature")

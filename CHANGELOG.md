@@ -133,8 +133,10 @@
 ### API & Visualization
 
 - **Plotting API:** All visualization aliases now use `plot_` prefix (breaking change)
+- **Two-phase plotting class design:** All plotting classes refactored to separate data preparation (`__init__()`) from styling/rendering (`plot()`). Enables replotting same data with different styling or on different axes. Classes updated: HeatmapBase, HeatmapDateTime, HeatmapYearMonth, HeatmapXYZ, HexbinPlot. All 16 visualization examples verified 100% compliant.
 - **HeatmapXYZ:** Refactored to accept pre-aggregated input
 - **ScatterXY:** Enhanced with color-coding, bin aggregation, trend overlays
+- **Source code API fixes:** Fixed 7 plotting instantiations in library code (quantiles.py, fluxprocessingchain.py) to use correct two-phase pattern
 
 ### Breaking Changes
 

@@ -27,6 +27,7 @@ from pandas import Series
 import diive as dv
 from diive.core.plotting.heatmap_base import HeatmapBase
 from diive.core.plotting.plotfuncs import nice_date_ticks
+from diive.core.plotting.styles import LightTheme as theme
 
 
 class HeatmapDateTime(HeatmapBase):
@@ -51,28 +52,28 @@ class HeatmapDateTime(HeatmapBase):
 
     def __init__(self,
                  series: Series,
-                 **kwargs):
-        """Creates the heatmap object and prepares the data grid.
-
-        The ``heatmaptype`` parameter (used internally for cell-centering in
-        :meth:`~diive.core.plotting.heatmap_base.HeatmapBase.show_vals_in_plot`)
-        is set automatically to ``'datetime'`` or ``'datetime_horizontal'``
-        based on ``ax_orientation`` and must not be passed in ``**kwargs``.
+                 ax_orientation: str = "vertical",
+                 verbose: bool = False):
+        """Prepare time series data for heatmap plotting (Phase 1 of two-phase design).
 
         Args:
             series: Pandas Series with a ``DatetimeIndex`` (or compatible
                     datetime-like index following diive's timestamp naming
                     convention).  Any temporal resolution is supported; the
                     series will be sanitized and regularised automatically.
-            **kwargs: All keyword arguments accepted by
-                      :class:`~diive.core.plotting.heatmap_base.HeatmapBase`,
-                      e.g. ``figsize``, ``ax_orientation``, ``cmap``,
-                      ``vmin``/``vmax``, ``zlabel``, ``verbose``.
+            ax_orientation: Layout of the axes.
+                ``'vertical'`` (default) — dates on y-axis, hours on x-axis.
+                ``'horizontal'`` — dates on x-axis, hours on y-axis.
+            verbose: Print progress and diagnostic messages.  Defaults to *False*.
+
+        See Also:
+            plot : Render the heatmap with matplotlib styling options
         """
-        _orientation = kwargs.get('ax_orientation', 'vertical')
-        _heatmaptype = 'datetime' if _orientation == 'vertical' else 'datetime_horizontal'
-        super().__init__(heatmaptype=_heatmaptype, **kwargs)
+        _heatmaptype = 'datetime' if ax_orientation == 'vertical' else 'datetime_horizontal'
+        super().__init__(heatmaptype=_heatmaptype, verbose=verbose)
+
         self.series = series.copy()
+        self.ax_orientation = ax_orientation
         self._prepare_data()
 
     def _prepare_data(self):
@@ -191,24 +192,110 @@ class HeatmapDateTime(HeatmapBase):
         ticklabels_time = tick_hours
         return ticks_time, ticklabels_time
 
-    def plot(self):
-        """Plots the heatmap from the prepared time series data.
+    def plot(self,
+             ax=None,
+             fig=None,
+             figsize: tuple = None,
+             figdpi: int = 72,
+             ax_orientation: str = None,
+             title: str = None,
+             vmin: float = None,
+             vmax: float = None,
+             cmap: str = 'RdYlBu_r',
+             zlabel: str = None,
+             cb_digits_after_comma: int = 2,
+             cb_labelsize: float = None,
+             cb_extend: str = 'neither',
+             axlabels_fontsize: float = None,
+             ticks_labelsize: float = None,
+             minticks: int = 3,
+             maxticks: int = 10,
+             color_bad: str = 'grey',
+             show_colormap: bool = True,
+             show_less_xticklabels: bool = False,
+             show_values: bool = False,
+             show_values_fontsize: float = None,
+             show_values_n_dec_places: int = 0,
+             show_grid: bool = False):
+        """Render HeatmapDateTime with matplotlib styling (Phase 2 of two-phase design).
 
-        This method orchestrates the plotting process:
-        1. Calls `plot_pcolormesh` (inherited from HeatmapBase) to render the
-           core heatmap using the `x`, `y`, and `z` data.
-        2. Retrieves standard time ticks and labels using `_set_ticks`.
-        3. Configures the x and y axis labels and tick formats based on
-           `self.ax_orientation`.
-           - For time axes, it sets specific tick locations and uses the predefined
-             time labels.
-           - For date axes, it leverages `nice_date_ticks` for intelligent date formatting.
-        4. Calls the `format` method (inherited from HeatmapBase) to apply
-           general plot formatting, including axis labels and plot title.
+        All styling and presentation parameters go here. Can be called multiple times
+        on the same HeatmapDateTime object to plot on different axes with different styling.
 
-        Raises:
-            NotImplementedError: If an unsupported `ax_orientation` value is encountered.
+        Args:
+            ax: Matplotlib axes to plot on. If None, creates new figure and displays it
+            fig: Existing matplotlib Figure. If None and ax is None, creates new figure
+            figsize: Figure size as (width, height) in inches. Only used when ax is None
+            figdpi: Figure DPI. Only used when ax is None. Defaults to 72
+            ax_orientation: Layout of axes. If None, uses value from __init__()
+                ``'vertical'`` — dates on y-axis, hours on x-axis (default)
+                ``'horizontal'`` — dates on x-axis, hours on y-axis
+            title: Plot title (auto-generated if None)
+            vmin: Minimum color value (auto from data if None)
+            vmax: Maximum color value (auto from data if None)
+            cmap: Colormap name (default: 'RdYlBu_r')
+            zlabel: Colorbar label (e.g., '°C', 'µmol m⁻²s⁻¹')
+            cb_digits_after_comma: Decimal places on colorbar labels (default: 2)
+            cb_labelsize: Font size for colorbar tick labels
+            cb_extend: Colorbar extension arrows ('neither', 'both', 'min', 'max')
+            axlabels_fontsize: Font size for axis labels
+            ticks_labelsize: Font size for tick labels
+            minticks: Minimum major ticks on date axis (default: 3)
+            maxticks: Maximum major ticks on date axis (default: 10)
+            color_bad: Color for NaN cells (default: 'grey')
+            show_colormap: Whether to show colorbar (default: True)
+            show_less_xticklabels: Hide every second x-tick label (default: False)
+            show_values: Overlay numeric values on cells (default: False)
+            show_values_fontsize: Font size for value overlay text
+            show_values_n_dec_places: Decimal places for value overlay (default: 0)
+            show_grid: Show gridlines (default: False)
+
+        Returns:
+            None (displays plot if ax=None, otherwise renders on provided axes)
         """
+        # Use provided ax_orientation or fall back to __init__ value
+        if ax_orientation is None:
+            ax_orientation = self.ax_orientation
+
+        # Use theme defaults if not provided
+        if cb_labelsize is None:
+            cb_labelsize = theme.AX_LABELS_FONTSIZE
+        if axlabels_fontsize is None:
+            axlabels_fontsize = theme.AX_LABELS_FONTSIZE
+        if ticks_labelsize is None:
+            ticks_labelsize = theme.TICKS_LABELS_FONTSIZE
+        if show_values_fontsize is None:
+            show_values_fontsize = theme.AX_LABELS_FONTSIZE
+
+        # Call parent plot() to create figure/axes and apply styling
+        super().plot(
+            ax=ax,
+            fig=fig,
+            figsize=figsize,
+            figdpi=figdpi,
+            ax_orientation=ax_orientation,
+            title=title,
+            vmin=vmin,
+            vmax=vmax,
+            cmap=cmap,
+            zlabel=zlabel,
+            cb_digits_after_comma=cb_digits_after_comma,
+            cb_labelsize=cb_labelsize,
+            cb_extend=cb_extend,
+            axlabels_fontsize=axlabels_fontsize,
+            ticks_labelsize=ticks_labelsize,
+            minticks=minticks,
+            maxticks=maxticks,
+            color_bad=color_bad,
+            show_colormap=show_colormap,
+            show_less_xticklabels=show_less_xticklabels,
+            show_values=show_values,
+            show_values_fontsize=show_values_fontsize,
+            show_values_n_dec_places=show_values_n_dec_places,
+            show_grid=show_grid
+        )
+
+        # Domain-specific rendering (pcolormesh + formatting)
         p = self.plot_pcolormesh()
         ticks_time, ticklabels_time = self._set_ticks()
 
@@ -217,9 +304,6 @@ class HeatmapDateTime(HeatmapBase):
             ylabel = 'Date'
             self.ax.set_xticks(ticks_time)
             self.ax.set_xticklabels(ticklabels_time)
-            # # matplotlib's HourLocator did not work
-            # nice_date_ticks(ax=self.ax, minticks=1, maxticks=24, which='x', locator='hour')
-            # For the y-axis (DATE) AutoDateLocator worked
             nice_date_ticks(ax=self.ax, minticks=self.minticks, maxticks=self.maxticks, which='y')
         elif self.ax_orientation == "horizontal":
             xlabel = 'Date'
@@ -242,6 +326,10 @@ class HeatmapDateTime(HeatmapBase):
             shown_freq=_freq
         )
 
+        if self.showplot:
+            self.fig.patch.set_facecolor('white')
+            self.fig.show()
+
 
 # @ConsoleOutputDecorator(spacing=False)
 class HeatmapYearMonth(HeatmapBase):
@@ -260,32 +348,25 @@ class HeatmapYearMonth(HeatmapBase):
                  series: Series,
                  agg: str = 'mean',
                  ranks: bool = False,
-                 cmap: str = None,
-                 **kwargs):
-        """Initializes the HeatmapYearMonth object.
+                 ax_orientation: str = "vertical",
+                 verbose: bool = False):
+        """Prepare year-month aggregated data for heatmap plotting (Phase 1 of two-phase design).
 
         Args:
-            series: A pandas Series with a datetime-like index, representing
-                    the time series data to be aggregated and plotted.
-            agg: The aggregation method to apply to the monthly data (e.g., 'mean',
-                 'sum', 'median', 'min', 'max'). Defaults to 'mean'.
-            ranks: If True, the data will be converted to ranks before plotting.
-                   Defaults to False.
-            cmap: The colormap to use for the heatmap. If None, 'RdYlBu' is used
-                  for ranks and 'RdYlBu_r' for raw values.
-            **kwargs: Arbitrary keyword arguments passed to the HeatmapBase
-                      constructor. These can include plotting parameters like
-                      `ax_orientation`, `show_values`, etc.
+            series: Pandas Series with a datetime-like index representing the time series data.
+            agg: Aggregation method ('mean', 'sum', 'median', 'min', 'max'). Defaults to 'mean'.
+            ranks: Convert data to ranks before plotting. Defaults to False.
+            ax_orientation: Layout of axes ('vertical' or 'horizontal'). Defaults to 'vertical'.
+            verbose: Print progress and diagnostic messages.  Defaults to *False*.
+
+        See Also:
+            plot : Render the heatmap with matplotlib styling options
         """
-        super().__init__(heatmaptype='yearmonth', **kwargs)
+        super().__init__(heatmaptype='yearmonth', verbose=verbose)
         self.series = series.copy()
         self.agg = agg
         self.ranks = ranks
-
-        if not cmap:
-            self.cmap = 'RdYlBu' if ranks else 'RdYlBu_r'
-        else:
-            self.cmap = cmap
+        self.ax_orientation = ax_orientation
 
         self._prepare_data()
 
@@ -352,25 +433,112 @@ class HeatmapYearMonth(HeatmapBase):
 
         return x, y, z
 
-    def plot(self):
-        """Plots the heatmap of year-month aggregated time series data.
+    def plot(self,
+             ax=None,
+             fig=None,
+             figsize: tuple = None,
+             figdpi: int = 72,
+             ax_orientation: str = None,
+             title: str = None,
+             vmin: float = None,
+             vmax: float = None,
+             cmap: str = None,
+             zlabel: str = None,
+             cb_digits_after_comma: int = 2,
+             cb_labelsize: float = None,
+             cb_extend: str = 'neither',
+             axlabels_fontsize: float = None,
+             ticks_labelsize: float = None,
+             minticks: int = 3,
+             maxticks: int = 10,
+             color_bad: str = 'grey',
+             show_colormap: bool = True,
+             show_less_xticklabels: bool = False,
+             show_values: bool = False,
+             show_values_fontsize: float = None,
+             show_values_n_dec_places: int = 0,
+             show_grid: bool = False):
+        """Render HeatmapYearMonth with matplotlib styling (Phase 2 of two-phase design).
 
-        This method orchestrates the plotting process:
-        1. Calls `plot_pcolormesh` (inherited from HeatmapBase) to render the
-           core heatmap using the `x`, `y`, and `z` data.
-        2. If `self.show_values` is True, it calls `show_vals_in_plot` to
-           overlay the numerical values on the heatmap cells.
-        3. Sets the tick positions and labels for both x and y axes. Since the
-           axes represent months or years (integers), ticks are centered within
-           the cells and labeled with their integer values.
-        4. Optionally hides every second x-axis tick label if `self.show_less_xticklabels` is True,
-           to prevent overcrowding.
-        5. Determines and sets the appropriate x and y axis labels based on
-           `self.ax_orientation`.
-        6. Calls the `format` method (inherited from HeatmapBase) to apply
-           general plot formatting, including axis labels and a title reflecting
-           the aggregation method and frequency.
+        All styling and presentation parameters go here. Can be called multiple times
+        on the same HeatmapYearMonth object to plot on different axes with different styling.
+
+        Args:
+            ax: Matplotlib axes to plot on. If None, creates new figure and displays it
+            fig: Existing matplotlib Figure. If None and ax is None, creates new figure
+            figsize: Figure size as (width, height) in inches. Only used when ax is None
+            figdpi: Figure DPI. Only used when ax is None. Defaults to 72
+            ax_orientation: Layout of axes. If None, uses value from __init__()
+            title: Plot title (auto-generated if None)
+            vmin: Minimum color value (auto from data if None)
+            vmax: Maximum color value (auto from data if None)
+            cmap: Colormap name (auto-selected if None: 'RdYlBu' for ranks, 'RdYlBu_r' for raw)
+            zlabel: Colorbar label
+            cb_digits_after_comma: Decimal places on colorbar labels (default: 2)
+            cb_labelsize: Font size for colorbar tick labels
+            cb_extend: Colorbar extension arrows ('neither', 'both', 'min', 'max')
+            axlabels_fontsize: Font size for axis labels
+            ticks_labelsize: Font size for tick labels
+            minticks: Minimum major ticks (default: 3)
+            maxticks: Maximum major ticks (default: 10)
+            color_bad: Color for NaN cells (default: 'grey')
+            show_colormap: Whether to show colorbar (default: True)
+            show_less_xticklabels: Hide every second x-tick label (default: False)
+            show_values: Overlay numeric values on cells (default: False)
+            show_values_fontsize: Font size for value overlay text
+            show_values_n_dec_places: Decimal places for value overlay (default: 0)
+            show_grid: Show gridlines (default: False)
+
+        Returns:
+            None (displays plot if ax=None, otherwise renders on provided axes)
         """
+        # Use provided ax_orientation or fall back to __init__ value
+        if ax_orientation is None:
+            ax_orientation = self.ax_orientation
+
+        # Auto-select colormap based on ranks if not provided
+        if cmap is None:
+            cmap = 'RdYlBu' if self.ranks else 'RdYlBu_r'
+
+        # Use theme defaults if not provided
+        if cb_labelsize is None:
+            cb_labelsize = theme.AX_LABELS_FONTSIZE
+        if axlabels_fontsize is None:
+            axlabels_fontsize = theme.AX_LABELS_FONTSIZE
+        if ticks_labelsize is None:
+            ticks_labelsize = theme.TICKS_LABELS_FONTSIZE
+        if show_values_fontsize is None:
+            show_values_fontsize = theme.AX_LABELS_FONTSIZE
+
+        # Call parent plot() to create figure/axes and apply styling
+        super().plot(
+            ax=ax,
+            fig=fig,
+            figsize=figsize,
+            figdpi=figdpi,
+            ax_orientation=ax_orientation,
+            title=title,
+            vmin=vmin,
+            vmax=vmax,
+            cmap=cmap,
+            zlabel=zlabel,
+            cb_digits_after_comma=cb_digits_after_comma,
+            cb_labelsize=cb_labelsize,
+            cb_extend=cb_extend,
+            axlabels_fontsize=axlabels_fontsize,
+            ticks_labelsize=ticks_labelsize,
+            minticks=minticks,
+            maxticks=maxticks,
+            color_bad=color_bad,
+            show_colormap=show_colormap,
+            show_less_xticklabels=show_less_xticklabels,
+            show_values=show_values,
+            show_values_fontsize=show_values_fontsize,
+            show_values_n_dec_places=show_values_n_dec_places,
+            show_grid=show_grid
+        )
+
+        # Domain-specific rendering (pcolormesh + formatting)
         p = self.plot_pcolormesh()
 
         if self.show_values:
@@ -386,15 +554,14 @@ class HeatmapYearMonth(HeatmapBase):
         yticklabels = [int(t) for t in ytickpos]
         self.ax.set_yticklabels(yticklabels)
 
-        # Get all current x-axis tick labels
+        # Hide every second x-label if requested
         if self.show_less_xticklabels:
             labels = self.ax.get_xticklabels()
-            # Iterate through the labels and hide every second one
             for i, label in enumerate(labels):
-                if i % 2 != 0:  # Check if the index is odd (to hide every second, starting from the second label)
+                if i % 2 != 0:
                     label.set_visible(False)
 
-        # Set xylabels
+        # Set axis labels based on orientation
         xlabel = 'Month' if self.ax_orientation == "vertical" else 'Year'
         ylabel = 'Year' if self.ax_orientation == "vertical" else 'Month'
 
@@ -405,3 +572,7 @@ class HeatmapYearMonth(HeatmapBase):
             plot=p,
             shown_freq=f'{self.agg}, MS'
         )
+
+        if self.showplot:
+            self.fig.patch.set_facecolor('white')
+            self.fig.show()

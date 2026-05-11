@@ -8,6 +8,7 @@ Basic Hexbin Plot (Percentile)
 Best for: Comparing relationships with standardized axes (0-100 percentile range)
 """
 
+import matplotlib.pyplot as plt
 import diive as dv
 
 # %%
@@ -33,15 +34,19 @@ hm = dv.plot_hexbin(
     x=data['Tair_f'],
     y=data['VPD_f'],
     z=data['NEE_CUT_REF_f'],
-    normalize_axes=True,               # Use percentile scale (0-100)
-    gridsize=11,                       # Number of hexagons per side
+    normalize_axes=True,               # Data: use percentile scale (0-100)
+    gridsize=11,                       # Data: number of hexagons per side
     xlabel='Air temperature (percentile)',
     ylabel='Vapor pressure deficit (percentile)',
-    zlabel='NEE aggregated',
-    cmap='RdYlBu_r',                   # Colormap name
-    show_values=False,                 # Don't show values on hexagons
-    cb_digits_after_comma=1            # Colorbar decimal places
+    zlabel='NEE aggregated'
 )
-hm.show()
+hm.plot(
+    ax=None,                           # Create new figure
+    cmap='RdYlBu_r',                   # Styling: colormap name
+    show_values=False,                 # Styling: don't show values on hexagons
+    cb_digits_after_comma=1            # Styling: colorbar decimal places
+)
+
+plt.show(block=False)
 
 print("Plotted hexbin with percentile normalization")

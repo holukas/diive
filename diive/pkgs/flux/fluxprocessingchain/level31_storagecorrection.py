@@ -308,23 +308,23 @@ class FluxStorageCorrectionSinglePointEddyPro:
         else:
             maxstrg = maxflux
 
-        HeatmapDateTime(ax=ax_flux, series=self.results[self.fluxcol], vmin=-maxflux, vmax=maxflux,
-                        cb_digits_after_comma=0).plot()
-        HeatmapDateTime(ax=ax_flux_storage_corrected, series=self.results[self.flux_corrected_col], vmin=-maxflux,
-                        vmax=maxflux, cb_digits_after_comma=0).plot()
+        HeatmapDateTime(series=self.results[self.fluxcol]).plot(ax=ax_flux, vmin=-maxflux, vmax=maxflux,
+                        cb_digits_after_comma=0)
+        HeatmapDateTime(series=self.results[self.flux_corrected_col]).plot(ax=ax_flux_storage_corrected, vmin=-maxflux,
+                        vmax=maxflux, cb_digits_after_comma=0)
         if not self.set_storage_to_zero:
-            HeatmapDateTime(ax=ax_storage_term, series=self.results[self.strgcol], vmin=-maxstrg, vmax=maxstrg,
-                            cb_digits_after_comma=1).plot()
+            HeatmapDateTime(series=self.results[self.strgcol]).plot(ax=ax_storage_term, vmin=-maxstrg, vmax=maxstrg,
+                            cb_digits_after_comma=1)
         else:
             _allzeros = pd.Series(0, index=self.results[self.strgcol].index, name='zero_storage')
-            HeatmapDateTime(ax=ax_storage_term, series=_allzeros,
-                            cb_digits_after_comma=0).plot()
+            HeatmapDateTime(series=_allzeros).plot(ax=ax_storage_term,
+                            cb_digits_after_comma=0)
         if self.gapfilled_strgcol:
-            HeatmapDateTime(ax=ax_storage_term_gf, series=self.results[self.gapfilled_strgcol], vmin=-maxstrg,
+            HeatmapDateTime(series=self.results[self.gapfilled_strgcol]).plot(ax=ax_storage_term_gf, vmin=-maxstrg,
                             vmax=maxstrg,
-                            cb_digits_after_comma=1).plot()
-            HeatmapDateTime(ax=ax_storage_term_flag, series=self.results[self.flag_isgapfilled],
-                            cb_digits_after_comma=0).plot()
+                            cb_digits_after_comma=1)
+            HeatmapDateTime(series=self.results[self.flag_isgapfilled]).plot(ax=ax_storage_term_flag,
+                            cb_digits_after_comma=0)
 
         plt.setp(ax_flux_storage_corrected.get_yticklabels(), visible=False)
         plt.setp(ax_storage_term.get_yticklabels(), visible=False)
