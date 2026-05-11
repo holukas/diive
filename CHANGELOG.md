@@ -109,6 +109,8 @@
     - `examples/pkgs/analysis/analysis_quantiles.py`: Fully covers Percentiles.ipynb content (percentile calculation 0-100 with distribution analysis). Archived notebook.
     - `examples/pkgs/analysis/analysis_gridaggregator.py`: Comprehensive coverage of QuantileGridAggregator.ipynb with enhanced binning methods (quantile, equal-width, custom). Archived notebook.
     - `examples/pkgs/analysis/analysis_seasonaltrend.py`: Significantly enhanced with 5 practical use cases from SeasonalTrendDecomposition.ipynb: (1) detrending for ML gap-filling, (2) anomaly detection via residual analysis, (3) method comparison (harmonic vs classical), (4) climate change impact analysis via deseasonalization, (5) ecosystem recovery trend quantification. All three remaining analysis notebooks now archived; conversion effort complete.
+- **Gap-filling notebook conversion (FluxMDSGapFilling):**
+    - `examples/pkgs/gapfilling/gapfill_mds.py`: Enhanced with comprehensive MDS gap-filling workflow from FluxMDSGapFilling.ipynb. Added: method overview and quality levels explanation, quality flag filtering (QCF), full-year dataset option, detailed parameter documentation, performance scores reporting, quality distribution analysis, time series and cumulative flux comparison visualizations, heatmap before/after comparison. Archived notebook.
 
 ### Bug Fixes
 
