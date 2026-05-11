@@ -105,6 +105,10 @@
 - **Decoupling & GapFinder notebook conversions:** Enhanced two existing Sphinx Gallery examples:
     - `examples/pkgs/analysis/analysis_decoupling.py`: Updated to match notebook content using StratifiedAnalysis API. Demonstrates stratified binning to reveal how ecosystem responses change across temperature ranges. Shows summer daytime filtering, multi-level binning (VPD × Temperature), result access patterns, and visualization.
     - `examples/pkgs/analysis/analysis_gapfinder.py`: Updated to match notebook content with real gap detection from 10-year dataset. Demonstrates gap identification, longest gap analysis, and gap distribution statistics. Replaced artificial gaps with real data-quality assessment workflow.
+- **Final notebook conversions (Percentiles, QuantileGridAggregator, SeasonalTrendDecomposition):**
+    - `examples/pkgs/analysis/analysis_quantiles.py`: Fully covers Percentiles.ipynb content (percentile calculation 0-100 with distribution analysis). Archived notebook.
+    - `examples/pkgs/analysis/analysis_gridaggregator.py`: Comprehensive coverage of QuantileGridAggregator.ipynb with enhanced binning methods (quantile, equal-width, custom). Archived notebook.
+    - `examples/pkgs/analysis/analysis_seasonaltrend.py`: Significantly enhanced with 5 practical use cases from SeasonalTrendDecomposition.ipynb: (1) detrending for ML gap-filling, (2) anomaly detection via residual analysis, (3) method comparison (harmonic vs classical), (4) climate change impact analysis via deseasonalization, (5) ecosystem recovery trend quantification. All three remaining analysis notebooks now archived; conversion effort complete.
 
 ### Bug Fixes
 
