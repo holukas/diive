@@ -17,16 +17,16 @@ from pathlib import Path
 # Example files to run (organized by core/ and pkgs/ structure)
 EXAMPLE_FILES = [
     # CORE: Visualization and times
-    'core/visualization/heatmap_datetime.py',
-    'core/visualization/hexbin.py',
-    'core/visualization/timeseries_and_cumulative.py',
-    'core/visualization/other_plots.py',
-    'core/visualization/timeseries.py',
-    'core/visualization/dielcycle.py',
-    'core/visualization/histogram.py',
-    'core/visualization/ridgeline.py',
-    'core/visualization/scatter_xy.py',
-    'core/times/timestamp_sanitizer.py',
+    'core/visualization/plot_heatmap_datetime.py',
+    'core/visualization/plot_hexbin.py',
+    'core/visualization/plot_timeseries_and_cumulative.py',
+    'core/visualization/plot_other_plots.py',
+    'core/visualization/plot_timeseries.py',
+    'core/visualization/plot_dielcycle.py',
+    'core/visualization/plot_histogram.py',
+    'core/visualization/plot_ridgeline.py',
+    'core/visualization/plot_scatter_xy.py',
+    'core/times/times_timestamp_sanitizer.py',
     # PKGS: Analysis
     'pkgs/analysis/analysis_correlation.py',
     'pkgs/analysis/analysis_decoupling.py',
@@ -79,7 +79,6 @@ EXAMPLE_FILES = [
     'pkgs/flux/lowres/flux_selfheating.py',
     'pkgs/flux/lowres/flux_uncertainty.py',
     'pkgs/flux/lowres/flux_ustar_mp_detection.py',
-    'pkgs/flux/lowres/flux_ustarthreshold.py',
     # PKGS: Flux - High-resolution analysis
     'pkgs/flux/hires/flux_fluxdetectionlimit.py',
     'pkgs/flux/hires/flux_lag.py',
@@ -166,6 +165,7 @@ def run_all_examples():
     print("=" * 80 + "\n")
 
     results = {'passed': [], 'failed': [], 'skipped': []}
+    completed = 0
 
     # Run examples in parallel
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
@@ -179,24 +179,27 @@ def run_all_examples():
             example_file = result['file']
             status = result['status']
             elapsed = result['time']
+            completed += 1
+            progress = (completed / len(EXAMPLE_FILES)) * 100
 
             if status == 'pass':
-                print(f"[PASS] {example_file:<45} ({elapsed:6.2f}s)")
+                print(f"[PASS] {example_file:<40} ({elapsed:6.2f}s) [{completed:2d}/{len(EXAMPLE_FILES)} {progress:5.1f}%]")
                 results['passed'].append((example_file, elapsed))
             elif status == 'fail':
-                print(f"[FAIL] {example_file:<45} ({elapsed:6.2f}s)")
-                error_line = result['error'].split('\n')[0][:80]
+                print(f"[FAIL] {example_file:<40} ({elapsed:6.2f}s) [{completed:2d}/{len(EXAMPLE_FILES)} {progress:5.1f}%]")
+                error_line = result['error'].split('\n')[0][:60]
                 print(f"       Error: {error_line}")
                 results['failed'].append((example_file, result['error'], elapsed))
             elif status == 'timeout':
-                print(f"[TIMEOUT] {example_file:<43} ({elapsed:6.2f}s)")
+                print(f"[TIMEOUT] {example_file:<38} ({elapsed:6.2f}s) [{completed:2d}/{len(EXAMPLE_FILES)} {progress:5.1f}%]")
                 results['failed'].append((example_file, result['error'], elapsed))
             elif status == 'error':
-                print(f"[ERROR] {example_file:<45} ({elapsed:6.2f}s)")
-                print(f"        {result['error'][:80]}")
+                print(f"[ERROR] {example_file:<40} ({elapsed:6.2f}s) [{completed:2d}/{len(EXAMPLE_FILES)} {progress:5.1f}%]")
+                error_msg = result['error'][:60]
+                print(f"        {error_msg}")
                 results['failed'].append((example_file, result['error'], elapsed))
             else:  # skip
-                print(f"[SKIP] {example_file:<46} (not found)")
+                print(f"[SKIP] {example_file:<41} [{completed:2d}/{len(EXAMPLE_FILES)} {progress:5.1f}%]")
                 results['skipped'].append(example_file)
 
     total_elapsed = time.time() - total_start

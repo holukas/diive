@@ -106,7 +106,7 @@ elapsed = time.time() - tic
 
 print(f"\n[OK] Optimization completed in {elapsed:.1f}s")
 print(f"  Scaling factors determined for {len(scaling_factors_df)} USTAR classes")
-print(f"  {optimizer.n_bootstrap_runs} bootstrap runs executed")
+print(f"  {optimizer.n_bootstrap} bootstrap runs executed")
 
 # %%
 # Step 3: Apply correction

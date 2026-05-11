@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
 
-**67 examples across 18 organized folders, mirroring the `diive` package structure.**
+**66 examples across 18 organized folders, mirroring the `diive` package structure.**
 
 ## Structure
 
@@ -37,16 +37,15 @@ examples/pkgs/
 │   └── ... (see README)
 ├── fits/                  # Data fitting (1 example)
 │   └── fit_fitter.py
-├── flux/                  # Eddy covariance flux processing (10 examples)
+├── flux/                  # Eddy covariance flux processing (9 examples)
 │   ├── fluxprocessingchain/
 │   │   └── fluxprocessingchain.py
-│   ├── lowres/            # Low-resolution processing (6 examples)
+│   ├── lowres/            # Low-resolution processing (5 examples)
 │   │   ├── flux_common.py
 │   │   ├── flux_hqflux.py
 │   │   ├── flux_selfheating.py
 │   │   ├── flux_uncertainty.py
-│   │   ├── flux_ustar_mp_detection.py
-│   │   └── flux_ustarthreshold.py
+│   │   └── flux_ustar_mp_detection.py
 │   └── hires/             # High-resolution analysis (3 examples)
 │       ├── flux_fluxdetectionlimit.py
 │       ├── flux_lag.py
@@ -99,7 +98,7 @@ uv run python examples/pkgs/gapfilling/gapfill_randomforest_ts.py
 uv run python examples/run_all_examples.py
 ```
 
-This runs all 67 examples in parallel with 8 workers, reporting execution time and any errors.
+This runs all 66 examples in parallel with 8 workers, reporting execution time and any errors.
 
 ## Finding Examples
 
@@ -127,11 +126,11 @@ Browse by topic:
 | **Analysis** | 9 | Correlation, decomposition, gap detection, spatial aggregation |
 | **Features** | 8 | Air properties, unit conversions, day/night flags, VPD |
 | **Fits** | 1 | Polynomial fitting |
-| **Flux** | 10 | Processing chain, HQ filtering, USTAR detection, self-heating, uncertainty, high-res analysis |
+| **Flux** | 9 | Processing chain, HQ filtering, USTAR detection, self-heating, uncertainty, high-res analysis |
 | **Gapfilling** | 10 | Linear interpolation (2), Random Forest (3), XGBoost (2), MDS (2), comparison (1) |
 | **IO** | 1 | Binary file operations |
 | **Preprocessing** | 18 | Corrections (7), outlier detection (9), QA/QC (2) |
-| **TOTAL** | **67** | **~100+ individual functions demonstrated** |
+| **TOTAL** | **66** | **~100+ individual functions demonstrated** |
 
 ## Running Options
 

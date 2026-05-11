@@ -23,6 +23,9 @@ import matplotlib.pyplot as plt
 # Load example data
 data_df = dv.load_exampledata_parquet()
 
+# Use subset only
+data_df = data_df.loc[(data_df.index.month >= 6) & (data_df.index.month <= 6)].copy()
+
 # Prepare subset with required columns
 subset = data_df[[
     'NEE_CUT_REF_orig', 'NEE_CUT_REF_f',

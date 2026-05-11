@@ -12,7 +12,6 @@ Examples demonstrating flux processing, quality control, and high-resolution ana
 - **lowres/flux_hqflux.py** — Highest-quality flux filtering with Hampel outlier detection
 - **lowres/flux_selfheating.py** — Oxygen sensor self-heating correction (SCOP methodology)
 - **lowres/flux_uncertainty.py** — Random uncertainty estimation (PAS20 method)
-- **lowres/flux_ustarthreshold.py** — USTAR threshold detection and filtering
 - **lowres/flux_ustar_mp_detection.py** — Moving Point (MP) USTAR detection method
 
 ### High-Resolution (10 Hz) Flux Analysis
@@ -40,7 +39,6 @@ uv run python examples/pkgs/flux/lowres/flux_common.py
 uv run python examples/pkgs/flux/lowres/flux_hqflux.py
 uv run python examples/pkgs/flux/lowres/flux_selfheating.py
 uv run python examples/pkgs/flux/lowres/flux_uncertainty.py
-uv run python examples/pkgs/flux/lowres/flux_ustarthreshold.py
 uv run python examples/pkgs/flux/lowres/flux_ustar_mp_detection.py
 
 # High-resolution analysis

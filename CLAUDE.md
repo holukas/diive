@@ -940,8 +940,7 @@ examples/pkgs/flux/
     ├── flux_hqflux.py
     ├── flux_selfheating.py
     ├── flux_uncertainty.py
-    ├── flux_ustar_mp_detection.py
-    └── flux_ustarthreshold.py
+    └── flux_ustar_mp_detection.py
 ```
 
 #### Naming Convention with Subdirectories

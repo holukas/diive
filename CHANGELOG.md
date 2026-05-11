@@ -2,7 +2,7 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.91.0 | 11 May 2026
+## v0.91.0 | XX May 2026
 
 - Now developing under Python 3.12
 - Switched from poetry to `uv` dependency management (modern, fast, deterministic)
@@ -98,6 +98,9 @@
     - `correction_winddir_offset.py`: Fixed column names from lowercase 'year'/'offset' to uppercase 'YEAR'/'OFFSET' in yearly offsets dataframe
     - `outlier_stepwise.py`: Fixed attribute names from `lat`/`lon` to `site_lat`/`site_lon` in StepwiseOutlierDetection
     - `outlier_zscore.py`: Fixed parameter name from `thres_zscore_increments` to `thres_zscore` in zScoreIncrements initialization
+    - `flux_ustar_mp_detection.py`: Fixed API misuse (was passing individual ustar/flux series instead of DataFrame); now correctly uses `UstarMovingPointDetection(df)` with auto-detected columns and proper `detect()` + `bootstrap()` workflow
+    - `flux_selfheating.py`: Fixed attribute error from `optimizer.n_bootstrap_runs` to `optimizer.n_bootstrap`; fixed ScopApplicator method call
+- **Example structure fixes:** Deleted `flux_ustarthreshold.py` (violated example guidelines by implementing algorithm instead of demonstrating diive API). Updated EXAMPLE_FILES in run_all_examples.py and total count in examples/README.md (67 → 66 examples).
 - **Import fixes in __init__.py:** Corrected 7 import path errors where functions were imported from wrong modules:
     - `latent_heat_of_vaporization`, `et_from_le` moved to `conversions` module (was `air`)
     - `DaytimeNighttimeFlag`, `daytime_nighttime_flag_from_swinpot` moved to `daynightflag` module
