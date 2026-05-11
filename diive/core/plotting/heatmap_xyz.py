@@ -53,14 +53,15 @@ class HeatmapXYZ(HeatmapBase):
     Cell boundaries are computed automatically from the coordinate spacing so
     that ``pcolormesh`` renders each cell at the correct position.
 
-    Top-level alias: ``dv.heatmap_xyz(x, y, z, ...)``
+    Top-level alias: ``dv.plot_heatmap_xyz(x, y, z, ...)``
 
-    Example::
+    Example:
+        See `examples/core/visualization/plot_heatmap_xyz_basic.py` for complete examples
+        with GridAggregator integration and styling options.
 
-        import diive as dv
-        hm = dv.heatmap_xyz(x=series_x, y=series_y, z=series_z,
-                           show_values=True, show_values_n_dec_places=1)
-        hm.show()
+    See Also:
+        GridAggregator : Bin and aggregate data into pre-aggregated format
+        plot_heatmap_datetime : For temporal heatmaps (date × time-of-day)
     """
 
     def __init__(self,

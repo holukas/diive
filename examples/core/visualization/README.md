@@ -2,7 +2,7 @@
 
 Examples demonstrating visualization and plotting functions for time series and flux data.
 
-16 examples across 10+ plot types.
+17 examples across 10+ plot types.
 
 ## Examples by Plot Type
 
@@ -10,6 +10,7 @@ Examples demonstrating visualization and plotting functions for time series and 
 
 - **plot_heatmap_datetime_basic.py** — Datetime heatmaps (vertical/horizontal layouts, diurnal patterns)
 - **plot_heatmap_advanced.py** — Year-month heatmaps with seasonal patterns and multi-variable comparison
+- **plot_heatmap_xyz_basic.py** — Pre-aggregated 2D heatmaps from GridAggregator (e.g., flux binned by temperature and VPD)
 
 ### Scatter Plots
 
@@ -63,6 +64,7 @@ scatter.plot(ax=axes[1], title='View 2', cmap='plasma')
 See `diive.core.plotting` for the complete API:
 
 - `HeatmapDateTime` — Datetime-aware heatmaps
+- `HeatmapXYZ` — Pre-aggregated 2D heatmaps
 - `HeatmapYearMonth` — Year-month aggregation
 - `ScatterXY` — Customizable 2D/3D scatter
 - `Cumulative` — Cumulative sum plots

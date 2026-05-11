@@ -229,16 +229,12 @@ hm_original.plot(
     ax=axes[0],
     title='Original NEE (with gaps)'
 )
-axes[0].set_xlabel('Hour of day')
-axes[0].set_ylabel('Month')
 
 hm_gapfilled = dv.HeatmapDateTime(series=gf_df[gapfilled_col])
 hm_gapfilled.plot(
     ax=axes[1],
     title='Gap-filled NEE (complete)'
 )
-axes[1].set_xlabel('Hour of day')
-axes[1].set_ylabel('Month')
 
 plt.tight_layout()
 fig.show()

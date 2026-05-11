@@ -21,6 +21,7 @@ Find examples by topic and use case.
 |---------|-------------|
 | [**plot_heatmap_datetime_basic.py**](core/visualization/plot_heatmap_datetime_basic.py) | Datetime heatmaps with vertical/horizontal orientations, diurnal patterns |
 | [**plot_heatmap_advanced.py**](core/visualization/plot_heatmap_advanced.py) | Year-month aggregation heatmaps, multi-variable comparison, seasonal analysis |
+| [**plot_heatmap_xyz_basic.py**](core/visualization/plot_heatmap_xyz_basic.py) | Pre-aggregated 2D heatmaps from GridAggregator, flux binned by two variables |
 | [**plot_scatter_xy_basic.py**](core/visualization/plot_scatter_xy_basic.py) | 2D scatter plots for exploring variable relationships |
 | [**plot_scatter_xy_colored.py**](core/visualization/plot_scatter_xy_colored.py) | 3D scatter with color coding, bin aggregation, trend visualization |
 | [**plot_timeseries.py**](core/visualization/plot_timeseries.py) | Time series line plots with matplotlib |

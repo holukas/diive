@@ -19,6 +19,7 @@ EXAMPLE_FILES = [
     # CORE: Visualization and times
     'core/visualization/plot_heatmap_datetime_basic.py',
     'core/visualization/plot_heatmap_advanced.py',
+    'core/visualization/plot_heatmap_xyz_basic.py',
     'core/visualization/plot_hexbin_basic.py',
     'core/visualization/plot_hexbin_advanced.py',
     'core/visualization/plot_cumulative_basic.py',

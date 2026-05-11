@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
 
-**74 examples across 11 organized folders, mirroring the `diive` package structure.**
+**75 examples across 11 organized folders, mirroring the `diive` package structure.**
 
 ## Structure
 
@@ -12,9 +12,10 @@ The examples are organized into two main categories:
 
 ```
 examples/core/
-├── visualization/         # Plotting and visualization (16 examples)
+├── visualization/         # Plotting and visualization (17 examples)
 │   ├── plot_heatmap_datetime_basic.py
 │   ├── plot_heatmap_advanced.py
+│   ├── plot_heatmap_xyz_basic.py
 │   ├── plot_hexbin_basic.py
 │   ├── plot_hexbin_advanced.py
 │   ├── plot_histogram_basic.py
@@ -138,7 +139,7 @@ Browse by topic:
 
 | Category | Files | Topics |
 |----------|-------|--------|
-| **Core** | 17 | Visualization (16), timestamp handling (1) |
+| **Core** | 18 | Visualization (17), timestamp handling (1) |
 | **Analysis** | 9 | Correlation, decomposition, gap detection, spatial aggregation, harmonic analysis |
 | **Features** | 8 | Air properties, unit conversions, day/night flags, VPD, lagged variants |
 | **Fits** | 1 | Polynomial fitting |
@@ -146,7 +147,7 @@ Browse by topic:
 | **Gapfilling** | 10 | Linear interpolation, Random Forest (3 variants), XGBoost (3 variants), MDS (2), comparison |
 | **IO** | 1 | Binary file operations |
 | **Preprocessing** | 18 | Corrections (7), outlier detection (9), QA/QC (2) |
-| **TOTAL** | **73** | **~100+ individual functions demonstrated** |
+| **TOTAL** | **74** | **~100+ individual functions demonstrated** |
 
 ## Running Options
 
