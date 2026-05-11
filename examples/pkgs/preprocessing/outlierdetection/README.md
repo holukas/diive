@@ -30,15 +30,100 @@ See `diive.pkgs.preprocessing.outlierdetection` for available detection classes:
 - `LocalOutlierFactor` — Density-based detection
 - `StepwiseOutlierDetection` — Multi-stage orchestration
 
-## Usage
+## Use Cases
 
-```bash
-uv run python examples/pkgs/preprocessing/outlierdetection/hampel.py
-uv run python examples/pkgs/preprocessing/outlierdetection/stepwise.py
+**Quick spike detection (Hampel filter):**
+```python
+from diive.pkgs.preprocessing.outlierdetection import Hampel
+
+# Fast, robust detection using Median Absolute Deviation
+detector = Hampel(
+    dfin=df,
+    col='NEE',
+    n_sigma=5.5,
+    win_size=48
+)
+flags = detector.flags_outliers  # 0=good, 2=outlier
+cleaned = df[detector.flags_outliers != 2]
 ```
 
-Or run all outlier detection examples:
+**Statistical thresholding (Z-score):**
+```python
+from diive.pkgs.preprocessing.outlierdetection import zScore
+
+# Global z-score with day/night separation
+detector = zScore(
+    dfin=df,
+    col='FCH4',
+    site_lat=47.5, site_lon=8.4,
+    thres_zscore=4,
+    separate_daytime_nighttime=True
+)
+```
+
+**Absolute physical limits:**
+```python
+from diive.pkgs.preprocessing.outlierdetection import AbsoluteLimits
+
+# Enforce known physical bounds
+detector = AbsoluteLimits(
+    dfin=df,
+    col='RH',
+    min_val=0,
+    max_val=100
+)
+```
+
+**Multi-stage filtering (sequential chain):**
+```python
+from diive.pkgs.preprocessing.outlierdetection import StepwiseOutlierDetection
+
+# Progressive filtering: aggressive first, then refine
+detector = StepwiseOutlierDetection(dfin=df, col='NEE', site_lat=46.8, site_lon=8.6)
+
+detector.flag_outliers_hampel_dtnt_test(n_sigma=5.5)
+detector.addflag()
+
+detector.flag_outliers_localsd_test(n_sd=[3.5, 3.5], winsize=[24, 24])
+detector.addflag()
+
+detector.flag_outliers_zscore_test(thres_zscore=4)
+detector.addflag()
+
+# View final cleaned series
+cleaned = detector.series_hires_cleaned
+```
+
+## Running Examples
 
 ```bash
+# Beginner-friendly (simple, deterministic)
+uv run python examples/pkgs/preprocessing/outlierdetection/outlier_absolutelimits.py
+uv run python examples/pkgs/preprocessing/outlierdetection/outlier_manualremoval.py
+uv run python examples/pkgs/preprocessing/outlierdetection/outlier_trim.py
+
+# Intermediate (statistical, adaptive)
+uv run python examples/pkgs/preprocessing/outlierdetection/outlier_hampel.py
+uv run python examples/pkgs/preprocessing/outlierdetection/outlier_zscore.py
+uv run python examples/pkgs/preprocessing/outlierdetection/outlier_localsd.py
+uv run python examples/pkgs/preprocessing/outlierdetection/outlier_incremental.py
+
+# Advanced (machine learning, multi-method)
+uv run python examples/pkgs/preprocessing/outlierdetection/outlier_lof.py
+uv run python examples/pkgs/preprocessing/outlierdetection/outlier_stepwise.py
+
+# Run all outlier detection examples
 uv run python examples/run_all_examples.py
 ```
+
+## Choosing a Method
+
+| Situation | Recommended Method | Why |
+|-----------|-------------------|-----|
+| Quick QA/QC | Hampel | Fast, robust to skew, works with non-normal distributions |
+| Known physical limits | AbsoluteLimits | Simple, deterministic, no parameters to tune |
+| Normal distribution | zScore | Works well when data is normally distributed |
+| Varying patterns | LocalSD | Adaptive to local variability |
+| Abrupt changes | Incremental | Detects step changes, not global outliers |
+| Unknown patterns | LOF | Density-based, finds anomalies without assumptions |
+| Multiple tests | StepwiseOutlierDetection | Combine methods, each filters progressively |

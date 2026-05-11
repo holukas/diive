@@ -74,33 +74,48 @@
   example file references across run_all_examples.py, 3 category READMEs, CATALOG.md, and 6 docstrings in source code.
   Examples now 20 preprocessing files (was 18), 64 total examples (was 62). Sphinx Gallery format is version-control
   friendly (pure Python, readable diffs) and auto-executable for documentation generation.
-- **Gap-filling & I/O examples restructure:** Converted all gap-filling and I/O examples to Sphinx Gallery format with 
-  consistent prefixes: gapfill_* (10 files) and io_* (1 file). **Split combined functions into separate files:** Linear 
-  interpolation (gapfill_interpolate_generous.py, gapfill_interpolate_conservative.py); Random Forest 
-  (gapfill_randomforest.py, gapfill_quickfill.py, gapfill_optimize_randomforest.py); XGBoost 
-  (gapfill_xgboost.py, gapfill_optimize_xgboost.py); MDS (gapfill_mds.py, gapfill_mds_comparison.py); Comparison 
-  (gapfill_comparison.py); I/O (io_extract.py). Each file now has # %% section separators for pedagogical clarity. 
-  Total gapfilling examples increased from 6 to 10 (67 total examples, up from 63). Updated 10 file references across 
-  run_all_examples.py, gapfilling/README.md, CATALOG.md, CLAUDE.md, and 4 source code docstrings in RandomForestTS, 
+- **Gap-filling & I/O examples restructure:** Converted all gap-filling and I/O examples to Sphinx Gallery format with
+  consistent prefixes: gapfill_* (10 files) and io_* (1 file). **Split combined functions into separate files:** Linear
+  interpolation (gapfill_interpolate_generous.py, gapfill_interpolate_conservative.py); Random Forest
+  (gapfill_randomforest.py, gapfill_quickfill.py, gapfill_optimize_randomforest.py); XGBoost
+  (gapfill_xgboost.py, gapfill_optimize_xgboost.py); MDS (gapfill_mds.py, gapfill_mds_comparison.py); Comparison
+  (gapfill_comparison.py); I/O (io_extract.py). Each file now has # %% section separators for pedagogical clarity.
+  Total gapfilling examples increased from 6 to 10 (67 total examples, up from 63). Updated 10 file references across
+  run_all_examples.py, gapfilling/README.md, CATALOG.md, CLAUDE.md, and 4 source code docstrings in RandomForestTS,
   XGBoostTS, FluxMDS, and linear_interpolation functions.
-- **Analysis, features & fits examples restructure:** Converted all 9 analysis examples (correlation, decoupling, gapfinder, 
-  gridaggregator, harmonic, histogram_distribution, optimumrange, quantiles, seasonaltrend) to Sphinx Gallery format with 
-  analysis_* prefix. Converted 8 feature examples (air, conversions, daynightflag, laggedvariants, noise, 
-  potentialradiation, timesince, vpd) with feature_* prefix, and 1 fits example (fitter) with fit_* prefix. All 18 files 
-  now have # %% section separators for clarity. Updated example file references across run_all_examples.py, category 
+- **Analysis, features & fits examples restructure:** Converted all 9 analysis examples (correlation, decoupling,
+  gapfinder,
+  gridaggregator, harmonic, histogram_distribution, optimumrange, quantiles, seasonaltrend) to Sphinx Gallery format
+  with
+  analysis_* prefix. Converted 8 feature examples (air, conversions, daynightflag, laggedvariants, noise,
+  potentialradiation, timesince, vpd) with feature_* prefix, and 1 fits example (fitter) with fit_* prefix. All 18 files
+  now have # %% section separators for clarity. Updated example file references across run_all_examples.py, category
   READMEs, examples/README.md, and source code docstrings (9 analysis modules, 1 feature module, 1 fits module).
 
 ### Bug Fixes
 
 - **Example validation fixes:** Fixed 5 examples that had API mismatches or incorrect column names:
-    - `analysis_gridaggregator.py`: Fixed KeyError on non-existent 'n_vals' column; now computes coverage from actual returned columns
+    - `analysis_gridaggregator.py`: Fixed KeyError on non-existent 'n_vals' column; now computes coverage from actual
+      returned columns
     - `analysis_quantiles.py`: Fixed column name from 'Tair_f' to 'VALUE' in percentiles dataframe access
-    - `correction_winddir_offset.py`: Fixed column names from lowercase 'year'/'offset' to uppercase 'YEAR'/'OFFSET' in yearly offsets dataframe
+    - `correction_winddir_offset.py`: Fixed column names from lowercase 'year'/'offset' to uppercase 'YEAR'/'OFFSET' in
+      yearly offsets dataframe
     - `outlier_stepwise.py`: Fixed attribute names from `lat`/`lon` to `site_lat`/`site_lon` in StepwiseOutlierDetection
-    - `outlier_zscore.py`: Fixed parameter name from `thres_zscore_increments` to `thres_zscore` in zScoreIncrements initialization
-    - `flux_ustar_mp_detection.py`: Fixed API misuse (was passing individual ustar/flux series instead of DataFrame); now correctly uses `UstarMovingPointDetection(df)` with auto-detected columns and proper `detect()` + `bootstrap()` workflow
-    - `flux_selfheating.py`: Fixed attribute error from `optimizer.n_bootstrap_runs` to `optimizer.n_bootstrap`; fixed ScopApplicator method call
-- **Example structure fixes:** Deleted `flux_ustarthreshold.py` (violated example guidelines by implementing algorithm instead of demonstrating diive API). Updated EXAMPLE_FILES in run_all_examples.py and total count in examples/README.md (67 → 66 examples).
+    - `outlier_zscore.py`: Fixed parameter name from `thres_zscore_increments` to `thres_zscore` in zScoreIncrements
+      initialization
+    - `flux_ustar_mp_detection.py`: Fixed API misuse (was passing individual ustar/flux series instead of DataFrame);
+      now correctly uses `UstarMovingPointDetection(df)` with auto-detected columns and proper `detect()` +
+      `bootstrap()` workflow
+    - `flux_selfheating.py`: Remove Unicode Greek character (ξ) causing Windows cp1252 encoding error; fix
+      ScopApplicator method (get_corrected_flux → get_results) and column access (NEE_SCOP → NEE_OP_CORR)
+    - `flux_uncertainty.py`: Optimize data subset (all June → March 2013) to prevent timeout; add cumulative uncertainty
+      propagation visualization with uncertainty bounds
+- **Library bug fix:** RandomUncertaintyPAS20.report_method_summary() now initializes WINDOW_N_VALS_METHOD1/2/3/4
+  columns in _calc_random_uncertainty() to prevent KeyError when methods skip rows (method4 never assigned if all
+  records have uncertainty from earlier methods)
+- **Example structure fixes:** Deleted `flux_ustarthreshold.py` (violated example guidelines by implementing algorithm
+  instead of demonstrating diive API). Updated EXAMPLE_FILES in run_all_examples.py and total count in
+  examples/README.md (67 → 66 examples).
 - **Import fixes in __init__.py:** Corrected 7 import path errors where functions were imported from wrong modules:
     - `latent_heat_of_vaporization`, `et_from_le` moved to `conversions` module (was `air`)
     - `DaytimeNighttimeFlag`, `daytime_nighttime_flag_from_swinpot` moved to `daynightflag` module
@@ -133,10 +148,14 @@
 ### API & Visualization
 
 - **Plotting API:** All visualization aliases now use `plot_` prefix (breaking change)
-- **Two-phase plotting class design:** All plotting classes refactored to separate data preparation (`__init__()`) from styling/rendering (`plot()`). Enables replotting same data with different styling or on different axes. Classes updated: HeatmapBase, HeatmapDateTime, HeatmapYearMonth, HeatmapXYZ, HexbinPlot. All 16 visualization examples verified 100% compliant.
+- **Two-phase plotting class design:** All plotting classes refactored to separate data preparation (`__init__()`) from
+  styling/rendering (`plot()`). Enables replotting same data with different styling or on different axes. Classes
+  updated: HeatmapBase, HeatmapDateTime, HeatmapYearMonth, HeatmapXYZ, HexbinPlot. All 16 visualization examples
+  verified 100% compliant.
 - **HeatmapXYZ:** Refactored to accept pre-aggregated input
 - **ScatterXY:** Enhanced with color-coding, bin aggregation, trend overlays
-- **Source code API fixes:** Fixed 7 plotting instantiations in library code (quantiles.py, fluxprocessingchain.py) to use correct two-phase pattern
+- **Source code API fixes:** Fixed 7 plotting instantiations in library code (quantiles.py, fluxprocessingchain.py) to
+  use correct two-phase pattern
 
 ### Breaking Changes
 

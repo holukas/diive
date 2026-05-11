@@ -2,41 +2,86 @@
 
 Examples demonstrating visualization and plotting functions for time series and flux data.
 
-## Contents
+16 examples across 10+ plot types.
 
-- **plot_heatmap_datetime_basic.py** — Datetime heatmaps with vertical/horizontal orientations
-- **plot_heatmap_advanced.py** — Year-month aggregation and multi-variable comparison
-- **plot_scatter_xy_basic.py** — Basic 2D scatter plots for variable relationships
-- **plot_scatter_xy_colored.py** — 3D scatter plots with color coding and bin aggregation
-- **plot_timeseries.py** — Line plots for time series data visualization
-- **plot_timeseries_interactive.py** — Interactive Bokeh plots for data exploration
-- **plot_dielcycle.py** — Diurnal (diel) cycle analysis and visualization
-- **plot_histogram_basic.py** — Histogram with z-score overlay and peak highlighting
-- **plot_histogram_yearly.py** — Yearly comparison histograms for temporal pattern analysis
-- **plot_hexbin_basic.py** — Hexbin with percentile normalization for standardized comparison
-- **plot_hexbin_advanced.py** — Advanced hexbin with absolute values and value overlays
-- **plot_cumulative_basic.py** — Cumulative flux across all time with scenario comparison
-- **plot_cumulative_year.py** — Yearly cumulative sums with reference band and highlighting
-- **plot_ridgeline_basic.py** — Ridge line plots for weekly distribution analysis
-- **plot_ridgeline_advanced.py** — Ridge line plots for monthly distribution analysis with multiple options
-- **plot_other_plots.py** — Additional specialized plot types (anomalies)
+## Examples by Plot Type
 
-## Related Documentation
+### Heatmaps
 
-See `diive.core.plotting` for available plot classes:
+- **plot_heatmap_datetime_basic.py** — Datetime heatmaps (vertical/horizontal layouts, diurnal patterns)
+- **plot_heatmap_advanced.py** — Year-month heatmaps with seasonal patterns and multi-variable comparison
+
+### Scatter Plots
+
+- **plot_scatter_xy_basic.py** — 2D scatter plots showing variable relationships
+- **plot_scatter_xy_colored.py** — 3D scatter with color coding, binning, and trend visualization
+
+### Time Series
+
+- **plot_timeseries.py** — Line plots with matplotlib
+- **plot_timeseries_interactive.py** — Interactive Bokeh plots with zoom, pan, and export
+
+### Diurnal & Cumulative Patterns
+
+- **plot_dielcycle.py** — Diurnal cycles grouped by month or season
+- **plot_cumulative_basic.py** — Cumulative flux over time with scenario comparison
+- **plot_cumulative_year.py** — Yearly cumulative sums with reference bands
+
+### Distributions
+
+- **plot_histogram_basic.py** — Histograms with z-score overlay and peak detection
+- **plot_histogram_yearly.py** — Year-over-year histograms showing temporal patterns
+
+### Density & Binning
+
+- **plot_hexbin_basic.py** — 2D hexagonal binning with percentile normalization
+- **plot_hexbin_advanced.py** — Hexbin plots with absolute values and overlays
+- **plot_ridgeline_basic.py** — Ridge plots grouped by week
+- **plot_ridgeline_advanced.py** — Ridge plots grouped by month with styling options
+
+### Other Plots
+
+- **plot_other_plots.py** — Long-term anomalies and trend visualization
+
+## Two-Phase Design
+
+All plotting classes separate data preparation from presentation:
+
+**Phase 1: `__init__()`** takes data and computation parameters.  
+**Phase 2: `plot()`** handles styling, axes, titles, labels, and colors.
+
+This lets you reuse the same data across multiple plots with different visual styles:
+
+```python
+scatter = dv.plot_scatter_xy(x=df['A'], y=df['B'], z=df['C'], nbins=10)
+scatter.plot(ax=axes[0], title='View 1', cmap='viridis')
+scatter.plot(ax=axes[1], title='View 2', cmap='plasma')
+```
+
+## Available Plot Classes
+
+See `diive.core.plotting` for the complete API:
+
 - `HeatmapDateTime` — Datetime-aware heatmaps
-- `ScatterXY` — Customizable scatter plots
+- `HeatmapYearMonth` — Year-month aggregation
+- `ScatterXY` — Customizable 2D/3D scatter
 - `Cumulative` — Cumulative sum plots
-- `TimeSeries` — Time series line plots
+- `CumulativeYear` — Yearly cumulative analysis
+- `TimeSeries` — Line plots
+- `DielCycle` — Diurnal cycle plots
+- `HistogramPlot` — Distribution histograms
+- `HexbinPlot` — 2D hexagonal binning
+- `RidgeLinePlot` — Ridge line plots
 
 ## Running Examples
 
 ```bash
-uv run python examples/core/visualization/plot_heatmap_datetime.py
-```
+# Single example
+uv run python examples/core/visualization/plot_heatmap_datetime_basic.py
+uv run python examples/core/visualization/plot_scatter_xy_colored.py
 
-Or run all visualization examples:
-
-```bash
+# All visualization examples
 uv run python examples/run_all_examples.py
 ```
+
+All 16 examples pass verification and follow the two-phase design pattern.

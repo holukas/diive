@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
 
-**76 examples across 18 organized folders, mirroring the `diive` package structure.**
+**73 examples across 11 organized folders, mirroring the `diive` package structure.**
 
 ## Structure
 
@@ -12,19 +12,25 @@ The examples are organized into two main categories:
 
 ```
 examples/core/
-├── visualization/         # Plotting and visualization (15 examples)
-│   ├── heatmap_datetime_basic.py
-│   ├── heatmap_advanced.py
-│   ├── hexbin_basic.py
-│   ├── hexbin_advanced.py
-│   ├── histogram_basic.py
-│   ├── histogram_yearly.py
-│   ├── scatter_xy_basic.py
-│   ├── scatter_xy_colored.py
-│   ├── timeseries.py
-│   └── ... (see README)
+├── visualization/         # Plotting and visualization (16 examples)
+│   ├── plot_heatmap_datetime_basic.py
+│   ├── plot_heatmap_advanced.py
+│   ├── plot_hexbin_basic.py
+│   ├── plot_hexbin_advanced.py
+│   ├── plot_histogram_basic.py
+│   ├── plot_histogram_yearly.py
+│   ├── plot_scatter_xy_basic.py
+│   ├── plot_scatter_xy_colored.py
+│   ├── plot_timeseries.py
+│   ├── plot_cumulative_basic.py
+│   ├── plot_cumulative_year.py
+│   ├── plot_dielcycle.py
+│   ├── plot_ridgeline_basic.py
+│   ├── plot_ridgeline_advanced.py
+│   ├── plot_other_plots.py
+│   └── plot_timeseries_interactive.py
 └── times/                 # Timestamp handling (1 example)
-    └── timestamp_sanitizer.py
+    └── times_timestamp_sanitizer.py
 ```
 
 ### **Pkgs** — Domain-specific packages
@@ -70,7 +76,7 @@ examples/pkgs/
 ├── io/                    # File I/O (1 example)
 │   └── io_extract.py
 └── preprocessing/         # Data quality & corrections (20 examples)
-    ├── corrections/       # Offset & bias corrections (8 examples)
+    ├── corrections/       # Offset & bias corrections (7 examples)
     │   ├── correction_relativehumidity_offset.py
     │   ├── correction_radiation_offset.py
     │   ├── correction_measurement_offset_replicate.py
@@ -94,8 +100,8 @@ examples/pkgs/
 **Run a single example:**
 
 ```bash
-uv run python examples/core/visualization/heatmap_datetime.py
-uv run python examples/pkgs/gapfilling/gapfill_randomforest_ts.py
+uv run python examples/core/visualization/plot_heatmap_datetime_basic.py
+uv run python examples/pkgs/gapfilling/gapfill_randomforest.py
 ```
 
 **Run all examples in parallel:**
@@ -104,7 +110,7 @@ uv run python examples/pkgs/gapfilling/gapfill_randomforest_ts.py
 uv run python examples/run_all_examples.py
 ```
 
-This runs all 66 examples in parallel with 8 workers, reporting execution time and any errors.
+This runs all 73 examples in parallel with 8 workers, reporting execution time and any errors.
 
 ## Finding Examples
 
@@ -116,40 +122,44 @@ Each category folder has a **README.md** with:
 
 Browse by topic:
 
-- **[core/visualization/README.md](core/visualization/README.md)** — Plotting types and visualization
-- **[pkgs/analysis/README.md](pkgs/analysis/README.md)** — Time series analysis methods
-- **[pkgs/features/README.md](pkgs/features/README.md)** — Variable creation & conversions
-- **[pkgs/flux/README.md](pkgs/flux/README.md)** — Flux processing pipeline
-- **[pkgs/gapfilling/README.md](pkgs/gapfilling/README.md)** — Gap-filling algorithms
-- **[pkgs/preprocessing/outlierdetection/README.md](pkgs/preprocessing/outlierdetection/README.md)** — Outlier detection methods
-- **[pkgs/preprocessing/qaqc/README.md](pkgs/preprocessing/qaqc/README.md)** — Quality control flags
+- **[core/visualization/README.md](core/visualization/README.md)** — 16 plot types (heatmaps, scatter, timeseries, etc.)
+- **[core/times/README.md](core/times/README.md)** — Timestamp validation and regularization
+- **[pkgs/analysis/README.md](pkgs/analysis/README.md)** — Correlation, decomposition, gap detection, spectral analysis
+- **[pkgs/features/README.md](pkgs/features/README.md)** — Variable creation, unit conversions, derived properties
+- **[pkgs/fits/README.md](pkgs/fits/README.md)** — Polynomial and custom curve fitting
+- **[pkgs/flux/README.md](pkgs/flux/README.md)** — Multi-level flux processing (L2-L4.1), quality filtering, high-res analysis
+- **[pkgs/gapfilling/README.md](pkgs/gapfilling/README.md)** — Linear, Random Forest, XGBoost, MDS methods
+- **[pkgs/io/README.md](pkgs/io/README.md)** — Binary value extraction and encoding
+- **[pkgs/preprocessing/corrections/README.md](pkgs/preprocessing/corrections/README.md)** — Offset corrections, value clipping
+- **[pkgs/preprocessing/outlierdetection/README.md](pkgs/preprocessing/outlierdetection/README.md)** — 9 outlier detection methods
+- **[pkgs/preprocessing/qaqc/README.md](pkgs/preprocessing/qaqc/README.md)** — Quality flags, EddyPro integration
 
 ## Example Coverage
 
 | Category | Files | Topics |
 |----------|-------|--------|
 | **Core** | 17 | Visualization (16), timestamp handling (1) |
-| **Analysis** | 9 | Correlation, decomposition, gap detection, spatial aggregation |
-| **Features** | 8 | Air properties, unit conversions, day/night flags, VPD |
+| **Analysis** | 9 | Correlation, decomposition, gap detection, spatial aggregation, harmonic analysis |
+| **Features** | 8 | Air properties, unit conversions, day/night flags, VPD, lagged variants |
 | **Fits** | 1 | Polynomial fitting |
 | **Flux** | 9 | Processing chain, HQ filtering, USTAR detection, self-heating, uncertainty, high-res analysis |
-| **Gapfilling** | 10 | Linear interpolation (2), Random Forest (3), XGBoost (2), MDS (2), comparison (1) |
+| **Gapfilling** | 10 | Linear interpolation, Random Forest (3 variants), XGBoost (3 variants), MDS (2), comparison |
 | **IO** | 1 | Binary file operations |
 | **Preprocessing** | 18 | Corrections (7), outlier detection (9), QA/QC (2) |
-| **TOTAL** | **76** | **~100+ individual functions demonstrated** |
+| **TOTAL** | **73** | **~100+ individual functions demonstrated** |
 
 ## Running Options
 
 ```bash
 # Run one specific example
-uv run python examples/pkgs/analysis/correlation.py
+uv run python examples/pkgs/analysis/analysis_correlation.py
 
 # Run all examples in a folder
 uv run python examples/run_all_examples.py
 
 # Run examples by category
-uv run python examples/core/visualization/heatmap_datetime.py
-uv run python examples/pkgs/flux/hires/lag.py
+uv run python examples/core/visualization/plot_heatmap_datetime_basic.py
+uv run python examples/pkgs/flux/hires/flux_lag.py
 ```
 
 ## Documentation & Guides

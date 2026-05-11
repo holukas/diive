@@ -331,9 +331,9 @@ All plotting classes follow a **two-phase design**:
 | **Use case** | Render same data on different axes, subplots, existing figures |
 
 **Why NOT in `__init__()`:**
-- ❌ Couples data preparation to plot destination
-- ❌ Makes object reuse inflexible (can't plot on different axes)
-- ❌ Violates separation of concerns
+- NOT: Couples data preparation to plot destination
+- NOT: Makes object reuse inflexible (can't plot on different axes)
+- NOT: Violates separation of concerns
 
 **Pattern — Plot same data on multiple axes:**
 
@@ -413,14 +413,14 @@ scatter.plot(
 
 **Checklist for plotting classes:**
 
-- ✓ `__init__()` contains ONLY: data + computation parameters
-- ✓ NO rendering or styling parameters in `__init__()` (explicitly exclude: `ax`, `title`, `xlabel`, `ylabel`, `colors`, `limits`, `cmap`, `show_*`, etc.)
-- ✓ `ax` parameter in `plot()` method as first parameter, default `None`
-- ✓ `ax=None` creates new figure automatically via `pf.create_ax()` or similar
-- ✓ All styling parameters moved to `plot()` method with sensible defaults
-- ✓ `plot()` has comprehensive docstring listing all options with descriptions
-- ✓ `plot()` can be called multiple times with different `ax`/styling
-- ✓ Examples updated to pass `ax` and styling to `plot()`, not `__init__()`
+- `__init__()` contains ONLY: data + computation parameters
+- NO rendering or styling parameters in `__init__()` (explicitly exclude: `ax`, `title`, `xlabel`, `ylabel`, `colors`, `limits`, `cmap`, `show_*`, etc.)
+- `ax` parameter in `plot()` method as first parameter, default `None`
+- `ax=None` creates new figure automatically via `pf.create_ax()` or similar
+- All styling parameters moved to `plot()` method with sensible defaults
+- `plot()` has comprehensive docstring listing all options with descriptions
+- `plot()` can be called multiple times with different `ax`/styling
+- Examples updated to pass `ax` and styling to `plot()`, not `__init__()`
 
 **Correct Implementation Pattern:**
 
@@ -462,14 +462,14 @@ plotter.plot()  # Creates new figure
 
 ### Refactoring Status (May 2026)
 
-**Completed ✅**
+**Completed**
 - HeatmapBase, HeatmapDateTime, HeatmapYearMonth, HeatmapXYZ fully refactored to two-phase design
-- **HexbinPlot refactored to two-phase design** — now follows pattern: __init__() data only, plot() styling
+- HexbinPlot refactored to two-phase design — now follows pattern: __init__() data only, plot() styling
 - Examples: All heatmap examples (plot_heatmap_datetime_basic.py, plot_heatmap_advanced.py) updated
 - Examples: All hexbin examples (plot_hexbin_basic.py, plot_hexbin_advanced.py) updated with non-blocking display
 - Theme imports added to heatmap_datetime.py, heatmap_xyz.py, hexbin.py
-- **All 16 visualization examples PASS** (100% compliance with two-phase design pattern)
-- **Source code fixes:** 
+- All 16 visualization examples PASS (100% compliance with two-phase design pattern)
+- Source code fixes: 
   - `diive/pkgs/analysis/quantiles.py` — ScatterXY API fixed
   - `diive/pkgs/flux/fluxprocessingchain/fluxprocessingchain.py` — HeatmapDateTime API fixed (2 calls)
   - `diive/pkgs/flux/fluxprocessingchain/level31_storagecorrection.py` — HeatmapDateTime API fixed (5 calls)
@@ -860,38 +860,46 @@ Located in `examples/` organized to mirror `diive/pkgs` and `diive/core` structu
 ```
 examples/
 ├── core/               # System-level utilities
-│   ├── visualization/  # Plotting (9 examples)
+│   ├── visualization/  # Plotting (16 examples)
 │   └── times/          # Timestamps (1 example)
 └── pkgs/               # Domain packages
     ├── analysis/       # Time series analysis (9 examples)
     ├── features/       # Variable creation (8 examples)
-    ├── flux/           # Flux processing (11 examples)
-    ├── gapfilling/     # Gap-filling methods (6 examples)
-    └── preprocessing/  # QC & corrections (16 examples)
+    ├── fits/           # Data fitting (1 example)
+    ├── flux/           # Flux processing (9 examples)
+    ├── gapfilling/     # Gap-filling methods (10 examples)
+    ├── io/             # File I/O (1 example)
+    └── preprocessing/  # QC & corrections (18 examples)
 ```
 
 **Documentation:**
 
-- **`examples/CATALOG.md`** — Find examples by use case (workflows, methods, difficulty levels)
-- **`examples/EXAMPLE_DATASET.md`** — Complete dataset documentation (37 variables, gaps, availability)
+- **`examples/CATALOG.md`** — Browse examples by topic with clear tables and descriptions
+- **`examples/EXAMPLE_DATASET.md`** — Complete dataset documentation (one example of many possible data structures)
 - **`examples/README.md`** — Quick start and structure overview
-- **Category READMEs** — One per folder with descriptions and usage
+- **Category READMEs** — One per folder with descriptions, use cases, and code examples
 
 **Running Examples:**
 
 - Run all: `uv run python examples/run_all_examples.py` (parallel, 8 workers)
-- Run category: `uv run python examples/pkgs/gapfilling/gapfill_randomforest_ts.py`
-- Coverage: 62 examples across 18 organized folders
+- Run category: `uv run python examples/pkgs/gapfilling/gapfill_randomforest.py`
+- Coverage: 73 examples across 11 organized folders
+
+**Important Notes:**
+
+- The example dataset in `examples/EXAMPLE_DATASET.md` is ONE example of how data can be structured. Real-world datasets may have different frequencies, gap patterns, quality characteristics, and variables.
+- All documentation should be in plain text (markdown). Never use emojis in markdown files.
+- No emojis in documentation, code comments, or file names.
 
 **Maintaining Examples (IMPORTANT):**
 When adding/modifying examples:
 
-1. Update **category README.md** with file description
-2. Update **examples/CATALOG.md** with use case/workflow info
+1. Update **category README.md** with file description and use cases
+2. Update **examples/CATALOG.md** with file reference in appropriate table
 3. Update **examples/run_all_examples.py** with file path
 4. Update **CHANGELOG.md** to note changes
 5. Update **source code docstrings** (see checklist below)
-6. Keep **examples/EXAMPLE_DATASET.md** in sync if data changes
+6. Keep **examples/EXAMPLE_DATASET.md** updated if data changes
 
 The examples catalog and dataset docs are user-facing—keep them accurate and in sync.
 
@@ -915,11 +923,11 @@ Examples are now structured as **executable Python scripts** designed for Sphinx
 - Inline prints and outputs visible to readers
 
 **Benefits:**
-- ✓ Pure Python — version control friendly (no notebook JSON)
-- ✓ Readable diffs — changes to code are clear
-- ✓ Auto-execution — Sphinx Gallery runs scripts, captures plots/output
-- ✓ Professional docs — generates beautiful HTML with code + output side-by-side
-- ✓ Reproducible — no hidden state, no kernel issues
+- Pure Python — version control friendly (no notebook JSON)
+- Readable diffs — changes to code are clear
+- Auto-execution — Sphinx Gallery runs scripts, captures plots/output
+- Professional docs — generates beautiful HTML with code + output side-by-side
+- Reproducible — no hidden state, no kernel issues
 
 **Example structure:**
 ```python
@@ -969,16 +977,20 @@ print(results)
 **Outlier Detection & QA/QC (`pkgs/preprocessing/outlierdetection/` and `qaqc/`)**
 - 9 outlier detection methods converted to Sphinx Gallery format with consistent `outlier_*` naming
 - 2 QA/QC examples (`qc_overall_flag.py`, `qc_eddypro_flags.py`)
-- Organized by complexity level (beginner, intermediate, advanced)
+- Organized by method and use case (statistical, robust, density-based, multi-stage)
 
 **Gap-Filling Methods (`pkgs/gapfilling/`)**
-- All 6 gap-filling examples converted to Sphinx Gallery format with consistent `gapfill_*` naming:
-  - `gapfill_randomforest_ts.py` — Random Forest with 3 sub-workflows
-  - `gapfill_xgboost_ts.py` — XGBoost with hyperparameter optimization
+- All 10 gap-filling examples converted to Sphinx Gallery format with consistent `gapfill_*` naming:
+  - `gapfill_randomforest.py` — Random Forest gap-filling
+  - `gapfill_quickfill.py` — Rapid Random Forest prototyping
+  - `gapfill_optimize_randomforest.py` — Hyperparameter optimization
+  - `gapfill_xgboost.py` — XGBoost gradient boosting
+  - `gapfill_optimize_xgboost.py` — Hyperparameter optimization
   - `gapfill_mds.py` — Meteorological Data Similarity
-  - `gapfill_mds_comparison.py` — Original vs. optimized MDS performance
-  - `gapfill_interpolate.py` — Linear interpolation (conservative & generous)
-  - `gapfill_comparison.py` — Benchmark all three methods side-by-side
+  - `gapfill_mds_comparison.py` — MDS variants comparison
+  - `gapfill_interpolate_conservative.py` — Linear interpolation (strict)
+  - `gapfill_interpolate_generous.py` — Linear interpolation (permissive)
+  - `gapfill_comparison.py` — Benchmark all methods side-by-side
 
 **File I/O (`pkgs/io/`)**
 - Binary value extraction example renamed to `io_extract.py` with Sphinx Gallery format
@@ -1117,12 +1129,12 @@ For each new/modified example, update:
 
 #### 5. Common Mistakes to Avoid
 
-- ❌ **Multiple functions in one file** — Create separate files for each function
-- ❌ **Forgetting to update source code docstrings** — Always update Example and See Also sections
-- ❌ **Including file I/O** — Don't add `.to_csv()` or `.to_parquet()` to examples
-- ❌ **Updating only examples/, forgetting source docstrings** — Both must be synchronized
-- ❌ **Inconsistent file naming** — Must use correct domain prefix (gapfill_, io_, etc.)
-- ❌ **Updating examples/run_all_examples.py but not README** — Update all 7 documentation files
+- AVOID: Multiple functions in one file — Create separate files for each function
+- AVOID: Forgetting to update source code docstrings — Always update Example and See Also sections
+- AVOID: Including file I/O — Don't add `.to_csv()` or `.to_parquet()` to examples
+- AVOID: Updating only examples/, forgetting source docstrings — Both must be synchronized
+- AVOID: Inconsistent file naming — Must use correct domain prefix (gapfill_, io_, etc.)
+- AVOID: Updating examples/run_all_examples.py but not README — Update all 7 documentation files
 
 #### 6. Verification Checklist
 
