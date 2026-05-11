@@ -22,8 +22,10 @@ class BinFitterCP:
 
     Examples
     --------
-    See `examples/fits/fitter.py` for complete examples demonstrating curve fitting
-    with real and synthetic ecosystem data.
+    See `examples/pkgs/fits/fit_binfittercp.py` for comprehensive example demonstrating
+    binned fitting with temperature-VPD relationship, result exploration, and interval
+    interpretation. See `examples/pkgs/fits/fit_fitter.py` for ecosystem driver-response
+    (NEE-VPD) fitting example.
     """
 
     def __init__(

@@ -1,15 +1,15 @@
 """
-============================================
-Photosynthetic Decoupling Analysis
-============================================
+=================
+Decoupling Analysis with Sorting Bins
+=================
 
-Stratified analysis of photosynthetic response across temperature gradients.
+Stratified binning to reveal how radiation response changes across temperature ranges.
 
-Demonstrates stratified binning analysis: how does net ecosystem productivity
-(NEE) respond to vapor pressure deficit (VPD) across different temperature
-classes? Reveals environmental controls on ecosystem carbon uptake.
+How does ecosystem radiation response depend on temperature? This example bins data
+by vapor pressure deficit (VPD) within separate temperature classes, showing whether
+the relationship stays stable or changes as temperature increases.
 
-Best for: Understanding multi-variable interactions in photosynthesis
+Best for: Understanding how environmental controls interact
 """
 
 # %%
@@ -18,74 +18,68 @@ Best for: Understanding multi-variable interactions in photosynthesis
 
 import diive as dv
 
+# Load the dataset
 data_df = dv.load_exampledata_parquet()
 
-# Use summer months only
+# Keep summer months (June-September is typical for vegetation growth)
 data_df = data_df.loc[(data_df.index.month >= 6) & (data_df.index.month <= 9)].copy()
 
 # Select variables
 vpd_col = 'VPD_f'
-nee_col = 'NEE_CUT_REF_f'
-ta_col = 'Tair_f'
-gpp_col = 'GPP_DT_CUT_REF'
-swin_col = 'Rg_f'
+tair_col = 'Tair_f'
+radiation_col = 'Rg_f'
 
-df = data_df[[nee_col, gpp_col, ta_col, vpd_col, swin_col]].copy()
+df = data_df[[vpd_col, tair_col, radiation_col]].copy()
 
-# Filter to daytime only (solar radiation > 50 W/m^2)
-daytime_locs = (df[swin_col] > 50) & (df[ta_col] > 5)
+# Keep daytime only: radiation > 20 W/m^2 and temperature > 0 C
+# (These thresholds define when the ecosystem is actually functioning)
+daytime_locs = (df[radiation_col] > 20) & (df[tair_col] > 0)
 df = df[daytime_locs].copy()
 
-# Rename for clarity
-rename_dict = {
-    ta_col: 'air_temperature',
-    vpd_col: 'vapor_pressure_deficit',
-    nee_col: 'net_ecosystem_productivity'
-}
-df = df.rename(columns=rename_dict, inplace=False)
-
-# Prepare data - convert to CO2 uptake (positive = uptake)
-ta_col = 'air_temperature'
-vpd_col = 'vapor_pressure_deficit'
-nee_col = 'net_ecosystem_productivity'
-df = df[[ta_col, vpd_col, nee_col]].copy()
-df[nee_col] = df[nee_col].multiply(-1)
+print(f"Loaded {len(df)} daytime records from summer")
 
 # %%
-# Stratified analysis
-# ^^^^^^^^^^^^^^^^^^^
+# Bin data by VPD within temperature strata
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-# Analyze with stratified binning across temperature classes
-analysis = dv.stratified_analysis(
+# The idea: group data into temperature bins, then within each bin,
+# bin by VPD. This shows if the radiation-VPD relationship changes
+# as temperature increases (decoupling).
+
+analysis = dv.StratifiedAnalysis(
     df=df,
-    zvar=ta_col,  # Stratification variable (temperature)
-    xvar=vpd_col,  # X-axis (vapor pressure deficit)
-    yvar=nee_col,  # Y-axis (CO2 uptake)
-    n_bins_z=10,  # Temperature strata
-    n_bins_x=5,   # VPD bins
-    conversion=False
+    xvar=vpd_col,           # Bin by VPD on x-axis
+    yvar=radiation_col,     # Show radiation on y-axis
+    zvar=tair_col,          # Stratify by temperature
+    n_bins_z=5,             # 5 temperature bins
+    n_bins_x=10,            # 10 VPD bins within each temperature class
+    conversion=None,        # No z-score conversion
+    agg='median'            # Use median for aggregation
 )
 
-# Calculate bins and display results
 analysis.calcbins()
 
+print("Binning complete")
+
 # %%
-# Results and interpretation
+# Access and examine results
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-# Access results as dictionary
-binaggs = analysis.get_binaggs()
-first = next(iter(binaggs))
-print("First temperature bin sample:")
-print(binaggs[first])
+# Results are stored as a dictionary with temperature medians as keys
+bin_results = analysis.get_binaggs()
 
-# Get all results as a single dataframe
-print("\nAll stratified analysis results:")
-print(analysis.results)
+# List all temperature classes (as strings of temperature medians)
+temp_classes = list(bin_results.keys())
+print(f"\nTemperature bins (medians in C): {temp_classes}")
+
+# Look at the warmest bin
+warmest = bin_results[temp_classes[-1]]
+print(f"\nResults for warmest class ({temp_classes[-1]} C):")
+print(warmest)
 
 # %%
 # Visualization
 # ^^^^^^^^^^^^^
 
-# Show decoupling patterns across temperature strata
+# Plot the stratified relationship
 analysis.showplot_decoupling_sbm(marker='o', emphasize_lines=True)

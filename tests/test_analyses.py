@@ -76,7 +76,7 @@ class TestAnalyses(unittest.TestCase):
 
     def test_daily_correlation(self):
         from diive.configs.exampledata import load_exampledata_parquet
-        from diive.pkgs.analysis.correlation import daily_correlation
+        from diive.pkgs.analysis import daily_correlation
         from diive.pkgs.features.variables.potentialradiation import potrad
         data_df = load_exampledata_parquet()
         # Use only year 2022

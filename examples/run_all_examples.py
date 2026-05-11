@@ -35,7 +35,7 @@ EXAMPLE_FILES = [
     'core/visualization/plot_scatter_xy_colored.py',
     'core/times/times_timestamp_sanitizer.py',
     # PKGS: Analysis
-    'pkgs/analysis/analysis_correlation.py',
+    'pkgs/analysis/analysis_daily_correlation.py',
     'pkgs/analysis/analysis_decoupling.py',
     'pkgs/analysis/analysis_gapfinder.py',
     'pkgs/analysis/analysis_gridaggregator.py',
@@ -77,6 +77,7 @@ EXAMPLE_FILES = [
     'pkgs/features/feature_timesince.py',
     'pkgs/features/feature_vpd.py',
     # PKGS: Fits
+    'pkgs/fits/fit_binfittercp.py',
     'pkgs/fits/fit_fitter.py',
     # PKGS: Flux - Processing chain
     'pkgs/flux/fluxprocessingchain/fluxprocessingchain.py',

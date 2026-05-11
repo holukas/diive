@@ -60,10 +60,11 @@ class StratifiedAnalysis:
             .showplot_decoupling_sbm(): Visualize results with line plot and error bars
 
         Example:
-            See `examples/pkgs/analysis/analysis_decoupling.py` for complete examples.
+            See `examples/pkgs/analysis/analysis_decoupling.py` for complete examples demonstrating
+            stratified binning across temperature ranges, result access, and visualization.
 
         See Also:
-            stratified_analysis : Convenience function.
+            stratified_analysis : Convenience alias (StratifiedAnalysis = stratified_analysis).
         """
         self._df = df.copy().dropna()
         self.zvar = zvar

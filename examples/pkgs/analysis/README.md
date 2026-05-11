@@ -2,14 +2,14 @@
 
 Examples demonstrating statistical analysis, decomposition, and pattern detection for time series data.
 
-9 examples covering correlation, spectral analysis, gap detection, and decomposition.
+10 examples covering correlation, spectral analysis, gap detection, grid aggregation, and decomposition.
 
 ## Examples by Method
 
 ### Correlation & Covariance
 
-- **analysis_correlation.py** — Cross-correlation, autocorrelation, lag detection, anomaly detection
-- **analysis_decoupling.py** — Photosynthetic decoupling across temperature gradients
+- **analysis_daily_correlation.py** — Daily correlation coefficients for quality checks, relationship analysis, and statistical methods
+- **analysis_decoupling.py** — Stratified binning to reveal how ecosystem responses change across temperature ranges
 
 ### Decomposition & Trends
 
@@ -24,8 +24,8 @@ Examples demonstrating statistical analysis, decomposition, and pattern detectio
 
 ### Data Characterization
 
-- **analysis_gapfinder.py** — Detect and visualize gaps, assess data completeness
-- **analysis_gridaggregator.py** — 2D spatial gridding and aggregation
+- **analysis_gapfinder.py** — Identify and characterize consecutive missing data periods in time series
+- **analysis_gridaggregator.py** — 2D grid aggregation with quantile, equal-width, and custom binning
 
 ## Common Patterns
 
@@ -69,10 +69,11 @@ std_by_hour = diel.std_by_hour
 uv run python examples/pkgs/analysis/analysis_seasonaltrend.py
 
 # Correlations & relationships
-uv run python examples/pkgs/analysis/analysis_correlation.py
+uv run python examples/pkgs/analysis/analysis_daily_correlation.py
 
 # Data characterization
 uv run python examples/pkgs/analysis/analysis_gapfinder.py
+uv run python examples/pkgs/analysis/analysis_gridaggregator.py
 uv run python examples/pkgs/analysis/analysis_quantiles.py
 
 # Distribution & range analysis
@@ -94,9 +95,10 @@ uv run python examples/run_all_examples.py
 
 See `diive.pkgs.analysis` for full API documentation:
 
+- `DailyCorrelation` — Daily correlation coefficients, summary statistics, anomaly detection
 - `Correlation` — Cross-correlation and lag detection
 - `SeasonalTrendDecomposition` — STL decomposition
 - `Quantiles` — Percentile-based analysis
 - `GapFinder` — Gap detection and reporting
-- `GridAggregator` — Spatial binning and aggregation
+- `GridAggregator` — 2D grid aggregation (quantile, equal-width, custom binning)
 - `Harmonic` — Spectral and Fourier analysis

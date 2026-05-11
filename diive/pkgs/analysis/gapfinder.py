@@ -12,10 +12,11 @@ class GapFinder:
     planning gap-filling strategies.
 
     Example:
-        See `examples/pkgs/analysis/analysis_gapfinder.py` for complete examples.
+        See `examples/pkgs/analysis/analysis_gapfinder.py` for complete examples showing
+        gap detection from real data, longest gap identification, and gap distribution analysis.
 
     See Also:
-        GapFinder : This class.
+        TimestampSanitizer : Handles missing time steps and data gaps at source.
     """
     # Define column names
     gap_values = 'GAPVALUES'

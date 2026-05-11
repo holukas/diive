@@ -45,11 +45,12 @@ See: [core/visualization/README.md](core/visualization/README.md)
 | Example | Description |
 |---------|-------------|
 | [**analysis_correlation.py**](pkgs/analysis/analysis_correlation.py) | Cross-correlation, autocorrelation, lag detection, anomaly detection |
+| [**analysis_daily_correlation.py**](pkgs/analysis/analysis_daily_correlation.py) | Daily correlation coefficients between time series, quality checks, relationship analysis |
 | [**analysis_seasonaltrend.py**](pkgs/analysis/analysis_seasonaltrend.py) | STL decomposition, trend isolation, seasonality extraction |
-| [**analysis_decoupling.py**](pkgs/analysis/analysis_decoupling.py) | Stratified analysis, canopy-scale processes, vegetation layer separation |
-| [**analysis_gapfinder.py**](pkgs/analysis/analysis_gapfinder.py) | Gap detection and visualization, data completeness assessment |
-| [**analysis_gridaggregator.py**](pkgs/analysis/analysis_gridaggregator.py) | 2D spatial gridding and aggregation |
-| [**analysis_histogram_distribution.py**](pkgs/analysis/analysis_histogram_distribution.py) | Distribution analysis, percentiles, quantile-based analysis |
+| [**analysis_decoupling.py**](pkgs/analysis/analysis_decoupling.py) | Stratified binning to reveal how ecosystem responses change across temperature ranges |
+| [**analysis_gapfinder.py**](pkgs/analysis/analysis_gapfinder.py) | Identify and characterize consecutive missing data periods in time series |
+| [**analysis_gridaggregator.py**](pkgs/analysis/analysis_gridaggregator.py) | 2D grid aggregation with quantile, equal-width, and custom binning methods |
+| [**analysis_histogram_distribution.py**](pkgs/analysis/analysis_histogram_distribution.py) | Histogram binning methods: fixed bins, unique values, fringe bin removal |
 | [**analysis_optimumrange.py**](pkgs/analysis/analysis_optimumrange.py) | Find optimal value ranges, condition-based filtering |
 | [**analysis_quantiles.py**](pkgs/analysis/analysis_quantiles.py) | Percentile and quantile calculations, non-parametric statistics |
 | [**analysis_harmonic.py**](pkgs/analysis/analysis_harmonic.py) | Spectral analysis, Fourier decomposition, frequency content |
@@ -184,7 +185,8 @@ See: [pkgs/gapfilling/README.md](pkgs/gapfilling/README.md)
 
 | Example | Description |
 |---------|-------------|
-| [**fit_fitter.py**](pkgs/fits/fit_fitter.py) | Polynomial fitting, light-response curves, custom function fitting |
+| [**fit_binfittercp.py**](pkgs/fits/fit_binfittercp.py) | Binned curve fitting with confidence/prediction intervals, result exploration |
+| [**fit_fitter.py**](pkgs/fits/fit_fitter.py) | Ecosystem driver-response fitting, NEE-VPD relationship, uncertainty quantification |
 
 See: [pkgs/fits/README.md](pkgs/fits/README.md)
 

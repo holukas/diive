@@ -35,10 +35,10 @@ class DailyCorrelation:
         plot(): Interactive visualization with correlation distribution and day examples
 
     Example:
-        See `examples/pkgs/analysis/analysis_correlation.py` for complete examples.
-
-    See Also:
-        daily_correlation : Convenience function.
+        See `examples/pkgs/analysis/analysis_daily_correlation.py` for comprehensive examples covering:
+        quality checks (observed vs. potential radiation), physical relationships (temperature vs. radiation),
+        biological processes (temperature vs. CO2 flux), and advanced methods like summary statistics
+        and anomaly detection.
     """
 
     def __init__(self, s1: Series, s2: Series, mincorr: float = 0.8):
@@ -259,32 +259,3 @@ class DailyCorrelation:
 
         fig.suptitle(f"Comparison between {s1.name} and {s2.name}")
         fig.show()
-
-
-def daily_correlation(s1: Series,
-                      s2: Series,
-                      mincorr: float = 0.8,
-                      showplot: bool = False) -> Series:
-    """Calculate daily correlation between two time series.
-
-    Convenience function. See DailyCorrelation class for class-based API.
-
-    Args:
-        s1: any time series, timestamp must overlap with *s2*
-        s2: any time series, timestamp must overlap with *s1*
-        mincorr: minimum absolute correlation threshold
-        showplot: if *True*, display plot of results
-
-    Returns:
-        series with correlations for each day
-
-    Example:
-        See `examples/pkgs/analysis/analysis_correlation.py` for complete examples.
-
-    See Also:
-        DailyCorrelation : Class-based API with more features.
-    """
-    dc = DailyCorrelation(s1=s1, s2=s2, mincorr=mincorr)
-    if showplot:
-        dc.plot()
-    return dc.daycorrs_

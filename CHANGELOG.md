@@ -91,6 +91,20 @@
   potentialradiation, timesince, vpd) with feature_* prefix, and 1 fits example (fitter) with fit_* prefix. All 18 files
   now have # %% section separators for clarity. Updated example file references across run_all_examples.py, category
   READMEs, examples/README.md, and source code docstrings (9 analysis modules, 1 feature module, 1 fits module).
+- **Notebook conversion: Histogram, BinFitterCP, & DailyCorrelation:** Converted 3 Jupyter notebooks to Sphinx Gallery examples:
+    - `examples/pkgs/analysis/analysis_histogram_distribution.py`: Enhanced existing example with all 4 histogram methods
+      (fixed bins, fixed bins with fringe removal, unique values, unique values with fringe removal), interpretation logic,
+      and comparison guidance. Replaced redundant notebook.
+    - `examples/pkgs/fits/fit_binfittercp.py`: New example demonstrating binned curve fitting with temperature-VPD
+      relationship, result exploration, confidence/prediction interval interpretation.
+    - `examples/pkgs/analysis/analysis_daily_correlation.py`: New example demonstrating daily correlation analysis for
+      quality checks, physical relationships, and biological processes with multiple use cases. Documented conversion
+      process in CLAUDE.md § "Converting Notebooks to Sphinx Gallery Examples" for team reference.
+- **Correlation API simplification:** Removed `daily_correlation()` convenience function wrapper; replaced with module-level alias `daily_correlation = DailyCorrelation` in `diive/pkgs/analysis/__init__.py`. This eliminates unnecessary indirection while maintaining backward compatibility. Combined separate `analysis_correlation.py` and `analysis_daily_correlation.py` examples into single comprehensive example showing three relationship types plus advanced methods (`.summary()`, `.get_days_by_correlation()`).
+- **GridAggregator notebook conversion:** Converted `notebooks/analyses/GridAggregator.ipynb` to Sphinx Gallery example `examples/pkgs/analysis/analysis_gridaggregator.py`. Demonstrates all three binning methods (quantile, equal-width, custom) with output format comparisons and interpretation guidance.
+- **Decoupling & GapFinder notebook conversions:** Enhanced two existing Sphinx Gallery examples:
+    - `examples/pkgs/analysis/analysis_decoupling.py`: Updated to match notebook content using StratifiedAnalysis API. Demonstrates stratified binning to reveal how ecosystem responses change across temperature ranges. Shows summer daytime filtering, multi-level binning (VPD × Temperature), result access patterns, and visualization.
+    - `examples/pkgs/analysis/analysis_gapfinder.py`: Updated to match notebook content with real gap detection from 10-year dataset. Demonstrates gap identification, longest gap analysis, and gap distribution statistics. Replaced artificial gaps with real data-quality assessment workflow.
 
 ### Bug Fixes
 

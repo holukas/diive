@@ -296,6 +296,19 @@ scatter.plot(xlabel='X', ylabel='Y', title='Title')
 - Makes it easy to modify examples for other use cases
 - Inline comments (not separate docstrings) keep examples readable
 
+## Text Writing Standards
+
+**Use `/llm-detox` skill for all written content:** When writing or rephrasing text (documentation, comments, commit messages, examples), apply the `/llm-detox` skill to ensure content is authentic and naturally written, not overly formal or obviously AI-generated.
+
+This applies to:
+- Documentation updates and READMEs
+- Example file content and docstrings
+- Commit messages
+- Section headers and explanatory text
+- Any rephrasing or content generation
+
+This keeps the codebase feeling human-written and maintains consistency with the project's voice.
+
 ## Plotting Class Design Standard
 
 All plotting classes follow a **two-phase design**:
@@ -1272,6 +1285,309 @@ When examples are organized in subdirectories, update these files:
    ```bash
    cd examples/pkgs/flux && find . -name "*.py" -exec python3 -m py_compile {} \;
    ```
+
+## Notebook Conversion Status (v0.91.0+)
+
+**6 Jupyter notebooks have been converted to Sphinx Gallery examples and archived in `_archived/`:**
+
+| Notebook (Archived) | Example File | Status |
+|---|---|---|
+| `Histogram.ipynb` | `examples/pkgs/analysis/analysis_histogram_distribution.py` | ✅ Complete |
+| `BinFitterCP.ipynb` | `examples/pkgs/fits/fit_binfittercp.py` | ✅ Complete |
+| `DailyCorrelation.ipynb` | `examples/pkgs/analysis/analysis_daily_correlation.py` | ✅ Complete |
+| `GridAggregator.ipynb` | `examples/pkgs/analysis/analysis_gridaggregator.py` | ✅ Complete |
+| `DecouplingSortingBins.ipynb` | `examples/pkgs/analysis/analysis_decoupling.py` | ✅ Complete |
+| `GapFinder.ipynb` | `examples/pkgs/analysis/analysis_gapfinder.py` | ✅ Complete |
+
+**All converted examples are:**
+- Registered in `examples/run_all_examples.py`
+- Documented in `examples/CATALOG.md`
+- Listed in category READMEs (`examples/pkgs/{category}/README.md`)
+- Have updated source code docstrings with example references
+- Include information preservation checklist verification (no content lost)
+
+## Converting Notebooks to Sphinx Gallery Examples
+
+This section documents the process for converting Jupyter notebooks from `notebooks/` to Sphinx Gallery `.py` examples in `examples/`.
+
+### Why Convert Notebooks?
+
+- **Discoverability:** Examples in `examples/` are organized, documented, and cross-referenced
+- **Maintainability:** Single source of truth; avoid duplicating content between notebook and example
+- **Integration:** Automated testing via `run_all_examples.py`
+- **Quality:** Sphinx Gallery format auto-generates professional documentation
+- **IDE support:** Docstrings visible in editors; no need to open separate notebook files
+
+### Conversion Checklist (7-Step Process)
+
+#### Step 1: Analyze the Notebook
+
+Read the notebook completely and identify:
+- **Main concepts** — What does this teach? (methods, parameters, use cases)
+- **Data/examples** — What dataset is used? Is it specific or general?
+- **Code sections** — How many distinct demonstrations?
+- **Explanations** — What text explains the results?
+- **Domain context** — Is it specific to one use case or broadly applicable?
+
+**Example from Histogram notebook:**
+- Concepts: 4 histogram binning methods, fringe bin removal
+- Data: CO2 time lags (narrow) → convert to general flux data (broad)
+- Code: 4 methods with different parameters
+- Explanations: Text after each method explaining results, rationale
+
+#### Step 2: Choose Example Location & Naming
+
+**Location:** Mirror source code organization in `examples/pkgs/{category}/`
+
+```
+Source code: diive/pkgs/analysis/histogram.py
+Example location: examples/pkgs/analysis/analysis_histogram_distribution.py
+                                          ↑ prefix: {domain}_ (optional if in subfolder)
+```
+
+**Check for existing examples:** Don't duplicate.
+- If basic example exists, enhance it
+- If similar example exists, keep separate (different use cases)
+
+**Naming convention:**
+- `analysis_*.py` for analysis methods
+- `correction_*.py` for data corrections
+- `gapfill_*.py` for gap-filling methods
+- `feature_*.py` for feature engineering
+- Filename should match primary use case
+
+#### Step 3: Create/Update Example File
+
+**Structure (Sphinx Gallery format):**
+
+```python
+"""
+=================
+Descriptive Title
+=================
+
+Brief explanation: what this example demonstrates and when to use it.
+
+Best for: [use case or context]
+"""
+
+# %%
+# Section Title
+# ^^^^^^^^^^^^^^
+# Explanatory text about this section (non-executed comments)
+
+import diive as dv
+
+# Code here
+result = dv.SomeClass(data)
+print(result)
+
+# %%
+# Next Section
+# ^^^^^^^^^^^^^
+# More explanation
+
+# More code
+```
+
+**Key principles:**
+- `# %%` marks cell boundaries (becomes sections in Sphinx Gallery)
+- Text ABOVE code explains what's coming
+- Include `print()` statements to show output
+- **No file I/O** — show API, not save/load
+- Use general datasets (parquet, not domain-specific CSVs)
+- All 4 methods from our histogram example should be demonstrated
+
+**Converting notebook content to example (preserve all information):**
+1. Extract description → Put in docstring + "Overview" section
+2. Extract imports → Simplify (use `import diive as dv`, remove version checks)
+3. Extract code sections → Organize into `# %%` cells with explanatory text
+4. Extract explanations → Convert to interpretive sections (teach not just show)
+5. Add comparison/guidance → Explain when/how to use each approach
+6. **Preserve all descriptive text** — Ensure no information from notebook markdown is lost:
+   - Rationale for each method/parameter
+   - Domain-specific context and motivation
+   - Warnings or critical caveats
+   - Use case guidance ("when to use this method")
+   - Interpret text after results (what the numbers mean)
+   - Adjust wording as needed for Sphinx Gallery format (comments, print statements, section headers)
+   - If text is domain-specific, make it general (e.g., "CO2 time lags" → "measurement relationships")
+
+**Example: Histogram notebook → example**
+
+| Notebook | Example |
+|----------|---------|
+| Title + version + author | Docstring (title only) |
+| Description (4 bullets) | Docstring + Overview section |
+| Imports + version check | Simple imports |
+| Load EddyPro CSV | Load parquet (standard) |
+| Extract CO2_TLAG_ACTUAL | Extract NEE_CUT_REF_f (general) |
+| 4 methods | 4 methods with same code |
+| Results + text explanation | Results + Interpretation section (programmatic) |
+| (none) | Comparison + "When to use" guidance |
+
+**Information Preservation Checklist (before testing):**
+
+Before testing, verify no descriptive content from the notebook is lost:
+
+- [ ] **Description/rationale** — Is the "why" (motivation, use case) included in docstring or overview?
+- [ ] **Method explanations** — Does each method/section have explanatory text about what it does?
+- [ ] **Parameter guidance** — Are parameter choices and their impact explained?
+- [ ] **Results interpretation** — Is there guidance on what results mean and how to read them?
+- [ ] **Warnings/caveats** — Are critical limitations or edge cases mentioned?
+- [ ] **When to use** — Is there guidance on choosing between different approaches?
+- [ ] **Domain context** — Is background context preserved (generalized if needed)?
+- [ ] **Code comments** — Are tricky, important, or non-obvious lines commented?
+
+**If any item is unchecked:**
+1. Identify the missing text in the notebook
+2. Find the appropriate place in the example (docstring, section header, comment, or print statement)
+3. Add it back, adjusting the format as needed for Sphinx Gallery (markdown → comments/section headers)
+4. Re-read the example to ensure information flows naturally
+
+**Goal:** The example should be a complete, standalone reference that requires no reference back to the notebook.
+
+#### Step 4: Test the Example
+
+```bash
+# Ensure it runs without errors
+uv run python examples/pkgs/analysis/analysis_histogram_distribution.py
+
+# Verify output looks reasonable
+# Check for:
+#   - Data loads successfully
+#   - All 4 methods run
+#   - Results are printed clearly
+#   - No file I/O operations
+#   - No external dependencies beyond diive
+```
+
+If errors occur:
+- Check data column names (verify columns exist in parquet/csv)
+- Adjust code to use available columns
+- Simplify if needed (don't include domain-specific details)
+
+#### Step 5: Update Source Code Docstrings
+
+In the **class/function being demonstrated** (e.g., `diive/pkgs/analysis/histogram.py`):
+
+```python
+class Histogram:
+    def __init__(self, ...):
+        """
+        [existing docstring...]
+        
+        Example:
+            See `examples/pkgs/analysis/analysis_histogram_distribution.py` for complete examples.
+        
+        See Also:
+            SomeRelatedClass : Brief description
+        """
+```
+
+**Format:**
+- Add/update `Example:` section with path to example
+- Add/update `See Also:` section with related functions
+- Use backticks around path: `` `examples/path/to/file.py` ``
+
+#### Step 6: Update Documentation Files
+
+Update these 5 files (in order):
+
+**A. Category README** (`examples/pkgs/{category}/README.md`)
+   - Add 1-line description in appropriate subsection
+   - Format: `- **filename.py** — One-line description`
+   - Include "Running Examples" bash command
+
+**B. examples/CATALOG.md**
+   - Add row to appropriate table
+   - Format: `| [**filename.py**](path) | Description |`
+   - Description should be specific to what example teaches
+
+**C. examples/run_all_examples.py**
+   - Add file path to `EXAMPLE_FILES` list in correct section
+   - Must include relative path like `'pkgs/analysis/analysis_histogram.py'`
+
+**D. examples/README.md**
+   - Update total example count in header
+   - Update per-category file counts if structure changed
+
+**E. CHANGELOG.md**
+   - Note new/updated examples in the latest version entry
+   - Format: `- Converted Histogram notebook to Sphinx Gallery example (examples/pkgs/analysis/analysis_histogram_distribution.py)`
+
+#### Step 7: Verify Integration
+
+**Run the example suite:**
+```bash
+uv run python examples/run_all_examples.py
+```
+
+**Check cross-references:**
+```bash
+# Source code docstring references example
+grep -r "examples/pkgs/analysis/analysis_histogram" diive/
+
+# Example is in CATALOG.md
+grep "analysis_histogram" examples/CATALOG.md
+
+# Example is in category README
+grep "analysis_histogram" examples/pkgs/analysis/README.md
+
+# Example is in runner
+grep "analysis_histogram" examples/run_all_examples.py
+```
+
+### Comparison Checklist: Before Deprecating Notebook
+
+Once example is created, verify the notebook is truly redundant:
+
+- [ ] **Functional coverage** — Does example demonstrate all methods from notebook?
+- [ ] **Content coverage** — Are all key concepts explained (not just results)?
+- [ ] **Data** — Does example use data that's available/standard (not notebook-specific)?
+- [ ] **Educational value** — Does example teach interpretation, not just API usage?
+- [ ] **Integration** — Is example discoverable (CATALOG, README, run_all_examples)?
+- [ ] **Docstrings** — Are source code docstrings updated to reference example?
+
+**If all ✅**, proceed to archival.
+
+If any ❌, enhance example before archiving notebook.
+
+### Step 8: Archive the Notebook
+
+Once comparison checklist passes, move the notebook to `_archived/` folder as a record of conversion:
+
+```bash
+# Move notebook to archive
+mv notebooks/category/NotebookName.ipynb _archived/NotebookName.ipynb
+```
+
+This preserves the notebook's history while marking it as converted and preventing accidental re-use.
+
+### Real Example: Histogram Notebook Conversion
+
+**Notebook:** `notebooks/analyses/Histogram.ipynb`
+**Example:** `examples/pkgs/analysis/analysis_histogram_distribution.py`
+
+**Process used:**
+1. ✅ Analyzed notebook: 4 histogram methods, CO2 time lag specific data
+2. ✅ Created example in `examples/pkgs/analysis/`
+3. ✅ Enhanced with overview section explaining all 4 methods
+4. ✅ Verified information preservation: all notebook description text included
+   - Rationale for each method (why fringe bin removal matters)
+   - Parameter guidance (when to use each approach)
+   - Results interpretation (what bin ranges mean, how to read inclusive/exclusive)
+   - Use case guidance (coarse vs fine-grained analysis)
+5. ✅ Added programmatic interpretation section (bin width calculation)
+6. ✅ Added comparison & "when to use" guidance
+7. ✅ Tested: runs without errors with general NEE flux data
+8. ✅ Updated Histogram class docstring to reference example
+9. ✅ Updated CATALOG.md, category README, run_all_examples.py, CHANGELOG.md
+10. ✅ Verified integration: example appears in all cross-references
+11. ✅ Comparison check: 100% content coverage, superior educational value
+12. ✅ Archived notebook: moved to `_archived/Histogram.ipynb`
+
+**Result:** Notebook conversion complete and archived. Example is discoverable, tested, documented.
 
 ## Common Workflows
 

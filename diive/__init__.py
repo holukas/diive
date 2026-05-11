@@ -26,8 +26,8 @@ from diive.core.plotting.timeseries import TimeSeries
 from diive.core.plotting.timeseries import TimeSeries as plot_time_series
 from diive.core.times.resampling import resample_to_monthly_agg_matrix as resample_to_monthly_agg_matrix
 from diive.core.times.times import TimestampSanitizer as TimestampSanitizer
-from diive.pkgs.analysis.correlation import DailyCorrelation as DailyCorrelation
-from diive.pkgs.analysis.correlation import daily_correlation as daily_correlation
+from diive.pkgs.analysis import DailyCorrelation as DailyCorrelation
+from diive.pkgs.analysis import daily_correlation as daily_correlation
 from diive.pkgs.analysis.decoupling import StratifiedAnalysis as StratifiedAnalysis
 from diive.pkgs.analysis.decoupling import StratifiedAnalysis as stratified_analysis
 from diive.pkgs.analysis.gapfinder import GapFinder as GapFinder

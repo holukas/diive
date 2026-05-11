@@ -1,4 +1,8 @@
 from diive.pkgs.analysis.correlation import DailyCorrelation
+
+# Alias for backward compatibility
+daily_correlation = DailyCorrelation
+
 from diive.pkgs.analysis.decoupling import StratifiedAnalysis
 from diive.pkgs.analysis.gapfinder import GapFinder
 from diive.pkgs.analysis.gridaggregator import GridAggregator
@@ -10,6 +14,7 @@ from diive.pkgs.analysis.seasonaltrend import SeasonalTrendDecomposition
 
 __all__ = [
     'DailyCorrelation',
+    'daily_correlation',
     'StratifiedAnalysis',
     'GapFinder',
     'GridAggregator',

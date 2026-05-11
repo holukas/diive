@@ -3,13 +3,13 @@
 Gap Detection and Analysis
 ========================
 
-Find and analyze consecutive missing values in time series data.
+Identify and characterize missing data periods in time series.
 
-Demonstrates gap detection: identifies consecutive missing values (NaN),
-reports their locations, durations, and provides statistics on gap sizes
-and distribution patterns.
+Scans a time series for consecutive NaN values and reports where gaps occur,
+how long they are, and which gaps are longest. Useful for spotting data loss
+events and assessing overall data quality.
 
-Best for: Data quality assessment and gap characterization
+Best for: Understanding missing data patterns and data availability
 """
 
 # %%
@@ -18,37 +18,54 @@ Best for: Data quality assessment and gap characterization
 
 import diive as dv
 
+# Load the full 10-year dataset
 data_df = dv.load_exampledata_parquet()
 
-# Get a single variable
-series = data_df['NEE_CUT_REF_f'].copy()
+# Get the original NEE series (before any gap-filling)
+series = data_df['NEE_CUT_REF_orig'].copy()
+
+print(f"Dataset: {len(series)} half-hourly records from {series.index[0]} to {series.index[-1]}")
+print(f"Missing values: {series.isna().sum()} ({100*series.isna().sum()/len(series):.1f}%)")
 
 # %%
-# Intentionally create gaps for demonstration
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# Find all gaps
+# ^^^^^^^^^^^^^
 
-# Create artificial gaps of various sizes to demonstrate gap detection
-series.iloc[100:105] = None      # 5-value gap
-series.iloc[500:503] = None      # 3-value gap
-series.iloc[1000:1001] = None    # 1-value gap
+# Detect all consecutive missing periods (limit=None finds gaps of any size)
+gf = dv.GapFinder(series=series, limit=None, sort_results=True)
+gaps = gf.get_results()
 
-# %%
-# Detect gaps
-# ^^^^^^^^^^
-
-# Find gaps with minimum length of 5 consecutive missing values
-gf = dv.GapFinder(series=series, limit=5, sort_results=True)
-results = gf.results
-
-print("Gap detection results:")
-print(f"Found {len(results)} gaps (limit=5 consecutive missing values)")
-print(results)
+print(f"\nFound {len(gaps)} gap periods (including single-record gaps)")
 
 # %%
-# Gap statistics
-# ^^^^^^^^^^^^^^
+# Examine longest gaps
+# ^^^^^^^^^^^^^^^^^^^^
 
-print(f"\nTotal records: {len(series)}")
-print(f"Missing values: {series.isna().sum()}")
-print(f"Valid values: {series.notna().sum()}")
-print(f"Data coverage: {100 * series.notna().sum() / len(series):.1f}%")
+# Display the top 5 longest gaps
+print("\nTop 5 longest gaps:")
+print(gaps.head(5))
+
+# Examine the longest gap in detail
+longest = gaps.iloc[0]
+gap_length_days = longest['GAP_LENGTH'] * 0.5 / 24  # Convert 30min records to days
+print(f"\nLongest gap: {longest['GAP_LENGTH']} missing records ({gap_length_days:.1f} days)")
+print(f"  Start: {longest['GAP_START']}")
+print(f"  End:   {longest['GAP_END']}")
+
+# %%
+# Gap distribution
+# ^^^^^^^^^^^^^^^^
+
+# Show statistics on gap sizes
+print(f"\nGap size statistics:")
+print(f"  Total gaps: {len(gaps)}")
+print(f"  Median gap length: {gaps['GAP_LENGTH'].median():.0f} records")
+print(f"  Mean gap length: {gaps['GAP_LENGTH'].mean():.0f} records")
+print(f"  Longest gap: {gaps['GAP_LENGTH'].max():.0f} records")
+print(f"  Total missing records: {gaps['GAP_LENGTH'].sum()}")
+
+# Show how many gaps exceed certain thresholds
+thresholds = [10, 100, 500]
+for thresh in thresholds:
+    count = (gaps['GAP_LENGTH'] >= thresh).sum()
+    print(f"  Gaps >= {thresh} records: {count}")

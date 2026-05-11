@@ -26,10 +26,8 @@ class GridAggregator:
     functions, including built-in statistical measures and custom callable functions.
 
     Example:
-        See `examples/pkgs/analysis/analysis_gridaggregator.py` for complete examples.
-
-    See Also:
-        gridaggregator : Convenience function wrapper.
+        See `examples/pkgs/analysis/analysis_gridaggregator.py` for complete examples demonstrating
+        quantile binning, equal-width binning, and custom binning methods with output format comparisons.
 
     Attributes:
         x (pd.Series): X-axis data to be used in binning.

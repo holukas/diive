@@ -2,11 +2,13 @@
 
 Examples demonstrating curve fitting and regression for time series analysis and modeling.
 
-**1 example covering polynomial fitting and custom function fitting.**
+**2 examples covering binned polynomial fitting and ecosystem driver-response analysis.**
 
 ## Contents
 
-- **fit_fitter.py** — Polynomial fitting, light-response curves, custom function fitting
+### Binned Fitting (BinFitterCP)
+- **fit_binfittercp.py** — Binned curve fitting with confidence/prediction intervals, result interpretation
+- **fit_fitter.py** — NEE response to vapor pressure deficit, uncertainty quantification
 
 ## Use Cases
 
@@ -61,7 +63,10 @@ See `diive.pkgs.fits` for available fitting classes:
 ## Running Examples
 
 ```bash
-# Curve fitting demonstration
+# Binned curve fitting with temperature-VPD relationship
+uv run python examples/pkgs/fits/fit_binfittercp.py
+
+# Ecosystem driver-response (NEE-VPD) fitting
 uv run python examples/pkgs/fits/fit_fitter.py
 
 # Run all fitting examples

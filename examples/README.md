@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
 
-**73 examples across 11 organized folders, mirroring the `diive` package structure.**
+**74 examples across 11 organized folders, mirroring the `diive` package structure.**
 
 ## Structure
 

@@ -17,6 +17,7 @@
 /notebooks/Workbench/Comparisons
 /notebooks/Workbench/mercury
 /diive/configs/exampledata/local
+/_archived
 
 # .claude local configuration (not shared)
 .claude/settings.local.json

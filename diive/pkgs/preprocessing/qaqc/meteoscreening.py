@@ -24,7 +24,7 @@ from diive.core.plotting.timeseries import TimeSeries
 from diive.core.times.resampling import resample_series_to_30MIN
 from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import detect_freq_groups
-from diive.pkgs.analysis.correlation import daily_correlation
+from diive.pkgs.analysis import daily_correlation
 from diive.pkgs.preprocessing.corrections import remove_radiation_zero_offset, remove_relativehumidity_offset
 from diive.pkgs.preprocessing.corrections import set_exact_values_to_missing, setto_threshold, setto_value
 from diive.pkgs.features.variables.potentialradiation import potrad
