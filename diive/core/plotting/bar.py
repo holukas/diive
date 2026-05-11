@@ -11,15 +11,21 @@ class LongtermAnomaliesYear:
     Visualizes yearly anomalies as red/blue bars (above/below reference mean),
     with reference period mean ± standard deviation band for context.
 
-    Args:
-        series: Time series for anomalies with one value per year.
-        reference_start_year: First year of the reference period.
-        reference_end_year: Last year of the reference period.
-        series_label: Label for *series* on the y-axis of the plot.
-        series_units: Units for *series* on the y-axis of the plot.
+    Two-phase design: separate data preparation (__init__) from rendering (plot).
+    Phase 1 creates the plotter with data; Phase 2 renders with styling options.
 
-    See Also:
-        examples/visualization/other_plots.py — Long-term anomaly bar plots
+    Args:
+        series: Time series for anomalies with one value per year (pandas Series with year index)
+        reference_start_year: First year of the reference period (int)
+        reference_end_year: Last year of the reference period (int)
+        series_label: Description label for the variable (displayed in title and legend)
+        series_units: Units string for the variable (displayed on y-axis, e.g., '(°C)')
+
+    Methods:
+        plot : Render anomaly bar chart with styling options
+
+    Example:
+        See `examples/core/visualization/plot_other_plots.py` for complete example.
     """
 
     def __init__(self,
@@ -28,7 +34,20 @@ class LongtermAnomaliesYear:
                  reference_end_year: int,
                  series_label: str = None,
                  series_units: str = None):
-        self.series = series
+        """
+        Prepare long-term anomaly data for plotting.
+
+        Args:
+            series: Data to plot (pandas Series with year index)
+            reference_start_year: First year of reference period for anomaly calculation
+            reference_end_year: Last year of reference period for anomaly calculation
+            series_label: Label for the variable (used in plot title and text)
+            series_units: Units string (e.g., '(°C)', appended to y-axis label)
+
+        See Also:
+            plot : Render the anomaly chart with matplotlib styling options
+        """
+        self.series = series.copy()
         self.series_units = series_units
         self.series_label = series_label
         self.reference_start_year = reference_start_year
@@ -38,39 +57,63 @@ class LongtermAnomaliesYear:
         self.data_first_year = self.series.index.min()
         self.data_last_year = self.series.index.max()
 
-        # Create axis
-        self.fig, self.ax = pf.create_ax()
-
         self.anomalies_df = self._calc_reference()
 
-    def _apply_format(self):
-        title = f"{self.series_label} anomaly per year ({self.data_first_year}-{self.data_last_year})"
-        self.fig.suptitle(title, fontsize=theme.FIGHEADER_FONTSIZE)
+    def _apply_format(self, title: str = None):
+        """Format matplotlib plot with modern scientific design principles."""
+        # Publication-ready title styling
+        if title is None:
+            title = f"{self.series_label} anomaly per year ({self.data_first_year}-{self.data_last_year})"
+        if self.fig is not None:
+            self.fig.suptitle(title, fontsize=16, fontweight=500, color='#2C3E50', y=0.98)
 
+        # Calculate reference statistics
         ref_mean = self.anomalies_df['reference_mean'].iloc[-1]
         ref_sd = self.anomalies_df['reference_sd'].iloc[-1]
         ref_n_years = (self.reference_end_year - self.reference_start_year) + 1
         last10 = self.anomalies_df[self.series.name].tail(10)
         last10_mean = last10.mean()
         last10_std = last10.std()
+
+        # Publication-ready info text
         self.ax.text(0.98, 0.02, f"reference period mean: {ref_mean:.2f}±{ref_sd:.2f}sd "
                                  f"({self.reference_start_year}-{self.reference_end_year}, "
                                  f"{ref_n_years} years)\n"
                                  f"last 10 years mean: {last10_mean:.2f}±{last10_std:.2f}sd "
                                  f"({last10.index[0]}-{last10.index[-1]})",
-                     size=theme.AX_LABELS_FONTSIZE, color='black', backgroundcolor='none', transform=self.ax.transAxes,
-                     alpha=0.8, horizontalalignment='right', verticalalignment='bottom')
+                     size=11, color='#2C3E50', backgroundcolor='white', transform=self.ax.transAxes,
+                     alpha=0.9, horizontalalignment='right', verticalalignment='bottom',
+                     bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.8, edgecolor='#CCCCCC', linewidth=0.5))
+
+        # X-axis tick configuration
         nbins = 50 if len(self.series) > 50 else len(self.series)
         self.ax.locator_params(axis='x', nbins=nbins)
-        pf.default_format(ax=self.ax,
-                          ax_xlabel_txt='Year',
-                          ax_ylabel_txt=f"{self.series_label} anomaly",
-                          txt_ylabel_units=self.series_units,
-                          showgrid=False)
-        self.ax.axhline(0, lw=1, color='black')
+
+        # Publication-ready axis labels and formatting
+        self.ax.set_xlabel('Year', fontsize=13, fontweight=600, color='#2C3E50', labelpad=10)
+        ylabel_text = f"{self.series_label} anomaly" + (f" {self.series_units}" if self.series_units else "")
+        self.ax.set_ylabel(ylabel_text, fontsize=13, fontweight=600, color='#2C3E50', labelpad=10)
+
+        # Publication-ready gridline styling (subtle, y-axis only)
+        self.ax.grid(True, axis='y', alpha=0.2, linestyle='-', linewidth=0.7, color='#CCCCCC')
+        self.ax.set_axisbelow(True)
+
+        # Publication-ready spine styling (all spines visible)
+        for spine in ['top', 'right', 'left', 'bottom']:
+            self.ax.spines[spine].set_color('#2C3E50')
+            self.ax.spines[spine].set_linewidth(1.2)
+
+        # Zero line reference
+        self.ax.axhline(0, lw=1.0, color='#2C3E50', linestyle='-', alpha=0.6, zorder=0)
+
+        # Publication-ready tick styling
+        self.ax.tick_params(axis='both', which='major', labelsize=12, colors='#2C3E50',
+                           length=6, width=1.0, pad=6)
+        self.ax.tick_params(axis='both', which='minor', length=4, width=0.7)
+
         self.ax.set_xlim(-1, len(self.series))
-        # pf.nice_date_ticks(ax=self.ax, which='x', locator='year')
-        self.fig.tight_layout()
+        if self.fig is not None:
+            self.fig.tight_layout(pad=1.2)
 
     def _calc_reference(self):
         anomalies_df = pd.DataFrame(self.series)
@@ -85,21 +128,65 @@ class LongtermAnomaliesYear:
         anomalies_df['anomaly_below'] = anomalies_df['anomaly'].loc[anomalies_df['anomaly'] < 0]
         return anomalies_df
 
+    def plot(self, ax=None, title: str = None):
+        """
+        Render long-term anomaly bar chart with matplotlib styling (Phase 2 of two-phase design).
+
+        All styling and presentation parameters go here. Can be called multiple times
+        on the same LongtermAnomaliesYear object to plot on different axes with different styling.
+
+        Args:
+            ax: Matplotlib axes to plot on. If None, creates new figure and displays it
+            title: Figure title (default: auto-generated from series_label and year range)
+
+        Returns:
+            None (displays plot if ax=None, otherwise renders on provided axes)
+
+        Example:
+            >>> anomaly = dv.plot_longterm_anomalies_year(series=data, reference_start_year=2015)
+            >>> anomaly.plot(title='Custom Title')  # New figure with custom title
+            >>> anomaly.plot(ax=ax1, title='Subplot Title')  # Plot on existing axis
+        """
+        # Create axis if not provided (Phase 2 only)
+        if ax:
+            # If ax is given, plot directly to ax, no fig needed
+            self.fig = None
+            self.ax = ax
+            self.showplot = False
+        else:
+            # If no ax is given, create fig and ax and then show the plot
+            self.fig, self.ax = pf.create_ax()
+            self.showplot = True
+
+        # Publication-ready colors for above/below anomalies
+        color_above = '#EF5350'  # Red for above-reference
+        color_below = '#42A5F5'  # Blue for below-reference
+
+        # Plot bars
+        self.anomalies_df['anomaly_above'].plot.bar(
+            color=color_above,
+            ax=self.ax,
+            legend=False,
+            width=0.7,
+            alpha=0.9
+        )
+        self.anomalies_df['anomaly_below'].plot.bar(
+            color=color_below,
+            ax=self.ax,
+            legend=False,
+            width=0.7,
+            alpha=0.9
+        )
+
+        # Apply formatting
+        self._apply_format(title=title)
+
+        # Set white background
+        self.ax.set_facecolor('white')
+        if self.showplot:
+            self.fig.patch.set_facecolor('white')
+            self.fig.show()
+
     def get(self):
         """Return axis"""
         return self.ax
-
-    def plot(self, showplot: bool = True):
-        # ax1.plot(ta_longterm.index.values, ta_longterm['diff'].values)
-        self.anomalies_df['anomaly_above'].plot.bar(color='#EF5350', ax=self.ax, legend=False, width=.7)
-        # self.anomalies_df['anomaly_above'].plot.bar(color='#F44336', ax=self.ax, legend=False)
-        self.anomalies_df['anomaly_below'].plot.bar(color='#42A5F5', ax=self.ax, legend=False, width=.7)
-        # self.anomalies_df['anomaly_below'].plot.bar(color='#2196F3', ax=self.ax, legend=False)
-        # ta_longterm_anomalies.plot.bar(x='year', y='Temperature', color='#2196F3', ax=ax1)
-        # ta_longterm_anomalies_above.plot.bar(x='year', y='Temperature', color='red', ax=ax1)
-        # ta_longterm_anomalies_below.plot.bar(x='year', y='Temperature', color='blue', ax=ax1)
-
-        self._apply_format()
-
-        if showplot:
-            self.fig.show()

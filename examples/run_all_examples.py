@@ -17,15 +17,22 @@ from pathlib import Path
 # Example files to run (organized by core/ and pkgs/ structure)
 EXAMPLE_FILES = [
     # CORE: Visualization and times
-    'core/visualization/plot_heatmap_datetime.py',
-    'core/visualization/plot_hexbin.py',
-    'core/visualization/plot_timeseries_and_cumulative.py',
+    'core/visualization/plot_heatmap_datetime_basic.py',
+    'core/visualization/plot_heatmap_advanced.py',
+    'core/visualization/plot_hexbin_basic.py',
+    'core/visualization/plot_hexbin_advanced.py',
+    'core/visualization/plot_cumulative_basic.py',
+    'core/visualization/plot_cumulative_year.py',
     'core/visualization/plot_other_plots.py',
     'core/visualization/plot_timeseries.py',
+    'core/visualization/plot_timeseries_interactive.py',
     'core/visualization/plot_dielcycle.py',
-    'core/visualization/plot_histogram.py',
-    'core/visualization/plot_ridgeline.py',
-    'core/visualization/plot_scatter_xy.py',
+    'core/visualization/plot_histogram_basic.py',
+    'core/visualization/plot_histogram_yearly.py',
+    'core/visualization/plot_ridgeline_basic.py',
+    'core/visualization/plot_ridgeline_advanced.py',
+    'core/visualization/plot_scatter_xy_basic.py',
+    'core/visualization/plot_scatter_xy_colored.py',
     'core/times/times_timestamp_sanitizer.py',
     # PKGS: Analysis
     'pkgs/analysis/analysis_correlation.py',

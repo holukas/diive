@@ -6,38 +6,67 @@ from bokeh.plotting import figure, show
 from pandas import Series
 
 import diive.core.plotting.plotfuncs as pf
-import diive.core.plotting.styles.LightTheme as theme
 
 
 # output_notebook()
 
 
 class TimeSeries:
+    """
+    Create time series plots with matplotlib (static) or Bokeh (interactive).
+
+    Two-phase design: separate data preparation (__init__) from rendering (plot).
+    Phase 1 creates the plotter with data; Phase 2 renders with styling options.
+
+    Methods:
+        plot : Render static matplotlib plot with styling options
+        plot_interactive : Render interactive Bokeh plot with zoom, pan, selection tools
+
+    Example:
+        See `examples/core/visualization/plot_timeseries.py` for matplotlib examples.
+        See `examples/core/visualization/plot_timeseries_interactive.py` for Bokeh examples.
+    """
+
     def __init__(self,
-                 series: Series,
-                 ax=None,
-                 series_units: str = None):
+                 series: Series):
         """
-        Plot timeseries
+        Prepare time series data for plotting.
 
         Args:
-            series: Data for plotting
-            ax: Axis to show the matplotlib plot
-            series_units: Units of *series*
+            series: Data to plot (pandas Series with datetime index)
 
         See Also:
-            examples/visualization/timeseries.py — Interactive time series visualization
-            examples/visualization/timeseries_and_cumulative.py — Time series with cumulative plots
-            examples/gap_filling/randomforest_ts.py — Time series in gap-filling context
+            plot : Render the time series with matplotlib styling options
         """
         self.series = series.copy()
-        self.ax = ax  # todo should be required when calling .plot() instead of here
-        self.series_units = series_units
         self.varname = series.name
-
         self.series = self.series.dropna()
 
     def plot_interactive(self, height: int = 600, width: int = 1200):
+        """
+        Render interactive time series plot using Bokeh.
+
+        Provides interactive tools for data exploration: hover tooltips, zoom, pan,
+        selection, and export. Useful for exploring large time series datasets.
+
+        Args:
+            height: Plot height in pixels (default: 600)
+            width: Plot width in pixels (default: 1200)
+
+        Tools Available:
+            - Hover: Display date and value on mouse over
+            - Box Zoom: Click and drag to zoom to region
+            - Reset: Reset to original view
+            - Pan: Click and drag to move across plot
+            - Box Select: Select points in a region
+            - Wheel Zoom: Scroll to zoom in/out
+            - Undo/Redo: Undo and redo zoom/pan operations
+            - Save: Export plot as PNG image
+
+        Example:
+            >>> ts = dv.plot_time_series(series=data)
+            >>> ts.plot_interactive(height=800, width=1600)  # Larger interactive plot
+        """
         # output_file(filename=r"M:\Downloads\_temp\bokeh.html", title="Static HTML file")
 
         # Bokeh needs dataframe
@@ -49,16 +78,15 @@ class TimeSeries:
         # Convert dataframe for bokeh
         source = ColumnDataSource(df)
 
-        # todo selection: https://docs.bokeh.org/en/latest/docs/user_guide/interaction/tools.html#ug-interaction-tools-pandrag
+        # Modern scientific Bokeh styling
         p = figure(height=height,
                    width=width,
-                   title=f"{self.series.name} ({self.series.index.name})",
+                   title=f"{self.series.name}",
                    tools=[
                        HoverTool(
                            tooltips=[('Date', '@date{%F %T}'),
-                                     ('Value', '@value')],
+                                     ('Value', '@value{0,0.00}')],
                            formatters={'@date': 'datetime'},
-                           # mode='vline'
                            mode='mouse'
                        ),
                        BoxZoomTool(),
@@ -69,16 +97,38 @@ class TimeSeries:
                        WheelPanTool(),
                        UndoTool(),
                        RedoTool(),
-                       # ZoomInTool(),  # not working, plot will not show
-                       # ZoomOutTool(),  # not working, plot will not show
                        SaveTool()],
-                   x_axis_type='datetime')
+                   x_axis_type='datetime',
+                   background_fill_color='#FAFAFA',
+                   border_fill_color='white')
 
-        p.line(x='date', y='value', line_width=2, source=source, color='#455A64')
-        # p.circle(x='date', y='value', size=5, source=source, color='#455A64')
-        p.scatter(x='date', y='value', size=5, source=source, color='#455A64')
+        # Modern line styling (publication-ready)
+        p.line(x='date', y='value', line_width=2.0, source=source, color='#2E86AB', alpha=0.95,
+               legend_label=self.series.name)
+        p.scatter(x='date', y='value', size=4, source=source, color='#2E86AB', alpha=0.6)
 
+        # Modern axis styling
         p.yaxis.axis_label = self.series.name
+        p.xaxis.axis_label = self.series.index.name
+
+        # Modern typography and aesthetics
+        p.title.text_font_size = '13pt'
+        p.title.text_color = '#2C3E50'
+        p.axis.axis_label_text_font_size = '11pt'
+        p.axis.axis_label_text_color = '#2C3E50'
+        p.axis.major_label_text_font_size = '10pt'
+        p.axis.major_label_text_color = '#2C3E50'
+
+        # Gridlines
+        p.grid.grid_line_alpha = 0.2
+        p.grid.grid_line_color = '#CCCCCC'
+        p.grid.grid_line_width = 0.5
+
+        # Legend styling
+        p.legend.location = 'top_left'
+        p.legend.click_policy = 'hide'
+        p.legend.background_fill_alpha = 0.8
+        p.legend.border_line_width = 0.5
 
         # # https://stackoverflow.com/questions/61340741/get-bokehs-selection-in-notebook
         # from bokeh.models import CustomJS
@@ -117,13 +167,35 @@ class TimeSeries:
         # Show plot
         show(p)
 
-    def plot(self, color: str = None):
-        """Plot data using matplotlib"""
+    def plot(self, ax=None, color: str = None, series_units: str = None, xlabel: str = None, ylabel: str = None,
+             title: str = None):
+        """
+        Render time series plot with matplotlib styling (Phase 2 of two-phase design).
+
+        All styling and presentation parameters go here. Can be called multiple times
+        on the same TimeSeries object to plot on different axes with different styling.
+
+        Args:
+            ax: Matplotlib axes to plot on. If None, creates new figure and displays it
+            color: Line color (default: modern scientific blue #1f77b4)
+            series_units: Units label appended to y-axis label (optional, e.g., '(°C)')
+            xlabel: X-axis label (default: 'Date')
+            ylabel: Y-axis label (default: series name)
+            title: Figure title (default: series name if creating new figure)
+
+        Returns:
+            None (displays plot if ax=None, otherwise renders on provided axes)
+
+        Example:
+            >>> ts = dv.plot_time_series(series=data)
+            >>> ts.plot(ax=ax1, color='#2E86AB', title='My Plot')  # Plot on axis
+            >>> ts.plot(title='Same Data, Different Style')  # New figure with different styling
+        """
         # Create axis
-        if self.ax:
+        if ax:
             # If ax is given, plot directly to ax, no fig needed
             self.fig = None
-            # self.ax = self.ax
+            self.ax = ax
             self.showplot = False
         else:
             # If no ax is given, create fig and ax and then show the plot
@@ -131,41 +203,63 @@ class TimeSeries:
             self.ax.xaxis.axis_date()
             self.showplot = True
 
-        color = color if color else theme.colorwheel_36()[0]
-        # color_list = theme.colorwheel_36()  # get some colors
+        # Modern scientific color palette (colorblind-friendly)
+        color = color if color else '#2E86AB'  # Professional blue
         label = self.series.name
+
         self.ax.plot(self.series.index,
                      self.series,
-                     color=color, alpha=1,
-                     lw=theme.WIDTH_LINE_DEFAULT,
+                     color=color, alpha=0.95,
+                     linewidth=2.2,  # Publication-ready, slightly thicker
                      linestyle='-', markeredgecolor='none', ms=0,
                      zorder=99, label=label)
-        self._apply_format()
+
+        self._apply_format(series_units=series_units, xlabel=xlabel, ylabel=ylabel, color=color)
 
         if self.showplot:
+            # Publication-ready styling with white background
+            self.fig.patch.set_facecolor('white')
+            self.ax.set_facecolor('white')
+
+            if title:
+                self.fig.suptitle(title, fontsize=16, fontweight=500, color='#2C3E50', y=0.98)
+            else:
+                self.fig.suptitle(self.series.name, fontsize=16, fontweight=500, color='#2C3E50', y=0.98)
+            self.fig.tight_layout(pad=1.2)
             self.fig.show()
 
-    def _apply_format(self):
-        """Format matplotlib plot"""
+    def _apply_format(self, series_units: str = None, xlabel: str = None, ylabel: str = None, color: str = None):
+        """Format matplotlib plot with modern scientific design principles"""
 
-        # ymin = self.series.min()
-        # ymax = self.series.max()
-        # self.ax.set_ylim(ymin, ymax)
+        # Publication-ready gridline styling (subtle, not distracting)
+        self.ax.grid(True, axis='y', alpha=0.2, linestyle='-', linewidth=0.7, color='#CCCCCC')
+        self.ax.set_axisbelow(True)
 
-        pf.add_zeroline_y(ax=self.ax, data=self.series)
+        # Publication-ready spine styling (all spines visible for professional look)
+        for spine in ['top', 'right', 'left', 'bottom']:
+            self.ax.spines[spine].set_color('#2C3E50')
+            self.ax.spines[spine].set_linewidth(1.2)
 
-        pf.default_format(ax=self.ax,
-                          ax_xlabel_txt='Date',
-                          ax_ylabel_txt=self.varname,
-                          txt_ylabel_units=self.series_units)
+        # Zero line if applicable (subtle reference)
+        if self.series.min() < 0 < self.series.max():
+            self.ax.axhline(y=0, color='#7F8C8D', linestyle='--', linewidth=1.0, alpha=0.5, zorder=0)
 
-        pf.default_legend(ax=self.ax,
-                          labelspacing=0.2,
-                          ncol=1)
+        # Publication-ready axis labels and tick styling (all larger)
+        self.ax.set_xlabel(xlabel or 'Date', fontsize=13, fontweight=600, color='#2C3E50', labelpad=10)
+        self.ax.set_ylabel((ylabel or self.varname) + (f' {series_units}' if series_units else ''),
+                           fontsize=13, fontweight=600, color='#2C3E50', labelpad=10)
 
+        # Publication-ready tick styling
+        self.ax.tick_params(axis='both', which='major', labelsize=12, colors='#2C3E50',
+                           length=6, width=1.0, pad=6)
+        self.ax.tick_params(axis='both', which='minor', length=4, width=0.7)
+
+        # Publication-ready legend styling
+        if self.ax.get_legend_handles_labels()[0]:
+            legend = self.ax.legend(loc='upper left', framealpha=0.98, fancybox=False,
+                                    edgecolor='#2C3E50', facecolor='white', fontsize=11,
+                                    frameon=True, shadow=False)
+            legend.get_frame().set_linewidth(1.0)
+
+        # Nice date ticks
         pf.nice_date_ticks(ax=self.ax, minticks=3, maxticks=20, which='x', locator='auto')
-
-        if self.showplot:
-            title = f"{self.series.name}"
-            self.fig.suptitle(title, fontsize=theme.FIGHEADER_FONTSIZE)
-            self.fig.tight_layout()

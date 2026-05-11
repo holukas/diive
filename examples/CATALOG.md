@@ -21,14 +21,21 @@
 
 | Example | What You'll Learn | Related |
 |---------|------------------|---------|
-| [**heatmap_datetime.py**](core/visualization/heatmap_datetime.py) | Heatmaps with datetime indices (daily/monthly aggregation) | HeatmapDateTime, HeatmapYearMonth |
-| [**scatter_xy.py**](core/visualization/scatter_xy.py) | Customizable 2D scatter plots with annotations | ScatterXY, correlation plots |
-| [**timeseries.py**](core/visualization/timeseries.py) | Interactive time series line plots | TimeSeries, trend visualization |
-| [**timeseries_and_cumulative.py**](core/visualization/timeseries_and_cumulative.py) | Combine time series with cumulative sum plots | Cumulative, CumulativeYear |
+| [**heatmap_datetime_basic.py**](core/visualization/heatmap_datetime_basic.py) | Datetime heatmaps with vertical/horizontal orientations | HeatmapDateTime, diurnal patterns |
+| [**heatmap_advanced.py**](core/visualization/heatmap_advanced.py) | Year-month aggregation and multi-variable comparison | HeatmapYearMonth, seasonal analysis |
+| [**scatter_xy_basic.py**](core/visualization/scatter_xy_basic.py) | Basic 2D scatter plots for exploring variable relationships | ScatterXY, correlation analysis |
+| [**scatter_xy_colored.py**](core/visualization/scatter_xy_colored.py) | 3D scatter with color coding and bin aggregation | ScatterXY, trend visualization |
+| [**timeseries.py**](core/visualization/timeseries.py) | Time series line plots with matplotlib | TimeSeries, trend visualization |
+| [**timeseries_interactive.py**](core/visualization/timeseries_interactive.py) | Interactive Bokeh plots with zoom, pan, export | TimeSeries, data exploration |
+| [**cumulative_basic.py**](core/visualization/cumulative_basic.py) | Cumulative flux across all time with scenario comparison | Cumulative, running totals |
+| [**cumulative_year.py**](core/visualization/cumulative_year.py) | Yearly cumulative sums with reference band and highlighting | CumulativeYear, annual budgets |
 | [**dielcycle.py**](core/visualization/dielcycle.py) | Diurnal (diel) cycle analysis by month/season | DielCycle, daytime/nighttime patterns |
-| [**hexbin.py**](core/visualization/hexbin.py) | 2D hexagonal binning density plots | HexbinPlot, 2D distributions |
-| [**histogram.py**](core/visualization/histogram.py) | Distribution histograms and statistics | HistogramPlot, quantile analysis |
-| [**ridgeline.py**](core/visualization/ridgeline.py) | Ridge line plots comparing distributions | RidgeLinePlot, kernel density |
+| [**hexbin_basic.py**](core/visualization/hexbin_basic.py) | 2D hexagonal binning with percentile normalization | HexbinPlot, standardized comparison |
+| [**hexbin_advanced.py**](core/visualization/hexbin_advanced.py) | Advanced hexbin with absolute values and overlays | HexbinPlot, detailed visualization |
+| [**histogram_basic.py**](core/visualization/histogram_basic.py) | Distribution histograms with z-score overlay | HistogramPlot, outlier detection |
+| [**histogram_yearly.py**](core/visualization/histogram_yearly.py) | Yearly comparison histograms for temporal patterns | HistogramPlot, seasonal analysis |
+| [**ridgeline_basic.py**](core/visualization/ridgeline_basic.py) | Ridge line plots with weekly grouping | RidgeLinePlot, kernel density |
+| [**ridgeline_advanced.py**](core/visualization/ridgeline_advanced.py) | Ridge line plots with monthly grouping and styling options | RidgeLinePlot, temporal patterns |
 | [**other_plots.py**](core/visualization/other_plots.py) | Specialized plot types (anomalies, trends) | LongtermAnomaliesYear |
 
 **See also:** [core/visualization/README.md](core/visualization/README.md)

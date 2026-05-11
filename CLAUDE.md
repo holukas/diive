@@ -259,6 +259,207 @@ result = model.fillgaps()
 result.to_csv('output.csv')  # ← Remove this from examples
 ```
 
+**Explicit parameters in function calls:** Always list all parameters, even defaults
+
+When calling functions in examples, make parameters explicit with inline comments showing defaults. This:
+- Documents what each parameter does
+- Shows all available options to users
+- Makes examples self-documenting
+- Easier to adapt examples to different use cases
+
+```python
+# Good: All parameters explicit with comments
+scatter = dv.plot_scatter_xy(
+    x=df['A'],
+    y=df['B'],
+    z=None,               # Optional color variable
+    nbins=0,              # No binning (0 = off)
+    binagg='median'       # Aggregation method (ignored if nbins=0)
+)
+scatter.plot(
+    ax=None,              # Create new figure
+    xlabel='X label',
+    ylabel='Y label',
+    title='Title',
+    cmap='viridis',       # Colormap name
+    show_colorbar=True    # Display color bar if z provided
+)
+
+# Bad: Sparse, doesn't show all options
+scatter = dv.plot_scatter_xy(x=df['A'], y=df['B'])
+scatter.plot(xlabel='X', ylabel='Y', title='Title')
+```
+
+**Rationale:**
+- New users see what parameters exist and their defaults
+- Examples become quick reference documentation
+- Makes it easy to modify examples for other use cases
+- Inline comments (not separate docstrings) keep examples readable
+
+## Plotting Class Design Standard
+
+All plotting classes follow a **two-phase design**:
+
+**Phase 1: `__init__()` — Data + Computation ONLY**
+- Accept data (Series, DataFrame, arrays)
+- Accept computation parameters (nbins, aggregation method, binning strategy, etc.)
+- Store only what's needed for data preparation
+- Do NOT include: plot destination (`ax`), styling, titles, labels, limits, or colors
+
+**Phase 2: `plot()` — All Styling + Rendering**
+- Accept `ax` (plot destination — where to render the figure)
+- Accept ALL styling/presentation parameters (title, labels, limits, colors, etc.)
+- Can be called multiple times with different styles/axes on same data
+- All parameters have sensible defaults (creates new figure if `ax=None`)
+
+**Rationale:**
+- Separates concerns (data ≠ presentation)
+- Follows matplotlib conventions (create figure → style → display)
+- Enables replotting same data with different styles or on different axes
+- Cleaner API — simpler object creation, all styling in one place
+- Flexible rendering — decide where to plot at plot-time, not object-creation-time
+
+### The `ax` Parameter
+
+**`ax` is a PRESENTATION parameter, NOT a data parameter. Always put it in `plot()` method.**
+
+| Aspect | Details |
+|--------|---------|
+| **Where** | `plot()` method, as first parameter |
+| **Default** | `None` — creates new figure if not provided |
+| **Purpose** | Specify which matplotlib axes to plot on |
+| **Use case** | Render same data on different axes, subplots, existing figures |
+
+**Why NOT in `__init__()`:**
+- ❌ Couples data preparation to plot destination
+- ❌ Makes object reuse inflexible (can't plot on different axes)
+- ❌ Violates separation of concerns
+
+**Pattern — Plot same data on multiple axes:**
+
+```python
+# Create once
+scatter = dv.plot_scatter_xy(x=df['A'], y=df['B'])
+
+# Render on different axes with different styling
+fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+scatter.plot(ax=axes[0], title='Linear scale')
+scatter.plot(ax=axes[1], title='Log scale', ylim='auto')
+plt.show()
+```
+
+**Pattern — Subplot integration:**
+
+```python
+fig, axes = plt.subplots(2, 2, figsize=(10, 8))
+scatter1 = dv.plot_scatter_xy(x=df['T'], y=df['VPD'])
+scatter2 = dv.plot_scatter_xy(x=df['SW'], y=df['T'])
+hist = dv.plot_histogram(s=df['NEE'], method='n_bins', n_bins=20)
+
+scatter1.plot(ax=axes[0, 0], title='VPD vs Temp')
+scatter2.plot(ax=axes[0, 1], title='Temp vs Radiation')
+hist.plot(ax=axes[1, 0], title='NEE Distribution')
+# axes[1, 1] left empty or used for legend, text, etc.
+
+plt.tight_layout()
+plt.show()
+```
+
+**Example: HistogramPlot**
+
+```python
+# Phase 1: Data + Computation
+hist = dv.plot_histogram(
+    s=series,                  # Data
+    method='n_bins',           # Computation
+    n_bins=20                  # Computation
+)
+
+# Phase 2: All styling in plot()
+hist.plot(
+    xlabel='NEE flux',         # Styling
+    title='My Histogram',      # Styling
+    highlight_peak=True,       # Styling
+    show_zscores=True,         # Styling
+    show_info=True             # Styling
+)
+```
+
+**Example: ScatterXY**
+
+```python
+# Phase 1: Data + Computation
+scatter = dv.plot_scatter_xy(
+    x=df['Tair_f'],            # Data
+    y=df['VPD_f'],             # Data
+    z=df['Rg_f'],              # Data (optional)
+    nbins=10,                  # Computation
+    binagg='median'            # Computation
+)
+
+# Phase 2: All styling in plot() — including ax (plot destination)
+scatter.plot(
+    ax=my_axes,                # Where to render (optional)
+    xlabel='Temperature (°C)',
+    ylabel='VPD (hPa)',
+    zlabel='Radiation (W/m²)',
+    title='Temperature vs VPD',
+    cmap='plasma',
+    show_colorbar=True,
+    xlim=[0, 30],
+    ylim=[0, 5]
+)
+```
+
+**Checklist for plotting classes:**
+
+- ✓ `__init__()` contains ONLY: data + computation parameters
+- ✓ NO rendering or styling parameters in `__init__()` (explicitly exclude: `ax`, `title`, `xlabel`, `ylabel`, `colors`, `limits`, `cmap`, `show_*`, etc.)
+- ✓ `ax` parameter in `plot()` method as first parameter, default `None`
+- ✓ `ax=None` creates new figure automatically via `pf.create_ax()` or similar
+- ✓ All styling parameters moved to `plot()` method with sensible defaults
+- ✓ `plot()` has comprehensive docstring listing all options with descriptions
+- ✓ `plot()` can be called multiple times with different `ax`/styling
+- ✓ Examples updated to pass `ax` and styling to `plot()`, not `__init__()`
+
+**Correct Implementation Pattern:**
+
+```python
+class MyPlotter:
+    def __init__(self, data1, data2, nbins=10):
+        """Data + computation only."""
+        self.data1 = data1
+        self.data2 = data2
+        self.nbins = nbins
+        # DO NOT include: ax, title, xlabel, ylabel, colors, etc.
+
+    def plot(self, ax=None, title=None, xlabel=None, ylabel=None, **styling):
+        """All styling parameters here, including ax."""
+        if not ax:
+            fig, ax = pf.create_ax()
+        
+        # Render with styling
+        ax.plot(self.data1, self.data2, ...)
+        if title:
+            ax.set_title(title)
+        # ... more styling
+        
+        if not existing_ax:
+            fig.show()
+```
+
+**Usage:**
+
+```python
+# Create object once
+plotter = MyPlotter(data1, data2)
+
+# Render multiple times on different axes
+plotter.plot(ax=axes[0], title='View 1')
+plotter.plot(ax=axes[1], title='View 2', xlabel='Custom X')
+plotter.plot()  # Creates new figure
+```
+
 ## Development Workflow
 
 **[CRITICAL] NEVER COMMIT CHANGES.** User commits and stages changes themselves.

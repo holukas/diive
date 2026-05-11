@@ -14,8 +14,6 @@ class ScatterXY:
             x: Series,
             y: Series,
             z: Series = None,
-            title: str = None,
-            ax: plt.Axes = None,
             nbins: int = 0,
             binagg: Literal['mean', 'median'] = 'median',
     ):
@@ -29,8 +27,6 @@ class ScatterXY:
             x: Series for x-axis
             y: Series for y-axis
             z: Optional Series for color-coding scatter points
-            title: Plot title (default: "{yname} vs. {xname}")
-            ax: Matplotlib axes (creates new if None)
             nbins: Number of bins for x-axis aggregation (0 = no aggregation)
             binagg: Aggregation method for bins ('mean' or 'median', default: 'median')
 
@@ -40,30 +36,18 @@ class ScatterXY:
             - Bin aggregation: Group data by x-axis bins and overlay trends
             - Confidence intervals: Show IQR (median) or std (mean) per bin
 
-        Call `plot()` to render with styling options (labels, limits, colormap).
+        Call `plot()` to render with styling options (labels, limits, title, colormap).
 
         See Also:
-            examples/visualization/scatter_xy.py — Scatter plot variations with 2D and 3D coloring
+            examples/core/visualization/plot_scatter_xy.py — Scatter plot variations with 2D and 3D coloring
         """
         self.xname = x.name
         self.yname = y.name
         self.zname = z.name if z is not None else None
-        self.ax = ax
         self.nbins = nbins
         self.binagg = binagg
-        self.title = title if title else f"{self.yname} vs. {self.xname}"
         self.fig = None
-
-        # Initialize styling attributes (set in plot() method)
-        self.xlabel = self.xname
-        self.ylabel = self.yname
-        self.zlabel = self.zname
-        self.xunits = None
-        self.yunits = None
-        self.xlim = None
-        self.ylim = None
-        self.cmap = 'viridis'
-        self.show_colorbar = True
+        self.ax = None
 
         # Prepare data
         df_list = [x, y]
@@ -85,6 +69,7 @@ class ScatterXY:
 
     def plot(
             self,
+            ax: plt.Axes = None,
             xlabel: str = None,
             ylabel: str = None,
             zlabel: str = None,
@@ -94,13 +79,15 @@ class ScatterXY:
             ylim: list or Literal['auto'] = None,
             cmap: str = 'viridis',
             show_colorbar: bool = True,
+            title: str = None,
     ):
         """Generate plot with optional styling and formatting.
 
         Renders scatter plot with all styling parameters. Can be called multiple
-        times with different parameters to explore different views of the same data.
+        times with different parameters/axes to explore different views of the same data.
 
         Args:
+            ax: Matplotlib axes to plot on (default: creates new figure if None)
             xlabel: X-axis label (default: series name)
             ylabel: Y-axis label (default: series name)
             zlabel: Colorbar label (default: z series name, ignored if no z)
@@ -111,97 +98,105 @@ class ScatterXY:
             cmap: Colormap name for z variable (default: 'viridis')
                   Examples: 'plasma', 'viridis', 'coolwarm', 'RdYlBu'
             show_colorbar: Display colorbar if z provided (default: True)
+            title: Plot title (default: "{yname} vs. {xname}")
 
         Notes:
             - xlim always uses full data range (no quantile trimming)
             - ylim='auto' with nbins: uses binned data limits
             - Colorbar shown only if z is provided and show_colorbar=True
         """
-        self.xlabel = xlabel if xlabel else self.xname
-        self.ylabel = ylabel if ylabel else self.yname
-        self.zlabel = zlabel if zlabel else self.zname
-        self.xunits = xunits
-        self.yunits = yunits
-        self.xlim = xlim
-        self.ylim = ylim
-        self.cmap = cmap
-        self.show_colorbar = show_colorbar
+        xlabel = xlabel if xlabel else self.xname
+        ylabel = ylabel if ylabel else self.yname
+        zlabel = zlabel if zlabel else self.zname
+        xunits = xunits
+        yunits = yunits
+        xlim = xlim
+        ylim = ylim
+        cmap = cmap
+        show_colorbar = show_colorbar
+        title = title if title else f"{self.yname} vs. {self.xname}"
 
-        if not self.ax:
+        if not ax:
             self.fig, self.ax = pf.create_ax(figsize=(8, 8))
-            self._plot()
+            self._plot(self.ax, xlabel, ylabel, zlabel, xunits, yunits, xlim, ylim, cmap, show_colorbar, title)
             # Skip tight_layout if colorbar is present (incompatible with new layout engine)
-            if self.zname is None or not self.show_colorbar:
+            if self.zname is None or not show_colorbar:
                 plt.tight_layout()
             self.fig.show()
         else:
-            self._plot()
+            self.ax = ax
+            self._plot(self.ax, xlabel, ylabel, zlabel, xunits, yunits, xlim, ylim, cmap, show_colorbar, title)
 
-    def _plot(self, nbins: int = 10):
+    def _plot(self, ax: plt.Axes, xlabel: str = None, ylabel: str = None, zlabel: str = None,
+              xunits: str = None, yunits: str = None, xlim: list = None,
+              ylim: list or str = None, cmap: str = 'viridis',
+              show_colorbar: bool = True, title: str = None, nbins: int = 10):
         """Generate plot on axis"""
         nbins += 1  # To include zero
 
         # Scatter plot with optional color
         if self.zname is not None:
-            scatter = self.ax.scatter(x=self.xy_df[self.xname],
-                                      y=self.xy_df[self.yname],
-                                      c=self.xy_df[self.zname],
-                                      s=40,
-                                      marker='o',
-                                      cmap=self.cmap,
-                                      label=self.yname)
-            if self.show_colorbar:
-                cbar = plt.colorbar(scatter, ax=self.ax)
-                cbar.set_label(self.zlabel if self.zlabel else self.zname, fontsize=12)
+            scatter = ax.scatter(x=self.xy_df[self.xname],
+                                 y=self.xy_df[self.yname],
+                                 c=self.xy_df[self.zname],
+                                 s=40,
+                                 marker='o',
+                                 cmap=cmap,
+                                 label=self.yname)
+            if show_colorbar:
+                cbar = plt.colorbar(scatter, ax=ax)
+                cbar.set_label(zlabel if zlabel else self.zname, fontsize=12)
         else:
-            self.ax.scatter(x=self.xy_df[self.xname],
-                            y=self.xy_df[self.yname],
-                            c='none',
-                            s=40,
-                            marker='o',
-                            edgecolors='#607D8B',
-                            label=self.yname)
+            ax.scatter(x=self.xy_df[self.xname],
+                       y=self.xy_df[self.yname],
+                       c='none',
+                       s=40,
+                       marker='o',
+                       edgecolors='#607D8B',
+                       label=self.yname)
 
         if self.nbins > 0:
 
             _min = self.xy_df_binned[self.yname]['count'].min()
             _max = self.xy_df_binned[self.yname]['count'].max()
-            self.ax.plot(self.xy_df_binned[self.xname][self.binagg],
-                         self.xy_df_binned[self.yname][self.binagg],
-                         c='r', ms=10, marker='o', lw=2,
-                         # c='none', ms=80, marker='o', edgecolors='r', lw=2,
-                         label=f"binned data ({self.binagg}, {_min}-{_max} values per bin)")
+            ax.plot(self.xy_df_binned[self.xname][self.binagg],
+                    self.xy_df_binned[self.yname][self.binagg],
+                    c='r', ms=10, marker='o', lw=2,
+                    # c='none', ms=80, marker='o', edgecolors='r', lw=2,
+                    label=f"binned data ({self.binagg}, {_min}-{_max} values per bin)")
 
             if self.binagg == 'median':
-                self.ax.fill_between(self.xy_df_binned[self.xname][self.binagg],
-                                     self.xy_df_binned[self.yname]['q25'],
-                                     self.xy_df_binned[self.yname]['q75'],
-                                     alpha=.2, zorder=10, color='red',
-                                     label="interquartile range")
+                ax.fill_between(self.xy_df_binned[self.xname][self.binagg],
+                                self.xy_df_binned[self.yname]['q25'],
+                                self.xy_df_binned[self.yname]['q75'],
+                                alpha=.2, zorder=10, color='red',
+                                label="interquartile range")
 
             if self.binagg == 'mean':
-                self.ax.errorbar(x=self.xy_df_binned[self.xname][self.binagg],
-                                 y=self.xy_df_binned[self.yname][self.binagg],
-                                 xerr=self.xy_df_binned[self.xname]['std'],
-                                 yerr=self.xy_df_binned[self.yname]['std'],
-                                 elinewidth=3, ecolor='red', alpha=.6, lw=0,
-                                 label="standard deviation")
+                ax.errorbar(x=self.xy_df_binned[self.xname][self.binagg],
+                            y=self.xy_df_binned[self.yname][self.binagg],
+                            xerr=self.xy_df_binned[self.xname]['std'],
+                            yerr=self.xy_df_binned[self.yname]['std'],
+                            elinewidth=3, ecolor='red', alpha=.6, lw=0,
+                            label="standard deviation")
 
-        self._apply_format()
-        self.ax.locator_params(axis='x', nbins=nbins)
-        self.ax.locator_params(axis='y', nbins=nbins)
+        self._apply_format(ax, xlabel, ylabel, xunits, yunits, xlim, ylim, title)
+        ax.locator_params(axis='x', nbins=nbins)
+        ax.locator_params(axis='y', nbins=nbins)
 
-    def _apply_format(self):
+    def _apply_format(self, ax: plt.Axes, xlabel: str = None, ylabel: str = None,
+                      xunits: str = None, yunits: str = None,
+                      xlim: list = None, ylim: list or str = None, title: str = None):
 
-        if self.xlim:
-            xmin = self.xlim[0]
-            xmax = self.xlim[1]
+        if xlim:
+            xmin = xlim[0]
+            xmax = xlim[1]
         else:
             xmin = self.xy_df[self.xname].min()
             xmax = self.xy_df[self.xname].max()
-        self.ax.set_xlim(xmin, xmax)
+        ax.set_xlim(xmin, xmax)
 
-        if self.ylim == 'auto':
+        if ylim == 'auto':
             if self.binagg == 'median':
                 ymin = self.xy_df_binned[self.yname]['q25'].min()
                 ymax = self.xy_df_binned[self.yname]['q75'].max()
@@ -213,27 +208,27 @@ class ScatterXY:
             else:
                 ymin = self.xy_df[self.yname].quantile(0.01)
                 ymax = self.xy_df[self.yname].quantile(0.99)
-        elif isinstance(self.ylim, list):
-            ymin = self.ylim[0]
-            ymax = self.ylim[1]
+        elif isinstance(ylim, list):
+            ymin = ylim[0]
+            ymax = ylim[1]
         else:
             ymin = self.xy_df[self.yname].min()
             ymax = self.xy_df[self.yname].max()
 
-        self.ax.set_ylim(ymin, ymax)
+        ax.set_ylim(ymin, ymax)
 
-        pf.add_zeroline_y(ax=self.ax, data=self.xy_df[self.yname])
+        pf.add_zeroline_y(ax=ax, data=self.xy_df[self.yname])
 
-        pf.default_format(ax=self.ax,
-                          ax_xlabel_txt=self.xlabel,
-                          ax_ylabel_txt=self.ylabel,
-                          txt_ylabel_units=self.yunits)
+        pf.default_format(ax=ax,
+                          ax_xlabel_txt=xlabel,
+                          ax_ylabel_txt=ylabel,
+                          txt_ylabel_units=yunits)
 
-        pf.default_legend(ax=self.ax,
+        pf.default_legend(ax=ax,
                           labelspacing=0.2,
                           ncol=1)
 
-        self.ax.set_title(self.title, size=20)
+        ax.set_title(title, size=20)
 
         # pf.nice_date_ticks(ax=self.ax, minticks=3, maxticks=20, which='x', locator='auto')
 

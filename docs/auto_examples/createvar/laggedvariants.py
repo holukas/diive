@@ -90,10 +90,10 @@ def example_lagged_variants_visualization():
     fig = plt.figure(facecolor='white', figsize=(16, 6), constrained_layout=True)
     ax1 = fig.add_subplot(111)
 
-    dv.plot_time_series(ax=ax1, series=plotdf['Tair_f']).plot(color='#1565C0')
-    dv.plot_time_series(ax=ax1, series=plotdf['.Tair_f-1']).plot(color='#D32F2F')
-    dv.plot_time_series(ax=ax1, series=plotdf['.Tair_f-2']).plot(color='#00BCD4')
-    dv.plot_time_series(ax=ax1, series=plotdf['.Tair_f+1']).plot(color='#AB47BC')
+    dv.plot_time_series(series=plotdf['Tair_f']).plot(ax=ax1, color='#1565C0')
+    dv.plot_time_series(series=plotdf['.Tair_f-1']).plot(ax=ax1, color='#D32F2F')
+    dv.plot_time_series(series=plotdf['.Tair_f-2']).plot(ax=ax1, color='#00BCD4')
+    dv.plot_time_series(series=plotdf['.Tair_f+1']).plot(ax=ax1, color='#AB47BC')
 
     # Add manual legend
     from matplotlib.lines import Line2D
