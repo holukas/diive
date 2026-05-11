@@ -104,6 +104,12 @@ class RandomUncertaintyPAS20:
     def _calc_random_uncertainty(self, ta_similarity: float = 2.5, vpd_similarity: float = 5,
                                  swin_similarity: float = 50):
 
+        # Initialize window count columns for all methods
+        self._randunc_results['WINDOW_N_VALS_METHOD1'] = np.nan
+        self._randunc_results['WINDOW_N_VALS_METHOD2'] = np.nan
+        self._randunc_results['WINDOW_N_VALS_METHOD3'] = np.nan
+        self._randunc_results['WINDOW_N_VALS_METHOD4'] = np.nan
+
         self._method1(ta_similarity=ta_similarity, vpd_similarity=vpd_similarity, swin_similarity=swin_similarity,
                       winsize_days=7, winsize_hours=1)
 

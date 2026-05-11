@@ -273,8 +273,8 @@ class StepwiseMeteoScreeningDb:
             # Heatmaps
             kwargs_heatmap = dict(cb_labelsize=10, axlabels_fontsize=10, ticks_labelsize=10,
                                   minticks=3, maxticks=99)
-            HeatmapDateTime(ax=ax_heatmap_hires_before, series=series_orig, **kwargs_heatmap).plot()
-            HeatmapDateTime(ax=ax_heatmap_resampled_after, series=series_resampled, **kwargs_heatmap).plot()
+            HeatmapDateTime(series=series_orig).plot(ax=ax_heatmap_hires_before, **kwargs_heatmap)
+            HeatmapDateTime(series=series_resampled).plot(ax=ax_heatmap_resampled_after, **kwargs_heatmap)
 
             # Format time series
             default_format(ax=ax_orig, ticks_labels_fontsize=10)

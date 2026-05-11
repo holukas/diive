@@ -138,9 +138,9 @@ ax1 = fig.add_subplot(gs[0, 0])
 ax2 = fig.add_subplot(gs[0, 1])
 ax3 = fig.add_subplot(gs[0, 2])
 
-dv.plot_heatmap_datetime(ax=ax1, series=ts_prec_df['PREC_TOT_T1_25+20_1']).plot()
-dv.plot_heatmap_datetime(ax=ax2, series=ts_prec_df['TIMESINCE_PREC_TOT_T1_25+20_1']).plot()
-dv.plot_heatmap_datetime(ax=ax3, series=ts_prec_df['FLAG_IS_OUTSIDE_RANGE']).plot()
+dv.plot_heatmap_datetime(series=ts_prec_df['PREC_TOT_T1_25+20_1']).plot(ax=ax1)
+dv.plot_heatmap_datetime(series=ts_prec_df['TIMESINCE_PREC_TOT_T1_25+20_1']).plot(ax=ax2)
+dv.plot_heatmap_datetime(series=ts_prec_df['FLAG_IS_OUTSIDE_RANGE']).plot(ax=ax3)
 
 ax1.set_title("Precipitation (mm)", fontsize=12, fontweight='bold')
 ax2.set_title("Time Since Last Precipitation (records)", fontsize=12, fontweight='bold')

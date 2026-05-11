@@ -605,14 +605,14 @@ class FlagQCF:
         # Heatmaps
         vmin = -maxabsval if maxabsval else None
         vmax = maxabsval if maxabsval else None
-        HeatmapDateTime(ax=ax_before, series=self.flags[self.series_name], vmin=vmin, vmax=vmax,
-                        cb_digits_after_comma=0).plot()
-        HeatmapDateTime(ax=ax_after, series=self.flags[self.filteredseriescol], vmin=vmin, vmax=vmax,
-                        cb_digits_after_comma=0).plot()
-        HeatmapDateTime(ax=ax_flagsum, series=self.flags[self.sumflagscol],
-                        cb_digits_after_comma=0).plot()
-        HeatmapDateTime(ax=ax_flag, series=self.flags[self.flagqcfcol],
-                        cb_digits_after_comma=0).plot()
+        HeatmapDateTime(series=self.flags[self.series_name]).plot(ax=ax_before, vmin=vmin, vmax=vmax,
+                                                                    cb_digits_after_comma=0)
+        HeatmapDateTime(series=self.flags[self.filteredseriescol]).plot(ax=ax_after, vmin=vmin, vmax=vmax,
+                                                                         cb_digits_after_comma=0)
+        HeatmapDateTime(series=self.flags[self.sumflagscol]).plot(ax=ax_flagsum,
+                                                                   cb_digits_after_comma=0)
+        HeatmapDateTime(series=self.flags[self.flagqcfcol]).plot(ax=ax_flag,
+                                                                  cb_digits_after_comma=0)
         plt.setp(ax_after.get_yticklabels(), visible=False)
         plt.setp(ax_flagsum.get_yticklabels(), visible=False)
         plt.setp(ax_flag.get_yticklabels(), visible=False)

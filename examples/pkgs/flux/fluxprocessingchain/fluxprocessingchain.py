@@ -269,8 +269,14 @@ fpc.report_traintest_model_scores()
 rf_model = fpc.level41['long_term_random_forest']['CUT_50']
 xgb_model = fpc.level41['long_term_xgboost']['CUT_50']
 
-print(f"Random Forest R²: {rf_model.scores_['r2']:.3f}")
-print(f"XGBoost R²: {xgb_model.scores_['r2']:.3f}")
+# Get R² scores (scores_ is a dict with year keys)
+rf_r2 = list(rf_model.scores_.values())[0]['r2'] if rf_model.scores_ else None
+xgb_r2 = list(xgb_model.scores_.values())[0]['r2'] if xgb_model.scores_ else None
+
+if rf_r2 is not None:
+    print(f"Random Forest R²: {rf_r2:.3f}")
+if xgb_r2 is not None:
+    print(f"XGBoost R²: {xgb_r2:.3f}")
 
 # Access final filtered series with all processing applied
 final_flux = fpc.filteredseries

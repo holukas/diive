@@ -1091,7 +1091,7 @@ class ScopOptimizer:
         # Header
         # Range column needs space for "123.45 - 123.45"
         header = (f"{'Bin':<4} | {'Class Range':^19} | {'N':>5} | "
-                  f"{'Median SF (ξ)':>16} | {'99% CI':^16} | {'Error (SOS)':>10}")
+                  f"{'Median SF':>16} | {'99% CI':^16} | {'Error (SOS)':>10}")
         print(header)
         print_sep('-', 75)
 

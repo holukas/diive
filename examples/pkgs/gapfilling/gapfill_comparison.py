@@ -248,19 +248,19 @@ fig, axes = plt.subplots(1, 4, figsize=(28, 5),
                          constrained_layout=True)
 
 # Observed
-dv.plot_heatmap_datetime(ax=axes[0], series=observed).plot()
+dv.plot_heatmap_datetime(series=observed).plot(ax=axes[0])
 axes[0].set_title('Observed\n(with gaps)', fontsize=11, fontweight='bold')
 
 # MDS gap-filled
-dv.plot_heatmap_datetime(ax=axes[1], series=mds_gapfilled).plot()
+dv.plot_heatmap_datetime(series=mds_gapfilled).plot(ax=axes[1])
 axes[1].set_title('MDS\nGap-Filled', fontsize=11, fontweight='bold')
 
 # RF gap-filled
-dv.plot_heatmap_datetime(ax=axes[2], series=rf_gapfilled).plot()
+dv.plot_heatmap_datetime(series=rf_gapfilled).plot(ax=axes[2])
 axes[2].set_title('Random Forest\nGap-Filled', fontsize=11, fontweight='bold')
 
 # XGB gap-filled
-dv.plot_heatmap_datetime(ax=axes[3], series=xgb_gapfilled).plot()
+dv.plot_heatmap_datetime(series=xgb_gapfilled).plot(ax=axes[3])
 axes[3].set_title('XGBoost\nGap-Filled', fontsize=11, fontweight='bold')
 
 fig.suptitle('Gap-Filling Method Comparison', fontsize=13, fontweight='bold', y=1.00)

@@ -137,10 +137,10 @@ fig, axes = plt.subplots(1, 2, figsize=(16, 5),
                          gridspec_kw={'wspace': 0.15},
                          constrained_layout=True)
 
-dv.plot_heatmap_datetime(ax=axes[0], series=observed).plot()
+dv.plot_heatmap_datetime(series=observed).plot(ax=axes[0])
 axes[0].set_title('Observed\n(with gaps)', fontsize=11, fontweight='bold')
 
-dv.plot_heatmap_datetime(ax=axes[1], series=gapfilled).plot()
+dv.plot_heatmap_datetime(series=gapfilled).plot(ax=axes[1])
 axes[1].set_title('XGBoost\nGap-Filled', fontsize=11, fontweight='bold')
 
 fig.suptitle('XGBoost Gap-Filling Comparison', fontsize=13, fontweight='bold', y=1.00)

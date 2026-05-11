@@ -188,9 +188,10 @@ sw_in_pot = dv.potrad(
 # Create heatmap visualization
 dv.plot_heatmap_datetime(
     series=sw_in_pot,
+    ax_orientation='horizontal'
+).plot(
     title='Potential Shortwave Radiation - Daily & Hourly Patterns',
     zlabel='W/m²',
     cb_digits_after_comma=0,
-    ax_orientation='horizontal',
     figsize=(14, 6)
-).show()
+)

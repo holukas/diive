@@ -71,12 +71,18 @@ fig, axes = plt.subplots(1, 3, figsize=(20, 9),
                          gridspec_kw={'wspace': 0.1},
                          constrained_layout=True)
 
-dv.plot_heatmap_datetime(ax=axes[0], series=daytime_flag,
-                         zlabel="flag (1=daytime)", cb_digits_after_comma=0).plot()
-dv.plot_heatmap_datetime(ax=axes[1], series=nighttime_flag,
-                         zlabel="flag (1=nighttime)", cb_digits_after_comma=0).plot()
-dv.plot_heatmap_datetime(ax=axes[2], series=swinpot,
-                         zlabel="$\mathrm{W\ m^{-2}}$", cb_digits_after_comma=0).plot()
+dv.plot_heatmap_datetime(series=daytime_flag).plot(
+    ax=axes[0],
+    zlabel="flag (1=daytime)",
+    cb_digits_after_comma=0)
+dv.plot_heatmap_datetime(series=nighttime_flag).plot(
+    ax=axes[1],
+    zlabel="flag (1=nighttime)",
+    cb_digits_after_comma=0)
+dv.plot_heatmap_datetime(series=swinpot).plot(
+    ax=axes[2],
+    zlabel=r"$\mathrm{W\ m^{-2}}$",
+    cb_digits_after_comma=0)
 
 axes[0].set_title("Daytime flag")
 axes[1].set_title("Nighttime flag")

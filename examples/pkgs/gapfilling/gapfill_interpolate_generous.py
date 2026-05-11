@@ -57,8 +57,8 @@ gs.update(wspace=0.3, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
 ax_input = fig.add_subplot(gs[0, 0])
 ax_output = fig.add_subplot(gs[0, 1])
 
-dv.plot_heatmap_datetime(ax=ax_input, series=series).plot()
-dv.plot_heatmap_datetime(ax=ax_output, series=series_gapfilled).plot()
+dv.plot_heatmap_datetime(series=series).plot(ax=ax_input)
+dv.plot_heatmap_datetime(series=series_gapfilled).plot(ax=ax_output)
 
 ax_input.set_title("Observed Data (with gaps)", color='black', fontsize=12, fontweight='bold')
 ax_output.set_title("Gap-Filled (limit=5)", color='black', fontsize=12, fontweight='bold')

@@ -129,7 +129,8 @@ applicator = ScopApplicator(
     daytime=results_physics_df["DAYTIME"].copy()
 )
 applicator.run()
-corrected_flux = applicator.get_corrected_flux()
+results_df = applicator.get_results()
+corrected_flux = results_df['NEE_OP_CORR']
 
 elapsed = time.time() - tic
 
