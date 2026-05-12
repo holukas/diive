@@ -143,7 +143,7 @@ Browse [examples/README.md](examples/README.md) for the full index with descript
 - 8-stage composable pipeline: lag features, rolling stats, differencing, EMA, polynomial, STL decomposition,
   timestamps, record numbering
 - Pre-engineer once, reuse across multiple gap-filling models
-- Full examples: [examples/pkgs/gapfilling/](examples/pkgs/gapfilling/)
+- Full examples: [examples/pkgs/gapfilling/](examples/gapfilling/)
 
 **Methods:**
 
@@ -158,7 +158,7 @@ Browse [examples/README.md](examples/README.md) for the full index with descript
 - Post-processing pipeline covering quality flags, storage correction, outlier detection, USTAR filtering, and
   gap-filling
 - Implements Levels 2–4.1 following Swiss FluxNet standards
-- Example: [examples/pkgs/flux/fluxprocessingchain/](examples/pkgs/flux/fluxprocessingchain/)
+- Example: [examples/pkgs/flux/fluxprocessingchain/](examples/flux/fluxprocessingchain/)
 -
 Reference: [Swiss FluxNet flux processing](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/)
 
@@ -168,7 +168,7 @@ Reference: [Swiss FluxNet flux processing](https://www.swissfluxnet.ethz.ch/inde
 
 - Merges multiple test flags into a single quality indicator
 - Daytime/nighttime separation and USTAR scenario support
-- Example: [examples/pkgs/preprocessing/qaqc/qcf.py](examples/pkgs/preprocessing/qaqc/qcf.py)
+- Example: [examples/pkgs/preprocessing/qaqc/qcf.py](examples/preprocessing/qaqc/qcf.py)
 
 **10 Outlier Detection Methods:**
 
@@ -181,7 +181,7 @@ Reference: [Swiss FluxNet flux processing](https://www.swissfluxnet.ethz.ch/inde
 - **Manual removal** — Explicit period or point flagging
 - **Trimmed mean**: Symmetric removal of high and low outliers
 - **Stepwise orchestration** — Chain multiple methods together
-- Examples: [examples/pkgs/preprocessing/outlierdetection/](examples/pkgs/preprocessing/outlierdetection/)
+- Examples: [examples/pkgs/preprocessing/outlierdetection/](examples/preprocessing/outlierdetection/)
 
 ### Data Processing & Corrections
 
@@ -189,7 +189,7 @@ Reference: [Swiss FluxNet flux processing](https://www.swissfluxnet.ethz.ch/inde
 - **Set to threshold/missing** — Apply thresholds or manual value replacements
 - **Timestamp sanitization**: Validate, regularize, and detect frequency
 - **Examples:
-  ** [examples/pkgs/preprocessing/corrections/](examples/pkgs/preprocessing/corrections/), [examples/core/times/](examples/core/times/)
+  ** [examples/pkgs/preprocessing/corrections/](examples/preprocessing/corrections/), [examples/core/times/](examples/times/)
 
 ### Analysis
 
@@ -198,7 +198,7 @@ Reference: [Swiss FluxNet flux processing](https://www.swissfluxnet.ethz.ch/inde
 - **Grid aggregation** (2D binning and statistics)
 - **Gap finder**: Identify missing data patterns
 - **Percentiles & histogram** — Distribution analysis
-- **Examples:** [examples/pkgs/analysis/](examples/pkgs/analysis/)
+- **Examples:** [examples/pkgs/analysis/](examples/analysis/)
 
 ### Feature Engineering
 
@@ -208,7 +208,7 @@ Reference: [Swiss FluxNet flux processing](https://www.swissfluxnet.ethz.ch/inde
 - **Unit conversions**: Temperature, energy, and water
 - **Lagged features** — Time-shifted variables
 - **Potential radiation**: Clear-sky calculation
-- **Examples:** [examples/pkgs/features/](examples/pkgs/features/)
+- **Examples:** [examples/pkgs/features/](examples/features/)
 
 ### Eddy Covariance & Flux
 
@@ -218,14 +218,14 @@ Reference: [Swiss FluxNet flux processing](https://www.swissfluxnet.ethz.ch/inde
 - **Self-heating correction**: Open-path IRGA oxygen flux adjustment
 - **USTAR filtering** — Threshold detection and filtering
 - **Uncertainty estimation**: Random error propagation
-- **Examples:** [examples/pkgs/flux/](examples/pkgs/flux/)
+- **Examples:** [examples/pkgs/flux/](examples/flux/)
 
 ### Visualization
 
 - **14+ plot types**: Time series, cumulative, diel cycle, heatmap (datetime/year-month), hexbin, histogram, ridge line,
   scatter, anomalies
 - **Interactive plots** — Matplotlib and Plotly support
-- **Examples:** [examples/core/visualization/](examples/core/visualization/)
+- **Examples:** [examples/core/visualization/](examples/visualization/)
 
 ### I/O & File Handling
 

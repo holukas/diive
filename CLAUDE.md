@@ -490,7 +490,7 @@ plotter.plot()  # Creates new figure
 **Known Issues to Fix (Priority Order)**
 
 1. **Gapfilling examples with old API** (12 example failures)
-   - Files: `examples/pkgs/gapfilling/*.py` and `examples/pkgs/features/feature_*.py`
+   - Files: `examples/gapfilling/*.py` and `examples/features/feature_*.py`
    - Issue: Examples use `dv.plot_heatmap_datetime(ax=axes[0], series=...)` instead of correct pattern
    - Correct pattern: `dv.plot_heatmap_datetime(series=...).plot(ax=axes[0], ...)`
    - Impact: 12 examples in gapfilling, features modules
@@ -522,7 +522,7 @@ Co-Authored-By: Claude Haiku 4.5 <noreply@anthropic.com>
 Only the user is the author.
 
 **Do NOT run `examples/run_all_examples.py` proactively.** User will run this themselves to validate the full suite.
-Only run individual example files for validation during development (e.g., `uv run python examples/pkgs/analysis/analysis_correlation.py`).
+Only run individual example files for validation during development (e.g., `uv run python examples/analysis/analysis_correlation.py`).
 
 **Do NOT perform git operations** (git add/commit/push). User commits and stages changes themselves.
 
@@ -866,23 +866,27 @@ See `examples/outlierdetection/stepwise.py` for complete example (6 methods with
 
 ## Examples
 
-Located in `examples/` organized to mirror `diive/pkgs` and `diive/core` structure.
+Located in `examples/` organized by **functional domain** for easy discoverability.
 
 **Structure:**
 
 ```
 examples/
-├── core/               # System-level utilities
-│   ├── visualization/  # Plotting (16 examples)
-│   └── times/          # Timestamps (1 example)
-└── pkgs/               # Domain packages
-    ├── analysis/       # Time series analysis (9 examples)
-    ├── features/       # Variable creation (8 examples)
-    ├── fits/           # Data fitting (1 example)
-    ├── flux/           # Flux processing (9 examples)
-    ├── gapfilling/     # Gap-filling methods (10 examples)
-    ├── io/             # File I/O (1 example)
-    └── preprocessing/  # QC & corrections (18 examples)
+├── visualization/      # Plotting and visualization (17 examples)
+├── times/              # Timestamp handling (1 example)
+├── analysis/           # Time series analysis (9 examples)
+├── features/           # Variable creation & engineering (8 examples)
+├── fits/               # Data fitting (2 examples)
+├── flux/               # Flux processing (9 examples)
+│   ├── fluxprocessingchain/
+│   ├── lowres/
+│   └── hires/
+├── gapfilling/         # Gap-filling methods (10 examples)
+├── io/                 # File I/O (1 example)
+└── preprocessing/      # Data QC & corrections (18 examples)
+    ├── corrections/
+    ├── outlierdetection/
+    └── qaqc/
 ```
 
 **Documentation:**
@@ -895,8 +899,8 @@ examples/
 **Running Examples:**
 
 - Run all: `uv run python examples/run_all_examples.py` (parallel, 8 workers)
-- Run category: `uv run python examples/pkgs/gapfilling/gapfill_randomforest.py`
-- Coverage: 73 examples across 11 organized folders
+- Run category: `uv run python examples/gapfilling/gapfill_randomforest.py`
+- Coverage: 75 examples across 9 organized functional domains
 
 **Important Notes:**
 
@@ -1091,14 +1095,14 @@ Update the function/class docstring in the source code to reference the example:
 5. **Example** — Reference the example file
    ```python
    Example:
-       See `examples/pkgs/gapfilling/gapfill_randomforest.py` for complete examples.
+       See `examples/gapfilling/gapfill_randomforest.py` for complete examples.
    ```
 
 #### 4. Documentation Files to Update (7-point checklist)
 
 For each new/modified example, update:
 
-**A. Category README** (`examples/pkgs/{category}/README.md`)
+**A. Category README** (`examples/{category}/README.md`)
    - Add file under appropriate subsection (e.g., "Machine Learning Methods")
    - Format: `- **filename.py** — One-line description`
    - Example:
@@ -1111,7 +1115,7 @@ For each new/modified example, update:
 **B. Running Examples section** (in same README)
    - Add bash command for single example:
      ```bash
-     uv run python examples/pkgs/gapfilling/gapfill_randomforest.py
+     uv run python examples/gapfilling/gapfill_randomforest.py
      ```
 
 **C. examples/run_all_examples.py**
@@ -1138,7 +1142,7 @@ For each new/modified example, update:
 **G. Source Code Docstrings** (in `diive/pkgs/{module}/{file}.py`)
    - Update "Example" section with new example path
    - Add "See Also" section linking to related functions
-   - Format: `` `examples/pkgs/gapfilling/gapfill_randomforest.py` ``
+   - Format: `` `examples/gapfilling/gapfill_randomforest.py` ``
 
 #### 5. Common Mistakes to Avoid
 
@@ -1157,7 +1161,7 @@ Before considering an example complete:
 □ File created with correct naming: {prefix}_{function}.py
 □ File follows Sphinx Gallery structure (docstring, # %%, narrative, code)
 □ No file I/O operations included
-□ Examples run without errors: uv run python examples/pkgs/{category}/{file}.py
+□ Examples run without errors: uv run python examples/{category}/{file}.py
 □ Category README.md updated with file description and running example
 □ examples/run_all_examples.py updated with file path
 □ examples/README.md example count and structure updated
@@ -1170,54 +1174,49 @@ Before considering an example complete:
 
 ### Subdirectory Organization Strategy
 
-**Key Principle:** Example subdirectories must mirror the source code organization in `diive/pkgs/`.
+Examples are organized by **functional domain**, not source code architecture. Top-level folders reflect what users are trying to do (`visualization/`, `gapfilling/`, `analysis/`, etc.).
 
-#### Why Mirror Source Structure?
+**Subdirectories within domains** are used only when there are logical functional subdivisions:
 
-- **Consistency:** Users familiar with the package structure can immediately find related examples
-- **Discoverability:** Grouping examples by function (hires, lowres, corrections) makes sense both in source and docs
-- **Maintainability:** When source code is refactored, the example organization stays aligned
-- **Scalability:** New examples naturally fit into existing categorical folders
+#### Example: Flux Processing (`examples/flux/`)
 
-#### Example: Flux Processing (`examples/pkgs/flux/`)
-
-Source code structure (`diive/pkgs/flux/`):
+Subdirectories reflect functional analysis levels, not source code structure:
 ```
-flux/
-├── fluxprocessingchain/    # Multi-level processing workflow
-├── hires/                  # High-resolution analysis (10Hz)
-├── lowres/                 # Low-resolution processing (30min)
-└── io/                     # File I/O (if applicable)
-```
-
-Examples structure MUST match:
-```
-examples/pkgs/flux/
+examples/flux/
 ├── fluxprocessingchain/
-│   └── fluxprocessingchain.py        (no prefix needed, already in subfolder)
-├── hires/
-│   ├── flux_lag.py
-│   ├── flux_windrotation.py
-│   └── flux_fluxdetectionlimit.py
-└── lowres/
-    ├── flux_common.py
-    ├── flux_hqflux.py
-    ├── flux_selfheating.py
-    ├── flux_uncertainty.py
-    └── flux_ustar_mp_detection.py
+│   └── fluxprocessingchain.py        # Complete multi-level workflow (L2-L4.1)
+├── hires/                            # High-resolution 10 Hz analysis
+│   ├── flux_lag.py                   # Time lag detection
+│   ├── flux_windrotation.py          # Wind coordinate transformation
+│   └── flux_fluxdetectionlimit.py    # Detection sensitivity
+└── lowres/                           # Low-resolution 30-min processing
+    ├── flux_common.py                # Variable detection & nomenclature
+    ├── flux_hqflux.py                # Quality filtering
+    ├── flux_selfheating.py           # IRGA heating correction
+    ├── flux_uncertainty.py           # Uncertainty estimation
+    └── flux_ustar_mp_detection.py    # Friction velocity detection
 ```
 
 #### Naming Convention with Subdirectories
 
-- **No prefix needed for top-level files** in single-purpose folders (e.g., `correction_*.py` at `examples/pkgs/preprocessing/corrections/`)
-- **With subdirectories:** Use prefix to clarify domain (e.g., `flux_lag.py` in `hires/` subdirectory)
-- **Exception:** Root-level module examples use prefix (e.g., `flux_common.py` instead of just `common.py`)
+- **Subdirectories only for logical grouping within a domain**, not architectural mirroring
+- **Use domain prefix** to clarify context (e.g., `flux_lag.py` in `hires/`, `correction_*.py` in `corrections/`)
+- **Top-level examples use prefix:** `analysis_correlation.py` not `correlation.py`
 
 **Formula:**
 ```
-examples/pkgs/{category}/{optional_subfolder}/{domain_prefix}_{function}.py
-                                                ↑ Add prefix when in subfolder with other domains
+examples/{domain}/{optional_subdomain}/{domain_prefix}_{function}.py
+         ↑ Functional domain     ↑ Logical subdivision
 ```
+
+#### When to Use Subdirectories
+
+- When there are 3+ related examples with a clear thematic grouping
+- Only when subdivisions have meaningful names that users would search for
+- NOT to mirror source code architecture
+
+Bad: `examples/flux/hires/` (mirrors `diive/pkgs/flux/hires/`)  
+Good: `examples/flux/hires/` (users search "high-resolution flux analysis")
 
 #### Updating Documentation When Adding Subdirectory Examples
 
@@ -1226,38 +1225,39 @@ When examples are organized in subdirectories, update these files:
 **1. Category README.md**
 ```markdown
 ### Subfolder Name
+
 - **subdirectory/flux_lag.py** — Time lag detection description
 - **subdirectory/flux_windrotation.py** — Wind rotation description
 ```
 
 **2. examples/run_all_examples.py**
 ```python
-# PKGS: Category - Subfolder
-'pkgs/category/subfolder/flux_lag.py',
-'pkgs/category/subfolder/flux_windrotation.py',
+# Flux - High-resolution analysis
+'flux/hires/flux_lag.py',
+'flux/hires/flux_windrotation.py',
 ```
 
 **3. examples/README.md structure**
 ```
-├── category/              # Category (N examples)
-│   ├── subfolder1/        # Subfolder A (3 examples)
+├── domain/                # Domain (N examples)
+│   ├── subdomain1/        # Subdomain A (3 examples)
 │   │   ├── example1.py
 │   │   ├── example2.py
 │   │   └── example3.py
-│   └── subfolder2/        # Subfolder B (2 examples)
+│   └── subdomain2/        # Subdomain B (2 examples)
 │       ├── example4.py
 │       └── example5.py
 ```
 
 #### Complete Subdirectory Example Workflow
 
-**Task:** Convert 10 flux examples organized into 3 source subdirectories
+**Task:** Create examples for flux processing at different analysis levels
 
 **Process:**
 
-1. **Create subdirectory structure** in examples/ matching source
+1. **Create subdirectory structure** by functional grouping
    ```bash
-   mkdir -p examples/pkgs/flux/{fluxprocessingchain,hires,lowres}
+   mkdir -p examples/flux/{fluxprocessingchain,hires,lowres}
    ```
 
 2. **Create Sphinx Gallery files** with domain prefix (flux_) for clarity
@@ -1266,8 +1266,8 @@ When examples are organized in subdirectories, update these files:
 
 3. **Update run_all_examples.py** with full paths including subdirectories
    ```python
-   'pkgs/flux/hires/flux_lag.py',
-   'pkgs/flux/lowres/flux_common.py',
+   'flux/hires/flux_lag.py',
+   'flux/lowres/flux_common.py',
    ```
 
 4. **Update category README.md** with subsections showing subdirectories
@@ -1278,12 +1278,12 @@ When examples are organized in subdirectories, update these files:
 
 5. **Verify examples work:**
    ```bash
-   uv run python examples/pkgs/flux/hires/flux_lag.py
+   uv run python examples/flux/hires/flux_lag.py
    ```
 
 6. **Validate syntax** for all new files
    ```bash
-   cd examples/pkgs/flux && find . -name "*.py" -exec python3 -m py_compile {} \;
+   cd examples/flux && find . -name "*.py" -exec python3 -m py_compile {} \;
    ```
 
 ## Notebook Conversion Status (v0.91.0+)
@@ -1292,17 +1292,17 @@ When examples are organized in subdirectories, update these files:
 
 | Notebook (Archived) | Example File | Status |
 |---|---|---|
-| `Histogram.ipynb` | `examples/pkgs/analysis/analysis_histogram_distribution.py` | ✅ Complete |
-| `BinFitterCP.ipynb` | `examples/pkgs/fits/fit_binfittercp.py` | ✅ Complete |
-| `DailyCorrelation.ipynb` | `examples/pkgs/analysis/analysis_daily_correlation.py` | ✅ Complete |
-| `GridAggregator.ipynb` | `examples/pkgs/analysis/analysis_gridaggregator.py` | ✅ Complete |
-| `DecouplingSortingBins.ipynb` | `examples/pkgs/analysis/analysis_decoupling.py` | ✅ Complete |
-| `GapFinder.ipynb` | `examples/pkgs/analysis/analysis_gapfinder.py` | ✅ Complete |
+| `Histogram.ipynb` | `examples/analysis/analysis_histogram_distribution.py` | ✅ Complete |
+| `BinFitterCP.ipynb` | `examples/fits/fit_binfittercp.py` | ✅ Complete |
+| `DailyCorrelation.ipynb` | `examples/analysis/analysis_daily_correlation.py` | ✅ Complete |
+| `GridAggregator.ipynb` | `examples/analysis/analysis_gridaggregator.py` | ✅ Complete |
+| `DecouplingSortingBins.ipynb` | `examples/analysis/analysis_decoupling.py` | ✅ Complete |
+| `GapFinder.ipynb` | `examples/analysis/analysis_gapfinder.py` | ✅ Complete |
 
 **All converted examples are:**
 - Registered in `examples/run_all_examples.py`
 - Documented in `examples/CATALOG.md`
-- Listed in category READMEs (`examples/pkgs/{category}/README.md`)
+- Listed in category READMEs (`examples/{category}/README.md`)
 - Have updated source code docstrings with example references
 - Include information preservation checklist verification (no content lost)
 
@@ -1337,12 +1337,12 @@ Read the notebook completely and identify:
 
 #### Step 2: Choose Example Location & Naming
 
-**Location:** Mirror source code organization in `examples/pkgs/{category}/`
+**Location:** Place in appropriate functional domain folder in `examples/{domain}/`
 
 ```
 Source code: diive/pkgs/analysis/histogram.py
-Example location: examples/pkgs/analysis/analysis_histogram_distribution.py
-                                          ↑ prefix: {domain}_ (optional if in subfolder)
+Example location: examples/analysis/analysis_histogram_distribution.py
+                                     ↑ prefix: {domain}_ (domain prefix required)
 ```
 
 **Check for existing examples:** Don't duplicate.
@@ -1451,7 +1451,7 @@ Before testing, verify no descriptive content from the notebook is lost:
 
 ```bash
 # Ensure it runs without errors
-uv run python examples/pkgs/analysis/analysis_histogram_distribution.py
+uv run python examples/analysis/analysis_histogram_distribution.py
 
 # Verify output looks reasonable
 # Check for:
@@ -1478,7 +1478,7 @@ class Histogram:
         [existing docstring...]
         
         Example:
-            See `examples/pkgs/analysis/analysis_histogram_distribution.py` for complete examples.
+            See `examples/analysis/analysis_histogram_distribution.py` for complete examples.
         
         See Also:
             SomeRelatedClass : Brief description
@@ -1494,7 +1494,7 @@ class Histogram:
 
 Update these 5 files (in order):
 
-**A. Category README** (`examples/pkgs/{category}/README.md`)
+**A. Category README** (`examples/{category}/README.md`)
    - Add 1-line description in appropriate subsection
    - Format: `- **filename.py** — One-line description`
    - Include "Running Examples" bash command
@@ -1514,7 +1514,7 @@ Update these 5 files (in order):
 
 **E. CHANGELOG.md**
    - Note new/updated examples in the latest version entry
-   - Format: `- Converted Histogram notebook to Sphinx Gallery example (examples/pkgs/analysis/analysis_histogram_distribution.py)`
+   - Format: `- Converted Histogram notebook to Sphinx Gallery example (examples/analysis/analysis_histogram_distribution.py)`
 
 #### Step 7: Verify Integration
 
@@ -1526,13 +1526,13 @@ uv run python examples/run_all_examples.py
 **Check cross-references:**
 ```bash
 # Source code docstring references example
-grep -r "examples/pkgs/analysis/analysis_histogram" diive/
+grep -r "examples/analysis/analysis_histogram" diive/
 
 # Example is in CATALOG.md
 grep "analysis_histogram" examples/CATALOG.md
 
 # Example is in category README
-grep "analysis_histogram" examples/pkgs/analysis/README.md
+grep "analysis_histogram" examples/analysis/README.md
 
 # Example is in runner
 grep "analysis_histogram" examples/run_all_examples.py
@@ -1567,11 +1567,11 @@ This preserves the notebook's history while marking it as converted and preventi
 ### Real Example: Histogram Notebook Conversion
 
 **Notebook:** `notebooks/analyses/Histogram.ipynb`
-**Example:** `examples/pkgs/analysis/analysis_histogram_distribution.py`
+**Example:** `examples/analysis/analysis_histogram_distribution.py`
 
 **Process used:**
 1. ✅ Analyzed notebook: 4 histogram methods, CO2 time lag specific data
-2. ✅ Created example in `examples/pkgs/analysis/`
+2. ✅ Created example in `examples/analysis/`
 3. ✅ Enhanced with overview section explaining all 4 methods
 4. ✅ Verified information preservation: all notebook description text included
    - Rationale for each method (why fringe bin removal matters)
