@@ -16,6 +16,12 @@ def load_exampledata_parquet() -> DataFrame:
     return data_df
 
 
+def load_exampledata_parquet_tlag_vars_level0() -> DataFrame:
+    filepath = Path(DIR_PATH) / 'exampledata_PARQUET_CH-HON_2025_LEVEL-0_TLAG-VARS_IRGA75_SUBSET.parquet'
+    data_df = load_parquet(filepath=filepath)
+    return data_df
+
+
 def load_exampledata_parquet_long() -> DataFrame:
     filepath = Path(DIR_PATH) / 'exampledata_PARQUET_CH-DAV_FP2022.5_2013-2022_ID20230206154316_30MIN.parquet'
     data_df = load_parquet(filepath=filepath)

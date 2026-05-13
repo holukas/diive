@@ -84,6 +84,7 @@ EXAMPLE_FILES = [
     # Flux - Processing chain
     'flux/fluxprocessingchain/fluxprocessingchain.py',
     # Flux - Low-resolution processing
+    'flux/lowres/flux_timelag_analysis.py',
     'flux/lowres/flux_common.py',
     'flux/lowres/flux_hqflux.py',
     'flux/lowres/flux_selfheating.py',

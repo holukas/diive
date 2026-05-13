@@ -8,6 +8,7 @@ Examples demonstrating flux processing, quality control, and high-resolution ana
 - **fluxprocessingchain/fluxprocessingchain.py** — Complete multi-level Swiss FluxNet workflow (L2-L4.1): Quality flags, storage correction, outlier detection, USTAR filtering, gap-filling
 
 ### Low-Resolution Flux Processing
+- **lowres/flux_timelag_analysis.py** — Time lag detection and visualization for gas concentrations
 - **lowres/flux_common.py** — Flux variable base detection and nomenclature
 - **lowres/flux_hqflux.py** — Highest-quality flux filtering with Hampel outlier detection
 - **lowres/flux_selfheating.py** — Oxygen sensor self-heating correction (SCOP methodology)
@@ -100,11 +101,12 @@ rotated = WindRotation(
 uv run python examples/pkgs/flux/fluxprocessingchain/fluxprocessingchain.py
 
 # Low-resolution (30-min) processing
-uv run python examples/pkgs/flux/lowres/flux_common.py
-uv run python examples/pkgs/flux/lowres/flux_hqflux.py
-uv run python examples/pkgs/flux/lowres/flux_selfheating.py
-uv run python examples/pkgs/flux/lowres/flux_uncertainty.py
-uv run python examples/pkgs/flux/lowres/flux_ustar_mp_detection.py
+uv run python examples/flux/lowres/flux_timelag_analysis.py
+uv run python examples/flux/lowres/flux_common.py
+uv run python examples/flux/lowres/flux_hqflux.py
+uv run python examples/flux/lowres/flux_selfheating.py
+uv run python examples/flux/lowres/flux_uncertainty.py
+uv run python examples/flux/lowres/flux_ustar_mp_detection.py
 
 # High-resolution (10 Hz) analysis
 uv run python examples/pkgs/flux/hires/flux_lag.py

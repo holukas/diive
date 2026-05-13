@@ -145,6 +145,7 @@ See: [features/README.md](features/README.md)
 
 | Example | Description |
 |---------|-------------|
+| [**flux_timelag_analysis.py**](flux/lowres/flux_timelag_analysis.py) | Time lag detection and visualization for gas concentrations |
 | [**flux_common.py**](flux/lowres/flux_common.py) | Flux variable base detection and nomenclature |
 | [**flux_hqflux.py**](flux/lowres/flux_hqflux.py) | Extract highest-quality flux using Hampel filter |
 | [**flux_selfheating.py**](flux/lowres/flux_selfheating.py) | SCOP self-heating correction for open-path IRGA |
