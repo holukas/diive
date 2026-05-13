@@ -34,7 +34,7 @@ def set_fig(ax: plt.Axes):
 def make_patch_spines_invisible(ax):
     ax.set_frame_on(True)
     ax.patch.set_visible(False)
-    for sp in ax.spines.values():
+    for sp in ax.spines.to_numpy()():
         sp.set_visible(False)
 
 

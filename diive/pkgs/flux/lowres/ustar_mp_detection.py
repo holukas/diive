@@ -739,9 +739,9 @@ class UstarMovingPointDetection:
         lines.append(f"{'Season':<15} {'Forward Mode (m/s)':<25} {'Back Mode (m/s)':<25}")
         lines.append("-" * 75)
 
-        for idx, row in self.results_.iterrows():
-            forward = f"{row['forward_mode']:.4f}" if not np.isnan(row['forward_mode']) and row['forward_mode'] != self.THRESHOLD_NOT_FOUND else "Not found"
-            back = f"{row['back_mode']:.4f}" if not np.isnan(row['back_mode']) and row['back_mode'] != self.THRESHOLD_NOT_FOUND else "Not found"
+        for idx in self.results_.index:
+            forward = f"{self.results_.loc[idx, 'forward_mode']:.4f}" if not np.isnan(self.results_.loc[idx, 'forward_mode']) and self.results_.loc[idx, 'forward_mode'] != self.THRESHOLD_NOT_FOUND else "Not found"
+            back = f"{self.results_.loc[idx, 'back_mode']:.4f}" if not np.isnan(self.results_.loc[idx, 'back_mode']) and self.results_.loc[idx, 'back_mode'] != self.THRESHOLD_NOT_FOUND else "Not found"
             lines.append(f"{idx:<15} {forward:<25} {back:<25}")
 
         return "\n".join(lines)

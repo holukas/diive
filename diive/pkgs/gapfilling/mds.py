@@ -1091,7 +1091,7 @@ class FluxMDS:
         counts = np.zeros(n_gaps, dtype=int)
 
         # Pre-extract arrays for faster access
-        gf_index_values = self.gapfilling_df_.index.values
+        gf_index_values = self.gapfilling_df_.index.to_numpy()
         gf_flux = self.gapfilling_df_[self.flux].values
         gf_ta = self.gapfilling_df_[self.ta].values
         gf_swin = self.gapfilling_df_[self.swin].values
@@ -1152,7 +1152,7 @@ class FluxMDS:
         counts = np.zeros(n_gaps, dtype=int)
 
         # Pre-extract arrays
-        gf_index_values = self.gapfilling_df_.index.values
+        gf_index_values = self.gapfilling_df_.index.to_numpy()
         gf_flux = self.gapfilling_df_[self.flux].values
         gf_swin = self.gapfilling_df_[self.swin].values
 
@@ -1201,7 +1201,7 @@ class FluxMDS:
         counts = np.zeros(n_gaps, dtype=int)
 
         # Pre-extract arrays
-        gf_index_values = self.gapfilling_df_.index.values
+        gf_index_values = self.gapfilling_df_.index.to_numpy()
         gf_flux = self.gapfilling_df_[self.flux].values
 
         # Process each gap row (no meteorological conditions, just time window)
@@ -1237,9 +1237,9 @@ class FluxMDS:
 
         # Pre-extract arrays
         gf_index = self.gapfilling_df_.index
-        gf_index_values = gf_index.values
+        gf_index_values = gf_index.to_numpy()
         gf_flux = self.gapfilling_df_[self.flux].values
-        gf_hours = gf_index.hour.values
+        gf_hours = gf_index.hour.to_numpy()
 
         # Process each gap row
         for i in range(n_gaps):

@@ -152,7 +152,7 @@ def potrad(timestamp_index: DatetimeIndex, lat: float, lon: float, utc_offset: i
     # Calculating radiation
     # in W/m^2
     rad = res.S * res.sin_psi
-    rad.values[rad < 0] = 0
+    rad[rad < 0] = 0
     res['SW_IN_POT'] = rad
 
     # Calculating azimut
@@ -223,7 +223,7 @@ def potrad(timestamp_index: DatetimeIndex, lat: float, lon: float, utc_offset: i
 #     if param[0].upper() != 'NONE':
 #         # in W/m^2
 #         rad = S * sin_psi
-#         rad.values[rad < 0] = 0
+#         rad.to_numpy()[rad < 0] = 0
 #         data.loc[idx, param[0]] = rad
 #
 #     # Calculating azimut

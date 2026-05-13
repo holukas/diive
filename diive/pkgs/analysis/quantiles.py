@@ -22,8 +22,8 @@ def percentiles101(series: Series, showplot: bool = True, verbose: bool = True) 
     percentiles_df = pd.DataFrame()
     percentiles_df['PERCENTILE'] = np.arange(0, 101, 1)
     vals_sorted = series.copy().sort_values().dropna()  # Pre-sort array
-    for index, row in percentiles_df.iterrows():
-        v = vals_sorted.quantile(row['PERCENTILE'] / 100)
+    for index in percentiles_df.index:
+        v = vals_sorted.quantile(percentiles_df.loc[index, 'PERCENTILE'] / 100)
         percentiles_df.loc[index, 'VALUE'] = v
 
     if verbose:

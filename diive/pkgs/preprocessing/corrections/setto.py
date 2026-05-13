@@ -162,7 +162,7 @@ def setto_threshold(series: Series,
     corrected_ix = flag == 1
     series_corr = series.copy()
     series_corr.loc[corrected_ix] = threshold
-    series_corr.rename(outname, inplace=True)
+    series_corr = series_corr.rename(outname)
 
     # Plot
     if showplot:

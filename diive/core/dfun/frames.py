@@ -300,7 +300,7 @@ def df_unique_values(df):
     -------
     array
     """
-    return pd.unique(df.values.ravel())
+    return pd.unique(df.to_numpy().ravel())
 
 
 def flatten_multiindex_all_df_cols(df: DataFrame, keep_first_row_only: bool = False) -> DataFrame:
@@ -314,7 +314,7 @@ def flatten_multiindex_all_df_cols(df: DataFrame, keep_first_row_only: bool = Fa
         df.columns = vars
     else:
         #  Combine first and second row of the MultiIndex column names to one line
-        df.columns = ['_'.join(col).strip() for col in df.columns.values]
+        df.columns = ['_'.join(col).strip() for col in df.columns.to_numpy()]
     return df
 
 

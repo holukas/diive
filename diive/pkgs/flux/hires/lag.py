@@ -276,7 +276,7 @@ class MaxCovariance:
         """
         # Peak of maximum covariance
         if True in cov_df[flag_col].values:
-            idx = cov_df.loc[cov_df[flag_col] == True, :].index.values[0]
+            idx = cov_df.loc[cov_df[flag_col] == True, :].index.to_numpy()[0]
         else:
             idx = False
         return idx

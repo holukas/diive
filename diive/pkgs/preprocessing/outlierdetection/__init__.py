@@ -1,6 +1,5 @@
 from diive.pkgs.preprocessing.outlierdetection.absolutelimits import (
     AbsoluteLimits,
-    AbsoluteLimitsDaytimeNighttime,
 )
 from diive.pkgs.preprocessing.outlierdetection.hampel import Hampel
 from diive.pkgs.preprocessing.outlierdetection.incremental import zScoreIncrements
@@ -15,6 +14,7 @@ from diive.pkgs.preprocessing.outlierdetection.zscore import (
 )
 
 # Aliases for compatibility
+AbsoluteLimitsDaytimeNighttime = AbsoluteLimits
 HampelDaytimeNighttime = Hampel
 hampel = Hampel
 hampel_daytime_nighttime = Hampel

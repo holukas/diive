@@ -226,12 +226,13 @@ class LongTermGapFillingBase:
                                subplot_kw=dict(ylim=(0.5, 0.5 + len(self.feature_ranks_per_year))),
                                layout='constrained')
         color = -1
-        for ix, row in self.feature_ranks_per_year.iterrows():
+        for ix in self.feature_ranks_per_year.index:
+            row = self.feature_ranks_per_year.loc[ix]
             color += 1 if color + 1 < len(colors) else 0
             # _marker_ix = _marker_ix + 1 if (_marker_ix + 1) < len(_marker) else 0
-            ax.plot(row.index, row.values, "o", marker=verts, ms=20,
+            ax.plot(row.index, row.to_numpy(), "o", marker=verts, ms=20,
                     color=colors[color], zorder=99)
-            ax.plot(row.index, row.values, "-", marker='none', ms=20, color=colors[color], zorder=1,
+            ax.plot(row.index, row.to_numpy(), "-", marker='none', ms=20, color=colors[color], zorder=1,
                     alpha=0.6)
         # ax.xaxis.set_major_locator(MultipleLocator(1))
         # ax.yaxis.set_major_locator(MultipleLocator(1))

@@ -18,7 +18,7 @@ def _calculate_gap_sizes(gap_df: pd.DataFrame, series: Series) -> np.ndarray:
     time_delta_seconds = (gap_df['GAP_END'] - gap_df['GAP_START']).dt.total_seconds().astype(int)
     median_step_seconds = series.index.to_series().diff().dt.total_seconds().median() or 1
     gap_sizes = (time_delta_seconds / median_step_seconds).astype(int) + 1
-    return gap_sizes.values
+    return gap_sizes.to_numpy()
 
 
 def linear_interpolation(series: Series, limit: int = 3, verbose: bool = False) -> Series:
@@ -146,9 +146,9 @@ def linear_interpolation(series: Series, limit: int = 3, verbose: bool = False) 
 
     # Vectorized gap-filling: create mask for all fillable gaps
     series_filled = series.copy()
-    for _, row in gapfinder_agg_df.iterrows():
-        gap_start = row['GAP_START']
-        gap_end = row['GAP_END']
+    for idx in gapfinder_agg_df.index:
+        gap_start = gapfinder_agg_df.loc[idx, 'GAP_START']
+        gap_end = gapfinder_agg_df.loc[idx, 'GAP_END']
         mask = (series.index >= gap_start) & (series.index <= gap_end)
         series_filled.loc[mask] = series_all_interpolated.loc[mask]
 

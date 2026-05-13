@@ -116,8 +116,8 @@ class DielCycle:
             label = None
             # label = "mean±1sd" if counter == 0 else ""
             self.ax.fill_between(x_decimal,
-                                 means_add_sd.values,
-                                 means_sub_sd.values,
+                                 means_add_sd.to_numpy(),
+                                 means_sub_sd.to_numpy(),
                                  alpha=alpha, zorder=0, color=color, edgecolor='none',
                                  label=label)
 

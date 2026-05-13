@@ -12,7 +12,7 @@ license = { text = "GPL-3.0" }
 authors = [{ name = "Lukas Hörtnagl", email = "holukas@ethz.ch" }]
 
 dependencies = [
-    "pandas>=2.2.3,<3.0.0",
+    "pandas>=3.0.0,<4.0.0",
     "xgboost>=3.0.0,<4.0.0",
     "scikit-learn>=1.6.1,<2.0.0",
     "matplotlib==3.10.7",
@@ -28,14 +28,13 @@ dependencies = [
     "eli5>=0.14.0,<0.15.0",
     "dtreeviz>=2.2.2,<3.0.0",
     "numpy>=2.2.4,<3.0.0",
-    "sktime>=0.36.0,<0.37.0",
     "category-encoders>=2.8.1,<3.0.0",
     "scikit-optimize>=0.10.2,<0.11.0",
     "polars>=1.26.0,<2.0.0",
     "jupyterlab>=4.3.6,<5.0.0",
     "jupyter-bokeh>=4.0.5,<5.0.0",
     "shap>=0.48.0,<0.49.0",
-    "pandas-stubs~=2.2.3",
+    "pandas-stubs>=2.0.0,<3.0.0",
     "dbc-influxdb @ file:///F:/Sync/luhk_work/20%20-%20CODING/22%20-%20POET/dbc-influxdb",
 ]
 

@@ -590,7 +590,7 @@ class TimeLagAnalysis:
 
         # Overview histogram (top-left)
         # Draw histogram bars, highlighting peak bin
-        peak_bin_idx = np.where(hist_bins == peak)[0][0] if peak in hist_bins.values else 0
+        peak_bin_idx = np.where(hist_bins == peak)[0][0] if peak in hist_bins.to_numpy() else 0
         colors = ['#212529' if idx == peak_bin_idx else '#6c757d' for idx in range(len(hist_bins))]
         ax.bar(x=hist_bins, height=hist_counts, color=colors, zorder=90, **bar_args)
         _add_range_markers(ax, orient='v')

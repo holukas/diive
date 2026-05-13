@@ -752,13 +752,13 @@ class ScopPhysics:
 
                     # 1. Ta (Reference)
                     mean_ta = plot_df['Ta'].groupby(plot_df.index.hour).mean()
-                    ax.plot(mean_ta.index, mean_ta.values, color='black', ls=':', lw=1.5, label='Ta (Air)')
+                    ax.plot(mean_ta.index, mean_ta.to_numpy(), color='black', ls=':', lw=1.5, label='Ta (Air)')
 
                     # 2. Surfaces
                     surfs = [('Ts_Bottom', '#c0392b'), ('Ts_Top', '#e67e22'), ('Ts_Spar', '#8e44ad')]
                     for s_col, s_color in surfs:
                         mean_s = plot_df[s_col].groupby(plot_df.index.hour).mean()
-                        ax.plot(mean_s.index, mean_s.values, color=s_color, lw=2, label=s_col.split('_')[1])
+                        ax.plot(mean_s.index, mean_s.to_numpy(), color=s_color, lw=2, label=s_col.split('_')[1])
 
                     ax.legend(fontsize=9, frameon=False, loc='best')
                     ax.set_title(var['title'], fontweight='bold', loc='left')
@@ -774,7 +774,7 @@ class ScopPhysics:
                 diel = series.groupby([series.index.month, series.index.hour]).mean().unstack()
                 annual = series.groupby(series.index.hour).mean()
 
-                ax.plot(annual.index, annual.values, color='gray', ls='--', lw=2, alpha=0.5, zorder=1)
+                ax.plot(annual.index, annual.to_numpy(), color='gray', ls='--', lw=2, alpha=0.5, zorder=1)
 
                 # Monthly lines
                 cmap = plt.get_cmap('Spectral_r', 12)
@@ -1104,20 +1104,20 @@ class ScopOptimizer:
             period_label = "DAYTIME" if daytime == 1 else "NIGHTTIME"
             print(f"--- {period_label} ---")
 
-            for _, row in subset.iterrows():
+            for idx in subset.index:
                 # Format the range string
-                r_min, r_max = row['GROUP_CLASSVAR_MIN'], row['GROUP_CLASSVAR_MAX']
+                r_min, r_max = subset.loc[idx, 'GROUP_CLASSVAR_MIN'], subset.loc[idx, 'GROUP_CLASSVAR_MAX']
                 range_str = f"{r_min:>7.2f} - {r_max:<7.2f}"
 
                 # Format CI string
-                ci_str = f"[{row['SF_Q01']:>4.2f}-{row['SF_Q99']:<4.2f}]"
+                ci_str = f"[{subset.loc[idx, 'SF_Q01']:>4.2f}-{subset.loc[idx, 'SF_Q99']:<4.2f}]"
 
-                print(f"{int(row['GROUP_CLASSVAR']):<4} | "
+                print(f"{int(subset.loc[idx, 'GROUP_CLASSVAR']):<4} | "
                       f"{range_str:^19} | "
-                      f"{int(row['NUMVALS_AVG']):>5} | "
-                      f"{row['SF_MEDIAN']:>16.3f} | "
+                      f"{int(subset.loc[idx, 'NUMVALS_AVG']):>5} | "
+                      f"{subset.loc[idx, 'SF_MEDIAN']:>16.3f} | "
                       f"{ci_str:^16} | "
-                      f"{row['SOS_MEDIAN']:>10.2f}")
+                      f"{subset.loc[idx, 'SOS_MEDIAN']:>10.2f}")
             print("")  # Spacer between day/night
 
         print_sep('=', 75)
@@ -1633,7 +1633,7 @@ class ScopApplicator:
                 diel = series.groupby([series.index.month, series.index.hour]).mean().unstack()
                 annual = series.groupby(series.index.hour).mean()
 
-                ax.plot(annual.index, annual.values, color='#7f8c8d', ls='--', lw=2, zorder=1, alpha=0.5)
+                ax.plot(annual.index, annual.to_numpy(), color='#7f8c8d', ls='--', lw=2, zorder=1, alpha=0.5)
                 for month in diel.index:
                     ax.plot(diel.columns, diel.loc[month], color=cmap(norm(month)),
                             lw=2, alpha=0.8, zorder=2)

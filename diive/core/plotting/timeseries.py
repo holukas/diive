@@ -73,7 +73,7 @@ class TimeSeries:
         df = pd.DataFrame()
         df['date'] = self.series.index
         df['date'] = pd.to_datetime(df['date'], format="%Y-%m-%d %H:%M")
-        df['value'] = self.series.values
+        df['value'] = self.series.to_numpy()
 
         # Convert dataframe for bokeh
         source = ColumnDataSource(df)

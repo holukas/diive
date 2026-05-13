@@ -232,13 +232,13 @@ def linear_trend_slope(s: Series) -> tuple:
         return (np.nan, np.nan, np.nan)
 
     x = np.arange(len(s_clean))
-    z = np.polyfit(x, s_clean.values, 1)
+    z = np.polyfit(x, s_clean.to_numpy(), 1)
     p = np.poly1d(z)
 
     # Calculate R-value
     y_pred = p(x)
-    ss_res = np.sum((s_clean.values - y_pred) ** 2)
-    ss_tot = np.sum((s_clean.values - s_clean.mean()) ** 2)
+    ss_res = np.sum((s_clean.to_numpy() - y_pred) ** 2)
+    ss_tot = np.sum((s_clean.to_numpy() - s_clean.mean()) ** 2)
     r_value = np.sqrt(1 - (ss_res / ss_tot)) if ss_tot != 0 else np.nan
 
     return (z[0], z[1], r_value)
@@ -259,7 +259,7 @@ def approximate_entropy(s: Series, m: int = 2, r: float = None) -> float:
     Returns:
         Approximate entropy value
     """
-    s_clean = s.dropna().values
+    s_clean = s.dropna().to_numpy()
     N = len(s_clean)
 
     if N < m + 1:

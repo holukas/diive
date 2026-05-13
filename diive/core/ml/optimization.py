@@ -209,14 +209,14 @@ class OptimizeParamsTS:
         print(f"\nOK TOP {top_n} PARAMETER COMBINATIONS (by CV score)")
         print("-" * 80)
         top_results = self._cv_results.nsmallest(top_n, 'rank_test_score')
-        for idx, (_, row) in enumerate(top_results.iterrows(), 1):
+        for idx, row_idx in enumerate(top_results.index, 1):
             print(f"\n  Rank {idx}:")
-            mean_score = -row['mean_test_score']  # Negate because neg_mean_squared_error
+            mean_score = -top_results.loc[row_idx, 'mean_test_score']  # Negate because neg_mean_squared_error
             print(f"    CV Score: {mean_score:.6f} (lower MSE is better)")
             for param in sorted(self.params.keys()):
                 param_key = f'param_{param}'
-                if param_key in row:
-                    print(f"    {param:<22} = {row[param_key]}")
+                if param_key in top_results.columns:
+                    print(f"    {param:<22} = {top_results.loc[row_idx, param_key]}")
 
         # Parameter sensitivity analysis
         print("\nOK PARAMETER SENSITIVITY (which parameters matter most)")

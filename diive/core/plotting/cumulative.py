@@ -78,18 +78,18 @@ class CumulativeYear:
 
         # label = f"{year}: {cumulative_df[year].dropna().iloc[-1]:.2f}"
         mean_end = self.mean_doy_cumulative_df['MEAN_DOY_TIME'].iloc[-1]
-        self.ax.plot(self.mean_doy_cumulative_df.index.values,
+        self.ax.plot(self.mean_doy_cumulative_df.index.to_numpy(),
                      self.mean_doy_cumulative_df['MEAN_DOY_TIME'].values,
                      color='black', alpha=1,
                      ls='-', lw=theme.WIDTH_LINE_WIDER,
                      marker='', markeredgecolor='none', ms=0,
                      zorder=99, label=f'mean {mean_end:.{digits_after_comma}f}')
-        # self.ax.fill_between(mean_cumulative_df.index.values,
+        # self.ax.fill_between(mean_cumulative_df.index.to_numpy(),
         #                      mean_cumulative_df['MEAN+1.96_SD'].values,
         #                      mean_cumulative_df['MEAN-1.96_SD'].values,
         #                      alpha=.005, zorder=0, color='black', edgecolor='none',
         #                      label="XXX")
-        self.ax.fill_between(self.mean_doy_cumulative_df.index.values,
+        self.ax.fill_between(self.mean_doy_cumulative_df.index.to_numpy(),
                              self.mean_doy_cumulative_df['MEAN+SD'].values,
                              self.mean_doy_cumulative_df['MEAN-SD'].values,
                              alpha=.1, zorder=0, color='black', edgecolor='none',

@@ -128,7 +128,7 @@ class DailyCorrelation:
         )
         df = pd.DataFrame({
             'date': sorted_corrs.index,
-            'correlation': sorted_corrs.values
+            'correlation': sorted_corrs.to_numpy()
         })
         return df.reset_index(drop=True)
 
@@ -166,9 +166,9 @@ class DailyCorrelation:
 
         df = pd.DataFrame({
             'date': self.daycorrs_.index,
-            'correlation': self.daycorrs_.values,
-            'anomaly_score': abs(scores).values,
-            'is_anomaly': is_anomaly.values
+            'correlation': self.daycorrs_.to_numpy(),
+            'anomaly_score': abs(scores).to_numpy(),
+            'is_anomaly': is_anomaly.to_numpy()
         })
 
         # Sort by anomaly score (highest first)

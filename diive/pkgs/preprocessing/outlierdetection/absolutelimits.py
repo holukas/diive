@@ -99,6 +99,10 @@ class AbsoluteLimits(FlagBase):
         """
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
 
+        # Auto-detect separate_daytime_nighttime if day/night params are provided
+        if daytime_minmax is not None or nighttime_minmax is not None:
+            separate_daytime_nighttime = True
+
         self.separate_daytime_nighttime = separate_daytime_nighttime
         self.showplot = showplot
         self.verbose = verbose

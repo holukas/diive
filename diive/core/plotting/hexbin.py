@@ -364,8 +364,8 @@ class HexbinPlot(HeatmapBase):
 
         # Domain-specific rendering (hexbin plot)
         self.p = self.ax.hexbin(
-            self.x.values, self.y.values,
-            C=self.z.values,
+            self.x.to_numpy(), self.y.to_numpy(),
+            C=self.z.to_numpy(),
             gridsize=self.gridsize,
             reduce_C_function=self.reduce_C_function,
             mincnt=self.mincnt,

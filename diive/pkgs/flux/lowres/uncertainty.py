@@ -313,7 +313,7 @@ class RandomUncertaintyPAS20:
         _df = _df.dropna()
         ax_orig.plot(_df.index, _df[self.fluxcol], label=f"measured {self.fluxcol}", color="black",
                      alpha=1, markersize=5, markeredgecolor="black", mfc='none')
-        ax_orig.errorbar(_df.index.values, _df[self.fluxcol], _df[self.randunccol],
+        ax_orig.errorbar(_df.index.to_numpy(), _df[self.fluxcol], _df[self.randunccol],
                          elinewidth=5, ecolor='red', alpha=.2)
         ax_orig.set_title(f"Measured {self.fluxcol} with Method 1 Uncertainties\n(±7 days, ±1 hour, meteorological similarity)",
                          fontsize=10, fontweight='bold')
@@ -334,7 +334,7 @@ class RandomUncertaintyPAS20:
         ax_gapfilled.plot(_df.index, _df[self.fluxgapfilledcol], label=f"gap-filled {self.fluxgapfilledcol}",
                           color="black",
                           alpha=1, markersize=5, markeredgecolor="black", mfc='none')
-        ax_gapfilled.errorbar(_df.index.values, _df[self.fluxgapfilledcol], _df[self.randunccol],
+        ax_gapfilled.errorbar(_df.index.to_numpy(), _df[self.fluxgapfilledcol], _df[self.randunccol],
                               elinewidth=5, ecolor='red', alpha=.2)
         ax_gapfilled.set_title(f"Gap-filled {self.fluxgapfilledcol} with Methods 1-4 Uncertainties\n(Hierarchical: Method 1→2→3→4)",
                               fontsize=10, fontweight='bold')
@@ -392,14 +392,14 @@ class RandomUncertaintyPAS20:
         print(f"Calculating random uncertainty with window size +/-{winsize_days} days "
               f"and +/-{winsize_hours} hours (method 1) ...")
         tic = time.time()
-        for ix, row in self.subset.iterrows():
+        for ix in self.subset.index:
             # Current data
             cur_dt = pd.to_datetime(ix)
-            cur_flux = row[self.fluxcol]
+            cur_flux = self.subset.loc[ix, self.fluxcol]
             if np.isnan(cur_flux): continue
-            cur_ta = row[self.tacol]
-            cur_vpd = row[self.vpdcol]
-            cur_swin = row[self.swincol]
+            cur_ta = self.subset.loc[ix, self.tacol]
+            cur_vpd = self.subset.loc[ix, self.vpdcol]
+            cur_swin = self.subset.loc[ix, self.swincol]
 
             # Window limits
             cur_ta_upper = cur_ta + ta_similarity
@@ -465,13 +465,13 @@ class RandomUncertaintyPAS20:
         subset = self.randunc_results.copy()
         ix_missing_randunc = subset[self.randunccol].isnull()
 
-        for ix, row in subset.iterrows():
+        for ix in subset.index:
             # Current data
-            cur_randunc = row[self.randunccol]
+            cur_randunc = subset.loc[ix, self.randunccol]
             if not np.isnan(cur_randunc): continue  # Continue with next if random uncertainty already available
 
             cur_dt = pd.to_datetime(ix)
-            cur_gapfilledflux = row[self.fluxgapfilledcol]
+            cur_gapfilledflux = subset.loc[ix, self.fluxgapfilledcol]
 
             # Window limits
             # Similar is defined as in the range of +/- 20% (but not less than 2 umolCO2 m-2 s-1)
@@ -516,13 +516,13 @@ class RandomUncertaintyPAS20:
         subset = self.randunc_results.copy()
         ix_missing_randunc = subset[self.randunccol].isnull()
 
-        for ix, row in subset.iterrows():
+        for ix in subset.index:
             # Current data
-            cur_randunc = row[self.randunccol]
+            cur_randunc = subset.loc[ix, self.randunccol]
             if not np.isnan(cur_randunc): continue  # Continue with next if random uncertainty already available
 
             cur_dt = pd.to_datetime(ix)
-            cur_gapfilledflux = row[self.fluxgapfilledcol]
+            cur_gapfilledflux = subset.loc[ix, self.fluxgapfilledcol]
 
             # Window limits
             # Similar is defined as in the range of +/- 20% (but not less than 2 umolCO2 m-2 s-1)
@@ -559,13 +559,13 @@ class RandomUncertaintyPAS20:
         tic = time.time()
         subset = self.randunc_results.copy()
 
-        for ix, row in subset.iterrows():
+        for ix in subset.index:
             # Current data
-            cur_randunc = row[self.randunccol]
+            cur_randunc = subset.loc[ix, self.randunccol]
             if not np.isnan(cur_randunc): continue  # Continue with next if random uncertainty already available
 
             cur_dt = pd.to_datetime(ix)
-            cur_gapfilledflux = row[self.fluxgapfilledcol]
+            cur_gapfilledflux = subset.loc[ix, self.fluxgapfilledcol]
 
             subset_win = subset.sort_values(by=self.fluxgapfilledcol, ascending=True)
             cur_ix = subset_win.index.get_loc(cur_dt)

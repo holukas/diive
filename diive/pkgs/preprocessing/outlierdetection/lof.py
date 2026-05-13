@@ -48,7 +48,7 @@ def lof(series: Series,
         suffix = ""
     series = series.copy().dropna()
     ix = series.index
-    vals = series.values.reshape(-1, 1)
+    vals = series.to_numpy().reshape(-1, 1)
 
     # Run analysis
     lof_detector = SKLocalOutlierFactor(
@@ -70,8 +70,8 @@ def lof(series: Series,
     outlier_vals = series[outlier_mask]
 
     # Collect in dataframe
-    series_clean = pd.Series(index=ix, data=series.values)
-    series_outliers = pd.Series(index=outlier_ix, data=outlier_vals.values)
+    series_clean = pd.Series(index=ix, data=series.to_numpy())
+    series_outliers = pd.Series(index=outlier_ix, data=outlier_vals.to_numpy())
     frame = {f"SERIES_{suffix}": series_clean,
              f"OUTLIER_{suffix}": series_outliers}
     df = pd.DataFrame(frame)

@@ -141,7 +141,7 @@ def remove_relativehumidity_offset(series: Series,
 
     # Detect series data that exceeds 100% relative humidity
     _series_exceeds = series.loc[series > 100]
-    _series_exceeds.rename("input_data_exceeds_100", inplace=True)
+    _series_exceeds = _series_exceeds.rename("input_data_exceeds_100")
     exceeds_ix = _series_exceeds.index
 
     # Calculate daily mean of values > 100
@@ -157,7 +157,7 @@ def remove_relativehumidity_offset(series: Series,
         _offset.loc[:] = 0  # Set offset to zero
     _offset = _offset.interpolate().ffill().bfill()
     # _offset = _offset.interpolate().ffill().bfill()
-    _offset.rename("offset", inplace=True)
+    _offset = _offset.rename("offset")
 
     # Subtract offset from relative humidity (RH) column (series - offset)
     # Offset examples assuming measured RH is 130:
@@ -171,7 +171,7 @@ def remove_relativehumidity_offset(series: Series,
     series_corr_max100 = _series_corr.copy()
     still_above_100_locs = series_corr_max100 > 100
     series_corr_max100.loc[still_above_100_locs] = 100
-    series_corr_max100.rename("corrected_by_offset_and_max100", inplace=True)
+    series_corr_max100 = series_corr_max100.rename("corrected_by_offset_and_max100")
 
     # Plot
     if showplot:
@@ -182,7 +182,7 @@ def remove_relativehumidity_offset(series: Series,
                   title=f"Remove RH offset from {outname}")
 
     # Rename for output
-    series_corr_max100.rename(outname, inplace=True)
+    series_corr_max100 = series_corr_max100.rename(outname)
 
     return series_corr_max100
 
@@ -255,7 +255,7 @@ def remove_radiation_zero_offset(series: Series,
     # Gap-fill offset values
     _offset = _offset.fillna(_offset.median())
     # offset = offset.interpolate().ffill().bfill()
-    _offset.rename("offset", inplace=True)
+    _offset = _offset.rename("offset")
 
     # Subtract offset from radiation column (rad_col - offset)
     # Offset examples assuming measured radiation is 120:
@@ -266,12 +266,12 @@ def remove_radiation_zero_offset(series: Series,
     #       (measured radiation should be zero but +8 was measured)
     #       120 - (+8) = 112
     _series_corr = series.sub(_offset)
-    _series_corr.rename("corrected_by_offset", inplace=True)
+    _series_corr = _series_corr.rename("corrected_by_offset")
 
     # Set nighttime radiation to zero (based on potential radiation)
     series_corr_settozero = _series_corr.copy()
     series_corr_settozero.loc[nighttime_ix] = 0
-    series_corr_settozero.rename("corrected_by_offset_and_night_settozero", inplace=True)
+    series_corr_settozero = series_corr_settozero.rename("corrected_by_offset_and_night_settozero")
 
     # Set still remaining negative values to zero
     series_corr_settozero.loc[series_corr_settozero < 0] = 0
@@ -285,7 +285,7 @@ def remove_radiation_zero_offset(series: Series,
                   title=f"Removing radiation zero-offset from {outname}")
 
     # Rename for output
-    series_corr_settozero.rename(outname, inplace=True)
+    series_corr_settozero = series_corr_settozero.rename(outname)
 
     return series_corr_settozero
 
@@ -361,7 +361,7 @@ class WindDirOffset:
     def _correct_wind_directions(self):
         """Correct wind directions by yearly offsets"""
         for year in self.uniq_years:
-            offset = int(self.yearlyoffsets_df.loc[self.yearlyoffsets_df['YEAR'] == year]['OFFSET'].values)
+            offset = int(self.yearlyoffsets_df.loc[self.yearlyoffsets_df['YEAR'] == year, 'OFFSET'].iloc[0])
             self.winddir_shifted.loc[self.winddir_shifted.index.year == year] += offset
         self.winddir_shifted = self._correct_degrees(self.winddir_shifted)
 

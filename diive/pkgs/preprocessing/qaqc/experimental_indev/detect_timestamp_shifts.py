@@ -202,8 +202,8 @@ def calculate_phase_shift_fft(df, col_meas, col_pot, min_clearness=0.5):
             continue
 
         # Fill NaNs with 0 (night/missing) for FFT safety
-        y_meas = group[col_meas].fillna(0).values
-        y_pot = group[col_pot].fillna(0).values
+        y_meas = group[col_meas].fillna(0).to_numpy()
+        y_pot = group[col_pot].fillna(0).to_numpy()
 
         # Basic Clearness Check (Filter out heavy overcast days)
         if np.sum(y_pot) > 0:

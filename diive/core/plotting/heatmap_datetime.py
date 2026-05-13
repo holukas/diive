@@ -136,9 +136,9 @@ class HeatmapDateTime(HeatmapBase):
         Returns:
             tuple: Extended ``(x, y, z)`` arrays ready for ``pcolormesh``.
         """
-        x = self.plotdf.columns.values
-        y = self.plotdf.index.values
-        z = self.plotdf.values
+        x = self.plotdf.columns.to_numpy()
+        y = self.plotdf.index.to_numpy()
+        z = self.plotdf.to_numpy()
 
         if self.ax_orientation == "vertical":
             # x = TIME → convert to float hours; y = DATE (keep as datetime.date)
@@ -396,9 +396,9 @@ class HeatmapYearMonth(HeatmapBase):
         if self.ax_orientation == "horizontal":
             self.plotdf = self.plotdf.transpose()
 
-        x = self.plotdf.columns.values
-        y = self.plotdf.index.values
-        z = self.plotdf.values
+        x = self.plotdf.columns.to_numpy()
+        y = self.plotdf.index.to_numpy()
+        z = self.plotdf.to_numpy()
         self.x, self.y, self.z = self._set_bounds(x=x, y=y, z=z)
 
     @staticmethod

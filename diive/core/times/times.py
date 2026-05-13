@@ -590,13 +590,13 @@ def detect_freq_groups(index: DatetimeIndex) -> Series:
     timedeltas_df['DELTA_DIFF'] = timedeltas_df['DELTA_PREV'] + timedeltas_df['DELTA_NEXT']
     ix = timedeltas_df['DELTA_DIFF'] == 0
     timedelta_unambiguous_df = timedeltas_df.loc[ix].copy()
-    timedelta_unambiguous_df.set_index(timedelta_unambiguous_df['TIMESTAMP_CURRENT'], inplace=True)
+    timedelta_unambiguous_df = timedelta_unambiguous_df.set_index(timedelta_unambiguous_df['TIMESTAMP_CURRENT'])
 
     # Count occurrences of respective DELTA
     delta_counts_df = timedelta_unambiguous_df['DELTA_NEXT'].groupby(
         timedelta_unambiguous_df['DELTA_NEXT']).count().sort_values(ascending=False)
     delta_counts_df = pd.DataFrame(delta_counts_df)
-    delta_counts_df.rename(columns={"DELTA_NEXT": "COUNTS"}, inplace=True)
+    delta_counts_df = delta_counts_df.rename(columns={"DELTA_NEXT": "COUNTS"})
 
     # Calculate how much time is covered by each DELTA
     delta_counts_df['DELTA_NEXT'] = delta_counts_df.index
@@ -614,7 +614,7 @@ def detect_freq_groups(index: DatetimeIndex) -> Series:
     #   - 'TIMESTAMP_NEXT' for last date
     for d in deltas:
         this_delta = timedelta_unambiguous_df.loc[timedelta_unambiguous_df['DELTA_NEXT'] == d].copy()
-        this_delta.set_index(this_delta['TIMESTAMP_CURRENT'], inplace=True)
+        this_delta = this_delta.set_index(this_delta['TIMESTAMP_CURRENT'])
         first_date = this_delta['TIMESTAMP_PREV'].min()
         last_date = this_delta['TIMESTAMP_NEXT'].max()
 
@@ -1779,7 +1779,7 @@ def doy_mean_cumulative(cumulatives_per_year_df: DataFrame,
     if excl_years_from_reference:
         for yr in excl_years_from_reference:
             try:
-                reference_years_df.drop(yr, axis=1, inplace=True)
+                reference_years_df = reference_years_df.drop(yr, axis=1)
             except KeyError:
                 pass
     df = pd.DataFrame()

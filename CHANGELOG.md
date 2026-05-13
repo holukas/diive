@@ -6,6 +6,15 @@
 
 - Now developing under Python 3.12
 - Switched from poetry to `uv` dependency management (modern, fast, deterministic)
+- **Pandas 3.0.3 compatibility upgrade:**
+  - Fixed 13 `.iterrows()` calls → index-based iteration (performance, pandas 3.0 compliance)
+  - Removed 24 `.inplace=True` parameter uses → assignment pattern (breaking change removed in pandas 3.0+)
+  - Modernized 64 `.values` calls → `.to_numpy()` (best practice, read-only array handling in pandas 3.0)
+  - Fixed read-only array assignment in potentialradiation.py (pandas 3.0 returns read-only views)
+  - Fixed auto-detection of `separate_daytime_nighttime` in AbsoluteLimits class
+  - Fixed dict method calls attempting `.to_numpy()` in optimumrange.py and times.py
+  - Fixed scalar extraction from pandas operations (`.iloc[0]` instead of `.values` conversion)
+  - Updated pyproject.toml: pandas>=3.0.0,<4.0.0, removed sktime dependency (incompatible)
 
 ### Major Changes
 

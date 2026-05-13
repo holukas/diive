@@ -285,7 +285,7 @@ class FindOptimumRange:
 
         # Format data for bar plot
         results = {}
-        for ix, row in df.iterrows():
+        for ix in df.index:
             results[ix] = df.loc[ix].to_list()
 
         year_labels = list(results.keys())

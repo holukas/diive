@@ -245,9 +245,9 @@ class HeatmapXYZ(HeatmapBase):
         df = pd.DataFrame.from_dict(data, orient='columns')
         pivot_df = pd.pivot_table(df, index=self._y_series.name, columns=self._x_series.name, values=self._z_series.name)
 
-        x_coords = pivot_df.columns.values
-        y_coords = pivot_df.index.values
-        z_values = pivot_df.values
+        x_coords = pivot_df.columns.to_numpy()
+        y_coords = pivot_df.index.to_numpy()
+        z_values = pivot_df.to_numpy()
 
         # Compute cell step using the median diff so non-uniform grids are
         # handled gracefully.  Fall back to 1.0 when only one unique value exists.

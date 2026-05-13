@@ -882,7 +882,7 @@ class UstarDetectionMPT:
         class_grouped_df = df.groupby(ta_class_col)  # Group by TA class
         for class_key, class_df in class_grouped_df:  # Loop through data of each TA class
             ustar_subclass = pd.qcut(class_df[subclass_col], q=n_subclasses, labels=False, duplicates='drop')  # Series
-            df.loc[class_df.index, ustar_subclass_col] = ustar_subclass.values  # ← Direct assignment (O(n) not O(n²))
+            df.loc[class_df.index, ustar_subclass_col] = ustar_subclass.to_numpy()  # ← Direct assignment (O(n) not O(n²))
 
         return df, ta_class_col, ustar_subclass_col
 
