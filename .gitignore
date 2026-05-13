@@ -1,5 +1,6 @@
 # Folders not needed for repo (old)
 *.parquet
+*.html
 
 # Development utilities (not for distribution)
 /dev_scripts/

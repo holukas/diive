@@ -1,8 +1,10 @@
+import os
+import tempfile
 import pandas as pd
 from bokeh.models import BoxZoomTool, PanTool, ResetTool, WheelZoomTool, WheelPanTool, UndoTool, \
     RedoTool, SaveTool, HoverTool, BoxSelectTool
 from bokeh.models import ColumnDataSource
-from bokeh.plotting import figure, show
+from bokeh.plotting import figure, show, output_file
 from pandas import Series
 
 import diive.core.plotting.plotfuncs as pf
@@ -42,7 +44,7 @@ class TimeSeries:
         self.varname = series.name
         self.series = self.series.dropna()
 
-    def plot_interactive(self, height: int = 600, width: int = 1200):
+    def plot_interactive(self, height: int = 600, width: int = 1200, save_to_file: bool = False):
         """
         Render interactive time series plot using Bokeh.
 
@@ -52,6 +54,7 @@ class TimeSeries:
         Args:
             height: Plot height in pixels (default: 600)
             width: Plot width in pixels (default: 1200)
+            save_to_file: Save plot to HTML file (default: False, display in browser only)
 
         Tools Available:
             - Hover: Display date and value on mouse over
@@ -67,7 +70,14 @@ class TimeSeries:
             >>> ts = dv.plot_time_series(series=data)
             >>> ts.plot_interactive(height=800, width=1600)  # Larger interactive plot
         """
-        # output_file(filename=r"M:\Downloads\_temp\bokeh.html", title="Static HTML file")
+        # Handle file output: temp file if not saving, named file if saving
+        if save_to_file:
+            output_file(filename=f"{self.series.name}_interactive.html", title=self.series.name)
+        else:
+            # Use temporary directory so file is automatically cleaned up
+            temp_dir = tempfile.gettempdir()
+            temp_file = os.path.join(temp_dir, f"bokeh_{id(self)}.html")
+            output_file(filename=temp_file, title=self.series.name)
 
         # Bokeh needs dataframe
         df = pd.DataFrame()

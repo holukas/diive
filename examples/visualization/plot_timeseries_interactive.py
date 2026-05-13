@@ -35,7 +35,7 @@ ts = dv.plot_time_series(
 )
 ts.plot_interactive(
     height=600,  # Plot height in pixels
-    width=1200  # Plot width in pixels
+    width=1200   # Plot width in pixels
 )
 
 print("\nCreated interactive NEE flux time series")
@@ -54,7 +54,7 @@ ts_large = dv.plot_time_series(
 )
 ts_large.plot_interactive(
     height=800,  # Taller plot
-    width=1600  # Wider plot
+    width=1600   # Wider plot
 )
 
 print("\nCreated larger interactive temperature plot")

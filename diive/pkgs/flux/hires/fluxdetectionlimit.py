@@ -7,9 +7,8 @@ Quantify the minimum detectable flux signal based on noise characteristics.
 Part of the diive library: https://github.com/holukas/diive
 
 Based on Langford et al. (2015). Parts of this code are based on Striednig et al. (2020).
-"""
 
-    References:
+References:
 
     (CAM98) Campbell, G. S., & Norman, J. M. (1998). An Introduction to Environmental Biophysics.
         Springer New York. https://doi.org/10.1007/978-1-4612-1626-1
