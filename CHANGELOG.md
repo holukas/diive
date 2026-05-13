@@ -126,6 +126,7 @@
     - `examples/pkgs/analysis/analysis_seasonaltrend.py`: Significantly enhanced with 5 practical use cases from SeasonalTrendDecomposition.ipynb: (1) detrending for ML gap-filling, (2) anomaly detection via residual analysis, (3) method comparison (harmonic vs classical), (4) climate change impact analysis via deseasonalization, (5) ecosystem recovery trend quantification. All three remaining analysis notebooks now archived; conversion effort complete.
 - **Gap-filling notebook conversion (FluxMDSGapFilling):**
     - `examples/pkgs/gapfilling/gapfill_mds.py`: Enhanced with comprehensive MDS gap-filling workflow from FluxMDSGapFilling.ipynb. Added: method overview and quality levels explanation, quality flag filtering (QCF), full-year dataset option, detailed parameter documentation, performance scores reporting, quality distribution analysis, time series and cumulative flux comparison visualizations, heatmap before/after comparison. Archived notebook.
+- **Standardized module docstrings across diive/pkgs:** Added consistent, concise module-level docstrings to 50+ files following format: MODULE_NAME: DESCRIPTION with brief capability summary. Updated all subdirectory __init__.py files (9 second-level packages), outlier detection methods (10 files), corrections (2 files), QA/QC utilities (5 files), feature variable derivations (8 files), flux processing levels (14 files), I/O format converters (5 files). Removed verbose descriptions and meta-commentary in favor of actionable, specific capability statements.
 
 ### Bug Fixes
 
