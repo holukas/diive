@@ -1,4 +1,11 @@
-"""Correction functions for setting data to missing values, specific values, or thresholds."""
+"""
+SET TO: CONDITIONAL VALUE REPLACEMENT
+======================================
+
+Set data to missing, specific values, or thresholds based on conditions.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 
 import numpy as np
 import pandas as pd

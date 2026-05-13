@@ -118,9 +118,9 @@ mscr.start_outlier_detection()  # If needed
 # mscr.flag_outliers_zscore_test(thres_zscore=4, separate_daytime_nighttime=True,
 #                                lat=SITE_LAT, lon=SITE_LON, utc_offset=TIMEZONE_OFFSET_TO_UTC_HOURS,
 #                                showplot=True, verbose=True, repeat=True)
-mscr.flag_outliers_hampel_dtnt_test(window_length=48 * 7, n_sigma_dt=5.5, n_sigma_nt=5.5,
-                                    use_differencing=True, separate_day_night=True,
-                                    showplot=True, verbose=True, repeat=True)
+mscr.flag_outliers_hampel_test(window_length=48 * 7, n_sigma_daytime=5.5, n_sigma_nighttime=5.5,
+                               use_differencing=True, separate_daytime_nighttime=True,
+                               showplot=True, verbose=True, repeat=True)
 # mscr.addflag()
 # mscr.flag_outliers_trim_low_test(trim_daytime=False, trim_nighttime=True, lower_limit=10,
 #                                  showplot=True, verbose=True)

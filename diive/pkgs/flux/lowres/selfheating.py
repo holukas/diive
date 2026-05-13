@@ -1,28 +1,25 @@
 """
-SELF-HEATING CORRECTION FOR OPEN-PATH IRGAS (SCOP)
+SELF-HEATING: OPEN-PATH IRGA CORRECTION
+========================================
 
-    Calculation of the flux correction term (FCT) for open-path infrared gas analyzers (IRGAs)
-    based on scaling factors from parallel measurements with an (en)closed-path IRGA.
+Correct open-path IRGA fluxes for sun-induced heating artifacts using closed-path scaling factors.
 
-    This correction is designed to remove spurious CO2 flux measurements caused by the sun-induced
-    heating of the open-path (OP) instrument surfaces. This self-heating warms the air passing the
-    sensor head, creating a low-density thermal plume around the sampling volume. Since the OP-IRGA
-    measures molar density, this plume artificially lowers the measured CO2 concentration, resulting
-    in a systematic, non-biological uptake (negative flux) bias, especially prevalent during high
-    solar radiation and low wind conditions.
+Part of the diive library: https://github.com/holukas/diive
 
-    The correction can be applied to CO2 fluxes (NEE, µmol m-2 s-1).
-    It can be used for H2O fluxes (LE, W m-2), but the code has only been implemented for testing.
-    When LE from the open-path shows higher fluxes than LE from the closed-path, then this
-    correction is most likely the wrong approach. The self-heating correction always increases the
-    flux (it assumes heating lowers density, so it adds density back).
+Detailed explanation:
 
-Core Correction Principle
+The method removes spurious CO2 flux measurements caused by sun-induced heating of open-path (OP)
+instrument surfaces. This self-heating warms the air passing the sensor head, creating a low-density
+thermal plume around the sampling volume. Since the OP-IRGA measures molar density, this plume
+artificially lowers the measured CO2 concentration, resulting in a systematic, non-biological uptake
+(negative flux) bias, especially prevalent during high solar radiation and low wind conditions.
 
-    The method first calculates an unscaled flux correction term (FCT_UNSC) based on boundary-layer
-    dynamics and instrument-specific thermal properties (e.g., sensible heat flux S or instrument
-    surface temperature TS). FCT_UNSC is proportional to the heat transfer from the instrument surfaces
-    to the air, which directly drives the artificial dilution.
+The correction can be applied to CO2 fluxes (NEE, µmol m-2 s-1) and optionally to H2O fluxes (LE, W m-2).
+
+The method first calculates an unscaled flux correction term (FCT_UNSC) based on boundary-layer
+dynamics and instrument-specific thermal properties (e.g., sensible heat flux S or instrument
+surface temperature TS). FCT_UNSC is proportional to the heat transfer from the instrument surfaces
+to the air, which directly drives the artificial dilution.
 
 Scaling and Final Application
 

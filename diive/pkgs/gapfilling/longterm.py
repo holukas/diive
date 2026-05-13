@@ -1,3 +1,13 @@
+"""
+GAP-FILLING: LONG-TERM MODELS
+=============================
+
+Extended gap-filling for multi-year datasets with USTAR filtering support.
+Wrapper for RF and XGBoost with scenario handling.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib.ticker import FixedFormatter, FixedLocator

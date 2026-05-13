@@ -1,3 +1,12 @@
+"""
+OFFSET CORRECTION: MEASUREMENT OFFSET AND GAIN DETECTION
+=========================================================
+
+Detect and remove systematic offsets and gain changes in measurement pairs via histogram comparison.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 import decimal
 
 import numpy as np

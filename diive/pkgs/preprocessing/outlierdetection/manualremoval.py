@@ -1,10 +1,10 @@
 """
-OUTLIER DETECTION: MANUAL REMOVAL
-=================================
+MANUAL REMOVAL: EXPLICIT DATA FLAGGING
+=======================================
 
-This module is part of the diive library:
-https://github.com/holukas/diive
+Manually flag specific records or date ranges as outliers.
 
+Part of the diive library: https://github.com/holukas/diive
 """
 import numpy as np
 import pandas as pd

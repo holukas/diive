@@ -1,10 +1,10 @@
 """
-Time Lag Analysis for Eddy Covariance Flux Data
-================================================
+TIME LAG ANALYSIS: FLUX-CONCENTRATION PAIRING DETECTION
+========================================================
 
-This module provides tools for analyzing and visualizing time lags in eddy covariance flux
-measurements. Time lag detection is critical for accurately pairing gas concentrations
-(CO2, H2O, etc.) with corresponding flux measurements in the eddy covariance method.
+Analyze and visualize time lags between gas concentrations and flux measurements.
+
+Part of the diive library: https://github.com/holukas/diive
 
 The module performs:
 - Histogram-based lag distribution analysis

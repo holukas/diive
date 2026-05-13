@@ -1,13 +1,11 @@
 """
-Grid Aggregation Module
+ANALYSIS: GRID AGGREGATION
+==========================
 
-This module provides the `GridAggregator` class, a tool for
-transforming and aggregating tabular data into a 2D grid structure. It
-supports flexible binning strategies and various aggregation methods,
-facilitating data analysis and visualization in grid-based formats.
+2D grid binning and aggregation for tabular time series data.
+Flexible binning strategies and multiple aggregation methods for analysis and visualization.
 
-Author: Lukas Hörtnagl
-License: GPL-3.0
+Part of the diive library: https://github.com/holukas/diive
 """
 
 from typing import Literal, Union, Callable

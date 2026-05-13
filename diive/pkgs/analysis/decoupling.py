@@ -1,14 +1,11 @@
 """
-DECOUPLING: SORTING BINS METHOD
-===============================
+ANALYSIS: DECOUPLING
+====================
 
-    Reference:
-    - todo
+Sorting bins method for analyzing variable decoupling in bivariate relationships.
+Identifies anomalies and patterns in time series correlations.
 
-
-    kudos:
-    - https://stackoverflow.com/questions/38208700/matplotlib-plot-lines-with-colors-through-colormap
-
+Part of the diive library: https://github.com/holukas/diive
 """
 from pathlib import Path
 

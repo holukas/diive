@@ -1,3 +1,12 @@
+"""
+CORRECTIONS: DATA OFFSET AND CALIBRATION
+==========================================
+
+Remove measurement offsets (humidity, radiation, wind direction) and set invalid values to missing.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 from diive.pkgs.preprocessing.corrections.offsetcorrection import (
     MeasurementOffsetFromReplicate,
     remove_relativehumidity_offset,

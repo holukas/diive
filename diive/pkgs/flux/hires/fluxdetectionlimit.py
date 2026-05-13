@@ -1,13 +1,13 @@
 """
-FLUX DETECTION LIMIT
-====================
+FLUX DETECTION LIMIT: MEASUREMENT SENSITIVITY ASSESSMENT
+=========================================================
 
-    Based on Langford et al. (2015)
-    Parts of this code are based on the source code from Striednig et al. (2020)
+Quantify the minimum detectable flux signal based on noise characteristics.
 
-    Tilt correction in EddyPro:
-    https://www.licor.com/env/support/EddyPro/topics/anemometer-tilt-correction.html
+Part of the diive library: https://github.com/holukas/diive
 
+Based on Langford et al. (2015). Parts of this code are based on Striednig et al. (2020).
+"""
 
     References:
 

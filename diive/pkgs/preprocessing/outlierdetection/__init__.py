@@ -1,3 +1,14 @@
+"""
+OUTLIER DETECTION: MULTI-METHOD FLAGGING
+=========================================
+
+Statistical and density-based methods for identifying anomalies: Hampel, z-score, local SD,
+Local Outlier Factor, trim, absolute limits, manual removal, and incremental change detection.
+Chain multiple methods sequentially via StepwiseOutlierDetection.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 from diive.pkgs.preprocessing.outlierdetection.absolutelimits import (
     AbsoluteLimits,
 )

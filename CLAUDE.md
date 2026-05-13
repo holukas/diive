@@ -27,7 +27,7 @@ python -m pytest tests/test_gapfilling.py -v
 
 ## Project Overview
 
-**DIIVE** — Data Integration and Interactive Visualization Engine for time series processing (ecosystem flux data).
+**DIIVE** is a Python library for time series processing, in particular ecosystem flux data.
 
 **Core capabilities:**
 
@@ -308,6 +308,47 @@ scatter.plot(xlabel='X', ylabel='Y', title='Title')
 - Examples become quick reference documentation
 - Makes it easy to modify examples for other use cases
 - Inline comments (not separate docstrings) keep examples readable
+
+## Module Docstring Format
+
+**Standard format for module-level docstrings at the top of Python files:**
+
+```python
+"""
+MODULE_NAME: DESCRIPTIVE_TITLE
+================================
+
+Brief one-line description of module scope and purpose.
+Optional: list key features or capabilities if helpful for discoverability.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+```
+
+**Example (with brief description):**
+```python
+"""
+METEOSCREENING: MULTI-STAGE METEOROLOGICAL SCREENING
+====================================================
+
+Multi-stage quality control and outlier detection for meteorological data.
+Includes: outlier detection, data corrections, resampling, and quality flag generation.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+```
+
+**Example (minimal):**
+```python
+"""
+OUTLIER DETECTION: STEP-WISE OUTLIER DETECTION
+==============================================
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+```
+
+The format provides clear hierarchy and consistent project reference. Brief description (1-2 lines) is optional but recommended for modules with multiple features.
 
 ## Text Writing Standards
 

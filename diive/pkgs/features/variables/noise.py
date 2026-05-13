@@ -1,3 +1,12 @@
+"""
+NOISE: SYNTHETIC NOISE GENERATION
+==================================
+
+Generate synthetic time series with noise and add impulse disturbances for testing.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 import numpy as np
 import pandas as pd
 

@@ -1,3 +1,12 @@
+"""
+POTENTIAL RADIATION: SOLAR RADIATION CALCULATIONS
+==================================================
+
+Calculate potential shortwave radiation (top-of-atmosphere and clear-sky surface).
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 import numpy as np
 import pandas as pd
 from pandas import DatetimeIndex, Series

@@ -1,3 +1,12 @@
+"""
+LEVEL 3.1: STORAGE TERM CORRECTION
+===================================
+
+Add gas storage term to flux measurements (single-point profile approximation).
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import pandas as pd

@@ -1,5 +1,10 @@
 """
-For more info on wind rotation / tilt correction see:
+WIND ROTATION: SONIC ANEMOMETER TILT CORRECTION
+================================================
+
+Rotate wind vectors to account for sonic anemometer tilt relative to true vertical.
+
+Part of the diive library: https://github.com/holukas/diive
 
 References:
     References:

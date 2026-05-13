@@ -1,3 +1,13 @@
+"""
+ANALYSIS: CORRELATION
+======================
+
+Daily and lagged correlation analysis for time series relationships.
+Detect patterns, anomalies, and decoupling between variables.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 import pandas as pd
 from matplotlib import pyplot as plt, gridspec as gridspec
 from pandas import Series

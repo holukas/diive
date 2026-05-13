@@ -142,11 +142,13 @@ class TestFluxProcessingChain(unittest.TestCase):
         # --------------------
         fpc.level32_stepwise_outlier_detection()
         kwargs = dict(showplot=False, verbose=False)
-        fpc.level32_flag_outliers_abslim_dtnt_test(
+        fpc.level32_flag_outliers_abslim_test(
+            separate_daytime_nighttime=True,
             daytime_minmax=[-50, 50], nighttime_minmax=[-50, 50], **kwargs)
         fpc.level32_addflag()
-        fpc.level32_flag_outliers_hampel_dtnt_test(
-            window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, repeat=False, **kwargs)
+        fpc.level32_flag_outliers_hampel_test(
+            window_length=48 * 3, n_sigma_daytime=3.5, n_sigma_nighttime=3.5,
+            separate_daytime_nighttime=True, repeat=False, **kwargs)
         fpc.level32_addflag()
         fpc.level32_flag_manualremoval_test(
             remove_dates=[['2022-07-01 12:15:00', '2022-07-01 13:45:00']], **kwargs)
@@ -156,8 +158,8 @@ class TestFluxProcessingChain(unittest.TestCase):
             lat=SITE_LAT, lon=SITE_LON, utc_offset=UTC_OFFSET,
             repeat=True, **kwargs)
         fpc.level32_addflag()
-        fpc.level32_flag_outliers_hampel_dtnt_test(
-            window_length=48 * 7, repeat=False, **kwargs)
+        fpc.level32_flag_outliers_hampel_test(
+            window_length=48 * 7, separate_daytime_nighttime=True, repeat=False, **kwargs)
         fpc.level32_addflag()
         fpc.level32_flag_outliers_zscore_rolling_test(
             winsize=48 * 7, thres_zscore=5, repeat=True, **kwargs)
@@ -174,8 +176,9 @@ class TestFluxProcessingChain(unittest.TestCase):
         fpc.level32_addflag()
         fpc.level32_flag_outliers_increments_zcore_test(thres_zscore=5, repeat=True, **kwargs)
         fpc.level32_addflag()
-        fpc.level32_flag_outliers_lof_dtnt_test(n_neighbors=48 * 7, contamination=None, repeat=True, n_jobs=-1,
-                                                **kwargs)
+        fpc.level32_flag_outliers_lof_test(n_neighbors=48 * 7, contamination=None,
+                                           separate_daytime_nighttime=True, repeat=True, n_jobs=-1,
+                                           **kwargs)
         fpc.level32_addflag()
         fpc.level32_flag_outliers_lof_test(n_neighbors=100, contamination=None, repeat=False, n_jobs=-1, **kwargs)
         fpc.level32_addflag()

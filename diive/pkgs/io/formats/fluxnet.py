@@ -1,3 +1,12 @@
+"""
+FLUXNET: FLUXNET FILE FORMAT CONVERSION
+========================================
+
+Convert EddyPro output to FLUXNET data format for archive submission.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 import re
 from pathlib import Path
 

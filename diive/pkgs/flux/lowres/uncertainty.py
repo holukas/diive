@@ -1,3 +1,12 @@
+"""
+UNCERTAINTY: FLUX MEASUREMENT UNCERTAINTY ESTIMATION
+=====================================================
+
+Calculate random and systematic uncertainties for flux measurements.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 import datetime as dt
 import time
 

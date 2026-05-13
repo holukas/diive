@@ -1,11 +1,11 @@
 """
-Harmonic (Fourier-based) time series analysis utilities.
+ANALYSIS: HARMONIC DECOMPOSITION
+=================================
 
-Functions for decomposing time series into sine/cosine basis functions,
-extracting amplitude and phase information, and analyzing frequency-domain
-properties.
+Fourier-based time series decomposition using FFT for frequency-domain analysis.
+Extracts amplitude and phase information from sine/cosine basis functions.
 
-Uses FFT (Fast Fourier Transform) for efficient computation.
+Part of the diive library: https://github.com/holukas/diive
 """
 
 import numpy as np

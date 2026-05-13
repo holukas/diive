@@ -1,3 +1,12 @@
+"""
+FLAGS: FLAG UTILITIES AND HELPERS
+==================================
+
+Restrict flag application to date ranges and handle missing value masking.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 import numpy as np
 import pandas as pd
 from pandas import Series, DatetimeIndex

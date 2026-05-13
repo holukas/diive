@@ -1,12 +1,11 @@
-# todo compare radiation peaks for time shift
-# todo check outliers before AND after first qc check
-
 """
-METEOSCREENING
-==============
+METEOSCREENING: MULTI-STAGE METEOROLOGICAL SCREENING
+====================================================
 
-This module is part of the 'diive' library.
+Multi-stage quality control and outlier detection for meteorological data.
+Includes: outlier detection, data corrections, resampling, and quality flag generation.
 
+Part of the diive library: https://github.com/holukas/diive
 """
 from typing import Literal
 
@@ -47,14 +46,14 @@ class StepwiseMeteoScreeningDb:
     Implemented outlier tests:
     For a full list of outlier tests see: pkgs/outlierdetection/stepwiseoutlierdetection.py
     - `.flag_missingvals_test()`: Generate flag that indicates missing records in data
-    - `.flag_outliers_abslim_test()`: Generate flag that indicates if values in data are outside the specified range
+    - `.flag_outliers_abslim_test()`: Generate flag that indicates if values in data are outside the specified range (global or separate day/night)
     - `.flag_outliers_increments_zcore_test()`: Identify outliers based on the z-score of increments
-    - `.flag_outliers_localsd_test()`: Identify outliers based on the local standard deviation
+    - `.flag_outliers_localsd_test()`: Identify outliers based on the local standard deviation (global or separate day/night)
     - `.flag_manualremoval_test()`: Remove data points for range, time or point-by-point
-    - `.flag_outliers_zscore_test()`:  Identify outliers based on the z-score (global or day/night separated)
+    - `.flag_outliers_zscore_test()`:  Identify outliers based on the z-score (global or separate day/night)
     - `.flag_outliers_zscore_rolling_test()`: Identify outliers based on the rolling z-score
-    - `.flag_outliers_lof_test()`: Identify outliers based on local outlier factor (global or day/night separated)
-    - `.flag_outliers_hampel_dtnt_test()`: Identify based on the Hampel filter, daytime nighttime separately
+    - `.flag_outliers_lof_test()`: Identify outliers based on local outlier factor (global or separate day/night)
+    - `.flag_outliers_hampel_test()`: Identify outliers based on the Hampel filter (global or separate day/night)
     - `.flag_outliers_trim_low_test()`: Remove values below threshold and remove an equal amount of records from high end of data
 
     Implemented corrections:
@@ -431,15 +430,40 @@ class StepwiseMeteoScreeningDb:
     def flag_outliers_hampel_test(self, window_length: int = 13, n_sigma: float = 5.5,
                                   n_sigma_daytime: float = None, n_sigma_nighttime: float = None,
                                   k: float = 1.4826, use_differencing: bool = True,
-                                  separate_day_night: bool = True, showplot: bool = False, verbose: bool = False,
+                                  separate_daytime_nighttime: bool = False, showplot: bool = False,
+                                  verbose: bool = False,
                                   repeat: bool = True):
-        """Identify outliers in a sliding window based on the Hampel filter,
-        separately for daytime and nighttime data."""
+        """Identify outliers in a sliding window based on the Hampel filter (global or separate day/night).
+
+        Parameters
+        ----------
+        window_length : int, default 13
+            Size of the sliding window for median/MAD calculation
+        n_sigma : float, default 5.5
+            Threshold multiplier for global mode (number of MADs above median)
+        n_sigma_daytime : float, optional
+            Threshold for daytime data (when separate_daytime_nighttime=True)
+        n_sigma_nighttime : float, optional
+            Threshold for nighttime data (when separate_daytime_nighttime=True)
+        k : float, default 1.4826
+            Scaling factor for MAD (median absolute deviation)
+        use_differencing : bool, default True
+            If True, apply Hampel filter to differenced series (rate of change)
+        separate_daytime_nighttime : bool, default False
+            If False, apply single threshold globally across all records.
+            If True, apply separate thresholds for daytime and nighttime data.
+        showplot : bool, default False
+            If True, display visualization of flagged outliers
+        verbose : bool, default False
+            If True, print flagging statistics
+        repeat : bool, default True
+            If True, iteratively repeat detection until convergence
+        """
         for field in self.fields:
-            self.outlier_detection[field].flag_outliers_hampel_dtnt_test(
+            self.outlier_detection[field].flag_outliers_hampel_test(
                 window_length=window_length, n_sigma=n_sigma, n_sigma_daytime=n_sigma_daytime,
                 n_sigma_nighttime=n_sigma_nighttime,
-                k=k, use_differencing=use_differencing, separate_day_night=separate_day_night,
+                k=k, use_differencing=use_differencing, separate_daytime_nighttime=separate_daytime_nighttime,
                 showplot=showplot, verbose=verbose, repeat=repeat)
 
     def flag_outliers_trim_low_test(self, trim_daytime: bool = False, trim_nighttime: bool = False,
@@ -457,7 +481,26 @@ class StepwiseMeteoScreeningDb:
                                   separate_daytime_nighttime: bool = False,
                                   daytime_minmax: list = None, nighttime_minmax: list = None,
                                   showplot: bool = False, verbose: bool = False):
-        """Identify outliers based on absolute limits"""
+        """Identify outliers based on absolute limits (global or separate day/night).
+
+        Parameters
+        ----------
+        minval : float, optional
+            Minimum acceptable value (global mode). Required if separate_daytime_nighttime=False.
+        maxval : float, optional
+            Maximum acceptable value (global mode). Required if separate_daytime_nighttime=False.
+        separate_daytime_nighttime : bool, default False
+            If False, apply single threshold globally across all records.
+            If True, apply separate thresholds for daytime and nighttime data.
+        daytime_minmax : [min, max], optional
+            Acceptable range during daytime (required if separate_daytime_nighttime=True).
+        nighttime_minmax : [min, max], optional
+            Acceptable range during nighttime (required if separate_daytime_nighttime=True).
+        showplot : bool, default False
+            If True, display visualization of flagged outliers
+        verbose : bool, default False
+            If True, print flagging statistics
+        """
         for field in self.fields:
             self.outlier_detection[field].flag_outliers_abslim_test(minval=minval,
                                                                     maxval=maxval,
@@ -467,21 +510,14 @@ class StepwiseMeteoScreeningDb:
                                                                     showplot=showplot,
                                                                     verbose=verbose)
 
-    def flag_outliers_abslim_dtnt_test(self, daytime_minmax: list[float, float],
-                                       nighttime_minmax: list[float, float], showplot: bool = False,
-                                       verbose: bool = False):
-        """Identify outliers based on absolute limits (daytime/nighttime)"""
-        for field in self.fields:
-            self.outlier_detection[field].flag_outliers_abslim_dtnt_test(daytime_minmax=daytime_minmax,
-                                                                         nighttime_minmax=nighttime_minmax,
-                                                                         showplot=showplot,
-                                                                         verbose=verbose)
-
     def flag_outliers_lof_test(self, n_neighbors: int = None, contamination: float = 'auto',
                                separate_daytime_nighttime: bool = False,
                                showplot: bool = False, verbose: bool = False, repeat: bool = True,
                                n_jobs: int = 1):
-        """Local outlier factor. Can be applied globally or separately for daytime/nighttime data.
+        """Local outlier factor detection (global or separate day/night).
+
+        Identifies density-based outliers using k-nearest neighbors. Can operate globally
+        across all records or separately for daytime and nighttime periods.
 
         Parameters
         ----------
@@ -490,7 +526,8 @@ class StepwiseMeteoScreeningDb:
         contamination : float or 'auto', default 'auto'
             Expected fraction of outliers (float 0-1) or 'auto' for automatic detection
         separate_daytime_nighttime : bool, default False
-            If True, apply separate LOF detection for daytime and nighttime data
+            If False, apply single LOF globally across all records.
+            If True, apply separate LOF detection for daytime and nighttime data.
         showplot : bool, default False
             If True, display visualization of detected outliers
         verbose : bool, default False
@@ -501,35 +538,15 @@ class StepwiseMeteoScreeningDb:
             Number of parallel jobs (-1 uses all cores)
         """
         for field in self.fields:
-            if separate_daytime_nighttime:
-                self.outlier_detection[field].flag_outliers_lof_dtnt_test(n_neighbors=n_neighbors,
-                                                                          contamination=contamination,
-                                                                          showplot=showplot,
-                                                                          verbose=verbose,
-                                                                          repeat=repeat,
-                                                                          n_jobs=n_jobs)
-            else:
-                self.outlier_detection[field].flag_outliers_lof_test(n_neighbors=n_neighbors,
-                                                                     contamination=contamination,
-                                                                     showplot=showplot,
-                                                                     verbose=verbose,
-                                                                     repeat=repeat,
-                                                                     n_jobs=n_jobs)
-
-    def flag_outliers_lof_dtnt_test(self, n_neighbors: int = None, contamination: float = 'auto',
-                                    showplot: bool = False, verbose: bool = False, n_jobs: int = 1,
-                                    repeat: bool = True):
-        """Convenience wrapper for separate daytime/nighttime LOF detection.
-
-        This is equivalent to flag_outliers_lof_test(..., separate_daytime_nighttime=True)
-        """
-        self.flag_outliers_lof_test(n_neighbors=n_neighbors,
-                                    contamination=contamination,
-                                    separate_daytime_nighttime=True,
-                                    showplot=showplot,
-                                    verbose=verbose,
-                                    repeat=repeat,
-                                    n_jobs=n_jobs)
+            self.outlier_detection[field].flag_outliers_lof_test(
+                n_neighbors=n_neighbors,
+                contamination=contamination,
+                separate_daytime_nighttime=separate_daytime_nighttime,
+                showplot=showplot,
+                verbose=verbose,
+                repeat=repeat,
+                n_jobs=n_jobs
+            )
 
     def correction_remove_radiation_zero_offset(self):
         """Remove nighttime offset from all radiation data and set nighttime to zero"""

@@ -67,11 +67,12 @@ print("="*60)
 
 # 1. Hampel filter
 print("\n1. Hampel filter (MAD-based spike detection)...")
-detector.flag_outliers_hampel_dtnt_test(
+detector.flag_outliers_hampel_test(
     window_length=7 * 48,
-    n_sigma=4.5,
+    n_sigma_daytime=4.5,
+    n_sigma_nighttime=4.5,
     use_differencing=True,
-    separate_day_night=True,
+    separate_daytime_nighttime=True,
     showplot=False,
     verbose=False,
     repeat=True

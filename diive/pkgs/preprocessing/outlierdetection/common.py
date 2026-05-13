@@ -1,3 +1,12 @@
+"""
+COMMON: SHARED OUTLIER DETECTION UTILITIES
+===========================================
+
+Shared functions for daytime/nighttime flag generation and other detection helpers.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 from diive.pkgs.features.variables.daynightflag import DaytimeNighttimeFlag
 
 

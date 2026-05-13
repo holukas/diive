@@ -1,5 +1,12 @@
 """
-Outlier detection using the Trim filter (Trimmed Mean Approach).
+TRIM LOW: SYMMETRIC OUTLIER REMOVAL
+====================================
+
+Detect outliers using trimmed mean approach: remove values below threshold, then remove equal number from high end.
+
+Part of the diive library: https://github.com/holukas/diive
+
+Trim filter details:
 
 This module provides outlier detection by removing values below a threshold,
 then removing an equal number of values from the high end. This is based on

@@ -1,3 +1,13 @@
+"""
+GAP-FILLING: LINEAR INTERPOLATION
+==================================
+
+Simple linear interpolation for small gaps in time series.
+Fast and robust for regular missing data patterns.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 import numpy as np
 import pandas as pd
 from pandas import Series

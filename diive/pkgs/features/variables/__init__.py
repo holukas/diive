@@ -1,3 +1,13 @@
+"""
+VARIABLES: METEOROLOGICAL AND PHYSICAL PROPERTIES
+==================================================
+
+Derive physical variables: air properties, unit conversions, day/night flags, lagged variants,
+synthetic noise, potential radiation, and time-since-condition tracking.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 # Air properties
 from diive.pkgs.features.variables.air import aerodynamic_resistance, dry_air_density
 

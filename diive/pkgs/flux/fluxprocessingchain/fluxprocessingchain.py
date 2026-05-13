@@ -1,15 +1,11 @@
 """
-Implements the multi-step Swiss FluxNet-style processing chain for eddy covariance flux data.
+FLUX PROCESSING CHAIN: MULTI-LEVEL EDDY COVARIANCE PROCESSING
+============================================================
 
-This chain typically involves:
-1. Level-1: Load flux data, including meteo variables (handled by LoadEddyProOutputFiles).
-2. Level-2: Quality flag expansion (VM97, signal strength, etc.).
-3. Level-3.1: Storage correction using a single-point profile.
-4. Level-3.2: Stepwise Outlier detection.
-5. Level-3.3: USTAR threshold filtering for low-turbulence periods.
-6. Level-4.1: Gap-filling using methods like XGBoost, Random Forest, and MDS.
+Swiss FluxNet-compliant post-processing: quality control, storage correction, outlier
+detection, USTAR filtering, and gap-filling.
 
-The `FluxProcessingChain` class manages the data flow and state across these levels.
+Part of the diive library: https://github.com/holukas/diive
 """
 
 from pathlib import Path
@@ -1319,20 +1315,37 @@ class FluxProcessingChain:
                                                  utc_offset=self.utc_offset,
                                                  idstr=idstr)
 
-    def level32_flag_outliers_abslim_dtnt_test(self,
-                                               daytime_minmax: list[float, float],
-                                               nighttime_minmax: list[float, float],
-                                               showplot: bool = False, verbose: bool = False):
-        self._level32.flag_outliers_abslim_dtnt_test(daytime_minmax=daytime_minmax,
-                                                     nighttime_minmax=nighttime_minmax,
-                                                     showplot=showplot, verbose=verbose)
-
-    def level32_flag_outliers_abslim_test(self, minval: float, maxval: float,
+    def level32_flag_outliers_abslim_test(self, minval: float = None, maxval: float = None,
+                                          separate_daytime_nighttime: bool = False,
+                                          daytime_minmax: list[float, float] = None,
+                                          nighttime_minmax: list[float, float] = None,
                                           showplot: bool = False, verbose: bool = False):
+        """Flag outliers based on absolute limits (global or separate day/night).
+
+        Parameters
+        ----------
+        minval : float, optional
+            Minimum acceptable value (global mode). Required if separate_daytime_nighttime=False.
+        maxval : float, optional
+            Maximum acceptable value (global mode). Required if separate_daytime_nighttime=False.
+        separate_daytime_nighttime : bool, default False
+            If False, apply single threshold globally across all records.
+            If True, apply separate thresholds for daytime and nighttime data.
+        daytime_minmax : [min, max], optional
+            Acceptable range during daytime (required if separate_daytime_nighttime=True).
+        nighttime_minmax : [min, max], optional
+            Acceptable range during nighttime (required if separate_daytime_nighttime=True).
+        showplot : bool, default False
+            If True, display visualization of flagged outliers
+        verbose : bool, default False
+            If True, print flagging statistics
+        """
         self._level32.flag_outliers_abslim_test(minval=minval,
                                                 maxval=maxval,
+                                                separate_daytime_nighttime=separate_daytime_nighttime,
+                                                daytime_minmax=daytime_minmax,
+                                                nighttime_minmax=nighttime_minmax,
                                                 showplot=showplot, verbose=verbose)
-
 
     def level32_flag_outliers_localsd_test(self, n_sd: float | list = 7, winsize: int | list = None,
                                            showplot: bool = False, constant_sd: bool = False,
@@ -1357,15 +1370,43 @@ class FluxProcessingChain:
                                                   lower_limit=lower_limit,
                                                   showplot=showplot, verbose=verbose)
 
-    def level32_flag_outliers_hampel_dtnt_test(self, window_length: int = 13, n_sigma_dt: float = 5.5,
-                                               n_sigma_nt: float = 5.5,
-                                               k: float = 1.4826, use_differencing: bool = True,
-                                               separate_day_night: bool = True, showplot: bool = False,
-                                               verbose: bool = False, repeat: bool = True):
-        self._level32.flag_outliers_hampel_dtnt_test(window_length=window_length, n_sigma_daytime=n_sigma_dt,
-                                                     n_sigma_nighttime=n_sigma_nt, k=k, use_differencing=use_differencing,
-                                                     separate_day_night=separate_day_night,
-                                                     showplot=showplot, verbose=verbose, repeat=repeat)
+    def level32_flag_outliers_hampel_test(self, window_length: int = 13, n_sigma: float = 5.5,
+                                          n_sigma_daytime: float = None, n_sigma_nighttime: float = None,
+                                          k: float = 1.4826, use_differencing: bool = True,
+                                          separate_daytime_nighttime: bool = False, showplot: bool = False,
+                                          verbose: bool = False, repeat: bool = True):
+        """Flag outliers using Hampel filter (global or separate day/night).
+
+        Parameters
+        ----------
+        window_length : int, default 13
+            Size of the sliding window for median/MAD calculation
+        n_sigma : float, default 5.5
+            Threshold multiplier for global mode (number of MADs above median)
+        n_sigma_daytime : float, optional
+            Threshold for daytime data (when separate_daytime_nighttime=True)
+        n_sigma_nighttime : float, optional
+            Threshold for nighttime data (when separate_daytime_nighttime=True)
+        k : float, default 1.4826
+            Scaling factor for MAD (median absolute deviation)
+        use_differencing : bool, default True
+            If True, apply Hampel filter to differenced series (rate of change)
+        separate_daytime_nighttime : bool, default False
+            If False, apply single threshold globally across all records.
+            If True, apply separate thresholds for daytime and nighttime data.
+        showplot : bool, default False
+            If True, display visualization of flagged outliers
+        verbose : bool, default False
+            If True, print flagging statistics
+        repeat : bool, default True
+            If True, iteratively repeat detection until convergence
+        """
+        self._level32.flag_outliers_hampel_test(window_length=window_length, n_sigma=n_sigma,
+                                                n_sigma_daytime=n_sigma_daytime,
+                                                n_sigma_nighttime=n_sigma_nighttime, k=k,
+                                                use_differencing=use_differencing,
+                                                separate_daytime_nighttime=separate_daytime_nighttime,
+                                                showplot=showplot, verbose=verbose, repeat=repeat)
 
     def level32_flag_outliers_zscore_rolling_test(self, thres_zscore: float = 4, showplot: bool = False,
                                                   verbose: bool = False, plottitle: str = None,
@@ -1429,23 +1470,36 @@ class FluxProcessingChain:
             idstr=idstr
         )
 
-    def level32_flag_outliers_lof_test(self, n_neighbors: int = None, contamination: float = None,
+    def level32_flag_outliers_lof_test(self, n_neighbors: int = None, contamination: float = 'auto',
+                                       separate_daytime_nighttime: bool = False,
                                        showplot: bool = False, verbose: bool = False, repeat: bool = True,
                                        n_jobs: int = 1):
-        self._level32.flag_outliers_lof_test(n_neighbors=n_neighbors, contamination=contamination, showplot=showplot,
-                                             verbose=verbose, repeat=repeat, n_jobs=n_jobs)
+        """Flag outliers using Local Outlier Factor (global or separate day/night).
 
-    def level32_flag_outliers_lof_dtnt_test(self, n_neighbors: int = None, contamination: float = None,
-                                            showplot: bool = False, verbose: bool = False, repeat: bool = True,
-                                            n_jobs: int = 1):
-        self._level32.flag_outliers_lof_dtnt_test(n_neighbors=n_neighbors, contamination=contamination,
-                                                  showplot=showplot, verbose=verbose, repeat=repeat, n_jobs=n_jobs)
+        Identifies density-based outliers using k-nearest neighbors. Can operate globally
+        across all records or separately for daytime and nighttime periods.
 
-    def level33_flag_constant_ustar_test(self, n_neighbors: int = None, contamination: float = None,
-                                         showplot: bool = False, verbose: bool = False, repeat: bool = True,
-                                         n_jobs: int = 1):
-        self._level32.flag_outliers_lof_dtnt_test(n_neighbors=n_neighbors, contamination=contamination,
-                                                  showplot=showplot, verbose=verbose, repeat=repeat, n_jobs=n_jobs)
+        Parameters
+        ----------
+        n_neighbors : int, optional
+            Number of neighbors for LOF calculation; auto-calculated if None
+        contamination : float or 'auto', default 'auto'
+            Expected fraction of outliers (float 0-1) or 'auto' for automatic detection
+        separate_daytime_nighttime : bool, default False
+            If False, apply single LOF globally across all records.
+            If True, apply separate LOF detection for daytime and nighttime data.
+        showplot : bool, default False
+            If True, display visualization of detected outliers
+        verbose : bool, default False
+            If True, print detection statistics
+        repeat : bool, default True
+            If True, repeat detection iteratively until convergence
+        n_jobs : int, default 1
+            Number of parallel jobs (-1 uses all cores)
+        """
+        self._level32.flag_outliers_lof_test(n_neighbors=n_neighbors, contamination=contamination,
+                                             separate_daytime_nighttime=separate_daytime_nighttime,
+                                             showplot=showplot, verbose=verbose, repeat=repeat, n_jobs=n_jobs)
 
     def level32_addflag(self):
         """Add current Level-3.2 flag to results."""
@@ -1895,10 +1949,11 @@ def _example():
     #                                       showplot=True, verbose=False, repeat=True)
     # fpc.level32_addflag()
 
-    # # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=False, verbose=False, repeat=False)
-    fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 13, n_sigma_dt=5.5, n_sigma_nt=5.5, showplot=False,
-                                               verbose=True, use_differencing=True, separate_day_night=True,
-                                               repeat=True)
+    # # fpc.level32_flag_outliers_hampel_test(window_length=48 * 3, n_sigma_daytime=3.5, n_sigma_nighttime=3.5, showplot=False, verbose=False, repeat=False)
+    fpc.level32_flag_outliers_hampel_test(window_length=48 * 13, n_sigma_daytime=5.5, n_sigma_nighttime=5.5,
+                                          showplot=False,
+                                          verbose=True, use_differencing=True, separate_daytime_nighttime=True,
+                                          repeat=True)
     fpc.level32_addflag()
 
     # fpc.level32_flag_outliers_zscore_rolling_test(winsize=48 * 7, thres_zscore=4, showplot=False, verbose=True,

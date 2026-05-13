@@ -1,3 +1,12 @@
+"""
+VPD: VAPOR PRESSURE DEFICIT CALCULATIONS
+=========================================
+
+Calculate vapor pressure deficit (VPD) from air temperature and relative humidity.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 from numpy import exp
 from pandas import DataFrame, Series
 

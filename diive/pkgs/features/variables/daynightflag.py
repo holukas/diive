@@ -1,11 +1,10 @@
 """
-NIGHTTIME FLAG
-==============
-from site location, latitude/longitude
+DAY/NIGHT FLAG: CLASSIFY TIMESTAMPS BY SOLAR POSITION
+======================================================
 
-- https://pysolar.org/
-- https://pysolar.readthedocs.io/en/latest/#
-- https://stackoverflow.com/questions/69766581/pysolar-get-azimuth-function-applied-to-pandas-dataframe
+Derive day/night classification from site location coordinates and solar potential radiation.
+
+Part of the diive library: https://github.com/holukas/diive
 """
 
 import numpy as np

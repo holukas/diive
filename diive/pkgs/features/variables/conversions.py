@@ -1,3 +1,12 @@
+"""
+CONVERSIONS: UNIT AND VARIABLE TRANSFORMATIONS
+================================================
+
+Convert between meteorological variables and units: sonic/air temperature, latent heat, evapotranspiration.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 import pandas as pd
 
 

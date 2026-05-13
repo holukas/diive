@@ -1,3 +1,12 @@
+"""
+USTAR THRESHOLD: FRICTION VELOCITY FILTERING
+==============================================
+
+Flag low-turbulence data using constant friction velocity thresholds with uncertainty scenarios.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np

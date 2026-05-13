@@ -1,24 +1,11 @@
 """
-Seasonal-Trend Decomposition for Time Series Analysis
+ANALYSIS: SEASONAL-TREND DECOMPOSITION
+=======================================
 
-Separates time series into:
-- Trend: Long-term direction (slow changes)
-- Seasonal: Recurring patterns (daily, weekly, annual cycles)
-- Residual: Noise and anomalies
+Decompose time series into trend, seasonal, and residual components.
+Supports STL, classical, and harmonic methods with quality-weighted fitting.
 
-Features:
-- Multiple decomposition methods (STL, classical, harmonic)
-- Quality-weighted fitting (incorporates data quality flags)
-- Lazy evaluation (components computed on first access)
-- Handles data gaps and non-stationary behavior
-
-Typical usage:
-    decomp = SeasonalTrendDecomposition(
-        nee_series, quality=quality_flags, method='stl'
-    )
-    trend = decomp.trend
-    seasonal = decomp.seasonal
-    residual = decomp.residual
+Part of the diive library: https://github.com/holukas/diive
 """
 
 from typing import Optional, List, Dict

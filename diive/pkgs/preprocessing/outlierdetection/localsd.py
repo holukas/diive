@@ -1,5 +1,12 @@
 """
-Outlier detection using rolling window standard deviation.
+LOCAL SD: ROLLING WINDOW DEVIATION DETECTION
+=============================================
+
+Identify outliers as values exceeding rolling median by specified standard deviations.
+
+Part of the diive library: https://github.com/holukas/diive
+
+Rolling window standard deviation:
 
 This module provides outlier detection based on deviations from a rolling median.
 The method identifies values that exceed a rolling window's median by a specified

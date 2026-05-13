@@ -1,9 +1,10 @@
 """
-OUTLIER DETECTION: LOCAL OUTLIER FACTOR
-=======================================
+LOCAL OUTLIER FACTOR: DENSITY-BASED ANOMALY DETECTION
+======================================================
 
-This module is part of the diive library:
-https://github.com/holukas/diive
+Identify anomalies by measuring local density deviation relative to neighbors.
+
+Part of the diive library: https://github.com/holukas/diive
 
 Local outlier factor:
     "The anomaly score of each sample is called the Local Outlier Factor. It measures

@@ -1,3 +1,12 @@
+"""
+FLUX - LOW-RESOLUTION PROCESSING
+=================================
+
+30-min flux analysis: quality control, storage correction, USTAR filtering, uncertainty.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 from diive.pkgs.flux.lowres.common import detect_fluxbasevar
 from diive.pkgs.flux.lowres.hqflux import analyze_highest_quality_flux
 from diive.pkgs.flux.lowres.selfheating import ScopApplicator

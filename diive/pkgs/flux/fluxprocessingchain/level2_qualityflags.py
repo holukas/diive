@@ -1,5 +1,12 @@
 """
-Performs Level 2 quality control (QC) flag generation for flux data derived from EddyPro outputs.
+LEVEL 2: QUALITY FLAG EXPANSION
+================================
+
+Generate and expand quality control flags for flux data from EddyPro outputs.
+
+Part of the diive library: https://github.com/holukas/diive
+
+Details:
 
 This module provides the `FluxQualityFlagsEddyPro` class, which encapsulates
 various QC tests described in flux processing literature (e.g., VM97) and

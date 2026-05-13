@@ -1,3 +1,12 @@
+"""
+ANALYSIS: TIME SERIES ANALYSIS METHODS
+=======================================
+
+Comprehensive toolkit: decomposition, correlation, gap detection, histograms, grid aggregation.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 from diive.pkgs.analysis.correlation import DailyCorrelation
 
 # Alias for backward compatibility

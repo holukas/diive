@@ -1,5 +1,12 @@
 """
-U* Moving Point (MP) Detection - Papale et al. (2006)
+USTAR MOVING POINT DETECTION: FRICTION VELOCITY THRESHOLD
+==========================================================
+
+Identify friction velocity (u*) threshold for reliable eddy covariance flux using moving point algorithm.
+
+Part of the diive library: https://github.com/holukas/diive
+
+Algorithm details (Papale et al. 2006):
 
 This module implements the ONEFlux USTAR moving point threshold detection algorithm
 as described in Papale et al. (2006). The algorithm identifies the friction velocity (u*)

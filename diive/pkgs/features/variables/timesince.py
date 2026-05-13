@@ -1,3 +1,12 @@
+"""
+TIME SINCE CONDITION: ELAPSED RECORD COUNTER
+==============================================
+
+Track consecutive records elapsed since last occurrence of a specified condition.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 import pandas as pd
 
 

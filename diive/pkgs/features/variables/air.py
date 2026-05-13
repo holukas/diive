@@ -1,3 +1,12 @@
+"""
+AIR: ATMOSPHERIC PROPERTIES
+============================
+
+Calculate air properties: aerodynamic resistance, air density for various conditions.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 import numpy as np
 import pandas as pd
 

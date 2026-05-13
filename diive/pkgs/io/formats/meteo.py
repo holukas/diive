@@ -1,3 +1,12 @@
+"""
+METEO: METEOROLOGICAL DATA FORMAT CONVERSION
+=============================================
+
+Convert meteorological data between EddyPro and FLUXNET file formats.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 from pathlib import Path
 
 import pandas as pd

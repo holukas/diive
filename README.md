@@ -315,7 +315,7 @@ If you use `diive` in your research, please cite it:
 
 ```bibtex
 @software{diive2024,
-  title={DIIVE: Data Integration and Interactive Visualization Engine},
+  title={DIIVE: Time Series Data Processing Library},
   author={Holukas, Dominik},
   url={https://github.com/holukas/diive},
   doi={10.5281/zenodo.10884017},

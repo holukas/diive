@@ -1,3 +1,13 @@
+"""
+ANALYSIS: QUANTILES AND PERCENTILES
+====================================
+
+Calculate and visualize distribution quantiles and percentiles.
+Includes percentile ranges and statistical distribution analysis.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 import numpy as np
 import pandas as pd
 from pandas import Series, DataFrame

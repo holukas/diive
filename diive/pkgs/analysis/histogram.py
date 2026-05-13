@@ -1,7 +1,11 @@
 """
-kudos:
-- https://datagy.io/numpy-histogram/
-- https://www.adamsmith.haus/python/answers/how-to-find-the-n-maximum-indices-of-a-numpy-array-in-python
+ANALYSIS: HISTOGRAM DISTRIBUTION
+=================================
+
+Distribution analysis with flexible binning methods and statistical summaries.
+Supports fringe bin removal and detailed bin-wise statistics.
+
+Part of the diive library: https://github.com/holukas/diive
 """
 
 from typing import Literal

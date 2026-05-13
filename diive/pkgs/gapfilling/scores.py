@@ -1,3 +1,12 @@
+"""
+GAP-FILLING: MODEL SCORING
+===========================
+
+Performance metrics for gap-filling models: R², MAE, RMSE, prediction intervals.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 import numpy as np
 from sklearn.metrics import mean_absolute_error, median_absolute_error, mean_squared_error, root_mean_squared_error, \
     mean_absolute_percentage_error, max_error, r2_score

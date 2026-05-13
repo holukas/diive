@@ -1,3 +1,12 @@
+"""
+COMMON: FLUX VARIABLE NOMENCLATURE AND HELPERS
+===============================================
+
+Mapping of flux variable names and base variable detection helpers.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 # Names of flux variables and their base variable in EddyPro,
 # names are different depending on output file (_full_output_ or _fluxnet_)
 fluxbasevars_fluxnetfile = {

@@ -1,3 +1,12 @@
+"""
+LAGGED VARIANTS: TIME-SHIFTED FEATURE COPIES
+==============================================
+
+Create past and future value copies of variables for modeling temporal dependencies.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 from pandas import DataFrame
 
 

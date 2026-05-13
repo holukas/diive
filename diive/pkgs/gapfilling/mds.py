@@ -1,10 +1,11 @@
 """
+GAP-FILLING: MARGINAL DISTRIBUTION SAMPLING
+============================================
 
-MARGINAL DISTRIBUTION SAMPLING (MDS)
-Gap-filling after Reichstein et al (2005)
+Statistical gap-filling using meteorological similarity.
+No training required; based on Reichstein et al (2005).
 
-Reference: https://doi.org/10.1111/j.1365-2486.2005.001002.x
-
+Part of the diive library: https://github.com/holukas/diive
 """
 from collections import Counter
 

@@ -1,27 +1,11 @@
 """
-===================================================
-Complete Meteorological Screening Workflow (QC/QA)
-===================================================
+METEOSCREENING: COMPLETE METEOROLOGICAL SCREENING WORKFLOW
+=========================================================
 
-This example demonstrates the complete workflow for quality control and outlier detection
-of high-resolution meteorological data downloaded from an InfluxDB database.
+End-to-end QC workflow: download InfluxDB data, apply multi-stage outlier detection,
+correct measurements, resample to 30 minutes, and upload cleaned results.
 
-The workflow includes:
-1. Downloading raw data from the database
-2. Quality screening with multiple outlier detection methods
-3. Data corrections for known measurement issues
-4. Resampling to 30-minute time resolution
-5. Uploading processed data back to the database
-
-The workflow supports iterative inspection and parameter adjustment at each stage.
-The StepwiseMeteoScreeningDb class is optimized for Jupyter notebooks but works
-equally well in Python scripts.
-
-**About this example:**
-
-In this notebook, the raw data are downloaded from the database, quality-screened,
-resampled and then uploaded to the database using the StepwiseMeteoScreeningDb class
-in diive.
+Part of the diive library: https://github.com/holukas/diive
 
 Here is an overview of what is done:
 - (1) **USER SETTINGS**: Specify general settings for the site and variable

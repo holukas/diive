@@ -1,5 +1,12 @@
 """
-Outlier detection using z-score of record increments.
+Z-SCORE INCREMENTS: ABRUPT CHANGE DETECTION
+=============================================
+
+Detect outliers based on z-scores of consecutive value changes (forward, backward, combined).
+
+Part of the diive library: https://github.com/holukas/diive
+
+Record increment z-score:
 
 This module provides outlier detection based on abrupt changes between consecutive values.
 The method calculates z-scores for three types of increments (forward, backward, combined)

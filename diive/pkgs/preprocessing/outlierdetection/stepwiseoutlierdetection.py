@@ -2,9 +2,10 @@
 OUTLIER DETECTION: STEP-WISE OUTLIER DETECTION
 ==============================================
 
-This module is part of the diive library:
-https://github.com/holukas/diive
+Chain multiple detection methods sequentially for progressive outlier filtering.
+Includes Hampel, z-score, LOF, absolute limits, local SD, and manual removal.
 
+Part of the diive library: https://github.com/holukas/diive
 """
 import numpy as np
 import pandas as pd
@@ -31,14 +32,14 @@ class StepwiseOutlierDetection:
 
     Quality flags that can be directly created via this class:
     - `.flag_missingvals_test()`: Generate flag that indicates missing records in data
-    - `.flag_outliers_abslim_test()`: Generate flag that indicates if values in data are outside the specified range
+    - `.flag_outliers_abslim_test()`: Generate flag that indicates if values in data are outside the specified range (global or separate day/night)
     - `.flag_outliers_increments_zcore_test()`: Identify outliers based on the z-score of increments
-    - `.flag_outliers_localsd_test()`: Identify outliers based on the local standard deviation from a running median
+    - `.flag_outliers_localsd_test()`: Identify outliers based on the local standard deviation from a running median (global or separate day/night)
     - `.flag_manualremoval_test()`: Remove data points for range, time or point-by-point
-    - `.flag_outliers_zscore_test()`:  Identify outliers based on the z-score (global or day/night separated)
+    - `.flag_outliers_zscore_test()`:  Identify outliers based on the z-score (global or separate day/night)
     - `.flag_outliers_zscore_rolling_test()`: Identify outliers based on the rolling z-score
-    - `.flag_outliers_lof_test()`: Identify outliers based on local outlier factor (global or day/night separated)
-    - `.flag_outliers_hampel_dtnt_test()`: Identify based on the Hampel filter, daytime nighttime separately
+    - `.flag_outliers_lof_test()`: Identify outliers based on local outlier factor (global or separate day/night)
+    - `.flag_outliers_hampel_test()`: Identify outliers based on the Hampel filter (global or separate day/night)
     - `.flag_outliers_trim_low_test()`: Remove values below threshold and remove an equal amount of records from high end of data
 
     The class is optimized to work in Jupyter notebooks. Various outlier detection
@@ -134,7 +135,6 @@ class StepwiseOutlierDetection:
         flagtest.calc()
         self._last_flag = flagtest.get_flag()
 
-
     def flag_outliers_localsd_test(self, n_sd: float | list = 7, winsize: int | list = None, showplot: bool = False,
                                    constant_sd: bool = False, separate_daytime_nighttime: bool = False,
                                    verbose: bool = False, repeat: bool = True):
@@ -167,18 +167,47 @@ class StepwiseOutlierDetection:
         flagtest.calc()
         self._last_flag = flagtest.get_flag()
 
-    def flag_outliers_hampel_dtnt_test(self, window_length: int = 13, n_sigma: float = 5.5, n_sigma_daytime: float = None, n_sigma_nighttime: float = None,
-                                       k: float = 1.4826, use_differencing: bool = True,
-                                       separate_day_night: bool = True, showplot: bool = False, verbose: bool = False,
-                                       repeat: bool = True):
-        """Identify outliers in a sliding window based on the Hampel filter,
-        separately for daytime and nighttime data."""
+    def flag_outliers_hampel_test(self, window_length: int = 13, n_sigma: float = 5.5, n_sigma_daytime: float = None,
+                                  n_sigma_nighttime: float = None,
+                                  k: float = 1.4826, use_differencing: bool = True,
+                                  separate_daytime_nighttime: bool = False, showplot: bool = False,
+                                  verbose: bool = False,
+                                  repeat: bool = True):
+        """Identify outliers in a sliding window based on the Hampel filter (global or separate day/night).
+
+        Parameters
+        ----------
+        window_length : int, default 13
+            Size of the sliding window for median/MAD calculation
+        n_sigma : float, default 5.5
+            Threshold multiplier for global mode (number of MADs above median)
+        n_sigma_daytime : float, optional
+            Threshold for daytime data (when separate_daytime_nighttime=True)
+        n_sigma_nighttime : float, optional
+            Threshold for nighttime data (when separate_daytime_nighttime=True)
+        k : float, default 1.4826
+            Scaling factor for MAD (median absolute deviation)
+        use_differencing : bool, default True
+            If True, apply Hampel filter to differenced series (rate of change)
+        separate_daytime_nighttime : bool, default False
+            If False, apply single threshold globally across all records.
+            If True, apply separate thresholds for daytime and nighttime data.
+        showplot : bool, default False
+            If True, display visualization of flagged outliers
+        verbose : bool, default False
+            If True, print flagging statistics
+        repeat : bool, default True
+            If True, iteratively repeat detection until convergence
+        """
         series_cleaned = self._series_hires_cleaned.copy()
         flagtest = Hampel(
             series=series_cleaned, idstr=self.idstr,
-            lat=self.site_lat, lon=self.site_lon, utc_offset=self.utc_offset,
-            use_differencing=use_differencing, separate_day_night=separate_day_night,
-            window_length=window_length, n_sigma=n_sigma, n_sigma_daytime=n_sigma_daytime, n_sigma_nighttime=n_sigma_nighttime,
+            lat=self.site_lat if separate_daytime_nighttime else None,
+            lon=self.site_lon if separate_daytime_nighttime else None,
+            utc_offset=self.utc_offset if separate_daytime_nighttime else None,
+            use_differencing=use_differencing, separate_day_night=separate_daytime_nighttime,
+            window_length=window_length, n_sigma=n_sigma, n_sigma_daytime=n_sigma_daytime,
+            n_sigma_nighttime=n_sigma_nighttime,
             k=k, showplot=showplot, verbose=verbose)
         flagtest.calc(repeat=repeat)
         self._last_flag = flagtest.get_flag()
@@ -258,40 +287,46 @@ class StepwiseOutlierDetection:
         flagtest.calc(repeat=repeat)
         self._last_flag = flagtest.get_flag()
 
-    def flag_outliers_lof_dtnt_test(self, n_neighbors: int = None, contamination: float = None,
-                                    showplot: bool = False, verbose: bool = False, repeat: bool = True,
-                                    n_jobs: int = 1):
-        """Convenience wrapper for LOF with separate daytime/nighttime detection.
-
-        Equivalent to flag_outliers_lof_test(..., separate_daytime_nighttime=True)
-        """
-        series_cleaned = self._series_hires_cleaned.copy()
-        # Number of neighbors is automatically calculated if not provided
-        n_neighbors = int(len(series_cleaned.dropna()) / 200) if not n_neighbors else n_neighbors
-        # Contamination is set automatically unless float is given
-        contamination = contamination if isinstance(contamination, float) else 'auto'
-        flagtest = LocalOutlierFactor(series=series_cleaned, lat=self.site_lat,
-                                      lon=self.site_lon, utc_offset=self.utc_offset, idstr=self.idstr,
-                                      n_neighbors=n_neighbors, contamination=contamination,
-                                      separate_daytime_nighttime=True,
-                                      showplot=showplot, verbose=verbose, n_jobs=n_jobs)
-        flagtest.calc(repeat=repeat)
-        self._last_flag = flagtest.get_flag()
-
     def flag_outliers_lof_test(self, n_neighbors: int = None, contamination: float = None,
+                               separate_daytime_nighttime: bool = False,
                                showplot: bool = False, verbose: bool = False, repeat: bool = True, n_jobs: int = 1):
-        """Local outlier factor. Applied globally across all data by default.
+        """Local outlier factor detection (global or separate day/night).
 
-        Note: Use flag_outliers_lof_dtnt_test() for separate daytime/nighttime detection.
+        Identifies density-based outliers using k-nearest neighbors. Can operate globally
+        across all records or separately for daytime and nighttime periods.
+
+        Parameters
+        ----------
+        n_neighbors : int, optional
+            Number of neighbors for LOF calculation; auto-calculated if None (1/200 of non-NaN records).
+        contamination : float or 'auto', default None
+            Expected fraction of outliers (float 0-1) or 'auto' for automatic detection.
+        separate_daytime_nighttime : bool, default False
+            If False, apply single LOF globally across all records.
+            If True, apply separate LOF detection for daytime and nighttime data.
+        showplot : bool, default False
+            If True, display visualization of detected outliers.
+        verbose : bool, default False
+            If True, print detection statistics.
+        repeat : bool, default True
+            If True, iteratively repeat detection until convergence.
+        n_jobs : int, default 1
+            Number of parallel jobs (-1 uses all cores).
         """
         series_cleaned = self._series_hires_cleaned.copy()
         # Number of neighbors is automatically calculated if not provided
         n_neighbors = int(len(series_cleaned.dropna()) / 200) if not n_neighbors else n_neighbors
         # Contamination is set automatically unless float is given
         contamination = contamination if isinstance(contamination, float) else 'auto'
-        flagtest = LocalOutlierFactor(series=series_cleaned, idstr=self.idstr,
+
+        lat = self.site_lat if separate_daytime_nighttime else None
+        lon = self.site_lon if separate_daytime_nighttime else None
+        utc_offset = self.utc_offset if separate_daytime_nighttime else None
+
+        flagtest = LocalOutlierFactor(series=series_cleaned, lat=lat, lon=lon, utc_offset=utc_offset,
+                                      idstr=self.idstr,
                                       n_neighbors=n_neighbors, contamination=contamination,
-                                      separate_daytime_nighttime=False,
+                                      separate_daytime_nighttime=separate_daytime_nighttime,
                                       showplot=showplot, verbose=verbose, n_jobs=n_jobs)
         flagtest.calc(repeat=repeat)
         self._last_flag = flagtest.get_flag()
@@ -338,22 +373,6 @@ class StepwiseOutlierDetection:
         )
         flagtest.calc(repeat=False)
         self._last_flag = flagtest.get_flag()
-
-    def flag_outliers_abslim_dtnt_test(self,
-                                       daytime_minmax: list[float, float],
-                                       nighttime_minmax: list[float, float],
-                                       showplot: bool = False, verbose: bool = False):
-        """Convenience wrapper for separate daytime/nighttime absolute limits.
-
-        Equivalent to flag_outliers_abslim_test(..., separate_daytime_nighttime=True)
-        """
-        self.flag_outliers_abslim_test(
-            separate_daytime_nighttime=True,
-            daytime_minmax=daytime_minmax,
-            nighttime_minmax=nighttime_minmax,
-            showplot=showplot,
-            verbose=verbose
-        )
 
     def addflag(self):
         """Add flag of most recent test to data and update filtered series

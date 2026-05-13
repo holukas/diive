@@ -1,14 +1,11 @@
 """
-================================
-Multi-Level Flux Processing Chain
-================================
+FLUX PROCESSING CHAIN: COMPLETE WORKFLOW EXAMPLE
+================================================
 
-Complete eddy covariance flux post-processing following Swiss FluxNet standards.
-Data flows through 5 sequential levels: quality control → storage correction →
-outlier detection → USTAR filtering → gap-filling.
+Swiss FluxNet-compliant post-processing across five levels: quality control, storage correction,
+outlier detection, USTAR filtering, and gap-filling. Demonstrates both Random Forest and XGBoost.
 
-This example processes one month of data through all levels with both Random Forest
-and XGBoost gap-filling methods.
+Part of the diive library: https://github.com/holukas/diive
 """
 
 # %%
@@ -135,14 +132,14 @@ fpc.finalize_level31()
 # previous tests. Preview plots help verify each stage before committing.
 
 fpc.level32_stepwise_outlier_detection()
-fpc.level32_flag_outliers_hampel_dtnt_test(
+fpc.level32_flag_outliers_hampel_test(
     window_length=48 * 13,
-    n_sigma_dt=5.5,
-    n_sigma_nt=5.5,
+    n_sigma_daytime=5.5,
+    n_sigma_nighttime=5.5,
     showplot=False,
     verbose=True,
     use_differencing=True,
-    separate_day_night=True,
+    separate_daytime_nighttime=True,
     repeat=True
 )
 fpc.level32_addflag()

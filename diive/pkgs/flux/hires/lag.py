@@ -1,3 +1,12 @@
+"""
+LAG: MAXIMUM COVARIANCE TIME LAG DETECTION
+===========================================
+
+Find optimal time lag between gas concentration and wind speed via covariance maximization.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np

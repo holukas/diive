@@ -1,3 +1,13 @@
+"""
+ANALYSIS: GAP DETECTION
+=======================
+
+Identify and analyze missing data patterns in time series.
+Report gap locations, duration, and statistics for data quality assessment.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 import numpy as np
 import pandas as pd
 from pandas import DataFrame

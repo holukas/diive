@@ -1,3 +1,13 @@
+"""
+QA/QC: QUALITY CONTROL AND DATA SCREENING
+==========================================
+
+EddyPro quality flag conversion, overall quality scoring (QCF), meteorological screening,
+and missing value handling for multi-stage data quality assessment.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 from diive.pkgs.preprocessing.qaqc.flags import restrict_application, MissingValues
 from diive.pkgs.preprocessing.qaqc.eddyproflags import (
     flag_signal_strength_eddypro_test,

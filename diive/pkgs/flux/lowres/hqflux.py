@@ -1,3 +1,12 @@
+"""
+HIGHEST-QUALITY FLUX: QUALITY-FILTERED FLUX SELECTION
+=======================================================
+
+Select and analyze highest-quality flux measurements from multi-quality data.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import pandas as pd

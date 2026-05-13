@@ -1,3 +1,12 @@
+"""
+EXTRACT: BINARY VALUE EXTRACTION
+=================================
+
+Extract encoded single values from multi-bit integer fields.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
 import numpy as np
 from pandas import Series
 

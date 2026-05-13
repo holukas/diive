@@ -1,6 +1,11 @@
 """
-FLUX: OPTIMUM RANGE
-===================
+ANALYSIS: OPTIMUM RANGE
+=======================
+
+Find optimal ranges for bivariate relationships using statistical methods.
+Identify acceptable operating conditions and valid data subsets.
+
+Part of the diive library: https://github.com/holukas/diive
 """
 
 from math import isclose
