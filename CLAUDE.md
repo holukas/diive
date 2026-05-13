@@ -831,13 +831,12 @@ Used by: `flag_steadiness_horizontal_wind_eddypro_test()`, `flag_angle_of_attack
 1. **AbsoluteLimits** — Min/max threshold
 2. **Hampel** — Robust spike detection (MAD-based)
 3. **LocalSD** — Local standard deviation (adaptive)
-4. **zScore** — Global z-score threshold
-5. **zScoreDaytimeNighttime** — Z-score with separate day/night thresholds
-6. **zScoreRolling** — Rolling z-score (adaptive threshold)
-7. **zScoreIncrements** — Abrupt change detection
-8. **LocalOutlierFactor** — Density-based anomalies
-9. **ManualRemoval** — Explicit data removal
-10. **TrimLow** — Symmetric removal (trimmed mean approach)
+4. **zScore** — Z-score threshold (global or separate day/night modes)
+5. **zScoreRolling** — Rolling z-score (adaptive threshold)
+6. **zScoreIncrements** — Abrupt change detection
+7. **LocalOutlierFactor** — Density-based anomalies
+8. **ManualRemoval** — Explicit data removal
+9. **TrimLow** — Symmetric removal (trimmed mean approach)
 
 **Step-wise Orchestration:** Chain multiple detection methods sequentially via `StepwiseOutlierDetection`. Each method
 operates on the previous result, progressively filtering outliers. Useful for multi-stage QA/QC workflows.

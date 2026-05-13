@@ -116,8 +116,6 @@ from diive.pkgs.preprocessing.outlierdetection import TrimLow as TrimLow
 from diive.pkgs.preprocessing.outlierdetection import TrimLow as trim_low
 from diive.pkgs.preprocessing.outlierdetection import zScore as zScore
 from diive.pkgs.preprocessing.outlierdetection import zScore as zscore
-from diive.pkgs.preprocessing.outlierdetection import zScoreDaytimeNighttime as zScoreDaytimeNighttime
-from diive.pkgs.preprocessing.outlierdetection import zScoreDaytimeNighttime as zscore_daytime_nighttime
 from diive.pkgs.preprocessing.outlierdetection import zScoreIncrements as zScoreIncrements
 from diive.pkgs.preprocessing.outlierdetection import zScoreIncrements as zscore_increments
 from diive.pkgs.preprocessing.outlierdetection import zScoreRolling as zScoreRolling
@@ -204,8 +202,6 @@ __all__ = [
     'zscore_increments',
     'zScore',
     'zscore',
-    'zScoreDaytimeNighttime',
-    'zscore_daytime_nighttime',
     'zScoreRolling',
     'zscore_rolling',
     'LocalSD',

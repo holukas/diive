@@ -118,8 +118,12 @@ detector.addflag()
 
 # 5. Z-score day/night
 print("\n5. Z-score day/night separation...")
-detector.flag_outliers_zscore_dtnt_test(
+detector.flag_outliers_zscore_test(
     thres_zscore=4,
+    separate_daytime_nighttime=True,
+    lat=detector.site_lat,
+    lon=detector.site_lon,
+    utc_offset=detector.utc_offset,
     showplot=False,
     verbose=False,
     repeat=True

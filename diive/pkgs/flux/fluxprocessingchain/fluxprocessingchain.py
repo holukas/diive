@@ -1333,10 +1333,6 @@ class FluxProcessingChain:
                                                 maxval=maxval,
                                                 showplot=showplot, verbose=verbose)
 
-    def level32_flag_outliers_zscore_dtnt_test(self, thres_zscore: float = 4, showplot: bool = False,
-                                               verbose: bool = False, repeat: bool = True):
-        self._level32.flag_outliers_zscore_dtnt_test(thres_zscore=thres_zscore, showplot=showplot, verbose=verbose,
-                                                     repeat=repeat)
 
     def level32_flag_outliers_localsd_test(self, n_sd: float | list = 7, winsize: int | list = None,
                                            showplot: bool = False, constant_sd: bool = False,
@@ -1377,10 +1373,61 @@ class FluxProcessingChain:
         self._level32.flag_outliers_zscore_rolling_test(thres_zscore=thres_zscore, showplot=showplot, verbose=verbose,
                                                         plottitle=plottitle, winsize=winsize, repeat=repeat)
 
-    def level32_flag_outliers_zscore_test(self, thres_zscore: int = 4, showplot: bool = False, verbose: bool = False,
-                                          plottitle: str = None, repeat: bool = True):
-        self._level32.flag_outliers_zscore_test(thres_zscore=thres_zscore, showplot=showplot,
-                                                verbose=verbose, plottitle=plottitle, repeat=repeat)
+    def level32_flag_outliers_zscore_test(self,
+                                          thres_zscore: float = 4,
+                                          separate_daytime_nighttime: bool = False,
+                                          lat: float = None,
+                                          lon: float = None,
+                                          utc_offset: int = None,
+                                          showplot: bool = False,
+                                          plottitle: str = None,
+                                          verbose: bool = False,
+                                          repeat: bool = True,
+                                          idstr: str = None):
+        """
+        Flag outliers using z-score threshold (global or separate day/night).
+
+        Applies z-score detection to identify values deviating from the mean by more than
+        a specified number of standard deviations. Can operate globally across all records
+        or separately for daytime and nighttime periods.
+
+        Parameters
+        ----------
+        thres_zscore : float, default 4
+            Z-score threshold for flagging. Typical range: 2.5-5.
+        separate_daytime_nighttime : bool, default False
+            If False, apply single threshold across all records (global mode).
+            If True, apply separate thresholds to daytime and nighttime records.
+            Requires lat, lon, utc_offset when True.
+        lat : float, default None
+            Site latitude in decimal degrees. Required when separate_daytime_nighttime=True.
+        lon : float, default None
+            Site longitude in decimal degrees. Required when separate_daytime_nighttime=True.
+        utc_offset : int, default None
+            UTC offset in hours. Required when separate_daytime_nighttime=True.
+        showplot : bool, default False
+            If True, display outlier visualization.
+        plottitle : str, default None
+            Title for plot. If None, auto-generated.
+        verbose : bool, default False
+            If True, print detection statistics.
+        repeat : bool, default True
+            If True, iteratively repeat detection until convergence.
+        idstr : str, default None
+            Optional identifier string for labeling output in verbose mode.
+        """
+        self._level32.flag_outliers_zscore_test(
+            thres_zscore=thres_zscore,
+            separate_daytime_nighttime=separate_daytime_nighttime,
+            lat=lat,
+            lon=lon,
+            utc_offset=utc_offset,
+            showplot=showplot,
+            plottitle=plottitle,
+            verbose=verbose,
+            repeat=repeat,
+            idstr=idstr
+        )
 
     def level32_flag_outliers_lof_test(self, n_neighbors: int = None, contamination: float = None,
                                        showplot: bool = False, verbose: bool = False, repeat: bool = True,
@@ -1548,7 +1595,16 @@ class QuickFluxProcessingChain:
 
     def _run_level32(self):
         self.fpc.level32_stepwise_outlier_detection()
-        self.fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=False, verbose=True, repeat=True)
+        self.fpc.level32_flag_outliers_zscore_test(
+            thres_zscore=4,
+            separate_daytime_nighttime=True,
+            lat=self.site_lat,
+            lon=self.site_lon,
+            utc_offset=self.utc_offset,
+            showplot=False,
+            verbose=True,
+            repeat=True
+        )
         self.fpc.level32_addflag()
         self.fpc.finalize_level32()
 
@@ -1834,7 +1890,9 @@ def _example():
     # fpc.level32_addflag()
     # # fpc.level32.results  # Stores Level-3.2 flags up to this point
 
-    # fpc.level32_flag_outliers_zscore_dtnt_test(thres_zscore=4, showplot=True, verbose=False, repeat=True)
+    # fpc.level32_flag_outliers_zscore_test(thres_zscore=4, separate_daytime_nighttime=True,
+    #                                       lat=SITE_LAT, lon=SITE_LON, utc_offset=UTC_OFFSET,
+    #                                       showplot=True, verbose=False, repeat=True)
     # fpc.level32_addflag()
 
     # # fpc.level32_flag_outliers_hampel_dtnt_test(window_length=48 * 3, n_sigma_dt=3.5, n_sigma_nt=3.5, showplot=False, verbose=False, repeat=False)

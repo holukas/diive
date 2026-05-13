@@ -11,7 +11,6 @@ from diive.pkgs.preprocessing.outlierdetection.stepwiseoutlierdetection import S
 from diive.pkgs.preprocessing.outlierdetection.trim import TrimLow
 from diive.pkgs.preprocessing.outlierdetection.zscore import (
     zScore,
-    zScoreDaytimeNighttime,
     zScoreRolling,
 )
 
@@ -24,6 +23,7 @@ zscore_increments = zScoreIncrements
 zscore = zScore
 LocalOutlierFactorAllData = LocalOutlierFactor
 LocalOutlierFactorDaytimeNighttime = LocalOutlierFactor
+zscore_rolling = zScoreRolling
 
 __all__ = [
     'AbsoluteLimits',
@@ -44,6 +44,6 @@ __all__ = [
     'TrimLow',
     'zScore',
     'zscore',
-    'zScoreDaytimeNighttime',
     'zScoreRolling',
+    'zscore_rolling',
 ]

@@ -151,8 +151,10 @@ class TestFluxProcessingChain(unittest.TestCase):
         fpc.level32_flag_manualremoval_test(
             remove_dates=[['2022-07-01 12:15:00', '2022-07-01 13:45:00']], **kwargs)
         fpc.level32_addflag()
-        fpc.level32_flag_outliers_zscore_dtnt_test(
-            thres_zscore=4, repeat=True, **kwargs)
+        fpc.level32_flag_outliers_zscore_test(
+            thres_zscore=4, separate_daytime_nighttime=True,
+            lat=SITE_LAT, lon=SITE_LON, utc_offset=UTC_OFFSET,
+            repeat=True, **kwargs)
         fpc.level32_addflag()
         fpc.level32_flag_outliers_hampel_dtnt_test(
             window_length=48 * 7, repeat=False, **kwargs)

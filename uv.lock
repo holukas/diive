@@ -396,6 +396,23 @@ wheels = [
 ]
 
 [[package]]
+name = "dbc-influxdb"
+version = "0.13.2"
+source = { directory = "F:/Sync/luhk_work/20 - CODING/22 - POET/dbc-influxdb" }
+dependencies = [
+    { name = "influxdb-client" },
+    { name = "pandas" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "influxdb-client", specifier = ">=1.37.0" },
+    { name = "pandas", specifier = ">=2.1.0" },
+    { name = "pyyaml", specifier = ">=6.0.1" },
+]
+
+[[package]]
 name = "debugpy"
 version = "1.8.20"
 source = { registry = "https://pypi.org/simple" }
@@ -437,6 +454,7 @@ source = { editable = "." }
 dependencies = [
     { name = "bokeh" },
     { name = "category-encoders" },
+    { name = "dbc-influxdb" },
     { name = "dtreeviz" },
     { name = "eli5" },
     { name = "jupyter-bokeh" },
@@ -506,6 +524,7 @@ requires-dist = [
     { name = "autopep8", marker = "extra == 'dev'", specifier = ">=2.3.2" },
     { name = "bokeh", specifier = ">=3.7.1,<4.0.0" },
     { name = "category-encoders", specifier = ">=2.8.1,<3.0.0" },
+    { name = "dbc-influxdb", directory = "F:/Sync/luhk_work/20 - CODING/22 - POET/dbc-influxdb" },
     { name = "diive", extras = ["dev", "docs"], marker = "extra == 'all'" },
     { name = "dtreeviz", specifier = ">=2.2.2,<3.0.0" },
     { name = "eli5", specifier = ">=0.14.0,<0.15.0" },
@@ -759,6 +778,21 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/e4/06/b56dfa750b44e86157093bc8fca0ab81dccbf5260510de4eaf1cb69b5b99/importlib_resources-7.1.0.tar.gz", hash = "sha256:0722d4c6212489c530f2a145a34c0a7a3b4721bc96a15fada5930e2a0b760708", size = 44985, upload-time = "2026-04-12T16:36:09.232Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8a/db/55a262f3606bebcae07cc14095338471ad7c0bbcaa37707e6f0ee49725b7/importlib_resources-7.1.0-py3-none-any.whl", hash = "sha256:1bd7b48b4088eddb2cd16382150bb515af0bd2c70128194392725f82ad2c96a1", size = 37232, upload-time = "2026-04-12T16:36:08.219Z" },
+]
+
+[[package]]
+name = "influxdb-client"
+version = "1.50.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "certifi" },
+    { name = "python-dateutil" },
+    { name = "reactivex" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/07/23/77a945465a556a8067917ba84bac04e312cee2a4fe03d41198fe79ed9c84/influxdb_client-1.50.0.tar.gz", hash = "sha256:c2a4906573097103fa6f9a2ab08efe2eb48c2fed60b8129a3e320affde445743", size = 386749, upload-time = "2026-01-23T09:39:39.322Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7f/ec/6b120b4a86f6fadc7ddb1d7c7cdcb15bcfb332deb022ab60df51bcd4494c/influxdb_client-1.50.0-py3-none-any.whl", hash = "sha256:f172975cf7f0c95bfe74f288b31273393b164d2c58a948de55497d9956ab49be", size = 746289, upload-time = "2026-01-23T09:39:37.377Z" },
 ]
 
 [[package]]
@@ -2011,6 +2045,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/4f/6f/55c10e2e49ad52d080dc24e37adb215e5b0d64990b57598abc2e3f01725b/pyzmq-27.1.0-cp313-cp313t-win32.whl", hash = "sha256:7ccc0700cfdf7bd487bea8d850ec38f204478681ea02a582a8da8171b7f90a1c", size = 574964, upload-time = "2025-09-08T23:08:37.178Z" },
     { url = "https://files.pythonhosted.org/packages/87/4d/2534970ba63dd7c522d8ca80fb92777f362c0f321900667c615e2067cb29/pyzmq-27.1.0-cp313-cp313t-win_amd64.whl", hash = "sha256:8085a9fba668216b9b4323be338ee5437a235fe275b9d1610e422ccc279733e2", size = 641029, upload-time = "2025-09-08T23:08:40.595Z" },
     { url = "https://files.pythonhosted.org/packages/f6/fa/f8aea7a28b0641f31d40dea42d7ef003fded31e184ef47db696bc74cd610/pyzmq-27.1.0-cp313-cp313t-win_arm64.whl", hash = "sha256:6bb54ca21bcfe361e445256c15eedf083f153811c37be87e0514934d6913061e", size = 561541, upload-time = "2025-09-08T23:08:42.668Z" },
+]
+
+[[package]]
+name = "reactivex"
+version = "4.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b6/af/38a4b62468e4c5bd50acf511d86fe62e65a466aa6abb55b1d59a4a9e57f3/reactivex-4.1.0.tar.gz", hash = "sha256:c7499e3c802bccaa20839b3e17355a7d939573fded3f38ba3d4796278a169a3d", size = 113482, upload-time = "2025-11-05T21:44:24.557Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ba/9e/3c2f5d3abb6c5d82f7696e1e3c69b7279049e928596ce82ed25ca97a08f3/reactivex-4.1.0-py3-none-any.whl", hash = "sha256:485750ec8d9b34bcc8ff4318971d234dc4f595058a1b4435a74aefef4b2bc9bd", size = 218588, upload-time = "2025-11-05T21:44:23.015Z" },
 ]
 
 [[package]]

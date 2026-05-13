@@ -50,8 +50,9 @@ print(f"  Data retained: {(flag_global != 2).sum()}")
 # Calculate z-scores separately for daytime and nighttime records.
 # Accounts for different signal characteristics across the day.
 
-detector_dtnt = dv.zScoreDaytimeNighttime(
+detector_dtnt = dv.zScore(
     series=series,
+    separate_daytime_nighttime=True,
     lat=47.286417,
     lon=7.733750,
     utc_offset=1,

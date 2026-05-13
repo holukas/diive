@@ -49,13 +49,14 @@ cleaned = df[detector.flags_outliers != 2]
 
 **Statistical thresholding (Z-score):**
 ```python
-from diive.pkgs.preprocessing.outlierdetection import zScore
+from diive.pkgs.preprocessing.outlierdetection import StepwiseOutlierDetection
 
-# Global z-score with day/night separation
-detector = zScore(
-    dfin=df,
-    col='FCH4',
-    site_lat=47.5, site_lon=8.4,
+# Global z-score
+detector = StepwiseOutlierDetection(dfin=df, col='FCH4', site_lat=47.5, site_lon=8.4, utc_offset=1)
+detector.flag_outliers_zscore_test(thres_zscore=4)
+
+# Day/night separated z-score
+detector.flag_outliers_zscore_test(
     thres_zscore=4,
     separate_daytime_nighttime=True
 )

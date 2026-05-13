@@ -11,7 +11,7 @@ from diive.pkgs.preprocessing.outlierdetection import zScoreIncrements
 from diive.pkgs.preprocessing.outlierdetection import LocalSD
 from diive.pkgs.preprocessing.outlierdetection import LocalOutlierFactorAllData
 from diive.pkgs.preprocessing.outlierdetection import TrimLow
-from diive.pkgs.preprocessing.outlierdetection import zScore, zScoreDaytimeNighttime, zScoreRolling
+from diive.pkgs.preprocessing.outlierdetection import zScore, zScoreRolling
 from diive.pkgs.preprocessing.qaqc import MissingValues
 
 
@@ -344,8 +344,9 @@ class TestOutlierDetection(unittest.TestCase):
         self.assertGreater(s_noise.max(), 22)
         self.assertLess(s_noise.min(), 10)
 
-        zdn = zScoreDaytimeNighttime(
+        zdn = zScore(
             series=s_noise,
+            separate_daytime_nighttime=True,
             lat=47.286417,
             lon=7.733750,
             utc_offset=1,

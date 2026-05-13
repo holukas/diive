@@ -61,9 +61,14 @@
       improved index operations). Added dedicated examples for single-date and date-range removal workflows.
     - **TrimLow consolidation:** Moved example from source to `examples/outlierdetection/trim.py` (2 examples). Fixed
       redundant initialization, unused variables, added input validation. Added exports to `diive/__init__.py`.
-    - **Z-Score consolidation:** Moved examples from source to `examples/outlierdetection/zscore.py` (3 examples:
-      global, day/night, rolling). Fixed redundant initialization, added input validation. Improved docstrings for all 3
-      z-score classes. Added exports to `diive/__init__.py`.
+    - **Z-Score API consolidation:** Unified `zScore` and `zScoreDaytimeNighttime` into single `zScore` class with
+      `separate_daytime_nighttime: bool` parameter. Consolidated across all 3 wrapper levels: `StepwiseOutlierDetection`,
+      `StepwiseMeteoScreeningDb`, `FluxProcessingChain`. Removed separate dtnt_test methods; all now use unified
+      `flag_outliers_zscore_test()` with explicit parameters (thres_zscore, separate_daytime_nighttime, lat, lon, utc_offset,
+      showplot, plottitle, verbose, repeat, idstr). Wrappers use class-level site attributes (self.site_lat, self.site_lon,
+      self.utc_offset) when calling detectors. Updated 6 examples and 1 test. Removed deprecated exports
+      (`zScoreDaytimeNighttime`, `zscore_daytime_nighttime`). ⚠️ **Breaking change:** Code using old class names must update
+      to unified API.
     - **Examples consolidation:** All 10 main outlier detection methods now have consolidated examples (20 total:
       absolutelimits 2, hampel 2, incremental 1, localsd 2, lof 2, manualremoval 2, stepwise 1, trim 2, zscore 3). Added
       StepwiseOutlierDetection orchestration example demonstrating how to chain multiple detection methods sequentially.
