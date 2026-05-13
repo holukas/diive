@@ -22,12 +22,15 @@ Examples demonstrating flux processing, quality control, and high-resolution ana
 
 ## Related Documentation
 
-See `diive.pkgs.flux` for available processing classes and functions:
-- Flux quality control and filtering
-- High-resolution analysis methods
-- Sensor corrections
-- USTAR filtering for low-turbulence periods
-- Gap-filling methods
+Available classes and functions in `diive.pkgs.flux`:
+- **TimeLagAnalysis** — Time lag detection and visualization for gas concentrations
+- **RandomUncertaintyPAS20** — Measurement uncertainty quantification
+- **FlagMultipleConstantUstarThresholds** — USTAR filtering with multiple thresholds
+- **UstarMovingPointDetection** — Moving-point USTAR detection method
+- **ScopApplicator** — SCOP self-heating correction for open-path IRGA
+- **FluxProcessingChain** — Complete multi-level flux processing workflow
+- High-resolution analysis methods (lag detection, wind rotation)
+- Flux variable detection and nomenclature
 
 ## Use Cases
 
@@ -62,16 +65,22 @@ fpc.level41_longterm_xgboost(
 results = fpc.get_data()
 ```
 
-**Analyze measurement quality:**
+**Analyze time lag and measurement quality:**
 ```python
-from diive.pkgs.flux import FluxHQ, FluxUncertainty
+from diive import TimeLagAnalysis, RandomUncertaintyPAS20
 
-# Extract only highest-quality flux
-hq = FluxHQ(df['FC'], df['QC_FLAG'])
-high_quality_flux = hq.get_hq_flux()
+# Detect optimal time lags for gas concentrations
+analysis = TimeLagAnalysis(
+    df=df,
+    ignore_fringe_bins=[5, 10],
+    lag_window_min=0.10,
+    lag_window_max=1.00
+)
+co2_results = analysis.analyze_gas('CO2')
+fig = analysis.plot_gas('CO2', outdir='output/')
 
 # Quantify measurement uncertainty
-unc = FluxUncertainty(flux_series=df['FC'], method='PAS20')
+unc = RandomUncertaintyPAS20(flux_series=df['FC'])
 uncertainty = unc.get_uncertainty()
 ```
 

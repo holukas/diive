@@ -102,6 +102,7 @@
       process in CLAUDE.md § "Converting Notebooks to Sphinx Gallery Examples" for team reference.
 - **Correlation API simplification:** Removed `daily_correlation()` convenience function wrapper; replaced with module-level alias `daily_correlation = DailyCorrelation` in `diive/pkgs/analysis/__init__.py`. This eliminates unnecessary indirection while maintaining backward compatibility. Combined separate `analysis_correlation.py` and `analysis_daily_correlation.py` examples into single comprehensive example showing three relationship types plus advanced methods (`.summary()`, `.get_days_by_correlation()`).
 - **GridAggregator notebook conversion:** Converted `notebooks/analyses/GridAggregator.ipynb` to Sphinx Gallery example `examples/pkgs/analysis/analysis_gridaggregator.py`. Demonstrates all three binning methods (quantile, equal-width, custom) with output format comparisons and interpretation guidance.
+- **Flux time lag analysis example:** Added `examples/flux/lowres/flux_timelag_analysis.py` demonstrating TimeLagAnalysis workflow: single-gas analysis (CO2), 4-panel visualization (overview/zoomed histogram + time series), dynamic tick spacing with overlap prevention, peak bin highlighting. Includes class docstring with implementation details and import registration in package `__init__.py` files.
 - **Decoupling & GapFinder notebook conversions:** Enhanced two existing Sphinx Gallery examples:
     - `examples/pkgs/analysis/analysis_decoupling.py`: Updated to match notebook content using StratifiedAnalysis API. Demonstrates stratified binning to reveal how ecosystem responses change across temperature ranges. Shows summer daytime filtering, multi-level binning (VPD × Temperature), result access patterns, and visualization.
     - `examples/pkgs/analysis/analysis_gapfinder.py`: Updated to match notebook content with real gap detection from 10-year dataset. Demonstrates gap identification, longest gap analysis, and gap distribution statistics. Replaced artificial gaps with real data-quality assessment workflow.
@@ -162,7 +163,7 @@
   `add_impulse_noise`, `potrad`, `potrad_eot`, `TimeSince`
 - **Eddy covariance:** `FluxDetectionLimit`, `MaxCovariance`, `WindRotation2D`
 - **Curve fitting:** `BinFitterCP` (polynomial fits with confidence intervals)
-- **Flux analysis:** Enhanced `analyze_highest_quality_flux()`, `RandomUncertaintyPAS20` reporting/plotting,
+- **Flux analysis:** `TimeLagAnalysis` (time lag detection and visualization with 4-panel plots, gradient-based peak detection, EddyPro compatibility); Enhanced `analyze_highest_quality_flux()`, `RandomUncertaintyPAS20` reporting/plotting,
   `UstarDetectionMPT`, `UstarThresholdConstantScenarios`, `FlagMultipleConstantUstarThresholds`
 
 ### API & Visualization

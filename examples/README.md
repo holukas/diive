@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
 
-**75 examples across 9 organized folders by functional domain.**
+**76 examples across 9 organized folders by functional domain.**
 
 ## Structure
 
@@ -43,10 +43,11 @@ examples/
 ├── fits/                  # Data fitting (2 examples)
 │   ├── fit_fitter.py
 │   └── fit_binfittercp.py
-├── flux/                  # Eddy covariance flux processing (9 examples)
+├── flux/                  # Eddy covariance flux processing (10 examples)
 │   ├── fluxprocessingchain/
 │   │   └── fluxprocessingchain.py
-│   ├── lowres/            # Low-resolution processing (5 examples)
+│   ├── lowres/            # Low-resolution processing (6 examples)
+│   │   ├── flux_timelag_analysis.py
 │   │   ├── flux_common.py
 │   │   ├── flux_hqflux.py
 │   │   ├── flux_selfheating.py
@@ -104,7 +105,7 @@ uv run python examples/gapfilling/gapfill_randomforest.py
 uv run python examples/run_all_examples.py
 ```
 
-This runs all 73 examples in parallel with 8 workers, reporting execution time and any errors.
+This runs all 76 examples in parallel with 8 workers, reporting execution time and any errors.
 
 ## Finding Examples
 
@@ -137,11 +138,11 @@ Browse by topic:
 | **Analysis** | 9 | Correlation, decomposition, gap detection, spatial aggregation, harmonic analysis |
 | **Features** | 8 | Air properties, unit conversions, day/night flags, VPD, lagged variants |
 | **Fits** | 2 | Binned fitting, ecosystem response fitting |
-| **Flux** | 9 | Processing chain, HQ filtering, USTAR detection, self-heating, uncertainty, high-res analysis |
+| **Flux** | 10 | Time lag analysis, processing chain, HQ filtering, USTAR detection, self-heating, uncertainty, high-res analysis |
 | **Gapfilling** | 10 | Linear interpolation, Random Forest (3 variants), XGBoost (3 variants), MDS (2), comparison |
 | **IO** | 1 | Binary value extraction |
 | **Preprocessing** | 18 | Corrections (7), outlier detection (9), QA/QC (2) |
-| **TOTAL** | **75** | **~100+ individual functions demonstrated** |
+| **TOTAL** | **76** | **~100+ individual functions demonstrated** |
 
 ## Running Options
 

@@ -68,6 +68,8 @@ from diive.pkgs.flux.hires.lag import MaxCovariance as MaxCovariance
 from diive.pkgs.flux.hires.lag import MaxCovariance as max_covariance
 from diive.pkgs.flux.hires.windrotation import WindRotation2D as WindRotation2D
 from diive.pkgs.flux.hires.windrotation import WindRotation2D as wind_rotation_2d
+from diive.pkgs.flux.lowres.timelag_analysis import TimeLagAnalysis as TimeLagAnalysis
+from diive.pkgs.flux.lowres.timelag_analysis import TimeLagAnalysis as timelag_analysis
 from diive.pkgs.flux.lowres.uncertainty import RandomUncertaintyPAS20 as RandomUncertaintyPAS20
 from diive.pkgs.flux.lowres.uncertainty import RandomUncertaintyPAS20 as random_uncertainty_pas20
 from diive.pkgs.flux.lowres.ustar_mp_detection import UstarMovingPointDetection as UstarMovingPointDetection
@@ -240,6 +242,8 @@ __all__ = [
     'max_covariance',
     'WindRotation2D',
     'wind_rotation_2d',
+    'TimeLagAnalysis',
+    'timelag_analysis',
     'RandomUncertaintyPAS20',
     'random_uncertainty_pas20',
     'UstarDetectionMPT',
