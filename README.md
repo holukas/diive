@@ -8,9 +8,8 @@
 
 *`diive` is under active development with frequent updates and improvements.*
 
-**Update 11 May 2026**  
-diive is currently prepared for the first main release. Code examples have been expanded to 62+ examples across 18 organized
-folders with comprehensive documentation (CATALOG.md, EXAMPLE_DATASET.md). Documentation will be created and hosted on ReadTheDocs after the initial release. New features are still added regularly, and existing functionality is continuously improved.
+**Update 13 May 2026**  
+diive v0.91.0 is now compatible with pandas 3.0+ (upgraded from 2.2.3). Code examples have been expanded to 76 examples across 9 organized folders with comprehensive documentation (CATALOG.md, EXAMPLE_DATASET.md). Documentation will be created and hosted on ReadTheDocs after the initial release. New features are still added regularly, and existing functionality is continuously improved.
 
 # Time series data processing
 

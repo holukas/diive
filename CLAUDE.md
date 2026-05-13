@@ -64,6 +64,19 @@ conda activate diive
 python -m pip install -e .
 ```
 
+**Key Dependencies (v0.91.0+):**
+
+- **pandas 3.0.3** — Core data handling (upgraded from 2.2.3)
+- **scikit-learn 1.8+** — ML algorithms (RandomForest, cross-validation)
+- **xgboost 3.2+** — Gradient boosting gap-filling
+- **numpy 2.4+** — Numerical operations
+- **matplotlib 3.10+** — Plotting backend
+- **statsmodels 0.14+** — Statistical analysis
+- **prophet 1.3+** — Time series forecasting (optional)
+- **pyarrow 19.0+** — Parquet file I/O
+
+All dependencies are pinned in `pyproject.toml` for reproducibility.
+
 ## Project Structure
 
 ```
