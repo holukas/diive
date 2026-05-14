@@ -8,6 +8,7 @@ Part of the diive library: https://github.com/holukas/diive
 """
 
 from diive.pkgs.analysis.correlation import DailyCorrelation
+from diive.pkgs.analysis.granger import GrangerCausality
 
 # Alias for backward compatibility
 daily_correlation = DailyCorrelation
@@ -24,6 +25,7 @@ from diive.pkgs.analysis.seasonaltrend import SeasonalTrendDecomposition
 __all__ = [
     'DailyCorrelation',
     'daily_correlation',
+    'GrangerCausality',
     'StratifiedAnalysis',
     'GapFinder',
     'GridAggregator',

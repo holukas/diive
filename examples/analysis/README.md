@@ -2,13 +2,14 @@
 
 Examples demonstrating statistical analysis, decomposition, and pattern detection for time series data.
 
-10 examples covering correlation, spectral analysis, gap detection, grid aggregation, and decomposition.
+11 examples covering correlation, spectral analysis, gap detection, grid aggregation, and decomposition.
 
 ## Examples by Method
 
 ### Correlation & Covariance
 
 - **analysis_daily_correlation.py** — Daily correlation coefficients for quality checks, relationship analysis, and statistical methods
+- **analysis_granger.py** — Granger causality testing to detect predictive relationships between time series
 - **analysis_decoupling.py** — Stratified binning to reveal how ecosystem responses change across temperature ranges
 
 ### Decomposition & Trends
@@ -69,7 +70,8 @@ std_by_hour = diel.std_by_hour
 uv run python examples/pkgs/analysis/analysis_seasonaltrend.py
 
 # Correlations & relationships
-uv run python examples/pkgs/analysis/analysis_daily_correlation.py
+uv run python examples/analysis/analysis_daily_correlation.py
+uv run python examples/analysis/analysis_granger.py
 
 # Data characterization
 uv run python examples/pkgs/analysis/analysis_gapfinder.py
@@ -97,6 +99,7 @@ See `diive.pkgs.analysis` for full API documentation:
 
 - `DailyCorrelation` — Daily correlation coefficients, summary statistics, anomaly detection
 - `Correlation` — Cross-correlation and lag detection
+- `GrangerCausality` — Granger causality testing for predictive relationships
 - `SeasonalTrendDecomposition` — STL decomposition
 - `Quantiles` — Percentile-based analysis
 - `GapFinder` — Gap detection and reporting

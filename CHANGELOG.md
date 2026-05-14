@@ -6,6 +6,7 @@
 
 - Now developing under Python 3.12
 - Switched from poetry to `uv` dependency management (modern, fast, deterministic)
+- **New analysis class: GrangerCausality** — Test predictive causality between time series with significance testing and lag identification. Example: `examples/analysis/analysis_granger.py`
 - **Pandas 3.0.3 compatibility upgrade:**
   - Fixed 13 `.iterrows()` calls → index-based iteration (performance, pandas 3.0 compliance)
   - Removed 24 `.inplace=True` parameter uses → assignment pattern (breaking change removed in pandas 3.0+)
