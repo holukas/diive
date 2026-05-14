@@ -31,9 +31,15 @@ class OptimizeParamsTS:
     Supports Random Forest, XGBoost, and any model implementing the sklearn regressor interface.
     Uses GridSearchCV with TimeSeriesSplit to avoid data leakage on time series data.
 
+    Visualization Features:
+        - Parameter slice plots showing sensitivity to each hyperparameter
+        - Parallel coordinates plot colored by performance (red=poor, blue=excellent)
+        - Convergence analysis and parameter importance
+        - Filters out non-optimized parameters (single value only)
+
     See Also:
-        examples/gap_filling/randomforest_ts.py — Random Forest hyperparameter optimization
-        examples/gap_filling/xgboost_ts.py — XGBoost hyperparameter optimization
+        `examples/gapfilling/gapfill_optimize_randomforest.py` — Random Forest hyperparameter optimization
+        `examples/gapfilling/gapfill_optimize_xgboost.py` — XGBoost hyperparameter optimization
     """
 
     def __init__(self,
@@ -481,12 +487,16 @@ Expected performance: R2 ~ {r2:.4f}
                     tick_labels.append('None')
                 else:
                     try:
-                        tick_labels.append(f'{int(v)}')
+                        num_val = float(v)
+                        # Use more decimal places for values < 1 (fractions/rates)
+                        if num_val < 1:
+                            tick_labels.append(f'{num_val:.2f}')
+                        else:
+                            tick_labels.append(f'{int(num_val)}')
                     except (ValueError, TypeError):
                         tick_labels.append(str(v))
             ax.set_xticklabels(tick_labels, rotation=45 if any(len(str(v)) > 3 for v in sorted_vals) else 0)
             ax.grid(True, alpha=0.3)
-            ax.legend(title=param_name, fontsize=8)
 
         # Hide unused subplot(s) if odd number of parameters to plot
         if n_params_to_plot > 0 and n_params_to_plot % 2 == 1:
@@ -543,6 +553,10 @@ Expected performance: R2 ~ {r2:.4f}
                     vals = vals.astype(float)
             except (ValueError, TypeError):
                 # Skip categorical parameters like 'criterion'
+                continue
+
+            # Skip parameters with only one unique value (not optimized)
+            if len(np.unique(vals)) <= 1:
                 continue
 
             normalized = (vals - vals.min()) / (vals.max() - vals.min() + 1e-10)

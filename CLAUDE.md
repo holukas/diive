@@ -575,6 +575,16 @@ Co-Authored-By: Claude Haiku 4.5 <noreply@anthropic.com>
 ```
 Only the user is the author.
 
+**Commit message style: Keep it concise.** One-line title (< 50 chars preferred), then bullet points if needed. Example:
+```
+Refine hyperparameter optimization visualization
+
+- Filter single-value parameters from parallel coordinates plot
+- Remove redundant legend from parameter slice plots
+- Update docstring with correct example paths
+```
+Avoid lengthy descriptions; the code diff shows the details.
+
 **Do NOT run `examples/run_all_examples.py` proactively.** User will run this themselves to validate the full suite.
 Only run individual example files for validation during development (e.g., `uv run python examples/analysis/analysis_correlation.py`).
 

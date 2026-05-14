@@ -4,6 +4,15 @@
 
 ## v0.91.0 | XX May 2026
 
+- **Enhanced hyperparameter optimization visualization** — Improved `OptimizeParamsTS.plot_optimization_analysis()`:
+  - Dynamic subplot grids that scale with number of parameters (no more fixed 3×2 layout)
+  - Support for mixed-type parameters (categorical strings + numeric values, e.g., max_features with 'sqrt', 'log2', 0.5)
+  - Proper numeric sorting for axis labels (1, 2, 3, 10 not 1, 10, 2, 3)
+  - Decimal formatting for values < 1 (learning rates 0.01, 0.05 shown with 2 decimals)
+  - Filter out single-value parameters from visualization (parameters not actually optimized)
+  - RdYlBu colormap for parallel coordinates (red=poor, yellow=medium, blue=excellent performance)
+  - Removed legend from parameter slice plots (redundant with x-axis labels)
+- **XGBoost optimization example refinements** — Match RandomForest example structure with arange learning rates
 - Now developing under Python 3.12
 - Switched from poetry to `uv` dependency management (modern, fast, deterministic)
 - **New example: flux_selfheating_production.py** — Complete production workflow for self-heating correction: create scaling factors table from parallel measurements (20 USTAR classes, 100 bootstrap runs), then apply to long-term data. Demonstrates full SCOP calibration and application phases with all diagnostics and uncertainty quantification.
