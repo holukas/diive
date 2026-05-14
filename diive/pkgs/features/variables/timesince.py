@@ -87,7 +87,7 @@ class TimeSince:
 
     See Also
     --------
-    examples/createvar/timesince.py : Complete usage examples with visualizations.
+    examples/features/feature_timesince.py : Complete usage examples with visualizations.
 
     Notes
     -----

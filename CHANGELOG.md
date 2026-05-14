@@ -4,7 +4,8 @@
 
 ## v0.91.0 | XX May 2026
 
-- **Feature examples: consolidated notebook + split conversions module** — Three focused examples replacing monolithic conversions file:
+- **Feature examples: consolidated notebooks + split conversions module** — Enhanced time-since and energy conversion examples:
+  - `feature_timesince.py` — Consolidates notebook `TimeSince.ipynb` (archived). Expanded with detailed explanations of output variables (UPPER_LIMIT, LOWER_LIMIT, FLAG_IS_OUTSIDE_RANGE), include_lim parameter behavior (exclusive vs inclusive), alternative access methods (get_full_results vs get_timesince), and interpretation guidance for both precipitation and temperature examples.
   - `feature_sonic_temp_conversion.py` — Consolidates notebook `Calculate_air_temp_from_sonic_temp.ipynb` (archived). Demonstrates air temperature correction from sonic temperature and water vapor with realistic 3-day time series and diurnal patterns. Explains correlation between H2O concentration and temperature correction magnitude.
   - `feature_latent_heat.py` — Latent heat of vaporization temperature dependency. Shows realistic -2370 J/kg per °C sensitivity from Stull (1988) formula. Includes interpretation of why latent heat decreases with temperature.
   - `feature_evapotranspiration.py` — Convert latent heat flux to evapotranspiration using real flux tower data (CH-AWS). Validates calculated ET against EddyPro reference (1.0 correlation, 0.0001 mm/h MAE). Emphasizes et_calculated as the important output time series for downstream water cycle analysis.
