@@ -71,8 +71,10 @@ EXAMPLE_FILES = [
     'preprocessing/qaqc/qc_overall_flag.py',
     'preprocessing/qaqc/qc_eddypro_flags.py',
     # Features
+    'features/feature_sonic_temp_conversion.py',
+    'features/feature_latent_heat.py',
+    'features/feature_evapotranspiration.py',
     'features/feature_air.py',
-    'features/feature_conversions.py',
     'features/feature_daynightflag.py',
     'features/feature_laggedvariants.py',
     'features/feature_noise.py',

@@ -37,7 +37,11 @@ def air_temp_from_sonic_temp(sonic_temp: pd.Series, h2o: pd.Series) -> pd.Series
         pd.Series: Air temperature data in Kelvin.
 
     Example:
-        See `examples/createvar/conversions.py` for complete examples.
+        See `examples/features/feature_sonic_temp_conversion.py` for complete example.
+
+    See Also:
+        latent_heat_of_vaporization : Calculate latent heat from air temperature
+        et_from_le : Convert latent heat flux to evapotranspiration
     """
     ta = sonic_temp / (1 + 0.32 * h2o)
     ta.name = "TA_SONIC"
@@ -62,7 +66,10 @@ def latent_heat_of_vaporization(ta: pd.Series) -> pd.Series:
         Latent heat of vaporization (J kg-1)
 
     Example:
-        See `examples/createvar/conversions.py` for complete examples.
+        See `examples/features/feature_latent_heat.py` for complete example.
+
+    See Also:
+        et_from_le : Convert latent heat flux to evapotranspiration
     """
     k1 = 2.501
     k2 = 0.00237
@@ -85,7 +92,10 @@ def et_from_le(le: pd.Series, ta: pd.Series) -> pd.Series:
         Evapotranspiration (mm H2O h-1)
 
     Example:
-        See `examples/createvar/conversions.py` for complete examples.
+        See `examples/features/feature_evapotranspiration.py` for complete example.
+
+    See Also:
+        latent_heat_of_vaporization : Calculate latent heat from air temperature
     """
     _lambda = latent_heat_of_vaporization(ta)
     et = le / _lambda  # kg m-2 s-1 = mm s-1

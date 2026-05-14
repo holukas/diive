@@ -2,9 +2,18 @@
 
 Examples demonstrating creation and engineering of variables for time series analysis and modeling.
 
-8 examples across air properties, conversions, derived variables, and engineered features.
+10 examples across sensor corrections, energy conversions, air properties, derived variables, and engineered features.
 
 ## Examples by Category
+
+### Sensor Corrections
+
+- **feature_sonic_temp_conversion.py** — Air temperature from sonic temperature and water vapor
+
+### Energy Conversions
+
+- **feature_latent_heat.py** — Latent heat of vaporization from air temperature
+- **feature_evapotranspiration.py** — Evapotranspiration from latent heat flux
 
 ### Physical Properties
 
@@ -15,10 +24,6 @@ Examples demonstrating creation and engineering of variables for time series ana
 
 - **feature_potentialradiation.py** — Clear-sky radiation calculation
 - **feature_daynightflag.py** — Daytime/nighttime classification
-
-### Unit Conversions & Transformations
-
-- **feature_conversions.py** — Convert between temperature, energy, water content, radiation
 
 ### Time-Based Features
 
@@ -53,21 +58,27 @@ df['Days_Since_Fire'] = feature_timesince(fire_date)
 ## Running Examples
 
 ```bash
+# Sensor corrections
+uv run python examples/features/feature_sonic_temp_conversion.py
+
 # Physical properties
-uv run python examples/pkgs/features/feature_air.py
-uv run python examples/pkgs/features/feature_vpd.py
+uv run python examples/features/feature_air.py
+uv run python examples/features/feature_vpd.py
 
 # Solar geometry & radiation
-uv run python examples/pkgs/features/feature_potentialradiation.py
-uv run python examples/pkgs/features/feature_daynightflag.py
+uv run python examples/features/feature_potentialradiation.py
+uv run python examples/features/feature_daynightflag.py
 
-# Conversions & transformations
-uv run python examples/pkgs/features/feature_conversions.py
-uv run python examples/pkgs/features/feature_laggedvariants.py
-uv run python examples/pkgs/features/feature_timesince.py
+# Energy conversions
+uv run python examples/features/feature_latent_heat.py
+uv run python examples/features/feature_evapotranspiration.py
+
+# Time series transformations
+uv run python examples/features/feature_laggedvariants.py
+uv run python examples/features/feature_timesince.py
 
 # Synthetic data
-uv run python examples/pkgs/features/feature_noise.py
+uv run python examples/features/feature_noise.py
 
 # All examples
 uv run python examples/run_all_examples.py

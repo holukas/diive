@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
 
-**77 examples across 9 organized folders by functional domain.**
+**78 examples across 9 organized folders by functional domain.**
 
 ## Structure
 
@@ -35,10 +35,12 @@ examples/
 │   ├── analysis_seasonaltrend.py
 │   ├── analysis_gapfinder.py
 │   └── ...
-├── features/              # Variable creation & engineering (8 examples)
+├── features/              # Variable creation & engineering (10 examples)
+│   ├── feature_sonic_temp_conversion.py
+│   ├── feature_latent_heat.py
+│   ├── feature_evapotranspiration.py
 │   ├── feature_vpd.py
 │   ├── feature_daynightflag.py
-│   ├── feature_conversions.py
 │   └── ...
 ├── fits/                  # Data fitting (2 examples)
 │   ├── fit_fitter.py

@@ -4,6 +4,11 @@
 
 ## v0.91.0 | XX May 2026
 
+- **Feature examples: consolidated notebook + split conversions module** — Three focused examples replacing monolithic conversions file:
+  - `feature_sonic_temp_conversion.py` — Consolidates notebook `Calculate_air_temp_from_sonic_temp.ipynb` (archived). Demonstrates air temperature correction from sonic temperature and water vapor with realistic 3-day time series and diurnal patterns. Explains correlation between H2O concentration and temperature correction magnitude.
+  - `feature_latent_heat.py` — Latent heat of vaporization temperature dependency. Shows realistic -2370 J/kg per °C sensitivity from Stull (1988) formula. Includes interpretation of why latent heat decreases with temperature.
+  - `feature_evapotranspiration.py` — Convert latent heat flux to evapotranspiration using real flux tower data (CH-AWS). Validates calculated ET against EddyPro reference (1.0 correlation, 0.0001 mm/h MAE). Emphasizes et_calculated as the important output time series for downstream water cycle analysis.
+  - Removed `feature_conversions.py` (split into focused examples). Total features examples: 10 (was 8).
 - **Enhanced hyperparameter optimization visualization** — Improved `OptimizeParamsTS.plot_optimization_analysis()`:
   - Dynamic subplot grids that scale with number of parameters (no more fixed 3×2 layout)
   - Support for mixed-type parameters (categorical strings + numeric values, e.g., max_features with 'sqrt', 'log2', 0.5)
