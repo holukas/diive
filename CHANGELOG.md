@@ -6,6 +6,7 @@
 
 - Now developing under Python 3.12
 - Switched from poetry to `uv` dependency management (modern, fast, deterministic)
+- **New example: flux_selfheating_production.py** — Complete production workflow for self-heating correction: create scaling factors table from parallel measurements (20 USTAR classes, 100 bootstrap runs), then apply to long-term data. Demonstrates full SCOP calibration and application phases with all diagnostics and uncertainty quantification.
 - **New analysis class: GrangerCausality** — Test predictive causality between time series with significance testing and lag identification. Example: `examples/analysis/analysis_granger.py`
 - **Pandas 3.0.3 compatibility upgrade:**
   - Fixed 13 `.iterrows()` calls → index-based iteration (performance, pandas 3.0 compliance)

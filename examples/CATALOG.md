@@ -149,7 +149,8 @@ See: [features/README.md](features/README.md)
 | [**flux_timelag_analysis.py**](flux/lowres/flux_timelag_analysis.py) | Time lag detection and visualization for gas concentrations |
 | [**flux_common.py**](flux/lowres/flux_common.py) | Flux variable base detection and nomenclature |
 | [**flux_hqflux.py**](flux/lowres/flux_hqflux.py) | Extract highest-quality flux using Hampel filter |
-| [**flux_selfheating.py**](flux/lowres/flux_selfheating.py) | SCOP self-heating correction for open-path IRGA |
+| [**flux_selfheating.py**](flux/lowres/flux_selfheating.py) | SCOP self-heating correction workflow (quick demo with 5/5 settings) |
+| [**flux_selfheating_production.py**](flux/lowres/flux_selfheating_production.py) | Complete production workflow: create scaling factors table + apply to long-term data |
 | [**flux_uncertainty.py**](flux/lowres/flux_uncertainty.py) | Random uncertainty estimation (PAS20 method) |
 | [**flux_ustar_mp_detection.py**](flux/lowres/flux_ustar_mp_detection.py) | Moving Point (MP) USTAR detection |
 

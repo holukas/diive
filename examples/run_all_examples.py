@@ -89,6 +89,7 @@ EXAMPLE_FILES = [
     'flux/lowres/flux_common.py',
     'flux/lowres/flux_hqflux.py',
     'flux/lowres/flux_selfheating.py',
+    'flux/lowres/flux_selfheating_production.py',
     'flux/lowres/flux_uncertainty.py',
     'flux/lowres/flux_ustar_mp_detection.py',
     # Flux - High-resolution analysis
