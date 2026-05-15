@@ -4,15 +4,15 @@ import numpy as np
 import pandas as pd
 
 import diive.configs.exampledata as ed
-from diive.pkgs.createvar.noise import add_impulse_noise
-from diive.pkgs.outlierdetection.absolutelimits import AbsoluteLimits, AbsoluteLimitsDaytimeNighttime
-from diive.pkgs.outlierdetection.hampel import HampelDaytimeNighttime
-from diive.pkgs.outlierdetection.incremental import zScoreIncrements
-from diive.pkgs.outlierdetection.localsd import LocalSD
-from diive.pkgs.outlierdetection.lof import LocalOutlierFactorAllData
-from diive.pkgs.outlierdetection.trim import TrimLow
-from diive.pkgs.outlierdetection.zscore import zScore, zScoreDaytimeNighttime, zScoreRolling
-from diive.pkgs.qaqc.flags import MissingValues
+from diive.pkgs.features.variables import add_impulse_noise
+from diive.pkgs.preprocessing.outlierdetection import AbsoluteLimits, AbsoluteLimitsDaytimeNighttime
+from diive.pkgs.preprocessing.outlierdetection.hampel import HampelDaytimeNighttime
+from diive.pkgs.preprocessing.outlierdetection import zScoreIncrements
+from diive.pkgs.preprocessing.outlierdetection import LocalSD
+from diive.pkgs.preprocessing.outlierdetection import LocalOutlierFactorAllData
+from diive.pkgs.preprocessing.outlierdetection import TrimLow
+from diive.pkgs.preprocessing.outlierdetection import zScore, zScoreRolling
+from diive.pkgs.preprocessing.qaqc import MissingValues
 
 
 # kudos https://medium.com/@ms_somanna/guide-to-adding-noise-to-your-data-using-python-and-numpy-c8be815df524
@@ -344,8 +344,9 @@ class TestOutlierDetection(unittest.TestCase):
         self.assertGreater(s_noise.max(), 22)
         self.assertLess(s_noise.min(), 10)
 
-        zdn = zScoreDaytimeNighttime(
+        zdn = zScore(
             series=s_noise,
+            separate_daytime_nighttime=True,
             lat=47.286417,
             lon=7.733750,
             utc_offset=1,

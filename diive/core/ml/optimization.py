@@ -13,6 +13,8 @@ regressor interface.
 import pandas as pd
 from pandas import DataFrame
 from sklearn.model_selection import train_test_split, TimeSeriesSplit, GridSearchCV
+from itertools import product
+from joblib import Parallel, delayed
 
 import diive.core.dfun.frames as fr
 from diive.pkgs.gapfilling.scores import prediction_scores
@@ -28,6 +30,16 @@ class OptimizeParamsTS:
 
     Supports Random Forest, XGBoost, and any model implementing the sklearn regressor interface.
     Uses GridSearchCV with TimeSeriesSplit to avoid data leakage on time series data.
+
+    Visualization Features:
+        - Parameter slice plots showing sensitivity to each hyperparameter
+        - Parallel coordinates plot colored by performance (red=poor, blue=excellent)
+        - Convergence analysis and parameter importance
+        - Filters out non-optimized parameters (single value only)
+
+    See Also:
+        `examples/gapfilling/gapfill_optimize_randomforest.py` — Random Forest hyperparameter optimization
+        `examples/gapfilling/gapfill_optimize_xgboost.py` — XGBoost hyperparameter optimization
     """
 
     def __init__(self,
@@ -133,12 +145,25 @@ class OptimizeParamsTS:
 
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
 
+        # Calculate total combinations for progress tracking
+        total_combinations = 1
+        for param_values in self.params.values():
+            total_combinations *= len(param_values)
+        n_splits = 10
+        total_fits = total_combinations * n_splits
+        print(f"\nGridSearchCV starting: {total_combinations} parameter combinations × {n_splits} CV folds = {total_fits} model fits\n")
+        print(f"Testing parameter combinations [X/{total_combinations}] - Parameters shown below:\n")
+
         grid = GridSearchCV(estimator=self.regressor_class(),
                             param_grid=self.params,
                             scoring='neg_mean_squared_error',
-                            cv=TimeSeriesSplit(n_splits=10),
-                            n_jobs=-1)
+                            cv=TimeSeriesSplit(n_splits=n_splits),
+                            n_jobs=1,
+                            verbose=2)
+
         grid.fit(X_train, y_train)
+
+        print(f"\n[OK] Optimization complete: {total_combinations} combinations tested\n")
 
         self._cv_results = pd.DataFrame.from_dict(grid.cv_results_)
 
@@ -205,14 +230,14 @@ class OptimizeParamsTS:
         print(f"\nOK TOP {top_n} PARAMETER COMBINATIONS (by CV score)")
         print("-" * 80)
         top_results = self._cv_results.nsmallest(top_n, 'rank_test_score')
-        for idx, (_, row) in enumerate(top_results.iterrows(), 1):
+        for idx, row_idx in enumerate(top_results.index, 1):
             print(f"\n  Rank {idx}:")
-            mean_score = -row['mean_test_score']  # Negate because neg_mean_squared_error
+            mean_score = -top_results.loc[row_idx, 'mean_test_score']  # Negate because neg_mean_squared_error
             print(f"    CV Score: {mean_score:.6f} (lower MSE is better)")
             for param in sorted(self.params.keys()):
                 param_key = f'param_{param}'
-                if param_key in row:
-                    print(f"    {param:<22} = {row[param_key]}")
+                if param_key in top_results.columns:
+                    print(f"    {param:<22} = {top_results.loc[row_idx, param_key]}")
 
         # Parameter sensitivity analysis
         print("\nOK PARAMETER SENSITIVITY (which parameters matter most)")
@@ -258,3 +283,319 @@ Expected performance: R2 ~ {r2:.4f}
 """
               )
         print("=" * 80 + "\n")
+
+    def plot_optimization_analysis(self):
+        """Comprehensive visualization of hyperparameter optimization results.
+
+        Creates a dynamic grid showing:
+        - (top-left) Optimization convergence history
+        - (top-right) Parameter importance analysis
+        - (remaining) Parameter slices for each numeric parameter
+        - (separate figure) Parallel coordinates plot
+
+        Requires: matplotlib, numpy
+        """
+        import matplotlib.pyplot as plt
+        import numpy as np
+
+        if not self._cv_results.size:
+            print("ERROR: Run optimize() first")
+            return
+
+        cv_results = self._cv_results.copy()
+        param_cols = [f'param_{p}' for p in self.params.keys()]
+        param_names = list(self.params.keys())
+
+        # Get test scores and convert negative MSE to R² if needed
+        test_scores = cv_results['mean_test_score'].values
+
+        # Convert negative MSE to R² for better interpretability
+        if (test_scores < 0).all():
+            target_variance = self.model_df[self.target_col].var()
+            test_scores = 1 - (np.abs(test_scores) / target_variance)
+            score_metric = 'R² Score'
+        else:
+            score_metric = 'R² Score' if (test_scores <= 1).all() and (test_scores >= -1).all() else 'Score'
+
+        # First pass: identify numeric parameters with multiple values (for layout calculation)
+        # Include parameters that are purely numeric OR have mixed types (strings + numbers)
+        # AND have more than 1 unique value (nothing to compare if only 1 value)
+        numeric_param_cols_temp = []
+        numeric_param_names_temp = []
+
+        for param_col, param_name in zip(param_cols, param_names):
+            param_vals = cv_results[param_col].values.copy()
+            unique_vals = cv_results[param_col].unique()
+
+            # Skip parameters with only 1 unique value
+            if len(unique_vals) <= 1:
+                continue
+
+            # Try pure numeric conversion first
+            try:
+                if any(v is None for v in param_vals):
+                    param_vals = np.array([1000 if v is None else v for v in param_vals], dtype=float)
+                else:
+                    param_vals = param_vals.astype(float)
+                numeric_param_cols_temp.append(param_col)
+                numeric_param_names_temp.append(param_name)
+            except (ValueError, TypeError):
+                # Try mixed-type conversion: convert all values to indices
+                # This handles parameters like max_features=['sqrt', 'log2', 0.5, 1]
+                try:
+                    unique_vals_list = list(unique_vals)
+                    unique_vals_sorted = sorted(unique_vals_list, key=lambda x: (x is None, str(x)))
+                    val_to_idx = {v: i for i, v in enumerate(unique_vals_sorted)}
+                    # Successfully created mapping, so this is a valid parameter for visualization
+                    numeric_param_cols_temp.append(param_col)
+                    numeric_param_names_temp.append(param_name)
+                except Exception:
+                    # Skip if we can't handle it
+                    continue
+
+        # Calculate grid dimensions: 1 row for convergence/importance, then 2 cols per additional row for slices
+        n_params_to_plot = len(numeric_param_cols_temp)
+        n_slice_rows = (n_params_to_plot + 1) // 2 if n_params_to_plot > 0 else 0  # Ceiling division for 2 columns
+        n_rows = 1 + n_slice_rows  # 1 row for convergence/importance + slice rows
+
+        # Create dynamic grid for main analysis plots (only create subplots as needed)
+        fig, axes = plt.subplots(n_rows, 2, figsize=(14, 4 + 4 * n_slice_rows))
+        fig.suptitle('Random Forest Hyperparameter Optimization Analysis', fontsize=14, fontweight='bold')
+
+        # 1. Optimization Convergence History
+        best_scores = []
+        current_best = -np.inf
+        for score in test_scores:
+            current_best = max(current_best, score)
+            best_scores.append(current_best)
+
+        ax = axes[0, 0]
+        ax.plot(range(len(best_scores)), best_scores, marker='o', linewidth=2, markersize=6, color='steelblue')
+        ax.fill_between(range(len(best_scores)), best_scores, alpha=0.3, color='steelblue')
+        ax.set_xlabel('Iteration (GridSearchCV combination #)', fontweight='bold')
+        ax.set_ylabel(f'Best {score_metric}', fontweight='bold')
+        ax.set_title('Optimization Convergence History', fontweight='bold')
+        ax.grid(True, alpha=0.3)
+
+        # 2. Parameter Importance Analysis & Identify Numeric Parameters
+        ax = axes[0, 1]
+
+        importances = []
+        importance_param_names = []
+        numeric_param_cols = []
+        numeric_param_names = []
+
+        for param_col, param_name in zip(param_cols, param_names):
+            param_vals = cv_results[param_col].values.copy()
+
+            # Try pure numeric conversion first
+            try:
+                if any(v is None for v in param_vals):
+                    param_vals = np.array([1000 if v is None else v for v in param_vals], dtype=float)
+                else:
+                    param_vals = param_vals.astype(float)
+            except (ValueError, TypeError):
+                # Try mixed-type conversion: convert all values to indices
+                # This handles parameters like max_features=['sqrt', 'log2', 0.5, 1]
+                try:
+                    unique_vals = list(cv_results[param_col].unique())
+                    unique_vals_sorted = sorted(unique_vals, key=lambda x: (x is None, str(x)))
+                    val_to_idx = {v: i for i, v in enumerate(unique_vals_sorted)}
+                    param_vals = np.array([val_to_idx.get(v, np.nan) for v in cv_results[param_col].values])
+                except Exception:
+                    # Skip if we can't handle it (purely categorical with no numeric mapping)
+                    continue
+
+            # Track numeric parameters for later parameter slices
+            numeric_param_cols.append(param_col)
+            numeric_param_names.append(param_name)
+
+            param_normalized = (param_vals - np.nanmin(param_vals)) / (np.nanmax(param_vals) - np.nanmin(param_vals) + 1e-10)
+
+            correlation = np.corrcoef(param_normalized, test_scores)[0, 1]
+            importance = abs(correlation)
+            importances.append(importance)
+            importance_param_names.append(param_name)
+
+        sorted_idx = np.argsort(importances)[::-1]
+        sorted_names = [importance_param_names[i] for i in sorted_idx]
+        sorted_importances = [importances[i] for i in sorted_idx]
+
+        colors_imp = plt.cm.RdYlGn(np.array(sorted_importances) / max(sorted_importances))
+        bars = ax.barh(sorted_names, sorted_importances, color=colors_imp, edgecolor='black', linewidth=1)
+        ax.set_xlabel('Importance (|correlation with R²|)', fontweight='bold')
+        ax.set_title('Parameter Importance Analysis', fontweight='bold')
+        ax.grid(axis='x', alpha=0.3)
+
+        for i, (bar, val) in enumerate(zip(bars, sorted_importances)):
+            ax.text(val, bar.get_y() + bar.get_height()/2, f'{val:.3f}',
+                   va='center', ha='left', fontsize=9, fontweight='bold')
+
+        # 3+. Parameter Slices for numeric parameters (dynamic grid layout)
+        # Use pre-filtered parameters from first pass (already excludes single-value params)
+        for idx, (param_col, param_name) in enumerate(zip(numeric_param_cols_temp, numeric_param_names_temp)):
+            # Map to subplot position: first slice starts at row 1, 2 columns
+            ax_row = 1 + idx // 2
+            ax_col = idx % 2
+
+            # Handle axes indexing for single or multiple rows
+            if n_rows == 1:
+                ax = axes[ax_col]
+            else:
+                ax = axes[ax_row, ax_col]
+
+            # Handle special case for None values (e.g., max_depth)
+            param_values = cv_results[param_col].unique()
+
+            # Smart sorting: try numeric, fallback to string
+            def sort_key(x):
+                if x is None:
+                    return (True, 0)  # None comes first
+                try:
+                    return (False, float(x))  # Numeric sort
+                except (ValueError, TypeError):
+                    return (False, str(x))  # String sort
+
+            sorted_vals = sorted(param_values, key=sort_key)
+
+            for i, param_val in enumerate(sorted_vals):
+                if param_val is None:
+                    mask = cv_results[param_col].isna()
+                    label = 'None (unlimited)'
+                    x_pos = i
+                else:
+                    mask = cv_results[param_col] == param_val
+                    # Format label: try int for numeric, otherwise use string representation
+                    try:
+                        label = f'{int(param_val)}'
+                    except (ValueError, TypeError):
+                        label = str(param_val)
+                    x_pos = i
+
+                scores = test_scores[mask]
+                ax.scatter([x_pos] * len(scores), scores, s=80, alpha=0.6, label=label)
+
+            ax.set_xlabel(param_name, fontweight='bold')
+            ax.set_ylabel('Mean Test R² Score', fontweight='bold')
+            ax.set_title(f'Parameter Slice: {param_name}', fontweight='bold')
+            ax.set_xticks(range(len(sorted_vals)))
+
+            # Format x-tick labels: handle both numeric and categorical parameters
+            tick_labels = []
+            for v in sorted_vals:
+                if v is None:
+                    tick_labels.append('None')
+                else:
+                    try:
+                        num_val = float(v)
+                        # Use more decimal places for values < 1 (fractions/rates)
+                        if num_val < 1:
+                            tick_labels.append(f'{num_val:.2f}')
+                        else:
+                            tick_labels.append(f'{int(num_val)}')
+                    except (ValueError, TypeError):
+                        tick_labels.append(str(v))
+            ax.set_xticklabels(tick_labels, rotation=45 if any(len(str(v)) > 3 for v in sorted_vals) else 0)
+            ax.grid(True, alpha=0.3)
+
+        # Hide unused subplot(s) if odd number of parameters to plot
+        if n_params_to_plot > 0 and n_params_to_plot % 2 == 1:
+            # Hide the rightmost subplot in the last row if we have an odd number
+            ax_row = 1 + (n_params_to_plot - 1) // 2
+            ax_col = 1
+            if n_rows > 1:
+                axes[ax_row, ax_col].set_visible(False)
+
+        plt.tight_layout()
+        plt.show()
+
+        # Parallel Coordinates plot (separate figure)
+        self.plot_parallel_coordinates()
+
+    def plot_parallel_coordinates(self):
+        """Parallel coordinates visualization of all parameter combinations and performance.
+
+        Shows each parameter combination as a line connecting normalized parameter values,
+        colored by test score to identify high-performing regions.
+
+        Requires: matplotlib, numpy, pandas
+        """
+        import matplotlib.pyplot as plt
+        import numpy as np
+
+        if not self._cv_results.size:
+            print("ERROR: Run optimize() first")
+            return
+
+        cv_results = self._cv_results.copy()
+        param_cols = [f'param_{p}' for p in self.params.keys()]
+        param_names = list(self.params.keys())
+
+        # Get test scores and convert negative MSE to R² if needed
+        test_scores = cv_results['mean_test_score'].values
+
+        if (test_scores < 0).all():
+            target_variance = self.model_df[self.target_col].var()
+            test_scores = 1 - (np.abs(test_scores) / target_variance)
+
+        # Prepare normalized data for parallel coordinates (skip categorical parameters)
+        dimensions = []
+        data_normalized = []
+
+        for param_col, param_name in zip(param_cols, param_names):
+            vals = cv_results[param_col].values.copy()
+
+            # Skip categorical parameters for parallel coordinates
+            try:
+                if any(v is None for v in vals):
+                    vals = np.array([1000 if v is None else v for v in vals], dtype=float)
+                else:
+                    vals = vals.astype(float)
+            except (ValueError, TypeError):
+                # Skip categorical parameters like 'criterion'
+                continue
+
+            # Skip parameters with only one unique value (not optimized)
+            if len(np.unique(vals)) <= 1:
+                continue
+
+            normalized = (vals - vals.min()) / (vals.max() - vals.min() + 1e-10)
+            data_normalized.append(normalized)
+            dimensions.append(param_name)
+
+        dimensions.append('R² Score')
+        r2_normalized = (test_scores - test_scores.min()) / (test_scores.max() - test_scores.min() + 1e-10)
+        data_normalized.append(r2_normalized)
+        num_dims = len(dimensions)
+
+        # Create parallel coordinates plot
+        fig, ax = plt.subplots(figsize=(14, 6))
+
+        colors_norm = (test_scores - test_scores.min()) / (test_scores.max() - test_scores.min() + 1e-10)
+        colormap = plt.cm.RdYlBu  # Red (low) -> Yellow (medium) -> Blue (high)
+
+        for i, (row_data, color_val) in enumerate(zip(zip(*data_normalized), colors_norm)):
+            color = colormap(color_val)
+            ax.plot(range(num_dims), row_data, color=color, alpha=0.3, linewidth=1)
+
+        ax.set_xticks(range(num_dims))
+        ax.set_xticklabels(dimensions, fontsize=11, fontweight='bold')
+        ax.set_ylabel('Normalized Value (0-1)', fontsize=11, fontweight='bold')
+        ax.set_title('Parallel Coordinates: All Parameter Combinations & Performance', fontsize=13, fontweight='bold')
+        ax.set_ylim(-0.05, 1.05)
+        ax.grid(axis='y', alpha=0.3)
+
+        for x in range(num_dims):
+            ax.axvline(x, color='gray', linestyle='-', linewidth=0.5, alpha=0.5)
+
+        sm = plt.cm.ScalarMappable(cmap=colormap, norm=plt.Normalize(vmin=test_scores.min(), vmax=test_scores.max()))
+        sm.set_array([])
+        cbar = plt.colorbar(sm, ax=ax, pad=0.02)
+        cbar.set_label('R² Score', fontweight='bold')
+
+        plt.tight_layout()
+        plt.show()
+
+        print(f"Parallel coordinates plot shows {len(cv_results)} parameter combinations.")
+        print(f"Each line represents one parameter combination.")
+        print(f"Lines colored blue indicate high-performing (R² closer to 1) combinations, red indicates poor performance.")

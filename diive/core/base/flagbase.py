@@ -187,14 +187,15 @@ class FlagBase:
         ax_series.plot(self.series[rejected].index, self.series[rejected],
                        label="outlier (rejected)", color="#F44336", alpha=1, linestyle='none',
                        markersize=12, markeredgecolor='none', marker='X')
-        hist_kwargs = dict(method='n_bins', n_bins=None, highlight_peak=True, show_zscores=True, show_info=False,
-                           show_title=False, show_zscore_values=False, show_grid=False)
-        HistogramPlot(self.series, **hist_kwargs).plot(ax=ax_series_hist)
+        hist_computation_kwargs = dict(method='n_bins', n_bins=None)
+        hist_styling_kwargs = dict(highlight_peak=True, show_zscores=True, show_info=False,
+                                    show_title=False, show_zscore_values=False, show_grid=False)
+        HistogramPlot(self.series, **hist_computation_kwargs).plot(ax=ax_series_hist, **hist_styling_kwargs)
 
         ax_ok.plot(self.series[ok].index, self.series[ok],
                    label="filtered series", alpha=.5, linestyle='none', markeredgewidth=1,
                    marker='o', markersize=6, markeredgecolor="#607D8B", fillstyle='none')
-        HistogramPlot(self.series[ok], **hist_kwargs).plot(ax=ax_ok_hist)
+        HistogramPlot(self.series[ok], **hist_computation_kwargs).plot(ax=ax_ok_hist, **hist_styling_kwargs)
 
         default_format(ax=ax_series)
         default_format(ax=ax_ok)
@@ -262,8 +263,9 @@ class FlagBase:
         axes_series = [ax_series, ax_cleaned, ax_series_dt, ax_cleaned_dt, ax_series_nt, ax_cleaned_nt]
         axes_hist = [ax_series_hist, ax_cleaned_hist, ax_series_dt_hist,
                      ax_cleaned_dt_hist, ax_series_nt_hist, ax_cleaned_nt_hist]
-        hist_kwargs = dict(method='n_bins', n_bins=None, highlight_peak=True, show_zscores=True, show_info=False,
-                           show_title=False, show_zscore_values=False, show_grid=False)
+        hist_computation_kwargs = dict(method='n_bins', n_bins=None)
+        hist_styling_kwargs = dict(highlight_peak=True, show_zscores=True, show_info=False,
+                                    show_title=False, show_zscore_values=False, show_grid=False)
         series_kwargs = dict(marker='o', mec='black', markeredgewidth=1, alpha=.2, fillstyle='none', linestyle='none')
 
         # Column 0
@@ -280,9 +282,9 @@ class FlagBase:
                           alpha=.9, color='red', label=f"outlier ({df['OUTLIER_NT'].count()} values)")
 
         # Column 1
-        HistogramPlot(s=df['UNFILTERED'], **hist_kwargs).plot(ax=ax_series_hist)
-        HistogramPlot(s=df['UNFILTERED_DT'], **hist_kwargs).plot(ax=ax_series_dt_hist)
-        HistogramPlot(s=df['UNFILTERED_NT'], **hist_kwargs).plot(ax=ax_series_nt_hist)
+        HistogramPlot(s=df['UNFILTERED'], **hist_computation_kwargs).plot(ax=ax_series_hist, **hist_styling_kwargs)
+        HistogramPlot(s=df['UNFILTERED_DT'], **hist_computation_kwargs).plot(ax=ax_series_dt_hist, **hist_styling_kwargs)
+        HistogramPlot(s=df['UNFILTERED_NT'], **hist_computation_kwargs).plot(ax=ax_series_nt_hist, **hist_styling_kwargs)
 
         # Column 2
         ax_cleaned.plot(df.index, df['CLEANED'], label=f"cleaned ({df['CLEANED'].count()} values)", **series_kwargs)
@@ -292,9 +294,9 @@ class FlagBase:
                            **series_kwargs)
 
         # Column 3
-        HistogramPlot(s=df['CLEANED'], **hist_kwargs).plot(ax=ax_cleaned_hist)
-        HistogramPlot(s=df['CLEANED_DT'], **hist_kwargs).plot(ax=ax_cleaned_dt_hist)
-        HistogramPlot(s=df['CLEANED_NT'], **hist_kwargs).plot(ax=ax_cleaned_nt_hist)
+        HistogramPlot(s=df['CLEANED'], **hist_computation_kwargs).plot(ax=ax_cleaned_hist, **hist_styling_kwargs)
+        HistogramPlot(s=df['CLEANED_DT'], **hist_computation_kwargs).plot(ax=ax_cleaned_dt_hist, **hist_styling_kwargs)
+        HistogramPlot(s=df['CLEANED_NT'], **hist_computation_kwargs).plot(ax=ax_cleaned_nt_hist, **hist_styling_kwargs)
 
         for a in axes_series:
             default_format(ax=a, ax_ylabel_txt="value")

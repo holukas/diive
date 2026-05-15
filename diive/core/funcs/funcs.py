@@ -50,7 +50,13 @@ def filter_strings_by_elements(list1: list[str], list2: list[str]) -> list[str]:
 
 
 def zscore(series: Series, absolute: bool = True) -> Series:
-    """Calculate the z-score (absolute) of each record in *series*"""
+    """Calculate the z-score (absolute) of each record in *series*
+
+    See Also:
+        examples/preprocessing/outlier_detection/zscore.py — Z-score outlier detection variations
+        examples/preprocessing/outlier_detection/incremental.py — Z-score incremental change detection
+        examples/visualization/histogram.py — Z-score overlay on histograms
+    """
     mean, std = np.mean(series), np.std(series)
     if absolute:
         z_score = np.abs((series - mean) / std)

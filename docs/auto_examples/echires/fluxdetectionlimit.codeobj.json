@@ -12,15 +12,15 @@
   {
    "is_class": true,
    "is_explicit": false,
-   "module": "diive.pkgs.echires.fluxdetectionlimit",
-   "module_short": "diive.pkgs.echires.fluxdetectionlimit",
+   "module": "diive.pkgs.flux.hires.fluxdetectionlimit",
+   "module_short": "diive.pkgs.flux.hires.fluxdetectionlimit",
    "name": "FluxDetectionLimit"
   },
   {
    "is_class": true,
    "is_explicit": false,
-   "module": "diive.pkgs.echires",
-   "module_short": "diive.pkgs.echires",
+   "module": "diive.pkgs.flux.hires",
+   "module_short": "diive.pkgs.flux.hires",
    "name": "FluxDetectionLimit"
   },
   {

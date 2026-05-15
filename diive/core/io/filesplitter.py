@@ -11,7 +11,7 @@ from diive.core.io.filereader import ReadFileType
 from diive.core.io.filereader import search_files
 from diive.core.io.files import save_parquet
 from diive.core.times.times import create_timestamp
-from diive.pkgs.echires.windrotation import WindRotation2D
+from diive.pkgs.flux.hires.windrotation import WindRotation2D
 
 
 class FileSplitter:
@@ -379,16 +379,16 @@ class FileSplitterMulti:
         coll_splitstats_df = DataFrame()
 
         # Split files into smaller files
-        for file_idx, file_info_row in files_overview_df.iterrows():
+        for file_idx in files_overview_df.index:
 
             # Check file availability
-            if file_info_row['file_available'] == 0:
+            if files_overview_df.loc[file_idx, 'file_available'] == 0:
                 continue
 
             filecounter += 1
 
             fs = FileSplitter(
-                filepath=file_info_row['filepath'],
+                filepath=files_overview_df.loc[file_idx, 'filepath'],
                 filename_pattern=self.filename_pattern,  # Accepts regex
                 filename_date_format=self.filename_date_format,  # Date format in filename
                 filetype=self.filetype,
@@ -397,9 +397,9 @@ class FileSplitterMulti:
                 data_split_outfile_prefix=self.data_split_outfile_prefix,
                 data_split_outfile_suffix=self.data_split_outfile_suffix,
                 outdir=outdirs['splits'],
-                expected_duration=file_info_row['expected_duration'],
-                file_name=file_info_row['filename'],
-                file_start=file_info_row['start'],
+                expected_duration=files_overview_df.loc[file_idx, 'expected_duration'],
+                file_name=files_overview_df.loc[file_idx, 'filename'],
+                file_start=files_overview_df.loc[file_idx, 'start'],
                 rotation=self.rotation,
                 u_var=self.u_var,
                 v_var=self.v_var,

@@ -12,15 +12,15 @@
   {
    "is_class": true,
    "is_explicit": false,
-   "module": "diive.pkgs.analyses.seasonaltrend",
-   "module_short": "diive.pkgs.analyses.seasonaltrend",
+   "module": "diive.pkgs.analysis.seasonaltrend",
+   "module_short": "diive.pkgs.analysis.seasonaltrend",
    "name": "SeasonalTrendDecomposition"
   },
   {
    "is_class": true,
    "is_explicit": false,
-   "module": "diive.pkgs.analyses",
-   "module_short": "diive.pkgs.analyses",
+   "module": "diive.pkgs.analysis",
+   "module_short": "diive.pkgs.analysis",
    "name": "SeasonalTrendDecomposition"
   },
   {

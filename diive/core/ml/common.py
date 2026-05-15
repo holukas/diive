@@ -13,9 +13,7 @@ from xgboost import XGBRegressor
 from yellowbrick.regressor import PredictionError, ResidualsPlot
 
 import diive.core.dfun.frames as fr
-from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import vectorize_timestamps
-from diive.pkgs.createvar.laggedvariants import lagged_variants
 from diive.pkgs.gapfilling.scores import prediction_scores
 
 pd.set_option('display.max_rows', 50)
@@ -94,6 +92,13 @@ class MlRegressorGapFillingBase:
             See diive.core.ml.feature_engineer.FeatureEngineer for comprehensive documentation
             of the 8-stage feature engineering pipeline (lag, rolling, diff, EMA, poly, STL,
             timestamps, record number).
+
+        See Also:
+            diive.pkgs.gapfilling.randomforest_ts.RandomForestTS — Random Forest subclass
+            diive.pkgs.gapfilling.xgboost_ts.XGBoostTS — XGBoost subclass
+            examples/gap_filling/randomforest_ts.py — Random Forest gap-filling with feature engineering
+            examples/gap_filling/xgboost_ts.py — XGBoost gap-filling with feature engineering
+            examples/gap_filling/comparison.py — Multi-method comparison
         """
 
         # Store arguments

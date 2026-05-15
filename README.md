@@ -4,29 +4,69 @@
 [![PyPI - Version](https://img.shields.io/pypi/v/diive?style=for-the-badge&color=%23EF6C00&link=https%3A%2F%2Fpypi.org%2Fproject%2Fdiive%2F)](https://pypi.org/project/diive/)
 [![GitHub License](https://img.shields.io/github/license/holukas/diive?style=for-the-badge&color=%237CB342)](https://github.com/holukas/diive/blob/indev/LICENSE)
 [![PyPI Downloads](https://static.pepy.tech/badge/diive)](https://pepy.tech/projects/diive)
-[![DOI](https://zenodo.org/badge/708559210.svg)](https://zenodo.org/doi/10.5281/zenodo.10884017)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10884017.svg)](https://doi.org/10.5281/zenodo.10884017)
 
-*`diive` is currently under active developement with frequent updates.*
-
-**Update 8 May 2026**  
-*`diive` is currently prepared for the first main release. There is still
-quite a bit missing, e.g., code examples for all public classes and functions.
-After that, the documentation will be created and hosted on ReadTheDocs.
-Most of the notebooks will be removed once the documentation is ready.
-New features are still added regularly, and existing functionality is
-continuously improved.*
+_**`diive` is currently prepared for the v1.0 release.**_
 
 # Time series data processing
 
 `diive` is a Python library for time series processing, in particular ecosystem data. Originally developed
 by the [ETH Grassland Sciences group](https://gl.ethz.ch/) for [Swiss FluxNet](https://www.swissfluxnet.ethz.ch/).
 
-Recent updates: [CHANGELOG](https://github.com/holukas/diive/blob/main/CHANGELOG.md)
-Recent releases: [Releases](https://github.com/holukas/diive/releases)
+**Recent updates:** [CHANGELOG](CHANGELOG.md) • **Development:** [CLAUDE.md](CLAUDE.md) • **Releases:
+** [GitHub](https://github.com/holukas/diive/releases)
 
 ---
 
-## Quick Access to Common Classes
+## Getting Started
+
+### Installation
+
+Requires **Python 3.12+**
+
+```bash
+pip install diive
+```
+
+Or use [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv pip install diive
+```
+
+### Minimal Example
+
+```python
+import diive as dv
+
+# Load example data
+df = dv.load_exampledata_parquet()
+
+# Plot time series
+dv.plot_time_series(series=df['NEE']).plot()
+
+# Gap-fill with Random Forest
+from diive.core.ml.feature_engineer import FeatureEngineer
+from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
+
+engineer = FeatureEngineer(target_col='NEE', features_lag=[-1, 1], features_rolling=[12, 24])
+df_engineered = engineer.fit_transform(df)
+
+model = RandomForestTS(input_df=df_engineered, target_col='NEE', n_estimators=100)
+model.trainmodel()
+model.fillgaps()
+```
+
+### Next Steps
+
+- **[86 Runnable Examples](examples/README.md)** — organized by topic (visualization, gap-filling, flux, etc.)
+    - Find examples by use case: [CATALOG.md](examples/CATALOG.md)
+    - Dataset documentation: [EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md)
+- **[Development Setup](CLAUDE.md)** — source setup, coding standards, testing
+
+---
+
+## Quick API Access
 
 Classes are available directly from the `diive` namespace with both PascalCase and snake_case names:
 
@@ -42,431 +82,181 @@ import diive as dv
 plot = dv.plot_time_series(series=data)
 ```
 
-### Available exports
+**Common exports:**
 
-**Plotting:** `time_series`, `TimeSeries`, `cumulative`, `Cumulative`, `diel_cycle`, `DielCycle`, `heatmap_datetime`,
-`HeatmapDateTime`, and more
+- **Plotting:** `time_series`, `TimeSeries`, `cumulative`, `Cumulative`, `diel_cycle`, `DielCycle`, `heatmap_datetime`,
+  `HeatmapDateTime`
+- **Gap-filling:** `randomforest_ts`, `RandomForestTS`, `xgboost_ts`, `XGBoostTS`, `flux_mds`, `FluxMDS`
+- **Analysis:** `gridaggregator`, `GridAggregator`, `seasonaltrend`, `SeasonalTrendDecomposition`
+- **Eddy Covariance:** `flux_processing_chain`, `FluxProcessingChain`, `flux_detection_limit`, `FluxDetectionLimit`
+- **I/O:** `load_parquet`, `save_parquet`, `load_exampledata_parquet`, `search_files`
 
-**Gap-filling:** `randomforest_ts`, `RandomForestTS`, `xgboost_ts`, `XGBoostTS`, `quick_fill_rfts`, `QuickFillRFTS`,
-`flux_mds`, `FluxMDS`, `optimize_params_ts`, `OptimizeParamsTS`, `optimize_params_rfts`, `OptimizeParamsRFTS`
-
-**Analysis:** `gridaggregator`, `GridAggregator`, `seasonaltrend`, `SeasonalTrendDecomposition`
-
-**Eddy Covariance:** `FluxDetectionLimit`, `fdl`, `MaxCovariance`, `max_covariance`, `WindRotation2D`,
-`wind_rotation_2d`
-
-**I/O:** `load_parquet`, `save_parquet`, `load_exampledata_parquet`, `search_files`
-
-For the complete list of available aliases, see `diive.__all__`.
+For the complete list, see `diive.__all__`.
 
 ---
 
-## Examples
+## 86 Runnable Examples
 
-**107 executable examples** demonstrating common workflows are organized by topic in the `examples/` folder:
+Organized by functional domain. All examples follow Sphinx Gallery format (`# %%` sections) — runnable as plain scripts
+and auto-converted to HTML docs.
 
-**Run all examples at once (parallelized):**
-
-```bash
-python examples/run_all_examples.py
-```
-
-**Run individual examples:**
+**Quick start:**
 
 ```bash
-python examples/visualization/heatmap_datetime.py    # HeatmapDateTime heatmaps (6 examples)
-python examples/analyses/seasonaltrend.py            # SeasonalTrendDecomposition (1 example)
-python examples/gap_filling/randomforest_ts.py       # Random Forest gap-filling & hyperparameter optimization (3 examples)
-python examples/gap_filling/xgboost_ts.py           # XGBoost gap-filling & hyperparameter optimization (2 examples)
-python examples/gap_filling/comparison.py           # Three-way comparison: MDS vs RF vs XGBoost (1 example)
-python examples/corrections/offsetcorrection.py      # Data corrections (4 examples)
-python examples/outlierdetection/absolutelimits.py   # Absolute limits filtering day/night thresholds (2 examples)
-python examples/outlierdetection/hampel.py           # Hampel filter robust outlier detection (2 examples)
-python examples/outlierdetection/incremental.py      # Z-score increments outlier detection (1 example)
-python examples/outlierdetection/localsd.py          # Local standard deviation rolling window detection (2 examples)
-python examples/outlierdetection/lof.py              # Local Outlier Factor density-based detection (2 examples)
-python examples/outlierdetection/manualremoval.py    # Manual data point/range removal for known issues (2 examples)
-python examples/createvar/timesince.py               # TimeSince time tracking (3 examples)
-python examples/createvar/potentialradiation.py      # Solar radiation (4 examples)
-python examples/echires/fluxdetectionlimit.py        # Flux detection limits (2 examples)
-python examples/echires/lag.py                       # Time lag detection (1 example)
-python examples/echires/windrotation.py              # Wind rotation and tilt correction (1 example)
-python examples/fits/fitter.py                       # Curve fitting with confidence intervals (1 example)
-python examples/flux/common.py                       # Flux variable detection (1 example)
-python examples/flux/hqflux.py                       # CO2 flux quality analysis with Hampel filter (1 example)
+# Run individual examples
+uv run python examples/visualization/plot_heatmap_datetime_basic.py
+uv run python examples/analysis/analysis_daily_correlation.py
+uv run python examples/gapfilling/gapfill_randomforest.py
+uv run python examples/flux/fluxprocessingchain/fluxprocessingchain.py
 ```
 
-**Example categories (107 total, 52 files):**
+**Find your way:**
 
-- **Visualization** (22): heatmap_datetime, hexbin, timeseries, cumulative, dielcycle, histogram, ridgeline, scatter
-- **Analyses** (8): correlation, decoupling, gapfinder, gridaggregator, histogram, optimumrange, quantiles,
-  seasonaltrend
-- **Data Processing** (50): binary extraction, corrections (setto, offsetcorrection), outlierdetection (absolutelimits,
-  hampel, incremental, localsd, lof, manualremoval, stepwise, trim), qaqc (FlagQCF, 6 EddyProFlags examples),
-  createvar (air, conversions, daynightflag, laggedvariants, noise, potentialradiation, timesince, vpd)
-- **Gap-Filling** (10): linear_interpolation, mds, mds_comparison, randomforest_ts (3 examples: full, quick, optimize),
-  xgboost_ts (2 examples: full, optimize), comparison (MDS vs RF vs XGB)
-- **Eddy Covariance & Flux** (9): fluxdetectionlimit, lag, windrotation, hqflux, selfheating, uncertainty,
-  ustarthreshold (3 examples)
-- **Spectral Analysis** (2): harmonic (spectrogram analysis)
-- **Fits** (1): fitter
+- **[CATALOG.md](examples/CATALOG.md)** — organized by use case (visualization, analysis, gap-filling, etc.)
+- **[EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md)** — dataset documentation (37 variables, availability, quality)
+- **[examples/README.md](examples/README.md)** — quick start and folder structure
 
-See [examples/README.md](examples/README.md) for a complete index of all examples with descriptions and quick start
-guides.
+**Example categories:**
 
-Additional examples available in **Jupyter notebooks** at [notebooks/](notebooks/) with comprehensive workflows and
-tutorials.
+- **Visualization** (17 examples) — heatmaps, time series, diel cycles, cumulative plots, histograms, scatter, ridgelines
+- **Times** (6 examples) — timestamp validation, frequency detection, diel cycles, temporal matrices
+- **Analysis** (10 examples) — correlation, seasonal decomposition, gap detection, gridding, spectral analysis
+- **Data Processing** (18 examples) — corrections (7), outlier detection (9), quality flags (2)
+- **Features** (11 examples) — VPD, unit conversions, day/night flags, lagged features, potential radiation
+- **Gap-Filling** (10 examples) — linear interpolation, Random Forest, XGBoost, MDS, comparisons, optimization
+- **Flux Processing** (11 examples) — time lag, wind rotation, USTAR filtering, uncertainty, self-heating, flux chain
+- **Curve Fitting** (2 examples) — polynomial and binned fitting
+- **I/O** (1 example) — binary value extraction
 
-## Overview of example notebooks
+Browse [examples/README.md](examples/README.md) for the full index with descriptions.
 
-- For many examples see notebooks
-  here: [Notebook overview](https://github.com/holukas/diive/blob/main/notebooks/OVERVIEW.ipynb)
-- More notebooks are added constantly.
+---
 
-## Current Features
+## Feature Overview
 
-### Analyses
+### Gap-Filling
 
-- **Daily correlation**: calculate daily correlation between two time
-  series · func:
-  `daily_correlation()` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/analyses/DailyCorrelation.ipynb))
-- **Decoupling**: Investigate binned aggregates (median) of a variable z in binned classes of x and
-  y ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/analyses/DecouplingSortingBins.ipynb))
-- **Data gaps identification** · class:
-  `GapFinder` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/analyses/GapFinder.ipynb))
-- **Grid aggregator**: calculate z-aggregates in bins (classes) of x and
-  y · class:
-  `GridAggregator` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/analyses/GridAggregator.ipynb))
-- **Histogram calculation**: calculate histogram from
-  Series ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/analyses/Histogram.ipynb))
-- **Optimum range**: find x range for optimum y
-- **Percentiles**: Calculate percentiles 0-100 for
-  series ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/analyses/Percentiles.ipynb))
-- **Seasonal-Trend Decomposition**: Separate time series into trend, seasonal, and residual components using STL (
-  Seasonal-Trend Loess), classical, or harmonic methods · class:
-  `SeasonalTrendDecomposition` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/Analyses/SeasonalTrendDecomposition.ipynb))
+**Feature Engineering Pipeline (v0.91.0)** · `FeatureEngineer`
 
-### Corrections
+- 8-stage pipeline: lag features, rolling stats, differencing, EMA, polynomial, STL decomposition,
+  timestamps, record numbering
+- Pre-engineer once, reuse across multiple gap-filling models
+- Full examples: [examples/gapfilling/](examples/gapfilling/)
 
-- **Offset correction for measurement**: correct measurement by offset in comparison to
-  replicate · class:
-  `OffsetCorrection` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/MeasurementOffset.ipynb))
-- **Offset correction radiation**: correct nighttime offset of radiation data and set nighttime to zero
-- **Offset correction relative humidity**: correct RH values > 100%
-- **Offset correction wind direction**: correct wind directions by offset, calculated based on reference time
-  period · class:
-  `WindDirectionOffset` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/WindDirectionOffset.ipynb))
-- **Set to threshold**: set values above or below a threshold value to threshold value · class: `SetToThreshold`
-- **Set exact values to missing**: set exact values to missing
-  records · class:
-  `SetToMissing` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/SetExactValuesToMissing.ipynb))
+**Methods:**
 
-### Create variable
+- **XGBoostTS** — gradient boosting
+- **RandomForestTS** — ensemble learning with SHAP feature importance
+- **FluxMDS** — meteorological similarity, no training required
+- **Linear interpolation** — for simple gaps only
+- **Long-term variants** support multi-year data with USTAR scenario options
 
-_Functions to create various variables._
+**Flux Processing Chain** · `FluxProcessingChain`
 
-- **Time since**: calculate time since last occurrence, e.g. since last
-  precipitation · class:
-  `TimeSince` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/variables/TimeSince.ipynb))
-- **Daytime/nighttime flag**: calculate daytime flag, nighttime flag and potential radiation from latitude and
-  longitude · class:
-  `DaytimeNighttimeFlag` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/variables/Daytime_and_nighttime_flag.ipynb))
-- **Vapor pressure deficit**: calculate VPD from air temperature and
-  RH · func:
-  `calc_vpd_from_ta_rh()` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/variables/Calculate_VPD_from_TA_and_RH.ipynb))
-- **Calculate ET from LE**: calculate evapotranspiration from latent heat
-  flux · func:
-  `et_from_le()` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/variables/Calculate_ET_from_LE.ipynb))
-- **Calculate air temperature from sonic anemometer temperature** · func:
-  `air_temp_from_sonic_temp()` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/variables/Calculate_air_temp_from_sonic_temp.ipynb))
+- Post-processing pipeline covering quality flags, storage correction, outlier detection, USTAR filtering, and
+  gap-filling
+- Implements Levels 2–4.1 following Swiss FluxNet standards
+- Example: [examples/flux/fluxprocessingchain/](examples/flux/fluxprocessingchain/)
 
-### Eddy covariance high-resolution
+Reference: [Swiss FluxNet flux processing](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/)
 
-- **Flux detection limit**: calculate flux detection limit from high-resolution data (20 Hz) · class:
-  `FluxDetectionLimit`
-- **Maximum covariance**: find maximum covariance between turbulent wind and scalar · class: `MaxCovariance`
-- **Turbulence**: wind rotation to calculate turbulent departures of wind components and scalar (e.g. CO2) · class:
-  `WindRotation2D`
+### Quality Control & Outlier Detection
 
-### Files
+**Overall Quality Flag (QCF)** · `FlagQCF`
 
-_Input/output functions._
+- Merges multiple test flags into a single quality indicator
+- Daytime/nighttime separation and USTAR scenario support
+- Example: [examples/preprocessing/qaqc/qc_overall_flag.py](examples/preprocessing/qaqc/qc_overall_flag.py)
 
-- **Detect files**: detect expected and unexpected (irregular) files in a list of files · class: `FileDetector`
-- **Split files**: split multiple files into smaller parts and export them as (compressed) CSV files · class:
-  `FileSplitter`
-- **Read single data files**: read file using
-  parameters · class:
-  `DataFileReader` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/io/Read_single_EddyPro_fluxnet_output_file_with_DataFileReader.ipynb))
-- **Read single data files**: read file using pre-defined
-  filetypes · class:
-  `ReadFileType` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/io/Read_single_EddyPro_fluxnet_output_file_with_ReadFileType.ipynb))
-- **Read multiple data files**: read files using pre-defined
-  filetype · class:
-  `MultiDataFileReader` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/io/Read_multiple_EddyPro_fluxnet_output_files_with_MultiDataFileReader.ipynb))
+**10 Outlier Detection Methods:**
 
-### Fits
+- **Hampel filter** — robust spike detection using MAD (median absolute deviation)
+- **Z-score** — global, rolling, or day/night variants
+- **Local SD** — adaptive local thresholds
+- **Local Outlier Factor (LOF)** — density-based anomaly detection
+- **Absolute limits** — physical bounds on values
+- **Incremental detection** — find abrupt changes between records
+- **Manual removal** — explicit period or point flagging
+- **Trimmed mean** — symmetric removal of high and low outliers
+- **Stepwise orchestration** — chain multiple methods together
+- Examples: [examples/preprocessing/outlier_detection/](examples/preprocessing/outlier_detection/)
 
-- **Bin fitter** · class:
-  `BinFitterCP` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/analyses/BinFitterCP.ipynb))
+### Data Processing & Corrections
 
-### Flux
+- **Offset correction** — adjust measurement, radiation, humidity, and wind direction biases
+- **Set to threshold/missing** — apply thresholds or manual value replacements
+- **Timestamp sanitization** — validate, regularize, and detect frequency
+- Examples: [examples/preprocessing/corrections/](examples/preprocessing/corrections/),
+  [examples/times/](examples/times/)
 
-_Function specifically for eddy covariance flux data._
+### Analysis
 
-- **Flux processing chain** · class:
-  `FluxProcessingChain` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/flux/FluxProcessingChain.ipynb))
-    - The notebook example shows the application of:
-        - _Post-processing of eddy covariance flux data._
-        - Level-2 quality flags
-        - Level-3.1 storage correction
-        - Level-3.2 outlier removal
-        - Level-3.3: USTAR filtering using constant thresholds
-        - Level-4.1: gap-filling using long-term random forest, XGBoost, and/or MDS
-        - _For info about the Swiss FluxNet flux levels,
-          see [here](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/)._
-- **Quick flux processing chain
-  ** ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/flux/QuickFluxProcessingChain.ipynb))
-- **Flux detection limit**: calculate flux detection limit from high-resolution eddy covariance
-  data · class:
-  `FluxDetectionLimit` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/flux/FluxDetectionLimit/FluxDetectionLimit.ipynb))
-- **Self-heating correction for open-path IRGA NEE fluxes**:
-    - create scaling factors table and apply to correct open-path NEE fluxes during a time period of parallel
-      measurements ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/flux/self-heating_correction/SelfHeatingCorrectionNEE_1_CreateScalingFactorsTable.ipynb))
-    - apply previously created scaling factors table to long-term open-path NEE flux data, outside the time period of
-      parallel
-      measurements ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/flux/self-heating_correction/SelfHeatingCorrectionNEE_2_ApplyScalingFactorsTable.ipynb))
-- **USTAR threshold scenarios**: display data availability under different USTAR threshold scenarios
+- **Seasonal-Trend Decomposition** — STL, classical, or harmonic methods
+- **Correlation & decoupling** — lagged relationships and binned analysis
+- **Grid aggregation** — 2D binning and statistics
+- **Gap finder** — identify missing data patterns
+- **Percentiles & histogram** — distribution analysis
+- Examples: [examples/analysis/](examples/analysis/)
 
-### Formats
+### Feature Engineering
 
-_Format data to specific formats._
+- **Vapor Pressure Deficit (VPD)** — calculate from temperature and humidity
+- **Day/night flags** — solar geometry classification
+- **Air properties** — density, resistance, heat capacity
+- **Unit conversions** — temperature, energy, and water
+- **Lagged features** — time-shifted variables
+- **Potential radiation** — clear-sky calculation
+- Examples: [examples/features/](examples/features/)
 
-- **Format**: convert EddyPro fluxnet output files for upload to FLUXNET
-  database · class:
-  `FormatEddyProFluxnetFileForUpload` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/io/FormatEddyProFluxnetFileForUpload.ipynb))
-- **Parquet files**: load and save parquet
-  files · funcs: `load_parquet()`,
-  `save_parquet()` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/io/LoadSaveParquetFile.ipynb))
+### Eddy Covariance & Flux
 
-### Gap-filling
+- **Flux detection limit** — signal-to-noise analysis from high-frequency (20 Hz) data
+- **Maximum covariance** — find optimal time lag
+- **Wind rotation** — coordinate transformation, turbulent departures
+- **Self-heating correction** — open-path IRGA oxygen flux adjustment
+- **USTAR filtering** — threshold detection and filtering
+- **Uncertainty estimation** — random error propagation
+- Examples: [examples/flux/](examples/flux/)
 
-_Fill gaps in time series with various methods._
+### Visualization
 
-**Feature Engineering (v0.91.0)** · class: `FeatureEngineer`
+- **14+ plot types** — time series, cumulative, diel cycle, heatmap (datetime/year-month), hexbin, histogram,
+  ridge line, scatter, anomalies
+- **Interactive plots** — Matplotlib and Plotly support
+- Examples: [examples/visualization/](examples/visualization/)
 
-- Standalone 8-stage feature engineering pipeline (composable, reusable across models)
-    - Stage 1: Lagged features from past and future values
-    - Stage 2: Rolling statistics (mean, std, median, min, max, quartiles)
-    - Stage 3: Temporal differencing (1st and 2nd order momentum)
-    - Stage 4: Exponential Moving Average (EMA) with recent-value emphasis
-    - Stage 5: Polynomial expansion (squared, cubed terms)
-    - Stage 6: STL decomposition (trend, seasonal, residual components)
-    - Stage 7: Timestamp vectorization (season, month, hour, etc.)
-    - Stage 8: Continuous record numbering for trend detection
-- Pre-engineer features once, reuse across multiple models (RF + XGB simultaneously)
-- Independent testing and debugging of feature engineering
+### I/O & File Handling
 
-- **XGBoostTS** · class:
-  `XGBoostTS` ([notebook example (minimal)](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/XGBoostGapFillingMinimal.ipynb), [notebook example (more extensive)](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/XGBoostGapFillingExtensive.ipynb))
-    - Use `FeatureEngineer` to create features, pass pre-engineered data to XGBoostTS
-- **RandomForestTS** · class:
-  `RandomForestTS` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/RandomForestGapFilling.ipynb))
-    - Use `FeatureEngineer` to create features, pass pre-engineered data to RandomForestTS
-- **Long-term gap-filling using RandomForestTS** · class:
-  `LongTermGapFillingRandomForestTS` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/LongTermRandomForestGapFilling.ipynb))
-- **Long-term gap-filling using XGBoostTS** · class:
-  `LongTermGapFillingXGBoostTS` (for multi-year data with USTAR scenario support)
-- **Linear interpolation** · func:
-  `linear_interpolation()` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/LinearInterpolation.ipynb))
-- **Quick random forest gap-filling** · class:
-  `QuickFillRFTS` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/QuickRandomForestGapFilling.ipynb))
-- **MDS gap-filling of ecosystem fluxes** · class:
-  `FluxMDS` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/gapfilling/FluxMDSGapFilling.ipynb)),
-  approach by [Reichstein et al., 2005](https://onlinelibrary.wiley.com/doi/10.1111/j.1365-2486.2005.001002.x)
+- **Load/save parquet** — efficient columnar format for time series
+- **Read EddyPro files** — single or batch file reading
+- **Detect/split files** — identify irregular files, split large datasets
+- **Format for FLUXNET** — prepare data for upload
 
-#### Comprehensive Examples for CO2 Flux Data
+---
 
-- **FluxProcessingChain examples** for CO2 half-hourly flux (NEE) gap-filling:
-    - Both **Random Forest** and **XGBoost** examples are fully activated and comprehensively documented
-    - Optimized feature engineering for diurnal photosynthetic patterns (lag, rolling, EMA, STL decomposition)
-    - Feature reduction enabled by default (SHAP-based selection reduces ~45-50 features to ~10-20)
-    - Hyperparameters tuned for ecosystem flux data with detailed tuning guidance
-    - Model comparison code to select best algorithm for your site
-    - See `examples/gap_filling/` folder for standalone runnable examples (Phase 2, coming soon)
-    - Or see `diive/pkgs/fluxprocessingchain/fluxprocessingchain.py` for detailed inline examples
+## Contributing
 
-### Outlier Detection
+See [CLAUDE.md](CLAUDE.md) for development setup, coding standards, and testing.
 
-#### Multiple tests combined
+---
 
-- **Step-wise outlier detection**: combine multiple outlier flags to one single overall flag
+## Citation
 
-#### Single tests
+If you use `diive` in your research, please cite it:
 
-_Create single outlier flags where `0=OK` and `2=outlier`._
-
-- **Absolute limits**: define absolute
-  limits · class:
-  `AbsoluteLimits` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/AbsoluteLimits.ipynb))
-- **Absolute limits daytime/nighttime**: define absolute limits separately for daytime and nighttime
-  data · class:
-  `AbsoluteLimitsDaytimeNighttime` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/AbsoluteLimitsDaytimeNighttime.ipynb))
-- **Hampel filter daytime/nighttime**, separately for daytime and nighttime
-  data · class:
-  `HampelDaytimeNighttime` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/HampelDaytimeNighttime.ipynb))
-- **Local standard deviation**: Identify outliers based on the local standard deviation from a running
-  median ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/LocalSD.ipynb))
-- **Local outlier factor**: Identify outliers based on local outlier factor, across all
-  data · class:
-  `LocalOutlierFactorAllData` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/LocalOutlierFactorAllData.ipynb))
-- **Local outlier factor daytime/nighttime**: Identify outliers based on local outlier factor, daytime nighttime
-  separately ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/LocalOutlierFactorDaytimeNighttime.ipynb))
-- **Manual removal**: Remove time periods (from-to) or single records from time
-  series ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/ManualRemoval.ipynb))
-- **Missing values**: Simply creates a flag that indicated available and missing data in a time
-  series · class:
-  `MissingValues` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/MissingValues.ipynb))
-- **Trimming**: Remove values below threshold and remove an equal amount of records from high end of
-  data ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/TrimLow.ipynb))
-- **z-score**: Identify outliers based on the z-score across all time series
-  data · class:
-  `zScore` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/zScore.ipynb))
-- **z-score increments daytime/nighttime**: Identify outliers based on the z-score of double
-  increments ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/zScoreIncremental.ipynb))
-- **z-score daytime/nighttime**: Identify outliers based on the z-score, separately for daytime and
-  nighttime · class:
-  `zScoreDaytimeNighttime` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/zScoreDaytimeNighttime.ipynb))
-- **z-score rolling**: Identify outliers based on the rolling
-  z-score ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/zScoreRolling.ipynb))
-
-### Plotting
-
-- **Cumulatives across all years for multiple variables** · class:
-  `Cumulative` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/Cumulative.ipynb))
-- **Cumulatives per year** · class:
-  `CumulativeYear` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/CumulativesPerYear.ipynb))
-- **Diel cycle per month** · class:
-  `DielCycle` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/DielCycle.ipynb))
-- **Heatmap date/time**: showing values (z) of time series as date (y) vs time (
-  x) · class:
-  `HeatmapDateTime` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/HeatmapDateTime.ipynb))
-- **Heatmap year/month**: plot monthly ranks across
-  years · class:
-  `HeatmapYearMonth` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/HeatmapYearMonth.ipynb))
-- **Heatmap XYZ**: show z-values in bins of x and y — pairs naturally with `GridAggregator` · class:
-  `HeatmapXYZ` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/HeatmapXYZ.ipynb))
-- **Hexbin plot**: aggregate flux values into 2D hexagonal bins of driver variables; supports percentile normalization
-  and configurable aggregation functions · class:
-  `HexbinPlot` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/HexbinPlot.ipynb))
-- **Histogram**: includes options to show z-score limits and to highlight the peak distribution
-  bin · class:
-  `HistogramPlot` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/Histogram.ipynb))
-- **Long-term anomalies**: calculate and plot long-term anomaly for a variable, per year, compared to a reference
-  period · class:
-  `LongtermAnomaliesYear` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/LongTermAnomalies.ipynb))
-- **Ridgeline plot**: looks a bit like a
-  landscape · class:
-  `RidgeLinePlot` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/RidgeLine.ipynb))
-- **Time series plot**: Simple (interactive) time series
-  plot · class:
-  `TimeSeries` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/TimeSeries.ipynb))
-- **ScatterXY plot** · class:
-  `ScatterXY` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/plotting/ScatterXY.ipynb))
-- Various classes to generate heatmaps, bar plots, time series plots and scatter plots, among others
-
-### Quality control
-
-- **Overall Quality Control Flag (QCF)** · class:
-  `FlagQCF` ([example](examples/qaqc/qcf.py))
-    - Combines multiple individual test flags into a single overall quality indicator
-    - Supports daytime/nighttime separation and USTAR filtering scenarios
-    - Generates comprehensive reports: QCF distribution, test statistics, sequential impact analysis
-    - Visualizations: 4-panel heatmap (original, QC, flag sums, QCF flag)
-- **Stepwise MeteoScreening from database** · class:
-  `StepwiseMeteoScreeningDb` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/qc/StepwiseMeteoScreeningFromDatabase.ipynb))
-
-### Resampling
-
-- **Diel cycle**: calculate diel cycle per
-  month · func:
-  `diel_cycle()` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/timeseries/ResamplingDielCycle.ipynb))
-
-### Stats
-
-- **Time series stats** · func:
-  `sstats()` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/timeseries/TimeSeriesStats.ipynb))
-
-### Timestamps
-
-- **Continuous timestamp**: create continuous timestamp based on number of records in the file and the file duration ·
-  func: `continuous_timestamp_freq()`
-- **Time resolution**: detect time resolution from
-  data · class:
-  `DetectFrequency` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/timeseries/Detect_time_resolution.ipynb))
-- **Timestamps**: create and insert additional timestamps in various formats · class: `TimestampSanitizer`
-- **Vectorize timestamps**: add date attributes as columns to dataframe, including sine/cosine variants fpr cyclical
-  variables (e.g., day of
-  year) · func:
-  `vectorize_timestamps()` ([notebook example](https://github.com/holukas/diive/blob/main/notebooks/timeseries/VectorizeTimestamps.ipynb))
-
-## Installation
-
-`diive` requires **Python 3.12-3.13**.
-
-### Using pip (Recommended)
-
-```bash
-pip install diive
+```bibtex
+@software{diive2024,
+  title={diive},
+  author={Hörtnagl, Lukas},
+  orcid={https://orcid.org/0000-0002-5569-0761},
+  url={https://github.com/holukas/diive},
+  doi={10.5281/zenodo.10884017},
+  year={2024}
+}
 ```
 
-### Using uv (Modern, Fast)
+---
 
-[uv](https://docs.astral.sh/uv/) is a modern Python package installer and resolver (5-10x faster than pip):
+## License
 
-```bash
-uv pip install diive
-```
-
-Or create a project with uv:
-
-```bash
-uv venv
-source .venv/bin/activate    # On Windows: .venv\Scripts\activate
-uv pip install diive
-```
-
-### Using poetry
-
-```bash
-poetry add diive
-```
-
-### From source (Development)
-
-Clone the repository and install in editable mode:
-
-```bash
-git clone https://github.com/holukas/diive.git
-cd diive
-uv sync                       # Install dependencies with uv
-uv run pytest tests/          # Run tests
-```
-
-### Legacy: Using conda
-
-If you prefer conda, create a new environment:
-
-```bash
-conda create -n diive python=3.12
-conda activate diive
-pip install diive
-```
-
-For development with conda:
-
-```bash
-conda env create -f environment.yml
-conda activate diive
-pip install -e .
-```
+`diive` is licensed under the [GNU General Public License v3.0](LICENSE).

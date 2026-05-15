@@ -152,7 +152,11 @@ def diel_cycle(series: Series,
                median: bool = False,
                each_month: bool = False,
                ) -> pd.DataFrame:
-    """Calculate diel cycles grouped by time"""
+    """Calculate diel cycles grouped by time
+
+    See Also:
+        examples/visualization/dielcycle.py — Diurnal cycle visualization with DielCycle class
+    """
 
     # Build list with agg strings
     aggstr = ['count']  # Available values always counted

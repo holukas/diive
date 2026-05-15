@@ -43,6 +43,7 @@ Example with absolute values::
 import numpy as np
 
 from diive.core.plotting.heatmap_base import HeatmapBase
+from diive.core.plotting.styles import LightTheme as theme
 
 
 class HexbinPlot(HeatmapBase):
@@ -57,58 +58,47 @@ class HexbinPlot(HeatmapBase):
 
     Top-level alias: ``dv.hexbinplot(x, y, z, ...)``
 
-    Example:
-        See `examples/visualization/hexbin.py` for complete examples
-        including percentile normalization, mean aggregation, and value overlay.
+    See Also:
+        examples/visualization/hexbin.py — Hexbin variations (percentile normalization, aggregation, overlay)
     """
 
     def __init__(self,
                  x,
                  y,
                  z,
-                 xlabel=None,
-                 ylabel=None,
-                 zlabel=None,
-                 gridsize=11,
+                 gridsize: int = 11,
                  reduce_C_function=np.median,
-                 normalize_axes=False,
-                 mincnt=0,
-                 edgecolors='none',
-                 vmin=None,
-                 vmax=None,
-                 show_values=False,
-                 show_values_n_dec_places=2,
-                 show_values_fontsize=8,
-                 show_values_color='black',
-                 **kwargs):
-        """
+                 normalize_axes: bool = False,
+                 mincnt: int = 0,
+                 edgecolors: str = 'none',
+                 xlabel: str = None,
+                 ylabel: str = None,
+                 zlabel: str = None,
+                 verbose: bool = False):
+        """Prepare 2D scatter data for hexbin plotting (Phase 1 of two-phase design).
+
         Args:
-            x: pandas Series with driver variable (x-axis)
-            y: pandas Series with driver variable (y-axis)
-            z: pandas Series with flux values to aggregate (color scale)
-            xlabel: Label for x-axis (auto-inferred from x.name if None)
-            ylabel: Label for y-axis (auto-inferred from y.name if None)
-            zlabel: Label for colorbar (auto-inferred from z.name if None)
+            x: pandas Series with driver variable (x-axis). Must have no NaN values
+            y: pandas Series with driver variable (y-axis). Must have no NaN values
+            z: pandas Series with flux values to aggregate (color scale). NaNs ignored
             gridsize: Number of hexagon bins (default 11, matches matplotlib.hexbin)
-            reduce_C_function: Aggregation function for z-values (default np.median)
-                Can be np.mean, np.sum, etc.
+            reduce_C_function: Aggregation function for z-values in each hexagon
+                (default np.median). Can be np.mean, np.sum, etc.
             normalize_axes: If True, convert x/y to percentile ranks (0-100 scale)
                 (default False, use original values)
             mincnt: Minimum number of data points per hexagon (default 0)
             edgecolors: Hexagon edge color (default 'none')
-            vmin: Minimum value for color scale (default None, auto-scaled)
-            vmax: Maximum value for color scale (default None, auto-scaled)
-            show_values: If True, overlay aggregated z-values on hexagons (default False)
-            show_values_n_dec_places: Number of decimal places for displayed values (default 2)
-            show_values_fontsize: Font size for displayed values (default 8)
-            show_values_color: Text color for displayed values (default 'black')
-            **kwargs: Additional arguments passed to HeatmapBase
-                (figsize, cmap, title, cb_digits_after_comma, verbose, etc.)
-                cb_digits_after_comma: Decimal places for colorbar labels (default 2)
+            xlabel: Label for x-axis (auto-inferred from x.name if None)
+            ylabel: Label for y-axis (auto-inferred from y.name if None)
+            zlabel: Label for colorbar (auto-inferred from z.name if None)
+            verbose: Print progress and diagnostic messages (default False)
 
         Raises:
             ValueError: If Series have mismatched lengths or no names
             ValueError: If x or y contain NaN values
+
+        See Also:
+            plot : Render the hexbin plot with matplotlib styling options
         """
         # Validate inputs
         if len(x) != len(y) or len(y) != len(z):
@@ -123,46 +113,20 @@ class HexbinPlot(HeatmapBase):
         # Warn if z has NaNs
         if z.isnull().any():
             n_nan = z.isnull().sum()
-            if hasattr(self, 'verbose') and kwargs.get('verbose', False):
+            if verbose:
                 print(f"Info: Z Series contains {n_nan} NaN values (will be ignored during aggregation)")
 
-        # Store parameters before parent init (except show_values which will be set after)
+        # Call parent init with only heatmaptype and verbose
+        super().__init__(heatmaptype='hexbin', verbose=verbose)
+
+        # Store data computation parameters
         self.gridsize = gridsize
         self.reduce_C_function = reduce_C_function
         self.normalize_axes = normalize_axes
         self.mincnt = mincnt
         self.edgecolors = edgecolors
-        self.vmin = vmin
-        self.vmax = vmax
 
-        # Set default labels before parent init
-        if xlabel is None:
-            xlabel = x.name
-        if ylabel is None:
-            ylabel = y.name
-        if zlabel is None:
-            zlabel = z.name
-
-        # Determine colorbar extension based on vmin/vmax vs data range
-        z_min = z.min()
-        z_max = z.max()
-        cb_extend = 'neither'
-        if vmin is not None and vmax is not None:
-            if vmin > z_min and vmax < z_max:
-                cb_extend = 'both'
-            elif vmin > z_min:
-                cb_extend = 'min'
-            elif vmax < z_max:
-                cb_extend = 'max'
-        elif vmin is not None and vmin > z_min:
-            cb_extend = 'min'
-        elif vmax is not None and vmax < z_max:
-            cb_extend = 'max'
-
-        # Call parent init with vmin/vmax and cb_extend (this sets self.x, self.y, self.z = None)
-        super().__init__(heatmaptype='hexbin', vmin=vmin, vmax=vmax, cb_extend=cb_extend, **kwargs)
-
-        # Now assign data AFTER parent init (so they don't get overwritten)
+        # Store original Series
         self.x_orig = x.copy()
         self.y_orig = y.copy()
         self.z_orig = z.copy()
@@ -177,17 +141,12 @@ class HexbinPlot(HeatmapBase):
 
         self.z = z.copy()
 
-        self.xlabel = xlabel
-        self.ylabel = ylabel
-        self.zlabel = zlabel
+        # Set default labels
+        self.xlabel = xlabel if xlabel is not None else x.name
+        self.ylabel = ylabel if ylabel is not None else y.name
+        self.zlabel = zlabel if zlabel is not None else z.name
 
-        # Set show_values parameters AFTER parent init (parent class resets them)
-        self.show_values = show_values
-        self.show_values_n_dec_places = show_values_n_dec_places
-        self.show_values_fontsize = show_values_fontsize
-        self.show_values_color = show_values_color
-
-        self.p = None  # Hexbin collection object
+        self.p = None  # Hexbin collection object (created in plot())
 
     def show_vals_in_plot(self):
         """Overlay aggregated z-values on hexagon centers.
@@ -280,50 +239,157 @@ class HexbinPlot(HeatmapBase):
         percentiles.name = series.name
         return percentiles
 
-    def plot(self):
-        """Create hexbin plot and apply formatting.
+    def plot(self,
+             ax=None,
+             fig=None,
+             figsize: tuple = None,
+             figdpi: int = 72,
+             title: str = None,
+             vmin: float = None,
+             vmax: float = None,
+             cmap: str = 'RdYlBu_r',
+             zlabel: str = None,
+             cb_digits_after_comma: int = 2,
+             cb_labelsize: float = None,
+             cb_extend: str = None,
+             axlabels_fontsize: float = None,
+             ticks_labelsize: float = None,
+             minticks: int = 3,
+             maxticks: int = 10,
+             color_bad: str = 'grey',
+             show_colormap: bool = True,
+             show_less_xticklabels: bool = False,
+             show_values: bool = False,
+             show_values_fontsize: float = None,
+             show_values_n_dec_places: int = 0,
+             show_values_color: str = 'black',
+             show_grid: bool = False):
+        """Render HexbinPlot with matplotlib styling (Phase 2 of two-phase design).
 
-        Steps:
-        1. Call matplotlib.hexbin() with x, y, z and aggregation function
-        2. Set equal aspect ratio for hexagons
-        3. Format axes (labels, ticks, limits)
-        4. Apply HeatmapBase styling (title, colorbar, spines, grid, etc.)
+        All styling and presentation parameters go here. Can be called multiple times
+        on the same HexbinPlot object to plot on different axes with different styling.
+
+        Args:
+            ax: Matplotlib axes to plot on. If None, creates new figure
+            fig: Existing matplotlib Figure. If None and ax is None, creates new figure
+            figsize: Figure size as (width, height) in inches. Only used when ax is None
+            figdpi: Figure DPI. Only used when ax is None (default 72)
+            title: Plot title (auto-generated if None)
+            vmin: Minimum color value (auto from data if None)
+            vmax: Maximum color value (auto from data if None)
+            cmap: Colormap name (default: 'RdYlBu_r')
+            zlabel: Colorbar label (e.g., '°C', 'µmol m⁻²s⁻¹')
+            cb_digits_after_comma: Decimal places on colorbar labels (default 2)
+            cb_labelsize: Font size for colorbar tick labels
+            cb_extend: Colorbar extension arrows ('neither', 'both', 'min', 'max')
+            axlabels_fontsize: Font size for axis labels
+            ticks_labelsize: Font size for tick labels
+            minticks: Minimum major ticks on axes (default 3)
+            maxticks: Maximum major ticks on axes (default 10)
+            color_bad: Color for NaN cells (default 'grey')
+            show_colormap: Whether to show colorbar (default True)
+            show_less_xticklabels: Hide every second x-tick label (default False)
+            show_values: Overlay numeric values on hexagons (default False)
+            show_values_fontsize: Font size for value overlay text
+            show_values_n_dec_places: Decimal places for value overlay (default 0)
+            show_values_color: Text color for value overlay (default 'black')
+            show_grid: Show gridlines (default False)
+
+        Returns:
+            None (displays plot if ax=None, otherwise renders on provided axes)
         """
-        # Create hexbin plot (convert Series to numpy arrays)
+        # Use provided zlabel or fall back to __init__ value
+        if zlabel is None:
+            zlabel = self.zlabel
+
+        # Use theme defaults if not provided
+        if cb_labelsize is None:
+            cb_labelsize = theme.AX_LABELS_FONTSIZE
+        if axlabels_fontsize is None:
+            axlabels_fontsize = theme.AX_LABELS_FONTSIZE
+        if ticks_labelsize is None:
+            ticks_labelsize = theme.TICKS_LABELS_FONTSIZE
+        if show_values_fontsize is None:
+            show_values_fontsize = theme.AX_LABELS_FONTSIZE
+
+        # Determine colorbar extension based on vmin/vmax vs data range if not provided
+        if cb_extend is None:
+            z_min = self.z.min()
+            z_max = self.z.max()
+            cb_extend = 'neither'
+            if vmin is not None and vmax is not None:
+                if vmin > z_min and vmax < z_max:
+                    cb_extend = 'both'
+                elif vmin > z_min:
+                    cb_extend = 'min'
+                elif vmax < z_max:
+                    cb_extend = 'max'
+            elif vmin is not None and vmin > z_min:
+                cb_extend = 'min'
+            elif vmax is not None and vmax < z_max:
+                cb_extend = 'max'
+
+        # Call parent plot() to create figure/axes and apply styling
+        super().plot(
+            ax=ax,
+            fig=fig,
+            figsize=figsize,
+            figdpi=figdpi,
+            title=title,
+            vmin=vmin,
+            vmax=vmax,
+            cmap=cmap,
+            zlabel=zlabel,
+            cb_digits_after_comma=cb_digits_after_comma,
+            cb_labelsize=cb_labelsize,
+            cb_extend=cb_extend,
+            axlabels_fontsize=axlabels_fontsize,
+            ticks_labelsize=ticks_labelsize,
+            minticks=minticks,
+            maxticks=maxticks,
+            color_bad=color_bad,
+            show_colormap=show_colormap,
+            show_less_xticklabels=show_less_xticklabels,
+            show_values=show_values,
+            show_values_fontsize=show_values_fontsize,
+            show_values_n_dec_places=show_values_n_dec_places,
+            show_grid=show_grid
+        )
+
+        # Store styling parameters for show_vals_in_plot()
+        self.show_values = show_values
+        self.show_values_n_dec_places = show_values_n_dec_places
+        self.show_values_fontsize = show_values_fontsize
+        self.show_values_color = show_values_color
+
+        # Domain-specific rendering (hexbin plot)
         self.p = self.ax.hexbin(
-            self.x.values, self.y.values,
-            C=self.z.values,
+            self.x.to_numpy(), self.y.to_numpy(),
+            C=self.z.to_numpy(),
             gridsize=self.gridsize,
             reduce_C_function=self.reduce_C_function,
             mincnt=self.mincnt,
-            cmap=self.cmap,
+            cmap=cmap,
             edgecolors=self.edgecolors,
-            linewidths=1,  # Hexagon border line width
-            vmin=self.vmin,
-            vmax=self.vmax,
+            linewidths=1,
+            vmin=vmin,
+            vmax=vmax,
             zorder=0
         )
 
-        # Set linewidth for all lines (axes, spines, etc.)
-        self.p.set_linewidth(1)
-        for spine in self.ax.spines.values():
-            spine.set_linewidth(1)
-
-        # Set equal aspect ratio to make hexagons appear as regular hexagons (not skewed)
-        # Use 'datalim' to adjust data limits so hexagons maintain 1:1 aspect in data space
+        # Set equal aspect ratio (hexagons appear as regular hexagons, not skewed)
         self.ax.set_aspect('equal', adjustable='datalim')
         self.ax.apply_aspect()
 
-        # Format axes
-        self.ax.set_xlabel(self.xlabel, fontsize=self.axlabels_fontsize)
-        self.ax.set_ylabel(self.ylabel, fontsize=self.axlabels_fontsize)
-        self.ax.xaxis.set_tick_params(labelsize=self.ticks_labelsize)
-        self.ax.yaxis.set_tick_params(labelsize=self.ticks_labelsize)
+        # Format axes with styling
+        self.ax.set_xlabel(self.xlabel, fontsize=axlabels_fontsize)
+        self.ax.set_ylabel(self.ylabel, fontsize=axlabels_fontsize)
+        self.ax.xaxis.set_tick_params(labelsize=ticks_labelsize)
+        self.ax.yaxis.set_tick_params(labelsize=ticks_labelsize)
 
         # Overlay values on hexagons if requested
-        if self.show_values:
+        if show_values:
             self.show_vals_in_plot()
 
         # Apply base formatting (title, colorbar, spines, grid, etc.)
-        # HeatmapBase.format() will handle the colorbar creation
         self.format(plot=self.p, ax_xlabel_txt=self.xlabel, ax_ylabel_txt=self.ylabel)

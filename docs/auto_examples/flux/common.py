@@ -12,7 +12,6 @@ See Also
 --------
 diive.pkgs.flux.common : Flux variable definitions and detection functions.
 """
-import diive as dv
 
 
 def example_detect_fluxbasevar():
@@ -23,7 +22,7 @@ def example_detect_fluxbasevar():
     This is useful when working with eddy covariance data files to understand
     the relationships between measured scalars and calculated fluxes.
     """
-    from diive.pkgs.flux.common import detect_fluxbasevar, fluxbasevars_fluxnetfile
+    from diive.pkgs.flux.lowres.common import detect_fluxbasevar, fluxbasevars_fluxnetfile
 
     print("=" * 80)
     print("Example: Flux Variable Base Detection")

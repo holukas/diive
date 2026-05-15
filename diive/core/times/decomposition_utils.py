@@ -333,7 +333,7 @@ def quality_weighted_decompose(
     if len(quality) != len(series):
         raise ValueError(f"quality length ({len(quality)}) != series length ({len(series)})")
 
-    quality_vals = quality.values.astype(float)
+    quality_vals = quality.to_numpy().astype(float)
     quality_vals = np.clip(quality_vals, 0, 1)
 
     if method == 'stl':

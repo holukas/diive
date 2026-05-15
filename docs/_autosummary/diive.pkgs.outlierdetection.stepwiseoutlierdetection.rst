@@ -1,7 +1,7 @@
-﻿diive.pkgs.outlierdetection.stepwiseoutlierdetection
+﻿diive.pkgs.preprocessing.outlierdetection.stepwiseoutlierdetection
 ====================================================
 
-.. automodule:: diive.pkgs.outlierdetection.stepwiseoutlierdetection
+.. automodule:: diive.pkgs.preprocessing.outlierdetection.stepwiseoutlierdetection
 
    
    .. rubric:: Classes

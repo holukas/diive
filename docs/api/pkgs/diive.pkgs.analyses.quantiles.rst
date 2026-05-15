@@ -1,7 +1,7 @@
-﻿diive.pkgs.analyses.quantiles
+﻿diive.pkgs.analysis.quantiles
 =============================
 
-.. automodule:: diive.pkgs.analyses.quantiles
+.. automodule:: diive.pkgs.analysis.quantiles
 
    
    .. rubric:: Functions

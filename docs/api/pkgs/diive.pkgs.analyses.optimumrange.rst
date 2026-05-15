@@ -1,7 +1,7 @@
-﻿diive.pkgs.analyses.optimumrange
+﻿diive.pkgs.analysis.optimumrange
 ================================
 
-.. automodule:: diive.pkgs.analyses.optimumrange
+.. automodule:: diive.pkgs.analysis.optimumrange
 
    
    .. rubric:: Classes

@@ -1,5 +1,6 @@
 # Folders not needed for repo (old)
 *.parquet
+*.html
 
 # Development utilities (not for distribution)
 /dev_scripts/
@@ -17,6 +18,7 @@
 /notebooks/Workbench/Comparisons
 /notebooks/Workbench/mercury
 /diive/configs/exampledata/local
+/_archived
 
 # .claude local configuration (not shared)
 .claude/settings.local.json

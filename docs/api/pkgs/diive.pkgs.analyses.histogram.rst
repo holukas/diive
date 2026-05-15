@@ -1,7 +1,7 @@
-﻿diive.pkgs.analyses.histogram
+﻿diive.pkgs.analysis.histogram
 =============================
 
-.. automodule:: diive.pkgs.analyses.histogram
+.. automodule:: diive.pkgs.analysis.histogram
 
    
    .. rubric:: Classes

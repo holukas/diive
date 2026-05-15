@@ -5,7 +5,7 @@ Outlier Detection: Local Standard Deviation Examples
 Examples demonstrating the local standard deviation method for outlier detection.
 Identifies values that deviate significantly from rolling window statistics.
 
-See: diive.pkgs.outlierdetection.localsd
+See: diive.pkgs.preprocessing.outlierdetection.localsd
 """
 import warnings
 

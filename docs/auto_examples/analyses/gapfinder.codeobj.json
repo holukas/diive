@@ -12,15 +12,15 @@
   {
    "is_class": true,
    "is_explicit": false,
-   "module": "diive.pkgs.analyses.gapfinder",
-   "module_short": "diive.pkgs.analyses.gapfinder",
+   "module": "diive.pkgs.analysis.gapfinder",
+   "module_short": "diive.pkgs.analysis.gapfinder",
    "name": "GapFinder"
   },
   {
    "is_class": true,
    "is_explicit": false,
-   "module": "diive.pkgs.analyses",
-   "module_short": "diive.pkgs.analyses",
+   "module": "diive.pkgs.analysis",
+   "module_short": "diive.pkgs.analysis",
    "name": "GapFinder"
   },
   {

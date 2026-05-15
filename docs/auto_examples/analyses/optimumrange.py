@@ -2,7 +2,7 @@
 Examples for optimum range analysis using FindOptimumRange.
 
 Run this script to see optimum range results and visualizations:
-    python examples/analyses/optimumrange.py
+    python examples/analysis/optimumrange.py
 """
 import diive as dv
 

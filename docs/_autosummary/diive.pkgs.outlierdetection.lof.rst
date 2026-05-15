@@ -1,7 +1,7 @@
-﻿diive.pkgs.outlierdetection.lof
+﻿diive.pkgs.preprocessing.outlierdetection.lof
 ===============================
 
-.. automodule:: diive.pkgs.outlierdetection.lof
+.. automodule:: diive.pkgs.preprocessing.outlierdetection.lof
 
    
    .. rubric:: Functions

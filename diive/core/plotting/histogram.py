@@ -18,27 +18,26 @@ from pandas import Series
 class HistogramPlot:
     """Histogram plot with optional z-score overlay and peak highlighting.
 
-    Example:
-        See `examples/visualization/histogram_distribution.py` for complete examples.
+    Visualize data distribution with optional z-score overlay and peak bin highlighting.
+
+    Args:
+        s: Series to plot
+        method: Binning method (e.g., 'n_bins')
+        n_bins: Number of bins for histogram (int or list)
+        ignore_fringe_bins: Whether to ignore fringe bins
+
+    Call `plot()` to render with styling options (title, labels, display options).
+
+    See Also:
+        examples/core/visualization/plot_histogram.py — Histogram variations with z-score overlays
     """
 
-    def __init__(self, s: Series, method, n_bins: int or list = None, ignore_fringe_bins: list = False,
-                 highlight_peak: bool = True, xlabel: str = None, show_zscores: bool = True,
-                 show_zscore_values: bool = True, show_info: bool = True, show_counts: bool = True,
-                 show_title: bool = True, show_grid: bool = True):
+    def __init__(self, s: Series, method, n_bins: int or list = None, ignore_fringe_bins: list = False):
 
         self.s = s
         self.method = method
         self.n_bins = n_bins
         self.ignore_fringe_bins = ignore_fringe_bins
-        self.highlight_peak = highlight_peak
-        self.xlabel = xlabel
-        self.show_zscores = show_zscores
-        self.show_zscore_values = show_zscore_values
-        self.show_info = show_info
-        self.show_counts = show_counts
-        self.show_title = show_title
-        self.show_grid = show_grid
         self.first_date = s.index[0]
         self.last_date = s.index[-1]
 
@@ -53,8 +52,23 @@ class HistogramPlot:
     def get_ax(self):
         return self.ax
 
-    def plot(self, ax=None):
+    def plot(self, ax=None, xlabel: str = None, title: str = None, highlight_peak: bool = True,
+             show_zscores: bool = True, show_zscore_values: bool = True, show_info: bool = True,
+             show_counts: bool = True, show_title: bool = True, show_grid: bool = True):
+        """Generate histogram plot with optional styling.
 
+        Args:
+            ax: Matplotlib axes (creates new if None)
+            xlabel: X-axis label (default: empty)
+            title: Plot title (default: "{series.name} (between {start_date} and {end_date})")
+            highlight_peak: Highlight the bin with most counts (default: True)
+            show_zscores: Show z-score overlay on top axis (default: True)
+            show_zscore_values: Display z-score values and corresponding data values (default: True)
+            show_info: Show method and peak information text (default: True)
+            show_counts: Show count labels on each bar (default: True)
+            show_title: Display title (default: True)
+            show_grid: Display gridlines (default: True)
+        """
         # Setup
         self.ax = ax
         self.fig, self.ax, showplot = pf.setup_figax(ax=self.ax, figsize=(16, 9))
@@ -68,26 +82,26 @@ class HistogramPlot:
         )
         self.ax.set_xticks(self.edges)
 
-        if self.show_title:
-            title = f"{self.s.name} (between {self.first_date} and {self.last_date})"
-            self.ax.set_title(title, fontsize=24, weight='bold')
+        if show_title:
+            plot_title = title if title else f"{self.s.name} (between {self.first_date} and {self.last_date})"
+            self.ax.set_title(plot_title, fontsize=24, weight='bold')
 
-        xlabel = self.xlabel if self.xlabel else ""
+        xlabel_text = xlabel if xlabel else ""
 
         ix_max = self.counts.argmax()
 
         # Show counts for each bar
-        if self.show_counts:
+        if show_counts:
             self.ax.bar_label(bars)
 
         # Peak: highlight bin with most counts
-        if self.highlight_peak:
+        if highlight_peak:
             bars[ix_max].set_fc('#FFA726')
 
-        if self.show_info:
+        if show_info:
             info_txt = f"method: {self.method}"
             info_txt += f"\nn_bins: {self.n_bins}" if self.method == 'n_bins' else info_txt
-            if self.highlight_peak:
+            if highlight_peak:
                 info_txt += f"\nPEAK between {self.edges[ix_max]:.02f} and {self.edges[ix_max + 1]:.02f}" if self.method == 'n_bins' else info_txt
 
             self.ax.text(0.05, 0.95, info_txt,
@@ -95,7 +109,7 @@ class HistogramPlot:
                          alpha=1, horizontalalignment='left', verticalalignment='top', zorder=999)
 
         # z-scores
-        if self.show_zscores:
+        if show_zscores:
             zscores = zscore(series=self.s, absolute=False)
             self.axx = self.ax.twiny()
             self.axx.set_xlim(self.ax.get_xlim()[0], self.ax.get_xlim()[1])
@@ -119,7 +133,7 @@ class HistogramPlot:
                 axx_zscores.append(z)
                 axx_ticks_pos.append(val)
             self.axx.set_xticks(axx_ticks_pos)
-            if self.show_zscore_values:
+            if show_zscore_values:
                 axx_zscores = [f"{z}\n{v:.01f}" for z, v in zip(axx_zscores, axx_ticks_pos)]
                 self.axx.set_xticklabels(axx_zscores)
             else:
@@ -128,9 +142,9 @@ class HistogramPlot:
             self.axx.tick_params(axis='x', colors='#AB47BC', labelsize=16)
             self.axx.set_xlabel("z-score", color='#AB47BC', fontsize=16)
 
-        default_format(ax=self.ax, ax_xlabel_txt=xlabel, ax_ylabel_txt="counts",
+        default_format(ax=self.ax, ax_xlabel_txt=xlabel_text, ax_ylabel_txt="counts",
                        ticks_width=2, ticks_length=6, ticks_direction='in',
-                       spines_lw=1, showgrid=self.show_grid)
+                       spines_lw=1, showgrid=show_grid)
 
         self.ax.locator_params(axis='both', nbins=10)
 

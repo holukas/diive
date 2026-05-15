@@ -1,22 +1,89 @@
-# Visualization Examples
+# Data Visualization Examples
 
-Comprehensive visualization examples for time series analysis and exploratory data analysis.
+Examples demonstrating visualization and plotting functions for time series and flux data.
 
-## Overview
+17 examples across 10+ plot types.
 
-This gallery demonstrates DIIVE's 14+ specialized plot types for visualizing time series data:
+## Examples by Plot Type
 
-- **Time Series Plots** — Interactive time series visualization with multiple styles
-- **Heatmaps** — DateTime and Year×Month heatmaps for temporal patterns
-- **Diel Cycles** — Diurnal cycle analysis and visualization
-- **Hexbin & Density** — 2D hexagonal binning and ridge line plots
-- **Scatter Plots** — XY scatter with customizable colors and sizes
-- **Histograms** — Distribution analysis
-- **Cumulative Curves** — Annual and multi-year cumulative flux analysis
+### Heatmaps
 
-## Use Cases
+- **plot_heatmap_datetime_basic.py** — Datetime heatmaps (vertical/horizontal layouts, value overlay on 6-hourly grids)
+- **plot_heatmap_advanced.py** — Year-month heatmaps: aggregation method comparison (mean/max/std), rank mode, multi-variable side-by-side
+- **plot_heatmap_xyz_basic.py** — Pre-aggregated 2D heatmaps from GridAggregator (mean and std, flux binned by temperature and VPD)
 
-- Identifying temporal patterns and anomalies
-- Comparing observed vs. gap-filled data
-- Assessing data quality across seasons
-- Visualizing ecosystem flux dynamics
+### Scatter Plots
+
+- **plot_scatter_xy_basic.py** — 2D scatter plots showing variable relationships
+- **plot_scatter_xy_colored.py** — 3D scatter with color coding, binning, and trend visualization
+
+### Time Series
+
+- **plot_timeseries.py** — Line plots with matplotlib
+- **plot_timeseries_interactive.py** — Interactive Bokeh plots with zoom, pan, and export
+
+### Diurnal & Cumulative Patterns
+
+- **plot_dielcycle.py** — Diurnal cycles grouped by month or season
+- **plot_cumulative_basic.py** — Cumulative flux over time with scenario comparison
+- **plot_cumulative_year.py** — Yearly cumulative sums with reference bands
+
+### Distributions
+
+- **plot_histogram_basic.py** — Histograms with z-score overlay, peak detection, and custom bin edges
+- **plot_histogram_yearly.py** — Year-over-year histograms showing temporal patterns
+
+### Density & Binning
+
+- **plot_hexbin_basic.py** — 2D hexagonal binning with percentile normalization and sparse-bin filtering
+- **plot_hexbin_advanced.py** — Hexbin plots with absolute values and overlays
+- **plot_ridgeline_basic.py** — Ridge plots grouped by week
+- **plot_ridgeline_advanced.py** — Ridge plots grouped by month with styling options
+
+### Other Plots
+
+- **plot_other_plots.py** — Long-term anomalies and trend visualization
+
+## Two-Phase Design
+
+All plotting classes separate data preparation from presentation:
+
+**Phase 1: `__init__()`** takes data and computation parameters.  
+**Phase 2: `plot()`** handles styling, axes, titles, labels, and colors.
+
+This lets you reuse the same data across multiple plots with different visual styles:
+
+```python
+scatter = dv.plot_scatter_xy(x=df['A'], y=df['B'], z=df['C'], nbins=10)
+scatter.plot(ax=axes[0], title='View 1', cmap='viridis')
+scatter.plot(ax=axes[1], title='View 2', cmap='plasma')
+```
+
+## Available Plot Classes
+
+See `diive.core.plotting` for the complete API:
+
+- `HeatmapDateTime` — Datetime-aware heatmaps
+- `HeatmapXYZ` — Pre-aggregated 2D heatmaps
+- `HeatmapYearMonth` — Year-month aggregation
+- `ScatterXY` — Customizable 2D/3D scatter
+- `Cumulative` — Cumulative sum plots
+- `CumulativeYear` — Yearly cumulative analysis
+- `TimeSeries` — Line plots
+- `DielCycle` — Diurnal cycle plots
+- `HistogramPlot` — Distribution histograms
+- `HexbinPlot` — 2D hexagonal binning
+- `RidgeLinePlot` — Ridge line plots
+
+## Running Examples
+
+```bash
+# Single example
+uv run python examples/visualization/plot_heatmap_datetime_basic.py
+uv run python examples/visualization/plot_scatter_xy_colored.py
+
+# All visualization examples
+uv run python examples/run_all_examples.py
+```
+
+All 17 examples follow the two-phase design pattern.

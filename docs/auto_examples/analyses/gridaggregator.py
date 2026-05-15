@@ -2,7 +2,7 @@
 Examples for grid aggregation analysis using GridAggregator.
 
 Run this script to see grid aggregation results:
-    python examples/analyses/gridaggregator.py
+    python examples/analysis/gridaggregator.py
 """
 import diive as dv
 from scipy.stats import zscore

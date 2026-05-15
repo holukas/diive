@@ -12,9 +12,8 @@ class CumulativeYear:
     Visualizes cumulative sums for each year with optional reference period
     mean and ±1 standard deviation band for comparison.
 
-    Example:
-        See `examples/visualization/timeseries_and_cumulative.py` for complete examples
-        including reference bands and year highlighting.
+    See Also:
+        examples/visualization/timeseries_and_cumulative.py — Yearly cumulative plots with reference bands
     """
 
     def __init__(self,
@@ -79,18 +78,18 @@ class CumulativeYear:
 
         # label = f"{year}: {cumulative_df[year].dropna().iloc[-1]:.2f}"
         mean_end = self.mean_doy_cumulative_df['MEAN_DOY_TIME'].iloc[-1]
-        self.ax.plot(self.mean_doy_cumulative_df.index.values,
+        self.ax.plot(self.mean_doy_cumulative_df.index.to_numpy(),
                      self.mean_doy_cumulative_df['MEAN_DOY_TIME'].values,
                      color='black', alpha=1,
                      ls='-', lw=theme.WIDTH_LINE_WIDER,
                      marker='', markeredgecolor='none', ms=0,
                      zorder=99, label=f'mean {mean_end:.{digits_after_comma}f}')
-        # self.ax.fill_between(mean_cumulative_df.index.values,
+        # self.ax.fill_between(mean_cumulative_df.index.to_numpy(),
         #                      mean_cumulative_df['MEAN+1.96_SD'].values,
         #                      mean_cumulative_df['MEAN-1.96_SD'].values,
         #                      alpha=.005, zorder=0, color='black', edgecolor='none',
         #                      label="XXX")
-        self.ax.fill_between(self.mean_doy_cumulative_df.index.values,
+        self.ax.fill_between(self.mean_doy_cumulative_df.index.to_numpy(),
                              self.mean_doy_cumulative_df['MEAN+SD'].values,
                              self.mean_doy_cumulative_df['MEAN-SD'].values,
                              alpha=.1, zorder=0, color='black', edgecolor='none',
@@ -166,9 +165,9 @@ class Cumulative:
         start_year: Start year of shown data.
         end_year: End year of shown data.
 
-    Example:
-        See `examples/visualization/timeseries_and_cumulative.py` for complete examples
-        including multiple USTAR scenarios and year ranges.
+    See Also:
+        examples/visualization/timeseries_and_cumulative.py — Cumulative plots with multiple scenarios
+        examples/flux/uncertainty.py — Cumulative uncertainty visualization
     """
 
     def __init__(self,

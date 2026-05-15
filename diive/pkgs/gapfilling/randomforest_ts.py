@@ -4,21 +4,13 @@
 # https://mljar.com/blog/feature-importance-in-random-forest/
 
 """
-=========================================
-RANDOM FOREST GAP-FILLING FOR TIME SERIES
-randomforest_ts
-=========================================
+GAP-FILLING: RANDOM FOREST TIME SERIES IMPUTATION
+=================================================
 
-This module is part of the diive library:
-https://gitlab.ethz.ch/diive/diive
+Ensemble learning gap-filling with scikit-learn Random Forest.
+Feature engineering pipeline and model scoring included.
 
-    - Example notebook available in:
-        notebooks/GapFilling/RandomForestGapFilling.ipynb
-
-Kudos, optimization of hyper-parameters, grid search
-- https://scikit-learn.org/stable/modules/grid_search.html
-- https://www.kaggle.com/code/carloscliment/random-forest-regressor-and-gridsearch
-
+Part of the diive library: https://github.com/holukas/diive
 """
 import pandas as pd
 from pandas import DataFrame, Series
@@ -80,9 +72,9 @@ class RandomForestTS(MlRegressorGapFillingBase):
             scores_: Model performance metrics (MAE, RMSE, R²).
 
         Examples:
-            See examples/gap_filling/randomforest_ts.py for complete examples.
-            See examples/gap_filling/comparison.py for side-by-side comparison
-            with MDS gap-filling.
+            See examples/pkgs/gapfilling/gapfill_randomforest_ts.py for complete examples.
+            See examples/pkgs/gapfilling/gapfill_comparison.py for side-by-side comparison
+            with MDS and XGBoost gap-filling.
         """
 
         # Pass to parent class

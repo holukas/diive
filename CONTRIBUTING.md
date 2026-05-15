@@ -1,6 +1,6 @@
 # Contributing to DIIVE
 
-We welcome contributions! This guide explains how to set up your development environment, run tests, and contribute code.
+This guide covers development setup, running tests, and contributing code.
 
 ## Development Setup
 
@@ -195,7 +195,7 @@ result.to_csv('output.csv')
 
 ### Adding an Outlier Detection Method
 
-1. Inherit from appropriate base class (see `diive.pkgs.outlierdetection`)
+1. Inherit from appropriate base class (see `diive.pkgs.preprocessing.outlierdetection`)
 2. Implement required methods (`flag_outliers()`, `get_flagged_data()`)
 3. Add comprehensive docstring with parameters
 4. Create example in `examples/outlierdetection/`
@@ -250,7 +250,7 @@ examples/
 ├── outlierdetection/    # Outlier detection
 ├── visualization/       # Plotting examples
 ├── createvar/          # Variable creation
-├── analyses/           # Time series analysis
+├── analysis/           # Time series analysis
 ├── corrections/        # Data corrections
 ├── flux/               # Flux-specific analysis
 ├── echires/            # High-resolution EC data
@@ -411,6 +411,3 @@ Set `'abort_on_example_error': False` in `docs/conf.py`. Check build logs.
 - **Discussions:** [GitHub Discussions](https://github.com/holukas/diive/discussions)
 - **Documentation:** [DIIVE ReadTheDocs](https://diive.readthedocs.io/)
 
-## Thank You!
-
-We appreciate your contributions. Whether it's code, documentation, examples, or bug reports, you're helping make DIIVE better for everyone.

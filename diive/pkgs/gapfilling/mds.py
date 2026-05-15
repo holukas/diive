@@ -1,10 +1,11 @@
 """
+GAP-FILLING: MARGINAL DISTRIBUTION SAMPLING
+============================================
 
-MARGINAL DISTRIBUTION SAMPLING (MDS)
-Gap-filling after Reichstein et al (2005)
+Statistical gap-filling using meteorological similarity.
+No training required; based on Reichstein et al (2005).
 
-Reference: https://doi.org/10.1111/j.1365-2486.2005.001002.x
-
+Part of the diive library: https://github.com/holukas/diive
 """
 from collections import Counter
 
@@ -617,9 +618,9 @@ class FluxMDS:
     Reference: https://doi.org/10.1111/j.1365-2486.2005.001002.x
 
     Examples:
-        See examples/gap_filling/mds.py for basic usage.
-        See examples/gap_filling/comparison.py for side-by-side comparison with
-        Random Forest gap-filling method.
+        See examples/pkgs/gapfilling/gapfill_mds.py for basic usage.
+        See examples/pkgs/gapfilling/gapfill_comparison.py for side-by-side comparison with
+        Random Forest and XGBoost gap-filling methods.
     """
 
     gfsuffix = '_gfMDS'
@@ -1091,7 +1092,7 @@ class FluxMDS:
         counts = np.zeros(n_gaps, dtype=int)
 
         # Pre-extract arrays for faster access
-        gf_index_values = self.gapfilling_df_.index.values
+        gf_index_values = self.gapfilling_df_.index.to_numpy()
         gf_flux = self.gapfilling_df_[self.flux].values
         gf_ta = self.gapfilling_df_[self.ta].values
         gf_swin = self.gapfilling_df_[self.swin].values
@@ -1152,7 +1153,7 @@ class FluxMDS:
         counts = np.zeros(n_gaps, dtype=int)
 
         # Pre-extract arrays
-        gf_index_values = self.gapfilling_df_.index.values
+        gf_index_values = self.gapfilling_df_.index.to_numpy()
         gf_flux = self.gapfilling_df_[self.flux].values
         gf_swin = self.gapfilling_df_[self.swin].values
 
@@ -1201,7 +1202,7 @@ class FluxMDS:
         counts = np.zeros(n_gaps, dtype=int)
 
         # Pre-extract arrays
-        gf_index_values = self.gapfilling_df_.index.values
+        gf_index_values = self.gapfilling_df_.index.to_numpy()
         gf_flux = self.gapfilling_df_[self.flux].values
 
         # Process each gap row (no meteorological conditions, just time window)
@@ -1237,9 +1238,9 @@ class FluxMDS:
 
         # Pre-extract arrays
         gf_index = self.gapfilling_df_.index
-        gf_index_values = gf_index.values
+        gf_index_values = gf_index.to_numpy()
         gf_flux = self.gapfilling_df_[self.flux].values
-        gf_hours = gf_index.hour.values
+        gf_hours = gf_index.hour.to_numpy()
 
         # Process each gap row
         for i in range(n_gaps):
@@ -1268,5 +1269,5 @@ class FluxMDS:
 
         return predictions, sds, counts
 
-# See examples/gap_filling/mds.py for usage examples.
+# See examples/pkgs/gapfilling/gapfill_mds.py for usage examples.
 # For the original unoptimized implementation, use _FluxMDS.

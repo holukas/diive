@@ -2,7 +2,7 @@
 Examples for percentile analysis using percentiles101.
 
 Run this script to see percentile results and visualizations:
-    python examples/analyses/quantiles.py
+    python examples/analysis/quantiles.py
 """
 import diive as dv
 

@@ -1,7 +1,7 @@
 """
 Run all examples in parallel and report results with execution time.
 
-Executes all example scripts in examples/visualization/ in parallel and reports
+Executes all example scripts in examples/ in parallel and reports
 success/failure with detailed error messages and execution times.
 
 Usage:
@@ -14,67 +14,110 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-# Example files to run
+# Example files to run (organized by functional domain)
 EXAMPLE_FILES = [
-    'visualization/heatmap_datetime.py',
-    'visualization/hexbin.py',
-    'visualization/timeseries_and_cumulative.py',
-    'visualization/other_plots.py',
-    'visualization/timeseries.py',
-    'visualization/dielcycle.py',
-    'visualization/histogram.py',
-    'visualization/ridgeline.py',
-    'visualization/scatter_xy.py',
-    'analyses/correlation.py',
-    'analyses/decoupling.py',
-    'analyses/gapfinder.py',
-    'analyses/gridaggregator.py',
-    'analyses/histogram.py',
-    'analyses/optimumrange.py',
-    'analyses/quantiles.py',
-    'analyses/seasonaltrend.py',
-    'binary/extract.py',
-    'corrections/setto.py',
-    'corrections/offsetcorrection.py',
-    'outlierdetection/absolutelimits.py',
-    'outlierdetection/hampel.py',
-    'outlierdetection/incremental.py',
-    'outlierdetection/localsd.py',
-    'outlierdetection/lof.py',
-    'outlierdetection/manualremoval.py',
-    'outlierdetection/stepwise.py',
-    'outlierdetection/trim.py',
-    'outlierdetection/zscore.py',
-    'qaqc/qcf.py',
-    'qaqc/eddyproflags.py',
-    'createvar/air.py',
-    'createvar/conversions.py',
-    'createvar/daynightflag.py',
-    'createvar/laggedvariants.py',
-    'createvar/noise.py',
-    'createvar/potentialradiation.py',
-    'createvar/timesince.py',
-    'createvar/vpd.py',
-    'echires/fluxdetectionlimit.py',
-    'echires/lag.py',
-    'echires/windrotation.py',
-    'fits/fitter.py',
-    'flux/common.py',
-    'flux/hqflux.py',
-    'flux/selfheating.py',
-    'flux/uncertainty.py',
-    'flux/ustar_mp_detection.py',
-    'flux/ustarthreshold.py',
-    'gap_filling/interpolate.py',
-    'gap_filling/mds.py',
-    'gap_filling/mds_comparison.py',
-    'gap_filling/randomforest_ts.py',
-    'gap_filling/xgboost_ts.py',
-    'gap_filling/comparison.py',
-    'timeseries/harmonic.py',
+    # Visualization
+    'visualization/plot_heatmap_datetime_basic.py',
+    'visualization/plot_heatmap_advanced.py',
+    'visualization/plot_heatmap_xyz_basic.py',
+    'visualization/plot_hexbin_basic.py',
+    'visualization/plot_hexbin_advanced.py',
+    'visualization/plot_cumulative_basic.py',
+    'visualization/plot_cumulative_year.py',
+    'visualization/plot_other_plots.py',
+    'visualization/plot_timeseries.py',
+    'visualization/plot_timeseries_interactive.py',
+    'visualization/plot_dielcycle.py',
+    'visualization/plot_histogram_basic.py',
+    'visualization/plot_histogram_yearly.py',
+    'visualization/plot_ridgeline_basic.py',
+    'visualization/plot_ridgeline_advanced.py',
+    'visualization/plot_scatter_xy_basic.py',
+    'visualization/plot_scatter_xy_colored.py',
+    # Times
+    'times/times_timestamp_sanitizer.py',
+    'times/times_frequency_detection.py',
+    'times/times_time_features.py',
+    'times/times_diel_cycles.py',
+    'times/times_temporal_matrices.py',
+    'times/times_statistics.py',
+    # Analysis
+    'analysis/analysis_daily_correlation.py',
+    'analysis/analysis_granger.py',
+    'analysis/analysis_decoupling.py',
+    'analysis/analysis_gapfinder.py',
+    'analysis/analysis_gridaggregator.py',
+    'analysis/analysis_harmonic.py',
+    'analysis/analysis_histogram_distribution.py',
+    'analysis/analysis_optimumrange.py',
+    'analysis/analysis_quantiles.py',
+    'analysis/analysis_seasonaltrend.py',
+    # I/O
+    'io/io_extract.py',
+    # Preprocessing - Corrections
+    'preprocessing/corrections/correction_relativehumidity_offset.py',
+    'preprocessing/corrections/correction_radiation_offset.py',
+    'preprocessing/corrections/correction_measurement_offset_replicate.py',
+    'preprocessing/corrections/correction_winddir_offset.py',
+    'preprocessing/corrections/correction_set_exact_values_to_missing.py',
+    'preprocessing/corrections/correction_setto_value.py',
+    'preprocessing/corrections/correction_setto_threshold.py',
+    # Preprocessing - Outlier Detection
+    'preprocessing/outlier_detection/outlier_absolutelimits.py',
+    'preprocessing/outlier_detection/outlier_hampel.py',
+    'preprocessing/outlier_detection/outlier_incremental.py',
+    'preprocessing/outlier_detection/outlier_localsd.py',
+    'preprocessing/outlier_detection/outlier_lof.py',
+    'preprocessing/outlier_detection/outlier_manualremoval.py',
+    'preprocessing/outlier_detection/outlier_stepwise.py',
+    'preprocessing/outlier_detection/outlier_trim.py',
+    'preprocessing/outlier_detection/outlier_zscore.py',
+    # Preprocessing - QA/QC
+    'preprocessing/qaqc/qc_overall_flag.py',
+    'preprocessing/qaqc/qc_eddypro_flags.py',
+    # Features
+    'features/feature_engineer.py',
+    'features/feature_sonic_temp_conversion.py',
+    'features/feature_latent_heat.py',
+    'features/feature_evapotranspiration.py',
+    'features/feature_air.py',
+    'features/feature_daynightflag.py',
+    'features/feature_laggedvariants.py',
+    'features/feature_noise.py',
+    'features/feature_potentialradiation.py',
+    'features/feature_timesince.py',
+    'features/feature_vpd.py',
+    # Fits
+    'fits/fit_binfittercp.py',
+    'fits/fit_fitter.py',
+    # Flux - Processing chain
+    'flux/fluxprocessingchain/fluxprocessingchain.py',
+    # Flux - Low-resolution processing
+    'flux/lowres/flux_timelag_analysis.py',
+    'flux/lowres/flux_common.py',
+    'flux/lowres/flux_hqflux.py',
+    'flux/lowres/flux_selfheating.py',
+    'flux/lowres/flux_selfheating_production.py',
+    'flux/lowres/flux_uncertainty.py',
+    'flux/lowres/flux_ustar_mp_detection.py',
+    # Flux - High-resolution analysis
+    'flux/hires/flux_fluxdetectionlimit.py',
+    'flux/hires/flux_lag.py',
+    'flux/hires/flux_windrotation.py',
+    # Gap-filling
+    'gapfilling/gapfill_interpolate_generous.py',
+    'gapfilling/gapfill_interpolate_conservative.py',
+    'gapfilling/gapfill_mds.py',
+    'gapfilling/gapfill_mds_comparison.py',
+    'gapfilling/gapfill_randomforest.py',
+    'gapfilling/gapfill_quickfill.py',
+    'gapfilling/gapfill_optimize_randomforest.py',
+    'gapfilling/gapfill_xgboost.py',
+    'gapfilling/gapfill_optimize_xgboost.py',
+    'gapfilling/gapfill_comparison.py',
 ]
 
-MAX_WORKERS = 4  # Number of parallel workers
+MAX_WORKERS = 8  # Number of parallel workers
 
 
 def run_example(example_file, examples_dir):
@@ -95,7 +138,7 @@ def run_example(example_file, examples_dir):
             [sys.executable, str(example_path)],
             capture_output=True,
             text=True,
-            timeout=60
+            timeout=120
         )
         elapsed = time.time() - start_time
 
@@ -143,6 +186,7 @@ def run_all_examples():
     print("=" * 80 + "\n")
 
     results = {'passed': [], 'failed': [], 'skipped': []}
+    completed = 0
 
     # Run examples in parallel
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
@@ -156,24 +200,27 @@ def run_all_examples():
             example_file = result['file']
             status = result['status']
             elapsed = result['time']
+            completed += 1
+            progress = (completed / len(EXAMPLE_FILES)) * 100
 
             if status == 'pass':
-                print(f"[PASS] {example_file:<45} ({elapsed:6.2f}s)")
+                print(f"[PASS] {example_file:<40} ({elapsed:6.2f}s) [{completed:2d}/{len(EXAMPLE_FILES)} {progress:5.1f}%]")
                 results['passed'].append((example_file, elapsed))
             elif status == 'fail':
-                print(f"[FAIL] {example_file:<45} ({elapsed:6.2f}s)")
-                error_line = result['error'].split('\n')[0][:80]
+                print(f"[FAIL] {example_file:<40} ({elapsed:6.2f}s) [{completed:2d}/{len(EXAMPLE_FILES)} {progress:5.1f}%]")
+                error_line = result['error'].split('\n')[0][:60]
                 print(f"       Error: {error_line}")
                 results['failed'].append((example_file, result['error'], elapsed))
             elif status == 'timeout':
-                print(f"[TIMEOUT] {example_file:<43} ({elapsed:6.2f}s)")
+                print(f"[TIMEOUT] {example_file:<38} ({elapsed:6.2f}s) [{completed:2d}/{len(EXAMPLE_FILES)} {progress:5.1f}%]")
                 results['failed'].append((example_file, result['error'], elapsed))
             elif status == 'error':
-                print(f"[ERROR] {example_file:<45} ({elapsed:6.2f}s)")
-                print(f"        {result['error'][:80]}")
+                print(f"[ERROR] {example_file:<40} ({elapsed:6.2f}s) [{completed:2d}/{len(EXAMPLE_FILES)} {progress:5.1f}%]")
+                error_msg = result['error'][:60]
+                print(f"        {error_msg}")
                 results['failed'].append((example_file, result['error'], elapsed))
             else:  # skip
-                print(f"[SKIP] {example_file:<46} (not found)")
+                print(f"[SKIP] {example_file:<41} [{completed:2d}/{len(EXAMPLE_FILES)} {progress:5.1f}%]")
                 results['skipped'].append(example_file)
 
     total_elapsed = time.time() - total_start

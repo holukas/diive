@@ -265,8 +265,8 @@ Key Classes:
    - :py:class:`diive.core.ml.FeatureEngineer` — Feature creation pipeline
    - :py:class:`diive.pkgs.gapfilling.RandomForestTS` — Random Forest gap-filling
    - :py:class:`diive.pkgs.gapfilling.XGBoostTS` — XGBoost gap-filling
-   - :py:class:`diive.pkgs.outlierdetection.AbsoluteLimits` — Simple threshold outlier detection
-   - :py:class:`diive.pkgs.outlierdetection.Hampel` — Robust spike detection
+   - :py:class:`diive.pkgs.preprocessing.outlierdetection.AbsoluteLimits` — Simple threshold outlier detection
+   - :py:class:`diive.pkgs.preprocessing.outlierdetection.Hampel` — Robust spike detection
    - :py:class:`diive.core.plotting.TimeSeries` — Time series visualization
 
 Helpful Resources

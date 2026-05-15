@@ -12,15 +12,15 @@
   {
    "is_class": true,
    "is_explicit": false,
-   "module": "diive.pkgs.echires.lag",
-   "module_short": "diive.pkgs.echires.lag",
+   "module": "diive.pkgs.flux.hires.lag",
+   "module_short": "diive.pkgs.flux.hires.lag",
    "name": "MaxCovariance"
   },
   {
    "is_class": true,
    "is_explicit": false,
-   "module": "diive.pkgs.echires",
-   "module_short": "diive.pkgs.echires",
+   "module": "diive.pkgs.flux.hires",
+   "module_short": "diive.pkgs.flux.hires",
    "name": "MaxCovariance"
   },
   {

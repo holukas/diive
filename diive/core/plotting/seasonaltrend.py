@@ -74,7 +74,7 @@ def plot_decomposition(
     alpha_array = None
     if highlight_quality and quality is not None:
         # Scale quality to alpha range [0.3, 1.0]
-        quality_vals = quality.fillna(0.5).values
+        quality_vals = quality.fillna(0.5).to_numpy()
         alpha_array = 0.3 + 0.7 * np.clip(quality_vals, 0, 1)
 
     # Panel 1: Original with trend overlay
@@ -84,10 +84,10 @@ def plot_decomposition(
             ax1.plot(original.index[i:i+2], original.iloc[i:i+2].values,
                     color=color_scheme['original'], alpha=alpha_array[i], linewidth=0.8)
     else:
-        ax1.plot(original.index, original.values, color=color_scheme['original'],
+        ax1.plot(original.index, original.to_numpy(), color=color_scheme['original'],
                 label='Original', linewidth=0.8)
 
-    ax1.plot(trend.index, trend.values, color=color_scheme['trend'],
+    ax1.plot(trend.index, trend.to_numpy(), color=color_scheme['trend'],
             label='Trend', linewidth=2, alpha=0.8)
     ax1.set_ylabel('Original + Trend')
     ax1.legend(loc='upper left')
@@ -96,8 +96,8 @@ def plot_decomposition(
 
     # Panel 2: Trend
     ax2 = fig.add_subplot(gs[1])
-    ax2.plot(trend.index, trend.values, color=color_scheme['trend'], linewidth=1.5)
-    ax2.fill_between(trend.index, trend.values, alpha=0.3, color=color_scheme['trend'])
+    ax2.plot(trend.index, trend.to_numpy(), color=color_scheme['trend'], linewidth=1.5)
+    ax2.fill_between(trend.index, trend.to_numpy(), alpha=0.3, color=color_scheme['trend'])
     ax2.set_ylabel('Trend')
     ax2.grid(True, alpha=0.3)
 
@@ -126,7 +126,7 @@ def plot_decomposition(
         except Exception as e:
             warnings.warn(f"Could not plot ACF: {str(e)}")
             # Fallback to residual plot
-            ax4.plot(residual.index, residual.values, color=color_scheme['residual'],
+            ax4.plot(residual.index, residual.to_numpy(), color=color_scheme['residual'],
                     linewidth=0.8, marker='o', markersize=2)
             ax4.axhline(y=0, color='black', linestyle='--', alpha=0.3, linewidth=0.8)
             ax4.set_ylabel('Residual')
@@ -137,7 +137,7 @@ def plot_decomposition(
                 ax4.plot(residual.index[i:i+2], residual.iloc[i:i+2].values,
                         color=color_scheme['residual'], alpha=alpha_array[i], linewidth=0.8)
         else:
-            ax4.plot(residual.index, residual.values, color=color_scheme['residual'],
+            ax4.plot(residual.index, residual.to_numpy(), color=color_scheme['residual'],
                     linewidth=0.8, marker='o', markersize=2)
 
         ax4.axhline(y=0, color='black', linestyle='--', alpha=0.3, linewidth=0.8)
@@ -188,7 +188,7 @@ def plot_seasonal_strength_by_period(
         periods = [7, 14, 30, 365]
 
     # Import here to avoid circular dependency
-    from diive.pkgs.analyses.seasonaltrend import SeasonalTrendDecomposition
+    from diive.pkgs.analysis.seasonaltrend import SeasonalTrendDecomposition
 
     # Limit to valid periods
     periods = [p for p in periods if p < len(series)]

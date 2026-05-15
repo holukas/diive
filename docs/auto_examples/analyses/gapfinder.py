@@ -2,7 +2,7 @@
 Examples for gap detection and analysis using GapFinder.
 
 Run this script to see gap detection results:
-    python examples/analyses/gapfinder.py
+    python examples/analysis/gapfinder.py
 """
 import diive as dv
 

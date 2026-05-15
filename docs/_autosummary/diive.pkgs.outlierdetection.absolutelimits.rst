@@ -1,7 +1,7 @@
-﻿diive.pkgs.outlierdetection.absolutelimits
+﻿diive.pkgs.preprocessing.outlierdetection.absolutelimits
 ==========================================
 
-.. automodule:: diive.pkgs.outlierdetection.absolutelimits
+.. automodule:: diive.pkgs.preprocessing.outlierdetection.absolutelimits
 
    
    .. rubric:: Functions

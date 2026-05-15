@@ -12,7 +12,7 @@ filtering outliers. This example shows 6 methods with full parameter signatures:
 5. Z-score day/night — Separate thresholds for daytime/nighttime
 6. Increments — Detect abrupt changes between consecutive values
 
-See diive.pkgs.outlierdetection.stepwiseoutlierdetection for complete API.
+See diive.pkgs.preprocessing.outlierdetection.stepwiseoutlierdetection for complete API.
 """
 import matplotlib.pyplot as plt
 
@@ -28,7 +28,7 @@ def example_stepwise_outlier_detection_synthetic_data():
     3. Chain multiple detection methods with full parameters
     4. View results at each step
     """
-    from diive.pkgs.outlierdetection.stepwiseoutlierdetection import StepwiseOutlierDetection
+    from diive.pkgs.preprocessing.outlierdetection import StepwiseOutlierDetection
 
     # Generate synthetic data
     df_noisy = dv.generate_noisy_timeseries(

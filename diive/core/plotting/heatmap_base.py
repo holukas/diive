@@ -32,139 +32,48 @@ class HeatmapBase:
     NaN masking, and cell-value overlays.  Subclasses must populate ``self.x``,
     ``self.y``, and ``self.z`` before calling :meth:`plot_pcolormesh`.
 
+    Two-phase design: separate data preparation (__init__) from rendering (plot).
+    Phase 1 creates the heatmap object with data; Phase 2 renders with styling options.
+
     Subclasses:
         - :class:`HeatmapDateTime` — time series as date × time-of-day grid.
         - :class:`HeatmapYearMonth` — time series aggregated into a year × month grid.
         - :class:`HeatmapXYZ` — arbitrary 2-D scatter data binned into a grid.
 
     Do not instantiate this class directly.
+
+    Methods:
+        plot : Render heatmap with styling options
+        show : Quick-render with default styling and display
     """
 
     def __init__(self,
-                 fig=None,
-                 figsize: tuple = None,
-                 figdpi: int = 72,
-                 ax=None,
-                 ax_orientation: str = "vertical",
-                 title: str = None,
-                 vmin: float = None,
-                 vmax: float = None,
-                 cb_digits_after_comma: int = 2,
-                 cb_labelsize: float = theme.AX_LABELS_FONTSIZE,
-                 cb_extend: str = 'neither',
-                 axlabels_fontsize: float = theme.AX_LABELS_FONTSIZE,
-                 ticks_labelsize: float = theme.TICKS_LABELS_FONTSIZE,
-                 minticks: int = 3,
-                 maxticks: int = 10,
-                 cmap: str = 'RdYlBu_r',
-                 color_bad: str = 'grey',
-                 zlabel: str = None,
-                 show_colormap: bool = True,
-                 show_less_xticklabels: bool = False,
-                 show_values: bool = False,
-                 show_values_fontsize: float = theme.AX_LABELS_FONTSIZE,
-                 show_values_n_dec_places: int = 0,
-                 show_grid: bool = False,
                  heatmaptype: str = None,
                  verbose: bool = False):
-        """Stores all shared configuration and creates the figure/axes when needed.
-
-        All parameters are optional keyword arguments that subclasses forward via
-        ``**kwargs``.  Callers typically only need to set the parameters relevant
-        to their use case; sensible defaults are provided for everything else.
+        """Prepare heatmap data for plotting (Phase 1 of two-phase design).
 
         Args:
-            fig: Existing :class:`matplotlib.figure.Figure` to draw on.
-                 When *None* a new figure is created with the given ``figsize``
-                 and ``figdpi``.  Ignored if ``ax`` is provided.
-            figsize: ``(width, height)`` in inches for the new figure.
-                     Only used when ``ax`` is *None*.
-            figdpi: Resolution of the new figure in dots per inch.
-                    Only used when ``ax`` is *None*.  Defaults to 72.
-            ax: Existing :class:`matplotlib.axes.Axes` to draw into.
-                When *None* a fresh figure and axes are created.  Pass an axes
-                when composing multiple heatmaps in one figure.
-            ax_orientation: Layout of the date/time axes.
-                ``'vertical'`` (default) — date on y, time-of-day on x.
-                ``'horizontal'`` — date on x, time-of-day on y.
-            title: Plot title.  When *None* an auto-title is generated from the
-                   series name and frequency string.  Pass ``title=""`` to suppress.
-            vmin: Lower bound of the colour scale.  *None* = auto from data.
-            vmax: Upper bound of the colour scale.  *None* = auto from data.
-            cb_digits_after_comma: Decimal places shown on colorbar tick labels.
-                Defaults to 2.
-            cb_labelsize: Font size for colorbar tick labels.
-            cb_extend: Colorbar extension arrows.  One of ``'neither'`` (default),
-                       ``'both'``, ``'min'``, or ``'max'``.  Use ``'both'`` when
-                       ``vmin``/``vmax`` clip the data range.
-            axlabels_fontsize: Font size for x-axis and y-axis labels.
-            ticks_labelsize: Font size for tick mark labels on both axes.
-            minticks: Minimum number of major ticks on date axes.  Defaults to 3.
-            maxticks: Maximum number of major ticks on date axes.  Defaults to 10.
-            cmap: Matplotlib colormap name (e.g. ``'RdYlBu_r'``, ``'viridis'``).
-            color_bad: Colour used to fill cells where the value is NaN.
-                       Defaults to ``'grey'``.
-            zlabel: Colorbar label describing what the colour encodes
-                    (e.g. ``'°C'``, ``'µmol CO₂ m⁻² s⁻¹'``).
-            show_colormap: Whether to render the colorbar.  Set to *False* to
-                           suppress it (e.g. when composing a multi-panel figure
-                           with a shared colorbar).  Defaults to *True*.
-            show_less_xticklabels: Hide every second x-axis tick label to reduce
-                                   crowding on dense time axes.  Defaults to *False*.
-            show_values: Overlay each cell with its numeric z-value.
-                         Only practical for coarse grids (year × month).
-                         Defaults to *False*.
-            show_values_fontsize: Font size for the cell-value overlay text.
-            show_values_n_dec_places: Decimal places for the cell-value overlay.
-                                      Defaults to 0.
-            show_grid: Draw a grid on the axes.  Defaults to *False*.
             heatmaptype: Internal tag set by subclasses to select the correct
                          cell-centering logic in :meth:`show_vals_in_plot`.
                          Valid values: ``'yearmonth'``, ``'xyz'``,
                          ``'datetime'``, ``'datetime_horizontal'``.
                          Do not set this manually.
             verbose: Print progress and diagnostic messages.  Defaults to *False*.
+
+        See Also:
+            plot : Render the heatmap with matplotlib styling options
         """
-
         self.verbose = verbose
-
-        self.fig = fig
-        self.figsize = figsize
-        self.figdpi = figdpi
-        self.ax = ax
-        self.ax_orientation = ax_orientation
-
-        self.title = title
-        self.cmap = cmap
-        self.vmin = vmin
-        self.vmax = vmax
-        self.cb_digits_after_comma = cb_digits_after_comma
-        self.cb_labelsize = cb_labelsize
-        self.cb_extend = cb_extend
-        self.color_bad = color_bad
-
-        # Create fig and axis if no axis is given, otherwise use given axis
-        if ax is None:
-            self.fig, self.ax = plt.subplots(constrained_layout=True, figsize=self.figsize, dpi=self.figdpi)
-
-        self.axlabels_fontsize = axlabels_fontsize
-        self.ticks_labelsize = ticks_labelsize
-        self.minticks = minticks
-        self.maxticks = maxticks
-        self.zlabel = zlabel
-
-        self.show_less_xticklabels = show_less_xticklabels
-        self.show_values = show_values
-        self.showvalues_fontsize = show_values_fontsize
-        self.showvalues_n_dec_places = show_values_n_dec_places
         self.heatmaptype = heatmaptype
-        self.show_colormap = show_colormap
-        self.show_grid = show_grid
 
         self.plotdf = None
         self.x = None
         self.y = None
         self.z = None
+
+        # Figure/axes created in plot() method
+        self.fig = None
+        self.ax = None
 
     def _setup_timestamp(self, series: pd.Series) -> pd.Series:
         """Sanitizes the time series index so it is ready for pivot-based heatmap plotting.
@@ -256,16 +165,131 @@ class HeatmapBase:
                                shading=shading, zorder=99)
         return p
 
+    def plot(self,
+             fig=None,
+             figsize: tuple = None,
+             figdpi: int = 72,
+             ax=None,
+             ax_orientation: str = "vertical",
+             title: str = None,
+             vmin: float = None,
+             vmax: float = None,
+             cb_digits_after_comma: int = 2,
+             cb_labelsize: float = theme.AX_LABELS_FONTSIZE,
+             cb_extend: str = 'neither',
+             axlabels_fontsize: float = theme.AX_LABELS_FONTSIZE,
+             ticks_labelsize: float = theme.TICKS_LABELS_FONTSIZE,
+             minticks: int = 3,
+             maxticks: int = 10,
+             cmap: str = 'RdYlBu_r',
+             color_bad: str = 'grey',
+             zlabel: str = None,
+             show_colormap: bool = True,
+             show_less_xticklabels: bool = False,
+             show_values: bool = False,
+             show_values_fontsize: float = theme.AX_LABELS_FONTSIZE,
+             show_values_n_dec_places: int = 0,
+             show_grid: bool = False):
+        """Render heatmap with matplotlib styling (Phase 2 of two-phase design).
+
+        All styling and presentation parameters go here. This method is abstract
+        in the base class; subclasses must call `super().plot()` and then perform
+        their own axis configuration (ticks, labels, domain-specific formatting).
+
+        Args:
+            fig: Existing :class:`matplotlib.figure.Figure` to draw on.
+                 When *None* a new figure is created with the given ``figsize``
+                 and ``figdpi``.  Ignored if ``ax`` is provided.
+            figsize: ``(width, height)`` in inches for the new figure.
+                     Only used when ``ax`` is *None*.
+            figdpi: Resolution of the new figure in dots per inch.
+                    Only used when ``ax`` is *None*.  Defaults to 72.
+            ax: Existing :class:`matplotlib.axes.Axes` to draw into.
+                When *None* a fresh figure and axes are created.  Pass an axes
+                when composing multiple heatmaps in one figure.
+            ax_orientation: Layout of the date/time axes.
+                ``'vertical'`` (default) — date on y, time-of-day on x.
+                ``'horizontal'`` — date on x, time-of-day on y.
+            title: Plot title.  When *None* an auto-title is generated from the
+                   series name and frequency string.  Pass ``title=""`` to suppress.
+            vmin: Lower bound of the colour scale.  *None* = auto from data.
+            vmax: Upper bound of the colour scale.  *None* = auto from data.
+            cb_digits_after_comma: Decimal places shown on colorbar tick labels.
+                Defaults to 2.
+            cb_labelsize: Font size for colorbar tick labels.
+            cb_extend: Colorbar extension arrows.  One of ``'neither'`` (default),
+                       ``'both'``, ``'min'``, or ``'max'``.  Use ``'both'`` when
+                       ``vmin``/``vmax`` clip the data range.
+            axlabels_fontsize: Font size for x-axis and y-axis labels.
+            ticks_labelsize: Font size for tick mark labels on both axes.
+            minticks: Minimum number of major ticks on date axes.  Defaults to 3.
+            maxticks: Maximum number of major ticks on date axes.  Defaults to 10.
+            cmap: Matplotlib colormap name (e.g. ``'RdYlBu_r'``, ``'viridis'``).
+            color_bad: Colour used to fill cells where the value is NaN.
+                       Defaults to ``'grey'``.
+            zlabel: Colorbar label describing what the colour encodes
+                    (e.g. ``'°C'``, ``'µmol CO₂ m⁻² s⁻¹'``).
+            show_colormap: Whether to render the colorbar.  Set to *False* to
+                           suppress it (e.g. when composing a multi-panel figure
+                           with a shared colorbar).  Defaults to *True*.
+            show_less_xticklabels: Hide every second x-axis tick label to reduce
+                                   crowding on dense time axes.  Defaults to *False*.
+            show_values: Overlay each cell with its numeric z-value.
+                         Only practical for coarse grids (year × month).
+                         Defaults to *False*.
+            show_values_fontsize: Font size for the cell-value overlay text.
+            show_values_n_dec_places: Decimal places for the cell-value overlay.
+                                      Defaults to 0.
+            show_grid: Draw a grid on the axes.  Defaults to *False*.
+
+        Returns:
+            None (displays plot if ax=None, otherwise renders on provided axes)
+        """
+        # Create figure/axes if not provided
+        if ax:
+            self.fig = fig
+            self.ax = ax
+            self.showplot = False
+        else:
+            if fig is None:
+                self.fig, self.ax = plt.subplots(constrained_layout=True, figsize=figsize, dpi=figdpi)
+            else:
+                self.fig = fig
+                self.ax = fig.add_subplot(111)
+            self.showplot = True
+
+        # Store styling parameters
+        self.ax_orientation = ax_orientation
+        self.title = title
+        self.cmap = cmap
+        self.vmin = vmin
+        self.vmax = vmax
+        self.cb_digits_after_comma = cb_digits_after_comma
+        self.cb_labelsize = cb_labelsize
+        self.cb_extend = cb_extend
+        self.color_bad = color_bad
+        self.axlabels_fontsize = axlabels_fontsize
+        self.ticks_labelsize = ticks_labelsize
+        self.minticks = minticks
+        self.maxticks = maxticks
+        self.zlabel = zlabel
+        self.show_less_xticklabels = show_less_xticklabels
+        self.show_values = show_values
+        self.showvalues_fontsize = show_values_fontsize
+        self.showvalues_n_dec_places = show_values_n_dec_places
+        self.show_colormap = show_colormap
+        self.show_grid = show_grid
+
     def show(self):
-        """Generates the heatmap plot and displays the figure.
+        """Generates the heatmap plot with defaults and displays the figure.
 
         This method calls the `plot` method (which should be implemented by
-        subclasses) to draw the heatmap and then uses `self.fig.show()`
+        subclasses) with all default styling options, then uses `self.fig.show()`
         to display the generated Matplotlib figure.
         """
         self.plot()
-        # plt.tight_layout()
-        self.fig.show()
+        if self.fig:
+            self.fig.show()
 
     @staticmethod
     def set_cmap(cmap, color_bad, z):

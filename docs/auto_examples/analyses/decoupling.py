@@ -2,7 +2,7 @@
 Examples for stratified binning analysis.
 
 Run this script to see example plots:
-    python examples/analyses/decoupling.py
+    python examples/analysis/decoupling.py
 """
 import diive as dv
 

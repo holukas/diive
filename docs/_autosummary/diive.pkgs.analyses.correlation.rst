@@ -1,7 +1,7 @@
-﻿diive.pkgs.analyses.correlation
+﻿diive.pkgs.analysis.correlation
 ===============================
 
-.. automodule:: diive.pkgs.analyses.correlation
+.. automodule:: diive.pkgs.analysis.correlation
 
    
    .. rubric:: Functions

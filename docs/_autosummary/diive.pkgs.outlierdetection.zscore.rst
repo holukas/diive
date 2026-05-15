@@ -1,7 +1,7 @@
-﻿diive.pkgs.outlierdetection.zscore
+﻿diive.pkgs.preprocessing.outlierdetection.zscore
 ==================================
 
-.. automodule:: diive.pkgs.outlierdetection.zscore
+.. automodule:: diive.pkgs.preprocessing.outlierdetection.zscore
 
    
    .. rubric:: Functions

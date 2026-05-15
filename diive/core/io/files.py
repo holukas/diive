@@ -6,7 +6,6 @@ from pathlib import Path
 
 from pandas import Series, DataFrame, read_parquet
 
-from diive.core.io.filereader import MultiDataFileReader
 from diive.core.times.times import TimestampSanitizer
 
 
@@ -118,6 +117,8 @@ def unzip_file(filepath):
 def loadfiles(sourcedir: str, fileext: str, filetype: str,
               idstr: str, limit_n_files: int = None) -> DataFrame:
     """Search and load data files of type *filetype*, merge data and store to one dataframe"""
+    from diive.core.io.filereader import MultiDataFileReader
+
     print(f"\nSearching for {filetype} files with extension {fileext} and"
           f"ID {idstr} in folder {sourcedir} ...")
     filepaths = [f for f in os.listdir(sourcedir) if f.endswith(fileext)]

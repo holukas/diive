@@ -1,7 +1,7 @@
-﻿diive.pkgs.analyses.seasonaltrend
+﻿diive.pkgs.analysis.seasonaltrend
 =================================
 
-.. automodule:: diive.pkgs.analyses.seasonaltrend
+.. automodule:: diive.pkgs.analysis.seasonaltrend
 
    
    .. rubric:: Classes

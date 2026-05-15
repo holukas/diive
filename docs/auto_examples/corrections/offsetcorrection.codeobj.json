@@ -12,15 +12,15 @@
   {
    "is_class": true,
    "is_explicit": false,
-   "module": "diive.pkgs.corrections.offsetcorrection",
-   "module_short": "diive.pkgs.corrections.offsetcorrection",
+   "module": "diive.pkgs.preprocessing.corrections.offsetcorrection",
+   "module_short": "diive.pkgs.preprocessing.corrections.offsetcorrection",
    "name": "MeasurementOffsetFromReplicate"
   },
   {
    "is_class": true,
    "is_explicit": false,
-   "module": "diive.pkgs.corrections",
-   "module_short": "diive.pkgs.corrections",
+   "module": "diive.pkgs.preprocessing.corrections",
+   "module_short": "diive.pkgs.preprocessing.corrections",
    "name": "MeasurementOffsetFromReplicate"
   },
   {
@@ -49,15 +49,15 @@
   {
    "is_class": true,
    "is_explicit": false,
-   "module": "diive.pkgs.corrections.offsetcorrection",
-   "module_short": "diive.pkgs.corrections.offsetcorrection",
+   "module": "diive.pkgs.preprocessing.corrections.offsetcorrection",
+   "module_short": "diive.pkgs.preprocessing.corrections.offsetcorrection",
    "name": "WindDirOffset"
   },
   {
    "is_class": true,
    "is_explicit": false,
-   "module": "diive.pkgs.corrections",
-   "module_short": "diive.pkgs.corrections",
+   "module": "diive.pkgs.preprocessing.corrections",
+   "module_short": "diive.pkgs.preprocessing.corrections",
    "name": "WindDirOffset"
   },
   {

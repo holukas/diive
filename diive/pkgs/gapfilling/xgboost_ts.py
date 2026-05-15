@@ -4,19 +4,13 @@
 # https://mljar.com/blog/feature-importance-in-random-forest/
 
 """
-=========================================
-XGBOOST GAP-FILLING FOR TIME SERIES
-=========================================
+GAP-FILLING: XGBOOST TIME SERIES IMPUTATION
+============================================
 
-This module is part of the diive library:
-https://gitlab.ethz.ch/diive/diive
+Gradient boosting gap-filling with XGBoost.
+Feature engineering pipeline and model scoring included.
 
-    - Example notebook available in:
-        XXX
-
-Kudos:
-    - XXX
-
+Part of the diive library: https://github.com/holukas/diive
 """
 import xgboost as xgb
 from pandas import DataFrame
@@ -64,9 +58,9 @@ class XGBoostTS(MlRegressorGapFillingBase):
             scores_: Model performance metrics (MAE, RMSE, R²).
 
         Examples:
-            See examples/gap_filling/xgboost_ts.py for complete example.
-            See examples/gap_filling/comparison.py for side-by-side comparison
-            with MDS gap-filling.
+            See examples/pkgs/gapfilling/gapfill_xgboost_ts.py for complete example.
+            See examples/pkgs/gapfilling/gapfill_comparison.py for side-by-side comparison
+            with MDS and Random Forest gap-filling.
         """
 
         # Pass to parent class

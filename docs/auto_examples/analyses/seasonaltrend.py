@@ -2,7 +2,7 @@
 Examples for seasonal-trend decomposition using SeasonalTrendDecomposition.
 
 Run this script to see decomposition results and analysis:
-    python examples/analyses/seasonaltrend.py
+    python examples/analysis/seasonaltrend.py
 """
 import numpy as np
 import pandas as pd

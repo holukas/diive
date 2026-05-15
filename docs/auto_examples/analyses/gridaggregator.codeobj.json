@@ -12,15 +12,15 @@
   {
    "is_class": true,
    "is_explicit": false,
-   "module": "diive.pkgs.analyses.gridaggregator",
-   "module_short": "diive.pkgs.analyses.gridaggregator",
+   "module": "diive.pkgs.analysis.gridaggregator",
+   "module_short": "diive.pkgs.analysis.gridaggregator",
    "name": "GridAggregator"
   },
   {
    "is_class": true,
    "is_explicit": false,
-   "module": "diive.pkgs.analyses",
-   "module_short": "diive.pkgs.analyses",
+   "module": "diive.pkgs.analysis",
+   "module_short": "diive.pkgs.analysis",
    "name": "GridAggregator"
   },
   {

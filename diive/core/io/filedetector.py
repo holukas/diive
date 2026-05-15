@@ -69,7 +69,7 @@ class FileDetector:
         _files_overview_df = self.files_overview_df.copy()
 
         if self.files_how_many:
-            for idx, file in _files_overview_df.iterrows():
+            for idx in _files_overview_df.index:
                 _restricted_df = _files_overview_df.loc[_files_overview_df.index[0]:idx]
                 num_available_files = _restricted_df['file_available'].sum()
                 if num_available_files >= self.files_how_many:

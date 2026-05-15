@@ -1,7 +1,7 @@
-﻿diive.pkgs.corrections.setto
+﻿diive.pkgs.preprocessing.corrections.setto
 ============================
 
-.. automodule:: diive.pkgs.corrections.setto
+.. automodule:: diive.pkgs.preprocessing.corrections.setto
 
    
    .. rubric:: Functions

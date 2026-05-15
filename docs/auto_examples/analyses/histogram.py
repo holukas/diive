@@ -2,7 +2,7 @@
 Examples for histogram analysis using Histogram.
 
 Run this script to see histogram results:
-    python examples/analyses/histogram_distribution.py
+    python examples/analysis/histogram_distribution.py
 """
 import diive as dv
 
