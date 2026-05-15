@@ -9,6 +9,7 @@ Best for: Comparing relationships with standardized axes (0-100 percentile range
 """
 
 import matplotlib.pyplot as plt
+
 import diive as dv
 
 # %%
@@ -34,17 +35,18 @@ hm = dv.plot_hexbin(
     x=data['Tair_f'],
     y=data['VPD_f'],
     z=data['NEE_CUT_REF_f'],
-    normalize_axes=True,               # Data: use percentile scale (0-100)
-    gridsize=11,                       # Data: number of hexagons per side
+    normalize_axes=True,  # Data: use percentile scale (0-100)
+    gridsize=11,  # Data: number of hexagons per side
+    mincnt=5,  # Data: hide bins with fewer than 5 values
     xlabel='Air temperature (percentile)',
     ylabel='Vapor pressure deficit (percentile)',
     zlabel='NEE aggregated'
 )
 hm.plot(
-    ax=None,                           # Create new figure
-    cmap='RdYlBu_r',                   # Styling: colormap name
-    show_values=False,                 # Styling: don't show values on hexagons
-    cb_digits_after_comma=1            # Styling: colorbar decimal places
+    ax=None,  # Create new figure
+    cmap='RdYlBu_r',  # Styling: colormap name
+    show_values=True,  # Styling: don't show values on hexagons
+    cb_digits_after_comma=1  # Styling: colorbar decimal places
 )
 
 plt.show(block=False)

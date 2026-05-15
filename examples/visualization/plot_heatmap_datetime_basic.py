@@ -31,16 +31,16 @@ print(f"Loaded {len(series)} records from {series.index[0].date()} to {series.in
 
 hm = dv.plot_heatmap_datetime(
     series=series,
-    ax_orientation="vertical"          # Dates on y-axis, hours on x-axis
+    ax_orientation="vertical"  # Dates on y-axis, hours on x-axis
 )
 hm.plot(
-    ax=None,                           # Create new figure
+    ax=None,  # Create new figure
     title="NEE flux - Vertical (dates on y-axis)",
-    vmin=-10,                          # Minimum color value
-    vmax=10,                           # Maximum color value
-    cmap='RdBu_r',                     # Colormap
+    vmin=-10,  # Minimum color value
+    vmax=10,  # Maximum color value
+    cmap='RdBu_r',  # Colormap
     zlabel=r'($\mathrm{µmol\ CO_2\ m^{-2}\ s^{-1}}$)',
-    show_values=False                  # Don't overlay cell values
+    show_values=False  # Don't overlay cell values
 )
 
 print("Plotted HeatmapDateTime in vertical orientation")
@@ -54,16 +54,16 @@ print("Plotted HeatmapDateTime in vertical orientation")
 
 hm = dv.plot_heatmap_datetime(
     series=series,
-    ax_orientation="horizontal"        # Dates on x-axis, hours on y-axis
+    ax_orientation="horizontal"  # Dates on x-axis, hours on y-axis
 )
 hm.plot(
-    ax=None,                           # Create new figure
+    ax=None,  # Create new figure
     title="NEE flux - Horizontal (dates on x-axis)",
-    vmin=-10,                          # Minimum color value
-    vmax=10,                           # Maximum color value
-    cmap='RdBu_r',                     # Colormap
+    vmin=-10,  # Minimum color value
+    vmax=10,  # Maximum color value
+    cmap='RdBu_r',  # Colormap
     zlabel=r'($\mathrm{µmol\ CO_2\ m^{-2}\ s^{-1}}$)',
-    show_values=False                  # Don't overlay cell values
+    show_values=False  # Don't overlay cell values
 )
 
 print("Plotted HeatmapDateTime in horizontal orientation")

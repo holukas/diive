@@ -94,3 +94,39 @@ hm2.plot(
 )
 
 print("Plotted HeatmapXYZ with continuous colormap")
+
+# %%
+# HeatmapXYZ - variability (std) instead of mean
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# Run GridAggregator with aggfunc='std' to see within-bin variability.
+# Complements the mean plot: high std where the flux response is uncertain or noisy.
+
+q_std = dv.GridAggregator(
+    x=df_clean['Tair_f'],
+    y=df_clean['VPD_f'],
+    z=df_clean['NEE_CUT_REF_f'],
+    binning_type='quantiles',
+    n_bins=10,
+    min_n_vals_per_bin=5,
+    aggfunc='std'  # standard deviation within each bin
+)
+
+hm_std = dv.plot_heatmap_xyz.from_gridaggregator(
+    q_std,
+    x_col='Tair_f',
+    y_col='VPD_f',
+    z_col='NEE_CUT_REF_f'
+)
+hm_std.plot(
+    ax=None,
+    title='NEE within-bin variability (std)',
+    figsize=(10, 8),
+    cmap='YlOrRd',  # low std = yellow, high std = red
+    cb_digits_after_comma=1,
+    show_values=True,
+    show_values_n_dec_places=1,
+    show_grid=True
+)
+
+print("Plotted HeatmapXYZ with std aggregation")

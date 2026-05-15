@@ -20,9 +20,9 @@ Find examples by topic and use case.
 
 | Example | Description |
 |---------|-------------|
-| [**plot_heatmap_datetime_basic.py**](visualization/plot_heatmap_datetime_basic.py) | Datetime heatmaps with vertical/horizontal orientations, diurnal patterns |
-| [**plot_heatmap_advanced.py**](visualization/plot_heatmap_advanced.py) | Year-month aggregation heatmaps, multi-variable comparison, seasonal analysis |
-| [**plot_heatmap_xyz_basic.py**](visualization/plot_heatmap_xyz_basic.py) | Pre-aggregated 2D heatmaps from GridAggregator, flux binned by two variables |
+| [**plot_heatmap_datetime_basic.py**](visualization/plot_heatmap_datetime_basic.py) | Datetime heatmaps: vertical/horizontal orientations, value overlay on 6-hourly grids |
+| [**plot_heatmap_advanced.py**](visualization/plot_heatmap_advanced.py) | Year-month heatmaps: aggregation method comparison (mean/max/std), rank mode, multi-variable side-by-side |
+| [**plot_heatmap_xyz_basic.py**](visualization/plot_heatmap_xyz_basic.py) | Pre-aggregated 2D heatmaps from GridAggregator: mean and std aggregation, flux binned by two variables |
 | [**plot_scatter_xy_basic.py**](visualization/plot_scatter_xy_basic.py) | 2D scatter plots for exploring variable relationships |
 | [**plot_scatter_xy_colored.py**](visualization/plot_scatter_xy_colored.py) | 3D scatter with color coding, bin aggregation, trend visualization |
 | [**plot_timeseries.py**](visualization/plot_timeseries.py) | Time series line plots with matplotlib |
@@ -30,9 +30,9 @@ Find examples by topic and use case.
 | [**plot_cumulative_basic.py**](visualization/plot_cumulative_basic.py) | Cumulative flux across all time, scenario comparison |
 | [**plot_cumulative_year.py**](visualization/plot_cumulative_year.py) | Yearly cumulative sums with reference bands, annual budgets |
 | [**plot_dielcycle.py**](visualization/plot_dielcycle.py) | Diurnal cycle analysis by month/season |
-| [**plot_hexbin_basic.py**](visualization/plot_hexbin_basic.py) | 2D hexagonal binning with percentile normalization |
+| [**plot_hexbin_basic.py**](visualization/plot_hexbin_basic.py) | 2D hexagonal binning with percentile normalization, sparse-bin filtering (mincnt) |
 | [**plot_hexbin_advanced.py**](visualization/plot_hexbin_advanced.py) | Advanced hexbin with absolute values and overlays |
-| [**plot_histogram_basic.py**](visualization/plot_histogram_basic.py) | Distribution histograms with z-score overlay |
+| [**plot_histogram_basic.py**](visualization/plot_histogram_basic.py) | Distribution histograms with z-score overlay, custom bin edges |
 | [**plot_histogram_yearly.py**](visualization/plot_histogram_yearly.py) | Yearly comparison histograms for temporal patterns |
 | [**plot_ridgeline_basic.py**](visualization/plot_ridgeline_basic.py) | Ridge line plots with weekly grouping |
 | [**plot_ridgeline_advanced.py**](visualization/plot_ridgeline_advanced.py) | Ridge line plots with monthly grouping |

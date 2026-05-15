@@ -4,6 +4,32 @@
 
 ## v0.91.0 | XX May 2026
 
+- **Documentation cleanup: removed AI-typical phrasing across all docs** — Checked README.md,
+  CONTRIBUTING.md, CLAUDE.md, examples/README.md, examples/CATALOG.md, and visualization/README.md
+  with `/llm-detox`:
+  - Removed filler lines ("active development", "We welcome contributions!", "Thank You!" section)
+  - Removed vague marketing phrases ("composable pipeline", "comprehensive documentation",
+    "robust", "learn by doing")
+  - Fixed factual errors: example count corrected to 86 (was 62+/75+/82 in different files),
+    per-category counts updated, stale paths fixed (`examples/core/...` -> `examples/...`)
+  - Fixed "mirror the codebase structure" -> "organized by functional domain" (opposite was true)
+  - Removed Notebook Consolidation section from CLAUDE.md (historical, already in CHANGELOG)
+- **Visualization examples enhanced: 5 files updated** — Filled gaps identified by comparing
+  Plotting notebooks against examples:
+  - `plot_histogram_basic.py` — added custom bin edges section (`n_bins` as list of explicit
+    edges, with note that z-scores are not meaningful for unequal bins)
+  - `plot_heatmap_advanced.py` — added aggregation method comparison (mean/max/std side-by-side
+    in subplots) and ranks mode (`ranks=True`, with colormap note for rank 1 = warmest)
+  - `plot_heatmap_datetime_basic.py` — added value overlay section (`show_values=True`,
+    `show_values_n_dec_places`, with 6-hourly resampling so cells are readable)
+  - `plot_hexbin_basic.py` — added `mincnt=5` (filter bins with fewer than 5 values)
+  - `plot_heatmap_xyz_basic.py` — added `aggfunc='std'` section (within-bin variability
+    as complement to the mean aggregation)
+- **Plotting notebooks archived: all 12 moved to notebooks/_archived/** — All content from
+  `notebooks/Plotting/` is now covered by visualization examples. Archived:
+  Cumulative, CumulativesPerYear, DielCycle, HeatmapDateTime, HeatmapXYZ, HeatmapYearMonth,
+  HexbinPlot, Histogram, LongTermAnomalies, RidgeLine, ScatterXY, TimeSeries.
+
 - **feature_engineer.py example enhanced with dynamic feature listing** — Updated comprehensive 8-stage ML feature engineering example:
   - Now uses 2020 data only for faster execution
   - Restructured to show full pipeline with realistic multi-column input (temperature, VPD, radiation)

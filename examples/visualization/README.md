@@ -8,9 +8,9 @@ Examples demonstrating visualization and plotting functions for time series and 
 
 ### Heatmaps
 
-- **plot_heatmap_datetime_basic.py** — Datetime heatmaps (vertical/horizontal layouts, diurnal patterns)
-- **plot_heatmap_advanced.py** — Year-month heatmaps with seasonal patterns and multi-variable comparison
-- **plot_heatmap_xyz_basic.py** — Pre-aggregated 2D heatmaps from GridAggregator (e.g., flux binned by temperature and VPD)
+- **plot_heatmap_datetime_basic.py** — Datetime heatmaps (vertical/horizontal layouts, value overlay on 6-hourly grids)
+- **plot_heatmap_advanced.py** — Year-month heatmaps: aggregation method comparison (mean/max/std), rank mode, multi-variable side-by-side
+- **plot_heatmap_xyz_basic.py** — Pre-aggregated 2D heatmaps from GridAggregator (mean and std, flux binned by temperature and VPD)
 
 ### Scatter Plots
 
@@ -30,12 +30,12 @@ Examples demonstrating visualization and plotting functions for time series and 
 
 ### Distributions
 
-- **plot_histogram_basic.py** — Histograms with z-score overlay and peak detection
+- **plot_histogram_basic.py** — Histograms with z-score overlay, peak detection, and custom bin edges
 - **plot_histogram_yearly.py** — Year-over-year histograms showing temporal patterns
 
 ### Density & Binning
 
-- **plot_hexbin_basic.py** — 2D hexagonal binning with percentile normalization
+- **plot_hexbin_basic.py** — 2D hexagonal binning with percentile normalization and sparse-bin filtering
 - **plot_hexbin_advanced.py** — Hexbin plots with absolute values and overlays
 - **plot_ridgeline_basic.py** — Ridge plots grouped by week
 - **plot_ridgeline_advanced.py** — Ridge plots grouped by month with styling options
@@ -79,11 +79,11 @@ See `diive.core.plotting` for the complete API:
 
 ```bash
 # Single example
-uv run python examples/core/visualization/plot_heatmap_datetime_basic.py
-uv run python examples/core/visualization/plot_scatter_xy_colored.py
+uv run python examples/visualization/plot_heatmap_datetime_basic.py
+uv run python examples/visualization/plot_scatter_xy_colored.py
 
 # All visualization examples
 uv run python examples/run_all_examples.py
 ```
 
-All 16 examples pass verification and follow the two-phase design pattern.
+All 17 examples follow the two-phase design pattern.
