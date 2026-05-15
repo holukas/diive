@@ -1247,9 +1247,33 @@ def insert_season(
 
 
 def timestamp_infer_freq_progressively(timestamp_ix: pd.DatetimeIndex) -> tuple:
-    """Try to infer freq from first x and last x rows of data, if these
-    match we can be relatively certain that the file has the same freq
-    from start to finish.
+    """
+    Infer frequency by comparing first and last intervals of timestamp index.
+
+    Checks if the first N rows and last N rows have the same frequency, starting
+    with N=1000 and progressively reducing to N=3. If both match, the frequency is
+    consistent throughout the dataset. This method is fast and robust for detecting
+    regular sampling patterns even in large datasets.
+
+    Parameters
+    ----------
+    timestamp_ix : pd.DatetimeIndex
+        Timestamp index to analyze.
+
+    Returns
+    -------
+    tuple
+        (inferred_freq, freqinfo)
+        - inferred_freq : str or None
+            Detected frequency string (e.g., '30min', '1h'), or None if detection failed.
+        - freqinfo : str or None
+            Detection method description ('data N+N' if successful, None otherwise).
+
+    Notes
+    -----
+    - Requires at least 6 rows (3 from start, 3 from end) for detection
+    - Returns frequency only if start and end intervals match
+    - Useful for quick frequency validation before full dataset analysis
     """
     MAX_CHECK_RANGE = 1000  # Start with up to 1000 rows from each end
     MIN_CHECK_RANGE = 3  # Minimum rows needed for frequency detection
@@ -1274,15 +1298,33 @@ def timestamp_infer_freq_progressively(timestamp_ix: pd.DatetimeIndex) -> tuple:
 
 def timestamp_infer_freq_from_fullset(timestamp_ix: pd.DatetimeIndex) -> tuple:
     """
-    Infer data frequency from all timestamps in time series index
+    Infer frequency from the complete timestamp index using pandas inference.
 
-    Minimum 10 values are required in timeseries index.
+    Analyzes all timestamps to detect regular sampling patterns. This method uses
+    pandas' built-in frequency inference and is most reliable for strictly regular
+    data without gaps or irregular intervals.
 
-    Args:
-        timestamp_ix: Timestamp index
+    Parameters
+    ----------
+    timestamp_ix : pd.DatetimeIndex
+        Timestamp index to analyze.
 
-    Returns:
-        Frequency string, e.g. '10T' for 10-minute time resolution
+    Returns
+    -------
+    tuple
+        (inferred_freq, freqinfo)
+        - inferred_freq : str or None
+            Detected frequency string (e.g., '30min', '1h'), or None if detection failed.
+        - freqinfo : str
+            Detection result ('full data' if successful, '-not-enough-datarows-' if <10 rows,
+            '-failed-' if inference failed).
+
+    Notes
+    -----
+    - Requires at least 10 timestamps for analysis
+    - Most reliable for perfectly regular, gap-free data
+    - Returns None if data has irregular intervals or gaps
+    - Use in combination with other methods for robust detection
     """
     inferred_freq = None
     freqinfo = None
@@ -1300,9 +1342,39 @@ def timestamp_infer_freq_from_fullset(timestamp_ix: pd.DatetimeIndex) -> tuple:
 
 
 def timestamp_infer_freq_from_timedelta(timestamp_ix: pd.DatetimeIndex) -> tuple:
-    """Check DataFrame index for frequency by subtracting successive timestamps from each other
-    and then checking the most frequent difference
+    """
+    Infer frequency from the most common interval between successive timestamps.
 
+    Calculates differences between consecutive timestamps and identifies the most
+    frequent interval. This method is robust to minor irregularities and works even
+    when data has small gaps or occasional interval variations, as long as one
+    interval dominates (>50% of observations).
+
+    Parameters
+    ----------
+    timestamp_ix : pd.DatetimeIndex
+        Timestamp index to analyze.
+
+    Returns
+    -------
+    tuple
+        (inferred_freq, freqinfo)
+        - inferred_freq : str or None
+            Detected frequency string (e.g., '30min', '1h'), or None if no interval
+            appears in >50% of data.
+        - freqinfo : str
+            Detection result with statistics (e.g., 'timedelta 99.5%'),
+            or '-failed-' if detection failed.
+
+    Notes
+    -----
+    - Requires at least 2 timestamps (to calculate one interval)
+    - Robust to occasional irregular intervals
+    - Returns frequency only if most common interval covers >50% of all intervals
+    - Useful for data with small gaps or timing variations
+
+    References
+    ----------
     - https://stackoverflow.com/questions/16777570/calculate-time-difference-between-pandas-dataframe-indices
     - https://stackoverflow.com/questions/31469811/convert-pandas-freq-string-to-timedelta
     """

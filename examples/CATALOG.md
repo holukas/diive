@@ -6,6 +6,7 @@ Find examples by topic and use case.
 
 - [Visualization & Plotting](#visualization--plotting)
 - [Data Analysis](#data-analysis)
+- [Timestamp & Time Series Handling](#timestamp--time-series-handling)
 - [Data Processing & Corrections](#data-processing--corrections)
 - [Quality Control](#quality-control)
 - [Feature Engineering](#feature-engineering)
@@ -61,6 +62,21 @@ See: [analysis/README.md](analysis/README.md)
 
 ---
 
+## Timestamp & Time Series Handling
+
+| Example | Description |
+|---------|-------------|
+| [**times_timestamp_sanitizer.py**](times/times_timestamp_sanitizer.py) | Clean, validate, regularize datetime indices, gap filling, frequency detection |
+| [**times_frequency_detection.py**](times/times_frequency_detection.py) | Auto-detect time resolution with confidence scoring and alternative frequencies |
+| [**times_diel_cycles.py**](times/times_diel_cycles.py) | Calculate hourly aggregation patterns (annual and monthly diel cycles) |
+| [**times_temporal_matrices.py**](times/times_temporal_matrices.py) | Convert time series to year × month matrix for heatmap visualization |
+| [**times_time_features.py**](times/times_time_features.py) | Extract ML-ready temporal features (year, month, hour) with sin/cos encoding |
+| [**times_statistics.py**](times/times_statistics.py) | Quick statistical profiling and data quality assessment |
+
+See: [times/README.md](times/README.md)
+
+---
+
 ## Data Processing & Corrections
 
 ### Offset Corrections
@@ -80,13 +96,7 @@ See: [analysis/README.md](analysis/README.md)
 | [**correction_setto_value.py**](preprocessing/corrections/correction_setto_value.py) | Replace values in time periods with constant (malfunction times) |
 | [**correction_setto_threshold.py**](preprocessing/corrections/correction_setto_threshold.py) | Clip values to physically realistic min/max bounds |
 
-### Timestamp Handling
-
-| Example | Description |
-|---------|-------------|
-| [**times_timestamp_sanitizer.py**](times/times_timestamp_sanitizer.py) | Clean, validate, regularize datetime indices, gap filling, frequency detection |
-
-See: [pkgs/preprocessing/corrections/README.md](preprocessing/corrections/README.md)
+See: [preprocessing/corrections/README.md](preprocessing/corrections/README.md)
 
 ---
 
@@ -96,15 +106,15 @@ See: [pkgs/preprocessing/corrections/README.md](preprocessing/corrections/README
 
 | Example | Method | Use |
 |---------|--------|-----|
-| [**outlier_hampel.py**](preprocessing/outlierdetection/outlier_hampel.py) | Hampel filter (MAD-based) | Robust spike detection |
-| [**outlier_zscore.py**](preprocessing/outlierdetection/outlier_zscore.py) | Z-score (global, day/night, rolling) | Statistical thresholding |
-| [**outlier_localsd.py**](preprocessing/outlierdetection/outlier_localsd.py) | Local standard deviation | Adaptive thresholds |
-| [**outlier_absolutelimits.py**](preprocessing/outlierdetection/outlier_absolutelimits.py) | Min/max thresholds | Known physical limits |
-| [**outlier_incremental.py**](preprocessing/outlierdetection/outlier_incremental.py) | Increment-based detection | Abrupt changes |
-| [**outlier_lof.py**](preprocessing/outlierdetection/outlier_lof.py) | Local Outlier Factor | Density-based anomalies |
-| [**outlier_manualremoval.py**](preprocessing/outlierdetection/outlier_manualremoval.py) | Manual point/range removal | Known issues |
-| [**outlier_trim.py**](preprocessing/outlierdetection/outlier_trim.py) | Trimmed mean approach | Symmetric removal |
-| [**outlier_stepwise.py**](preprocessing/outlierdetection/outlier_stepwise.py) | Chain multiple methods | Multi-stage QA/QC |
+| [**outlier_hampel.py**](preprocessing/outlier_detection/outlier_hampel.py) | Hampel filter (MAD-based) | Robust spike detection |
+| [**outlier_zscore.py**](preprocessing/outlier_detection/outlier_zscore.py) | Z-score (global, day/night, rolling) | Statistical thresholding |
+| [**outlier_localsd.py**](preprocessing/outlier_detection/outlier_localsd.py) | Local standard deviation | Adaptive thresholds |
+| [**outlier_absolutelimits.py**](preprocessing/outlier_detection/outlier_absolutelimits.py) | Min/max thresholds | Known physical limits |
+| [**outlier_incremental.py**](preprocessing/outlier_detection/outlier_incremental.py) | Increment-based detection | Abrupt changes |
+| [**outlier_lof.py**](preprocessing/outlier_detection/outlier_lof.py) | Local Outlier Factor | Density-based anomalies |
+| [**outlier_manualremoval.py**](preprocessing/outlier_detection/outlier_manualremoval.py) | Manual point/range removal | Known issues |
+| [**outlier_trim.py**](preprocessing/outlier_detection/outlier_trim.py) | Trimmed mean approach | Symmetric removal |
+| [**outlier_stepwise.py**](preprocessing/outlier_detection/outlier_stepwise.py) | Chain multiple methods | Multi-stage QA/QC |
 
 ### Overall Quality Flags
 
@@ -113,7 +123,7 @@ See: [pkgs/preprocessing/corrections/README.md](preprocessing/corrections/README
 | [**qc_overall_flag.py**](preprocessing/qaqc/qc_overall_flag.py) | Combine multiple test flags into overall QCF (0=good, 1=marginal, 2=poor) |
 | [**qc_eddypro_flags.py**](preprocessing/qaqc/qc_eddypro_flags.py) | Extract EddyPro quality flags (VM97 tests, signal strength, completeness) |
 
-See: [preprocessing/outlierdetection/README.md](preprocessing/outlierdetection/README.md) and [preprocessing/qaqc/README.md](preprocessing/qaqc/README.md)
+See: [preprocessing/outlier_detection/README.md](preprocessing/outlier_detection/README.md) and [preprocessing/qaqc/README.md](preprocessing/qaqc/README.md)
 
 ---
 

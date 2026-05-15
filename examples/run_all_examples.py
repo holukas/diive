@@ -36,6 +36,11 @@ EXAMPLE_FILES = [
     'visualization/plot_scatter_xy_colored.py',
     # Times
     'times/times_timestamp_sanitizer.py',
+    'times/times_frequency_detection.py',
+    'times/times_time_features.py',
+    'times/times_diel_cycles.py',
+    'times/times_temporal_matrices.py',
+    'times/times_statistics.py',
     # Analysis
     'analysis/analysis_daily_correlation.py',
     'analysis/analysis_granger.py',

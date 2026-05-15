@@ -1,12 +1,20 @@
 # Timestamp & Time Series Handling Examples
 
-Examples demonstrating timestamp sanitization, validation, and time series regularization.
+Examples demonstrating timestamp sanitization, frequency detection, feature engineering, temporal aggregation, and statistical analysis.
 
-**1 example covering comprehensive timestamp cleaning and validation.**
+**6 examples covering the complete time series handling pipeline.**
 
 ## Contents
 
+**Core utilities:**
 - **times_timestamp_sanitizer.py** — 10-step timestamp validation, cleaning, and regularization
+
+**Temporal analysis & feature engineering:**
+- **times_frequency_detection.py** — Auto-detect time resolution with confidence scoring
+- **times_time_features.py** — Extract temporal features (year, month, hour) with sin/cos encoding for ML
+- **times_diel_cycles.py** — Calculate hourly aggregation patterns and diurnal cycles
+- **times_temporal_matrices.py** — Convert time series to matrix format (years × months) for visualization
+- **times_statistics.py** — Quick statistical profiling and data quality assessment
 
 ## Overview
 
@@ -153,11 +161,58 @@ status['n_duplicates']                        # Duplicate timestamps
 status['monotonicity_violations']             # Non-increasing timestamps
 ```
 
+## Time Series Processing Pipeline
+
+The examples follow a logical progression:
+
+1. **Sanitize** (`times_timestamp_sanitizer.py`) — Clean and validate raw timestamps
+2. **Detect** (`times_frequency_detection.py`) — Verify time resolution and regularity
+3. **Analyze** (`times_statistics.py`) — Profile statistical characteristics
+4. **Aggregate** (`times_diel_cycles.py`, `times_temporal_matrices.py`) — Group by time period (hour, month, year)
+5. **Engineer** (`times_time_features.py`) — Create ML-ready temporal features
+
+## Example Descriptions
+
+### 1. Timestamp Sanitization
+Comprehensive 10-step validation and cleaning pipeline. Removes NaT values, duplicates, sorts chronologically, regularizes gaps, and detects frequency with confidence scoring.
+
+**Use when:** Loading raw data with timestamp issues, needing to validate data quality.
+
+### 2. Frequency Detection
+Automatically detects time resolution (e.g., 30-minute, hourly) using 3 independent methods with confidence scoring. Shows alternatives when detection is ambiguous.
+
+**Use when:** Need to verify data frequency, identify irregular sampling patterns, validate data consistency.
+
+### 3. Time Features
+Creates temporal features for machine learning: year, season, month, week, day-of-year, and hour. Uses sin/cos encoding to preserve cyclical proximity for neural networks and tree-based models.
+
+**Use when:** Engineering features for gap-filling, regression, or classification models that need seasonal/diurnal patterns.
+
+### 4. Diel Cycles
+Extracts time-of-day patterns by grouping data by hour and calculating statistics for each. Shows seasonal variation (monthly diel cycles) and anomaly detection.
+
+**Use when:** Understanding ecosystem processes with daily cycles (photosynthesis, evapotranspiration), identifying unusual daily patterns.
+
+### 5. Temporal Matrices
+Converts time series to year × month matrix format, ideal for heatmap visualization and long-term pattern analysis. Supports mean, sum, max, min aggregation and percentile ranking.
+
+**Use when:** Visualizing multi-year patterns, detecting trends across years, identifying warmest/coldest periods.
+
+### 6. Statistics
+Quick statistical profiling: mean, median, SD, variance, percentiles (P01, P05, P25, P75, P95, P99). Useful for data quality assessment.
+
+**Use when:** Need rapid summary statistics, comparing multiple variables, assessing missing data percentage.
+
 ## Running Examples
 
 ```bash
-# Comprehensive timestamp cleaning with diagnostics
-uv run python examples/core/times/times_timestamp_sanitizer.py
+# Individual examples
+uv run python examples/times/times_timestamp_sanitizer.py
+uv run python examples/times/times_frequency_detection.py
+uv run python examples/times/times_time_features.py
+uv run python examples/times/times_diel_cycles.py
+uv run python examples/times/times_temporal_matrices.py
+uv run python examples/times/times_statistics.py
 
 # Run all examples
 uv run python examples/run_all_examples.py

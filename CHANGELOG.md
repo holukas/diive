@@ -4,6 +4,28 @@
 
 ## v0.91.0 | XX May 2026
 
+- **Frequency detection docstrings: comprehensive NumPy-style documentation** — Enhanced three detection functions in `diive.core.times.times`:
+  - `timestamp_infer_freq_progressively()`: Compares first/last intervals for fast, robust detection
+  - `timestamp_infer_freq_from_fullset()`: Uses pandas inference for perfectly regular data
+  - `timestamp_infer_freq_from_timedelta()`: Analyzes most frequent interval (tolerates gaps)
+  - All three now have consistent NumPy docstring format with Parameters, Returns, Notes sections explaining confidence levels, use cases, and robustness characteristics.
+- **times_frequency_detection.py example enhanced and reorganized** — Comprehensive frequency detection tutorial:
+  - Simplified and refocused on core functionality
+  - Reorganized in logical flow: TimestampSanitizer → direct functions → DetectFrequency class → validation
+  - Added DetectFrequency class section showing low-level API and confidence scoring
+  - Removed corporate language using /llm-detox (natural, human-sounding phrasing)
+  - Shows agreement checking across three detection methods
+  - Includes troubleshooting guidance for mismatches
+  - Reduced verbosity by 40% while maintaining educational value
+- **Notebook consolidation: 21 notebooks archived, 12 examples enhanced** — Completed Sphinx Gallery migration:
+  - **Time series (6 notebooks → 5 examples):** Consolidated `Detect_time_resolution.ipynb`, `ResamplingDielCycle.ipynb`, `ResamplingMonthlyMatrix.ipynb`, `TimeSeriesStats.ipynb`, `VectorizeTimestamps.ipynb` into comprehensive examples covering frequency detection, diel cycles, temporal matrices, ML feature engineering, and statistics.
+  - **QC/preprocessing (15 notebooks → 7 enhanced examples):** Added day/night variant sections to `outlier_absolutelimits.py` and `outlier_lof.py` (showing `separate_daytime_nighttime=True` parameter usage). Enhanced `qc_overall_flag.py` with missing values handling, `correction_measurement_offset_replicate.py` with constant offset application, and `outlier_hampel.py`, `outlier_zscore.py`, `outlier_localsd.py` with parameter tuning workflows.
+  - **Optimization:** Removed corporate language from docstrings (e.g., "Professional visualization" → "Plotting diel cycles with the DielCycle class").
+  - **Refactoring:** All examples now use existing `diive` functions (`diel_cycle()`, `resample_to_monthly_agg_matrix()`, `FeatureEngineer.vectorize_timestamps`, `sstats()`, `TimestampSanitizer`). Removed duplicate/custom implementations.
+  - **Import standardization:** Renamed directory `examples/preprocessing/outlierdetection/` → `outlier_detection/` (9 files updated in `run_all_examples.py`, all examples, docstrings, CATALOG.md).
+  - **Bug fixes:** Fixed Windows Unicode encoding issues (arrow characters → ASCII) in `outlier_stepwise.py`.
+  - **Result:** 5 new examples (times: 1→6), total example count now **82** (was 77).
+  - **Documentation:** Updated CLAUDE.md with consolidated notebook consolidation strategy section. Examples are primary documentation; archived notebooks kept as reference in `notebooks/_archived/`.
 - **Feature examples: consolidated 4 notebooks** — Fully consolidated variable and energy conversion examples:
   - `feature_timesince.py` — Consolidates notebook `TimeSince.ipynb` (archived). Expanded with detailed explanations of output variables (UPPER_LIMIT, LOWER_LIMIT, FLAG_IS_OUTSIDE_RANGE), include_lim parameter behavior (exclusive vs inclusive), alternative access methods (get_full_results vs get_timesince), and interpretation guidance for both precipitation and temperature examples.
   - `feature_evapotranspiration.py` — Consolidates notebook `Calculate_ET_from_LE.ipynb` (archived). Enhanced with heatmap visualizations comparing calculated ET, EddyPro reference, and the difference (3-panel heatmap showing agreement patterns).
