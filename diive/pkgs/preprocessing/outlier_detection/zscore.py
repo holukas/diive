@@ -12,7 +12,7 @@ Quality flags:
   - flag=2: Value detected as outlier (removed)
   - NaN: Original missing data preserved
 
-See examples/outlierdetection/zscore.py for working examples.
+See examples/preprocessing/outlier_detection/zscore.py for working examples.
 
 This module is part of the diive library:
 https://github.com/holukas/diive
@@ -24,7 +24,7 @@ from pandas import Series, DatetimeIndex
 import diive.core.funcs.funcs as funcs
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.pkgs.preprocessing.outlierdetection.common import create_daytime_nighttime_flags
+from diive.pkgs.preprocessing.outlier_detection.common import create_daytime_nighttime_flags
 
 
 @ConsoleOutputDecorator()
@@ -52,7 +52,7 @@ class zScore(FlagBase):
     - NaN: Original missing data
 
     Example:
-        See `examples/outlierdetection/zscore.py` for complete examples.
+        See `examples/preprocessing/outlier_detection/zscore.py` for complete examples.
     """
 
     flagid = 'OUTLIER_ZSCORE'
@@ -215,7 +215,7 @@ class zScoreRolling(FlagBase):
         useful for non-stationary time series.
 
         Example:
-            See `examples/outlierdetection/zscore.py` for complete examples.
+            See `examples/preprocessing/outlier_detection/zscore.py` for complete examples.
 
         Args:
             series: Time series in which outliers are identified.

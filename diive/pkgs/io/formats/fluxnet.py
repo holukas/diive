@@ -17,7 +17,7 @@ from diive.core.io.files import loadfiles
 from diive.core.times.times import current_date_str_condensed
 from diive.core.times.times import format_timestamp_to_fluxnet_format
 from diive.core.times.times import insert_timestamp
-from diive.pkgs.preprocessing.outlierdetection.manualremoval import ManualRemoval
+from diive.pkgs.preprocessing.outlier_detection.manualremoval import ManualRemoval
 from diive.pkgs.preprocessing.qaqc.eddyproflags import flag_signal_strength_eddypro_test
 
 # Names of variables in the EddyPro _fluxnet_ output file

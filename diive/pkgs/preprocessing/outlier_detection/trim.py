@@ -17,7 +17,7 @@ Quality flags:
   - flag=2: Value detected as outlier (removed)
   - NaN: Original missing data preserved
 
-See examples/outlierdetection/trim.py for working examples.
+See examples/preprocessing/outlier_detection/trim.py for working examples.
 
 This module is part of the diive library:
 https://github.com/holukas/diive
@@ -28,7 +28,7 @@ from pandas import DatetimeIndex, Series
 
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.pkgs.preprocessing.outlierdetection.common import create_daytime_nighttime_flags
+from diive.pkgs.preprocessing.outlier_detection.common import create_daytime_nighttime_flags
 
 
 @ConsoleOutputDecorator()
@@ -52,7 +52,7 @@ class TrimLow(FlagBase):
         from the high end. Supports separate processing for daytime/nighttime data.
 
         Example:
-            See `examples/outlierdetection/trim.py` for complete examples.
+            See `examples/preprocessing/outlier_detection/trim.py` for complete examples.
 
         Args:
             series: Time series in which outliers are identified.

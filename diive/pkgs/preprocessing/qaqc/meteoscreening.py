@@ -27,7 +27,7 @@ from diive.pkgs.analysis import daily_correlation
 from diive.pkgs.features.variables.potentialradiation import potrad
 from diive.pkgs.preprocessing.corrections import remove_radiation_zero_offset, remove_relativehumidity_offset
 from diive.pkgs.preprocessing.corrections import set_exact_values_to_missing, setto_threshold, setto_value
-from diive.pkgs.preprocessing.outlierdetection import StepwiseOutlierDetection
+from diive.pkgs.preprocessing.outlier_detection import StepwiseOutlierDetection
 from diive.pkgs.preprocessing.qaqc.flags import MissingValues
 from diive.pkgs.preprocessing.qaqc.qcf import FlagQCF
 
@@ -44,7 +44,7 @@ class StepwiseMeteoScreeningDb:
     to filter the time series.
 
     Implemented outlier tests:
-    For a full list of outlier tests see: pkgs/outlierdetection/stepwiseoutlierdetection.py
+    For a full list of outlier tests see: pkgs/preprocessing/outlier_detection/stepwiseoutlierdetection.py
     - `.flag_missingvals_test()`: Generate flag that indicates missing records in data
     - `.flag_outliers_abslim_test()`: Generate flag that indicates if values in data are outside the specified range (global or separate day/night)
     - `.flag_outliers_increments_zcore_test()`: Identify outliers based on the z-score of increments

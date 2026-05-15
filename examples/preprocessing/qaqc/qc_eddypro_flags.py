@@ -44,8 +44,8 @@ n_retained = (flag_signal == 0).sum()
 n_discarded = (flag_signal == 2).sum()
 
 print("\nSignal Strength Quality Test:")
-print(f"  Retained: {n_retained} records ({100*n_retained/(n_retained+n_discarded):.1f}%)")
-print(f"  Discarded: {n_discarded} records ({100*n_discarded/(n_retained+n_discarded):.1f}%)")
+print(f"  Retained: {n_retained} records ({100 * n_retained / (n_retained + n_discarded):.1f}%)")
+print(f"  Discarded: {n_discarded} records ({100 * n_discarded / (n_retained + n_discarded):.1f}%)")
 
 # %%
 # Wind steadiness test
@@ -165,9 +165,9 @@ print(f"  Bad (<97% complete): {n_bad}")
 # EddyPro quality flags help identify measurement reliability issues.
 # Use these flags to establish data quality thresholds for your analysis.
 
-print("\n" + "="*60)
+print("\n" + "=" * 60)
 print("Key Takeaways")
-print("="*60)
+print("=" * 60)
 print("""
 - Signal strength: Optical/sensor quality indicator
 - Steadiness: Measurement stationarity check

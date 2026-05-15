@@ -18,6 +18,7 @@ absolute difference between measurement and replicate.
 
 import numpy as np
 import pandas as pd
+
 import diive as dv
 
 dates = pd.date_range('2024-01-01', periods=500, freq='30min')
@@ -83,3 +84,43 @@ print(f"\nCorrection quality:")
 print(f"  Mean absolute difference (before): {mae_before:.4f}")
 print(f"  Mean absolute difference (after): {mae_after:.4f}")
 print(f"  Improvement: {((mae_before - mae_after) / mae_before * 100):.1f}%")
+
+# %%
+# Apply known constant offset directly
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# When the offset is already known (from calibration data, documentation,
+# or previous analysis), apply it directly without detection.
+# This is simpler and faster than the brute-force search approach.
+
+known_offset = 4.2
+
+# Simple offset correction: subtract the offset from measurement
+measurement_simple_corrected = measurement - known_offset
+
+mae_simple = (measurement_simple_corrected - replicate).abs().mean()
+
+print(f"\nSimple constant offset correction:")
+print(f"  Known offset: {known_offset}")
+print(f"  Corrected range: {measurement_simple_corrected.min():.2f} to {measurement_simple_corrected.max():.2f}")
+print(f"  Mean absolute difference: {mae_simple:.4f}")
+
+# %%
+# When to use each approach
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# **Replicate-based detection (MeasurementOffsetFromReplicate):**
+# - Offset value is unknown
+# - Reference/replicate data is available
+# - Want to find optimal offset automatically
+#
+# **Direct offset application:**
+# - Offset is known (from calibration, documentation)
+# - No reference data available
+# - Need quick correction without computation
+#
+# Example comparison:
+print(f"\nComparison of methods:")
+print(f"  Detected offset: {detected_offset:.2f}")
+print(f"  Known offset: {known_offset:.2f}")
+print(f"  Detection error: {abs(detected_offset - known_offset):.4f}")

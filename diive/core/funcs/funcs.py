@@ -53,8 +53,8 @@ def zscore(series: Series, absolute: bool = True) -> Series:
     """Calculate the z-score (absolute) of each record in *series*
 
     See Also:
-        examples/outlierdetection/zscore.py — Z-score outlier detection variations
-        examples/outlierdetection/incremental.py — Z-score incremental change detection
+        examples/preprocessing/outlier_detection/zscore.py — Z-score outlier detection variations
+        examples/preprocessing/outlier_detection/incremental.py — Z-score incremental change detection
         examples/visualization/histogram.py — Z-score overlay on histograms
     """
     mean, std = np.mean(series), np.std(series)

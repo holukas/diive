@@ -23,7 +23,7 @@ Quality flags:
   - flag=2: Value detected as outlier (removed)
   - NaN: Original missing data preserved
 
-See examples/outlierdetection/localsd.py for working examples.
+See examples/preprocessing/outlier_detection/localsd.py for working examples.
 
 This module is part of the diive library:
 https://github.com/holukas/diive
@@ -38,7 +38,7 @@ import diive.core.plotting.styles.LightTheme as theme
 from diive.core.base.flagbase import FlagBase
 from diive.core.plotting.plotfuncs import default_format, default_legend
 from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.pkgs.preprocessing.outlierdetection.common import create_daytime_nighttime_flags
+from diive.pkgs.preprocessing.outlier_detection.common import create_daytime_nighttime_flags
 
 
 @ConsoleOutputDecorator()
@@ -61,7 +61,7 @@ class LocalSD(FlagBase):
         flagid (str): The identifier for this flagging method, 'OUTLIER_LOCALSD'.
 
     Example:
-        See `examples/outlierdetection/localsd.py` for complete examples.
+        See `examples/preprocessing/outlier_detection/localsd.py` for complete examples.
     """
     flagid = 'OUTLIER_LOCALSD'
 

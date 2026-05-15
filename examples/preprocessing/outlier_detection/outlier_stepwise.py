@@ -15,6 +15,7 @@ Each method operates on data filtered by previous methods, refining results.
 # Simulates realistic noisy measurement data.
 
 import matplotlib.pyplot as plt
+
 import diive as dv
 
 df_noisy = dv.generate_noisy_timeseries(
@@ -40,7 +41,7 @@ print(f"  Period: {df_noisy.index.min()} to {df_noisy.index.max()}")
 # Create orchestrator that chains multiple detection methods.
 # Each method filters data already cleaned by previous methods.
 
-from diive.pkgs.preprocessing.outlierdetection import StepwiseOutlierDetection
+from diive.pkgs.preprocessing.outlier_detection import StepwiseOutlierDetection
 
 detector = StepwiseOutlierDetection(
     dfin=df_noisy,
@@ -61,9 +62,9 @@ print(f"  Site lat/lon: {detector.site_lat}, {detector.site_lon}")
 # Each test operates on data cleaned by previous tests.
 # Order matters: start with aggressive filtering, then refine.
 
-print("\n" + "="*60)
+print("\n" + "=" * 60)
 print("Sequential Outlier Detection Chain")
-print("="*60)
+print("=" * 60)
 
 # 1. Hampel filter
 print("\n1. Hampel filter (MAD-based spike detection)...")
@@ -77,7 +78,7 @@ detector.flag_outliers_hampel_test(
     verbose=False,
     repeat=True
 )
-print(f"   → Found {(detector.last_flag == 2).sum()} outliers")
+print(f"   > Found {(detector.last_flag == 2).sum()} outliers")
 detector.addflag()
 
 # 2. LocalSD
@@ -91,7 +92,7 @@ detector.flag_outliers_localsd_test(
     verbose=False,
     repeat=True
 )
-print(f"   → Found {(detector.last_flag == 2).sum()} additional outliers")
+print(f"   > Found {(detector.last_flag == 2).sum()} additional outliers")
 detector.addflag()
 
 # 3. Z-score global
@@ -102,7 +103,7 @@ detector.flag_outliers_zscore_test(
     verbose=False,
     repeat=True
 )
-print(f"   → Found {(detector.last_flag == 2).sum()} additional outliers")
+print(f"   > Found {(detector.last_flag == 2).sum()} additional outliers")
 detector.addflag()
 
 # 4. Z-score rolling
@@ -114,7 +115,7 @@ detector.flag_outliers_zscore_rolling_test(
     repeat=True,
     winsize=None
 )
-print(f"   → Found {(detector.last_flag == 2).sum()} additional outliers")
+print(f"   > Found {(detector.last_flag == 2).sum()} additional outliers")
 detector.addflag()
 
 # 5. Z-score day/night
@@ -129,7 +130,7 @@ detector.flag_outliers_zscore_test(
     verbose=False,
     repeat=True
 )
-print(f"   → Found {(detector.last_flag == 2).sum()} additional outliers")
+print(f"   > Found {(detector.last_flag == 2).sum()} additional outliers")
 detector.addflag()
 
 # 6. Increments
@@ -140,7 +141,7 @@ detector.flag_outliers_increments_zcore_test(
     verbose=False,
     repeat=True
 )
-print(f"   → Found {(detector.last_flag == 2).sum()} additional outliers")
+print(f"   > Found {(detector.last_flag == 2).sum()} additional outliers")
 detector.addflag()
 
 # %%
@@ -152,13 +153,13 @@ detector.addflag()
 cleaned = detector.series_hires_cleaned
 original = detector.series_hires_orig
 
-print("\n" + "="*60)
+print("\n" + "=" * 60)
 print("Final Results")
-print("="*60)
+print("=" * 60)
 print(f"Original valid records: {original.notna().sum()}")
 print(f"Final valid records: {cleaned.notna().sum()}")
 print(f"Total outliers removed: {(original.notna() & cleaned.isna()).sum()}")
-print(f"Data retention: {100*cleaned.notna().sum()/original.notna().sum():.1f}%")
+print(f"Data retention: {100 * cleaned.notna().sum() / original.notna().sum():.1f}%")
 
 print(f"\nFlag columns applied: {detector.flags.shape[1]}")
 print(f"Sample flags (first 5 records):\n{detector.flags.head()}")

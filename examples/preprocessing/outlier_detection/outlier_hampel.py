@@ -15,6 +15,7 @@ Detects values that deviate significantly from local trend, ideal for spike remo
 # Demonstrates the Hampel filter's ability to handle abrupt changes.
 
 import warnings
+
 import diive as dv
 
 warnings.filterwarnings('ignore')
@@ -102,5 +103,88 @@ print(f"  Filtered range: {filtered_global.min():.2f} to {filtered_global.max():
 
 print("\nComparison:")
 print(f"  Original valid: {s_noise.notna().sum()}")
-print(f"  Day/night filtered: {filtered_dtnt.notna().sum()} ({100*filtered_dtnt.notna().sum()/s_noise.notna().sum():.1f}%)")
-print(f"  Global filtered: {filtered_global.notna().sum()} ({100*filtered_global.notna().sum()/s_noise.notna().sum():.1f}%)")
+print(
+    f"  Day/night filtered: {filtered_dtnt.notna().sum()} ({100 * filtered_dtnt.notna().sum() / s_noise.notna().sum():.1f}%)")
+print(
+    f"  Global filtered: {filtered_global.notna().sum()} ({100 * filtered_global.notna().sum() / s_noise.notna().sum():.1f}%)")
+
+# %%
+# Parameter tuning: sensitivity analysis
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# Vary n_sigma threshold to understand its effect on outlier detection.
+# Higher n_sigma → more permissive (fewer outliers), lower n_sigma → stricter.
+
+print("\n" + "=" * 60)
+print("Parameter Tuning: n_sigma Sensitivity")
+print("=" * 60)
+
+n_sigma_values = [3.0, 4.0, 5.5, 7.0, 9.0]
+
+for n_sig in n_sigma_values:
+    ham_tune = dv.Hampel(
+        series=s_noise,
+        n_sigma=n_sig,
+        window_length=48 * 13,
+        use_differencing=True,
+        separate_day_night=False,
+        showplot=False,
+        verbose=0
+    )
+    ham_tune.calc(repeat=False)
+
+    outlier_count = (ham_tune.flag == 2).sum()
+    data_retained = ham_tune.filteredseries.notna().sum()
+    outlier_rate = 100 * outlier_count / len(s_noise)
+
+    print(f"\nn_sigma = {n_sig}:")
+    print(f"  Outliers detected: {outlier_count} ({outlier_rate:.1f}%)")
+    print(f"  Data retained: {data_retained} ({100 * data_retained / s_noise.notna().sum():.1f}%)")
+
+# %%
+# Parameter tuning: window length effect
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# Shorter windows catch local anomalies, longer windows smooth regional trends.
+
+print("\n" + "=" * 60)
+print("Parameter Tuning: Window Length")
+print("=" * 60)
+
+window_lengths = [24 * 2, 48 * 5, 48 * 13, 48 * 30]  # 2 days to 30 days
+
+for win_len in window_lengths:
+    ham_win = dv.Hampel(
+        series=s_noise,
+        n_sigma=5.5,
+        window_length=win_len,
+        use_differencing=True,
+        separate_day_night=False,
+        showplot=False,
+        verbose=0
+    )
+    ham_win.calc(repeat=False)
+
+    outlier_count = (ham_win.flag == 2).sum()
+    data_retained = ham_win.filteredseries.notna().sum()
+
+    days = win_len / 48
+    print(f"\nWindow = {win_len} steps ({days:.0f} days):")
+    print(f"  Outliers detected: {outlier_count}")
+    print(f"  Data retained: {data_retained}")
+
+# %%
+# Choosing parameters
+# ^^^^^^^^^^^^^^^^^^^^
+#
+# **Guidelines for parameter selection:**
+#
+# - **n_sigma:** Start with 5.5 (typical), decrease (3-4) for stricter QC, increase (7+) if too aggressive
+# - **window_length:** Use 10-15 days for typical QC, longer for smoothing, shorter for real-time detection
+# - **use_differencing:** Enable for spike detection, disable for level-based thresholding
+# - **separate_day_night:** Use when daytime/nighttime signals differ significantly
+
+print("\nParameter Selection Summary:")
+print("  Balanced (default): n_sigma=5.5, window=13 days")
+print("  Strict QC: n_sigma=4.0, window=7 days")
+print("  Permissive: n_sigma=7.0, window=20 days")

@@ -30,7 +30,7 @@ from diive.pkgs.flux.lowres.hqflux import analyze_highest_quality_flux
 from diive.pkgs.flux.lowres.ustarthreshold import FlagMultipleConstantUstarThresholds
 from diive.pkgs.gapfilling.longterm import LongTermGapFillingRandomForestTS, LongTermGapFillingXGBoostTS
 from diive.pkgs.gapfilling.mds import FluxMDS
-from diive.pkgs.preprocessing.outlierdetection import StepwiseOutlierDetection
+from diive.pkgs.preprocessing.outlier_detection import StepwiseOutlierDetection
 from diive.pkgs.preprocessing.qaqc import FlagQCF
 
 

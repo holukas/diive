@@ -14,14 +14,14 @@ from pandas import Series, DataFrame
 from diive.core.funcs.funcs import validate_id_string
 from diive.core.plotting.timeseries import TimeSeries
 from diive.core.times.times import TimestampSanitizer
-from diive.pkgs.preprocessing.outlierdetection.absolutelimits import AbsoluteLimits
-from diive.pkgs.preprocessing.outlierdetection.hampel import Hampel
-from diive.pkgs.preprocessing.outlierdetection.incremental import zScoreIncrements
-from diive.pkgs.preprocessing.outlierdetection.localsd import LocalSD
-from diive.pkgs.preprocessing.outlierdetection.lof import LocalOutlierFactor
-from diive.pkgs.preprocessing.outlierdetection.manualremoval import ManualRemoval
-from diive.pkgs.preprocessing.outlierdetection.trim import TrimLow
-from diive.pkgs.preprocessing.outlierdetection.zscore import zScore, zScoreRolling
+from diive.pkgs.preprocessing.outlier_detection.absolutelimits import AbsoluteLimits
+from diive.pkgs.preprocessing.outlier_detection.hampel import Hampel
+from diive.pkgs.preprocessing.outlier_detection.incremental import zScoreIncrements
+from diive.pkgs.preprocessing.outlier_detection.localsd import LocalSD
+from diive.pkgs.preprocessing.outlier_detection.lof import LocalOutlierFactor
+from diive.pkgs.preprocessing.outlier_detection.manualremoval import ManualRemoval
+from diive.pkgs.preprocessing.outlier_detection.trim import TrimLow
+from diive.pkgs.preprocessing.outlier_detection.zscore import zScore, zScoreRolling
 
 
 class StepwiseOutlierDetection:

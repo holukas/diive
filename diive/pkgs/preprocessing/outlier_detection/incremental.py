@@ -17,7 +17,7 @@ Quality flags:
   - flag=2: Value detected as outlier (removed)
   - NaN: Original missing data preserved
 
-See examples/outlierdetection/incremental.py for working examples.
+See examples/preprocessing/outlier_detection/incremental.py for working examples.
 
 This module is part of the diive library:
 https://github.com/holukas/diive
@@ -27,7 +27,7 @@ from pandas import Series, DatetimeIndex
 from diive.core.dfun.stats import double_diff_absolute
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.pkgs.preprocessing.outlierdetection.zscore import zScore
+from diive.pkgs.preprocessing.outlier_detection.zscore import zScore
 
 
 @ConsoleOutputDecorator()
@@ -46,7 +46,7 @@ class zScoreIncrements(FlagBase):
     to isolated spikes while allowing gradual changes.
 
     Example:
-        See `examples/outlierdetection/incremental.py` for complete examples.
+        See `examples/preprocessing/outlier_detection/incremental.py` for complete examples.
     """
 
     flagid = 'OUTLIER_INCRZ'

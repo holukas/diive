@@ -25,7 +25,7 @@ Kudos:
 References:
     [1] https://scikit-learn.org/stable/modules/generated/sklearn.neighbors.LocalOutlierFactor.html
 
-See examples/outlierdetection/lof.py for working examples.
+See examples/preprocessing/outlier_detection/lof.py for working examples.
 
 """
 import numpy as np
@@ -35,7 +35,7 @@ from sklearn.neighbors import LocalOutlierFactor as SKLocalOutlierFactor
 
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.pkgs.preprocessing.outlierdetection.common import create_daytime_nighttime_flags
+from diive.pkgs.preprocessing.outlier_detection.common import create_daytime_nighttime_flags
 
 
 def lof(series: Series,

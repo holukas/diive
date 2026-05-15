@@ -13,8 +13,8 @@ import pandas as pd
 from pandas import Series
 
 import diive.core.plotting.plotfuncs as pf
-from diive.pkgs.preprocessing.outlierdetection.hampel import Hampel
-from diive.pkgs.preprocessing.outlierdetection import LocalOutlierFactorAllData
+from diive.pkgs.preprocessing.outlier_detection.hampel import Hampel
+from diive.pkgs.preprocessing.outlier_detection import LocalOutlierFactorAllData
 
 
 def _deprecated_analyze_highest_quality_flux(flux: Series, nighttime_flag: Series, showplot: bool = True):

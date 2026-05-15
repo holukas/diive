@@ -95,7 +95,7 @@ from scipy.optimize import minimize_scalar
 
 from diive.pkgs.features.variables import dry_air_density, aerodynamic_resistance
 from diive.pkgs.features.variables import DaytimeNighttimeFlag
-from diive.pkgs.preprocessing.outlierdetection.hampel import HampelDaytimeNighttime
+from diive.pkgs.preprocessing.outlier_detection.hampel import HampelDaytimeNighttime
 
 pd.set_option('display.width', 2000)
 pd.set_option('display.max_columns', 14)

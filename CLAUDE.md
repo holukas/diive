@@ -1360,6 +1360,36 @@ When examples are organized in subdirectories, update these files:
    cd examples/flux && find . -name "*.py" -exec python3 -m py_compile {} \;
    ```
 
+## Notebook Consolidation (May 2026)
+
+**Preprocessing/QC notebook consolidation:**
+
+15 Jupyter notebooks from `notebooks/qc/` have been consolidated into comprehensive Sphinx Gallery examples and archived:
+
+**Archived Notebooks (15):**
+- Outlier detection: AbsoluteLimits, AbsoluteLimitsDaytimeNighttime, Hampel variants, LocalOutlierFactor variants, LocalSD, zScore variants, TrimLow, ManualRemoval
+- Corrections: MeasurementOffset, WindDirectionOffset
+- QC: MissingValues, SetExactValuesToMissing
+
+**Kept Notebook (1):**
+- `StepwiseMeteoScreeningFromDatabase.ipynb` — Unique database workflow with InfluxDB integration
+
+**Enhanced Examples (7):**
+1. `outlier_hampel.py` — Added parameter tuning sensitivity analysis
+2. `outlier_zscore.py` — Added threshold sensitivity analysis
+3. `outlier_localsd.py` — Added window size and n_sd tuning
+4. `qc_overall_flag.py` — Added missing values handling and detection
+5. `correction_measurement_offset_replicate.py` — Added simple constant offset application
+6. `outlier_absolutelimits.py` — Already had day/night variants (verified)
+7. `outlier_lof.py` — Already had day/night variants with parallel processing (verified)
+
+**Consolidation Strategy:**
+- Examples: Primary reference for production use, automated testing, Sphinx Gallery documentation
+- Archived notebooks: Historical reference, parameter exploration guide
+- Kept notebook: Unique database integration workflow still in active use
+
+All consolidation preserves information without loss; examples enhanced with parameter tuning guidance and use-case clarity.
+
 ## Notebook Conversion Status (v0.91.0+)
 
 **6 Jupyter notebooks have been converted to Sphinx Gallery examples and archived in `_archived/`:**

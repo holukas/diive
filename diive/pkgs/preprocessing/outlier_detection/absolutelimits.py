@@ -15,7 +15,7 @@ Both modes use the quality flag system:
   - flag=2: Value outside acceptable range (outlier, removed)
   - NaN: Original missing data preserved
 
-See examples/outlierdetection/absolutelimits.py for working examples.
+See examples/preprocessing/outlier_detection/absolutelimits.py for working examples.
 
 This module is part of the diive library:
 https://github.com/holukas/diive
@@ -26,7 +26,7 @@ from pandas import Series, DatetimeIndex
 
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.pkgs.preprocessing.outlierdetection.common import create_daytime_nighttime_flags
+from diive.pkgs.preprocessing.outlier_detection.common import create_daytime_nighttime_flags
 
 
 @ConsoleOutputDecorator()
@@ -54,7 +54,7 @@ class AbsoluteLimits(FlagBase):
     - NaN: Original missing data
 
     Example:
-        See `examples/outlierdetection/absolutelimits.py` for complete examples.
+        See `examples/preprocessing/outlier_detection/absolutelimits.py` for complete examples.
     """
 
     flagid = 'OUTLIER_ABSLIM'
