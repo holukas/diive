@@ -30,7 +30,7 @@ python -m pytest tests/test_gapfilling.py -v
 
 **Core capabilities:**
 - Timestamp sanitization (10-step validation, frequency detection)
-- Feature engineering (8-stage composable pipeline)
+- Feature engineering (8-stage pipeline)
 - ML gap-filling (Random Forest, XGBoost, MDS)
 - Flux processing chain (5-level workflow)
 - Outlier detection & quality control
@@ -61,7 +61,7 @@ diive/
 ├── pkgs/preprocessing/       # Outlier detection, corrections, QA/QC
 ├── pkgs/analysis/            # Time series analysis, decomposition
 └── pkgs/features/            # Variable calculations
-examples/                      # Runnable examples (75+)
+examples/                      # Runnable examples (86)
 tests/                        # Unit tests
 ```
 
@@ -256,9 +256,7 @@ scatter.plot(ax=axes[1], title='Log', ylim='auto')
 
 **Refactoring status (May 2026):**
 - ✅ HeatmapBase, HeatmapDateTime, HeatmapXYZ, HexbinPlot
-- ✅ All 16 visualization examples (100% compliance)
-- ⚠️ 12 gap-filling examples use old API (need `series` → data, move `ax` to `plot()`)
-- ⚠️ 2 examples have Windows encoding issues (box-drawing chars)
+- ✅ All 17 visualization examples
 
 See `CHANGELOG.md` for detailed refactoring notes.
 
@@ -313,7 +311,7 @@ Part of the diive library: https://github.com/holukas/diive
 
 ## Text Writing Standards
 
-Use `/llm-detox` skill for all written content (documentation, comments, commit messages, examples). Keeps codebase feeling human-written and maintains consistent voice.
+Use `/llm-detox` skill for all written content (documentation, comments, commit messages, examples).
 
 ## Known Issues & Workarounds
 
@@ -324,19 +322,19 @@ Use `/llm-detox` skill for all written content (documentation, comments, commit 
 | Feature reduction too strict | Reduce `shap_threshold_factor` (default 0.5) |
 | Unicode encoding on Windows (→ char) | Use ASCII equivalents (>, >) in examples |
 
-## Examples (75+ runnable scripts)
+## Examples (86 runnable scripts)
 
-Organized by functional domain. Each category has README with descriptions and running instructions.
+Organized by functional domain. Each category has a README with file descriptions and usage.
 
 **Structure:**
 - `visualization/` — 17 plotting examples
-- `times/` — 1 timestamp handling
-- `analysis/` — 9 time series analysis
-- `features/` — 8 variable engineering
+- `times/` — 6 timestamp handling
+- `analysis/` — 10 time series analysis
+- `features/` — 11 variable engineering
 - `fits/` — 2 data fitting
 - `io/` — 1 file I/O
 - `preprocessing/` — 18 (corrections, outlier detection, QA/QC)
-- `flux/` — 9 (processing chain, low-res, high-res)
+- `flux/` — 11 (processing chain, low-res, high-res)
 - `gapfilling/` — 10 (RF, XGBoost, MDS, interpolation, comparison)
 
 **Running examples:**
@@ -346,18 +344,6 @@ python examples/run_all_examples.py  # All in parallel (8 workers)
 ```
 
 See `examples/CATALOG.md` for complete listing and `examples/README.md` for details.
-
-## Notebook Consolidation (May 2026)
-
-**Status:** 15 QC/preprocessing notebooks consolidated into Sphinx Gallery examples and archived to `notebooks/_archived/`.
-
-**Kept:** `StepwiseMeteoScreeningFromDatabase.ipynb` (unique database workflow).
-
-**Enhanced examples:** 5 files with parameter tuning & sensitivity analysis:
-- `outlier_hampel.py`, `outlier_zscore.py`, `outlier_localsd.py`
-- `qc_overall_flag.py`, `correction_measurement_offset_replicate.py`
-
-**Result:** Examples are now primary documentation. Notebooks archived as reference.
 
 ## Common Workflows
 
