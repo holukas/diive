@@ -35,8 +35,7 @@ def calc_vpd_from_ta_rh(df: DataFrame, rh_col: str, ta_col: str) -> Series:
 
     See Also
     --------
-    examples/createvar/vpd.py : Complete examples with gap-filling and visualizations.
-    notebooks/CalculateVariable/Calculate_VPD_from_TA_and_RH.ipynb : Detailed notebook with tutorial.
+    examples/features/feature_vpd.py : Complete examples with gap-filling and visualizations.
 
     """
 

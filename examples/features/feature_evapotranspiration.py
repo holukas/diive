@@ -79,6 +79,36 @@ if len(et_eddypro_valid) > 0:
     print(f"  Correlation: {corr:.4f}")
 
 # %%
+# Visualize ET Comparison using Heatmaps
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# Create heatmaps comparing calculated ET, EddyPro reference, and the difference.
+# Reveals spatial and temporal patterns in ET agreement.
+
+import matplotlib.gridspec as gridspec
+import matplotlib.pyplot as plt
+
+fig = plt.figure(facecolor='white', figsize=(18, 6), constrained_layout=True)
+gs = gridspec.GridSpec(1, 3, figure=fig, wspace=0.3)
+
+ax1 = fig.add_subplot(gs[0, 0])
+ax2 = fig.add_subplot(gs[0, 1])
+ax3 = fig.add_subplot(gs[0, 2])
+
+dv.plot_heatmap_datetime(series=et_calculated).plot(ax=ax1)
+dv.plot_heatmap_datetime(series=et_eddypro_valid).plot(ax=ax2)
+dv.plot_heatmap_datetime(series=(et_valid - et_eddypro_valid)).plot(ax=ax3)
+
+ax1.set_title("ET from Latent Heat Flux (mm/h)", fontsize=12, fontweight='bold')
+ax2.set_title("ET from EddyPro Reference (mm/h)", fontsize=12, fontweight='bold')
+ax3.set_title("Difference (calculated - reference)", fontsize=12, fontweight='bold')
+
+ax2.tick_params(left=True, labelleft=False)
+ax3.tick_params(left=True, labelleft=False)
+
+fig.show()
+
+# %%
 # Output: Calculated Evapotranspiration
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 # The main output is the calculated ET time series
