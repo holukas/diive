@@ -17,9 +17,12 @@ Examples demonstrating flux processing, quality control, and high-resolution ana
 - **lowres/flux_timelag_analysis.py** — Time lag detection and visualization for gas concentrations
 - **lowres/flux_common.py** — Flux variable base detection and nomenclature
 - **lowres/flux_hqflux.py** — Highest-quality flux filtering with Hampel outlier detection
-- **lowres/flux_selfheating.py** — Oxygen sensor self-heating correction (SCOP methodology)
+- **lowres/flux_selfheating.py** — SCOP self-heating correction (quick demo)
+- **lowres/flux_selfheating_production.py** — Complete production workflow: scaling factors from parallel measurements, applied to long-term data
 - **lowres/flux_uncertainty.py** — Random uncertainty estimation (PAS20 method)
-- **lowres/flux_ustar_mp_detection.py** — Moving Point (MP) USTAR detection method
+- **lowres/flux_ustar_mp_detection.py** — Moving Point (MP) USTAR detection (Papale et al. 2006) with multi-year bootstrap
+- **lowres/flux_ustar_vekuri_detection.py** — Quantile-based USTAR detection (Vekuri method) with multi-year bootstrap
+- **lowres/flux_ustar_method_comparison.py** — Side-by-side comparison of ONEFlux and Vekuri USTAR approaches
 
 ### High-Resolution (10 Hz) Flux Analysis
 - **hires/flux_lag.py** — Time lag detection using MaxCovariance covariance analysis
@@ -32,7 +35,9 @@ Available classes and functions in `diive.pkgs.flux`:
 - **TimeLagAnalysis** — Time lag detection and visualization for gas concentrations
 - **RandomUncertaintyPAS20** — Measurement uncertainty quantification
 - **FlagMultipleConstantUstarThresholds** — USTAR filtering with multiple thresholds
-- **UstarMovingPointDetection** — Moving-point USTAR detection method
+- **UstarMovingPointDetection** — Moving-point USTAR detection (Papale et al. 2006)
+- **UstarVekuriThresholdDetection** — Quantile-based USTAR detection (Vekuri method)
+- **UstarBootstrapThresholds** — Multi-year bootstrap wrapper for any USTAR detector; 3-year sliding window, per-year p16/p50/p84, pooled CUT threshold
 - **ScopApplicator** — SCOP self-heating correction for open-path IRGA
 - **FluxProcessingChain** — Complete multi-level flux processing workflow
 - High-resolution analysis methods (lag detection, wind rotation)
@@ -113,20 +118,20 @@ rotated = WindRotation(
 
 ```bash
 # Complete multi-level processing workflow (recommended starting point)
-uv run python examples/pkgs/flux/fluxprocessingchain/fluxprocessingchain.py
+uv run python examples/flux/fluxprocessingchain/fluxprocessingchain.py
 
 # Low-resolution (30-min) processing
 uv run python examples/flux/lowres/flux_timelag_analysis.py
-uv run python examples/flux/lowres/flux_common.py
-uv run python examples/flux/lowres/flux_hqflux.py
 uv run python examples/flux/lowres/flux_selfheating.py
 uv run python examples/flux/lowres/flux_uncertainty.py
 uv run python examples/flux/lowres/flux_ustar_mp_detection.py
+uv run python examples/flux/lowres/flux_ustar_vekuri_detection.py
+uv run python examples/flux/lowres/flux_ustar_method_comparison.py
 
 # High-resolution (10 Hz) analysis
-uv run python examples/pkgs/flux/hires/flux_lag.py
-uv run python examples/pkgs/flux/hires/flux_windrotation.py
-uv run python examples/pkgs/flux/hires/flux_fluxdetectionlimit.py
+uv run python examples/flux/hires/flux_lag.py
+uv run python examples/flux/hires/flux_windrotation.py
+uv run python examples/flux/hires/flux_fluxdetectionlimit.py
 
 # Run all flux examples
 uv run python examples/run_all_examples.py

@@ -217,17 +217,3 @@ See: [fits/README.md](fits/README.md)
 | [**io_extract.py**](io/io_extract.py) | Binary value extraction, bit-level data manipulation |
 
 See: [io/README.md](io/README.md)
-
----
-
-## Example Data
-
-The examples use a single standardized example dataset for consistency and reproducibility. However, this represents just one example of time series data structure and quality. Real-world datasets may have:
-
-- Different time frequencies (hourly, daily, sub-30min, etc.)
-- Different gap patterns and sizes
-- Different quality characteristics and noise levels
-- Domain-specific variables and units
-- Various timestamp formats and timezone conventions
-
-All examples demonstrate principles applicable to different datasets. Adapt the code to your specific data format and requirements.
