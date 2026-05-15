@@ -75,6 +75,10 @@ from diive.pkgs.flux.lowres.uncertainty import RandomUncertaintyPAS20 as RandomU
 from diive.pkgs.flux.lowres.uncertainty import RandomUncertaintyPAS20 as random_uncertainty_pas20
 from diive.pkgs.flux.lowres.ustar_mp_detection import UstarMovingPointDetection as UstarMovingPointDetection
 from diive.pkgs.flux.lowres.ustar_mp_detection import UstarMovingPointDetection as ustar_mp_detection
+from diive.pkgs.flux.lowres.ustar_vekuri_detection import UstarVekuriThresholdDetection as UstarVekuriThresholdDetection
+from diive.pkgs.flux.lowres.ustar_vekuri_detection import UstarVekuriThresholdDetection as ustar_vekuri_detection
+from diive.pkgs.flux.lowres.ustar_bootstrap import UstarBootstrapThresholds as UstarBootstrapThresholds
+from diive.pkgs.flux.lowres.ustar_bootstrap import UstarBootstrapThresholds as ustar_bootstrap_thresholds
 from diive.pkgs.flux.lowres.ustarthreshold import \
     FlagMultipleConstantUstarThresholds as FlagMultipleConstantUstarThresholds
 from diive.pkgs.flux.lowres.ustarthreshold import FlagSingleConstantUstarThreshold as FlagSingleConstantUstarThreshold

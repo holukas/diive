@@ -164,7 +164,9 @@ See: [features/README.md](features/README.md)
 | [**flux_selfheating.py**](flux/lowres/flux_selfheating.py) | SCOP self-heating correction workflow (quick demo with 5/5 settings) |
 | [**flux_selfheating_production.py**](flux/lowres/flux_selfheating_production.py) | Complete production workflow: create scaling factors table + apply to long-term data |
 | [**flux_uncertainty.py**](flux/lowres/flux_uncertainty.py) | Random uncertainty estimation (PAS20 method) |
-| [**flux_ustar_mp_detection.py**](flux/lowres/flux_ustar_mp_detection.py) | Moving Point (MP) USTAR detection |
+| [**flux_ustar_mp_detection.py**](flux/lowres/flux_ustar_mp_detection.py) | Moving Point (MP) USTAR detection (Papale et al. 2006) |
+| [**flux_ustar_vekuri_detection.py**](flux/lowres/flux_ustar_vekuri_detection.py) | Simplified quantile-based USTAR detection (Vekuri method) |
+| [**flux_ustar_method_comparison.py**](flux/lowres/flux_ustar_method_comparison.py) | Compare ONEFlux and Vekuri USTAR detection methods |
 
 ### High-Resolution (10 Hz) Analysis
 

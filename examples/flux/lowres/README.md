@@ -18,7 +18,11 @@ Covers time lag detection, quality filtering, self-heating correction, uncertain
 
 ### Measurement Uncertainty & Turbulence
 - **flux_uncertainty.py** — Random uncertainty estimation using the Pilegaard et al. (2020) method
-- **flux_ustar_mp_detection.py** — Moving Point (MP) friction velocity detection for nighttime turbulence thresholds
+- **flux_ustar_mp_detection.py** — Moving Point (MP) friction velocity detection for nighttime turbulence thresholds (Papale et al. 2006)
+- **flux_ustar_vekuri_detection.py** — Simplified quantile-based friction velocity detection (Vekuri method)
+- **flux_ustar_method_comparison.py** — Compare ONEFlux and Vekuri USTAR detection approaches
+
+All three USTAR examples use `UstarBootstrapThresholds` as the multi-year bootstrap wrapper. It runs N iterations per calendar year using a 3-year sliding window, then returns per-year p16/p50/p84 thresholds and a CUT (constant) threshold pooled across all years. The detection algorithm (moving point vs. quantile-based) is swapped via `detector_class`.
 
 ## Running Examples
 

@@ -2,35 +2,9 @@
 USTAR MOVING POINT DETECTION: FRICTION VELOCITY THRESHOLD
 ==========================================================
 
-Identify friction velocity (u*) threshold for reliable eddy covariance flux using moving point algorithm.
+Detect friction velocity (u*) threshold using the ONEFlux moving point algorithm (Papale et al., 2006).
 
 Part of the diive library: https://github.com/holukas/diive
-
-Algorithm details (Papale et al. 2006):
-
-This module implements the ONEFlux USTAR moving point threshold detection algorithm
-as described in Papale et al. (2006). The algorithm identifies the friction velocity (u*)
-threshold below which eddy covariance flux measurements are unreliable due to insufficient
-turbulent mixing.
-
-Algorithm Overview:
-1. Filter data to NIGHTTIME ONLY (SW_IN < 10 W/m²) where respiration is pure and stable
-2. Stratify data by SEASON (4 groups), then TEMPERATURE CLASS (7 classes), then USTAR CLASS (20 classes)
-3. For each temperature class:
-   - Validate temperature-USTAR independence (correlation check)
-   - Create quantile-based USTAR classes
-   - Compute mean respiration (NEE) per USTAR class
-   - Find stability threshold using forward/back mode detection
-4. Aggregate thresholds across temperature classes using median
-5. Bootstrap resampling provides uncertainty estimates
-
-The forward mode searches from low to high USTAR for where respiration stabilizes.
-The back mode works backwards from high USTAR for additional validation.
-
-References:
-    Papale, D., et al. (2006). Towards a standardized processing of net ecosystem
-    productivity and flux measurements of seasonal and interannual variability.
-    Biogeosciences. https://doi.org/10.5194/bg-3-571-2006
 """
 
 import numpy as np
@@ -59,7 +33,7 @@ class UstarMovingPointDetection:
     4. STRATIFY BY USTAR: Within each temperature class, divide into 20 USTAR classes
     5. COMPUTE STATISTICS: Calculate mean respiration per USTAR class
     6. VALIDATE: Check temperature-USTAR independence and first USTAR validity
-    7. DETECT THRESHOLD: Use forward/back mode detection to find stability point
+    7. DETECT THRESHOLD: Use forward mode detection (ascending search) to find stability point
     8. AGGREGATE: Median across temperature classes gives season threshold
     9. BOOTSTRAP: Repeat with resampled data for uncertainty estimation
 
@@ -94,10 +68,10 @@ class UstarMovingPointDetection:
     Attributes
     ----------
     results_ : pd.DataFrame
-        Detected thresholds with columns: 'forward_mode', 'back_mode'
+        Detected thresholds with column: 'threshold'
         Index contains season labels (Season 1, 2, 3, 4)
-    bootstrap_stats_ : pd.DataFrame
-        Bootstrap statistics including mean, std, percentiles for each mode
+    annual_thresholds_ : dict
+        Annual threshold with key: 'threshold' (maximum across seasons)
 
     Examples
     --------
@@ -136,7 +110,6 @@ class UstarMovingPointDetection:
     MIN_SAMPLES_TA_CLASS = 100  # Minimum records per temperature class (TA_CLASS_MIN_SAMPLE)
     CORRELATION_CHECK = 0.5  # Maximum |correlation(TA, USTAR)| allowed for valid TA class
     FIRST_USTAR_MEAN_CHECK = 0.2  # Maximum first USTAR class mean in m/s (validation threshold)
-    PERCENTILE_CHECK = 90  # Percentile of USTAR distribution for back mode start
     THRESHOLD_NOT_FOUND = 10.0  # Marker value indicating threshold could not be detected (USTAR_THRESHOLD_NOT_FOUND)
 
     def __init__(
@@ -250,14 +223,14 @@ class UstarMovingPointDetection:
         Returns
         -------
         pd.DataFrame
-            Seasonal thresholds with columns: 'forward_mode', 'back_mode'
+            Seasonal thresholds with column: 'threshold'
             Rows: Season 1, 2, 3, 4 (winter, spring, summer, fall)
             Values: USTAR threshold in m/s, or NaN if detection failed
 
         Notes
         -----
-        Annual thresholds (maximum across seasons) stored in annual_thresholds_ attribute.
-        Use get_annual_thresholds() to retrieve the annual values for data filtering.
+        Annual threshold (maximum across seasons) stored in annual_thresholds_ attribute.
+        Use get_annual_thresholds() to retrieve the annual value for data filtering.
         """
         # STEP 1: Data validation
         # ============================================================================
@@ -315,51 +288,50 @@ class UstarMovingPointDetection:
             season_mask = (df_valid['month'].isin(months)) & (df_valid['is_night'])
             df_season = df_valid[season_mask].copy()
 
-            # Check minimum season data (ONEFlux requirement: MIN_VALUE_SEASON = 160 records)
+            # Check minimum season data (Papale et al. requirement: MIN_VALUE_SEASON = 160 records)
             if len(df_season) < self.MIN_SAMPLES_SEASON:
                 if self.verbose >= 2:
                     print(f"    Insufficient data: {len(df_season)} samples (need {self.MIN_SAMPLES_SEASON})")
-                thresholds_list.append([np.nan, np.nan])
+                thresholds_list.append([np.nan])
                 continue
 
             # Detect threshold for this season using temperature stratification
-            # Returns both forward mode (ascending USTAR) and back mode (descending USTAR)
-            forward_th, back_th = self._detect_season(df_season)
-            thresholds_list.append([forward_th, back_th])
+            # Returns forward mode threshold (Papale et al. 2006)
+            threshold = self._detect_season(df_season)
+            thresholds_list.append([threshold])
 
-            if self.verbose >= 2:
-                print(f"    Forward mode: {forward_th:.4f} m/s")
-                print(f"    Back mode:    {back_th:.4f} m/s")
+            if self.verbose >= 2 and threshold != self.THRESHOLD_NOT_FOUND:
+                print(f"    Threshold: {threshold:.4f} m/s")
 
         # STEP 5: Store seasonal results
         # ============================================================================
         self.results_ = pd.DataFrame(
             thresholds_list,
-            columns=['forward_mode', 'back_mode'],
+            columns=['threshold'],
             index=[f'Season {i+1}' for i in range(len(thresholds_list))]
         )
 
-        # STEP 6: Calculate annual thresholds (ONEFlux conservative approach)
+        # STEP 6: Calculate annual thresholds (Papale et al. 2006 conservative approach)
         # ============================================================================
         # Annual threshold = MAXIMUM seasonal threshold (conservative filtering)
-        # Matches ONEFlux: "The whole data set is filtered according to the highest threshold found"
+        # Matches Papale et al.: "The whole data set is filtered according to the highest threshold found"
         # This ensures we use the most restrictive (highest) USTAR threshold across all seasons
-        forward_thresholds = [t[0] for t in thresholds_list if not np.isnan(t[0]) and t[0] != self.THRESHOLD_NOT_FOUND]
-        back_thresholds = [t[1] for t in thresholds_list if not np.isnan(t[1]) and t[1] != self.THRESHOLD_NOT_FOUND]
+        valid_thresholds = [t[0] for t in thresholds_list if not np.isnan(t[0]) and t[0] != self.THRESHOLD_NOT_FOUND]
 
         self.annual_thresholds_ = {
-            'forward_mode': np.max(forward_thresholds) if forward_thresholds else self.THRESHOLD_NOT_FOUND,
-            'back_mode': np.max(back_thresholds) if back_thresholds else self.THRESHOLD_NOT_FOUND
+            'threshold': np.max(valid_thresholds) if valid_thresholds else self.THRESHOLD_NOT_FOUND,
         }
 
         if self.verbose >= 1:
-            print(f"\nAnnual thresholds (conservative approach):")
-            print(f"  Forward Mode: {self.annual_thresholds_['forward_mode']:.4f} m/s" if self.annual_thresholds_['forward_mode'] != self.THRESHOLD_NOT_FOUND else "  Forward Mode: Not found")
-            print(f"  Back Mode:    {self.annual_thresholds_['back_mode']:.4f} m/s" if self.annual_thresholds_['back_mode'] != self.THRESHOLD_NOT_FOUND else "  Back Mode: Not found")
+            annual_val = self.annual_thresholds_['threshold']
+            if annual_val != self.THRESHOLD_NOT_FOUND:
+                print(f"\nAnnual threshold (Papale et al. 2006 conservative approach): {annual_val:.4f} m/s")
+            else:
+                print(f"\nAnnual threshold: Not found")
 
         return self.results_
 
-    def _detect_season(self, df_season: pd.DataFrame) -> Tuple[float, float]:
+    def _detect_season(self, df_season: pd.DataFrame) -> float:
         """
         Detect USTAR threshold for a single season using temperature stratification.
 
@@ -368,7 +340,7 @@ class UstarMovingPointDetection:
         higher USTAR to mix CO2 to the sensor height, while unstable conditions (warm nights) have
         lower USTAR requirements.
 
-        Algorithm flow (matches ONEFlux ustar.c):
+        Algorithm flow (matches Papale et al. 2006 ustar.c):
         1. Sort data by temperature (TA)
         2. Create 7 equal-sized temperature classes using quantile method
         3. For each temperature class:
@@ -378,10 +350,9 @@ class UstarMovingPointDetection:
            d. Compute mean NEE (respiration) per USTAR class
            e. Validate first USTAR class (mean < 0.2 m/s)
            f. Detect forward mode threshold (ascending USTAR search)
-           g. Detect back mode threshold (descending USTAR search)
         4. Aggregate thresholds across temperature classes using MEDIAN
            (robust to outlier TA classes, matches ONEFlux approach)
-        5. Return (forward_threshold, back_threshold) for the season
+        5. Return forward_threshold for the season
 
         Parameters
         ----------
@@ -390,14 +361,12 @@ class UstarMovingPointDetection:
 
         Returns
         -------
-        Tuple[float, float]
-            (forward_mode_threshold, back_mode_threshold) in m/s
-            Returns (10.0, 10.0) if threshold cannot be detected (THRESHOLD_NOT_FOUND marker)
+        float
+            Forward mode threshold in m/s
         """
         # Store thresholds detected in each temperature class
-        # Later aggregated using median (robust aggregation method, matches ONEFlux)
-        thresholds_forward = []
-        thresholds_back = []
+        # Later aggregated using median (robust aggregation method, matches Papale et al. 2006)
+        thresholds = []
 
         # STEP 1: Sort data by temperature for class creation
         # ============================================================================
@@ -412,7 +381,7 @@ class UstarMovingPointDetection:
         n_per_ta = len(df_sorted) // self.ta_classes_count
         if n_per_ta < self.MIN_SAMPLES_TA_CLASS:
             # Insufficient data to create valid temperature classes
-            return self.THRESHOLD_NOT_FOUND, self.THRESHOLD_NOT_FOUND
+            return self.THRESHOLD_NOT_FOUND
 
         # STEP 3: Process each temperature class independently
         # ============================================================================
@@ -428,7 +397,7 @@ class UstarMovingPointDetection:
 
             df_ta_class = df_sorted.iloc[start_idx:end_idx]
 
-            # Skip if too few samples for this TA class (minimum 100 records per ONEFlux)
+            # Skip if too few samples for this TA class (minimum 100 records per Papale et al.)
             if len(df_ta_class) < self.MIN_SAMPLES_TA_CLASS:
                 continue
 
@@ -446,24 +415,19 @@ class UstarMovingPointDetection:
 
             # Detect USTAR threshold for this temperature class
             # Calls _detect_ta_class which stratifies by USTAR and finds stability point
-            forward_th, back_th = self._detect_ta_class(df_ta_class)
+            threshold = self._detect_ta_class(df_ta_class)
 
             # Collect valid thresholds for later aggregation
-            if not np.isnan(forward_th) and forward_th != self.THRESHOLD_NOT_FOUND:
-                thresholds_forward.append(forward_th)
-            if not np.isnan(back_th) and back_th != self.THRESHOLD_NOT_FOUND:
-                thresholds_back.append(back_th)
+            if not np.isnan(threshold) and threshold != self.THRESHOLD_NOT_FOUND:
+                thresholds.append(threshold)
 
         # STEP 4: Aggregate thresholds across temperature classes
         # ============================================================================
-        # Use MEDIAN aggregation (robust to outliers, matches ONEFlux approach)
+        # Use MEDIAN aggregation (robust to outliers, matches Papale et al. 2006 approach)
         # If no valid TA classes found, return THRESHOLD_NOT_FOUND (10.0) marker
-        forward_result = np.median(thresholds_forward) if thresholds_forward else self.THRESHOLD_NOT_FOUND
-        back_result = np.median(thresholds_back) if thresholds_back else self.THRESHOLD_NOT_FOUND
+        return np.median(thresholds) if thresholds else self.THRESHOLD_NOT_FOUND
 
-        return forward_result, back_result
-
-    def _detect_ta_class(self, df_ta_class: pd.DataFrame) -> Tuple[float, float]:
+    def _detect_ta_class(self, df_ta_class: pd.DataFrame) -> float:
         """
         Detect USTAR threshold for one temperature class via USTAR stratification.
 
@@ -474,13 +438,13 @@ class UstarMovingPointDetection:
           3. High USTAR: respiration stabilizes (full recovery, no further change)
 
         The threshold is the USTAR value where further increases don't change respiration.
+        Uses forward mode detection as per Papale et al. (2006).
 
-        Algorithm (matches ONEFlux ustar.c):
+        Algorithm (matches Papale et al. 2006 ustar.c):
         1. Create 20 equal-sized USTAR quantile classes within this TA class
         2. Calculate mean respiration (NEE) per USTAR class
         3. Validate: first USTAR class must be low (< 0.2 m/s) to detect the threshold
         4. Forward mode: ascending search for stabilization point
-        5. Back mode: descending search for additional validation
 
         Parameters
         ----------
@@ -489,8 +453,8 @@ class UstarMovingPointDetection:
 
         Returns
         -------
-        Tuple[float, float]
-            (forward_mode_threshold, back_mode_threshold) in m/s
+        float
+            Forward mode threshold in m/s
         """
         # STEP 1: Sort by USTAR for quantile-based class creation
         # ============================================================================
@@ -501,7 +465,7 @@ class UstarMovingPointDetection:
         n_per_ustar = len(df_sorted) // self.ustar_classes_count
         if n_per_ustar < 1:
             # Not enough data to create valid USTAR classes
-            return self.THRESHOLD_NOT_FOUND, self.THRESHOLD_NOT_FOUND
+            return self.THRESHOLD_NOT_FOUND
 
         # STEP 2: Compute statistics for each USTAR class
         # ============================================================================
@@ -528,7 +492,7 @@ class UstarMovingPointDetection:
 
         # Need at least 2 USTAR classes to detect a threshold
         if len(ustar_means) < 2:
-            return self.THRESHOLD_NOT_FOUND, self.THRESHOLD_NOT_FOUND
+            return self.THRESHOLD_NOT_FOUND
 
         ustar_means = np.array(ustar_means)
         nee_means = np.array(nee_means)
@@ -541,23 +505,16 @@ class UstarMovingPointDetection:
         # If the lowest class is already >= 0.2 m/s, the data doesn't span the problematic range
         if ustar_means[0] > self.FIRST_USTAR_MEAN_CHECK:
             # Data doesn't include sufficiently low USTAR values
-            return self.THRESHOLD_NOT_FOUND, self.THRESHOLD_NOT_FOUND
+            return self.THRESHOLD_NOT_FOUND
 
-        # STEP 3: Detect forward mode threshold
+        # STEP 3: Detect forward mode threshold (Papale et al. 2006)
         # ============================================================================
         # Search ascending through USTAR classes for where respiration stabilizes
         # Window size = 10 classes (ONEFlux default WINDOWS_SIZE_FOR_FORWARD_MODE)
         # n = 1 (check next 1 class for stability)
-        forward_th = self._forward_mode(ustar_means, nee_means, n=1, window_size=10)
+        threshold = self._forward_mode(ustar_means, nee_means, n=1, window_size=10)
 
-        # STEP 4: Detect back mode threshold
-        # ============================================================================
-        # Search descending from high USTAR for additional stability validation
-        # Window size = 6 classes (ONEFlux default WINDOWS_SIZE_FOR_BACK_MODE)
-        # n = 1 (check previous 1 class for stability)
-        back_th = self._back_mode(ustar_means, nee_means, n=1, window_size=6)
-
-        return forward_th, back_th
+        return threshold
 
     def _forward_mode(
         self,
@@ -598,54 +555,6 @@ class UstarMovingPointDetection:
             # Check if current class meets all n threshold conditions
             if np.all(nee_means[i:i+n] >= np.array(window_means) * threshold_check):
                 return ustar_means[i]
-
-        return self.THRESHOLD_NOT_FOUND
-
-    def _back_mode(
-        self,
-        ustar_means: np.ndarray,
-        nee_means: np.ndarray,
-        n: int = 1,
-        threshold_check: float = 1.0,
-        percentile: float = 90.0,
-        window_size: int = 6
-    ) -> float:
-        """
-        Back mode: Start from high USTAR, work backwards finding stabilization point.
-
-        For each position i starting from percentile, compute window mean from position i
-        forward for window_size steps, then check if previous n values satisfy condition.
-        Window size defaults to 6 (ONEFlux default WINDOWS_SIZE_FOR_BACK_MODE).
-        """
-        # Start from percentile
-        start_idx = int(len(ustar_means) * percentile / 100.0)
-        if start_idx >= len(ustar_means):
-            start_idx = len(ustar_means) - 1
-
-        # Work backwards
-        for i in range(start_idx, n, -1):
-            # Calculate window mean from i forward for window_size
-            end_idx = min(i + window_size, len(nee_means))
-            window = nee_means[i:end_idx]
-
-            if len(window) == 0 or np.any(np.isnan(window)):
-                continue
-
-            window_mean = np.nanmean(window)
-            threshold = window_mean * threshold_check
-
-            # Check previous n values
-            prev_nee = nee_means[max(0, i - n):i]
-            if len(prev_nee) == 0 or np.any(np.isnan(prev_nee)):
-                continue
-
-            # All previous values must be <= threshold
-            if np.all(prev_nee <= threshold):
-                return ustar_means[i - 1]
-
-        # Fallback: use percentile value
-        if start_idx < len(ustar_means):
-            return ustar_means[start_idx]
 
         return self.THRESHOLD_NOT_FOUND
 
@@ -713,22 +622,20 @@ class UstarMovingPointDetection:
 
             if len(boot_vals) == 0:
                 stats_list.append({
-                    'forward_mean': np.nan, 'forward_std': np.nan,
-                    'forward_p05': np.nan, 'forward_p95': np.nan,
-                    'back_mean': np.nan, 'back_std': np.nan,
-                    'back_p05': np.nan, 'back_p95': np.nan,
+                    'mean': np.nan, 'std': np.nan,
+                    'p05': np.nan, 'p50': np.nan, 'p95': np.nan,
                 })
                 continue
 
+            # Extract threshold values (first column)
+            threshold_vals = boot_vals[:, 0] if boot_vals.ndim > 1 else boot_vals
+
             stats_list.append({
-                'forward_mean': np.nanmean(boot_vals[:, 0]),
-                'forward_std': np.nanstd(boot_vals[:, 0]),
-                'forward_p05': np.nanpercentile(boot_vals[:, 0], 5),
-                'forward_p95': np.nanpercentile(boot_vals[:, 0], 95),
-                'back_mean': np.nanmean(boot_vals[:, 1]),
-                'back_std': np.nanstd(boot_vals[:, 1]),
-                'back_p05': np.nanpercentile(boot_vals[:, 1], 5),
-                'back_p95': np.nanpercentile(boot_vals[:, 1], 95),
+                'mean': np.nanmean(threshold_vals),
+                'std': np.nanstd(threshold_vals),
+                'p05': np.nanpercentile(threshold_vals, 5),
+                'p50': np.nanpercentile(threshold_vals, 50),
+                'p95': np.nanpercentile(threshold_vals, 95),
             })
 
         return pd.DataFrame(
@@ -742,31 +649,31 @@ class UstarMovingPointDetection:
             return "No detection results. Run detect() first."
 
         lines = ["USTAR Threshold Detection Results (Papale et al., 2006)"]
-        lines.append("=" * 75)
-        lines.append(f"{'Season':<15} {'Forward Mode (m/s)':<25} {'Back Mode (m/s)':<25}")
-        lines.append("-" * 75)
+        lines.append("=" * 60)
+        lines.append(f"{'Season':<15} {'Threshold (m/s)':<20}")
+        lines.append("-" * 60)
 
         for idx in self.results_.index:
-            forward = f"{self.results_.loc[idx, 'forward_mode']:.4f}" if not np.isnan(self.results_.loc[idx, 'forward_mode']) and self.results_.loc[idx, 'forward_mode'] != self.THRESHOLD_NOT_FOUND else "Not found"
-            back = f"{self.results_.loc[idx, 'back_mode']:.4f}" if not np.isnan(self.results_.loc[idx, 'back_mode']) and self.results_.loc[idx, 'back_mode'] != self.THRESHOLD_NOT_FOUND else "Not found"
-            lines.append(f"{idx:<15} {forward:<25} {back:<25}")
+            val = self.results_.loc[idx, 'threshold']
+            threshold_str = f"{val:.4f}" if not np.isnan(val) and val != self.THRESHOLD_NOT_FOUND else "Not found"
+            lines.append(f"{idx:<15} {threshold_str:<20}")
 
         return "\n".join(lines)
 
     def get_annual_thresholds(self) -> Dict[str, float]:
         """
-        Get annual USTAR thresholds (maximum across all seasons).
+        Get annual USTAR threshold (maximum across all seasons).
 
         Returns
         -------
         Dict[str, float]
-            Annual thresholds with keys: 'forward_mode', 'back_mode'
-            Values: USTAR threshold in m/s (10.0 if not found)
+            Annual threshold with key: 'threshold'.
+            Value: USTAR threshold in m/s, or NaN if detection failed.
 
         Notes
         -----
         Annual threshold uses conservative approach: maximum of seasonal thresholds.
-        Matches ONEFlux: "The whole data set is filtered according to the highest
+        Matches Papale et al. (2006): "The whole data set is filtered according to the highest
         threshold found (conservative approach)."
 
         Example
@@ -774,11 +681,15 @@ class UstarMovingPointDetection:
         >>> detector = UstarMovingPointDetection(df)
         >>> detector.detect()
         >>> annual = detector.get_annual_thresholds()
-        >>> print(f"Forward mode: {annual['forward_mode']:.4f} m/s")
+        >>> print(f"Threshold: {annual['threshold']:.4f} m/s")
         """
         if not hasattr(self, 'annual_thresholds_'):
             raise RuntimeError("Detection not yet performed. Call detect() first.")
-        return self.annual_thresholds_.copy()
+        result = self.annual_thresholds_.copy()
+        # Convert THRESHOLD_NOT_FOUND marker to NaN for clean external interface
+        if result.get('threshold') == self.THRESHOLD_NOT_FOUND:
+            result['threshold'] = np.nan
+        return result
 
     def __repr__(self) -> str:
         """String representation."""

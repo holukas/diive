@@ -1,45 +1,35 @@
 """
-=====================================
-Moving Point (MP) USTAR Detection
-=====================================
+======================================
+USTAR Vekuri Threshold Detection
+======================================
 
-Detect USTAR threshold using the Moving Point method (Papale et al., 2006).
+Detect USTAR threshold using the quantile-based Vekuri approach.
 
-Nighttime data is stratified by season, temperature class, and USTAR class.
-The threshold is where NEE stops increasing with rising USTAR (forward mode).
+Uses quantile binning for both temperature and USTAR classes, which gives
+equal sample sizes per bin regardless of the underlying distribution.
 A 3-year sliding window bootstrap returns per-year p16/p50/p84 thresholds
 and a CUT (constant) threshold pooled across all years.
 """
 
-import diive as dv
-
 # %%
 # Load example data
-# ^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^^^^^^^^^
 
-df = dv.load_exampledata_parquet_lae()
+import diive as dv
 
-print("=" * 70)
-print("Moving Point (MP) USTAR Threshold Detection")
-print("=" * 70)
-print(f"\nData: {len(df)} records, {df.index.min().date()} to {df.index.max().date()}")
+data = dv.load_exampledata_parquet_lae()
+
+print(f"Data: {len(data)} records, {data.index.min().date()} to {data.index.max().date()}")
 
 # %%
-# Detect USTAR threshold
-# ^^^^^^^^^^^^^^^^^^^^^^
+# Detect thresholds
+# ^^^^^^^^^^^^^^^^^^
 #
-# Initialize detector with DataFrame. Column names are auto-detected.
 # detect() returns seasonal thresholds; get_annual_thresholds() returns the
 # conservative annual maximum across seasons.
 
-detector = dv.UstarMovingPointDetection(
-    df=df,
-    ta_classes_count=7,  # Temperature stratification classes (ONEFlux default)
-    ustar_classes_count=20,  # USTAR stratification classes per temperature class
-    verbose=1
-)
-
-detector.detect()
+detector = dv.UstarVekuriThresholdDetection(data, verbose=1)
+thresholds = detector.detect()
 
 print("\n" + detector.summary())
 
@@ -48,7 +38,7 @@ print(f"\nAnnual threshold (max across seasons): {annual['threshold']:.4f} m/s")
 
 # %%
 # Multi-year bootstrap uncertainty
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
 # UstarBootstrapThresholds runs N bootstrap iterations per calendar year,
 # then extracts percentile thresholds from the resulting distribution.
@@ -56,9 +46,8 @@ print(f"\nAnnual threshold (max across seasons): {annual['threshold']:.4f} m/s")
 # get_cut_threshold() pools all years into a single CUT threshold.
 
 boot = dv.UstarBootstrapThresholds(
-    df=df,
-    detector_class=dv.UstarMovingPointDetection,
-    detector_kwargs=dict(ta_classes_count=7, ustar_classes_count=20),
+    df=data,
+    detector_class=dv.UstarVekuriThresholdDetection,
     n_iter=100,
     percentiles=(16, 50, 84),
     n_jobs=-1,
@@ -92,4 +81,15 @@ for pct, val in cut.items():
     marker = "  <-- recommended" if pct == 'p50' else ""
     print(f"  {pct}: {val:.4f}{marker}")
 
-print("\n[OK] Moving Point USTAR detection complete.")
+# %%
+# Seasonal thresholds overview
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# The raw detect() output shows thresholds for each season.
+
+import pandas as pd
+
+print("\nSeasonal thresholds from detect():")
+print(thresholds.round(4))
+
+print("\n[OK] Vekuri USTAR detection complete.")

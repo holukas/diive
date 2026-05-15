@@ -80,6 +80,14 @@
 - Now developing under Python 3.12
 - Switched from poetry to `uv` dependency management (modern, fast, deterministic)
 - **New example: flux_selfheating_production.py** — Complete production workflow for self-heating correction: create scaling factors table from parallel measurements (20 USTAR classes, 100 bootstrap runs), then apply to long-term data. Demonstrates full SCOP calibration and application phases with all diagnostics and uncertainty quantification.
+- **New USTAR threshold detection method: Vekuri quantile-based approach** — Simplified alternative to ONEFlux moving point method. Key differences: quantile-based stratification (ensures equal sample sizes), single ascending-search detection mode, lower correlation threshold (0.4 vs 0.5), generally faster computation. Added `UstarVekuriThresholdDetection` class in `diive.pkgs.flux.lowres.ustar_vekuri_detection`, two new examples:
+  - `flux_ustar_vekuri_detection.py` — Demonstration of Vekuri method with bootstrap uncertainty estimation
+  - `flux_ustar_method_comparison.py` — Side-by-side comparison of ONEFlux vs Vekuri on same data with seasonal/annual thresholds, bootstrap statistics, and guidance on when to use each method
+- **New class: UstarBootstrapThresholds** — Multi-year bootstrap wrapper for any USTAR detection method. Splits data by calendar year, runs N bootstrap iterations per year, and returns per-year percentile thresholds (p16/p50/p84 by default) and a CUT (constant) threshold pooled across all years. Works with both `UstarMovingPointDetection` and `UstarVekuriThresholdDetection`. p50 is the recommended annual threshold; p16/p84 bound the uncertainty (~1 sigma). CUT pools all years' samples into a single conservative threshold. Added in `diive.pkgs.flux.lowres.ustar_bootstrap`. All three USTAR examples updated to use the wrapper for bootstrap:
+  - `flux_ustar_mp_detection.py` — Uses `UstarBootstrapThresholds` with `UstarMovingPointDetection`
+  - `flux_ustar_vekuri_detection.py` — Uses `UstarBootstrapThresholds` with `UstarVekuriThresholdDetection`
+  - `flux_ustar_method_comparison.py` — Compares both methods via `UstarBootstrapThresholds`, shows per-year and CUT thresholds side by side
+- **UstarMovingPointDetection cleanup** — Simplified to forward mode only (back mode removed as it is not part of the Papale et al. 2006 standard). `get_annual_thresholds()` now returns NaN (not the internal 10.0 marker) when detection fails, giving a clean external interface.
 - **New analysis class: GrangerCausality** — Test predictive causality between time series with significance testing and lag identification. Example: `examples/analysis/analysis_granger.py`
 - **Pandas 3.0.3 compatibility upgrade:**
   - Fixed 13 `.iterrows()` calls → index-based iteration (performance, pandas 3.0 compliance)

@@ -100,6 +100,8 @@ EXAMPLE_FILES = [
     'flux/lowres/flux_selfheating_production.py',
     'flux/lowres/flux_uncertainty.py',
     'flux/lowres/flux_ustar_mp_detection.py',
+    'flux/lowres/flux_ustar_vekuri_detection.py',
+    'flux/lowres/flux_ustar_method_comparison.py',
     # Flux - High-resolution analysis
     'flux/hires/flux_fluxdetectionlimit.py',
     'flux/hires/flux_lag.py',

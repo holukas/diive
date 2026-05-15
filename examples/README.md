@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
 
-**86 examples across 9 organized folders by functional domain.**
+**88 examples across 9 organized folders by functional domain.**
 
 ## Structure
 
@@ -51,17 +51,19 @@ examples/
 ├── fits/                  # Data fitting (2 examples)
 │   ├── fit_fitter.py
 │   └── fit_binfittercp.py
-├── flux/                  # Eddy covariance flux processing (11 examples)
+├── flux/                  # Eddy covariance flux processing (13 examples)
 │   ├── fluxprocessingchain/
 │   │   └── fluxprocessingchain.py
-│   ├── lowres/            # Low-resolution processing (7 examples)
+│   ├── lowres/            # Low-resolution processing (9 examples)
 │   │   ├── flux_timelag_analysis.py
 │   │   ├── flux_common.py
 │   │   ├── flux_hqflux.py
 │   │   ├── flux_selfheating.py
 │   │   ├── flux_selfheating_production.py
 │   │   ├── flux_uncertainty.py
-│   │   └── flux_ustar_mp_detection.py
+│   │   ├── flux_ustar_mp_detection.py
+│   │   ├── flux_ustar_vekuri_detection.py
+│   │   └── flux_ustar_method_comparison.py
 │   └── hires/             # High-resolution analysis (3 examples)
 │       ├── flux_fluxdetectionlimit.py
 │       ├── flux_lag.py
@@ -114,7 +116,7 @@ uv run python examples/gapfilling/gapfill_randomforest.py
 uv run python examples/run_all_examples.py
 ```
 
-This runs all 86 examples in parallel with 8 workers, reporting execution time and any errors.
+This runs all 88 examples in parallel with 8 workers, reporting execution time and any errors.
 
 ## Finding Examples
 
@@ -147,11 +149,11 @@ Browse by topic:
 | **Analysis** | 10 | Correlation, decomposition, gap detection, spatial aggregation, harmonic analysis |
 | **Features** | 11 | Feature engineering pipeline, air properties, unit conversions, day/night flags, VPD, lagged variants |
 | **Fits** | 2 | Binned fitting, ecosystem response fitting |
-| **Flux** | 11 | Time lag analysis, processing chain, HQ filtering, USTAR detection, self-heating (2), uncertainty, high-res analysis |
+| **Flux** | 13 | Time lag analysis, processing chain, HQ filtering, USTAR detection (3), self-heating (2), uncertainty, high-res analysis |
 | **Gapfilling** | 10 | Linear interpolation, Random Forest (3 variants), XGBoost (3 variants), MDS (2), comparison |
 | **IO** | 1 | Binary value extraction |
 | **Preprocessing** | 18 | Corrections (7), outlier detection (9), QA/QC (2) |
-| **TOTAL** | **86** | |
+| **TOTAL** | **88** | |
 
 ## Running Options
 

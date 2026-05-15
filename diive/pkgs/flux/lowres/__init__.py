@@ -14,6 +14,8 @@ from diive.pkgs.flux.lowres.timelag_analysis import TimeLagAnalysis
 from diive.pkgs.flux.lowres.uncertainty import RandomUncertaintyPAS20
 from diive.pkgs.flux.lowres.ustarthreshold import FlagMultipleConstantUstarThresholds
 from diive.pkgs.flux.lowres.ustar_mp_detection import UstarMovingPointDetection
+from diive.pkgs.flux.lowres.ustar_vekuri_detection import UstarVekuriThresholdDetection
+from diive.pkgs.flux.lowres.ustar_bootstrap import UstarBootstrapThresholds
 
 __all__ = [
     'detect_fluxbasevar',
@@ -23,4 +25,6 @@ __all__ = [
     'RandomUncertaintyPAS20',
     'FlagMultipleConstantUstarThresholds',
     'UstarMovingPointDetection',
+    'UstarVekuriThresholdDetection',
+    'UstarBootstrapThresholds',
 ]
