@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
 
-**82 examples across 9 organized folders by functional domain.**
+**86 examples across 9 organized folders by functional domain.**
 
 ## Structure
 
@@ -28,13 +28,14 @@ examples/
 │   ├── plot_ridgeline_advanced.py
 │   ├── plot_other_plots.py
 │   └── plot_timeseries_interactive.py
-├── times/                 # Timestamp handling (5 examples)
+├── times/                 # Timestamp handling (6 examples)
 │   ├── times_timestamp_sanitizer.py
 │   ├── times_frequency_detection.py
+│   ├── times_time_features.py
 │   ├── times_diel_cycles.py
 │   ├── times_temporal_matrices.py
 │   └── times_statistics.py
-├── analysis/              # Time series analysis (9 examples)
+├── analysis/              # Time series analysis (10 examples)
 │   ├── analysis_correlation.py
 │   ├── analysis_seasonaltrend.py
 │   ├── analysis_gapfinder.py
@@ -50,7 +51,7 @@ examples/
 ├── fits/                  # Data fitting (2 examples)
 │   ├── fit_fitter.py
 │   └── fit_binfittercp.py
-├── flux/                  # Eddy covariance flux processing (10 examples)
+├── flux/                  # Eddy covariance flux processing (11 examples)
 │   ├── fluxprocessingchain/
 │   │   └── fluxprocessingchain.py
 │   ├── lowres/            # Low-resolution processing (7 examples)
@@ -113,7 +114,7 @@ uv run python examples/gapfilling/gapfill_randomforest.py
 uv run python examples/run_all_examples.py
 ```
 
-This runs all 82 examples in parallel with 8 workers, reporting execution time and any errors.
+This runs all 86 examples in parallel with 8 workers, reporting execution time and any errors.
 
 ## Finding Examples
 
@@ -125,7 +126,7 @@ Each category folder has a **README.md** with:
 
 Browse by topic:
 
-- **visualization/README.md** — 16 plot types (heatmaps, scatter, timeseries, etc.)
+- **visualization/README.md** — 17 plot types (heatmaps, scatter, timeseries, etc.)
 - **times/README.md** — Timestamp validation and regularization
 - **analysis/README.md** — Correlation, decomposition, gap detection, spectral analysis
 - **features/README.md** — Variable creation, unit conversions, derived properties
@@ -134,7 +135,7 @@ Browse by topic:
 - **gapfilling/README.md** — Linear, Random Forest, XGBoost, MDS methods
 - **io/README.md** — Binary value extraction and encoding
 - **preprocessing/corrections/README.md** — Offset corrections, value clipping
-- **preprocessing/outlierdetection/README.md** — 9 outlier detection methods
+- **preprocessing/outlier_detection/README.md** — 9 outlier detection methods
 - **preprocessing/qaqc/README.md** — Quality flags, EddyPro integration
 
 ## Example Coverage
@@ -142,15 +143,15 @@ Browse by topic:
 | Domain | Files | Topics |
 |--------|-------|--------|
 | **Visualization** | 17 | Heatmaps, scatter, timeseries, histograms, ridgelines, cumulative, diurnal cycles |
-| **Times** | 5 | Timestamp validation, frequency detection, diel cycles, temporal matrices, statistics |
-| **Analysis** | 9 | Correlation, decomposition, gap detection, spatial aggregation, harmonic analysis |
+| **Times** | 6 | Timestamp validation, frequency detection, diel cycles, temporal matrices, statistics |
+| **Analysis** | 10 | Correlation, decomposition, gap detection, spatial aggregation, harmonic analysis |
 | **Features** | 11 | Feature engineering pipeline, air properties, unit conversions, day/night flags, VPD, lagged variants |
 | **Fits** | 2 | Binned fitting, ecosystem response fitting |
 | **Flux** | 11 | Time lag analysis, processing chain, HQ filtering, USTAR detection, self-heating (2), uncertainty, high-res analysis |
 | **Gapfilling** | 10 | Linear interpolation, Random Forest (3 variants), XGBoost (3 variants), MDS (2), comparison |
 | **IO** | 1 | Binary value extraction |
 | **Preprocessing** | 18 | Corrections (7), outlier detection (9), QA/QC (2) |
-| **TOTAL** | **82** | **~100+ individual functions demonstrated** |
+| **TOTAL** | **86** | |
 
 ## Running Options
 

@@ -6,10 +6,7 @@
 [![PyPI Downloads](https://static.pepy.tech/badge/diive)](https://pepy.tech/projects/diive)
 [![DOI](https://zenodo.org/badge/708559210.svg)](https://zenodo.org/doi/10.5281/zenodo.10884017)
 
-*`diive` is under active development with frequent updates and improvements.*
-
-**Update 13 May 2026**  
-diive v0.91.0 is now compatible with pandas 3.0+ (upgraded from 2.2.3). Code examples have been expanded to 76 examples across 9 organized folders with comprehensive documentation (CATALOG.md, EXAMPLE_DATASET.md). Documentation will be created and hosted on ReadTheDocs after the initial release. New features are still added regularly, and existing functionality is continuously improved.
+**13 May 2026** — diive v0.91.0 is now compatible with pandas 3.0+ (upgraded from 2.2.3). Examples expanded to 86 across 9 folders; CATALOG.md and EXAMPLE_DATASET.md are new.
 
 # Time series data processing
 
@@ -62,10 +59,10 @@ model.fillgaps()
 
 ### Next Steps
 
-- **📖 [62+ Executable Examples](examples/README.md)** — Learn by doing
+- **[86 Runnable Examples](examples/README.md)** — organized by topic (visualization, gap-filling, flux, etc.)
     - Find examples by use case: [CATALOG.md](examples/CATALOG.md)
     - Dataset documentation: [EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md)
-- **💻 [Development Setup](CLAUDE.md)** — Contribute or work with the source
+- **[Development Setup](CLAUDE.md)** — source setup, coding standards, testing
 
 ---
 
@@ -98,18 +95,18 @@ For the complete list, see `diive.__all__`.
 
 ---
 
-## 62+ Executable Examples
+## 86 Runnable Examples
 
-Organized to mirror the codebase structure. All examples follow Sphinx Gallery format (executable Python scripts with # %% sections) for version control friendliness and auto-documentation generation.
+Organized by functional domain. All examples follow Sphinx Gallery format (`# %%` sections) — runnable as plain scripts and auto-converted to HTML docs.
 
 **Quick start:**
 
 ```bash
 # Run individual examples
-uv run python examples/core/visualization/heatmap_datetime.py
-uv run python examples/pkgs/analysis/analysis_correlation.py
-uv run python examples/pkgs/gapfilling/gapfill_randomforest.py
-uv run python examples/pkgs/flux/fluxprocessingchain/fluxprocessingchain.py
+uv run python examples/visualization/plot_heatmap_datetime_basic.py
+uv run python examples/analysis/analysis_daily_correlation.py
+uv run python examples/gapfilling/gapfill_randomforest.py
+uv run python examples/flux/fluxprocessingchain/fluxprocessingchain.py
 ```
 
 **Find your way:**
@@ -120,14 +117,15 @@ uv run python examples/pkgs/flux/fluxprocessingchain/fluxprocessingchain.py
 
 **Example categories:**
 
-- **Visualization** (9 examples) — Heatmaps, time series, diel cycles, cumulative plots, histograms
-- **Analysis** (9 examples) — Correlation, seasonal decomposition, gap detection, gridding, spectral analysis
-- **Data Processing** (19 examples) — Corrections (8), outlier detection (9), quality flags (2)
-- **Feature Engineering** (8 examples) — VPD, unit conversions, day/night flags, lagged features, potential radiation
+- **Visualization** (17 examples) — Heatmaps, time series, diel cycles, cumulative plots, histograms, scatter, ridgelines
+- **Times** (6 examples) — Timestamp validation, frequency detection, diel cycles, temporal matrices
+- **Analysis** (10 examples) — Correlation, seasonal decomposition, gap detection, gridding, spectral analysis
+- **Data Processing** (18 examples) — Corrections (7), outlier detection (9), quality flags (2)
+- **Features** (11 examples) — VPD, unit conversions, day/night flags, lagged features, potential radiation
 - **Gap-Filling** (10 examples) — Linear interpolation, Random Forest, XGBoost, MDS, comparisons, optimization
-- **Flux Processing** (10 examples) — Time lag, wind rotation, USTAR filtering, uncertainty, self-heating, fluxchain
-- **Curve Fitting** (1 example) — Polynomial fitting
-- **I/O & Utilities** (1 example) — Binary value extraction
+- **Flux Processing** (11 examples) — Time lag, wind rotation, USTAR filtering, uncertainty, self-heating, flux chain
+- **Curve Fitting** (2 examples) — Polynomial and binned fitting
+- **I/O** (1 example) — Binary value extraction
 
 Browse [examples/README.md](examples/README.md) for the full index with descriptions.
 
@@ -139,15 +137,15 @@ Browse [examples/README.md](examples/README.md) for the full index with descript
 
 **Feature Engineering Pipeline (v0.91.0)** · `FeatureEngineer`
 
-- 8-stage composable pipeline: lag features, rolling stats, differencing, EMA, polynomial, STL decomposition,
+- 8-stage pipeline: lag features, rolling stats, differencing, EMA, polynomial, STL decomposition,
   timestamps, record numbering
 - Pre-engineer once, reuse across multiple gap-filling models
 - Full examples: [examples/pkgs/gapfilling/](examples/gapfilling/)
 
 **Methods:**
 
-- **XGBoostTS**: Gradient boosting for speed and high accuracy
-- **RandomForestTS** — Ensemble learning; interpretable and robust
+- **XGBoostTS** — Gradient boosting; slightly higher R² than Random Forest on most datasets
+- **RandomForestTS** — Ensemble learning with SHAP feature importance
 - **FluxMDS** (meteorological similarity, no training required)
 - **Linear interpolation**: For simple gaps only
 - **Long-term variants** support multi-year data with USTAR scenario options
@@ -297,7 +295,7 @@ Use notebooks as detailed references; see [examples/](examples/) for quick, runn
 
 ## Contributing
 
-Contributions are welcome! See [CLAUDE.md](CLAUDE.md) for development guidelines, testing, and coding standards.
+See [CLAUDE.md](CLAUDE.md) for development setup, coding standards, and testing.
 
 Key points:
 

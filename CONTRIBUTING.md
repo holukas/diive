@@ -1,6 +1,6 @@
 # Contributing to DIIVE
 
-We welcome contributions! This guide explains how to set up your development environment, run tests, and contribute code.
+This guide covers development setup, running tests, and contributing code.
 
 ## Development Setup
 
@@ -411,6 +411,3 @@ Set `'abort_on_example_error': False` in `docs/conf.py`. Check build logs.
 - **Discussions:** [GitHub Discussions](https://github.com/holukas/diive/discussions)
 - **Documentation:** [DIIVE ReadTheDocs](https://diive.readthedocs.io/)
 
-## Thank You!
-
-We appreciate your contributions. Whether it's code, documentation, examples, or bug reports, you're helping make DIIVE better for everyone.
