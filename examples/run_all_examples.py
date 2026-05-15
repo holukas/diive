@@ -76,6 +76,7 @@ EXAMPLE_FILES = [
     'preprocessing/qaqc/qc_overall_flag.py',
     'preprocessing/qaqc/qc_eddypro_flags.py',
     # Features
+    'features/feature_engineer.py',
     'features/feature_sonic_temp_conversion.py',
     'features/feature_latent_heat.py',
     'features/feature_evapotranspiration.py',

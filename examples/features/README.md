@@ -2,9 +2,13 @@
 
 Examples demonstrating creation and engineering of variables for time series analysis and modeling.
 
-10 examples across sensor corrections, energy conversions, air properties, derived variables, and engineered features.
+11 examples across ML feature engineering, sensor corrections, energy conversions, air properties, derived variables, and temporal encoding.
 
 ## Examples by Category
+
+### ML Feature Engineering
+
+- **feature_engineer.py** — 8-stage composable pipeline: lag, rolling stats, differencing, EMA, polynomial, temporal encoding, STL, record numbering
 
 ### Sensor Corrections
 
@@ -58,6 +62,9 @@ df['Days_Since_Fire'] = feature_timesince(fire_date)
 ## Running Examples
 
 ```bash
+# ML feature engineering pipeline
+uv run python examples/features/feature_engineer.py
+
 # Sensor corrections
 uv run python examples/features/feature_sonic_temp_conversion.py
 

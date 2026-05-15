@@ -52,13 +52,13 @@ print(f"Intervals matching: {status['frequency_percent_matching']:.1f}%")
 # Assess result quality
 confidence = status['frequency_confidence']
 if confidence >= 0.95:
-    print(f"✓ All methods agree")
+    print(f"[OK] All methods agree")
 elif confidence >= 0.90:
-    print(f"✓ Multiple methods agree")
+    print(f"[OK] Multiple methods agree")
 elif confidence >= 0.70:
-    print(f"⚠ Some disagreement - check for gaps or irregular intervals")
+    print(f"[!] Some disagreement - check for gaps or irregular intervals")
 else:
-    print(f"✗ Methods disagree - data may be irregular")
+    print(f"[X] Methods disagree - data may be irregular")
 
 # Show alternatives if any
 if status['frequency_alternatives']:
@@ -103,11 +103,11 @@ unique_results = set(f for f in all_methods if f is not None)
 
 print("\nAgreement:")
 if len(unique_results) == 1:
-    print(f"✓ All agree: {list(unique_results)[0]}")
+    print(f"[OK] All agree: {list(unique_results)[0]}")
 elif len(unique_results) == 2:
-    print(f"⚠ Two methods agree on {list(unique_results)[0]}")
+    print(f"[!] Two methods agree on {list(unique_results)[0]}")
 else:
-    print(f"✗ All three disagree: {unique_results}")
+    print(f"[X] All three disagree: {unique_results}")
 
 # %%
 # Method 3: DetectFrequency class (internal API)
@@ -156,7 +156,7 @@ print(f"Expected: {expected}")
 print(f"Detected: {detected}")
 
 if detected == expected:
-    print(f"✓ Match")
+    print(f"[OK] Match")
 else:
-    print(f"✗ Mismatch")
+    print(f"[X] Mismatch")
     print(f"Check for: gaps, duplicate timestamps, incorrect frequency specification")

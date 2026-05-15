@@ -1,17 +1,16 @@
 # Timestamp & Time Series Handling Examples
 
-Examples demonstrating timestamp sanitization, frequency detection, feature engineering, temporal aggregation, and statistical analysis.
+Examples demonstrating timestamp sanitization, frequency detection, temporal aggregation, and statistical analysis.
 
-**6 examples covering the complete time series handling pipeline.**
+**5 examples covering the complete time series handling pipeline.**
 
 ## Contents
 
 **Core utilities:**
 - **times_timestamp_sanitizer.py** — 10-step timestamp validation, cleaning, and regularization
 
-**Temporal analysis & feature engineering:**
+**Temporal analysis & aggregation:**
 - **times_frequency_detection.py** — Auto-detect time resolution with confidence scoring
-- **times_time_features.py** — Extract temporal features (year, month, hour) with sin/cos encoding for ML
 - **times_diel_cycles.py** — Calculate hourly aggregation patterns and diurnal cycles
 - **times_temporal_matrices.py** — Convert time series to matrix format (years × months) for visualization
 - **times_statistics.py** — Quick statistical profiling and data quality assessment
@@ -169,7 +168,8 @@ The examples follow a logical progression:
 2. **Detect** (`times_frequency_detection.py`) — Verify time resolution and regularity
 3. **Analyze** (`times_statistics.py`) — Profile statistical characteristics
 4. **Aggregate** (`times_diel_cycles.py`, `times_temporal_matrices.py`) — Group by time period (hour, month, year)
-5. **Engineer** (`times_time_features.py`) — Create ML-ready temporal features
+
+For ML feature engineering (temporal features with sin/cos encoding), see `examples/features/feature_engineer.py`.
 
 ## Example Descriptions
 
@@ -183,22 +183,17 @@ Automatically detects time resolution (e.g., 30-minute, hourly) using 3 independ
 
 **Use when:** Need to verify data frequency, identify irregular sampling patterns, validate data consistency.
 
-### 3. Time Features
-Creates temporal features for machine learning: year, season, month, week, day-of-year, and hour. Uses sin/cos encoding to preserve cyclical proximity for neural networks and tree-based models.
-
-**Use when:** Engineering features for gap-filling, regression, or classification models that need seasonal/diurnal patterns.
-
-### 4. Diel Cycles
+### 3. Diel Cycles
 Extracts time-of-day patterns by grouping data by hour and calculating statistics for each. Shows seasonal variation (monthly diel cycles) and anomaly detection.
 
 **Use when:** Understanding ecosystem processes with daily cycles (photosynthesis, evapotranspiration), identifying unusual daily patterns.
 
-### 5. Temporal Matrices
+### 4. Temporal Matrices
 Converts time series to year × month matrix format, ideal for heatmap visualization and long-term pattern analysis. Supports mean, sum, max, min aggregation and percentile ranking.
 
 **Use when:** Visualizing multi-year patterns, detecting trends across years, identifying warmest/coldest periods.
 
-### 6. Statistics
+### 5. Statistics
 Quick statistical profiling: mean, median, SD, variance, percentiles (P01, P05, P25, P75, P95, P99). Useful for data quality assessment.
 
 **Use when:** Need rapid summary statistics, comparing multiple variables, assessing missing data percentage.
@@ -209,7 +204,6 @@ Quick statistical profiling: mean, median, SD, variance, percentiles (P01, P05, 
 # Individual examples
 uv run python examples/times/times_timestamp_sanitizer.py
 uv run python examples/times/times_frequency_detection.py
-uv run python examples/times/times_time_features.py
 uv run python examples/times/times_diel_cycles.py
 uv run python examples/times/times_temporal_matrices.py
 uv run python examples/times/times_statistics.py

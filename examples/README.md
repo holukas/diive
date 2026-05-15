@@ -28,19 +28,19 @@ examples/
 │   ├── plot_ridgeline_advanced.py
 │   ├── plot_other_plots.py
 │   └── plot_timeseries_interactive.py
-├── times/                 # Timestamp handling (6 examples)
+├── times/                 # Timestamp handling (5 examples)
 │   ├── times_timestamp_sanitizer.py
 │   ├── times_frequency_detection.py
 │   ├── times_diel_cycles.py
 │   ├── times_temporal_matrices.py
-│   ├── times_time_features.py
 │   └── times_statistics.py
 ├── analysis/              # Time series analysis (9 examples)
 │   ├── analysis_correlation.py
 │   ├── analysis_seasonaltrend.py
 │   ├── analysis_gapfinder.py
 │   └── ...
-├── features/              # Variable creation & engineering (10 examples)
+├── features/              # Variable creation & engineering (11 examples)
+│   ├── feature_engineer.py
 │   ├── feature_sonic_temp_conversion.py
 │   ├── feature_latent_heat.py
 │   ├── feature_evapotranspiration.py
@@ -142,9 +142,9 @@ Browse by topic:
 | Domain | Files | Topics |
 |--------|-------|--------|
 | **Visualization** | 17 | Heatmaps, scatter, timeseries, histograms, ridgelines, cumulative, diurnal cycles |
-| **Times** | 6 | Timestamp validation, frequency detection, diel cycles, temporal matrices, feature engineering, statistics |
+| **Times** | 5 | Timestamp validation, frequency detection, diel cycles, temporal matrices, statistics |
 | **Analysis** | 9 | Correlation, decomposition, gap detection, spatial aggregation, harmonic analysis |
-| **Features** | 10 | Air properties, unit conversions, day/night flags, VPD, lagged variants |
+| **Features** | 11 | Feature engineering pipeline, air properties, unit conversions, day/night flags, VPD, lagged variants |
 | **Fits** | 2 | Binned fitting, ecosystem response fitting |
 | **Flux** | 11 | Time lag analysis, processing chain, HQ filtering, USTAR detection, self-heating (2), uncertainty, high-res analysis |
 | **Gapfilling** | 10 | Linear interpolation, Random Forest (3 variants), XGBoost (3 variants), MDS (2), comparison |

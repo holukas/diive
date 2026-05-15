@@ -259,7 +259,7 @@ result = sanitizer.get()
 status = sanitizer.get_status()
 
 print("\nLevel 5 - Minimal processing (frequency detection only):")
-print(f"  Data shape unchanged: {status['original_shape'][0]} → {status['final_shape'][0]} rows")
+print(f"  Data shape unchanged: {status['original_shape'][0]} -> {status['final_shape'][0]} rows")
 print(f"  Inferred frequency: {status['inferred_frequency']}")
 print(f"  Detection method: {status['frequency_detection_method']}")
 

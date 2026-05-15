@@ -4,6 +4,14 @@
 
 ## v0.91.0 | XX May 2026
 
+- **feature_engineer.py example enhanced with dynamic feature listing** — Updated comprehensive 8-stage ML feature engineering example:
+  - Now uses 2020 data only for faster execution
+  - Restructured to show full pipeline with realistic multi-column input (temperature, VPD, radiation)
+  - Demonstrates lag features (t-2, t-1 for non-target columns), rolling windows (12, 24 steps), differencing, EMA, polynomial, and 14 temporal features (sin/cos encoding)
+  - Added dynamic feature detection: automatically lists all 46 generated features by comparing df_full vs df_data columns
+  - Shows feature importance ranking (top 12 by correlation with temperature)
+  - Example output includes: 3 input columns + 46 engineered features = 49 total
+  - Fixed Unicode encoding issues: replaced checkmarks with `[OK]`, arrows with `->` for Windows compatibility
 - **Frequency detection docstrings: comprehensive NumPy-style documentation** — Enhanced three detection functions in `diive.core.times.times`:
   - `timestamp_infer_freq_progressively()`: Compares first/last intervals for fast, robust detection
   - `timestamp_infer_freq_from_fullset()`: Uses pandas inference for perfectly regular data
