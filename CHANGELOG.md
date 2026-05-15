@@ -334,8 +334,8 @@
 * (9) `diive.pkgs.flux.hires.fluxdetectionlimit.FluxDetectionLimit`
 * (10) `tests.test_echires.TestEcHires`
 * (11) `diive.core.times.times.insert_season`
-* (12) `diive.pkgs.preprocessing.outlierdetection.common.create_daytime_nighttime_flags`
-* (13) `diive.pkgs.preprocessing.outlierdetection.localsd.LocalSD`
+* (12) `diive.pkgs.preprocessing.outlier_detection.common.create_daytime_nighttime_flags`
+* (13) `diive.pkgs.preprocessing.outlier_detection.localsd.LocalSD`
 * (14) `tests.test_outlierdetection.TestOutlierDetection.test_localsd_daytime_nighttime`
 * (15) `notebooks/FluxProcessingChain/FluxProcessingChain.ipynb`
 * (16) `notebooks/MeteoScreening/StepwiseMeteoScreeningFromDatabase.ipynb`
@@ -345,13 +345,13 @@
 * (20) `diive.pkgs.createvar.air.dry_air_density`
 * (21) `diive.pkgs.createvar.air.aerodynamic_resistance`
 * (22) `diive.pkgs.fluxprocessingchain.level31_storagecorrection.FluxStorageCorrectionSinglePointEddyPro`
-* (23) `diive.pkgs.preprocessing.outlierdetection.hampel.HampelDaytimeNighttime`
-* (24) `diive.pkgs.preprocessing.outlierdetection.hampel.Hampel`
+* (23) `diive.pkgs.preprocessing.outlier_detection.hampel.HampelDaytimeNighttime`
+* (24) `diive.pkgs.preprocessing.outlier_detection.hampel.Hampel`
 * (25) `tests.test_outlierdetection.TestOutlierDetection.test_hampel_filter_daytime_nighttime_doublediff`
 * (26) `tests.test_outlierdetection.TestOutlierDetection.test_hampel_filter_basic`
 * (27) `tests.test_outlierdetection.TestOutlierDetection.test_hampel_filter`
 * (28)
-  `diive.pkgs.preprocessing.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection.flag_outliers_hampel_dtnt_test`
+  `diive.pkgs.preprocessing.outlier_detection.stepwiseoutlierdetection.StepwiseOutlierDetection.flag_outliers_hampel_dtnt_test`
 * (29) `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain.level32_flag_outliers_hampel_dtnt_test`
 * (30) `tests.test_time.TestTime.test_vectorize_with_default_parameters`
 * (31) `notebooks/GapFilling/LongTermRandomForestGapFilling.ipynb`
@@ -765,7 +765,7 @@ meteorological conditions.
 
 - The setting for features that should not be lagged was not properly implemented (
   `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain._get_ml_feature_settings`)
-- Fixed bug when plotting (`diive.pkgs.preprocessing.outlierdetection.localsd.LocalSD`)
+- Fixed bug when plotting (`diive.pkgs.preprocessing.outlier_detection.localsd.LocalSD`)
 
 ## v0.84.2 | 8 Nov 2024
 
@@ -1087,9 +1087,9 @@ With this update, the `FluxProcessingChain` class can handle various data proces
 - `LocalSD` outlier detection can now use a constant SD:
     - Added parameter to use standard deviation across all data (constant) instead of the rolling SD to calculate the
       upper and lower limits that define outliers in the median rolling window (
-      `diive.pkgs.preprocessing.outlierdetection.localsd.LocalSD`)
+      `diive.pkgs.preprocessing.outlier_detection.localsd.LocalSD`)
     - Added to step-wise outlier detection (
-      `diive.pkgs.preprocessing.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection.flag_outliers_localsd_test`)
+      `diive.pkgs.preprocessing.outlier_detection.stepwiseoutlierdetection.StepwiseOutlierDetection.flag_outliers_localsd_test`)
     - Added to meteoscreening from database (
       `diive.pkgs.preprocessing.qaqc.meteoscreening.StepwiseMeteoScreeningDb.flag_outliers_localsd_test`)
     - Added to flux processing chain (
@@ -1203,12 +1203,12 @@ time series. The bin with most counts is highlighted orange.*
 
 - Added histogram plots to `FlagBase`, histograms are now shown for all outlier methods (
   `diive.core.base.flagbase.FlagBase.defaultplot`)
-- Added daytime/nighttime histogram plots to (`diive.pkgs.preprocessing.outlierdetection.hampel.HampelDaytimeNighttime`)
-- Added daytime/nighttime histogram plots to (`diive.pkgs.preprocessing.outlierdetection.zscore.zScoreDaytimeNighttime`)
+- Added daytime/nighttime histogram plots to (`diive.pkgs.preprocessing.outlier_detection.hampel.HampelDaytimeNighttime`)
+- Added daytime/nighttime histogram plots to (`diive.pkgs.preprocessing.outlier_detection.zscore.zScoreDaytimeNighttime`)
 - Added daytime/nighttime histogram plots to (
-  `diive.pkgs.preprocessing.outlierdetection.lof.LocalOutlierFactorDaytimeNighttime`)
+  `diive.pkgs.preprocessing.outlier_detection.lof.LocalOutlierFactorDaytimeNighttime`)
 - Added daytime/nighttime histogram plots to (
-  `diive.pkgs.preprocessing.outlierdetection.absolutelimits.AbsoluteLimitsDaytimeNighttime`)
+  `diive.pkgs.preprocessing.outlier_detection.absolutelimits.AbsoluteLimitsDaytimeNighttime`)
 - Added option to calculate the z-score with sign instead of absolute (`diive.core.funcs.funcs.zscore`)
 
 ### Changes
@@ -1243,7 +1243,7 @@ time series. The bin with most counts is highlighted orange.*
 ### Changes
 
 - Added option to set different `n_sigma` for daytime and nightime data
-  in `HampelDaytimeNighttime` (`diive.pkgs.preprocessing.outlierdetection.hampel.HampelDaytimeNighttime`)
+  in `HampelDaytimeNighttime` (`diive.pkgs.preprocessing.outlier_detection.hampel.HampelDaytimeNighttime`)
 - Updated `flag_outliers_hampel_dtnt_test` in step-wise outlier detection
 - Updated `level32_flag_outliers_hampel_dtnt_test` in flux processing chain
 
@@ -1263,12 +1263,12 @@ time series. The bin with most counts is highlighted orange.*
 
 - Added new class for outlier removal, based on the rolling z-score. It can also be used in step-wise outlier detection
   and during meteoscreening from the
-  database. (`diive.pkgs.preprocessing.outlierdetection.zscore.zScoreRolling`,
-  `diive.pkgs.preprocessing.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection`,
+  database. (`diive.pkgs.preprocessing.outlier_detection.zscore.zScoreRolling`,
+  `diive.pkgs.preprocessing.outlier_detection.stepwiseoutlierdetection.StepwiseOutlierDetection`,
   `diive.pkgs.preprocessing.qaqc.meteoscreening.StepwiseMeteoScreeningDb`).
-- Added Hampel filter for outlier removal (`diive.pkgs.preprocessing.outlierdetection.hampel.Hampel`)
+- Added Hampel filter for outlier removal (`diive.pkgs.preprocessing.outlier_detection.hampel.Hampel`)
 - Added Hampel filter (separate daytime, nighttime) for outlier
-  removal (`diive.pkgs.preprocessing.outlierdetection.hampel.HampelDaytimeNighttime`)
+  removal (`diive.pkgs.preprocessing.outlier_detection.hampel.HampelDaytimeNighttime`)
 - Added function to plot daytime and nighttime outliers during outlier
   tests (`diive.core.plotting.outlier_dtnt.outlier_daytime_nighttime`)
 
@@ -1390,7 +1390,7 @@ time series. The bin with most counts is highlighted orange.*
 
 - Changed the algorithm for outlier detection when using `zScoreIncrements`. Data points are now flagged as outliers if
   the z-scores of three absolute differences (previous record, next record and the sum of both) all exceed a specified
-  threshold.  (`diive.pkgs.preprocessing.outlierdetection.incremental.zScoreIncrements`)
+  threshold.  (`diive.pkgs.preprocessing.outlier_detection.incremental.zScoreIncrements`)
 
 ### Notebooks
 
@@ -1414,7 +1414,7 @@ time series. The bin with most counts is highlighted orange.*
 - In class `zScoreIncrements`, outliers are now detected by calculating the sum of the absolute differences between a
   data point and its respective preceding and next data point. Before, only the non-absolute difference of the preceding
   data point was considered. The sum of absolute differences is then used to calculate the z-score and in further
-  consequence to flag outliers. (`diive.pkgs.preprocessing.outlierdetection.incremental.zScoreIncrements`)
+  consequence to flag outliers. (`diive.pkgs.preprocessing.outlier_detection.incremental.zScoreIncrements`)
 
 ### Notebooks
 
@@ -1833,7 +1833,7 @@ covariance was calculated using the `MaxCovariance` class.*
   settings) then the name of the flag of this second run is `FLAG_TA_T1_2_1_OUTLIER_ZSCOREDTNT_2_TEST`,
   etc ... The script now checks whether a flag of the same name was already created, in which case an
   integer is added to the flag name. These re-runs are now available in addition to the `repeat=True` keyword.
-  (`diive.pkgs.preprocessing.outlierdetection.stepwiseoutlierdetection.StepwiseOutlierDetection.addflag`)
+  (`diive.pkgs.preprocessing.outlier_detection.stepwiseoutlierdetection.StepwiseOutlierDetection.addflag`)
   Example:
     - `METHOD` with `SETTINGS` is applied with `repeat=True` and therefore repeated until no more outliers
       were found with these settings. The name of the flag produced is `TEST_METHOD_FLAG`.
@@ -1918,7 +1918,7 @@ the updated `FluxProcessingChain`notebook (`notebooks/FluxProcessingChain/FluxPr
   the `StepwiseOutlierDetection` and thus the flux processing chain Level-3.2 (outlier detection) and the meteoscreening
   in `StepwiseMeteoScreeningDb` (not yet checked in this update). To repeat an outlier method use the `repeat` keyword
   arg (see the `FluxProcessingChain` notebook for examples).(
-  `diive.pkgs.preprocessing.outlierdetection.repeater.repeater`)
+  `diive.pkgs.preprocessing.outlier_detection.repeater.repeater`)
 - Added new function `filter_strings_by_elements`: Returns a list of strings from list1 that contain all of the elements
   in list2.(`core.funcs.funcs.filter_strings_by_elements`)
 - Added new function `flag_steadiness_horizontal_wind_eddypro_test`: Create flag for steadiness of horizontal wind u

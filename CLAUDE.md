@@ -791,6 +791,17 @@ scores = model.scores_  # R², MAE, RMSE on test data
 6. **Neglecting method divergence** — Compare RF and MDS results; high divergence signals model uncertainty in that
    period.
 
+## Flux Processing Terminology
+
+**Resolution abbreviations used in flux module and examples:**
+
+- **`lowres/`** — Low-resolution eddy covariance flux measurements (e.g., 30-minute averaged data). Includes quality control, outlier detection, USTAR filtering, and gap-filling methods.
+- **`hires/`** — High-resolution raw sonic anemometer and gas analyzer data (e.g., 10 Hz or 20 Hz). Pre-averaging analysis for time lag detection, wind rotation correction, and flux detection limits.
+
+These abbreviations distinguish two different data processing workflows:
+- **lowres workflow:** Raw EC → averaging → quality control → flux calculation (L2-L4.1)
+- **hires workflow:** High-frequency signal analysis (diagnostic, pre-averaging)
+
 ## Quality Control (QCF - Overall Quality Flag)
 
 **FlagQCF** · class: `FlagQCF` ([example](examples/qaqc/qcf.py))
@@ -906,7 +917,7 @@ Used by: `flag_steadiness_horizontal_wind_eddypro_test()`, `flag_angle_of_attack
 operates on the previous result, progressively filtering outliers. Useful for multi-stage QA/QC workflows.
 
 ```python
-from diive.pkgs.preprocessing.outlierdetection import StepwiseOutlierDetection
+from diive.pkgs.preprocessing.outlier_detection import StepwiseOutlierDetection
 
 detector = StepwiseOutlierDetection(dfin=df, col='NEE', site_lat=46.8, site_lon=8.6, utc_offset=1)
 
@@ -942,13 +953,13 @@ examples/
 ├── fits/               # Data fitting (2 examples)
 ├── flux/               # Flux processing (9 examples)
 │   ├── fluxprocessingchain/
-│   ├── lowres/
-│   └── hires/
+│   ├── lowres/         # Low-resolution (30-min) processing
+│   └── hires/          # High-resolution (10 Hz) analysis
 ├── gapfilling/         # Gap-filling methods (10 examples)
 ├── io/                 # File I/O (1 example)
 └── preprocessing/      # Data QC & corrections (18 examples)
     ├── corrections/
-    ├── outlierdetection/
+    ├── outlier_detection/
     └── qaqc/
 ```
 

@@ -75,3 +75,6 @@ dev = [
     "sphinx-basic-ng>=1.0.0b2",
     "sphinx-gallery>=0.21.0",
 ]
+
+[tool.ruff]
+cache-dir = ".ruff_cache"

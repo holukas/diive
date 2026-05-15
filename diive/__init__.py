@@ -101,30 +101,30 @@ from diive.pkgs.preprocessing.corrections import remove_relativehumidity_offset 
 from diive.pkgs.preprocessing.corrections import set_exact_values_to_missing as set_exact_values_to_missing
 from diive.pkgs.preprocessing.corrections import setto_threshold as setto_threshold
 from diive.pkgs.preprocessing.corrections import setto_value as setto_value
-from diive.pkgs.preprocessing.outlierdetection import AbsoluteLimits as AbsoluteLimits
-from diive.pkgs.preprocessing.outlierdetection import AbsoluteLimits as absolute_limits
-from diive.pkgs.preprocessing.outlierdetection import AbsoluteLimitsDaytimeNighttime as AbsoluteLimitsDaytimeNighttime
-from diive.pkgs.preprocessing.outlierdetection import \
+from diive.pkgs.preprocessing.outlier_detection import AbsoluteLimits as AbsoluteLimits
+from diive.pkgs.preprocessing.outlier_detection import AbsoluteLimits as absolute_limits
+from diive.pkgs.preprocessing.outlier_detection import AbsoluteLimitsDaytimeNighttime as AbsoluteLimitsDaytimeNighttime
+from diive.pkgs.preprocessing.outlier_detection import \
     AbsoluteLimitsDaytimeNighttime as absolute_limits_daytime_nighttime
-from diive.pkgs.preprocessing.outlierdetection import LocalOutlierFactor as LocalOutlierFactor
-from diive.pkgs.preprocessing.outlierdetection import LocalOutlierFactorAllData as LocalOutlierFactorAllData
-from diive.pkgs.preprocessing.outlierdetection import \
+from diive.pkgs.preprocessing.outlier_detection import LocalOutlierFactor as LocalOutlierFactor
+from diive.pkgs.preprocessing.outlier_detection import LocalOutlierFactorAllData as LocalOutlierFactorAllData
+from diive.pkgs.preprocessing.outlier_detection import \
     LocalOutlierFactorDaytimeNighttime as LocalOutlierFactorDaytimeNighttime
-from diive.pkgs.preprocessing.outlierdetection import LocalSD as LocalSD
-from diive.pkgs.preprocessing.outlierdetection import LocalSD as localsd
-from diive.pkgs.preprocessing.outlierdetection import ManualRemoval as ManualRemoval
-from diive.pkgs.preprocessing.outlierdetection import TrimLow as TrimLow
-from diive.pkgs.preprocessing.outlierdetection import TrimLow as trim_low
-from diive.pkgs.preprocessing.outlierdetection import zScore as zScore
-from diive.pkgs.preprocessing.outlierdetection import zScore as zscore
-from diive.pkgs.preprocessing.outlierdetection import zScoreIncrements as zScoreIncrements
-from diive.pkgs.preprocessing.outlierdetection import zScoreIncrements as zscore_increments
-from diive.pkgs.preprocessing.outlierdetection import zScoreRolling as zScoreRolling
-from diive.pkgs.preprocessing.outlierdetection import zScoreRolling as zscore_rolling
-from diive.pkgs.preprocessing.outlierdetection.hampel import Hampel as Hampel
-from diive.pkgs.preprocessing.outlierdetection.hampel import Hampel as hampel
-from diive.pkgs.preprocessing.outlierdetection.hampel import HampelDaytimeNighttime as HampelDaytimeNighttime
-from diive.pkgs.preprocessing.outlierdetection.hampel import HampelDaytimeNighttime as hampel_daytime_nighttime
+from diive.pkgs.preprocessing.outlier_detection import LocalSD as LocalSD
+from diive.pkgs.preprocessing.outlier_detection import LocalSD as localsd
+from diive.pkgs.preprocessing.outlier_detection import ManualRemoval as ManualRemoval
+from diive.pkgs.preprocessing.outlier_detection import TrimLow as TrimLow
+from diive.pkgs.preprocessing.outlier_detection import TrimLow as trim_low
+from diive.pkgs.preprocessing.outlier_detection import zScore as zScore
+from diive.pkgs.preprocessing.outlier_detection import zScore as zscore
+from diive.pkgs.preprocessing.outlier_detection import zScoreIncrements as zScoreIncrements
+from diive.pkgs.preprocessing.outlier_detection import zScoreIncrements as zscore_increments
+from diive.pkgs.preprocessing.outlier_detection import zScoreRolling as zScoreRolling
+from diive.pkgs.preprocessing.outlier_detection import zScoreRolling as zscore_rolling
+from diive.pkgs.preprocessing.outlier_detection.hampel import Hampel as Hampel
+from diive.pkgs.preprocessing.outlier_detection.hampel import Hampel as hampel
+from diive.pkgs.preprocessing.outlier_detection.hampel import HampelDaytimeNighttime as HampelDaytimeNighttime
+from diive.pkgs.preprocessing.outlier_detection.hampel import HampelDaytimeNighttime as hampel_daytime_nighttime
 from diive.pkgs.preprocessing.qaqc import FlagQCF as FlagQCF
 
 __all__ = [

@@ -9,11 +9,11 @@ Part of the diive library: https://github.com/holukas/diive
 """
 
 from diive.pkgs.preprocessing import corrections
-from diive.pkgs.preprocessing import outlierdetection
+from diive.pkgs.preprocessing import outlier_detection
 from diive.pkgs.preprocessing import qaqc
 
 __all__ = [
     'corrections',
-    'outlierdetection',
+    'outlier_detection',
     'qaqc',
 ]

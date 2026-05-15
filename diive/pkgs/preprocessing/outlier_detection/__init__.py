@@ -9,17 +9,17 @@ Chain multiple methods sequentially via StepwiseOutlierDetection.
 Part of the diive library: https://github.com/holukas/diive
 """
 
-from diive.pkgs.preprocessing.outlierdetection.absolutelimits import (
+from diive.pkgs.preprocessing.outlier_detection.absolutelimits import (
     AbsoluteLimits,
 )
-from diive.pkgs.preprocessing.outlierdetection.hampel import Hampel
-from diive.pkgs.preprocessing.outlierdetection.incremental import zScoreIncrements
-from diive.pkgs.preprocessing.outlierdetection.localsd import LocalSD
-from diive.pkgs.preprocessing.outlierdetection.lof import LocalOutlierFactor
-from diive.pkgs.preprocessing.outlierdetection.manualremoval import ManualRemoval
-from diive.pkgs.preprocessing.outlierdetection.stepwiseoutlierdetection import StepwiseOutlierDetection
-from diive.pkgs.preprocessing.outlierdetection.trim import TrimLow
-from diive.pkgs.preprocessing.outlierdetection.zscore import (
+from diive.pkgs.preprocessing.outlier_detection.hampel import Hampel
+from diive.pkgs.preprocessing.outlier_detection.incremental import zScoreIncrements
+from diive.pkgs.preprocessing.outlier_detection.localsd import LocalSD
+from diive.pkgs.preprocessing.outlier_detection.lof import LocalOutlierFactor
+from diive.pkgs.preprocessing.outlier_detection.manualremoval import ManualRemoval
+from diive.pkgs.preprocessing.outlier_detection.stepwiseoutlierdetection import StepwiseOutlierDetection
+from diive.pkgs.preprocessing.outlier_detection.trim import TrimLow
+from diive.pkgs.preprocessing.outlier_detection.zscore import (
     zScore,
     zScoreRolling,
 )

@@ -2,6 +2,12 @@
 
 Examples demonstrating flux processing, quality control, and high-resolution analysis for eddy covariance data.
 
+## Terminology
+
+**Directory abbreviations** used throughout flux processing examples:
+- **`lowres/`** — Low-resolution (e.g., 30-minute) flux data processing. Typically averaged or aggregated time series.
+- **`hires/`** — High-resolution (e.g., 10 Hz or 20 Hz) raw sonic and gas analyzer data. Pre-averaging analysis before flux averaging.
+
 ## Contents
 
 ### Processing Chain
