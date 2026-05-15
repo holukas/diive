@@ -4,9 +4,9 @@
 [![PyPI - Version](https://img.shields.io/pypi/v/diive?style=for-the-badge&color=%23EF6C00&link=https%3A%2F%2Fpypi.org%2Fproject%2Fdiive%2F)](https://pypi.org/project/diive/)
 [![GitHub License](https://img.shields.io/github/license/holukas/diive?style=for-the-badge&color=%237CB342)](https://github.com/holukas/diive/blob/indev/LICENSE)
 [![PyPI Downloads](https://static.pepy.tech/badge/diive)](https://pepy.tech/projects/diive)
-[![DOI](https://zenodo.org/badge/708559210.svg)](https://zenodo.org/doi/10.5281/zenodo.10884017)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10884017.svg)](https://doi.org/10.5281/zenodo.10884017)
 
-**13 May 2026** — diive v0.91.0 is now compatible with pandas 3.0+ (upgraded from 2.2.3). Examples expanded to 86 across 9 folders; CATALOG.md and EXAMPLE_DATASET.md are new.
+_**`diive` is currently prepared for the v1.0 release.**_
 
 # Time series data processing
 
@@ -97,7 +97,8 @@ For the complete list, see `diive.__all__`.
 
 ## 86 Runnable Examples
 
-Organized by functional domain. All examples follow Sphinx Gallery format (`# %%` sections) — runnable as plain scripts and auto-converted to HTML docs.
+Organized by functional domain. All examples follow Sphinx Gallery format (`# %%` sections) — runnable as plain scripts
+and auto-converted to HTML docs.
 
 **Quick start:**
 
@@ -111,21 +112,21 @@ uv run python examples/flux/fluxprocessingchain/fluxprocessingchain.py
 
 **Find your way:**
 
-- **[CATALOG.md](examples/CATALOG.md)** — Organized by use case with workflows (visualization, analysis, gap-filling, etc.)
-- **[EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md)** — Complete dataset documentation (37 variables, availability, quality)
-- **[examples/README.md](examples/README.md)** — Quick start and folder structure
+- **[CATALOG.md](examples/CATALOG.md)** — organized by use case (visualization, analysis, gap-filling, etc.)
+- **[EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md)** — dataset documentation (37 variables, availability, quality)
+- **[examples/README.md](examples/README.md)** — quick start and folder structure
 
 **Example categories:**
 
-- **Visualization** (17 examples) — Heatmaps, time series, diel cycles, cumulative plots, histograms, scatter, ridgelines
-- **Times** (6 examples) — Timestamp validation, frequency detection, diel cycles, temporal matrices
-- **Analysis** (10 examples) — Correlation, seasonal decomposition, gap detection, gridding, spectral analysis
-- **Data Processing** (18 examples) — Corrections (7), outlier detection (9), quality flags (2)
+- **Visualization** (17 examples) — heatmaps, time series, diel cycles, cumulative plots, histograms, scatter, ridgelines
+- **Times** (6 examples) — timestamp validation, frequency detection, diel cycles, temporal matrices
+- **Analysis** (10 examples) — correlation, seasonal decomposition, gap detection, gridding, spectral analysis
+- **Data Processing** (18 examples) — corrections (7), outlier detection (9), quality flags (2)
 - **Features** (11 examples) — VPD, unit conversions, day/night flags, lagged features, potential radiation
-- **Gap-Filling** (10 examples) — Linear interpolation, Random Forest, XGBoost, MDS, comparisons, optimization
-- **Flux Processing** (11 examples) — Time lag, wind rotation, USTAR filtering, uncertainty, self-heating, flux chain
-- **Curve Fitting** (2 examples) — Polynomial and binned fitting
-- **I/O** (1 example) — Binary value extraction
+- **Gap-Filling** (10 examples) — linear interpolation, Random Forest, XGBoost, MDS, comparisons, optimization
+- **Flux Processing** (11 examples) — time lag, wind rotation, USTAR filtering, uncertainty, self-heating, flux chain
+- **Curve Fitting** (2 examples) — polynomial and binned fitting
+- **I/O** (1 example) — binary value extraction
 
 Browse [examples/README.md](examples/README.md) for the full index with descriptions.
 
@@ -140,14 +141,14 @@ Browse [examples/README.md](examples/README.md) for the full index with descript
 - 8-stage pipeline: lag features, rolling stats, differencing, EMA, polynomial, STL decomposition,
   timestamps, record numbering
 - Pre-engineer once, reuse across multiple gap-filling models
-- Full examples: [examples/pkgs/gapfilling/](examples/gapfilling/)
+- Full examples: [examples/gapfilling/](examples/gapfilling/)
 
 **Methods:**
 
-- **XGBoostTS** — Gradient boosting; slightly higher R² than Random Forest on most datasets
-- **RandomForestTS** — Ensemble learning with SHAP feature importance
-- **FluxMDS** (meteorological similarity, no training required)
-- **Linear interpolation**: For simple gaps only
+- **XGBoostTS** — gradient boosting
+- **RandomForestTS** — ensemble learning with SHAP feature importance
+- **FluxMDS** — meteorological similarity, no training required
+- **Linear interpolation** — for simple gaps only
 - **Long-term variants** support multi-year data with USTAR scenario options
 
 **Flux Processing Chain** · `FluxProcessingChain`
@@ -155,8 +156,8 @@ Browse [examples/README.md](examples/README.md) for the full index with descript
 - Post-processing pipeline covering quality flags, storage correction, outlier detection, USTAR filtering, and
   gap-filling
 - Implements Levels 2–4.1 following Swiss FluxNet standards
-- Example: [examples/pkgs/flux/fluxprocessingchain/](examples/flux/fluxprocessingchain/)
--
+- Example: [examples/flux/fluxprocessingchain/](examples/flux/fluxprocessingchain/)
+
 Reference: [Swiss FluxNet flux processing](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/)
 
 ### Quality Control & Outlier Detection
@@ -165,145 +166,77 @@ Reference: [Swiss FluxNet flux processing](https://www.swissfluxnet.ethz.ch/inde
 
 - Merges multiple test flags into a single quality indicator
 - Daytime/nighttime separation and USTAR scenario support
-- Example: [examples/pkgs/preprocessing/qaqc/qcf.py](examples/preprocessing/qaqc/qcf.py)
+- Example: [examples/preprocessing/qaqc/qc_overall_flag.py](examples/preprocessing/qaqc/qc_overall_flag.py)
 
 **10 Outlier Detection Methods:**
 
-- **Hampel filter**: Robust spike detection using MAD (median absolute deviation)
-- **Z-score** — Global, rolling, or day/night variants
-- **Local SD** (adaptive local thresholds)
-- **Local Outlier Factor (LOF)**: Density-based anomaly detection
-- **Absolute limits** — Physical bounds on values
-- **Incremental detection**: Find abrupt changes between records
-- **Manual removal** — Explicit period or point flagging
-- **Trimmed mean**: Symmetric removal of high and low outliers
-- **Stepwise orchestration** — Chain multiple methods together
-- Examples: [examples/pkgs/preprocessing/outlierdetection/](examples/preprocessing/outlierdetection/)
+- **Hampel filter** — robust spike detection using MAD (median absolute deviation)
+- **Z-score** — global, rolling, or day/night variants
+- **Local SD** — adaptive local thresholds
+- **Local Outlier Factor (LOF)** — density-based anomaly detection
+- **Absolute limits** — physical bounds on values
+- **Incremental detection** — find abrupt changes between records
+- **Manual removal** — explicit period or point flagging
+- **Trimmed mean** — symmetric removal of high and low outliers
+- **Stepwise orchestration** — chain multiple methods together
+- Examples: [examples/preprocessing/outlier_detection/](examples/preprocessing/outlier_detection/)
 
 ### Data Processing & Corrections
 
-- **Offset correction**: Adjust measurement, radiation, humidity, and wind direction biases
-- **Set to threshold/missing** — Apply thresholds or manual value replacements
-- **Timestamp sanitization**: Validate, regularize, and detect frequency
-- **Examples:
-  ** [examples/pkgs/preprocessing/corrections/](examples/preprocessing/corrections/), [examples/core/times/](examples/times/)
+- **Offset correction** — adjust measurement, radiation, humidity, and wind direction biases
+- **Set to threshold/missing** — apply thresholds or manual value replacements
+- **Timestamp sanitization** — validate, regularize, and detect frequency
+- Examples: [examples/preprocessing/corrections/](examples/preprocessing/corrections/),
+  [examples/times/](examples/times/)
 
 ### Analysis
 
-- **Seasonal-Trend Decomposition**: STL, classical, or harmonic methods
-- **Correlation & decoupling** — Lagged relationships and binned analysis
-- **Grid aggregation** (2D binning and statistics)
-- **Gap finder**: Identify missing data patterns
-- **Percentiles & histogram** — Distribution analysis
-- **Examples:** [examples/pkgs/analysis/](examples/analysis/)
+- **Seasonal-Trend Decomposition** — STL, classical, or harmonic methods
+- **Correlation & decoupling** — lagged relationships and binned analysis
+- **Grid aggregation** — 2D binning and statistics
+- **Gap finder** — identify missing data patterns
+- **Percentiles & histogram** — distribution analysis
+- Examples: [examples/analysis/](examples/analysis/)
 
 ### Feature Engineering
 
-- **Vapor Pressure Deficit (VPD)**: Calculate from temperature and humidity
-- **Day/night flags** — Solar geometry classification
-- **Air properties** (density, resistance, heat capacity)
-- **Unit conversions**: Temperature, energy, and water
-- **Lagged features** — Time-shifted variables
-- **Potential radiation**: Clear-sky calculation
-- **Examples:** [examples/pkgs/features/](examples/features/)
+- **Vapor Pressure Deficit (VPD)** — calculate from temperature and humidity
+- **Day/night flags** — solar geometry classification
+- **Air properties** — density, resistance, heat capacity
+- **Unit conversions** — temperature, energy, and water
+- **Lagged features** — time-shifted variables
+- **Potential radiation** — clear-sky calculation
+- Examples: [examples/features/](examples/features/)
 
 ### Eddy Covariance & Flux
 
-- **Flux detection limit**: Signal-to-noise analysis from high-frequency (20 Hz) data
-- **Maximum covariance** — Find optimal time lag
-- **Wind rotation** (coordinate transformation, turbulent departures)
-- **Self-heating correction**: Open-path IRGA oxygen flux adjustment
-- **USTAR filtering** — Threshold detection and filtering
-- **Uncertainty estimation**: Random error propagation
-- **Examples:** [examples/pkgs/flux/](examples/flux/)
+- **Flux detection limit** — signal-to-noise analysis from high-frequency (20 Hz) data
+- **Maximum covariance** — find optimal time lag
+- **Wind rotation** — coordinate transformation, turbulent departures
+- **Self-heating correction** — open-path IRGA oxygen flux adjustment
+- **USTAR filtering** — threshold detection and filtering
+- **Uncertainty estimation** — random error propagation
+- Examples: [examples/flux/](examples/flux/)
 
 ### Visualization
 
-- **14+ plot types**: Time series, cumulative, diel cycle, heatmap (datetime/year-month), hexbin, histogram, ridge line,
-  scatter, anomalies
+- **14+ plot types** — time series, cumulative, diel cycle, heatmap (datetime/year-month), hexbin, histogram,
+  ridge line, scatter, anomalies
 - **Interactive plots** — Matplotlib and Plotly support
-- **Examples:** [examples/core/visualization/](examples/visualization/)
+- Examples: [examples/visualization/](examples/visualization/)
 
 ### I/O & File Handling
 
-- **Load/save parquet**: Efficient columnar format for time series
-- **Read EddyPro files** — Single or batch file reading
-- **Detect/split files** (identify irregular files, split large datasets)
-- **Format for FLUXNET**: Prepare data for upload
-
----
-
-## Installation
-
-### Using pip (Recommended)
-
-```bash
-pip install diive
-```
-
-### Using uv
-
-[uv](https://docs.astral.sh/uv/) is a modern Python package installer:
-
-```bash
-uv pip install diive
-```
-
-### Using poetry
-
-```bash
-poetry add diive
-```
-
-### From source (Development)
-
-```bash
-git clone https://github.com/holukas/diive.git
-cd diive
-uv sync                       # Install dependencies
-uv run pytest tests/          # Run tests
-```
-
-See [CLAUDE.md](CLAUDE.md) for detailed development setup.
-
-### Legacy: Using conda
-
-```bash
-conda create -n diive python=3.12
-conda activate diive
-pip install diive
-```
-
----
-
-## Advanced: Comprehensive Jupyter Notebooks
-
-Detailed Jupyter notebooks with full example workflows are available at [notebooks/](notebooks/):
-
-- **[Notebook Overview](https://github.com/holukas/diive/blob/main/notebooks/OVERVIEW.ipynb)** — Complete listing of all
-  notebooks
-- **Gap-Filling:** XGBoost, Random Forest, MDS, linear interpolation, quick methods
-- **Flux Processing:** Complete chain, quick chain, self-heating correction, detection limit
-- **Quality Control:** Outlier detection, z-score variants, Hampel, LOF, quality flags
-- **Analysis:** Correlation, seasonality, decomposition, binned analysis
-- **I/O:** Reading EddyPro files, parquet, formatting for FLUXNET
-- **Visualization:** All plot types and customization options
-
-Use notebooks as detailed references; see [examples/](examples/) for quick, runnable demonstrations.
+- **Load/save parquet** — efficient columnar format for time series
+- **Read EddyPro files** — single or batch file reading
+- **Detect/split files** — identify irregular files, split large datasets
+- **Format for FLUXNET** — prepare data for upload
 
 ---
 
 ## Contributing
 
 See [CLAUDE.md](CLAUDE.md) for development setup, coding standards, and testing.
-
-Key points:
-
-- **Setup:** `uv sync` to install dependencies
-- **Tests:** `uv run pytest tests/ -v`
-- **Examples:** Always include runnable examples, update [CATALOG.md](examples/CATALOG.md) and category READMEs when
-  adding new ones
-- **Changelog:** Document changes in [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
@@ -313,8 +246,9 @@ If you use `diive` in your research, please cite it:
 
 ```bibtex
 @software{diive2024,
-  title={DIIVE: Time Series Data Processing Library},
-  author={Holukas, Dominik},
+  title={diive},
+  author={Hörtnagl, Lukas},
+  orcid={https://orcid.org/0000-0002-5569-0761},
   url={https://github.com/holukas/diive},
   doi={10.5281/zenodo.10884017},
   year={2024}
@@ -325,4 +259,4 @@ If you use `diive` in your research, please cite it:
 
 ## License
 
-`diive` is licensed under the [MIT License](LICENSE).
+`diive` is licensed under the [GNU General Public License v3.0](LICENSE).
