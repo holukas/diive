@@ -67,6 +67,9 @@ from diive.pkgs.flux.hires.fluxdetectionlimit import FluxDetectionLimit as fdl
 from diive.pkgs.flux.hires.fluxdetectionlimit import FluxDetectionLimit as flux_detection_limit
 from diive.pkgs.flux.hires.lag import MaxCovariance as MaxCovariance
 from diive.pkgs.flux.hires.lag import MaxCovariance as max_covariance
+from diive.pkgs.flux.hires.lag_pwb import PreWhiteningBootstrap as PreWhiteningBootstrap
+from diive.pkgs.flux.hires.lag_pwb import PreWhiteningBootstrap as pre_whitening_bootstrap
+from diive.pkgs.flux.hires.lag_pwb import PwboptLagPlot as PwboptLagPlot
 from diive.pkgs.flux.hires.windrotation import WindRotation2D as WindRotation2D
 from diive.pkgs.flux.hires.windrotation import WindRotation2D as wind_rotation_2d
 from diive.pkgs.flux.lowres.timelag_analysis import TimeLagAnalysis as TimeLagAnalysis
@@ -242,6 +245,9 @@ __all__ = [
     'FluxDetectionLimit',
     'MaxCovariance',
     'max_covariance',
+    'PreWhiteningBootstrap',
+    'pre_whitening_bootstrap',
+    'PwboptLagPlot',
     'WindRotation2D',
     'wind_rotation_2d',
     'TimeLagAnalysis',

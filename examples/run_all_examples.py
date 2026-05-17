@@ -105,6 +105,8 @@ EXAMPLE_FILES = [
     # Flux - High-resolution analysis
     'flux/hires/flux_fluxdetectionlimit.py',
     'flux/hires/flux_lag.py',
+    'flux/hires/flux_lag_pwb.py',
+    'flux/hires/flux_lag_pwbopt.py',
     'flux/hires/flux_windrotation.py',
     # Gap-filling
     'gapfilling/gapfill_interpolate_generous.py',

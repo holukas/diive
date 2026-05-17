@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
 
-**88 examples across 9 organized folders by functional domain.**
+**90 examples across 9 organized folders by functional domain.**
 
 ## Structure
 
@@ -51,7 +51,7 @@ examples/
 ├── fits/                  # Data fitting (2 examples)
 │   ├── fit_fitter.py
 │   └── fit_binfittercp.py
-├── flux/                  # Eddy covariance flux processing (13 examples)
+├── flux/                  # Eddy covariance flux processing (15 examples)
 │   ├── fluxprocessingchain/
 │   │   └── fluxprocessingchain.py
 │   ├── lowres/            # Low-resolution processing (9 examples)
@@ -64,9 +64,11 @@ examples/
 │   │   ├── flux_ustar_mp_detection.py
 │   │   ├── flux_ustar_vekuri_detection.py
 │   │   └── flux_ustar_method_comparison.py
-│   └── hires/             # High-resolution analysis (3 examples)
+│   └── hires/             # High-resolution analysis (5 examples)
 │       ├── flux_fluxdetectionlimit.py
 │       ├── flux_lag.py
+│       ├── flux_lag_pwb.py
+│       ├── flux_lag_pwbopt.py
 │       └── flux_windrotation.py
 ├── gapfilling/            # Gap-filling methods (10 examples)
 │   ├── gapfill_interpolate_generous.py
