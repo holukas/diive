@@ -116,7 +116,7 @@ SCALARS = {
 # ------------------------------------------------------------------
 HZ = 20  # sampling frequency (Hz);  R: mfreq = 20
 LAG_MAX_S = 10.0  # CCF search half-width (s);  R: LAG.MAX = mfreq*10
-N_BOOTSTRAP = 9  # bootstrap replicates — production: 99;  R: n_boot = 99
+N_BOOTSTRAP = 99  # bootstrap replicates — production: 99;  R: n_boot = 99
 BLOCK_LENGTH_S = 20.0  # bootstrap block length (s);  paper Section 2.2
 
 # ------------------------------------------------------------------
@@ -150,6 +150,7 @@ SAVE_PLOTS = True
 # threshold change takes effect, and the visualization runs as normal.
 # Set to None to run the full pipeline from scratch.
 RESULTS_CSV = None
+# RESULTS_CSV = OUTPUT_DIR / 'tlag_results.csv'
 
 # ------------------------------------------------------------------
 # Synthetic-mode parameters  (ignored when USE_SYNTHETIC = False)
@@ -346,9 +347,9 @@ if RESULTS_CSV is not None:
         raise FileNotFoundError(f'RESULTS_CSV not found: {_results_path}')
     results = pd.read_csv(_results_path, na_values=['-9999', '-9999.0'])
     _csv_loaded = True
-    output_csv = _results_path        # used by the summary-stats print below
-    plot_dir = OUTPUT_DIR / 'plots'   # used by the summary-stats print below
-    period_sources = []               # makes the batch loop a no-op
+    output_csv = _results_path  # used by the summary-stats print below
+    plot_dir = OUTPUT_DIR / 'plots'  # used by the summary-stats print below
+    period_sources = []  # makes the batch loop a no-op
     print(f'CSV mode: {len(results)} periods loaded from {_results_path}')
     print('Batch detection skipped; re-applying PWBOPT and running visualization.')
 
@@ -747,12 +748,12 @@ for _scalar_label in SCALARS:
 if scalars_plot:
     lag_plot = dv.PwboptLagPlot(
         results=results,
-        scalars=scalars_plot,                        # gases to plot
-        label_a='PWBOPT standard',                   # left panels
-        label_b='PWBOPT pre-filtered',               # right panels
-        color_a='#0072B2',                           # Wong blue
-        color_b='#E05C2A',                           # coral-orange
-        ylim=(-LAG_MAX_S - 0.5, LAG_MAX_S + 0.5),   # shared y range
+        scalars=scalars_plot,  # gases to plot
+        label_a='PWBOPT standard',  # left panels
+        label_b='PWBOPT pre-filtered',  # right panels
+        color_a='#0072B2',  # Wong blue
+        color_b='#E05C2A',  # coral-orange
+        # ylim: omitted -> auto-scaled tight to the actual lag data
     )
     lag_plot.plot(
         title='PWB optimal lag: standard vs pre-filtered PWBOPT',
