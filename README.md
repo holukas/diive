@@ -59,7 +59,7 @@ model.fillgaps()
 
 ### Next Steps
 
-- **[86 Runnable Examples](examples/README.md)** — organized by topic (visualization, gap-filling, flux, etc.)
+- **[98 Runnable Examples](examples/README.md)** — organized by topic (visualization, gap-filling, flux, etc.)
     - Find examples by use case: [CATALOG.md](examples/CATALOG.md)
     - Dataset documentation: [EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md)
 - **[Development Setup](CLAUDE.md)** — source setup, coding standards, testing
@@ -95,7 +95,7 @@ For the complete list, see `diive.__all__`.
 
 ---
 
-## 86 Runnable Examples
+## 98 Runnable Examples
 
 Organized by functional domain. All examples follow Sphinx Gallery format (`# %%` sections) — runnable as plain scripts
 and auto-converted to HTML docs.
@@ -119,14 +119,14 @@ uv run python examples/flux/fluxprocessingchain/fluxprocessingchain.py
 **Example categories:**
 
 - **Visualization** (17 examples) — heatmaps, time series, diel cycles, cumulative plots, histograms, scatter, ridgelines
-- **Times** (6 examples) — timestamp validation, frequency detection, diel cycles, temporal matrices
-- **Analysis** (10 examples) — correlation, seasonal decomposition, gap detection, gridding, spectral analysis
-- **Data Processing** (18 examples) — corrections (7), outlier detection (9), quality flags (2)
+- **Times** (5 examples) — timestamp validation, frequency detection, diel cycles, temporal matrices
+- **Analysis** (11 examples) — correlation, daily correlation, seasonal decomposition, gap detection, gridding, spectral analysis
+- **Data Processing** (20 examples) — corrections (7), outlier detection (9), quality flags (2), other (2)
 - **Features** (11 examples) — VPD, unit conversions, day/night flags, lagged features, potential radiation
-- **Gap-Filling** (10 examples) — linear interpolation, Random Forest, XGBoost, MDS, comparisons, optimization
-- **Flux Processing** (11 examples) — time lag, wind rotation, USTAR filtering, uncertainty, self-heating, flux chain
+- **Gap-Filling** (11 examples) — linear interpolation, Random Forest, XGBoost, MDS, comparisons, optimization, long-term
+- **Flux Processing** (16 examples) — flux chain, low-res analysis, high-res analysis, time lag, wind rotation, USTAR filtering, self-heating
 - **Curve Fitting** (2 examples) — polynomial and binned fitting
-- **I/O** (1 example) — binary value extraction
+- **I/O** (5 examples) — file reading, extraction, and data loading
 
 Browse [examples/README.md](examples/README.md) for the full index with descriptions.
 

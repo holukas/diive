@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
 
-**94 examples across 9 organized folders by functional domain.**
+**98 examples across 9 organized folders by functional domain.**
 
 ## Structure
 
@@ -28,13 +28,12 @@ examples/
 │   ├── plot_ridgeline_advanced.py
 │   ├── plot_other_plots.py
 │   └── plot_timeseries_interactive.py
-├── times/                 # Timestamp handling (6 examples)
+├── times/                 # Timestamp handling (5 examples)
 │   ├── times_timestamp_sanitizer.py
 │   ├── times_frequency_detection.py
 │   ├── times_time_features.py
 │   ├── times_diel_cycles.py
-│   ├── times_temporal_matrices.py
-│   └── times_statistics.py
+│   └── times_temporal_matrices.py
 ├── analysis/              # Time series analysis (10 examples)
 │   ├── analysis_correlation.py
 │   ├── analysis_seasonaltrend.py
@@ -51,7 +50,7 @@ examples/
 ├── fits/                  # Data fitting (2 examples)
 │   ├── fit_fitter.py
 │   └── fit_binfittercp.py
-├── flux/                  # Eddy covariance flux processing (15 examples)
+├── flux/                  # Eddy covariance flux processing (16 examples)
 │   ├── fluxprocessingchain/
 │   │   └── fluxprocessingchain.py
 │   ├── lowres/            # Low-resolution processing (9 examples)
@@ -70,10 +69,11 @@ examples/
 │       ├── flux_lag_pwb.py
 │       ├── flux_lag_pwbopt.py
 │       └── flux_windrotation.py
-├── gapfilling/            # Gap-filling methods (10 examples)
+├── gapfilling/            # Gap-filling methods (11 examples)
 │   ├── gapfill_interpolate_generous.py
 │   ├── gapfill_interpolate_conservative.py
 │   ├── gapfill_randomforest.py
+│   ├── gapfill_randomforest_longterm.py
 │   ├── gapfill_quickfill.py
 │   ├── gapfill_optimize_randomforest.py
 │   ├── gapfill_xgboost.py
@@ -87,7 +87,7 @@ examples/
 │   ├── io_read_multiple_files_with_multidatafilereader.py
 │   ├── io_read_single_file_with_readfiletype.py
 │   └── io_extract.py
-└── preprocessing/         # Data quality & corrections (18 examples)
+└── preprocessing/         # Data quality & corrections (20 examples)
     ├── corrections/       # Offset & bias corrections (7 examples)
     │   ├── correction_relativehumidity_offset.py
     │   ├── correction_radiation_offset.py
@@ -122,7 +122,7 @@ uv run python examples/gapfilling/gapfill_randomforest.py
 uv run python examples/run_all_examples.py
 ```
 
-This runs all 94 examples in parallel with 8 workers, reporting execution time and any errors.
+This runs all 98 examples in parallel with 8 workers, reporting execution time and any errors.
 
 ## Finding Examples
 
@@ -151,15 +151,15 @@ Browse by topic:
 | Domain | Files | Topics |
 |--------|-------|--------|
 | **Visualization** | 17 | Heatmaps, scatter, timeseries, histograms, ridgelines, cumulative, diurnal cycles |
-| **Times** | 6 | Timestamp validation, frequency detection, diel cycles, temporal matrices, statistics |
-| **Analysis** | 10 | Correlation, decomposition, gap detection, spatial aggregation, harmonic analysis |
+| **Times** | 5 | Timestamp validation, frequency detection, diel cycles, temporal matrices |
+| **Analysis** | 11 | Correlation, daily correlation, decomposition, gap detection, spatial aggregation, harmonic analysis |
 | **Features** | 11 | Feature engineering pipeline, air properties, unit conversions, day/night flags, VPD, lagged variants |
 | **Fits** | 2 | Binned fitting, ecosystem response fitting |
-| **Flux** | 13 | Time lag analysis, processing chain, HQ filtering, USTAR detection (3), self-heating (2), uncertainty, high-res analysis |
-| **Gapfilling** | 10 | Linear interpolation, Random Forest (3 variants), XGBoost (3 variants), MDS (2), comparison |
+| **Flux** | 16 | Time lag analysis, processing chain, HQ filtering, USTAR detection (3), self-heating (2), uncertainty, high-res analysis |
+| **Gapfilling** | 11 | Linear interpolation, Random Forest (4 variants), XGBoost (3 variants), MDS (2), comparison |
 | **IO** | 5 | Parquet file I/O, EddyPro CSV reading, binary value extraction |
-| **Preprocessing** | 18 | Corrections (7), outlier detection (9), QA/QC (2) |
-| **TOTAL** | **94** | |
+| **Preprocessing** | 20 | Corrections (7), outlier detection (9), QA/QC (2), other (2) |
+| **TOTAL** | **98** | |
 
 ## Running Options
 

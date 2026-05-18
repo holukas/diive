@@ -2,7 +2,7 @@
 
 Examples demonstrating various gap-filling approaches for time series data, from simple to advanced machine learning.
 
-10 examples across 4 gap-filling methods with optimization and comparison workflows.
+11 examples across 4 gap-filling methods with optimization and comparison workflows.
 
 ## Method Overview
 
@@ -26,9 +26,10 @@ Simple, no training required. Works for small gaps.
 
 ### Random Forest
 
-Training-based, interpretable, robust to outliers. Three versions: basic, quick prototype, and hyperparameter-tuned.
+Training-based, interpretable, robust to outliers. Four versions: basic, long-term year-pooling, quick prototype, and hyperparameter-tuned.
 
 - **gapfill_randomforest.py** — Basic Random Forest with 8-stage feature engineering
+- **gapfill_randomforest_longterm.py** — Long-term gap-filling using year-pooling strategy (optimal for multi-year datasets)
 - **gapfill_quickfill.py** — Quick prototype (faster for exploration)
 - **gapfill_optimize_randomforest.py** — Hyperparameter tuning via grid search
 
@@ -118,6 +119,7 @@ uv run python examples/pkgs/gapfilling/gapfill_interpolate_generous.py
 
 # Random Forest
 uv run python examples/pkgs/gapfilling/gapfill_randomforest.py
+uv run python examples/pkgs/gapfilling/gapfill_randomforest_longterm.py
 uv run python examples/pkgs/gapfilling/gapfill_quickfill.py
 uv run python examples/pkgs/gapfilling/gapfill_optimize_randomforest.py
 

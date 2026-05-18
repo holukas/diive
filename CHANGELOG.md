@@ -2,7 +2,7 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.91.0 | XX May 2026
+## v0.91.0 | 18 May 2026
 
 - **New: PreWhiteningBootstrap class (PWB time lag detection)** — `diive/pkgs/flux/hires/lag_pwb.py`
   implements the pre-whitening with block-bootstrap cross-correlation method from Vitale et al. (2024).
@@ -25,7 +25,7 @@
     with decreasing signal strength, PWBOPT S1/S2/S3 selection, standard vs. pre-filtered strategy
     comparison; supports real EddyPro-rotated files via `USE_SYNTHETIC=False`
   - Registered in `run_all_examples.py`, `examples/CATALOG.md`, `examples/README.md`,
-    `examples/flux/README.md`; example count updated 88 -> 90
+    `examples/flux/README.md`
 
 - **New examples: parquet I/O and EddyPro CSV reading** — 4 new I/O examples
   - `io_load_save_parquet.py` — Efficient parquet file I/O with automatic timestamp sanitization
@@ -35,7 +35,7 @@
     files with pre-defined filetype
   - `io_read_single_file_with_readfiletype.py` — Read single EddyPro CSV with pre-defined filetype
   - All registered in `run_all_examples.py`, `examples/CATALOG.md`, `examples/README.md`,
-    `examples/io/README.md`; example count updated 90 -> 94
+    `examples/io/README.md`
 
 - **Documentation cleanup: removed AI-typical phrasing across all docs** — Checked README.md,
   CONTRIBUTING.md, CLAUDE.md, examples/README.md, examples/CATALOG.md, and visualization/README.md
@@ -110,7 +110,7 @@
   - All gap-filling workflows now documented in discoverable, runnable examples; notebooks preserved in `notebooks/_archive/` for historical reference
   - **Import standardization:** Renamed directory `examples/preprocessing/outlierdetection/` → `outlier_detection/` (9 files updated in `run_all_examples.py`, all examples, docstrings, CATALOG.md).
   - **Bug fixes:** Fixed Windows Unicode encoding issues (arrow characters → ASCII) in `outlier_stepwise.py`.
-  - **Result:** 5 new examples (times: 1→6), total example count now **82** (was 77).
+  - **Result:** Final example count: **98** examples across all categories.
   - **Documentation:** Updated CLAUDE.md with consolidated notebook consolidation strategy section. Examples are primary documentation; archived notebooks kept as reference in `notebooks/_archived/`.
 - **Feature examples: consolidated 4 notebooks** — Fully consolidated variable and energy conversion examples:
   - `feature_timesince.py` — Consolidates notebook `TimeSince.ipynb` (archived). Expanded with detailed explanations of output variables (UPPER_LIMIT, LOWER_LIMIT, FLAG_IS_OUTSIDE_RANGE), include_lim parameter behavior (exclusive vs inclusive), alternative access methods (get_full_results vs get_timesince), and interpretation guidance for both precipitation and temperature examples.
