@@ -98,6 +98,16 @@
   - **QC/preprocessing (15 notebooks → 7 enhanced examples):** Added day/night variant sections to `outlier_absolutelimits.py` and `outlier_lof.py` (showing `separate_daytime_nighttime=True` parameter usage). Enhanced `qc_overall_flag.py` with missing values handling, `correction_measurement_offset_replicate.py` with constant offset application, and `outlier_hampel.py`, `outlier_zscore.py`, `outlier_localsd.py` with parameter tuning workflows.
   - **Optimization:** Removed corporate language from docstrings (e.g., "Professional visualization" → "Plotting diel cycles with the DielCycle class").
   - **Refactoring:** All examples now use existing `diive` functions (`diel_cycle()`, `resample_to_monthly_agg_matrix()`, `FeatureEngineer.vectorize_timestamps`, `sstats()`, `TimestampSanitizer`). Removed duplicate/custom implementations.
+
+- **Notebooks reorganization: consolidated folder structure** — Flattened notebook directory organization:
+  - Moved notebooks from subdirectories (`flux/`, `gapfilling/`, `io/`, `qc/`) to root `notebooks/` for discoverability
+  - Updated OVERVIEW.ipynb index to reflect new structure
+  - Subsequent consolidation archived gap-filling workflow notebooks superseded by examples
+
+- **Gap-filling workflow consolidation: 6 notebooks → 4 examples** — Archived gap-filling notebooks superseded by discoverable examples:
+  - **New examples:** `gapfill_randomforest_longterm.py` (year-pooling strategy with LongTermGapFillingRandomForestTS), `fluxprocessingchain_quick.py` (rapid exploratory L2-L3.3 flux processing with defaults)
+  - **Archived:** `LinearInterpolation.ipynb` (covered by conservative/generous interpolation examples), `LongTermRandomForestGapFilling.ipynb`, `QuickRandomForestGapFilling.ipynb` (covered by gapfill_quickfill.py), `QuickFluxProcessingChain.ipynb`, `XGBoostGapFillingMinimal.ipynb`, `XGBoostGapFillingExtensive.ipynb` (both covered by comprehensive gapfill_xgboost.py)
+  - All gap-filling workflows now documented in discoverable, runnable examples; notebooks preserved in `notebooks/_archive/` for historical reference
   - **Import standardization:** Renamed directory `examples/preprocessing/outlierdetection/` → `outlier_detection/` (9 files updated in `run_all_examples.py`, all examples, docstrings, CATALOG.md).
   - **Bug fixes:** Fixed Windows Unicode encoding issues (arrow characters → ASCII) in `outlier_stepwise.py`.
   - **Result:** 5 new examples (times: 1→6), total example count now **82** (was 77).
