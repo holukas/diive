@@ -4,8 +4,13 @@ Read, write, and manipulate data in various formats.
 
 ## Contents
 
-### File Format I/O
-- **io_load_save_parquet.py** — Save DataFrames as efficient Parquet files and reload with automatic timestamp sanitization
+### Parquet File I/O
+- **io_load_save_parquet.py** — Save and reload DataFrames as Parquet files with automatic timestamp sanitization
+
+### EddyPro CSV File Reading
+- **io_read_single_file_with_datafilereader.py** — Read single file with manual parameter specification
+- **io_read_multiple_files_with_multidatafilereader.py** — Load and merge multiple files with pre-defined filetype
+- **io_read_single_file_with_readfiletype.py** — Read single file with pre-defined filetype configuration
 
 ### Binary Data Extraction
 - **io_extract.py** — Extract individual bits from integer values with optional gain factors

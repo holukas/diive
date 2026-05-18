@@ -27,10 +27,15 @@
   - Registered in `run_all_examples.py`, `examples/CATALOG.md`, `examples/README.md`,
     `examples/flux/README.md`; example count updated 88 -> 90
 
-- **New example: io_load_save_parquet.py** — Demonstrates efficient parquet file I/O with automatic
-  timestamp sanitization. Shows how to save DataFrames as compressed parquet files and reload
-  with frequency detection. Registered in `run_all_examples.py`, `examples/CATALOG.md`,
-  `examples/README.md`, `examples/io/README.md`; example count updated 90 -> 91
+- **New examples: parquet I/O and EddyPro CSV reading** — 4 new I/O examples
+  - `io_load_save_parquet.py` — Efficient parquet file I/O with automatic timestamp sanitization
+    and CSV performance comparison (60% smaller, 15x faster)
+  - `io_read_single_file_with_datafilereader.py` — Read single EddyPro CSV with manual parameters
+  - `io_read_multiple_files_with_multidatafilereader.py` — Load and merge multiple EddyPro CSV
+    files with pre-defined filetype
+  - `io_read_single_file_with_readfiletype.py` — Read single EddyPro CSV with pre-defined filetype
+  - All registered in `run_all_examples.py`, `examples/CATALOG.md`, `examples/README.md`,
+    `examples/io/README.md`; example count updated 90 -> 94
 
 - **Documentation cleanup: removed AI-typical phrasing across all docs** — Checked README.md,
   CONTRIBUTING.md, CLAUDE.md, examples/README.md, examples/CATALOG.md, and visualization/README.md

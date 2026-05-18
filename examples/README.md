@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
 
-**91 examples across 9 organized folders by functional domain.**
+**94 examples across 9 organized folders by functional domain.**
 
 ## Structure
 
@@ -81,8 +81,11 @@ examples/
 │   ├── gapfill_mds.py
 │   ├── gapfill_mds_comparison.py
 │   └── gapfill_comparison.py
-├── io/                    # File I/O (2 examples)
+├── io/                    # File I/O (5 examples)
 │   ├── io_load_save_parquet.py
+│   ├── io_read_single_file_with_datafilereader.py
+│   ├── io_read_multiple_files_with_multidatafilereader.py
+│   ├── io_read_single_file_with_readfiletype.py
 │   └── io_extract.py
 └── preprocessing/         # Data quality & corrections (18 examples)
     ├── corrections/       # Offset & bias corrections (7 examples)
@@ -119,7 +122,7 @@ uv run python examples/gapfilling/gapfill_randomforest.py
 uv run python examples/run_all_examples.py
 ```
 
-This runs all 91 examples in parallel with 8 workers, reporting execution time and any errors.
+This runs all 94 examples in parallel with 8 workers, reporting execution time and any errors.
 
 ## Finding Examples
 
@@ -154,9 +157,9 @@ Browse by topic:
 | **Fits** | 2 | Binned fitting, ecosystem response fitting |
 | **Flux** | 13 | Time lag analysis, processing chain, HQ filtering, USTAR detection (3), self-heating (2), uncertainty, high-res analysis |
 | **Gapfilling** | 10 | Linear interpolation, Random Forest (3 variants), XGBoost (3 variants), MDS (2), comparison |
-| **IO** | 2 | Parquet file I/O, binary value extraction |
+| **IO** | 5 | Parquet file I/O, EddyPro CSV reading, binary value extraction |
 | **Preprocessing** | 18 | Corrections (7), outlier detection (9), QA/QC (2) |
-| **TOTAL** | **91** | |
+| **TOTAL** | **94** | |
 
 ## Running Options
 

@@ -53,8 +53,11 @@ EXAMPLE_FILES = [
     'analysis/analysis_quantiles.py',
     'analysis/analysis_seasonaltrend.py',
     # I/O
-    'io/io_extract.py',
     'io/io_load_save_parquet.py',
+    'io/io_read_single_file_with_datafilereader.py',
+    'io/io_read_multiple_files_with_multidatafilereader.py',
+    'io/io_read_single_file_with_readfiletype.py',
+    'io/io_extract.py',
     # Preprocessing - Corrections
     'preprocessing/corrections/correction_relativehumidity_offset.py',
     'preprocessing/corrections/correction_radiation_offset.py',

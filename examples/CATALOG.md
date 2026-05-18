@@ -216,7 +216,10 @@ See: [fits/README.md](fits/README.md)
 
 | Example | Description |
 |---------|-------------|
-| [**io_load_save_parquet.py**](io/io_load_save_parquet.py) | Save DataFrames as efficient Parquet files, reload with automatic timestamp sanitization |
+| [**io_load_save_parquet.py**](io/io_load_save_parquet.py) | Save and reload DataFrames as Parquet files with automatic timestamp sanitization |
+| [**io_read_single_file_with_datafilereader.py**](io/io_read_single_file_with_datafilereader.py) | Read single EddyPro CSV with manual parameter specification |
+| [**io_read_multiple_files_with_multidatafilereader.py**](io/io_read_multiple_files_with_multidatafilereader.py) | Load and merge multiple EddyPro CSV files with pre-defined filetype |
+| [**io_read_single_file_with_readfiletype.py**](io/io_read_single_file_with_readfiletype.py) | Read single EddyPro CSV with pre-defined filetype configuration |
 | [**io_extract.py**](io/io_extract.py) | Binary value extraction, bit-level data manipulation |
 
 See: [io/README.md](io/README.md)
