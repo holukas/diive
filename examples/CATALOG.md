@@ -153,6 +153,7 @@ See: [features/README.md](features/README.md)
 | Example | Description |
 |---------|-------------|
 | [**fluxprocessingchain.py**](flux/fluxprocessingchain/fluxprocessingchain.py) | Complete Swiss FluxNet workflow (L2-L4.1): quality flags, storage correction, outlier removal, USTAR filtering, gap-filling |
+| [**fluxprocessingchain_quick.py**](flux/fluxprocessingchain/fluxprocessingchain_quick.py) | Quick exploratory processing (L2-L3.3) with default settings for rapid data checking |
 
 ### Low-Resolution (30-min) Processing
 
@@ -189,6 +190,7 @@ See: [flux/README.md](flux/README.md)
 | [**gapfill_interpolate_conservative.py**](gapfilling/gapfill_interpolate_conservative.py) | Linear interpolation | No |
 | [**gapfill_interpolate_generous.py**](gapfilling/gapfill_interpolate_generous.py) | Linear interpolation | No |
 | [**gapfill_randomforest.py**](gapfilling/gapfill_randomforest.py) | Random Forest | Yes |
+| [**gapfill_randomforest_longterm.py**](gapfilling/gapfill_randomforest_longterm.py) | Random Forest with long-term year pooling | Yes |
 | [**gapfill_quickfill.py**](gapfilling/gapfill_quickfill.py) | Quick Random Forest | Yes |
 | [**gapfill_optimize_randomforest.py**](gapfilling/gapfill_optimize_randomforest.py) | Random Forest with hyperparameter tuning | Yes |
 | [**gapfill_xgboost.py**](gapfilling/gapfill_xgboost.py) | XGBoost | Yes |

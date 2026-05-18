@@ -96,6 +96,7 @@ EXAMPLE_FILES = [
     'fits/fit_fitter.py',
     # Flux - Processing chain
     'flux/fluxprocessingchain/fluxprocessingchain.py',
+    'flux/fluxprocessingchain/fluxprocessingchain_quick.py',
     # Flux - Low-resolution processing
     'flux/lowres/flux_timelag_analysis.py',
     'flux/lowres/flux_common.py',
@@ -118,6 +119,7 @@ EXAMPLE_FILES = [
     'gapfilling/gapfill_mds.py',
     'gapfilling/gapfill_mds_comparison.py',
     'gapfilling/gapfill_randomforest.py',
+    'gapfilling/gapfill_randomforest_longterm.py',
     'gapfilling/gapfill_quickfill.py',
     'gapfilling/gapfill_optimize_randomforest.py',
     'gapfilling/gapfill_xgboost.py',
