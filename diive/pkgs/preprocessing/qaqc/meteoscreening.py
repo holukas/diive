@@ -431,8 +431,7 @@ class StepwiseMeteoScreeningDb:
                                   n_sigma_daytime: float = None, n_sigma_nighttime: float = None,
                                   k: float = 1.4826, use_differencing: bool = True,
                                   separate_daytime_nighttime: bool = False, showplot: bool = False,
-                                  verbose: bool = False,
-                                  repeat: bool = True):
+                                  verbose: bool = False, repeat: bool = True):
         """Identify outliers in a sliding window based on the Hampel filter (global or separate day/night).
 
         Parameters

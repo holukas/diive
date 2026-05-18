@@ -71,6 +71,15 @@
   - Shows feature importance ranking (top 12 by correlation with temperature)
   - Example output includes: 3 input columns + 46 engineered features = 49 total
   - Fixed Unicode encoding issues: replaced checkmarks with `[OK]`, arrows with `->` for Windows compatibility
+- **Public API exports: timestamp and QA/QC utilities** — Exposed 5 previously internal functions/classes as public aliases:
+  - `DetectFrequency` class: Low-level frequency detection with confidence scoring and multiple detection methods
+  - `timestamp_infer_freq_progressively()`: Fast detection via first/last interval comparison
+  - `timestamp_infer_freq_from_fullset()`: Pandas-based inference for regular data
+  - `timestamp_infer_freq_from_timedelta()`: Most frequent interval analysis (gap-tolerant)
+  - `StepwiseMeteoScreeningDb` class: Database-backed quality screening and resampling workflow
+  - All accessible via `diive.DetectFrequency`, `diive.timestamp_infer_freq_*`, and `diive.StepwiseMeteoScreeningDb`
+  - Updated `examples/times/times_frequency_detection.py` and `notebooks/qc/StepwiseMeteoScreeningFromDatabase.ipynb` to use public aliases instead of direct internal imports
+
 - **Frequency detection docstrings: comprehensive NumPy-style documentation** — Enhanced three detection functions in `diive.core.times.times`:
   - `timestamp_infer_freq_progressively()`: Compares first/last intervals for fast, robust detection
   - `timestamp_infer_freq_from_fullset()`: Uses pandas inference for perfectly regular data

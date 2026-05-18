@@ -36,6 +36,7 @@ dependencies = [
     "shap>=0.48.0,<0.49.0",
     "pandas-stubs>=2.0.0,<3.0.0",
     "dbc-influxdb @ file:///F:/Sync/luhk_work/20%20-%20CODING/22%20-%20POET/dbc-influxdb",
+    "ipykernel>=7.2.0",
 ]
 
 [project.optional-dependencies]
