@@ -54,6 +54,7 @@ EXAMPLE_FILES = [
     'analysis/analysis_seasonaltrend.py',
     # I/O
     'io/io_extract.py',
+    'io/io_load_save_parquet.py',
     # Preprocessing - Corrections
     'preprocessing/corrections/correction_relativehumidity_offset.py',
     'preprocessing/corrections/correction_radiation_offset.py',

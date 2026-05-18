@@ -1,10 +1,13 @@
-# Binary Data I/O Examples
+# Data I/O Examples
 
-Extract and manipulate information stored in binary-encoded values and bit fields.
+Read, write, and manipulate data in various formats.
 
 ## Contents
 
-### Binary Value Extraction
+### File Format I/O
+- **io_load_save_parquet.py** — Save DataFrames as efficient Parquet files and reload with automatic timestamp sanitization
+
+### Binary Data Extraction
 - **io_extract.py** — Extract individual bits from integer values with optional gain factors
 
 ## Related Documentation

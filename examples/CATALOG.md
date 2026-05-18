@@ -216,6 +216,7 @@ See: [fits/README.md](fits/README.md)
 
 | Example | Description |
 |---------|-------------|
+| [**io_load_save_parquet.py**](io/io_load_save_parquet.py) | Save DataFrames as efficient Parquet files, reload with automatic timestamp sanitization |
 | [**io_extract.py**](io/io_extract.py) | Binary value extraction, bit-level data manipulation |
 
 See: [io/README.md](io/README.md)
