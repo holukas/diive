@@ -18,6 +18,26 @@ by the [ETH Grassland Sciences group](https://gl.ethz.ch/) for [Swiss FluxNet](h
 
 ---
 
+## Citation
+
+Cite `diive` using the DOI [10.5281/zenodo.10884017](https://doi.org/10.5281/zenodo.10884017). This concept DOI resolves to the latest release; specify the version in your citation.
+
+**BibTeX format:**
+
+```bibtex
+@software{diive2026,
+  author = {Hörtnagl, Lukas},
+  title = {diive: Python library for time series processing},
+  version = {0.91.0},
+  year = {2026},
+  doi = {10.5281/zenodo.10884017}
+}
+```
+
+Replace `version` and `year` with the values for your target release.
+
+---
+
 ## Getting Started
 
 ### Installation
@@ -237,23 +257,6 @@ Reference: [Swiss FluxNet flux processing](https://www.swissfluxnet.ethz.ch/inde
 ## Contributing
 
 See [CLAUDE.md](CLAUDE.md) for development setup, coding standards, and testing.
-
----
-
-## Citation
-
-If you use `diive` in your research, please cite it:
-
-```bibtex
-@software{diive2024,
-  title={diive},
-  author={Hörtnagl, Lukas},
-  orcid={https://orcid.org/0000-0002-5569-0761},
-  url={https://github.com/holukas/diive},
-  doi={10.5281/zenodo.10884017},
-  year={2024}
-}
-```
 
 ---
 
