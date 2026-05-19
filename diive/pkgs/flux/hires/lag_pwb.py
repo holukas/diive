@@ -244,8 +244,8 @@ class PreWhiteningBootstrap:
         self._hdi_hi_s: float | None = None
         self._bootstrap_lags: np.ndarray | None = None
         # AR model info
-        self._ar_order: int | None = None      # scalar AR order (primary)
-        self._ar_orders: dict | None = None    # all fitted AR orders
+        self._ar_order: int | None = None  # scalar AR order (primary)
+        self._ar_orders: dict | None = None  # all fitted AR orders
         self._best_combination: str | None = None
         # Arrays kept for plotting
         self._lags_axis: np.ndarray | None = None
@@ -358,8 +358,8 @@ class PreWhiteningBootstrap:
             'corr_est': self.corr_est,
             'cv5pct': self.cv5pct,
             'cv1pct': self.cv1pct,
-            'ar_order': self._ar_order,           # scalar AR order (primary)
-            'ar_orders': self._ar_orders,          # all fitted AR orders
+            'ar_order': self._ar_order,  # scalar AR order (primary)
+            'ar_orders': self._ar_orders,  # all fitted AR orders
             'best_combination': self._best_combination,
             # PWB results (from the selected combination)
             'tlag_records': self.tlag_records,
@@ -424,8 +424,8 @@ class PreWhiteningBootstrap:
 
         # ---- Step 2: fit separate AR models ----
         # R: ar.resx = ar(x=scalar, ...), ar.resz = ar(z=W, ...), ar.resy = ar(y=T_SONIC, ...)
-        phi_s, p_s = self._fit_ar_model(s)   # scalar AR
-        phi_w, p_w = self._fit_ar_model(w)   # W AR
+        phi_s, p_s = self._fit_ar_model(s)  # scalar AR
+        phi_w, p_w = self._fit_ar_model(w)  # W AR
         self._ar_order = p_s
         self._ar_orders = {'scalar': p_s, 'w': p_w}
         if has_tsonic:
@@ -434,15 +434,15 @@ class PreWhiteningBootstrap:
 
         # ---- Step 3: filtered series ----
         # Scalar AR applied to scalar (x1), W (z1), and T_SONIC (y1)
-        s_fa = self._apply_ar_filter(phi_s, s)   # scalar filt by scalar AR  (R: x1)
-        w_fa = self._apply_ar_filter(phi_s, w)   # W filt by scalar AR       (R: z1)
+        s_fa = self._apply_ar_filter(phi_s, s)  # scalar filt by scalar AR  (R: x1)
+        w_fa = self._apply_ar_filter(phi_s, w)  # W filt by scalar AR       (R: z1)
         # W AR applied to scalar (x3) and W (z3)
-        s_fw = self._apply_ar_filter(phi_w, s)   # scalar filt by W AR       (R: x3)
-        w_fw = self._apply_ar_filter(phi_w, w)   # W filt by W AR            (R: z3)
+        s_fw = self._apply_ar_filter(phi_w, s)  # scalar filt by W AR       (R: x3)
+        w_fw = self._apply_ar_filter(phi_w, w)  # W filt by W AR            (R: z3)
         if has_tsonic:
-            t_fa = self._apply_ar_filter(phi_s, t)   # T_SONIC filt by scalar AR (R: y1)
-            s_ft = self._apply_ar_filter(phi_t, s)   # scalar filt by T_SONIC AR (R: x2)
-            t_ft = self._apply_ar_filter(phi_t, t)   # T_SONIC filt by T_SONIC AR(R: y2)
+            t_fa = self._apply_ar_filter(phi_s, t)  # T_SONIC filt by scalar AR (R: y1)
+            s_ft = self._apply_ar_filter(phi_t, s)  # scalar filt by T_SONIC AR (R: x2)
+            t_ft = self._apply_ar_filter(phi_t, t)  # T_SONIC filt by T_SONIC AR(R: y2)
 
         # ---- Step 4: raw cross-covariance (diagnostic panel 2) ----
         self._raw_ccov = self._compute_ccov(w, s)
@@ -998,10 +998,10 @@ class PreWhiteningBootstrap:
         ax.plot(lags_s, self._smooth_pw_ccf,
                 color='black', linewidth=2, label='smoothed CCF')
 
-        ax.axhline(cv5,  color='steelblue', linestyle=':', linewidth=1,
+        ax.axhline(cv5, color='steelblue', linestyle=':', linewidth=1,
                    label='+/-1.96/sqrt(n)  (5%)')
         ax.axhline(-cv5, color='steelblue', linestyle=':', linewidth=1)
-        ax.axhline(cv1,  color='steelblue', linestyle='--', linewidth=1,
+        ax.axhline(cv1, color='steelblue', linestyle='--', linewidth=1,
                    label='+/-2.57/sqrt(n)  (1%)')
         ax.axhline(-cv1, color='steelblue', linestyle='--', linewidth=1)
         ax.axhline(0, color='black', linewidth=0.5)
@@ -1227,7 +1227,7 @@ class PwboptLagPlot:
         # last gas row is no longer the visual bottom, so x-axis labels shift
         # down to the comparison row.  The extra hspace prevents the last gas
         # row's tick labels from colliding with the comparison row's titles.
-        fig_h = n_rows_fig * 8.0 / 2.54      # 8 cm per row (was 7 cm)
+        fig_h = n_rows_fig * 8.0 / 2.54  # 8 cm per row (was 7 cm)
         _hspace = 0.42 if _has_gas_comparison else 0.25
         fig = plt.figure(figsize=(28 / 2.54, fig_h), facecolor='white')
 
