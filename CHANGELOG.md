@@ -7,25 +7,33 @@
 - **New: PreWhiteningBootstrap class (PWB time lag detection)** — `diive/pkgs/flux/hires/lag_pwb.py`
   implements the pre-whitening with block-bootstrap cross-correlation method from Vitale et al. (2024).
   Robust for low-magnitude fluxes (CH4, N2O) where the standard MaxCovariance method fails due to
-  absence of a distinct CCF peak. Key features:
-  - AR(p) pre-whitening of W and scalar to remove serial autocorrelation (AIC-selected order via
-    `statsmodels.tsa.ar_model.ar_select_order`)
-  - Block-bootstrap (N_B=99 samples, L=20 s blocks) CCF computed per replicate, smoothed, peak detected
-  - Bootstrap lag summarised as mode (TL^PWB) + 95% HDI (Highest Density Interval)
-  - `is_reliable` flag: HDI range < 0.5 s (S1 criterion, paper Section 2.3)
+  absence of a distinct CCF peak. Full alignment with RFlux v3.2.0 (`tlag_detection.R`). Key features:
+  - AR(p) pre-whitening of W, scalar, and optionally T_SONIC to remove serial autocorrelation.
+    Order selected by AIC with max_order = floor(100 * log10(N)), matching R's formula.
+    For N = 36000 this gives max_order = 455; a low cap (e.g. 45) under-fits and distorts the CCF peak.
+  - Four bootstrap CCF combinations when `var_tsonic` is provided (strongly recommended for trace gases):
+    - `cw` -- scalar x W, scalar AR filter (R: bootccf_cw)
+    - `ct` -- scalar x T_SONIC, scalar AR filter (R: bootccf_ct)
+    - `wc` -- scalar x W, W AR filter (R: bootccf_wc)
+    - `tc` -- scalar x T_SONIC, T_SONIC AR filter (R: bootccf_tc)
+    The combination with the highest smoothed peak correlation is selected (R: which.max(abs(corr_est_s))).
+    For N2O and CH4 the T_SONIC combinations often produce a cleaner peak than scalar x W alone.
+  - Block-bootstrap (N_B=99 samples, L=20 s blocks): CCF computed per replicate, smoothed, peak detected.
+    na.locf fills smoothed-CCF edges so boundary lags are not excluded from the peak search.
+  - Bootstrap lag summarised as mode (TL^PWB) + 95% HDI (Highest Density Interval).
+  - `is_reliable` flag: HDI range < 0.5 s (S1 criterion, paper Section 2.3).
   - Three-panel `plot()`: pre-whitened CCF with Bartlett significance bands, raw cross-covariance,
-    bootstrap lag histogram with HDI
-  - Direct Python port of `tlag_detection.R` (RFlux package): na.omit trimming, rollapply smoothing
-    widths (3 and 13), sequential if-rules for tlag_opt, 1-based/0-based index conversion verified
-  - Exported as `dv.PreWhiteningBootstrap` in `diive/__init__.py`
+    bootstrap lag histogram with HDI shading for the selected combination.
+  - Exported as `dv.PreWhiteningBootstrap` in `diive/__init__.py`.
 - **New examples: flux_lag_pwb.py and flux_lag_pwbopt.py** — 2 new high-resolution lag examples
   - `examples/flux/hires/flux_lag_pwb.py` — single averaging period: PWB on synthetic high-flux
-    (CO2) and low-flux (N2O) data, verifying reliable vs. unreliable detection
-  - `examples/flux/hires/flux_lag_pwbopt.py` — multi-period batch pipeline: 20 synthetic periods
-    with decreasing signal strength, PWBOPT S1/S2/S3 selection, standard vs. pre-filtered strategy
-    comparison; supports real EddyPro-rotated files via `USE_SYNTHETIC=False`
+    (CO2) and low-flux (N2O) data with T_SONIC, demonstrating the 4-combination logic and
+    reliable vs. unreliable detection.
+  - `examples/flux/hires/flux_lag_pwbopt.py` — multi-period batch pipeline: PWBOPT S1/S2/S3
+    selection, standard vs. pre-filtered strategy comparison; supports real EddyPro-rotated
+    files via `USE_SYNTHETIC=False`.
   - Registered in `run_all_examples.py`, `examples/CATALOG.md`, `examples/README.md`,
-    `examples/flux/README.md`
+    `examples/flux/README.md`.
 
 - **New examples: parquet I/O and EddyPro CSV reading** — 4 new I/O examples
   - `io_load_save_parquet.py` — Efficient parquet file I/O with automatic timestamp sanitization

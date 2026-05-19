@@ -4,13 +4,13 @@ Time Lag Detection (PreWhiteningBootstrap / PWB)
 =================================================
 
 Detect time lag between a scalar and vertical wind using the pre-whitening
-with block-bootstrap (PWB) cross-correlation procedure.
+with block-bootstrap (PWB) cross-correlation procedure, following RFlux v3.2.0.
 
-Unlike covariance maximisation (MaxCovariance), PWB is robust for low-magnitude
-fluxes such as CH4 and N2O, where the cross-covariance function often lacks a
-distinct peak. Pre-whitening removes serial correlation that inflates spurious
-CCF peaks. Block-bootstrapping quantifies detection uncertainty so unreliable
-lags can be identified and replaced.
+Providing var_tsonic enables the full 4-combination logic: scalar x W and
+scalar x T_SONIC, each under its own AR filter and under the scalar AR filter.
+The combination with the highest smoothed peak correlation is selected.  For
+trace gases (N2O, CH4) with a weak scalar x W signal, the T_SONIC combinations
+often yield a cleaner peak and a narrower HDI.
 
 Reference: Vitale D et al. (2024), Environmental and Ecological Statistics 31:219-244.
 doi:10.1007/s10651-024-00615-9
@@ -23,6 +23,8 @@ doi:10.1007/s10651-024-00615-9
 # Simulate 30 minutes of 20 Hz data (36000 records) where the scalar has a
 # known lag of 1.5 s relative to the vertical wind component. High correlation
 # between wind and scalar mimics a moderate/high flux situation (e.g. CO2).
+# T_SONIC is simulated as a noisy version of W (common covariance structure in
+# turbulence), allowing the 4-combination RFlux v3.2.0 logic to run.
 
 import numpy as np
 import pandas as pd
@@ -42,12 +44,15 @@ w = np.zeros(n_records)
 for t in range(1, n_records):
     w[t] = phi * w[t - 1] + np.random.normal(0, 0.3)
 
+# T_SONIC: correlated with W (buoyancy flux drives both)
+t_sonic = w * 0.6 + np.random.normal(0, 0.15, n_records)
+
 # Scalar: strongly correlated with lagged wind (high flux, easy case)
 s_noise = np.random.normal(0, 0.5, n_records)
 s = np.roll(w, lag_true_records) * 5 + s_noise
 s[:lag_true_records] = s[lag_true_records]  # fill initial wrap-around
 
-df_highflux = pd.DataFrame({'W': w, 'CO2': s})
+df_highflux = pd.DataFrame({'W': w, 'T_SONIC': t_sonic, 'CO2': s})
 
 print("=" * 70)
 print("Synthetic data: HIGH-FLUX case")
@@ -69,6 +74,7 @@ pwb_high = dv.PreWhiteningBootstrap(
     df=df_highflux,
     var_w='W',
     var_scalar='CO2',
+    var_tsonic='T_SONIC',  # enables 4-combination RFlux v3.2.0 logic
     hz=hz,
     lag_max_s=10.0,  # search window: +/- 10 s
     n_bootstrap=9,  # N_B bootstrap samples (99 in production)
@@ -82,7 +88,8 @@ res_high = pwb_high.results
 print("\n" + "=" * 70)
 print("PWB results: HIGH-FLUX case")
 print("=" * 70)
-print(f"  AR order selected     : {res_high['ar_order']}")
+print(f"  AR orders (scalar/w)  : {res_high['ar_orders']}")
+print(f"  Best combination      : {res_high['best_combination']}")
 print(f"  Detected lag          : {res_high['tlag_s']:.3f} s  (true: {lag_true_s} s)")
 print(f"  95% HDI               : [{res_high['hdi_lo_s']:.3f}, {res_high['hdi_hi_s']:.3f}] s")
 print(f"  HDI range             : {res_high['hdi_range_s']:.3f} s")
@@ -100,7 +107,7 @@ np.random.seed(7)
 s_lowflux = np.roll(w, lag_true_records) * 0.05 + np.random.normal(0, 1.0, n_records)
 s_lowflux[:lag_true_records] = s_lowflux[lag_true_records]
 
-df_lowflux = pd.DataFrame({'W': w, 'N2O': s_lowflux})
+df_lowflux = pd.DataFrame({'W': w, 'T_SONIC': t_sonic, 'N2O': s_lowflux})
 
 print("\n" + "=" * 70)
 print("Synthetic data: LOW-FLUX case")
@@ -120,6 +127,7 @@ pwb_low = dv.PreWhiteningBootstrap(
     df=df_lowflux,
     var_w='W',
     var_scalar='N2O',
+    var_tsonic='T_SONIC',  # T_SONIC combinations critical for weak-flux gases
     hz=hz,
     lag_max_s=10.0,
     n_bootstrap=9,  # N_B bootstrap samples (99 in production)
@@ -133,7 +141,8 @@ res_low = pwb_low.results
 print("\n" + "=" * 70)
 print("PWB results: LOW-FLUX case")
 print("=" * 70)
-print(f"  AR order selected     : {res_low['ar_order']}")
+print(f"  AR orders (scalar/w)  : {res_low['ar_orders']}")
+print(f"  Best combination      : {res_low['best_combination']}")
 print(f"  Detected lag          : {res_low['tlag_s']:.3f} s  (true: {lag_true_s} s)")
 print(f"  95% HDI               : [{res_low['hdi_lo_s']:.3f}, {res_low['hdi_hi_s']:.3f}] s")
 print(f"  HDI range             : {res_low['hdi_range_s']:.3f} s")

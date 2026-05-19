@@ -26,7 +26,7 @@ Examples demonstrating flux processing, quality control, and high-resolution ana
 
 ### High-Resolution (10 Hz) Flux Analysis
 - **hires/flux_lag.py** — Time lag detection using MaxCovariance covariance analysis
-- **hires/flux_lag_pwb.py** — PWB time lag detection: pre-whitening with block-bootstrap (Vitale et al. 2024), single averaging period, high-flux vs. low-flux comparison
+- **hires/flux_lag_pwb.py** — PWB time lag detection: pre-whitening with block-bootstrap (Vitale et al. 2024), single averaging period, high-flux vs. low-flux comparison; demonstrates the 4-combination logic via `var_tsonic`
 - **hires/flux_lag_pwbopt.py** — PWBOPT batch pipeline: multi-period PWB detection with S1/S2/S3 selection and standard vs. pre-filtered strategy comparison
 - **hires/flux_windrotation.py** — Wind rotation and tilt correction for coordinate transformation
 - **hires/flux_fluxdetectionlimit.py** — Flux detection limit and measurement sensitivity
@@ -36,7 +36,7 @@ Examples demonstrating flux processing, quality control, and high-resolution ana
 Available classes and functions in `diive.pkgs.flux`:
 - **TimeLagAnalysis** — Time lag detection and visualization for gas concentrations
 - **MaxCovariance** — Time lag detection via cross-covariance maximisation
-- **PreWhiteningBootstrap** — PWB time lag detection (Vitale et al. 2024): pre-whitening + block-bootstrap, robust for low-magnitude fluxes (CH4, N2O)
+- **PreWhiteningBootstrap** — PWB time lag detection (Vitale et al. 2024): pre-whitening + block-bootstrap, robust for low-magnitude fluxes (CH4, N2O). Provide `var_tsonic` to enable the full 4-combination RFlux v3.2.0 logic (strongly recommended for trace gases).
 - **RandomUncertaintyPAS20** — Measurement uncertainty quantification
 - **FlagMultipleConstantUstarThresholds** — USTAR filtering with multiple thresholds
 - **UstarMovingPointDetection** — Moving-point USTAR detection (Papale et al. 2006)

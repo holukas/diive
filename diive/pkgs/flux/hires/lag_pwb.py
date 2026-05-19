@@ -2,14 +2,59 @@
 LAG_PWB: PRE-WHITENING WITH BLOCK-BOOTSTRAP TIME LAG DETECTION
 ==============================================================
 
-Detect the time lag between a scalar gas concentration and the vertical wind
-component using the pre-whitening with block-bootstrap (PWB) cross-correlation
-procedure from Vitale et al. 2024.
+In eddy covariance systems, gas analyzers connected via a sample tube receive
+the air parcel slightly later than the sonic anemometer measures the vertical
+wind at the intake. This offset -- the time lag -- must be detected and
+corrected before computing flux covariances.  For reactive or trace gases such
+as N2O and CH4, the gas-wind cross-correlation is often too weak to pinpoint
+the lag reliably with conventional covariance-maximization (CM) methods.
 
-The pre-whitening (PW) step is a direct Python port of the R function
-tlag_detection() in the RFlux package (github.com/icos-etc/RFlux), including
-the local-extrema decision logic, na.omit handling, and smoothing widths.
-The block-bootstrap extension follows Section 2.2 of the paper.
+This module implements the pre-whitening with block-bootstrap (PWB) procedure
+introduced by Vitale et al. (2024) to overcome that limitation.  The algorithm
+works in two stages:
+
+**Pre-whitening** removes serial autocorrelation from each time series before
+computing the cross-correlation function (CCF).  Turbulent wind and trace-gas
+series have strong autocorrelation that broadens and distorts the CCF peak; an
+AR(p) filter estimated by AIC makes the residuals approximately white noise,
+sharpening the peak and enabling a cleaner lag estimate.
+
+**Block-bootstrap** quantifies the uncertainty of the detected lag.  Instead
+of relying on a single CCF computed from the full averaging period, the method
+draws N_B resampled series (using non-overlapping blocks of length L = 20 s to
+preserve local autocorrelation structure), detects the peak lag in each, and
+summarises the resulting distribution with a mode (the lag estimate) and a 95%
+Highest Density Interval (HDI).  A narrow HDI (< 0.5 s) indicates that
+repeated resampling consistently finds the same lag -- the S1 reliability
+criterion from the paper.
+
+**Four CCF combinations** (following RFlux v3.2.0) are evaluated when the
+sonic temperature T_SONIC is provided.  For each combination a different AR
+filter is applied before computing the CCF between the scalar and either W or
+T_SONIC.  Because T_SONIC and W are correlated through buoyant turbulence, the
+T_SONIC-based combinations often reveal a cleaner lag peak for gases with a
+weak scalar x W signal:
+
+    cw  -- scalar x W,       scalar AR filter   (R: bootccf_cw / x1, z1)
+    ct  -- scalar x T_SONIC, scalar AR filter   (R: bootccf_ct / x1, y1)
+    wc  -- scalar x W,       W AR filter        (R: bootccf_wc / x3, z3)
+    tc  -- scalar x T_SONIC, T_SONIC AR filter  (R: bootccf_tc / x2, y2)
+
+The combination that produces the highest smoothed CCF peak at its mode lag is
+selected as the most informative for that averaging period
+(R: which.max(abs(corr_est_s))).
+
+Implementation notes:
+- Three separate AR(p) models are fitted (scalar, W, T_SONIC) using AIC with
+  max_order = floor(100 * log10(N)), matching R's formula.  For N = 36000
+  records this gives max_order = 455, which is large enough for AIC to capture
+  the long-range autocorrelation typical of turbulent series.
+- Linear interpolation (na.approx) is applied to input NaN before AR fitting.
+- Forward-fill + backward-fill (na.locf, two-pass) fills the NaN edges of each
+  per-replicate smoothed CCF before the peak search so that lags at the
+  boundary of the search window can still be selected.
+- Providing var_tsonic is strongly recommended for trace gases (N2O, CH4);
+  without it, only the two scalar x W combinations (cw and wc) are evaluated.
 
 References:
     Vitale D, Fratini G, Helfter C, Hortnagl L, et al. (2024) A pre-whitening
@@ -34,48 +79,86 @@ from scipy.stats import gaussian_kde, mode
 from diive.core.plotting.plotfuncs import default_format
 from diive.core.plotting.styles import LightTheme as theme
 
-# Smoothing widths are hardcoded in tlag_detection.R and must not be changed.
-# R line 11: rollapply(cross_cov$acf, width=3, ...)   -> raw cross-covariance
-# R line 35: rollapply(cross_cor$acf, width=13, ...)  -> pre-whitened CCF
+# Smoothing widths for the full-data PW CCF diagnostic panels (older R convention).
 _SMOOTH_WIDTH_CCF = 13
 _SMOOTH_WIDTH_CCOV = 3
 
 
+def _na_approx(x: np.ndarray) -> np.ndarray:
+    """Linear interpolation of NaN, matching R's zoo::na.approx(na.rm=FALSE)."""
+    if not np.any(np.isnan(x)):
+        return x
+    return pd.Series(x).interpolate(method='linear', limit_direction='both').values
+
+
+def _na_locf_1d(x: np.ndarray) -> np.ndarray:
+    """Forward-fill then backward-fill NaN, matching R's zoo::na.locf two-pass."""
+    if not np.any(np.isnan(x)):
+        return x
+    s = pd.Series(x)
+    return s.ffill().bfill().values
+
+
 class PreWhiteningBootstrap:
     """
-    Detect time lag between a scalar and vertical wind via pre-whitening with
-    block-bootstrap cross-correlation (PWB), following Vitale et al. (2024).
+    Detect the tube-delay time lag between a scalar gas concentration and the
+    vertical wind component using the pre-whitening with block-bootstrap (PWB)
+    cross-correlation procedure (Vitale et al. 2024, RFlux v3.2.0).
 
-    Unlike covariance maximisation (MaxCovariance), this method is robust for
-    low-magnitude fluxes (e.g. CH4, N2O) where the cross-covariance function
-    lacks a distinct peak. Pre-whitening removes serial correlation that inflates
-    spurious CCF peaks, and block-bootstrapping quantifies detection uncertainty
-    so unreliable lags can be flagged and replaced.
+    **Why pre-whitening?**  Turbulent wind and scalar series carry strong
+    autocorrelation that broadens the raw CCF peak.  An AR(p) filter estimated
+    by AIC transforms each series into approximate white noise; the CCF of the
+    filtered residuals has a sharper peak, making the lag easier to locate.
 
-    Two complementary lag estimates are produced:
+    **Why block-bootstrap?**  A single CCF can be noisy.  The bootstrap draws
+    N_B resampled series (in non-overlapping blocks of L = 20 s to preserve
+    local autocorrelation) and detects the peak lag in each.  The mode of the
+    resulting N_B lag estimates is the final lag; the 95% HDI (Highest Density
+    Interval, shortest interval containing 95% of the distribution) measures
+    how consistently the resampling agrees on that lag.  A narrow HDI means
+    the lag is robust; a wide HDI signals an unreliable estimate.
 
-    - **tlag_pw** — Pre-whitening lag (PW): argmax of the smoothed pre-whitened
-      CCF on the full data, refined by the R tlag_detection.R decision rules
-      (tlag_opt). This is the fast, single-pass estimate.
-    - **tlag_s** — Bootstrap lag (PWB): mode of lags detected across N_B
-      block-bootstrap samples. More robust for low-magnitude fluxes.
+    **Why four combinations?**  When *var_tsonic* is provided, four
+    pre-whitened CCF variants are computed.  T_SONIC and W co-vary through
+    buoyant turbulent structures; for trace gases (N2O, CH4) the scalar x W
+    signal is often too weak to produce a clear peak, whereas scalar x T_SONIC
+    combinations can reveal the same tube-delay lag more clearly.  The
+    combination that produces the highest smoothed CCF value at its mode lag is
+    selected (R: which.max(abs(corr_est_s))):
 
-    The 95% HDI of the bootstrap lag distribution quantifies uncertainty.
-    Lags with HDI range < 0.5 s are considered reliable (S1 criterion).
+        cw  -- scalar x W,       scalar AR filter
+        ct  -- scalar x T_SONIC, scalar AR filter
+        wc  -- scalar x W,       W AR filter
+        tc  -- scalar x T_SONIC, T_SONIC AR filter
 
-    The plot() method reproduces the two R tlag_detection.R diagnostic panels
-    plus a third panel for the PWB bootstrap distribution:
+    Without *var_tsonic*, only cw and wc are evaluated.
 
-    - Panel 1 (left):  Pre-whitened CCF — grey stems, smoothed black line,
-      significance bands, detected-lag marker  (R panel 1)
-    - Panel 2 (middle): Raw cross-covariance — grey stems, smoothed cyan line,
-      detected-lag marker  (R panel 2)
-    - Panel 3 (right): Bootstrap lag histogram with 95% HDI  (PWB-specific)
+    **Two lag estimates are returned:**
+
+    - *tlag_pw* -- Pre-whitening lag: argmax of the smoothed scalar-AR CCF on
+      the full data.  Kept for diagnostic purposes (panel 1 of the plot).
+    - *tlag_s* -- Bootstrap lag (the primary output): mode of detected lags
+      across N_B bootstrap samples for the best-performing combination.
+
+    **Reliability criterion (S1):** HDI range < 0.5 s.  Use *is_reliable* to
+    check; unreliable segments should fall back to a carry-forward strategy
+    (PWBOPT S2/S3, see PwboptLagDetection).
+
+    The *plot()* method shows three diagnostic panels:
+
+    - Panel 1 (left):  Pre-whitened CCF (scalar AR, full data) with Bartlett
+      significance bands and the detected-lag marker.
+    - Panel 2 (middle): Raw cross-covariance with smoothed overlay.
+    - Panel 3 (right): Bootstrap lag histogram with 95% HDI and mode marker for
+      the selected combination.
 
     Attributes:
         df (DataFrame): Input high-frequency data.
         var_w (str): Column name for vertical wind component W.
         var_scalar (str): Column name for scalar gas concentration.
+        var_tsonic (str | None): Column name for sonic temperature T_SONIC.
+            Strongly recommended for trace gases; enables the 4-combination
+            RFlux v3.2.0 logic.
         hz (int): Acquisition frequency in Hz.
         lag_max_s (float): Half-width of lag search window in seconds.
         n_bootstrap (int): Number of block-bootstrap samples (N_B).
@@ -96,6 +179,7 @@ class PreWhiteningBootstrap:
             df: DataFrame,
             var_w: str,
             var_scalar: str,
+            var_tsonic: str = None,
             hz: int = 20,
             lag_max_s: float = 10.0,
             n_bootstrap: int = 99,
@@ -114,6 +198,10 @@ class PreWhiteningBootstrap:
             var_w (str): Column name for vertical wind component W.
             var_scalar (str): Column name for scalar gas concentration (CO2,
                 CH4, N2O, ...).
+            var_tsonic (str | None): Column name for sonic temperature T_SONIC.
+                When supplied, the full 4-combination RFlux v3.2.0 logic is
+                used, which is essential for trace gases with a weak W
+                cross-correlation.  Defaults to None.
             hz (int): Acquisition frequency in samples per second (10 or 20).
                 Defaults to 20.
             lag_max_s (float): Half-width of lag search window in seconds
@@ -128,6 +216,7 @@ class PreWhiteningBootstrap:
         self.df = df
         self.var_w = var_w
         self.var_scalar = var_scalar
+        self.var_tsonic = var_tsonic
         self.hz = hz
         self.lag_max_s = lag_max_s
         self.n_bootstrap = n_bootstrap
@@ -138,24 +227,27 @@ class PreWhiteningBootstrap:
         self._lag_max_records = int(round(lag_max_s * hz))
         # Block length in records (paper: L = 20 s, Section 2.2)
         self._block_length_records = int(round(block_length_s * hz))
-        # Bootstrap CCF smoothing width: hz/2 + 1 timesteps (paper Section 2.2, eq. 6)
+        # Bootstrap CCF smoothing width: hz/2 + 1 (R: wdt = floor(mfreq/2) + 1)
         self._smooth_width_bootstrap = hz // 2 + 1
 
         # --- Results populated by run() ---
-        # PW results (from full-data pre-whitened CCF, matching tlag_detection.R)
-        self._tlag_pw_records: int | None = None    # argmax of smoothed PW CCF
-        self._tlag_opt_records: int | None = None   # after R decision rules (= tlag_pw)
-        self._tlag_lmax: list | None = None         # local maxima lags in CCov window
-        self._tlag_lmin: list | None = None         # local minima lags in CCov window
-        self._corr_est: float | None = None         # un-smoothed CCF at tlag_opt
-        self._n_eff: int | None = None              # full series length for Bartlett thresholds
-        # PWB results (from block bootstrap)
-        self._tlag_records: int | None = None       # mode of bootstrap lags
+        # PW results (full-data scalar-AR CCF, for diagnostic panels)
+        self._tlag_pw_records: int | None = None
+        self._tlag_opt_records: int | None = None
+        self._tlag_lmax: list | None = None
+        self._tlag_lmin: list | None = None
+        self._corr_est: float | None = None
+        self._n_eff: int | None = None
+        # PWB results (from the selected combination's bootstrap)
+        self._tlag_records: int | None = None
         self._hdi_lo_s: float | None = None
         self._hdi_hi_s: float | None = None
         self._bootstrap_lags: np.ndarray | None = None
+        # AR model info
+        self._ar_order: int | None = None      # scalar AR order (primary)
+        self._ar_orders: dict | None = None    # all fitted AR orders
+        self._best_combination: str | None = None
         # Arrays kept for plotting
-        self._ar_order: int | None = None
         self._lags_axis: np.ndarray | None = None
         self._raw_ccov: np.ndarray | None = None
         self._smooth_raw_ccov: np.ndarray | None = None
@@ -163,7 +255,7 @@ class PreWhiteningBootstrap:
         self._smooth_pw_ccf: np.ndarray | None = None
 
     # ------------------------------------------------------------------
-    # Properties — PW results
+    # Properties -- PW results
     # ------------------------------------------------------------------
 
     @property
@@ -180,7 +272,7 @@ class PreWhiteningBootstrap:
 
     @property
     def tlag_opt_records(self) -> int:
-        """Optimal PW lag in records (after R tlag_detection.R decision rules)."""
+        """Optimal PW lag in records (after decision rules)."""
         if self._tlag_opt_records is None:
             raise RuntimeError("Call run() first.")
         return self._tlag_opt_records
@@ -192,27 +284,27 @@ class PreWhiteningBootstrap:
 
     @property
     def corr_est(self) -> float:
-        """Un-smoothed CCF value at tlag_opt (R: corr_est)."""
+        """Un-smoothed CCF value at tlag_opt."""
         if self._corr_est is None:
             raise RuntimeError("Call run() first.")
         return self._corr_est
 
     @property
     def cv5pct(self) -> float:
-        """5% Bartlett significance threshold: 1.96 / sqrt(N) (R: cv5pct)."""
+        """5% Bartlett significance threshold: 1.96 / sqrt(N)."""
         if self._n_eff is None:
             raise RuntimeError("Call run() first.")
         return 1.96 / np.sqrt(self._n_eff)
 
     @property
     def cv1pct(self) -> float:
-        """1% Bartlett significance threshold: 2.57 / sqrt(N) (R: cv1pct)."""
+        """1% Bartlett significance threshold: 2.57 / sqrt(N)."""
         if self._n_eff is None:
             raise RuntimeError("Call run() first.")
         return 2.57 / np.sqrt(self._n_eff)
 
     # ------------------------------------------------------------------
-    # Properties — PWB results
+    # Properties -- PWB results
     # ------------------------------------------------------------------
 
     @property
@@ -253,10 +345,10 @@ class PreWhiteningBootstrap:
 
     @property
     def results(self) -> dict:
-        """All key outputs as a dictionary (mirrors R return list)."""
+        """All key outputs as a dictionary."""
         return {
             'segment_name': self.segment_name,
-            # PW results (matching R tlag_detection.R return values)
+            # PW results (full-data scalar-AR CCF, for diagnostics)
             'tlag_pw_records': self.tlag_pw_records,
             'tlag_pw_s': self.tlag_pw_s,
             'opt_tlag_records': self.tlag_opt_records,
@@ -266,8 +358,10 @@ class PreWhiteningBootstrap:
             'corr_est': self.corr_est,
             'cv5pct': self.cv5pct,
             'cv1pct': self.cv1pct,
-            'ar_order': self._ar_order,
-            # PWB results (bootstrap extension, paper Section 2.2)
+            'ar_order': self._ar_order,           # scalar AR order (primary)
+            'ar_orders': self._ar_orders,          # all fitted AR orders
+            'best_combination': self._best_combination,
+            # PWB results (from the selected combination)
             'tlag_records': self.tlag_records,
             'tlag_s': self.tlag_s,
             'hdi_lo_s': self.hdi_lo_s,
@@ -283,145 +377,154 @@ class PreWhiteningBootstrap:
 
     def run(self):
         """
-        Execute the full PWB pipeline.
-
-        Follows the structure of tlag_detection.R with the block-bootstrap
-        extension described in paper Section 2.2.
+        Execute the full PWB pipeline following RFlux v3.2.0.
 
         Steps
         -----
-        1. Raw cross-covariance on original data (used for local-extrema search
-           around the PW peak). R lines 10-11.
-        2. Pre-whitening: fit AR(p) to W, apply the same filter to both W and
-           the scalar S to remove serial autocorrelation. R lines 13-32.
-        3. Pre-whitened CCF on the na.omit-trimmed filtered series. R line 33.
-        4. Smooth the PW CCF with a centered rolling mean (width=13). R line 35.
-        5. Detect tlag_pw (argmax of smoothed PW CCF) and refine to tlag_opt
-           via the four sequential if-rules from R lines 37-47. Compute corr_est
-           (un-smoothed CCF at tlag_opt) for the significance test.
-        6. Block bootstrap: draw N_B block samples from the pre-whitened series,
-           compute and smooth the CCF for each, record the peak lag. Paper eq. 6.
-        7. Summarise the N_B bootstrap lags as mode (tlag_s) + 95% HDI. Paper eq. 7.
+        1. Load all input series and linearly interpolate NaN (R: na.approx).
+           Drop rows where any series remains NaN after interpolation.
+        2. Fit separate AR(p) models to the scalar, W, and T_SONIC (when
+           provided) using AIC selection with max_order = floor(100*log10(N))
+           (R: ar(x, aic=TRUE, order.max=floor(10^2*log10(length(x))))).
+        3. Apply each AR filter to all relevant series to produce the
+           pre-whitened filtered arrays (R: x1/y1/z1/x2/y2/x3/z3).
+        4. Compute raw cross-covariance on the original data (diagnostic panel 2).
+        5. Compute full-data PW CCF using the scalar AR filter on W and scalar
+           (R: ccf_pww). Detect tlag_pw / tlag_opt for diagnostic panel 1.
+        6. Block-bootstrap each combination (2 or 4):
+             cw  -- scalar x W,       scalar AR (R: bootccf_cw)
+             wc  -- scalar x W,       W AR      (R: bootccf_wc)
+             ct  -- scalar x T_SONIC, scalar AR (R: bootccf_ct)  [if var_tsonic]
+             tc  -- scalar x T_SONIC, T_SONIC AR(R: bootccf_tc)  [if var_tsonic]
+           Per replicate: smooth CCF with width=hz/2+1, apply na.locf to edges,
+           find the peak lag index.  Also compute the mean bootstrap CCF,
+           smoothed with the same width + na.locf (R: ccf_cw / ccfs_cw).
+        7. Select the combination with the highest |avg_smooth_ccf| at its mode
+           lag (R: corr_est_s -> which.max -> corr_ind).
+        8. Summarise the winning combination's bootstrap distribution:
+           mode -> tlag_s, 95% HDI -> hdi_lo_s / hdi_hi_s.
         """
-        w = self.df[self.var_w].values.astype(float)
-        s = self.df[self.var_scalar].values.astype(float)
+        # ---- Step 1: load, interpolate NaN, align ----
+        w_raw = _na_approx(self.df[self.var_w].values.astype(float))
+        s_raw = _na_approx(self.df[self.var_scalar].values.astype(float))
+        has_tsonic = self.var_tsonic is not None
 
-        # Lag axis in records: [-lag_max, ..., 0, ..., +lag_max]
-        # Positive = scalar arrives later than wind (tube delay)
+        if has_tsonic:
+            t_raw = _na_approx(self.df[self.var_tsonic].values.astype(float))
+            valid = ~np.isnan(w_raw) & ~np.isnan(s_raw) & ~np.isnan(t_raw)
+        else:
+            t_raw = None
+            valid = ~np.isnan(w_raw) & ~np.isnan(s_raw)
+
+        w = w_raw[valid]
+        s = s_raw[valid]
+        t = t_raw[valid] if has_tsonic else None
+
         self._lags_axis = np.arange(-self._lag_max_records, self._lag_max_records + 1)
 
-        # ---- Step 1: raw cross-covariance on the original, unfiltered data ----
-        # Computed here, BEFORE pre-whitening, so it reflects the original signal.
-        # Used later in _compute_tlag_opt to search for local extrema near the
-        # PW-detected peak (R lines 10-11).
+        # ---- Step 2: fit separate AR models ----
+        # R: ar.resx = ar(x=scalar, ...), ar.resz = ar(z=W, ...), ar.resy = ar(y=T_SONIC, ...)
+        phi_s, p_s = self._fit_ar_model(s)   # scalar AR
+        phi_w, p_w = self._fit_ar_model(w)   # W AR
+        self._ar_order = p_s
+        self._ar_orders = {'scalar': p_s, 'w': p_w}
+        if has_tsonic:
+            phi_t, p_t = self._fit_ar_model(t)  # T_SONIC AR
+            self._ar_orders['tsonic'] = p_t
+
+        # ---- Step 3: filtered series ----
+        # Scalar AR applied to scalar (x1), W (z1), and T_SONIC (y1)
+        s_fa = self._apply_ar_filter(phi_s, s)   # scalar filt by scalar AR  (R: x1)
+        w_fa = self._apply_ar_filter(phi_s, w)   # W filt by scalar AR       (R: z1)
+        # W AR applied to scalar (x3) and W (z3)
+        s_fw = self._apply_ar_filter(phi_w, s)   # scalar filt by W AR       (R: x3)
+        w_fw = self._apply_ar_filter(phi_w, w)   # W filt by W AR            (R: z3)
+        if has_tsonic:
+            t_fa = self._apply_ar_filter(phi_s, t)   # T_SONIC filt by scalar AR (R: y1)
+            s_ft = self._apply_ar_filter(phi_t, s)   # scalar filt by T_SONIC AR (R: x2)
+            t_ft = self._apply_ar_filter(phi_t, t)   # T_SONIC filt by T_SONIC AR(R: y2)
+
+        # ---- Step 4: raw cross-covariance (diagnostic panel 2) ----
         self._raw_ccov = self._compute_ccov(w, s)
         self._smooth_raw_ccov = self._smooth_series(self._raw_ccov, _SMOOTH_WIDTH_CCOV)
 
-        # ---- Step 2: pre-whitening ----
-        # Fit AR(p) to W only; apply the same filter coefficients to both W and S.
-        # This removes the dominant autocorrelation structure from both series so
-        # that the subsequent CCF is not dominated by spurious within-series peaks
-        # (paper Section 2.1; R lines 28-31).
-        phi, self._ar_order = self._fit_ar_model(w)
-        x_pw = self._apply_ar_filter(phi, w)
-        y_pw = self._apply_ar_filter(phi, s)
-
-        # ---- Step 3: pre-whitened CCF ----
-        # Leading NaN (from AR filter initialisation) are trimmed before computing
-        # the correlation, matching R's na.action=na.omit inside ccf() (R line 33).
-        self._pw_ccf = self._compute_ccf(x_pw, y_pw)
-
-        # ---- Step 4: smooth the PW CCF ----
-        # Centered rolling mean, width=13, matching R line 35.
-        # Edge positions with < 13 neighbours remain NaN (min_periods=13), which
-        # matches R's rollapply(..., fill=NA) behaviour.
+        # ---- Step 5: full-data PW CCF, scalar AR (diagnostic panel 1) ----
+        # R: ccf_pww = ccf(x1, z1)  ->  scalar AR filter, scalar x W pair
+        self._pw_ccf = self._compute_ccf(w_fa, s_fa)
         self._smooth_pw_ccf = self._smooth_series(self._pw_ccf, _SMOOTH_WIDTH_CCF)
+        # R uses length(x1) including leading NaN for the Bartlett denominator
+        self._n_eff = len(s_fa)
 
-        # Bartlett significance threshold denominator: R uses length(x) = full
-        # array length including the leading NaN from the AR filter, not the
-        # trimmed (na.omit) length.  Matches R line 53: 1.96/sqrt(length(x)).
-        self._n_eff = len(x_pw)
-
-        # ---- Step 5: PW lag detection and tlag_opt decision ----
-        # Identifies tlag_pw (argmax of smoothed PW CCF), searches the raw CCov
-        # for local extrema near that peak, and applies the four sequential
-        # if-rules from R lines 37-47 to arrive at tlag_opt.
         self._tlag_pw_records, self._tlag_opt_records, \
             self._tlag_lmax, self._tlag_lmin, self._corr_est = \
             self._compute_tlag_opt()
 
-        # ---- Step 6: block bootstrap ----
-        # Replace the leading NaN (AR initialisation) with 0 so that block
-        # boundaries never contain NaN.  Block 0 (which holds those zeroed
-        # positions) is excluded from sampling to avoid any residual bias.
-        x_pw0 = np.where(np.isnan(x_pw), 0.0, x_pw)
-        y_pw0 = np.where(np.isnan(y_pw), 0.0, y_pw)
-        self._bootstrap_lags = self._block_bootstrap(x_pw0, y_pw0)
+        # ---- Step 6: block-bootstrap each combination ----
+        # x argument = leading signal (W or T_SONIC), y = scalar (delayed by tube)
+        combinations = {
+            'cw': self._run_combination_bootstrap(w_fa, s_fa),  # scalar x W, scalar AR
+            'wc': self._run_combination_bootstrap(w_fw, s_fw),  # scalar x W, W AR
+        }
+        if has_tsonic:
+            combinations['ct'] = self._run_combination_bootstrap(t_fa, s_fa)  # scalar x T_SONIC, scalar AR
+            combinations['tc'] = self._run_combination_bootstrap(t_ft, s_ft)  # scalar x T_SONIC, T_SONIC AR
 
-        # ---- Step 7: mode + 95% HDI ----
-        # Mode gives the most frequently detected lag across N_B bootstrap samples
-        # (paper eq. 7).  The HDI is the shortest interval containing 95% of the
-        # bootstrap distribution; its width is the uncertainty metric (Section 2.3).
-        tlag_mode, hdi_lo, hdi_hi = self._mode_and_hdi(self._bootstrap_lags)
+        # ---- Step 7: select the winning combination ----
+        best_key = self._select_best_combination(combinations)
+        self._best_combination = best_key
+        best = combinations[best_key]
+
+        # ---- Step 8: summarise from the winning combination ----
+        self._bootstrap_lags = best['lags']
+        tlag_mode, hdi_lo, hdi_hi = self._mode_and_hdi(best['lags'])
         self._tlag_records = int(tlag_mode)
         self._hdi_lo_s = hdi_lo
         self._hdi_hi_s = hdi_hi
 
     # ------------------------------------------------------------------
-    # Private: pre-whitening  (R lines 13-32)
+    # Private: pre-whitening  (AR fitting and filtering)
     # ------------------------------------------------------------------
 
     def _fit_ar_model(self, x: np.ndarray) -> tuple[np.ndarray, int]:
         """
-        Fit AR(p) model to x via Levinson-Durbin recursion with AIC order selection.
+        Fit an AR(p) model to x and return the AR coefficients and selected order.
 
-        Replaces a statsmodels AIC grid search that fitted ``max_lag`` separate OLS
-        regressions (~135 ms per period at 20 Hz / 30 min).  The Levinson-Durbin
-        recursion builds all orders 1..max_lag in a single O(max_lag²) pass after
-        computing the biased autocorrelation sequence in O(N log N) via FFT.
-        Typical speedup: 20-30x for the AR fitting step.
+        The order p is selected by AIC from candidates 1..max_order, where
+        max_order = floor(100 * log10(N)) matches R's formula
+        (order.max = floor(10^2 * log10(length(x)))).  For a 30-minute 20 Hz
+        record (N = 36000) this gives max_order = 455.  The large upper bound
+        allows AIC to pick up the long-range autocorrelation structures found in
+        turbulent wind and trace-gas series; capping at a smaller value (e.g. 45)
+        forces AIC to under-fit and leaves residual autocorrelation that distorts
+        the CCF peak.
 
-        The R script supports two modes (R lines 28-29)::
+        Levinson-Durbin recursion computes all orders 1..max_order in O(max_order^2)
+        after a single FFT-based autocorrelation pass, so the large max_order is
+        numerically feasible.
 
-            AIC=TRUE  -> ar.ols(x, aic=TRUE)                         (AIC selection)
-            AIC=FALSE -> ar.ols(x, aic=FALSE, order.max=10*log10(n)) (fixed order, R default)
-
-        This implementation always uses AIC selection (paper recommendation).
-        The maximum candidate order is 10*log10(n), matching R's order.max formula.
-
-        The AIC comparison uses ``n * log(sigma2) + 2 * p`` (Yule-Walker residual
-        variance, biased ACF estimator).  Constants that are identical across all
-        candidate orders cancel, so this gives the same argmin as the full statsmodels
-        AIC.  For N=36000 the biased and OLS variance estimates differ by < 0.01%.
+        Returns:
+            phi (np.ndarray): AR coefficients for the selected order p.
+            p (int): Selected AR order (0 if the series is already white noise).
         """
         x_clean = x[~np.isnan(x)]
         x_centered = x_clean - x_clean.mean()
         n = len(x_centered)
 
-        # Maximum candidate AR order: 10*log10(n), matching R: order.max=10*log(length(x),10)
-        max_lag = min(int(10 * np.log10(n)), 100)
+        # R: order.max = floor(10^2 * log10(length(x)))
+        max_lag = int(np.floor(100 * np.log10(n)))
 
-        # Biased autocorrelation sequence via FFT: O(N log N).
-        # acf[k] = (1/n) * sum_t x[t]*x[t+k]  (biased estimator, consistent with ar.ols)
-        nfft = 1 << (2 * n).bit_length()   # next power of 2 >= 2n (linear correlation)
+        # Biased autocorrelation via FFT
+        nfft = 1 << (2 * n).bit_length()
         xf = np.fft.rfft(x_centered, n=nfft)
         acf = np.fft.irfft(xf * np.conj(xf), n=nfft)[:max_lag + 1].real / n
 
         if acf[0] <= 0:
-            # Constant series: no autocorrelation structure to model
             return np.array([], dtype=float), 0
 
-        # Baseline: AR(0) — no filtering; AIC = n*log(sigma2) + 2*0
         best_aic = n * np.log(acf[0])
         best_phi = np.array([], dtype=float)
         best_p = 0
 
-        # Levinson-Durbin recursion: derive AR(p) from AR(p-1) in O(p) per step.
-        # Total cost O(max_lag²) vs O(max_lag * N * max_lag) for OLS grid search.
-        #
-        # Initialise at order p=1:
-        #   phi_11 = r[1] / r[0]   (reflection coefficient = AR(1) coefficient)
-        #   sigma2 = r[0] * (1 - phi_11^2)
         phi = np.array([acf[1] / acf[0]], dtype=float)
         sigma2 = acf[0] * (1.0 - phi[0] ** 2)
 
@@ -432,21 +535,10 @@ class PreWhiteningBootstrap:
 
         for p in range(2, max_lag + 1):
             if sigma2 <= 0:
-                break   # perfect fit or numerical underflow — stop early
-
-            # Reflection coefficient kappa_p (Levinson 1947):
-            #   kappa_p = (r[p] - sum_{j=1}^{p-1} phi_{p-1,j} * r[p-j]) / sigma2_{p-1}
-            # In vector form: phi @ acf[1:p][::-1] = sum_j phi[j-1] * r[p-j]
+                break
             kappa = (acf[p] - phi @ acf[1:p][::-1]) / sigma2
-
-            # Update AR coefficients (Durbin 1960):
-            #   phi_{p,j} = phi_{p-1,j} - kappa_p * phi_{p-1,p-j}  for j=1..p-1
-            #   phi_{p,p} = kappa_p
             phi = np.append(phi - kappa * phi[::-1], kappa)
-
-            # Residual variance update: sigma2_p = sigma2_{p-1} * (1 - kappa_p^2)
             sigma2 *= 1.0 - kappa ** 2
-
             if sigma2 > 0:
                 aic = n * np.log(sigma2) + 2.0 * p
                 if aic < best_aic:
@@ -458,96 +550,57 @@ class PreWhiteningBootstrap:
         """
         Apply AR(p) filter to x to produce the pre-whitened series x_tilde.
 
-        The filter computes the one-step-ahead prediction error:
-            x_tilde[t] = x[t] - phi[0]*x[t-1] - ... - phi[p-1]*x[t-p]
-
-        This matches R: stats::filter(x, filter=c(1,-phi), method="convolution", sides=1)
-        from tlag_detection.R lines 30-31.
-
-        scipy.signal.lfilter with b=[1, -phi_1, ..., -phi_p] and a=[1] is the
-        direct Python equivalent of R's one-sided convolution filter.
-
-        The first p output values are set to NaN because lfilter seeds the delay
-        line with zeros (not actual past data), so those values are unreliable.
-        R's stats::filter also marks the first p values as NA.  They are removed
-        by na.omit inside _compute_ccf, matching R line 33.
+        Matches R: stats::filter(x, filter=c(1,-phi), method="convolution", sides=1).
+        The first p output values are set to NaN because lfilter seeds its delay
+        line with zeros (not actual past data); R's stats::filter also marks them NA.
+        These NaN values are removed by na.omit inside _compute_ccf (R line: ccf(...,
+        na.action=na.omit)) or zeroed out before block-bootstrap sampling.
         """
         x_centered = x - np.nanmean(x)
         if len(phi) == 0:
-            # AR(0) selected: series is already white, no filtering needed
             return x_centered
 
-        # Build FIR numerator: [1, -phi_1, -phi_2, ..., -phi_p]
         b = np.concatenate([[1.0], -phi])
-
-        # Replace any input NaN with 0 before lfilter (NaN would propagate)
         x_filled = np.where(np.isnan(x_centered), 0.0, x_centered)
         x_tilde = lfilter(b, [1.0], x_filled)
-
-        # First p values are contaminated by the zero initial conditions of lfilter.
-        # Mark them NaN so that _compute_ccf trims them via na.omit (R line 33).
         x_tilde[:len(phi)] = np.nan
         return x_tilde
 
     # ------------------------------------------------------------------
-    # Private: tlag_pw / tlag_opt decision logic  (R lines 37-47)
+    # Private: tlag_pw / tlag_opt decision logic
     # ------------------------------------------------------------------
 
     def _compute_tlag_opt(self) -> tuple[int, int, list, list, float]:
         """
-        Detect tlag_pw and refine to tlag_opt.
+        Detect tlag_pw and refine to tlag_opt from the full-data PW CCF.
 
-        Direct port of tlag_detection.R lines 37-47.
-
-        tlag_pw is the lag at the absolute maximum of the smoothed PW CCF.
-        tlag_opt is intended to refine this estimate using local extrema of the
-        raw cross-covariance near the PW peak.  However, the four sequential
-        if-rules in R always end with Rule 4 overwriting Rules 2 and 3, so in
-        practice tlag_opt == tlag_pw for all possible inputs.  The local extrema
-        (tlag_lmax, tlag_lmin) are returned in the results dict to match R's
-        return list, but they do not influence the detected lag.
+        tlag_pw is the argmax of the smoothed PW CCF (scalar AR filter).
+        The four sequential if-rules search local extrema of the raw CCov near
+        the PW peak; Rule 4 always fires when any extremum exists, so in
+        practice tlag_opt == tlag_pw.  The local extrema are retained in the
+        results dict for diagnostic use.
         """
-        # Index of the absolute maximum in the smoothed PW CCF (R: which.max(abs(scross_cor)))
-        # R returns 1-based; Python's nanargmax returns 0-based.
         tl0 = int(np.nanargmax(np.abs(self._smooth_pw_ccf)))
-
-        # Convert 0-based array index to lag in records.
-        # R formula (1-based): tlag_pw = tl0 - LAG.MAX - 1
-        # Python equivalent (0-based): tlag_pw = tl0 - lag_max
         tlag_pw = tl0 - self._lag_max_records
 
-        # Search window: +-12 records around tl0 in the smoothed raw CCov.
-        # R line 40: scross_cov[max(1, tl0-12) : min(tl0+12, LAG.MAX*2)]  (1-based inclusive)
-        # Converted to Python 0-based exclusive slicing:
-        #   start = max(0, tl0-12)      [same value because tl0_R = tl0_P + 1 cancels -1]
-        #   end   = min(tl0+13, 2*lag_max)  [R caps at LAG.MAX*2, excluding the very last element]
         win_start = max(0, tl0 - 12)
         win_end = min(tl0 + 13, 2 * self._lag_max_records)
         window = self._smooth_raw_ccov[win_start:win_end]
 
-        # Convert local-extrema positions within the window to lags in records.
-        # Element at 0-based window index i has array index win_start+i,
-        # which corresponds to lag = (win_start + i) - lag_max = i + offset.
         offset = win_start - self._lag_max_records
         tlag_lmax = self._local_extrema(window, 'max', offset)
         tlag_lmin = self._local_extrema(window, 'min', offset)
 
-        # Four sequential if-rules from R lines 43-46 (NOT if-elif — exact port).
-        # Rule 4 always fires when any extremum exists, overwriting Rules 2 and 3,
-        # so tlag_opt == tlag_pw in every case.
-        tlag_opt = tlag_pw                                        # Rule 1 default
+        tlag_opt = tlag_pw
         if len(tlag_lmax) == 0 and len(tlag_lmin) == 0:
-            tlag_opt = tlag_pw                                    # Rule 1: no extrema found
+            tlag_opt = tlag_pw
         if len(tlag_lmax) == 1 and len(tlag_lmin) == 0:
-            tlag_opt = tlag_lmax[0]                               # Rule 2 (overwritten by Rule 4)
+            tlag_opt = tlag_lmax[0]
         if len(tlag_lmax) == 0 and len(tlag_lmin) == 1:
-            tlag_opt = tlag_lmin[0]                               # Rule 3 (overwritten by Rule 4)
+            tlag_opt = tlag_lmin[0]
         if len(tlag_lmax) >= 1 or len(tlag_lmin) >= 1:
-            tlag_opt = tlag_pw                                    # Rule 4: always reverts to tlag_pw
+            tlag_opt = tlag_pw
 
-        # Un-smoothed CCF value at tlag_opt, used for the significance test.
-        # R line 47: corr_est <- cross_cor$acf[tlag_opt + LAG.MAX + 1]  (1-based index)
-        # Python:    opt_idx  = tlag_opt + lag_max_records               (0-based index)
         opt_idx = tlag_opt + self._lag_max_records
         corr_est = float(self._pw_ccf[opt_idx]) if 0 <= opt_idx < len(self._pw_ccf) else 0.0
 
@@ -558,141 +611,169 @@ class PreWhiteningBootstrap:
         """
         Find local maxima or minima in arr and return their lag values.
 
-        Matches R tlag_detection.R lines 5-6:
-            local_max <- function(x) which(x - shift(x,1) > 0 & x - shift(x,1,type='lead') > 0)
-            local_min <- function(x) which(x - shift(x,1) < 0 & x - shift(x,1,type='lead') < 0)
-
-        R's shift(x, 1) shifts values forward (lag): shift(x,1)[i] = x[i-1].
-        R's shift(x, 1, type='lead') shifts values back: shift(x,1,type='lead')[i] = x[i+1].
-        So a local maximum satisfies: x[i] > x[i-1] AND x[i] > x[i+1].
-
-        Args:
-            arr: Input 1-D array (window of smoothed cross-covariance).
-            kind: 'max' for local maxima, 'min' for local minima.
-            offset: Converts 0-based window index i to lag in records: lag = i + offset.
-
-        Returns:
-            List of lag values (in records) where local extrema occur.
+        Matches R tlag_detection.R helper functions local_max / local_min:
+            local_max(x) = which(x[i] > x[i-1] AND x[i] > x[i+1])
         """
         mid = arr[1:-1]
         if kind == 'max':
             mask = (mid > arr[:-2]) & (mid > arr[2:])
         else:
             mask = (mid < arr[:-2]) & (mid < arr[2:])
-        # np.where returns 0-based indices into mid; add 1 for the slice offset,
-        # then add caller-supplied offset to convert to lag in records.
         return (np.where(mask)[0] + 1 + offset).tolist()
 
     # ------------------------------------------------------------------
-    # Private: block bootstrap  (paper Section 2.2, eq. 6)
+    # Private: combination bootstrap (RFlux v3.2.0 multi-combination logic)
     # ------------------------------------------------------------------
 
-    def _block_bootstrap(self, x_pw: np.ndarray, y_pw: np.ndarray) -> np.ndarray:
+    def _run_combination_bootstrap(
+            self, x_pw: np.ndarray, y_pw: np.ndarray
+    ) -> dict:
         """
-        Draw N_B block-bootstrap samples and return the detected lag per sample.
+        Run block bootstrap for one pre-whitened (x, y) pair and summarise.
 
-        Procedure (paper Section 2.2):
-        1. Divide the pre-whitened series into n_blocks non-overlapping blocks
-           of length L = block_length_records.
-        2. Draw all N_B sets of block indices at once (vectorised, no Python loop).
-        3. Assemble all N_B bootstrap series in one operation via fancy indexing.
-        4. Compute the CCF for all N_B samples simultaneously via batch FFT
-           (_batch_ccf_fft): O(N_B × N log N) instead of N_B × O(N²).
-        5. Smooth all CCFs at once with a vectorised rolling mean (_smooth_rows):
-           O(N_B × M) via cumulative sum, no pandas overhead.
-        6. Find the peak lag for each bootstrap sample with a single np.nanargmax
-           call across the entire (N_B × M) array.
+        x_pw is the pre-whitened leading series -- either W or T_SONIC after AR
+        filtering.  y_pw is the pre-whitened scalar (tube-delayed) after the same
+        AR filtering.  The naming convention for each combination is:
 
-        Block 0 (the very first block) is excluded from sampling because the AR
-        filter sets its first p values to 0 (they were NaN before the caller
-        replaced them), which would bias the CCF.
+            cw: x_pw = W filtered by scalar AR,       y_pw = scalar filtered by scalar AR
+            wc: x_pw = W filtered by W AR,             y_pw = scalar filtered by W AR
+            ct: x_pw = T_SONIC filtered by scalar AR,  y_pw = scalar filtered by scalar AR
+            tc: x_pw = T_SONIC filtered by T_SONIC AR, y_pw = scalar filtered by T_SONIC AR
 
-        Memory note: two (N_B × N) float64 arrays are allocated (~28 MB each for
-        N_B=99, N=36000), plus one (N_B × n_fft) array for the FFT (~100 MB).
-        All temporaries are released before returning.
+        Leading NaN left by the AR filter (order-p initialisation artifact) are
+        zeroed so that block 0 -- which contains those positions -- is harmless
+        when sampled; it is also excluded from the bootstrap draw.
+
+        Returns a dict with:
+            lags           -- shape (N_B,) peak lags per bootstrap sample, in records
+            mode_lag       -- most frequent peak lag across all N_B samples, in records
+            mean_smooth_ccf-- mean bootstrap CCF smoothed with na.locf, used by
+                              _select_best_combination (R: ccfs_cw, ccfs_ct, etc.)
+        """
+        x0 = np.where(np.isnan(x_pw), 0.0, x_pw)
+        y0 = np.where(np.isnan(y_pw), 0.0, y_pw)
+        boot_lags, mean_smooth_ccf = self._block_bootstrap(x0, y0)
+        mode_lag = int(mode(boot_lags, keepdims=True).mode[0])
+        return {'lags': boot_lags, 'mode_lag': mode_lag, 'mean_smooth_ccf': mean_smooth_ccf}
+
+    @staticmethod
+    def _select_best_combination(combinations: dict) -> str:
+        """
+        Return the key of the combination with the highest |avg_smooth_ccf| at its mode lag.
+
+        The selection criterion is the absolute value of the mean bootstrap CCF
+        (smoothed) evaluated at the mode lag detected by that combination.  A
+        higher value indicates that the cross-correlation peak is more prominent
+        relative to background noise, making that combination the most informative
+        signal for this averaging period.  For strong-flux scalars (CO2) the
+        scalar x W combinations (cw/wc) typically win; for weak-flux trace gases
+        (N2O, CH4) the T_SONIC combinations (ct/tc) often show a cleaner peak.
+
+        Mirrors R tlag_detection.R lines 151-158:
+            corr_est_s <- c(ccfs_ct[maps[1]], ccfs_cw[maps[2]], ...)
+            corr_ind   <- which.max(abs(corr_est_s))
+        """
+        best_corr = -np.inf
+        best_key = None
+        for key, combo in combinations.items():
+            mode_lag = combo['mode_lag']
+            avg_ccf = combo['mean_smooth_ccf']
+            lag_max = (len(avg_ccf) - 1) // 2
+            idx = mode_lag + lag_max
+            if 0 <= idx < len(avg_ccf) and not np.isnan(avg_ccf[idx]):
+                corr = abs(avg_ccf[idx])
+                if corr > best_corr:
+                    best_corr = corr
+                    best_key = key
+        return best_key if best_key is not None else next(iter(combinations))
+
+    def _block_bootstrap(
+            self, x_pw: np.ndarray, y_pw: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Draw N_B block-bootstrap samples and return peak lags + mean smooth CCF.
+
+        Procedure (paper Section 2.2 + RFlux v3.2.0):
+        1. Divide into n_blocks non-overlapping blocks of length L.
+        2. Draw N_B sets of block indices (block 0 excluded — AR init artifact).
+        3. Assemble N_B bootstrap series via fancy indexing.
+        4. Batch FFT CCF for all N_B samples simultaneously.
+        5. Compute mean CCF across N_B samples, smooth with width=hz/2+1,
+           apply na.locf (R: ccfs_cw = rollapply(mean_ccf, width=wdt) + na.locf).
+        6. Per-replicate: smooth each CCF with the same width, apply na.locf
+           to fill NaN edges (R: rollapply + na.locf per replicate in bootccf_*).
+        7. Find the peak lag per replicate via argmax(abs(smooth_ccf)).
+
+        Returns:
+            boot_lags       -- shape (N_B,) peak lags in records
+            mean_smooth_ccf -- shape (2*lag_max+1,) mean bootstrap CCF, smoothed
         """
         n = len(x_pw)
-        L = self._block_length_records    # block length in records
-        n_blocks = n // L                 # number of complete blocks
+        L = self._block_length_records
+        n_blocks = n // L
         N_B = self.n_bootstrap
 
-        # Skip block 0 (contaminated by AR filter zero-initialisation)
         valid_blocks = np.arange(1, n_blocks) if n_blocks > 1 else np.arange(n_blocks)
 
-        # ---- Pre-compute block views: shape (n_blocks, L) ----
-        # Avoids repeated slicing inside the loop; trailing records (< L) discarded.
         x_blocks = x_pw[:n_blocks * L].reshape(n_blocks, L)
         y_blocks = y_pw[:n_blocks * L].reshape(n_blocks, L)
-
-        # ---- Draw all N_B sets of block indices at once: shape (N_B, n_blocks) ----
         all_chosen = np.random.choice(valid_blocks, size=(N_B, n_blocks), replace=True)
-
-        # ---- Assemble all bootstrap series via fancy indexing: shape (N_B, N) ----
-        # x_blocks[all_chosen] is (N_B, n_blocks, L); reshape collapses blocks × L -> N.
         x_boot = x_blocks[all_chosen].reshape(N_B, -1)
         y_boot = y_blocks[all_chosen].reshape(N_B, -1)
 
-        # ---- Batch FFT CCF: shape (N_B, 2*lag_max+1) ----
         all_ccf = self._batch_ccf_fft(x_boot, y_boot)
 
-        # ---- Batch smoothing: vectorised rolling mean, NaN at edges ----
-        all_smooth = self._smooth_rows(all_ccf, self._smooth_width_bootstrap)
+        # Mean CCF across all N_B samples, smoothed then na.locf to fill edge NaN.
+        # Used by _select_best_combination to compare combinations (R: ccfs_cw etc.).
+        mean_smooth_ccf = _na_locf_1d(
+            self._smooth_series(np.mean(all_ccf, axis=0), self._smooth_width_bootstrap)
+        )
 
-        # ---- Batch argmax across all bootstrap samples ----
-        peak_indices = np.nanargmax(np.abs(all_smooth), axis=1)  # shape (N_B,)
-        return peak_indices.astype(int) - self._lag_max_records
+        # Per-replicate: smooth each CCF, fill edge NaN with na.locf so that lags
+        # at the boundary of the search window are not excluded from the argmax search
+        # (without na.locf, nanargmax would skip those positions and could miss an
+        # edge-lag peak -- R applies zoo::na.locf per replicate for the same reason).
+        all_smooth = self._na_locf_rows(
+            self._smooth_rows(all_ccf, self._smooth_width_bootstrap)
+        )
+        peak_indices = np.nanargmax(np.abs(all_smooth), axis=1)
+        boot_lags = peak_indices.astype(int) - self._lag_max_records
+
+        return boot_lags, mean_smooth_ccf
 
     def _batch_ccf_fft(self, X: np.ndarray, Y: np.ndarray) -> np.ndarray:
         """
         Batch FFT-based normalised cross-correlation for all N_B bootstrap samples.
 
-        Replaces N_B sequential O(N²) np.correlate calls with a single batch of
-        FFT operations that scales as O(N_B × N log N).
-
-        For N=36000 and N_B=99 the FFT approach is roughly 2 000× faster than
-        the direct convolution used by np.correlate(mode='full').
-
         Args:
-            X: Pre-whitened wind bootstrap arrays, shape (N_B, N). Zero-filled,
-               no NaN (caller replaced NaN with 0 before bootstrapping).
-            Y: Pre-whitened scalar bootstrap arrays, shape (N_B, N). Same.
+            X: Leading-signal bootstrap arrays, shape (N_B, N). Zero-filled, no NaN.
+            Y: Scalar bootstrap arrays, shape (N_B, N). Same.
 
         Returns:
             Normalised CCF windows of shape (N_B, 2*lag_max+1), ordered
-            [lag=-lag_max, ..., lag=0, ..., lag=+lag_max].  Same sign convention
-            as _compute_ccf: positive lag = scalar delayed (tube delay).
+            [lag=-lag_max, ..., lag=0, ..., lag=+lag_max]. Positive lag = scalar
+            delayed (tube delay).
         """
         N_B, N = X.shape
         lag_max = self._lag_max_records
 
-        # Centre each bootstrap sample (remove per-row mean)
         X_c = X - X.mean(axis=1, keepdims=True)
         Y_c = Y - Y.mean(axis=1, keepdims=True)
 
-        # FFT size: next power of 2 >= 2N-1 ensures linear (non-cyclic) correlation.
-        # For N=36000: n_fft = 2^17 = 131072.
         n_fft = 1 << (2 * N - 2).bit_length()
 
-        # Batch real FFT along axis=1: shape (N_B, n_fft//2 + 1) complex
         FX = np.fft.rfft(X_c, n=n_fft, axis=1)
         FY = np.fft.rfft(Y_c, n=n_fft, axis=1)
 
-        # Cross-correlation via IFFT of the spectral product.
-        # irfft(FY * conj(FX))[k] = sum_n Y[n]*X[n-k], matching np.correlate(y,x,'full').
-        ccf_full = np.fft.irfft(FY * np.conj(FX), n=n_fft, axis=1)  # (N_B, n_fft)
+        ccf_full = np.fft.irfft(FY * np.conj(FX), n=n_fft, axis=1)
 
-        # Normalise to correlation coefficient in [-1, +1]
-        norm = np.sqrt((X_c ** 2).sum(axis=1) * (Y_c ** 2).sum(axis=1))  # (N_B,)
+        norm = np.sqrt((X_c ** 2).sum(axis=1) * (Y_c ** 2).sum(axis=1))
         norm = np.where(norm == 0.0, 1.0, norm)
         ccf_full /= norm[:, np.newaxis]
 
-        # Extract the lag window [-lag_max, +lag_max] from the FFT output layout:
-        #   ccf_full[:, k]          = lag +k  (k = 0 .. lag_max)
-        #   ccf_full[:, n_fft - k]  = lag -k  (k = 1 .. lag_max)
-        # Concatenate negative lags (ascending) then non-negative lags.
-        neg = ccf_full[:, n_fft - lag_max:]   # lags -lag_max .. -1  (N_B, lag_max)
-        pos = ccf_full[:, :lag_max + 1]       # lags 0 .. +lag_max   (N_B, lag_max+1)
-        return np.concatenate([neg, pos], axis=1)  # (N_B, 2*lag_max+1)
+        neg = ccf_full[:, n_fft - lag_max:]
+        pos = ccf_full[:, :lag_max + 1]
+        return np.concatenate([neg, pos], axis=1)
 
     # ------------------------------------------------------------------
     # Private: cross-correlation and cross-covariance
@@ -702,45 +783,26 @@ class PreWhiteningBootstrap:
         """
         Normalised cross-correlation for lags [-lag_max, +lag_max].
 
-        Matches R: ccf(x, y, na.action=na.omit, lag.max=LAG.MAX, type="correlation")
-        from tlag_detection.R line 33.
-
-        Sign convention (positive = tube delay):
-            np.correlate(y_c, x_c)[mid+k] = sum(y[t] * x[t-k])
-            At positive k: y is shifted right relative to x, meaning y arrives
-            k records later — the physical tube delay.
-            This matches R's ccf(x=wind, y=scalar) convention, where positive lag
-            means x (wind) leads y (scalar).
-
-        na.omit handling:
-            After the AR filter, both x and y have NaN at the same leading positions
-            (first p records).  These are trimmed together before computing the
-            correlation, exactly as R's na.action=na.omit does inside ccf().
+        Sign convention: positive lag = scalar (y) arrives later than x (tube delay).
+        Leading NaN from AR filtering are trimmed together (R: na.action=na.omit).
         """
-        # Remove leading NaN (AR filter initialisation) from both series simultaneously.
-        # R: ccf(..., na.action=na.omit) trims any position where either x or y is NA.
         is_nan = np.isnan(x) | np.isnan(y)
         if np.any(is_nan):
-            first_valid = int(np.argmax(~is_nan))  # index of first fully valid pair
+            first_valid = int(np.argmax(~is_nan))
             x = x[first_valid:]
             y = y[first_valid:]
 
-        # Centre both series; replace any residual NaN with 0 (guard only)
         x_c = np.where(np.isnan(x - np.nanmean(x)), 0.0, x - np.nanmean(x))
         y_c = np.where(np.isnan(y - np.nanmean(y)), 0.0, y - np.nanmean(y))
 
-        # Full cross-correlation: correlate(y, x) so that positive lag k = scalar delayed.
-        # FFT-based (_signal_correlate method='fft') is O(N log N) vs O(N²) for np.correlate.
         full = _signal_correlate(y_c, x_c, mode='full', method='fft')
 
-        # Normalise to correlation coefficient in [-1, +1]
         denom = np.sqrt(np.sum(x_c ** 2) * np.sum(y_c ** 2))
         if denom == 0:
             full[:] = 0.0
         else:
             full /= denom
 
-        # Extract the central window [-lag_max, +lag_max]
         mid = len(full) // 2
         return full[mid - self._lag_max_records: mid + self._lag_max_records + 1]
 
@@ -748,23 +810,14 @@ class PreWhiteningBootstrap:
         """
         Un-normalised cross-covariance for lags [-lag_max, +lag_max].
 
-        Matches R: ccf(x, y, lag.max=LAG.MAX, type="covariance")
-        from tlag_detection.R line 10.
-
-        Computed on the ORIGINAL (not pre-whitened) data.  The result is stored
-        and later used in _compute_tlag_opt to search for local extrema of the
-        raw signal near the PW-detected peak.
-
-        The biased estimator (divide by N, not by N-k) is used, matching R's
-        ccf() default.  Same positive-lag sign convention as _compute_ccf.
+        Computed on the original (not pre-whitened) data. Used in
+        _compute_tlag_opt to search for local extrema near the PW peak.
+        Biased estimator (divide by N), matching R's ccf(type="covariance").
         """
-        # Centre and fill NaN with 0 (NaN in raw data would propagate)
         x_c = np.where(np.isnan(x), 0.0, x - np.nanmean(x))
         y_c = np.where(np.isnan(y), 0.0, y - np.nanmean(y))
 
-        # FFT-based: O(N log N) vs O(N²) for np.correlate.
         full = _signal_correlate(y_c, x_c, mode='full', method='fft')
-        # Biased covariance: divide by N (not lag-dependent), matching R's ccf(type="covariance")
         n = max(len(x_c), len(y_c))
         full /= n
 
@@ -774,15 +827,8 @@ class PreWhiteningBootstrap:
     @staticmethod
     def _smooth_series(series: np.ndarray, width: int) -> np.ndarray:
         """
-        Centered rolling mean of given width.
-
-        Matches R: rollapply(series, width=width, FUN="mean", fill=NA)
-        from tlag_detection.R lines 11 (width=3) and 35 (width=13).
-
-        Uses the same cumsum approach as _smooth_rows to avoid pandas object
-        allocation overhead.  Edge positions where a full window is unavailable
-        are NaN (min_periods=width behaviour), matching R's fill=NA.
-        np.nanargmax in the callers correctly skips these NaN edges.
+        Centered rolling mean of given width with NaN at edges (min_periods=width).
+        Matches R: rollapply(series, width=width, FUN="mean", fill=NA).
         """
         M = len(series)
         half = width // 2
@@ -790,7 +836,6 @@ class PreWhiteningBootstrap:
         cs[0] = 0.0
         np.cumsum(series, out=cs[1:])
         result = np.full(M, np.nan, dtype=np.float64)
-        # Interior positions [half, M-half) have a full window of `width` values.
         result[half:M - half] = (cs[width:] - cs[:M - width + 1]) / width
         return result
 
@@ -798,20 +843,7 @@ class PreWhiteningBootstrap:
     def _smooth_rows(arr: np.ndarray, width: int) -> np.ndarray:
         """
         Vectorised centered rolling mean for every row of a 2-D array.
-
-        Used inside _block_bootstrap to smooth all N_B CCF arrays at once
-        with a single O(N_B × M) cumulative-sum pass — no pandas, no Python loop.
-
-        Replicates the min_periods=width edge behaviour of _smooth_series:
-        positions within half = width//2 records of either edge are set to NaN
-        because a full window of width neighbours is not available there.
-
-        Args:
-            arr: Shape (N_B, M). No NaN expected (bootstrap arrays are zero-filled).
-            width: Rolling-mean window width (must be >= 1).
-
-        Returns:
-            Shape (N_B, M) float64 array; NaN at the first and last half positions.
+        NaN at the first and last half positions (min_periods=width behaviour).
         """
         if width <= 1:
             return arr.copy()
@@ -819,17 +851,45 @@ class PreWhiteningBootstrap:
         N_B, M = arr.shape
         half = width // 2
 
-        # Padded cumulative sum: cs[:, j] = sum(arr[:, 0:j])  (cs[:, 0] = 0)
         cs = np.empty((N_B, M + 1), dtype=np.float64)
         cs[:, 0] = 0.0
         np.cumsum(arr, axis=1, out=cs[:, 1:])
 
-        # Interior positions [half, M-half): full window of `width` values available.
-        # result[:, i] = (cs[:, i+half+1] - cs[:, i-half]) / width
-        # Vectorised: upper slice cs[:, width:] and lower cs[:, :M-width+1]
-        # each have exactly M - 2*half = M - width + 1 elements.
         result = np.full((N_B, M), np.nan, dtype=np.float64)
         result[:, half:M - half] = (cs[:, width:] - cs[:, :M - width + 1]) / width
+        return result
+
+    @staticmethod
+    def _na_locf_rows(arr: np.ndarray) -> np.ndarray:
+        """
+        Apply forward-fill then backward-fill NaN to every row of a 2-D array.
+
+        The centered rolling mean used for smoothing leaves NaN at the first and
+        last (width//2) positions of each row.  If those positions correspond to
+        the search-window edges (+/- lag_max), a true lag peak there would be
+        invisible to nanargmax.  Filling the edges with the nearest non-NaN value
+        ensures every lag position is a candidate -- matching R's two-pass
+        zoo::na.locf applied per bootstrap replicate.
+
+        Matches R: zoo::na.locf(zoo::na.locf(..., na.rm=FALSE), fromLast=TRUE).
+        """
+        result = arr.copy()
+        for i in range(arr.shape[0]):
+            row = result[i]
+            mask = np.isnan(row)
+            if not mask.any():
+                continue
+            # Forward fill
+            idx = np.where(~mask, np.arange(len(row)), 0)
+            np.maximum.accumulate(idx, out=idx)
+            row = row[idx]
+            # Backward fill
+            mask = np.isnan(row)
+            if mask.any():
+                idx = np.where(~mask, np.arange(len(row)), len(row) - 1)
+                np.minimum.accumulate(idx[::-1], out=idx[::-1])
+                row = row[idx]
+            result[i] = row
         return result
 
     # ------------------------------------------------------------------
@@ -841,15 +901,10 @@ class PreWhiteningBootstrap:
         Summarise the N_B bootstrap lag distribution (paper eq. 7).
 
         The mode is the most frequently detected lag across the N_B bootstrap
-        replicates and is the final PWB lag estimate (TL^PWB, paper eq. 6).
-
-        The 95% HDI is the shortest interval that contains 95% of the bootstrap
-        distribution.  Its width is the reliability metric: HDI < 0.5 s means
-        the lag detection is considered reliable (S1 criterion, Section 2.3).
+        replicates.  The 95% HDI is the shortest interval containing 95% of the
+        distribution; its width is the reliability metric (Section 2.3).
         """
-        # Mode of the integer bootstrap lag distribution (in records)
         tlag_mode = int(mode(lags_records, keepdims=True).mode[0])
-        # Convert lag distribution to seconds for the HDI
         lags_s = lags_records / self.hz
         hdi_lo, hdi_hi = self._hdi(lags_s, credible_mass=0.95)
         return tlag_mode, float(hdi_lo), float(hdi_hi)
@@ -857,28 +912,20 @@ class PreWhiteningBootstrap:
     @staticmethod
     def _hdi(samples: np.ndarray, credible_mass: float = 0.95) -> tuple[float, float]:
         """
-        Highest Density Interval (HDI): shortest interval containing credible_mass
-        of the sample distribution.
-
-        Algorithm: sort the samples, then slide a window of length
-        n_included = floor(credible_mass * n) across the sorted array and pick
-        the window with the smallest width.  O(n log n) due to the sort.
-        No external Bayesian library required.
+        Highest Density Interval: shortest interval containing credible_mass of samples.
         """
         sorted_s = np.sort(samples)
         n = len(sorted_s)
         n_included = int(np.floor(credible_mass * n))
         n_intervals = n - n_included
         if n_intervals <= 0:
-            # All samples fit inside one interval
             return float(sorted_s[0]), float(sorted_s[-1])
-        # Width of every candidate interval of length n_included
         widths = sorted_s[n_included:] - sorted_s[:n_intervals]
         min_idx = int(np.argmin(widths))
         return float(sorted_s[min_idx]), float(sorted_s[min_idx + n_included])
 
     # ------------------------------------------------------------------
-    # Plotting  (Phase 2 — styling only, no computation)
+    # Plotting  (Phase 2 -- styling only, no computation)
     # ------------------------------------------------------------------
 
     def plot(
@@ -892,16 +939,16 @@ class PreWhiteningBootstrap:
         """
         Three-panel diagnostic figure.
 
-        Panel 1 (left) — Pre-whitened CCF, matching R tlag_detection.R panel 1:
-            Grey stems + smoothed black line (width=13) + ±1.96/sqrt(n) dotted
-            and ±2.57/sqrt(n) dashed significance bands + red tlag_opt marker
-            + significance annotation in title.
+        Panel 1 (left) -- Pre-whitened CCF (scalar AR, full data):
+            Grey stems + smoothed black line (width=13) + Bartlett significance
+            bands + red tlag_opt marker + significance annotation.
 
-        Panel 2 (middle) — Raw cross-covariance, matching R panel 2:
+        Panel 2 (middle) -- Raw cross-covariance:
             Grey stems + smoothed cyan line (width=3) + red tlag_opt marker.
 
-        Panel 3 (right) — Bootstrap lag distribution (PWB-specific):
+        Panel 3 (right) -- Bootstrap lag distribution (best combination):
             Histogram of N_B detected lags + 95% HDI shading + mode marker.
+            Title includes the selected combination name.
 
         Args:
             ax: Not used (three-panel figure always created). Kept for API
@@ -919,9 +966,9 @@ class PreWhiteningBootstrap:
 
         fig = plt.figure(facecolor='white', figsize=(18, 6), layout='constrained')
         gs = gridspec.GridSpec(1, 3, figure=fig)
-        ax_ccf = fig.add_subplot(gs[0, 0])    # Panel 1: PW CCF  (R panel 1)
-        ax_ccov = fig.add_subplot(gs[0, 1])   # Panel 2: raw CCov (R panel 2)
-        ax_hist = fig.add_subplot(gs[0, 2])   # Panel 3: bootstrap histogram
+        ax_ccf = fig.add_subplot(gs[0, 0])
+        ax_ccov = fig.add_subplot(gs[0, 1])
+        ax_hist = fig.add_subplot(gs[0, 2])
 
         if title:
             fig.suptitle(title, fontsize=13, fontweight='bold')
@@ -941,44 +988,25 @@ class PreWhiteningBootstrap:
         return fig
 
     def _plot_pw_ccf(self, ax: plt.Axes):
-        """
-        Panel 1: pre-whitened CCF.
-
-        Reproduces R tlag_detection.R plot panel 1 (top panel):
-            - Grey stems:    R plot(..., type="h", col="grey68")
-            - Smoothed line: R lines(..., col=1, lwd=2)
-            - 5% threshold:  R abline(h=+-1.96/sqrt(n), col=4, lty=3)   dotted blue
-            - 1% threshold:  R abline(h=+-2.57/sqrt(n), col=4, lty=2)   dashed blue
-            - Lag marker:    R abline(v=tlag_opt, col="red", lty=3)
-            - Annotation:    R mtext(...) with significance level (R lines 59-61)
-        """
+        """Panel 1: pre-whitened CCF (scalar AR, full data)."""
         lags_s = self._lags_axis / self.hz
-        cv5 = self.cv5pct   # Bartlett 5% threshold: 1.96 / sqrt(N)
-        cv1 = self.cv1pct   # Bartlett 1% threshold: 2.57 / sqrt(N)
+        cv5 = self.cv5pct
+        cv1 = self.cv1pct
 
-        # Grey stems for each lag (R: type="h", col="grey68")
         ax.vlines(lags_s, 0, self._pw_ccf,
                   colors='#808080', linewidth=0.6, alpha=0.7)
-
-        # Smoothed PW CCF overlaid in black (R: lines(..., col=1, lwd=2))
         ax.plot(lags_s, self._smooth_pw_ccf,
                 color='black', linewidth=2, label='smoothed CCF')
 
-        # Bartlett significance bands (R: abline lines 53-56)
         ax.axhline(cv5,  color='steelblue', linestyle=':', linewidth=1,
-                   label=f'+/-1.96/sqrt(n)  (5%)')
+                   label='+/-1.96/sqrt(n)  (5%)')
         ax.axhline(-cv5, color='steelblue', linestyle=':', linewidth=1)
         ax.axhline(cv1,  color='steelblue', linestyle='--', linewidth=1,
-                   label=f'+/-2.57/sqrt(n)  (1%)')
+                   label='+/-2.57/sqrt(n)  (1%)')
         ax.axhline(-cv1, color='steelblue', linestyle='--', linewidth=1)
         ax.axhline(0, color='black', linewidth=0.5)
-
-        # Red vertical line at the detected lag (R: abline(v=tlag_opt, col="red", lty=3))
         ax.axvline(self.tlag_opt_s, color='red', linestyle=':', linewidth=1.5)
 
-        # Significance annotation in panel title (R: mtext lines 59-61).
-        # corr_est is the un-smoothed CCF at tlag_opt; compare against Bartlett thresholds.
-        # Case 3 ("not significant") omits the lag position, matching R exactly.
         abs_est = abs(self._corr_est)
         if abs_est >= cv1:
             sig_txt = (f'Detected peak at {self.tlag_opt_s:.3f} s'
@@ -987,7 +1015,7 @@ class PreWhiteningBootstrap:
             sig_txt = (f'Detected peak at {self.tlag_opt_s:.3f} s'
                        f'  stat. sign. at 0.05 level')
         else:
-            sig_txt = 'Detected peak not stat. significant'  # R: "Detected peak not stat. significant"
+            sig_txt = 'Detected peak not stat. significant'
 
         ax.set_title(sig_txt, fontsize=9)
         default_format(ax=ax, ax_labels_fontsize=theme.AX_LABELS_FONTSIZE,
@@ -996,67 +1024,40 @@ class PreWhiteningBootstrap:
         ax.legend(frameon=False, fontsize=8)
 
     def _plot_raw_ccov(self, ax: plt.Axes):
-        """
-        Panel 2: raw cross-covariance (original, non-pre-whitened data).
-
-        Reproduces R tlag_detection.R plot panel 2 (bottom panel):
-            - Grey stems:    R plot(..., type="h", col="grey68")
-            - Smoothed line: R lines(..., col="cyan")
-            - Lag marker:    R abline(v=tlag_opt, col="red", lty=3)
-            - Title:         R mtext("Optimal Time Lag at X timesteps")
-        """
+        """Panel 2: raw cross-covariance."""
         lags_s = self._lags_axis / self.hz
 
-        # Grey stems (R: type="h", col="grey68")
         ax.vlines(lags_s, 0, self._raw_ccov,
                   colors='#808080', linewidth=0.6, alpha=0.7)
-
-        # Smoothed cross-covariance in cyan (R: lines(..., col="cyan"))
         ax.plot(lags_s, self._smooth_raw_ccov,
                 color='cyan', linewidth=1.5, label='smoothed cross-cov')
         ax.axhline(0, color='black', linewidth=0.5)
-
-        # Red vertical line at the detected lag (R: abline(v=tlag_opt, col="red", lty=3))
         ax.axvline(self.tlag_opt_s, color='red', linestyle=':', linewidth=1.5,
                    label=f'tlag_opt = {self.tlag_opt_s:.2f} s')
 
-        # Panel title (R: mtext("Optimal Time Lag at X timesteps"))
         ax.set_title(f'Optimal time lag at {self.tlag_opt_s:.2f} s', fontsize=9)
-
         default_format(ax=ax, ax_labels_fontsize=theme.AX_LABELS_FONTSIZE,
                        ax_xlabel_txt='lag', ax_ylabel_txt='cross-covariance',
                        txt_ylabel_units='s')
         ax.legend(frameon=False, fontsize=8)
 
     def _plot_bootstrap_histogram(self, ax: plt.Axes):
-        """
-        Panel 3: bootstrap lag distribution.
-
-        Not present in the R script; specific to the PWB extension (paper Section 2.2,
-        analogous to Fig. 2 right column which shows the bootstrap CCF distribution).
-
-        Shows the histogram of N_B detected lags, the 95% HDI shaded in blue,
-        and the mode (final PWB lag estimate) as a red vertical line.
-        """
+        """Panel 3: bootstrap lag distribution from the selected combination."""
         lags_s = self._bootstrap_lags / self.hz
         n_bins = max(10, self.n_bootstrap // 5)
 
         ax.hist(lags_s, bins=n_bins, color='#808080', alpha=0.7,
                 edgecolor='none', label='bootstrap lags')
-
-        # 95% HDI shading: shortest interval containing 95% of the bootstrap distribution
         ax.axvspan(self._hdi_lo_s, self._hdi_hi_s, alpha=0.35, color='steelblue',
                    label=f'95% HDI  [{self._hdi_lo_s:.2f}, {self._hdi_hi_s:.2f}] s')
-
-        # Mode = final PWB lag estimate (TL^PWB, paper eq. 6)
         ax.axvline(self.tlag_s, color='red', linewidth=2,
                    label=f'mode = {self.tlag_s:.2f} s')
 
-        # Reliability flag: HDI range < 0.5 s = S1 criterion (paper Section 2.3)
         reliability = 'reliable' if self.is_reliable else 'UNRELIABLE'
+        combo_label = f'combo={self._best_combination}' if self._best_combination else ''
         ax.set_title(
             f'{self.segment_name} | {reliability} '
-            f'(HDI range = {self.hdi_range_s:.2f} s)',
+            f'(HDI={self.hdi_range_s:.2f} s, {combo_label})',
             fontsize=9
         )
         default_format(ax=ax, ax_labels_fontsize=theme.AX_LABELS_FONTSIZE,
@@ -1079,7 +1080,7 @@ class PwboptLagPlot:
     Typical use cases:
 
     - **Strategy comparison**: standard PWBOPT (left) vs pre-filtered PWBOPT
-      (right) — using columns produced by ``flux_lag_pwbopt.py``.
+      (right) -- using columns produced by ``flux_lag_pwbopt.py``.
     - **Method comparison**: CM covariance-max lags (left) vs PWB lags (right).
 
     Layout (2 rows x 5 cols via GridSpec, width_ratios=[5,1,0.25,5,1])::
@@ -1323,7 +1324,7 @@ class PwboptLagPlot:
 
                 xs = self._xvals[series.index]
 
-                # Jittered scatter — small uniform noise so stacked points separate
+                # Jittered scatter -- small uniform noise so stacked points separate
                 jitter_v = rng.uniform(-self.jitter, self.jitter,
                                        size=len(series))
                 ax_s.scatter(xs, series.values + jitter_v,
@@ -1411,7 +1412,7 @@ class PwboptLagPlot:
         """
         lo, hi = float(np.nanmin(values)), float(np.nanmax(values))
         if lo >= hi:
-            # Degenerate: all values identical — return a trivial distribution
+            # Degenerate: all values identical -- return a trivial distribution
             return lo, np.array([lo - 0.5, lo + 0.5]), np.array([0.0, 1.0])
         pad = (hi - lo) * 0.12
         kde_y = np.linspace(lo - pad, hi + pad, n)
@@ -1495,11 +1496,11 @@ class PwboptLagPlot:
         Both panels compare gas1 vs gas2 using the standard strategy (col_a)
         for the overlay and both strategies for the scatter.
 
-        Left panel — **Overlay**: gas1 and gas2 optimal lags plotted on the
+        Left panel -- **Overlay**: gas1 and gas2 optimal lags plotted on the
         same time axis as jittered scatter with KDE mode lines.  Answers
         "do the two gases track each other over time?"
 
-        Right panel — **Cross-scatter**: gas1 lag on x vs gas2 lag on y with
+        Right panel -- **Cross-scatter**: gas1 lag on x vs gas2 lag on y with
         a 1:1 identity line.  Both strategies are shown (col_a = color_a,
         col_b = color_b).  Answers "is there a consistent offset between the
         two gases?" and "how tightly correlated are their lags?"
@@ -1517,12 +1518,12 @@ class PwboptLagPlot:
         rng = np.random.default_rng(42)
 
         # In the inter-gas panels color_a identifies gas1, color_b identifies
-        # gas2 — consistent with the top rows where these colors anchor each
+        # gas2 -- consistent with the top rows where these colors anchor each
         # left / right panel pair.
         _c1, _c2 = self.color_a, self.color_b
 
         # ---- Overlay: gas1 and gas2 on the same time axis (pre-filtered only) ----
-        # col_b = pre-filtered PWBOPT — used exclusively so the overlay shows
+        # col_b = pre-filtered PWBOPT -- used exclusively so the overlay shows
         # the cleaner, more conservative lag series for both gases.
         for col, color, gas in [
             (cols1['col_b'], _c1, gas1),
@@ -1561,7 +1562,7 @@ class PwboptLagPlot:
         ax_overlay.legend(frameon=False, fontsize=8, loc='upper right')
 
         # ---- Cross-scatter: gas1 lag vs gas2 lag (pre-filtered only) --------
-        # Only col_b (pre-filtered) is shown — the cleaner series for
+        # Only col_b (pre-filtered) is shown -- the cleaner series for
         # assessing whether the two gases share the same inlet lag.
         col1, col2 = cols1['col_b'], cols2['col_b']
         if (col1 in self.results.columns and col2 in self.results.columns):

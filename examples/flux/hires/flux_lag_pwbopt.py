@@ -104,6 +104,12 @@ FILE_NA_VALUES = ['-9999', '-9999.0', '-9999.0000000000000']
 # Vertical wind column name (after FILE_COL_NAMES renaming)
 COL_W = 'w'
 
+# Sonic temperature column (required for the 4-combination RFlux v3.2.0 logic).
+# T_SONIC combinations are critical for trace gases (N2O, CH4) where the scalar
+# x W cross-correlation is too weak to produce a reliable peak.
+# Set to None to fall back to 2-combination mode (cw, wc only).
+COL_TSONIC = 'ts'
+
 # Scalars to process: {display_label: column_name_in_file}
 # Add or remove entries to change which gases are detected.
 SCALARS = {
@@ -367,6 +373,9 @@ if not _csv_loaded and USE_SYNTHETIC:
         for _t in range(1, RECORDS):
             _w[_t] = 0.8 * _w[_t - 1] + np.random.normal(0, 0.3)
 
+        # T_SONIC: correlated with W (driven by the same turbulent structures)
+        _ts = _w * 0.6 + np.random.normal(0, 0.15, RECORDS)
+
         # Both scalars: lagged wind * flux_strength + growing noise
         _noise_std = 0.5 + (1.0 - flux_strengths[_p] / 5.0) * 0.8
         _ch4 = (np.roll(_w, LAG_TRUE_RECORDS) * flux_strengths[_p]
@@ -378,7 +387,7 @@ if not _csv_loaded and USE_SYNTHETIC:
                 + np.random.normal(0, 1.0, RECORDS))
         _n2o[:LAG_TRUE_RECORDS] = _n2o[LAG_TRUE_RECORDS]
 
-        _synthetic_dfs.append(pd.DataFrame({'w': _w, 'ch4': _ch4, 'n2o': _n2o}))
+        _synthetic_dfs.append(pd.DataFrame({'w': _w, 'ts': _ts, 'ch4': _ch4, 'n2o': _n2o}))
 
     period_sources = [(f'period_{p:02d}', df)
                       for p, df in enumerate(_synthetic_dfs)]
@@ -457,11 +466,17 @@ for period_name, source in period_sources:
             continue
 
         # Run PWB (equivalent to detect_gas() -> tlag_detection() in R script)
+        _has_ts = COL_TSONIC is not None and COL_TSONIC in df.columns
+        _col_map = {COL_W: 'W', scalar_col: scalar_label}
+        _keep_cols = [COL_W, scalar_col]
+        if _has_ts:
+            _col_map[COL_TSONIC] = 'T_SONIC'
+            _keep_cols.append(COL_TSONIC)
         pwb = dv.PreWhiteningBootstrap(
-            df=df[[COL_W, scalar_col]].rename(columns={COL_W: 'W',
-                                                       scalar_col: scalar_label}),
+            df=df[_keep_cols].rename(columns=_col_map),
             var_w='W',
             var_scalar=scalar_label,
+            var_tsonic='T_SONIC' if _has_ts else None,
             hz=HZ,
             lag_max_s=LAG_MAX_S,
             n_bootstrap=N_BOOTSTRAP,
