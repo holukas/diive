@@ -2,7 +2,7 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.91.0 | 18 May 2026
+## v0.91.0 | XX May 2026
 
 - **New: PreWhiteningBootstrap class (PWB time lag detection)** — `diive/pkgs/flux/hires/lag_pwb.py`
   implements the pre-whitening with block-bootstrap cross-correlation method from Vitale et al. (2024).
@@ -18,9 +18,13 @@
     - `tc` -- scalar x T_SONIC, T_SONIC AR filter (R: bootccf_tc)
     The combination with the highest smoothed peak correlation is selected (R: which.max(abs(corr_est_s))).
     For N2O and CH4 the T_SONIC combinations often produce a cleaner peak than scalar x W alone.
+  - ADF unit-root test on each aligned series before AR fitting (R: egcm::bvr.test, same H0 direction).
+    If any series has a unit root (p >= 0.01), all series are first-differenced. Uses maxlag=1 for
+    ~4 ms cost per series; sufficient to discriminate turbulent EC data (p ~ 0) from non-stationary
+    series (p ~ 0.5). For EC data this virtually never triggers.
   - Block-bootstrap (N_B=99 samples, L=20 s blocks): CCF computed per replicate, smoothed, peak detected.
     na.locf fills smoothed-CCF edges so boundary lags are not excluded from the peak search.
-  - Bootstrap lag summarised as mode (TL^PWB) + 95% HDI (Highest Density Interval).
+  - Bootstrap lag summarised via KDE MAP estimate with tiny jitter (R: bayestestR::map_estimate) + 95% HDI.
   - `is_reliable` flag: HDI range < 0.5 s (S1 criterion, paper Section 2.3).
   - Three-panel `plot()`: pre-whitened CCF with Bartlett significance bands, raw cross-covariance,
     bootstrap lag histogram with HDI shading for the selected combination.

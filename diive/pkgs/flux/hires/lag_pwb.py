@@ -45,6 +45,10 @@ selected as the most informative for that averaging period
 (R: which.max(abs(corr_est_s))).
 
 Implementation notes:
+- An ADF unit-root test (R: egcm::bvr.test, same H0 direction) is applied to
+  each aligned series before AR fitting.  If any series has a unit root
+  (p >= 0.01), all series are first-differenced.  For turbulent EC data this
+  virtually never triggers but handles pathological non-stationary periods.
 - Three separate AR(p) models are fitted (scalar, W, T_SONIC) using AIC with
   max_order = floor(100 * log10(N)), matching R's formula.  For N = 36000
   records this gives max_order = 455, which is large enough for AIC to capture
@@ -74,7 +78,8 @@ import pandas as pd
 from matplotlib.figure import Figure
 from pandas import DataFrame
 from scipy.signal import correlate as _signal_correlate, lfilter
-from scipy.stats import gaussian_kde, mode
+from scipy.stats import gaussian_kde
+from statsmodels.tsa.stattools import adfuller
 
 from diive.core.plotting.plotfuncs import default_format
 from diive.core.plotting.styles import LightTheme as theme
@@ -85,18 +90,48 @@ _SMOOTH_WIDTH_CCOV = 3
 
 
 def _na_approx(x: np.ndarray) -> np.ndarray:
-    """Linear interpolation of NaN, matching R's zoo::na.approx(na.rm=FALSE)."""
-    if not np.any(np.isnan(x)):
+    """
+    Linear interpolation of NaN, matching R's zoo::na.approx(na.rm=FALSE).
+
+    Interior NaN are linearly interpolated between their neighbours.  Leading
+    and trailing NaN are filled with the nearest valid boundary value (constant
+    extrapolation), which matches numpy.interp's default clamping behaviour and
+    pandas interpolate(limit_direction='both').
+    """
+    nans = np.isnan(x)
+    if not nans.any():
         return x
-    return pd.Series(x).interpolate(method='linear', limit_direction='both').values
+    idx = np.arange(len(x))
+    out = x.copy()
+    # np.interp clamps to boundary values for indices outside valid range,
+    # matching R's na.approx edge behaviour.
+    out[nans] = np.interp(idx[nans], idx[~nans], x[~nans])
+    return out
 
 
 def _na_locf_1d(x: np.ndarray) -> np.ndarray:
-    """Forward-fill then backward-fill NaN, matching R's zoo::na.locf two-pass."""
-    if not np.any(np.isnan(x)):
+    """
+    Forward-fill then backward-fill NaN, matching R's zoo::na.locf two-pass.
+
+    Forward fill carries the last valid value rightward (fills trailing NaN).
+    Backward fill carries the next valid value leftward (fills leading NaN).
+    """
+    nans = np.isnan(x)
+    if not nans.any():
         return x
-    s = pd.Series(x)
-    return s.ffill().bfill().values
+    col = np.arange(len(x))
+    out = x.copy()
+    # Forward fill: for each NaN at position j, use the last valid index before j
+    idx = np.where(~nans, col, 0)
+    np.maximum.accumulate(idx, out=idx)
+    out = np.where(nans, out[idx], out)
+    # Backward fill: remaining left-edge NaN get the next valid value after them
+    nans2 = np.isnan(out)
+    if nans2.any():
+        idx2 = np.where(~nans2, col, len(x) - 1)
+        np.minimum.accumulate(idx2[::-1], out=idx2[::-1])
+        out = np.where(nans2, out[idx2], out)
+    return out
 
 
 class PreWhiteningBootstrap:
@@ -383,6 +418,8 @@ class PreWhiteningBootstrap:
         -----
         1. Load all input series and linearly interpolate NaN (R: na.approx).
            Drop rows where any series remains NaN after interpolation.
+        1b. ADF unit-root test on each series (R: egcm::bvr.test).  If any
+           series has a unit root (p >= 0.01), first-difference all series.
         2. Fit separate AR(p) models to the scalar, W, and T_SONIC (when
            provided) using AIC selection with max_order = floor(100*log10(N))
            (R: ar(x, aic=TRUE, order.max=floor(10^2*log10(length(x))))).
@@ -419,6 +456,20 @@ class PreWhiteningBootstrap:
         w = w_raw[valid]
         s = s_raw[valid]
         t = t_raw[valid] if has_tsonic else None
+
+        # ---- Step 1b: stationarity check (R: egcm::bvr.test) ----
+        # ADF unit-root test on each aligned series.  If ANY series has a unit
+        # root (p >= 0.01), first-difference ALL series before AR fitting.
+        # This matches R's logic exactly: stationarity of all three is required
+        # to use the original series; a single failure triggers differencing.
+        # For turbulent EC data the test virtually always passes.  The rare
+        # failures occur during sensor drift, rain events, or other artefacts.
+        series_to_test = [s, w] + ([t] if has_tsonic else [])
+        if not all(self._is_stationary(x) for x in series_to_test):
+            s = np.diff(s)
+            w = np.diff(w)
+            if has_tsonic:
+                t = np.diff(t)
 
         self._lags_axis = np.arange(-self._lag_max_records, self._lag_max_records + 1)
 
@@ -484,6 +535,19 @@ class PreWhiteningBootstrap:
     # ------------------------------------------------------------------
     # Private: pre-whitening  (AR fitting and filtering)
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _is_stationary(x: np.ndarray, alpha: float = 0.01) -> bool:
+        """
+        ADF unit-root test: return True if the series is stationary (p < alpha).
+
+        Matches the direction of R's egcm::bvr.test used in tlag_detection.R:
+        H0 = unit root (non-stationary); p < alpha rejects H0, confirming
+        stationarity.  maxlag=1 is sufficient to discriminate turbulent EC series
+        (p ~ 0) from non-stationary series (p ~ 0.5) and costs only ~4 ms for
+        N = 36000 vs ~1500 ms with autolag='AIC'.
+        """
+        return adfuller(x, maxlag=1, autolag=None)[1] < alpha
 
     def _fit_ar_model(self, x: np.ndarray) -> tuple[np.ndarray, int]:
         """
@@ -653,7 +717,7 @@ class PreWhiteningBootstrap:
         x0 = np.where(np.isnan(x_pw), 0.0, x_pw)
         y0 = np.where(np.isnan(y_pw), 0.0, y_pw)
         boot_lags, mean_smooth_ccf = self._block_bootstrap(x0, y0)
-        mode_lag = int(mode(boot_lags, keepdims=True).mode[0])
+        mode_lag = self._map_estimate(boot_lags)  # KDE MAP, matching R's bayestestR::map_estimate
         return {'lags': boot_lags, 'mode_lag': mode_lag, 'mean_smooth_ccf': mean_smooth_ccf}
 
     @staticmethod
@@ -872,39 +936,77 @@ class PreWhiteningBootstrap:
         zoo::na.locf applied per bootstrap replicate.
 
         Matches R: zoo::na.locf(zoo::na.locf(..., na.rm=FALSE), fromLast=TRUE).
+
+        Implementation uses vectorised numpy accumulate over all N_B rows
+        simultaneously instead of a Python for loop.
         """
-        result = arr.copy()
-        for i in range(arr.shape[0]):
-            row = result[i]
-            mask = np.isnan(row)
-            if not mask.any():
-                continue
-            # Forward fill
-            idx = np.where(~mask, np.arange(len(row)), 0)
-            np.maximum.accumulate(idx, out=idx)
-            row = row[idx]
-            # Backward fill
-            mask = np.isnan(row)
-            if mask.any():
-                idx = np.where(~mask, np.arange(len(row)), len(row) - 1)
-                np.minimum.accumulate(idx[::-1], out=idx[::-1])
-                row = row[idx]
-            result[i] = row
-        return result
+        N_B, M = arr.shape
+        col = np.arange(M)                    # (M,) broadcasts to (N_B, M)
+        row = np.arange(N_B)[:, np.newaxis]   # (N_B, 1) for 2-D fancy indexing
+
+        out = arr.copy()
+
+        # Forward fill: carry last valid value rightward (fills right-edge NaN).
+        # idx[i, j] = j when out[i, j] is valid, else 0; after maximum.accumulate
+        # idx[i, j] holds the column of the last valid value at or before j.
+        nan_mask = np.isnan(out)
+        idx = np.where(~nan_mask, col, 0)
+        np.maximum.accumulate(idx, axis=1, out=idx)
+        out = np.where(nan_mask, out[row, idx], out)
+
+        # Backward fill: carry next valid value leftward (fills left-edge NaN).
+        # Achieved by running maximum.accumulate on the column-reversed array.
+        nan_mask = np.isnan(out)
+        if nan_mask.any():
+            idx = np.where(~nan_mask, col, M - 1)
+            np.minimum.accumulate(idx[:, ::-1], axis=1, out=idx[:, ::-1])
+            out = np.where(nan_mask, out[row, idx], out)
+
+        return out
 
     # ------------------------------------------------------------------
     # Private: mode and HDI  (paper Section 2.2, eqs. 6-7)
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _map_estimate(samples: np.ndarray) -> int:
+        """
+        MAP (mode) estimate via KDE with tiny jitter, matching R's
+        bayestestR::map_estimate used in tlag_detection.R line 146.
+
+        R adds small Gaussian noise to discrete integer lag indices to break
+        exact ties before fitting a kernel density, then rounds the KDE peak
+        to the nearest integer.  For a unimodal distribution -- which arises
+        whenever the lag signal is clear -- this is identical to
+        scipy.stats.mode.  The two differ only when two adjacent integer lags
+        have exactly equal counts (bimodal tie); in that case the KDE
+        interpolates between them while mode picks the lower value.  That
+        edge case coincides with a wide HDI (unreliable result) where the
+        exact mode value is inconsequential.
+
+        Args:
+            samples: Bootstrap lag distribution in integer records.
+
+        Returns:
+            MAP estimate rounded to the nearest integer record.
+        """
+        if len(np.unique(samples)) == 1:
+            # All samples identical: gaussian_kde would have zero bandwidth.
+            return int(samples[0])
+        jittered = samples.astype(float) + np.random.normal(0, 0.0001, len(samples))
+        kde = gaussian_kde(jittered)
+        x_grid = np.linspace(jittered.min(), jittered.max(), 512)
+        return int(round(float(x_grid[np.argmax(kde(x_grid))])))
+
     def _mode_and_hdi(self, lags_records: np.ndarray) -> tuple[int, float, float]:
         """
         Summarise the N_B bootstrap lag distribution (paper eq. 7).
 
-        The mode is the most frequently detected lag across the N_B bootstrap
-        replicates.  The 95% HDI is the shortest interval containing 95% of the
-        distribution; its width is the reliability metric (Section 2.3).
+        The mode (MAP estimate via KDE) is the most probable lag across the N_B
+        bootstrap replicates.  The 95% HDI is the shortest interval containing
+        95% of the distribution; its width is the reliability metric (Section 2.3).
         """
-        tlag_mode = int(mode(lags_records, keepdims=True).mode[0])
+        tlag_mode = self._map_estimate(lags_records)
         lags_s = lags_records / self.hz
         hdi_lo, hdi_hi = self._hdi(lags_s, credible_mass=0.95)
         return tlag_mode, float(hdi_lo), float(hdi_hi)
