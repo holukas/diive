@@ -34,6 +34,7 @@ EXAMPLE_FILES = [
     'visualization/plot_ridgeline_advanced.py',
     'visualization/plot_scatter_xy_basic.py',
     'visualization/plot_scatter_xy_colored.py',
+    'visualization/plot_treering_temperature.py',
     # Times
     'times/times_timestamp_sanitizer.py',
     'times/times_frequency_detection.py',

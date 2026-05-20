@@ -19,6 +19,7 @@ from diive.core.plotting.heatmap_datetime import HeatmapDateTime as plot_heatmap
 from diive.core.plotting.heatmap_datetime import HeatmapYearMonth as plot_heatmap_year_month
 from diive.core.plotting.heatmap_xyz import HeatmapXYZ as plot_heatmap_xyz
 from diive.core.plotting.hexbin import HexbinPlot as plot_hexbin
+from diive.core.plotting.treering import TreeRingPlot as plot_treering
 from diive.core.plotting.histogram import HistogramPlot as plot_histogram
 from diive.core.plotting.ridgeline import RidgeLinePlot as plot_ridgeline
 from diive.core.plotting.scatter import ScatterXY as plot_scatter_xy
@@ -163,6 +164,7 @@ __all__ = [
     'plot_heatmap_year_month',
     'plot_heatmap_xyz',
     'plot_hexbin',
+    'plot_treering',
     'plot_ridgeline',
     'plot_time_series',
     'plot_cumulative',

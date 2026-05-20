@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
 
-**98 examples across 9 organized folders by functional domain.**
+**99 examples across 9 organized folders by functional domain.**
 
 ## Structure
 
@@ -10,7 +10,7 @@ Examples are organized by **functional domain**, not source code structure:
 
 ```
 examples/
-├── visualization/         # Plotting and visualization (17 examples)
+├── visualization/         # Plotting and visualization (18 examples)
 │   ├── plot_heatmap_datetime_basic.py
 │   ├── plot_heatmap_advanced.py
 │   ├── plot_heatmap_xyz_basic.py
@@ -27,7 +27,8 @@ examples/
 │   ├── plot_ridgeline_basic.py
 │   ├── plot_ridgeline_advanced.py
 │   ├── plot_other_plots.py
-│   └── plot_timeseries_interactive.py
+│   ├── plot_timeseries_interactive.py
+│   └── plot_treering_temperature.py
 ├── times/                 # Timestamp handling (5 examples)
 │   ├── times_timestamp_sanitizer.py
 │   ├── times_frequency_detection.py
@@ -122,7 +123,7 @@ uv run python examples/gapfilling/gapfill_randomforest.py
 uv run python examples/run_all_examples.py
 ```
 
-This runs all 98 examples in parallel with 8 workers, reporting execution time and any errors.
+This runs all 99 examples in parallel with 8 workers, reporting execution time and any errors.
 
 ## Finding Examples
 
@@ -134,7 +135,7 @@ Each category folder has a **README.md** with:
 
 Browse by topic:
 
-- **visualization/README.md** — 17 plot types (heatmaps, scatter, timeseries, etc.)
+- **visualization/README.md** — 18 plot types (heatmaps, scatter, timeseries, tree-ring, etc.)
 - **times/README.md** — Timestamp validation and regularization
 - **analysis/README.md** — Correlation, decomposition, gap detection, spectral analysis
 - **features/README.md** — Variable creation, unit conversions, derived properties
@@ -150,7 +151,7 @@ Browse by topic:
 
 | Domain | Files | Topics |
 |--------|-------|--------|
-| **Visualization** | 17 | Heatmaps, scatter, timeseries, histograms, ridgelines, cumulative, diurnal cycles |
+| **Visualization** | 18 | Heatmaps, scatter, timeseries, histograms, ridgelines, cumulative, diurnal cycles, tree-ring spiral |
 | **Times** | 5 | Timestamp validation, frequency detection, diel cycles, temporal matrices |
 | **Analysis** | 11 | Correlation, daily correlation, decomposition, gap detection, spatial aggregation, harmonic analysis |
 | **Features** | 11 | Feature engineering pipeline, air properties, unit conversions, day/night flags, VPD, lagged variants |

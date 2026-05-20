@@ -4,6 +4,25 @@
 
 ## v0.91.0 | XX May 2026
 
+- **New: TreeRingPlot visualization class** — `diive/core/plotting/treering.py`
+  Circular spiral plot displaying annual time series data as concentric color-coded rings.
+  Each ring represents one year (inner = oldest, outer = most recent). Color encodes the
+  variable of interest; months are arranged around the circumference with January at the
+  bottom and July at the top, mirroring the climate calendar. Key features:
+  - Two-phase design: `__init__` handles data and resampling, `plot()` handles all styling
+  - `resample_freq` parameter controls angular resolution: `'D'` (366 slots, default),
+    `'h'` (8784 slots), `'30min'` (17568 slots), or `None` (auto-detect from data)
+  - Colorbar auto-extends with arrows when `vmin`/`vmax` clip the data range
+    (`'min'`, `'max'`, or `'both'`), consistent with other diive plotting classes
+  - `show_month_lines` — thin radial spokes at each month boundary
+  - `show_year_separators` — thin white concentric circles between rings (default True)
+  - Exported as `dv.plot_treering` in `diive/__init__.py`
+- **New example: plot_treering_temperature.py** — `examples/visualization/plot_treering_temperature.py`
+  Demonstrates `TreeRingPlot` with 30-minute air temperature from CH-DAV (2013-2022),
+  resampled to daily means; shows colorbar extension with clipped `vmin`/`vmax`.
+  Registered in `run_all_examples.py`, `examples/CATALOG.md`, `examples/README.md`,
+  `examples/visualization/README.md`.
+
 - **New: PreWhiteningBootstrap class (PWB time lag detection)** — `diive/pkgs/flux/hires/lag_pwb.py`
   implements the pre-whitening with block-bootstrap cross-correlation method from Vitale et al. (2024).
   Robust for low-magnitude fluxes (CH4, N2O) where the standard MaxCovariance method fails due to
