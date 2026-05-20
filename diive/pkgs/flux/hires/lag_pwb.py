@@ -941,8 +941,8 @@ class PreWhiteningBootstrap:
         simultaneously instead of a Python for loop.
         """
         N_B, M = arr.shape
-        col = np.arange(M)                    # (M,) broadcasts to (N_B, M)
-        row = np.arange(N_B)[:, np.newaxis]   # (N_B, 1) for 2-D fancy indexing
+        col = np.arange(M)  # (M,) broadcasts to (N_B, M)
+        row = np.arange(N_B)[:, np.newaxis]  # (N_B, 1) for 2-D fancy indexing
 
         out = arr.copy()
 
