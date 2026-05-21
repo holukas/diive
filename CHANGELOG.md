@@ -23,7 +23,7 @@
   Registered in `run_all_examples.py`, `examples/CATALOG.md`, `examples/README.md`,
   `examples/visualization/README.md`.
 
-- **New: PwbBatchDetection class (parallel batch PWB time-lag detection)** — `diive/pkgs/flux/hires/lag_pwb_batch.py`
+- **New: PwbBatchDetection class (parallel batch PWB time-lag detection)** — `diive/pkgs/flux/hires/lag_pwb.py`
   Distributes `PreWhiteningBootstrap` across CPU cores using `ProcessPoolExecutor` (spawn-safe for Windows).
   Each averaging-period file is processed by a module-level worker function (`_pwb_file_worker`) so results
   can be pickled and returned to the main process. Key features:
@@ -44,7 +44,7 @@
     PWBOPT, adding `{prefix}_tlag_final_s` and `{prefix}_tlag_final_pf_s` columns to the results CSV
   - Mode computed from rounded value counts (not histogram bin centers) to match the 1/hz lag resolution
   - Zero-line and mode line both shown in the scatter and histogram panels
-  - CLI entry point: `python -m diive.pkgs.flux.hires.lag_pwb_batch --help`; supports all detection and
+  - CLI entry point: `python -m diive.pkgs.flux.hires.lag_pwb --help` (alias: `diive-tlag-pwb-batch`); supports all detection and
     PWBOPT parameters; Rich progress bar with per-file log lines; summary figures saved automatically
   - `RuntimeWarning` from runpy double-import suppressed at module level so it never appears in workers
   - Exported as `dv.PwbBatchDetection` in `diive/__init__.py`

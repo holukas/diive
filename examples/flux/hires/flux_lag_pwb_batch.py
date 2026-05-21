@@ -154,7 +154,7 @@ if __name__ == '__main__':
         lag_max_s=10.0,  # CCF search half-width (s)
         n_bootstrap=N_BOOTSTRAP,  # 99 in production
         block_length_s=20.0,  # bootstrap block length (s)
-        usecols=FILE_USECOLS,   # [0,1,2,3,6,7] -> u,v,w,ts,ch4,4th_gas
+        usecols=FILE_USECOLS,  # [0,1,2,3,6,7] -> u,v,w,ts,ch4,4th_gas
         col_names=FILE_COL_NAMES,  # rename 4th_gas -> n2o after loading
         skiprows=FILE_SKIPROWS,
         min_valid_frac=0.3,
@@ -171,6 +171,7 @@ if __name__ == '__main__':
     # grows in real time as workers finish.
     _live_rows: list[dict] = []
     _n_active = [0]  # mutable counter: files currently being processed
+
 
     def _make_display(progress_bar: Progress) -> Table:
         """Compose the live display: results table on top, progress below."""
@@ -209,6 +210,7 @@ if __name__ == '__main__':
         grid.add_row(progress_bar)
         return grid
 
+
     progress = Progress(
         SpinnerColumn(),
         TextColumn('  {task.description}'),
@@ -228,11 +230,13 @@ if __name__ == '__main__':
         # min(n_workers, remaining) until workers start finishing.
         _n_active[0] = min(det.n_workers, len(file_paths))
 
+
         def _progress(done, total, row):
             _live_rows.append(row)
             _n_active[0] = min(det.n_workers, total - done)
             progress.update(overall, completed=done)
             live.update(_make_display(progress))
+
 
         results = det.run(on_progress=_progress)
 

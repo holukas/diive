@@ -1,6 +1,6 @@
 """
 LAG_PWB: PRE-WHITENING WITH BLOCK-BOOTSTRAP TIME LAG DETECTION
-==============================================================
+===============================================================
 
 In eddy covariance systems, gas analyzers connected via a sample tube receive
 the air parcel slightly later than the sonic anemometer measures the vertical
@@ -61,20 +61,129 @@ Implementation notes:
   without it, only the two scalar x W combinations (cw and wc) are evaluated.
 
 Input data requirement:
-    Both this module and ``lag_pwb_batch.py`` require **wind-rotation-corrected**
+    All classes in this module require **wind-rotation-corrected**
     high-frequency data (double rotation or planar-fit, e.g. EddyPro "Advanced"
     rotated output).  Wind rotation removes the mean vertical-wind offset so that
     W contains only turbulent fluctuations; a non-zero mean W corrupts the
     cross-correlation and yields an unreliable lag estimate.
 
 Batch processing across many files:
-    ``lag_pwb_batch.py`` wraps this class in ``PwbBatchDetection``, which
-    distributes files across CPU cores via ``ProcessPoolExecutor``, collects
+    ``PwbBatchDetection`` (also in this module) wraps ``PreWhiteningBootstrap``
+    and distributes files across CPU cores via ``ProcessPoolExecutor``, collects
     results into a single DataFrame, applies PWBOPT post-processing
-    (S1/S2/S3 selection and optional HDI pre-filter), and produces batch
-    summary figures.  It is also callable as a CLI module::
+    (S1/S2/S3 selection and optional HDI pre-filter), fills remaining NaN lags
+    via ``fill_tlag_gaps()``, and produces batch summary figures.
 
-        python -m diive.pkgs.flux.hires.lag_pwb_batch --help
+    The module is also directly executable as a CLI tool -- see the CLI section
+    below for full usage.
+
+CLI usage
+---------
+Run the batch detector from the command line::
+
+    python -m diive.pkgs.flux.hires.lag_pwb --help
+
+or with the installed console-script alias (after ``uv sync`` or ``pip install``)::
+
+    uv run diive-tlag-pwb-batch --help
+
+**Required flags**
+
+``--input-dir PATH``
+    Directory containing EddyPro rotated ``.txt`` files.
+``--output-dir PATH``
+    Output directory for the results CSV, checkpoint, and optional plots.
+``--scalar LABEL:column``
+    Gas label and column name, e.g. ``CH4:ch4``.  Repeat for each gas.
+
+**Column mapping**
+
+``--col-w NAME``
+    Column name for the vertical wind component W.  Default: ``w``.
+``--col-tsonic NAME``
+    Column name for sonic temperature T_SONIC.  Enables the full 4-combination
+    RFlux v3.2.0 logic (strongly recommended for trace gases).
+``--usecols I [I ...]``
+    0-based column indices to read from each file.  Default: ``0 1 2 3 4 5``.
+``--col-names N [N ...]``
+    Column names assigned to the selected columns.
+    Default: ``u v w ts ch4 n2o``.
+``--skiprows N``
+    Number of metadata rows before the column-name header row.
+    EddyPro default: 9.
+``--na-values V [V ...]``
+    Strings treated as NaN.  Default: ``-9999``, ``-9999.0``,
+    ``-9999.0000000000000``.
+
+**Detection parameters**
+
+``--hz N``
+    Sampling frequency in Hz.  Default: 20.
+``--lag-max S``
+    CCF search half-width in seconds.  Default: 10.0.
+``--n-bootstrap N``
+    Number of block-bootstrap replicates.  Default: 99.
+    Use 9 for fast testing; 99-999 for production.
+``--block-length S``
+    Bootstrap block length in seconds.  Default: 20.0.
+``--min-valid-frac F``
+    Minimum fraction of non-NaN values required for a series to be processed.
+    Default: 0.3.
+
+**PWBOPT post-processing thresholds**
+
+``--hdi-thresh S``
+    S1 threshold: periods with HDI range < this value (seconds) are flagged
+    S1_optimal (reliable detection).  Default: 0.5.
+``--dev-thresh S``
+    S2 threshold: periods with HDI >= hdi-thresh but lag within this distance
+    (seconds) of the preceding optimal are flagged S2_optimal.  Default: 0.5.
+``--hdi-prefilter S``
+    Pre-filter: lags with HDI range > this value are set to NaN before PWBOPT
+    so that S2 cannot accept wide-uncertainty detections.  Set to 0 to
+    disable.  Default: 1.0.
+
+**Execution**
+
+``--n-workers N``
+    Number of parallel worker processes.  Default: all available CPU cores.
+``--file-pattern PATTERN``
+    Glob pattern used to collect input files.  Default: ``*.txt``.
+``--save-plots``
+    Save one diagnostic PNG per averaging period per scalar to
+    ``<output-dir>/plots/``.
+
+**EddyPro 10-column rotated file layout (0-indexed)**::
+
+    col  0:u   1:v   2:w   3:ts   4:co2   5:h2o   6:ch4   7:4th_gas   8:air_t   9:air_p
+
+    To select u, v, w, ts, ch4, 4th_gas (as N2O):
+        --usecols 0 1 2 3 6 7 --col-names u v w ts ch4 n2o
+
+**Example — bash (multi-line)**::
+
+    uv run diive-tlag-pwb-batch \\
+        --input-dir  /path/to/hires_files \\
+        --output-dir /path/to/results \\
+        --scalar CH4:ch4 --scalar N2O:n2o \\
+        --col-w w --col-tsonic ts \\
+        --usecols 0 1 2 3 6 7 --col-names u v w ts ch4 n2o \\
+        --skiprows 9 --hz 20 --lag-max 10.0 \\
+        --n-bootstrap 99 --block-length 20.0 --min-valid-frac 0.3 \\
+        --hdi-thresh 0.5 --dev-thresh 0.5 --hdi-prefilter 1.0 \\
+        --n-workers 16 --save-plots
+
+**Example — PowerShell / Windows (one-liner)**::
+
+    uv run diive-tlag-pwb-batch --input-dir "F:\\path\\to\\input" --output-dir "F:\\path\\to\\output" --scalar CH4:ch4 --scalar N2O:n2o --col-w w --col-tsonic ts --usecols 0 1 2 3 6 7 --col-names u v w ts ch4 n2o --skiprows 9 --hz 20 --lag-max 10.0 --n-bootstrap 99 --block-length 20.0 --min-valid-frac 0.3 --hdi-thresh 0.5 --dev-thresh 0.5 --hdi-prefilter 1.0 --n-workers 16 --save-plots
+
+Windows note:
+    ``ProcessPoolExecutor`` uses the *spawn* start method on Windows.  Any
+    script that instantiates ``PwbBatchDetection`` must guard its entry point::
+
+        if __name__ == '__main__':
+            det = PwbBatchDetection(...)
+            results = det.run()
 
 References:
     Vitale D, Fratini G, Helfter C, Hortnagl L, et al. (2024) A pre-whitening
@@ -84,6 +193,16 @@ References:
 
 Part of the diive library: https://github.com/holukas/diive
 """
+
+import os
+import warnings
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from pathlib import Path
+from typing import Callable
+
+# Suppress the runpy double-import warning that fires in every worker process
+# when diive.__init__ has already imported this module before -m re-executes it.
+warnings.filterwarnings('ignore', category=RuntimeWarning, module='runpy')
 
 import matplotlib.dates as mdates
 import matplotlib.gridspec as gridspec
@@ -99,6 +218,9 @@ from statsmodels.tsa.stattools import adfuller
 
 from diive.core.plotting.plotfuncs import default_format
 from diive.core.plotting.styles import LightTheme as theme
+
+# Default NA strings matching EddyPro rotated-file conventions
+_DEFAULT_NA_VALUES = ['-9999', '-9999.0', '-9999.0000000000000']
 
 # Smoothing widths for the full-data PW CCF diagnostic panels (older R convention).
 _SMOOTH_WIDTH_CCF = 13
@@ -1727,3 +1849,845 @@ class PwboptLagPlot:
         ax_scatter.spines['right'].set_visible(False)
         ax_scatter.grid(color='#DDDDDD', linewidth=0.4, linestyle='--')
         ax_scatter.legend(frameon=False, fontsize=8)
+
+
+# ---------------------------------------------------------------------------
+# Module-level worker — must be at module scope to be picklable by
+# ProcessPoolExecutor (Windows spawn: each worker re-imports this module)
+# ---------------------------------------------------------------------------
+
+def _pwb_file_worker(args: tuple) -> dict:
+    """Process one averaging-period file and return one result-row dict."""
+    (filepath, scalars, col_w, col_tsonic,
+     hz, lag_max_s, n_bootstrap, block_length_s,
+     usecols, col_names, skiprows, na_values,
+     min_valid_frac, plot_dir, save_plots) = args
+
+    period_name = Path(filepath).name
+    row: dict = {'period': period_name}
+
+    try:
+        df = pd.read_csv(
+            filepath,
+            skiprows=skiprows + 1,
+            header=None,
+            sep=r'\s+',
+            na_values=na_values,
+            low_memory=False,
+        )
+        df = df.iloc[:, usecols].copy()
+        df.columns = col_names[:len(df.columns)]
+    except Exception:
+        return row
+
+    if len(df) < 25:
+        return row
+
+    w_arr = np.asarray(df[col_w], dtype=float)
+    if (np.mean(~np.isnan(w_arr)) < min_valid_frac
+            or np.nanstd(w_arr) < np.finfo(float).eps):
+        return row
+
+    for scalar_label, scalar_col in scalars.items():
+        prefix = scalar_label.lower()
+        _nan_keys = (
+            'tlag_s', 'hdi_lo_s', 'hdi_hi_s',
+            'hdi_range_s', 'tlag_pw_s', 'corr_est', 'ar_order',
+        )
+        nan_row = {f'{prefix}_{k}': np.nan for k in _nan_keys}
+
+        if scalar_col not in df.columns:
+            row.update(nan_row)
+            continue
+
+        s_arr = np.asarray(df[scalar_col], dtype=float)
+        if (np.mean(~np.isnan(s_arr)) < min_valid_frac
+                or np.nanstd(s_arr) < np.finfo(float).eps):
+            row.update(nan_row)
+            continue
+
+        has_ts = col_tsonic is not None and col_tsonic in df.columns
+        col_map = {col_w: 'W', scalar_col: scalar_label}
+        keep_cols = [col_w, scalar_col]
+        if has_ts:
+            col_map[col_tsonic] = 'T_SONIC'
+            keep_cols.append(col_tsonic)
+
+        try:
+            pwb = PreWhiteningBootstrap(
+                df=df[keep_cols].rename(columns=col_map),
+                var_w='W',
+                var_scalar=scalar_label,
+                var_tsonic='T_SONIC' if has_ts else None,
+                hz=hz,
+                lag_max_s=lag_max_s,
+                n_bootstrap=n_bootstrap,
+                block_length_s=block_length_s,
+                segment_name=period_name,
+            )
+            pwb.run()
+            res = pwb.results
+
+            row[f'{prefix}_tlag_s'] = res['tlag_s']
+            row[f'{prefix}_hdi_lo_s'] = res['hdi_lo_s']
+            row[f'{prefix}_hdi_hi_s'] = res['hdi_hi_s']
+            row[f'{prefix}_hdi_range_s'] = res['hdi_range_s']
+            row[f'{prefix}_tlag_pw_s'] = res['tlag_pw_s']
+            row[f'{prefix}_corr_est'] = res['corr_est']
+            row[f'{prefix}_ar_order'] = res['ar_order']
+
+            if save_plots and plot_dir:
+                fig = pwb.plot(
+                    title=f'{period_name} | {scalar_label}',
+                    showplot=False,
+                )
+                fig.savefig(
+                    Path(plot_dir) / f'{Path(period_name).stem}_{prefix}.png',
+                    dpi=100, bbox_inches='tight',
+                )
+                plt.close(fig)
+
+        except Exception:
+            row.update(nan_row)
+
+    return row
+
+
+# ---------------------------------------------------------------------------
+# PwbBatchDetection
+# ---------------------------------------------------------------------------
+
+class PwbBatchDetection:
+    """
+    Parallel batch PWB time-lag detection across many averaging-period files.
+
+    .. important::
+        Input files must contain **wind-rotation-corrected** data (double
+        rotation or planar-fit applied, e.g. EddyPro "Advanced" rotated
+        output).  Wind rotation removes the mean vertical-wind offset so that
+        W contains only turbulent fluctuations.  Without rotation the
+        cross-correlation is biased and the detected lag is unreliable.
+
+    Distributes ``PreWhiteningBootstrap`` across CPU cores using
+    ``ProcessPoolExecutor``.  Results accumulate into a DataFrame; an optional
+    checkpoint CSV is written after every completed file (silently skipped when
+    the file is locked, e.g. open in Excel) so that a crash can be diagnosed.
+
+    PWBOPT post-processing (S1/S2/S3 selection and optional HDI pre-filter)
+    from Vitale et al. (2024) Section 2.3 is available via the static methods
+    ``apply_pwbopt()``, ``apply_hdi_prefilter()``, and ``fill_tlag_gaps()``.
+
+    The module is also directly executable as a CLI tool — see the module
+    docstring for the full flag reference and usage examples.
+
+    Windows note: guard the calling script with ``if __name__ == '__main__':``
+    because ``ProcessPoolExecutor`` uses the *spawn* start method on Windows.
+
+    Parameters
+    ----------
+    files:
+        Paths to averaging-period files (one file per 30-min period).
+    scalars:
+        ``{gas_label: column_name}`` mapping, e.g.
+        ``{'CH4': 'ch4', 'N2O': 'n2o'}``.
+    col_w:
+        Column name for vertical wind W after loading and renaming.
+    col_tsonic:
+        Column name for sonic temperature T_SONIC, or ``None`` for
+        2-combination mode (cw and wc only).
+    hz:
+        Sampling frequency in Hz. Defaults to 20.
+    lag_max_s:
+        CCF search half-width in seconds. Defaults to 10.0.
+    n_bootstrap:
+        Number of block-bootstrap replicates. Defaults to 99.
+    block_length_s:
+        Bootstrap block length in seconds. Defaults to 20.0.
+    usecols:
+        0-based column indices to select from each file.
+    col_names:
+        Column names to assign after selecting *usecols*.
+    skiprows:
+        Metadata rows before the column-name row (EddyPro default: 9).
+    na_values:
+        Strings to treat as NaN. Defaults to EddyPro conventions.
+    min_valid_frac:
+        Minimum fraction of non-NaN values for a series to be processed.
+        Defaults to 0.3.
+    output_dir:
+        Optional directory for checkpoint CSV and diagnostic plots.
+    save_plots:
+        Save one diagnostic PNG per period per scalar. Requires *output_dir*.
+    n_workers:
+        Number of parallel worker processes. Defaults to ``os.cpu_count()``.
+
+    Example
+    -------
+    See ``examples/flux/hires/flux_lag_pwb_batch.py`` for a complete example.
+
+    See Also
+    --------
+    PreWhiteningBootstrap : Single-period PWB detection.
+    """
+
+    def __init__(
+            self,
+            files: list,
+            scalars: dict,
+            col_w: str,
+            col_tsonic: str | None = None,
+            hz: int = 20,
+            lag_max_s: float = 10.0,
+            n_bootstrap: int = 99,
+            block_length_s: float = 20.0,
+            usecols: list | None = None,
+            col_names: list | None = None,
+            skiprows: int = 9,
+            na_values: list | None = None,
+            min_valid_frac: float = 0.3,
+            output_dir: Path | None = None,
+            save_plots: bool = False,
+            n_workers: int | None = None,
+    ):
+        if usecols is None or col_names is None:
+            raise ValueError("usecols and col_names must both be provided.")
+        if len(usecols) != len(col_names):
+            raise ValueError("usecols and col_names must have the same length.")
+
+        self.files = [Path(f) for f in files]
+        self.scalars = scalars
+        self.col_w = col_w
+        self.col_tsonic = col_tsonic
+        self.hz = hz
+        self.lag_max_s = lag_max_s
+        self.n_bootstrap = n_bootstrap
+        self.block_length_s = block_length_s
+        self.usecols = usecols
+        self.col_names = col_names
+        self.skiprows = skiprows
+        self.na_values = na_values if na_values is not None else _DEFAULT_NA_VALUES
+        self.min_valid_frac = min_valid_frac
+        self.output_dir = Path(output_dir) if output_dir else None
+        self.save_plots = save_plots
+        self.n_workers = n_workers or os.cpu_count()
+
+        self._results: DataFrame | None = None
+
+    @property
+    def results(self) -> DataFrame:
+        """Accumulated results DataFrame (available after ``run()``)."""
+        if self._results is None:
+            raise RuntimeError("Call run() first.")
+        return self._results
+
+    def run(self, on_progress: Callable | None = None) -> DataFrame:
+        """
+        Execute PWB detection across all files in parallel.
+
+        Results are collected in completion order then sorted back to the
+        original file order.
+
+        Args:
+            on_progress: Optional callback ``f(completed, total, row)`` called
+                each time a file finishes.
+
+        Returns:
+            DataFrame with one row per file.
+        """
+        plot_dir = None
+        if self.output_dir:
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+            if self.save_plots:
+                plot_dir = self.output_dir / 'plots'
+                plot_dir.mkdir(exist_ok=True)
+
+        worker_args = [
+            (
+                str(f),
+                self.scalars, self.col_w, self.col_tsonic,
+                self.hz, self.lag_max_s, self.n_bootstrap, self.block_length_s,
+                self.usecols, self.col_names, self.skiprows, self.na_values,
+                self.min_valid_frac,
+                str(plot_dir) if plot_dir else None,
+                self.save_plots,
+            )
+            for f in self.files
+        ]
+
+        rows: list[dict] = []
+        total = len(worker_args)
+        completed = 0
+
+        with ProcessPoolExecutor(max_workers=self.n_workers) as executor:
+            future_to_file = {
+                executor.submit(_pwb_file_worker, args): args[0]
+                for args in worker_args
+            }
+            for future in as_completed(future_to_file):
+                row = future.result()
+                rows.append(row)
+                completed += 1
+
+                if self.output_dir:
+                    try:
+                        pd.DataFrame(rows).to_csv(
+                            self.output_dir / 'tlag_results_checkpoint.csv',
+                            index=False,
+                        )
+                    except PermissionError:
+                        pass  # file locked (e.g. open in Excel); skip checkpoint
+
+                if on_progress is not None:
+                    on_progress(completed, total, row)
+
+        name_to_idx = {Path(f).name: i for i, f in enumerate(self.files)}
+        rows.sort(key=lambda r: name_to_idx.get(r.get('period', ''), total))
+
+        self._results = pd.DataFrame(rows)
+        if self.output_dir:
+            self._results.to_csv(
+                self.output_dir / 'tlag_results.csv',
+                index=False,
+            )
+
+        return self._results
+
+    # ------------------------------------------------------------------
+    # PWBOPT post-processing (static: usable standalone or via instance)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def apply_pwbopt(
+            tlag_s,
+            hdi_range_s,
+            hdi_thresh: float = 0.5,
+            dev_thresh: float = 0.5,
+    ) -> DataFrame:
+        """
+        Apply PWBOPT S1/S2/S3 selection to a sequence of PWB lag estimates.
+
+        S1 -- HDI range < *hdi_thresh* -> reliable, accept directly.
+        S2 -- uncertain but within *dev_thresh* of the preceding optimal lag
+              -> accept for temporal continuity.
+        S3 -- unreliable -> carry forward the last known optimal lag.
+
+        Args:
+            tlag_s: Detected PWB lags in seconds (NaN where detection failed).
+            hdi_range_s: 95% HDI range in seconds per period.
+            hdi_thresh: S1 threshold in seconds. Default: 0.5.
+            dev_thresh: S2 max deviation from the preceding optimal. Default: 0.5.
+
+        Returns:
+            DataFrame with columns ``pwbopt_s`` (optimal lag, s) and ``flag``.
+        """
+        tlag_s = np.asarray(tlag_s, dtype=float)
+        hdi_range_s = np.asarray(hdi_range_s, dtype=float)
+        n = len(tlag_s)
+        flags = ['S3_unreliable'] * n
+        optimal = np.full(n, np.nan)
+        last_optimal = np.nan
+
+        for i in range(n):
+            tl = tlag_s[i]
+            hdi = hdi_range_s[i]
+
+            if np.isnan(tl) or np.isnan(hdi):
+                optimal[i] = last_optimal
+                continue
+
+            if hdi < hdi_thresh:
+                flags[i] = 'S1_optimal'
+                optimal[i] = tl
+                last_optimal = tl
+            elif not np.isnan(last_optimal) and abs(tl - last_optimal) <= dev_thresh:
+                flags[i] = 'S2_optimal'
+                optimal[i] = tl
+                last_optimal = tl
+            else:
+                optimal[i] = last_optimal
+
+        return pd.DataFrame({'pwbopt_s': optimal, 'flag': flags})
+
+    @staticmethod
+    def fill_tlag_gaps(
+            pwbopt_s,
+            tlag_s_raw=None,
+            fallback: float | None = None,
+    ) -> np.ndarray:
+        """
+        Fill NaN values in a PWBOPT lag series so every averaging period has
+        a usable time lag for flux covariance calculation.
+
+        PWBOPT carries the last known optimal lag forward in time.  Periods
+        *before* the first S1/S2 detection have nothing to carry forward and
+        remain NaN.  This method fills them with a three-step strategy:
+
+        1. **Backward fill** — propagates the first reliable lag backward to
+           cover the leading NaN periods.
+        2. **Median of raw lags** — if the entire series is NaN (no S1/S2
+           detection at all), the median of all raw detected lags is used.
+        3. **Explicit fallback** — constant value used as last resort (e.g.
+           the nominal tube-delay for the gas/site).
+
+        Args:
+            pwbopt_s: Optimal lag series from ``apply_pwbopt()``.
+            tlag_s_raw: Raw PWB lags before PWBOPT.  Used to compute the
+                median fallback.  Ignored when ``None``.
+            fallback: Constant lag in seconds used as last resort.
+
+        Returns:
+            Array of the same length as *pwbopt_s*, NaN-free when a finite
+            value can be found through any of the three strategies.
+        """
+        result = pd.Series(np.asarray(pwbopt_s, dtype=float))
+        result = result.bfill()
+
+        if result.isna().any() and tlag_s_raw is not None:
+            raw = np.asarray(tlag_s_raw, dtype=float)
+            median_raw = np.nanmedian(raw)
+            if np.isfinite(median_raw):
+                result = result.fillna(median_raw)
+
+        if result.isna().any() and fallback is not None:
+            result = result.fillna(fallback)
+
+        return result.to_numpy()
+
+    @staticmethod
+    def apply_hdi_prefilter(
+            tlag_s,
+            hdi_range_s,
+            threshold: float = 1.0,
+    ) -> np.ndarray:
+        """
+        Replace lags whose HDI exceeds *threshold* with NaN before PWBOPT.
+
+        More conservative than standard PWBOPT: wide-HDI detections are
+        discarded before S1/S2/S3 runs, so S2 cannot accept them even if they
+        happen to lie close to the preceding optimal lag.
+
+        Args:
+            tlag_s: Detected lags in seconds.
+            hdi_range_s: 95% HDI range in seconds.
+            threshold: Lags with HDI range wider than this are set to NaN.
+
+        Returns:
+            Array of pre-filtered lags (NaN where HDI > threshold).
+        """
+        tlag_filtered = np.asarray(tlag_s, dtype=float).copy()
+        hdi = np.asarray(hdi_range_s, dtype=float)
+        tlag_filtered[(hdi > threshold) & ~np.isnan(hdi)] = np.nan
+        return tlag_filtered
+
+    @staticmethod
+    def plot_summary(
+            results: DataFrame,
+            scalars: dict,
+            hdi_thresh: float = 0.5,
+            hdi_prefilter: float = 1.0,
+            lag_max_s: float = 10.0,
+            output_dir: Path | None = None,
+            showplot: bool = False,
+    ) -> None:
+        """
+        Generate batch-level summary figures after PWBOPT post-processing.
+
+        Produces one 5-panel figure per scalar and one scatter + KDE comparison
+        figure across all scalars (``PwboptLagPlot``).  Panel layout:
+
+        1. Detected lags coloured by S1/S2/S3 flag (scatter, no lines) + mode.
+        2. Final gap-filled lags: S1/S2 anchor points (filled markers) +
+           pre-filtered final lag as open black circles + mode.
+        3. 95% HDI range bars with S1 and pre-filter threshold lines.
+        4. Flag bars per period: standard vs. pre-filtered side by side.
+        5. Histogram of all detected lags with mode marker.
+
+        Expects *results* to already contain the PWBOPT columns added by
+        ``apply_pwbopt()`` / ``apply_hdi_prefilter()`` / ``fill_tlag_gaps()``.
+
+        Args:
+            results: Per-period results DataFrame (one row per file).
+            scalars: ``{gas_label: column_name}`` mapping used during detection.
+            hdi_thresh: S1 HDI threshold in seconds (for plot label).
+            hdi_prefilter: HDI pre-filter threshold in seconds (0 = disabled).
+            lag_max_s: CCF half-width in seconds — sets y-axis limits.
+            output_dir: Directory for saved PNGs.  ``None`` skips saving.
+            showplot: Call ``plt.show()`` after each figure.
+        """
+        import matplotlib.patches as mpatches
+
+        FLAG_COLORS = {
+            'S1_optimal': '#2ca02c',
+            'S2_optimal': '#ff7f0e',
+            'S3_unreliable': '#d62728',
+        }
+        px = np.arange(len(results))
+        out = Path(output_dir) if output_dir else None
+
+        for scalar_label in scalars:
+            prefix = scalar_label.lower()
+            tlag_col = f'{prefix}_tlag_s'
+            hdi_col = f'{prefix}_hdi_range_s'
+            flag_std_col = f'{prefix}_flag_std'
+            flag_pf_col = f'{prefix}_flag_pf'
+            opt_pf_col = f'{prefix}_pwbopt_s_pf'
+            final_pf_col = f'{prefix}_tlag_final_pf_s'
+
+            if tlag_col not in results.columns or flag_std_col not in results.columns:
+                continue
+
+            tlag = results[tlag_col].values.astype(float)
+            hdi = results[hdi_col].values.astype(float)
+            flag_std = results[flag_std_col].values
+            has_pf = flag_pf_col in results.columns
+            has_final_pf = final_pf_col in results.columns
+            valid_lags = tlag[~np.isnan(tlag)]
+
+            # Mode: exact value counts on lags rounded to 1/hz resolution
+            if len(valid_lags) > 0:
+                mode_lag = (pd.Series(np.round(valid_lags, 2))
+                            .value_counts().idxmax())
+            else:
+                mode_lag = np.nan
+
+            fig, axes = plt.subplots(
+                5, 1, figsize=(14, 17),
+                gridspec_kw={'height_ratios': [3, 2.5, 2, 1.5, 2]},
+            )
+            fig.suptitle(
+                f'{scalar_label} -- PWB lag pipeline (PWBOPT strategy comparison)',
+                fontsize=12,
+            )
+
+            # Panel 1: raw detected lags coloured by S1/S2/S3, no connecting lines
+            ax = axes[0]
+            ax.axhline(0, color='#888888', linewidth=0.8, linestyle='-', zorder=1)
+            for flag, color in FLAG_COLORS.items():
+                mask = flag_std == flag
+                ax.scatter(px[mask], tlag[mask], color=color, s=50, zorder=3,
+                           label=flag)
+            if not np.isnan(mode_lag):
+                ax.axhline(mode_lag, color='#9467bd', linewidth=1.2,
+                           linestyle='-.', zorder=2,
+                           label=f'mode = {mode_lag:.2f} s')
+            ax.set_ylabel('Time lag (s)')
+            ax.set_title('Detected lags per period (coloured by standard PWBOPT flag)')
+            ax.legend(frameon=False, fontsize=8, ncol=4)
+            ax.set_ylim(-lag_max_s - 0.5, lag_max_s + 0.5)
+
+            # Panel 2: final (gap-filled) lags — S1/S2 anchor points +
+            #          pre-filtered final lag as open black circles
+            ax = axes[1]
+            ax.axhline(0, color='#888888', linewidth=0.8, linestyle='-', zorder=1)
+            for flag in ('S1_optimal', 'S2_optimal'):
+                mask = flag_std == flag
+                ax.scatter(px[mask], tlag[mask], color=FLAG_COLORS[flag], s=50,
+                           zorder=4, label=flag)
+            if has_final_pf:
+                final_pf = results[final_pf_col].values.astype(float)
+                ax.scatter(px, final_pf, color='none', edgecolors='black',
+                           linewidths=1.0, s=50, zorder=3,
+                           label='Final lag — pre-filtered')
+            if not np.isnan(mode_lag):
+                ax.axhline(mode_lag, color='#9467bd', linewidth=1.2,
+                           linestyle='-.', zorder=2,
+                           label=f'mode = {mode_lag:.2f} s')
+            ax.set_ylabel('Time lag (s)')
+            ax.set_title('Final (gap-filled) lags used for flux calculation')
+            ax.legend(frameon=False, fontsize=8, ncol=3)
+            ax.set_ylim(-lag_max_s - 0.5, lag_max_s + 0.5)
+
+            # Panel 3: HDI range
+            ax = axes[2]
+            ax.bar(px, hdi, color='#aec7e8', edgecolor='none', label='HDI range')
+            ax.axhline(hdi_thresh, color='#2ca02c', linewidth=1.5, linestyle='--',
+                       label=f'S1 threshold ({hdi_thresh} s)')
+            if hdi_prefilter > 0:
+                ax.axhline(hdi_prefilter, color='steelblue', linewidth=1.5,
+                           linestyle=':',
+                           label=f'Pre-filter threshold ({hdi_prefilter} s)')
+            ax.set_ylabel('95% HDI range (s)')
+            ax.set_title('Bootstrap uncertainty (HDI range) per period')
+            ax.legend(frameon=False, fontsize=8)
+
+            # Panel 4: flag bars — standard (left) vs pre-filtered (right)
+            ax = axes[3]
+            bar_w = 0.4
+            flag_cols = [(flag_std_col, 0)]
+            if has_pf:
+                flag_cols.append((flag_pf_col, 1))
+            for flag_col, offset in flag_cols:
+                for p in px:
+                    flag = results[flag_col].iloc[p]
+                    ax.bar(p + (offset - 0.5) * bar_w, 1, bar_w,
+                           color=FLAG_COLORS.get(flag, '#aaaaaa'), alpha=0.85)
+            patches = [mpatches.Patch(color=c, label=f)
+                       for f, c in FLAG_COLORS.items()]
+            ax.legend(handles=patches, frameon=False, fontsize=8)
+            ax.set_yticks([])
+            ax.set_title(
+                'Flag per period: standard (left bar) vs. pre-filtered (right bar)'
+                if has_pf else 'Flag per period'
+            )
+
+            # Panel 5: histogram of detected lags
+            ax = axes[4]
+            ax.set_xlabel('Time lag (s)')
+            ax.set_title(f'Distribution of detected lags  (n={len(valid_lags)})')
+            if len(valid_lags) > 0:
+                n_bins = min(50, max(10, len(valid_lags) // 4))
+                ax.hist(valid_lags, bins=n_bins, range=(-lag_max_s, lag_max_s),
+                        color='#aec7e8', edgecolor='white', linewidth=0.4)
+                ax.axvline(0, color='#888888', linewidth=0.8, linestyle='-')
+                ax.axvline(mode_lag, color='#9467bd', linewidth=1.5,
+                           linestyle='-.', label=f'mode = {mode_lag:.2f} s')
+                ax.legend(frameon=False, fontsize=8)
+            ax.set_ylabel('Count')
+
+            plt.tight_layout()
+            if out:
+                fig.savefig(out / f'summary_{prefix}.png', dpi=100,
+                            bbox_inches='tight')
+            if showplot:
+                plt.show()
+            else:
+                plt.close(fig)
+
+        # PwboptLagPlot: scatter + KDE — only when both std and pf columns exist
+        scalars_plot = {}
+        for label in scalars:
+            pfx = label.lower()
+            col_a = f'{pfx}_pwbopt_s_std'
+            col_b = f'{pfx}_pwbopt_s_pf'
+            if col_a in results.columns and col_b in results.columns:
+                scalars_plot[label] = {'col_a': col_a, 'col_b': col_b}
+
+        if scalars_plot:
+            lag_plot = PwboptLagPlot(
+                results=results,
+                scalars=scalars_plot,
+                label_a='PWBOPT standard',
+                label_b='PWBOPT pre-filtered',
+                color_a='#0072B2',
+                color_b='#E05C2A',
+            )
+            lag_plot.plot(
+                title='PWB optimal lag: standard vs. pre-filtered PWBOPT',
+                showplot=showplot,
+                outpath=str(out) if out else None,
+                outname='summary_lag_comparison.png',
+            )
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def _build_parser():
+    import argparse
+    p = argparse.ArgumentParser(
+        prog='python -m diive.pkgs.flux.hires.lag_pwb',
+        description=(
+            'Parallel PWB time-lag detection across EddyPro high-frequency files.\n'
+            'Alias: uv run diive-tlag-pwb-batch'
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    # I/O
+    p.add_argument('--input-dir', required=True,
+                   help='Directory containing EddyPro rotated .txt files.')
+    p.add_argument('--file-pattern', default='*.txt',
+                   help='Glob pattern for input files.')
+    p.add_argument('--output-dir', required=True,
+                   help='Directory for results CSV, checkpoint, and optional plots.')
+    # Scalars
+    p.add_argument('--scalar', dest='scalars', action='append',
+                   metavar='LABEL:column', required=True,
+                   help='Gas label and column name, e.g. CH4:ch4. Repeat for each gas.')
+    # Column mapping
+    p.add_argument('--col-w', default='w',
+                   help='Column name for vertical wind W.')
+    p.add_argument('--col-tsonic', default=None,
+                   help='Column name for sonic temperature T_SONIC (enables 4-combination mode).')
+    p.add_argument('--usecols', type=int, nargs='+', default=[0, 1, 2, 3, 4, 5],
+                   help='0-based column indices to read from each file.')
+    p.add_argument('--col-names', nargs='+', default=['u', 'v', 'w', 'ts', 'ch4', 'n2o'],
+                   help='Column names to assign after selecting --usecols.')
+    p.add_argument('--skiprows', type=int, default=9,
+                   help='Metadata rows before the column-name row.')
+    p.add_argument('--na-values', nargs='+',
+                   default=['-9999', '-9999.0', '-9999.0000000000000'],
+                   help='Strings to treat as NaN.')
+    # PWB parameters
+    p.add_argument('--hz', type=int, default=20,
+                   help='Sampling frequency in Hz.')
+    p.add_argument('--lag-max', type=float, default=10.0,
+                   help='CCF search half-width in seconds.')
+    p.add_argument('--n-bootstrap', type=int, default=99,
+                   help='Number of block-bootstrap replicates.')
+    p.add_argument('--block-length', type=float, default=20.0,
+                   help='Bootstrap block length in seconds.')
+    p.add_argument('--min-valid-frac', type=float, default=0.3,
+                   help='Minimum non-NaN fraction for a series to be processed.')
+    # PWBOPT thresholds
+    p.add_argument('--hdi-thresh', type=float, default=0.5,
+                   help='S1 HDI threshold in seconds.')
+    p.add_argument('--dev-thresh', type=float, default=0.5,
+                   help='S2 deviation threshold in seconds.')
+    p.add_argument('--hdi-prefilter', type=float, default=1.0,
+                   help='HDI pre-filter threshold in seconds (0 = disabled).')
+    # Execution
+    p.add_argument('--n-workers', type=int, default=None,
+                   help='Parallel worker processes (default: os.cpu_count()).')
+    p.add_argument('--save-plots', action='store_true',
+                   help='Save one diagnostic PNG per period per scalar.')
+    return p
+
+
+def _cli_main():
+    import sys
+    try:
+        from rich.console import Console as _Console
+        from rich.progress import (BarColumn, MofNCompleteColumn, Progress,
+                                   SpinnerColumn, TextColumn,
+                                   TimeElapsedColumn, TimeRemainingColumn)
+        _rich = True
+        console = _Console(log_path=False)
+    except ImportError:
+        _rich = False
+        console = None
+
+    args = _build_parser().parse_args()
+
+    input_dir = Path(args.input_dir)
+    if not input_dir.exists():
+        print(f'ERROR: --input-dir not found: {input_dir}', file=sys.stderr)
+        sys.exit(1)
+
+    files = sorted(input_dir.glob(args.file_pattern))
+    if not files:
+        print(f'ERROR: no files matching {args.file_pattern!r} in {input_dir}',
+              file=sys.stderr)
+        sys.exit(1)
+
+    scalars = {}
+    for token in args.scalars:
+        if ':' not in token:
+            print(f'ERROR: --scalar must be LABEL:column, got {token!r}',
+                  file=sys.stderr)
+            sys.exit(1)
+        label, col = token.split(':', 1)
+        scalars[label] = col
+
+    det = PwbBatchDetection(
+        files=files,
+        scalars=scalars,
+        col_w=args.col_w,
+        col_tsonic=args.col_tsonic,
+        hz=args.hz,
+        lag_max_s=args.lag_max,
+        n_bootstrap=args.n_bootstrap,
+        block_length_s=args.block_length,
+        usecols=args.usecols,
+        col_names=args.col_names,
+        skiprows=args.skiprows,
+        na_values=args.na_values,
+        min_valid_frac=args.min_valid_frac,
+        output_dir=Path(args.output_dir),
+        save_plots=args.save_plots,
+        n_workers=args.n_workers,
+    )
+
+    msg = (f'PWB batch detection  {len(files)} files  '
+           f'{det.n_workers} workers  -> {args.output_dir}')
+
+    if _rich:
+        console.print(f'\n[bold]{msg}[/bold]\n')
+
+        def _fmt(row, gas):
+            pfx = gas.lower()
+            v = row.get(f'{pfx}_tlag_s')
+            h = row.get(f'{pfx}_hdi_range_s')
+            if v is None or v != v:
+                return f'[dim]{gas}=--[/dim]'
+            hdi_color = ('green' if h == h and h < 0.5
+                         else ('yellow' if h == h and h < 1.0 else 'red'))
+            return f'{gas}=[bold]{v:.2f}s[/bold] HDI=[{hdi_color}]{h:.2f}[/{hdi_color}]'
+
+        prog = Progress(
+            SpinnerColumn(),
+            TextColumn('[progress.description]{task.description}'),
+            BarColumn(bar_width=40),
+            MofNCompleteColumn(),
+            TimeElapsedColumn(),
+            TimeRemainingColumn(),
+            console=console,
+            refresh_per_second=8,
+        )
+        task_id = prog.add_task(
+            f'[cyan]{det.n_workers} workers[/cyan]', total=len(files))
+
+        with prog:
+            def _cb(done, total, row):
+                period = row.get('period', '')
+                period_short = Path(period).stem.split('_')[0]
+                parts = '  '.join(_fmt(row, g) for g in scalars)
+                console.log(f'[dim]{period_short}[/dim]  {parts}')
+                prog.update(task_id, completed=done,
+                            description=f'[cyan]{det.n_workers} workers[/cyan]  [dim]{period_short}[/dim]')
+
+            results = det.run(on_progress=_cb)
+
+        console.print(f'\n[green]Done — {len(results)} periods.[/green]')
+    else:
+        print(msg)
+        results = det.run(
+            on_progress=lambda done, total, row:
+            print(f'  [{done}/{total}] {row.get("period", "")}')
+        )
+        print(f'Done — {len(results)} periods.')
+
+    # PWBOPT post-processing
+    for label in scalars:
+        pfx = label.lower()
+        tc, hc = f'{pfx}_tlag_s', f'{pfx}_hdi_range_s'
+        if tc not in results.columns:
+            continue
+        std = PwbBatchDetection.apply_pwbopt(
+            results[tc], results[hc], args.hdi_thresh, args.dev_thresh)
+        results[f'{pfx}_pwbopt_s_std'] = std['pwbopt_s']
+        results[f'{pfx}_flag_std'] = std['flag']
+
+        if args.hdi_prefilter > 0:
+            tpf = PwbBatchDetection.apply_hdi_prefilter(
+                results[tc], results[hc], args.hdi_prefilter)
+            pf = PwbBatchDetection.apply_pwbopt(
+                tpf, results[hc], args.hdi_thresh, args.dev_thresh)
+            results[f'{pfx}_pwbopt_s_pf'] = pf['pwbopt_s']
+            results[f'{pfx}_flag_pf'] = pf['flag']
+
+        # Fill leading/trailing NaN lags (raw lags supply the median fallback)
+        raw_tlag = results[tc]
+        results[f'{pfx}_tlag_final_s'] = PwbBatchDetection.fill_tlag_gaps(
+            results[f'{pfx}_pwbopt_s_std'], tlag_s_raw=raw_tlag)
+        if f'{pfx}_pwbopt_s_pf' in results.columns:
+            results[f'{pfx}_tlag_final_pf_s'] = PwbBatchDetection.fill_tlag_gaps(
+                results[f'{pfx}_pwbopt_s_pf'], tlag_s_raw=raw_tlag)
+
+    PwbBatchDetection.plot_summary(
+        results=results,
+        scalars=scalars,
+        hdi_thresh=args.hdi_thresh,
+        hdi_prefilter=args.hdi_prefilter,
+        lag_max_s=args.lag_max,
+        output_dir=Path(args.output_dir),
+        showplot=False,
+    )
+
+    out_csv = Path(args.output_dir) / 'tlag_results.csv'
+    results.to_csv(out_csv, index=False)
+    print(f'Results saved to: {out_csv}')
+
+
+if __name__ == '__main__':
+    _cli_main()

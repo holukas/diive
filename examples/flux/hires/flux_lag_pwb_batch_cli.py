@@ -5,7 +5,7 @@ Batch Time Lag Detection via CLI (PwbBatchDetection)
 
 Demonstrates calling ``PwbBatchDetection`` from the command line via::
 
-    python -m diive.pkgs.flux.hires.lag_pwb_batch [options]
+    python -m diive.pkgs.flux.hires.lag_pwb [options]
 
 This script creates synthetic EddyPro-format files in a temporary input
 directory, invokes the module CLI as a subprocess, and prints the generated
@@ -15,7 +15,7 @@ CLI usage reference
 -------------------
 .. code-block:: text
 
-    python -m diive.pkgs.flux.hires.lag_pwb_batch \\
+    python -m diive.pkgs.flux.hires.lag_pwb \\
         --input-dir  /path/to/hires_files \\
         --output-dir /path/to/results \\
         --scalar CH4:ch4 --scalar N2O:n2o \\
@@ -51,6 +51,12 @@ Example with uv alias (EddyPro rotated files, all parameters explicit)
         --hdi-thresh 0.5 --dev-thresh 0.5 --hdi-prefilter 1.0 \\
         --n-workers 16 --save-plots
 
+One-liner for PowerShell / Windows (no line continuation needed)
+-----------------------------------------------------------------
+.. code-block:: text
+
+    uv run diive-tlag-pwb-batch --input-dir "F:\Sync\luhk_work\dev-data\datasets-data\dataset_ch-cha_flux_product-data\docs\notebooks\05_TIME_LAG_COMPARISON\input\test_input" --output-dir "F:\Sync\luhk_work\dev-data\datasets-data\dataset_ch-cha_flux_product-data\docs\notebooks\05_TIME_LAG_COMPARISON\input\test_output" --scalar CH4:ch4 --scalar N2O:n2o --col-w w --col-tsonic ts --usecols 0 1 2 3 6 7 --col-names u v w ts ch4 n2o --skiprows 9 --hz 20 --lag-max 10.0 --n-bootstrap 99 --block-length 20.0 --min-valid-frac 0.3 --hdi-thresh 0.5 --dev-thresh 0.5 --hdi-prefilter 1.0 --n-workers 16 --save-plots
+
 Column layout for EddyPro rotated files (10 columns, 0-indexed)
 ----------------------------------------------------------------
 .. code-block:: text
@@ -69,7 +75,7 @@ Short alias (after ``uv sync`` or ``pip install diive``)
 
 ``diive-tlag-pwb-batch`` is a console-script entry point defined in
 ``pyproject.toml`` that calls the same ``_cli_main()`` function as
-``python -m diive.pkgs.flux.hires.lag_pwb_batch``.
+``python -m diive.pkgs.flux.hires.lag_pwb``.
 
 Run ``uv run diive-tlag-pwb-batch --help`` for all options.
 """
@@ -143,7 +149,7 @@ if __name__ == '__main__':
     # Build the CLI command
     # ------------------------------------------------------------------
     cmd = [
-        sys.executable, '-m', 'diive.pkgs.flux.hires.lag_pwb_batch',
+        sys.executable, '-m', 'diive.pkgs.flux.hires.lag_pwb',
         '--input-dir', input_dir,
         '--output-dir', output_dir,
         '--scalar', 'CH4:ch4',
@@ -173,7 +179,7 @@ if __name__ == '__main__':
     # Run the CLI
     # ------------------------------------------------------------------
     # Suppress the runpy double-import warning that appears when diive.__init__
-    # pre-imports lag_pwb_batch and then -m re-executes it as __main__.
+    # pre-imports lag_pwb and then -m re-executes it as __main__.
     # PYTHONWARNINGS is inherited by all child processes (including workers).
     _env = {**os.environ, 'PYTHONWARNINGS': 'ignore::RuntimeWarning:runpy'}
 
@@ -208,3 +214,5 @@ if __name__ == '__main__':
     shutil.rmtree(output_dir, ignore_errors=True)
     print('\nTemporary directories removed.')
     print('[OK] CLI example complete.')
+
+

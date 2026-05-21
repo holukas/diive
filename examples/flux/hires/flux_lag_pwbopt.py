@@ -61,7 +61,7 @@ import diive as dv
 # ------------------------------------------------------------------
 # Mode switch
 # ------------------------------------------------------------------
-USE_SYNTHETIC = False  # False: load from INPUT_DIR; True: use synthetic data
+USE_SYNTHETIC = True  # False: load from INPUT_DIR; True: use synthetic data
 
 # ------------------------------------------------------------------
 # I/O (only used when USE_SYNTHETIC = False)

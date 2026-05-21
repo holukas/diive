@@ -232,7 +232,7 @@ Reference: [Swiss FluxNet flux processing](https://www.swissfluxnet.ethz.ch/inde
 
 - **Flux detection limit** — signal-to-noise analysis from high-frequency (20 Hz) data
 - **Maximum covariance** — find optimal time lag
-- **PWB time-lag detection** — pre-whitening + block-bootstrap, robust for trace gases (CH4, N2O); single-period via `PreWhiteningBootstrap`, multi-file parallel via `PwbBatchDetection` or CLI (`python -m diive.pkgs.flux.hires.lag_pwb_batch`)
+- **PWB time-lag detection** — pre-whitening + block-bootstrap, robust for trace gases (CH4, N2O); single-period via `PreWhiteningBootstrap`, multi-file parallel via `PwbBatchDetection` or CLI (`python -m diive.pkgs.flux.hires.lag_pwb` / `diive-tlag-pwb-batch`)
 - **Wind rotation** — coordinate transformation, turbulent departures
 - **Self-heating correction** — open-path IRGA oxygen flux adjustment
 - **USTAR filtering** — threshold detection and filtering
