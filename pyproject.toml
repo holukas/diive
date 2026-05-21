@@ -15,7 +15,7 @@ dependencies = [
     "pandas>=3.0.0,<4.0.0",
     "xgboost>=3.0.0,<4.0.0",
     "scikit-learn>=1.6.1,<2.0.0",
-    "matplotlib==3.10.7",
+    "matplotlib>=3.10.0,<4.0.0",
     "pyyaml>=6.0.2,<7.0.0",
     "uncertainties>=3.2.2,<4.0.0",
     "statsmodels>=0.14.4,<0.15.0",
@@ -31,44 +31,28 @@ dependencies = [
     "category-encoders>=2.8.1,<3.0.0",
     "scikit-optimize>=0.10.2,<0.11.0",
     "polars>=1.26.0,<2.0.0",
-    "jupyterlab>=4.3.6,<5.0.0",
     "jupyter-bokeh>=4.0.5,<5.0.0",
-    "shap>=0.48.0,<0.49.0",
-    "pandas-stubs>=2.0.0,<3.0.0",
-    "dbc-influxdb @ file:///F:/Sync/luhk_work/20%20-%20CODING/22%20-%20POET/dbc-influxdb",
-    "ipykernel>=7.2.0",
+    "shap>=0.48.0,<1.0.0",
 ]
 
-[project.optional-dependencies]
+[tool.uv]
+python-preference = "managed"
+
+[tool.uv.sources]
+dbc-influxdb = { path = "../poet/dbc-influxdb" }
+
+[dependency-groups]
 dev = [
+    "dbc-influxdb",
+    "jupyterlab>=4.3.6,<5.0.0",
+    "ipykernel>=7.2.0",
+    "pandas-stubs>=2.0.0,<3.0.0",
     "pytest>=8.0.0",
     "ruff>=0.11.2",
     "autopep8>=2.3.2",
     "ipywidgets>=8.1.5",
     "ghp-import>=2.1.0",
     "jupyter-book>=1.0.4.post1",
-]
-
-docs = [
-    "sphinx>=9.1.0",
-    "furo>=2024.1.29",
-    "myst-parser>=5.0.0",
-    "sphinx-autodoc-typehints>=3.10.2",
-    "sphinx-gallery>=0.21.0",
-]
-
-all = [
-    "diive[dev,docs]",
-]
-
-[tool.hatch.metadata]
-allow-direct-references = true
-
-[tool.uv]
-python-preference = "managed"
-
-[dependency-groups]
-dev = [
     "furo>=2025.12.19",
     "myst-parser>=5.0.0",
     "sphinx>=9.1.0",
