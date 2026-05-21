@@ -60,6 +60,13 @@ Implementation notes:
 - Providing var_tsonic is strongly recommended for trace gases (N2O, CH4);
   without it, only the two scalar x W combinations (cw and wc) are evaluated.
 
+Input data requirement:
+    Both this module and ``lag_pwb_batch.py`` require **wind-rotation-corrected**
+    high-frequency data (double rotation or planar-fit, e.g. EddyPro "Advanced"
+    rotated output).  Wind rotation removes the mean vertical-wind offset so that
+    W contains only turbulent fluctuations; a non-zero mean W corrupts the
+    cross-correlation and yields an unreliable lag estimate.
+
 Batch processing across many files:
     ``lag_pwb_batch.py`` wraps this class in ``PwbBatchDetection``, which
     distributes files across CPU cores via ``ProcessPoolExecutor``, collects
@@ -148,6 +155,13 @@ class PreWhiteningBootstrap:
     Detect the tube-delay time lag between a scalar gas concentration and the
     vertical wind component using the pre-whitening with block-bootstrap (PWB)
     cross-correlation procedure (Vitale et al. 2024, RFlux v3.2.0).
+
+    .. important::
+        Input data must be **wind-rotation-corrected** (double rotation or
+        planar-fit, e.g. from EddyPro "Advanced" rotated output).  Wind
+        rotation removes the mean vertical-wind offset so that W consists
+        only of turbulent fluctuations.  A non-zero mean W biases the
+        cross-correlation and produces an unreliable lag estimate.
 
     **Why pre-whitening?**  Turbulent wind and scalar series carry strong
     autocorrelation that broadens the raw CCF peak.  An AR(p) filter estimated

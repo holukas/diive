@@ -57,6 +57,15 @@ flag comparison, lag distribution histogram with exact mode) and a
 computed from rounded value counts — not histogram bin centers — to match
 the discrete 1/hz lag resolution (e.g. 0.05 s at 20 Hz).
 
+Input data requirement
+----------------------
+Input files must contain **wind-rotation-corrected** high-frequency data
+(double rotation or planar-fit correction applied, e.g. by EddyPro's
+"Advanced" processing with output to rotated files).  Wind rotation removes
+the mean vertical-wind component so that W contains only turbulent
+fluctuations.  Without rotation the mean W offset corrupts the
+cross-correlation, and the detected lag is unreliable.
+
 CLI entry point
 ---------------
 The module is directly executable::
@@ -218,6 +227,13 @@ def _pwb_file_worker(args: tuple) -> dict:
 class PwbBatchDetection:
     """
     Parallel batch PWB time-lag detection across many averaging-period files.
+
+    .. important::
+        Input files must contain **wind-rotation-corrected** data (double
+        rotation or planar-fit applied, e.g. EddyPro "Advanced" rotated
+        output).  Wind rotation removes the mean vertical-wind offset so that
+        W contains only turbulent fluctuations.  Without rotation the
+        cross-correlation is biased and the detected lag is unreliable.
 
     Distributes ``PreWhiteningBootstrap`` across CPU cores using
     ``ProcessPoolExecutor``.  Results accumulate into a DataFrame; an optional
