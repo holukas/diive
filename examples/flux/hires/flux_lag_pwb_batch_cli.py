@@ -27,9 +27,51 @@ CLI usage reference
         --hz 20 \\
         --lag-max 10.0 \\
         --n-bootstrap 99 \\
-        --n-workers 4
+        --block-length 20.0 \\
+        --min-valid-frac 0.3 \\
+        --hdi-thresh 0.5 \\
+        --dev-thresh 0.5 \\
+        --hdi-prefilter 1.0 \\
+        --n-workers 4 \\
+        --save-plots
 
-Run ``python -m diive.pkgs.flux.hires.lag_pwb_batch --help`` for all options.
+Example with uv alias (EddyPro rotated files, all parameters explicit)
+-----------------------------------------------------------------------
+.. code-block:: text
+
+    uv run diive-tlag-pwb-batch \\
+        --input-dir  "F:\\Sync\\luhk_work\\dev-data\\datasets-data\\dataset_ch-cha_flux_product-data\\docs\\notebooks\\05_TIME_LAG_COMPARISON\\input\\test_input" \\
+        --output-dir "F:\\Sync\\luhk_work\\dev-data\\datasets-data\\dataset_ch-cha_flux_product-data\\docs\\notebooks\\05_TIME_LAG_COMPARISON\\input\\test_output" \\
+        --scalar CH4:ch4 --scalar N2O:n2o \\
+        --col-w w --col-tsonic ts \\
+        --usecols 0 1 2 3 6 7 \\
+        --col-names u v w ts ch4 n2o \\
+        --skiprows 9 --hz 20 --lag-max 10.0 \\
+        --n-bootstrap 9 --block-length 20.0 --min-valid-frac 0.3 \\
+        --hdi-thresh 0.5 --dev-thresh 0.5 --hdi-prefilter 1.0 \\
+        --n-workers 16 --save-plots
+
+Column layout for EddyPro rotated files (10 columns, 0-indexed)
+----------------------------------------------------------------
+.. code-block:: text
+
+    0:u  1:v  2:w  3:ts  4:co2  5:h2o  6:ch4  7:4th_gas  8:air_t  9:air_p
+
+    --usecols 0 1 2 3 6 7 selects u, v, w, ts, ch4, 4th_gas
+    --col-names renames them to: u v w ts ch4 n2o
+
+Short alias (after ``uv sync`` or ``pip install diive``)
+---------------------------------------------------------
+.. code-block:: text
+
+    uv run diive-tlag-pwb-batch --input-dir ... --output-dir ... [options]
+    uv run diive-tlag-pwb-batch --help
+
+``diive-tlag-pwb-batch`` is a console-script entry point defined in
+``pyproject.toml`` that calls the same ``_cli_main()`` function as
+``python -m diive.pkgs.flux.hires.lag_pwb_batch``.
+
+Run ``uv run diive-tlag-pwb-batch --help`` for all options.
 """
 
 # %%
@@ -52,10 +94,10 @@ if __name__ == '__main__':
     # ------------------------------------------------------------------
     HZ = 20
     N_PERIODS = 8
-    RECORDS = HZ * 60 * 30       # 30 min at 20 Hz
+    RECORDS = HZ * 60 * 30  # 30 min at 20 Hz
     LAG_TRUE_S = 1.5
     LAG_TRUE_RECORDS = int(LAG_TRUE_S * HZ)
-    N_BOOTSTRAP = 9              # 99 in production
+    N_BOOTSTRAP = 9  # 99 in production
     N_WORKERS = 4
 
     # ------------------------------------------------------------------
@@ -88,7 +130,7 @@ if __name__ == '__main__':
 
         path = Path(input_dir) / f'period_{i:04d}.txt'
         with open(path, 'w') as fh:
-            for j in range(9):                      # 9 metadata rows
+            for j in range(9):  # 9 metadata rows
                 fh.write(f'metadata_line_{j}\n')
             fh.write('u v w ts co2 h2o ch4 4th_gas air_t air_p\n')  # header row
             fh.write(pd.DataFrame({
@@ -102,21 +144,21 @@ if __name__ == '__main__':
     # ------------------------------------------------------------------
     cmd = [
         sys.executable, '-m', 'diive.pkgs.flux.hires.lag_pwb_batch',
-        '--input-dir',   input_dir,
-        '--output-dir',  output_dir,
-        '--scalar',      'CH4:ch4',
-        '--scalar',      'N2O:n2o',
-        '--col-w',       'w',
-        '--col-tsonic',  'ts',
-        '--usecols',     '0', '1', '2', '3', '6', '7',
-        '--col-names',   'u', 'v', 'w', 'ts', 'ch4', 'n2o',
-        '--skiprows',    '9',
-        '--hz',          str(HZ),
-        '--lag-max',     '10.0',
+        '--input-dir', input_dir,
+        '--output-dir', output_dir,
+        '--scalar', 'CH4:ch4',
+        '--scalar', 'N2O:n2o',
+        '--col-w', 'w',
+        '--col-tsonic', 'ts',
+        '--usecols', '0', '1', '2', '3', '6', '7',
+        '--col-names', 'u', 'v', 'w', 'ts', 'ch4', 'n2o',
+        '--skiprows', '9',
+        '--hz', str(HZ),
+        '--lag-max', '10.0',
         '--n-bootstrap', str(N_BOOTSTRAP),
-        '--n-workers',   str(N_WORKERS),
-        '--hdi-thresh',  '0.5',
-        '--dev-thresh',  '0.5',
+        '--n-workers', str(N_WORKERS),
+        '--hdi-thresh', '0.5',
+        '--dev-thresh', '0.5',
         '--hdi-prefilter', '1.0',
     ]
 
@@ -153,7 +195,7 @@ if __name__ == '__main__':
             print(f'\nColumns    : {list(df.columns)}')
             print(f'\nFirst rows :')
             print(df[['period', 'ch4_tlag_s', 'ch4_hdi_range_s',
-                       'n2o_tlag_s', 'n2o_hdi_range_s']].to_string(index=False))
+                      'n2o_tlag_s', 'n2o_hdi_range_s']].to_string(index=False))
         else:
             print('Results CSV not found — check CLI output above.')
 
@@ -161,6 +203,7 @@ if __name__ == '__main__':
     # Cleanup
     # ------------------------------------------------------------------
     import shutil
+
     shutil.rmtree(input_dir, ignore_errors=True)
     shutil.rmtree(output_dir, ignore_errors=True)
     print('\nTemporary directories removed.')

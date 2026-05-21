@@ -32,9 +32,16 @@
   - `on_progress(completed, total, row)` callback enables live Rich display without coupling the class to a UI
   - PWBOPT S1/S2/S3 post-processing via `apply_pwbopt()` static method (port of `01_tlag_detection_pwb.R`)
   - HDI pre-filter via `apply_hdi_prefilter()`: discards wide-HDI lags before PWBOPT so S2 cannot accept them
-  - `plot_summary()` static method: per-scalar 3-panel figure (detected lags coloured by flag, 95% HDI bars,
-    standard vs. pre-filtered flag comparison, lag histogram with exact mode) and a `PwboptLagPlot` scatter/KDE
-    comparison figure; figures saved automatically when `output_dir` is set
+  - `plot_summary()` static method: per-scalar 5-panel figure and a `PwboptLagPlot` scatter/KDE comparison figure;
+    figures saved automatically when `output_dir` is set. Panel layout:
+    1. Detected lags: scatter coloured by S1/S2/S3 flag (no connecting lines) + mode reference line
+    2. Final lags: S1/S2 anchor points (filled, coloured) + pre-filtered gap-filled lag as open black circles + mode
+    3. 95% HDI range bars with S1 and pre-filter threshold lines
+    4. Flag bars per period: standard vs. pre-filtered PWBOPT side by side
+    5. Histogram of detected lags with mode marker
+  - `fill_tlag_gaps()` static method: three-step gap-fill (bfill → median of raw lags → constant fallback) so every
+    averaging period has a usable lag for flux covariance calculation; called automatically in `_cli_main()` after
+    PWBOPT, adding `{prefix}_tlag_final_s` and `{prefix}_tlag_final_pf_s` columns to the results CSV
   - Mode computed from rounded value counts (not histogram bin centers) to match the 1/hz lag resolution
   - Zero-line and mode line both shown in the scatter and histogram panels
   - CLI entry point: `python -m diive.pkgs.flux.hires.lag_pwb_batch --help`; supports all detection and

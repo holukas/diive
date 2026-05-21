@@ -36,6 +36,9 @@ dependencies = [
     "rich>=15.0.0",
 ]
 
+[project.scripts]
+diive-tlag-pwb-batch = "diive.pkgs.flux.hires.lag_pwb_batch:_cli_main"
+
 [tool.uv]
 python-preference = "managed"
 

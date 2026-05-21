@@ -50,12 +50,26 @@ detections that happen to be near the preceding optimal.
 
 Summary figures
 ---------------
-``plot_summary()`` generates per-scalar 3-panel figures (detected lags
-coloured by PWBOPT flag, 95% HDI uncertainty bars, standard vs. pre-filtered
-flag comparison, lag distribution histogram with exact mode) and a
-``PwboptLagPlot`` scatter/KDE comparison across all scalars.  The mode is
-computed from rounded value counts — not histogram bin centers — to match
-the discrete 1/hz lag resolution (e.g. 0.05 s at 20 Hz).
+``plot_summary()`` generates per-scalar 5-panel figures and a
+``PwboptLagPlot`` scatter/KDE comparison across all scalars:
+
+1. **Detected lags** — scatter coloured by S1/S2/S3 flag + mode reference line.
+2. **Final lags** — S1/S2 anchor points (filled, coloured) overlaid with the
+   pre-filtered gap-filled lag as open black circles + mode reference line.
+   This is the series written to ``{prefix}_tlag_final_pf_s`` and used
+   directly for flux covariance calculation.
+3. **HDI range** — bootstrap uncertainty bars with S1 and pre-filter thresholds.
+4. **Flag bars** — standard vs. pre-filtered PWBOPT flags side by side.
+5. **Lag histogram** — distribution of all detected lags with exact mode.
+
+The mode is computed from rounded value counts — not histogram bin centers —
+to match the discrete 1/hz lag resolution (e.g. 0.05 s at 20 Hz).
+
+``fill_tlag_gaps()`` is called automatically in ``_cli_main()`` after
+PWBOPT, adding ``{prefix}_tlag_final_s`` and ``{prefix}_tlag_final_pf_s``
+to the results CSV so that every averaging period has a usable lag for
+flux calculation (leading NaN periods are backward-filled from the first
+reliable detection).
 
 Input data requirement
 ----------------------
@@ -490,6 +504,66 @@ class PwbBatchDetection:
         return pd.DataFrame({'pwbopt_s': optimal, 'flag': flags})
 
     @staticmethod
+    def fill_tlag_gaps(
+            pwbopt_s,
+            tlag_s_raw=None,
+            fallback: float | None = None,
+    ) -> np.ndarray:
+        """
+        Fill any remaining NaN values in a PWBOPT lag series so that every
+        averaging period has a usable time lag for flux covariance calculation.
+
+        Why NaN values remain after ``apply_pwbopt``
+        --------------------------------------------
+        PWBOPT carries the last known optimal lag forward in time.  Periods
+        *before* the first S1/S2 detection have nothing to carry forward, so
+        ``pwbopt_s`` is NaN for those leading periods.  Periods after the last
+        S1/S2 detection (e.g. end-of-season low-flux episodes) are already
+        filled by the forward carry.
+
+        Fill strategy (applied in order):
+        1. **Backward fill** — propagates the first reliable lag backward to
+           cover the leading NaN periods.
+        2. **Median of raw lags** — if the entire series is NaN (no S1/S2
+           detection at all), the median of all non-NaN values in *tlag_s_raw*
+           is used as a constant fallback.
+        3. **Explicit fallback** — if *fallback* is provided it overrides the
+           median and is used when both bfill and median leave NaN (e.g. raw
+           lags are also entirely NaN).
+
+        Args:
+            pwbopt_s: Optimal lag series from ``apply_pwbopt()`` (NaN where
+                no carry-forward value was available).
+            tlag_s_raw: Raw PWB detected lags before PWBOPT.  Used only to
+                compute a median fallback when ``pwbopt_s`` is entirely NaN.
+                Ignored when ``None``.
+            fallback: Constant lag in seconds used as last resort when all
+                other strategies leave NaN.  Typically the nominal tube-delay
+                for the gas/site.
+
+        Returns:
+            Array of the same length as *pwbopt_s* with no NaN values
+            (unless *fallback* is ``None`` and no finite value can be found).
+        """
+        result = pd.Series(np.asarray(pwbopt_s, dtype=float))
+
+        # 1. backward fill: first reliable optimal propagates to leading NaNs
+        result = result.bfill()
+
+        # 2. if still NaN (entire series unreliable), use median of raw lags
+        if result.isna().any() and tlag_s_raw is not None:
+            raw = np.asarray(tlag_s_raw, dtype=float)
+            median_raw = np.nanmedian(raw)
+            if np.isfinite(median_raw):
+                result = result.fillna(median_raw)
+
+        # 3. last resort: user-supplied constant
+        if result.isna().any() and fallback is not None:
+            result = result.fillna(fallback)
+
+        return result.to_numpy()
+
+    @staticmethod
     def apply_hdi_prefilter(
             tlag_s,
             hdi_range_s,
@@ -531,15 +605,24 @@ class PwbBatchDetection:
         """
         Generate batch-level summary figures after PWBOPT post-processing.
 
-        Produces one 3-panel figure per scalar (detected lags coloured by flag,
-        95% HDI range bars, side-by-side standard vs. pre-filtered flag
-        comparison) and one scatter + KDE comparison figure across all scalars
-        (``PwboptLagPlot``).  Figures are saved to *output_dir* when provided.
+        Produces one 5-panel figure per scalar and one scatter + KDE comparison
+        figure across all scalars (``PwboptLagPlot``).  Figures are saved to
+        *output_dir* when provided.
+
+        Panel layout:
+
+        1. Detected lags coloured by S1/S2/S3 flag (scatter, no lines) + mode.
+        2. Final gap-filled lags: S1/S2 anchor points (filled markers) +
+           pre-filtered final lag as open black circles + mode.
+        3. 95% HDI range bars with S1 and pre-filter threshold lines.
+        4. Flag bars per period: standard vs. pre-filtered side by side.
+        5. Histogram of all detected lags with mode marker.
 
         Expects the *results* DataFrame to already contain the PWBOPT columns
         added by ``apply_pwbopt()`` / ``apply_hdi_prefilter()``:
         ``{prefix}_flag_std``, ``{prefix}_pwbopt_s_std``, and optionally
-        ``{prefix}_flag_pf`` / ``{prefix}_pwbopt_s_pf``.
+        ``{prefix}_flag_pf`` / ``{prefix}_pwbopt_s_pf`` /
+        ``{prefix}_tlag_final_pf_s``.
 
         Args:
             results: Per-period results DataFrame (one row per file).
@@ -581,6 +664,11 @@ class PwbBatchDetection:
             has_pf = flag_pf_col in results.columns
             valid_lags = tlag[~np.isnan(tlag)]
 
+            final_std_col = f'{prefix}_tlag_final_s'
+            final_pf_col = f'{prefix}_tlag_final_pf_s'
+            has_final_std = final_std_col in results.columns
+            has_final_pf = final_pf_col in results.columns
+
             # Most frequent lag: exact value count on lags rounded to 2 decimal
             # places (PWB lags are discrete at 1/hz steps, e.g. 0.05 s at 20 Hz,
             # so rounding to 0.01 s preserves the true resolution without binning
@@ -592,27 +680,21 @@ class PwbBatchDetection:
                 mode_lag = np.nan
 
             fig, axes = plt.subplots(
-                4, 1, figsize=(14, 13),
-                gridspec_kw={'height_ratios': [3, 2, 1.5, 2]},
+                5, 1, figsize=(14, 17),
+                gridspec_kw={'height_ratios': [3, 2.5, 2, 1.5, 2]},
             )
             fig.suptitle(
                 f'{scalar_label} -- PWB lag pipeline (PWBOPT strategy comparison)',
                 fontsize=12,
             )
 
-            # Panel 1: detected lags coloured by standard PWBOPT flag
+            # Panel 1: raw detected lags coloured by S1/S2/S3, no connecting lines
             ax = axes[0]
             ax.axhline(0, color='#888888', linewidth=0.8, linestyle='-', zorder=1)
             for flag, color in FLAG_COLORS.items():
                 mask = flag_std == flag
-                ax.scatter(px[mask], tlag[mask], color=color, s=70, zorder=3,
+                ax.scatter(px[mask], tlag[mask], color=color, s=50, zorder=3,
                            label=flag)
-            ax.plot(px, opt_std, color='black', linewidth=1.5, linestyle='-',
-                    label='PWBOPT standard')
-            if has_pf:
-                opt_pf = results[opt_pf_col].values.astype(float)
-                ax.plot(px, opt_pf, color='steelblue', linewidth=1.5,
-                        linestyle='--', label='PWBOPT pre-filtered')
             if not np.isnan(mode_lag):
                 ax.axhline(mode_lag, color='#9467bd', linewidth=1.2,
                            linestyle='-.', zorder=2,
@@ -622,8 +704,31 @@ class PwbBatchDetection:
             ax.legend(frameon=False, fontsize=8, ncol=4)
             ax.set_ylim(-lag_max_s - 0.5, lag_max_s + 0.5)
 
-            # Panel 2: HDI range with S1 and pre-filter threshold lines
+            # Panel 2: final (gap-filled) lags + S1/S2 markers showing the anchor points
             ax = axes[1]
+            ax.axhline(0, color='#888888', linewidth=0.8, linestyle='-', zorder=1)
+            # S1 and S2 scatter: the reliable detected values that anchor the fill
+            for flag in ('S1_optimal', 'S2_optimal'):
+                mask = flag_std == flag
+                ax.scatter(px[mask], tlag[mask], color=FLAG_COLORS[flag], s=50,
+                           zorder=4, label=flag)
+            # Pre-filtered final lag as open black circles
+            if has_final_pf:
+                final_pf = results[final_pf_col].values.astype(float)
+                ax.scatter(px, final_pf, color='none', edgecolors='black',
+                           linewidths=1.0, s=50, zorder=3,
+                           label='Final lag — pre-filtered')
+            if not np.isnan(mode_lag):
+                ax.axhline(mode_lag, color='#9467bd', linewidth=1.2,
+                           linestyle='-.', zorder=2,
+                           label=f'mode = {mode_lag:.2f} s')
+            ax.set_ylabel('Time lag (s)')
+            ax.set_title('Final (gap-filled) lags used for flux calculation')
+            ax.legend(frameon=False, fontsize=8, ncol=3)
+            ax.set_ylim(-lag_max_s - 0.5, lag_max_s + 0.5)
+
+            # Panel 3: HDI range with S1 and pre-filter threshold lines
+            ax = axes[2]
             ax.bar(px, hdi, color='#aec7e8', edgecolor='none', label='HDI range')
             ax.axhline(hdi_thresh, color='#2ca02c', linewidth=1.5, linestyle='--',
                        label=f'S1 threshold ({hdi_thresh} s)')
@@ -635,8 +740,8 @@ class PwbBatchDetection:
             ax.set_title('Bootstrap uncertainty (HDI range) per period')
             ax.legend(frameon=False, fontsize=8)
 
-            # Panel 3: side-by-side flag bars (standard left, pre-filtered right)
-            ax = axes[2]
+            # Panel 4: side-by-side flag bars (standard left, pre-filtered right)
+            ax = axes[3]
             bar_w = 0.4
             flag_cols = [(flag_std_col, 0)]
             if has_pf:
@@ -650,15 +755,14 @@ class PwbBatchDetection:
                        for f, c in FLAG_COLORS.items()]
             ax.legend(handles=patches, frameon=False, fontsize=8)
             ax.set_yticks([])
-            ax.set_xlabel('Period index')
-            panel3_title = (
+            panel4_title = (
                 'Flag per period: standard (left bar) vs. pre-filtered (right bar)'
                 if has_pf else 'Flag per period'
             )
-            ax.set_title(panel3_title)
+            ax.set_title(panel4_title)
 
-            # Panel 4: histogram of detected lags
-            ax = axes[3]
+            # Panel 5: histogram of detected lags
+            ax = axes[4]
             ax.set_xlabel('Time lag (s)')
             ax.set_title(f'Distribution of detected lags  (n={len(valid_lags)})')
             if len(valid_lags) > 0:
@@ -889,6 +993,16 @@ def _cli_main():
                                                 args.hdi_thresh, args.dev_thresh)
             results[f'{pfx}_pwbopt_s_pf'] = pf['pwbopt_s']
             results[f'{pfx}_flag_pf'] = pf['flag']
+
+        # Fill leading/trailing NaN lags so every period has a usable lag
+        # for flux covariance calculation.  The raw lags supply the median
+        # fallback when the entire PWBOPT series is NaN.
+        raw_tlag = results[tc] if tc in results.columns else None
+        results[f'{pfx}_tlag_final_s'] = PwbBatchDetection.fill_tlag_gaps(
+            results[f'{pfx}_pwbopt_s_std'], tlag_s_raw=raw_tlag)
+        if f'{pfx}_pwbopt_s_pf' in results.columns:
+            results[f'{pfx}_tlag_final_pf_s'] = PwbBatchDetection.fill_tlag_gaps(
+                results[f'{pfx}_pwbopt_s_pf'], tlag_s_raw=raw_tlag)
 
     PwbBatchDetection.plot_summary(
         results=results,

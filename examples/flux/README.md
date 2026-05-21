@@ -144,8 +144,10 @@ uv run python examples/flux/hires/flux_lag_pwb_batch_cli.py
 uv run python examples/flux/hires/flux_windrotation.py
 uv run python examples/flux/hires/flux_fluxdetectionlimit.py
 
-# PWB batch detection via CLI (real EddyPro files)
-uv run python -m diive.pkgs.flux.hires.lag_pwb_batch \
+# PWB batch detection via CLI alias (real EddyPro files)
+# diive-tlag-pwb-batch is a console-script shortcut for
+# python -m diive.pkgs.flux.hires.lag_pwb_batch
+uv run diive-tlag-pwb-batch \
     --input-dir /path/to/hires_files \
     --output-dir /path/to/results \
     --scalar CH4:ch4 --scalar N2O:n2o \
