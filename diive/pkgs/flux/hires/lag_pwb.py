@@ -60,6 +60,15 @@ Implementation notes:
 - Providing var_tsonic is strongly recommended for trace gases (N2O, CH4);
   without it, only the two scalar x W combinations (cw and wc) are evaluated.
 
+Batch processing across many files:
+    ``lag_pwb_batch.py`` wraps this class in ``PwbBatchDetection``, which
+    distributes files across CPU cores via ``ProcessPoolExecutor``, collects
+    results into a single DataFrame, applies PWBOPT post-processing
+    (S1/S2/S3 selection and optional HDI pre-filter), and produces batch
+    summary figures.  It is also callable as a CLI module::
+
+        python -m diive.pkgs.flux.hires.lag_pwb_batch --help
+
 References:
     Vitale D, Fratini G, Helfter C, Hortnagl L, et al. (2024) A pre-whitening
     with block-bootstrap cross-correlation procedure for temporal alignment of

@@ -79,7 +79,7 @@ model.fillgaps()
 
 ### Next Steps
 
-- **[98 Runnable Examples](examples/README.md)** — organized by topic (visualization, gap-filling, flux, etc.)
+- **[101 Runnable Examples](examples/README.md)** — organized by topic (visualization, gap-filling, flux, etc.)
     - Find examples by use case: [CATALOG.md](examples/CATALOG.md)
     - Dataset documentation: [EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md)
 - **[Development Setup](CLAUDE.md)** — source setup, coding standards, testing
@@ -115,7 +115,7 @@ For the complete list, see `diive.__all__`.
 
 ---
 
-## 98 Runnable Examples
+## 101 Runnable Examples
 
 Organized by functional domain. All examples follow Sphinx Gallery format (`# %%` sections) — runnable as plain scripts
 and auto-converted to HTML docs.
@@ -138,13 +138,13 @@ uv run python examples/flux/fluxprocessingchain/fluxprocessingchain.py
 
 **Example categories:**
 
-- **Visualization** (17 examples) — heatmaps, time series, diel cycles, cumulative plots, histograms, scatter, ridgelines
+- **Visualization** (18 examples) — heatmaps, time series, diel cycles, cumulative plots, histograms, scatter, ridgelines, tree-ring spiral
 - **Times** (5 examples) — timestamp validation, frequency detection, diel cycles, temporal matrices
 - **Analysis** (11 examples) — correlation, daily correlation, seasonal decomposition, gap detection, gridding, spectral analysis
 - **Data Processing** (20 examples) — corrections (7), outlier detection (9), quality flags (2), other (2)
 - **Features** (11 examples) — VPD, unit conversions, day/night flags, lagged features, potential radiation
 - **Gap-Filling** (11 examples) — linear interpolation, Random Forest, XGBoost, MDS, comparisons, optimization, long-term
-- **Flux Processing** (16 examples) — flux chain, low-res analysis, high-res analysis, time lag, wind rotation, USTAR filtering, self-heating
+- **Flux Processing** (18 examples) — flux chain, low-res analysis, high-res analysis, time lag, PWB batch detection (CLI + API), wind rotation, USTAR filtering, self-heating
 - **Curve Fitting** (2 examples) — polynomial and binned fitting
 - **I/O** (5 examples) — file reading, extraction, and data loading
 
@@ -232,6 +232,7 @@ Reference: [Swiss FluxNet flux processing](https://www.swissfluxnet.ethz.ch/inde
 
 - **Flux detection limit** — signal-to-noise analysis from high-frequency (20 Hz) data
 - **Maximum covariance** — find optimal time lag
+- **PWB time-lag detection** — pre-whitening + block-bootstrap, robust for trace gases (CH4, N2O); single-period via `PreWhiteningBootstrap`, multi-file parallel via `PwbBatchDetection` or CLI (`python -m diive.pkgs.flux.hires.lag_pwb_batch`)
 - **Wind rotation** — coordinate transformation, turbulent departures
 - **Self-heating correction** — open-path IRGA oxygen flux adjustment
 - **USTAR filtering** — threshold detection and filtering

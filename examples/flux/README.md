@@ -28,6 +28,8 @@ Examples demonstrating flux processing, quality control, and high-resolution ana
 - **hires/flux_lag.py** — Time lag detection using MaxCovariance covariance analysis
 - **hires/flux_lag_pwb.py** — PWB time lag detection: pre-whitening with block-bootstrap (Vitale et al. 2024), single averaging period, high-flux vs. low-flux comparison; demonstrates the 4-combination logic via `var_tsonic`
 - **hires/flux_lag_pwbopt.py** — PWBOPT batch pipeline: multi-period PWB detection with S1/S2/S3 selection and standard vs. pre-filtered strategy comparison
+- **hires/flux_lag_pwb_batch.py** — `PwbBatchDetection` Python API demo: distributes PWB detection across CPU cores with `ProcessPoolExecutor`, shows live Rich progress (growing results table + progress bar), applies PWBOPT post-processing (standard and pre-filtered strategies), and generates batch summary figures (3-panel per scalar + scatter/KDE via `PwboptLagPlot`)
+- **hires/flux_lag_pwb_batch_cli.py** — CLI demo: generates synthetic EddyPro files and invokes `python -m diive.pkgs.flux.hires.lag_pwb_batch` as a subprocess; shows all available CLI flags
 - **hires/flux_windrotation.py** — Wind rotation and tilt correction for coordinate transformation
 - **hires/flux_fluxdetectionlimit.py** — Flux detection limit and measurement sensitivity
 
@@ -37,6 +39,7 @@ Available classes and functions in `diive.pkgs.flux`:
 - **TimeLagAnalysis** — Time lag detection and visualization for gas concentrations
 - **MaxCovariance** — Time lag detection via cross-covariance maximisation
 - **PreWhiteningBootstrap** — PWB time lag detection (Vitale et al. 2024): pre-whitening + block-bootstrap, robust for low-magnitude fluxes (CH4, N2O). Provide `var_tsonic` to enable the full 4-combination RFlux v3.2.0 logic (strongly recommended for trace gases).
+- **PwbBatchDetection** — Parallel batch wrapper around `PreWhiteningBootstrap`: distributes many EddyPro averaging-period files across CPU cores, collects results into a single DataFrame, writes a checkpoint CSV after every completed file (crash-safe), applies PWBOPT S1/S2/S3 selection and optional HDI pre-filter, and produces batch summary figures. Also callable as a CLI module: `python -m diive.pkgs.flux.hires.lag_pwb_batch --help`.
 - **RandomUncertaintyPAS20** — Measurement uncertainty quantification
 - **FlagMultipleConstantUstarThresholds** — USTAR filtering with multiple thresholds
 - **UstarMovingPointDetection** — Moving-point USTAR detection (Papale et al. 2006)
@@ -136,8 +139,20 @@ uv run python examples/flux/lowres/flux_ustar_method_comparison.py
 uv run python examples/flux/hires/flux_lag.py
 uv run python examples/flux/hires/flux_lag_pwb.py
 uv run python examples/flux/hires/flux_lag_pwbopt.py
+uv run python examples/flux/hires/flux_lag_pwb_batch.py
+uv run python examples/flux/hires/flux_lag_pwb_batch_cli.py
 uv run python examples/flux/hires/flux_windrotation.py
 uv run python examples/flux/hires/flux_fluxdetectionlimit.py
+
+# PWB batch detection via CLI (real EddyPro files)
+uv run python -m diive.pkgs.flux.hires.lag_pwb_batch \
+    --input-dir /path/to/hires_files \
+    --output-dir /path/to/results \
+    --scalar CH4:ch4 --scalar N2O:n2o \
+    --col-w w --col-tsonic ts \
+    --usecols 0 1 2 3 6 7 \
+    --col-names u v w ts ch4 n2o \
+    --skiprows 9 --hz 20 --n-bootstrap 99 --n-workers 4 --save-plots
 
 # Run all flux examples
 uv run python examples/run_all_examples.py

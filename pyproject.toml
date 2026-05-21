@@ -33,6 +33,7 @@ dependencies = [
     "polars>=1.26.0,<2.0.0",
     "jupyter-bokeh>=4.0.5,<5.0.0",
     "shap>=0.48.0,<1.0.0",
+    "rich>=15.0.0",
 ]
 
 [tool.uv]

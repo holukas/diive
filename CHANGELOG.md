@@ -23,6 +23,33 @@
   Registered in `run_all_examples.py`, `examples/CATALOG.md`, `examples/README.md`,
   `examples/visualization/README.md`.
 
+- **New: PwbBatchDetection class (parallel batch PWB time-lag detection)** — `diive/pkgs/flux/hires/lag_pwb_batch.py`
+  Distributes `PreWhiteningBootstrap` across CPU cores using `ProcessPoolExecutor` (spawn-safe for Windows).
+  Each averaging-period file is processed by a module-level worker function (`_pwb_file_worker`) so results
+  can be pickled and returned to the main process. Key features:
+  - Parallel execution across any number of EddyPro high-frequency files; results returned in original file order
+  - Crash-safe checkpoint CSV written after every completed file (skipped silently if file is locked in another app)
+  - `on_progress(completed, total, row)` callback enables live Rich display without coupling the class to a UI
+  - PWBOPT S1/S2/S3 post-processing via `apply_pwbopt()` static method (port of `01_tlag_detection_pwb.R`)
+  - HDI pre-filter via `apply_hdi_prefilter()`: discards wide-HDI lags before PWBOPT so S2 cannot accept them
+  - `plot_summary()` static method: per-scalar 3-panel figure (detected lags coloured by flag, 95% HDI bars,
+    standard vs. pre-filtered flag comparison, lag histogram with exact mode) and a `PwboptLagPlot` scatter/KDE
+    comparison figure; figures saved automatically when `output_dir` is set
+  - Mode computed from rounded value counts (not histogram bin centers) to match the 1/hz lag resolution
+  - Zero-line and mode line both shown in the scatter and histogram panels
+  - CLI entry point: `python -m diive.pkgs.flux.hires.lag_pwb_batch --help`; supports all detection and
+    PWBOPT parameters; Rich progress bar with per-file log lines; summary figures saved automatically
+  - `RuntimeWarning` from runpy double-import suppressed at module level so it never appears in workers
+  - Exported as `dv.PwbBatchDetection` in `diive/__init__.py`
+- **New examples: flux_lag_pwb_batch.py and flux_lag_pwb_batch_cli.py** — 2 new high-resolution batch examples
+  - `examples/flux/hires/flux_lag_pwb_batch.py` — Python API demo: generates 12 synthetic EddyPro-format
+    files in a 10-column layout (u, v, w, ts, co2, h2o, ch4, 4th_gas, air_t, air_p) with decreasing flux
+    strength, runs `PwbBatchDetection` with `ProcessPoolExecutor`, shows live Rich display (growing results
+    table + progress bar), applies both PWBOPT strategies, and prints a summary table
+  - `examples/flux/hires/flux_lag_pwb_batch_cli.py` — CLI demo: generates 8 synthetic files, invokes the
+    module CLI as a subprocess, and reads back the results CSV
+  - Registered in `run_all_examples.py`, `examples/CATALOG.md`, `examples/README.md`, `examples/flux/README.md`
+
 - **New: PreWhiteningBootstrap class (PWB time lag detection)** — `diive/pkgs/flux/hires/lag_pwb.py`
   implements the pre-whitening with block-bootstrap cross-correlation method from Vitale et al. (2024).
   Robust for low-magnitude fluxes (CH4, N2O) where the standard MaxCovariance method fails due to
