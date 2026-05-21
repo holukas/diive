@@ -54,7 +54,7 @@ class MaxCovariance:
 
     See Also
     --------
-    WindRotation2D : Coordinate transformation and tilt correction for wind data.
+    WindDoubleRotation : Coordinate transformation and tilt correction for wind data.
     FluxDetectionLimit : Calculate minimum detectable flux based on measurement noise.
 
     Example

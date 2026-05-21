@@ -108,7 +108,7 @@ plot = dv.plot_time_series(series=data)
   `HeatmapDateTime`
 - **Gap-filling:** `randomforest_ts`, `RandomForestTS`, `xgboost_ts`, `XGBoostTS`, `flux_mds`, `FluxMDS`
 - **Analysis:** `gridaggregator`, `GridAggregator`, `seasonaltrend`, `SeasonalTrendDecomposition`
-- **Eddy Covariance:** `flux_processing_chain`, `FluxProcessingChain`, `flux_detection_limit`, `FluxDetectionLimit`
+- **Eddy Covariance:** `flux_processing_chain`, `FluxProcessingChain`, `flux_detection_limit`, `FluxDetectionLimit`, `WindDoubleRotation`, `reynolds_decomposition`
 - **I/O:** `load_parquet`, `save_parquet`, `load_exampledata_parquet`, `search_files`
 
 For the complete list, see `diive.__all__`.

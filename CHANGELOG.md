@@ -4,6 +4,26 @@
 
 ## v0.91.0 | XX May 2026
 
+- **Renamed: `WindRotation2D` → `WindDoubleRotation`** — `diive/pkgs/flux/hires/windrotation.py`
+  Name now matches eddy covariance literature terminology (double rotation, Wilczak et al. 2001).
+  Exported as `dv.WindDoubleRotation` and `dv.wind_double_rotation`.
+
+- **Bugfix: rotation angles now use `atan2` instead of `atan`** — `diive/pkgs/flux/hires/windrotation.py`
+  `math.atan(v/u)` raised `ZeroDivisionError` when `u_mean == 0` and silently returned a wrong-quadrant
+  angle when `u_mean < 0`. Both rotation angles (`theta`, `phi`) now use `math.atan2`, which handles
+  all quadrants correctly and never divides by zero.
+
+- **Refactored: `WindDoubleRotation` now does rotation only** — `diive/pkgs/flux/hires/windrotation.py`
+  The scalar `c` parameter has been removed. Reynolds decomposition is no longer performed inside
+  the class. The class exposes `theta`, `phi`, `u2`, `v2`, `w2`; callers apply `reynolds_decomposition`
+  themselves. This separates two conceptually distinct EC processing steps and removes a scalar
+  dependency that had nothing to do with wind rotation.
+
+- **New: `reynolds_decomposition` function** — `diive/pkgs/flux/hires/windrotation.py`
+  Module-level function `reynolds_decomposition(x: Series) -> Series` computes `x' = x - mean(x)`.
+  Exported as `dv.reynolds_decomposition`. Cross-referenced in `WindDoubleRotation`, `FluxDetectionLimit`
+  docstrings to highlight this as an explicit, required step in the EC processing chain.
+
 - **New: TreeRingPlot visualization class** — `diive/core/plotting/treering.py`
   Circular spiral plot displaying annual time series data as concentric color-coded rings.
   Each ring represents one year (inner = oldest, outer = most recent). Color encodes the

@@ -30,7 +30,7 @@ Examples demonstrating flux processing, quality control, and high-resolution ana
 - **hires/flux_lag_pwbopt.py** — PWBOPT batch pipeline: multi-period PWB detection with S1/S2/S3 selection and standard vs. pre-filtered strategy comparison
 - **hires/flux_lag_pwb_batch.py** — `PwbBatchDetection` Python API demo: distributes PWB detection across CPU cores with `ProcessPoolExecutor`, shows live Rich progress (growing results table + progress bar), applies PWBOPT post-processing (standard and pre-filtered strategies), and generates batch summary figures (3-panel per scalar + scatter/KDE via `PwboptLagPlot`)
 - **hires/flux_lag_pwb_batch_cli.py** — CLI demo: generates synthetic EddyPro files and invokes `python -m diive.pkgs.flux.hires.lag_pwb` as a subprocess; shows all available CLI flags
-- **hires/flux_windrotation.py** — Wind rotation and tilt correction for coordinate transformation
+- **hires/flux_windrotation.py** — Double rotation tilt correction (`WindDoubleRotation`) followed by Reynolds decomposition (`reynolds_decomposition`) to extract turbulent fluctuations and compute eddy covariance fluxes
 - **hires/flux_fluxdetectionlimit.py** — Flux detection limit and measurement sensitivity
 
 ## Related Documentation
@@ -47,6 +47,8 @@ Available classes and functions in `diive.pkgs.flux`:
 - **UstarBootstrapThresholds** — Multi-year bootstrap wrapper for any USTAR detector; 3-year sliding window, per-year p16/p50/p84, pooled CUT threshold
 - **ScopApplicator** — SCOP self-heating correction for open-path IRGA
 - **FluxProcessingChain** — Complete multi-level flux processing workflow
+- **WindDoubleRotation** — Double rotation tilt correction (Wilczak et al. 2001): aligns coordinate system with mean wind direction; exposes `theta`, `phi`, `u2`, `v2`, `w2`
+- **reynolds_decomposition** — Reynolds decomposition `x' = x - mean(x)`; applied after rotation to extract turbulent fluctuations of wind components and scalars before flux covariance calculation
 - High-resolution analysis methods (lag detection, wind rotation)
 - Flux variable detection and nomenclature
 
@@ -104,21 +106,29 @@ uncertainty = unc.get_uncertainty()
 
 **High-resolution analysis:**
 ```python
-from diive.pkgs.flux.hires import FluxLag, WindRotation
+import diive as dv
 
-# Detect time lag via covariance
-lag = FluxLag(
-    w_10hz=df['w'],
-    c_10hz=df['CO2'],
-    h_10hz=df['H2O']
-)
-optimal_lag = lag.get_lag()
+# Double rotation: align coordinate system with mean wind direction
+wr = dv.WindDoubleRotation(u=df['u'], v=df['v'], w=df['w'])
 
-# Rotate wind to streamline coordinates
-rotated = WindRotation(
-    u=df['u'], v=df['v'], w=df['w'],
-    canopy_height=20
+# Reynolds decomposition: extract turbulent fluctuations
+w_prime = dv.reynolds_decomposition(wr.w2)
+c_prime = dv.reynolds_decomposition(df['CO2'])
+
+# Eddy covariance flux: w'c'
+flux = (w_prime * c_prime).mean()
+
+# Time lag detection via cross-covariance maximisation
+mc = dv.MaxCovariance(
+    df=df,
+    var_reference='w',
+    var_lagged='CO2',
+    lgs_winsize_from=-100,
+    lgs_winsize_to=0,
+    shift_stepsize=1,
+    segment_name='CO2 lag'
 )
+mc.run()
 ```
 
 ## Running Examples

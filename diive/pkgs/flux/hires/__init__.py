@@ -10,12 +10,13 @@ Part of the diive library: https://github.com/holukas/diive
 from diive.pkgs.flux.hires.fluxdetectionlimit import FluxDetectionLimit
 from diive.pkgs.flux.hires.lag import MaxCovariance
 from diive.pkgs.flux.hires.lag_pwb import PreWhiteningBootstrap, PwboptLagPlot
-from diive.pkgs.flux.hires.windrotation import WindRotation2D
+from diive.pkgs.flux.hires.windrotation import WindDoubleRotation, reynolds_decomposition
 
 __all__ = [
     'FluxDetectionLimit',
     'MaxCovariance',
     'PreWhiteningBootstrap',
     'PwboptLagPlot',
-    'WindRotation2D',
+    'WindDoubleRotation',
+    'reynolds_decomposition',
 ]

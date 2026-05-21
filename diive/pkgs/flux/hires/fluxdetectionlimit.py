@@ -55,7 +55,7 @@ from pandas import DataFrame
 
 from diive.pkgs.features.variables import air_temp_from_sonic_temp
 from diive.pkgs.flux.hires.lag import MaxCovariance
-from diive.pkgs.flux.hires.windrotation import WindRotation2D
+from diive.pkgs.flux.hires.windrotation import WindDoubleRotation, reynolds_decomposition
 
 
 class FluxDetectionLimit:
@@ -170,7 +170,8 @@ class FluxDetectionLimit:
     See Also
     --------
     MaxCovariance : Detect time lag between wind and scalars using covariance.
-    WindRotation2D : Coordinate transformation and tilt correction for wind data.
+    WindDoubleRotation : Coordinate rotation and tilt correction for eddy covariance measurements.
+    reynolds_decomposition : Compute turbulent fluctuation x' = x - mean(x).
 
     Example
     -------
@@ -329,11 +330,13 @@ class FluxDetectionLimit:
         return fig_cov
 
     def _turbulent_fluctuations(self, df: pd.DataFrame) -> pd.DataFrame:
-        r = WindRotation2D(u=df[self.u_col],
-                           v=df[self.v_col],
-                           w=df[self.w_col],
-                           c=df[self.c_col])
-        primes_df = r.get_primes()
+        wr = WindDoubleRotation(u=df[self.u_col],
+                                v=df[self.v_col],
+                                w=df[self.w_col])
+        primes_df = pd.DataFrame({
+            f'{self.w_col}_TURB': reynolds_decomposition(wr.w2),
+            f'{self.c_col}_TURB': reynolds_decomposition(df[self.c_col]),
+        })
         df = pd.concat([df, primes_df], axis=1)
         return df
 

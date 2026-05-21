@@ -78,8 +78,9 @@ from diive.pkgs.flux.hires.lag_pwb import PreWhiteningBootstrap as PreWhiteningB
 from diive.pkgs.flux.hires.lag_pwb import PreWhiteningBootstrap as pre_whitening_bootstrap
 from diive.pkgs.flux.hires.lag_pwb import PwboptLagPlot as PwboptLagPlot
 from diive.pkgs.flux.hires.lag_pwb import PwbBatchDetection as PwbBatchDetection
-from diive.pkgs.flux.hires.windrotation import WindRotation2D as WindRotation2D
-from diive.pkgs.flux.hires.windrotation import WindRotation2D as wind_rotation_2d
+from diive.pkgs.flux.hires.windrotation import WindDoubleRotation as WindDoubleRotation
+from diive.pkgs.flux.hires.windrotation import WindDoubleRotation as wind_double_rotation
+from diive.pkgs.flux.hires.windrotation import reynolds_decomposition as reynolds_decomposition
 from diive.pkgs.flux.lowres.timelag_analysis import TimeLagAnalysis as TimeLagAnalysis
 from diive.pkgs.flux.lowres.timelag_analysis import TimeLagAnalysis as timelag_analysis
 from diive.pkgs.flux.lowres.uncertainty import RandomUncertaintyPAS20 as RandomUncertaintyPAS20
@@ -264,8 +265,9 @@ __all__ = [
     'pre_whitening_bootstrap',
     'PwbBatchDetection',
     'PwboptLagPlot',
-    'WindRotation2D',
-    'wind_rotation_2d',
+    'WindDoubleRotation',
+    'wind_double_rotation',
+    'reynolds_decomposition',
     'TimeLagAnalysis',
     'timelag_analysis',
     'RandomUncertaintyPAS20',

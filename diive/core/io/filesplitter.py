@@ -11,7 +11,7 @@ from diive.core.io.filereader import ReadFileType
 from diive.core.io.filereader import search_files
 from diive.core.io.files import save_parquet
 from diive.core.times.times import create_timestamp
-from diive.pkgs.flux.hires.windrotation import WindRotation2D
+from diive.pkgs.flux.hires.windrotation import WindDoubleRotation, reynolds_decomposition
 
 
 class FileSplitter:
@@ -149,11 +149,15 @@ class FileSplitter:
                                                 outdir_splits=self.outdir)
 
     def _rotate_split(self, split_df: pd.DataFrame):
-        wr = WindRotation2D(u=split_df[self.u_col],
-                            v=split_df[self.v_col],
-                            w=split_df[self.w_col],
-                            c=split_df[self.c_col])
-        primes_df = wr.get_primes()
+        wr = WindDoubleRotation(u=split_df[self.u_col],
+                                v=split_df[self.v_col],
+                                w=split_df[self.w_col])
+        primes_df = pd.DataFrame({
+            f'{self.u_col}_TURB': reynolds_decomposition(wr.u2),
+            f'{self.v_col}_TURB': reynolds_decomposition(wr.v2),
+            f'{self.w_col}_TURB': reynolds_decomposition(wr.w2),
+            f'{self.c_col}_TURB': reynolds_decomposition(split_df[self.c_col]),
+        })
         split_df = pd.concat([split_df, primes_df], axis=1)
         return split_df
 

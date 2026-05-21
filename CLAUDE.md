@@ -38,7 +38,7 @@ python -m pytest tests/test_gapfilling.py -v
 - ML gap-filling (Random Forest, XGBoost, MDS)
 - Flux processing chain (5-level workflow)
 - Outlier detection & quality control
-- Data visualization (14+ plot types)
+- Data visualization (18+ plot types)
 
 ## Development Environment
 
@@ -132,6 +132,68 @@ status = sanitizer.get_status()  # Diagnostics: rows removed/added, frequency co
 - USTAR filtering applies ONLY to CO2/CH4/N2O, not H/LE (energy fluxes)
 
 **Example:** `examples/flux/fluxprocessingchain/fluxprocessingchain.py` (all 5 levels, both gap-filling methods).
+
+## High-Resolution EC Analysis (hires)
+
+Tools for 10/20 Hz raw sonic anemometer data. All live in `diive/pkgs/flux/hires/`.
+
+**Available tools:**
+
+| Class / Function | Purpose | Example |
+|---|---|---|
+| `WindDoubleRotation` | Double rotation tilt correction (Wilczak et al. 2001) | `flux_windrotation.py` |
+| `reynolds_decomposition` | Turbulent fluctuation x' = x - mean(x) | `flux_windrotation.py` |
+| `MaxCovariance` | Time lag detection via cross-covariance maximisation | `flux_lag.py` |
+| `FluxDetectionLimit` | Flux detection limit and signal-to-noise ratio (Langford et al. 2015) | `flux_fluxdetectionlimit.py` |
+| `PreWhiteningBootstrap` | Robust lag detection for low-magnitude fluxes (Vitale et al. 2024) | `flux_lag_pwb.py` |
+| `PwbBatchDetection` | Parallel batch PWB across many averaging-period files | `flux_lag_pwb_batch.py` |
+
+**Typical per-averaging-period workflow:**
+
+```
+raw 20 Hz file
+  -> WindDoubleRotation        # align coordinate system
+  -> reynolds_decomposition    # extract w', c'
+  -> MaxCovariance             # find time lag
+  -> flux = mean(w' * c')      # eddy covariance flux
+```
+
+### Two-step wind rotation workflow
+
+Wind rotation and Reynolds decomposition are **two separate steps** — do not combine them:
+
+```python
+import diive as dv
+
+# Step 1: double rotation (Wilczak et al. 2001)
+# Aligns coordinate system with mean wind; mean(v2) ~ 0, mean(w2) ~ 0
+wr = dv.WindDoubleRotation(u=df['u'], v=df['v'], w=df['w'])
+
+# Step 2: Reynolds decomposition — apply to rotated wind AND any scalar
+w_prime = dv.reynolds_decomposition(wr.w2)   # x' = x - mean(x)
+c_prime = dv.reynolds_decomposition(df['CO2'])
+
+# Flux
+flux = (w_prime * c_prime).mean()
+```
+
+**Design rationale:**
+
+- `WindDoubleRotation` takes only `u, v, w` — the scalar has no role in rotation
+- `reynolds_decomposition(x)` is a standalone function (`x - x.mean()`), not a class
+- Keeping them separate makes each step explicit and reusable
+
+**`WindDoubleRotation` attributes after construction:**
+
+| Attribute | Description |
+|-----------|-------------|
+| `theta`   | First rotation angle, radians (yaw: sets mean v to zero) |
+| `phi`     | Second rotation angle, radians (pitch: sets mean w to zero) |
+| `u2`, `v2`, `w2` | Rotated wind components (high-res Series) |
+
+**Critical pitfall:** always apply `reynolds_decomposition` to `wr.w2` (rotated), not the raw `w`.
+
+**Example:** `examples/flux/hires/flux_windrotation.py`
 
 ## Outlier Detection Methods
 
@@ -277,7 +339,7 @@ scatter.plot(ax=axes[1], title='Log', ylim='auto')
 **Refactoring status (May 2026):**
 
 - ✅ HeatmapBase, HeatmapDateTime, HeatmapXYZ, HexbinPlot
-- ✅ All 17 visualization examples
+- ✅ All 18 visualization examples
 
 See `CHANGELOG.md` for detailed refactoring notes.
 
@@ -348,23 +410,23 @@ Use `/llm-detox` skill for all written content (documentation, comments, commit 
 | SHAP importance fluctuates ±5-10%         | Use flexible assertion ranges in tests        |
 | XGBoost base_score in scientific notation | Monkey-patched in `MlRegressorGapFillingBase` |
 | Feature reduction too strict              | Reduce `shap_threshold_factor` (default 0.5)  |
-| Unicode encoding on Windows (→ char)      | Use ASCII equivalents (>, >) in examples      |
+| Unicode encoding on Windows (arrow chars)  | Use ASCII equivalents (>, ->) in examples     |
 
-## Examples (86 runnable scripts)
+## Examples (~100 runnable scripts)
 
 Organized by functional domain. Each category has a README with file descriptions and usage.
 
 **Structure:**
 
-- `visualization/` — 17 plotting examples
-- `times/` — 6 timestamp handling
+- `visualization/` — 18 plotting examples
+- `times/` — 5 timestamp handling
 - `analysis/` — 10 time series analysis
 - `features/` — 11 variable engineering
 - `fits/` — 2 data fitting
-- `io/` — 1 file I/O
-- `preprocessing/` — 18 (corrections, outlier detection, QA/QC)
-- `flux/` — 11 (processing chain, low-res, high-res)
-- `gapfilling/` — 10 (RF, XGBoost, MDS, interpolation, comparison)
+- `io/` — 5 file I/O
+- `preprocessing/` — 20 (corrections, outlier detection, QA/QC)
+- `flux/` — 18 (processing chain, low-res, high-res)
+- `gapfilling/` — 11 (RF, XGBoost, MDS, interpolation, comparison)
 
 **Running examples:**
 
@@ -412,6 +474,6 @@ See `examples/CATALOG.md` for complete listing and `examples/README.md` for deta
 
 ---
 
-**Last Updated:** 2026-05-15  
+**Last Updated:** 2026-05-21  
 **Version:** v0.91.0+  
 **Package Manager:** `uv`
