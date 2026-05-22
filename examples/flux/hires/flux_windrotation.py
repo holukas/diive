@@ -9,7 +9,6 @@ Wind rotation (tilt correction) aligns the coordinate system with mean wind
 direction. Reynolds decomposition then extracts turbulent fluctuations from the
 rotated wind components and scalars, which are combined to compute fluxes.
 
-Best for: Coordinate system alignment before eddy covariance flux calculation.
 """
 
 # %%

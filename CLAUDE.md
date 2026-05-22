@@ -343,6 +343,55 @@ scatter.plot(ax=axes[1], title='Log', ylim='auto')
 
 See `CHANGELOG.md` for detailed refactoring notes.
 
+## Plotting Conventions
+
+### Color palette
+
+Use **Material Design** colours consistently across multi-panel figures:
+
+| Zone | 300-level (top/bar panels) | 500-level (shaded background) |
+|------|---------------------------|-------------------------------|
+| in optimum / primary | `#64B5F6` blue | `#2196F3` blue |
+| above optimum | `#E57373` red | `#F44336` red |
+| below optimum | `#FFD54F` yellow | `#FFC107` amber |
+| boundary lines | — | `#455A64` blue-grey |
+| peak marker | — | `#37474F` dark blue-grey |
+
+300-level for filled bars and line plots; 500-level for shaded background regions. Using two levels within the same figure avoids the top and bottom panels visually clashing.
+
+### Bar label centering
+
+Use `va='center_baseline'` (not `va='center'`) to visually center digit-only strings inside horizontal bars. `va='center'` aligns the bounding box, which includes descender whitespace — labels drift above center for strings without descenders (numbers).
+
+```python
+ax.text(rect.get_x() + rect.get_width() / 2,
+        rect.get_y() + rect.get_height() / 2,
+        f"{val:.1f}",
+        ha='center', va='center_baseline',
+        color=text_color)
+```
+
+### Automatic label contrast
+
+Compute luminance with the WCAG formula to choose white or black label text automatically:
+
+```python
+import matplotlib.colors as mcolors
+r, g, b, *_ = mcolors.to_rgba(color)
+text_color = 'white' if 0.299 * r + 0.587 * g + 0.114 * b < 0.5 else 'black'
+```
+
+### Dynamic panel height scaling
+
+When a panel contains one row per year, scale its height dynamically so it stays compact regardless of dataset length:
+
+```python
+n_years = len(yearly_df)
+top_h = max(1.5, n_years * 0.38)   # ~0.38 in per year, minimum 1.5 in
+```
+
+Pair with `ax.margins(y=0.02)` to remove the default 5% vertical padding that creates excess whitespace when bars are few.
+
 ## Development Workflow
 
 **[CRITICAL] NEVER COMMIT CHANGES.** User stages and commits exclusively.

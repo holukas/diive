@@ -112,6 +112,36 @@
   - Registered in `run_all_examples.py`, `examples/CATALOG.md`, `examples/README.md`,
     `examples/flux/README.md`.
 
+- **Refactored: FindOptimumRange algorithm and visualization** — `diive/pkgs/analysis/optimumrange.py`
+  Complete overhaul of the optimum range detection algorithm, results structure, and three-panel figure.
+  - **Algorithm**: threshold is now applied to the full curve range so it works for any sign of y values.
+    Walking outward from the peak, bins are included while the smoothed value stays within
+    `(1 - threshold) * curve_range` of the peak. Old approach used rolling window width as range (arbitrary).
+  - **New `prominence_threshold` parameter**: flags whether the peak stands out from the curve mean by at
+    least N standard deviations (`prominence = |peak - mean| / std`). Prints a warning and sets
+    `is_optimum_prominent=False` when the curve is too flat to identify a meaningful optimum.
+  - **New `threshold` validation**: raises `ValueError` when `threshold` is not in `(0, 1)`.
+  - **`_divide_xdata_into_bins`**: returns a single DataFrame; uses single `groupby.agg([list])` call
+    instead of an unordered set; no redundant `.copy()`.
+  - **`_values_in_optimum_range`**: single-pass `groupby(['year', 'category']).size().unstack()`;
+    avoids mutation of `self.df` by using a local variable for the category column.
+  - **`results_optrange` keys added**: `is_optimum_prominent` (bool), `optimum_prominence` (float).
+  - **`showfig` / `plot_bin_aggregates`**: x-axis now shows actual variable values (bin midpoints) instead
+    of integer bin indices; thinned to ~10 ticks; `xlabel`/`ylabel`/`xunit`/`yunit` parameters.
+  - **Three-panel figure**: dynamic top panel height (`max(1.5, n_years * 0.38)`) keeps bars compact for
+    any number of years; `ax.margins(y=0.02)` removes default padding.
+  - **`plot_bin_aggregates`**: three shaded zones (below/in/above optimum) using Material 500 colours
+    (#FFC107 amber, #2196F3 blue, #F44336 red); neutral boundary lines (#455A64); dotted peak marker.
+  - **`plot_vals_in_optimum_range`**: Material 300 colours (#64B5F6 blue, #E57373 red, #FFD54F yellow)
+    matching the timeseries panel; automatic white/black label colour based on WCAG luminance formula;
+    `va='center_baseline'` for visually centred digit labels inside bars (not `va='center'`, which
+    drifts upward because of descender whitespace in the bounding box).
+  - **New `plot_optimum_range_timeseries` method**: line plot with filled area showing percentage of
+    data in each category (in optimum / above / below) over years; colours match top panel.
+- **Updated example: analysis_optimumrange.py** — `examples/analysis/analysis_optimumrange.py`
+  Shows all parameters explicitly; results section prints `is_optimum_prominent` and `optimum_prominence`;
+  `showfig` called with `xunit` and `yunit`.
+
 - **New examples: parquet I/O and EddyPro CSV reading** — 4 new I/O examples
   - `io_load_save_parquet.py` — Efficient parquet file I/O with automatic timestamp sanitization
     and CSV performance comparison (60% smaller, 15x faster)
