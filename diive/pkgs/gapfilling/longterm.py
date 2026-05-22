@@ -28,6 +28,7 @@ class LongTermGapFillingBase:
                  target_col: str or tuple,
                  verbose: int = 0,
                  test_size: float = 0.25,
+                 below_zero: str = None,
                  **kwargs):
         """
         Gap-fill each year based on data from the respective year and the two closest neighboring years
@@ -42,6 +43,9 @@ class LongTermGapFillingBase:
 
         Args:
             See docstring for pkgs.gapfilling.randomforest_ts.RandomForestTS
+            below_zero: How to treat predicted values below zero for variables that
+                       cannot be negative (e.g. VPD, SW_IN, PPFD).
+                       None (default): keep as-is. 'zero': clip to 0. 'nan': set to NaN.
 
         Attributes:
             gapfilling_df_: dataframe, gapfilling results from all years in one dataframe
@@ -55,6 +59,7 @@ class LongTermGapFillingBase:
         self.target_col = target_col
         self.verbose = verbose
         self.test_size = test_size
+        self.below_zero = below_zero
         self.kwargs = kwargs
 
         self._yearpools = None
@@ -179,6 +184,7 @@ class LongTermGapFillingBase:
                 target_col=self.target_col,
                 verbose=self.verbose,
                 test_size=self.test_size,
+                below_zero=self.below_zero,
                 **self.kwargs
             )
             self._results_yearly[year] = model
@@ -305,13 +311,27 @@ class LongTermGapFillingRandomForestTS(LongTermGapFillingBase):
                  target_col: str or tuple,
                  verbose: int = 0,
                  test_size: float = 0.25,
+                 below_zero: str = None,
                  **kwargs):
+        """Long-term Random Forest gap-filling with per-year models.
+
+        Args:
+            input_df: DataFrame with target and pre-engineered feature columns.
+            target_col: Column name of variable to gap-fill.
+            verbose: Verbosity level: 0=silent, 1=progress, 2+=detailed.
+            test_size: Fraction of complete data for testing (0.0-1.0).
+            below_zero: How to treat predicted values below zero for variables that
+                       cannot be negative (e.g. VPD, SW_IN, PPFD).
+                       None (default): keep as-is. 'zero': clip to 0. 'nan': set to NaN.
+            **kwargs: Random Forest hyperparameters passed to RandomForestRegressor.
+        """
         super().__init__(
             regressor=RandomForestRegressor,
             input_df=input_df,
             target_col=target_col,
             verbose=verbose,
             test_size=test_size,
+            below_zero=below_zero,
             **kwargs
         )
 
@@ -323,13 +343,27 @@ class LongTermGapFillingXGBoostTS(LongTermGapFillingBase):
                  target_col: str or tuple,
                  verbose: int = 0,
                  test_size: float = 0.25,
+                 below_zero: str = None,
                  **kwargs):
+        """Long-term XGBoost gap-filling with per-year models.
+
+        Args:
+            input_df: DataFrame with target and pre-engineered feature columns.
+            target_col: Column name of variable to gap-fill.
+            verbose: Verbosity level: 0=silent, 1=progress, 2+=detailed.
+            test_size: Fraction of complete data for testing (0.0-1.0).
+            below_zero: How to treat predicted values below zero for variables that
+                       cannot be negative (e.g. VPD, SW_IN, PPFD).
+                       None (default): keep as-is. 'zero': clip to 0. 'nan': set to NaN.
+            **kwargs: XGBoost hyperparameters passed to XGBRegressor.
+        """
         super().__init__(
             regressor=XGBRegressor,
             input_df=input_df,
             target_col=target_col,
             verbose=verbose,
             test_size=test_size,
+            below_zero=below_zero,
             **kwargs
         )
 

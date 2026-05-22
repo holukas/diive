@@ -95,6 +95,9 @@ xgbts = dv.XGBoostTS(
     input_df=df_engineered,
     target_col=TARGET_COL,
     verbose=1,
+    below_zero=None,  # How to treat negative predictions: None=keep, 'zero'=clip, 'nan'=set missing
+    # Use 'zero' or 'nan' for variables that cannot be negative (e.g. VPD, SW_IN, PPFD).
+    # NEE can be negative (carbon uptake), so None is correct here.
     n_estimators=50,
     random_state=42,
     max_depth=6,

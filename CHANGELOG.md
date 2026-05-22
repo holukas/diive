@@ -4,6 +4,30 @@
 
 ## v0.91.0 | XX May 2026
 
+- **New param: `below_zero` in ML gap-filling models** — `diive/core/ml/common.py`, `diive/pkgs/gapfilling/randomforest_ts.py`, `diive/pkgs/gapfilling/xgboost_ts.py`, `diive/pkgs/gapfilling/longterm.py`
+  Controls how predicted values below zero are handled for variables that cannot be negative (e.g. VPD, SW_IN, PPFD).
+  Options: `None` (default, keep as-is), `'zero'` (clip to 0), `'nan'` (set to NaN / treat as unfillable).
+  Applied to gap-filling predictions only; observed data and model scores are unaffected.
+  Available in `RandomForestTS`, `XGBoostTS`, `LongTermGapFillingRandomForestTS`, `LongTermGapFillingXGBoostTS`,
+  and the base class `MlRegressorGapFillingBase`.
+
+- **Bugfix: XGBoost/SHAP incompatibility with Python 3.13** — `diive/core/ml/common.py`
+  Python 3.13 tightened `ast.literal_eval`, breaking SHAP's XGBoost `base_score` parser which receives
+  bracket-enclosed scientific notation such as `[-3.18E0]`. The existing `builtins.float` monkey-patch
+  no longer intercepted this code path. Extended the patch to also temporarily replace `ast.literal_eval`
+  so both old and new shap versions initialise `TreeExplainer` correctly.
+
+- **Updated examples: `below_zero` param added** — `examples/gapfilling/`
+  `gapfill_randomforest.py`, `gapfill_xgboost.py`, `gapfill_comparison.py`, `gapfill_randomforest_longterm.py`
+  All gap-filling examples now include `below_zero=None` with an inline comment explaining when to use
+  `'zero'` or `'nan'` (e.g. VPD, SW_IN, PPFD) vs. keeping the default for variables that can go negative (NEE).
+
+- **Speedup: `gapfill_randomforest_longterm.py` example** — `examples/gapfilling/gapfill_randomforest_longterm.py`
+  - `sanitize_timestamp=False`: example data is already clean; the 10-step validator added unnecessary overhead.
+  - `reduce_features_across_years()` commented out: with only 3 input features and `n_estimators=3` the step
+    fits and SHAP-evaluates one model per year with nothing to prune, doubling total runtime for no gain.
+    A comment explains when to enable it in production.
+
 - **Refactored: `DailyCorrelation`** — `diive/pkgs/analysis/correlation.py`
   Comprehensive review covering bugs, robustness, and efficiency. Key changes:
   - Fixed: NaN days leaked into the "high correlation" group in `plot()` because

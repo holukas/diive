@@ -29,6 +29,7 @@ class MlRegressorGapFillingBase:
                  target_col: str or tuple,
                  verbose: int = 0,
                  test_size: float = 0.25,
+                 below_zero: str = None,
                  **kwargs):
         """
         Base class for machine-learning gap-filling using Random Forest or XGBoost.
@@ -66,6 +67,14 @@ class MlRegressorGapFillingBase:
                 - Smaller test_size: tighter train set but more noise in test metrics
                 - Larger test_size: looser train set but better estimate stability
                 Standard value 0.25 balances both considerations.
+
+            below_zero:
+                How to treat predicted values below zero for variables that cannot be negative
+                (e.g. VPD, SW_IN, PPFD). Applied to gap-filled predictions only, not to
+                observed data.
+                - None (default): no treatment, keep predictions as-is.
+                - 'zero': clip negative predictions to 0.
+                - 'nan': set negative predictions to NaN (treated as unfillable).
 
             **kwargs:
                 Regressor-specific hyperparameters passed to the sklearn regressor.
@@ -108,6 +117,11 @@ class MlRegressorGapFillingBase:
         self.test_size = test_size
         self.verbose = verbose
         self.kwargs = kwargs
+
+        _valid_below_zero = (None, 'zero', 'nan')
+        if below_zero not in _valid_below_zero:
+            raise ValueError(f"below_zero must be one of {_valid_below_zero}, got '{below_zero}'")
+        self.below_zero = below_zero
 
         self._random_state = self.kwargs['random_state'] if 'random_state' in self.kwargs else None
 
@@ -627,29 +641,46 @@ class MlRegressorGapFillingBase:
         """
 
         # Create explainer and calculate SHAP values
-        # Handle XGBoost base_score parameter format issue with monkey-patch
-        # Some XGBoost/environment combinations return base_score as '[-4.121306E0]' which
-        # float() cannot parse. We monkey-patch float() to handle this.
+        # XGBoost stores base_score internally as '[-3.18E0]' (bracket-enclosed scientific
+        # notation). Older shap versions parsed this via float(), newer ones use
+        # ast.literal_eval(). Python 3.13 tightened ast.literal_eval and rejects this
+        # format. Patch both entry points so the explainer initialises cleanly regardless
+        # of the shap/Python version combination in use.
+        import ast
+        import builtins
+
         _builtin_float = float
 
         def _patched_float(x):
-            """float() that handles bracket-enclosed scientific notation like '[-4.121306E0]'"""
+            """Handle bracket-enclosed scientific notation like '[-4.121306E0]'."""
             if isinstance(x, str):
                 x_stripped = x.strip('[]')
-                if x_stripped != x:  # Only use patched version if brackets were removed
+                if x_stripped != x:
                     return _builtin_float(x_stripped)
             return _builtin_float(x)
 
-        # Temporarily replace float in builtins
-        import builtins
-        original_float = builtins.float
+        _original_literal_eval = ast.literal_eval
+
+        def _patched_literal_eval(s):
+            """Handle bracket-enclosed scientific notation that Python 3.13 rejects."""
+            if isinstance(s, str):
+                stripped = s.strip()
+                if stripped.startswith('[') and stripped.endswith(']'):
+                    inner = stripped[1:-1].strip()
+                    try:
+                        return [float(inner)]
+                    except ValueError:
+                        pass
+            return _original_literal_eval(s)
+
         builtins.float = _patched_float
+        ast.literal_eval = _patched_literal_eval
 
         try:
             explainer = shap.TreeExplainer(model)
         finally:
-            # Always restore original float
-            builtins.float = original_float
+            builtins.float = _builtin_float
+            ast.literal_eval = _original_literal_eval
 
         shap_values = explainer.shap_values(X)
 
@@ -695,6 +726,27 @@ class MlRegressorGapFillingBase:
         if len(self.model_df.columns) == 1:
             raise Exception(f"(!) Stopping execution because dataset comprises "
                             f"only one single column : {self.model_df.columns}")
+
+    def _apply_below_zero_treatment(self, predictions: np.ndarray) -> np.ndarray:
+        """Clip or nullify negative predictions for physically non-negative variables.
+
+        Applied only when below_zero is set. Has no effect on observed data.
+        """
+        if self.below_zero is None:
+            return predictions
+        predictions = predictions.copy().astype(float)
+        neg_locs = predictions < 0
+        if neg_locs.any():
+            n_neg = int(neg_locs.sum())
+            if self.below_zero == 'zero':
+                predictions[neg_locs] = 0.0
+                if self.verbose:
+                    print(f">>> below_zero='zero': clipped {n_neg} negative prediction(s) to 0.")
+            elif self.below_zero == 'nan':
+                predictions[neg_locs] = np.nan
+                if self.verbose:
+                    print(f">>> below_zero='nan': set {n_neg} negative prediction(s) to NaN.")
+        return predictions
 
     def _fillgaps_fullmodel(self, showplot_scores, showplot_importance):
         """Apply model to fill missing targets for records where all features are available
@@ -755,6 +807,7 @@ class MlRegressorGapFillingBase:
 
         # Predict targets for all records where all features are available
         pred_y = self.model_.predict(X=X)
+        pred_y = self._apply_below_zero_treatment(pred_y)
         print(f"predicted {len(pred_y)} records.")
 
         # Collect gapfilling results in df
@@ -871,6 +924,7 @@ class MlRegressorGapFillingBase:
 
         print(f">>> Predicting target {self.target_gapfilled_col} using fallback model ...")
         pred_y_fallback = model_fallback.predict(X=X_fallback_full)  # Predict targets in test data
+        pred_y_fallback = self._apply_below_zero_treatment(pred_y_fallback)
         full_timestamp = full_timestamp_df.index
 
         return pred_y_fallback, full_timestamp

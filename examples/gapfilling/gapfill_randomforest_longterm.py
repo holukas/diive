@@ -62,9 +62,8 @@ engineer = dv.FeatureEngineer(
     target_col=TARGET_COL,
     verbose=2,
     features_lag=[-1, -1],  # 1-step lag on all features except target
-    features_ema=[6, 24, 48],  # Exponential moving averages (spans in records)
     add_continuous_record_number=True,  # Capture long-term drift
-    sanitize_timestamp=False
+    sanitize_timestamp=False  # Example data is already clean; skip 10-step validation
 )
 df_engineered = engineer.fit_transform(df)
 
@@ -85,7 +84,10 @@ gf = LongTermGapFillingRandomForestTS(
     input_df=df_engineered,
     target_col=TARGET_COL,
     verbose=2,
-    n_estimators=9,  # Reduced from standard 300 for speed (demo only)
+    below_zero=None,  # How to treat negative predictions: None=keep, 'zero'=clip, 'nan'=set missing
+    # Use 'zero' or 'nan' for variables that cannot be negative (e.g. VPD, SW_IN, PPFD).
+    # NEE can be negative (carbon uptake), so None is correct here.
+    n_estimators=3,  # Reduced from standard 300 for speed (demo only)
     random_state=42,
     n_jobs=-1
 )
@@ -97,16 +99,16 @@ gf.create_yearpools()
 gf.initialize_yearly_models()
 
 # %%
-# Feature reduction across all years
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# Feature reduction across all years (optional)
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# Once all yearly models are trained, identify features that are important
-# across all years. This consensus set reduces noise and focuses on robust
-# predictors that work year-round.
-
-gf.reduce_features_across_years()
-
-print(f"Features retained across all years: {gf.features_reduced_across_years}")
+# Identifies features that are important across all years. Fits one model per
+# year using SHAP, prunes weak features, then re-initialises the year pools.
+# Skipped here for speed (only 3 features + n_estimators=3 leaves nothing to prune).
+# Enable in production when working with many engineered features.
+#
+# gf.reduce_features_across_years()
+# print(f"Features retained across all years: {gf.features_reduced_across_years}")
 
 # %%
 # Fill gaps with year-specific models
@@ -153,8 +155,7 @@ print(f"{'MEAN':<6} {mean(r2_list):<10.4f} {mean(mae_list):<10.4f}")
 
 feature_importance_df = gf.feature_importance_per_year
 print("\nTOP 5 FEATURES BY YEAR:")
-print(feature_importance_df.loc[feature_importance_df.index.isin(
-    gf.features_reduced_across_years)].head(5))
+print(feature_importance_df.head(5))
 
 # %%
 # Visualization: before and after gap-filling

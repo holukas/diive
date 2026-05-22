@@ -36,6 +36,7 @@ class RandomForestTS(MlRegressorGapFillingBase):
                  target_col: str or tuple,
                  verbose: bool = True,
                  test_size: float = 0.25,
+                 below_zero: str = None,
                  **kwargs):
         """Gap-filling for time series using Random Forest regression.
 
@@ -52,6 +53,9 @@ class RandomForestTS(MlRegressorGapFillingBase):
                     Default: True (equivalent to 1).
             test_size: Fraction of complete data for testing (0.0-1.0).
                       Default: 0.25. Only complete rows used for split.
+            below_zero: How to treat predicted values below zero for variables that
+                       cannot be negative (e.g. VPD, SW_IN, PPFD).
+                       None (default): keep as-is. 'zero': clip to 0. 'nan': set to NaN.
             **kwargs: Random Forest hyperparameters (n_estimators, max_depth,
                      min_samples_split, min_samples_leaf, random_state, n_jobs, etc).
                      See scikit-learn RandomForestRegressor documentation.
@@ -84,6 +88,7 @@ class RandomForestTS(MlRegressorGapFillingBase):
             target_col=target_col,
             verbose=verbose,
             test_size=test_size,
+            below_zero=below_zero,
             **kwargs
         )
 

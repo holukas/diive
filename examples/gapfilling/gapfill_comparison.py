@@ -27,8 +27,9 @@ Methods compared:
 # 6. Visualize cumulative carbon flux from all three methods
 
 import time
-import pandas as pd
+
 import matplotlib.pyplot as plt
+import pandas as pd
 
 import diive as dv
 from diive.core.ml.feature_engineer import FeatureEngineer
@@ -132,6 +133,9 @@ rfts = dv.RandomForestTS(
     input_df=df_engineered,
     target_col=TARGET_COL,
     verbose=0,
+    below_zero=None,  # How to treat negative predictions: None=keep, 'zero'=clip, 'nan'=set missing
+    # Use 'zero' or 'nan' for variables that cannot be negative (e.g. VPD, SW_IN, PPFD).
+    # NEE can be negative (carbon uptake), so None is correct here.
     n_estimators=50,
     random_state=42,
     max_depth=None,
@@ -169,6 +173,9 @@ xgbts = dv.XGBoostTS(
     input_df=df_engineered,
     target_col=TARGET_COL,
     verbose=0,
+    below_zero=None,  # How to treat negative predictions: None=keep, 'zero'=clip, 'nan'=set missing
+    # Use 'zero' or 'nan' for variables that cannot be negative (e.g. VPD, SW_IN, PPFD).
+    # NEE can be negative (carbon uptake), so None is correct here.
     n_estimators=50,
     random_state=42,
     max_depth=6,
