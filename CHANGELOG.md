@@ -4,6 +4,34 @@
 
 ## v0.91.0 | XX May 2026
 
+- **Refactored: `GapFinder`** — `diive/pkgs/analysis/gapfinder.py`
+  Full rewrite of the detection core and public API. Key changes:
+  - Detection rewritten as a single vectorized pass using `notna().cumsum()` grouping;
+    removed `_make_required_cols`, `_apply_limit`, `_rename_results`, and the index-name
+    workaround — all replaced by a named `groupby().agg()` call
+  - `limit` parameter renamed to `max_length` for symmetry with new `min_length` parameter;
+    both filters use `is not None` so `max_length=0` and `min_length=0` work correctly
+  - `GAP_DURATION` (timedelta) always present in results; `pd.NaT` when time resolution
+    cannot be inferred
+  - Results index reset to clean 0-based integers; internal cumsum group ids no longer leak
+    into public output
+  - Frequency inferred via full-series median delta (`index.to_series().diff().median()`)
+    instead of first 10 records — robust against irregular or gap-heavy series starts
+  - Gap detection fast-path uses `s.hasnans` instead of `s.isna().sum() == 0`
+  - Memory optimization: NaN mask applied to index and cumsum arrays before DataFrame
+    construction, avoiding an intermediate full-length object
+  - `summary` property returns headline stats (n_gaps, missing_pct, longest gap + duration,
+    median, mean) as a plain-Python dict
+  - `__str__` / `__repr__` print a formatted report block (series range, missing %, gap
+    count, longest/median/mean, active filters)
+  - `get_results()` alias removed; `gapfinder_df` and `series_col` made private
+  - Visualization: availability heatmap colormap changed from `RdYlGn` to `RdYlBu`
+    (colorblind-friendly); both plot methods (`plot_availability_heatmap`,
+    `plot_gap_length_histogram`) callable independently
+- **Updated example: `analysis_gapfinder.py`** — `examples/analysis/analysis_gapfinder.py`
+  Demonstrates all parameters with explicit defaults, `max_length` / `min_length` filters,
+  `print(gf)` for the formatted summary, and `GAP_DURATION` in results table.
+
 - **Renamed: `WindRotation2D` → `WindDoubleRotation`** — `diive/pkgs/flux/hires/windrotation.py`
   Name now matches eddy covariance literature terminology (double rotation, Wilczak et al. 2001).
   Exported as `dv.WindDoubleRotation` and `dv.wind_double_rotation`.

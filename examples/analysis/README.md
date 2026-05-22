@@ -25,7 +25,7 @@ Examples demonstrating statistical analysis, decomposition, and pattern detectio
 
 ### Data Characterization
 
-- **analysis_gapfinder.py** — Identify and characterize consecutive missing data periods in time series
+- **analysis_gapfinder.py** — Detect and characterize consecutive missing data periods; availability heatmap, gap-length histogram, size filters, summary statistics
 - **analysis_gridaggregator.py** — 2D grid aggregation with quantile, equal-width, and custom binning
 
 ## Common Patterns
@@ -74,8 +74,8 @@ uv run python examples/analysis/analysis_daily_correlation.py
 uv run python examples/analysis/analysis_granger.py
 
 # Data characterization
-uv run python examples/pkgs/analysis/analysis_gapfinder.py
-uv run python examples/pkgs/analysis/analysis_gridaggregator.py
+uv run python examples/analysis/analysis_gapfinder.py
+uv run python examples/analysis/analysis_gridaggregator.py
 uv run python examples/pkgs/analysis/analysis_quantiles.py
 
 # Distribution & range analysis

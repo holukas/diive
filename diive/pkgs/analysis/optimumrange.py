@@ -11,11 +11,11 @@ Part of the diive library: https://github.com/holukas/diive
 from pathlib import Path
 from typing import Literal
 
+import matplotlib.colors as mcolors
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.colors as mcolors
 from matplotlib.legend_handler import HandlerTuple
 from pandas import DataFrame
 
@@ -397,7 +397,7 @@ class FindOptimumRange:
         years = df.index.astype(int)
 
         series = [
-            ('vals_inoptimum_perc',    'in optimum (%)',    '#64B5F6'),
+            ('vals_inoptimum_perc', 'in optimum (%)', '#64B5F6'),
             ('vals_aboveoptimum_perc', 'above optimum (%)', '#E57373'),
             ('vals_belowoptimum_perc', 'below optimum (%)', '#FFD54F'),
         ]

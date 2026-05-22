@@ -64,8 +64,8 @@ print(vals_in_range[['vals_inoptimum_perc']])
 # ^^^^^^^^^^^^^
 
 optrange.showfig(
-    xunit='degC',            # x-axis unit label: "Tair_f [degC]"
-    yunit='umol m-2 s-1',   # y-axis unit label: "NEE_CUT_REF_f [umol m-2 s-1]"
+    xunit='degC',  # x-axis unit label: "Tair_f [degC]"
+    yunit='umol m-2 s-1',  # y-axis unit label: "NEE_CUT_REF_f [umol m-2 s-1]"
     # xlabel='Air temperature',  # override full x label (optional)
     # ylabel='NEE',              # override full y label (optional)
 )
