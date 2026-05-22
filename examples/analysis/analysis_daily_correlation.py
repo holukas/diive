@@ -253,3 +253,13 @@ print(best_days.head(5).to_string())
 print(f"\nDays Sorted by Correlation Strength (Bottom 5):")
 worst_days = corr1.get_days_by_correlation(high=False)
 print(worst_days.head(5).to_string())
+
+# %%
+# Visualization: Daily Correlation Plot
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# The plot shows:
+# - Top panel: daily correlation time series with high/low thresholds
+# - Middle panel: all low-correlation days overlaid (grey)
+# - Bottom rows: the 3 lowest and 3 highest correlation days individually
+
+corr1.plot(showplot=True)

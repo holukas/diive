@@ -9,7 +9,7 @@ Part of the diive library: https://github.com/holukas/diive
 """
 
 import pandas as pd
-from matplotlib import pyplot as plt, gridspec as gridspec
+from matplotlib import gridspec, pyplot as plt
 from pandas import Series
 from scipy import stats
 
@@ -45,7 +45,7 @@ class DailyCorrelation:
         plot(): Interactive visualization with correlation distribution and day examples
 
     Example:
-        See `examples/pkgs/analysis/analysis_daily_correlation.py` for comprehensive examples covering:
+        See `examples/analysis/analysis_daily_correlation.py` for comprehensive examples covering:
         quality checks (observed vs. potential radiation), physical relationships (temperature vs. radiation),
         biological processes (temperature vs. CO2 flux), and advanced methods like summary statistics
         and anomaly detection.
@@ -54,23 +54,23 @@ class DailyCorrelation:
     def __init__(self, s1: Series, s2: Series, mincorr: float = 0.8):
         if not (-1 <= mincorr <= 1):
             raise ValueError("mincorr must be between -1 and 1.")
+        if s1.name is None or s2.name is None:
+            raise ValueError("s1 and s2 must have names (set Series.name).")
+        if s1.name == s2.name:
+            raise ValueError(f"s1 and s2 must have different names, both are '{s1.name}'.")
 
         self.s1 = s1
         self.s2 = s2
         self.mincorr = abs(mincorr)
 
-        # Calculate daily correlations
         df = pd.concat([s1, s2], axis=1)
         df['DATE'] = df.index.date.astype(str)
 
-        groups = df.groupby('DATE')
-        daycorrs_index = groups.count().index
-        daycorrs = pd.Series(index=daycorrs_index, name='daycorrs')
-
-        for day, day_df in groups:
-            corr = day_df[s1.name].corr(day_df[s2.name])
-            daycorrs.loc[day] = corr
-
+        daycorrs = (
+            df.groupby('DATE')
+            .apply(lambda g: g[s1.name].corr(g[s2.name]), include_groups=False)
+            .rename('daycorrs')
+        )
         daycorrs.index = pd.to_datetime(daycorrs.index)
         daycorrs = daycorrs.asfreq('1d')
 
@@ -87,7 +87,7 @@ class DailyCorrelation:
 
         Returns:
             dict with:
-            - count: number of days
+            - count: number of valid (non-NaN) days
             - median: median correlation
             - mean: mean correlation
             - std: standard deviation
@@ -99,26 +99,34 @@ class DailyCorrelation:
             - kurtosis: distribution kurtosis (heavy/light tails)
             - normality_statistic: Shapiro-Wilk test statistic
             - normality_pvalue: p-value (>0.05 suggests normal distribution)
+            All float fields are NaN when no valid days exist.
         """
         daycorrs_clean = self.daycorrs_.dropna()
+        n = len(daycorrs_clean)
 
-        # Shapiro-Wilk normality test
-        if len(daycorrs_clean) >= 3:
-            stat, pvalue = stats.shapiro(daycorrs_clean)
-        else:
-            stat, pvalue = float('nan'), float('nan')
+        if n == 0:
+            nan = float('nan')
+            return {
+                'count': 0, 'median': nan, 'mean': nan, 'std': nan,
+                'min': nan, 'max': nan, 'p1': nan, 'p99': nan,
+                'skewness': nan, 'kurtosis': nan,
+                'normality_statistic': nan, 'normality_pvalue': nan,
+            }
+
+        stat, pvalue = stats.shapiro(daycorrs_clean) if n >= 3 else (float('nan'), float('nan'))
+        desc = daycorrs_clean.describe(percentiles=[0.01, 0.5, 0.99])
 
         return {
-            'count': len(self.daycorrs_),
-            'median': float(self.daycorrs_.median()),
-            'mean': float(self.daycorrs_.mean()),
-            'std': float(self.daycorrs_.std()),
-            'min': float(self.daycorrs_.min()),
-            'max': float(self.daycorrs_.max()),
-            'p1': float(self.daycorrs_.quantile(0.01)),
-            'p99': float(self.daycorrs_.quantile(0.99)),
-            'skewness': float(stats.skew(daycorrs_clean)),
-            'kurtosis': float(stats.kurtosis(daycorrs_clean)),
+            'count': int(desc['count']),
+            'median': float(desc['50%']),
+            'mean': float(desc['mean']),
+            'std': float(desc['std']),
+            'min': float(desc['min']),
+            'max': float(desc['max']),
+            'p1': float(desc['1%']),
+            'p99': float(desc['99%']),
+            'skewness': float(daycorrs_clean.skew()),
+            'kurtosis': float(daycorrs_clean.kurt()),
             'normality_statistic': float(stat),
             'normality_pvalue': float(pvalue),
         }
@@ -132,15 +140,13 @@ class DailyCorrelation:
 
         Returns:
             DataFrame with columns ['date', 'correlation'] sorted by strength.
+            Days with no valid correlation (NaN) are excluded.
         """
-        sorted_corrs = self.daycorrs_.sort_values(
-            key=abs, ascending=not high
-        )
-        df = pd.DataFrame({
+        sorted_corrs = self.daycorrs_.dropna().sort_values(key=abs, ascending=not high)
+        return pd.DataFrame({
             'date': sorted_corrs.index,
             'correlation': sorted_corrs.to_numpy()
-        })
-        return df.reset_index(drop=True)
+        }).reset_index(drop=True)
 
     def detect_anomalies(self, method: str = 'zscore', threshold: float = 2.0) -> pd.DataFrame:
         """Identify anomalous correlation days.
@@ -160,58 +166,82 @@ class DailyCorrelation:
         Example:
             Dates with z-score > 2.0 are flagged as anomalies (unusual correlation days).
         """
+        clean = self.daycorrs_.dropna()
+
         if method == 'zscore':
-            scores = (self.daycorrs_ - self.daycorrs_.mean()) / self.daycorrs_.std()
-            is_anomaly = abs(scores) > threshold
+            std = clean.std()
+            if std == 0:
+                scores = pd.Series(0.0, index=clean.index)
+                is_anomaly = pd.Series(False, index=clean.index)
+            else:
+                scores = (clean - clean.mean()) / std
+                is_anomaly = abs(scores) > threshold
         elif method == 'iqr':
-            q1 = self.daycorrs_.quantile(0.25)
-            q3 = self.daycorrs_.quantile(0.75)
+            q1 = clean.quantile(0.25)
+            q3 = clean.quantile(0.75)
             iqr = q3 - q1
-            lower = q1 - threshold * iqr
-            upper = q3 + threshold * iqr
-            is_anomaly = (self.daycorrs_ < lower) | (self.daycorrs_ > upper)
-            scores = (self.daycorrs_ - q1) / iqr  # Normalized score
+            if iqr == 0:
+                scores = pd.Series(0.0, index=clean.index)
+                is_anomaly = pd.Series(False, index=clean.index)
+            else:
+                lower = q1 - threshold * iqr
+                upper = q3 + threshold * iqr
+                is_anomaly = (clean < lower) | (clean > upper)
+                scores = (clean - clean.median()) / iqr
         else:
             raise ValueError(f"Unknown method: {method}. Use 'zscore' or 'iqr'.")
 
         df = pd.DataFrame({
-            'date': self.daycorrs_.index,
-            'correlation': self.daycorrs_.to_numpy(),
+            'date': clean.index,
+            'correlation': clean.to_numpy(),
             'anomaly_score': abs(scores).to_numpy(),
             'is_anomaly': is_anomaly.to_numpy()
         })
+        return df.sort_values('anomaly_score', ascending=False).reset_index(drop=True)
 
-        # Sort by anomaly score (highest first)
-        df = df.sort_values('anomaly_score', ascending=False).reset_index(drop=True)
+    def _plot_example_days(self, groups, axes: list, daycorrs: Series) -> None:
+        """Plot time series for up to len(axes) example days; hides unused axes."""
+        used = 0
+        for day, day_df in groups:
+            if used >= len(axes):
+                break
+            day_df = day_df.copy()
+            day_df.index = day_df.index.time
+            day_df[[self.s2.name, self.s1.name]].plot(ax=axes[used])
+            axes[used].set_title(f"{day}, r = {daycorrs[day]:.3f}")
+            used += 1
+        for ax in axes[used:]:
+            ax.set_visible(False)
 
-        return df
+    def plot(self, showplot: bool = True) -> plt.Figure:
+        """Display daily correlation analysis plot.
 
-    def plot(self):
-        """Display daily correlation analysis plot."""
+        Args:
+            showplot: if True, call plt.show() to display the figure interactively.
+                Set to False when rendering in non-interactive environments (Sphinx Gallery,
+                headless testing).
+
+        Returns:
+            matplotlib Figure.
+        """
         daycorrs = self.daycorrs_
         df = self.df_
         s1 = self.s1
         s2 = self.s2
         mincorr = self.mincorr
 
-        # Identify dates with low correlation
-        _lowcorrs = daycorrs.between(-mincorr, mincorr, inclusive='neither')
-        lowcorrs = daycorrs[_lowcorrs]
-        lowcorrs = lowcorrs.sort_values(key=abs, ascending=True)
-        lowestcorrs = lowcorrs.head(3)
-        lowcorrs = lowcorrs.index.astype(str).to_list()
-        lowdays = df['DATE'].isin(lowcorrs)
+        daycorrs_valid = daycorrs.dropna()
+        _lowcorrs = daycorrs_valid.between(-mincorr, mincorr, inclusive='neither')
+        lowcorrs_series = daycorrs_valid[_lowcorrs].sort_values(key=abs, ascending=True)
+        highcorrs_series = daycorrs_valid[~_lowcorrs].sort_values(key=abs, ascending=False)
 
-        # Identify dates with high correlation
-        highcorrs = daycorrs[~_lowcorrs]
-        highcorrs = highcorrs.sort_values(key=abs, ascending=False)
-        highestcorrs = highcorrs.head(3)
-        highestcorrs = highestcorrs.index.astype(str).to_list()
-        highestdays = df['DATE'].isin(highestcorrs)
+        lowcorr_dates = lowcorrs_series.index.astype(str).to_list()
+        lowestcorr_dates = lowcorrs_series.head(3).index.astype(str).to_list()
+        highestcorr_dates = highcorrs_series.head(3).index.astype(str).to_list()
 
-        # Identify dates with lowest correlation
-        lowestcorrs = lowestcorrs.index.astype(str).to_list()
-        lowestdays = df['DATE'].isin(lowestcorrs)
+        lowdays = df['DATE'].isin(lowcorr_dates)
+        lowestdays = df['DATE'].isin(lowestcorr_dates)
+        highestdays = df['DATE'].isin(highestcorr_dates)
 
         fig = plt.figure(facecolor='white', figsize=(8, 12), dpi=100)
         gs = gridspec.GridSpec(4, 3)
@@ -226,46 +256,36 @@ class DailyCorrelation:
         ax8 = fig.add_subplot(gs[3, 2])
 
         daycorrs.plot(
-            ax=ax1, title=f"Correlation between {s2.name} and {s1.name} per day "
-                          f"(n = {len(daycorrs)})\ncorrelation "
-                          f"median = {daycorrs.median():.3f}, "
-                          f"99th percentile = {daycorrs.quantile(.99):.3f} "
-                          f"1st percentile = {daycorrs.quantile(.01):.3f}, "
-                          f"min / max = {daycorrs.min():.3f} / {daycorrs.max():.3f} "
+            ax=ax1,
+            title=(
+                f"Correlation between {s2.name} and {s1.name} per day "
+                f"(n = {daycorrs.count()})\n"
+                f"median = {daycorrs.median():.3f}, "
+                f"99th percentile = {daycorrs.quantile(.99):.3f}, "
+                f"1st percentile = {daycorrs.quantile(.01):.3f}, "
+                f"min / max = {daycorrs.min():.3f} / {daycorrs.max():.3f}"
+            )
         )
         ax1.axhline(-mincorr, c='#ff0051')
         ax1.axhline(mincorr, c='#ff0051')
         ax1.set_ylim(-1, 1)
 
-        # Get full resolution data for low-correlation days
-        lowdays_fullres = df[lowdays].copy()
-        groups2 = lowdays_fullres.groupby(lowdays_fullres['DATE'])
-        for day, day_df in groups2:
+        for day, day_df in df[lowdays].groupby(df[lowdays]['DATE']):
+            day_df = day_df.copy()
             day_df.index = day_df.index.time
             day_df[[s2.name, s1.name]].plot(ax=ax2, legend=False, alpha=.3, color='grey')
-        ax2.set_title(f"Found {len(lowcorrs)} low correlation days")
+        ax2.set_title(f"Found {len(lowcorr_dates)} low correlation days")
 
-        # Get full resolution data for lowest-correlation days
-        lowestdays_fullres = df[lowestdays].copy()
-        groups3 = lowestdays_fullres.groupby(lowestdays_fullres['DATE'])
-        axes = [ax3, ax4, ax5]
-        counter = 0
-        for day, day_df in groups3:
-            day_df.index = day_df.index.time
-            day_df[[s2.name, s1.name]].plot(ax=axes[counter])
-            axes[counter].set_title(f"{day}, r = {daycorrs[day]:.3f}")
-            counter += 1
-
-        # Get full resolution data for highest-correlation days
-        highestdays_fullres = df[highestdays].copy()
-        groups4 = highestdays_fullres.groupby(highestdays_fullres['DATE'])
-        axes = [ax6, ax7, ax8]
-        counter = 0
-        for day, day_df in groups4:
-            day_df.index = day_df.index.time
-            day_df[[s2.name, s1.name]].plot(ax=axes[counter])
-            axes[counter].set_title(f"{day}, r = {daycorrs[day]:.3f}")
-            counter += 1
+        self._plot_example_days(
+            df[lowestdays].groupby(df[lowestdays]['DATE']),
+            [ax3, ax4, ax5], daycorrs
+        )
+        self._plot_example_days(
+            df[highestdays].groupby(df[highestdays]['DATE']),
+            [ax6, ax7, ax8], daycorrs
+        )
 
         fig.suptitle(f"Comparison between {s1.name} and {s2.name}")
-        fig.show()
+        if showplot:
+            plt.show()
+        return fig

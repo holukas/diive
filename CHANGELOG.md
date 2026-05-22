@@ -4,6 +4,33 @@
 
 ## v0.91.0 | XX May 2026
 
+- **Refactored: `DailyCorrelation`** — `diive/pkgs/analysis/correlation.py`
+  Comprehensive review covering bugs, robustness, and efficiency. Key changes:
+  - Fixed: NaN days leaked into the "high correlation" group in `plot()` because
+    `~between()` is `True` for NaN; now filters on `daycorrs.dropna()` before splitting
+  - Fixed: `fig.show()` replaced with `plt.show()` (unreliable outside GUI backends)
+  - Fixed: IQR anomaly score centred on `q1` instead of `median`, making positive
+    and negative deviations asymmetric
+  - Fixed: missing comma in plot title f-string caused two stat values to run together
+  - Added series-name validation in `__init__`: raises `ValueError` when either series
+    is unnamed or both share the same name (would silently produce wrong correlations)
+  - `summary()`: uses `describe(percentiles=[0.01, 0.5, 0.99])` for a single-pass
+    reduction; `skew`/`kurt` use pandas built-ins instead of `scipy`; returns a
+    graceful all-NaN dict when no valid days exist rather than crashing
+  - `detect_anomalies()`: operates on `dropna()` so NaN days are excluded from scores
+    and output; both `std == 0` (zscore) and `iqr == 0` (iqr) now return zero scores
+    with all-False `is_anomaly` instead of producing `inf`/`NaN` or raising
+  - `get_days_by_correlation()`: drops NaN days before sorting
+  - `plot()`: accepts `showplot: bool = True` and returns the `Figure`; title now
+    shows `daycorrs.count()` (valid days) instead of `len()` (all days including NaN);
+    extracted `_plot_example_days()` helper removes the duplicated groupby+plot block
+    and hides unused axes when fewer than 3 days match
+  - Vectorised daily correlation computation: replaced Python loop + wasted
+    `groupby.count()` index grab with a single `groupby.apply()`
+
+- **Updated example: `analysis_daily_correlation.py`** — `examples/analysis/analysis_daily_correlation.py`
+  Added visualization section demonstrating `corr1.plot(showplot=True)`.
+
 - **Refactored: `GapFinder`** — `diive/pkgs/analysis/gapfinder.py`
   Full rewrite of the detection core and public API. Key changes:
   - Detection rewritten as a single vectorized pass using `notna().cumsum()` grouping;
