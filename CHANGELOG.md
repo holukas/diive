@@ -4,6 +4,24 @@
 
 ## v0.91.0 | XX May 2026
 
+- **New: `DetectTimestampShifts`** — `diive/pkgs/preprocessing/qaqc/detect_timestamp_shifts.py`
+  Detects clock/timestamp errors in meteorological time series by comparing measured shortwave
+  radiation against theoretical potential radiation. Three detection methods:
+  - `fft_phase_shift()` — projects each day onto the k=1 Fourier basis and compares phase angles;
+    fast and robust on clear days
+  - `crosscorr()` — upsamples to 1-minute resolution and uses `scipy.signal.correlate` for a
+    vectorised lag search; 1-minute precision
+  - `noon_shift()` — vectorised daily peak-time delta; fast heuristic for obvious drifts
+  All three methods share the sign convention: positive = measured peaks earlier (leading clock),
+  negative = measured peaks later (lagging clock).
+  Five plot methods: `plot_fft_results`, `plot_crosscorr_results`, `plot_noon_shift_results`,
+  `plot_monthly_dielcycles`, `plot_radiation_fingerprint`.
+  Potential radiation is computed automatically via `potrad` when `lat`/`lon` are supplied.
+
+- **New example: `qaqc_detect_timestamp_shifts.py`** — `examples/preprocessing/qaqc/`
+  Demonstrates all constructor parameters, all three detection methods with their parameters,
+  and all five plot methods.
+
 - **New param: `below_zero` in ML gap-filling models** — `diive/core/ml/common.py`, `diive/pkgs/gapfilling/randomforest_ts.py`, `diive/pkgs/gapfilling/xgboost_ts.py`, `diive/pkgs/gapfilling/longterm.py`
   Controls how predicted values below zero are handled for variables that cannot be negative (e.g. VPD, SW_IN, PPFD).
   Options: `None` (default, keep as-is), `'zero'` (clip to 0), `'nan'` (set to NaN / treat as unfillable).

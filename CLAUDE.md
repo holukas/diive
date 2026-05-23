@@ -224,6 +224,24 @@ Features: Auto-detect test flags, day/night separation, USTAR scenario support, 
 
 **Example:** `examples/preprocessing/qaqc/qc_overall_flag.py`
 
+## Timestamp Shift Detection
+
+**DetectTimestampShifts** detects clock/timestamp errors by comparing measured shortwave radiation
+against theoretical potential radiation. Three methods with a shared sign convention
+(positive = measured peaks earlier / leading clock, negative = later / lagging clock):
+
+- `fft_phase_shift()` — k=1 Fourier phase-angle comparison; fast, no upsampling needed
+- `crosscorr()` — upsample to 1-min, scipy cross-correlation; 1-minute precision
+- `noon_shift()` — vectorised daily peak-time delta; quick heuristic
+
+Five plot methods cover time series, histograms, polar plots, monthly boxplots, diel cycles,
+and radiation fingerprint heatmaps.
+
+**Critical pitfall:** all three methods require clear or mostly-clear days; heavily overcast days
+are filtered via a clearness index threshold before any phase analysis is performed.
+
+**Example:** `examples/preprocessing/qaqc/qaqc_detect_timestamp_shifts.py`
+
 ## Coding Standards
 
 ### Input validation
@@ -473,7 +491,7 @@ Organized by functional domain. Each category has a README with file description
 - `features/` — 11 variable engineering
 - `fits/` — 2 data fitting
 - `io/` — 5 file I/O
-- `preprocessing/` — 20 (corrections, outlier detection, QA/QC)
+- `preprocessing/` — 21 (corrections, outlier detection, QA/QC)
 - `flux/` — 18 (processing chain, low-res, high-res)
 - `gapfilling/` — 11 (RF, XGBoost, MDS, interpolation, comparison)
 

@@ -80,6 +80,7 @@ EXAMPLE_FILES = [
     # Preprocessing - QA/QC
     'preprocessing/qaqc/qc_overall_flag.py',
     'preprocessing/qaqc/qc_eddypro_flags.py',
+    'preprocessing/qaqc/qaqc_detect_timestamp_shifts.py',
     # Features
     'features/feature_engineer.py',
     'features/feature_sonic_temp_conversion.py',

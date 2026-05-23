@@ -123,6 +123,7 @@ See: [preprocessing/corrections/README.md](preprocessing/corrections/README.md)
 |---------|-------------|
 | [**qc_overall_flag.py**](preprocessing/qaqc/qc_overall_flag.py) | Combine multiple test flags into overall QCF (0=good, 1=marginal, 2=poor) |
 | [**qc_eddypro_flags.py**](preprocessing/qaqc/qc_eddypro_flags.py) | Extract EddyPro quality flags (VM97 tests, signal strength, completeness) |
+| [**qaqc_detect_timestamp_shifts.py**](preprocessing/qaqc/qaqc_detect_timestamp_shifts.py) | Detect clock/timestamp errors via radiation phase analysis: FFT phase shift, cross-correlation, and noon-shift peak detection |
 
 See: [preprocessing/outlier_detection/README.md](preprocessing/outlier_detection/README.md) and [preprocessing/qaqc/README.md](preprocessing/qaqc/README.md)
 

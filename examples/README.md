@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
 
-**101 examples across 9 organized folders by functional domain.**
+**102 examples across 9 organized folders by functional domain.**
 
 ## Structure
 
@@ -105,9 +105,10 @@ examples/
     │   ├── outlier_localsd.py
     │   ├── outlier_lof.py
     │   └── ...
-    └── qaqc/              # Quality flags & EddyPro QC (2 examples)
+    └── qaqc/              # Quality flags & EddyPro QC (3 examples)
         ├── qc_overall_flag.py
-        └── qc_eddypro_flags.py
+        ├── qc_eddypro_flags.py
+        └── qaqc_detect_timestamp_shifts.py
 ```
 
 ## Quick Start
@@ -125,7 +126,7 @@ uv run python examples/gapfilling/gapfill_randomforest.py
 uv run python examples/run_all_examples.py
 ```
 
-This runs all 101 examples in parallel with 8 workers, reporting execution time and any errors.
+This runs all 102 examples in parallel with 8 workers, reporting execution time and any errors.
 
 ## Finding Examples
 
@@ -161,8 +162,8 @@ Browse by topic:
 | **Flux** | 18 | Time lag analysis, processing chain, HQ filtering, USTAR detection (3), self-heating (2), uncertainty, PWB batch detection (CLI + API), high-res analysis |
 | **Gapfilling** | 11 | Linear interpolation, Random Forest (4 variants), XGBoost (3 variants), MDS (2), comparison |
 | **IO** | 5 | Parquet file I/O, EddyPro CSV reading, binary value extraction |
-| **Preprocessing** | 20 | Corrections (7), outlier detection (9), QA/QC (2), other (2) |
-| **TOTAL** | **101** | |
+| **Preprocessing** | 21 | Corrections (7), outlier detection (9), QA/QC (3), other (2) |
+| **TOTAL** | **102** | |
 
 ## Running Options
 
