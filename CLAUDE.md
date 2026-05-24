@@ -172,6 +172,36 @@ Used by: `FeatureEngineer` class, fed into gap-filling models.
 | MDS            | No       | Meteorological similarity | R² 0.40-0.70 | No overfitting risk   |
 | Linear Interp. | No       | None                      | Simple       | Small gaps only       |
 
+**Accessing results:** all gap-filling classes expose a `.results` property (after `.run()`) that returns a
+`GapFillingResult` dataclass bundling every output in one place:
+
+```python
+rf = dv.gapfilling.RandomForestTS(input_df=engineered, target_col='NEE_f')
+rf.run()
+r = rf.results          # GapFillingResult
+r.gapfilled             # gap-filled Series
+r.flag                  # 0=observed, 1=gap-filled, 2=fallback
+r.scores['r2']          # gap-filling R²
+r.scores_traintest      # train/test split metrics dict
+r.feature_importances   # SHAP importances DataFrame
+r.model                 # trained sklearn/XGBoost regressor
+r.accepted_features     # features kept after SHAP reduction
+```
+
+MDS returns the same type; ML-only fields (`scores_traintest`, `feature_importances`, `model`) are `None`.
+The legacy `.result` property (returns raw DataFrame) is still available.
+
+`GapFillingResult` is importable as `dv.gapfilling.GapFillingResult` for type-hinting.
+
+**Domain-aware error messages:** MDS validates all four required columns at construction time:
+
+```
+KeyError: Column(s) not found in df - MDS requires flux, SWIN (W m-2), TA (deg C), VPD (kPa):
+  'VPD_f': VPD - vapor pressure deficit (kPa)
+```
+
+The ML base class validates `target_col` exists in `input_df` before any processing begins.
+
 ### Timestamp Sanitization
 
 10-step validation pipeline (configurable, monotonicity required):

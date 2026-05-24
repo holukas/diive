@@ -13,6 +13,7 @@ from xgboost import XGBRegressor
 from yellowbrick.regressor import PredictionError, ResidualsPlot
 
 import diive.core.dfun.frames as fr
+from diive.core.ml.results import GapFillingResult
 from diive.core.times.times import vectorize_timestamps
 from diive.pkgs.gapfilling.scores import prediction_scores
 
@@ -137,6 +138,13 @@ class MlRegressorGapFillingBase:
 
         # Model dataframe is the pre-engineered input (features are already computed)
         self.model_df = input_df.copy()
+
+        if target_col not in self.model_df.columns:
+            available = self.model_df.columns.tolist()
+            raise KeyError(
+                f"target_col '{target_col}' not found in input_df. "
+                f"Available columns: {available}"
+            )
 
         # Original input features (all features except target)
         self.original_input_features = self.model_df.drop(columns=self.target_col).columns.tolist()
@@ -325,6 +333,35 @@ class MlRegressorGapFillingBase:
     def result(self) -> DataFrame:
         """Primary result: full gap-filling DataFrame (target + flag columns)."""
         return self.gapfilling_df_
+
+    @property
+    def results(self) -> GapFillingResult:
+        """Structured result after .run() — all outputs in one object.
+
+        Returns a :class:`~diive.core.ml.results.GapFillingResult` with:
+        ``gapfilled``, ``flag``, ``scores``, ``scores_traintest``,
+        ``feature_importances``, ``feature_importances_traintest``,
+        ``gapfilling_df``, ``model``, ``accepted_features``, ``rejected_features``.
+
+        Raises:
+            Exception: if called before :meth:`run`.
+        """
+        if not isinstance(self._gapfilling_df, DataFrame):
+            raise Exception("Results not available: call .run() first.")
+        fi = self._feature_importances if isinstance(self._feature_importances, DataFrame) else None
+        fi_tt = self._feature_importances_traintest if isinstance(self._feature_importances_traintest, DataFrame) else None
+        return GapFillingResult(
+            gapfilled=self.get_gapfilled_target(),
+            flag=self.get_flag(),
+            scores=self._scores,
+            scores_traintest=self._scores_traintest or None,
+            feature_importances=fi,
+            feature_importances_traintest=fi_tt,
+            gapfilling_df=self._gapfilling_df,
+            model=self._model,
+            accepted_features=self._accepted_features or None,
+            rejected_features=self._rejected_features or None,
+        )
 
     def trainmodel(self,
                    showplot_scores: bool = True,

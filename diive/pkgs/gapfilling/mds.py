@@ -16,6 +16,7 @@ import pandas as pd
 from pandas import DataFrame
 
 import diive.core.plotting.styles.LightTheme as theme
+from diive.core.ml.results import GapFillingResult
 from diive.core.plotting.plotfuncs import default_format, default_legend
 from diive.core.plotting.plotfuncs import nice_date_ticks
 from diive.core.plotting.styles.LightTheme import colorwheel_36_blackfirst, generate_plot_marker_list
@@ -74,6 +75,20 @@ class _FluxMDS:
                 calculate the average *flux* value for gaps during nighttime.
             verbose: Value 1 creates more text output.
         """
+        _required = {
+            flux: 'flux (no unit restriction)',
+            swin: 'SWIN - short-wave incoming radiation (W m-2)',
+            ta: 'TA - air temperature (deg C)',
+            vpd: 'VPD - vapor pressure deficit (kPa)',
+        }
+        _missing = [col for col in _required if col not in df.columns]
+        if _missing:
+            _msgs = [f"  '{col}': {_required[col]}" for col in _missing]
+            raise KeyError(
+                "Column(s) not found in df - MDS requires flux, SWIN (W m-2), TA (deg C), VPD (kPa):\n"
+                + "\n".join(_msgs)
+            )
+
         self._gapfilling_df = df[[flux, swin, ta, vpd]].copy()
         self.flux = flux
         self.swin = swin
@@ -112,6 +127,26 @@ class _FluxMDS:
     def result(self) -> DataFrame:
         """Primary result: full gap-filling DataFrame (target + flag columns)."""
         return self.gapfilling_df_
+
+    @property
+    def results(self) -> GapFillingResult:
+        """Structured result after .run() — all outputs in one object.
+
+        Returns a :class:`~diive.core.ml.results.GapFillingResult` with:
+        ``gapfilled``, ``flag``, ``scores``, ``gapfilling_df``.
+        ML-only fields (``scores_traintest``, ``feature_importances``, ``model``) are None.
+
+        Raises:
+            Exception: if called before :meth:`run`.
+        """
+        if not self._scores:
+            raise Exception("Results not available: call .run() first.")
+        return GapFillingResult(
+            gapfilled=self.get_gapfilled_target(),
+            flag=self.get_flag(),
+            scores=self._scores,
+            gapfilling_df=self._gapfilling_df,
+        )
 
     @property
     def gapfilled_(self) -> pd.Series:
@@ -655,6 +690,20 @@ class FluxMDS:
             avg_min_n_vals: Minimum records for average (default: 5)
             verbose: Verbosity level (default: 1)
         """
+        _required = {
+            flux: 'flux (no unit restriction)',
+            swin: 'SWIN - short-wave incoming radiation (W m-2)',
+            ta: 'TA - air temperature (deg C)',
+            vpd: 'VPD - vapor pressure deficit (kPa)',
+        }
+        _missing = [col for col in _required if col not in df.columns]
+        if _missing:
+            _msgs = [f"  '{col}': {_required[col]}" for col in _missing]
+            raise KeyError(
+                "Column(s) not found in df - MDS requires flux, SWIN (W m-2), TA (deg C), VPD (kPa):\n"
+                + "\n".join(_msgs)
+            )
+
         self._gapfilling_df = df[[flux, swin, ta, vpd]].copy()
         self.flux = flux
         self.swin = swin
@@ -693,6 +742,26 @@ class FluxMDS:
     def result(self) -> DataFrame:
         """Primary result: full gap-filling DataFrame (target + flag columns)."""
         return self.gapfilling_df_
+
+    @property
+    def results(self) -> GapFillingResult:
+        """Structured result after .run() — all outputs in one object.
+
+        Returns a :class:`~diive.core.ml.results.GapFillingResult` with:
+        ``gapfilled``, ``flag``, ``scores``, ``gapfilling_df``.
+        ML-only fields (``scores_traintest``, ``feature_importances``, ``model``) are None.
+
+        Raises:
+            Exception: if called before :meth:`run`.
+        """
+        if not self._scores:
+            raise Exception("Results not available: call .run() first.")
+        return GapFillingResult(
+            gapfilled=self.get_gapfilled_target(),
+            flag=self.get_flag(),
+            scores=self._scores,
+            gapfilling_df=self._gapfilling_df,
+        )
 
     @property
     def gapfilled_(self) -> pd.Series:

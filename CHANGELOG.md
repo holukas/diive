@@ -2,7 +2,7 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.92.0 | 24 May 2026
+## v0.91.0 | XX May 2026
 
 - **Refactor: namespace submodules for public API** — `diive/__init__.py`, new `diive/outliers/`, `diive/gapfilling/`, `diive/flux/`, `diive/analysis/`, `diive/plotting/`, `diive/times/`, `diive/features/`, `diive/corrections/`, `diive/qaqc/`
   Replaced the flat 145-export top-level namespace (with 40+ snake_case aliases) with 9 domain namespaces.
@@ -19,7 +19,20 @@
 - **Fix `test_hexbin_plot.py`: move styling params from `__init__` to `plot()`** — `tests/test_hexbin_plot.py`
   Tests passed `show_values`, `show_values_*`, and `figsize` to `HexbinPlot.__init__`, violating the two-phase plotting design. Updated to pass them to `plot()` instead, where they are stored as instance attributes.
 
-## v0.91.0 | 24 May 2026
+- **Add `GapFillingResult` dataclass and `.results` property** — `diive/core/ml/results.py`, `diive/core/ml/common.py`, `diive/pkgs/gapfilling/mds.py`, `diive/pkgs/gapfilling/__init__.py`
+  All gap-filling classes (`RandomForestTS`, `XGBoostTS`, `_FluxMDS`, `FluxMDS`) now expose a `.results`
+  property (available after `.run()`) that returns a `GapFillingResult` dataclass bundling every post-run
+  output: `gapfilled`, `flag`, `scores`, `scores_traintest`, `feature_importances`,
+  `feature_importances_traintest`, `gapfilling_df`, `model`, `accepted_features`, `rejected_features`.
+  MDS populates only the four core fields; ML-only fields are `None`. The existing `.result` property
+  (raw DataFrame) is unchanged. `GapFillingResult` exported from `dv.gapfilling` for type-hinting.
+
+- **Add domain-aware column validation at gap-filling boundaries** — `diive/pkgs/gapfilling/mds.py`, `diive/core/ml/common.py`
+  MDS (`_FluxMDS`, `FluxMDS`) now validates all four required columns before the DataFrame slice, raising
+  a descriptive `KeyError` listing each missing column with its expected unit:
+  `"Column(s) not found in df - MDS requires flux, SWIN (W m-2), TA (deg C), VPD (kPa): 'VPD_f': VPD - vapor pressure deficit (kPa)"`.
+  `MlRegressorGapFillingBase` validates `target_col` exists in `input_df` before any processing, with
+  the available column list in the message.
 
 - **Add `.run()` / `.result` protocol across all class families** — `diive/core/base/flagbase.py`, `diive/core/ml/common.py`, `diive/pkgs/gapfilling/mds.py`, `diive/pkgs/analysis/correlation.py`, `diive/pkgs/analysis/decoupling.py`, `diive/pkgs/fits/fitter.py`
   Unified entry point and result-access across the library. All class families now share the same two-step pattern:
