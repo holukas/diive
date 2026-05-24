@@ -70,7 +70,7 @@ class TestGapFilling(unittest.TestCase):
         results = mds.gapfilling_df_
         self.assertEqual(len(results), 1488)
         self.assertEqual(mds.scores_['r2'], 0.648227237609387)
-        self.assertEqual(mds.scores_['medae'], 2.0329177096370477)
+        self.assertAlmostEqual(mds.scores_['medae'], 2.0329177096370477, places=10)
         self.assertEqual(results[mds.target_gapfilled].isnull().sum(), 0)
         self.assertEqual(results[mds.target_gapfilled_flag].sum(), 1919)
         counts = Counter(results[mds.target_gapfilled_flag])

@@ -315,6 +315,17 @@ class MlRegressorGapFillingBase:
             model.fit(X=X_train, y=y_train, eval_set=[(X_train, y_train), (X_test, y_test)])
         return model
 
+    def run(self, **kwargs):
+        """Unified trigger: trains model then fills gaps."""
+        self.trainmodel(**kwargs)
+        self.fillgaps(**kwargs)
+        return self
+
+    @property
+    def result(self) -> DataFrame:
+        """Primary result: full gap-filling DataFrame (target + flag columns)."""
+        return self.gapfilling_df_
+
     def trainmodel(self,
                    showplot_scores: bool = True,
                    showplot_importance: bool = True):

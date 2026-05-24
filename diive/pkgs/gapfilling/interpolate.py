@@ -95,7 +95,7 @@ def linear_interpolation(series: Series, limit: int = 3, verbose: bool = False) 
         return series.copy()
 
     # Locate all gaps (without limit filtering to analyze full gap distribution)
-    gapfinder_all = gapfinder.GapFinder(series=series, limit=np.inf).get_results()
+    gapfinder_all = gapfinder.GapFinder(series=series).results
 
     # Edge case: no gaps detected
     if len(gapfinder_all) == 0:
@@ -114,7 +114,7 @@ def linear_interpolation(series: Series, limit: int = 3, verbose: bool = False) 
         return series.copy()
 
     # Calculate gap sizes for all gaps
-    gapfinder_all['gap_size'] = _calculate_gap_sizes(gapfinder_all, series)
+    gapfinder_all['gap_size'] = gapfinder_all['GAP_LENGTH']
 
     # For interpolation, use only gaps within the limit
     gaps_within_limit = gapfinder_all['gap_size'] <= limit

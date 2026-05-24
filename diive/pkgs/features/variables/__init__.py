@@ -36,6 +36,9 @@ from diive.pkgs.features.variables.noise import (
 # Potential radiation
 from diive.pkgs.features.variables.potentialradiation import potrad, potrad_eot
 
+# VPD
+from diive.pkgs.features.variables.vpd import calc_vpd_from_ta_rh
+
 # Time since condition
 from diive.pkgs.features.variables.timesince import TimeSince
 
@@ -60,4 +63,6 @@ __all__ = [
     'potrad_eot',
     # timesince
     'TimeSince',
+    # vpd
+    'calc_vpd_from_ta_rh',
 ]

@@ -99,6 +99,16 @@ class StratifiedAnalysis:
             raise Exception('No binned means available, try to run .calcbins() first.')
         return self._binaggs
 
+    def run(self, **kwargs):
+        """Unified trigger. Delegates to .calcbins()."""
+        self.calcbins(**kwargs)
+        return self
+
+    @property
+    def result(self) -> DataFrame:
+        """Primary result: all binned results as a single DataFrame."""
+        return self.results
+
     def get_binaggs(self) -> dict:
         """Return dict of dataframes with variable 1 group as key"""
         return self.binaggs
@@ -306,3 +316,6 @@ class StratifiedAnalysis:
                            textsize=textsize,
                            bbox_to_anchor=(1, 1.02))
         return ax
+
+
+SortingBinsMethod = StratifiedAnalysis

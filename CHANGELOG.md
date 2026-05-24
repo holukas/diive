@@ -2,7 +2,49 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.91.0 | XX May 2026
+## v0.91.0 | 24 May 2026
+
+- **Add `.run()` / `.result` protocol across all class families** — `diive/core/base/flagbase.py`, `diive/core/ml/common.py`, `diive/pkgs/gapfilling/mds.py`, `diive/pkgs/analysis/correlation.py`, `diive/pkgs/analysis/decoupling.py`, `diive/pkgs/fits/fitter.py`
+  Unified entry point and result-access across the library. All class families now share the same two-step pattern:
+  - **`FlagBase`** (all outlier-detection classes): `run(**kwargs)` delegates to `.calc()`; `result` property returns `.filteredseries`
+  - **`MlRegressorGapFillingBase`** (`RandomForestTS`, `XGBoostTS`): `run(**kwargs)` calls `.trainmodel()` then `.fillgaps()`; `result` returns `.gapfilling_df_`
+  - **`FluxMDS` / `_FluxMDS`**: already had `.run()`; `result` property added returning `.gapfilling_df_`
+  - **`DailyCorrelation`**: `result` property returns `.daycorrs_`
+  - **`StratifiedAnalysis`**: `run(**kwargs)` delegates to `.calcbins()`; `result` returns `.results`
+  - **`BinFitterCP`**: `result` property returns `.fit_results`; `.run()` now returns `self`
+  All existing methods and properties are unchanged — strictly additive. Enables one-liner usage:
+  `series = dv.Hampel(s, n_sigma=5).run().result`
+
+- **Add backward-compat alias `SortingBinsMethod = StratifiedAnalysis`** — `diive/pkgs/analysis/decoupling.py`
+  Preserves imports that used the old name before `StratifiedAnalysis` was introduced
+
+- **Export `calc_vpd_from_ta_rh` from `diive.pkgs.features.variables`** — `diive/pkgs/features/variables/__init__.py`
+  Function existed in `vpd.py` but was not re-exported from the subpackage `__init__`; now importable as
+  `from diive.pkgs.features.variables import calc_vpd_from_ta_rh`
+
+- **Fix `LocalOutlierFactor` validation rejecting `contamination='auto'`** — `diive/pkgs/preprocessing/outlier_detection/lof.py`
+  The numeric range check `0 < contamination <= 0.5` raised `TypeError` when `contamination='auto'` (the
+  default used by `FluxProcessingChain.level32_flag_outliers_lof_test`); guard now skips the check for the
+  string value `'auto'`
+
+- **Fix `linear_interpolation` calling stale `GapFinder` API** — `diive/pkgs/gapfilling/interpolate.py`
+  `GapFinder(series, limit=np.inf).get_results()` used the pre-refactor signature; updated to
+  `GapFinder(series).results` and replaced the separate `_calculate_gap_sizes` call with the built-in
+  `GAP_LENGTH` column
+
+- **Fix 13 pre-existing test failures** — `tests/`
+  Tests had drifted from source refactors; all 63 active tests now pass:
+  - `test_analyses.py` — `GapFinder` API (dropped `limit=`, `get_results()` → `.results`, columns 3 → 4);
+    `daily_correlation` alias returns a class instance, so access `.result` on it; removed stale `showplot=False`
+  - `test_gapfilling.py` — `medae` float comparison relaxed to `assertAlmostEqual(places=10)`
+  - `test_createvar.py` — integer Series indexing `et[0]` → `et.iloc[0]`; float sums relaxed to `assertAlmostEqual`
+  - `test_echires.py` — column count updated 13 → 11 (wind-rotation refactor removed 2 intermediate columns);
+    float comparisons relaxed to `assertAlmostEqual`
+  - `test_fluxprocessingchain.py` — stale `outlierdetection` import path corrected to `outlier_detection`;
+    RF gap-filling exact sums replaced with `assertGreater`/`assertLess` ranges (ML variability)
+  - `test_plots.py` — `HistogramPlot` styling params (`xlabel`, `highlight_peak`, etc.) moved from
+    `__init__()` to `.plot()` call, matching the two-phase plotting refactor
+  - `test_loaddata.py` — two aggregate float sums relaxed to `assertAlmostEqual`
 
 - **New: `DetectTimestampShifts`** — `diive/pkgs/preprocessing/qaqc/detect_timestamp_shifts.py`
   Detects clock/timestamp errors in meteorological time series by comparing measured shortwave

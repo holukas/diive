@@ -10,16 +10,8 @@ class TestPlots(unittest.TestCase):
         data_df, metadata_df = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
         series = data_df['FC'].copy()
 
-        hist = HistogramPlot(
-            s=series,
-            method='n_bins',
-            n_bins=20,
-            xlabel='flux',
-            highlight_peak=True,
-            show_zscores=True,
-            show_info=True
-        )
-        hist.plot()
+        hist = HistogramPlot(s=series, method='n_bins', n_bins=20)
+        hist.plot(xlabel='flux', highlight_peak=True, show_zscores=True, show_info=True)
 
         edges = hist.edges
         counts = hist.counts

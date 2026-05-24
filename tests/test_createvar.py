@@ -34,9 +34,9 @@ class TestCreateVar(unittest.TestCase):
         et_eddypro = df['ET'].copy()  # Should be in mm h-1
         ta = df['TA_1_1_1'].copy()
         et = dv.et_from_le(le=le, ta=ta)
-        self.assertAlmostEqual(et[0], et_eddypro[0], places=4)
-        self.assertAlmostEqual(et[1], et_eddypro[1], places=4)
-        self.assertAlmostEqual(et[-1], et_eddypro[-1], places=3)
+        self.assertAlmostEqual(et.iloc[0], et_eddypro.iloc[0], places=4)
+        self.assertAlmostEqual(et.iloc[1], et_eddypro.iloc[1], places=4)
+        self.assertAlmostEqual(et.iloc[-1], et_eddypro.iloc[-1], places=3)
         self.assertAlmostEqual(et.sum(), et_eddypro.sum(), places=0)
 
     def test_lagged_variants(self):
@@ -80,8 +80,8 @@ class TestCreateVar(unittest.TestCase):
         swin_pot = dnf.get_swinpot()
         daytime_flag = dnf.get_daytime_flag()
         nighttime_flag = dnf.get_nighttime_flag()
-        self.assertEqual(results.sum().sum(), 52180821.63268461)
-        self.assertEqual(swin_pot.sum(), 52005525.63268461)
+        self.assertAlmostEqual(results.sum().sum(), 52180821.63268461, places=3)
+        self.assertAlmostEqual(swin_pot.sum(), 52005525.63268461, places=3)
         self.assertEqual(daytime_flag.sum(), 87592)
         self.assertEqual(daytime_flag.max(), 1)
         self.assertEqual(daytime_flag.min(), 0)
@@ -103,7 +103,7 @@ class TestCreateVar(unittest.TestCase):
         subsetcols = [ta_col, rh_col]
         subset_df = df[subsetcols].copy()
         subset_df[vpd_col] = calc_vpd_from_ta_rh(df=subset_df, ta_col=ta_col, rh_col=rh_col)
-        self.assertEqual(subset_df[vpd_col].sum(), 56371.50662138253)
+        self.assertAlmostEqual(subset_df[vpd_col].sum(), 56371.50662138253, places=3)
         self.assertEqual(subset_df[vpd_col].min(), 0)
         self.assertEqual(subset_df[vpd_col].max(), 3.215734681690522)
         self.assertEqual(subset_df[vpd_col].dropna().count(), 174589)

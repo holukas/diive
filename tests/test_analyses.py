@@ -19,9 +19,9 @@ class TestAnalyses(unittest.TestCase):
         from diive.pkgs.analysis.gapfinder import GapFinder
         data_df = load_exampledata_parquet()
         series = data_df['NEE_CUT_REF_orig']
-        gf = GapFinder(series=series, limit=None, sort_results=True)
-        gapfinder_df = gf.get_results()
-        self.assertEqual(len(gapfinder_df.columns), 3)
+        gf = GapFinder(series=series, sort_results=True)
+        gapfinder_df = gf.results
+        self.assertEqual(len(gapfinder_df.columns), 4)
         self.assertEqual(len(gapfinder_df.index), 15602)
         self.assertEqual(gapfinder_df.iloc[0]['GAP_LENGTH'], 2633)
         self.assertEqual(gapfinder_df.iloc[1]['GAP_LENGTH'], 468)
@@ -93,19 +93,10 @@ class TestAnalyses(unittest.TestCase):
                            lon=7.733750,
                            utc_offset=1)
         # Calculate daily correlation between Rg_f and SW_IN_POT
-        daycorrs = daily_correlation(
-            s1=rg_series,
-            s2=reference,
-            mincorr=0.8,
-            showplot=False
-        )
+        daycorrs = daily_correlation(s1=rg_series, s2=reference, mincorr=0.8).result
         self.assertEqual(daycorrs.sum(), 337.3189145385522)
         # Calculate daily correlation between Tair_f and NEE_CUT_REF_f
-        daycorrs = daily_correlation(
-            s1=ta_series,
-            s2=nee_series,
-            showplot=False
-        )
+        daycorrs = daily_correlation(s1=ta_series, s2=nee_series).result
         self.assertEqual(daycorrs.sum(), -167.25042524807637)
         self.assertEqual(daycorrs.min(), -0.9450031804629302)
         self.assertEqual(daycorrs.max(), 0.7109706199504967)

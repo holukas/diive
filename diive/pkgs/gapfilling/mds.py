@@ -109,6 +109,11 @@ class _FluxMDS:
         return self.gapfilling_df_[self.target_gapfilled_flag]
 
     @property
+    def result(self) -> DataFrame:
+        """Primary result: full gap-filling DataFrame (target + flag columns)."""
+        return self.gapfilling_df_
+
+    @property
     def gapfilled_(self) -> pd.Series:
         """Gap-filled data."""
         series = self.get_gapfilled_target()
@@ -683,6 +688,11 @@ class FluxMDS:
     def get_flag(self):
         """Gap-filling flag, where 0=observed, 1+=gap-filled"""
         return self.gapfilling_df_[self.target_gapfilled_flag]
+
+    @property
+    def result(self) -> DataFrame:
+        """Primary result: full gap-filling DataFrame (target + flag columns)."""
+        return self.gapfilling_df_
 
     @property
     def gapfilled_(self) -> pd.Series:

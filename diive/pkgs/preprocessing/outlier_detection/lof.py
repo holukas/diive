@@ -132,8 +132,8 @@ class LocalOutlierFactor(FlagBase):
 
         if n_neighbors < 1:
             raise ValueError(f"n_neighbors must be >= 1, got {n_neighbors}")
-        if not (0 < contamination <= 0.5):
-            raise ValueError(f"contamination must be in (0, 0.5], got {contamination}")
+        if contamination != 'auto' and not (0 < contamination <= 0.5):
+            raise ValueError(f"contamination must be 'auto' or in (0, 0.5], got {contamination}")
 
         self.n_neighbors = n_neighbors
         self.contamination = contamination

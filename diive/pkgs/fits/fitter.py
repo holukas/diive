@@ -75,6 +75,12 @@ class BinFitterCP:
 
     def run(self):
         self.fit_results = self._fit()
+        return self
+
+    @property
+    def result(self) -> dict:
+        """Primary result: fit results dict."""
+        return self.fit_results
 
     def get_results(self):
         return self.fit_results

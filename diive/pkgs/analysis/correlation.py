@@ -78,6 +78,11 @@ class DailyCorrelation:
         self.df_ = df
 
     @property
+    def result(self) -> Series:
+        """Primary result: daily correlations as a pandas Series."""
+        return self.daycorrs_
+
+    @property
     def correlations(self) -> Series:
         """Daily correlations as a pandas Series."""
         return self.daycorrs_
