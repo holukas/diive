@@ -15,7 +15,7 @@ class TestEcHires(unittest.TestCase):
         df['N2Od'] = df['N2Od'].multiply(10 ** 3)  # Convert from umol mol-1 to nmol mol-1
         df['H2O'] = df['H2O'].div(10 ** 6)  # Convert from umol mol-1 to mol mol-1
         df['Ts'] = df['Ts'].add(273.15)  # From degC to K
-        fdl = dv.FluxDetectionLimit(
+        fdl = dv.flux.FluxDetectionLimit(
             df=df,
             u_col='x',  # m s-1
             v_col='y',  # m s-1

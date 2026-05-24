@@ -32,7 +32,7 @@ print(f"\nData: {len(df)} records, {df.index.min().date()} to {df.index.max().da
 # detect() returns seasonal thresholds; get_annual_thresholds() returns the
 # conservative annual maximum across seasons.
 
-detector = dv.UstarMovingPointDetection(
+detector = dv.flux.UstarMovingPointDetection(
     df=df,
     ta_classes_count=7,  # Temperature stratification classes (ONEFlux default)
     ustar_classes_count=20,  # USTAR stratification classes per temperature class
@@ -55,9 +55,9 @@ print(f"\nAnnual threshold (max across seasons): {annual['threshold']:.4f} m/s")
 # p50 is the recommended annual threshold; p16/p84 bound the uncertainty.
 # get_cut_threshold() pools all years into a single CUT threshold.
 
-boot = dv.UstarBootstrapThresholds(
+boot = dv.flux.UstarBootstrapThresholds(
     df=df,
-    detector_class=dv.UstarMovingPointDetection,
+    detector_class=dv.flux.UstarMovingPointDetection,
     detector_kwargs=dict(ta_classes_count=7, ustar_classes_count=20),
     n_iter=100,
     percentiles=(16, 50, 84),

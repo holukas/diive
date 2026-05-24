@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 
 import diive as dv
 
-df_noisy = dv.generate_noisy_timeseries(
+df_noisy = dv.features.generate_noisy_timeseries(
     start_date='2024-01-01',
     periods=48 * 30,  # ~1 month half-hourly
     freq='30min',

@@ -37,7 +37,7 @@ print(f"  Values exceeding 100%: {(series > 100).sum()}")
 # the mean excess as the offset, and subtracts it from all data.
 # Values are then capped at 100%.
 
-series_corr = dv.remove_relativehumidity_offset(series=series, showplot=True)
+series_corr = dv.corrections.remove_relativehumidity_offset(series=series, showplot=True)
 
 print("\nCorrected RH data:")
 print(f"  Range: {series_corr.min():.2f}% to {series_corr.max():.2f}%")

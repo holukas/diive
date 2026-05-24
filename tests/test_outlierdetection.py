@@ -5,13 +5,13 @@ import pandas as pd
 
 import diive.configs.exampledata as ed
 from diive.pkgs.features.variables import add_impulse_noise
-from diive.pkgs.preprocessing.outlierdetection import AbsoluteLimits, AbsoluteLimitsDaytimeNighttime
-from diive.pkgs.preprocessing.outlierdetection.hampel import HampelDaytimeNighttime
-from diive.pkgs.preprocessing.outlierdetection import zScoreIncrements
-from diive.pkgs.preprocessing.outlierdetection import LocalSD
-from diive.pkgs.preprocessing.outlierdetection import LocalOutlierFactorAllData
-from diive.pkgs.preprocessing.outlierdetection import TrimLow
-from diive.pkgs.preprocessing.outlierdetection import zScore, zScoreRolling
+from diive.pkgs.preprocessing.outlier_detection import AbsoluteLimits, AbsoluteLimitsDaytimeNighttime
+from diive.pkgs.preprocessing.outlier_detection.hampel import HampelDaytimeNighttime
+from diive.pkgs.preprocessing.outlier_detection import zScoreIncrements
+from diive.pkgs.preprocessing.outlier_detection import LocalSD
+from diive.pkgs.preprocessing.outlier_detection import LocalOutlierFactorAllData
+from diive.pkgs.preprocessing.outlier_detection import TrimLow
+from diive.pkgs.preprocessing.outlier_detection import zScore, zScoreRolling
 from diive.pkgs.preprocessing.qaqc import MissingValues
 
 

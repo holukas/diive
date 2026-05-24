@@ -29,7 +29,7 @@ df = df.loc[df['Rg_f'] > 20]
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 # Find optimum temperature range for maximum CO2 uptake (minimum NEE)
-optrange = dv.find_optimum_range(
+optrange = dv.analysis.FindOptimumRange(
     df=df,
     xcol='Tair_f',  # Driver variable (air temperature)
     ycol='NEE_CUT_REF_f',  # Response variable (net ecosystem productivity)

@@ -4,7 +4,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from diive.core.plotting.hexbin_plot import HexbinPlot
+from diive.core.plotting.hexbin import HexbinPlot
 
 
 class TestHexbinPlot(unittest.TestCase):
@@ -143,10 +143,9 @@ class TestHexbinPlot(unittest.TestCase):
             xlabel="Custom X",
             ylabel="Custom Y",
             zlabel="Custom Z",
-            figsize=(10, 8)
         )
         try:
-            hb.plot()
+            hb.plot(figsize=(10, 8))
         except Exception as e:
             self.fail(f"plot() with custom params raised: {e}")
 
@@ -163,30 +162,34 @@ class TestHexbinPlot(unittest.TestCase):
         self.assertEqual(normalized.name, "test")
 
     def test_show_values_parameter(self):
-        """Test initialization with show_values parameter."""
-        hb = HexbinPlot(self.x, self.y, self.z, show_values=True)
+        """Test show_values parameter passed to plot()."""
+        hb = HexbinPlot(self.x, self.y, self.z)
+        hb.plot(show_values=True)
         self.assertTrue(hb.show_values)
 
     def test_show_values_n_dec_places(self):
         """Test custom decimal places for displayed values."""
-        hb = HexbinPlot(self.x, self.y, self.z, show_values=True, show_values_n_dec_places=3)
+        hb = HexbinPlot(self.x, self.y, self.z)
+        hb.plot(show_values=True, show_values_n_dec_places=3)
         self.assertEqual(hb.show_values_n_dec_places, 3)
 
     def test_show_values_fontsize(self):
         """Test custom font size for displayed values."""
-        hb = HexbinPlot(self.x, self.y, self.z, show_values=True, show_values_fontsize=10)
+        hb = HexbinPlot(self.x, self.y, self.z)
+        hb.plot(show_values=True, show_values_fontsize=10)
         self.assertEqual(hb.show_values_fontsize, 10)
 
     def test_show_values_color(self):
         """Test custom color for displayed values."""
-        hb = HexbinPlot(self.x, self.y, self.z, show_values=True, show_values_color='red')
+        hb = HexbinPlot(self.x, self.y, self.z)
+        hb.plot(show_values=True, show_values_color='red')
         self.assertEqual(hb.show_values_color, 'red')
 
     def test_plot_with_show_values(self):
         """Test plot() with show_values enabled."""
-        hb = HexbinPlot(self.x, self.y, self.z, show_values=True, mincnt=2)
+        hb = HexbinPlot(self.x, self.y, self.z, mincnt=2)
         try:
-            hb.plot()
+            hb.plot(show_values=True)
         except Exception as e:
             self.fail(f"plot() with show_values raised: {e}")
 

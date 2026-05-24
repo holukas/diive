@@ -2,6 +2,23 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.92.0 | 24 May 2026
+
+- **Refactor: namespace submodules for public API** — `diive/__init__.py`, new `diive/outliers/`, `diive/gapfilling/`, `diive/flux/`, `diive/analysis/`, `diive/plotting/`, `diive/times/`, `diive/features/`, `diive/corrections/`, `diive/qaqc/`
+  Replaced the flat 145-export top-level namespace (with 40+ snake_case aliases) with 9 domain namespaces.
+  `dir(dv)` now shows 21 names instead of 145+. Access pattern: `dv.outliers.AbsoluteLimits`, `dv.gapfilling.RandomForestTS`, `dv.flux.FluxProcessingChain`, etc.
+  Top-level exports kept: `load_exampledata_parquet`, `load_parquet`, `save_parquet`, `ReadFileType`, `search_files`, `sstats`, `transform_yearmonth_matrix_to_longform`, `get_encoded_value_from_int`, `get_encoded_value_series`.
+  **Breaking change:** all old flat names (`dv.AbsoluteLimits`, `dv.plot_scatter_xy`, etc.) removed.
+
+- **Updated 84 example and test files** — `examples/`, `tests/`
+  All `dv.OldName` references updated to `dv.namespace.NewName`. Also fixed two pre-existing wrong internal import paths: `outlierdetection` → `outlier_detection`, `hexbin_plot` → `hexbin`.
+
+- **Fix `Hampel`: add `n_sigma_dt` / `n_sigma_nt` parameter aliases** — `diive/pkgs/preprocessing/outlier_detection/hampel.py`
+  The constructor accepted `n_sigma_daytime` / `n_sigma_nighttime` but internal callers (`selfheating.py`) and tests already used the short forms `n_sigma_dt` / `n_sigma_nt`. Both forms now accepted; short form takes precedence.
+
+- **Fix `test_hexbin_plot.py`: move styling params from `__init__` to `plot()`** — `tests/test_hexbin_plot.py`
+  Tests passed `show_values`, `show_values_*`, and `figsize` to `HexbinPlot.__init__`, violating the two-phase plotting design. Updated to pass them to `plot()` instead, where they are stored as instance attributes.
+
 ## v0.91.0 | 24 May 2026
 
 - **Add `.run()` / `.result` protocol across all class families** — `diive/core/base/flagbase.py`, `diive/core/ml/common.py`, `diive/pkgs/gapfilling/mds.py`, `diive/pkgs/analysis/correlation.py`, `diive/pkgs/analysis/decoupling.py`, `diive/pkgs/fits/fitter.py`

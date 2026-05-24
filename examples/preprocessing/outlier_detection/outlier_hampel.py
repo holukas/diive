@@ -25,7 +25,7 @@ s = df['Tair_f'].copy()
 s = s.loc[s.index.year == 2018].copy()
 
 # Add synthetic impulse noise
-s_noise = dv.add_impulse_noise(
+s_noise = dv.features.add_impulse_noise(
     series=s,
     factor_low=-10,
     factor_high=4,
@@ -46,7 +46,7 @@ print(f"  Valid records: {s_noise.notna().sum()}")
 # Use separate thresholds for daytime and nighttime data.
 # This accounts for different signal characteristics across the day.
 
-ham_dtnt = dv.Hampel(
+ham_dtnt = dv.outliers.Hampel(
     series=s_noise,
     n_sigma=5.5,
     window_length=48 * 13,  # 13 days
@@ -75,7 +75,7 @@ print(f"  Filtered range: {filtered_dtnt.min():.2f} to {filtered_dtnt.max():.2f}
 # Use consistent threshold across entire series.
 # Simpler, faster approach when time-of-day variation is not a concern.
 
-ham_global = dv.Hampel(
+ham_global = dv.outliers.Hampel(
     series=s_noise,
     n_sigma=5.5,
     window_length=48 * 13,
@@ -122,7 +122,7 @@ print("=" * 60)
 n_sigma_values = [3.0, 4.0, 5.5, 7.0, 9.0]
 
 for n_sig in n_sigma_values:
-    ham_tune = dv.Hampel(
+    ham_tune = dv.outliers.Hampel(
         series=s_noise,
         n_sigma=n_sig,
         window_length=48 * 13,
@@ -154,7 +154,7 @@ print("=" * 60)
 window_lengths = [24 * 2, 48 * 5, 48 * 13, 48 * 30]  # 2 days to 30 days
 
 for win_len in window_lengths:
-    ham_win = dv.Hampel(
+    ham_win = dv.outliers.Hampel(
         series=s_noise,
         n_sigma=5.5,
         window_length=win_len,

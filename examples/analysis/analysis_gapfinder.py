@@ -29,7 +29,7 @@ series = data_df['NEE_CUT_REF_orig'].copy()
 # ^^^^^^^^^^^^^
 
 # Detect all consecutive missing periods
-gf = dv.GapFinder(
+gf = dv.analysis.GapFinder(
     series=series,
     max_length=None,   # max gap size to include (records); None = no upper limit
     min_length=None,   # min gap size to include (records); None = no lower limit
@@ -53,7 +53,7 @@ print(gf.results[['GAP_START', 'GAP_END', 'GAP_LENGTH', 'GAP_DURATION']].head(5)
 # ^^^^^^^^^^^^^^^^^^
 
 # Only gaps too long for simple interpolation (> 1 day = 48 records at 30min)
-long_gaps = dv.GapFinder(
+long_gaps = dv.analysis.GapFinder(
     series=series,
     max_length=None,   # no upper bound
     min_length=49,     # at least 49 records = just over 1 day at 30min
@@ -62,7 +62,7 @@ long_gaps = dv.GapFinder(
 print(long_gaps)
 
 # Only short gaps suitable for linear interpolation (<= 4 records = 2 hours at 30min)
-short_gaps = dv.GapFinder(
+short_gaps = dv.analysis.GapFinder(
     series=series,
     max_length=4,      # at most 4 records = 2 hours at 30min
     min_length=None,   # no lower bound

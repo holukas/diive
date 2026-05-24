@@ -33,7 +33,7 @@ class TestCreateVar(unittest.TestCase):
         le = df['LE'].copy()
         et_eddypro = df['ET'].copy()  # Should be in mm h-1
         ta = df['TA_1_1_1'].copy()
-        et = dv.et_from_le(le=le, ta=ta)
+        et = dv.features.et_from_le(le=le, ta=ta)
         self.assertAlmostEqual(et.iloc[0], et_eddypro.iloc[0], places=4)
         self.assertAlmostEqual(et.iloc[1], et_eddypro.iloc[1], places=4)
         self.assertAlmostEqual(et.iloc[-1], et_eddypro.iloc[-1], places=3)

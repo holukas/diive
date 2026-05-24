@@ -29,7 +29,7 @@ print(f"Loaded {len(df)} records from {df.index[0].date()} to {df.index[-1].date
 df_2019 = df.loc[(df.index.year >= 2019) & (df.index.year <= 2019)].copy()
 series_weekly = df_2019['Tair_f'].copy()
 
-rp = dv.plot_ridgeline(
+rp = dv.plotting.RidgeLinePlot(
     series=series_weekly
 )
 rp.plot(

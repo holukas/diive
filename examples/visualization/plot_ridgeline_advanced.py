@@ -29,7 +29,7 @@ print(f"Loaded {len(df)} records from {df.index[0].date()} to {df.index[-1].date
 df_2022 = df.loc[df.index.year == 2022].copy()
 series_monthly = df_2022['Tair_f'].copy()
 
-rp = dv.plot_ridgeline(
+rp = dv.plotting.RidgeLinePlot(
     series=series_monthly
 )
 rp.plot(

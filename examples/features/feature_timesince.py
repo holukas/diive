@@ -48,7 +48,7 @@ df = dv.load_exampledata_parquet()
 series_prec = df.loc[(df.index.year == 2022) & (df.index.month == 7),
     "PREC_TOT_T1_25+20_1"].copy()
 
-ts_prec = dv.TimeSince(series_prec, lower_lim=0, include_lim=False)
+ts_prec = dv.features.TimeSince(series_prec, lower_lim=0, include_lim=False)
 ts_prec.calc()
 
 print("Time Since Last Precipitation Event")
@@ -110,9 +110,9 @@ ax1 = fig.add_subplot(gs[0, 0])
 ax2 = fig.add_subplot(gs[1, 0])
 ax3 = fig.add_subplot(gs[2, 0])
 
-dv.plot_time_series(series=ts_prec_df['PREC_TOT_T1_25+20_1']).plot(ax=ax1, color='#1565C0')
-dv.plot_time_series(series=ts_prec_df['TIMESINCE_PREC_TOT_T1_25+20_1']).plot(ax=ax2, color='#D32F2F')
-dv.plot_time_series(series=ts_prec_df['FLAG_IS_OUTSIDE_RANGE']).plot(ax=ax3, color='#00BCD4')
+dv.plotting.TimeSeries(series=ts_prec_df['PREC_TOT_T1_25+20_1']).plot(ax=ax1, color='#1565C0')
+dv.plotting.TimeSeries(series=ts_prec_df['TIMESINCE_PREC_TOT_T1_25+20_1']).plot(ax=ax2, color='#D32F2F')
+dv.plotting.TimeSeries(series=ts_prec_df['FLAG_IS_OUTSIDE_RANGE']).plot(ax=ax3, color='#00BCD4')
 
 ax1.set_title("Measured Precipitation (mm)", fontsize=12, fontweight='bold')
 ax2.set_title("Time Since Last Precipitation (records)", fontsize=12, fontweight='bold')
@@ -139,7 +139,7 @@ df = dv.load_exampledata_parquet()
 series_ta = df.loc[(df.index.year == 2022) & (df.index.month == 3),
     "Tair_f"].copy()
 
-ts_ta = dv.TimeSince(series_ta, upper_lim=0, include_lim=True)
+ts_ta = dv.features.TimeSince(series_ta, upper_lim=0, include_lim=True)
 ts_ta.calc()
 
 print("\nTime Since Last Freezing Temperature")
@@ -184,9 +184,9 @@ ax1 = fig.add_subplot(gs[0, 0])
 ax2 = fig.add_subplot(gs[1, 0])
 ax3 = fig.add_subplot(gs[2, 0])
 
-dv.plot_time_series(series=ts_ta_df['Tair_f']).plot(ax=ax1, color='#1565C0')
-dv.plot_time_series(series=ts_ta_df['TIMESINCE_Tair_f']).plot(ax=ax2, color='#D32F2F')
-dv.plot_time_series(series=ts_ta_df['FLAG_IS_OUTSIDE_RANGE']).plot(ax=ax3, color='#00BCD4')
+dv.plotting.TimeSeries(series=ts_ta_df['Tair_f']).plot(ax=ax1, color='#1565C0')
+dv.plotting.TimeSeries(series=ts_ta_df['TIMESINCE_Tair_f']).plot(ax=ax2, color='#D32F2F')
+dv.plotting.TimeSeries(series=ts_ta_df['FLAG_IS_OUTSIDE_RANGE']).plot(ax=ax3, color='#00BCD4')
 
 ax1.set_title("Measured Air Temperature (°C)", fontsize=12, fontweight='bold')
 ax2.set_title("Time Since Last Freezing Temperature (records)", fontsize=12, fontweight='bold')
@@ -211,7 +211,7 @@ series_prec = df.loc[(df.index.year == 2022) & (df.index.month == 7),
     "PREC_TOT_T1_25+20_1"].copy()
 
 # Create TimeSince counter
-ts_prec = dv.TimeSince(series_prec, lower_lim=0, include_lim=False)
+ts_prec = dv.features.TimeSince(series_prec, lower_lim=0, include_lim=False)
 ts_prec.calc()
 ts_prec_df = ts_prec.get_full_results()
 
@@ -223,9 +223,9 @@ ax1 = fig.add_subplot(gs[0, 0])
 ax2 = fig.add_subplot(gs[0, 1])
 ax3 = fig.add_subplot(gs[0, 2])
 
-dv.plot_heatmap_datetime(series=ts_prec_df['PREC_TOT_T1_25+20_1']).plot(ax=ax1)
-dv.plot_heatmap_datetime(series=ts_prec_df['TIMESINCE_PREC_TOT_T1_25+20_1']).plot(ax=ax2)
-dv.plot_heatmap_datetime(series=ts_prec_df['FLAG_IS_OUTSIDE_RANGE']).plot(ax=ax3)
+dv.plotting.HeatmapDateTime(series=ts_prec_df['PREC_TOT_T1_25+20_1']).plot(ax=ax1)
+dv.plotting.HeatmapDateTime(series=ts_prec_df['TIMESINCE_PREC_TOT_T1_25+20_1']).plot(ax=ax2)
+dv.plotting.HeatmapDateTime(series=ts_prec_df['FLAG_IS_OUTSIDE_RANGE']).plot(ax=ax3)
 
 ax1.set_title("Precipitation (mm)", fontsize=12, fontweight='bold')
 ax2.set_title("Time Since Last Precipitation (records)", fontsize=12, fontweight='bold')

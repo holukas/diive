@@ -66,7 +66,7 @@ print(f"  Individual test flags: 6 (with overlaps)")
 # Combine all test flags into single quality indicator.
 # Hard flags (2) weighted more heavily than soft flags (1).
 
-qcf = dv.FlagQCF(
+qcf = dv.qaqc.FlagQCF(
     df=df,
     target_col='NEE',
     outname='NEE',
@@ -122,7 +122,7 @@ print(f"  Records with data: {df['NEE'].notna().sum()}")
 print(f"  Missing records: {df['NEE'].isna().sum()}")
 
 # Missing values are automatically flagged as poor quality
-qcf_with_missing = dv.FlagQCF(
+qcf_with_missing = dv.qaqc.FlagQCF(
     df=df,
     target_col='NEE',
     outname='NEE',

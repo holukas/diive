@@ -36,7 +36,7 @@ print(f"Tair_f range: {df['Tair_f'].min():.1f} to {df['Tair_f'].max():.1f} deg C
 # ``resample_freq='D'`` (default) aggregates observations to daily means before
 # building the ring grid.  Use ``'h'`` or ``'30min'`` for finer angular resolution.
 
-tr = dv.plot_treering(
+tr = dv.plotting.TreeRingPlot(
     df=df,
     value_col='Tair_f',  # Data: column with values to visualize
     resample_freq='D'  # Data: resample to daily means (366 slots per ring)

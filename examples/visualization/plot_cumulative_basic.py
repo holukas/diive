@@ -34,7 +34,7 @@ print(f"Unit conversion factor: {conversion_factor}")
 df_cum = df_orig[['NEE_CUT_16_f', 'NEE_CUT_REF_f', 'NEE_CUT_84_f']].copy()
 df_cum = df_cum.multiply(conversion_factor)
 
-dv.plot_cumulative(
+dv.plotting.Cumulative(
     df=df_cum,
     units=series_units,
     start_year=2015,

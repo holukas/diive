@@ -29,7 +29,7 @@ print(f"Loaded {len(series)} records from {series.index[0].date()} to {series.in
 # Dates on y-axis, time-of-day (0-24h) on x-axis.
 # Vertical layout is intuitive: time progresses left-to-right, days progress top-to-bottom.
 
-hm = dv.plot_heatmap_datetime(
+hm = dv.plotting.HeatmapDateTime(
     series=series,
     ax_orientation="vertical"  # Dates on y-axis, hours on x-axis
 )
@@ -52,7 +52,7 @@ print("Plotted HeatmapDateTime in vertical orientation")
 # Time-of-day on y-axis, dates on x-axis.
 # Horizontal layout places dates along x-axis for easier date reading.
 
-hm = dv.plot_heatmap_datetime(
+hm = dv.plotting.HeatmapDateTime(
     series=series,
     ax_orientation="horizontal"  # Dates on x-axis, hours on y-axis
 )

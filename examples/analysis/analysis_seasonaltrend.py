@@ -52,7 +52,7 @@ nee_subset = nee_subset.interpolate(method='linear').ffill().bfill()
 
 print(f"Using subset: {len(nee_subset)} records ({nee_subset.index[0].date()} to {nee_subset.index[-1].date()})")
 
-decomp = dv.SeasonalTrendDecomposition(
+decomp = dv.analysis.SeasonalTrendDecomposition(
     nee_subset,
     method='harmonic',
     n_harmonics=10,
@@ -88,7 +88,7 @@ nee_with_gaps = nee_subset.copy()
 gap_indices = nee_with_gaps.index[100:150]
 nee_with_gaps.loc[gap_indices] = np.nan
 
-decomp_ml = dv.SeasonalTrendDecomposition(
+decomp_ml = dv.analysis.SeasonalTrendDecomposition(
     nee_with_gaps,
     method='harmonic',
     n_harmonics=10,
@@ -134,7 +134,7 @@ print("="*70)
 print("Residuals reveal measurement errors, equipment failures, unusual events\n")
 
 # Use full time series for anomaly detection
-decomp_anomaly = dv.SeasonalTrendDecomposition(
+decomp_anomaly = dv.analysis.SeasonalTrendDecomposition(
     nee,
     method='harmonic',
     n_harmonics=10,
@@ -190,7 +190,7 @@ nee_clean = nee_subset.copy()
 
 # Harmonic method
 start = time.time()
-decomp_harmonic = dv.SeasonalTrendDecomposition(
+decomp_harmonic = dv.analysis.SeasonalTrendDecomposition(
     nee_clean,
     method='harmonic',
     n_harmonics=10,
@@ -225,7 +225,7 @@ print("EXAMPLE 4: Climate Change Impact Analysis")
 print("="*70)
 print("Deseasonalized component reveals climate signal hidden by seasons\n")
 
-decomp_climate = dv.SeasonalTrendDecomposition(
+decomp_climate = dv.analysis.SeasonalTrendDecomposition(
     nee,
     method='harmonic',
     n_harmonics=10,
@@ -271,7 +271,7 @@ print("EXAMPLE 5: Ecosystem Recovery Trends")
 print("="*70)
 print("Trend isolation shows recovery progression after disturbance\n")
 
-decomp_recovery = dv.SeasonalTrendDecomposition(
+decomp_recovery = dv.analysis.SeasonalTrendDecomposition(
     nee,
     method='harmonic',
     n_harmonics=10,

@@ -38,7 +38,7 @@ remove_dates_single = [
     '2018-07-20 09:00:00'
 ]
 
-mr_single = dv.ManualRemoval(
+mr_single = dv.outliers.ManualRemoval(
     series=s,
     remove_dates=remove_dates_single,
     showplot=False,
@@ -69,7 +69,7 @@ remove_dates_ranges = [
     ['2018-07-25', '2018-07-27']  # Multi-day period
 ]
 
-mr_ranges = dv.ManualRemoval(
+mr_ranges = dv.outliers.ManualRemoval(
     series=s,
     remove_dates=remove_dates_ranges,
     showplot=False,

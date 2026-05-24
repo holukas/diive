@@ -28,7 +28,7 @@ print(f"Data: {len(data)} records, {data.index.min().date()} to {data.index.max(
 # detect() returns seasonal thresholds; get_annual_thresholds() returns the
 # conservative annual maximum across seasons.
 
-detector = dv.UstarVekuriThresholdDetection(data, verbose=1)
+detector = dv.flux.UstarVekuriThresholdDetection(data, verbose=1)
 thresholds = detector.detect()
 
 print("\n" + detector.summary())
@@ -45,9 +45,9 @@ print(f"\nAnnual threshold (max across seasons): {annual['threshold']:.4f} m/s")
 # p50 is the recommended annual threshold; p16/p84 bound the uncertainty.
 # get_cut_threshold() pools all years into a single CUT threshold.
 
-boot = dv.UstarBootstrapThresholds(
+boot = dv.flux.UstarBootstrapThresholds(
     df=data,
-    detector_class=dv.UstarVekuriThresholdDetection,
+    detector_class=dv.flux.UstarVekuriThresholdDetection,
     n_iter=100,
     percentiles=(16, 50, 84),
     n_jobs=-1,

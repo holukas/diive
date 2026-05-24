@@ -24,7 +24,7 @@ s = s.loc[s.index.year == 2018].copy()
 s = s.loc[s.index.month == 7].copy()
 
 # Add synthetic impulse noise
-s_noise = dv.add_impulse_noise(
+s_noise = dv.features.add_impulse_noise(
     series=s,
     factor_low=-10,
     factor_high=3,
@@ -49,7 +49,7 @@ print(f"  Range: {s_noise.min():.2f} to {s_noise.max():.2f}°C")
 #
 # Values flagged in all three increment types are removed.
 
-zsi = dv.zScoreIncrements(
+zsi = dv.outliers.zScoreIncrements(
     series=s_noise,
     thres_zscore=3,
     showplot=False,

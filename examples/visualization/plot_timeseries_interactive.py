@@ -30,7 +30,7 @@ print(f"Loaded {len(df)} records from {df.index[0]} to {df.index[-1]}")
 
 series = df['NEE_CUT_REF_f'].copy()
 
-ts = dv.plot_time_series(
+ts = dv.plotting.TimeSeries(
     series=series
 )
 ts.plot_interactive(
@@ -49,7 +49,7 @@ print("Tools available: Hover (tooltip), Box Zoom, Reset, Pan, Box Select, Wheel
 
 series_temp = df['Tair_f'].copy()
 
-ts_large = dv.plot_time_series(
+ts_large = dv.plotting.TimeSeries(
     series=series_temp
 )
 ts_large.plot_interactive(

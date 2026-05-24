@@ -30,7 +30,7 @@ print(f"Loaded {len(data)} growing season records")
 #
 # Use original variable values on axes with mean aggregation in each bin.
 
-hm = dv.plot_hexbin(
+hm = dv.plotting.HexbinPlot(
     x=data['Tair_f'],
     y=data['VPD_f'],
     z=data['NEE_CUT_REF_f'],
@@ -58,7 +58,7 @@ print("Plotted hexbin with absolute values and mean aggregation")
 #
 # Display aggregated values directly on hexagon centers for detailed readability.
 
-hm = dv.plot_hexbin(
+hm = dv.plotting.HexbinPlot(
     x=data['Tair_f'],
     y=data['VPD_f'],
     z=data['NEE_CUT_REF_f'],

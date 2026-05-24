@@ -58,7 +58,7 @@ print(f"Water vapor concentration: {h2o.min():.4f} to {h2o.max():.4f} mol/mol")
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^
 # Apply the correction using the Striednig et al. (2020) formula
 
-air_temp = dv.air_temp_from_sonic_temp(sonic_temp=sonic_temp, h2o=h2o)
+air_temp = dv.features.air_temp_from_sonic_temp(sonic_temp=sonic_temp, h2o=h2o)
 
 print(f"\nAir temperature range: {air_temp.min():.2f} to {air_temp.max():.2f} K "
       f"({air_temp.min() - 273.15:.1f} to {air_temp.max() - 273.15:.1f}°C)")

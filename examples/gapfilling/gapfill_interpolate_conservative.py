@@ -43,7 +43,7 @@ print(f"Missing values before: {series.isnull().sum()}")
 #
 # Fill only isolated missing values (gaps of 1 record).
 
-series_gapfilled = dv.linear_interpolation(series=series, limit=1, verbose=True)
+series_gapfilled = dv.gapfilling.linear_interpolation(series=series, limit=1, verbose=True)
 
 print(f"Missing values after: {series_gapfilled.isnull().sum()}")
 
@@ -57,8 +57,8 @@ gs.update(wspace=0.3, hspace=0.3, left=0.03, right=0.97, top=0.97, bottom=0.03)
 ax_input = fig.add_subplot(gs[0, 0])
 ax_output = fig.add_subplot(gs[0, 1])
 
-dv.plot_heatmap_datetime(series=series).plot(ax=ax_input)
-dv.plot_heatmap_datetime(series=series_gapfilled).plot(ax=ax_output)
+dv.plotting.HeatmapDateTime(series=series).plot(ax=ax_input)
+dv.plotting.HeatmapDateTime(series=series_gapfilled).plot(ax=ax_output)
 
 ax_input.set_title("Observed Data (with gaps)", color='black', fontsize=12, fontweight='bold')
 ax_output.set_title("Gap-Filled (limit=1, conservative)", color='black', fontsize=12, fontweight='bold')

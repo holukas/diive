@@ -145,7 +145,7 @@ if __name__ == '__main__':
     # ------------------------------------------------------------------
     # Run batch detection
     # ------------------------------------------------------------------
-    det = dv.PwbBatchDetection(
+    det = dv.flux.PwbBatchDetection(
         files=file_paths,
         scalars={'CH4': 'ch4', 'N2O': 'n2o'},
         col_w='w',
@@ -251,7 +251,7 @@ if __name__ == '__main__':
         hdi_col = f'{prefix}_hdi_range_s'
         if tlag_col not in results.columns:
             continue
-        std = dv.PwbBatchDetection.apply_pwbopt(
+        std = dv.flux.PwbBatchDetection.apply_pwbopt(
             results[tlag_col],
             results[hdi_col],
             hdi_thresh=0.5,  # S1: HDI < 0.5 s -> reliable
@@ -272,12 +272,12 @@ if __name__ == '__main__':
         hdi_col = f'{prefix}_hdi_range_s'
         if tlag_col not in results.columns:
             continue
-        tlag_pf = dv.PwbBatchDetection.apply_hdi_prefilter(
+        tlag_pf = dv.flux.PwbBatchDetection.apply_hdi_prefilter(
             results[tlag_col],
             results[hdi_col],
             threshold=1.0,  # discard lags with HDI > 1.0 s before PWBOPT
         )
-        pf = dv.PwbBatchDetection.apply_pwbopt(tlag_pf, results[hdi_col])
+        pf = dv.flux.PwbBatchDetection.apply_pwbopt(tlag_pf, results[hdi_col])
         results[f'{prefix}_pwbopt_s_pf'] = pf['pwbopt_s']
         results[f'{prefix}_flag_pf'] = pf['flag']
 

@@ -39,7 +39,7 @@ print(f"Coordinates: {SITE_LAT}°N, {SITE_LON}°E")
 print(f"Nighttime threshold: {NIGHTTIME_THRESHOLD} W/m²")
 
 # Calculate daytime/nighttime flags
-dnf = dv.DaytimeNighttimeFlag(
+dnf = dv.features.DaytimeNighttimeFlag(
     timestamp_index=df.index,
     nighttime_threshold=NIGHTTIME_THRESHOLD,
     lat=SITE_LAT,
@@ -71,15 +71,15 @@ fig, axes = plt.subplots(1, 3, figsize=(20, 9),
                          gridspec_kw={'wspace': 0.1},
                          constrained_layout=True)
 
-dv.plot_heatmap_datetime(series=daytime_flag).plot(
+dv.plotting.HeatmapDateTime(series=daytime_flag).plot(
     ax=axes[0],
     zlabel="flag (1=daytime)",
     cb_digits_after_comma=0)
-dv.plot_heatmap_datetime(series=nighttime_flag).plot(
+dv.plotting.HeatmapDateTime(series=nighttime_flag).plot(
     ax=axes[1],
     zlabel="flag (1=nighttime)",
     cb_digits_after_comma=0)
-dv.plot_heatmap_datetime(series=swinpot).plot(
+dv.plotting.HeatmapDateTime(series=swinpot).plot(
     ax=axes[2],
     zlabel=r"$\mathrm{W\ m^{-2}}$",
     cb_digits_after_comma=0)

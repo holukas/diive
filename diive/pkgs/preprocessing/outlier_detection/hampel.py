@@ -63,6 +63,8 @@ class Hampel(FlagBase):
                  n_sigma: float = 5.5,
                  n_sigma_daytime: float = None,
                  n_sigma_nighttime: float = None,
+                 n_sigma_dt: float = None,
+                 n_sigma_nt: float = None,
                  k: float = 1.4826,
                  use_differencing: bool = True,
                  separate_day_night: bool = True,
@@ -128,9 +130,11 @@ class Hampel(FlagBase):
         self.verbose = verbose
         self.window_length = window_length
         self.n_sigma = n_sigma
-        # Use provided day/night overrides, or fall back to n_sigma
-        self.n_sigma_daytime = n_sigma_daytime if n_sigma_daytime is not None else n_sigma
-        self.n_sigma_nighttime = n_sigma_nighttime if n_sigma_nighttime is not None else n_sigma
+        # Short-form aliases (n_sigma_dt/n_sigma_nt) take precedence over long-form
+        _n_sigma_daytime = n_sigma_dt if n_sigma_dt is not None else n_sigma_daytime
+        _n_sigma_nighttime = n_sigma_nt if n_sigma_nt is not None else n_sigma_nighttime
+        self.n_sigma_daytime = _n_sigma_daytime if _n_sigma_daytime is not None else n_sigma
+        self.n_sigma_nighttime = _n_sigma_nighttime if _n_sigma_nighttime is not None else n_sigma
         self.k = k
         self.use_differencing = use_differencing
         self.separate_day_night = separate_day_night

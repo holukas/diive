@@ -20,7 +20,7 @@ s = df['Tair_f'].copy()
 s = s.loc[s.index.year == 2018].copy()
 s = s.loc[s.index.month == 7].copy()
 
-s_noise = dv.add_impulse_noise(
+s_noise = dv.features.add_impulse_noise(
     series=s,
     factor_low=-10,
     factor_high=3,
@@ -40,7 +40,7 @@ print(f"  Range: {s_noise.min():.2f} to {s_noise.max():.2f}°C")
 # Use separate contamination rates for daytime and nighttime.
 # LOF identifies points with anomalous local density compared to neighbors.
 
-lof_dtnt = dv.LocalOutlierFactor(
+lof_dtnt = dv.outliers.LocalOutlierFactor(
     series=s_noise,
     n_neighbors=20,
     contamination=0.05,
@@ -71,7 +71,7 @@ print(f"  Data retained: {100*filtered_dtnt.notna().sum()/s_noise.notna().sum():
 # Single contamination rate applied to entire series.
 # Simpler approach when time-of-day variation is not significant.
 
-lof_global = dv.LocalOutlierFactor(
+lof_global = dv.outliers.LocalOutlierFactor(
     series=s_noise,
     n_neighbors=20,
     contamination=0.05,

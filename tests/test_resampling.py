@@ -12,8 +12,8 @@ class TestResampling(unittest.TestCase):
     def test_resample_to_monthly_agg_matrix(self):
         df = load_exampledata_parquet_long()
         series = df['Tair_f'].copy()
-        monthly_means = dv.resample_to_monthly_agg_matrix(series=series, agg='mean', ranks=False)
-        monthly_means_ranks = dv.resample_to_monthly_agg_matrix(series=series, agg='mean', ranks=True)
+        monthly_means = dv.times.resample_to_monthly_agg_matrix(series=series, agg='mean', ranks=False)
+        monthly_means_ranks = dv.times.resample_to_monthly_agg_matrix(series=series, agg='mean', ranks=True)
         self.assertEqual(monthly_means.shape, (10, 12))
         self.assertEqual(monthly_means.loc[2013, 3], -1.8029825268817206)
         self.assertEqual(monthly_means.loc[2019, 6], 14.38481597222222)

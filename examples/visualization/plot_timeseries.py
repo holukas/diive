@@ -28,7 +28,7 @@ print(f"Loaded {len(df)} records from {df.index[0]} to {df.index[-1]}")
 
 series = df['NEE_CUT_REF_f'].copy()
 
-ts = dv.plot_time_series(
+ts = dv.plotting.TimeSeries(
     series=series
 )
 ts.plot(
@@ -48,7 +48,7 @@ print("\nPlotted NEE flux time series")
 #
 # Add units information and custom labels for better documentation.
 
-ts_with_units = dv.plot_time_series(
+ts_with_units = dv.plotting.TimeSeries(
     series=series
 )
 ts_with_units.plot(
@@ -70,7 +70,7 @@ print("\nPlotted with custom units, labels, and title")
 
 series_temp = df['Tair_f'].copy()
 
-ts_color = dv.plot_time_series(
+ts_color = dv.plotting.TimeSeries(
     series=series_temp
 )
 ts_color.plot(

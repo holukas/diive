@@ -81,7 +81,7 @@ print(f"  Std:  {c_turb.std():.2f} ppm")
 # WindDoubleRotation aligns the coordinate system with mean wind direction.
 # After rotation, mean(v2) ~ 0 and mean(w2) ~ 0.
 
-wr = dv.WindDoubleRotation(u=u_series, v=v_series, w=w_series)
+wr = dv.flux.WindDoubleRotation(u=u_series, v=v_series, w=w_series)
 
 print(f"\n" + "=" * 80)
 print("Rotation Results")
@@ -100,10 +100,10 @@ print(f"  mean(w2): {wr.w2.mean():.6f} m/s")
 # Reynolds decomposition extracts turbulent fluctuations: x' = x - mean(x).
 # Applied to the rotated wind components and the scalar.
 
-u_prime = dv.reynolds_decomposition(wr.u2)
-v_prime = dv.reynolds_decomposition(wr.v2)
-w_prime = dv.reynolds_decomposition(wr.w2)
-c_prime = dv.reynolds_decomposition(c_series)
+u_prime = dv.flux.reynolds_decomposition(wr.u2)
+v_prime = dv.flux.reynolds_decomposition(wr.v2)
+w_prime = dv.flux.reynolds_decomposition(wr.w2)
+c_prime = dv.flux.reynolds_decomposition(c_series)
 
 print(f"\n" + "=" * 80)
 print("Turbulent Fluctuations (Reynolds Decomposition)")

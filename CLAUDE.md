@@ -130,6 +130,24 @@ examples/                      # Runnable examples (86)
 tests/                        # Unit tests
 ```
 
+## Public API — Namespace Layout
+
+`import diive as dv` exposes 9 domain namespaces plus top-level I/O helpers:
+
+| Namespace | Contents |
+|---|---|
+| `dv.outliers` | `AbsoluteLimits`, `Hampel`, `LocalSD`, `LocalOutlierFactor`, `zScore`, `zScoreRolling`, `zScoreIncrements`, `TrimLow`, `ManualRemoval`, + daytime/nighttime variants |
+| `dv.gapfilling` | `RandomForestTS`, `XGBoostTS`, `FluxMDS`, `QuickFillRFTS`, `OptimizeParamsRFTS`, `OptimizeParamsTS`, `FeatureEngineer`, `linear_interpolation` |
+| `dv.flux` | `FluxProcessingChain`, `WindDoubleRotation`, `reynolds_decomposition`, `MaxCovariance`, `PreWhiteningBootstrap`, `PwbBatchDetection`, `FluxDetectionLimit`, ustar classes |
+| `dv.analysis` | `DailyCorrelation`, `GrangerCausality`, `StratifiedAnalysis`, `GapFinder`, `GridAggregator`, `Histogram`, `FindOptimumRange`, `SeasonalTrendDecomposition`, `BinFitterCP`, `percentiles101` |
+| `dv.plotting` | `HeatmapDateTime`, `HeatmapXYZ`, `HeatmapYearMonth`, `HexbinPlot`, `ScatterXY`, `TimeSeries`, `DielCycle`, `RidgeLinePlot`, `HistogramPlot`, `Cumulative`, `CumulativeYear`, `LongtermAnomaliesYear`, `TreeRingPlot` |
+| `dv.times` | `TimestampSanitizer`, `DetectFrequency`, `resample_to_monthly_agg_matrix`, `timestamp_infer_freq_*` |
+| `dv.features` | `DaytimeNighttimeFlag`, `TimeSince`, `potrad`, `potrad_eot`, `calc_vpd_from_ta_rh`, `aerodynamic_resistance`, `dry_air_density`, `et_from_le`, `latent_heat_of_vaporization`, `air_temp_from_sonic_temp`, `lagged_variants`, noise helpers |
+| `dv.corrections` | `MeasurementOffsetFromReplicate`, `WindDirOffset`, `remove_radiation_zero_offset`, `remove_relativehumidity_offset`, `set_exact_values_to_missing`, `setto_threshold`, `setto_value` |
+| `dv.qaqc` | `FlagQCF`, `StepwiseMeteoScreeningDb` |
+
+Top-level (no namespace): `load_exampledata_parquet`, `load_parquet`, `save_parquet`, `ReadFileType`, `search_files`, `sstats`, `transform_yearmonth_matrix_to_longform`, `get_encoded_value_from_int`, `get_encoded_value_series`
+
 ## Core Concepts
 
 ### Feature Engineering (8-stage pipeline)
@@ -159,9 +177,9 @@ Used by: `FeatureEngineer` class, fed into gap-filling models.
 10-step validation pipeline (configurable, monotonicity required):
 
 ```python
-from diive import TimestampSanitizer
+import diive as dv
 
-sanitizer = TimestampSanitizer(
+sanitizer = dv.times.TimestampSanitizer(
     data=df,
     output_middle_timestamp=True,  # Convert to mid-period
     nominal_freq='30min',  # Expected frequency
@@ -227,11 +245,11 @@ import diive as dv
 
 # Step 1: double rotation (Wilczak et al. 2001)
 # Aligns coordinate system with mean wind; mean(v2) ~ 0, mean(w2) ~ 0
-wr = dv.WindDoubleRotation(u=df['u'], v=df['v'], w=df['w'])
+wr = dv.flux.WindDoubleRotation(u=df['u'], v=df['v'], w=df['w'])
 
 # Step 2: Reynolds decomposition — apply to rotated wind AND any scalar
-w_prime = dv.reynolds_decomposition(wr.w2)   # x' = x - mean(x)
-c_prime = dv.reynolds_decomposition(df['CO2'])
+w_prime = dv.flux.reynolds_decomposition(wr.w2)   # x' = x - mean(x)
+c_prime = dv.flux.reynolds_decomposition(df['CO2'])
 
 # Flux
 flux = (w_prime * c_prime).mean()
@@ -398,7 +416,7 @@ data = dv.load_exampledata_parquet()
 
 ```python
 # Create once
-scatter = dv.plot_scatter_xy(x=df['A'], y=df['B'])
+scatter = dv.plotting.ScatterXY(x=df['A'], y=df['B'])
 
 # Render multiple times with different styles
 fig, axes = plt.subplots(1, 2)
@@ -601,6 +619,6 @@ See `examples/CATALOG.md` for complete listing and `examples/README.md` for deta
 
 ---
 
-**Last Updated:** 2026-05-21  
+**Last Updated:** 2026-05-24  
 **Version:** v0.91.0+  
 **Package Manager:** `uv`

@@ -39,14 +39,14 @@ print("=" * 70)
 print("Running ONEFlux Moving Point Detection (Papale et al. 2006)")
 print("=" * 70)
 
-detector_mp = dv.UstarMovingPointDetection(data, verbose=1)
+detector_mp = dv.flux.UstarMovingPointDetection(data, verbose=1)
 results_mp = detector_mp.detect()
 
 print("\n" + "=" * 70)
 print("Running Vekuri Quantile-Based Detection")
 print("=" * 70)
 
-detector_vekuri = dv.UstarVekuriThresholdDetection(data, verbose=1)
+detector_vekuri = dv.flux.UstarVekuriThresholdDetection(data, verbose=1)
 results_vekuri = detector_vekuri.detect()
 
 # %%
@@ -72,9 +72,9 @@ print("\n" + "=" * 70)
 print("Multi-Year Bootstrap: ONEFlux")
 print("=" * 70)
 
-boot_mp = dv.UstarBootstrapThresholds(
+boot_mp = dv.flux.UstarBootstrapThresholds(
     df=data,
-    detector_class=dv.UstarMovingPointDetection,
+    detector_class=dv.flux.UstarMovingPointDetection,
     detector_kwargs=dict(ta_classes_count=7, ustar_classes_count=20),
     n_iter=100,
     percentiles=(16, 50, 84),
@@ -88,9 +88,9 @@ print("\n" + "=" * 70)
 print("Multi-Year Bootstrap: Vekuri")
 print("=" * 70)
 
-boot_vekuri = dv.UstarBootstrapThresholds(
+boot_vekuri = dv.flux.UstarBootstrapThresholds(
     df=data,
-    detector_class=dv.UstarVekuriThresholdDetection,
+    detector_class=dv.flux.UstarVekuriThresholdDetection,
     n_iter=100,
     percentiles=(16, 50, 84),
     n_jobs=-1,

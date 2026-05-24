@@ -33,7 +33,7 @@ DAYTIME_ACCEPT_QCF_BELOW = 2
 NIGHTTIMETIME_ACCEPT_QCF_BELOW = 2
 
 # Initialize processing chain
-fpc = dv.flux_processing_chain(
+fpc = dv.flux.FluxProcessingChain(
     df=df,
     fluxcol=FLUXVAR,
     site_lat=SITE_LAT,

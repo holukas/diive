@@ -58,7 +58,7 @@ print(f"Missing values: {df[TARGET_COL].isnull().sum()}")
 # Before model training, create engineered features (lags, timestamps, trends).
 # This preparation applies to all years equally.
 
-engineer = dv.FeatureEngineer(
+engineer = dv.gapfilling.FeatureEngineer(
     target_col=TARGET_COL,
     verbose=2,
     features_lag=[-1, -1],  # 1-step lag on all features except target
@@ -162,8 +162,8 @@ print(feature_importance_df.head(5))
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 fig, axs = plt.subplots(ncols=2, figsize=(18, 9))
-dv.plot_heatmap_datetime(series=df[TARGET_COL]).plot(ax=axs[0])
-dv.plot_heatmap_datetime(series=gf.gapfilling_df_[gf.gapfilled_.name]).plot(ax=axs[1])
+dv.plotting.HeatmapDateTime(series=df[TARGET_COL]).plot(ax=axs[0])
+dv.plotting.HeatmapDateTime(series=gf.gapfilling_df_[gf.gapfilled_.name]).plot(ax=axs[1])
 
 axs[0].set_title("Observed NEE (with gaps)", fontsize=14, fontweight='bold')
 axs[1].set_title("Gap-Filled NEE (yearly RF models)", fontsize=14, fontweight='bold')

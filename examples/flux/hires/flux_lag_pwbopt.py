@@ -472,7 +472,7 @@ for period_name, source in period_sources:
         if _has_ts:
             _col_map[COL_TSONIC] = 'T_SONIC'
             _keep_cols.append(COL_TSONIC)
-        pwb = dv.PreWhiteningBootstrap(
+        pwb = dv.flux.PreWhiteningBootstrap(
             df=df[_keep_cols].rename(columns=_col_map),
             var_w='W',
             var_scalar=scalar_label,
@@ -761,7 +761,7 @@ for _scalar_label in SCALARS:
         scalars_plot[_scalar_label] = {'col_a': _col_a, 'col_b': _col_b}
 
 if scalars_plot:
-    lag_plot = dv.PwboptLagPlot(
+    lag_plot = dv.flux.PwboptLagPlot(
         results=results,
         scalars=scalars_plot,  # gases to plot
         label_a='PWBOPT standard',  # left panels

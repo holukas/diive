@@ -70,7 +70,7 @@ print(f"  W correlation with CO2: {np.corrcoef(w, np.roll(s, -lag_true_records))
 # samples should agree closely with the true lag and the HDI range should
 # be narrow (< 0.5 s), indicating a reliable result.
 
-pwb_high = dv.PreWhiteningBootstrap(
+pwb_high = dv.flux.PreWhiteningBootstrap(
     df=df_highflux,
     var_w='W',
     var_scalar='CO2',
@@ -123,7 +123,7 @@ print(f"  W correlation with N2O: {np.corrcoef(w, np.roll(s_lowflux, -lag_true_r
 # flagging the detected lag as unreliable. This triggers the PWB^OPT strategy:
 # replace the unreliable lag with the closest preceding reliable optimal lag.
 
-pwb_low = dv.PreWhiteningBootstrap(
+pwb_low = dv.flux.PreWhiteningBootstrap(
     df=df_lowflux,
     var_w='W',
     var_scalar='N2O',

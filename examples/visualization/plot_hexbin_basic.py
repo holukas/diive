@@ -31,7 +31,7 @@ print(f"Loaded {len(data)} growing season records")
 # Normalize axes to 0-100 percentile scale for standardized comparison
 # across different variables.
 
-hm = dv.plot_hexbin(
+hm = dv.plotting.HexbinPlot(
     x=data['Tair_f'],
     y=data['VPD_f'],
     z=data['NEE_CUT_REF_f'],

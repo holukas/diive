@@ -27,7 +27,7 @@ print(f"Loaded {len(df_2022)} records for 2022")
 # Third variable (radiation) controls the color of each point.
 # Bin aggregation groups data by x-axis and overlays trend lines.
 
-scatter = dv.plot_scatter_xy(
+scatter = dv.plotting.ScatterXY(
     x=df_2022['VPD_f'],
     y=df_2022['NEE_CUT_REF_f'],
     z=df_2022['Rg_f'],  # Color by radiation

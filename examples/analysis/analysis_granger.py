@@ -45,7 +45,7 @@ print(f"NEE: {len(nee)} records, {nee.isna().sum()} missing")
 #
 # Does VPD Granger-cause NEE? We test up to 5-step time lags.
 
-gc = dv.GrangerCausality(x=vpd, y=nee, max_lag=5, verbose=True)
+gc = dv.analysis.GrangerCausality(x=vpd, y=nee, max_lag=5, verbose=True)
 
 print(f"\nData after alignment: {len(gc.data)} records")
 print(gc.data.head())
@@ -84,7 +84,7 @@ gc.report(alpha=0.05)
 #
 # Does NEE Granger-cause VPD? This is expected to be non-significant.
 
-gc_reverse = dv.GrangerCausality(x=nee, y=vpd, max_lag=5, verbose=False)
+gc_reverse = dv.analysis.GrangerCausality(x=nee, y=vpd, max_lag=5, verbose=False)
 gc_reverse.report(alpha=0.05)
 
 # %%
@@ -96,7 +96,7 @@ gc_reverse.report(alpha=0.05)
 radiation = df_daily['Rg_f'].copy()
 radiation.name = 'Radiation'
 
-gc_rad = dv.GrangerCausality(x=radiation, y=nee, max_lag=5, verbose=False)
+gc_rad = dv.analysis.GrangerCausality(x=radiation, y=nee, max_lag=5, verbose=False)
 
 print("\nComparison: VPD vs Radiation as NEE predictors")
 print("-" * 60)

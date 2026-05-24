@@ -120,7 +120,7 @@ df[vpd_col] = df[vpd_col] * 0.1
 print("\nStarting MDS gap-filling...")
 start_time = time.perf_counter()
 
-mds = dv.FluxMDS(
+mds = dv.gapfilling.FluxMDS(
     df=df,
     flux=flux_col,
     ta=ta_col,
@@ -224,13 +224,13 @@ fig.show()
 
 fig, axes = plt.subplots(1, 2, figsize=(16, 6))
 
-hm_original = dv.HeatmapDateTime(series=gf_df[original_col])
+hm_original = dv.plotting.HeatmapDateTime(series=gf_df[original_col])
 hm_original.plot(
     ax=axes[0],
     title='Original NEE (with gaps)'
 )
 
-hm_gapfilled = dv.HeatmapDateTime(series=gf_df[gapfilled_col])
+hm_gapfilled = dv.plotting.HeatmapDateTime(series=gf_df[gapfilled_col])
 hm_gapfilled.plot(
     ax=axes[1],
     title='Gap-filled NEE (complete)'

@@ -31,7 +31,7 @@ for year in years:
     if len(year_series) < 10:
         continue
 
-    hist = dv.plot_histogram(
+    hist = dv.plotting.HistogramPlot(
         s=year_series,
         method='n_bins',              # Binning method
         n_bins=15,                    # Number of bins

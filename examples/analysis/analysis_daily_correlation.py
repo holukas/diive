@@ -79,7 +79,7 @@ print(f"{'='*60}")
 print(f"\nExpectation: High correlations (>0.8) indicate good measurement quality")
 print(f"and clear-sky conditions. Low correlations suggest clouds or issues.")
 
-corr1 = dv.daily_correlation(
+corr1 = dv.analysis.DailyCorrelation(
     s1=rg_series,
     s2=sw_pot,
     mincorr=0.8
@@ -119,7 +119,7 @@ print(f"{'='*60}")
 print(f"\nExpectation: Positive correlations on clear days, variable on cloudy days.")
 print(f"Low/negative correlations indicate advection or unusual conditions.")
 
-corr2 = dv.daily_correlation(
+corr2 = dv.analysis.DailyCorrelation(
     s1=ta_series,
     s2=rg_series,
     mincorr=0.5
@@ -160,7 +160,7 @@ print(f"\nExpectation: Variable correlations across seasons. Winter/spring")
 print(f"often show positive correlations (warmer = more respiration).")
 print(f"Summer shows weak/negative correlations (light-limited photosynthesis).")
 
-corr3 = dv.daily_correlation(
+corr3 = dv.analysis.DailyCorrelation(
     s1=ta_series,
     s2=nee_series
 )
