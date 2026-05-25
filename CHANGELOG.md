@@ -4,6 +4,15 @@
 
 ## v0.91.0 | XX May 2026
 
+- **Refactor: make `FluxProcessingChain` composable** — new `diive/pkgs/flux/fluxprocessingchain/container.py`, new `diive/pkgs/flux/fluxprocessingchain/levels/` package, rewrite of `diive/pkgs/flux/fluxprocessingchain/fluxprocessingchain.py`
+  The 2387-line monolithic class has been broken into typed data containers (`FluxLevelData`, `FluxMeta`, `LevelResults`) and one standalone pure callable per level (`init_flux_data`, `run_level2`, `run_level31`, `make_level32_detector`, `run_level32`, `run_level33_constant_ustar`, `run_level41_mds`, `run_level41_rf`, `run_level41_xgb`). Each callable accepts a `FluxLevelData` and returns a new one — never mutates the input. Users who want a partial pipeline (e.g. L2 + L3.1 only), a custom L3.2, or branching at L4.1 can compose the levels directly without subclassing.
+  Per-level results live on a typed `LevelResults` dataclass accessible via `data.levels.level2`, `data.levels.level31`, `data.levels.flux_corrected_col`, etc. — no magic-string dict lookups. `FluxLevelData` provides a useful `__repr__` that summarises shape and levels run.
+  Level-3.2 ships a `make_level32_detector(data)` factory that wires the `StepwiseOutlierDetection` to the correct `dfin` / `col` / site coordinates / `idstr='L3.2'`, removing a class of setup errors.
+  `run_level41_rf` and `run_level41_xgb` now accept a pre-built `FeatureEngineer` instance instead of 24 forwarded `features_*` parameters; the two functions share a single internal helper, removing ~100 lines of duplication.
+  The `FluxProcessingChain` class is kept as a slim convenience orchestrator (~600 lines, was ~2300) that wraps the new callables. All existing methods and properties (`fpc.fpc_df`, `fpc.level2`, `fpc.level32_qcf`, `fpc.level41`, etc.) continue to work; the test suite passes unchanged. The `finalize_level2/31/33()` methods are now no-ops that emit a `DeprecationWarning` (the matching `levelXX_*` method runs everything in one go). L3.2 still uses the multi-call configuration pattern because `StepwiseOutlierDetection` is inherently stateful.
+  New example: `examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py` demonstrates an L2+L3.1+L3.2 partial pipeline.
+  New tests: `TestFluxProcessingChainComposable` exercises the standalone callables, including pure-function contract assertions and ordering-error coverage.
+
 - **Refactor: namespace submodules for public API** — `diive/__init__.py`, new `diive/outliers/`, `diive/gapfilling/`, `diive/flux/`, `diive/analysis/`, `diive/plotting/`, `diive/times/`, `diive/features/`, `diive/corrections/`, `diive/qaqc/`
   Replaced the flat 145-export top-level namespace (with 40+ snake_case aliases) with 9 domain namespaces.
   `dir(dv)` now shows 21 names instead of 145+. Access pattern: `dv.outliers.AbsoluteLimits`, `dv.gapfilling.RandomForestTS`, `dv.flux.FluxProcessingChain`, etc.

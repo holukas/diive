@@ -98,6 +98,7 @@ EXAMPLE_FILES = [
     'fits/fit_fitter.py',
     # Flux - Processing chain
     'flux/fluxprocessingchain/fluxprocessingchain.py',
+    'flux/fluxprocessingchain/fluxprocessingchain_composable.py',
     'flux/fluxprocessingchain/fluxprocessingchain_quick.py',
     # Flux - Low-resolution processing
     'flux/lowres/flux_timelag_analysis.py',

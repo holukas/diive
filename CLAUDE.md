@@ -233,13 +233,85 @@ status = sanitizer.get_status()  # Diagnostics: rows removed/added, frequency co
 - **L3.3** — USTAR turbulence filtering (nighttime only)
 - **L4.1** — Gap-filling (RF, XGBoost, MDS)
 
+**Two API styles** (since v0.91.0+):
+
+1. **Composable functions** — one pure callable per level, each taking and returning a `FluxLevelData` container. Pure functions — never mutate input. Use this when you want a partial pipeline (e.g. L2 + L3.1 only), a custom L3.2, or branching at L4.1.
+
+   ```python
+   from diive.pkgs.flux.fluxprocessingchain import (
+       init_flux_data, run_level2, run_level31,
+       make_level32_detector, run_level32,
+       run_level33_constant_ustar,
+       run_level41_mds, run_level41_rf, run_level41_xgb,
+   )
+
+   data = init_flux_data(df, fluxcol='FC', site_lat=46.6, site_lon=9.8, utc_offset=1)
+   data = run_level2(data, ssitc={'apply': True, 'setflag_timeperiod': None}, ...)
+   data = run_level31(data, gapfill_storage_term=True)
+   # stop here if you only need L2 + L3.1
+   final_df = data.fpc_df
+   ```
+
+2. **`FluxProcessingChain` class** — convenience orchestrator that wraps the callables for the common "run all 5 levels" path. All existing methods/properties (`fpc.fpc_df`, `fpc.level2`, `fpc.level32_qcf`, etc.) keep working unchanged.
+
+   ```python
+   fpc = dv.flux.FluxProcessingChain(df=df, fluxcol='FC', ...)
+   fpc.level2_quality_flag_expansion(**LEVEL2_SETTINGS)
+   fpc.level31_storage_correction()
+   # ... rest of the chain
+   ```
+
+**Container types:**
+
+| Field | Type | Description |
+|---|---|---|
+| `data.fpc_df` | `DataFrame` | Working dataframe; grows as levels append flag/QCF columns |
+| `data.full_df` | `DataFrame` | Original input dataframe (with day/night flags added) |
+| `data.filteredseries` | `Series \| None` | QCF-filtered flux from the most recent level |
+| `data.meta` | `FluxMeta` (frozen) | Site coordinates, fluxcol, swinpot_col, QCF thresholds |
+| `data.levels` | `LevelResults` | Typed bag of per-level outputs (see below) |
+| `data.level_ids` | `list[str]` | Identifiers of levels run, in order |
+
+`LevelResults` exposes every per-level instance behind a named field — no magic-string dict lookups:
+
+```python
+data.levels.level2                      # FluxQualityFlagsEddyPro
+data.levels.level2_qcf                  # FlagQCF
+data.levels.filteredseries_level2_qcf   # Series
+data.levels.filteredseries_hq           # Series (QCF=0 only)
+data.levels.level31                     # FluxStorageCorrectionSinglePointEddyPro
+data.levels.flux_corrected_col          # str
+data.levels.filteredseries_level31_qcf  # Series
+data.levels.level32                     # StepwiseOutlierDetection
+data.levels.level32_qcf                 # FlagQCF
+data.levels.filteredseries_level32_qcf  # Series
+data.levels.level33                     # FlagMultipleConstantUstarThresholds
+data.levels.level33_qcf                 # dict[ustar_scenario, FlagQCF]
+data.levels.filteredseries_level33_qcf  # dict[ustar_scenario, Series]
+data.levels.level41_mds                 # dict[ustar_scenario, FluxMDS]
+data.levels.level41_rf                  # dict[ustar_scenario, LongTermGapFillingRandomForestTS]
+data.levels.level41_xgb                 # dict[ustar_scenario, LongTermGapFillingXGBoostTS]
+```
+
+**Architecture notes:**
+
+- Level callables live in `diive/pkgs/flux/fluxprocessingchain/levels/` (one module per level).
+- `finalize_level2()`, `finalize_level31()`, `finalize_level33()` are now no-ops emitting `DeprecationWarning` — the matching `levelXX_*` method runs everything in one go.
+- Level-3.2 still uses the multi-call pattern because `StepwiseOutlierDetection` is inherently stateful: `level32_stepwise_outlier_detection()`, multiple `level32_flag_*` calls, `level32_addflag()`, then `finalize_level32()`.
+- For the composable API, use `make_level32_detector(data)` to get a properly-wired `StepwiseOutlierDetection`, then pass it to `run_level32(data, outlier_detector=sod)`.
+- `run_level41_rf` / `run_level41_xgb` take a pre-built `FeatureEngineer` instance (the class wrapper still accepts the legacy `features_*` keyword set for backward compatibility, and constructs the engineer internally).
+
 **Critical pitfalls:**
 
 - Wrong USTAR threshold filters too much/little nighttime
 - MDS requires exact units: W/m² (radiation), °C (temp), hPa (VPD)
 - USTAR filtering applies ONLY to CO2/CH4/N2O, not H/LE (energy fluxes)
 
-**Example:** `examples/flux/fluxprocessingchain/fluxprocessingchain.py` (all 5 levels, both gap-filling methods).
+**Examples:**
+
+- `examples/flux/fluxprocessingchain/fluxprocessingchain.py` — all 5 levels via the orchestrator class (RF + XGBoost).
+- `examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py` — partial L2+L3.1 pipeline using the composable functions.
+- `examples/flux/fluxprocessingchain/fluxprocessingchain_quick.py` — `QuickFluxProcessingChain` wrapper for rapid exploratory checks.
 
 ## High-Resolution EC Analysis (hires)
 

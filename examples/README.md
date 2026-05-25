@@ -51,9 +51,11 @@ examples/
 ├── fits/                  # Data fitting (2 examples)
 │   ├── fit_fitter.py
 │   └── fit_binfittercp.py
-├── flux/                  # Eddy covariance flux processing (18 examples)
+├── flux/                  # Eddy covariance flux processing (19 examples)
 │   ├── fluxprocessingchain/
-│   │   └── fluxprocessingchain.py
+│   │   ├── fluxprocessingchain.py
+│   │   ├── fluxprocessingchain_composable.py
+│   │   └── fluxprocessingchain_quick.py
 │   ├── lowres/            # Low-resolution processing (9 examples)
 │   │   ├── flux_timelag_analysis.py
 │   │   ├── flux_common.py
