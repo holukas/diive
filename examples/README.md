@@ -181,6 +181,7 @@ uv run python examples/flux/hires/flux_lag.py
 
 ## Documentation & Guides
 
+- **[COOKBOOK.md](COOKBOOK.md)** — Start here: 6 minimal working workflows (load data, clean timestamps, remove outliers, gap-fill, flux chain, visualize)
 - **[CATALOG.md](CATALOG.md)** — Find examples by use case (workflows, analysis types, methods)
 - **[EXAMPLE_DATASET.md](EXAMPLE_DATASET.md)** — Complete documentation of the example dataset (columns, availability, quality)
 

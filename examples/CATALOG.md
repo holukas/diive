@@ -1,6 +1,7 @@
 # Examples Catalog
 
 Find examples by topic and use case.
+New to diive? Start with the **[Cookbook](COOKBOOK.md)** — 6 minimal workflows that cover the most common tasks.
 
 ## Quick Navigation
 
