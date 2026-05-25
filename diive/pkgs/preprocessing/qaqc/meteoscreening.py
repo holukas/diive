@@ -657,7 +657,7 @@ class StepwiseMeteoScreeningDb:
 
     def finalize_outlier_detection(self,
                                    daytime_accept_qcf_below: int = 2,
-                                   nighttimetime_accept_qcf_below: int = 2) -> FlagQCF:
+                                   nighttime_accept_qcf_below: int = 2) -> FlagQCF:
 
         for field in self.fields:
             # Detect new columns
@@ -675,7 +675,7 @@ class StepwiseMeteoScreeningDb:
                           # nighttime_threshold=nighttime_threshold
                           )
             qcf.calculate(daytime_accept_qcf_below=daytime_accept_qcf_below,
-                          nighttimetime_accept_qcf_below=nighttimetime_accept_qcf_below)
+                          nighttime_accept_qcf_below=nighttime_accept_qcf_below)
             self._data_detailed[field] = qcf.get()
             self._outlier_detection_qcf[field] = qcf
 

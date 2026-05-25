@@ -24,7 +24,7 @@ Example:
     ...     outname='NEE',
     ...     swinpot=sw_in_pot  # Optional: enables daytime/nighttime separation
     ... )
-    >>> qcf.calculate(daytime_accept_qcf_below=2, nighttimetime_accept_qcf_below=2)
+    >>> qcf.calculate(daytime_accept_qcf_below=2, nighttime_accept_qcf_below=2)
     >>> quality_controlled_flux = qcf.filteredseries  # NaN for rejected values
     >>> highest_quality_flux = qcf.filteredseries_hq  # NaN for any QCF > 0
 """
@@ -167,7 +167,7 @@ class FlagQCF:
         self.sumsoftflagscol = f'SUM{self.idstr}_{self.outname}_SOFTFLAGS'
 
         self.daytime_accept_qcf_below = None
-        self.nighttimetime_accept_qcf_below = None
+        self.nighttime_accept_qcf_below = None
 
     @property
     def flags(self) -> DataFrame:
@@ -242,7 +242,7 @@ class FlagQCF:
 
     def calculate(self,
                   daytime_accept_qcf_below: int = 2,
-                  nighttimetime_accept_qcf_below: int = 2):
+                  nighttime_accept_qcf_below: int = 2):
         """Calculate QCF from test flags and generate quality-controlled series.
 
         Orchestrates the complete QCF workflow:
@@ -254,7 +254,7 @@ class FlagQCF:
         Args:
             daytime_accept_qcf_below: Accept daytime records where QCF < this value.
                 Default 2 (rejects only QCF=2). Set to 1 to also reject QCF=1.
-            nighttimetime_accept_qcf_below: Accept nighttime records where QCF < this value.
+            nighttime_accept_qcf_below: Accept nighttime records where QCF < this value.
                 Default 2. Separate threshold useful for day/night quality differences.
 
         Note:
@@ -262,7 +262,7 @@ class FlagQCF:
             Otherwise, all records with QCF>=2 are rejected uniformly.
         """
         self.daytime_accept_qcf_below = daytime_accept_qcf_below
-        self.nighttimetime_accept_qcf_below = nighttimetime_accept_qcf_below
+        self.nighttime_accept_qcf_below = nighttime_accept_qcf_below
         self._flags_df = self._calculate_flagsums(df=self._flags_df)
         self._flags_df = self._calculate_flag_qcf(df=self._flags_df)
         self._add_series()
@@ -547,7 +547,7 @@ class FlagQCF:
 
         # Flag nighttime values based on param
         if isinstance(self.nighttime, Series):
-            ix = (df[self.flagqcfcol] >= self.nighttimetime_accept_qcf_below) & (self.nighttime == 1)
+            ix = (df[self.flagqcfcol] >= self.nighttime_accept_qcf_below) & (self.nighttime == 1)
             df.loc[ix, self.flagqcfcol] = 2
 
         # Daytime and nighttime flags are only calculated when swinpot is provided.

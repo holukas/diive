@@ -155,7 +155,7 @@ fpc = dv.flux.FluxProcessingChain(
     utc_offset=1,
     nighttime_threshold=20,                 # W m-2
     daytime_accept_qcf_below=2,
-    nighttimetime_accept_qcf_below=2
+    nighttime_accept_qcf_below=2
 )
 
 fpc.level2_quality_flag_expansion()        # L2: 7 quality tests

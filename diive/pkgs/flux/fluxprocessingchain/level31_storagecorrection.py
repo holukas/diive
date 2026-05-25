@@ -36,7 +36,7 @@ class FluxStorageCorrectionSinglePointEddyPro:
                  df: DataFrame,
                  fluxcol: str,
                  basevar: str,
-                 gapfill_storage_term: bool = False,
+                 gapfill_storage_term: bool = True,
                  idstr: str = 'L3.1',
                  set_storage_to_zero: bool = False):
         """Initialize the storage corrector.
@@ -47,12 +47,17 @@ class FluxStorageCorrectionSinglePointEddyPro:
                 Used to auto-detect the storage variable.
             basevar: Name of the measured variable ('CO2', 'H2O', 'N2O', 'CH4').
                 For logging; not used in calculations.
-            gapfill_storage_term: If True, gap-fills missing storage values.
-                Default False.
+            gapfill_storage_term: If True, gap-fills missing storage values using a
+                rolling median before adding the term to the flux. Default True.
+                Set to False only if the storage column is already complete or you
+                want to preserve NaN positions.
             idstr: Suffix for output columns (default 'L3.1'). Output is {fluxcol}{idstr}
                 or NEE{idstr} for FC.
-            set_storage_to_zero: If True, adds zero instead of using storage data.
-                Useful for testing. Default False.
+            set_storage_to_zero: If True, sets the storage term to zero instead of
+                using measured or gap-filled storage data.  Use this for fluxes where
+                no storage profile is available (e.g. H, LE at low-canopy sites) or
+                when the single-point approximation is considered unreliable.
+                Default False.
 
         Attributes:
             results: DataFrame with corrected flux and gap-filling info.

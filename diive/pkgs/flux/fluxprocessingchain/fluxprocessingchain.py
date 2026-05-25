@@ -131,7 +131,7 @@ class FluxProcessingChain:
             utc_offset: int,
             nighttime_threshold: float = 20,
             daytime_accept_qcf_below: int = 1,
-            nighttimetime_accept_qcf_below: int = 1,
+            nighttime_accept_qcf_below: int = 1,
     ):
         """
         Initialise the processing chain.
@@ -149,7 +149,7 @@ class FluxProcessingChain:
                 below which records are treated as nighttime. Defaults to 20.
             daytime_accept_qcf_below: Daytime QCF acceptance threshold
                 (0, 1, or 2). Defaults to 1.
-            nighttimetime_accept_qcf_below: Nighttime QCF acceptance
+            nighttime_accept_qcf_below: Nighttime QCF acceptance
                 threshold (0, 1, or 2). Defaults to 1.
         """
         self._data: FluxLevelData = init_flux_data(
@@ -160,7 +160,7 @@ class FluxProcessingChain:
             utc_offset=utc_offset,
             nighttime_threshold=nighttime_threshold,
             daytime_accept_qcf_below=daytime_accept_qcf_below,
-            nighttimetime_accept_qcf_below=nighttimetime_accept_qcf_below,
+            nighttime_accept_qcf_below=nighttime_accept_qcf_below,
         )
         # Pending L3.2 detector — configured across multiple method calls
         self._pending_level32: StepwiseOutlierDetection | None = None
@@ -755,6 +755,12 @@ class LoadEddyProOutputFiles:
         raise ValueError(f"Unknown filetype: {self.filetype}")
 
 
+# Flux variables that must NOT receive USTAR turbulence filtering.
+# For these, run_level33 is called with thresholds=[0] (filter nothing).
+# Extend this set if your site uses non-standard column names for energy fluxes.
+_ENERGY_FLUX_VARS = frozenset({'H', 'LE', 'G', 'SH', 'SLE', 'FH2O'})
+
+
 class QuickFluxProcessingChain:
 
     def __init__(
@@ -766,7 +772,7 @@ class QuickFluxProcessingChain:
             utc_offset: int,
             nighttime_threshold: int = 20,
             daytime_accept_qcf_below: int = 2,
-            nighttimetime_accept_qcf_below: int = 2,
+            nighttime_accept_qcf_below: int = 2,
             test_signal_strength=False,
             test_signal_strength_col='',
             test_signal_strength_method='discard above',
@@ -779,7 +785,7 @@ class QuickFluxProcessingChain:
         self.utc_offset = utc_offset
         self.nighttime_threshold = nighttime_threshold
         self.daytime_accept_qcf_below = daytime_accept_qcf_below
-        self.nighttimetime_accept_qcf_below = nighttimetime_accept_qcf_below
+        self.nighttime_accept_qcf_below = nighttime_accept_qcf_below
         self.test_signal_strength = test_signal_strength
         self.test_signal_strength_col = test_signal_strength_col
         self.test_signal_strength_method = test_signal_strength_method
@@ -797,7 +803,7 @@ class QuickFluxProcessingChain:
             self._run_level33(fluxcol=fluxcol)
 
     def _run_level33(self, fluxcol):
-        if fluxcol in ['H', 'LE']:
+        if fluxcol in _ENERGY_FLUX_VARS:
             thresholds, ustar_scenarios = [0], ['CUT_NONE']
         else:
             thresholds, ustar_scenarios = [0.08], ['CUT_PRELIM']
@@ -843,7 +849,7 @@ class QuickFluxProcessingChain:
             site_lat=self.site_lat, site_lon=self.site_lon,
             utc_offset=self.utc_offset,
             daytime_accept_qcf_below=self.daytime_accept_qcf_below,
-            nighttimetime_accept_qcf_below=self.nighttimetime_accept_qcf_below,
+            nighttime_accept_qcf_below=self.nighttime_accept_qcf_below,
         )
 
     def _load_data(self):

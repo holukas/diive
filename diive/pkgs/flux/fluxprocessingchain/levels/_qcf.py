@@ -57,7 +57,7 @@ def finalize_level(
     )
     qcf.calculate(
         daytime_accept_qcf_below=data.meta.daytime_accept_qcf_below,
-        nighttimetime_accept_qcf_below=data.meta.nighttimetime_accept_qcf_below,
+        nighttime_accept_qcf_below=data.meta.nighttime_accept_qcf_below,
     )
     fpc_df = qcf.get()
 

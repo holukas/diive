@@ -265,12 +265,14 @@ status = sanitizer.get_status()  # Diagnostics: rows removed/added, frequency co
 
 | Field | Type | Description |
 |---|---|---|
-| `data.fpc_df` | `DataFrame` | Working dataframe; grows as levels append flag/QCF columns |
-| `data.full_df` | `DataFrame` | Original input dataframe (with day/night flags added) |
+| `data.fpc_df` | `DataFrame` | Working dataframe; grows as levels append flag/QCF columns. Use this for results/export. |
+| `data.full_df` | `DataFrame` | Full input dataframe (with day/night flags added). Used read-only by L2, L3.1, L4.1 for driver columns. |
 | `data.filteredseries` | `Series \| None` | QCF-filtered flux from the most recent level |
 | `data.meta` | `FluxMeta` (frozen) | Site coordinates, fluxcol, swinpot_col, QCF thresholds |
 | `data.levels` | `LevelResults` | Typed bag of per-level outputs (see below) |
 | `data.level_ids` | `list[str]` | Identifiers of levels run, in order |
+| `data.summary()` | `str` | Per-level data availability with daytime/nighttime breakdown |
+| `data.gapfilled_cols()` | `dict[str, dict[str, str]]` | Gap-filled column names per L4.1 method and USTAR scenario |
 
 `LevelResults` exposes every per-level instance behind a named field — no magic-string dict lookups:
 
@@ -304,8 +306,14 @@ data.levels.level41_xgb                 # dict[ustar_scenario, LongTermGapFillin
 **Critical pitfalls:**
 
 - Wrong USTAR threshold filters too much/little nighttime
-- MDS requires exact units: W/m² (radiation), °C (temp), hPa (VPD)
-- USTAR filtering applies ONLY to CO2/CH4/N2O, not H/LE (energy fluxes)
+- MDS requires exact units: W/m² (radiation), °C (temp), **kPa (VPD)** — EddyPro outputs VPD in hPa; divide by 10 before passing to `run_level41_mds()`
+- USTAR filtering applies ONLY to CO2/CH4/N2O, not H/LE (energy fluxes); for H/LE use `thresholds=[0], threshold_labels=['CUT_NONE']`
+- L3.2 and L3.3 require L3.1 to have run; for H/LE call `run_level31(data, set_storage_to_zero=True)` instead of skipping
+- L4.1 `features` and MDS driver columns must exist in `data.full_df`, not `data.fpc_df`; run `data.gapfilled_cols()` to find gap-filled column names after L4.1
+- `nighttime_accept_qcf_below` (was `nighttimetime_accept_qcf_below` before v0.91.1 — typo fixed)
+- Default `daytime_accept_qcf_below=1` is stricter than the FLUXNET/Swiss FluxNet convention of `2` (keep QCF=0 and QCF=1); QCF=0 means all tests pass, QCF=1 is soft warnings, QCF=2 is hard failure
+- `run_level33_constant_ustar` only supports constant thresholds; use REddyProc or hesseflux externally for bootstrap threshold estimation, then pass the percentile values here
+- `FeatureEngineer(target_col='_target_', ...)` — `target_col` is a required placeholder for L4.1; any string not in your feature list works
 
 **Examples:**
 

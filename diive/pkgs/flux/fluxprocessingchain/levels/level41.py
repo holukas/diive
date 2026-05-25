@@ -66,9 +66,14 @@ def run_level41_mds(
 
     Args:
         data: FluxLevelData after ``run_level33_constant_ustar()``.
-        swin: Column name for shortwave incoming radiation (W m-2).
-        ta: Column name for air temperature (deg C).
-        vpd: Column name for vapour pressure deficit (kPa).
+        swin: Column name for shortwave incoming radiation (**W m-2**).
+            Must exist in ``data.full_df`` (the original EddyPro input).
+        ta: Column name for air temperature (**deg C**).
+            Must exist in ``data.full_df``.
+        vpd: Column name for vapour pressure deficit (**kPa**).
+            Must exist in ``data.full_df``.
+            EddyPro outputs VPD in hPa — divide by 10 before passing here.
+            A ``UserWarning`` is raised automatically if the median looks like hPa.
         swin_tol: Tolerance window for radiation matching [absolute, relative].
         ta_tol: Temperature tolerance (deg C).
         vpd_tol: VPD tolerance (kPa).
@@ -79,6 +84,29 @@ def run_level41_mds(
         ``data.levels.level41_mds[ustar_scenario]``.
     """
     from diive.pkgs.gapfilling.mds import FluxMDS
+    import warnings
+
+    # Validate that all three driver columns exist in full_df before the loop.
+    missing_drivers = [c for c in (swin, ta, vpd) if c not in data.full_df.columns]
+    if missing_drivers:
+        raise KeyError(
+            f"MDS driver column(s) not found in data.full_df: {missing_drivers}. "
+            f"Driver columns must exist in the original input DataFrame (data.full_df), "
+            f"not only in data.fpc_df. "
+            f"Available columns: {list(data.full_df.columns)}"
+        )
+
+    # Sanity-check VPD units: MDS requires kPa, but EddyPro outputs hPa.
+    # A median VPD > 10 almost certainly means the column is in hPa.
+    vpd_median = data.full_df[vpd].median()
+    if vpd_median > 10:
+        warnings.warn(
+            f"VPD column '{vpd}' has a median of {vpd_median:.1f} — this looks "
+            f"like hPa, but MDS requires kPa (typical daytime values: 0.5–3 kPa). "
+            f"Divide your VPD column by 10 before calling run_level41_mds().",
+            UserWarning,
+            stacklevel=2,
+        )
 
     filteredseries_l33 = _require_level33(data)
     fpc_df = data.fpc_df.copy()
@@ -121,13 +149,25 @@ def _run_level41_ml(
         results_attr: str,
 ) -> FluxLevelData:
     """Internal: shared workflow for Random Forest and XGBoost L4.1 gap-filling."""
+    # Validate feature columns exist in full_df before doing any work.
+    missing_features = [c for c in features if c not in data.full_df.columns]
+    if missing_features:
+        raise KeyError(
+            f"Feature column(s) not found in data.full_df: {missing_features}. "
+            f"Feature columns must exist in the original input DataFrame (data.full_df), "
+            f"not only in data.fpc_df. "
+            f"Available columns: {list(data.full_df.columns)}"
+        )
+
     filteredseries_l33 = _require_level33(data)
     fpc_df = data.fpc_df.copy()
     ml_results: dict = {}
 
+    # Feature engineering does not depend on the target (USTAR scenario flux),
+    # so run it once and reuse the result across all scenarios.
+    engineered = engineer.fit_transform(data.full_df[features].copy())
+
     for ustar_scen, ustar_flux in filteredseries_l33.items():
-        scen_features = data.full_df[features].copy()
-        engineered = engineer.fit_transform(scen_features)
         scen_df = pd.concat([engineered, fpc_df[ustar_flux.name]], axis=1).copy()
 
         instance = model_factory(
@@ -143,6 +183,14 @@ def _run_level41_ml(
         instance.fillgaps()
 
         flag_col = _extract_gapfilling_flag_col(instance.gapfilling_df_)
+        if flag_col is None:
+            candidates = [c for c in instance.gapfilling_df_.columns
+                          if str(c).startswith("FLAG_")]
+            raise RuntimeError(
+                f"Could not identify a unique FLAG_*_ISFILLED column for USTAR scenario "
+                f"'{ustar_scen}'. Found: {candidates}. "
+                f"This is an internal error — please report it."
+            )
         fpc_df = pd.concat(
             [fpc_df, instance.gapfilled_.copy(), instance.gapfilling_df_[flag_col]],
             axis=1,
@@ -176,10 +224,30 @@ def run_level41_rf(
 
     Args:
         data: FluxLevelData after ``run_level33_constant_ustar()``.
-        features: Input feature column names (resolved from ``data.full_df``).
+        features: Column names to use as predictor variables, resolved from
+            ``data.full_df`` (the original EddyPro input DataFrame).  Columns
+            added only to ``data.fpc_df`` are not available here.  Typical
+            NEE drivers: air temperature (``TA_1_1_1``), shortwave radiation
+            (``SW_IN_1_1_1``), VPD, relative humidity, soil temperature,
+            and PPFD.  The more complete and gap-free these columns are, the
+            better the gap-filling coverage.
         engineer: Pre-configured ``FeatureEngineer`` instance.  See
             ``diive.core.ml.feature_engineer.FeatureEngineer`` for the full
-            list of feature-engineering parameters.
+            list of feature-engineering parameters.  Feature engineering is
+            applied once and reused for all USTAR scenarios.
+
+            ``FeatureEngineer`` requires a ``target_col`` argument, but for
+            L4.1 gap-filling the value does not matter — pass any string that
+            is not in your feature list (e.g. ``'_target_'``).  The engineered
+            features are computed from the predictor columns only::
+
+                from diive.core.ml.feature_engineer import FeatureEngineer
+                engineer = FeatureEngineer(
+                    target_col='_target_',   # placeholder; value irrelevant here
+                    features_lag=True,
+                    features_rolling=True,
+                )
+
         reduce_features: Apply SHAP-based feature selection across all years.
         verbose: Verbosity level (0=silent, 1+=progress).
         **rf_kwargs: sklearn ``RandomForestRegressor`` hyperparameters
@@ -188,6 +256,7 @@ def run_level41_rf(
     Returns:
         Updated FluxLevelData; RF instances accessible via
         ``data.levels.level41_rf[ustar_scenario]``.
+        Use ``data.gapfilled_cols()`` to retrieve gap-filled column names.
     """
     from diive.pkgs.gapfilling.longterm import LongTermGapFillingRandomForestTS
     return _run_level41_ml(
@@ -220,8 +289,17 @@ def run_level41_xgb(
 
     Args:
         data: FluxLevelData after ``run_level33_constant_ustar()``.
-        features: Input feature column names (resolved from ``data.full_df``).
-        engineer: Pre-configured ``FeatureEngineer`` instance.
+        features: Column names to use as predictor variables, resolved from
+            ``data.full_df`` (the original EddyPro input DataFrame).  Columns
+            added only to ``data.fpc_df`` are not available here.  Typical
+            NEE drivers: air temperature (``TA_1_1_1``), shortwave radiation
+            (``SW_IN_1_1_1``), VPD, relative humidity, soil temperature,
+            and PPFD.  Feature engineering is applied once and reused for all
+            USTAR scenarios.
+        engineer: Pre-configured ``FeatureEngineer`` instance.  Pass
+            ``target_col='_target_'`` (any placeholder); the value is
+            irrelevant for L4.1 feature engineering (see ``run_level41_rf``
+            for a usage example).
         reduce_features: Apply SHAP-based feature selection across all years.
         verbose: Verbosity level (0=silent, 1+=progress).
         **xgb_kwargs: ``XGBRegressor`` hyperparameters (``n_estimators``,
@@ -230,6 +308,7 @@ def run_level41_xgb(
     Returns:
         Updated FluxLevelData; XGBoost instances accessible via
         ``data.levels.level41_xgb[ustar_scenario]``.
+        Use ``data.gapfilled_cols()`` to retrieve gap-filled column names.
     """
     from diive.pkgs.gapfilling.longterm import LongTermGapFillingXGBoostTS
     return _run_level41_ml(

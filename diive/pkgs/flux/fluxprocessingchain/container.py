@@ -36,7 +36,7 @@ class FluxMeta:
     utc_offset: int
     nighttime_threshold: float
     daytime_accept_qcf_below: int
-    nighttimetime_accept_qcf_below: int
+    nighttime_accept_qcf_below: int
     outname: str
 
 
@@ -46,19 +46,38 @@ class LevelResults:
     Typed bag of per-level outputs accumulated as the chain progresses.
 
     All fields default to ``None`` / empty so a partial pipeline (e.g. L2 only)
-    leaves later fields unset.  Dict-valued fields are keyed by USTAR scenario
-    label (e.g. ``'CUT_16'``).
+    leaves later fields unset.
+
+    **High-quality vs. accepted-quality series:**
+
+    - ``filteredseries_hq`` — flux with QCF=0 *only* (strictest filter, no
+      soft warnings tolerated).  Used as the reference series for gap-filling
+      model training.  Updated by each level that runs a QCF.
+    - ``filteredseries_level*_qcf`` — flux accepted at QCF < threshold (set by
+      ``daytime_accept_qcf_below`` / ``nighttime_accept_qcf_below`` in
+      ``init_flux_data``).  The threshold is usually 1 or 2 depending on the
+      level and site protocol.
+
+    **USTAR scenario dicts:** ``level33_qcf``, ``filteredseries_level33_qcf``,
+    ``level41_*`` are keyed by the scenario labels supplied to
+    ``run_level33_constant_ustar()`` (e.g. ``'CUT_16'``, ``'CUT_50'``,
+    ``'CUT_84'`` for the 16th, 50th, and 84th percentiles of a bootstrap USTAR
+    threshold distribution).
     """
 
     # Level-2
     level2: FluxQualityFlagsEddyPro | None = None
     level2_qcf: FlagQCF | None = None
     filteredseries_level2_qcf: pd.Series | None = None
-    filteredseries_hq: pd.Series | None = None
+    filteredseries_hq: pd.Series | None = None  # QCF=0 only; updated by each level
 
     # Level-3.1
     level31: FluxStorageCorrectionSinglePointEddyPro | None = None
     flux_corrected_col: str | None = None
+    # Note: Level-3.1 has no quality test of its own.  filteredseries_level31_qcf
+    # is the Level-2 QCF re-applied to the storage-corrected flux — not a new
+    # L3.1-specific filter.  Record counts therefore match Level-2 unless some
+    # storage-corrected values happened to become NaN.
     filteredseries_level31_qcf: pd.Series | None = None
 
     # Level-3.2
@@ -97,19 +116,28 @@ class FluxLevelData:
     """
     Container passed between composable level callables.
 
-    Each level returns a new ``FluxLevelData`` with updated fields; the input
-    is never mutated.  ``fpc_df`` grows as each level appends its output
-    columns; ``filteredseries`` is updated to the QCF-filtered flux from the
-    most-recently completed level.
+    Each level callable returns a *new* ``FluxLevelData``; the input is never
+    mutated.
+
+    **Two DataFrames — which one to use?**
+
+    - ``fpc_df`` — the *processing* dataframe.  Starts with just the flux and
+      USTAR columns, then grows as each level appends its flag, QCF, and
+      gap-filled columns.  Use this for inspecting chain outputs, exporting
+      results, or plotting quality-controlled fluxes.
+    - ``full_df`` — the *full input* dataframe (original EddyPro columns plus
+      potential radiation and day/night flags added by ``init_flux_data``).
+      Level-2 reads EddyPro diagnostic columns from here; Level-4.1 reads
+      meteorological driver columns (e.g. ``TA_1_1_1``, ``SW_IN``) from here
+      as gap-filling features.  Do not modify this dataframe — level callables
+      use it read-only.
     """
 
     fpc_df: pd.DataFrame
     full_df: pd.DataFrame
-    """The original input DataFrame (with day/night flags + potential
-    radiation added).  Required by Level-2, Level-3.1, and Level-4.1 to
-    pull meteorological features and apply EddyPro tests."""
-
     filteredseries: pd.Series | None
+    """QCF-filtered flux from the most recently completed level (accepted-quality
+    threshold, not QCF=0-only).  ``None`` before any level has run."""
     meta: FluxMeta
     levels: LevelResults = field(default_factory=LevelResults)
     level_ids: list[str] = field(default_factory=list)
@@ -117,7 +145,112 @@ class FluxLevelData:
     def __repr__(self) -> str:
         rows, cols = self.fpc_df.shape
         fs = self.filteredseries
-        fs_str = f"{fs.name!r} (n={fs.dropna().count()})" if fs is not None else "None"
-        return (f"FluxLevelData(flux={self.meta.fluxcol!r}, "
-                f"levels={self.level_ids}, "
-                f"fpc_df=({rows}x{cols}), filteredseries={fs_str})")
+        if fs is not None:
+            n_valid = int(fs.dropna().count())
+            n_total = len(fs)
+            fs_str = f"{fs.name!r} ({n_valid}/{n_total} valid)"
+        else:
+            fs_str = "None (use data.levels.filteredseries_level33_qcf after L3.3)"
+        all_cols = self.fpc_df.columns.tolist()
+        _max_shown = 12
+        if len(all_cols) <= _max_shown:
+            col_str = ", ".join(all_cols)
+        else:
+            col_str = ", ".join(all_cols[:_max_shown]) + f", ... (+{len(all_cols) - _max_shown} more)"
+        return (
+            f"FluxLevelData(\n"
+            f"  flux        = {self.meta.fluxcol!r}\n"
+            f"  levels run  = {self.level_ids}\n"
+            f"  fpc_df      = {rows} rows x {cols} cols\n"
+            f"  columns     = [{col_str}]\n"
+            f"  filtered    = {fs_str}\n"
+            f")"
+        )
+
+    def summary(self) -> str:
+        """
+        Return a concise data-availability summary across all completed levels.
+
+        Shows the number of valid (non-NaN) records per QCF-filtered series,
+        split by daytime and nighttime where available.  Useful for quickly
+        assessing how much data each level removes.
+
+        Returns:
+            Multi-line string ready for ``print()``.
+        """
+        m = self.meta
+        lines = [
+            f"Data availability summary  —  flux: {m.fluxcol!r}",
+            f"Site: lat={m.site_lat}, lon={m.site_lon}, UTC+{m.utc_offset}",
+            f"QCF thresholds: daytime accept QCF < {m.daytime_accept_qcf_below}  |  "
+            f"nighttime accept QCF < {m.nighttime_accept_qcf_below}",
+            f"  (QCF=0: all tests pass; QCF=1: soft warnings; QCF=2: hard failure)",
+            f"Total records: {len(self.fpc_df)}",
+        ]
+
+        # Try to pull daytime / nighttime masks from fpc_df
+        daytime_col = 'DAYTIME'
+        nighttime_col = 'NIGHTTIME'
+        has_dn = daytime_col in self.fpc_df.columns and nighttime_col in self.fpc_df.columns
+        if has_dn:
+            day_mask = self.fpc_df[daytime_col] == 1
+            night_mask = self.fpc_df[nighttime_col] == 1
+            lines.append(f"  Daytime records:    {int(day_mask.sum())}")
+            lines.append(f"  Nighttime records:  {int(night_mask.sum())}")
+        lines.append("")
+
+        def _row(label: str, s: pd.Series | None) -> str:
+            if s is None:
+                return f"  {label:<32s}  not yet run"
+            n = int(s.dropna().count())
+            pct = 100 * n / max(len(s), 1)
+            if has_dn:
+                nd = int(s[day_mask].dropna().count())
+                nn = int(s[night_mask].dropna().count())
+                return (f"  {label:<32s}  {n:5d} valid ({pct:5.1f}%)"
+                        f"  |  day: {nd:5d}  night: {nn:5d}")
+            return f"  {label:<32s}  {n:5d} valid ({pct:5.1f}%)"
+
+        lvl = self.levels
+        lines.append(_row("L2  (after QC flags)", lvl.filteredseries_level2_qcf))
+        lines.append(_row("L2  (QCF=0 only, high-quality)", lvl.filteredseries_hq))
+        lines.append(_row("L3.1 (storage-corrected)", lvl.filteredseries_level31_qcf))
+        lines.append(_row("L3.2 (outlier-cleaned)", lvl.filteredseries_level32_qcf))
+        for scen, s in lvl.filteredseries_level33_qcf.items():
+            lines.append(_row(f"L3.3 USTAR={scen}", s))
+        lines.append("")
+        lines.append(f"fpc_df columns ({len(self.fpc_df.columns)}): "
+                     + ", ".join(self.fpc_df.columns.tolist()))
+        return "\n".join(lines)
+
+    def gapfilled_cols(self) -> dict[str, dict[str, str]]:
+        """
+        Return the gap-filled output column names per L4.1 method and USTAR scenario.
+
+        Saves the user from digging into the level instances to find which column
+        in ``fpc_df`` holds the gap-filled flux.
+
+        Returns:
+            Nested dict ``{method: {ustar_scenario: column_name}}``.
+            Keys present only when that method has been run.
+
+        Example::
+
+            cols = data.gapfilled_cols()
+            # {'rf': {'CUT_50': 'NEE_L3.3_CUT_50_QCF_f'},
+            #  'mds': {'CUT_50': 'NEE_L3.3_CUT_50_QCF_MDS_f'}}
+
+            gapfilled = data.fpc_df[cols['rf']['CUT_50']]
+        """
+        out: dict[str, dict[str, str]] = {}
+        lvl = self.levels
+        if lvl.level41_rf:
+            out['rf'] = {scen: inst.gapfilled_.name
+                         for scen, inst in lvl.level41_rf.items()}
+        if lvl.level41_xgb:
+            out['xgb'] = {scen: inst.gapfilled_.name
+                          for scen, inst in lvl.level41_xgb.items()}
+        if lvl.level41_mds:
+            out['mds'] = {scen: inst.get_gapfilled_target().name
+                          for scen, inst in lvl.level41_mds.items()}
+        return out

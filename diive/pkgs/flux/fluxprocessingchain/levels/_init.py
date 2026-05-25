@@ -26,7 +26,7 @@ def init_flux_data(
         utc_offset: int,
         nighttime_threshold: float = 20,
         daytime_accept_qcf_below: int = 1,
-        nighttimetime_accept_qcf_below: int = 1,
+        nighttime_accept_qcf_below: int = 1,
         ustarcol: str = 'USTAR',
 ) -> FluxLevelData:
     """
@@ -44,15 +44,44 @@ def init_flux_data(
         utc_offset: UTC offset in hours.
         nighttime_threshold: Potential radiation threshold (W m-2) below
             which records are treated as nighttime. Defaults to 20.
-        daytime_accept_qcf_below: QCF value below which daytime data are
-            retained (0, 1, or 2). Defaults to 1.
-        nighttimetime_accept_qcf_below: QCF value below which nighttime
-            data are retained. Defaults to 1.
+        daytime_accept_qcf_below: QCF threshold for daytime data retention.
+            Records with QCF **below** this value are kept; those at or above
+            are set to NaN.  Allowed values:
+
+            - ``1`` (default) — keep only QCF=0 (all tests pass).  Strictest.
+            - ``2`` — keep QCF=0 and QCF=1 (soft warnings tolerated).
+              This matches the conventional FLUXNET / Swiss FluxNet choice
+              (Papale et al. 2006, Reichstein et al. 2005) and maximises
+              data availability while still rejecting hard failures.
+
+            **QCF value meanings:**
+
+            - ``QCF=0`` — all quality tests passed; highest confidence.
+            - ``QCF=1`` — one or more soft warnings (minor issues); marginal quality.
+            - ``QCF=2`` — at least one hard failure or many soft warnings; rejected.
+
+        nighttime_accept_qcf_below: Same as ``daytime_accept_qcf_below`` but
+            applied to nighttime records.  Defaults to 1.  Set to 2 for the
+            conventional FLUXNET treatment.
         ustarcol: Name of the friction velocity column. Defaults to 'USTAR'.
 
     Returns:
         FluxLevelData ready to be passed to run_level2().
+
+    Note:
+        **FC → NEE rename:** when ``fluxcol='FC'``, the output column produced
+        by Level-3.1 (storage-corrected flux) is automatically named ``NEE``
+        following the FLUXNET convention.  All subsequent level outputs and
+        gap-filling results use ``NEE`` as the base name.  For any other flux
+        (e.g. ``'LE'``, ``'H'``, ``'FCH4'``), the original column name is kept.
     """
+    missing = [c for c in (fluxcol, ustarcol) if c not in df.columns]
+    if missing:
+        raise KeyError(
+            f"Column(s) not found in df: {missing}. "
+            f"Available columns: {list(df.columns)}"
+        )
+
     full_df = df.copy()
     fluxbasevar = detect_fluxbasevar(fluxcol=fluxcol)
 
@@ -100,7 +129,7 @@ def init_flux_data(
         utc_offset=utc_offset,
         nighttime_threshold=nighttime_threshold,
         daytime_accept_qcf_below=daytime_accept_qcf_below,
-        nighttimetime_accept_qcf_below=nighttimetime_accept_qcf_below,
+        nighttime_accept_qcf_below=nighttime_accept_qcf_below,
         outname=outname,
     )
 

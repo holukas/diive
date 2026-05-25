@@ -35,8 +35,16 @@ def run_level31(
 
     Args:
         data: FluxLevelData after ``run_level2()``.
-        gapfill_storage_term: Gap-fill the storage term before adding it.
-        set_storage_to_zero: Set the storage term to zero (skip correction).
+        gapfill_storage_term: Gap-fill missing storage values with a rolling
+            median before adding the term to the flux.  Default True.
+        set_storage_to_zero: Set the storage term to zero instead of using
+            measured data.  Use this for fluxes where no storage profile
+            exists (e.g. H, LE at low-canopy sites) or where the
+            single-point approximation is considered unreliable.
+            **Level-3.2 and Level-3.3 require Level-3.1 to have run.**
+            Even for H and LE, call this function with
+            ``set_storage_to_zero=True`` rather than skipping it entirely,
+            so that the chain's ordering guards are satisfied.
 
     Returns:
         Updated FluxLevelData with ``levels.level31``,

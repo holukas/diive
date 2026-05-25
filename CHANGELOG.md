@@ -2,6 +2,81 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
+## v0.91.4 | XX May 2026
+
+- **Fix: `data.filteredseries` set to `None` after `run_level33_constant_ustar()`** — `diive/pkgs/flux/fluxprocessingchain/levels/level33.py`
+  Previously `filteredseries` silently held the last-processed USTAR scenario's series, which was arbitrary dict-order dependent. Now explicitly `None` after L3.3 to force users to access the unambiguous per-scenario dict: `data.levels.filteredseries_level33_qcf['CUT_50']`.
+
+- **Fix: validate `signal_strength` and `raw_data_screening_vm97` sub-keys in `run_level2()`** — `diive/pkgs/flux/fluxprocessingchain/levels/level2.py`
+  Missing required sub-keys (e.g. omitting `'spikes'` from `raw_data_screening_vm97`) previously caused a confusing `KeyError` deep in the level class. Now raises a clear `KeyError` at the `run_level2()` call site listing all required keys.
+
+- **Fix: extract energy flux constant in `QuickFluxProcessingChain`** — `diive/pkgs/flux/fluxprocessingchain/fluxprocessingchain.py`
+  Hardcoded `if fluxcol in ['H', 'LE']` replaced with a module-level `_ENERGY_FLUX_VARS` frozenset that also covers `'G'`, `'SH'`, `'SLE'`, `'FH2O'`. Prevents USTAR filtering from being silently applied to non-CO2/CH4/N2O fluxes with non-standard names.
+
+- **Improve: `run_level2()` docstrings** — `diive/pkgs/flux/fluxprocessingchain/levels/level2.py`
+  `signal_strength['method']` now documents the two valid values (`'discard above'` / `'discard below'`) with guidance on which to use for each analyzer type. `raw_data_screening_vm97` lists all eight required boolean sub-keys with a brief description of each.
+
+- **Improve: document `filteredseries_level31_qcf` is not a new L3.1 quality test** — `diive/pkgs/flux/fluxprocessingchain/container.py`
+  Inline comment in `LevelResults` clarifies that Level-3.1 has no quality test of its own; the field re-applies the Level-2 QCF to the storage-corrected flux.
+
+- **Improve: `__repr__` truncates long column lists** — `diive/pkgs/flux/fluxprocessingchain/container.py`
+  Column list is now capped at 12 entries with `... (+N more)` suffix, preventing the repr from becoming unreadable after a full five-level chain with multiple USTAR scenarios.
+
+## v0.91.3 | XX May 2026
+
+- **Fix: guard for empty outlier detector in `run_level32()`** — `diive/pkgs/flux/fluxprocessingchain/levels/level32.py`
+  If no `flag_outliers_*()` + `addflag()` calls were made before `run_level32()`, the detector had no FLAG_ columns and `FlagQCF` would produce all QCF=0 (everything passes silently). Now raises a clear `RuntimeError` before any processing starts.
+
+- **Fix: validate MDS and ML driver/feature columns at call-site** — `diive/pkgs/flux/fluxprocessingchain/levels/level41.py`
+  `run_level41_mds()` now raises `KeyError` immediately if `swin`, `ta`, or `vpd` are missing from `data.full_df`. `_run_level41_ml()` raises `KeyError` if any `features` column is missing from `data.full_df`. Both include the list of available columns.
+
+- **Fix: guard `_extract_gapfilling_flag_col()` returning None** — `diive/pkgs/flux/fluxprocessingchain/levels/level41.py`
+  When zero or more than one `FLAG_*_ISFILLED` column exists, the function returned `None`, causing a confusing `KeyError: None` later. Now raises a descriptive `RuntimeError` immediately.
+
+- **Improve: explain QCF semantics and default vs FLUXNET convention in `init_flux_data()`** — `diive/pkgs/flux/fluxprocessingchain/levels/_init.py`
+  The `daytime_accept_qcf_below` and `nighttime_accept_qcf_below` docstrings now explain what QCF=0/1/2 mean and note that the default of 1 is stricter than the conventional FLUXNET / Swiss FluxNet choice of 2 (Papale et al. 2006).
+
+- **Improve: document constant-USTAR limitation in `run_level33_constant_ustar()`** — `diive/pkgs/flux/fluxprocessingchain/levels/level33.py`
+  Adds a note that only constant thresholds are supported, directs users to REddyProc / hesseflux for bootstrapped threshold estimation, and explains how to pass the resulting percentile values.
+
+- **Improve: `summary()` shows QCF thresholds and site metadata** — `diive/pkgs/flux/fluxprocessingchain/container.py`
+  `FluxLevelData.summary()` now prints the QCF acceptance thresholds used for each run alongside the data-availability counts, making it easy to spot when two chains differ only in threshold.
+
+- **Improve: `FeatureEngineer target_col` explained in `run_level41_rf/xgb()`** — `diive/pkgs/flux/fluxprocessingchain/levels/level41.py`
+  Docstrings now explain that `target_col` is a required but irrelevant placeholder for L4.1 feature engineering, and show a minimal construction example.
+
+## v0.91.2 | XX May 2026
+
+- **Fix: hoist feature engineering outside USTAR scenario loop in `_run_level41_ml`** — `diive/pkgs/flux/fluxprocessingchain/levels/level41.py`
+  `engineer.fit_transform()` was called once per USTAR scenario even though the features are identical across scenarios. Now called once before the loop; for 3 USTAR scenarios this is a 3× speedup for the feature engineering step.
+
+- **Fix: align `gapfill_storage_term` default** — `FluxStorageCorrectionSinglePointEddyPro.__init__` default changed from `False` to `True`, matching `run_level31()`. Both now default to gap-filling the storage term, which is the correct choice for the chain.
+
+- **Add: `FluxLevelData.gapfilled_cols()`** — `diive/pkgs/flux/fluxprocessingchain/container.py`
+  Returns a nested dict `{method: {ustar_scenario: column_name}}` mapping each L4.1 method and USTAR scenario to its gap-filled output column in `fpc_df`. Eliminates the need to inspect instance internals to find the gap-filled series.
+
+- **Improve: docstrings** — `run_level31` documents the H/LE `set_storage_to_zero=True` pattern and explains why L3.1 must run even for energy fluxes. `run_level33_constant_ustar` documents that L3.2 is recommended but not mandatory, and explains the `thresholds=[0], threshold_labels=['CUT_NONE']` pattern for H/LE. `run_level41_rf/xgb/mds` document that driver columns must exist in `data.full_df` and list typical NEE driver variables. `FluxStorageCorrectionSinglePointEddyPro.__init__` clarifies that `set_storage_to_zero=True` is a legitimate scientific choice, not just a testing option.
+
+## v0.91.1 | XX May 2026
+
+- **Fix: rename `nighttimetime_accept_qcf_below` → `nighttime_accept_qcf_below`** — `FlagQCF.calculate()`, `StepwiseMeteoScreeningDb.finalize_outlier_detection()`, `FluxMeta`, `init_flux_data`, `FluxProcessingChain.__init__`, all examples, tests, COOKBOOK.md
+  Corrected a long-standing double-"time" typo in a public parameter name.  The old spelling silently accepted keyword calls with the wrong name (Python accepted it via `**kwargs` fallback paths).  All source files updated; notebooks not patched (too many, low risk).
+
+- **Add: `FluxLevelData.summary()`** — `diive/pkgs/flux/fluxprocessingchain/container.py`
+  Returns a human-readable multi-line string showing valid-record counts per QCF-filtered series, with daytime/nighttime breakdown where available.  Call `print(data.summary())` after any level.
+
+- **Improve: `FluxLevelData.__repr__`** — shows valid/total count for the filtered series and lists all current `fpc_df` column names, so users can see what columns accumulated without an extra `.columns.tolist()` call.
+
+- **Add: VPD unit validation in `run_level41_mds()`** — `diive/pkgs/flux/fluxprocessingchain/levels/level41.py`
+  Raises a `UserWarning` when the median of the supplied VPD column exceeds 10, which almost certainly means the column is in hPa rather than the required kPa.
+
+- **Add: `fluxcol`/`ustarcol` existence check in `init_flux_data()`** — `diive/pkgs/flux/fluxprocessingchain/levels/_init.py`
+  Raises `KeyError` immediately (with the list of available columns) if `fluxcol` or `ustarcol` are not in the input DataFrame.
+
+- **Improve: USTAR filtering scope documented in `run_level33_constant_ustar()`** — adds an explicit warning that USTAR filtering must not be applied to energy fluxes (H, LE).
+
+- **Improve: docstrings** — `init_flux_data` documents the FC→NEE rename; `run_level32` / `make_level32_detector` document the mandatory `sod.addflag()` sequential semantics; `LevelResults` explains `filteredseries_hq` progression and USTAR scenario label convention; `FluxLevelData` explains `fpc_df` vs. `full_df`.
+
 ## v0.91.0 | XX May 2026
 
 - **Refactor: make `FluxProcessingChain` composable** — new `diive/pkgs/flux/fluxprocessingchain/container.py`, new `diive/pkgs/flux/fluxprocessingchain/levels/` package, rewrite of `diive/pkgs/flux/fluxprocessingchain/fluxprocessingchain.py`

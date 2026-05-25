@@ -27,8 +27,17 @@ def make_level32_detector(data: FluxLevelData) -> StepwiseOutlierDetection:
     Usage::
 
         sod = make_level32_detector(data)
+
+        # Each detector method + addflag() is one sequential step.
+        # addflag() locks in the current flags so the *next* detector
+        # operates only on the data that survived *this* step.
+        # Omitting addflag() means the next detector sees unfiltered data.
         sod.flag_outliers_hampel_test(window_length=48 * 13, ...)
-        sod.addflag()
+        sod.addflag()   # <- required after every detector call
+
+        sod.flag_outliers_zscore_rolling(...)
+        sod.addflag()   # <- required again
+
         data = run_level32(data, outlier_detector=sod)
     """
     if data.filteredseries is None:
@@ -54,8 +63,10 @@ def run_level32(
 
     The caller is responsible for constructing and configuring
     ``outlier_detector``.  Use ``make_level32_detector(data)`` for the correct
-    wiring, then call any number of ``sod.flag_outliers_*`` / ``sod.addflag()``
-    methods before passing it in.
+    wiring, then chain detector calls and ``addflag()`` calls alternately before
+    passing it in.  Each ``sod.addflag()`` call locks in the current flags so
+    the *next* detector method sees only the surviving records — omitting it
+    breaks the sequential filtering guarantee.
 
     Args:
         data: FluxLevelData after ``run_level31()``.
@@ -67,6 +78,17 @@ def run_level32(
     """
     if data.levels.flux_corrected_col is None:
         raise RuntimeError("run_level31() must be called before run_level32().")
+
+    # Guard: if no FLAG_ columns exist the user forgot to call flag_outliers_* + addflag().
+    # Without this check every record silently passes (QCF=0) because FlagQCF finds
+    # nothing to combine — the data looks clean when no test actually ran.
+    flag_cols = [c for c in outlier_detector.flags.columns if str(c).startswith("FLAG_")]
+    if not flag_cols:
+        raise RuntimeError(
+            "outlier_detector has no FLAG_ columns — did you forget to call "
+            "sod.flag_outliers_*() followed by sod.addflag() before run_level32()? "
+            "Without at least one completed test every record would pass silently."
+        )
 
     idstr = 'L3.2'
     updated, qcf = finalize_level(

@@ -30,7 +30,7 @@ SITE_LON = 8.491318  # CH-HON
 UTC_OFFSET = 1
 NIGHTTIME_THRESHOLD = 20  # W m-2, conditions below are nighttime
 DAYTIME_ACCEPT_QCF_BELOW = 2
-NIGHTTIMETIME_ACCEPT_QCF_BELOW = 2
+NIGHTTIME_ACCEPT_QCF_BELOW = 2
 
 # Initialize processing chain
 fpc = dv.flux.FluxProcessingChain(
@@ -41,7 +41,7 @@ fpc = dv.flux.FluxProcessingChain(
     utc_offset=UTC_OFFSET,
     nighttime_threshold=NIGHTTIME_THRESHOLD,
     daytime_accept_qcf_below=DAYTIME_ACCEPT_QCF_BELOW,
-    nighttimetime_accept_qcf_below=NIGHTTIMETIME_ACCEPT_QCF_BELOW
+    nighttime_accept_qcf_below=NIGHTTIME_ACCEPT_QCF_BELOW
 )
 
 # %%

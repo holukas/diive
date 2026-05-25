@@ -44,7 +44,7 @@ UTC_OFFSET = 1        # UTC+01:00 (Central European Time)
 # Quality control thresholds
 NIGHTTIME_THRESHOLD = 20        # W m-2, below this is nighttime
 DAYTIME_ACCEPT_QCF_BELOW = 2    # Accept data quality flag < 2 during day
-NIGHTTIMETIME_ACCEPT_QCF_BELOW = 2  # Accept data quality flag < 2 at night
+NIGHTTIME_ACCEPT_QCF_BELOW = 2  # Accept data quality flag < 2 at night
 
 # Signal strength testing (optional)
 TEST_SIGNAL_STRENGTH = True
@@ -71,7 +71,7 @@ qfpc = QuickFluxProcessingChain(
     utc_offset=UTC_OFFSET,
     nighttime_threshold=NIGHTTIME_THRESHOLD,
     daytime_accept_qcf_below=DAYTIME_ACCEPT_QCF_BELOW,
-    nighttimetime_accept_qcf_below=NIGHTTIMETIME_ACCEPT_QCF_BELOW,
+    nighttime_accept_qcf_below=NIGHTTIME_ACCEPT_QCF_BELOW,
     test_signal_strength=TEST_SIGNAL_STRENGTH,
     test_signal_strength_col=TEST_SIGNAL_STRENGTH_COL,
     test_signal_strength_method=TEST_SIGNAL_STRENGTH_METHOD,

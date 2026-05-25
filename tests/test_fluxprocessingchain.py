@@ -34,7 +34,7 @@ class TestFluxProcessingChain(unittest.TestCase):
             utc_offset=UTC_OFFSET,
             nighttime_threshold=NIGHTTIME_THRESHOLD,
             daytime_accept_qcf_below=DAYTIME_ACCEPT_QCF_BELOW,
-            nighttimetime_accept_qcf_below=NIGHTTIMETIME_ACCEPT_QCF_BELOW
+            nighttime_accept_qcf_below=NIGHTTIMETIME_ACCEPT_QCF_BELOW
         )
         self.assertEqual(len(fpc.fpc_df.columns), 5)
 
@@ -323,7 +323,7 @@ class TestFluxProcessingChainComposable(unittest.TestCase):
             df=df, fluxcol='FC',
             site_lat=46.583056, site_lon=9.790639, utc_offset=1,
             nighttime_threshold=50,
-            daytime_accept_qcf_below=2, nighttimetime_accept_qcf_below=2,
+            daytime_accept_qcf_below=2, nighttime_accept_qcf_below=2,
         )
         self.assertIsInstance(data, FluxLevelData)
         self.assertIsInstance(data.levels, LevelResults)

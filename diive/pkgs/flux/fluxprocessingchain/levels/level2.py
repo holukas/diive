@@ -36,11 +36,41 @@ def run_level2(
 
     Args:
         data: FluxLevelData from ``init_flux_data()``.
-        signal_strength: Config dict; requires ``signal_strength_col``,
-            ``method``, ``threshold``.
-        raw_data_screening_vm97: Config dict; requires ``spikes``, ``amplitude``,
-            ``dropout``, ``abslim``, ``skewkurt_hf``, ``skewkurt_sf``,
-            ``discont_hf``, ``discont_sf``.
+        signal_strength: Config dict with keys:
+
+            - ``'apply'``: ``True`` to enable the test.
+            - ``'signal_strength_col'``: column name of the signal strength /
+              AGC (Automatic Gain Control) diagnostic from EddyPro output
+              (e.g. ``'CUSTOM_SIGNAL_STRENGTH_IRGA72_MEAN'``).
+            - ``'method'``: ``'discard above'`` to flag records where signal
+              strength *exceeds* the threshold (high AGC = dirty optics on
+              some analyzers), or ``'discard below'`` to flag records where
+              it *falls below* the threshold (low signal = instrument issue).
+              Check your analyzer's manual to know which direction applies.
+            - ``'threshold'``: numeric cutoff value (instrument-specific).
+
+            Example for a LI-7200 where low signal strength indicates a problem::
+
+                signal_strength={
+                    'apply': True,
+                    'signal_strength_col': 'CUSTOM_SIGNAL_STRENGTH_IRGA72_MEAN',
+                    'method': 'discard below',
+                    'threshold': 60,
+                }
+        raw_data_screening_vm97: Config dict with ``'apply': True`` and eight
+            boolean sub-keys (``True`` to enable, ``False`` to skip each test):
+
+            - ``'spikes'``: spike detection
+            - ``'amplitude'``: amplitude resolution check
+            - ``'dropout'``: dropout detection
+            - ``'abslim'``: absolute limits check
+            - ``'skewkurt_hf'``: skewness/kurtosis on high-frequency data
+            - ``'skewkurt_sf'``: skewness/kurtosis on slow-response data
+            - ``'discont_hf'``: discontinuities in high-frequency data
+            - ``'discont_sf'``: discontinuities in slow-response data
+
+            All eight keys must be present even if set to ``False``.
+            (Vickers & Mahrt 1997)
         ssitc: Config dict; optional ``setflag_timeperiod``.
         gas_completeness: Config dict (just ``{'apply': True}``).
         spectral_correction_factor: Config dict (just ``{'apply': True}``).
@@ -52,6 +82,29 @@ def run_level2(
         ``levels.filteredseries_level2_qcf``, and ``levels.filteredseries_hq``
         populated.
     """
+    # Validate required sub-keys upfront so users get a clear error at the
+    # call site, not a confusing KeyError buried inside the level class.
+    if signal_strength and signal_strength.get('apply'):
+        _required = ('signal_strength_col', 'method', 'threshold')
+        _missing = [k for k in _required if k not in signal_strength]
+        if _missing:
+            raise KeyError(
+                f"signal_strength config is missing required key(s): {_missing}. "
+                f"Required: {{'apply': True, 'signal_strength_col': '...', "
+                f"'method': 'discard above' | 'discard below', 'threshold': <int>}}"
+            )
+
+    if raw_data_screening_vm97 and raw_data_screening_vm97.get('apply'):
+        _required_vm97 = ('spikes', 'amplitude', 'dropout', 'abslim',
+                          'skewkurt_hf', 'skewkurt_sf', 'discont_hf', 'discont_sf')
+        _missing_vm97 = [k for k in _required_vm97 if k not in raw_data_screening_vm97]
+        if _missing_vm97:
+            raise KeyError(
+                f"raw_data_screening_vm97 config is missing required key(s): {_missing_vm97}. "
+                f"All eight boolean sub-keys must be present (set to True or False): "
+                f"{list(_required_vm97)}"
+            )
+
     idstr = 'L2'
     meta = data.meta
 
