@@ -92,7 +92,7 @@ print(assigned_measurements)
 # Initialize MeteoScreening
 # ^^^^^^^^^^^^^^^^^^^^^^^^
 
-from diive.pkgs.preprocessing.qaqc.meteoscreening import StepwiseMeteoScreeningDb
+from diive.preprocessing.qaqc.meteoscreening import StepwiseMeteoScreeningDb
 
 mscr = StepwiseMeteoScreeningDb(site=SITE,
                                 data_detailed=data_detailed,

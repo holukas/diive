@@ -29,7 +29,7 @@ print(f"  Columns: {df.shape[1]}")
 # Identify measurements with poor sensor signal quality.
 # Low signal indicates dust, condensation, or optical drift.
 
-from diive.pkgs.preprocessing.qaqc import flag_signal_strength_eddypro_test
+from diive.preprocessing.qaqc import flag_signal_strength_eddypro_test
 
 flag_signal = flag_signal_strength_eddypro_test(
     df=df,
@@ -54,7 +54,7 @@ print(f"  Discarded: {n_discarded} records ({100 * n_discarded / (n_retained + n
 # Evaluate horizontal wind stability throughout measurement period.
 # Non-stationary wind indicates poor measurement conditions.
 
-from diive.pkgs.preprocessing.qaqc import flag_steadiness_horizontal_wind_eddypro_test
+from diive.preprocessing.qaqc import flag_steadiness_horizontal_wind_eddypro_test
 
 flag_wind = flag_steadiness_horizontal_wind_eddypro_test(
     df=df,
@@ -73,7 +73,7 @@ print(f"  Non-steady: {(flag_wind == 2).sum()}")
 # Check if wind approaches anemometer at acceptable angle.
 # Large angles degrade measurement accuracy.
 
-from diive.pkgs.preprocessing.qaqc import flag_angle_of_attack_eddypro_test
+from diive.preprocessing.qaqc import flag_angle_of_attack_eddypro_test
 
 flag_aoa = flag_angle_of_attack_eddypro_test(
     df=df,
@@ -92,7 +92,7 @@ print(f"  Poor angle: {(flag_aoa == 2).sum()}")
 # Extract 8 individual quality tests from EddyPro VM97 codes.
 # Tests evaluate stationarity, amplitude, dropout, limits, etc.
 
-from diive.pkgs.preprocessing.qaqc import flags_vm97_eddypro_fluxnetfile_tests
+from diive.preprocessing.qaqc import flags_vm97_eddypro_fluxnetfile_tests
 
 flags_vm97 = flags_vm97_eddypro_fluxnetfile_tests(
     df=df,
@@ -138,7 +138,7 @@ for test_name, test_suffix in test_info:
 # Evaluate data availability for flux calculation.
 # CO2 completeness determines CO2 flux (FC) reliability.
 
-from diive.pkgs.preprocessing.qaqc import flag_fluxbasevar_completeness_eddypro_test
+from diive.preprocessing.qaqc import flag_fluxbasevar_completeness_eddypro_test
 
 flag_complete = flag_fluxbasevar_completeness_eddypro_test(
     df=df,

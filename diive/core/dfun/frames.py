@@ -17,7 +17,7 @@ from diive.core.funcs.funcs import find_duplicates_in_list
 from diive.core.times.times import current_time_microseconds_str
 # from diive.core.times.times import timedelta_to_string
 from diive.core.utils.console import info
-from diive.pkgs.gapfilling.interpolate import linear_interpolation
+from diive.gapfilling.interpolate import linear_interpolation
 
 pd.set_option('display.width', 1500)
 pd.set_option('display.max_columns', 30)

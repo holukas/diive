@@ -20,7 +20,7 @@ Best for: Understanding FLUXNET variable nomenclature and relationships.
 # Demonstrates flux variable detection by querying which base variables
 # (measured quantities) are used to calculate different flux variables.
 
-from diive.pkgs.flux.lowres.common import detect_fluxbasevar, fluxbasevars_fluxnetfile
+from diive.flux.lowres.common import detect_fluxbasevar, fluxbasevars_fluxnetfile
 
 print("=" * 80)
 print("Available flux variables in FLUXNET format:")

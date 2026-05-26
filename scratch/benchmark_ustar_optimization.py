@@ -8,7 +8,7 @@ Uses same example data as examples.flux.ustarthreshold.example_ustar_detection_m
 
 import time
 import numpy as np
-from diive.pkgs.flux.lowres.ustarthreshold import UstarDetectionMPT, OptimizedUstarDetectionMPT
+from diive.flux.lowres.ustarthreshold import UstarDetectionMPT, OptimizedUstarDetectionMPT
 from diive.configs.exampledata import load_exampledata_parquet_lae
 
 def benchmark_ustar_detection(use_optimized=False):

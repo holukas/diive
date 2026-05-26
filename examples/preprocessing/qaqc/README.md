@@ -23,7 +23,7 @@ See `diive.pkgs.preprocessing.qaqc` for:
 
 **Generate overall quality flag (QCF):**
 ```python
-from diive.pkgs.preprocessing.qaqc import FlagQCF
+from diive.preprocessing.qaqc import FlagQCF
 
 # Combine multiple individual quality tests into single QCF
 qcf = FlagQCF(
@@ -46,7 +46,7 @@ qcf.showplot_qcf_heatmaps()  # Visualization
 
 **Extract EddyPro quality flags:**
 ```python
-from diive.pkgs.preprocessing.qaqc import (
+from diive.preprocessing.qaqc import (
     flag_signal_strength_eddypro_test,
     flags_vm97_eddypro_fluxnetfile_tests,
     flag_ssitc_eddypro_test

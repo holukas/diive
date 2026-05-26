@@ -43,7 +43,7 @@ to operational correction of multi-year flux datasets, with full diagnostic visu
 import pandas as pd
 import time
 from datetime import datetime
-from diive.pkgs.flux.lowres.selfheating import ScopPhysics, ScopOptimizer, ScopApplicator
+from diive.flux.lowres.selfheating import ScopPhysics, ScopOptimizer, ScopApplicator
 from diive.configs.exampledata import load_exampledata_parquet_lae
 
 print("=" * 80)

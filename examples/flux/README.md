@@ -56,7 +56,7 @@ Available classes and functions in `diive.pkgs.flux`:
 
 **Process raw eddy covariance data:**
 ```python
-from diive.pkgs.flux.fluxprocessingchain import FluxProcessingChain
+from diive.flux.fluxprocessingchain import FluxProcessingChain
 
 # Complete multi-level workflow
 fpc = FluxProcessingChain(

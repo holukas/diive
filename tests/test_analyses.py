@@ -1,13 +1,13 @@
 import unittest
 
-from diive.pkgs.analysis.histogram import Histogram
+from diive.analysis.histogram import Histogram
 
 
 class TestAnalyses(unittest.TestCase):
 
     def test_percentiles(self):
         from diive.configs.exampledata import load_exampledata_parquet
-        from diive.pkgs.analysis.quantiles import percentiles101
+        from diive.analysis.quantiles import percentiles101
         df = load_exampledata_parquet()
         percentiles_df = percentiles101(series=df['Tair_f'], showplot=False, verbose=True)
         self.assertEqual(len(percentiles_df.columns), 2)
@@ -16,7 +16,7 @@ class TestAnalyses(unittest.TestCase):
 
     def test_gapfinder(self):
         from diive.configs.exampledata import load_exampledata_parquet
-        from diive.pkgs.analysis.gapfinder import GapFinder
+        from diive.analysis.gapfinder import GapFinder
         data_df = load_exampledata_parquet()
         series = data_df['NEE_CUT_REF_orig']
         gf = GapFinder(series=series, sort_results=True)
@@ -30,7 +30,7 @@ class TestAnalyses(unittest.TestCase):
 
     def test_sorting_bins_method(self):
         from diive.configs.exampledata import load_exampledata_parquet
-        from diive.pkgs.analysis.decoupling import SortingBinsMethod
+        from diive.analysis.decoupling import SortingBinsMethod
         vpd_col = 'VPD_f'  # Vapor pressure deficit
         ta_col = 'Tair_f'  # Air temperature
         swin_col = 'Rg_f'  # Radiation used to detect daytime data
@@ -76,8 +76,8 @@ class TestAnalyses(unittest.TestCase):
 
     def test_daily_correlation(self):
         from diive.configs.exampledata import load_exampledata_parquet
-        from diive.pkgs.analysis import daily_correlation
-        from diive.pkgs.features.variables.potentialradiation import potrad
+        from diive.analysis import daily_correlation
+        from diive.features.variables.potentialradiation import potrad
         data_df = load_exampledata_parquet()
         # Use only year 2022
         data_df = data_df.loc[data_df.index.year == 2022].copy()

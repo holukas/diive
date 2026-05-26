@@ -6,8 +6,8 @@ from numpy import mean
 import diive.configs.exampledata as ed
 from diive.core.ml.common import MlRegressorGapFillingBase
 from diive.core.ml.feature_engineer import FeatureEngineer
-from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
-from diive.pkgs.gapfilling.xgboost_ts import XGBoostTS
+from diive.gapfilling.randomforest_ts import RandomForestTS
+from diive.gapfilling.xgboost_ts import XGBoostTS
 
 
 class TestGapFilling(unittest.TestCase):
@@ -17,7 +17,7 @@ class TestGapFilling(unittest.TestCase):
 
     def test_quickfill(self):
         """Test QuickFillRFTS for rapid gap-filling exploration"""
-        from diive.pkgs.gapfilling.randomforest_ts import QuickFillRFTS
+        from diive.gapfilling.randomforest_ts import QuickFillRFTS
         df = ed.load_exampledata_parquet()
         df = df.loc[(df.index.year == 2020) & (df.index.month == 7)].copy()
 
@@ -45,7 +45,7 @@ class TestGapFilling(unittest.TestCase):
     def test_fluxmds(self):
         from collections import Counter
         from diive.configs.exampledata import load_exampledata_parquet
-        from diive.pkgs.gapfilling.mds import FluxMDS
+        from diive.gapfilling.mds import FluxMDS
         df = load_exampledata_parquet()
         locs = (df.index.year >= 2022) & (df.index.year <= 2022)
         df = df.loc[locs].copy()
@@ -87,7 +87,7 @@ class TestGapFilling(unittest.TestCase):
 
     def test_gapfilling_longterm_randomforest(self):
         from diive.configs.exampledata import load_exampledata_parquet
-        from diive.pkgs.gapfilling.longterm import LongTermGapFillingRandomForestTS
+        from diive.gapfilling.longterm import LongTermGapFillingRandomForestTS
         TARGET_COL = 'NEE_CUT_REF_orig'
         subsetcols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
         source_df = load_exampledata_parquet()
@@ -171,7 +171,7 @@ class TestGapFilling(unittest.TestCase):
 
     def test_linear_interpolation(self):
         from diive.configs.exampledata import load_exampledata_parquet
-        from diive.pkgs.gapfilling.interpolate import linear_interpolation
+        from diive.gapfilling.interpolate import linear_interpolation
         df = load_exampledata_parquet()
         df = df.loc[df.index.year == 2022].copy()
         series = df['NEE_CUT_REF_orig'].copy()

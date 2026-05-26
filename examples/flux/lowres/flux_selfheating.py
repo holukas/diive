@@ -22,7 +22,7 @@ Best for: Correcting systematic bias in open-path IRGA CO2 flux measurements.
 # 2. ScopOptimizer: Optimize scaling factors using closed-path reference
 # 3. ScopApplicator: Apply final correction to open-path flux
 
-from diive.pkgs.flux.lowres.selfheating import ScopPhysics, ScopOptimizer, ScopApplicator
+from diive.flux.lowres.selfheating import ScopPhysics, ScopOptimizer, ScopApplicator
 from diive.configs.exampledata import load_exampledata_parquet_lae
 import time
 

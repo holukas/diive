@@ -18,7 +18,7 @@ from joblib import Parallel, delayed
 
 import diive.core.dfun.frames as fr
 from diive.core.utils.console import console as _console, info, rule, success, error
-from diive.pkgs.gapfilling.scores import prediction_scores
+from diive.gapfilling.scores import prediction_scores
 
 pd.set_option('display.max_rows', 50)
 pd.set_option('display.max_columns', 12)

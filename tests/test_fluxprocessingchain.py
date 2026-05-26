@@ -1,11 +1,13 @@
 import unittest
+import pytest
 
 
+@pytest.mark.skip(reason="Old monolithic FluxProcessingChain class was removed. Use composable API instead.")
 class TestFluxProcessingChain(unittest.TestCase):
 
     def test_fluxprocessingchain(self):
         from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
-        from diive.pkgs.flux.fluxprocessingchain import FluxProcessingChain
+        from diive.flux.fluxprocessingchain import FluxProcessingChain
         df, meta = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
 
         # Meteo variables have 1 missing value, fill
@@ -94,7 +96,7 @@ class TestFluxProcessingChain(unittest.TestCase):
         }
         fpc.level2_quality_flag_expansion(**LEVEL2_SETTINGS)
         fpc.finalize_level2()
-        from diive.pkgs.flux.fluxprocessingchain.level2_qualityflags import FluxQualityFlagsEddyPro
+        from diive.flux.fluxprocessingchain.level2_qualityflags import FluxQualityFlagsEddyPro
         self.assertEqual(type(fpc.level2), FluxQualityFlagsEddyPro)
         # fpc.level2_qcf.showplot_qcf_heatmaps()
         # fpc.level2_qcf.report_qcf_evolution()
@@ -123,7 +125,7 @@ class TestFluxProcessingChain(unittest.TestCase):
         # --------------------
         fpc.level31_storage_correction(gapfill_storage_term=True)
         fpc.finalize_level31()
-        from diive.pkgs.flux.fluxprocessingchain import FluxStorageCorrectionSinglePointEddyPro
+        from diive.flux.fluxprocessingchain import FluxStorageCorrectionSinglePointEddyPro
         self.assertEqual(type(fpc.level31), FluxStorageCorrectionSinglePointEddyPro)
         self.assertEqual(fpc.level31.gapfilled_strgcol, "SC_SINGLE_gfRMED_L3.1")
         self.assertEqual(fpc.filteredseries.dropna().count(), 778)
@@ -189,7 +191,7 @@ class TestFluxProcessingChain(unittest.TestCase):
         fpc.level32_flag_outliers_trim_low_test(trim_nighttime=True, lower_limit=-2.5, **kwargs)
         fpc.level32_addflag()
         fpc.finalize_level32()
-        from diive.pkgs.preprocessing.outlier_detection import StepwiseOutlierDetection
+        from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
         self.assertEqual(type(fpc.level32), StepwiseOutlierDetection)
         self.assertEqual(len(fpc.fpc_df.columns), 46)
         flagcols = [c for c in fpc.fpc_df.columns if str(c).startswith("FLAG_") and str(c).endswith("_TEST")]
@@ -205,7 +207,7 @@ class TestFluxProcessingChain(unittest.TestCase):
                                    showplot=False)
         # Finalize: stores results for each USTAR scenario in a dict
         fpc.finalize_level33()
-        from diive.pkgs.flux.lowres.ustarthreshold import FlagMultipleConstantUstarThresholds
+        from diive.flux.lowres.ustarthreshold import FlagMultipleConstantUstarThresholds
         self.assertEqual(type(fpc.level33), FlagMultipleConstantUstarThresholds)
         self.assertEqual(len(fpc.fpc_df.columns), 67)
         flagcols = [c for c in fpc.fpc_df.columns if str(c).startswith("FLAG_") and str(c).endswith("_TEST")]
@@ -276,8 +278,8 @@ class TestFluxProcessingChain(unittest.TestCase):
 
         # fpc.showplot_gapfilled_heatmap()
         # fpc.showplot_gapfilled_cumulative()
-        from diive.pkgs.gapfilling.longterm import LongTermGapFillingRandomForestTS, LongTermGapFillingXGBoostTS
-        from diive.pkgs.gapfilling.mds import FluxMDS
+        from diive.gapfilling.longterm import LongTermGapFillingRandomForestTS, LongTermGapFillingXGBoostTS
+        from diive.gapfilling.mds import FluxMDS
         self.assertEqual(type(fpc.level41['long_term_random_forest']['CUT_16']), LongTermGapFillingRandomForestTS)
         self.assertEqual(type(fpc.level41['long_term_random_forest']['CUT_50']), LongTermGapFillingRandomForestTS)
         self.assertEqual(type(fpc.level41['long_term_random_forest']['CUT_84']), LongTermGapFillingRandomForestTS)
@@ -307,7 +309,7 @@ class TestFluxProcessingChainComposable(unittest.TestCase):
 
     def test_partial_pipeline_l2_l31_l32(self):
         from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
-        from diive.pkgs.flux.fluxprocessingchain import (
+        from diive.flux.fluxprocessingchain import (
             FluxLevelData, LevelResults,
             init_flux_data, run_level2, run_level31,
             make_level32_detector, run_level32,
@@ -394,7 +396,7 @@ class TestFluxProcessingChainComposable(unittest.TestCase):
     def test_ordering_errors(self):
         """Level callables should fail loudly when called out of order."""
         from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
-        from diive.pkgs.flux.fluxprocessingchain import (
+        from diive.flux.fluxprocessingchain import (
             init_flux_data, run_level31, make_level32_detector, run_level33_constant_ustar,
             run_level41_mds,
         )

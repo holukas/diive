@@ -33,7 +33,7 @@ Examples demonstrating statistical analysis, decomposition, and pattern detectio
 **Decompose seasonal trends:**
 
 ```python
-from diive.pkgs.analysis import SeasonalTrendDecomposition
+from diive.analysis import SeasonalTrendDecomposition
 
 std = SeasonalTrendDecomposition(series=df['NEE'], period=365)
 trend = std.trend
@@ -43,7 +43,7 @@ seasonal = std.seasonal
 **Find lagged correlations (e.g., radiation vs. photosynthesis):**
 
 ```python
-from diive.pkgs.analysis import Correlation
+from diive.analysis import Correlation
 
 corr = Correlation(
     series1=df['PAR'],
@@ -56,7 +56,7 @@ max_correlation = corr.results[corr.max_lag]
 **Analyze diurnal cycles:**
 
 ```python
-from diive.pkgs.analysis import DielCycle
+from diive.analysis import DielCycle
 
 diel = DielCycle(series=df['NEE'])
 mean_by_hour = diel.mean_by_hour

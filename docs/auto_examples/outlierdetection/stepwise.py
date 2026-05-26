@@ -28,7 +28,7 @@ def example_stepwise_outlier_detection_synthetic_data():
     3. Chain multiple detection methods with full parameters
     4. View results at each step
     """
-    from diive.pkgs.preprocessing.outlierdetection import StepwiseOutlierDetection
+    from diive.preprocessing.outlierdetection import StepwiseOutlierDetection
 
     # Generate synthetic data
     df_noisy = dv.generate_noisy_timeseries(

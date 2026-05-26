@@ -27,7 +27,7 @@ negative shift = measured peaks **later** (lagging clock).
 import matplotlib.pyplot as plt
 
 import diive as dv
-from diive.pkgs.preprocessing.qaqc.detect_timestamp_shifts import DetectTimestampShifts
+from diive.preprocessing.qaqc.detect_timestamp_shifts import DetectTimestampShifts
 
 df = dv.load_exampledata_parquet()
 df = df.loc[df.index.year == 2022].copy()
@@ -62,7 +62,7 @@ dts = DetectTimestampShifts(
 # If the potential radiation is already in the DataFrame, pass it directly.
 # No lat/lon required.
 
-from diive.pkgs.features.variables.potentialradiation import potrad
+from diive.features.variables.potentialradiation import potrad
 
 df_with_pot = df.copy()
 df_with_pot['SW_IN_POT'] = potrad(

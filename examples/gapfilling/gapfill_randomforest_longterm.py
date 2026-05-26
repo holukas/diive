@@ -26,7 +26,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import diive as dv
-from diive.pkgs.gapfilling.longterm import LongTermGapFillingRandomForestTS
+from diive.gapfilling.longterm import LongTermGapFillingRandomForestTS
 
 # %%
 # Load and prepare data

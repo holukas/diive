@@ -1,6 +1,6 @@
 import unittest
 
-from diive.pkgs.fits.fitter import BinFitterCP
+from diive.fits.fitter import BinFitterCP
 
 
 class TestFits(unittest.TestCase):

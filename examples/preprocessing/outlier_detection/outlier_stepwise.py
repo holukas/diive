@@ -41,7 +41,7 @@ print(f"  Period: {df_noisy.index.min()} to {df_noisy.index.max()}")
 # Create orchestrator that chains multiple detection methods.
 # Each method filters data already cleaned by previous methods.
 
-from diive.pkgs.preprocessing.outlier_detection import StepwiseOutlierDetection
+from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
 
 detector = StepwiseOutlierDetection(
     dfin=df_noisy,

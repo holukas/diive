@@ -38,7 +38,7 @@ import warnings
 import diive as dv
 from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
 from diive.core.ml.feature_engineer import FeatureEngineer
-from diive.pkgs.flux.fluxprocessingchain import (
+from diive.flux.fluxprocessingchain import (
     init_flux_data,
     make_level32_detector,
     run_level2,

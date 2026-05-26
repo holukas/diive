@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
 import diive as dv
-from diive.pkgs.gapfilling.mds import FluxMDS, _FluxMDS
+from diive.gapfilling.mds import FluxMDS, _FluxMDS
 
 
 def _plot_comparison_results(original_time, optimized_time, speedup,

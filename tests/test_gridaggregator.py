@@ -5,7 +5,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from diive.pkgs.analysis.gridaggregator import GridAggregator
+from diive.analysis.gridaggregator import GridAggregator
 
 
 class TestGridAggregator(unittest.TestCase):

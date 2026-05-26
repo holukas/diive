@@ -16,7 +16,7 @@ import diive.core.dfun.frames as fr
 from diive.core.ml.results import GapFillingResult
 from diive.core.times.times import vectorize_timestamps
 from diive.core.utils.console import console as _console, detail, info, rule, warn
-from diive.pkgs.gapfilling.scores import prediction_scores
+from diive.gapfilling.scores import prediction_scores
 
 pd.set_option('display.max_rows', 50)
 pd.set_option('display.max_columns', 12)

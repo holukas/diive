@@ -197,7 +197,7 @@ See `examples/times/times_timestamp_sanitizer.py`.
 Each level is a pure function: `init_flux_data` → `run_level2` → `run_level31` → `run_level32` → `run_level33` → `run_level41_*`. Never mutate input. Write your own loop for single or multiple fluxes.
 
 ```python
-from diive.pkgs.flux.fluxprocessingchain import (
+from diive.flux.fluxprocessingchain import (
     init_flux_data, run_level2, run_level31, run_level33_constant_ustar, run_level41_mds
 )
 
@@ -248,7 +248,7 @@ data.levels.level41_xgb                 # dict[ustar_scenario, LongTermGapFillin
 
 **Architecture notes:**
 
-- Level callables live in `diive/pkgs/flux/fluxprocessingchain/levels/` (one module per level).
+- Level callables live in `diive/flux/fluxprocessingchain/levels/` (one module per level).
 - `finalize_level2()`, `finalize_level31()`, `finalize_level33()` are now no-ops emitting `DeprecationWarning` — the matching `levelXX_*` method runs everything in one go.
 - Level-3.2 still uses the multi-call pattern because `StepwiseOutlierDetection` is inherently stateful: `level32_stepwise_outlier_detection()`, multiple `level32_flag_*` calls, `level32_addflag()`, then `finalize_level32()`.
 - For the composable API, use `make_level32_detector(data)` to get a properly-wired `StepwiseOutlierDetection`, then pass it to `run_level32(data, outlier_detector=sod)`.

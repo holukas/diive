@@ -12,7 +12,7 @@ from diive.core.io.filereader import ReadFileType
 from diive.core.io.filereader import search_files
 from diive.core.io.files import save_parquet
 from diive.core.times.times import create_timestamp
-from diive.pkgs.flux.hires.windrotation import WindDoubleRotation, reynolds_decomposition
+from diive.flux.hires.windrotation import WindDoubleRotation, reynolds_decomposition
 
 
 class FileSplitter:

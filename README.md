@@ -67,7 +67,7 @@ dv.plot_time_series(series=df['NEE']).plot()
 
 # Gap-fill with Random Forest
 from diive.core.ml.feature_engineer import FeatureEngineer
-from diive.pkgs.gapfilling.randomforest_ts import RandomForestTS
+from diive.gapfilling.randomforest_ts import RandomForestTS
 
 engineer = FeatureEngineer(target_col='NEE', features_lag=[-1, 1], features_rolling=[12, 24])
 df_engineered = engineer.fit_transform(df)

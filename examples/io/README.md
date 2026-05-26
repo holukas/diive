@@ -25,7 +25,7 @@ See `diive.pkgs.io.binary` for:
 
 **Decode binary-encoded measurements:**
 ```python
-from diive.pkgs.io.binary import get_encoded_value_from_int, get_encoded_value_series
+from diive.io.binary import get_encoded_value_from_int, get_encoded_value_series
 
 # Extract bits 5-7 from diagnostic codes
 diagnostic_code = 156  # Example 8-bit integer
@@ -47,7 +47,7 @@ flags = get_encoded_value_series(
 
 **Extract quality indicators:**
 ```python
-from diive.pkgs.io.binary import get_encoded_value_series
+from diive.io.binary import get_encoded_value_series
 
 # AGC mean (often encoded in lower bits)
 agc = get_encoded_value_series(

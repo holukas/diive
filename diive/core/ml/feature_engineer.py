@@ -36,7 +36,7 @@ import diive.core.dfun.frames as fr
 from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import vectorize_timestamps
 from diive.core.utils.console import detail, warn
-from diive.pkgs.features.variables import lagged_variants
+from diive.features.variables import lagged_variants
 
 
 class FeatureEngineer:
@@ -701,7 +701,7 @@ class FeatureEngineer:
         if not self.features_stl:
             return df
 
-        from diive.pkgs.analysis.seasonaltrend import SeasonalTrendDecomposition
+        from diive.analysis.seasonaltrend import SeasonalTrendDecomposition
 
         exclude = [self.target_col] + (self.features_stl_exclude_cols or [])
         feature_cols = [c for c in df.columns if c not in exclude and not c.startswith('.')]

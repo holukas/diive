@@ -55,7 +55,7 @@ Full example: [times/times_timestamp_sanitizer.py](times/times_timestamp_sanitiz
 
 ```python
 import diive as dv
-from diive.pkgs.preprocessing.outlier_detection import StepwiseOutlierDetection
+from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
 
 df = dv.load_exampledata_parquet()
 

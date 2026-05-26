@@ -25,7 +25,7 @@ The workflow includes:
 
 # Load data
 from diive.configs.exampledata import load_exampledata_parquet_tlag_vars_level0
-from diive.pkgs.flux.lowres.timelag_analysis import TimeLagAnalysis
+from diive.flux.lowres.timelag_analysis import TimeLagAnalysis
 
 # Expected columns: CO2_TLAG_ACTUAL, H2O_TLAG_ACTUAL, etc.
 # Data should have datetime index

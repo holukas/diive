@@ -1,2 +1,2 @@
-from diive.pkgs.preprocessing.qaqc import FlagQCF
-from diive.pkgs.preprocessing.qaqc import StepwiseMeteoScreeningDb
+from diive.preprocessing.qaqc import FlagQCF
+from diive.preprocessing.qaqc import StepwiseMeteoScreeningDb

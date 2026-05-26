@@ -188,7 +188,7 @@ def plot_seasonal_strength_by_period(
         periods = [7, 14, 30, 365]
 
     # Import here to avoid circular dependency
-    from diive.pkgs.analysis.seasonaltrend import SeasonalTrendDecomposition
+    from diive.analysis.seasonaltrend import SeasonalTrendDecomposition
 
     # Limit to valid periods
     periods = [p for p in periods if p < len(series)]

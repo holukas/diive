@@ -56,7 +56,7 @@ No training. Fills gaps by finding similar conditions elsewhere in your data.
 **Linear interpolation:** Your gaps are small (a few hours or less) and you don't need high accuracy.
 
 ```python
-from diive.pkgs.gapfilling import linear_interpolation
+from diive.gapfilling import linear_interpolation
 
 filled = linear_interpolation(series=df['NEE'], limit=1)
 ```
@@ -65,7 +65,7 @@ filled = linear_interpolation(series=df['NEE'], limit=1)
 
 ```python
 from diive.core.ml.feature_engineer import FeatureEngineer
-from diive.pkgs.gapfilling import RandomForestTS
+from diive.gapfilling import RandomForestTS
 
 engineer = FeatureEngineer(
     target_col='NEE',
@@ -89,7 +89,7 @@ gapfilled = model.get_gapfilled_target()
 **MDS:** You have no training data, or you want to avoid potential overfitting from learned models.
 
 ```python
-from diive.pkgs.gapfilling import FluxMDS
+from diive.gapfilling import FluxMDS
 
 mds = FluxMDS(
     df=df,

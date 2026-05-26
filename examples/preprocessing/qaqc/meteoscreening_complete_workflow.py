@@ -28,7 +28,7 @@ from dbc_influxdb import dbcInflux
 
 from diive.core.plotting.timeseries import TimeSeries
 from diive.core.times.times import DetectFrequency
-from diive.pkgs.preprocessing.qaqc.meteoscreening import StepwiseMeteoScreeningDb
+from diive.preprocessing.qaqc.meteoscreening import StepwiseMeteoScreeningDb
 
 warnings.filterwarnings(action='ignore', category=FutureWarning)
 warnings.filterwarnings(action='ignore', category=UserWarning)

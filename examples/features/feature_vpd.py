@@ -86,7 +86,7 @@ print(f"RH: {subset_df[rh_col].min():.1f}% to {subset_df[rh_col].max():.1f}%")
 # XGBoostTS uses gradient boosting with configurable feature engineering for gap-filling.
 # Note: This section is computationally intensive and may take 1-2 minutes to run.
 
-from diive.pkgs.gapfilling.xgboost_ts import XGBoostTS
+from diive.gapfilling.xgboost_ts import XGBoostTS
 from diive.core.ml.feature_engineer import FeatureEngineer
 
 # Load example data - use 1 year subset for faster training
