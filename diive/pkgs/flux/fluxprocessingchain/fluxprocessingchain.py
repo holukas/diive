@@ -57,6 +57,7 @@ from diive.pkgs.flux.fluxprocessingchain.levels import (
     run_level31,
     run_level32,
     run_level33_constant_ustar,
+    run_level33_ustar_detection,
     run_level41_mds,
     run_level41_rf,
     run_level41_xgb,
@@ -265,6 +266,11 @@ class FluxProcessingChain:
         return self._data.levels.level33_qcf
 
     @property
+    def ustar_detection(self):
+        """``UstarBootstrapThresholds`` instance from ``level33_ustar_detection()``, or None."""
+        return self._data.levels.ustar_detection
+
+    @property
     def level41(self) -> dict:
         """Nested dict ``{method: {ustar_scenario: gap_filling_instance}}`` for L4.1.
 
@@ -455,6 +461,72 @@ class FluxProcessingChain:
             thresholds=thresholds,
             threshold_labels=threshold_labels,
             showplot=showplot, verbose=verbose,
+        )
+
+    def level33_ustar_detection(
+            self,
+            ta_col: str,
+            swin_col: str,
+            detector_class=None,
+            detector_kwargs: dict | None = None,
+            n_iter: int = 100,
+            n_jobs: int = 1,
+            percentiles: tuple = (16, 50, 84),
+            showplot: bool = True,
+            verbose: bool = True,
+    ):
+        """Auto-detect USTAR threshold via bootstrap, then apply it as constant scenario(s).
+
+        Runs a multi-year bootstrap USTAR threshold detection and uses the CUT
+        (constant upper threshold) percentile results as one filtering scenario each.
+        The detection results are stored in ``fpc.ustar_detection`` for inspection.
+
+        Use this instead of ``level33_constant_ustar()`` when you do not yet have a
+        site-specific threshold — for example on the first run or for a new site.
+        Once you are happy with the detected threshold, you can switch to
+        ``level33_constant_ustar()`` in subsequent runs using the p50 value from
+        ``fpc.ustar_detection.get_cut_threshold()['p50']``.
+
+        Args:
+            ta_col: Air temperature column name (deg C) in the input DataFrame.
+            swin_col: Incoming shortwave radiation column (W m-2) in the input DataFrame.
+                Used to identify nighttime (SW_IN < 10 W m-2).
+            detector_class: USTAR detection class. Defaults to
+                ``UstarMovingPointDetection`` (ONEFlux algorithm, Papale et al. 2006).
+                Can also be ``UstarVekuriThresholdDetection`` for the quantile-based method.
+            detector_kwargs: Extra kwargs forwarded to the detector constructor
+                (e.g. ``ta_classes_count``, ``ustar_classes_count``). Column-name
+                arguments are set automatically.
+            n_iter: Bootstrap iterations per year window. Defaults to 100.
+            n_jobs: Parallel workers (1 = sequential, -1 = all CPUs). Defaults to 1.
+            percentiles: Bootstrap percentiles to compute and use as separate USTAR
+                scenarios. Each value ``p`` becomes a scenario labelled ``CUT_p``.
+                Defaults to ``(16, 50, 84)``.
+            showplot: Show diagnostic filtering plots. Defaults to True.
+            verbose: Print detection progress and summary. Defaults to True.
+
+        Example::
+
+            fpc.level33_ustar_detection(
+                ta_col='TA_T1_47_1',
+                swin_col='SW_IN_T1_47_1',
+                n_iter=100,
+                n_jobs=-1,
+            )
+            print(fpc.ustar_detection.summary())
+            cut_p50 = fpc.ustar_detection.get_cut_threshold()['p50']
+        """
+        self._data = run_level33_ustar_detection(
+            self._data,
+            ta_col=ta_col,
+            swin_col=swin_col,
+            detector_class=detector_class,
+            detector_kwargs=detector_kwargs,
+            n_iter=n_iter,
+            n_jobs=n_jobs,
+            percentiles=percentiles,
+            showplot=showplot,
+            verbose=verbose,
         )
 
     def finalize_level33(self):

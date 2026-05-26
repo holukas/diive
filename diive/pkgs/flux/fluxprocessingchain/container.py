@@ -215,6 +215,7 @@ class LevelResults:
     level33_qcf: dict[str, FlagQCF] = field(default_factory=dict)
     filteredseries_level33_qcf: dict[str, pd.Series] = field(default_factory=dict)
     filteredseries_level33_hq: dict[str, pd.Series] = field(default_factory=dict)
+    ustar_detection: Any = None  # UstarBootstrapThresholds instance when detection was run
 
     # Level-4.1 — one dict per gap-filling method, keyed by USTAR scenario
     level41_mds: dict[str, Any] = field(default_factory=dict)

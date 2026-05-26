@@ -5,6 +5,13 @@ FLUX PROCESSING CHAIN: COMPLETE WORKFLOW EXAMPLE
 Swiss FluxNet-compliant post-processing across five levels: quality control, storage correction,
 outlier detection, USTAR filtering, and gap-filling. Demonstrates both Random Forest and XGBoost.
 
+Level-3.3 shows two approaches for USTAR filtering:
+
+* **Option A (recommended for new sites / first run):** Auto-detect the USTAR threshold
+  from the data using a bootstrap algorithm (``level33_ustar_detection``).
+* **Option B (for repeat runs or known sites):** Apply a pre-known constant threshold
+  (``level33_constant_ustar``).
+
 Part of the diive library: https://github.com/holukas/diive
 """
 
@@ -13,15 +20,13 @@ Part of the diive library: https://github.com/holukas/diive
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
 # We start with raw 30-minute flux data and set site-specific parameters for
-# the processing chain. Using one month of data for faster demonstration.
+# the processing chain.  The full available dataset is used here because USTAR
+# threshold detection requires at least ~3000 nighttime records to be reliable.
 
 import diive as dv
 from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
 
 df = load_exampledata_parquet_lae_level1_30MIN()
-
-# Use one month of data for faster example
-df = df.loc['2024-06':'2024-06']
 
 # Site and processing parameters
 FLUXVAR = "FC"
@@ -149,21 +154,62 @@ fpc.finalize_level32()
 fpc.level32_qcf.showplot_qcf_heatmaps()
 
 # %%
-# Level-3.3: USTAR Filtering
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^
+# Level-3.3: USTAR Filtering -- Option A: Auto-detect threshold (recommended)
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# Remove low-turbulence nighttime data using friction velocity (USTAR)
-# threshold filtering. Applied only to CO2/CH4/N2O fluxes (not H or LE).
-# Multiple scenarios with percentile thresholds account for uncertainty.
+# Remove low-turbulence nighttime periods using friction velocity (USTAR)
+# threshold filtering.  USTAR filtering applies only to CO2/CH4/N2O fluxes
+# (not energy fluxes H or LE).
+#
+# Option A runs a bootstrap algorithm (ONEFlux moving point, Papale et al. 2006)
+# on the storage-corrected flux to find the threshold automatically.  The result
+# is a CUT (constant upper threshold) derived from the pooled bootstrap distribution.
+#
+# ``percentiles=(50,)`` produces a single filtering scenario labelled ``CUT_50``.
+# For full uncertainty quantification pass ``percentiles=(16, 50, 84)`` to get
+# three scenarios (``CUT_16``, ``CUT_50``, ``CUT_84``).
+#
+# ``n_iter=10`` here for demo speed -- use 100 or more in production.
+# ``n_jobs=-1`` runs bootstrap iterations in parallel across all available CPUs.
 
-ustar_scenarios = ['CUT_50']
-ustar_thresholds = [0.30]  # Site-specific threshold
-fpc.level33_constant_ustar(
-    thresholds=ustar_thresholds,
-    threshold_labels=ustar_scenarios,
-    showplot=False
+TA_COL = 'TA_T1_47_1'    # Air temperature column in the input data (deg C)
+SWIN_COL = 'SW_IN_T1_47_1'  # Incoming shortwave radiation column (W m-2)
+
+fpc.level33_ustar_detection(
+    ta_col=TA_COL,
+    swin_col=SWIN_COL,
+    n_iter=10,            # Demo setting (use 100+ in production)
+    n_jobs=-1,
+    percentiles=(50,),    # Single scenario CUT_50; use (16, 50, 84) for uncertainty range
+    showplot=False,
+    verbose=True,
 )
-fpc.finalize_level33()
+
+# Inspect detection results
+print(fpc.ustar_detection.summary())
+
+# The detected CUT threshold (p50) that was applied
+cut_threshold = fpc.ustar_detection.get_cut_threshold()['p50']
+print(f"\nDetected USTAR threshold (CUT p50): {cut_threshold:.4f} m/s")
+print("Use this value in subsequent runs with level33_constant_ustar() for speed.")
+
+# %%
+# Level-3.3: USTAR Filtering -- Option B: Pre-known constant threshold
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# Once you have a trusted site-specific threshold (e.g. from a previous
+# detection run or from REddyProc), skip detection and apply the value directly.
+# This is faster and fully reproducible across processing runs.
+#
+# To switch to this option, comment out ``level33_ustar_detection`` above and
+# uncomment the block below.  Keep the scenario label consistent with what
+# gap-filling expects downstream (e.g. ``'CUT_50'``).
+
+# fpc.level33_constant_ustar(
+#     thresholds=[0.30],       # Site-specific threshold from prior detection (m/s)
+#     threshold_labels=['CUT_50'],
+#     showplot=False,
+# )
 
 # %%
 # Level-4.1: Gap-Filling with Machine Learning

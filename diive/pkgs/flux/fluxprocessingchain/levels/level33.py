@@ -2,8 +2,14 @@
 LEVEL 3.3: USTAR FILTERING
 ============================
 
-Composable callable that flags low-turbulence periods using one or more
-constant USTAR thresholds and computes per-scenario QCFs.
+Composable callables that flag low-turbulence periods using one or more
+constant USTAR thresholds and compute per-scenario QCFs.
+
+Two entry points:
+
+* ``run_level33_constant_ustar`` — apply pre-determined constant threshold(s).
+* ``run_level33_ustar_detection`` — auto-detect threshold via bootstrap, then
+  apply the detected CUT percentile thresholds as constant scenarios.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -11,10 +17,16 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import TYPE_CHECKING
+
+import numpy as np
 
 from diive.pkgs.flux.fluxprocessingchain.container import FluxLevelData
 from diive.pkgs.flux.fluxprocessingchain.levels._qcf import finalize_level
 from diive.pkgs.flux.lowres.ustarthreshold import FlagMultipleConstantUstarThresholds
+
+if TYPE_CHECKING:
+    from diive.pkgs.flux.lowres.ustar_bootstrap import UstarBootstrapThresholds
 
 
 def run_level33_constant_ustar(
@@ -139,3 +151,145 @@ def run_level33_constant_ustar(
     # unambiguous "the" filtered series. Force users to access the scenario dict
     # explicitly via data.levels.filteredseries_level33_qcf['CUT_50'].
     return replace(current, levels=new_levels, level_ids=level_ids, filteredseries=None)
+
+
+def run_level33_ustar_detection(
+        data: FluxLevelData,
+        *,
+        ta_col: str,
+        swin_col: str,
+        detector_class=None,
+        detector_kwargs: dict | None = None,
+        n_iter: int = 100,
+        n_jobs: int = 1,
+        percentiles: tuple[int, ...] = (16, 50, 84),
+        showplot: bool = True,
+        verbose: bool = True,
+) -> FluxLevelData:
+    """
+    Level-3.3: Auto-detect the USTAR threshold, then apply it as constant scenario(s).
+
+    Runs a multi-year bootstrap USTAR threshold detection (using the ONEFlux moving
+    point method by default) and converts the CUT (constant upper threshold) percentile
+    results into one USTAR filtering scenario per requested percentile.  Each scenario
+    is then passed to ``run_level33_constant_ustar()`` so that per-scenario QCFs and
+    filtered series are produced in exactly the same way as when a pre-known threshold
+    is supplied.
+
+    Requires Level-3.1 (``data.levels.flux_corrected_col``) to have been run.
+    Level-3.2 is strongly recommended before calling this function to avoid bias from
+    outliers at low-turbulence conditions.
+
+    **When to use which function:**
+
+    * ``run_level33_constant_ustar`` — you already have a threshold from an external
+      analysis (e.g. REddyProc) or a previous run.  Fastest; no computation overhead.
+    * ``run_level33_ustar_detection`` — you want the threshold computed automatically
+      from the data in the same pipeline run.  Slower (bootstrap) but fully reproducible.
+
+    Args:
+        data: FluxLevelData after ``run_level32()``.
+        ta_col: Air temperature column name (deg C) in ``data.full_df``.
+            Used to stratify nighttime records into temperature classes.
+        swin_col: Incoming shortwave radiation column (W m-2) in ``data.full_df``.
+            Used to identify nighttime periods (SW_IN < 10 W m-2).
+        detector_class: USTAR detection class to use.  Must implement ``detect()``
+            and ``get_annual_thresholds()``.  Defaults to
+            ``UstarMovingPointDetection`` (ONEFlux algorithm, Papale et al. 2006).
+        detector_kwargs: Extra keyword arguments forwarded to the detector constructor
+            (e.g. ``ta_classes_count``, ``ustar_classes_count``).  The column-name
+            arguments (``nee_col``, ``ta_col``, ``ustar_col``, ``swin_col``) are set
+            automatically and must not be included here.
+        n_iter: Bootstrap iterations per year window. Defaults to 100.
+        n_jobs: Parallel workers for the bootstrap (1 = sequential, -1 = all CPUs).
+            Defaults to 1.
+        percentiles: Bootstrap percentiles to compute and use as separate USTAR
+            scenarios.  Each value ``p`` produces one scenario labelled ``CUT_p``
+            (e.g. ``(16, 50, 84)`` -> scenarios ``CUT_16``, ``CUT_50``, ``CUT_84``).
+            Defaults to ``(16, 50, 84)``.
+        showplot: Show diagnostic plots from USTAR filtering. Defaults to True.
+        verbose: Print progress and detection summary. Defaults to True.
+
+    Returns:
+        Updated FluxLevelData with ``levels.level33``, ``levels.level33_qcf``,
+        ``levels.filteredseries_level33_qcf``, ``levels.filteredseries_level33_hq``,
+        and ``levels.ustar_detection`` populated.  The ``ustar_detection`` attribute
+        holds the fitted ``UstarBootstrapThresholds`` instance so you can inspect
+        annual per-year thresholds and the full bootstrap summary afterwards::
+
+            print(data.levels.ustar_detection.summary())
+            annual = data.levels.ustar_detection.annual_stats_
+
+    Raises:
+        RuntimeError: If ``run_level31()`` has not been called, or if threshold
+            detection produces NaN for any requested percentile (e.g. too little
+            nighttime data).
+    """
+    from diive.pkgs.flux.lowres.ustar_bootstrap import UstarBootstrapThresholds
+    from diive.pkgs.flux.lowres.ustar_mp_detection import UstarMovingPointDetection
+
+    if data.levels.flux_corrected_col is None:
+        raise RuntimeError("run_level31() must be called before run_level33_ustar_detection().")
+
+    if detector_class is None:
+        detector_class = UstarMovingPointDetection
+
+    meta = data.meta
+    flux_corrected_col = data.levels.flux_corrected_col
+
+    # Assemble detection DataFrame: storage-corrected flux + required met drivers
+    det_df = data.full_df[[ta_col, swin_col, meta.ustarcol]].copy()
+    det_df[flux_corrected_col] = data.fpc_df[flux_corrected_col]
+
+    # Build detector kwargs — column names are set here; user must not duplicate them
+    kw = {k: v for k, v in (detector_kwargs or {}).items()
+          if k not in ('nee_col', 'ta_col', 'ustar_col', 'swin_col')}
+    kw['nee_col'] = flux_corrected_col
+    kw['ta_col'] = ta_col
+    kw['ustar_col'] = meta.ustarcol
+    kw['swin_col'] = swin_col
+
+    if verbose:
+        print(f"\nL3.3 USTAR threshold detection  ({detector_class.__name__}, "
+              f"{n_iter} iterations, n_jobs={n_jobs})")
+
+    boot: UstarBootstrapThresholds = UstarBootstrapThresholds(
+        df=det_df,
+        detector_class=detector_class,
+        detector_kwargs=kw,
+        n_iter=n_iter,
+        n_jobs=n_jobs,
+        percentiles=percentiles,
+        verbose=int(verbose),
+    )
+    boot.run()
+    cut = boot.get_cut_threshold()
+
+    if verbose:
+        print(boot.summary())
+
+    # Extract threshold per percentile; raise if any are NaN
+    thresholds = []
+    for p in percentiles:
+        thr = cut.get(f'p{p}', np.nan)
+        if np.isnan(thr):
+            raise RuntimeError(
+                f"USTAR threshold detection produced NaN for percentile {p}. "
+                "Check that the dataset has sufficient nighttime records "
+                "(>= 3000 total, >= 160 per season)."
+            )
+        thresholds.append(float(thr))
+    threshold_labels = [f'CUT_{p}' for p in percentiles]
+
+    # Apply detected thresholds as constant USTAR scenarios
+    updated = run_level33_constant_ustar(
+        data,
+        thresholds=thresholds,
+        threshold_labels=threshold_labels,
+        showplot=showplot,
+        verbose=verbose,
+    )
+
+    # Attach the bootstrap instance to levels for post-hoc inspection
+    new_levels = replace(updated.levels, ustar_detection=boot)
+    return replace(updated, levels=new_levels)
