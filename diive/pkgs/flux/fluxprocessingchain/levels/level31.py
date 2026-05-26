@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 
 from diive.core.dfun.frames import detect_new_columns
+from diive.core.utils.console import detail, rule
 from diive.pkgs.flux.fluxprocessingchain.container import FluxLevelData
 from diive.pkgs.flux.fluxprocessingchain.level31_storagecorrection import (
     FluxStorageCorrectionSinglePointEddyPro,
@@ -55,6 +56,8 @@ def run_level31(
         raise RuntimeError("run_level2() must be called before run_level31().")
 
     idstr = 'L3.1'
+
+    rule("Level 3.1: Storage Correction")
     meta = data.meta
 
     level31 = FluxStorageCorrectionSinglePointEddyPro(
@@ -71,7 +74,7 @@ def run_level31(
     new_cols = detect_new_columns(df=level31.results, other=data.fpc_df)
     fpc_df = pd.concat([data.fpc_df, level31.results[new_cols]], axis=1)
     for col in new_cols:
-        print(f"++Added new column {col}.")
+        detail(f"Added column {col}.")
 
     # Apply Level-2 QCF to storage-corrected flux
     level2_qcf = data.levels.level2_qcf
@@ -90,7 +93,7 @@ def run_level31(
         axis=1,
     )
     for c in (strg_qcf.name, strg_qcf0.name):
-        print(f"++Added new column {c} (Level-3.1 with applied quality flag from Level-2).")
+        detail(f"Added column {c} (L3.1 with L2 quality flag applied).")
 
     new_levels = replace(
         data.levels,

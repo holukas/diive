@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from diive.core.utils.console import rule
 from diive.pkgs.flux.fluxprocessingchain.container import FluxLevelData
 from diive.pkgs.flux.fluxprocessingchain.level2_qualityflags import FluxQualityFlagsEddyPro
 from diive.pkgs.flux.fluxprocessingchain.levels._qcf import finalize_level
@@ -107,6 +108,8 @@ def run_level2(
 
     idstr = 'L2'
     meta = data.meta
+
+    rule("Level 2: Quality Flag Expansion")
 
     level2 = FluxQualityFlagsEddyPro(
         fluxcol=meta.fluxcol,

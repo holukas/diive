@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from pandas import DataFrame
 
+from diive.core.utils.console import detail, info, rule, warn
 from diive.pkgs.features.variables import daytime_nighttime_flag_from_swinpot
 from diive.pkgs.features.variables.potentialradiation import potrad
 from diive.pkgs.flux.fluxprocessingchain.container import FluxLevelData, FluxMeta
@@ -82,6 +83,8 @@ def init_flux_data(
             f"Available columns: {list(df.columns)}"
         )
 
+    rule(f"Initializing flux data: {fluxcol}")
+
     full_df = df.copy()
     fluxbasevar = detect_fluxbasevar(fluxcol=fluxcol)
 
@@ -92,7 +95,7 @@ def init_flux_data(
     swinpot = potrad(timestamp_index=fpc_df.index,
                      lat=site_lat, lon=site_lon, utc_offset=utc_offset)
     swinpot_col = str(swinpot.name)
-    print(f"Calculated potential radiation from latitude and longitude ({swinpot_col}) ...")
+    info(f"Potential radiation calculated ({swinpot_col})")
 
     daytime_flag, nighttime_flag = daytime_nighttime_flag_from_swinpot(
         swinpot=swinpot,
@@ -101,8 +104,7 @@ def init_flux_data(
         nighttime_col='NIGHTTIME')
     daytime_flag_col = str(daytime_flag.name)
     nighttime_flag_col = str(nighttime_flag.name)
-    print(f"Calculated daytime flag {daytime_flag_col} and "
-          f"nighttime flag {nighttime_flag_col} from {swinpot_col} ...")
+    info(f"Day/night flags: {daytime_flag_col}, {nighttime_flag_col}")
 
     fpc_df[swinpot_col] = swinpot
     fpc_df[daytime_flag_col] = daytime_flag.copy()
@@ -113,8 +115,10 @@ def init_flux_data(
     for col in (swinpot_col, daytime_flag_col, nighttime_flag_col):
         overwritten = col in full_df.columns
         full_df[col] = fpc_df[col].copy()
-        tag = " (!) Existing column overwritten." if overwritten else ""
-        print(f"++ Added new column {col} to input data.{tag}")
+        if overwritten:
+            warn(f"Added column {col} (overwrote existing)")
+        else:
+            detail(f"Added column {col}")
 
     # CO2 flux (FC) is renamed to NEE during Level-3.1
     outname = 'NEE' if fluxcol == 'FC' else fluxcol

@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from diive.core.utils.console import console as _console, info, rule
 from diive.pkgs.flux.fluxprocessingchain.container import FluxLevelData
 from diive.pkgs.flux.fluxprocessingchain.levels._qcf import finalize_level
 from diive.pkgs.flux.lowres.ustarthreshold import FlagMultipleConstantUstarThresholds
@@ -103,6 +104,8 @@ def run_level33_constant_ustar(
     meta = data.meta
     flux_corrected_col = data.levels.flux_corrected_col
 
+    rule("Level 3.3: USTAR Filtering")
+
     level33 = FlagMultipleConstantUstarThresholds(
         series=data.fpc_df[flux_corrected_col],
         ustar=data.fpc_df[meta.ustarcol],
@@ -133,8 +136,7 @@ def run_level33_constant_ustar(
         level33_qcf[ustar_scen] = qcf
         filteredseries_level33_qcf[ustar_scen] = current.filteredseries.copy()
         filteredseries_level33_hq[ustar_scen] = qcf.filteredseries_hq.copy()
-        if verbose:
-            print(f"++ Calculated overall quality flag QCF for USTAR scenario {ustar_scen}.")
+        info(f"QCF computed for USTAR scenario {ustar_scen}", verbose=verbose)
 
     new_levels = replace(
         current.levels,
@@ -249,9 +251,9 @@ def run_level33_ustar_detection(
     kw['ustar_col'] = meta.ustarcol
     kw['swin_col'] = swin_col
 
-    if verbose:
-        print(f"\nL3.3 USTAR threshold detection  ({detector_class.__name__}, "
-              f"{n_iter} iterations, n_jobs={n_jobs})")
+    rule("Level 3.3: USTAR Threshold Detection", verbose=verbose)
+    info(f"{detector_class.__name__}  {n_iter} iterations  n_jobs={n_jobs}",
+         verbose=verbose)
 
     boot: UstarBootstrapThresholds = UstarBootstrapThresholds(
         df=det_df,
@@ -266,7 +268,7 @@ def run_level33_ustar_detection(
     cut = boot.get_cut_threshold()
 
     if verbose:
-        print(boot.summary())
+        _console.print(boot.summary())
 
     # Extract threshold per percentile; raise if any are NaN
     thresholds = []

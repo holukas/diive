@@ -45,6 +45,7 @@ from pandas import DataFrame, Series
 
 from diive.core.funcs.funcs import filter_strings_by_elements
 from diive.core.ml.feature_engineer import FeatureEngineer
+from diive.core.utils.console import console as _console, info
 from diive.core.plotting.cumulative import Cumulative, CumulativeYear
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
 from diive.pkgs.flux.fluxprocessingchain.container import FluxLevelData, LevelResults
@@ -633,10 +634,10 @@ class FluxProcessingChain:
         full_df = self._data.full_df
         new_cols = [c for c in self.fpc_df.columns if c not in full_df.columns]
         if verbose:
-            print("NEW VARIABLES FROM FLUX PROCESSING CHAIN:")
+            info("New variables from flux processing chain:")
             for c in new_cols:
-                print(f"++ {c}")
-            print("No variables in input data were overwritten, only new variables added.")
+                info(f"  {c}")
+            info("No variables in input data were overwritten, only new variables added.")
         return pd.concat([full_df, self.fpc_df[new_cols]], axis=1)
 
     def get_gapfilled_names(self) -> list:
@@ -653,7 +654,7 @@ class FluxProcessingChain:
         for gfmethod, ustar_scenarios in self.level41.items():
             for s in ustar_scenarios:
                 inst = self.level41[gfmethod][s]
-                print(f"{gfmethod} ({s}): {inst.target_col} -> {inst.gapfilled_.name}")
+                info(f"{gfmethod} ({s}): {inst.target_col} -> {inst.gapfilled_.name}")
 
     def get_gapfilled_variables(self) -> DataFrame:
         cols = self.get_gapfilled_names() + self.get_nongapfilled_names()
@@ -664,15 +665,15 @@ class FluxProcessingChain:
             for s in ustar_scenarios:
                 inst = self.level41[gfmethod][s]
                 if not hasattr(inst, attr):
-                    print(f"{gfmethod} {s} does not have {label}.")
+                    info(f"{gfmethod} {s} does not have {label}.")
                     continue
-                print(f"\n{label.upper()} ({gfmethod}): {s}")
+                info(f"{label.upper()} ({gfmethod}): {s}")
                 scores = getattr(inst, attr)
                 try:
                     df = pd.DataFrame.from_dict(scores, orient='columns')
                 except ValueError:
                     df = pd.DataFrame.from_dict(scores, orient='index')
-                print(df)
+                _console.print(df.to_string())
                 if outpath:
                     df.to_csv(Path(outpath) / f"{outfile_prefix}_{s}_{gfmethod}.csv")
 
@@ -693,33 +694,32 @@ class FluxProcessingChain:
             for s in ustar_scenarios:
                 inst = self.level41[gfmethod][s]
                 if not hasattr(inst, 'feature_importance_per_year'):
-                    print(f"{gfmethod} {s} does not have feature importances.")
+                    info(f"{gfmethod} {s} does not have feature importances.")
                     continue
-                print(f"\nFEATURE IMPORTANCES ({gfmethod}): {s}")
+                info(f"FEATURE IMPORTANCES ({gfmethod}): {s}")
                 df = inst.feature_importance_per_year
-                print(df)
+                _console.print(df.to_string())
                 if outpath:
                     df.to_csv(Path(outpath) / f"gapfilling_model_feature_importances_{s}_{gfmethod}.csv")
 
     def report_gapfilling_poolyears(self):
-        print("DATA POOLS USED FOR MACHINE-LEARNING GAP-FILLING:")
+        info("Data pools used for machine-learning gap-filling:")
         for gfmethod, ustar_scenarios in self.level41.items():
             for s in ustar_scenarios:
                 inst = self.level41[gfmethod][s]
                 if not hasattr(inst, 'yearpools'):
-                    print(f"{gfmethod} {s} did not use poolyears.")
+                    info(f"{gfmethod} {s} did not use poolyears.")
                     continue
                 for yr, pool in inst.yearpools.items():
-                    print(f"{yr}: {gfmethod} used data from {pool['poolyears']} "
-                          f"for gap-filling {inst.target_col} and "
-                          f"producing --> {inst.gapfilled_.name}")
+                    info(f"{yr}: {gfmethod} used data from {pool['poolyears']} "
+                         f"for gap-filling {inst.target_col} -> {inst.gapfilled_.name}")
 
     def showplot_feature_ranks_per_year(self):
         for gfmethod, ustar_scenarios in self.level41.items():
             for s in ustar_scenarios:
                 inst = self.level41[gfmethod][s]
                 if not hasattr(inst, 'results_yearly_'):
-                    print(f"{gfmethod} {s} does not have feature ranks.")
+                    info(f"{gfmethod} {s} does not have feature ranks.")
                     continue
                 title = f"{inst.gapfilled_.name} ({s})"
                 first_key = next(iter(inst.results_yearly_))
@@ -809,9 +809,9 @@ class LoadEddyProOutputFiles:
         fileids = self._init_filetype()
         self._filepaths = search_files(self.sourcedir, extension)
         self._filepaths = filter_strings_by_elements(list1=self.filepaths, list2=fileids)
-        print(f"Found {len(self.filepaths)} files with extension {extension} and file IDs {fileids}:")
+        info(f"Found {len(self.filepaths)} files with extension {extension} and file IDs {fileids}:")
         for ix, f in enumerate(self.filepaths):
-            print(f" Found file #{ix + 1}: {f}")
+            info(f"  File #{ix + 1}: {f}")
 
     def loadfiles(self):
         from diive.core.io.filereader import MultiDataFileReader

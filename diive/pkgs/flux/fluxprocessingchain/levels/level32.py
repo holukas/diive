@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from diive.core.utils.console import rule
 from diive.pkgs.flux.fluxprocessingchain.container import FluxLevelData
 from diive.pkgs.flux.fluxprocessingchain.levels._qcf import finalize_level
 from diive.pkgs.preprocessing.outlier_detection import StepwiseOutlierDetection
@@ -91,6 +92,8 @@ def run_level32(
         )
 
     idstr = 'L3.2'
+    rule("Level 3.2: Stepwise Outlier Detection")
+
     updated, qcf = finalize_level(
         data,
         run_qcf_on_col=data.levels.flux_corrected_col,

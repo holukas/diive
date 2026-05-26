@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Callable
 
 import pandas as pd
 
+from diive.core.utils.console import rule
 from diive.pkgs.flux.fluxprocessingchain.container import FluxLevelData
 
 if TYPE_CHECKING:
@@ -107,6 +108,8 @@ def run_level41_mds(
             UserWarning,
             stacklevel=2,
         )
+
+    rule("Level 4.1: Gap-Filling (MDS)")
 
     filteredseries_l33 = _require_level33(data)
     fpc_df = data.fpc_df.copy()
@@ -258,6 +261,7 @@ def run_level41_rf(
         ``data.levels.level41_rf[ustar_scenario]``.
         Use ``data.gapfilled_cols()`` to retrieve gap-filled column names.
     """
+    rule("Level 4.1: Gap-Filling (Random Forest)")
     from diive.pkgs.gapfilling.longterm import LongTermGapFillingRandomForestTS
     return _run_level41_ml(
         data,
@@ -310,6 +314,7 @@ def run_level41_xgb(
         ``data.levels.level41_xgb[ustar_scenario]``.
         Use ``data.gapfilled_cols()`` to retrieve gap-filled column names.
     """
+    rule("Level 4.1: Gap-Filling (XGBoost)")
     from diive.pkgs.gapfilling.longterm import LongTermGapFillingXGBoostTS
     return _run_level41_ml(
         data,

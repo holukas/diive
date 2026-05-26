@@ -16,6 +16,7 @@ import pandas as pd
 from pandas import DataFrame
 
 from diive.core.dfun.frames import detect_new_columns
+from diive.core.utils.console import detail
 from diive.pkgs.flux.fluxprocessingchain.container import FluxLevelData
 from diive.pkgs.preprocessing.qaqc import FlagQCF
 
@@ -45,7 +46,7 @@ def finalize_level(
     new_cols = detect_new_columns(df=level_df, other=data.fpc_df)
     fpc_df = pd.concat([data.fpc_df, level_df[new_cols]], axis=1)
     for col in new_cols:
-        print(f"++Added new column {col}.")
+        detail(f"Added column {col}.")
 
     qcf = FlagQCF(
         target_col=run_qcf_on_col,

@@ -2546,16 +2546,11 @@ def _build_parser():
 
 def _cli_main():
     import sys
-    try:
-        from rich.console import Console as _Console
-        from rich.progress import (BarColumn, MofNCompleteColumn, Progress,
-                                   SpinnerColumn, TextColumn,
-                                   TimeElapsedColumn, TimeRemainingColumn)
-        _rich = True
-        console = _Console(log_path=False)
-    except ImportError:
-        _rich = False
-        console = None
+    from rich.console import Console as _Console
+    from rich.progress import (BarColumn, MofNCompleteColumn, Progress,
+                               SpinnerColumn, TextColumn,
+                               TimeElapsedColumn, TimeRemainingColumn)
+    console = _Console(log_path=False)
 
     args = _build_parser().parse_args()
 
@@ -2601,51 +2596,43 @@ def _cli_main():
     msg = (f'PWB batch detection  {len(files)} files  '
            f'{det.n_workers} workers  -> {args.output_dir}')
 
-    if _rich:
-        console.print(f'\n[bold]{msg}[/bold]\n')
+    console.print(f'\n[bold]{msg}[/bold]\n')
 
-        def _fmt(row, gas):
-            pfx = gas.lower()
-            v = row.get(f'{pfx}_tlag_s')
-            h = row.get(f'{pfx}_hdi_range_s')
-            if v is None or v != v:
-                return f'[dim]{gas}=--[/dim]'
-            hdi_color = ('green' if h == h and h < 0.5
-                         else ('yellow' if h == h and h < 1.0 else 'red'))
-            return f'{gas}=[bold]{v:.2f}s[/bold] HDI=[{hdi_color}]{h:.2f}[/{hdi_color}]'
+    def _fmt(row, gas):
+        pfx = gas.lower()
+        v = row.get(f'{pfx}_tlag_s')
+        h = row.get(f'{pfx}_hdi_range_s')
+        if v is None or v != v:
+            return f'[dim]{gas}=--[/dim]'
+        hdi_color = ('green' if h == h and h < 0.5
+                     else ('yellow' if h == h and h < 1.0 else 'red'))
+        return f'{gas}=[bold]{v:.2f}s[/bold] HDI=[{hdi_color}]{h:.2f}[/{hdi_color}]'
 
-        prog = Progress(
-            SpinnerColumn(),
-            TextColumn('[progress.description]{task.description}'),
-            BarColumn(bar_width=40),
-            MofNCompleteColumn(),
-            TimeElapsedColumn(),
-            TimeRemainingColumn(),
-            console=console,
-            refresh_per_second=8,
-        )
-        task_id = prog.add_task(
-            f'[cyan]{det.n_workers} workers[/cyan]', total=len(files))
+    prog = Progress(
+        SpinnerColumn(),
+        TextColumn('[progress.description]{task.description}'),
+        BarColumn(bar_width=40),
+        MofNCompleteColumn(),
+        TimeElapsedColumn(),
+        TimeRemainingColumn(),
+        console=console,
+        refresh_per_second=8,
+    )
+    task_id = prog.add_task(
+        f'[cyan]{det.n_workers} workers[/cyan]', total=len(files))
 
-        with prog:
-            def _cb(done, total, row):
-                period = row.get('period', '')
-                period_short = Path(period).stem.split('_')[0]
-                parts = '  '.join(_fmt(row, g) for g in scalars)
-                console.log(f'[dim]{period_short}[/dim]  {parts}')
-                prog.update(task_id, completed=done,
-                            description=f'[cyan]{det.n_workers} workers[/cyan]  [dim]{period_short}[/dim]')
+    with prog:
+        def _cb(done, total, row):
+            period = row.get('period', '')
+            period_short = Path(period).stem.split('_')[0]
+            parts = '  '.join(_fmt(row, g) for g in scalars)
+            console.log(f'[dim]{period_short}[/dim]  {parts}')
+            prog.update(task_id, completed=done,
+                        description=f'[cyan]{det.n_workers} workers[/cyan]  [dim]{period_short}[/dim]')
 
-            results = det.run(on_progress=_cb)
+        results = det.run(on_progress=_cb)
 
-        console.print(f'\n[green]Done — {len(results)} periods.[/green]')
-    else:
-        print(msg)
-        results = det.run(
-            on_progress=lambda done, total, row:
-            print(f'  [{done}/{total}] {row.get("period", "")}')
-        )
-        print(f'Done — {len(results)} periods.')
+    console.print(f'\n[green]Done — {len(results)} periods.[/green]')
 
     # PWBOPT post-processing
     for label in scalars:
