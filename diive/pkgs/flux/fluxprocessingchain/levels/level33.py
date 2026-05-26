@@ -37,9 +37,8 @@ def run_level33_constant_ustar(
         USTAR values.  The community standard since Papale et al. (2006) is to
         derive the threshold via a bootstrap analysis that accounts for
         inter-annual and seasonal variability (e.g. using the R package
-        REddyProc or the Python package ``hesseflux``).  Run that analysis
-        externally, then pass its output percentiles (e.g. 16th, 50th, 84th)
-        as ``thresholds`` here.
+        REddyProc).  Run that analysis externally, then pass its output
+        percentiles (e.g. 16th, 50th, 84th) as ``thresholds`` here.
 
         **USTAR filtering applies only to CO2, CH4, and N2O fluxes.**
         Do *not* apply it to energy fluxes (H, LE) — those are not subject
@@ -104,6 +103,7 @@ def run_level33_constant_ustar(
 
     level33_qcf: dict = {}
     filteredseries_level33_qcf: dict = {}
+    filteredseries_level33_hq: dict = {}
     current = data
 
     for ustar_scen in threshold_labels:
@@ -120,6 +120,7 @@ def run_level33_constant_ustar(
         )
         level33_qcf[ustar_scen] = qcf
         filteredseries_level33_qcf[ustar_scen] = current.filteredseries.copy()
+        filteredseries_level33_hq[ustar_scen] = qcf.filteredseries_hq.copy()
         if verbose:
             print(f"++ Calculated overall quality flag QCF for USTAR scenario {ustar_scen}.")
 
@@ -128,6 +129,7 @@ def run_level33_constant_ustar(
         level33=level33,
         level33_qcf=level33_qcf,
         filteredseries_level33_qcf=filteredseries_level33_qcf,
+        filteredseries_level33_hq=filteredseries_level33_hq,
     )
     level_ids = list(current.level_ids)
     if idstr not in level_ids:

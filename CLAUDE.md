@@ -312,7 +312,7 @@ data.levels.level41_xgb                 # dict[ustar_scenario, LongTermGapFillin
 - L4.1 `features` and MDS driver columns must exist in `data.full_df`, not `data.fpc_df`; run `data.gapfilled_cols()` to find gap-filled column names after L4.1
 - `nighttime_accept_qcf_below` (was `nighttimetime_accept_qcf_below` before v0.91.1 — typo fixed)
 - Default `daytime_accept_qcf_below=1` is stricter than the FLUXNET/Swiss FluxNet convention of `2` (keep QCF=0 and QCF=1); QCF=0 means all tests pass, QCF=1 is soft warnings, QCF=2 is hard failure
-- `run_level33_constant_ustar` only supports constant thresholds; use REddyProc or hesseflux externally for bootstrap threshold estimation, then pass the percentile values here
+- `run_level33_constant_ustar` only supports constant thresholds; use REddyProc externally for bootstrap threshold estimation, then pass the percentile values here
 - `FeatureEngineer(target_col='_target_', ...)` — `target_col` is a required placeholder for L4.1; any string not in your feature list works
 
 **Examples:**

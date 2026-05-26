@@ -59,10 +59,13 @@ class LevelResults:
       level and site protocol.
 
     **USTAR scenario dicts:** ``level33_qcf``, ``filteredseries_level33_qcf``,
-    ``level41_*`` are keyed by the scenario labels supplied to
-    ``run_level33_constant_ustar()`` (e.g. ``'CUT_16'``, ``'CUT_50'``,
+    ``filteredseries_level33_hq``, ``level41_*`` are keyed by the scenario labels
+    supplied to ``run_level33_constant_ustar()`` (e.g. ``'CUT_16'``, ``'CUT_50'``,
     ``'CUT_84'`` for the 16th, 50th, and 84th percentiles of a bootstrap USTAR
     threshold distribution).
+
+    ``filteredseries_level33_hq`` holds the QCF=0-only (strictest quality) series
+    per USTAR scenario — the analogue of ``filteredseries_hq`` at the L3.3 level.
     """
 
     # Level-2
@@ -89,6 +92,7 @@ class LevelResults:
     level33: FlagMultipleConstantUstarThresholds | None = None
     level33_qcf: dict[str, FlagQCF] = field(default_factory=dict)
     filteredseries_level33_qcf: dict[str, pd.Series] = field(default_factory=dict)
+    filteredseries_level33_hq: dict[str, pd.Series] = field(default_factory=dict)
 
     # Level-4.1 — one dict per gap-filling method, keyed by USTAR scenario
     level41_mds: dict[str, Any] = field(default_factory=dict)
@@ -218,6 +222,29 @@ class FluxLevelData:
         lines.append(_row("L3.2 (outlier-cleaned)", lvl.filteredseries_level32_qcf))
         for scen, s in lvl.filteredseries_level33_qcf.items():
             lines.append(_row(f"L3.3 USTAR={scen}", s))
+            if scen in lvl.filteredseries_level33_hq:
+                lines.append(_row(f"L3.3 USTAR={scen} (QCF=0 only)", lvl.filteredseries_level33_hq[scen]))
+
+        # L4.1 gap-filling stats
+        if lvl.has_level41():
+            lines.append("")
+            lines.append("Gap-filling (L4.1)  [measured / gap-filled / fallback]:")
+            for method, col in self.gapfilled_cols().items():
+                for scen, gf_col in col.items():
+                    flag_col = f"FLAG_{gf_col}_ISFILLED"
+                    if flag_col in self.fpc_df.columns:
+                        flags = self.fpc_df[flag_col]
+                        n_measured = int((flags == 0).sum())
+                        n_filled = int((flags == 1).sum())
+                        n_fallback = int((flags == 2).sum())
+                        n_total = n_measured + n_filled + n_fallback
+                        pct = 100 * n_filled / max(n_total, 1)
+                        lines.append(
+                            f"  {method} {scen:<10s}  total: {n_total:5d}  |  "
+                            f"measured: {n_measured:5d}  |  gap-filled: {n_filled:5d} ({pct:.1f}%)"
+                            + (f"  |  fallback: {n_fallback}" if n_fallback else "")
+                        )
+
         lines.append("")
         lines.append(f"fpc_df columns ({len(self.fpc_df.columns)}): "
                      + ", ".join(self.fpc_df.columns.tolist()))

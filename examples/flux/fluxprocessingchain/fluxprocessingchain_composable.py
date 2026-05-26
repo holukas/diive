@@ -7,19 +7,36 @@ The flux processing chain is also exposed as standalone pure functions, one per
 level.  Each function takes a ``FluxLevelData`` container and returns a new
 one — no shared state, no orchestrator class required.
 
-This example runs the **full L2 -> L3.1 -> L3.2 -> L3.3 -> L4.1** pipeline
-using composable functions and demonstrates the key advantages of the functional
-API: partial pipelines, custom steps, and **branching** (running three gap-filling
-methods — Random Forest, XGBoost, and MDS — from the same L3.3 state without
-re-doing any upstream work).
+This example runs the **full L2 -> L3.1 -> L3.2 -> L3.3 -> L4.1** pipeline and
+demonstrates the key advantage of the functional API: **branching** — running
+three gap-filling methods (Random Forest, XGBoost, MDS) from the same L3.3 state
+without repeating any upstream work.
 
 Compare with ``fluxprocessingchain.py`` for the same chain via the
 ``FluxProcessingChain`` orchestrator class.
+
+Swiss FluxNet workflow overview
+--------------------------------
+- **L2**   — Expand EddyPro quality flags; compute an overall Quality Control
+             Flag (QCF) per half-hour.  Remove records with hard failures.
+- **L3.1** — Add the single-point canopy-air-space CO2 storage term to the
+             turbulent flux.  Without this, nighttime NEE is systematically
+             under-estimated.
+- **L3.2** — Remove remaining outliers (spikes, instrument glitches) that
+             passed the L2 statistical tests.
+- **L3.3** — Discard nighttime records measured under low-turbulence conditions
+             (USTAR below a site-specific threshold).  Under stable stratification,
+             CO2 drains laterally and the eddy-covariance method under-estimates
+             ecosystem respiration.
+- **L4.1** — Fill the data gaps created by L2-L3.3 with meteorology-driven
+             models.  Required to compute annual carbon budgets.
 """
 
 # %%
 # Imports
 # ^^^^^^^
+
+import warnings
 
 import diive as dv
 from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
@@ -44,31 +61,42 @@ df = load_exampledata_parquet_lae_level1_30MIN()
 df = df.loc['2024-06':'2024-06']  # one month for speed
 
 # %%
-# Step 1: build the initial FluxLevelData container
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# Step 1: initialise the FluxLevelData container
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# ``init_flux_data`` adds potential radiation and day/night flags, assembles
-# the frozen site-metadata record, and returns a container ready for the
-# first level.
+# ``init_flux_data`` calculates potential radiation, derives daytime/nighttime
+# flags, and assembles a frozen site-metadata record.  All downstream level
+# functions read site coordinates and QCF thresholds from this metadata.
+#
+# ``daytime_accept_qcf_below=2`` keeps QCF=0 (all tests pass) and QCF=1 (soft
+# warnings) for daytime records.  Set to 1 to accept only the strictest quality.
 
 data = init_flux_data(
     df=df,
     fluxcol="FC",
-    site_lat=47.41887,        # CH-HON
+    site_lat=47.41887,  # CH-HON
     site_lon=8.491318,
     utc_offset=1,
-    nighttime_threshold=20,
+    nighttime_threshold=20,  # W m-2; SW_IN below this = nighttime
     daytime_accept_qcf_below=2,
     nighttime_accept_qcf_below=2,
 )
-print(data)   # FluxLevelData has a useful __repr__
+print(data)  # FluxLevelData has a useful __repr__
 
 # %%
-# Step 2: run Level-2 (quality flag expansion)
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# Step 2: Level-2 — quality flag expansion
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# Each test is enabled by passing a config dict containing at least
-# ``{'apply': True}``.  Pass ``None`` (or omit) to skip a test.
+# Seven configurable tests expand the raw EddyPro quality indicators into
+# explicit per-half-hour flags.  Each test is enabled by passing a config dict
+# with ``{'apply': True, ...}``.  Omit or pass ``None`` to skip a test.
+#
+# Tests applied here:
+#   - SSITC  : steady-state and integral turbulence characteristics (Foken 2004)
+#   - Gas completeness  : fraction of raw 10/20 Hz records available
+#   - Spectral correction factor  : overcorrected spectra are unphysical
+#   - Signal strength   : low IRGA signal = dirty or wet optics
+#   - VM97 spikes/dropout : raw-data spike and dropout detection (Vickers & Mahrt 1997)
 
 data = run_level2(
     data,
@@ -78,7 +106,7 @@ data = run_level2(
     signal_strength={
         'apply': True,
         'signal_strength_col': 'CUSTOM_SIGNAL_STRENGTH_IRGA72_MEAN',
-        'method': 'discard below',
+        'method': 'discard below',  # low signal = problem on LI-7200
         'threshold': 60,
     },
     raw_data_screening_vm97={
@@ -88,92 +116,130 @@ data = run_level2(
         'discont_hf': False, 'discont_sf': False,
     },
 )
-print(f"After L2: filteredseries = {data.filteredseries.name}, "
-      f"{data.filteredseries.dropna().count()} valid records")
+print(f"After L2: {data.filteredseries.dropna().count()} valid records "
+      f"(col: {data.filteredseries.name})")
 
 # %%
-# Step 3: run Level-3.1 (storage correction)
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# QCF heatmaps (L2 quality overview)
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# Shows which half-hours failed which tests on a date x time-of-day grid.
+# Useful for spotting instrument outages, sensor contamination events, or
+# persistent quality problems at certain times of day.
 
-data = run_level31(data, gapfill_storage_term=True, set_storage_to_zero=False)
-print(f"After L3.1: filteredseries = {data.filteredseries.name}, "
-      f"{data.filteredseries.dropna().count()} valid records")
+data.levels.level2_qcf.showplot_qcf_heatmaps()
 
 # %%
-# Step 4: run Level-3.2 (outlier removal)
+# Step 3: Level-3.1 — storage correction
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# Level-3.2 uses a stateful ``StepwiseOutlierDetection`` instance.  The
-# ``make_level32_detector`` factory wires it to the right ``dfin`` / ``col``
-# / site coordinates so you don't have to.  Call any number of
-# ``flag_outliers_*`` / ``addflag`` methods on it, then hand it to
-# ``run_level32``.
+# The eddy-covariance flux FC measures only the turbulent vertical transport.
+# During transitional periods (sunrise, sunset, after rain) CO2 accumulates in
+# or drains from the canopy air space.  The storage flux SC_SINGLE corrects for
+# this, giving the net ecosystem-atmosphere exchange:
+#
+#   NEE = FC + SC_SINGLE
+#
+# Gap-filling the storage term with a rolling median (``gapfill_storage_term=True``)
+# prevents the correction from introducing additional gaps.
+
+data = run_level31(data, gapfill_storage_term=True, set_storage_to_zero=False)
+print(f"After L3.1: {data.filteredseries.dropna().count()} valid records "
+      f"(col: {data.filteredseries.name})")
+
+# %%
+# Step 4: Level-3.2 — outlier removal
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# Even after L2 flagging, spikes from transient sensor contamination, insects
+# in the optical path, or brief electrical interference remain in the NEE record.
+# The Hampel filter (median-absolute-deviation based, applied separately to
+# daytime and nighttime) is robust to the asymmetric distribution of NEE.
+#
+# ``make_level32_detector`` wires the detector to the correct input column and
+# site coordinates so you don't have to.  Chain additional ``flag_outliers_*``
+# / ``addflag()`` calls before ``run_level32`` if needed.
 
 sod = make_level32_detector(data)
 sod.flag_outliers_hampel_test(
-    window_length=48 * 13,
-    n_sigma_daytime=5.5, n_sigma_nighttime=5.5,
-    use_differencing=True, separate_daytime_nighttime=True,
-    showplot=False, verbose=True, repeat=True,
+    window_length=48 * 13,  # 13-day rolling window (±6.5 days)
+    n_sigma_daytime=5.5,
+    n_sigma_nighttime=5.5,
+    use_differencing=True,  # more sensitive to isolated spikes
+    separate_daytime_nighttime=True,
+    showplot=False,
+    verbose=True,
+    repeat=True,
 )
 sod.addflag()
 
 data = run_level32(data, outlier_detector=sod)
-print(f"After L3.2: filteredseries = {data.filteredseries.name}, "
-      f"{data.filteredseries.dropna().count()} valid records")
+print(f"After L3.2: {data.filteredseries.dropna().count()} valid records "
+      f"(col: {data.filteredseries.name})")
 
 # %%
 # QCF heatmaps (L3.2 quality overview)
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-#
-# Each level's QCF object can show diagnostic heatmaps — a date-vs-time grid
-# coloured by QCF value (0=good, 1=soft warning, 2=hard failure).  Useful for
-# spotting instrument outages or seasonal quality patterns.
 
 data.levels.level32_qcf.showplot_qcf_heatmaps()
 
 # %%
-# Step 5: run Level-3.3 (USTAR turbulence filtering)
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# Step 5: Level-3.3 — USTAR turbulence filtering
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# Remove low-turbulence nighttime periods using a constant USTAR threshold.
-# Applied only to CO2/CH4/N2O — not to energy fluxes (H, LE).
+# Under calm, stable nighttime conditions the atmospheric boundary layer
+# decouples from the canopy.  Eddy-covariance underestimates ecosystem
+# respiration because CO2 drains laterally rather than vertically.  The
+# standard correction (Papale et al. 2006) removes nighttime records where
+# the friction velocity USTAR falls below a site-specific threshold.
 #
-# Pass the 16th, 50th, and 84th percentiles of a bootstrap USTAR threshold
-# distribution (from REddyProc or hesseflux) to quantify the uncertainty.
+# The threshold is uncertain: derive its distribution externally (e.g. REddyProc)
+# and pass the 16th, 50th, and 84th percentiles to quantify sensitivity.
 # Here we use one scenario for brevity.
 #
-# After this call ``data.filteredseries`` is set to ``None`` because there
-# is no single unambiguous filtered series when multiple USTAR scenarios
-# exist.  Always access per-scenario series explicitly.
+# USTAR filtering applies ONLY to CO2, CH4, and N2O fluxes.
+# For energy fluxes (H, LE) use thresholds=[0], threshold_labels=['CUT_NONE'].
+#
+# After this call ``data.filteredseries`` is None — always access results via
+# the per-scenario dict (see below).
 
 data = run_level33_constant_ustar(
     data,
-    thresholds=[0.30],           # m s-1; site-specific, typically CUT_50
-    threshold_labels=['CUT_50'],
+    thresholds=[0.30],  # m s-1 — site-specific value
+    threshold_labels=['CUT_50'],  # label matches the bootstrap percentile
     showplot=False,
     verbose=True,
 )
 
-# data.filteredseries is None here — use the scenario dict instead
+# Access per-scenario results explicitly
 flux_l33 = data.levels.filteredseries_level33_qcf['CUT_50']
-print(f"After L3.3 (CUT_50): {flux_l33.dropna().count()} valid records")
+flux_l33_hq = data.levels.filteredseries_level33_hq['CUT_50']  # QCF=0 only
+
+print(f"After L3.3 (CUT_50): {flux_l33.dropna().count()} accepted  |  "
+      f"{flux_l33_hq.dropna().count()} high-quality (QCF=0)")
 
 # %%
-# Step 6: feature engineering for gap-filling
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# Step 6: feature engineering for ML gap-filling
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# Build a ``FeatureEngineer`` with the meteorological driver columns that will
-# serve as gap-filling predictors.  ``target_col`` is a required placeholder —
-# its value does not matter as long as it is not in the feature list.
+# ML gap-filling models require a rich feature set that captures the diurnal
+# and seasonal drivers of NEE (radiation, temperature, VPD) plus their
+# temporal context (lags, rolling statistics, trends).  The 8-stage
+# ``FeatureEngineer`` pipeline creates these automatically.
 #
 # All feature columns must exist in ``data.full_df`` (the original input
 # dataframe), not ``data.fpc_df``.
+#
+# ``target_col='_target_'`` is a required placeholder; its value is irrelevant
+# for L4.1 because the engineer is applied to predictor columns only.
+#
+# The same engineer instance is passed to both RF and XGBoost — feature
+# engineering runs once and is reused across all USTAR scenarios and methods.
 
 FEATURES = ["TA_T1_47_1_gfXG", "SW_IN_T1_47_1_gfXG", "VPD_T1_47_1_gfXG"]
 
 engineer = FeatureEngineer(
-    target_col='_target_',  # placeholder; value irrelevant for L4.1
+    target_col='_target_',  # placeholder; irrelevant for L4.1
     features_lag=[-2, -1],
     features_lag_stepsize=1,
     features_lag_exclude_cols=None,
@@ -201,17 +267,17 @@ engineer = FeatureEngineer(
 # Step 7a: gap-fill with Random Forest
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# ``run_level41_rf`` runs one RF model per USTAR scenario found in L3.3.
-# Feature engineering (``engineer.fit_transform``) runs once and is reused
-# across all USTAR scenarios — no redundant computation.
+# An ensemble of decision trees, each trained on a bootstrapped subset of the
+# data.  Robust to outliers, interpretable via SHAP feature importances.
+# Production settings: n_estimators >= 350, max_depth >= 15.
 
 data = run_level41_rf(
     data,
     features=FEATURES,
-    engineer=engineer,
-    reduce_features=True,
+    engineer=engineer,  # same instance reused by XGBoost below
+    reduce_features=True,  # SHAP-based feature selection
     verbose=1,
-    # RF hyperparameters — use n_estimators=350, max_depth=15 in production
+    # Demo settings — use n_estimators=350, max_depth=15 in production
     n_estimators=2,
     max_depth=1,
     min_samples_split=5,
@@ -225,10 +291,12 @@ print("Random Forest gap-filling complete")
 # Step 7b: gap-fill with XGBoost (branch from same L3.3 state)
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# The composable API makes branching trivial: pass the same ``data`` object
-# (which already contains the L3.3 results and the RF outputs) directly to
-# ``run_level41_xgb``.  No upstream work is repeated; only the XGBoost model
-# is added.
+# Gradient boosted trees.  Generally captures stronger non-linear patterns than
+# RF and trains faster at equal n_estimators.  The same ``engineer`` instance
+# is passed; feature engineering is not repeated.
+#
+# This is the composable API's key advantage: pass the same ``data`` object to
+# run a second method — no upstream work is repeated.
 
 data = run_level41_xgb(
     data,
@@ -236,7 +304,7 @@ data = run_level41_xgb(
     engineer=engineer,
     reduce_features=True,
     verbose=1,
-    # XGBoost hyperparameters — use n_estimators=350, max_depth=6 in production
+    # Demo settings — use n_estimators=350, max_depth=6 in production
     n_estimators=2,
     max_depth=1,
     learning_rate=0.05,
@@ -251,68 +319,89 @@ print("XGBoost gap-filling complete")
 # Step 7c: gap-fill with MDS (branch from same L3.3 state)
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# Marginal Data Substitution requires no model training: it searches a
-# look-up table of meteorologically similar half-hours to fill each gap.
-# No ``FeatureEngineer`` is needed.
+# Marginal Data Substitution (Reichstein et al. 2005) fills gaps by searching
+# a look-up table of meteorologically similar half-hours within a moving window.
+# No model training needed; no risk of overfitting.
 #
-# Driver columns must exist in ``data.full_df``.  MDS expects VPD in **kPa**;
-# EddyPro outputs VPD in hPa — divide by 10 if the raw column is used.
-# ``run_level41_mds`` raises a ``UserWarning`` automatically when the median
-# VPD looks like hPa (> 10).
+# Driver columns must exist in ``data.full_df``.
+# MDS requires VPD in kPa — EddyPro outputs VPD in hPa, so divide by 10 if
+# using the raw EddyPro column.  ``run_level41_mds`` issues a UserWarning
+# automatically when the median VPD looks like hPa (> 10).
+
+VPD_COL = 'VPD_T1_47_1_gfXG'
+vpd_median = data.full_df[VPD_COL].median()
+if vpd_median > 10:
+    warnings.warn(
+        f"VPD column '{VPD_COL}' has median {vpd_median:.1f} — "
+        f"looks like hPa; MDS requires kPa.  Divide by 10.",
+        UserWarning, stacklevel=1,
+    )
 
 data = run_level41_mds(
     data,
     swin='SW_IN_T1_47_1_gfXG',
     ta='TA_T1_47_1_gfXG',
-    vpd='VPD_T1_47_1_gfXG',   # kPa; divide by 10 if your column is in hPa
-    ta_tol=2.5,
+    vpd=VPD_COL,  # kPa; divide by 10 if your column is in hPa
+    ta_tol=2.5,  # Reichstein et al. 2005 default tolerances
     vpd_tol=0.5,
 )
 print("MDS gap-filling complete")
 
 # %%
-# Step 8: inspect typed per-level results
+# Step 8: collect all gap-filling results
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# ``data.levels`` is a typed ``LevelResults`` dataclass.  Every per-level
-# object lives behind a named attribute — no magic-string dict lookups.
-
-print(f"Levels run: {data.level_ids}")
-print(f"L3.3 instance:   {type(data.levels.level33).__name__}")
-print(f"L3.3 QCF keys:   {list(data.levels.level33_qcf.keys())}")
-print(f"L4.1 RF keys:    {list(data.levels.level41_rf.keys())}")
-print(f"L4.1 XGB keys:   {list(data.levels.level41_xgb.keys())}")
-print(f"L4.1 MDS keys:   {list(data.levels.level41_mds.keys())}")
-
-# %%
-# Step 9: find gap-filled column names
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ``data.levels.level41_methods()`` returns a nested dict keyed by method name
+# and USTAR scenario.  Use this to iterate over methods uniformly rather than
+# accessing level41_rf / level41_xgb / level41_mds individually.
 #
-# ``data.gapfilled_cols()`` returns a nested dict
-# ``{method: {ustar_scenario: column_name}}`` so you don't have to dig into
-# the model instances to find the right column in ``data.fpc_df``.
+# ``data.gapfilled_cols()`` returns the column names in ``fpc_df`` for each
+# method and scenario — useful for plotting and export without digging into
+# model instances.
+
+all_models = data.levels.level41_methods()
+# {'mds': {'CUT_50': <FluxMDS>},
+#  'long_term_random_forest': {'CUT_50': <LongTermGapFillingRandomForestTS>},
+#  'long_term_xgboost': {'CUT_50': <LongTermGapFillingXGBoostTS>}}
 
 cols = data.gapfilled_cols()
-print(f"Gap-filled columns: {cols}")
+# {'rf': {'CUT_50': 'NEE_..._gfRF'}, 'xgb': {'CUT_50': '..._gfXG'}, 'mds': {'CUT_50': '...'}}
+print(f"Gap-filled columns:\n  {cols}")
 
-rf_col  = cols['rf']['CUT_50']
+rf_col = cols['rf']['CUT_50']
 xgb_col = cols['xgb']['CUT_50']
 mds_col = cols['mds']['CUT_50']
 
-rf_gapfilled  = data.fpc_df[rf_col]
+rf_gapfilled = data.fpc_df[rf_col]
 xgb_gapfilled = data.fpc_df[xgb_col]
 mds_gapfilled = data.fpc_df[mds_col]
 
-print(f"RF  gap-filled: {rf_gapfilled.dropna().count()} records in column '{rf_col}'")
-print(f"XGB gap-filled: {xgb_gapfilled.dropna().count()} records in column '{xgb_col}'")
-print(f"MDS gap-filled: {mds_gapfilled.dropna().count()} records in column '{mds_col}'")
+# %%
+# Step 9: gap-filling fraction
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# The ``FLAG_*_ISFILLED`` column records the origin of each value:
+#   0 = directly measured (passed all QC filters)
+#   1 = gap-filled by the primary model
+#   2 = gap-filled by the fallback model (if primary could not predict)
+#
+# Reporting this fraction is standard in flux papers.
+
+for method_key, scen_cols in cols.items():
+    for scen, gf_col in scen_cols.items():
+        flag_col = f"FLAG_{gf_col}_ISFILLED"
+        if flag_col in data.fpc_df.columns:
+            flags = data.fpc_df[flag_col]
+            n_measured = int((flags == 0).sum())
+            n_filled = int((flags == 1).sum())
+            total = n_measured + n_filled
+            print(f"{method_key} {scen}: {n_measured}/{total} measured "
+                  f"({100 * n_measured / max(total, 1):.1f}%), "
+                  f"{n_filled} gap-filled ({100 * n_filled / max(total, 1):.1f}%)")
 
 # %%
 # Step 10: data-availability summary across all levels
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-#
-# ``data.summary()`` prints per-level valid record counts split by daytime
-# and nighttime.  Useful for a quick sanity check before exporting results.
 
 print(data.summary())
 
@@ -320,15 +409,15 @@ print(data.summary())
 # Step 11: model performance
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# Access the trained model instance for each USTAR scenario and gap-filling
-# method via ``data.levels.level41_rf[ustar_scen]``.  The instance exposes
-# per-year R² scores and a convenience plot method.
+# Access trained model instances and their per-year R² scores.
+# ML methods expose ``showplot_feature_ranks_per_year()``; MDS exposes
+# ``showplot()`` which shows gap-filling coverage by meteorological window.
 
-rf_model  = data.levels.level41_rf['CUT_50']
+rf_model = data.levels.level41_rf['CUT_50']
 xgb_model = data.levels.level41_xgb['CUT_50']
 mds_model = data.levels.level41_mds['CUT_50']
 
-rf_r2  = list(rf_model.scores_.values())[0]['r2']  if rf_model.scores_  else None
+rf_r2 = list(rf_model.scores_.values())[0]['r2'] if rf_model.scores_ else None
 xgb_r2 = list(xgb_model.scores_.values())[0]['r2'] if xgb_model.scores_ else None
 
 if rf_r2 is not None:
@@ -336,11 +425,8 @@ if rf_r2 is not None:
 if xgb_r2 is not None:
     print(f"XGBoost        R2: {xgb_r2:.3f}")
 
-# Feature importance plots (ML methods only)
 rf_model.showplot_feature_ranks_per_year(title="RF feature importance — NEE CUT_50")
 xgb_model.showplot_feature_ranks_per_year(title="XGBoost feature importance — NEE CUT_50")
-
-# MDS diagnostic plot
 mds_model.showplot()
 
 # %%
@@ -348,50 +434,60 @@ mds_model.showplot()
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
 # ``HeatmapDateTime`` arranges the time series on a date x time-of-day grid.
-# NaN cells are highlighted so data gaps remain visible even after filling.
-# Plot both the RF and XGB gap-filled series side-by-side for comparison.
+# Measured vs. gap-filled periods are not distinguished here — use the
+# FLAG_*_ISFILLED column to mask gap-filled values if needed.
 
 heatmap_rf = dv.plotting.HeatmapDateTime(series=rf_gapfilled)
-heatmap_rf.plot(title=f"RF gap-filled flux  ({rf_col})")
+heatmap_rf.plot(title=f"RF gap-filled NEE  ({rf_col})")
 
 heatmap_xgb = dv.plotting.HeatmapDateTime(series=xgb_gapfilled)
-heatmap_xgb.plot(title=f"XGB gap-filled flux  ({xgb_col})")
+heatmap_xgb.plot(title=f"XGB gap-filled NEE  ({xgb_col})")
 
 heatmap_mds = dv.plotting.HeatmapDateTime(series=mds_gapfilled)
-heatmap_mds.plot(title=f"MDS gap-filled flux  ({mds_col})")
+heatmap_mds.plot(title=f"MDS gap-filled NEE  ({mds_col})")
 
 # %%
-# Step 13: cumulative gap-filled flux
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# Step 13: cumulative gap-filled NEE
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# ``CumulativeYear`` shows yearly cumulative sums day-by-day.  With one month
-# of data the curve covers only June; with a full year it produces the classic
-# annual NEE fingerprint used to report carbon-budget balance.
+# Cumulative NEE (daily running sum) is the standard diagnostic for the annual
+# carbon budget.  The sign convention follows eddy covariance: negative = carbon
+# uptake by the ecosystem, positive = carbon release.
+#
+# Unit conversion from µmol CO2 m-2 s-1 to gC m-2:
+#   gC per timestep = µmol CO2 m-2 s-1  x  12.011 g mol-1  x  1e-6 mol µmol-1
+#                     x  1800 s per 30-min timestep
+# Summing over the full time series gives the cumulative carbon balance in gC m-2.
+#
+# With one month of data the curves cover June only; over a full year they
+# produce the classic NEE fingerprint used in carbon-budget reporting.
 
-cumulative_rf = dv.plotting.CumulativeYear(
-    series=rf_gapfilled,
-    series_units="umol m-2 s-1",
-)
-cumulative_rf.plot()
+UMOL_TO_GC = 12.011 * 1e-6 * 1800  # conversion factor for 30-min data
 
-cumulative_xgb = dv.plotting.CumulativeYear(
-    series=xgb_gapfilled,
-    series_units="umol m-2 s-1",
-)
-cumulative_xgb.plot()
-
-cumulative_mds = dv.plotting.CumulativeYear(
-    series=mds_gapfilled,
-    series_units="umol m-2 s-1",
-)
-cumulative_mds.plot()
+for label, series in [("RF", rf_gapfilled), ("XGB", xgb_gapfilled), ("MDS", mds_gapfilled)]:
+    series_gC = series * UMOL_TO_GC
+    series_gC.name = series.name + "_gC"
+    cumul = dv.plotting.CumulativeYear(series=series_gC, series_units="gC m-2")
+    cumul.plot()
 
 # %%
 # Step 14: export the final dataframe
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# ``data.fpc_df`` holds every flag, QCF, and gap-filled column appended by
-# the chain.  Export it directly or subset the columns you need.
+# ``data.fpc_df`` holds every flag, QCF, storage-correction, gap-filled column
+# and their ISFILLED flags accumulated by the chain.  Export it directly or
+# select the columns relevant to your analysis.
+#
+# Typical columns to keep for publication:
+#   - the gap-filled NEE column  (e.g. NEE_L3.1_L3.3_CUT_50_QCF_gfRF)
+#   - its ISFILLED flag          (distinguishes measured from modelled)
+#   - the L2 QCF                 (FLAG_L2_FC_QCF)
+#   - USTAR                      (already in fpc_df from init)
+#
+# **Next step — flux partitioning:**
+# Gap-filled NEE can be partitioned into gross primary production (GPP) and
+# ecosystem respiration (Reco) using nighttime or daytime approaches.
+# Use an external tool such as REddyProc (R) for this step.
 
 final_df = data.fpc_df
 print(f"Final dataframe: {final_df.shape[0]} rows x {final_df.shape[1]} cols")
@@ -401,10 +497,10 @@ print(f"Final dataframe: {final_df.shape[0]} rows x {final_df.shape[1]} cols")
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
 # - **Partial pipelines**: stop after any level — no chain overhead.
-# - **Custom steps**: skip ``run_level32`` and write your own outlier logic on
+# - **Custom steps**: replace ``run_level32`` with your own outlier logic on
 #   ``data.fpc_df``, then continue with ``run_level33_constant_ustar``.
-# - **Branching**: run three L4.1 methods (RF, XGBoost, MDS) from the same
-#   L3.3 state by reusing the same ``FluxLevelData`` — no upstream re-runs.
+# - **Branching**: run RF, XGBoost, and MDS from the same L3.3 state by
+#   reusing the same ``FluxLevelData`` — no upstream re-runs.
 # - **Pure functions**: each call returns a new container, never mutates the
 #   input — easy to unit-test, easy to reason about.
 #

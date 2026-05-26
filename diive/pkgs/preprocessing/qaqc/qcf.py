@@ -34,6 +34,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from pandas import DataFrame, Series
+
 from diive.core.base.identify import identify_flagcols
 from diive.core.funcs.funcs import validate_id_string
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
@@ -380,7 +381,8 @@ class FlagQCF:
         n_flag2_prev = 0
 
         # Header for combined results table
-        print(f"{'Step':<5} {'Test Name':<38} {'New Rej':<8} {'Available':<12} {'Rejected':<12} {'Avail %':<9} {'Rej %':<9} {'QCF Distribution':<15}")
+        print(
+            f"{'Step':<5} {'Test Name':<38} {'New Rej':<8} {'Available':<12} {'Rejected':<12} {'Avail %':<9} {'Rej %':<9} {'QCF Distribution':<15}")
         print(f"{'':5} {'':38} {'':8} {'(count)':<12} {'(count)':<12} {'':9} {'':9} {'0/1/2':<15}")
         print(f"{'-' * 120}")
 
@@ -412,12 +414,12 @@ class FlagQCF:
                 test_name = test_name[:32] + "..."
 
             qcf_dist = f"{n_flag0}/{n_flag1}/{n_flag2}"
-            print(f"{ix_test:<5} {test_name:<38} {n_new_rejected:<8} {n_available:<12} {n_rejected:<12} {perc_available:<9.2f} {perc_rejected:<9.2f} {qcf_dist:<15}")
+            print(
+                f"{ix_test:<5} {test_name:<38} {n_new_rejected:<8} {n_available:<12} {n_rejected:<12} {perc_available:<9.2f} {perc_rejected:<9.2f} {qcf_dist:<15}")
 
             n_flag2_prev = n_flag2
 
         print(f"\n{'=' * 120}\n")
-
 
     def _flagstats(self, flag: Series, prefix: str, indent: str = "  "):
         """Print flag value counts in table format (0=pass, 1=warn, 2=fail)."""
@@ -513,7 +515,8 @@ class FlagQCF:
         print(f"\n[4] DATA LOSS ANALYSIS")
         print(f"    Records retained after QC: {n_available}/{n_measured} ({perc_available:.2f}%)")
         print(f"    Data loss from QC:         {n_rejected}/{n_measured} ({data_loss_perc:.2f}%)")
-        print(f"    Final data coverage:       {n_available}/{n_potential} ({(n_available/n_potential)*100:.2f}% of potential)")
+        print(
+            f"    Final data coverage:       {n_available}/{n_potential} ({(n_available / n_potential) * 100:.2f}% of potential)")
 
         print(f"\n{'=' * 70}\n")
 
@@ -606,13 +609,13 @@ class FlagQCF:
         vmin = -maxabsval if maxabsval else None
         vmax = maxabsval if maxabsval else None
         HeatmapDateTime(series=self.flags[self.series_name]).plot(ax=ax_before, vmin=vmin, vmax=vmax,
-                                                                    cb_digits_after_comma=0)
-        HeatmapDateTime(series=self.flags[self.filteredseriescol]).plot(ax=ax_after, vmin=vmin, vmax=vmax,
-                                                                         cb_digits_after_comma=0)
-        HeatmapDateTime(series=self.flags[self.sumflagscol]).plot(ax=ax_flagsum,
-                                                                   cb_digits_after_comma=0)
-        HeatmapDateTime(series=self.flags[self.flagqcfcol]).plot(ax=ax_flag,
                                                                   cb_digits_after_comma=0)
+        HeatmapDateTime(series=self.flags[self.filteredseriescol]).plot(ax=ax_after, vmin=vmin, vmax=vmax,
+                                                                        cb_digits_after_comma=0)
+        HeatmapDateTime(series=self.flags[self.sumflagscol]).plot(ax=ax_flagsum,
+                                                                  cb_digits_after_comma=0)
+        HeatmapDateTime(series=self.flags[self.flagqcfcol]).plot(ax=ax_flag,
+                                                                 cb_digits_after_comma=0)
         plt.setp(ax_after.get_yticklabels(), visible=False)
         plt.setp(ax_flagsum.get_yticklabels(), visible=False)
         plt.setp(ax_flag.get_yticklabels(), visible=False)
