@@ -318,7 +318,7 @@ data.levels.level41_xgb                 # dict[ustar_scenario, LongTermGapFillin
 **Examples:**
 
 - `examples/flux/fluxprocessingchain/fluxprocessingchain.py` — all 5 levels via the orchestrator class (RF + XGBoost).
-- `examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py` — partial L2+L3.1 pipeline using the composable functions.
+- `examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py` — full L2→L4.1 pipeline using composable functions, including RF, XGBoost, and MDS gap-filling; heatmaps and cumulative plots.
 - `examples/flux/fluxprocessingchain/fluxprocessingchain_quick.py` — `QuickFluxProcessingChain` wrapper for rapid exploratory checks.
 
 ## High-Resolution EC Analysis (hires)
