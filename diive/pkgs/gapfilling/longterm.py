@@ -18,6 +18,7 @@ from xgboost import XGBRegressor
 from diive.core.ml.common import MlRegressorGapFillingBase
 from diive.core.plotting.styles.LightTheme import colorwheel_48
 from diive.core.times.neighbors import neighboring_years
+from diive.core.utils.console import detail, info, rule
 
 
 class LongTermGapFillingBase:
@@ -175,7 +176,7 @@ class LongTermGapFillingBase:
         # Features are already engineered in input_df
         self._results_yearly = {}
         for year, _df in self._yearpools.items():
-            print(f"Initializing model for {year} ...")
+            info(f"Initializing model for {year} ...", verbose=self.verbose)
             df = _df['df'].copy()
 
             model = MlRegressorGapFillingBase(
@@ -193,7 +194,7 @@ class LongTermGapFillingBase:
         """Reduce features and detect features that were selected in at least one year."""
         features_reduced_across_years = []
         for year, year_dict in self._yearpools.items():
-            print(f"---\nReducing features based on SHAP importance for year {year} ...")
+            info(f"Reducing features for {year} ...", verbose=self.verbose)
             rfts = self.results_yearly_[year]
             rfts.reduce_features(shap_threshold_factor=0.5)
             features_reduced_across_years.append(rfts.accepted_features_)
@@ -204,11 +205,8 @@ class LongTermGapFillingBase:
         self._features_reduced_across_years = list(set(features_reduced_across_years))
         self._features_reduced_across_years.sort()  # Important! For consistency when using random_state!
 
-        print(f"---")
-        print(f"Finished reducing features based on SHAP importance for all years.")
-        print(f"List of features after reduction: {self.features_reduced_across_years}.")
-        print(f"Each feature was selected in at least one year.")
-        print(f"---")
+        info(f"Feature reduction complete.  Accepted across all years: "
+             f"{self.features_reduced_across_years}", verbose=self.verbose)
 
         # Keep features that were selected
         keepcols = self.features_reduced_across_years.copy()
@@ -222,10 +220,10 @@ class LongTermGapFillingBase:
     def fillgaps(self):
         """Train model for each year"""
         for year, _df in self._yearpools.items():
-            print(f"\nTraining model for {year} ...")
+            info(f"Training model for {year} ...", verbose=self.verbose)
             rfts = self.results_yearly_[year]  # Get instance with model from dict
             rfts.trainmodel(showplot_scores=False, showplot_importance=False)
-            print(f"\nGap-filling {year} ...")
+            info(f"Gap-filling {year} ...", verbose=self.verbose)
             rfts.fillgaps(showplot_scores=False, showplot_importance=False)
         self._collect()
 
@@ -272,7 +270,7 @@ class LongTermGapFillingBase:
         counter = 0
         for year, _df in self._yearpools.items():
             counter += 1
-            print(f"Collecting results for {year} ...")
+            detail(f"Collecting results for {year} ...", verbose=self.verbose)
             rfts = self.results_yearly_[year]
             keepyear = rfts.gapfilling_df_.index.year == int(year)
             self._gapfilling_df = pd.concat([self._gapfilling_df, rfts.gapfilling_df_[keepyear]], axis=0)
@@ -385,7 +383,8 @@ def _example_longterm_xgbts():
     subset = df[['SW_IN_T1_47_1']].copy()
     subset['SW_IN_POT'] = potrad(timestamp_index=subset.index, lat=SITE_LAT, lon=SITE_LON,
                                  utc_offset=TIMEZONE_OFFSET_TO_UTC_HOURS)
-    print(subset)
+    from diive.core.utils.console import console as _console
+    _console.print(subset.to_string())
 
     # https://xgboost.readthedocs.io/en/stable/python/python_api.html#module-xgboost.sklearn
     ltxgb = LongTermGapFillingXGBoostTS(

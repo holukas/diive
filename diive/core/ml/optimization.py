@@ -17,6 +17,7 @@ from itertools import product
 from joblib import Parallel, delayed
 
 import diive.core.dfun.frames as fr
+from diive.core.utils.console import console as _console, info, rule, success, error
 from diive.pkgs.gapfilling.scores import prediction_scores
 
 pd.set_option('display.max_rows', 50)
@@ -151,8 +152,8 @@ class OptimizeParamsTS:
             total_combinations *= len(param_values)
         n_splits = 10
         total_fits = total_combinations * n_splits
-        print(f"\nGridSearchCV starting: {total_combinations} parameter combinations × {n_splits} CV folds = {total_fits} model fits\n")
-        print(f"Testing parameter combinations [X/{total_combinations}] - Parameters shown below:\n")
+        rule(f"Hyperparameter Optimization: {self.regressor_class.__name__}")
+        info(f"{total_combinations} combinations x {n_splits} CV folds = {total_fits} model fits")
 
         grid = GridSearchCV(estimator=self.regressor_class(),
                             param_grid=self.params,
@@ -163,7 +164,7 @@ class OptimizeParamsTS:
 
         grid.fit(X_train, y_train)
 
-        print(f"\n[OK] Optimization complete: {total_combinations} combinations tested\n")
+        success(f"Optimization complete: {total_combinations} combinations tested")
 
         self._cv_results = pd.DataFrame.from_dict(grid.cv_results_)
 
@@ -192,97 +193,73 @@ class OptimizeParamsTS:
         Args:
             top_n: Number of top parameter combinations to show (default 5)
         """
+        from rich.table import Table
+
         if not self._best_params:
-            print("ERROR: Run optimize() first")
+            error("Run optimize() first")
             return
 
         model_name = self.regressor_class.__name__
-        print("\n" + "=" * 80)
-        print(f"{model_name.upper()} HYPERPARAMETER OPTIMIZATION REPORT")
-        print("=" * 80)
+        rule(f"{model_name} Hyperparameter Optimization Report")
 
         # Tested parameter ranges
-        print("\nOK PARAMETER RANGES TESTED")
-        print("-" * 80)
+        info("Parameter ranges tested:")
         for param, values in sorted(self.params.items()):
-            if isinstance(values, list):
-                if len(values) > 5:
-                    print(f"  {param:<25} : {values[0]} to {values[-1]} ({len(values)} values)")
-                else:
-                    print(f"  {param:<25} : {values}")
+            if isinstance(values, list) and len(values) > 5:
+                _console.print(f"  [cyan]{param:<25}[/cyan]  {values[0]} to {values[-1]} ({len(values)} values)")
             else:
-                print(f"  {param:<25} : {values}")
+                _console.print(f"  [cyan]{param:<25}[/cyan]  {values}")
 
-        # Best parameters section
-        print("\nOK BEST PARAMETERS (GridSearchCV winner)")
-        print("-" * 80)
+        # Best parameters
+        rule("Best Parameters", min_level=2)
         for param, value in sorted(self._best_params.items()):
-            print(f"  {param:<25} = {value}")
+            _console.print(f"  [cyan]{param:<25}[/cyan]  [green]{value}[/green]")
 
-        # Best performance section
-        print("\nOK BEST MODEL PERFORMANCE (test set)")
-        print("-" * 80)
-        print(f"  R2 Score              = {self._scores['r2']:>10.4f}  (0-1 scale, higher is better)")
-        print(f"  MAE                   = {self._scores['mae']:>10.4f}  (mean absolute error)")
-        print(f"  RMSE                  = {self._scores['rmse']:>10.4f}  (root mean squared error)")
+        # Performance
+        rule("Best Model Performance (test set)", min_level=2)
+        _console.print(
+            f"  R2 Score  {self._scores['r2']:>10.4f}  (0-1, higher is better)\n"
+            f"  MAE       {self._scores['mae']:>10.4f}  (mean absolute error)\n"
+            f"  RMSE      {self._scores['rmse']:>10.4f}  (root mean squared error)"
+        )
 
         # Top N combinations
-        print(f"\nOK TOP {top_n} PARAMETER COMBINATIONS (by CV score)")
-        print("-" * 80)
+        rule(f"Top {top_n} Parameter Combinations (CV score)", min_level=2)
         top_results = self._cv_results.nsmallest(top_n, 'rank_test_score')
+        table = Table(show_header=True, header_style="bold cyan", box=None, padding=(0, 2))
+        table.add_column("Rank", style="dim", no_wrap=True)
+        table.add_column("CV MSE", justify="right")
+        for param in sorted(self.params.keys()):
+            table.add_column(param, justify="right")
         for idx, row_idx in enumerate(top_results.index, 1):
-            print(f"\n  Rank {idx}:")
-            mean_score = -top_results.loc[row_idx, 'mean_test_score']  # Negate because neg_mean_squared_error
-            print(f"    CV Score: {mean_score:.6f} (lower MSE is better)")
+            mean_mse = -top_results.loc[row_idx, 'mean_test_score']
+            row_vals = [str(idx), f"{mean_mse:.6f}"]
             for param in sorted(self.params.keys()):
                 param_key = f'param_{param}'
-                if param_key in top_results.columns:
-                    print(f"    {param:<22} = {top_results.loc[row_idx, param_key]}")
+                row_vals.append(str(top_results.loc[row_idx, param_key]) if param_key in top_results.columns else "-")
+            table.add_row(*row_vals)
+        _console.print(table)
 
-        # Parameter sensitivity analysis
-        print("\nOK PARAMETER SENSITIVITY (which parameters matter most)")
-        print("-" * 80)
-        for param in sorted(self.params.keys()):
-            param_key = f'param_{param}'
-            if param_key in self._cv_results.columns:
-                unique_values = self._cv_results[param_key].unique()
-                if len(unique_values) > 1:
-                    print(f"  {param:<25} : {len(unique_values)} values tested")
-
-        # Recommendation section
-        print("\n" + "=" * 80)
-        print("RECOMMENDATION FOR PRODUCTION")
-        print("=" * 80)
+        # Recommendation
+        rule("Recommendation for Production", min_level=2)
         r2 = self._scores['r2']
-
-        # Determine wrapper class based on regressor type
-        model_name = self.regressor_class.__name__
         if 'RandomForest' in model_name:
             wrapper_class = 'RandomForestTS'
         elif 'XGB' in model_name:
             wrapper_class = 'XGBoostTS'
         else:
-            wrapper_class = f'# Your custom gap-filling wrapper for {model_name}'
-
-        # Generate parameters string from best_params
-        params_str = ""
-        for param, value in sorted(self._best_params.items()):
-            params_str += f"        {param}={value},\n"
-
-        print(f"""
-Use these parameters for gap-filling with {model_name}:
-
-    model = {wrapper_class}(
-        input_df=df_engineered,
-        target_col='<your_target>',
-{params_str}        verbose=1,
-        random_state=42
-    )
-
-Expected performance: R2 ~ {r2:.4f}
-"""
-              )
-        print("=" * 80 + "\n")
+            wrapper_class = f'# custom wrapper for {model_name}'
+        params_str = "".join(f"        {p}={v},\n" for p, v in sorted(self._best_params.items()))
+        _console.print(
+            f"\n  model = {wrapper_class}(\n"
+            f"      input_df=df_engineered,\n"
+            f"      target_col='<your_target>',\n"
+            f"{params_str}"
+            f"      verbose=1,\n"
+            f"      random_state=42\n"
+            f"  )\n\n"
+            f"  Expected performance: R2 ~ {r2:.4f}\n"
+        )
 
     def plot_optimization_analysis(self):
         """Comprehensive visualization of hyperparameter optimization results.
@@ -299,7 +276,7 @@ Expected performance: R2 ~ {r2:.4f}
         import numpy as np
 
         if not self._cv_results.size:
-            print("ERROR: Run optimize() first")
+            error("Run optimize() first")
             return
 
         cv_results = self._cv_results.copy()
@@ -524,7 +501,7 @@ Expected performance: R2 ~ {r2:.4f}
         import numpy as np
 
         if not self._cv_results.size:
-            print("ERROR: Run optimize() first")
+            error("Run optimize() first")
             return
 
         cv_results = self._cv_results.copy()
@@ -596,6 +573,6 @@ Expected performance: R2 ~ {r2:.4f}
         plt.tight_layout()
         plt.show()
 
-        print(f"Parallel coordinates plot shows {len(cv_results)} parameter combinations.")
+        info(f"Parallel coordinates: {len(cv_results)} parameter combinations.")
         print(f"Each line represents one parameter combination.")
         print(f"Lines colored blue indicate high-performing (R² closer to 1) combinations, red indicates poor performance.")

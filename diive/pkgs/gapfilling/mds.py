@@ -20,6 +20,7 @@ from diive.core.ml.results import GapFillingResult
 from diive.core.plotting.plotfuncs import default_format, default_legend
 from diive.core.plotting.plotfuncs import nice_date_ticks
 from diive.core.plotting.styles.LightTheme import colorwheel_36_blackfirst, generate_plot_marker_list
+from diive.core.utils.console import console as _console, detail, info, rule
 from diive.pkgs.gapfilling.scores import prediction_scores
 
 
@@ -181,7 +182,7 @@ class _FluxMDS:
         # https://www.geeksforgeeks.org/apply-function-to-every-row-in-a-pandas-dataframe/
         # https://labs.quansight.org/blog/unlocking-c-level-performance-in-df-apply
 
-        print(f"\n{'=' * 30}\nStarting MDS gap-filling of flux {self.flux}.")
+        rule(f"MDS Gap-Filling: {self.flux}")
 
         self._gapfilling_df = self.gapfilling_df_.copy()
         locs_missing = self.gapfilling_df_['.PREDICTIONS'].isnull()
@@ -271,7 +272,7 @@ class _FluxMDS:
         self._scores['mean_quality_flag_gap_predictions'] = \
             self.gapfilling_df_.loc[locs_measured_missing, self.target_gapfilled_flag].mean()
 
-        print("MDS gap-filling done.")
+        info(f"MDS gap-filling done: {self.flux}")
 
     def showplot(self):
         fig = plt.figure(facecolor='white', figsize=(16, 9), dpi=100, layout='constrained')
@@ -344,104 +345,90 @@ class _FluxMDS:
         mean_quality = self.gapfilling_df_['.PREDICTIONS_QUALITY'].mean()
         flagcounts = Counter(self.gapfilling_df_[self.target_gapfilled_flag])
 
-        print(f"\n{'Marginal Distribution Sampling (MDS) Gap-Filling Report':=^80}")
-        print(f"  Reference: Reichstein et al. (2005) - https://doi.org/10.1111/j.1365-2486.2005.001002.x")
+        from rich.table import Table
 
-        print(f"\n{'Algorithm Overview':-^80}")
-        print(f"  MDS fills gaps using average flux from similar meteorological conditions.")
-        print(f"  Hierarchical quality-based approach with progressively relaxed windows:")
-        print(f"    • Quality 1-3 (A1-A3):  7-14 days,  all 3 variables (SWIN, TA, VPD)")
-        print(f"    • Quality 4-8 (B1-B4):  21-28 days, 2-3 variables")
-        print(f"    • Quality 9+  (C+):     35-140+ days, progressively fewer constraints")
+        rule(f"MDS Gap-Filling Report: {self.flux}")
+        _console.print(
+            "  Reference: Reichstein et al. (2005) — "
+            "https://doi.org/10.1111/j.1365-2486.2005.001002.x\n"
+            "\n"
+            "  [bold]Algorithm:[/bold] hierarchical similarity matching on SWIN / TA / VPD\n"
+            "    Quality 1-3 (A1-A3):  7-14 days  —  all 3 variables\n"
+            "    Quality 4-8 (B1-B4):  21-28 days —  2-3 variables\n"
+            "    Quality 9+  (C+):     35-140+ days — progressively fewer constraints"
+        )
 
-        print(f"\n{'Parameters':-^80}")
-        print(f"  {'Flux variable':<35} {self.flux}")
-        print(f"  {'SWIN tolerance':<35} [{self.swin_tol[0]}, {self.swin_tol[1]}] W m-2")
-        print(f"  {'TA tolerance':<35} {self.ta_tol} °C")
-        print(f"  {'VPD tolerance':<35} {self.vpd_tol} kPa")
-        print(f"  {'Min records for average':<35} {self.avg_min_n_vals}")
+        rule("Parameters", min_level=2)
+        _console.print(
+            f"  Flux variable          {self.flux}\n"
+            f"  SWIN tolerance         [{self.swin_tol[0]}, {self.swin_tol[1]}] W m-2\n"
+            f"  TA tolerance           {self.ta_tol} deg C\n"
+            f"  VPD tolerance          {self.vpd_tol} kPa\n"
+            f"  Min records for mean   {self.avg_min_n_vals}"
+        )
 
-        print(f"\n{'Input Data Summary':-^80}")
-        print(f"  {'Total records':<35} {potential_vals:>15,d}")
-        print(
-            f"  {'Available measurements':<35} {n_vals_before:>15,d}  ({100.0 * n_vals_before / potential_vals:>6.2f}%)")
-        print(f"  {'Missing values':<35} {n_vals_missing_before:>15,d}  ({pct_missing_before:>6.2f}%)")
-
-        print(f"\n{'Gap-Filling Performance':-^80}")
-        print(f"  {'Values filled':<35} {n_vals_filled:>15,d}  ({pct_recovery:>6.2f}% of gaps)")
-        print(f"  {'Remaining missing':<35} {n_vals_missing_after:>15,d}  ({pct_missing_after:>6.2f}% of total)")
-        print(f"  {'Final data coverage':<35} {n_vals_after:>15,d}  ({100.0 * n_vals_after / potential_vals:>6.2f}%)")
-        gap_recovery_efficiency = pct_recovery if pct_recovery > 0 else 0
-        print(f"  {'Gap recovery efficiency':<35} {gap_recovery_efficiency:>15.2f}%")
-        print(f"  {'Mean quality score':<35} {mean_quality:>15.3f}  (1=best, 9+=low)")
-
-        print(f"\n{'Quality Distribution':-^80}")
-        measured_count = flagcounts.get(0, 0)
-        print(
-            f"  {'Measured (original data)':<35} {measured_count:>15,d}  ({100.0 * measured_count / potential_vals:>6.2f}%)")
+        rule("Data & Performance", min_level=2)
+        _console.print(
+            f"  Total records          {potential_vals:>12,d}\n"
+            f"  Available before       {n_vals_before:>12,d}  ({100.0 * n_vals_before / potential_vals:.1f}%)\n"
+            f"  Missing before         {n_vals_missing_before:>12,d}  ({pct_missing_before:.1f}%)\n"
+            f"  Filled                 {n_vals_filled:>12,d}  ({pct_recovery:.1f}% of gaps)\n"
+            f"  Remaining missing      {n_vals_missing_after:>12,d}  ({pct_missing_after:.1f}% of total)\n"
+            f"  Final coverage         {n_vals_after:>12,d}  ({100.0 * n_vals_after / potential_vals:.1f}%)\n"
+            f"  Mean quality score     {mean_quality:>12.3f}  (1=best, 9+=low)"
+        )
 
         quality_counts = {k: v for k, v in sorted(flagcounts.items()) if k > 0}
+        measured_count = flagcounts.get(0, 0)
         if quality_counts:
-            quality_groups = {
-                'High quality (A1-A3, 1-3)': sum(v for k, v in quality_counts.items() if 1 <= k <= 3),
-                'Medium quality (B1-B4, 4-8)': sum(v for k, v in quality_counts.items() if 4 <= k <= 8),
-                'Low quality (C+, 9+)': sum(v for k, v in quality_counts.items() if k >= 9),
-            }
-            for group_name, count in quality_groups.items():
-                if count > 0:
-                    pct = 100.0 * count / potential_vals
-                    print(f"  {group_name:<35} {count:>15,d}  ({pct:>6.2f}%)")
-
-            print(f"\n  Quality level breakdown (detailed):")
-            print(f"    {'Level':<10} {'Count':>12} {'Percentage':>12} {'Description':<45}")
-            print(f"    {'-' * 10} {'-' * 12} {'-' * 12} {'-' * 45}")
+            rule("Quality Distribution", min_level=2)
             quality_descriptions = {
                 1: 'SWIN, TA, VPD: 7 days',
                 2: 'SWIN, TA, VPD: 14 days',
                 3: 'SWIN only: 7 days',
-                4: 'NEE only: 1 hour same day',
-                5: 'NEE only: 1 hour within 1 day',
+                4: 'Diurnal cycle: 1 h same day',
+                5: 'Diurnal cycle: 1 h within 1 day',
                 6: 'SWIN, TA, VPD: 21 days',
                 7: 'SWIN, TA, VPD: 28 days',
                 8: 'SWIN only: 14 days',
             }
-            for quality, count in sorted(quality_counts.items()):
-                pct = 100.0 * count / potential_vals
-                # Get description or generate one for C+ levels (9+)
-                if quality in quality_descriptions:
-                    desc = quality_descriptions[quality]
+            table = Table(show_header=True, header_style="bold cyan", box=None, padding=(0, 2))
+            table.add_column("Level", style="dim", no_wrap=True)
+            table.add_column("Count", justify="right")
+            table.add_column("  %", justify="right")
+            table.add_column("Description")
+            table.add_row("0 (observed)", f"{measured_count:,d}",
+                          f"{100.0 * measured_count / potential_vals:.1f}%", "measured")
+            for q, cnt in sorted(quality_counts.items()):
+                pct = 100.0 * cnt / potential_vals
+                if q in quality_descriptions:
+                    desc = quality_descriptions[q]
+                elif 9 <= q <= 24:
+                    desc = f'SWIN, TA, VPD: {35 + (q - 9) * 7} days'
+                elif 25 <= q <= 40:
+                    desc = f'SWIN only: {21 + (q - 25) * 7} days'
+                elif q >= 41:
+                    desc = f'Diurnal cycle: {21 + (q - 41) * 7} days'
                 else:
-                    # C+ levels: 9-24 use SWIN/TA/VPD, 25-40 use SWIN, 41+ use NEE
-                    if 9 <= quality <= 24:
-                        days = 35 + (quality - 9) * 7
-                        desc = f'SWIN, TA, VPD: {days} days'
-                    elif 25 <= quality <= 40:
-                        days = 21 + (quality - 25) * 7
-                        desc = f'SWIN only: {days} days'
-                    elif quality >= 41:
-                        days = 21 + (quality - 41) * 7
-                        desc = f'NEE only: {days} days'
-                    else:
-                        desc = 'Unknown'
-                print(f"    {quality:<10} {count:>12,d} {pct:>11.2f}% {desc:<45}")
+                    desc = 'unknown'
+                table.add_row(str(q), f"{cnt:,d}", f"{pct:.1f}%", desc)
+            _console.print(table)
 
         self.report_scores()
-        print(f"{'':=^80}\n")
 
     def report_scores(self):
         """Print model performance scores with interpretation."""
-        print(f"\n{'Model Performance Scores':-^80}")
+        rule("Model Performance Scores", min_level=2)
         if self.scores_:
             for score, val in self.scores_.items():
                 score_display = score.replace('_', ' ').title()
-                print(f"  {score_display:<35} {val:>15.4f}")
+                _console.print(f"  {score_display:<35} {val:.4f}")
         else:
-            print("  No scores available")
-        print(f"\n{'Key Insights':-^80}")
-        print(f"  • Higher quality levels (e.g., 1-3) indicate more similar meteorological conditions")
-        print(f"  • Mean quality score closer to 1 = more gap-filled values from strict criteria")
-        print(f"  • Check 'Final data coverage' to assess overall gap-filling success")
-        print(f"  • Review 'Quality Distribution' to understand data source reliability")
+            _console.print("  No scores available")
+        _console.print(
+            "\n  [dim]Higher quality levels (1-3) = stricter meteorological match.[/dim]\n"
+            "  [dim]Mean quality near 1 = most gaps filled under tight constraints.[/dim]"
+        )
 
     def _run_all_available(self, days: int, quality: int):
 
@@ -449,7 +436,7 @@ class _FluxMDS:
         if workdf.empty:
             return workdf, _df
 
-        print(f"MDS gap-filling quality {quality}    using SW_IN, TA, VPD in {days} days window ...")
+        detail(f"MDS Q{quality}: SWIN+TA+VPD, {days}d window")
 
         offset = pd.DateOffset(days=days)
         workdf['.START'] = pd.to_datetime(workdf.index) - offset
@@ -483,7 +470,7 @@ class _FluxMDS:
         if workdf.empty:
             return workdf, _df
 
-        print(f"MDS gap-filling quality {quality}    using SW_IN in {days} days window ...")
+        detail(f"MDS Q{quality}: SWIN only, {days}d window")
 
         offset = pd.DateOffset(days=days)
         workdf['.START'] = pd.to_datetime(workdf.index) - offset
@@ -503,8 +490,7 @@ class _FluxMDS:
         if workdf.empty:
             return workdf, _df
 
-        print(f"MDS gap-filling quality {quality}    using mean diurnal cycle of flux in "
-              f"{days} days, {hours} hours window ...")
+        detail(f"MDS Q{quality}: MDC, {days}d {hours}h window")
 
         offset = pd.DateOffset(days=days, hours=hours)
         workdf['.START'] = pd.to_datetime(workdf.index) - offset
@@ -794,7 +780,7 @@ class FluxMDS:
 
     def run(self):
         """Execute optimized MDS gap-filling algorithm."""
-        print(f"\n{'=' * 30}\nStarting MDS gap-filling of flux {self.flux}.")
+        rule(f"MDS Gap-Filling: {self.flux}")
 
         locs_missing = self.gapfilling_df_['.PREDICTIONS'].isnull()
         self._missing_mask = locs_missing.copy()
@@ -862,7 +848,7 @@ class FluxMDS:
         self._scores['mean_quality_flag_gap_predictions'] = \
             self.gapfilling_df_.loc[locs_measured_missing, self.target_gapfilled_flag].mean()
 
-        print("MDS gap-filling done.")
+        info(f"MDS gap-filling done: {self.flux}")
 
     def showplot(self):
         """Display MDS gap-filling results with plots."""
@@ -932,100 +918,90 @@ class FluxMDS:
         mean_quality = self.gapfilling_df_['.PREDICTIONS_QUALITY'].mean()
         flagcounts = Counter(self.gapfilling_df_[self.target_gapfilled_flag])
 
-        print(f"\n{'Marginal Distribution Sampling (MDS) Gap-Filling Report':=^80}")
-        print(f"  Reference: Reichstein et al. (2005) - https://doi.org/10.1111/j.1365-2486.2005.001002.x")
+        from rich.table import Table
 
-        print(f"\n{'Algorithm Overview':-^80}")
-        print(f"  MDS fills gaps using average flux from similar meteorological conditions.")
-        print(f"  Hierarchical quality-based approach with progressively relaxed windows:")
-        print(f"    • Quality 1-3 (A1-A3):  7-14 days,  all 3 variables (SWIN, TA, VPD)")
-        print(f"    • Quality 4-8 (B1-B4):  21-28 days, 2-3 variables")
-        print(f"    • Quality 9+  (C+):     35-140+ days, progressively fewer constraints")
+        rule(f"MDS Gap-Filling Report: {self.flux}")
+        _console.print(
+            "  Reference: Reichstein et al. (2005) — "
+            "https://doi.org/10.1111/j.1365-2486.2005.001002.x\n"
+            "\n"
+            "  [bold]Algorithm:[/bold] hierarchical similarity matching on SWIN / TA / VPD\n"
+            "    Quality 1-3 (A1-A3):  7-14 days  —  all 3 variables\n"
+            "    Quality 4-8 (B1-B4):  21-28 days —  2-3 variables\n"
+            "    Quality 9+  (C+):     35-140+ days — progressively fewer constraints"
+        )
 
-        print(f"\n{'Parameters':-^80}")
-        print(f"  {'Flux variable':<35} {self.flux}")
-        print(f"  {'SWIN tolerance':<35} [{self.swin_tol[0]}, {self.swin_tol[1]}] W m-2")
-        print(f"  {'TA tolerance':<35} {self.ta_tol} °C")
-        print(f"  {'VPD tolerance':<35} {self.vpd_tol} kPa")
-        print(f"  {'Min records for average':<35} {self.avg_min_n_vals}")
+        rule("Parameters", min_level=2)
+        _console.print(
+            f"  Flux variable          {self.flux}\n"
+            f"  SWIN tolerance         [{self.swin_tol[0]}, {self.swin_tol[1]}] W m-2\n"
+            f"  TA tolerance           {self.ta_tol} deg C\n"
+            f"  VPD tolerance          {self.vpd_tol} kPa\n"
+            f"  Min records for mean   {self.avg_min_n_vals}"
+        )
 
-        print(f"\n{'Input Data Summary':-^80}")
-        print(f"  {'Total records':<35} {potential_vals:>15,d}")
-        print(f"  {'Available measurements':<35} {n_vals_before:>15,d}  ({100.0*n_vals_before/potential_vals:>6.2f}%)")
-        print(f"  {'Missing values':<35} {n_vals_missing_before:>15,d}  ({pct_missing_before:>6.2f}%)")
-
-        print(f"\n{'Gap-Filling Performance':-^80}")
-        print(f"  {'Values filled':<35} {n_vals_filled:>15,d}  ({pct_recovery:>6.2f}% of gaps)")
-        print(f"  {'Remaining missing':<35} {n_vals_missing_after:>15,d}  ({pct_missing_after:>6.2f}% of total)")
-        print(f"  {'Final data coverage':<35} {n_vals_after:>15,d}  ({100.0*n_vals_after/potential_vals:>6.2f}%)")
-        gap_recovery_efficiency = pct_recovery if pct_recovery > 0 else 0
-        print(f"  {'Gap recovery efficiency':<35} {gap_recovery_efficiency:>15.2f}%")
-        print(f"  {'Mean quality score':<35} {mean_quality:>15.3f}  (1=best, 9+=low)")
-
-        print(f"\n{'Quality Distribution':-^80}")
-        measured_count = flagcounts.get(0, 0)
-        print(f"  {'Measured (original data)':<35} {measured_count:>15,d}  ({100.0*measured_count/potential_vals:>6.2f}%)")
+        rule("Data & Performance", min_level=2)
+        _console.print(
+            f"  Total records          {potential_vals:>12,d}\n"
+            f"  Available before       {n_vals_before:>12,d}  ({100.0 * n_vals_before / potential_vals:.1f}%)\n"
+            f"  Missing before         {n_vals_missing_before:>12,d}  ({pct_missing_before:.1f}%)\n"
+            f"  Filled                 {n_vals_filled:>12,d}  ({pct_recovery:.1f}% of gaps)\n"
+            f"  Remaining missing      {n_vals_missing_after:>12,d}  ({pct_missing_after:.1f}% of total)\n"
+            f"  Final coverage         {n_vals_after:>12,d}  ({100.0 * n_vals_after / potential_vals:.1f}%)\n"
+            f"  Mean quality score     {mean_quality:>12.3f}  (1=best, 9+=low)"
+        )
 
         quality_counts = {k: v for k, v in sorted(flagcounts.items()) if k > 0}
+        measured_count = flagcounts.get(0, 0)
         if quality_counts:
-            quality_groups = {
-                'High quality (A1-A3, 1-3)': sum(v for k, v in quality_counts.items() if 1 <= k <= 3),
-                'Medium quality (B1-B4, 4-8)': sum(v for k, v in quality_counts.items() if 4 <= k <= 8),
-                'Low quality (C+, 9+)': sum(v for k, v in quality_counts.items() if k >= 9),
-            }
-            for group_name, count in quality_groups.items():
-                if count > 0:
-                    pct = 100.0 * count / potential_vals
-                    print(f"  {group_name:<35} {count:>15,d}  ({pct:>6.2f}%)")
-
-            print(f"\n  Quality level breakdown (detailed):")
-            print(f"    {'Level':<10} {'Count':>12} {'Percentage':>12} {'Description':<45}")
-            print(f"    {'-'*10} {'-'*12} {'-'*12} {'-'*45}")
+            rule("Quality Distribution", min_level=2)
             quality_descriptions = {
                 1: 'SWIN, TA, VPD: 7 days',
                 2: 'SWIN, TA, VPD: 14 days',
                 3: 'SWIN only: 7 days',
-                4: 'NEE only: 1 hour same day',
-                5: 'NEE only: 1 hour within 1 day',
+                4: 'Diurnal cycle: 1 h same day',
+                5: 'Diurnal cycle: 1 h within 1 day',
                 6: 'SWIN, TA, VPD: 21 days',
                 7: 'SWIN, TA, VPD: 28 days',
                 8: 'SWIN only: 14 days',
             }
-            for quality, count in sorted(quality_counts.items()):
-                pct = 100.0 * count / potential_vals
-                if quality in quality_descriptions:
-                    desc = quality_descriptions[quality]
+            table = Table(show_header=True, header_style="bold cyan", box=None, padding=(0, 2))
+            table.add_column("Level", style="dim", no_wrap=True)
+            table.add_column("Count", justify="right")
+            table.add_column("  %", justify="right")
+            table.add_column("Description")
+            table.add_row("0 (observed)", f"{measured_count:,d}",
+                          f"{100.0 * measured_count / potential_vals:.1f}%", "measured")
+            for q, cnt in sorted(quality_counts.items()):
+                pct = 100.0 * cnt / potential_vals
+                if q in quality_descriptions:
+                    desc = quality_descriptions[q]
+                elif 9 <= q <= 24:
+                    desc = f'SWIN, TA, VPD: {35 + (q - 9) * 7} days'
+                elif 25 <= q <= 40:
+                    desc = f'SWIN only: {21 + (q - 25) * 7} days'
+                elif q >= 41:
+                    desc = f'Diurnal cycle: {21 + (q - 41) * 7} days'
                 else:
-                    if 9 <= quality <= 24:
-                        days = 35 + (quality - 9) * 7
-                        desc = f'SWIN, TA, VPD: {days} days'
-                    elif 25 <= quality <= 40:
-                        days = 21 + (quality - 25) * 7
-                        desc = f'SWIN only: {days} days'
-                    elif quality >= 41:
-                        days = 21 + (quality - 41) * 7
-                        desc = f'NEE only: {days} days'
-                    else:
-                        desc = 'Unknown'
-                print(f"    {quality:<10} {count:>12,d} {pct:>11.2f}% {desc:<45}")
+                    desc = 'unknown'
+                table.add_row(str(q), f"{cnt:,d}", f"{pct:.1f}%", desc)
+            _console.print(table)
 
         self.report_scores()
-        print(f"{'':=^80}\n")
 
     def report_scores(self):
         """Print model performance scores with interpretation."""
-        print(f"\n{'Model Performance Scores':-^80}")
+        rule("Model Performance Scores", min_level=2)
         if self.scores_:
             for score, val in self.scores_.items():
                 score_display = score.replace('_', ' ').title()
-                print(f"  {score_display:<35} {val:>15.4f}")
+                _console.print(f"  {score_display:<35} {val:.4f}")
         else:
-            print("  No scores available")
-        print(f"\n{'Key Insights':-^80}")
-        print(f"  • Higher quality levels (e.g., 1-3) indicate more similar meteorological conditions")
-        print(f"  • Mean quality score closer to 1 = more gap-filled values from strict criteria")
-        print(f"  • Check 'Final data coverage' to assess overall gap-filling success")
-        print(f"  • Review 'Quality Distribution' to understand data source reliability")
+            _console.print("  No scores available")
+        _console.print(
+            "\n  [dim]Higher quality levels (1-3) = stricter meteorological match.[/dim]\n"
+            "  [dim]Mean quality near 1 = most gaps filled under tight constraints.[/dim]"
+        )
 
     def _fill_gap_predictions(self, gap_indices, predictions, sds, counts, quality):
         """Fill gap predictions into main dataframe using index locations.
@@ -1091,7 +1067,7 @@ class FluxMDS:
         if len(gap_indices) == 0:
             return
 
-        print(f"MDS gap-filling quality {quality}    using SW_IN, TA, VPD in {days} days window ...")
+        detail(f"MDS Q{quality}: SWIN+TA+VPD, {days}d window")
 
         # Build start/end times for each gap
         gap_timestamps = self._gapfilling_df.iloc[gap_indices].index
@@ -1114,7 +1090,7 @@ class FluxMDS:
         if len(gap_indices) == 0:
             return
 
-        print(f"MDS gap-filling quality {quality}    using SW_IN in {days} days window ...")
+        detail(f"MDS Q{quality}: SWIN only, {days}d window")
 
         # Build start/end times for each gap
         gap_timestamps = self._gapfilling_df.iloc[gap_indices].index
@@ -1137,8 +1113,7 @@ class FluxMDS:
         if len(gap_indices) == 0:
             return
 
-        print(f"MDS gap-filling quality {quality}    using mean diurnal cycle of flux in "
-              f"{days} days, {hours} hours window ...")
+        detail(f"MDS Q{quality}: MDC, {days}d {hours}h window")
 
         # Build start/end times for each gap
         gap_timestamps = self._gapfilling_df.iloc[gap_indices].index

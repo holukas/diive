@@ -38,6 +38,7 @@ from pandas import DataFrame, Series
 from diive.core.base.identify import identify_flagcols
 from diive.core.funcs.funcs import validate_id_string
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+from diive.core.utils.console import detail
 from diive.pkgs.features.variables.daynightflag import daytime_nighttime_flag_from_swinpot
 
 
@@ -238,7 +239,7 @@ class FlagQCF:
         newcols = [col for col in self.flags.columns if col not in returndf]
         newcolsdf = self.flags[newcols].copy()
         returndf = pd.concat([returndf, newcolsdf], axis=1)  # Add new columns to main data
-        [print(f"++Added new column {c}.") for c in newcols]
+        [detail(f"Added column {c}.") for c in newcols]
         return returndf
 
     def calculate(self,
