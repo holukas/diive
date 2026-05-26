@@ -1,6 +1,6 @@
 """
-POTENTIAL RADIATION: SOLAR RADIATION CALCULATIONS
-==================================================
+RADIATION: SOLAR RADIATION CALCULATIONS
+========================================
 
 Calculate potential shortwave radiation (top-of-atmosphere and clear-sky surface).
 
@@ -173,76 +173,3 @@ def potrad(timestamp_index: DatetimeIndex, lat: float, lon: float, utc_offset: i
     res['elevation'] = np.arcsin(res.sin_psi) * 180 / np.pi
 
     return res['SW_IN_POT']
-
-# def solar(data, var, idx, param):
-#     """
-#     SOLAR
-#     -----
-#
-#     Calculates theoretical azimut, elevation and radiation
-#
-#     Arguments:
-#         var:   None
-#         param: _RAD_ref_, _AZI_ref_, _ELE_ref_, lat, lon, UTC_offset
-#
-#     Note:
-#         _RAD_ref_, _AZI_ref_, _ELE_ref_: new names for the theoretical
-#                                          radiation, azimut and sun elevation.
-#         lat, lon (float): Latitude/Longitude of measurement.
-#         UTC_offset (float): hours offset to UTC.
-#
-#         Usually we use (47.286417, 7.733750, 1)
-#     """
-#     if len(param) != 6:
-#         logging.error('SOLAR: invalid parameters. '
-#                       'Expected (str, str, str, float, float, float).')
-#         return
-#     lat, lon, offset = map(parse_number, param[3:])
-#     if lat < -90 or lat > 90:
-#         logging.warning('Latitude %.1f (deg N) is out of range.', lat)
-#     if lon < -180 or lat > 180:
-#         logging.warning('Longitude %.1f (deg E) is out of range.', lon)
-#     if offset < -12 or offset > 12:
-#         logging.warning('UTC-offset %.1f hours is out of range.', offset)
-#
-#     # Calculations by Stull (1988), p.257
-#
-#     # radiation 'constant'
-#     #     S = 1370 # W/m^2   (Kyle, et al., 1985)
-#     S = 1361  # W/m^2   (According to Iris)
-#
-#     d_y = 365.25
-#     d_r = 173  # summer solstice
-#     phi_r = 23.45 * np.pi / 180  # tropic of cancer (1. Wendekreis)
-#
-#     utc_time = data.index[idx] - pd.Timedelta(offset, unit='h')
-#     utc_h = utc_time.hour + utc_time.minute / 60 + utc_time.second / 3600  # hour fraction
-#     utc_doy = utc_time.dayofyear
-#
-#     lambda_e = lon * np.pi / 180
-#     phi = lat * np.pi / 180
-#
-#     delta = phi_r * np.cos(2 * np.pi * (utc_doy - d_r) / d_y)
-#
-#     sin_psi = (np.sin(phi) * np.sin(delta) -
-#                np.cos(phi) * np.cos(delta) *
-#                np.cos((np.pi * utc_h) / 12 + lambda_e))
-#
-#     # Calculating radiation
-#     if param[0].upper() != 'NONE':
-#         # in W/m^2
-#         rad = S * sin_psi
-#         rad.to_numpy()[rad < 0] = 0
-#         data.loc[idx, param[0]] = rad
-#
-#     # Calculating azimut
-#     if param[1].upper() != 'NONE':
-#         # in degrees 0-360, S is 0
-#         data.loc[idx, param[1]] = (360 * utc_h / 24 + lon + 180) % 360
-#
-#     # Calculating elevation
-#     if param[2].upper() != 'NONE':
-#         # in deg (-90) to 90
-#         data.loc[idx, param[2]] = np.arcsin(sin_psi) * 180 / np.pi
-#
-#     return data

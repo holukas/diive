@@ -18,7 +18,7 @@ from diive.core.plotting.plotfuncs import quickplot
 from diive.core.utils.console import detail
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.analysis.histogram import Histogram
-from diive.features.variables.daynightflag import DaytimeNighttimeFlag
+from diive.variables import DaytimeNighttimeFlag
 
 
 class MeasurementOffsetFromReplicate:

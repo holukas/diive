@@ -20,8 +20,8 @@ from diive.core.base.flagbase import FlagBase
 from diive.core.times.times import insert_season
 from diive.core.utils.console import info, detail, warn
 from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.features.variables import daytime_nighttime_flag_from_swinpot
-from diive.features.variables.potentialradiation import potrad
+from diive.variables import daytime_nighttime_flag_from_swinpot
+from diive.variables.radiation import potrad
 
 
 class FlagMultipleConstantUstarThresholds:

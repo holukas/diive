@@ -54,7 +54,7 @@ import pandas as pd
 from pandas import DataFrame
 
 from diive.core.utils.console import info
-from diive.features.variables import air_temp_from_sonic_temp
+from diive.variables import air_temp_from_sonic_temp
 from diive.flux.hires.lag import MaxCovariance
 from diive.flux.hires.windrotation import WindDoubleRotation, reynolds_decomposition
 

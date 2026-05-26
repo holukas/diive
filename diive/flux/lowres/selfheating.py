@@ -94,8 +94,8 @@ import pandas as pd
 from scipy.optimize import minimize_scalar
 
 from diive.core.utils.console import console as _console, info, detail, warn
-from diive.features.variables import dry_air_density, aerodynamic_resistance
-from diive.features.variables import DaytimeNighttimeFlag
+from diive.variables import dry_air_density, aerodynamic_resistance
+from diive.variables import DaytimeNighttimeFlag
 from diive.preprocessing.outlier_detection.hampel import HampelDaytimeNighttime
 
 pd.set_option('display.width', 2000)

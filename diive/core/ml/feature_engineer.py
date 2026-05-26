@@ -36,7 +36,7 @@ import diive.core.dfun.frames as fr
 from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import vectorize_timestamps
 from diive.core.utils.console import detail, warn
-from diive.features.variables import lagged_variants
+from diive.variables import lagged_variants
 
 
 class FeatureEngineer:

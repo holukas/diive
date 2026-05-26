@@ -1,6 +1,6 @@
 from diive import analysis
 from diive import corrections
-from diive import features
+from diive import variables
 from diive import flux
 from diive import gapfilling
 from diive import outliers
@@ -23,7 +23,7 @@ __all__ = [
     # Namespace submodules
     'analysis',
     'corrections',
-    'features',
+    'variables',
     'flux',
     'gapfilling',
     'outliers',

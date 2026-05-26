@@ -47,7 +47,7 @@ from matplotlib import cm
 from scipy.signal import correlate as sp_correlate
 
 from diive.core.times.resampling import diel_cycle
-from diive.features.variables.potentialradiation import potrad
+from diive.variables.radiation import potrad
 
 
 class DetectTimestampShifts:

@@ -7,7 +7,7 @@ Shared functions for daytime/nighttime flag generation and other detection helpe
 Part of the diive library: https://github.com/holukas/diive
 """
 
-from diive.features.variables.daynightflag import DaytimeNighttimeFlag
+from diive.variables import DaytimeNighttimeFlag
 
 
 def create_daytime_nighttime_flags(timestamp_index, lat, lon, utc_offset):

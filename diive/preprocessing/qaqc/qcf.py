@@ -39,7 +39,7 @@ from diive.core.base.identify import identify_flagcols
 from diive.core.funcs.funcs import validate_id_string
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
 from diive.core.utils.console import console as _console, detail
-from diive.features.variables.daynightflag import daytime_nighttime_flag_from_swinpot
+from diive.variables import daytime_nighttime_flag_from_swinpot
 
 
 class FlagQCF:

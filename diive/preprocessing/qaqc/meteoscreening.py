@@ -25,7 +25,7 @@ from diive.core.times.resampling import resample_series_to_30MIN
 from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import detect_freq_groups
 from diive.analysis import daily_correlation
-from diive.features.variables.potentialradiation import potrad
+from diive.variables.radiation import potrad
 from diive.preprocessing.corrections import remove_radiation_zero_offset, remove_relativehumidity_offset
 from diive.preprocessing.corrections import set_exact_values_to_missing, setto_threshold, setto_value
 from diive.preprocessing.outlier_detection import StepwiseOutlierDetection

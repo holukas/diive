@@ -1,6 +1,6 @@
 """
-NOISE: SYNTHETIC NOISE GENERATION
-==================================
+UTILITIES: TESTING AND SYNTHETIC DATA GENERATION
+=================================================
 
 Generate synthetic time series with noise and add impulse disturbances for testing.
 
@@ -57,35 +57,25 @@ def generate_noisy_timeseries(
     """
     np.random.seed(random_seed)
 
-    # Create timestamp index based on the start date and frequency
     date_range = pd.date_range(start=start_date, periods=periods, freq=freq)
 
-    # Create a time step variable (x-axis) for math calculations
     x = np.linspace(0, 50, periods)
 
-    # Base signal: linear trend + seasonality (sine wave)
-    # y = mx + A*sin(Bx)
     trend = trend_slope * np.arange(periods)
     seasonality = seasonal_strength * np.sin(x)
     base_signal = trend + seasonality
 
-    # Add Gaussian (white) noise
-    # np.random.normal(mean, std_dev, size)
     noise = np.random.normal(loc=0, scale=noise_level, size=periods)
 
-    # Add outliers: select a random fraction of indices and spike them
     data_with_noise = base_signal + noise
 
     if outlier_fraction > 0:
         n_outliers = int(periods * outlier_fraction)
         outlier_indices = np.random.choice(periods, size=n_outliers, replace=False)
-        # Randomly decide if outlier is positive or negative spike
         signs = np.random.choice([-1, 1], size=n_outliers)
-        # Magnitude is 5x to 10x the noise level
         magnitudes = np.random.uniform(5 * noise_level, 10 * noise_level, size=n_outliers)
         data_with_noise[outlier_indices] += signs * magnitudes
 
-    # Assemble DataFrame
     df = pd.DataFrame(data={
         'base_signal': base_signal,
         'noise': noise,
@@ -121,32 +111,20 @@ def add_impulse_noise(
 
     """
 
-    # Set parameters
     minimum_noise = factor_low * abs(min(series))
     maximum_noise = factor_high * abs(max(series))
     contamination_noise = int(contamination * len(series))
 
-    # Generate noise sample with values that are higer or lower than a randomly selected value in the original data
     noise_impulse_sample = np.random.default_rng(seed=seed).uniform(minimum_noise, maximum_noise, contamination_noise)
 
-    # Generate an array of zeros with a size that is the difference of the sizes of the original data an the noise sample
     zeros = np.zeros(len(series) - len(noise_impulse_sample))
 
-    # Add noise sample to zeros array to obtain the final noise with the same shape as that of the original data
     noise_impulse = np.concatenate([noise_impulse_sample, zeros])
 
-    # Shuffle the values in the noise to make sure the values are randomly placed.
     np.random.seed(seed=seed)
     np.random.shuffle(noise_impulse)
 
-    # Add impulse noise to original data (addition)
     noise_impulse = pd.Series(noise_impulse, index=series.index)
     s_noise = series.add(noise_impulse)
-
-    # import matplotlib.pyplot as plt
-    # # s.plot()
-    # # plt.show()
-    # s_noise.plot()
-    # plt.show()
 
     return s_noise

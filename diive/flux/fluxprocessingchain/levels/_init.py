@@ -13,8 +13,8 @@ from __future__ import annotations
 from pandas import DataFrame
 
 from diive.core.utils.console import detail, info, rule, warn
-from diive.features.variables import daytime_nighttime_flag_from_swinpot
-from diive.features.variables.potentialradiation import potrad
+from diive.variables import daytime_nighttime_flag_from_swinpot
+from diive.variables.radiation import potrad
 from diive.flux.fluxprocessingchain.container import FluxLevelData, FluxMeta
 from diive.flux.lowres.common import detect_fluxbasevar
 
