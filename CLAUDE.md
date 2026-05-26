@@ -1,6 +1,8 @@
 # CLAUDE.md - DIIVE Development Guide
 
-Quick reference for DIIVE development. See `CHANGELOG.md` for version history and recent implementations.
+Quick reference for DIIVE development. See `CHANGELOG.md` for version history.
+
+**Quick navigation:** [Behavioral Guidelines](#behavioral-guidelines) | [Quick Start](#quick-start) | [Coding Standards](#coding-standards) | [Flux Processing Chain](#flux-processing-chain-swiss-fluxnet-workflow) | [Common Workflows](#common-workflows) | [Quick Reference](#quick-reference)
 
 ## Behavioral Guidelines
 
@@ -77,14 +79,6 @@ uv run pytest tests/test_gapfilling.py -v
 uv run python script.py              # Run script
 uv run pytest tests/ -v              # Run tests
 uv add package_name                  # Add dependency
-uv pip list                          # List packages
-```
-
-**Legacy conda (optional):**
-
-```bash
-conda env create -f environment.yml && conda activate diive
-python -m pytest tests/test_gapfilling.py -v
 ```
 
 ## Project Overview
@@ -118,21 +112,21 @@ All pinned in `pyproject.toml` for reproducibility.
 ```
 diive/
 ├── core/ml/                  # Feature engineering, ML base classes
-├── core/plotting/            # 14+ visualization types
+├── core/plotting/            # Visualization types
 ├── core/times/               # Timestamp handling
 ├── core/io/                  # File I/O
-├── pkgs/gapfilling/          # RF, XGBoost, MDS gap-filling
+├── pkgs/gapfilling/          # Gap-filling (RF, XGBoost, MDS)
 ├── pkgs/flux/                # Flux processing (lowres, hires, chain)
 ├── pkgs/preprocessing/       # Outlier detection, corrections, QA/QC
-├── pkgs/analysis/            # Time series analysis, decomposition
+├── pkgs/analysis/            # Time series analysis
 └── pkgs/features/            # Variable calculations
-examples/                      # Runnable examples (86)
+examples/                      # ~100 runnable examples
 tests/                        # Unit tests
 ```
 
-## Public API — Namespace Layout
+## Public API Overview
 
-`import diive as dv` exposes 9 domain namespaces plus top-level I/O helpers:
+`import diive as dv` exposes 9 domain namespaces:
 
 | Namespace | Contents |
 |---|---|
@@ -150,76 +144,49 @@ Top-level (no namespace): `load_exampledata_parquet`, `load_parquet`, `save_parq
 
 ## Core Concepts
 
-### Feature Engineering (8-stage pipeline)
+### Feature Engineering (8-stage)
 
-1. **Lag features** — Past/future values
-2. **Rolling stats** — Mean, median, min, max, std, quantiles
-3. **Differencing** — 1st/2nd order rate of change
-4. **EMA** — Exponential moving averages
-5. **Polynomial** — Squared/cubic terms
-6. **STL** — Trend, seasonal, residual decomposition
-7. **Timestamps** — Year, season, month, hour (vectorized)
-8. **Record number** — Temporal ordering
+1. Lag features (past/future values)
+2. Rolling stats (mean, std, quantiles, etc.)
+3. Differencing (1st/2nd order rate of change)
+4. EMA (exponential moving averages)
+5. Polynomial (squared/cubic terms)
+6. STL decomposition (trend, seasonal, residual)
+7. Timestamps (year, season, month, hour)
+8. Record number (temporal ordering)
 
-Used by: `FeatureEngineer` class, fed into gap-filling models.
+Used by `FeatureEngineer` class, fed into gap-filling models.
 
 ### Gap-Filling Methods
 
-| Method         | Training | Features                  | Accuracy     | Use case              |
-|----------------|----------|---------------------------|--------------|-----------------------|
-| Random Forest  | Yes      | 8-stage engineered        | R² 0.60-0.80 | Interpretable, robust |
-| XGBoost        | Yes      | 8-stage engineered        | R² 0.65-0.85 | Non-linear, efficient |
-| MDS            | No       | Meteorological similarity | R² 0.40-0.70 | No overfitting risk   |
-| Linear Interp. | No       | None                      | Simple       | Small gaps only       |
+| Method         | Training | Features                  | Use case              |
+|----------------|----------|---------------------------|-----------------------|
+| Random Forest  | Yes      | 8-stage engineered        | Interpretable, robust |
+| XGBoost        | Yes      | 8-stage engineered        | Non-linear, efficient |
+| MDS            | No       | Meteorological similarity | No overfitting risk   |
+| Linear Interp. | No       | None                      | Small gaps only       |
 
-**Accessing results:** all gap-filling classes expose a `.results` property (after `.run()`) that returns a
-`GapFillingResult` dataclass bundling every output in one place:
+**Results:** All gap-filling classes expose `.results` property (after `.run()`) returning `GapFillingResult` with:
+- `gapfilled` — Series
+- `flag` — 0=observed, 1=gap-filled, 2=fallback
+- `scores['r2']` — gap-filling R²
+- `feature_importances` — SHAP DataFrame (ML methods only)
+- `model` — trained regressor (ML methods only)
 
-```python
-rf = dv.gapfilling.RandomForestTS(input_df=engineered, target_col='NEE_f')
-rf.run()
-r = rf.results          # GapFillingResult
-r.gapfilled             # gap-filled Series
-r.flag                  # 0=observed, 1=gap-filled, 2=fallback
-r.scores['r2']          # gap-filling R²
-r.scores_traintest      # train/test split metrics dict
-r.feature_importances   # SHAP importances DataFrame
-r.model                 # trained sklearn/XGBoost regressor
-r.accepted_features     # features kept after SHAP reduction
-```
-
-MDS returns the same type; ML-only fields (`scores_traintest`, `feature_importances`, `model`) are `None`.
-The legacy `.result` property (returns raw DataFrame) is still available.
-
-`GapFillingResult` is importable as `dv.gapfilling.GapFillingResult` for type-hinting.
-
-**Domain-aware error messages:** MDS validates all four required columns at construction time:
-
-```
-KeyError: Column(s) not found in df - MDS requires flux, SWIN (W m-2), TA (deg C), VPD (kPa):
-  'VPD_f': VPD - vapor pressure deficit (kPa)
-```
-
-The ML base class validates `target_col` exists in `input_df` before any processing begins.
+MDS validates required columns at init and provides domain-aware errors.
+Legacy `.result` property (raw DataFrame) still available.
 
 ### Timestamp Sanitization
 
-10-step validation pipeline (configurable, monotonicity required):
+10-step validation pipeline with monotonicity enforcement:
 
 ```python
-import diive as dv
-
-sanitizer = dv.times.TimestampSanitizer(
-    data=df,
-    output_middle_timestamp=True,  # Convert to mid-period
-    nominal_freq='30min',  # Expected frequency
-    verbose=True
-)
+sanitizer = dv.times.TimestampSanitizer(df, nominal_freq='30min', verbose=True)
 clean_df = sanitizer.get()
-status = sanitizer.get_status()  # Diagnostics: rows removed/added, frequency confidence, detection method
+status = sanitizer.get_status()  # Diagnostics: rows removed/added, detection method
 ```
 
-**Example:** `examples/times/times_timestamp_sanitizer.py` demonstrates 5 severity levels (clean → corrupted).
+See `examples/times/times_timestamp_sanitizer.py`.
 
 ## Flux Processing Chain (Swiss FluxNet Workflow)
 
@@ -353,112 +320,32 @@ data.levels.level41_xgb                 # dict[ustar_scenario, LongTermGapFillin
 
 ## High-Resolution EC Analysis (hires)
 
-Tools for 10/20 Hz raw sonic anemometer data. All live in `diive/pkgs/flux/hires/`.
-
-**Available tools:**
-
-| Class / Function | Purpose | Example |
-|---|---|---|
-| `WindDoubleRotation` | Double rotation tilt correction (Wilczak et al. 2001) | `flux_windrotation.py` |
-| `reynolds_decomposition` | Turbulent fluctuation x' = x - mean(x) | `flux_windrotation.py` |
-| `MaxCovariance` | Time lag detection via cross-covariance maximisation | `flux_lag.py` |
-| `FluxDetectionLimit` | Flux detection limit and signal-to-noise ratio (Langford et al. 2015) | `flux_fluxdetectionlimit.py` |
-| `PreWhiteningBootstrap` | Robust lag detection for low-magnitude fluxes (Vitale et al. 2024) | `flux_lag_pwb.py` |
-| `PwbBatchDetection` | Parallel batch PWB across many averaging-period files | `flux_lag_pwb_batch.py` |
-
-**Typical per-averaging-period workflow:**
-
+Tools for 10/20 Hz sonic anemometer data. Typical workflow:
 ```
-raw 20 Hz file
-  -> WindDoubleRotation        # align coordinate system
-  -> reynolds_decomposition    # extract w', c'
-  -> MaxCovariance             # find time lag
-  -> flux = mean(w' * c')      # eddy covariance flux
+raw 20 Hz  →  WindDoubleRotation  →  reynolds_decomposition  →  flux
 ```
 
-### Two-step wind rotation workflow
+**Key classes:** `WindDoubleRotation` (Wilczak et al. 2001 rotation), `reynolds_decomposition`, `MaxCovariance` (lag detection), `FluxDetectionLimit`, `PreWhiteningBootstrap` (PWB robust lag), `PwbBatchDetection` (parallel batch PWB).
 
-Wind rotation and Reynolds decomposition are **two separate steps** — do not combine them:
+**Wind rotation workflow — two separate steps:**
 
 ```python
-import diive as dv
-
-# Step 1: double rotation (Wilczak et al. 2001)
-# Aligns coordinate system with mean wind; mean(v2) ~ 0, mean(w2) ~ 0
-wr = dv.flux.WindDoubleRotation(u=df['u'], v=df['v'], w=df['w'])
-
-# Step 2: Reynolds decomposition — apply to rotated wind AND any scalar
-w_prime = dv.flux.reynolds_decomposition(wr.w2)   # x' = x - mean(x)
+wr = dv.flux.WindDoubleRotation(u=df['u'], v=df['v'], w=df['w'])  # Rotate
+w_prime = dv.flux.reynolds_decomposition(wr.w2)   # Extract fluctuations
 c_prime = dv.flux.reynolds_decomposition(df['CO2'])
-
-# Flux
 flux = (w_prime * c_prime).mean()
 ```
 
-**Design rationale:**
+**Critical:** Apply `reynolds_decomposition` to rotated `wr.w2`, not raw `w`. See `examples/flux/hires/flux_windrotation.py`.
 
-- `WindDoubleRotation` takes only `u, v, w` — the scalar has no role in rotation
-- `reynolds_decomposition(x)` is a standalone function (`x - x.mean()`), not a class
-- Keeping them separate makes each step explicit and reusable
+## Outlier Detection & QC
 
-**`WindDoubleRotation` attributes after construction:**
+**10 outlier methods:** AbsoluteLimits, Hampel, LocalSD, zScore (4 variants), LocalOutlierFactor, TrimLow, ManualRemoval.
+Chain via `StepwiseOutlierDetection`. See `examples/preprocessing/outlier_detection/`.
 
-| Attribute | Description |
-|-----------|-------------|
-| `theta`   | First rotation angle, radians (yaw: sets mean v to zero) |
-| `phi`     | Second rotation angle, radians (pitch: sets mean w to zero) |
-| `u2`, `v2`, `w2` | Rotated wind components (high-res Series) |
+**Quality Control (QCF):** Combines test flags into 0 (good) / 1 (marginal) / 2 (poor). See `examples/preprocessing/qaqc/qc_overall_flag.py`.
 
-**Critical pitfall:** always apply `reynolds_decomposition` to `wr.w2` (rotated), not the raw `w`.
-
-**Example:** `examples/flux/hires/flux_windrotation.py`
-
-## Outlier Detection Methods
-
-10 built-in methods:
-
-1. **AbsoluteLimits** — Min/max threshold
-2. **Hampel** — Robust spike detection (MAD-based)
-3. **LocalSD** — Adaptive local standard deviation
-4. **zScore** (4 variants) — Global, rolling, increments, day/night
-5. **LocalOutlierFactor** — Density-based anomalies
-6. **TrimLow** — Trimmed mean approach
-7. **ManualRemoval** — Explicit removal
-
-**Chain multiple methods sequentially:** `StepwiseOutlierDetection` class orchestrates each method operating on data
-filtered by previous tests.
-
-**Examples:** `examples/preprocessing/outlier_detection/` (9 files, one per method + stepwise).
-
-## Quality Control (QCF)
-
-**FlagQCF** combines multiple test flags into single quality indicator:
-
-- **QCF=0** — Good (all tests pass)
-- **QCF=1** — Marginal (1-3 soft warnings)
-- **QCF=2** — Poor (>3 soft warnings or ≥2 hard fails)
-
-Features: Auto-detect test flags, day/night separation, USTAR scenario support, impact analysis.
-
-**Example:** `examples/preprocessing/qaqc/qc_overall_flag.py`
-
-## Timestamp Shift Detection
-
-**DetectTimestampShifts** detects clock/timestamp errors by comparing measured shortwave radiation
-against theoretical potential radiation. Three methods with a shared sign convention
-(positive = measured peaks earlier / leading clock, negative = later / lagging clock):
-
-- `fft_phase_shift()` — k=1 Fourier phase-angle comparison; fast, no upsampling needed
-- `crosscorr()` — upsample to 1-min, scipy cross-correlation; 1-minute precision
-- `noon_shift()` — vectorised daily peak-time delta; quick heuristic
-
-Five plot methods cover time series, histograms, polar plots, monthly boxplots, diel cycles,
-and radiation fingerprint heatmaps.
-
-**Critical pitfall:** all three methods require clear or mostly-clear days; heavily overcast days
-are filtered via a clearness index threshold before any phase analysis is performed.
-
-**Example:** `examples/preprocessing/qaqc/qaqc_detect_timestamp_shifts.py`
+**Timestamp Shift Detection:** Three methods compare measured vs. theoretical radiation (positive = measured peaks early, negative = late). Requires mostly-clear days. See `examples/preprocessing/qaqc/qaqc_detect_timestamp_shifts.py`.
 
 ## Coding Standards
 
@@ -498,42 +385,88 @@ Only WHY, not WHAT. Hidden constraints, workarounds, non-obvious logic.
 result = result + 1
 ```
 
-### Examples (Sphinx Gallery format)
+### Console Output & Verbosity
 
-- No file I/O (show API only, not `.to_csv()`)
-- Use `# %%` cell markers (becomes sections in Sphinx)
-- Single year of data for speed
-- Disable `showplot=True` (matplotlib blocks rendering)
-- Explicit parameters with inline comments
+**All production output uses Rich console helpers** from the shared singleton at `diive/core/utils/console.py`.
+
+**NO `print()` calls in production code.** Print is allowed only in:
+- Example files (`examples/*/`)
+- Docstring code snippets (non-executable documentation)
+- `if __name__ == '__main__'` blocks
+- CLI helper functions like `_cli_main()`
+
+**Import pattern:**
 
 ```python
-"""
-===================
-Example Title
-===================
-
-Brief description of what this teaches.
-"""
-
-# %%
-# Section Title
-# ^^^^^^^^^^^^^^
-# Explanatory text about this section
-
-import diive as dv
-
-data = dv.load_exampledata_parquet()
+from diive.core.utils.console import console as _console, info, detail, warn, success, rule
 ```
 
-**Documentation checklist (7-point):**
+**Helper functions & verbosity levels:**
 
-1. Category README.md — Add file description
-2. examples/run_all_examples.py — Register file path
-3. examples/CATALOG.md — Add to workflow table
-4. examples/README.md — Update file count
-5. Source code docstring "Example" section — Reference file
-6. CHANGELOG.md — Note new/updated example
-7. Run example to verify no errors
+| Function | Level | Use case | Example |
+|----------|-------|----------|---------|
+| `rule(title)` | PROGRESS (2) | Section headers, major milestones | `rule("Gap-Filling Report")` |
+| `info(msg)` | PROGRESS (2) | Key progress messages, results | `info(f"Train R²: {r2:.3f}")` |
+| `success(msg)` | PROGRESS (2) | Operation completion | `success("Gap-filling complete")` |
+| `warn(msg)` | ERROR (1) | Warnings, always visible | `warn("No features passed SHAP threshold")` |
+| `error(msg)` | ERROR (1) | Errors, always visible | `error("Target column not found")` |
+| `detail(msg)` | DEBUG (3) | Inner-loop details, per-iteration | `detail(f"Iteration {i}: loss={loss}")` |
+| `_console.print(msg)` | None | User-facing reports, formatted text | Multi-line report tables, formatted output |
+
+**Verbosity levels:**
+
+- `VERBOSE_SILENT = 0` — No output
+- `VERBOSE_ERROR = 1` — Errors and warnings only
+- `VERBOSE_PROGRESS = 2` — Section headers and results (default)
+- `VERBOSE_DEBUG = 3` — All detail lines
+
+All helpers accept `verbose=` argument (int or bool):
+
+```python
+info("This step took 2.5s", verbose=self.verbose)
+detail(f"Iteration {i}", verbose=3)  # Only shows when verbose >= 3
+```
+
+**Pattern for integer-verbose files** (e.g., `if self.verbose >= 1`):
+
+When a class uses integer verbose guards, call helpers WITHOUT a `verbose=` arg inside the block. The guard handles visibility:
+
+```python
+class MyProcessor:
+    def process(self):
+        if self.verbose >= 1:
+            info("Starting processing")  # No verbose= arg needed
+        if self.verbose >= 2:
+            detail(f"Step details")
+```
+
+**Report methods** use `_console.print()` directly for formatted, user-facing output (no verbosity gating):
+
+```python
+def report(self):
+    rule("Gap-Filling Results")
+    _console.print(f"  Target: {self.target_col}")
+    _console.print(f"  R² (train): {self.r2_train:.3f}")
+```
+
+**Do NOT:**
+
+- Use `print()` in production code
+- Create separate `Console` instances (use the shared `_console`)
+- Use `logging` module for general output (it's for persistent log files)
+- Mix print() and Rich helpers in the same file
+
+### Examples (Sphinx Gallery format)
+
+Use `# %%` cell markers. No file I/O (API only). Single year of data. Disable `showplot=True`.
+
+**Checklist for new examples:**
+1. Register in `examples/run_all_examples.py` and `examples/CATALOG.md`
+2. Add category README description
+3. Reference in source docstring "Example" section
+4. Update `examples/README.md` file count
+5. Note in CHANGELOG.md
+6. Verify it runs without errors
 
 ## Plotting Class Design (Two-Phase Pattern)
 
@@ -581,52 +514,13 @@ See `CHANGELOG.md` for detailed refactoring notes.
 
 ## Plotting Conventions
 
-### Color palette
+**Color palette:** Material Design colors. Use 300-level (bars, lines) and 500-level (backgrounds): blue `#2196F3`, red `#F44336`, amber `#FFC107`, grey `#455A64`.
 
-Use **Material Design** colours consistently across multi-panel figures:
+**Bar label centering:** Use `va='center_baseline'` (not `va='center'`) for digit-only strings inside bars.
 
-| Zone | 300-level (top/bar panels) | 500-level (shaded background) |
-|------|---------------------------|-------------------------------|
-| in optimum / primary | `#64B5F6` blue | `#2196F3` blue |
-| above optimum | `#E57373` red | `#F44336` red |
-| below optimum | `#FFD54F` yellow | `#FFC107` amber |
-| boundary lines | — | `#455A64` blue-grey |
-| peak marker | — | `#37474F` dark blue-grey |
+**Label contrast:** Choose white/black text based on WCAG luminance: `text_color = 'white' if 0.299*r + 0.587*g + 0.114*b < 0.5 else 'black'`.
 
-300-level for filled bars and line plots; 500-level for shaded background regions. Using two levels within the same figure avoids the top and bottom panels visually clashing.
-
-### Bar label centering
-
-Use `va='center_baseline'` (not `va='center'`) to visually center digit-only strings inside horizontal bars. `va='center'` aligns the bounding box, which includes descender whitespace — labels drift above center for strings without descenders (numbers).
-
-```python
-ax.text(rect.get_x() + rect.get_width() / 2,
-        rect.get_y() + rect.get_height() / 2,
-        f"{val:.1f}",
-        ha='center', va='center_baseline',
-        color=text_color)
-```
-
-### Automatic label contrast
-
-Compute luminance with the WCAG formula to choose white or black label text automatically:
-
-```python
-import matplotlib.colors as mcolors
-r, g, b, *_ = mcolors.to_rgba(color)
-text_color = 'white' if 0.299 * r + 0.587 * g + 0.114 * b < 0.5 else 'black'
-```
-
-### Dynamic panel height scaling
-
-When a panel contains one row per year, scale its height dynamically so it stays compact regardless of dataset length:
-
-```python
-n_years = len(yearly_df)
-top_h = max(1.5, n_years * 0.38)   # ~0.38 in per year, minimum 1.5 in
-```
-
-Pair with `ax.margins(y=0.02)` to remove the default 5% vertical padding that creates excess whitespace when bars are few.
+**Dynamic height:** Scale multi-year panels: `height = max(1.5, n_years * 0.38)` inches.
 
 ## Development Workflow
 
@@ -690,60 +584,46 @@ Use `/llm-detox` skill for all written content (documentation, comments, commit 
 
 ## Known Issues & Workarounds
 
-| Issue                                     | Workaround                                    |
-|-------------------------------------------|-----------------------------------------------|
-| SHAP importance fluctuates ±5-10%         | Use flexible assertion ranges in tests        |
+| Issue | Workaround |
+|-------|-----------|
+| SHAP importance fluctuates ±5-10% | Use flexible ranges in tests (`assertGreater/Less`) |
 | XGBoost base_score in scientific notation | Monkey-patched in `MlRegressorGapFillingBase` |
-| Feature reduction too strict              | Reduce `shap_threshold_factor` (default 0.5)  |
-| Unicode encoding on Windows (arrow chars)  | Use ASCII equivalents (>, ->) in examples     |
+| Feature reduction too strict | Reduce `shap_threshold_factor` (default 0.5) |
+| Unicode on Windows (arrow chars) | Use ASCII (>, ->) in examples |
 
 ## Examples (~100 runnable scripts)
 
-Organized by functional domain. Each category has a README with file descriptions and usage.
+Organized by functional domain: visualization (18), times (5), analysis (10), features (11), preprocessing (21), flux (20), gapfilling (11), io (5), fits (2).
 
-**Structure:**
-
-- `visualization/` — 18 plotting examples
-- `times/` — 5 timestamp handling
-- `analysis/` — 10 time series analysis
-- `features/` — 11 variable engineering
-- `fits/` — 2 data fitting
-- `io/` — 5 file I/O
-- `preprocessing/` — 21 (corrections, outlier detection, QA/QC)
-- `flux/` — 20 (processing chain, low-res, high-res)
-- `gapfilling/` — 11 (RF, XGBoost, MDS, interpolation, comparison)
-
-**Running examples:**
-
+**Run individual example:**
 ```bash
 uv run python examples/gapfilling/gapfill_randomforest.py
-python examples/run_all_examples.py  # All in parallel (8 workers)
 ```
 
-See `examples/CATALOG.md` for complete listing and `examples/README.md` for details.
+**Run all examples:**
+```bash
+python examples/run_all_examples.py  # All in parallel
+```
+
+See `examples/CATALOG.md` for complete listing.
 
 ## Common Workflows
 
-### Adding new feature engineering stage
-
-1. Add parameter to `FeatureEngineer.__init__()` (default None)
+**Add feature engineering stage:**
+1. Add parameter to `FeatureEngineer.__init__()`
 2. Implement `_stagename_features()` method
 3. Call from `_create_features()` orchestrator
 4. Use naming: `.{col}_TYPE{detail}` (e.g., `.Tair_f_POL2`)
 
-### Adding gap-filling method to FluxProcessingChain
+**Add gap-filling method:**
+1. Create `level41_newmethod()` with 24 feature parameters
+2. Build `FeatureEngineer`, create and train model
+3. Store results in `self._level41['new_method'][ustar_scenario]`
 
-1. Create `level41_newmethod()` with all 24 feature parameters
-2. Create `FeatureEngineer`, apply to data
-3. Create and train gap-filling model
-4. Store results in `self._level41['new_method'][ustar_scenario]`
-
-### Debugging SHAP importance issues
-
-1. Check `.RANDOM` baseline feature included
-2. Verify threshold: `random_mean + k * random_sd`
-3. Check feature counts before/after reduction
-4. Inspect `model_.feature_importances_traintest_`
+**Debug SHAP importance:**
+1. Check `.RANDOM` baseline included
+2. Verify threshold calculation
+3. Inspect feature counts before/after reduction
 
 ## Quick Reference
 
@@ -759,6 +639,6 @@ See `examples/CATALOG.md` for complete listing and `examples/README.md` for deta
 
 ---
 
-**Last Updated:** 2026-05-24  
+**Last Updated:** 2026-05-26 (Rich console migration completed)  
 **Version:** v0.91.0+  
 **Package Manager:** `uv`
