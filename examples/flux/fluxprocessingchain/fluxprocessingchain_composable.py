@@ -8,12 +8,9 @@ level.  Each function takes a ``FluxLevelData`` container and returns a new
 one — no shared state, no orchestrator class required.
 
 This example runs the **full L2 -> L3.1 -> L3.2 -> L3.3 -> L4.1** pipeline and
-demonstrates the key advantage of the functional API: **branching** — running
+demonstrates the key advantage of the composable functional API: **branching** — running
 three gap-filling methods (Random Forest, XGBoost, MDS) from the same L3.3 state
 without repeating any upstream work.
-
-Compare with ``fluxprocessingchain.py`` for the same chain via the
-``FluxProcessingChain`` orchestrator class.
 
 Swiss FluxNet workflow overview
 --------------------------------
@@ -503,7 +500,3 @@ print(f"Final dataframe: {final_df.shape[0]} rows x {final_df.shape[1]} cols")
 #   reusing the same ``FluxLevelData`` — no upstream re-runs.
 # - **Pure functions**: each call returns a new container, never mutates the
 #   input — easy to unit-test, easy to reason about.
-#
-# For the full L2-to-L4.1 chain (RF + XGBoost gap-filling), the
-# ``FluxProcessingChain`` orchestrator is more concise — see
-# ``fluxprocessingchain.py``.

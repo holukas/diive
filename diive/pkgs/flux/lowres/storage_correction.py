@@ -1,6 +1,6 @@
 """
-LEVEL 3.1: STORAGE TERM CORRECTION
-===================================
+STORAGE TERM CORRECTION
+=======================
 
 Add gas storage term to flux measurements (single-point profile approximation).
 

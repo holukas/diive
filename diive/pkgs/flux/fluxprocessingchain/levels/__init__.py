@@ -21,7 +21,6 @@ from diive.pkgs.flux.fluxprocessingchain.levels.level41 import (
     run_level41_rf,
     run_level41_xgb,
 )
-from diive.pkgs.flux.fluxprocessingchain.levels.multiflux import run_flux_chain
 
 __all__ = [
     'init_flux_data',
@@ -34,5 +33,4 @@ __all__ = [
     'run_level41_mds',
     'run_level41_rf',
     'run_level41_xgb',
-    'run_flux_chain',
 ]

@@ -187,7 +187,6 @@ def analyze_highest_quality_flux(flux: Series,
 
     See Also:
         Hampel : Underlying robust outlier detection method using Median Absolute Deviation.
-        FluxProcessingChain : Complete multi-level flux processing workflow.
         detect_fluxbasevar : Detect base variable for a given flux.
 
     Example:

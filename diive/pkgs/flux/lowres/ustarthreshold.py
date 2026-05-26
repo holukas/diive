@@ -48,10 +48,6 @@ class FlagMultipleConstantUstarThresholds:
         verbose: If True, prints filtering statistics. Default True.
         idstr: Optional identifier string for output columns
 
-    See Also:
-        FluxProcessingChain : Complete multi-level flux processing workflow.
-        FlagMultipleConstantUstarThresholds : Apply multiple USTAR thresholds.
-
     Example:
         See `examples/pkgs/flux/lowres/flux_ustarthreshold.py` for complete examples
         of USTAR threshold detection and data filtering.

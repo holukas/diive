@@ -1,6 +1,6 @@
 """
-LEVEL 2: QUALITY FLAG EXPANSION
-================================
+QUALITY FLAG EXPANSION
+======================
 
 Generate and expand quality control flags for flux data from EddyPro outputs.
 
@@ -15,8 +15,8 @@ based on criteria like signal strength, angle of attack, wind steadiness,
 and statistical properties of the raw data.
 
 Reference:
-(VM97) Vickers, Dean, and L. Mahrt. 1997. “Quality Control and Flux Sampling
-    Problems for Tower and Aircraft Data.” JOURNAL OF ATMOSPHERIC AND
+(VM97) Vickers, Dean, and L. Mahrt. 1997. "Quality Control and Flux Sampling
+    Problems for Tower and Aircraft Data." JOURNAL OF ATMOSPHERIC AND
     OCEANIC TECHNOLOGY 14:15.
 """
 
@@ -158,8 +158,8 @@ class FluxQualityFlagsEddyPro:
         stored internally.
 
         Reference:
-        Vickers, Dean, and L. Mahrt. 1997. “Quality Control and Flux Sampling
-            Problems for Tower and Aircraft Data.” JOURNAL OF ATMOSPHERIC AND
+        Vickers, Dean, and L. Mahrt. 1997. "Quality Control and Flux Sampling
+            Problems for Tower and Aircraft Data." JOURNAL OF ATMOSPHERIC AND
             OCEANIC TECHNOLOGY 14:15.
 
         Args:
@@ -246,8 +246,8 @@ class FluxQualityFlagsEddyPro:
             Alexander Graf, Lukas Hörtnagl, Andreas Ibrom, Bernard Longdoz, Matthias Mauder,
             Lutz Merbold, Stefan Metzger, Leonardo Montagnani, Andrea Pitacco,
             Corinna Rebmann, Pavel Sedlák, Ladislav Šigut, Domenico Vitale, and
-            Dario Papale. 2018. “Eddy Covariance Raw Data Processing for CO2 and Energy
-            Fluxes Calculation at ICOS Ecosystem Stations.” International Agrophysics 32(4):495–515.
+            Dario Papale. 2018. "Eddy Covariance Raw Data Processing for CO2 and Energy
+            Fluxes Calculation at ICOS Ecosystem Stations." International Agrophysics 32(4):495–515.
             doi:10.1515/intag-2017-0043.
 
 

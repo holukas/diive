@@ -192,69 +192,24 @@ See `examples/times/times_timestamp_sanitizer.py`.
 
 5-level eddy covariance flux post-processing following FLUXNET/Swiss standards.
 
-**Levels:**
+**Levels:** L2 (quality flags) → L3.1 (storage correction) → L3.2 (outlier removal) → L3.3 (USTAR filtering) → L4.1 (gap-filling).
 
-- **L2** — Quality flag expansion (7 tests)
-- **L3.1** — Storage correction
-- **L3.2** — Outlier removal (sequential chain)
-- **L3.3** — USTAR turbulence filtering (nighttime only)
-- **L4.1** — Gap-filling (RF, XGBoost, MDS)
+Each level is a pure function: `init_flux_data` → `run_level2` → `run_level31` → `run_level32` → `run_level33` → `run_level41_*`. Never mutate input. Write your own loop for single or multiple fluxes.
 
-**Three API styles** (since v0.91.0+):
+```python
+from diive.pkgs.flux.fluxprocessingchain import (
+    init_flux_data, run_level2, run_level31, run_level33_constant_ustar, run_level41_mds
+)
 
-1. **Multi-flux loop** — `FluxConfig` + `run_flux_chain`. Write site parameters once; iterate over all fluxes. Each flux gets its own `FluxConfig` with tailored USTAR thresholds, outlier sigma, and L2 tests. Use this for typical site processing (FC/NEE, H, LE, N2O, CH4).
+data = init_flux_data(df, fluxcol='FC', site_lat=46.6, site_lon=9.8, utc_offset=1)
+data = run_level2(data, ssitc={'apply': True, 'setflag_timeperiod': None}, ...)
+data = run_level31(data, gapfill_storage_term=True)
+data = run_level33_constant_ustar(data, ustar_thresholds=[0.30])
+data = run_level41_mds(data, mds_swin='SW_IN', mds_ta='TA', mds_vpd='VPD')
+final_df = data.fpc_df
+```
 
-   ```python
-   from diive.pkgs.flux.fluxprocessingchain import FluxConfig, run_flux_chain
-
-   SITE = dict(site_lat=47.42, site_lon=9.84, utc_offset=1,
-               nighttime_threshold=20, daytime_accept_qcf_below=2,
-               nighttime_accept_qcf_below=2)
-
-   fc_cfg = FluxConfig(
-       fluxcol='FC', ustar_thresholds=[0.30], ustar_labels=['CUT_50'],
-       outlier_sigma_daytime=5.5, outlier_sigma_nighttime=5.5,  # required, no defaults
-       gapfilling_features=['TA_1_1_1', 'SW_IN_1_1_1', 'VPD_1_1_1'],
-       level2_tests={'ssitc': {'apply': True, 'setflag_timeperiod': None}, ...},
-       mds_swin='SW_IN_1_1_1', mds_ta='TA_1_1_1', mds_vpd='VPD_kPa_1_1_1',
-   )
-   h_cfg = FluxConfig(
-       fluxcol='H', ustar_thresholds=[0.0], ustar_labels=['CUT_NONE'],  # no USTAR for energy fluxes
-       outlier_sigma_daytime=5.5, outlier_sigma_nighttime=5.5,
-       set_storage_to_zero=True,  # no heat storage profile available
-       ...
-   )
-
-   results: dict[str, FluxLevelData] = {}
-   for cfg in [fc_cfg, h_cfg]:
-       results[cfg.fluxcol] = run_flux_chain(df, cfg, **SITE, engineer=engineer)
-   ```
-
-2. **Composable functions** — one pure callable per level, each taking and returning a `FluxLevelData` container. Pure functions — never mutate input. Use this when you want a partial pipeline (e.g. L2 + L3.1 only), a custom L3.2, or branching at L4.1.
-
-   ```python
-   from diive.pkgs.flux.fluxprocessingchain import (
-       init_flux_data, run_level2, run_level31,
-       make_level32_detector, run_level32,
-       run_level33_constant_ustar,
-       run_level41_mds, run_level41_rf, run_level41_xgb,
-   )
-
-   data = init_flux_data(df, fluxcol='FC', site_lat=46.6, site_lon=9.8, utc_offset=1)
-   data = run_level2(data, ssitc={'apply': True, 'setflag_timeperiod': None}, ...)
-   data = run_level31(data, gapfill_storage_term=True)
-   # stop here if you only need L2 + L3.1
-   final_df = data.fpc_df
-   ```
-
-3. **`FluxProcessingChain` class** — convenience orchestrator that wraps the callables for the common "run all 5 levels" path. All existing methods/properties (`fpc.fpc_df`, `fpc.level2`, `fpc.level32_qcf`, etc.) keep working unchanged.
-
-   ```python
-   fpc = dv.flux.FluxProcessingChain(df=df, fluxcol='FC', ...)
-   fpc.level2_quality_flag_expansion(**LEVEL2_SETTINGS)
-   fpc.level31_storage_correction()
-   # ... rest of the chain
-   ```
+For multiple fluxes, loop this pattern with different `fluxcol` and parameters. See `examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py`.
 
 **Container types:**
 
@@ -311,12 +266,9 @@ data.levels.level41_xgb                 # dict[ustar_scenario, LongTermGapFillin
 - `run_level33_constant_ustar` only supports constant thresholds; use REddyProc externally for bootstrap threshold estimation, then pass the percentile values here
 - `FeatureEngineer(target_col='_target_', ...)` — `target_col` is a required placeholder for L4.1; any string not in your feature list works
 
-**Examples:**
+**Example:**
 
-- `examples/flux/fluxprocessingchain/fluxprocessingchain.py` — all 5 levels via the orchestrator class (RF + XGBoost).
-- `examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py` — full L2→L4.1 pipeline using composable functions, including RF, XGBoost, and MDS gap-filling; heatmaps and cumulative plots.
-- `examples/flux/fluxprocessingchain/fluxprocessingchain_multiflux.py` — multi-flux loop with `FluxConfig` + `run_flux_chain` for FC, H, and N2O; combined export and gap-filling fraction.
-- `examples/flux/fluxprocessingchain/fluxprocessingchain_quick.py` — `QuickFluxProcessingChain` wrapper for rapid exploratory checks.
+- `examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py` — full L2→L4.1 pipeline using composable functions (RF, XGBoost, MDS); heatmaps and plots.
 
 ## High-Resolution EC Analysis (hires)
 

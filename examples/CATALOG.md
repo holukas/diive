@@ -155,10 +155,7 @@ See: [features/README.md](features/README.md)
 
 | Example | Description |
 |---------|-------------|
-| [**fluxprocessingchain.py**](flux/fluxprocessingchain/fluxprocessingchain.py) | Complete Swiss FluxNet workflow (L2-L4.1) via the `FluxProcessingChain` orchestrator: quality flags, storage correction, outlier removal, USTAR filtering, gap-filling |
-| [**fluxprocessingchain_composable.py**](flux/fluxprocessingchain/fluxprocessingchain_composable.py) | Full L2→L4.1 pipeline using standalone level callables; RF, XGBoost, and MDS gap-filling from the same L3.3 state; `HeatmapDateTime` and `CumulativeYear` plots |
-| [**fluxprocessingchain_multiflux.py**](flux/fluxprocessingchain/fluxprocessingchain_multiflux.py) | Multi-flux loop with `FluxConfig` + `run_flux_chain`: process FC, H, and trace gases in one pass; combined export DataFrame for flux partitioning |
-| [**fluxprocessingchain_quick.py**](flux/fluxprocessingchain/fluxprocessingchain_quick.py) | Quick exploratory processing (L2-L3.3) with default settings for rapid data checking |
+| [**fluxprocessingchain_composable.py**](flux/fluxprocessingchain/fluxprocessingchain_composable.py) | Full L2→L4.1 pipeline using composable level callables; RF, XGBoost, and MDS gap-filling from the same L3.3 state; `HeatmapDateTime` and `CumulativeYear` plots |
 
 ### Low-Resolution (30-min) Processing
 

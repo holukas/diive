@@ -15,8 +15,8 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 
 if TYPE_CHECKING:
-    from diive.pkgs.flux.fluxprocessingchain.level2_qualityflags import FluxQualityFlagsEddyPro
-    from diive.pkgs.flux.fluxprocessingchain.level31_storagecorrection import (
+    from diive.pkgs.flux.lowres.quality_flags import FluxQualityFlagsEddyPro
+    from diive.pkgs.flux.lowres.storage_correction import (
         FluxStorageCorrectionSinglePointEddyPro,
     )
     from diive.pkgs.flux.lowres.ustarthreshold import FlagMultipleConstantUstarThresholds
@@ -27,11 +27,11 @@ if TYPE_CHECKING:
 @dataclass
 class FluxConfig:
     """
-    Per-flux configuration for :func:`run_flux_chain`.
+    Per-flux configuration for multi-flux processing loops.
 
     Captures every setting that differs between fluxes (CO2, H, LE, N2O, CH4, …)
-    so that a multi-flux loop can call ``run_flux_chain(df, config, **site)`` for
-    each variable without repeating site-level parameters.
+    so that a composable-function loop can process each variable without repeating
+    site-level parameters.
 
     **Required fields** (no defaults) force you to make explicit choices for every
     flux rather than silently inheriting wrong values from another variable.

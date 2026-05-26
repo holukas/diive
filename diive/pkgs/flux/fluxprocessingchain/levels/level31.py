@@ -18,7 +18,7 @@ import pandas as pd
 from diive.core.dfun.frames import detect_new_columns
 from diive.core.utils.console import detail, rule
 from diive.pkgs.flux.fluxprocessingchain.container import FluxLevelData
-from diive.pkgs.flux.fluxprocessingchain.level31_storagecorrection import (
+from diive.pkgs.flux.lowres.storage_correction import (
     FluxStorageCorrectionSinglePointEddyPro,
 )
 

@@ -93,7 +93,6 @@ class UstarVekuriThresholdDetection:
     --------
     UstarMovingPointDetection : Full ONEFlux implementation with forward/back modes.
     FlagMultipleConstantUstarThresholds : Apply detected USTAR thresholds to filter data.
-    FluxProcessingChain : Complete multi-level flux processing workflow.
     """
 
     CORRELATION_CHECK = 0.4

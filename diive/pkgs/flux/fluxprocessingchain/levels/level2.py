@@ -14,7 +14,7 @@ from dataclasses import replace
 
 from diive.core.utils.console import rule
 from diive.pkgs.flux.fluxprocessingchain.container import FluxLevelData
-from diive.pkgs.flux.fluxprocessingchain.level2_qualityflags import FluxQualityFlagsEddyPro
+from diive.pkgs.flux.lowres.quality_flags import FluxQualityFlagsEddyPro
 from diive.pkgs.flux.fluxprocessingchain.levels._qcf import finalize_level
 
 

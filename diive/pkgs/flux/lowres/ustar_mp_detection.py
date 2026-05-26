@@ -97,7 +97,6 @@ class UstarMovingPointDetection:
     See Also
     --------
     FlagMultipleConstantUstarThresholds : Apply detected USTAR thresholds to filter data.
-    FluxProcessingChain : Complete multi-level flux processing workflow.
 
     Example
     -------
