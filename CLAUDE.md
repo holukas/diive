@@ -115,11 +115,14 @@ diive/
 ├── core/plotting/            # Visualization types
 ├── core/times/               # Timestamp handling
 ├── core/io/                  # File I/O
-├── pkgs/gapfilling/          # Gap-filling (RF, XGBoost, MDS)
-├── pkgs/flux/                # Flux processing (lowres, hires, chain)
-├── pkgs/preprocessing/       # Outlier detection, corrections, QA/QC
-├── pkgs/analysis/            # Time series analysis
-└── pkgs/features/            # Variable calculations
+├── gapfilling/               # Gap-filling (RF, XGBoost, MDS)
+├── flux/                     # Flux processing (lowres, hires, chain)
+├── preprocessing/            # Wrapper for domain-based preprocessing modules
+├── corrections/              # Offset/gain removal, value corrections
+├── outliers/                 # 10+ outlier detection methods
+├── qaqc/                     # Quality control flags and screening
+├── analysis/                 # Time series analysis
+└── variables/                # Feature engineering and calculations
 examples/                      # ~100 runnable examples
 tests/                        # Unit tests
 ```
@@ -136,7 +139,7 @@ tests/                        # Unit tests
 | `dv.analysis` | `DailyCorrelation`, `GrangerCausality`, `StratifiedAnalysis`, `GapFinder`, `GridAggregator`, `Histogram`, `FindOptimumRange`, `SeasonalTrendDecomposition`, `BinFitterCP`, `percentiles101` |
 | `dv.plotting` | `HeatmapDateTime`, `HeatmapXYZ`, `HeatmapYearMonth`, `HexbinPlot`, `ScatterXY`, `TimeSeries`, `DielCycle`, `RidgeLinePlot`, `HistogramPlot`, `Cumulative`, `CumulativeYear`, `LongtermAnomaliesYear`, `TreeRingPlot` |
 | `dv.times` | `TimestampSanitizer`, `DetectFrequency`, `resample_to_monthly_agg_matrix`, `timestamp_infer_freq_*` |
-| `dv.features` | `DaytimeNighttimeFlag`, `TimeSince`, `potrad`, `potrad_eot`, `calc_vpd_from_ta_rh`, `aerodynamic_resistance`, `dry_air_density`, `et_from_le`, `latent_heat_of_vaporization`, `air_temp_from_sonic_temp`, `lagged_variants`, noise helpers |
+| `dv.variables` | `DaytimeNighttimeFlag`, `TimeSince`, `potrad`, `potrad_eot`, `calc_vpd_from_ta_rh`, `aerodynamic_resistance`, `dry_air_density`, `et_from_le`, `latent_heat_of_vaporization`, `air_temp_from_sonic_temp`, `lagged_variants`, noise helpers |
 | `dv.corrections` | `MeasurementOffsetFromReplicate`, `WindDirOffset`, `remove_radiation_zero_offset`, `remove_relativehumidity_offset`, `set_exact_values_to_missing`, `setto_threshold`, `setto_value` |
 | `dv.qaqc` | `FlagQCF`, `StepwiseMeteoScreeningDb` |
 
@@ -292,10 +295,25 @@ flux = (w_prime * c_prime).mean()
 
 ## Outlier Detection & QC
 
-**10 outlier methods:** AbsoluteLimits, Hampel, LocalSD, zScore (4 variants), LocalOutlierFactor, TrimLow, ManualRemoval.
-Chain via `StepwiseOutlierDetection`. See `examples/preprocessing/outlier_detection/`.
+**Outlier Detection (10 methods):** AbsoluteLimits, Hampel, LocalSD, zScore (4 variants), LocalOutlierFactor, TrimLow, ManualRemoval, daytime/nighttime variants.
+- **Single method:** `dv.outliers.Hampel(series).run()`
+- **Chained workflow:** `dv.outliers.StepwiseOutlierDetection()` orchestrates multiple methods sequentially.
+- Examples: `examples/preprocessing/outlier_detection/`
 
-**Quality Control (QCF):** Combines test flags into 0 (good) / 1 (marginal) / 2 (poor). See `examples/preprocessing/qaqc/qc_overall_flag.py`.
+**Offsets & Corrections:** Remove systematic biases and set invalid values.
+- `dv.corrections.MeasurementOffsetFromReplicate()` — detect/remove gain and offset via histogram comparison
+- `dv.corrections.remove_radiation_zero_offset()`, `remove_relativehumidity_offset()`
+- `dv.corrections.setto_*()` — set values to missing based on thresholds or exact values
+- Examples: `examples/preprocessing/corrections/`
+
+**Quality Control (QCF):** Combines individual test flags into 0 (good) / 1 (marginal) / 2 (poor).
+- `dv.qaqc.FlagQCF()` — aggregates multiple quality flags into overall QCF score
+- Examples: `examples/preprocessing/qaqc/qc_overall_flag.py`
+
+**Full QA/QC Pipeline:** `dv.qaqc.StepwiseMeteoScreeningDb()` chains corrections → outlier detection → quality flags in one composable workflow.
+- Automatically applies offset corrections, outlier detection, missing value handling
+- Performs meteorological screening (e.g., radiation, temperature, VPD validity checks)
+- Examples: `examples/preprocessing/qaqc/meteoscreening_complete_workflow.py`, `meteoscreening_stepwise_workflow.py`
 
 **Timestamp Shift Detection:** Three methods compare measured vs. theoretical radiation (positive = measured peaks early, negative = late). Requires mostly-clear days. See `examples/preprocessing/qaqc/qaqc_detect_timestamp_shifts.py`.
 
