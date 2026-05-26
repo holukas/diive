@@ -573,6 +573,5 @@ class OptimizeParamsTS:
         plt.tight_layout()
         plt.show()
 
-        info(f"Parallel coordinates: {len(cv_results)} parameter combinations.")
-        print(f"Each line represents one parameter combination.")
-        print(f"Lines colored blue indicate high-performing (R² closer to 1) combinations, red indicates poor performance.")
+        info(f"Parallel coordinates: {len(cv_results)} parameter combinations. "
+             f"Each line is one combination; blue = high R², red = poor performance.")

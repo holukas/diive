@@ -14,6 +14,8 @@ import pandas as pd
 from joblib import Parallel, delayed
 from typing import Dict, List, Optional, Tuple
 
+from diive.core.utils.console import info, detail
+
 
 def _bootstrap_window_worker(
     year: int,
@@ -182,11 +184,9 @@ class UstarBootstrapThresholds:
         if self.verbose >= 1:
             pct_labels = '/'.join(f'p{p}' for p in self.percentiles)
             mode = f"parallel ({n_workers} workers)" if n_workers > 1 else "sequential"
-            print(
-                f"Bootstrap USTAR thresholds: {self.detector_class.__name__}, "
-                f"{self.n_iter} iterations x {len(self.years_)} windows ({mode}), "
-                f"percentiles: [{pct_labels}]"
-            )
+            info(f"Bootstrap USTAR thresholds: {self.detector_class.__name__}, "
+                 f"{self.n_iter} iterations x {len(self.years_)} windows ({mode}), "
+                 f"percentiles: [{pct_labels}]")
 
         self._raw_samples_ = {}
         self._window_years_ = {}
@@ -208,8 +208,7 @@ class UstarBootstrapThresholds:
 
                 if self.verbose >= 1:
                     win_str = '/'.join(str(y) for y in windows[year])
-                    print(f"  {year} [window: {win_str}] ({len(df_window)} records)... ",
-                          end='', flush=True)
+                    info(f"  {year} [window: {win_str}] ({len(df_window)} records)...")
 
                 for _ in range(self.n_iter):
                     df_boot = df_window.sample(n=len(df_window), replace=True)
@@ -228,14 +227,14 @@ class UstarBootstrapThresholds:
                 if self.verbose >= 1:
                     if samples:
                         p50 = float(np.percentile(samples, 50))
-                        print(f"p50={p50:.4f} m/s ({len(samples)}/{self.n_iter} ok)")
+                        detail(f"    p50={p50:.4f} m/s ({len(samples)}/{self.n_iter} ok)")
                     else:
-                        print("no valid thresholds")
+                        detail(f"    no valid thresholds")
 
         else:
             # Parallel execution via joblib/loky (Windows-safe, no __main__ guard needed)
             if self.verbose >= 1:
-                print(f"  Submitting {len(self.years_)} windows to {n_workers} workers...")
+                info(f"  Submitting {len(self.years_)} windows to {n_workers} workers...")
 
             results = Parallel(n_jobs=n_workers)(
                 delayed(_bootstrap_window_worker)(
@@ -250,8 +249,7 @@ class UstarBootstrapThresholds:
                     win_str = '/'.join(str(y) for y in windows[year])
                     n_ok = len(samples)
                     p50 = float(np.percentile(samples, 50)) if samples else float('nan')
-                    print(f"  {year} [window: {win_str}]  "
-                          f"p50={p50:.4f} m/s ({n_ok}/{self.n_iter} ok)")
+                    info(f"  {year} [window: {win_str}]  p50={p50:.4f} m/s ({n_ok}/{self.n_iter} ok)")
 
         # Compute per-year percentiles
         rows = []
@@ -270,7 +268,7 @@ class UstarBootstrapThresholds:
         if self.verbose >= 1:
             cut = self.get_cut_threshold()
             cut_str = '  '.join(f'{k}={v:.4f}' for k, v in cut.items())
-            print(f"\nCUT (pooled): {cut_str}")
+            info(f"CUT (pooled): {cut_str}")
 
         return self.annual_stats_
 

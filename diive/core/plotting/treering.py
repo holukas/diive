@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 
 import diive.core.plotting.styles.LightTheme as theme
+from diive.core.utils.console import detail
 
 
 class TreeRingPlot:
@@ -128,8 +129,8 @@ class TreeRingPlot:
         if self.verbose:
             filled = int(np.sum(~np.isnan(self.grid)))
             total = self.n_years * n_slots
-            print(f"Grid: {self.n_years} years x {n_slots} slots, {filled}/{total} filled "
-                  f"(freq={self.resample_freq})")
+            detail(f"Grid: {self.n_years} years x {n_slots} slots, {filled}/{total} filled "
+                   f"(freq={self.resample_freq})", verbose=self.verbose)
 
     def plot(self,
              ax=None,

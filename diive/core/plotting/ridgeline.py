@@ -11,6 +11,7 @@ from matplotlib.pyplot import cm
 from sklearn.neighbors import KernelDensity
 
 from diive.core.plotting.styles.LightTheme import adjust_color_lightness
+from diive.core.utils.console import detail
 
 
 class RidgeLinePlot:
@@ -186,7 +187,7 @@ class RidgeLinePlot:
         i = 0
         for y_current in self.ys_unique:
             if self.verbose:
-                print(f"Current y: {y_current}  Position in gridspec: {i + 1}")
+                detail(f"Current y: {y_current}  Position in gridspec: {i + 1}", verbose=self.verbose)
             # Get data for current year or month or etc.
             locs_current = self.ys == y_current
             series = self.series[locs_current].copy()

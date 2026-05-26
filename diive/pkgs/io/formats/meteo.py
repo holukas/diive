@@ -15,6 +15,7 @@ from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import current_date_str_condensed
 from diive.core.times.times import format_timestamp_to_fluxnet_format
 from diive.core.times.times import insert_timestamp
+from diive.core.utils.console import info
 
 
 class FormatMeteoForEddyProFluxProcessing:
@@ -40,13 +41,13 @@ class FormatMeteoForEddyProFluxProcessing:
         self._df = self._sanitize_timestamp()
         self._df = self._split_timestamp_date_time()
 
-        print("Filling missing values with -9999 ...")
+        info("Filling missing values with -9999 ...")
         self._df = self._df.fillna(-9999)
 
         self._df = self._rename_columns()
 
     def _rename_columns(self):
-        print("Renaming columns ...")
+        info("Renaming columns ...")
         from diive.core.dfun.frames import rename_cols_to_multiindex
         df = self._df.copy()
         df = rename_cols_to_multiindex(df=df, renaming_dict=self.cols)
@@ -56,7 +57,7 @@ class FormatMeteoForEddyProFluxProcessing:
         """Split timestamp into separate date and time columns.
         Timestamp column names are stored as tuples.
         """
-        print(f"Splitting timestamp into two separate columns {self.colname_timestamp1} and {self.colname_timestamp2}")
+        info(f"Splitting timestamp into two separate columns {self.colname_timestamp1} and {self.colname_timestamp2}")
         df = self._df.copy()
         df[self.colname_timestamp2] = df.index
         first_column = df.pop(self.colname_timestamp2)
@@ -105,7 +106,7 @@ class FormatMeteoForFluxnetUpload:
         self._df = self._sanitize_timestamp()
         self._df = self._insert_timestamps_start_end()
 
-        print("Filling missing values with -9999 ...")
+        info("Filling missing values with -9999 ...")
         self._df = self._df.fillna(-9999)
 
         self._df = self._rename_columns()
@@ -117,7 +118,7 @@ class FormatMeteoForFluxnetUpload:
     @staticmethod
     def _save_one_file_per_year(df: pd.DataFrame, site: str, outdir: str, add_runid: bool = True):
         """Save data to yearly files"""
-        print(f"\nSaving yearly CSV files ...")
+        info(f"\nSaving yearly CSV files ...")
         uniq_years = list(df.index.year.unique())
         runid = f"_{current_date_str_condensed()}" if add_runid else ""
         for year in uniq_years:
@@ -126,10 +127,10 @@ class FormatMeteoForFluxnetUpload:
             yearlocs = df.index.year == year
             yeardata = df[yearlocs].copy()
             yeardata.to_csv(outpath, index=False)
-            print(f"    --> Saved file {outpath}.")
+            info(f"    --> Saved file {outpath}.")
 
     def _rename_columns(self):
-        print("Renaming columns ...")
+        info("Renaming columns ...")
         df = self._df.copy()
         df = df.rename(columns=self.cols)
         return df
@@ -138,7 +139,7 @@ class FormatMeteoForFluxnetUpload:
         """Insert two timestamp columns 'TIMESTAMP_START' and 'TIMESTAMP_END' as
         required for FLUXNET data submissions.
         """
-        print(f"Inserting timestamp columns 'TIMESTAMP_START' and 'TIMESTAMP_END' ... ")
+        info(f"Inserting timestamp columns 'TIMESTAMP_START' and 'TIMESTAMP_END' ... ")
         df = self._df.copy()
         df = insert_timestamp(data=df, convention='end', insert_as_first_col=True, verbose=True)
         df = insert_timestamp(data=df, convention='start', insert_as_first_col=True, verbose=True)

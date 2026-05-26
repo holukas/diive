@@ -93,6 +93,7 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import minimize_scalar
 
+from diive.core.utils.console import console as _console, info, detail, warn
 from diive.pkgs.features.variables import dry_air_density, aerodynamic_resistance
 from diive.pkgs.features.variables import DaytimeNighttimeFlag
 from diive.pkgs.preprocessing.outlier_detection.hampel import HampelDaytimeNighttime
@@ -290,9 +291,9 @@ class ScopPhysics:
         Focuses on Data Coverage (Hybrid Gap-Filling), Instrument Heating,
         and Correction Magnitude.
         """
-        print(f"\n{'=' * 65}")
-        print(f"SCOP PHYSICS DIAGNOSTICS ({self.flux_type})")
-        print(f"{'=' * 65}")
+        _console.print(f"\n{'=' * 65}")
+        _console.print(f"SCOP PHYSICS DIAGNOSTICS ({self.flux_type})")
+        _console.print(f"{'=' * 65}")
 
         # --- 1. DATA COVERAGE (Hybrid RF + MDV) ---
         n_total = len(self.ta)
@@ -300,12 +301,12 @@ class ScopPhysics:
         n_final = self.fct_unsc_gf.count()
         n_filled = n_final - n_raw
 
-        print(f"1. DATA COVERAGE & GAP-FILLING")
-        print(f"{'-' * 30}")
-        print(f"   Total Timestamps       : {n_total:,}")
-        print(f"   Raw Physics Calculated : {n_raw:,}  ({n_raw / n_total:>6.1%})")
-        print(f"   Final Gap-Filled (GF)  : {n_final:,}  ({n_final / n_total:>6.1%})")
-        print(f"   -> Imputed (RF + MDV)  : {n_filled:,}  ({n_filled / n_total:>6.1%})")
+        _console.print(f"1. DATA COVERAGE & GAP-FILLING")
+        _console.print(f"{'-' * 30}")
+        _console.print(f"   Total Timestamps       : {n_total:,}")
+        _console.print(f"   Raw Physics Calculated : {n_raw:,}  ({n_raw / n_total:>6.1%})")
+        _console.print(f"   Final Gap-Filled (GF)  : {n_final:,}  ({n_final / n_total:>6.1%})")
+        _console.print(f"   -> Imputed (RF + MDV)  : {n_filled:,}  ({n_filled / n_total:>6.1%})")
 
         # --- 2. HEATING EFFECT (Delta T) ---
         # The core physical assumption is that Ts > Ta due to radiation.
@@ -320,22 +321,22 @@ class ScopPhysics:
             d_max = delta_t.loc[day_mask].max()
             n_mean = delta_t.loc[~day_mask].mean()
 
-            print(f"\n2. INSTRUMENT SELF-HEATING (Ts - Ta)")
-            print(f"{'-' * 30}")
-            print(f"   Avg Daytime Heating    : {d_mean:+.2f} °C")
-            print(f"   Max Daytime Heating    : {d_max:+.2f} °C")
-            print(f"   Avg Nighttime Offset   : {n_mean:+.2f} °C")
+            _console.print(f"\n2. INSTRUMENT SELF-HEATING (Ts - Ta)")
+            _console.print(f"{'-' * 30}")
+            _console.print(f"   Avg Daytime Heating    : {d_mean:+.2f} °C")
+            _console.print(f"   Max Daytime Heating    : {d_max:+.2f} °C")
+            _console.print(f"   Avg Nighttime Offset   : {n_mean:+.2f} °C")
 
         # --- 3. SENSIBLE HEAT FLUX (BUR08 Only) ---
         if not self.S.dropna().empty:
             s_day = self.S.loc[self.daytime == 1].mean()
-            print(f"\n   Modeled Sensible Heat (S) : {s_day:.1f} W m-2 (Daytime Avg)")
+            _console.print(f"\n   Modeled Sensible Heat (S) : {s_day:.1f} W m-2 (Daytime Avg)")
 
         # --- 4. CORRECTION MAGNITUDE (FCT_UNSC) ---
         # Units are always [µmol m-2 s-1] regardless of flux type in this class.
-        print(f"\n3. UNSCALED CORRECTION TERM (FCT_unsc)")
-        print(f"   (Units: µmol m-2 s-1)")
-        print(f"{'-' * 30}")
+        _console.print(f"\n3. UNSCALED CORRECTION TERM (FCT_unsc)")
+        _console.print(f"   (Units: µmol m-2 s-1)")
+        _console.print(f"{'-' * 30}")
 
         # Group stats by Day/Night
         df_stat = pd.DataFrame({'FCT': self.fct_unsc_gf, 'Day': self.daytime})
@@ -345,9 +346,9 @@ class ScopPhysics:
         row_day = g.loc[1] if 1 in g.index else pd.Series(0, index=g.columns)
         row_night = g.loc[0] if 0 in g.index else pd.Series(0, index=g.columns)
 
-        print(
+        _console.print(
             f"   DAYTIME   : {row_day['mean']:+.4f} ± {row_day['std']:.4f}  [Range: {row_day['min']:.2f} to {row_day['max']:.2f}]")
-        print(
+        _console.print(
             f"   NIGHTTIME : {row_night['mean']:+.4f} ± {row_night['std']:.4f}  [Range: {row_night['min']:.2f} to {row_night['max']:.2f}]")
 
         # --- 5. DRIVERS OVERVIEW ---
@@ -356,13 +357,13 @@ class ScopPhysics:
         u_avg = self.u[day_idx].mean() if not self.u.isna().all() else 0
         ra_avg = self.ra[day_idx].mean() if not self.ra.isna().all() else 0
 
-        print(f"\n4. KEY DRIVERS (Daytime Avg)")
-        print(f"{'-' * 30}")
-        print(f"   Radiation (SW_IN)      : {swin_avg:.0f} W m-2")
-        print(f"   Wind Speed (U)         : {u_avg:.2f} m s-1")
-        print(f"   Aero Resistance (Ra)   : {ra_avg:.1f} s m-1")
+        _console.print(f"\n4. KEY DRIVERS (Daytime Avg)")
+        _console.print(f"{'-' * 30}")
+        _console.print(f"   Radiation (SW_IN)      : {swin_avg:.0f} W m-2")
+        _console.print(f"   Wind Speed (U)         : {u_avg:.2f} m s-1")
+        _console.print(f"   Aero Resistance (Ra)   : {ra_avg:.1f} s m-1")
 
-        print(f"{'=' * 65}\n")
+        _console.print(f"{'=' * 65}\n")
 
     def _gapfill(self):
         """
@@ -412,10 +413,10 @@ class ScopPhysics:
 
         # Report model performance metrics
         if hasattr(xgb, 'scores_'):
-            print(f"\n    XGBoost Performance Metrics:")
+            info(f"\n    XGBoost Performance Metrics:")
             for metric_name, metric_value in xgb.scores_.items():
                 if isinstance(metric_value, (int, float)):
-                    print(f"      {metric_name}: {metric_value:.4f}")
+                    info(f"      {metric_name}: {metric_value:.4f}")
 
         # Get gap-filled result (XGBoost creates column with _gfXG suffix)
         gf_col = f"{self.cols.fct_unsc}_gfXG"
@@ -425,7 +426,7 @@ class ScopPhysics:
         # Report remaining gaps
         gaps_remaining = fct_result.isna().sum()
         if gaps_remaining > 0:
-            print(f"    (i) XGBoost left {gaps_remaining} gaps (expected at edges with insufficient drivers)")
+            info(f"    (i) XGBoost left {gaps_remaining} gaps (expected at edges with insufficient drivers)")
 
         return fct_result
 
@@ -680,7 +681,7 @@ class ScopPhysics:
         import matplotlib.ticker as ticker
         import numpy as np
 
-        print("Plotting Physics Diel Cycles...")
+        info("Plotting Physics Diel Cycles...")
 
         # Check if BUR08 surfaces exist
         has_bur08 = (self.ts_bottom is not None)
@@ -947,7 +948,7 @@ class ScopOptimizer:
                     'NUMVALS_AVG': n_samples
                 })
 
-                print(f"Finished group {bin_id} (Daytime {daytime}): Median SF = {np.median(factors):.3f}")
+                detail(f"Finished group {bin_id} (Daytime {daytime}): Median SF = {np.median(factors):.3f}")
 
         # Create dataframe
         self.scaling_factors_df = pd.DataFrame(results)
@@ -1003,7 +1004,7 @@ class ScopOptimizer:
         if self.scaling_factors_df.empty:
             return
 
-        print("Plotting Scaling Factors...")
+        info("Plotting Scaling Factors...")
         plot_df = self.scaling_factors_df.copy()
 
         styles = {
@@ -1046,29 +1047,29 @@ class ScopOptimizer:
         including global averages and per-bin details.
         """
         if self.scaling_factors_df.empty:
-            print("(!) No optimization results found. Run .run() first.")
+            _console.print("(!) No optimization results found. Run .run() first.")
             return
 
         df = self.scaling_factors_df
 
         # Helper for separators
         def print_sep(char='-', length=75):
-            print(char * length)
+            _console.print(char * length)
 
-        print("\n")
+        _console.print("\n")
         print_sep('=', 75)
-        print(f"{'SCALING FACTOR OPTIMIZATION REPORT':^75}")
+        _console.print(f"{'SCALING FACTOR OPTIMIZATION REPORT':^75}")
         print_sep('=', 75)
 
-        print(f"Flux Type      : {self.flux_type}")
-        print(f"Bootstrap Runs : {self.n_bootstrap}")
-        print(f"Total Bins     : {len(df)}")
+        _console.print(f"Flux Type      : {self.flux_type}")
+        _console.print(f"Bootstrap Runs : {self.n_bootstrap}")
+        _console.print(f"Total Bins     : {len(df)}")
         print_sep('-', 75)
 
         # --- 1. GLOBAL SUMMARY (Day vs Night) ---
-        print(f"{'1. GLOBAL SUMMARY (Median of Bins)':<40}")
+        _console.print(f"{'1. GLOBAL SUMMARY (Median of Bins)':<40}")
         print_sep('.', 75)
-        print(f"{'Period':<15} | {'Median SF':>10} | {'Mean Uncertainty (IQR)':>22} | {'N_Avg':>8}")
+        _console.print(f"{'Period':<15} | {'Median SF':>10} | {'Mean Uncertainty (IQR)':>22} | {'N_Avg':>8}")
 
         summary_groups = df.groupby('DAYTIME')
         for daytime, group in summary_groups:
@@ -1077,19 +1078,19 @@ class ScopOptimizer:
             mean_iqr = (group['SF_Q75'] - group['SF_Q25']).mean()
             mean_n = group['NUMVALS_AVG'].mean()
 
-            print(f"{period:<15} | {median_sf:>10.3f} | {mean_iqr:>22.3f} | {mean_n:>8.0f}")
+            _console.print(f"{period:<15} | {median_sf:>10.3f} | {mean_iqr:>22.3f} | {mean_n:>8.0f}")
 
-        print("\n")
+        _console.print("\n")
 
         # --- 2. DETAILED BIN REPORT ---
-        print(f"{'2. DETAILED BIN BREAKDOWN':<40}")
+        _console.print(f"{'2. DETAILED BIN BREAKDOWN':<40}")
         print_sep('.', 75)
 
         # Header
         # Range column needs space for "123.45 - 123.45"
         header = (f"{'Bin':<4} | {'Class Range':^19} | {'N':>5} | "
                   f"{'Median SF':>16} | {'99% CI':^16} | {'Error (SOS)':>10}")
-        print(header)
+        _console.print(header)
         print_sep('-', 75)
 
         # Iterate Day then Night
@@ -1099,7 +1100,7 @@ class ScopOptimizer:
                 continue
 
             period_label = "DAYTIME" if daytime == 1 else "NIGHTTIME"
-            print(f"--- {period_label} ---")
+            _console.print(f"--- {period_label} ---")
 
             for idx in subset.index:
                 # Format the range string
@@ -1109,16 +1110,16 @@ class ScopOptimizer:
                 # Format CI string
                 ci_str = f"[{subset.loc[idx, 'SF_Q01']:>4.2f}-{subset.loc[idx, 'SF_Q99']:<4.2f}]"
 
-                print(f"{int(subset.loc[idx, 'GROUP_CLASSVAR']):<4} | "
-                      f"{range_str:^19} | "
-                      f"{int(subset.loc[idx, 'NUMVALS_AVG']):>5} | "
-                      f"{subset.loc[idx, 'SF_MEDIAN']:>16.3f} | "
-                      f"{ci_str:^16} | "
-                      f"{subset.loc[idx, 'SOS_MEDIAN']:>10.2f}")
-            print("")  # Spacer between day/night
+                _console.print(f"{int(subset.loc[idx, 'GROUP_CLASSVAR']):<4} | "
+                                f"{range_str:^19} | "
+                                f"{int(subset.loc[idx, 'NUMVALS_AVG']):>5} | "
+                                f"{subset.loc[idx, 'SF_MEDIAN']:>16.3f} | "
+                                f"{ci_str:^16} | "
+                                f"{subset.loc[idx, 'SOS_MEDIAN']:>10.2f}")
+            _console.print("")  # Spacer between day/night
 
         print_sep('=', 75)
-        print("\n")
+        _console.print("\n")
 
     def get(self) -> pd.DataFrame:
         return self.scaling_factors_df
@@ -1264,8 +1265,8 @@ class ScopApplicator:
 
         if missing_sf_mask.any():
             n_missing = missing_sf_mask.sum()
-            print(f"(!) Warning: {n_missing} fluxes missing Scaling Factor (due to missing {self.classvar.name}).")
-            print("    Imputing using Month-Daytime-Hour-Minute Diel Cycle Median...")
+            warn(f"(!) Warning: {n_missing} fluxes missing Scaling Factor (due to missing {self.classvar.name}).")
+            info("    Imputing using Month-Daytime-Hour-Minute Diel Cycle Median...")
 
             # --- KEY CHANGE: USE ORIGINAL FLUX INDEX ---
             # We access the index directly from the original input series stored in self.
@@ -1322,11 +1323,11 @@ class ScopApplicator:
             remaining_missing = self.df[self.flux_openpath.name].notna() & self.df[self.cols.sf].isna()
 
             if remaining_missing.any():
-                print(
+                info(
                     f"    (!) {remaining_missing.sum()} items still NaN (Exact Month-Hour-Minute combo never observed).")
 
                 # --- DIAGNOSTIC: PRINT MISSING COMBINATIONS ---
-                print("    [DEBUG] The following (Month, Daytime, Hour, Minute) combinations are missing from the LUT:")
+                detail("    [DEBUG] The following (Month, Daytime, Hour, Minute) combinations are missing from the LUT:")
 
                 # Select the relevant columns for the missing rows
                 missing_combos = self.df.loc[remaining_missing, ['__MONTH', self.daytime.name, '__HOUR', '__MINUTE']]
@@ -1336,11 +1337,11 @@ class ScopApplicator:
                 missing_counts = missing_combos.value_counts().sort_index()
 
                 # Print the list (Month, Daytime, Hour, Minute) -> Count of missing records
-                print(missing_counts)
-                print("    -----------------------------------------------------------------------------------------")
+                _console.print(missing_counts)
+                detail("    -----------------------------------------------------------------------------------------")
                 # ----------------------------------------------
 
-                print("    -> Filling edge cases with global Month-Daytime median.")
+                info("    -> Filling edge cases with global Month-Daytime median.")
 
                 # Coarser fallback: Just Month + Daytime (ignoring exact hour/minute)
                 coarse_grouper = [self.df['__MONTH'], self.df[self.daytime.name]]
@@ -1353,7 +1354,7 @@ class ScopApplicator:
             self.df.drop(columns=[c for c in cols_to_drop if c in self.df.columns], inplace=True)
 
             n_filled = n_missing - (self.df[self.flux_openpath.name].notna() & self.df[self.cols.sf].isna()).sum()
-            print(f"    > Successfully imputed {n_filled} missing Scaling Factors.")
+            info(f"    > Successfully imputed {n_filled} missing Scaling Factors.")
 
         return self.df.sort_index()
 
@@ -1381,7 +1382,7 @@ class ScopApplicator:
 
         # --- 1. SAFETY CHECKS ---
         if self.col_flux_corr not in self.df.columns:
-            print("(!) No corrected data found. Run .run() first.")
+            _console.print("(!) No corrected data found. Run .run() first.")
             return
 
         # Prepare Reference if available
@@ -1423,37 +1424,37 @@ class ScopApplicator:
 
         # Helper for printing
         def print_sep(char='-', length=75):
-            print(char * length)
+            _console.print(char * length)
 
         # ================= REPORT =================
-        print("\n")
+        _console.print("\n")
         print_sep('=', 75)
-        print(f"{'FLUX CORRECTION REPORT':^75}")
+        _console.print(f"{'FLUX CORRECTION REPORT':^75}")
         print_sep('=', 75)
-        print(f"Flux Type      : {self.flux_type}")
-        print(f"Total Records  : {n_total:,}")
+        _console.print(f"Flux Type      : {self.flux_type}")
+        _console.print(f"Total Records  : {n_total:,}")
         print_sep('-', 75)
 
         # SECTION A: ASSIGNMENT DETAILS
-        print(f"{'1. SCALING FACTOR ASSIGNMENT':<40} {'(Method Used)':>34}")
+        _console.print(f"{'1. SCALING FACTOR ASSIGNMENT':<40} {'(Method Used)':>34}")
         print_sep('.', 75)
 
-        print(f"   Direct Lookup (Valid {col_key}) : {n_direct:>8,}  ({pct_direct:>5.1f}%)")
+        _console.print(f"   Direct Lookup (Valid {col_key}) : {n_direct:>8,}  ({pct_direct:>5.1f}%)")
 
         # Highlight Imputation
         imp_symbol = "!" if pct_imputed > 10 else "i"
-        print(f" {imp_symbol} Gap-Filled    (MDV Imputation) : {n_imputed:>8,}  ({pct_imputed:>5.1f}%)")
+        _console.print(f" {imp_symbol} Gap-Filled    (MDV Imputation) : {n_imputed:>8,}  ({pct_imputed:>5.1f}%)")
 
-        print(f"\n   Median Scaling Factor (Day)     : {mean_sf_day:.3f}")
-        print(f"   Median Scaling Factor (Night)   : {mean_sf_night:.3f}")
-        print("\n")
+        _console.print(f"\n   Median Scaling Factor (Day)     : {mean_sf_day:.3f}")
+        _console.print(f"   Median Scaling Factor (Night)   : {mean_sf_night:.3f}")
+        _console.print("\n")
 
         # SECTION B: BUDGET IMPACT
-        print(f"{'2. CORRECTION IMPACT (Budget)':<40} {'(Units: Sum)':>34}")
+        _console.print(f"{'2. CORRECTION IMPACT (Budget)':<40} {'(Units: Sum)':>34}")
         print_sep('.', 75)
-        print(f"   Uncorrected Sum                 : {sum_raw:>15,.0f}")
-        print(f"   Corrected Sum                   : {sum_corr:>15,.0f}")
-        print(f"   Net Adjustment                  : {net_change:>15,.0f}  ({(net_change / abs(sum_raw)) * 100:+.1f}%)")
+        _console.print(f"   Uncorrected Sum                 : {sum_raw:>15,.0f}")
+        _console.print(f"   Corrected Sum                   : {sum_corr:>15,.0f}")
+        _console.print(f"   Net Adjustment                  : {net_change:>15,.0f}  ({(net_change / abs(sum_raw)) * 100:+.1f}%)")
 
         # SECTION C: ACCURACY (Only if Ref provided)
         if cp_col:
@@ -1462,27 +1463,27 @@ class ScopApplicator:
             rmse = np.sqrt((resid ** 2).mean())
             slope, _ = np.polyfit(df_active[cp_col].fillna(0), df_active[col_corr].fillna(0), 1)
 
-            print("\n")
-            print(f"{'3. ACCURACY vs REFERENCE':<40}")
+            _console.print("\n")
+            _console.print(f"{'3. ACCURACY vs REFERENCE':<40}")
             print_sep('.', 75)
-            print(f"   Reference Sum                   : {sum_ref:>15,.0f}")
-            print(f"   Recovery (Corrected / Ref)      : {(sum_corr / sum_ref) * 100:>14.1f}%")
-            print(f"   RMSE                            : {rmse:>15.3f}")
-            print(f"   Slope (m)                       : {slope:>15.3f}")
+            _console.print(f"   Reference Sum                   : {sum_ref:>15,.0f}")
+            _console.print(f"   Recovery (Corrected / Ref)      : {(sum_corr / sum_ref) * 100:>14.1f}%")
+            _console.print(f"   RMSE                            : {rmse:>15.3f}")
+            _console.print(f"   Slope (m)                       : {slope:>15.3f}")
 
         print_sep('=', 75)
-        print("\n")
+        _console.print("\n")
 
     def plot_dashboard(self, flux_closedpath: Optional[pd.Series] = None):
         """
         Generates a master dashboard with INCREASED FONT SIZES for better readability.
         """
 
-        print("Generating Comprehensive Flux Dashboard (Large Font Edition)...")
+        info("Generating Comprehensive Flux Dashboard (Large Font Edition)...")
 
         # --- 1. DATA PREPARATION ---
         if self.col_flux_corr not in self.df.columns:
-            print(f"Warning: '{self.col_flux_corr}' not found. Run .run() first.")
+            warn(f"Warning: '{self.col_flux_corr}' not found. Run .run() first.")
             return
 
         plot_df = self.df.copy()

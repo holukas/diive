@@ -45,6 +45,7 @@ import warnings
 
 from diive.core.io.files import load_parquet
 from diive.core.plotting.plotfuncs import default_format
+from diive.core.utils.console import info, warn
 from diive.pkgs.analysis.histogram import Histogram
 
 
@@ -656,7 +657,7 @@ class TimeLagAnalysis:
         if outdir:
             outfile = f"{outdir}/02_{gascol}_{first_date}_{last_date}.png"
             fig.savefig(outfile, dpi=150, bbox_inches='tight')
-            print(f"Saved: {outfile}")
+            info(f"Saved: {outfile}")
 
         if show:
             fig.show()
@@ -713,7 +714,7 @@ class TimeLagAnalysis:
             try:
                 results[gas] = self.analyze_gas(gas)
             except ValueError as e:
-                print(f"Warning: Could not analyze {gas}: {e}")
+                warn(f"Could not analyze {gas}: {e}")
 
         return results
 
@@ -785,6 +786,6 @@ class TimeLagAnalysis:
             try:
                 figs[gas] = self.plot_gas(gas, outdir=outdir, figsize=figsize, show=show)
             except ValueError as e:
-                print(f"Warning: Could not plot {gas}: {e}")
+                warn(f"Could not plot {gas}: {e}")
 
         return figs

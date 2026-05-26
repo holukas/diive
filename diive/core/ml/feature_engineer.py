@@ -35,6 +35,7 @@ from pandas import DataFrame
 import diive.core.dfun.frames as fr
 from diive.core.times.times import TimestampSanitizer
 from diive.core.times.times import vectorize_timestamps
+from diive.core.utils.console import detail, warn
 from diive.pkgs.features.variables import lagged_variants
 
 
@@ -589,7 +590,7 @@ class FeatureEngineer:
             newcols += mean_df.columns.tolist() + std_df.columns.tolist()
 
         if self.verbose:
-            print(f"++ Added rolling features (windows={windows}) for {len(feature_cols)} columns: {newcols}")
+            detail(f"Added rolling features (windows={windows}) for {len(feature_cols)} columns: {newcols}", verbose=self.verbose)
         return df
 
     def _rolling_features_advanced(self, df: pd.DataFrame, windows: list, stats: list,
@@ -614,7 +615,7 @@ class FeatureEngineer:
             for stat in stats:
                 if stat not in stat_name_map:
                     if self.verbose:
-                        print(f"Warning: unknown rolling statistic '{stat}', skipping")
+                        warn(f"Unknown rolling statistic '{stat}', skipping.", verbose=self.verbose)
                     continue
 
                 stat_display_name, stat_func = stat_name_map[stat]
@@ -625,8 +626,8 @@ class FeatureEngineer:
                 newcols += stat_df.columns.tolist()
 
         if self.verbose and newcols:
-            print(f"++ Added advanced rolling statistics (stats={stats}, windows={windows}) "
-                  f"for {len(feature_cols)} columns: {newcols}")
+            detail(f"Added advanced rolling statistics (stats={stats}, windows={windows}) "
+                   f"for {len(feature_cols)} columns: {newcols}", verbose=self.verbose)
         return df
 
     def _differencing_features(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -649,8 +650,8 @@ class FeatureEngineer:
             newcols += diff_df.columns.tolist()
 
         if self.verbose:
-            print(f"++ Added differencing features (orders={self.features_diff}) for {len(feature_cols)} columns: "
-                  f"{newcols}")
+            detail(f"Added differencing features (orders={self.features_diff}) for {len(feature_cols)} columns: "
+                   f"{newcols}", verbose=self.verbose)
         return df
 
     def _ema_features(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -671,8 +672,8 @@ class FeatureEngineer:
             newcols += ema_df.columns.tolist()
 
         if self.verbose:
-            print(f"++ Added EMA features (spans={self.features_ema}) for {len(feature_cols)} columns: "
-                  f"{newcols}")
+            detail(f"Added EMA features (spans={self.features_ema}) for {len(feature_cols)} columns: "
+                   f"{newcols}", verbose=self.verbose)
         return df
 
     def _polynomial_features(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -691,8 +692,8 @@ class FeatureEngineer:
             newcols += poly_df.columns.tolist()
 
         if self.verbose:
-            print(f"++ Added polynomial features (degree={self.features_poly_degree}) for {len(feature_cols)} columns: "
-                  f"{newcols}")
+            detail(f"Added polynomial features (degree={self.features_poly_degree}) for {len(feature_cols)} columns: "
+                   f"{newcols}", verbose=self.verbose)
         return df
 
     def _stl_features(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -717,14 +718,14 @@ class FeatureEngineer:
 
         if not components_to_extract:
             if self.verbose:
-                print(f"Warning: No valid STL components specified. Valid options: {valid_components}")
+                warn(f"No valid STL components specified. Valid options: {valid_components}", verbose=self.verbose)
             return df
 
         for col in feature_cols:
             # Check if column is complete (no gaps)
             if df[col].isna().sum() > 0:
                 if self.verbose:
-                    print(f"Skipping STL decomposition for {col} (contains {df[col].isna().sum()} gaps)")
+                    detail(f"Skipping STL decomposition for {col} (contains {df[col].isna().sum()} gaps)", verbose=self.verbose)
                 continue
 
             try:
@@ -752,11 +753,11 @@ class FeatureEngineer:
 
             except Exception as e:
                 if self.verbose:
-                    print(f"Warning: STL decomposition failed for {col}: {str(e)}")
+                    warn(f"STL decomposition failed for {col}: {str(e)}", verbose=self.verbose)
                 continue
 
         if self.verbose and newcols:
-            print(f"++ Added STL features (method={self.features_stl_method}, "
-                  f"components={components_to_extract}) for {len([c for c in feature_cols if any(nc.startswith(f'.{c}_STL') for nc in newcols)])} "
-                  f"complete columns: {newcols}")
+            detail(f"Added STL features (method={self.features_stl_method}, "
+                   f"components={components_to_extract}) for {len([c for c in feature_cols if any(nc.startswith(f'.{c}_STL') for nc in newcols)])} "
+                   f"complete columns: {newcols}", verbose=self.verbose)
         return df

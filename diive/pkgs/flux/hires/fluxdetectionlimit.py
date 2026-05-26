@@ -53,6 +53,7 @@ import matplotlib
 import pandas as pd
 from pandas import DataFrame
 
+from diive.core.utils.console import info
 from diive.pkgs.features.variables import air_temp_from_sonic_temp
 from diive.pkgs.flux.hires.lag import MaxCovariance
 from diive.pkgs.flux.hires.windrotation import WindDoubleRotation, reynolds_decomposition
@@ -362,7 +363,7 @@ class FluxDetectionLimit:
         maxcov_obj.run()
         end_time = time.perf_counter()
         elapsed_time_seconds = end_time - start_time
-        print(f"Time needed for covariance calculation: {elapsed_time_seconds:0.3f}s")
+        info(f"Time needed for covariance calculation: {elapsed_time_seconds:0.3f}s")
         cov_df, props_peak_auto = maxcov_obj.get()
 
         # Max covariance
@@ -433,8 +434,8 @@ class FluxDetectionLimit:
                 (cov_df_right['cov_flux'].std()) ** 2 + (cov_df_right['cov_flux'].mean()) ** 2
         ))
         flux_detection_limit = flux_noise_rmse * 3
-        print(f"Flux noise RMSE: {flux_noise_rmse}")
-        print(f"Flux detection limit: {flux_detection_limit}")
+        info(f"Flux noise RMSE: {flux_noise_rmse}")
+        info(f"Flux detection limit: {flux_detection_limit}")
         return flux_detection_limit, flux_noise_rmse
 
 

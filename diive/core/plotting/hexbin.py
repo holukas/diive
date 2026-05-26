@@ -44,6 +44,7 @@ import numpy as np
 
 from diive.core.plotting.heatmap_base import HeatmapBase
 from diive.core.plotting.styles import LightTheme as theme
+from diive.core.utils.console import info
 
 
 class HexbinPlot(HeatmapBase):
@@ -114,7 +115,7 @@ class HexbinPlot(HeatmapBase):
         if z.isnull().any():
             n_nan = z.isnull().sum()
             if verbose:
-                print(f"Info: Z Series contains {n_nan} NaN values (will be ignored during aggregation)")
+                info(f"Z Series contains {n_nan} NaN values (will be ignored during aggregation)", verbose=verbose)
 
         # Call parent init with only heatmaptype and verbose
         super().__init__(heatmaptype='hexbin', verbose=verbose)

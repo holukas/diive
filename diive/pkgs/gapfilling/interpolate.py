@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 from pandas import Series
 
+from diive.core.utils.console import console as _console
 from diive.pkgs.analysis import gapfinder
 
 
@@ -81,17 +82,17 @@ def linear_interpolation(series: Series, limit: int = 3, verbose: bool = False) 
     # Edge case: no missing values
     if n_missing_input == 0:
         if verbose:
-            print(f"\n{'Linear Interpolation Gap-Filling Summary':=^80}")
-            print(f"\n{'Parameters':-^80}")
-            print(f"  {'Method':<35} Linear Interpolation")
-            print(f"  {'Gap size limit':<35} {limit:>4d}  (max consecutive records)")
-            print(f"  {'Time series length':<35} {n_total:>9,d}  records")
-            print(f"\n{'Input Data':-^80}")
-            print(f"  {'Total records':<35} {n_total:>9,d}")
-            print(f"  {'Missing values':<35} {n_missing_input:>9,d}  ({pct_missing_input:>6.2f}%)")
-            print(f"\n{'Result':-^80}")
-            print(f"  {'Status':<35} No gaps found - returning original series")
-            print(f"{'':=^80}\n")
+            _console.print(f"\n{'Linear Interpolation Gap-Filling Summary':=^80}")
+            _console.print(f"\n{'Parameters':-^80}")
+            _console.print(f"  {'Method':<35} Linear Interpolation")
+            _console.print(f"  {'Gap size limit':<35} {limit:>4d}  (max consecutive records)")
+            _console.print(f"  {'Time series length':<35} {n_total:>9,d}  records")
+            _console.print(f"\n{'Input Data':-^80}")
+            _console.print(f"  {'Total records':<35} {n_total:>9,d}")
+            _console.print(f"  {'Missing values':<35} {n_missing_input:>9,d}  ({pct_missing_input:>6.2f}%)")
+            _console.print(f"\n{'Result':-^80}")
+            _console.print(f"  {'Status':<35} No gaps found - returning original series")
+            _console.print(f"{'':=^80}\n")
         return series.copy()
 
     # Locate all gaps (without limit filtering to analyze full gap distribution)
@@ -100,17 +101,17 @@ def linear_interpolation(series: Series, limit: int = 3, verbose: bool = False) 
     # Edge case: no gaps detected
     if len(gapfinder_all) == 0:
         if verbose:
-            print(f"\n{'Linear Interpolation Gap-Filling Summary':=^80}")
-            print(f"\n{'Parameters':-^80}")
-            print(f"  {'Method':<35} Linear Interpolation")
-            print(f"  {'Gap size limit':<35} {limit:>4d}  (max consecutive records)")
-            print(f"  {'Time series length':<35} {n_total:>9,d}  records")
-            print(f"\n{'Input Data':-^80}")
-            print(f"  {'Total records':<35} {n_total:>9,d}")
-            print(f"  {'Missing values':<35} {n_missing_input:>9,d}  ({pct_missing_input:>6.2f}%)")
-            print(f"\n{'Result':-^80}")
-            print(f"  {'Status':<35} No gap regions detected - returning original series")
-            print(f"{'':=^80}\n")
+            _console.print(f"\n{'Linear Interpolation Gap-Filling Summary':=^80}")
+            _console.print(f"\n{'Parameters':-^80}")
+            _console.print(f"  {'Method':<35} Linear Interpolation")
+            _console.print(f"  {'Gap size limit':<35} {limit:>4d}  (max consecutive records)")
+            _console.print(f"  {'Time series length':<35} {n_total:>9,d}  records")
+            _console.print(f"\n{'Input Data':-^80}")
+            _console.print(f"  {'Total records':<35} {n_total:>9,d}")
+            _console.print(f"  {'Missing values':<35} {n_missing_input:>9,d}  ({pct_missing_input:>6.2f}%)")
+            _console.print(f"\n{'Result':-^80}")
+            _console.print(f"  {'Status':<35} No gap regions detected - returning original series")
+            _console.print(f"{'':=^80}\n")
         return series.copy()
 
     # Calculate gap sizes for all gaps
@@ -131,23 +132,23 @@ def linear_interpolation(series: Series, limit: int = 3, verbose: bool = False) 
     # Early exit: no gaps to fill
     if n_gaps_filled == 0:
         if verbose:
-            print(f"\n{'Linear Interpolation Gap-Filling Summary':=^80}")
-            print(f"\n{'Parameters':-^80}")
-            print(f"  {'Method':<35} Linear Interpolation")
-            print(f"  {'Gap size limit':<35} {limit:>4d}  (max consecutive records)")
-            print(f"  {'Time series length':<35} {n_total:>9,d}  records")
-            print(f"\n{'Input Data':-^80}")
-            print(f"  {'Total records':<35} {n_total:>9,d}")
-            print(f"  {'Missing values':<35} {n_missing_input:>9,d}  ({pct_missing_input:>6.2f}%)")
-            print(f"\n{'Gap Analysis (limit={limit})':-^80}")
-            print(f"  {'Total gaps detected':<35} {n_gaps_total:>9,d}  (separate regions)")
-            print(f"  {'Gaps ≤ '+str(limit)+' record(s)':<35} {n_gaps_filled:>9,d}  (eligible for filling)")
-            print(f"  {'Gaps > '+str(limit)+' record(s)':<35} {n_gaps_skipped:>9,d}  (exceed limit)")
-            print(f"  {'Values to interpolate':<35} {n_records_filled:>9,d}  (in fillable gaps)")
-            print(f"  {'Values skipped':<35} {n_records_skipped:>9,d}  (in too-large gaps)")
-            print(f"\n{'Result':-^80}")
-            print(f"  {'Status':<35} No fillable gaps - all exceed limit")
-            print(f"{'':=^80}\n")
+            _console.print(f"\n{'Linear Interpolation Gap-Filling Summary':=^80}")
+            _console.print(f"\n{'Parameters':-^80}")
+            _console.print(f"  {'Method':<35} Linear Interpolation")
+            _console.print(f"  {'Gap size limit':<35} {limit:>4d}  (max consecutive records)")
+            _console.print(f"  {'Time series length':<35} {n_total:>9,d}  records")
+            _console.print(f"\n{'Input Data':-^80}")
+            _console.print(f"  {'Total records':<35} {n_total:>9,d}")
+            _console.print(f"  {'Missing values':<35} {n_missing_input:>9,d}  ({pct_missing_input:>6.2f}%)")
+            _console.print(f"\n{'Gap Analysis (limit={limit})':-^80}")
+            _console.print(f"  {'Total gaps detected':<35} {n_gaps_total:>9,d}  (separate regions)")
+            _console.print(f"  {'Gaps ≤ '+str(limit)+' record(s)':<35} {n_gaps_filled:>9,d}  (eligible for filling)")
+            _console.print(f"  {'Gaps > '+str(limit)+' record(s)':<35} {n_gaps_skipped:>9,d}  (exceed limit)")
+            _console.print(f"  {'Values to interpolate':<35} {n_records_filled:>9,d}  (in fillable gaps)")
+            _console.print(f"  {'Values skipped':<35} {n_records_skipped:>9,d}  (in too-large gaps)")
+            _console.print(f"\n{'Result':-^80}")
+            _console.print(f"  {'Status':<35} No fillable gaps - all exceed limit")
+            _console.print(f"{'':=^80}\n")
         return series.copy()
 
     # Interpolate all gaps, then selectively keep only fillable gaps
@@ -168,38 +169,38 @@ def linear_interpolation(series: Series, limit: int = 3, verbose: bool = False) 
     pct_recovery = 100.0 * (n_missing_input - n_missing_output) / max(n_missing_input, 1)
 
     if verbose:
-        print(f"\n{'Linear Interpolation Gap-Filling Summary':=^80}")
+        _console.print(f"\n{'Linear Interpolation Gap-Filling Summary':=^80}")
 
-        print(f"\n{'Parameters':-^80}")
-        print(f"  {'Method':<35} Linear Interpolation")
-        print(f"  {'Gap size limit':<35} {limit:>4d}  (max consecutive records)")
-        print(f"  {'Time series length':<35} {n_total:>9,d}  records")
+        _console.print(f"\n{'Parameters':-^80}")
+        _console.print(f"  {'Method':<35} Linear Interpolation")
+        _console.print(f"  {'Gap size limit':<35} {limit:>4d}  (max consecutive records)")
+        _console.print(f"  {'Time series length':<35} {n_total:>9,d}  records")
 
-        print(f"\n{'Input Data':-^80}")
-        print(f"  {'Total records':<35} {n_total:>9,d}")
-        print(f"  {'Missing values':<35} {n_missing_input:>9,d}  ({pct_missing_input:>6.2f}%)")
+        _console.print(f"\n{'Input Data':-^80}")
+        _console.print(f"  {'Total records':<35} {n_total:>9,d}")
+        _console.print(f"  {'Missing values':<35} {n_missing_input:>9,d}  ({pct_missing_input:>6.2f}%)")
 
-        print(f"\n{'Gap Analysis (limit={limit})':-^80}")
-        print(f"  {'Total gaps detected':<35} {n_gaps_total:>9,d}  (separate regions)")
-        print(f"  {'Gaps ≤ '+str(limit)+' record(s)':<35} {n_gaps_filled:>9,d}  (eligible for filling)")
-        print(f"  {'Gaps > '+str(limit)+' record(s)':<35} {n_gaps_skipped:>9,d}  (exceed limit)")
-        print(f"  {'Values to interpolate':<35} {n_records_filled:>9,d}  (in fillable gaps)")
-        print(f"  {'Values skipped':<35} {n_records_skipped:>9,d}  (in too-large gaps)")
+        _console.print(f"\n{'Gap Analysis (limit={limit})':-^80}")
+        _console.print(f"  {'Total gaps detected':<35} {n_gaps_total:>9,d}  (separate regions)")
+        _console.print(f"  {'Gaps ≤ '+str(limit)+' record(s)':<35} {n_gaps_filled:>9,d}  (eligible for filling)")
+        _console.print(f"  {'Gaps > '+str(limit)+' record(s)':<35} {n_gaps_skipped:>9,d}  (exceed limit)")
+        _console.print(f"  {'Values to interpolate':<35} {n_records_filled:>9,d}  (in fillable gaps)")
+        _console.print(f"  {'Values skipped':<35} {n_records_skipped:>9,d}  (in too-large gaps)")
 
-        print(f"\n{'Output Data':-^80}")
-        print(f"  {'Missing values after':<35} {n_missing_output:>9,d}  ({pct_missing_output:>6.2f}%)")
+        _console.print(f"\n{'Output Data':-^80}")
+        _console.print(f"  {'Missing values after':<35} {n_missing_output:>9,d}  ({pct_missing_output:>6.2f}%)")
         n_filled = int(n_missing_input - n_missing_output)
-        print(f"  {'Successfully filled':<35} {n_filled:>9,d}  ({pct_recovery:>6.2f}% of {n_missing_input:,d})")
+        _console.print(f"  {'Successfully filled':<35} {n_filled:>9,d}  ({pct_recovery:>6.2f}% of {n_missing_input:,d})")
 
         if n_gaps_total > 0:
             gap_sizes = gapfinder_all['gap_size']
-            print(f"\n{'Gap Size Distribution':-^80}")
-            print(f"  {'Smallest gap':<35} {gap_sizes.min():>9.0f}  record(s)")
-            print(f"  {'Median gap size':<35} {gap_sizes.median():>9.0f}  record(s)")
-            print(f"  {'Largest gap':<35} {gap_sizes.max():>9.0f}  record(s)")
-            print(f"  {'Mean gap size':<35} {gap_sizes.mean():>9.1f}  record(s)")
+            _console.print(f"\n{'Gap Size Distribution':-^80}")
+            _console.print(f"  {'Smallest gap':<35} {gap_sizes.min():>9.0f}  record(s)")
+            _console.print(f"  {'Median gap size':<35} {gap_sizes.median():>9.0f}  record(s)")
+            _console.print(f"  {'Largest gap':<35} {gap_sizes.max():>9.0f}  record(s)")
+            _console.print(f"  {'Mean gap size':<35} {gap_sizes.mean():>9.1f}  record(s)")
 
-        print(f"{'':=^80}\n")
+        _console.print(f"{'':=^80}\n")
 
     return series_filled
 

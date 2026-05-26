@@ -20,6 +20,7 @@ from uncertainties import ufloat
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.plotting.plotfuncs import default_format, default_legend, nice_date_ticks
 from diive.core.plotting.scatter import ScatterXY
+from diive.core.utils.console import console as _console, info
 
 
 # todo
@@ -211,12 +212,12 @@ class RandomUncertaintyPAS20:
         }
         df_summary = pd.DataFrame(summary_data)
 
-        print(f"\n{'=' * 80}")
-        print(f"CUMULATIVE UNCERTAINTY PROPAGATION")
-        print(f"{'=' * 80}")
-        print(df_summary.to_string(index=False))
-        print(f"{'=' * 80}")
-        print(f"Uncertainties package notation: {ufloat:.3f}\n")
+        _console.print(f"\n{'=' * 80}")
+        _console.print(f"CUMULATIVE UNCERTAINTY PROPAGATION")
+        _console.print(f"{'=' * 80}")
+        _console.print(df_summary.to_string(index=False))
+        _console.print(f"{'=' * 80}")
+        _console.print(f"Uncertainties package notation: {ufloat:.3f}\n")
 
     def report_method_summary(self):
         """Report summary of 4-method hierarchical uncertainty quantification."""
@@ -265,17 +266,17 @@ class RandomUncertaintyPAS20:
         }
         df_stats = pd.DataFrame(stats_data)
 
-        print(f"\n{'=' * 80}")
-        print(f"RANDOM UNCERTAINTY QUANTIFICATION - 4-METHOD SUMMARY")
-        print(f"{'=' * 80}")
-        print(f"Total Records: {n_records:,}  |  Measured: {n_measured:,}  |  Gap-filled: {n_gapfilled:,}\n")
+        _console.print(f"\n{'=' * 80}")
+        _console.print(f"RANDOM UNCERTAINTY QUANTIFICATION - 4-METHOD SUMMARY")
+        _console.print(f"{'=' * 80}")
+        _console.print(f"Total Records: {n_records:,}  |  Measured: {n_measured:,}  |  Gap-filled: {n_gapfilled:,}\n")
 
-        print("METHOD DISTRIBUTION:")
-        print(df_methods.to_string(index=False))
+        _console.print("METHOD DISTRIBUTION:")
+        _console.print(df_methods.to_string(index=False))
 
-        print(f"\nUNCERTAINTY STATISTICS (umol CO2 m-2 s-1):")
-        print(df_stats.to_string(index=False))
-        print(f"{'=' * 80}\n")
+        _console.print(f"\nUNCERTAINTY STATISTICS (umol CO2 m-2 s-1):")
+        _console.print(df_stats.to_string(index=False))
+        _console.print(f"{'=' * 80}\n")
 
     def showplot_cumulative_uncertainty_propagation(self):
         """Plot cumulative flux with uncertainty bounds."""
@@ -398,8 +399,8 @@ class RandomUncertaintyPAS20:
             source: https://github.com/fluxnet/ONEFlux/blob/55b6610499e8104450d84f134c3e53284d05e137/oneflux_steps/nee_proc/info/info_hh.txt
 
         """
-        print(f"Calculating random uncertainty with window size +/-{winsize_days} days "
-              f"and +/-{winsize_hours} hours (method 1) ...")
+        info(f"Calculating random uncertainty with window size +/-{winsize_days} days "
+             f"and +/-{winsize_hours} hours (method 1) ...")
         tic = time.time()
         for ix in self.subset.index:
             # Current data
@@ -447,7 +448,7 @@ class RandomUncertaintyPAS20:
             self._randunc_results.loc[cur_dt, 'WINDOW_N_VALS_METHOD1'] = n_vals
 
         toc = time.time() - tic
-        print(f"Time needed: {toc:.2f}s")
+        info(f"Time needed: {toc:.2f}s")
 
     def _method2(self, winsize_days: int = 5, winsize_hours: int = 1):
         """
@@ -468,8 +469,8 @@ class RandomUncertaintyPAS20:
             NEE is always expressed as umolCO2 m-2 s-1
 
         """
-        print(f"Calculating random uncertainty with window size +/-{winsize_days} days "
-              f"and +/-{winsize_hours} hours (method 2) ...")
+        info(f"Calculating random uncertainty with window size +/-{winsize_days} days "
+             f"and +/-{winsize_hours} hours (method 2) ...")
         tic = time.time()
         subset = self.randunc_results.copy()
         ix_missing_randunc = subset[self.randunccol].isnull()
@@ -514,13 +515,13 @@ class RandomUncertaintyPAS20:
             self._randunc_results.loc[cur_dt, 'WINDOW_N_VALS_METHOD2'] = n_vals
 
         toc = time.time() - tic
-        print(f"Time needed: {toc:.2f}s")
+        info(f"Time needed: {toc:.2f}s")
 
     def _method3(self):
         """
         Fill left-over gaps with uncertainty from similar fluxes
         """
-        print(f"Calculating random uncertainty from similar fluxes (method 3) ...")
+        info(f"Calculating random uncertainty from similar fluxes (method 3) ...")
         tic = time.time()
         subset = self.randunc_results.copy()
         ix_missing_randunc = subset[self.randunccol].isnull()
@@ -554,7 +555,7 @@ class RandomUncertaintyPAS20:
             self._randunc_results.loc[cur_dt, 'WINDOW_N_VALS_METHOD3'] = n_vals
 
         toc = time.time() - tic
-        print(f"Time needed: {toc:.2f}s")
+        info(f"Time needed: {toc:.2f}s")
 
     def _method4(self):
         """
@@ -564,7 +565,7 @@ class RandomUncertaintyPAS20:
         Useful if there are fluxes higher outside the +/- 20% flux similarity used
         in method 2 and method 3.
         """
-        print(f"Calculating random uncertainty from similar fluxes (method 3) ...")
+        info(f"Calculating random uncertainty from similar fluxes (method 4) ...")
         tic = time.time()
         subset = self.randunc_results.copy()
 
@@ -590,4 +591,4 @@ class RandomUncertaintyPAS20:
             self._randunc_results.loc[cur_dt, 'WINDOW_N_VALS_METHOD4'] = n_vals
 
         toc = time.time() - tic
-        print(f"Time needed: {toc:.2f}s")
+        info(f"Time needed: {toc:.2f}s")

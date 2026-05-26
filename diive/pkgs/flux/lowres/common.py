@@ -7,6 +7,8 @@ Mapping of flux variable names and base variable detection helpers.
 Part of the diive library: https://github.com/holukas/diive
 """
 
+from diive.core.utils.console import info
+
 # Names of flux variables and their base variable in EddyPro,
 # names are different depending on output file (_full_output_ or _fluxnet_)
 fluxbasevars_fluxnetfile = {
@@ -56,6 +58,6 @@ def detect_fluxbasevar(fluxcol: str) -> str:
     fluxbasevar = fluxbasevars_fluxnetfile[fluxcol]
     if not fluxbasevar:
         raise KeyError(f'No base variable for {fluxcol} could be detected.')
-    print(f"Detected base variable {fluxbasevar} for {fluxcol}. "
-          f"({fluxbasevar} was used to calculate {fluxcol}.)")
+    info(f"Detected base variable {fluxbasevar} for {fluxcol}. "
+         f"({fluxbasevar} was used to calculate {fluxcol}.)")
     return fluxbasevar

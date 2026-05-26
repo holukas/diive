@@ -12,6 +12,8 @@ import pandas as pd
 from typing import Dict, Tuple, Optional, List
 import warnings
 
+from diive.core.utils.console import info, detail, warn
+
 
 class UstarMovingPointDetection:
     """
@@ -235,9 +237,9 @@ class UstarMovingPointDetection:
         # STEP 1: Data validation
         # ============================================================================
         if self.verbose >= 1:
-            print(f"Detecting USTAR thresholds (Papale et al., 2006)...")
-            print(f"  Data: {len(self.df)} records, {self.seasons_count} seasons, "
-                  f"{self.ta_classes_count} TA classes, {self.ustar_classes_count} USTAR classes")
+            info(f"Detecting USTAR thresholds (Papale et al., 2006) | "
+                 f"{len(self.df)} records, {self.seasons_count} seasons, "
+                 f"{self.ta_classes_count} TA classes, {self.ustar_classes_count} USTAR classes")
 
         # Check minimum data volume (ONEFlux requirement: MIN_VALUE_PERIOD = 3000 records)
         if len(self.df) < self.MIN_SAMPLES_PERIOD:
@@ -282,7 +284,7 @@ class UstarMovingPointDetection:
         thresholds_list = []
         for season_idx, months in enumerate(self.season_groups):
             if self.verbose >= 1:
-                print(f"  Season {season_idx + 1}: months {months}")
+                info(f"  Season {season_idx + 1}: months {months}")
 
             # Filter to season AND nighttime (respiration only, no photosynthesis noise)
             season_mask = (df_valid['month'].isin(months)) & (df_valid['is_night'])
@@ -291,7 +293,7 @@ class UstarMovingPointDetection:
             # Check minimum season data (Papale et al. requirement: MIN_VALUE_SEASON = 160 records)
             if len(df_season) < self.MIN_SAMPLES_SEASON:
                 if self.verbose >= 2:
-                    print(f"    Insufficient data: {len(df_season)} samples (need {self.MIN_SAMPLES_SEASON})")
+                    detail(f"    Insufficient data: {len(df_season)} samples (need {self.MIN_SAMPLES_SEASON})")
                 thresholds_list.append([np.nan])
                 continue
 
@@ -301,7 +303,7 @@ class UstarMovingPointDetection:
             thresholds_list.append([threshold])
 
             if self.verbose >= 2 and threshold != self.THRESHOLD_NOT_FOUND:
-                print(f"    Threshold: {threshold:.4f} m/s")
+                detail(f"    Threshold: {threshold:.4f} m/s")
 
         # STEP 5: Store seasonal results
         # ============================================================================
@@ -325,9 +327,9 @@ class UstarMovingPointDetection:
         if self.verbose >= 1:
             annual_val = self.annual_thresholds_['threshold']
             if annual_val != self.THRESHOLD_NOT_FOUND:
-                print(f"\nAnnual threshold (Papale et al. 2006 conservative approach): {annual_val:.4f} m/s")
+                info(f"Annual threshold (Papale et al. 2006 conservative approach): {annual_val:.4f} m/s")
             else:
-                print(f"\nAnnual threshold: Not found")
+                info(f"Annual threshold: Not found")
 
         return self.results_
 
@@ -576,13 +578,13 @@ class UstarMovingPointDetection:
             n_iter = self.bootstrapping_times
 
         if self.verbose >= 1:
-            print(f"Running {n_iter} bootstrap iterations...")
+            info(f"Running {n_iter} bootstrap iterations...")
 
         boot_results = {i: [] for i in range(self.seasons_count)}
 
         for boot_idx in range(n_iter):
             if self.verbose >= 2 and boot_idx % 10 == 0:
-                print(f"  Iteration {boot_idx + 1}/{n_iter}")
+                detail(f"  Iteration {boot_idx + 1}/{n_iter}")
 
             # Resample with replacement
             df_boot = self.df.sample(n=len(self.df), replace=True)
@@ -607,7 +609,7 @@ class UstarMovingPointDetection:
                         boot_results[season_idx].append(results.iloc[season_idx].values)
             except Exception as e:
                 if self.verbose >= 2:
-                    print(f"    Bootstrap {boot_idx} failed: {str(e)}")
+                    warn(f"Bootstrap {boot_idx} failed: {str(e)}")
                 continue
 
         # Compute statistics

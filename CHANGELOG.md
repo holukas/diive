@@ -102,6 +102,15 @@
 - **Import path fixes** — corrected 7 misrouted exports in `__init__.py` files.
 - All 63 active tests pass.
 
+### Console Output
+
+- **Rich console migration** — all `print()` calls in production code replaced with structured Rich helpers
+  (`info`, `detail`, `warn`, `error`, `_console.print()`). User-facing report methods use `_console.print()`
+  directly; verbose-gated progress uses `info()`/`detail()`; always-visible warnings use `warn()`.
+  Affected modules: `core/ml`, `core/plotting`, `pkgs/flux/lowres`, `pkgs/flux/hires`, `pkgs/gapfilling`,
+  `pkgs/io/formats`, `pkgs/analysis`, `pkgs/features`, `pkgs/preprocessing/qaqc`. Example functions and
+  CLI entry points intentionally left unchanged.
+
 ### Examples & Documentation
 
 - New examples: `fluxprocessingchain_composable.py` (full L2->L4.1), `fluxprocessingchain_multiflux.py` (multi-flux

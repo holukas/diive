@@ -13,6 +13,7 @@ import pandas as pd
 from pandas import Series
 
 import diive.core.plotting.plotfuncs as pf
+from diive.core.utils.console import info
 from diive.pkgs.preprocessing.outlier_detection.hampel import Hampel
 from diive.pkgs.preprocessing.outlier_detection import LocalOutlierFactorAllData
 
@@ -44,9 +45,9 @@ def _deprecated_analyze_highest_quality_flux(flux: Series, nighttime_flag: Serie
         n_neighbors = n_neighbors if n_neighbors > 0 else 10
         contamination = 'auto'
         repeat = False
-        print(f"\n>>> Removing outliers from highest-quality {timeofday} fluxes ({hq.name})")
-        print(f">>> Outlier removal method: Local outlier factor across all data (n_neighbors={n_neighbors}, "
-              f"contamination={contamination}, repeat={repeat})")
+        info(f"\n>>> Removing outliers from highest-quality {timeofday} fluxes ({hq.name})")
+        info(f">>> Outlier removal method: Local outlier factor across all data (n_neighbors={n_neighbors}, "
+             f"contamination={contamination}, repeat={repeat})")
         lof = LocalOutlierFactorAllData(series=hq, n_neighbors=n_neighbors, contamination=contamination,
                                         showplot=showplot, verbose=True, n_jobs=-1)
         lof.calc(repeat=repeat)
@@ -71,20 +72,20 @@ def _deprecated_analyze_highest_quality_flux(flux: Series, nighttime_flag: Serie
         hqdf_filtered[f'WINSIZE_{timeofday}'] = winsize
 
         non_outliers_s_above_zero = non_outlier_s[non_outlier_s >= 0].copy()
-        print(f">>> Largest non-outlier flux >= 0 {timeofday}:   {non_outliers_s_above_zero.max()}")
-        print(f">>> Smallest non-outlier flux >= 0 {timeofday}:  {non_outliers_s_above_zero.min()}")
+        info(f">>> Largest non-outlier flux >= 0 {timeofday}:   {non_outliers_s_above_zero.max()}")
+        info(f">>> Smallest non-outlier flux >= 0 {timeofday}:  {non_outliers_s_above_zero.min()}")
 
         non_outliers_s_below_zero = non_outlier_s[non_outlier_s < 0].copy()
-        print(f">>> Largest non-outlier flux < 0 {timeofday}:    {non_outliers_s_below_zero.max()}")
-        print(f">>> Smallest non-outlier flux < 0 {timeofday}:   {non_outliers_s_below_zero.min()}")
+        info(f">>> Largest non-outlier flux < 0 {timeofday}:    {non_outliers_s_below_zero.max()}")
+        info(f">>> Smallest non-outlier flux < 0 {timeofday}:   {non_outliers_s_below_zero.min()}")
 
         outliers_s_above_zero = outlier_s[outlier_s >= 0].copy()
-        print(f">>> Largest outlier flux >= 0 {timeofday}:   {outliers_s_above_zero.max()}")
-        print(f">>> Smallest outlier flux >= 0 {timeofday}:  {outliers_s_above_zero.min()}")
+        info(f">>> Largest outlier flux >= 0 {timeofday}:   {outliers_s_above_zero.max()}")
+        info(f">>> Smallest outlier flux >= 0 {timeofday}:  {outliers_s_above_zero.min()}")
 
         outliers_s_below_zero = outlier_s[outlier_s < 0].copy()
-        print(f">>> Largest outlier flux < 0 {timeofday}:    {outliers_s_below_zero.max()}")
-        print(f">>> Smallest outlier flux < 0 {timeofday}:   {outliers_s_below_zero.min()}")
+        info(f">>> Largest outlier flux < 0 {timeofday}:    {outliers_s_below_zero.max()}")
+        info(f">>> Smallest outlier flux < 0 {timeofday}:   {outliers_s_below_zero.min()}")
 
     if showplot:
         fig = plt.figure(facecolor='white', figsize=(16, 7))
@@ -217,11 +218,11 @@ def analyze_highest_quality_flux(flux: Series,
         window_length = max(int(flux.dropna().count() / 100), 13)
 
     # Apply Hampel filter to entire series with built-in day/night separation
-    print(f"\n>>> Removing outliers from highest-quality fluxes ({flux.name})")
-    print(f">>> Outlier removal method: Hampel filter (MAD-based)")
-    print(f">>> Parameters: window_length={window_length}, "
-          f"n_sigma_daytime={n_sigma_daytime}, n_sigma_nighttime={n_sigma_nighttime}, "
-          f"use_differencing={use_differencing}")
+    info(f"\n>>> Removing outliers from highest-quality fluxes ({flux.name})")
+    info(f">>> Outlier removal method: Hampel filter (MAD-based)")
+    info(f">>> Parameters: window_length={window_length}, "
+         f"n_sigma_daytime={n_sigma_daytime}, n_sigma_nighttime={n_sigma_nighttime}, "
+         f"use_differencing={use_differencing}")
 
     try:
         hampel = Hampel(
@@ -260,10 +261,10 @@ def analyze_highest_quality_flux(flux: Series,
     summary['n_sigma_daytime'] = n_sigma_daytime
     summary['n_sigma_nighttime'] = n_sigma_nighttime
 
-    print(f"\n>>> Outlier Detection Summary:")
-    print(f">>> Total records:     {n_total}")
-    print(f">>> Valid records:     {n_valid} ({100-pct_outliers:.1f}%)")
-    print(f">>> Outliers detected: {n_outliers} ({pct_outliers:.1f}%)")
+    info(f"\n>>> Outlier Detection Summary:")
+    info(f">>> Total records:     {n_total}")
+    info(f">>> Valid records:     {n_valid} ({100-pct_outliers:.1f}%)")
+    info(f">>> Outliers detected: {n_outliers} ({pct_outliers:.1f}%)")
 
     # Process daytime and nighttime separately for statistics
     for d, timeofday in enumerate(['DAYTIME', 'NIGHTTIME']):
@@ -297,27 +298,27 @@ def analyze_highest_quality_flux(flux: Series,
         # Calculate and print statistics
         non_outliers_s_above_zero = non_outlier_s[non_outlier_s >= 0].copy()
         if len(non_outliers_s_above_zero) > 0:
-            print(f">>> Largest non-outlier flux >= 0 {timeofday}:   {non_outliers_s_above_zero.max():.6f}")
-            print(f">>> Smallest non-outlier flux >= 0 {timeofday}:  {non_outliers_s_above_zero.min():.6f}")
+            info(f">>> Largest non-outlier flux >= 0 {timeofday}:   {non_outliers_s_above_zero.max():.6f}")
+            info(f">>> Smallest non-outlier flux >= 0 {timeofday}:  {non_outliers_s_above_zero.min():.6f}")
         else:
-            print(f">>> No non-outlier flux >= 0 {timeofday}")
+            info(f">>> No non-outlier flux >= 0 {timeofday}")
 
         non_outliers_s_below_zero = non_outlier_s[non_outlier_s < 0].copy()
         if len(non_outliers_s_below_zero) > 0:
-            print(f">>> Largest non-outlier flux < 0 {timeofday}:    {non_outliers_s_below_zero.max():.6f}")
-            print(f">>> Smallest non-outlier flux < 0 {timeofday}:   {non_outliers_s_below_zero.min():.6f}")
+            info(f">>> Largest non-outlier flux < 0 {timeofday}:    {non_outliers_s_below_zero.max():.6f}")
+            info(f">>> Smallest non-outlier flux < 0 {timeofday}:   {non_outliers_s_below_zero.min():.6f}")
         else:
-            print(f">>> No non-outlier flux < 0 {timeofday}")
+            info(f">>> No non-outlier flux < 0 {timeofday}")
 
         outliers_s_above_zero = outlier_s[outlier_s >= 0].copy()
         if len(outliers_s_above_zero) > 0:
-            print(f">>> Largest outlier flux >= 0 {timeofday}:   {outliers_s_above_zero.max():.6f}")
-            print(f">>> Smallest outlier flux >= 0 {timeofday}:  {outliers_s_above_zero.min():.6f}")
+            info(f">>> Largest outlier flux >= 0 {timeofday}:   {outliers_s_above_zero.max():.6f}")
+            info(f">>> Smallest outlier flux >= 0 {timeofday}:  {outliers_s_above_zero.min():.6f}")
 
         outliers_s_below_zero = outlier_s[outlier_s < 0].copy()
         if len(outliers_s_below_zero) > 0:
-            print(f">>> Largest outlier flux < 0 {timeofday}:    {outliers_s_below_zero.max():.6f}")
-            print(f">>> Smallest outlier flux < 0 {timeofday}:   {outliers_s_below_zero.min():.6f}")
+            info(f">>> Largest outlier flux < 0 {timeofday}:    {outliers_s_below_zero.max():.6f}")
+            info(f">>> Smallest outlier flux < 0 {timeofday}:   {outliers_s_below_zero.min():.6f}")
 
     if showplot:
         fig = plt.figure(facecolor='white', figsize=figsize)

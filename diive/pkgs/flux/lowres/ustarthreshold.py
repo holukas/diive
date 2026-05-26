@@ -18,6 +18,7 @@ import diive.core.plotting.plotfuncs as pf
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.base.flagbase import FlagBase
 from diive.core.times.times import insert_season
+from diive.core.utils.console import info, detail, warn
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.pkgs.features.variables import daytime_nighttime_flag_from_swinpot
 from diive.pkgs.features.variables.potentialradiation import potrad
@@ -141,9 +142,8 @@ class FlagSingleConstantUstarThreshold(FlagBase):
         n_outliers = len(rejected)
 
         if self.verbose:
-            if self.verbose:
-                print(
-                    f"Total found outliers for USTAR threshold {self._idstr} {self.threshold}: {len(rejected)} values")
+            detail(f"Total found outliers for USTAR threshold {self._idstr} {self.threshold}: {len(rejected)} values",
+                   verbose=self.verbose)
 
         return ok, rejected, n_outliers
 
@@ -434,11 +434,9 @@ class UstarDetectionMPT:
         results_so_far = []
 
         for bts_run in range(0, overall_runs):
-            print(f"BOOTSTRAP RUN #{bts_run}: ", end=" ")
-
             # SAMPLE DATA
             sampledf = self.sample_data(df=self.workdf_nt)
-            print(f"{sampledf.shape} records ", end=" ")
+            info(f"Bootstrap run #{bts_run}: {sampledf.shape} records")
             sampledf = sampledf.reset_index(inplace=False)  # Keeps timestamp as column in df
 
             # SEPARATE BY SEASON DATA POOL
@@ -482,15 +480,13 @@ class UstarDetectionMPT:
             locs = self.bts_results_df['BOOTSTRAP_RUN'] == bts_run
             season_max = self.bts_results_df.loc[locs, 'SEASON_THRES_MEDIAN'].max()
             self.bts_results_df.loc[locs, 'OVERALL_THRES_MAX'] = season_max
-            print(f"{season_max:.3f} m s-1 ", end=" ")
-
             results_so_far.append(season_max)
-            print(f"overall so far: {np.median(results_so_far):.3f}")
+            info(f"  Season max: {season_max:.3f} m s-1 | overall so far: {np.median(results_so_far):.3f}")
 
         bts_thresholds = self.bts_results_df['OVERALL_THRES_MAX'].unique()
-        print(np.quantile(bts_thresholds, .16))
-        print(np.quantile(bts_thresholds, .50))
-        print(np.quantile(bts_thresholds, .84))
+        info(f"Bootstrap quantiles: p16={np.quantile(bts_thresholds, .16):.4f}  "
+             f"p50={np.quantile(bts_thresholds, .50):.4f}  "
+             f"p84={np.quantile(bts_thresholds, .84):.4f}")
 
     def set_yearly_thresholds(self, df):
         """Calculate yearly thresholds from season thresholds in full-resolution dataframe."""
@@ -802,19 +798,18 @@ class UstarDetectionMPT:
             cur_following_mean = cur_flux_perc = nxt_following_mean = nxt_flux_perc = nxt_flux = -9999
 
         try:
-            print(f"\n\n[SEASON] {cur_season}  "
-                  f"[TA CLASS] {cur_class}  "
-                  f"[USTAR SUBCLASS] {cur_subclass}  "
-                  f"USTAR  {cur_ustar:.2f}  "
-                  f"FLUX  {cur_flux:.2f}  "
-                  f"FLUX following mean {cur_following_mean:.2f}  "
-                  f"FLUX/MEAN {cur_flux_perc:.2f}%  "
-                  f"(NEXT) FLUX {nxt_flux:.2f}  "
-                  f"(NEXT) FLUX following mean {nxt_following_mean:.2f}  "
-                  f"(NEXT) FLUX/MEAN {nxt_flux_perc:.2f}  "
-                  )
+            detail(f"[SEASON] {cur_season}  "
+                   f"[TA CLASS] {cur_class}  "
+                   f"[USTAR SUBCLASS] {cur_subclass}  "
+                   f"USTAR {cur_ustar:.2f}  "
+                   f"FLUX {cur_flux:.2f}  "
+                   f"FLUX following mean {cur_following_mean:.2f}  "
+                   f"FLUX/MEAN {cur_flux_perc:.2f}%  "
+                   f"(NEXT) FLUX {nxt_flux:.2f}  "
+                   f"(NEXT) FLUX following mean {nxt_following_mean:.2f}  "
+                   f"(NEXT) FLUX/MEAN {nxt_flux_perc:.2f}")
         except ValueError:
-            print("-ValueError-")
+            warn("ValueError in ustar_subclass_info")
 
     def calculate_subclass_medians(self, season_df, ta_class_col, ustar_subclass_col,
                                    season_key):

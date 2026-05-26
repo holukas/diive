@@ -12,6 +12,8 @@ import pandas as pd
 from typing import Dict, Tuple, Optional, List
 import warnings
 
+from diive.core.utils.console import info, detail, warn
+
 
 class UstarVekuriThresholdDetection:
     """
@@ -206,9 +208,9 @@ class UstarVekuriThresholdDetection:
             Values: USTAR threshold in m/s, or NaN if detection failed
         """
         if self.verbose >= 1:
-            print(f"Detecting USTAR thresholds (Vekuri quantile-based approach)...")
-            print(f"  Data: {len(self.df)} records, {self.seasons_count} seasons, "
-                  f"{self.n_temperature_classes} TA classes, {self.n_ustar_classes} USTAR classes")
+            info(f"Detecting USTAR thresholds (Vekuri quantile-based approach) | "
+                 f"{len(self.df)} records, {self.seasons_count} seasons, "
+                 f"{self.n_temperature_classes} TA classes, {self.n_ustar_classes} USTAR classes")
 
         # Remove records with missing values
         valid_mask = (
@@ -232,14 +234,14 @@ class UstarVekuriThresholdDetection:
         thresholds_list = []
         for season_idx, months in enumerate(self.season_groups):
             if self.verbose >= 1:
-                print(f"  Season {season_idx + 1}: months {months}")
+                info(f"  Season {season_idx + 1}: months {months}")
 
             season_mask = df_valid['month'].isin(months)
             df_season = df_valid[season_mask].copy()
 
             if len(df_season) < 50:
                 if self.verbose >= 2:
-                    print(f"    Insufficient data: {len(df_season)} samples")
+                    detail(f"    Insufficient data: {len(df_season)} samples")
                 thresholds_list.append([np.nan])
                 continue
 
@@ -247,7 +249,7 @@ class UstarVekuriThresholdDetection:
             thresholds_list.append([threshold])
 
             if self.verbose >= 2 and not np.isnan(threshold):
-                print(f"    Threshold: {threshold:.4f} m/s")
+                detail(f"    Threshold: {threshold:.4f} m/s")
 
         # Store results
         self.results_ = pd.DataFrame(
@@ -265,7 +267,7 @@ class UstarVekuriThresholdDetection:
         if self.verbose >= 1:
             annual = self.annual_thresholds_['threshold']
             if not np.isnan(annual):
-                print(f"\nAnnual threshold: {annual:.4f} m/s")
+                info(f"Annual threshold: {annual:.4f} m/s")
 
         return self.results_
 
@@ -311,7 +313,7 @@ class UstarVekuriThresholdDetection:
 
         except Exception as e:
             if self.verbose >= 2:
-                print(f"    Error in season detection: {str(e)}")
+                warn(f"Error in season detection: {str(e)}")
             return np.nan
 
         # Aggregate using median
@@ -360,13 +362,13 @@ class UstarVekuriThresholdDetection:
             n_iter = self.bootstrapping_times
 
         if self.verbose >= 1:
-            print(f"Running {n_iter} bootstrap iterations...")
+            info(f"Running {n_iter} bootstrap iterations...")
 
         boot_results = {i: [] for i in range(self.seasons_count)}
 
         for boot_idx in range(n_iter):
             if self.verbose >= 2 and boot_idx % 10 == 0:
-                print(f"  Iteration {boot_idx + 1}/{n_iter}")
+                detail(f"  Iteration {boot_idx + 1}/{n_iter}")
 
             df_boot = self.df.sample(n=len(self.df), replace=True)
 
@@ -392,7 +394,7 @@ class UstarVekuriThresholdDetection:
                             boot_results[season_idx].append(val)
             except Exception:
                 if self.verbose >= 2:
-                    print(f"    Bootstrap {boot_idx} failed")
+                    warn(f"Bootstrap {boot_idx} failed")
                 continue
 
         return self._compute_bootstrap_statistics(boot_results)

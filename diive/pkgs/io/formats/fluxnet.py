@@ -17,6 +17,7 @@ from diive.core.io.files import loadfiles
 from diive.core.times.times import current_date_str_condensed
 from diive.core.times.times import format_timestamp_to_fluxnet_format
 from diive.core.times.times import insert_timestamp
+from diive.core.utils.console import info, warn
 from diive.pkgs.preprocessing.outlier_detection.manualremoval import ManualRemoval
 from diive.pkgs.preprocessing.qaqc.eddyproflags import flag_signal_strength_eddypro_test
 
@@ -135,11 +136,11 @@ class FormatEddyProFluxnetFileForUpload:
         self._merged_df = None
         self._subset_fluxnet = None
 
-        print(f"\nInitiated formatting for datafiles with the following settings:")
-        print(f"    site: {self.site}")
-        print(f"    source folder: {self.sourcedir}")
-        print(f"    output folder: {self.outdir}")
-        print(f"    add run ID: {self.add_runid}")
+        info(f"\nInitiated formatting for datafiles with the following settings:")
+        info(f"    site: {self.site}")
+        info(f"    source folder: {self.sourcedir}")
+        info(f"    output folder: {self.outdir}")
+        info(f"    add run ID: {self.add_runid}")
 
         self.req_vars = self._create_list_req_vars()
 
@@ -179,8 +180,9 @@ class FormatEddyProFluxnetFileForUpload:
         if not req_vars:
             raise Exception(f"No required variables selected.")
 
-        print(f"\nSearching for the following variables in the output file:")
-        [print(f"    {v}") for v in req_vars]
+        info(f"\nSearching for the following variables in the output file:")
+        for v in req_vars:
+            info(f"    {v}")
 
         return req_vars
 
@@ -204,12 +206,12 @@ class FormatEddyProFluxnetFileForUpload:
         Returns:
             updated *var* in merged dataframe, with data points removed
         """
-        print(f"\nRemoving {var} data points for the following date(s) and/or time range(s):")
+        info(f"\nRemoving {var} data points for the following date(s) and/or time range(s):")
         for d in remove_dates:
             if isinstance(d, str):
-                print(f"    REMOVING data for {var} single data point {d}")
+                info(f"    REMOVING data for {var} single data point {d}")
             elif isinstance(d, list):
-                print(f"    REMOVING data for {var} time range between {d} (dates are inclusive)")
+                info(f"    REMOVING data for {var} time range between {d} (dates are inclusive)")
         series = self.merged_df[var].copy()
         n_vals_before = series.dropna().count()
         flagtest = ManualRemoval(series=series, remove_dates=remove_dates,
@@ -229,10 +231,10 @@ class FormatEddyProFluxnetFileForUpload:
         # Info number of rejected values
         n_vals_after = self.merged_df[var].dropna().count()
         n_rejected = reject.sum()
-        print(f"Manual removal rejected {n_rejected} values of {var}, all rejected "
-              f"value were removed from the dataset.")
-        print(f"\nAvailable values of {var} before removing fluxes: {n_vals_before}")
-        print(f"Available values of {var} after removing fluxes: {n_vals_after}")
+        info(f"Manual removal rejected {n_rejected} values of {var}, all rejected "
+             f"value were removed from the dataset.")
+        info(f"\nAvailable values of {var} before removing fluxes: {n_vals_before}")
+        info(f"Available values of {var} after removing fluxes: {n_vals_after}")
 
     def apply_fluxnet_format(self):
         self._subset_fluxnet = self._make_subset(df=self.merged_df)
@@ -254,7 +256,7 @@ class FormatEddyProFluxnetFileForUpload:
 
     def _save_one_file_per_year(self, df: DataFrame):
         """Save data to yearly files"""
-        print(f"\nSaving yearly CSV files ...")
+        info(f"\nSaving yearly CSV files ...")
         uniq_years = list(df.index.year.unique())
         runid = f"_{current_date_str_condensed()}" if self.add_runid else ""
         for year in uniq_years:
@@ -263,12 +265,12 @@ class FormatEddyProFluxnetFileForUpload:
             yearlocs = df.index.year == year
             yeardata = df[yearlocs].copy()
             yeardata.to_csv(outpath, index=False)
-            print(f"    --> Saved file {outpath}.")
+            info(f"    --> Saved file {outpath}.")
 
     @staticmethod
     def _missing_values(df: DataFrame):
         """Set all missing values to -9999 as required by FLUXNET"""
-        print("\nSetting all missing values to -9999 ...")
+        info("\nSetting all missing values to -9999 ...")
         return df.fillna(-9999)
 
     @staticmethod
@@ -293,12 +295,12 @@ class FormatEddyProFluxnetFileForUpload:
             else:
                 notrenamed.append(var)
         df = df.rename(columns=renaming_dict)
-        print(f"\nThe following variables have been renamed:")
+        info(f"\nThe following variables have been renamed:")
         for ix, val in renaming_dict.items():
-            print(f"    RENAMED --> {ix} was renamed to {val}")
-        print(f"\nThe following variables have not been renamed:")
+            info(f"    RENAMED --> {ix} was renamed to {val}")
+        info(f"\nThe following variables have not been renamed:")
         for var in notrenamed:
-            print(f"    NOT RENAMED --> {var} was not renamed")
+            info(f"    NOT RENAMED --> {var} was not renamed")
         return df
 
     def _rename_to_variable_codes(self, df: DataFrame) -> DataFrame:
@@ -307,44 +309,42 @@ class FormatEddyProFluxnetFileForUpload:
 
         see: http://www.europe-fluxdata.eu/home/guidelines/how-to-submit-data/variables-codes
         """
-        print("\nThe following variables are renamed to comply with FLUXNET variable codes:")
+        info("\nThe following variables are renamed to comply with FLUXNET variable codes:")
 
         # TODO
 
         for key, val in renaming_dict.items():
             if key in self.req_vars:
-                print(f"    RENAMED --> {key} was renamed to {val}")
+                info(f"    RENAMED --> {key} was renamed to {val}")
         df = df.rename(columns=renaming_dict)
         return df
 
     def _make_subset(self, df: DataFrame) -> DataFrame:
         """Make subset that contains variables available for sharing"""
-        print("\nAssembling subset of variables ...")
+        info("\nAssembling subset of variables ...")
 
         _df = df.copy()
 
-        print("  > Removing empty variables ...")
+        info("  > Removing empty variables ...")
         _df = _df.dropna(how='all', axis=1, inplace=False)
 
-        print("  > Collecting available data ...")
+        info("  > Collecting available data ...")
         available_vars = _df.columns
         subsetcols = []
         notavailablecols = []
         for var in self.req_vars:
-            print(f"      searching for {var} ...", end=" ")
             if var in available_vars:
-                print(f"found {var} OK")
+                info(f"      searching for {var} ... found {var} OK")
                 subsetcols.append(var)
             else:
-                print(f"variable {var} not found in output file (!) WARNING")
+                warn(f"      searching for {var} ... variable {var} not found in output file (!) WARNING")
                 notavailablecols.append(var)
 
         if notavailablecols:
-            print(f"      (!) WARNING Some required columns were not available in the data, check {notavailablecols}")
+            warn(f"      (!) WARNING Some required columns were not available in the data, check {notavailablecols}")
 
-        print(f"  > Creating subset of data with variables {subsetcols} ...", end=" ")
         subset = df[subsetcols].copy()
-        print("OK")
+        info(f"  > Creating subset of data with variables {subsetcols} ... OK")
         return subset
 
     def remove_low_signal_data(self,
@@ -364,13 +364,13 @@ class FormatEddyProFluxnetFileForUpload:
         Returns:
             None
         """
-        print(f"\n\n{'=' * 80}\nRemoving {fluxcol} flux values where signal strength / AGC is not sufficient:")
+        info(f"\n\n{'=' * 80}\nRemoving {fluxcol} flux values where signal strength / AGC is not sufficient:")
         levelid = 'L2'  # ID to identify newly created columns
         df = self.merged_df.copy()
         keepcols = df.columns.copy()  # Original columns in df, used to keep only original variable names
         n_vals_before = df[fluxcol].dropna().count()
 
-        print(f"\nPerforming signal strength / AGC quality check ...\n")
+        info(f"\nPerforming signal strength / AGC quality check ...\n")
         flag = flag_signal_strength_eddypro_test(df=df,
                                                  signal_strength_col=signal_strength_col,
                                                  var_col=fluxcol,
@@ -386,14 +386,14 @@ class FormatEddyProFluxnetFileForUpload:
         # Info number of rejected values
         n_vals_after = df[fluxcol].dropna().count()
         n_rejected = reject.sum()
-        print(f"{signal_strength_col} rejected {n_rejected} values of {fluxcol}, all rejected "
-              f"value were removed from the dataset.")
-        print(f"\nAvailable values of {fluxcol} before removing low signal fluxes: {n_vals_before}")
-        print(f"Available values of {fluxcol} after removing low signal fluxes: {n_vals_after}")
+        info(f"{signal_strength_col} rejected {n_rejected} values of {fluxcol}, all rejected "
+             f"value were removed from the dataset.")
+        info(f"\nAvailable values of {fluxcol} before removing low signal fluxes: {n_vals_before}")
+        info(f"Available values of {fluxcol} after removing low signal fluxes: {n_vals_after}")
 
         # Keep original columns only, do not keep the newly generated L2 columns
-        print("\nRemoving all newly generated columns relating to quality check "
-              "(not needed for FLUXNET), restoring original set of variables ...")
+        info("\nRemoving all newly generated columns relating to quality check "
+             "(not needed for FLUXNET), restoring original set of variables ...")
         self._merged_df = df[keepcols].copy()
 
 
