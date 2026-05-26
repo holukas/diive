@@ -2,699 +2,113 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## Unreleased
-
-**Harden composable flux chain API; extend composable example to full L2–L4.1.**
-
-### Fixes
-
-- **Rename `nighttimetime_accept_qcf_below` → `nighttime_accept_qcf_below`** — `FlagQCF.calculate()`, `StepwiseMeteoScreeningDb.finalize_outlier_detection()`, `FluxMeta`, `init_flux_data`, `FluxProcessingChain.__init__`, all examples, tests, COOKBOOK.md.
-  Corrected a long-standing double-"time" typo in a public parameter name.
-
-- **`data.filteredseries` set to `None` after `run_level33_constant_ustar()`** — `levels/level33.py`.
-  Previously held the last-processed USTAR scenario's series (arbitrary dict-order). Now explicitly `None` to force correct per-scenario access: `data.levels.filteredseries_level33_qcf['CUT_50']`.
-
-- **Validate `signal_strength` and `raw_data_screening_vm97` sub-keys in `run_level2()`** — `levels/level2.py`.
-  Missing sub-keys previously caused a confusing `KeyError` deep in the level class. Now raises a clear error at the call site listing all required keys.
-
-- **Guard for empty outlier detector in `run_level32()`** — `levels/level32.py`.
-  If no `flag_outliers_*()` + `addflag()` calls were made, `FlagQCF` would silently produce all QCF=0. Now raises `RuntimeError` before any processing starts.
-
-- **Validate MDS and ML driver/feature columns at call-site** — `levels/level41.py`.
-  `run_level41_mds()` raises `KeyError` if `swin`/`ta`/`vpd` are missing from `data.full_df`; `_run_level41_ml()` raises `KeyError` for missing feature columns. Both include the list of available columns.
-
-- **Guard `_extract_gapfilling_flag_col()` returning `None`** — `levels/level41.py`.
-  Zero or multiple `FLAG_*_ISFILLED` columns now raise a descriptive `RuntimeError` instead of a confusing `KeyError: None`.
-
-- **Hoist feature engineering outside USTAR scenario loop** — `levels/level41.py`.
-  `engineer.fit_transform()` was called once per USTAR scenario; features are identical across scenarios. Now called once before the loop — up to 3× speedup for multi-scenario chains.
-
-- **Align `gapfill_storage_term` default** — `FluxStorageCorrectionSinglePointEddyPro.__init__` default changed from `False` to `True`, matching `run_level31()`.
-
-- **Extract energy flux constant in `QuickFluxProcessingChain`** — `fluxprocessingchain.py`.
-  Hardcoded `['H', 'LE']` replaced with `_ENERGY_FLUX_VARS` frozenset covering `'G'`, `'SH'`, `'SLE'`, `'FH2O'` as well.
-
-- **`fluxcol`/`ustarcol` existence check in `init_flux_data()`** — `levels/_init.py`.
-  Raises `KeyError` immediately (with available columns) if either column is missing from the input DataFrame.
-
-- **VPD unit validation in `run_level41_mds()`** — `levels/level41.py`.
-  Raises `UserWarning` when median VPD exceeds 10 (almost certainly hPa instead of the required kPa).
-
-### Additions
-
-- **`FluxConfig` dataclass** — `container.py`.
-  Per-flux configuration for `run_flux_chain`. Captures USTAR thresholds, Hampel sigma values (required, no defaults for outlier sigma — must be set per flux), L2 test dicts, gap-filling features, and MDS driver columns. `set_storage_to_zero` applies to any flux without a storage measurement (not H/LE-specific).
-
-- **`run_flux_chain(df, config, *, site_lat, site_lon, ...)` → `FluxLevelData`** — `levels/multiflux.py`.
-  Convenience wrapper that runs the full L1→L4.1 pipeline for a single flux guided by a `FluxConfig`. Site-level parameters are keyword-only so they can be written once and shared across a multi-flux loop. Validates that `engineer` is provided when ML gap-filling is enabled, and that MDS driver columns are set. Production-ready RF/XGBoost defaults (`n_estimators=350`, `max_depth=15`/`6`) that can be overridden via `rf_kwargs`/`xgb_kwargs`/`mds_kwargs`.
-
-- **`filteredseries_level33_hq` per USTAR scenario** — `levels/level33.py`, `container.py`.
-  `LevelResults.filteredseries_level33_hq` dict holds the QCF=0-only (strictest) filtered series for each USTAR scenario — the analogue of `filteredseries_hq` at the L3.3 level.
-
-- **`FluxLevelData.gapfilled_cols()`** — `container.py`.
-  Returns `{method: {ustar_scenario: column_name}}` for all L4.1 methods that have run. Eliminates digging into model instances to find gap-filled column names.
-
-- **`FluxLevelData.summary()`** — `container.py`.
-  Human-readable per-level data-availability table with daytime/nighttime breakdown, QCF thresholds, and site metadata. L4.1 section shows measured / gap-filled / fallback counts and percentages via `FLAG_*_ISFILLED`.
-
-### Improvements
-
-- **`FluxLevelData.__repr__`** — shows valid/total count for the filtered series; column list capped at 12 entries with `... (+N more)`.
-- **Docstrings throughout** — QCF=0/1/2 semantics and FLUXNET vs default threshold explained in `init_flux_data()`; H/LE patterns (`set_storage_to_zero=True`, `thresholds=[0]`) documented in `run_level31/33`; `FeatureEngineer target_col` placeholder explained in `run_level41_rf/xgb`; constant-USTAR limitation with REddyProc/hesseflux pointer in `run_level33`; `filteredseries_level31_qcf` clarified as L2 QCF re-applied, not a new L3.1 test.
-
-### Examples
-
-- **`fluxprocessingchain_composable.py`** extended from L2+L3.1+L3.2 to the full L2→L4.1 pipeline.
-  Now demonstrates L3.3 USTAR filtering and all three L4.1 gap-filling methods (RF, XGBoost, MDS) run as branches from the same `FluxLevelData`. Includes `HeatmapDateTime` and `CumulativeYear` plots (with µmol→gC unit conversion), VPD unit check, `data.gapfilled_cols()`, `data.summary()`, and model diagnostics. Flux partitioning (REddyProc) noted as next step.
-
-- **New: `fluxprocessingchain_multiflux.py`** — multi-flux loop example.
-  Shows `FluxConfig` objects for FC, H, and N2O (different outlier sigma for trace gas, no USTAR filtering for H). Runs `run_flux_chain` in a loop sharing one site parameter dict and one `FeatureEngineer`. Demonstrates combined export DataFrame and gap-filling fraction reporting.
-
 ## v0.91.0 | XX May 2026
 
-- **Refactor: make `FluxProcessingChain` composable** — new `diive/pkgs/flux/fluxprocessingchain/container.py`, new `diive/pkgs/flux/fluxprocessingchain/levels/` package, rewrite of `diive/pkgs/flux/fluxprocessingchain/fluxprocessingchain.py`
-  The 2387-line monolithic class has been broken into typed data containers (`FluxLevelData`, `FluxMeta`, `LevelResults`) and one standalone pure callable per level (`init_flux_data`, `run_level2`, `run_level31`, `make_level32_detector`, `run_level32`, `run_level33_constant_ustar`, `run_level41_mds`, `run_level41_rf`, `run_level41_xgb`). Each callable accepts a `FluxLevelData` and returns a new one — never mutates the input. Users who want a partial pipeline (e.g. L2 + L3.1 only), a custom L3.2, or branching at L4.1 can compose the levels directly without subclassing.
-  Per-level results live on a typed `LevelResults` dataclass accessible via `data.levels.level2`, `data.levels.level31`, `data.levels.flux_corrected_col`, etc. — no magic-string dict lookups. `FluxLevelData` provides a useful `__repr__` that summarises shape and levels run.
-  Level-3.2 ships a `make_level32_detector(data)` factory that wires the `StepwiseOutlierDetection` to the correct `dfin` / `col` / site coordinates / `idstr='L3.2'`, removing a class of setup errors.
-  `run_level41_rf` and `run_level41_xgb` now accept a pre-built `FeatureEngineer` instance instead of 24 forwarded `features_*` parameters; the two functions share a single internal helper, removing ~100 lines of duplication.
-  The `FluxProcessingChain` class is kept as a slim convenience orchestrator (~600 lines, was ~2300) that wraps the new callables. All existing methods and properties (`fpc.fpc_df`, `fpc.level2`, `fpc.level32_qcf`, `fpc.level41`, etc.) continue to work; the test suite passes unchanged. The `finalize_level2/31/33()` methods are now no-ops that emit a `DeprecationWarning` (the matching `levelXX_*` method runs everything in one go). L3.2 still uses the multi-call configuration pattern because `StepwiseOutlierDetection` is inherently stateful.
-  New example: `examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py` demonstrates an L2+L3.1+L3.2 partial pipeline.
-  New tests: `TestFluxProcessingChainComposable` exercises the standalone callables, including pure-function contract assertions and ordering-error coverage.
-
-- **Refactor: namespace submodules for public API** — `diive/__init__.py`, new `diive/outliers/`, `diive/gapfilling/`, `diive/flux/`, `diive/analysis/`, `diive/plotting/`, `diive/times/`, `diive/features/`, `diive/corrections/`, `diive/qaqc/`
-  Replaced the flat 145-export top-level namespace (with 40+ snake_case aliases) with 9 domain namespaces.
-  `dir(dv)` now shows 21 names instead of 145+. Access pattern: `dv.outliers.AbsoluteLimits`, `dv.gapfilling.RandomForestTS`, `dv.flux.FluxProcessingChain`, etc.
-  Top-level exports kept: `load_exampledata_parquet`, `load_parquet`, `save_parquet`, `ReadFileType`, `search_files`, `sstats`, `transform_yearmonth_matrix_to_longform`, `get_encoded_value_from_int`, `get_encoded_value_series`.
-  **Breaking change:** all old flat names (`dv.AbsoluteLimits`, `dv.plot_scatter_xy`, etc.) removed.
-
-- **Updated 84 example and test files** — `examples/`, `tests/`
-  All `dv.OldName` references updated to `dv.namespace.NewName`. Also fixed two pre-existing wrong internal import paths: `outlierdetection` → `outlier_detection`, `hexbin_plot` → `hexbin`.
-
-- **Fix `Hampel`: add `n_sigma_dt` / `n_sigma_nt` parameter aliases** — `diive/pkgs/preprocessing/outlier_detection/hampel.py`
-  The constructor accepted `n_sigma_daytime` / `n_sigma_nighttime` but internal callers (`selfheating.py`) and tests already used the short forms `n_sigma_dt` / `n_sigma_nt`. Both forms now accepted; short form takes precedence.
-
-- **Fix `test_hexbin_plot.py`: move styling params from `__init__` to `plot()`** — `tests/test_hexbin_plot.py`
-  Tests passed `show_values`, `show_values_*`, and `figsize` to `HexbinPlot.__init__`, violating the two-phase plotting design. Updated to pass them to `plot()` instead, where they are stored as instance attributes.
-
-- **Add `GapFillingResult` dataclass and `.results` property** — `diive/core/ml/results.py`, `diive/core/ml/common.py`, `diive/pkgs/gapfilling/mds.py`, `diive/pkgs/gapfilling/__init__.py`
-  All gap-filling classes (`RandomForestTS`, `XGBoostTS`, `_FluxMDS`, `FluxMDS`) now expose a `.results`
-  property (available after `.run()`) that returns a `GapFillingResult` dataclass bundling every post-run
-  output: `gapfilled`, `flag`, `scores`, `scores_traintest`, `feature_importances`,
-  `feature_importances_traintest`, `gapfilling_df`, `model`, `accepted_features`, `rejected_features`.
-  MDS populates only the four core fields; ML-only fields are `None`. The existing `.result` property
-  (raw DataFrame) is unchanged. `GapFillingResult` exported from `dv.gapfilling` for type-hinting.
-
-- **Add domain-aware column validation at gap-filling boundaries** — `diive/pkgs/gapfilling/mds.py`, `diive/core/ml/common.py`
-  MDS (`_FluxMDS`, `FluxMDS`) now validates all four required columns before the DataFrame slice, raising
-  a descriptive `KeyError` listing each missing column with its expected unit:
-  `"Column(s) not found in df - MDS requires flux, SWIN (W m-2), TA (deg C), VPD (kPa): 'VPD_f': VPD - vapor pressure deficit (kPa)"`.
-  `MlRegressorGapFillingBase` validates `target_col` exists in `input_df` before any processing, with
-  the available column list in the message.
-
-- **Add `.run()` / `.result` protocol across all class families** — `diive/core/base/flagbase.py`, `diive/core/ml/common.py`, `diive/pkgs/gapfilling/mds.py`, `diive/pkgs/analysis/correlation.py`, `diive/pkgs/analysis/decoupling.py`, `diive/pkgs/fits/fitter.py`
-  Unified entry point and result-access across the library. All class families now share the same two-step pattern:
-  - **`FlagBase`** (all outlier-detection classes): `run(**kwargs)` delegates to `.calc()`; `result` property returns `.filteredseries`
-  - **`MlRegressorGapFillingBase`** (`RandomForestTS`, `XGBoostTS`): `run(**kwargs)` calls `.trainmodel()` then `.fillgaps()`; `result` returns `.gapfilling_df_`
-  - **`FluxMDS` / `_FluxMDS`**: already had `.run()`; `result` property added returning `.gapfilling_df_`
-  - **`DailyCorrelation`**: `result` property returns `.daycorrs_`
-  - **`StratifiedAnalysis`**: `run(**kwargs)` delegates to `.calcbins()`; `result` returns `.results`
-  - **`BinFitterCP`**: `result` property returns `.fit_results`; `.run()` now returns `self`
-  All existing methods and properties are unchanged — strictly additive. Enables one-liner usage:
-  `series = dv.Hampel(s, n_sigma=5).run().result`
-
-- **Add backward-compat alias `SortingBinsMethod = StratifiedAnalysis`** — `diive/pkgs/analysis/decoupling.py`
-  Preserves imports that used the old name before `StratifiedAnalysis` was introduced
-
-- **Export `calc_vpd_from_ta_rh` from `diive.pkgs.features.variables`** — `diive/pkgs/features/variables/__init__.py`
-  Function existed in `vpd.py` but was not re-exported from the subpackage `__init__`; now importable as
-  `from diive.pkgs.features.variables import calc_vpd_from_ta_rh`
-
-- **Fix `LocalOutlierFactor` validation rejecting `contamination='auto'`** — `diive/pkgs/preprocessing/outlier_detection/lof.py`
-  The numeric range check `0 < contamination <= 0.5` raised `TypeError` when `contamination='auto'` (the
-  default used by `FluxProcessingChain.level32_flag_outliers_lof_test`); guard now skips the check for the
-  string value `'auto'`
-
-- **Fix `linear_interpolation` calling stale `GapFinder` API** — `diive/pkgs/gapfilling/interpolate.py`
-  `GapFinder(series, limit=np.inf).get_results()` used the pre-refactor signature; updated to
-  `GapFinder(series).results` and replaced the separate `_calculate_gap_sizes` call with the built-in
-  `GAP_LENGTH` column
-
-- **Fix 13 pre-existing test failures** — `tests/`
-  Tests had drifted from source refactors; all 63 active tests now pass:
-  - `test_analyses.py` — `GapFinder` API (dropped `limit=`, `get_results()` → `.results`, columns 3 → 4);
-    `daily_correlation` alias returns a class instance, so access `.result` on it; removed stale `showplot=False`
-  - `test_gapfilling.py` — `medae` float comparison relaxed to `assertAlmostEqual(places=10)`
-  - `test_createvar.py` — integer Series indexing `et[0]` → `et.iloc[0]`; float sums relaxed to `assertAlmostEqual`
-  - `test_echires.py` — column count updated 13 → 11 (wind-rotation refactor removed 2 intermediate columns);
-    float comparisons relaxed to `assertAlmostEqual`
-  - `test_fluxprocessingchain.py` — stale `outlierdetection` import path corrected to `outlier_detection`;
-    RF gap-filling exact sums replaced with `assertGreater`/`assertLess` ranges (ML variability)
-  - `test_plots.py` — `HistogramPlot` styling params (`xlabel`, `highlight_peak`, etc.) moved from
-    `__init__()` to `.plot()` call, matching the two-phase plotting refactor
-  - `test_loaddata.py` — two aggregate float sums relaxed to `assertAlmostEqual`
-
-- **New: `DetectTimestampShifts`** — `diive/pkgs/preprocessing/qaqc/detect_timestamp_shifts.py`
-  Detects clock/timestamp errors in meteorological time series by comparing measured shortwave
-  radiation against theoretical potential radiation. Three detection methods:
-  - `fft_phase_shift()` — projects each day onto the k=1 Fourier basis and compares phase angles;
-    fast and robust on clear days
-  - `crosscorr()` — upsamples to 1-minute resolution and uses `scipy.signal.correlate` for a
-    vectorised lag search; 1-minute precision
-  - `noon_shift()` — vectorised daily peak-time delta; fast heuristic for obvious drifts
-  All three methods share the sign convention: positive = measured peaks earlier (leading clock),
-  negative = measured peaks later (lagging clock).
-  Five plot methods: `plot_fft_results`, `plot_crosscorr_results`, `plot_noon_shift_results`,
-  `plot_monthly_dielcycles`, `plot_radiation_fingerprint`.
-  Potential radiation is computed automatically via `potrad` when `lat`/`lon` are supplied.
-
-- **New example: `qaqc_detect_timestamp_shifts.py`** — `examples/preprocessing/qaqc/`
-  Demonstrates all constructor parameters, all three detection methods with their parameters,
-  and all five plot methods.
-
-- **New param: `below_zero` in ML gap-filling models** — `diive/core/ml/common.py`, `diive/pkgs/gapfilling/randomforest_ts.py`, `diive/pkgs/gapfilling/xgboost_ts.py`, `diive/pkgs/gapfilling/longterm.py`
-  Controls how predicted values below zero are handled for variables that cannot be negative (e.g. VPD, SW_IN, PPFD).
-  Options: `None` (default, keep as-is), `'zero'` (clip to 0), `'nan'` (set to NaN / treat as unfillable).
-  Applied to gap-filling predictions only; observed data and model scores are unaffected.
-  Available in `RandomForestTS`, `XGBoostTS`, `LongTermGapFillingRandomForestTS`, `LongTermGapFillingXGBoostTS`,
-  and the base class `MlRegressorGapFillingBase`.
-
-- **Bugfix: XGBoost/SHAP incompatibility with Python 3.13** — `diive/core/ml/common.py`
-  Python 3.13 tightened `ast.literal_eval`, breaking SHAP's XGBoost `base_score` parser which receives
-  bracket-enclosed scientific notation such as `[-3.18E0]`. The existing `builtins.float` monkey-patch
-  no longer intercepted this code path. Extended the patch to also temporarily replace `ast.literal_eval`
-  so both old and new shap versions initialise `TreeExplainer` correctly.
-
-- **Updated examples: `below_zero` param added** — `examples/gapfilling/`
-  `gapfill_randomforest.py`, `gapfill_xgboost.py`, `gapfill_comparison.py`, `gapfill_randomforest_longterm.py`
-  All gap-filling examples now include `below_zero=None` with an inline comment explaining when to use
-  `'zero'` or `'nan'` (e.g. VPD, SW_IN, PPFD) vs. keeping the default for variables that can go negative (NEE).
-
-- **Speedup: `gapfill_randomforest_longterm.py` example** — `examples/gapfilling/gapfill_randomforest_longterm.py`
-  - `sanitize_timestamp=False`: example data is already clean; the 10-step validator added unnecessary overhead.
-  - `reduce_features_across_years()` commented out: with only 3 input features and `n_estimators=3` the step
-    fits and SHAP-evaluates one model per year with nothing to prune, doubling total runtime for no gain.
-    A comment explains when to enable it in production.
-
-- **Refactored: `DailyCorrelation`** — `diive/pkgs/analysis/correlation.py`
-  Comprehensive review covering bugs, robustness, and efficiency. Key changes:
-  - Fixed: NaN days leaked into the "high correlation" group in `plot()` because
-    `~between()` is `True` for NaN; now filters on `daycorrs.dropna()` before splitting
-  - Fixed: `fig.show()` replaced with `plt.show()` (unreliable outside GUI backends)
-  - Fixed: IQR anomaly score centred on `q1` instead of `median`, making positive
-    and negative deviations asymmetric
-  - Fixed: missing comma in plot title f-string caused two stat values to run together
-  - Added series-name validation in `__init__`: raises `ValueError` when either series
-    is unnamed or both share the same name (would silently produce wrong correlations)
-  - `summary()`: uses `describe(percentiles=[0.01, 0.5, 0.99])` for a single-pass
-    reduction; `skew`/`kurt` use pandas built-ins instead of `scipy`; returns a
-    graceful all-NaN dict when no valid days exist rather than crashing
-  - `detect_anomalies()`: operates on `dropna()` so NaN days are excluded from scores
-    and output; both `std == 0` (zscore) and `iqr == 0` (iqr) now return zero scores
-    with all-False `is_anomaly` instead of producing `inf`/`NaN` or raising
-  - `get_days_by_correlation()`: drops NaN days before sorting
-  - `plot()`: accepts `showplot: bool = True` and returns the `Figure`; title now
-    shows `daycorrs.count()` (valid days) instead of `len()` (all days including NaN);
-    extracted `_plot_example_days()` helper removes the duplicated groupby+plot block
-    and hides unused axes when fewer than 3 days match
-  - Vectorised daily correlation computation: replaced Python loop + wasted
-    `groupby.count()` index grab with a single `groupby.apply()`
-
-- **Updated example: `analysis_daily_correlation.py`** — `examples/analysis/analysis_daily_correlation.py`
-  Added visualization section demonstrating `corr1.plot(showplot=True)`.
-
-- **Refactored: `GapFinder`** — `diive/pkgs/analysis/gapfinder.py`
-  Full rewrite of the detection core and public API. Key changes:
-  - Detection rewritten as a single vectorized pass using `notna().cumsum()` grouping;
-    removed `_make_required_cols`, `_apply_limit`, `_rename_results`, and the index-name
-    workaround — all replaced by a named `groupby().agg()` call
-  - `limit` parameter renamed to `max_length` for symmetry with new `min_length` parameter;
-    both filters use `is not None` so `max_length=0` and `min_length=0` work correctly
-  - `GAP_DURATION` (timedelta) always present in results; `pd.NaT` when time resolution
-    cannot be inferred
-  - Results index reset to clean 0-based integers; internal cumsum group ids no longer leak
-    into public output
-  - Frequency inferred via full-series median delta (`index.to_series().diff().median()`)
-    instead of first 10 records — robust against irregular or gap-heavy series starts
-  - Gap detection fast-path uses `s.hasnans` instead of `s.isna().sum() == 0`
-  - Memory optimization: NaN mask applied to index and cumsum arrays before DataFrame
-    construction, avoiding an intermediate full-length object
-  - `summary` property returns headline stats (n_gaps, missing_pct, longest gap + duration,
-    median, mean) as a plain-Python dict
-  - `__str__` / `__repr__` print a formatted report block (series range, missing %, gap
-    count, longest/median/mean, active filters)
-  - `get_results()` alias removed; `gapfinder_df` and `series_col` made private
-  - Visualization: availability heatmap colormap changed from `RdYlGn` to `RdYlBu`
-    (colorblind-friendly); both plot methods (`plot_availability_heatmap`,
-    `plot_gap_length_histogram`) callable independently
-- **Updated example: `analysis_gapfinder.py`** — `examples/analysis/analysis_gapfinder.py`
-  Demonstrates all parameters with explicit defaults, `max_length` / `min_length` filters,
-  `print(gf)` for the formatted summary, and `GAP_DURATION` in results table.
-
-- **Renamed: `WindRotation2D` → `WindDoubleRotation`** — `diive/pkgs/flux/hires/windrotation.py`
-  Name now matches eddy covariance literature terminology (double rotation, Wilczak et al. 2001).
-  Exported as `dv.WindDoubleRotation` and `dv.wind_double_rotation`.
-
-- **Bugfix: rotation angles now use `atan2` instead of `atan`** — `diive/pkgs/flux/hires/windrotation.py`
-  `math.atan(v/u)` raised `ZeroDivisionError` when `u_mean == 0` and silently returned a wrong-quadrant
-  angle when `u_mean < 0`. Both rotation angles (`theta`, `phi`) now use `math.atan2`, which handles
-  all quadrants correctly and never divides by zero.
-
-- **Refactored: `WindDoubleRotation` now does rotation only** — `diive/pkgs/flux/hires/windrotation.py`
-  The scalar `c` parameter has been removed. Reynolds decomposition is no longer performed inside
-  the class. The class exposes `theta`, `phi`, `u2`, `v2`, `w2`; callers apply `reynolds_decomposition`
-  themselves. This separates two conceptually distinct EC processing steps and removes a scalar
-  dependency that had nothing to do with wind rotation.
-
-- **New: `reynolds_decomposition` function** — `diive/pkgs/flux/hires/windrotation.py`
-  Module-level function `reynolds_decomposition(x: Series) -> Series` computes `x' = x - mean(x)`.
-  Exported as `dv.reynolds_decomposition`. Cross-referenced in `WindDoubleRotation`, `FluxDetectionLimit`
-  docstrings to highlight this as an explicit, required step in the EC processing chain.
-
-- **New: TreeRingPlot visualization class** — `diive/core/plotting/treering.py`
-  Circular spiral plot displaying annual time series data as concentric color-coded rings.
-  Each ring represents one year (inner = oldest, outer = most recent). Color encodes the
-  variable of interest; months are arranged around the circumference with January at the
-  bottom and July at the top, mirroring the climate calendar. Key features:
-  - Two-phase design: `__init__` handles data and resampling, `plot()` handles all styling
-  - `resample_freq` parameter controls angular resolution: `'D'` (366 slots, default),
-    `'h'` (8784 slots), `'30min'` (17568 slots), or `None` (auto-detect from data)
-  - Colorbar auto-extends with arrows when `vmin`/`vmax` clip the data range
-    (`'min'`, `'max'`, or `'both'`), consistent with other diive plotting classes
-  - `show_month_lines` — thin radial spokes at each month boundary
-  - `show_year_separators` — thin white concentric circles between rings (default True)
-  - Exported as `dv.plot_treering` in `diive/__init__.py`
-- **New example: plot_treering_temperature.py** — `examples/visualization/plot_treering_temperature.py`
-  Demonstrates `TreeRingPlot` with 30-minute air temperature from CH-DAV (2013-2022),
-  resampled to daily means; shows colorbar extension with clipped `vmin`/`vmax`.
-  Registered in `run_all_examples.py`, `examples/CATALOG.md`, `examples/README.md`,
-  `examples/visualization/README.md`.
-
-- **New: PwbBatchDetection class (parallel batch PWB time-lag detection)** — `diive/pkgs/flux/hires/lag_pwb.py`
-  Distributes `PreWhiteningBootstrap` across CPU cores using `ProcessPoolExecutor` (spawn-safe for Windows).
-  Each averaging-period file is processed by a module-level worker function (`_pwb_file_worker`) so results
-  can be pickled and returned to the main process. Key features:
-  - Parallel execution across any number of EddyPro high-frequency files; results returned in original file order
-  - Crash-safe checkpoint CSV written after every completed file (skipped silently if file is locked in another app)
-  - `on_progress(completed, total, row)` callback enables live Rich display without coupling the class to a UI
-  - PWBOPT S1/S2/S3 post-processing via `apply_pwbopt()` static method (port of `01_tlag_detection_pwb.R`)
-  - HDI pre-filter via `apply_hdi_prefilter()`: discards wide-HDI lags before PWBOPT so S2 cannot accept them
-  - `plot_summary()` static method: per-scalar 5-panel figure and a `PwboptLagPlot` scatter/KDE comparison figure;
-    figures saved automatically when `output_dir` is set. Panel layout:
-    1. Detected lags: scatter coloured by S1/S2/S3 flag (no connecting lines) + mode reference line
-    2. Final lags: S1/S2 anchor points (filled, coloured) + pre-filtered gap-filled lag as open black circles + mode
-    3. 95% HDI range bars with S1 and pre-filter threshold lines
-    4. Flag bars per period: standard vs. pre-filtered PWBOPT side by side
-    5. Histogram of detected lags with mode marker
-  - `fill_tlag_gaps()` static method: three-step gap-fill (bfill → median of raw lags → constant fallback) so every
-    averaging period has a usable lag for flux covariance calculation; called automatically in `_cli_main()` after
-    PWBOPT, adding `{prefix}_tlag_final_s` and `{prefix}_tlag_final_pf_s` columns to the results CSV
-  - Mode computed from rounded value counts (not histogram bin centers) to match the 1/hz lag resolution
-  - Zero-line and mode line both shown in the scatter and histogram panels
-  - CLI entry point: `python -m diive.pkgs.flux.hires.lag_pwb --help` (alias: `diive-tlag-pwb-batch`); supports all detection and
-    PWBOPT parameters; Rich progress bar with per-file log lines; summary figures saved automatically
-  - `RuntimeWarning` from runpy double-import suppressed at module level so it never appears in workers
-  - Exported as `dv.PwbBatchDetection` in `diive/__init__.py`
-- **New examples: flux_lag_pwb_batch.py and flux_lag_pwb_batch_cli.py** — 2 new high-resolution batch examples
-  - `examples/flux/hires/flux_lag_pwb_batch.py` — Python API demo: generates 12 synthetic EddyPro-format
-    files in a 10-column layout (u, v, w, ts, co2, h2o, ch4, 4th_gas, air_t, air_p) with decreasing flux
-    strength, runs `PwbBatchDetection` with `ProcessPoolExecutor`, shows live Rich display (growing results
-    table + progress bar), applies both PWBOPT strategies, and prints a summary table
-  - `examples/flux/hires/flux_lag_pwb_batch_cli.py` — CLI demo: generates 8 synthetic files, invokes the
-    module CLI as a subprocess, and reads back the results CSV
-  - Registered in `run_all_examples.py`, `examples/CATALOG.md`, `examples/README.md`, `examples/flux/README.md`
-
-- **New: PreWhiteningBootstrap class (PWB time lag detection)** — `diive/pkgs/flux/hires/lag_pwb.py`
-  implements the pre-whitening with block-bootstrap cross-correlation method from Vitale et al. (2024).
-  Robust for low-magnitude fluxes (CH4, N2O) where the standard MaxCovariance method fails due to
-  absence of a distinct CCF peak. Full alignment with RFlux v3.2.0 (`tlag_detection.R`). Key features:
-  - AR(p) pre-whitening of W, scalar, and optionally T_SONIC to remove serial autocorrelation.
-    Order selected by AIC with max_order = floor(100 * log10(N)), matching R's formula.
-    For N = 36000 this gives max_order = 455; a low cap (e.g. 45) under-fits and distorts the CCF peak.
-  - Four bootstrap CCF combinations when `var_tsonic` is provided (strongly recommended for trace gases):
-    - `cw` -- scalar x W, scalar AR filter (R: bootccf_cw)
-    - `ct` -- scalar x T_SONIC, scalar AR filter (R: bootccf_ct)
-    - `wc` -- scalar x W, W AR filter (R: bootccf_wc)
-    - `tc` -- scalar x T_SONIC, T_SONIC AR filter (R: bootccf_tc)
-    The combination with the highest smoothed peak correlation is selected (R: which.max(abs(corr_est_s))).
-    For N2O and CH4 the T_SONIC combinations often produce a cleaner peak than scalar x W alone.
-  - ADF unit-root test on each aligned series before AR fitting (R: egcm::bvr.test, same H0 direction).
-    If any series has a unit root (p >= 0.01), all series are first-differenced. Uses maxlag=1 for
-    ~4 ms cost per series; sufficient to discriminate turbulent EC data (p ~ 0) from non-stationary
-    series (p ~ 0.5). For EC data this virtually never triggers.
-  - Block-bootstrap (N_B=99 samples, L=20 s blocks): CCF computed per replicate, smoothed, peak detected.
-    na.locf fills smoothed-CCF edges so boundary lags are not excluded from the peak search.
-  - Bootstrap lag summarised via KDE MAP estimate with tiny jitter (R: bayestestR::map_estimate) + 95% HDI.
-  - `is_reliable` flag: HDI range < 0.5 s (S1 criterion, paper Section 2.3).
-  - Three-panel `plot()`: pre-whitened CCF with Bartlett significance bands, raw cross-covariance,
-    bootstrap lag histogram with HDI shading for the selected combination.
-  - Exported as `dv.PreWhiteningBootstrap` in `diive/__init__.py`.
-- **New examples: flux_lag_pwb.py and flux_lag_pwbopt.py** — 2 new high-resolution lag examples
-  - `examples/flux/hires/flux_lag_pwb.py` — single averaging period: PWB on synthetic high-flux
-    (CO2) and low-flux (N2O) data with T_SONIC, demonstrating the 4-combination logic and
-    reliable vs. unreliable detection.
-  - `examples/flux/hires/flux_lag_pwbopt.py` — multi-period batch pipeline: PWBOPT S1/S2/S3
-    selection, standard vs. pre-filtered strategy comparison; supports real EddyPro-rotated
-    files via `USE_SYNTHETIC=False`.
-  - Registered in `run_all_examples.py`, `examples/CATALOG.md`, `examples/README.md`,
-    `examples/flux/README.md`.
-
-- **Refactored: FindOptimumRange algorithm and visualization** — `diive/pkgs/analysis/optimumrange.py`
-  Complete overhaul of the optimum range detection algorithm, results structure, and three-panel figure.
-  - **Algorithm**: threshold is now applied to the full curve range so it works for any sign of y values.
-    Walking outward from the peak, bins are included while the smoothed value stays within
-    `(1 - threshold) * curve_range` of the peak. Old approach used rolling window width as range (arbitrary).
-  - **New `prominence_threshold` parameter**: flags whether the peak stands out from the curve mean by at
-    least N standard deviations (`prominence = |peak - mean| / std`). Prints a warning and sets
-    `is_optimum_prominent=False` when the curve is too flat to identify a meaningful optimum.
-  - **New `threshold` validation**: raises `ValueError` when `threshold` is not in `(0, 1)`.
-  - **`_divide_xdata_into_bins`**: returns a single DataFrame; uses single `groupby.agg([list])` call
-    instead of an unordered set; no redundant `.copy()`.
-  - **`_values_in_optimum_range`**: single-pass `groupby(['year', 'category']).size().unstack()`;
-    avoids mutation of `self.df` by using a local variable for the category column.
-  - **`results_optrange` keys added**: `is_optimum_prominent` (bool), `optimum_prominence` (float).
-  - **`showfig` / `plot_bin_aggregates`**: x-axis now shows actual variable values (bin midpoints) instead
-    of integer bin indices; thinned to ~10 ticks; `xlabel`/`ylabel`/`xunit`/`yunit` parameters.
-  - **Three-panel figure**: dynamic top panel height (`max(1.5, n_years * 0.38)`) keeps bars compact for
-    any number of years; `ax.margins(y=0.02)` removes default padding.
-  - **`plot_bin_aggregates`**: three shaded zones (below/in/above optimum) using Material 500 colours
-    (#FFC107 amber, #2196F3 blue, #F44336 red); neutral boundary lines (#455A64); dotted peak marker.
-  - **`plot_vals_in_optimum_range`**: Material 300 colours (#64B5F6 blue, #E57373 red, #FFD54F yellow)
-    matching the timeseries panel; automatic white/black label colour based on WCAG luminance formula;
-    `va='center_baseline'` for visually centred digit labels inside bars (not `va='center'`, which
-    drifts upward because of descender whitespace in the bounding box).
-  - **New `plot_optimum_range_timeseries` method**: line plot with filled area showing percentage of
-    data in each category (in optimum / above / below) over years; colours match top panel.
-- **Updated example: analysis_optimumrange.py** — `examples/analysis/analysis_optimumrange.py`
-  Shows all parameters explicitly; results section prints `is_optimum_prominent` and `optimum_prominence`;
-  `showfig` called with `xunit` and `yunit`.
-
-- **New examples: parquet I/O and EddyPro CSV reading** — 4 new I/O examples
-  - `io_load_save_parquet.py` — Efficient parquet file I/O with automatic timestamp sanitization
-    and CSV performance comparison (60% smaller, 15x faster)
-  - `io_read_single_file_with_datafilereader.py` — Read single EddyPro CSV with manual parameters
-  - `io_read_multiple_files_with_multidatafilereader.py` — Load and merge multiple EddyPro CSV
-    files with pre-defined filetype
-  - `io_read_single_file_with_readfiletype.py` — Read single EddyPro CSV with pre-defined filetype
-  - All registered in `run_all_examples.py`, `examples/CATALOG.md`, `examples/README.md`,
-    `examples/io/README.md`
-
-- **Documentation cleanup: removed AI-typical phrasing across all docs** — Checked README.md,
-  CONTRIBUTING.md, CLAUDE.md, examples/README.md, examples/CATALOG.md, and visualization/README.md
-  with `/llm-detox`:
-  - Removed filler lines ("active development", "We welcome contributions!", "Thank You!" section)
-  - Removed vague marketing phrases ("composable pipeline", "comprehensive documentation",
-    "robust", "learn by doing")
-  - Fixed factual errors: example count corrected to 86 (was 62+/75+/82 in different files),
-    per-category counts updated, stale paths fixed (`examples/core/...` -> `examples/...`)
-  - Fixed "mirror the codebase structure" -> "organized by functional domain" (opposite was true)
-  - Removed Notebook Consolidation section from CLAUDE.md (historical, already in CHANGELOG)
-- **Visualization examples enhanced: 5 files updated** — Filled gaps identified by comparing
-  Plotting notebooks against examples:
-  - `plot_histogram_basic.py` — added custom bin edges section (`n_bins` as list of explicit
-    edges, with note that z-scores are not meaningful for unequal bins)
-  - `plot_heatmap_advanced.py` — added aggregation method comparison (mean/max/std side-by-side
-    in subplots) and ranks mode (`ranks=True`, with colormap note for rank 1 = warmest)
-  - `plot_heatmap_datetime_basic.py` — added value overlay section (`show_values=True`,
-    `show_values_n_dec_places`, with 6-hourly resampling so cells are readable)
-  - `plot_hexbin_basic.py` — added `mincnt=5` (filter bins with fewer than 5 values)
-  - `plot_heatmap_xyz_basic.py` — added `aggfunc='std'` section (within-bin variability
-    as complement to the mean aggregation)
-- **Plotting notebooks archived: all 12 moved to notebooks/_archived/** — All content from
-  `notebooks/Plotting/` is now covered by visualization examples. Archived:
-  Cumulative, CumulativesPerYear, DielCycle, HeatmapDateTime, HeatmapXYZ, HeatmapYearMonth,
-  HexbinPlot, Histogram, LongTermAnomalies, RidgeLine, ScatterXY, TimeSeries.
-
-- **feature_engineer.py example enhanced with dynamic feature listing** — Updated comprehensive 8-stage ML feature engineering example:
-  - Now uses 2020 data only for faster execution
-  - Restructured to show full pipeline with realistic multi-column input (temperature, VPD, radiation)
-  - Demonstrates lag features (t-2, t-1 for non-target columns), rolling windows (12, 24 steps), differencing, EMA, polynomial, and 14 temporal features (sin/cos encoding)
-  - Added dynamic feature detection: automatically lists all 46 generated features by comparing df_full vs df_data columns
-  - Shows feature importance ranking (top 12 by correlation with temperature)
-  - Example output includes: 3 input columns + 46 engineered features = 49 total
-  - Fixed Unicode encoding issues: replaced checkmarks with `[OK]`, arrows with `->` for Windows compatibility
-- **Public API exports: timestamp and QA/QC utilities** — Exposed 5 previously internal functions/classes as public aliases:
-  - `DetectFrequency` class: Low-level frequency detection with confidence scoring and multiple detection methods
-  - `timestamp_infer_freq_progressively()`: Fast detection via first/last interval comparison
-  - `timestamp_infer_freq_from_fullset()`: Pandas-based inference for regular data
-  - `timestamp_infer_freq_from_timedelta()`: Most frequent interval analysis (gap-tolerant)
-  - `StepwiseMeteoScreeningDb` class: Database-backed quality screening and resampling workflow
-  - All accessible via `diive.DetectFrequency`, `diive.timestamp_infer_freq_*`, and `diive.StepwiseMeteoScreeningDb`
-  - Updated `examples/times/times_frequency_detection.py` and `notebooks/qc/StepwiseMeteoScreeningFromDatabase.ipynb` to use public aliases instead of direct internal imports
-
-- **Frequency detection docstrings: comprehensive NumPy-style documentation** — Enhanced three detection functions in `diive.core.times.times`:
-  - `timestamp_infer_freq_progressively()`: Compares first/last intervals for fast, robust detection
-  - `timestamp_infer_freq_from_fullset()`: Uses pandas inference for perfectly regular data
-  - `timestamp_infer_freq_from_timedelta()`: Analyzes most frequent interval (tolerates gaps)
-  - All three now have consistent NumPy docstring format with Parameters, Returns, Notes sections explaining confidence levels, use cases, and robustness characteristics.
-- **times_frequency_detection.py example enhanced and reorganized** — Comprehensive frequency detection tutorial:
-  - Simplified and refocused on core functionality
-  - Reorganized in logical flow: TimestampSanitizer → direct functions → DetectFrequency class → validation
-  - Added DetectFrequency class section showing low-level API and confidence scoring
-  - Removed corporate language using /llm-detox (natural, human-sounding phrasing)
-  - Shows agreement checking across three detection methods
-  - Includes troubleshooting guidance for mismatches
-  - Reduced verbosity by 40% while maintaining educational value
-- **Notebook consolidation: 21 notebooks archived, 12 examples enhanced** — Completed Sphinx Gallery migration:
-  - **Time series (6 notebooks → 5 examples):** Consolidated `Detect_time_resolution.ipynb`, `ResamplingDielCycle.ipynb`, `ResamplingMonthlyMatrix.ipynb`, `TimeSeriesStats.ipynb`, `VectorizeTimestamps.ipynb` into comprehensive examples covering frequency detection, diel cycles, temporal matrices, ML feature engineering, and statistics.
-  - **QC/preprocessing (15 notebooks → 7 enhanced examples):** Added day/night variant sections to `outlier_absolutelimits.py` and `outlier_lof.py` (showing `separate_daytime_nighttime=True` parameter usage). Enhanced `qc_overall_flag.py` with missing values handling, `correction_measurement_offset_replicate.py` with constant offset application, and `outlier_hampel.py`, `outlier_zscore.py`, `outlier_localsd.py` with parameter tuning workflows.
-  - **Optimization:** Removed corporate language from docstrings (e.g., "Professional visualization" → "Plotting diel cycles with the DielCycle class").
-  - **Refactoring:** All examples now use existing `diive` functions (`diel_cycle()`, `resample_to_monthly_agg_matrix()`, `FeatureEngineer.vectorize_timestamps`, `sstats()`, `TimestampSanitizer`). Removed duplicate/custom implementations.
-
-- **Notebooks reorganization: consolidated folder structure** — Flattened notebook directory organization:
-  - Moved notebooks from subdirectories (`flux/`, `gapfilling/`, `io/`, `qc/`) to root `notebooks/` for discoverability
-  - Updated OVERVIEW.ipynb index to reflect new structure
-  - Subsequent consolidation archived gap-filling workflow notebooks superseded by examples
-
-- **Gap-filling workflow consolidation: 6 notebooks → 4 examples** — Archived gap-filling notebooks superseded by discoverable examples:
-  - **New examples:** `gapfill_randomforest_longterm.py` (year-pooling strategy with LongTermGapFillingRandomForestTS), `fluxprocessingchain_quick.py` (rapid exploratory L2-L3.3 flux processing with defaults)
-  - **Archived:** `LinearInterpolation.ipynb` (covered by conservative/generous interpolation examples), `LongTermRandomForestGapFilling.ipynb`, `QuickRandomForestGapFilling.ipynb` (covered by gapfill_quickfill.py), `QuickFluxProcessingChain.ipynb`, `XGBoostGapFillingMinimal.ipynb`, `XGBoostGapFillingExtensive.ipynb` (both covered by comprehensive gapfill_xgboost.py)
-  - All gap-filling workflows now documented in discoverable, runnable examples; notebooks preserved in `notebooks/_archive/` for historical reference
-  - **Import standardization:** Renamed directory `examples/preprocessing/outlierdetection/` → `outlier_detection/` (9 files updated in `run_all_examples.py`, all examples, docstrings, CATALOG.md).
-  - **Bug fixes:** Fixed Windows Unicode encoding issues (arrow characters → ASCII) in `outlier_stepwise.py`.
-  - **Result:** Final example count: **98** examples across all categories.
-  - **Documentation:** Updated CLAUDE.md with consolidated notebook consolidation strategy section. Examples are primary documentation; archived notebooks kept as reference in `notebooks/_archived/`.
-- **Feature examples: consolidated 4 notebooks** — Fully consolidated variable and energy conversion examples:
-  - `feature_timesince.py` — Consolidates notebook `TimeSince.ipynb` (archived). Expanded with detailed explanations of output variables (UPPER_LIMIT, LOWER_LIMIT, FLAG_IS_OUTSIDE_RANGE), include_lim parameter behavior (exclusive vs inclusive), alternative access methods (get_full_results vs get_timesince), and interpretation guidance for both precipitation and temperature examples.
-  - `feature_evapotranspiration.py` — Consolidates notebook `Calculate_ET_from_LE.ipynb` (archived). Enhanced with heatmap visualizations comparing calculated ET, EddyPro reference, and the difference (3-panel heatmap showing agreement patterns).
-  - `feature_vpd.py` — Consolidates notebook `Calculate_VPD_from_TA_and_RH.ipynb` (archived). Enhanced with gap-filling section using QuickFillRFTS, demonstrating how to fill RH-induced gaps in VPD. Adds 3-panel heatmap visualization showing VPD, temperature, and humidity patterns.
-  - `feature_sonic_temp_conversion.py` — Consolidates notebook `Calculate_air_temp_from_sonic_temp.ipynb` (archived). Demonstrates air temperature correction from sonic temperature and water vapor with realistic 3-day time series and diurnal patterns. Explains correlation between H2O concentration and temperature correction magnitude.
-  - `feature_latent_heat.py` — Latent heat of vaporization temperature dependency. Shows realistic -2370 J/kg per °C sensitivity from Stull (1988) formula. Includes interpretation of why latent heat decreases with temperature.
-  - `feature_evapotranspiration.py` — Convert latent heat flux to evapotranspiration using real flux tower data (CH-AWS). Validates calculated ET against EddyPro reference (1.0 correlation, 0.0001 mm/h MAE). Emphasizes et_calculated as the important output time series for downstream water cycle analysis.
-  - Removed `feature_conversions.py` (split into focused examples). Total features examples: 10 (was 8).
-- **Enhanced hyperparameter optimization visualization** — Improved `OptimizeParamsTS.plot_optimization_analysis()`:
-  - Dynamic subplot grids that scale with number of parameters (no more fixed 3×2 layout)
-  - Support for mixed-type parameters (categorical strings + numeric values, e.g., max_features with 'sqrt', 'log2', 0.5)
-  - Proper numeric sorting for axis labels (1, 2, 3, 10 not 1, 10, 2, 3)
-  - Decimal formatting for values < 1 (learning rates 0.01, 0.05 shown with 2 decimals)
-  - Filter out single-value parameters from visualization (parameters not actually optimized)
-  - RdYlBu colormap for parallel coordinates (red=poor, yellow=medium, blue=excellent performance)
-  - Removed legend from parameter slice plots (redundant with x-axis labels)
-- **XGBoost optimization example refinements** — Match RandomForest example structure with arange learning rates
-- Now developing under Python 3.12
-- Switched from poetry to `uv` dependency management (modern, fast, deterministic)
-- **New example: flux_selfheating_production.py** — Complete production workflow for self-heating correction: create scaling factors table from parallel measurements (20 USTAR classes, 100 bootstrap runs), then apply to long-term data. Demonstrates full SCOP calibration and application phases with all diagnostics and uncertainty quantification.
-- **New USTAR threshold detection method: Vekuri quantile-based approach** — Simplified alternative to ONEFlux moving point method. Key differences: quantile-based stratification (ensures equal sample sizes), single ascending-search detection mode, lower correlation threshold (0.4 vs 0.5), generally faster computation. Added `UstarVekuriThresholdDetection` class in `diive.pkgs.flux.lowres.ustar_vekuri_detection`, two new examples:
-  - `flux_ustar_vekuri_detection.py` — Demonstration of Vekuri method with bootstrap uncertainty estimation
-  - `flux_ustar_method_comparison.py` — Side-by-side comparison of ONEFlux vs Vekuri on same data with seasonal/annual thresholds, bootstrap statistics, and guidance on when to use each method
-- **New class: UstarBootstrapThresholds** — Multi-year bootstrap wrapper for any USTAR detection method. Splits data by calendar year, runs N bootstrap iterations per year, and returns per-year percentile thresholds (p16/p50/p84 by default) and a CUT (constant) threshold pooled across all years. Works with both `UstarMovingPointDetection` and `UstarVekuriThresholdDetection`. p50 is the recommended annual threshold; p16/p84 bound the uncertainty (~1 sigma). CUT pools all years' samples into a single conservative threshold. Added in `diive.pkgs.flux.lowres.ustar_bootstrap`. All three USTAR examples updated to use the wrapper for bootstrap:
-  - `flux_ustar_mp_detection.py` — Uses `UstarBootstrapThresholds` with `UstarMovingPointDetection`
-  - `flux_ustar_vekuri_detection.py` — Uses `UstarBootstrapThresholds` with `UstarVekuriThresholdDetection`
-  - `flux_ustar_method_comparison.py` — Compares both methods via `UstarBootstrapThresholds`, shows per-year and CUT thresholds side by side
-- **UstarMovingPointDetection cleanup** — Simplified to forward mode only (back mode removed as it is not part of the Papale et al. 2006 standard). `get_annual_thresholds()` now returns NaN (not the internal 10.0 marker) when detection fails, giving a clean external interface.
-- **New analysis class: GrangerCausality** — Test predictive causality between time series with significance testing and lag identification. Example: `examples/analysis/analysis_granger.py`
-- **Pandas 3.0.3 compatibility upgrade:**
-  - Fixed 13 `.iterrows()` calls → index-based iteration (performance, pandas 3.0 compliance)
-  - Removed 24 `.inplace=True` parameter uses → assignment pattern (breaking change removed in pandas 3.0+)
-  - Modernized 64 `.values` calls → `.to_numpy()` (best practice, read-only array handling in pandas 3.0)
-  - Fixed read-only array assignment in potentialradiation.py (pandas 3.0 returns read-only views)
-  - Fixed auto-detection of `separate_daytime_nighttime` in AbsoluteLimits class
-  - Fixed dict method calls attempting `.to_numpy()` in optimumrange.py and times.py
-  - Fixed scalar extraction from pandas operations (`.iloc[0]` instead of `.values` conversion)
-  - Updated pyproject.toml: pandas>=3.0.0,<4.0.0, removed sktime dependency (incompatible)
-
-### Major Changes
-
-- **Standalone FeatureEngineer** — Separated feature engineering from gap-filling. 8-stage pipeline (
-  lag→rolling→diff→EMA→poly→STL→timestamps→record_number). Pre-engineer once, reuse across models. ⚠️ **Breaking change:
-  ** RandomForestTS/XGBoostTS now accept only pre-engineered data.
-- **Long-term XGBoost gap-filling** — Added `level41_longterm_xgboost()` with same architecture as Random Forest for
-  fair comparison.
-- **SHAP-based feature reduction** — Replaced permutation importance with SHAP values.
-- **FluxMDS memory optimization** — 4.0x speedup through vectorization + in-place updates. Eliminated DataFrame copies
-  at each quality level. Results bit-identical to original reference implementation.
-- **Harmonic spectral analysis** — Two examples showing CO₂ flux periodicities (24h photosynthesis, 12h/8h harmonics, 5h
-  noise) with frequency interpretation for gap-filling validation.
-- **Time series analysis** — Refactored DailyCorrelation, StratifiedAnalysis, GapFinder, GridAggregator,
-  FindOptimumRange, percentiles101, SeasonalTrendDecomposition.
-- **Examples reorganization & documentation** — Restructured 62+ examples to mirror `diive/pkgs` and `diive/core`
-  architecture (18 organized folders). Created 3 comprehensive user-facing guides:
-    - **`examples/CATALOG.md`** — Find examples by use case/workflow (8 categories, difficulty levels, cross-referenced)
-    - **`examples/EXAMPLE_DATASET.md`** — Complete dataset documentation (37 variables, gaps %, availability, quality
-      notes, USTAR scenarios)
-    - **17 category READMEs** — One per folder with file descriptions and usage examples
-    - Fixed critical import issues: lazy imports for circular dependencies, corrected export names in __init__.py files
-- **Examples consolidation** — 62+ examples across organized folders (was 107 across 52 files). Consolidated all
-  RandomForestTS/XGBoostTS examples to `pkgs/gapfilling/`. RandomForestTS includes: randomforest_ts.py (production
-  settings + heatmap + cumulative flux). XGBoostTS includes: xgboost_ts.py (harmonized with RF for direct comparison).
-  Three-way gap-filling comparison: `examples/pkgs/gapfilling/comparison.py` comparing MDS vs Random Forest vs XGBoost.
-  All 10 outlier detection methods have examples in `pkgs/preprocessing/outlierdetection/` (9 files). **EddyPro quality
-  flags:** Examples in `pkgs/preprocessing/qaqc/eddyproflags.py` demonstrating all 7 EddyPro flag extraction functions (
-  signal strength, wind steadiness, angle of attack, VM97 raw data tests, flux base variable completeness, SSITC).
-- **Harmonized ML gap-filling examples** — RandomForest and XGBoost examples now use identical data (2020), identical
-  8-stage feature engineering, identical workflow for direct comparison. Both include heatmap (observed vs gap-filled) +
-  cumulative flux visualizations. Results: RF R²=0.8185, XGB R²=0.8141 (comparable, different architectures).
-- **Simplified gap-filling docstrings** — Refactored `FluxMDS`, `RandomForestTS`, `XGBoostTS`, `linear_interpolation`,
-  `prediction_scores` docstrings. Removed implementation details/optimization claims, focused on functionality, added
-  example file references for better discoverability.
-- **Generalized hyperparameter optimization** — Refactored `OptimizeParamsRFTS` → `OptimizeParamsTS` for model-agnostic
-  design. Works with any sklearn-compatible regressor (RandomForest, XGBoost, custom). Moved to
-  `diive/core/ml/optimization.py`. Includes `report_optimization()` method with tested parameter ranges, best
-  parameters, performance metrics (R², MAE, RMSE), top N parameter combinations, parameter sensitivity, and
-  production-ready code snippet with auto-detected wrapper class.
-- **Outlier detection improvements:**
-    - **Class consolidation:** Unified `LocalOutlierFactorAllData` and `LocalOutlierFactorDaytimeNighttime` into single
-      `LocalOutlierFactor` class with `separate_daytime_nighttime: bool` mode parameter (follows Hampel consolidation
-      pattern). Location parameters (lat, lon, utc_offset) now optional. Old class names remain as backward-compatible
-      aliases.
-    - **Hampel API refactoring:** Renamed `HampelDaytimeNighttime` → `Hampel` with clearer parameter API. Primary
-      `n_sigma` parameter with optional `n_sigma_daytime`/`n_sigma_nighttime` overrides. Old class name remains as
-      alias.
-    - **LocalSD code quality:** Fixed 4 critical bugs (redundant initialization, unsafe parameter checks, missing else
-      branch, copy-paste error). 7 code quality improvements (safer type checks, simplified logic, removed dead code,
-      improved type hints).
-    - **ManualRemoval improvements:** Fixed 4 code quality issues (redundant initialization, docstring corrections,
-      improved index operations). Added dedicated examples for single-date and date-range removal workflows.
-    - **TrimLow consolidation:** Moved example from source to `examples/outlierdetection/trim.py` (2 examples). Fixed
-      redundant initialization, unused variables, added input validation. Added exports to `diive/__init__.py`.
-    - **Z-Score API consolidation:** Unified `zScore` and `zScoreDaytimeNighttime` into single `zScore` class with
-      `separate_daytime_nighttime: bool` parameter. Consolidated across all 3 wrapper levels: `StepwiseOutlierDetection`,
-      `StepwiseMeteoScreeningDb`, `FluxProcessingChain`. Removed separate dtnt_test methods; all now use unified
-      `flag_outliers_zscore_test()` with explicit parameters (thres_zscore, separate_daytime_nighttime, lat, lon, utc_offset,
-      showplot, plottitle, verbose, repeat, idstr). Wrappers use class-level site attributes (self.site_lat, self.site_lon,
-      self.utc_offset) when calling detectors. Updated 6 examples and 1 test. Removed deprecated exports
-      (`zScoreDaytimeNighttime`, `zscore_daytime_nighttime`). ⚠️ **Breaking change:** Code using old class names must update
-      to unified API.
-    - **Examples consolidation:** All 10 main outlier detection methods now have consolidated examples (20 total:
-      absolutelimits 2, hampel 2, incremental 1, localsd 2, lof 2, manualremoval 2, stepwise 1, trim 2, zscore 3). Added
-      StepwiseOutlierDetection orchestration example demonstrating how to chain multiple detection methods sequentially.
-- **Test speedup** — RandomForest gap-filling tests 60-70% faster (2.8s vs 6s).
-- **Examples restructure:** Split setto.py into 3 focused examples (set_exact_values, setto_value, setto_threshold).
-  Converted all 9 outlier detection methods + 2 QA/QC examples to Sphinx Gallery format (executable Python with # %%
-  sections instead of monolithic functions). Renamed with consistent prefixes: correction_*, outlier_*, qc_*. Updated 18
-  example file references across run_all_examples.py, 3 category READMEs, CATALOG.md, and 6 docstrings in source code.
-  Examples now 20 preprocessing files (was 18), 64 total examples (was 62). Sphinx Gallery format is version-control
-  friendly (pure Python, readable diffs) and auto-executable for documentation generation.
-- **Gap-filling & I/O examples restructure:** Converted all gap-filling and I/O examples to Sphinx Gallery format with
-  consistent prefixes: gapfill_* (10 files) and io_* (1 file). **Split combined functions into separate files:** Linear
-  interpolation (gapfill_interpolate_generous.py, gapfill_interpolate_conservative.py); Random Forest
-  (gapfill_randomforest.py, gapfill_quickfill.py, gapfill_optimize_randomforest.py); XGBoost
-  (gapfill_xgboost.py, gapfill_optimize_xgboost.py); MDS (gapfill_mds.py, gapfill_mds_comparison.py); Comparison
-  (gapfill_comparison.py); I/O (io_extract.py). Each file now has # %% section separators for pedagogical clarity.
-  Total gapfilling examples increased from 6 to 10 (67 total examples, up from 63). Updated 10 file references across
-  run_all_examples.py, gapfilling/README.md, CATALOG.md, CLAUDE.md, and 4 source code docstrings in RandomForestTS,
-  XGBoostTS, FluxMDS, and linear_interpolation functions.
-- **Analysis, features & fits examples restructure:** Converted all 9 analysis examples (correlation, decoupling,
-  gapfinder,
-  gridaggregator, harmonic, histogram_distribution, optimumrange, quantiles, seasonaltrend) to Sphinx Gallery format
-  with
-  analysis_* prefix. Converted 8 feature examples (air, conversions, daynightflag, laggedvariants, noise,
-  potentialradiation, timesince, vpd) with feature_* prefix, and 1 fits example (fitter) with fit_* prefix. All 18 files
-  now have # %% section separators for clarity. Updated example file references across run_all_examples.py, category
-  READMEs, examples/README.md, and source code docstrings (9 analysis modules, 1 feature module, 1 fits module).
-- **Notebook conversion: Histogram, BinFitterCP, & DailyCorrelation:** Converted 3 Jupyter notebooks to Sphinx Gallery examples:
-    - `examples/pkgs/analysis/analysis_histogram_distribution.py`: Enhanced existing example with all 4 histogram methods
-      (fixed bins, fixed bins with fringe removal, unique values, unique values with fringe removal), interpretation logic,
-      and comparison guidance. Replaced redundant notebook.
-    - `examples/pkgs/fits/fit_binfittercp.py`: New example demonstrating binned curve fitting with temperature-VPD
-      relationship, result exploration, confidence/prediction interval interpretation.
-    - `examples/pkgs/analysis/analysis_daily_correlation.py`: New example demonstrating daily correlation analysis for
-      quality checks, physical relationships, and biological processes with multiple use cases. Documented conversion
-      process in CLAUDE.md § "Converting Notebooks to Sphinx Gallery Examples" for team reference.
-- **Correlation API simplification:** Removed `daily_correlation()` convenience function wrapper; replaced with module-level alias `daily_correlation = DailyCorrelation` in `diive/pkgs/analysis/__init__.py`. This eliminates unnecessary indirection while maintaining backward compatibility. Combined separate `analysis_correlation.py` and `analysis_daily_correlation.py` examples into single comprehensive example showing three relationship types plus advanced methods (`.summary()`, `.get_days_by_correlation()`).
-- **GridAggregator notebook conversion:** Converted `notebooks/analyses/GridAggregator.ipynb` to Sphinx Gallery example `examples/pkgs/analysis/analysis_gridaggregator.py`. Demonstrates all three binning methods (quantile, equal-width, custom) with output format comparisons and interpretation guidance.
-- **Flux time lag analysis example:** Added `examples/flux/lowres/flux_timelag_analysis.py` demonstrating TimeLagAnalysis workflow: single-gas analysis (CO2), 4-panel visualization (overview/zoomed histogram + time series), dynamic tick spacing with overlap prevention, peak bin highlighting. Includes class docstring with implementation details and import registration in package `__init__.py` files.
-- **Decoupling & GapFinder notebook conversions:** Enhanced two existing Sphinx Gallery examples:
-    - `examples/pkgs/analysis/analysis_decoupling.py`: Updated to match notebook content using StratifiedAnalysis API. Demonstrates stratified binning to reveal how ecosystem responses change across temperature ranges. Shows summer daytime filtering, multi-level binning (VPD × Temperature), result access patterns, and visualization.
-    - `examples/pkgs/analysis/analysis_gapfinder.py`: Updated to match notebook content with real gap detection from 10-year dataset. Demonstrates gap identification, longest gap analysis, and gap distribution statistics. Replaced artificial gaps with real data-quality assessment workflow.
-- **Final notebook conversions (Percentiles, QuantileGridAggregator, SeasonalTrendDecomposition):**
-    - `examples/pkgs/analysis/analysis_quantiles.py`: Fully covers Percentiles.ipynb content (percentile calculation 0-100 with distribution analysis). Archived notebook.
-    - `examples/pkgs/analysis/analysis_gridaggregator.py`: Comprehensive coverage of QuantileGridAggregator.ipynb with enhanced binning methods (quantile, equal-width, custom). Archived notebook.
-    - `examples/pkgs/analysis/analysis_seasonaltrend.py`: Significantly enhanced with 5 practical use cases from SeasonalTrendDecomposition.ipynb: (1) detrending for ML gap-filling, (2) anomaly detection via residual analysis, (3) method comparison (harmonic vs classical), (4) climate change impact analysis via deseasonalization, (5) ecosystem recovery trend quantification. All three remaining analysis notebooks now archived; conversion effort complete.
-- **Gap-filling notebook conversion (FluxMDSGapFilling):**
-    - `examples/pkgs/gapfilling/gapfill_mds.py`: Enhanced with comprehensive MDS gap-filling workflow from FluxMDSGapFilling.ipynb. Added: method overview and quality levels explanation, quality flag filtering (QCF), full-year dataset option, detailed parameter documentation, performance scores reporting, quality distribution analysis, time series and cumulative flux comparison visualizations, heatmap before/after comparison. Archived notebook.
-- **Standardized module docstrings across diive/pkgs:** Added consistent, concise module-level docstrings to 50+ files following format: MODULE_NAME: DESCRIPTION with brief capability summary. Updated all subdirectory __init__.py files (9 second-level packages), outlier detection methods (10 files), corrections (2 files), QA/QC utilities (5 files), feature variable derivations (8 files), flux processing levels (14 files), I/O format converters (5 files). Removed verbose descriptions and meta-commentary in favor of actionable, specific capability statements.
-
-### Bug Fixes
-
-- **Example validation fixes:** Fixed 5 examples that had API mismatches or incorrect column names:
-    - `analysis_gridaggregator.py`: Fixed KeyError on non-existent 'n_vals' column; now computes coverage from actual
-      returned columns
-    - `analysis_quantiles.py`: Fixed column name from 'Tair_f' to 'VALUE' in percentiles dataframe access
-    - `correction_winddir_offset.py`: Fixed column names from lowercase 'year'/'offset' to uppercase 'YEAR'/'OFFSET' in
-      yearly offsets dataframe
-    - `outlier_stepwise.py`: Fixed attribute names from `lat`/`lon` to `site_lat`/`site_lon` in StepwiseOutlierDetection
-    - `outlier_zscore.py`: Fixed parameter name from `thres_zscore_increments` to `thres_zscore` in zScoreIncrements
-      initialization
-    - `flux_ustar_mp_detection.py`: Fixed API misuse (was passing individual ustar/flux series instead of DataFrame);
-      now correctly uses `UstarMovingPointDetection(df)` with auto-detected columns and proper `detect()` +
-      `bootstrap()` workflow
-    - `flux_selfheating.py`: Remove Unicode Greek character (ξ) causing Windows cp1252 encoding error; fix
-      ScopApplicator method (get_corrected_flux → get_results) and column access (NEE_SCOP → NEE_OP_CORR)
-    - `flux_uncertainty.py`: Optimize data subset (all June → March 2013) to prevent timeout; add cumulative uncertainty
-      propagation visualization with uncertainty bounds
-- **Library bug fix:** RandomUncertaintyPAS20.report_method_summary() now initializes WINDOW_N_VALS_METHOD1/2/3/4
-  columns in _calc_random_uncertainty() to prevent KeyError when methods skip rows (method4 never assigned if all
-  records have uncertainty from earlier methods)
-- **Example structure fixes:** Deleted `flux_ustarthreshold.py` (violated example guidelines by implementing algorithm
-  instead of demonstrating diive API). Updated EXAMPLE_FILES in run_all_examples.py and total count in
-  examples/README.md (67 → 66 examples).
-- **Import fixes in __init__.py:** Corrected 7 import path errors where functions were imported from wrong modules:
-    - `latent_heat_of_vaporization`, `et_from_le` moved to `conversions` module (was `air`)
-    - `DaytimeNighttimeFlag`, `daytime_nighttime_flag_from_swinpot` moved to `daynightflag` module
-    - `lagged_variants` moved to `laggedvariants` module (was `air`)
-    - `generate_noisy_timeseries`, `add_impulse_noise` moved to `noise` module (was `air`)
-    - `read_file_type` alias corrected for consistency with snake_case convention
-
-### New Classes & Functions
-
-- **Outlier detection:** `LocalOutlierFactor` (unified class with global/day-night modes, replacing
-  LocalOutlierFactorAllData/LocalOutlierFactorDaytimeNighttime); `Hampel` (refactored with clearer API, replacing
-  HampelDaytimeNighttime as primary name); `ManualRemoval` (explicit data point/range removal); `TrimLow` (symmetric
-  outlier removal using trimmed mean approach); `zScore` (global z-score threshold), `zScoreDaytimeNighttime` (z-score
-  with day/night separation), `zScoreRolling` (rolling z-score with adaptive threshold)
-- **EddyPro quality flags:** `flag_signal_strength_eddypro_test()`, `flag_steadiness_horizontal_wind_eddypro_test()`,
-  `flag_angle_of_attack_eddypro_test()`, `flags_vm97_eddypro_fluxnetfile_tests()`,
-  `flag_fluxbasevar_completeness_eddypro_test()`, `flag_ssitc_eddypro_test()` (Vickers & Mahrt 1997 raw data quality
-  testing); private helper `_extract_and_convert_flag_from_multidigit()` consolidates multi-digit flag extraction logic
-- **Binary data processing:** `get_encoded_value_from_int`, `get_encoded_value_series` (bit extraction)
-- **Data corrections:** `set_exact_values_to_missing`, `setto_value`, `setto_threshold`,
-  `MeasurementOffsetFromReplicate`, `remove_relativehumidity_offset`, `remove_radiation_zero_offset`, `WindDirOffset`
-- **Variable creation:** `aerodynamic_resistance`, `dry_air_density`, `air_temp_from_sonic_temp`,
-  `latent_heat_of_vaporization`, `et_from_le`, `DaytimeNighttimeFlag`, `lagged_variants`, `generate_noisy_timeseries`,
-  `add_impulse_noise`, `potrad`, `potrad_eot`, `TimeSince`
-- **Eddy covariance:** `FluxDetectionLimit`, `MaxCovariance`, `WindRotation2D`
-- **Curve fitting:** `BinFitterCP` (polynomial fits with confidence intervals)
-- **Flux analysis:** `TimeLagAnalysis` (time lag detection and visualization with 4-panel plots, gradient-based peak detection, EddyPro compatibility); Enhanced `analyze_highest_quality_flux()`, `RandomUncertaintyPAS20` reporting/plotting,
-  `UstarDetectionMPT`, `UstarThresholdConstantScenarios`, `FlagMultipleConstantUstarThresholds`
-
-### API & Visualization
-
-- **Plotting API:** All visualization aliases now use `plot_` prefix (breaking change)
-- **Two-phase plotting class design:** All plotting classes refactored to separate data preparation (`__init__()`) from
-  styling/rendering (`plot()`). Enables replotting same data with different styling or on different axes. Classes
-  updated: HeatmapBase, HeatmapDateTime, HeatmapYearMonth, HeatmapXYZ, HexbinPlot. All 16 visualization examples
-  verified 100% compliant.
-- **HeatmapXYZ:** Refactored to accept pre-aggregated input
-- **ScatterXY:** Enhanced with color-coding, bin aggregation, trend overlays
-- **Source code API fixes:** Fixed 7 plotting instantiations in library code (quantiles.py, fluxprocessingchain.py) to
-  use correct two-phase pattern
+**Major release: composable flux chain, 9 domain namespaces, new EC analysis tools.**
 
 ### Breaking Changes
 
-- Gap-filling API: Feature parameters moved to FeatureEngineer (not accepted in models)
-- Plotting aliases: Old names deprecated in favor of `plot_*` prefix
-- DailyCorrelation: Refactored from function to class-based API
-- HeatmapXYZ: Now requires pre-aggregated input
+- **Public API: 9 domain namespaces** — flat 145-export namespace replaced with `dv.outliers`, `dv.gapfilling`,
+  `dv.flux`, `dv.analysis`, `dv.plotting`, `dv.times`, `dv.features`, `dv.corrections`, `dv.qaqc`. All old flat names
+  removed. Update all imports.
+- **Gap-filling: feature parameters moved to `FeatureEngineer`** — `RandomForestTS` / `XGBoostTS` no longer accept
+  `features_*` parameters; pass a pre-built `FeatureEngineer` instance instead.
+- **`zScore` unified** — `zScoreDaytimeNighttime` removed; use `zScore(separate_daytime_nighttime=True)`.
+- **Plotting aliases use `plot_` prefix** — old unprefixed names removed.
+- **`HeatmapXYZ` requires pre-aggregated input.**
+- **`DailyCorrelation` is now a class** — old function-based API removed.
+
+### Flux Processing Chain
+
+- **Composable architecture** — monolithic `FluxProcessingChain` (2387 lines) replaced with typed containers (
+  `FluxLevelData`, `FluxMeta`, `LevelResults`) and one pure callable per level. The `FluxProcessingChain` class is kept
+  as a slim orchestrator; all existing methods and properties unchanged. `finalize_level2/31/33()` now no-ops with
+  `DeprecationWarning`.
+- **`FluxConfig` + `run_flux_chain()`** — per-flux configuration dataclass and convenience wrapper for multi-flux loops
+  with shared site parameters.
+- **`FluxLevelData.gapfilled_cols()`** — returns `{method: {ustar_scenario: column_name}}` for all L4.1 methods run.
+- **`FluxLevelData.summary()`** — per-level data-availability table with daytime/nighttime breakdown.
+- **`filteredseries_level33_hq`** — QCF=0-only series per USTAR scenario on `LevelResults`.
+- **Feature engineering hoisted outside USTAR loop** — `engineer.fit_transform()` called once, not once per scenario; up
+  to 3x speedup for multi-scenario chains.
+- **Input validation added to composable callables** — `run_level2()` validates test sub-keys; `run_level32()` guards
+  against empty outlier detector; L4.1 callables validate driver/feature columns; `init_flux_data()` checks `fluxcol`/
+  `ustarcol`; MDS warns when VPD > 10 (likely hPa instead of kPa).
+- **`nighttimetime_accept_qcf_below` -> `nighttime_accept_qcf_below`** — typo fixed across `FlagQCF`, `FluxMeta`,
+  examples, tests.
+- **`gapfill_storage_term` default** — `FluxStorageCorrectionSinglePointEddyPro` default changed `False` -> `True` to
+  match `run_level31()`.
+- **Energy flux detection uses `_ENERGY_FLUX_VARS` frozenset** — covers `G`, `SH`, `SLE`, `FH2O` in addition to `H`/`LE`
+  in `QuickFluxProcessingChain`.
+
+### Gap-Filling
+
+- **`GapFillingResult` dataclass + `.results` property** — all gap-filling classes expose `.results` after `.run()`,
+  bundling `gapfilled`, `flag`, `scores`, `feature_importances`, `model`, and related fields. Importable as
+  `dv.gapfilling.GapFillingResult`.
+- **`.run()` / `.result` unified across class families** — `FlagBase`, `MlRegressorGapFillingBase`, `FluxMDS`,
+  `DailyCorrelation`, `StratifiedAnalysis`, `BinFitterCP` all share the same two-step API. Enables
+  `series = dv.outliers.Hampel(s, n_sigma=5).run().result`.
+- **`below_zero` param** — controls handling of below-zero predictions: `None` (keep), `'zero'` (clip), `'nan'` (treat
+  as unfillable). Available in `RandomForestTS`, `XGBoostTS`, and longterm variants.
+- **`OptimizeParamsRFTS` -> `OptimizeParamsTS`** — generalized hyperparameter optimization for any sklearn-compatible
+  regressor.
+- **SHAP-based feature reduction** — replaced permutation importance with SHAP values.
+- **`FluxMDS` 4x speedup** — vectorization and in-place updates; results bit-identical to previous implementation.
+
+### New Classes & Functions
+
+- **`DetectTimestampShifts`** — detects clock errors by comparing measured vs. potential shortwave radiation. Three
+  detection methods (`fft_phase_shift`, `crosscorr`, `noon_shift`) with five plot methods.
+- **`PreWhiteningBootstrap`** — Vitale et al. (2024) PWB time-lag detection for low-magnitude fluxes (CH4, N2O).
+- **`PwbBatchDetection`** — parallel batch PWB across many files using `ProcessPoolExecutor`. Crash-safe checkpointing;
+  CLI: `diive-tlag-pwb-batch`.
+- **`reynolds_decomposition()`** — standalone `x' = x - mean(x)`; exported as `dv.flux.reynolds_decomposition`.
+- **`WindDoubleRotation`** (renamed from `WindRotation2D`) — scalar `c` removed; Reynolds decomposition is now a
+  separate explicit step. Rotation angles use `atan2` (fixes `ZeroDivisionError` and wrong-quadrant results when
+  `u_mean <= 0`).
+- **`UstarVekuriThresholdDetection`** — quantile-based USTAR detection; simpler alternative to the ONEFlux moving-point
+  method.
+- **`UstarBootstrapThresholds`** — multi-year bootstrap wrapper for any USTAR detection method; returns per-year
+  p16/p50/p84 thresholds.
+- **`GrangerCausality`** — predictive causality test between time series with lag identification.
+- **`TreeRingPlot`** — circular spiral plot displaying annual time series as concentric color-coded rings.
+- **`FeatureEngineer`** — standalone 8-stage feature engineering pipeline (lag, rolling, diff, EMA, poly, STL,
+  timestamps, record number); pre-engineer once and reuse across models.
+
+### Refactoring
+
+- **`GapFinder`** — single-pass vectorized detection; `limit` -> `max_length`; new `min_length`; `GAP_DURATION` always
+  present; `get_results()` removed.
+- **`DailyCorrelation`** — vectorized; NaN days no longer leak into groups; IQR anomaly score centred on median.
+- **`FindOptimumRange`** — threshold applied to full curve range; new `prominence_threshold` parameter; Material Design
+  colors.
+- **`LocalOutlierFactor`** — `LocalOutlierFactorAllData` and `LocalOutlierFactorDaytimeNighttime` merged into single
+  class with `separate_daytime_nighttime` parameter.
+- **`Hampel`** — `HampelDaytimeNighttime` renamed to `Hampel`; `n_sigma_dt`/`n_sigma_nt` short-form aliases added.
+- **Plotting two-phase design** — `HeatmapBase`, `HeatmapDateTime`, `HeatmapYearMonth`, `HeatmapXYZ`, `HexbinPlot`
+  refactored to separate data (`__init__`) from styling (`plot()`).
+
+### Fixes
+
+- **XGBoost/SHAP incompatibility with Python 3.13** — extended monkey-patch to cover `ast.literal_eval` so
+  `TreeExplainer` initialises correctly.
+- **Pandas 3.0.3 compatibility** — replaced `iterrows`, `inplace=True`, and `.values` patterns library-wide.
+- **`LocalOutlierFactor`: `contamination='auto'` no longer raises `TypeError`.**
+- **`linear_interpolation`**: updated to current `GapFinder` API.
+- **`data.filteredseries` set to `None`** after `run_level33_constant_ustar()` to prevent silent wrong-scenario access.
+- **`calc_vpd_from_ta_rh`** now exported from `diive.pkgs.features.variables`.
+- **`SortingBinsMethod`** alias added for `StratifiedAnalysis` (backward compatibility).
+- **Import path fixes** — corrected 7 misrouted exports in `__init__.py` files.
+- All 63 active tests pass.
+
+### Examples & Documentation
+
+- New examples: `fluxprocessingchain_composable.py` (full L2->L4.1), `fluxprocessingchain_multiflux.py` (multi-flux
+  loop), `qaqc_detect_timestamp_shifts.py`, `flux_lag_pwb.py`, `flux_lag_pwb_batch.py`, `plot_treering_temperature.py`,
+  4 I/O examples, USTAR method comparison. Total: 98 examples.
+- 21 Jupyter notebooks archived; content migrated to Sphinx Gallery examples.
+- Switched from poetry to `uv` for dependency management.
 
 ## v0.90.0 | 13 Jan 2026
 
@@ -1680,8 +1094,10 @@ time series. The bin with most counts is highlighted orange.*
 
 - Added histogram plots to `FlagBase`, histograms are now shown for all outlier methods (
   `diive.core.base.flagbase.FlagBase.defaultplot`)
-- Added daytime/nighttime histogram plots to (`diive.pkgs.preprocessing.outlier_detection.hampel.HampelDaytimeNighttime`)
-- Added daytime/nighttime histogram plots to (`diive.pkgs.preprocessing.outlier_detection.zscore.zScoreDaytimeNighttime`)
+- Added daytime/nighttime histogram plots to (
+  `diive.pkgs.preprocessing.outlier_detection.hampel.HampelDaytimeNighttime`)
+- Added daytime/nighttime histogram plots to (
+  `diive.pkgs.preprocessing.outlier_detection.zscore.zScoreDaytimeNighttime`)
 - Added daytime/nighttime histogram plots to (
   `diive.pkgs.preprocessing.outlier_detection.lof.LocalOutlierFactorDaytimeNighttime`)
 - Added daytime/nighttime histogram plots to (
