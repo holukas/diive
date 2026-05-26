@@ -25,6 +25,7 @@ Part of the diive library: https://github.com/holukas/diive
 """
 
 from diive.pkgs.flux.fluxprocessingchain.container import (
+    FluxConfig,
     FluxLevelData,
     FluxMeta,
     LevelResults,
@@ -35,6 +36,7 @@ from diive.pkgs.flux.fluxprocessingchain.level31_storagecorrection import FluxSt
 from diive.pkgs.flux.fluxprocessingchain.levels import (
     init_flux_data,
     make_level32_detector,
+    run_flux_chain,
     run_level2,
     run_level31,
     run_level32,
@@ -45,11 +47,12 @@ from diive.pkgs.flux.fluxprocessingchain.levels import (
 )
 
 __all__ = [
-    # Containers
+    # Containers / config
+    'FluxConfig',
     'FluxLevelData',
     'FluxMeta',
     'LevelResults',
-    # Composable callables
+    # Composable callables — single flux
     'init_flux_data',
     'run_level2',
     'run_level31',
@@ -59,6 +62,8 @@ __all__ = [
     'run_level41_mds',
     'run_level41_rf',
     'run_level41_xgb',
+    # Multi-flux helper
+    'run_flux_chain',
     # Orchestrating class
     'FluxProcessingChain',
     # Level classes (for type-checking downstream)

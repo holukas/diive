@@ -233,9 +233,37 @@ status = sanitizer.get_status()  # Diagnostics: rows removed/added, frequency co
 - **L3.3** — USTAR turbulence filtering (nighttime only)
 - **L4.1** — Gap-filling (RF, XGBoost, MDS)
 
-**Two API styles** (since v0.91.0+):
+**Three API styles** (since v0.91.0+):
 
-1. **Composable functions** — one pure callable per level, each taking and returning a `FluxLevelData` container. Pure functions — never mutate input. Use this when you want a partial pipeline (e.g. L2 + L3.1 only), a custom L3.2, or branching at L4.1.
+1. **Multi-flux loop** — `FluxConfig` + `run_flux_chain`. Write site parameters once; iterate over all fluxes. Each flux gets its own `FluxConfig` with tailored USTAR thresholds, outlier sigma, and L2 tests. Use this for typical site processing (FC/NEE, H, LE, N2O, CH4).
+
+   ```python
+   from diive.pkgs.flux.fluxprocessingchain import FluxConfig, run_flux_chain
+
+   SITE = dict(site_lat=47.42, site_lon=9.84, utc_offset=1,
+               nighttime_threshold=20, daytime_accept_qcf_below=2,
+               nighttime_accept_qcf_below=2)
+
+   fc_cfg = FluxConfig(
+       fluxcol='FC', ustar_thresholds=[0.30], ustar_labels=['CUT_50'],
+       outlier_sigma_daytime=5.5, outlier_sigma_nighttime=5.5,  # required, no defaults
+       gapfilling_features=['TA_1_1_1', 'SW_IN_1_1_1', 'VPD_1_1_1'],
+       level2_tests={'ssitc': {'apply': True, 'setflag_timeperiod': None}, ...},
+       mds_swin='SW_IN_1_1_1', mds_ta='TA_1_1_1', mds_vpd='VPD_kPa_1_1_1',
+   )
+   h_cfg = FluxConfig(
+       fluxcol='H', ustar_thresholds=[0.0], ustar_labels=['CUT_NONE'],  # no USTAR for energy fluxes
+       outlier_sigma_daytime=5.5, outlier_sigma_nighttime=5.5,
+       set_storage_to_zero=True,  # no heat storage profile available
+       ...
+   )
+
+   results: dict[str, FluxLevelData] = {}
+   for cfg in [fc_cfg, h_cfg]:
+       results[cfg.fluxcol] = run_flux_chain(df, cfg, **SITE, engineer=engineer)
+   ```
+
+2. **Composable functions** — one pure callable per level, each taking and returning a `FluxLevelData` container. Pure functions — never mutate input. Use this when you want a partial pipeline (e.g. L2 + L3.1 only), a custom L3.2, or branching at L4.1.
 
    ```python
    from diive.pkgs.flux.fluxprocessingchain import (
@@ -252,7 +280,7 @@ status = sanitizer.get_status()  # Diagnostics: rows removed/added, frequency co
    final_df = data.fpc_df
    ```
 
-2. **`FluxProcessingChain` class** — convenience orchestrator that wraps the callables for the common "run all 5 levels" path. All existing methods/properties (`fpc.fpc_df`, `fpc.level2`, `fpc.level32_qcf`, etc.) keep working unchanged.
+3. **`FluxProcessingChain` class** — convenience orchestrator that wraps the callables for the common "run all 5 levels" path. All existing methods/properties (`fpc.fpc_df`, `fpc.level2`, `fpc.level32_qcf`, etc.) keep working unchanged.
 
    ```python
    fpc = dv.flux.FluxProcessingChain(df=df, fluxcol='FC', ...)
@@ -290,6 +318,7 @@ data.levels.filteredseries_level32_qcf  # Series
 data.levels.level33                     # FlagMultipleConstantUstarThresholds
 data.levels.level33_qcf                 # dict[ustar_scenario, FlagQCF]
 data.levels.filteredseries_level33_qcf  # dict[ustar_scenario, Series]
+data.levels.filteredseries_level33_hq   # dict[ustar_scenario, Series] (QCF=0 only)
 data.levels.level41_mds                 # dict[ustar_scenario, FluxMDS]
 data.levels.level41_rf                  # dict[ustar_scenario, LongTermGapFillingRandomForestTS]
 data.levels.level41_xgb                 # dict[ustar_scenario, LongTermGapFillingXGBoostTS]
@@ -319,6 +348,7 @@ data.levels.level41_xgb                 # dict[ustar_scenario, LongTermGapFillin
 
 - `examples/flux/fluxprocessingchain/fluxprocessingchain.py` — all 5 levels via the orchestrator class (RF + XGBoost).
 - `examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py` — full L2→L4.1 pipeline using composable functions, including RF, XGBoost, and MDS gap-filling; heatmaps and cumulative plots.
+- `examples/flux/fluxprocessingchain/fluxprocessingchain_multiflux.py` — multi-flux loop with `FluxConfig` + `run_flux_chain` for FC, H, and N2O; combined export and gap-filling fraction.
 - `examples/flux/fluxprocessingchain/fluxprocessingchain_quick.py` — `QuickFluxProcessingChain` wrapper for rapid exploratory checks.
 
 ## High-Resolution EC Analysis (hires)
@@ -680,7 +710,7 @@ Organized by functional domain. Each category has a README with file description
 - `fits/` — 2 data fitting
 - `io/` — 5 file I/O
 - `preprocessing/` — 21 (corrections, outlier detection, QA/QC)
-- `flux/` — 18 (processing chain, low-res, high-res)
+- `flux/` — 20 (processing chain, low-res, high-res)
 - `gapfilling/` — 11 (RF, XGBoost, MDS, interpolation, comparison)
 
 **Running examples:**

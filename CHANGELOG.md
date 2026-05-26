@@ -2,7 +2,7 @@
 
 ![DIIVE](images/logo_diive1_256px.png)
 
-## v0.91.1 | XX May 2026
+## Unreleased
 
 **Harden composable flux chain API; extend composable example to full L2–L4.1.**
 
@@ -42,11 +42,20 @@
 
 ### Additions
 
+- **`FluxConfig` dataclass** — `container.py`.
+  Per-flux configuration for `run_flux_chain`. Captures USTAR thresholds, Hampel sigma values (required, no defaults for outlier sigma — must be set per flux), L2 test dicts, gap-filling features, and MDS driver columns. `set_storage_to_zero` applies to any flux without a storage measurement (not H/LE-specific).
+
+- **`run_flux_chain(df, config, *, site_lat, site_lon, ...)` → `FluxLevelData`** — `levels/multiflux.py`.
+  Convenience wrapper that runs the full L1→L4.1 pipeline for a single flux guided by a `FluxConfig`. Site-level parameters are keyword-only so they can be written once and shared across a multi-flux loop. Validates that `engineer` is provided when ML gap-filling is enabled, and that MDS driver columns are set. Production-ready RF/XGBoost defaults (`n_estimators=350`, `max_depth=15`/`6`) that can be overridden via `rf_kwargs`/`xgb_kwargs`/`mds_kwargs`.
+
+- **`filteredseries_level33_hq` per USTAR scenario** — `levels/level33.py`, `container.py`.
+  `LevelResults.filteredseries_level33_hq` dict holds the QCF=0-only (strictest) filtered series for each USTAR scenario — the analogue of `filteredseries_hq` at the L3.3 level.
+
 - **`FluxLevelData.gapfilled_cols()`** — `container.py`.
   Returns `{method: {ustar_scenario: column_name}}` for all L4.1 methods that have run. Eliminates digging into model instances to find gap-filled column names.
 
 - **`FluxLevelData.summary()`** — `container.py`.
-  Human-readable per-level data-availability table with daytime/nighttime breakdown, QCF thresholds, and site metadata.
+  Human-readable per-level data-availability table with daytime/nighttime breakdown, QCF thresholds, and site metadata. L4.1 section shows measured / gap-filled / fallback counts and percentages via `FLAG_*_ISFILLED`.
 
 ### Improvements
 
@@ -56,7 +65,10 @@
 ### Examples
 
 - **`fluxprocessingchain_composable.py`** extended from L2+L3.1+L3.2 to the full L2→L4.1 pipeline.
-  Now demonstrates L3.3 USTAR filtering and all three L4.1 gap-filling methods (RF, XGBoost, MDS) run as branches from the same `FluxLevelData`. Includes `HeatmapDateTime` and `CumulativeYear` plots, `data.gapfilled_cols()`, `data.summary()`, and model diagnostics.
+  Now demonstrates L3.3 USTAR filtering and all three L4.1 gap-filling methods (RF, XGBoost, MDS) run as branches from the same `FluxLevelData`. Includes `HeatmapDateTime` and `CumulativeYear` plots (with µmol→gC unit conversion), VPD unit check, `data.gapfilled_cols()`, `data.summary()`, and model diagnostics. Flux partitioning (REddyProc) noted as next step.
+
+- **New: `fluxprocessingchain_multiflux.py`** — multi-flux loop example.
+  Shows `FluxConfig` objects for FC, H, and N2O (different outlier sigma for trace gas, no USTAR filtering for H). Runs `run_flux_chain` in a loop sharing one site parameter dict and one `FeatureEngineer`. Demonstrates combined export DataFrame and gap-filling fraction reporting.
 
 ## v0.91.0 | XX May 2026
 

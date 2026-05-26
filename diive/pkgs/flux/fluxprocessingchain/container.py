@@ -24,6 +24,128 @@ if TYPE_CHECKING:
     from diive.pkgs.preprocessing.qaqc import FlagQCF
 
 
+@dataclass
+class FluxConfig:
+    """
+    Per-flux configuration for :func:`run_flux_chain`.
+
+    Captures every setting that differs between fluxes (CO2, H, LE, N2O, CH4, …)
+    so that a multi-flux loop can call ``run_flux_chain(df, config, **site)`` for
+    each variable without repeating site-level parameters.
+
+    **Required fields** (no defaults) force you to make explicit choices for every
+    flux rather than silently inheriting wrong values from another variable.
+
+    Example — NEE, H, and N2O configs::
+
+        from diive.pkgs.flux.fluxprocessingchain import FluxConfig
+
+        fc_cfg = FluxConfig(
+            fluxcol='FC',
+            ustar_thresholds=[0.30],
+            ustar_labels=['CUT_50'],
+            outlier_sigma_daytime=5.5,
+            outlier_sigma_nighttime=5.5,
+            gapfilling_features=['TA_1_1_1', 'SW_IN_1_1_1', 'VPD_1_1_1'],
+            level2_tests={
+                'ssitc': {'apply': True, 'setflag_timeperiod': None},
+                'gas_completeness': {'apply': True},
+                'spectral_correction_factor': {'apply': True},
+            },
+            mds_swin='SW_IN_1_1_1',
+            mds_ta='TA_1_1_1',
+            mds_vpd='VPD_kPa_1_1_1',
+        )
+
+        h_cfg = FluxConfig(
+            fluxcol='H',
+            ustar_thresholds=[0.0],   # energy flux — no USTAR filtering
+            ustar_labels=['CUT_NONE'],
+            outlier_sigma_daytime=5.5,
+            outlier_sigma_nighttime=5.5,
+            gapfilling_features=['TA_1_1_1', 'SW_IN_1_1_1'],
+            level2_tests={
+                'ssitc': {'apply': True, 'setflag_timeperiod': None},
+            },
+            mds_swin='SW_IN_1_1_1',
+            mds_ta='TA_1_1_1',
+            mds_vpd='VPD_kPa_1_1_1',
+        )
+
+        n2o_cfg = FluxConfig(
+            fluxcol='N2O',
+            ustar_thresholds=[0.30],
+            ustar_labels=['CUT_50'],
+            outlier_sigma_daytime=4.0,    # chosen by inspecting the N2O record
+            outlier_sigma_nighttime=3.5,  # trace gases typically need lower sigma
+            gapfilling_features=['TA_1_1_1', 'SW_IN_1_1_1'],
+            level2_tests={
+                'ssitc': {'apply': True, 'setflag_timeperiod': None},
+                'gas_completeness': {'apply': True},
+            },
+            gapfill_mds=False,  # MDS not appropriate for N2O without dedicated drivers
+        )
+    """
+
+    # ------------------------------------------------------------------ required
+    fluxcol: str
+    """Target flux column (e.g. ``'FC'``, ``'H'``, ``'N2O'``)."""
+
+    ustar_thresholds: list
+    """USTAR threshold(s) in m s-1 — one per scenario.
+    Use ``[0.0]`` for energy fluxes (H, LE) to keep all records."""
+
+    ustar_labels: list
+    """Short label per threshold (e.g. ``['CUT_50']``; ``['CUT_NONE']`` for H/LE)."""
+
+    outlier_sigma_daytime: float
+    """Hampel filter sigma for daytime outlier detection.
+    Must be chosen by inspecting the flux record — no universal default applies.
+    Typical range: 5–6 for CO2/H/LE; 3–5 for trace gases (N2O, CH4)."""
+
+    outlier_sigma_nighttime: float
+    """Hampel filter sigma for nighttime outlier detection.
+    Must be chosen by inspecting the flux record — no universal default applies."""
+
+    gapfilling_features: list
+    """Predictor column names for ML gap-filling (RF, XGBoost).
+    Must exist in ``data.full_df``.  Ignored when both ``gapfill_rf`` and
+    ``gapfill_xgb`` are ``False``."""
+
+    level2_tests: dict
+    """Keyword arguments forwarded verbatim to :func:`run_level2`
+    (``ssitc``, ``gas_completeness``, ``spectral_correction_factor``,
+    ``signal_strength``, ``raw_data_screening_vm97``,
+    ``angle_of_attack``, ``steadiness_of_horizontal_wind``)."""
+
+    # ------------------------------------------------------------------ optional
+    set_storage_to_zero: bool = False
+    """Set to ``True`` when no storage measurement is available for this flux.
+    The storage correction (L3.1) still runs; it just adds zero."""
+
+    outlier_window_length: int = 48 * 13
+    """Hampel filter rolling window in half-hours (default = 13 days = 624 records)."""
+
+    gapfill_rf: bool = True
+    """Run Random Forest gap-filling (L4.1)."""
+
+    gapfill_xgb: bool = False
+    """Run XGBoost gap-filling (L4.1).  Off by default — slower than RF."""
+
+    gapfill_mds: bool = True
+    """Run MDS gap-filling (L4.1)."""
+
+    mds_swin: str | None = None
+    """Shortwave incoming radiation column for MDS (W m-2; must be in ``data.full_df``)."""
+
+    mds_ta: str | None = None
+    """Air temperature column for MDS (deg C; must be in ``data.full_df``)."""
+
+    mds_vpd: str | None = None
+    """VPD column for MDS (**kPa**; must be in ``data.full_df``).
+    EddyPro outputs VPD in hPa — divide by 10 before assigning here."""
+
+
 @dataclass(frozen=True)
 class FluxMeta:
     """Frozen site and processing metadata, shared by all levels."""
