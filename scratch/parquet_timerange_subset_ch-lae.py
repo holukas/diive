@@ -27,7 +27,7 @@ from diive.core.io.files import load_parquet, save_parquet
 # ===========================
 
 # Source parquet file (full path)
-PARQUET_FILE = r"F:\Sync\luhk_work\20 - CODING\29 - WORKBENCH\dataset_ch-lae_flux_product\dataset_ch-lae_flux_product\notebooks\20_MERGE_DATA\22.4_FLUXES_L1_IRGA72+METEO7_2016-2024.parquet"
+PARQUET_FILE = r"F:\Sync\luhk_work\dev-data\diive-data\dev_scripts\22.4_FLUXES_L1_IRGA72+METEO7_2016-2024.parquet"
 
 # Time range to keep
 START_YEAR = 2024

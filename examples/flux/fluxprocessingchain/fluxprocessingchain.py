@@ -172,15 +172,15 @@ fpc.level32_qcf.showplot_qcf_heatmaps()
 # ``n_iter=10`` here for demo speed -- use 100 or more in production.
 # ``n_jobs=-1`` runs bootstrap iterations in parallel across all available CPUs.
 
-TA_COL = 'TA_T1_47_1'    # Air temperature column in the input data (deg C)
-SWIN_COL = 'SW_IN_T1_47_1'  # Incoming shortwave radiation column (W m-2)
+TA_COL = 'TA_T1_47_1_gfXG'      # Air temperature column in the input data (deg C)
+SWIN_COL = 'SW_IN_T1_47_1_gfXG'  # Incoming shortwave radiation column (W m-2)
 
 fpc.level33_ustar_detection(
     ta_col=TA_COL,
     swin_col=SWIN_COL,
-    n_iter=10,            # Demo setting (use 100+ in production)
+    n_iter=10,  # Demo setting (use 100+ in production)
     n_jobs=-1,
-    percentiles=(50,),    # Single scenario CUT_50; use (16, 50, 84) for uncertainty range
+    percentiles=(50,),  # Single scenario CUT_50; use (16, 50, 84) for uncertainty range
     showplot=False,
     verbose=True,
 )
@@ -322,5 +322,6 @@ if xgb_r2 is not None:
     print(f"XGBoost R²: {xgb_r2:.3f}")
 
 # Access final filtered series with all processing applied
-final_flux = fpc.filteredseries
-highest_quality = fpc.filteredseries_hq  # Only QCF=0 (best quality)
+# After L3.3 there is no single filtered series; access per USTAR scenario explicitly.
+final_flux = fpc.filteredseries_level33_qcf['CUT_50']
+highest_quality = fpc.levels.filteredseries_level33_hq['CUT_50']  # Only QCF=0 (best quality)
