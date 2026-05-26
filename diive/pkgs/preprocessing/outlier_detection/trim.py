@@ -27,6 +27,7 @@ import pandas as pd
 from pandas import DatetimeIndex, Series
 
 from diive.core.base.flagbase import FlagBase
+from diive.core.utils.console import detail
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.pkgs.preprocessing.outlier_detection.common import create_daytime_nighttime_flags
 
@@ -170,9 +171,9 @@ class TrimLow(FlagBase):
         rejected = rejected[rejected].index
 
         if self.verbose:
-            print(f"ITERATION#{iteration}: Total found outliers: "
-                  f"{n_outliers}, "
-                  f"minimum value: {_s.loc[flag == 0].min()}",
-                  f"maximum value: {_s.loc[flag == 0].max()}")
+            detail(f"ITERATION#{iteration}: Total found outliers: "
+                   f"{n_outliers}, "
+                   f"minimum value: {_s.loc[flag == 0].min()}, "
+                   f"maximum value: {_s.loc[flag == 0].max()}", verbose=self.verbose)
 
         return ok, rejected, n_outliers

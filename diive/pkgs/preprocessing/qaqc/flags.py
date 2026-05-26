@@ -12,6 +12,7 @@ import pandas as pd
 from pandas import Series, DatetimeIndex
 
 from diive.core.base.flagbase import FlagBase
+from diive.core.utils.console import info
 from diive.core.utils.prints import ConsoleOutputDecorator
 
 
@@ -33,7 +34,7 @@ def restrict_application(flag: Series, flagname: str, application_dates: list or
     orig_flag = flag.copy()
     restricted_flag = pd.Series(index=orig_flag.index, data=fill_value)
     if verbose:
-        print(f"{flagname}: will be applied on the following dates only: {application_dates}")
+        info(f"{flagname}: will be applied on the following dates only: {application_dates}")
 
     for date in application_dates:
         if isinstance(date, str):
@@ -78,10 +79,10 @@ class MissingValues(FlagBase):
         #     self.defaultplot(n_iterations=1)
 
         if self.verbose:
-            print(f"MISSING VALUES TEST: Generated new flag variable {self.overall_flag.name}, "
-                  f"newly calculated from variable {self.series.name},"
-                  f"with flag 0 (good values) where {self.series.name} is available, "
-                  f"flag 2 (bad values) where {self.series.name} is missing.")
+            info(f"MISSING VALUES TEST: Generated new flag variable {self.overall_flag.name}, "
+                 f"newly calculated from variable {self.series.name}, "
+                 f"with flag 0 (good values) where {self.series.name} is available, "
+                 f"flag 2 (bad values) where {self.series.name} is missing.", verbose=self.verbose)
 
     def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Perform tests required for this flag"""

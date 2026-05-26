@@ -16,6 +16,8 @@ from typing import Dict, Tuple, Optional, List
 from statsmodels.tsa.seasonal import STL, seasonal_decompose
 from scipy import signal, fft as scipy_fft
 
+from diive.core.utils.console import detail
+
 
 def stl_decompose(
     series: pd.Series,
@@ -128,8 +130,8 @@ def stl_decompose(
         decomp.resid.index = series.index
 
         if verbose:
-            print(f"STL decomposition: seasonal={seasonal}, trend={trend}, robust={robust}")
-            print(f"  Iterations: {decomp.nobs}")
+            detail(f"STL decomposition: seasonal={seasonal}, trend={trend}, robust={robust}, "
+                   f"iterations={decomp.nobs}", verbose=verbose)
 
         return {
             'seasonal': decomp.seasonal,
@@ -185,7 +187,7 @@ def classical_decompose(
             decomp = seasonal_decompose(series, model=model, period=period)
 
         if verbose:
-            print(f"Classical decomposition: period={period}, model={model}")
+            detail(f"Classical decomposition: period={period}, model={model}", verbose=verbose)
 
         return {
             'seasonal': decomp.seasonal,
@@ -287,8 +289,8 @@ def harmonic_decompose(
     )
 
     if verbose:
-        print(f"Harmonic decomposition: n_harmonics={n_harmonics}, window={window}")
-        print(f"  FFT length={n}, top frequency={top_idx_sorted[-1] / n:.4f}")
+        detail(f"Harmonic decomposition: n_harmonics={n_harmonics}, window={window}, "
+               f"FFT length={n}, top frequency={top_idx_sorted[-1] / n:.4f}", verbose=verbose)
 
     return {
         'harmonics': harmonics,
@@ -499,9 +501,10 @@ def detect_seasonality(
         strength = float(seasonal_power / total_power) if total_power > 0 else 0.0
 
     if verbose:
-        print(f"Seasonality detection: primary_period={primary_period}, strength={strength:.3f}")
+        msg = f"Seasonality detection: primary_period={primary_period}, strength={strength:.3f}"
         if secondary_periods:
-            print(f"  Secondary periods: {secondary_periods}")
+            msg += f", secondary periods: {secondary_periods}"
+        detail(msg, verbose=verbose)
 
     all_periods = list(zip(periods, powers_by_period))
     all_periods.sort(key=lambda x: -x[1])

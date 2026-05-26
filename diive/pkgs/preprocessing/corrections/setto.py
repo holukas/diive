@@ -12,6 +12,7 @@ import pandas as pd
 from pandas import Series
 
 from diive.core.plotting.plotfuncs import quickplot
+from diive.core.utils.console import info, detail
 from diive.core.utils.prints import ConsoleOutputDecorator
 
 
@@ -61,12 +62,12 @@ def set_exact_values_to_missing(series: Series,
     # Number of values set to missing
     n_vals = int(flag.sum())
 
-    print(f"Correction: set exact values to missing")
-    print(f"    Variable: {series.name}")
-    print(f"    Number of records set to missing: {n_vals}")
+    info(f"Correction: set exact values to missing")
+    info(f"  Variable: {series.name}")
+    info(f"  Number of records set to missing: {n_vals}")
 
     if verbose > 0:
-        print(f"    Locations of records set to missing: {locs}")
+        detail(f"  Locations of records set to missing: {locs}")
 
     # Plot
     if showplot:
@@ -112,7 +113,7 @@ def setto_value(series: Series, dates: list, value: float = 0, verbose: int = 0)
             _dates = (series_corr.index >= date[0]) & (series_corr.index <= date[1])
             series_corr.loc[_dates] = value
     if verbose > 0:
-        print(f"Records in time range {dates} were set to value {value}.")
+        info(f"Records in time range {dates} were set to value {value}.")
     return series_corr
 
 
@@ -155,16 +156,14 @@ def setto_threshold(series: Series,
     flag.loc[over_thres_ix] = 1
     flag.loc[range_ok_ix] = 0
 
-    print(f"QA/QC set to threshold value")
-    print(f"    Variable: {series.name}")
+    info(f"QA/QC set to threshold value")
+    info(f"  Variable: {series.name}")
     if type == 'max':
-        print(f"    Accepted: {range_ok_ix.sum()} values below max threshold of {threshold}")
-        print(
-            f"    Corrected: {over_thres_ix.sum()} values above max threshold of {threshold} were set to {threshold}")
+        info(f"  Accepted: {range_ok_ix.sum()} values below max threshold of {threshold}")
+        info(f"  Corrected: {over_thres_ix.sum()} values above max threshold of {threshold} were set to {threshold}")
     if type == 'min':
-        print(f"    Accepted: {range_ok_ix.sum()} values above min threshold of {threshold}")
-        print(
-            f"    Corrected: {over_thres_ix.sum()} values below min threshold of {threshold} were set to {threshold}")
+        info(f"  Accepted: {range_ok_ix.sum()} values above min threshold of {threshold}")
+        info(f"  Corrected: {over_thres_ix.sum()} values below min threshold of {threshold} were set to {threshold}")
 
     corrected_ix = flag == 1
     series_corr = series.copy()

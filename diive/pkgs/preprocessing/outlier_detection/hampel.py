@@ -30,6 +30,7 @@ import pandas as pd
 from pandas import DatetimeIndex, Series
 
 from diive.core.base.flagbase import FlagBase
+from diive.core.utils.console import detail
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.pkgs.preprocessing.outlier_detection.common import create_daytime_nighttime_flags
 
@@ -253,15 +254,15 @@ class Hampel(FlagBase):
 
                 # 3. Print beautiful aligned output
                 # Example: [Dt/Nt] ITER #01 | Outliers:   123 ( 0.45%) | Day:    50 | Night:    73
-                print(f"[Dt/Nt] {iter_str} | "
-                      f"Outliers: {out_str} ({pct_str}) | "
-                      f"Day: {n_dt:>5} | "
-                      f"Night: {n_nt:>5}")
+                detail(f"[Dt/Nt] {iter_str} | "
+                       f"Outliers: {out_str} ({pct_str}) | "
+                       f"Day: {n_dt:>5} | "
+                       f"Night: {n_nt:>5}", verbose=self.verbose)
             else:
                 # Global reporting
                 # Example: [Global] ITER #01 | Outliers:   123 ( 0.45%)
-                print(f"[Global] {iter_str} | "
-                      f"Outliers: {out_str} ({pct_str})")
+                detail(f"[Global] {iter_str} | "
+                       f"Outliers: {out_str} ({pct_str})", verbose=self.verbose)
 
         return ok, rejected, n_outliers
 

@@ -25,6 +25,7 @@ import pandas as pd
 from pandas import Series, DatetimeIndex
 
 from diive.core.base.flagbase import FlagBase
+from diive.core.utils.console import detail
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.pkgs.preprocessing.outlier_detection.common import create_daytime_nighttime_flags
 
@@ -217,8 +218,8 @@ class AbsoluteLimits(FlagBase):
         rejected = rejected[rejected].index
 
         if self.verbose:
-            print(f"Total found outliers: {len(_rejected_dt)} values (daytime)")
-            print(f"Total found outliers: {len(_rejected_nt)} values (nighttime)")
-            print(f"Total found outliers: {n_outliers} values (daytime+nighttime)")
+            detail(f"Total found outliers: {len(_rejected_dt)} values (daytime)", verbose=self.verbose)
+            detail(f"Total found outliers: {len(_rejected_nt)} values (nighttime)", verbose=self.verbose)
+            detail(f"Total found outliers: {n_outliers} values (daytime+nighttime)", verbose=self.verbose)
 
         return ok, rejected, n_outliers

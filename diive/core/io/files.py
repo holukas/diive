@@ -7,6 +7,7 @@ from pathlib import Path
 from pandas import Series, DataFrame, read_parquet
 
 from diive.core.times.times import TimestampSanitizer
+from diive.core.utils.console import info, detail
 
 
 def set_outpath(outpath: str or None, filename: str, fileextension: str):
@@ -52,7 +53,7 @@ def save_parquet(filename: str, data: DataFrame or Series, outpath: str or None 
         data = data.to_frame()
     data.to_parquet(filepath)
     toc = time.time() - tic
-    print(f"Saved file {filepath} ({toc:.3f} seconds).")
+    info(f"Saved file {filepath} ({toc:.3f} seconds).")
     return str(filepath)
 
 
@@ -104,12 +105,12 @@ def load_parquet(filepath: str or Path, output_middle_timestamp: bool = True,
     tic = time.time()
     df = read_parquet(filepath)
     toc = time.time() - tic
-    print(f"Loaded .parquet file {filepath} ({toc:.3f} seconds).")
+    info(f"Loaded .parquet file {filepath} ({toc:.3f} seconds).")
 
     if sanitize_timestamp:
         # Check timestamp, also detects frequency of time series, this info was lost when saving to the parquet file
         df = TimestampSanitizer(data=df, output_middle_timestamp=output_middle_timestamp).get()
-        print(f"    --> Detected time resolution of {df.index.freq} / {df.index.freqstr} ")
+        detail(f"Detected time resolution of {df.index.freq} / {df.index.freqstr}")
     return df
 
 
@@ -121,7 +122,7 @@ def save_as_pickle(outpath: str or None, filename: str, data) -> str:
     pickle.dump(data, pickle_out)
     pickle_out.close()
     toc = time.time() - tic
-    print(f"Saved pickle {filepath} ({toc:.3f} seconds).")
+    info(f"Saved pickle {filepath} ({toc:.3f} seconds).")
     return str(filepath)
 
 
@@ -131,7 +132,7 @@ def load_pickle(filepath: str):
     pickle_in = open(filepath, "rb")
     data = pickle.load(pickle_in)
     toc = time.time() - tic
-    print(f"Loaded pickle {filepath} ({toc:.3f} seconds).")
+    info(f"Loaded pickle {filepath} ({toc:.3f} seconds).")
     return data
 
 
@@ -162,14 +163,14 @@ def loadfiles(sourcedir: str, fileext: str, filetype: str,
     """Search and load data files of type *filetype*, merge data and store to one dataframe"""
     from diive.core.io.filereader import MultiDataFileReader
 
-    print(f"\nSearching for {filetype} files with extension {fileext} and"
-          f"ID {idstr} in folder {sourcedir} ...")
+    info(f"Searching for {filetype} files with extension {fileext} and ID {idstr} in folder {sourcedir} ...")
     filepaths = [f for f in os.listdir(sourcedir) if f.endswith(fileext)]
     filepaths = [f for f in filepaths if idstr in f]
     filepaths = [sourcedir + "/" + f for f in filepaths]
     filepaths = [Path(f) for f in filepaths]
-    print(f"    Found {len(filepaths)} files:")
-    [print(f"   --> {f}") for f in filepaths]
+    info(f"Found {len(filepaths)} files:")
+    for f in filepaths:
+        detail(f"  {f}")
     if limit_n_files:
         filepaths = filepaths[0:limit_n_files]
     mergedfiledata = MultiDataFileReader(filetype=filetype, filepaths=filepaths)

@@ -13,6 +13,8 @@ from typing import Literal, Union, Callable
 import numpy as np
 import pandas as pd
 
+from diive.core.utils.console import info, warn
+
 
 class GridAggregator:
     """
@@ -289,8 +291,8 @@ class GridAggregator:
             actual_n_bins = len(bins) - 1
 
             if actual_n_bins == 0:
-                print(f"Warning: No distinct quantile bins formed for '{series_name}'. "
-                      "All values might be identical. Returning NaN for bin labels.")
+                warn(f"No distinct quantile bins formed for '{series_name}'. "
+                     "All values might be identical. Returning NaN for bin labels.")
                 return pd.Series(np.nan, index=series.index, name=f'BIN_{series_name}')
 
             # Generate labels as percentiles (0, 10, 20... 90 for 10 bins)
@@ -304,13 +306,13 @@ class GridAggregator:
             return binned_series.astype(float)
 
         except ValueError as e:
-            print(f"Warning: Could not apply quantile binning to '{series_name}'. Error: {e}. "
-                  "This might happen if there are too many duplicate values preventing distinct quantiles. "
-                  "Returning NaN for bin labels.")
+            warn(f"Could not apply quantile binning to '{series_name}'. Error: {e}. "
+                 "This might happen if there are too many duplicate values preventing distinct quantiles. "
+                 "Returning NaN for bin labels.")
             return pd.Series(np.nan, index=series.index, name=f'BIN_{series_name}')
         except Exception as e:
-            print(f"An unexpected error occurred during quantile binning for '{series_name}': {e}. "
-                  "Returning NaN for bin labels.")
+            warn(f"Unexpected error during quantile binning for '{series_name}': {e}. "
+                 "Returning NaN for bin labels.")
             return pd.Series(np.nan, index=series.index, name=f'BIN_{series_name}')
 
     def _assign_bins_equal_width(self, series: pd.Series) -> pd.Series:
@@ -333,8 +335,8 @@ class GridAggregator:
             actual_n_bins = len(bins) - 1
 
             if actual_n_bins == 0:
-                print(f"Warning: No distinct equal-width bins formed for '{series_name}'. "
-                      "All values might be identical or range too small. Returning NaN for bin labels.")
+                warn(f"No distinct equal-width bins formed for '{series_name}'. "
+                     "All values might be identical or range too small. Returning NaN for bin labels.")
                 return pd.Series(np.nan, index=series.index, name=f'BIN_{series_name}')
 
             # Use the lower bound of each interval as the label
@@ -343,8 +345,8 @@ class GridAggregator:
             return binned_series_numeric_labels.astype(float)
 
         except Exception as e:
-            print(f"Warning: Could not apply equal-width binning to '{series_name}'. Error: {e}. "
-                  "Returning NaN for bin labels.")
+            warn(f"Could not apply equal-width binning to '{series_name}'. Error: {e}. "
+                 "Returning NaN for bin labels.")
             return pd.Series(np.nan, index=series.index, name=f'BIN_{series_name}')
 
     def _assign_bins_custom(self, series: pd.Series, bins: np.ndarray) -> pd.Series:
@@ -373,8 +375,8 @@ class GridAggregator:
             binned_series = pd.cut(series, bins=bins, labels=labels, right=False, include_lowest=True)
             return binned_series.astype(float)
         except Exception as e:
-            print(f"Warning: Could not apply custom binning to '{series_name}'. Error: {e}. "
-                  f"Returning NaN for bin labels.")
+            warn(f"Could not apply custom binning to '{series_name}'. Error: {e}. "
+                 f"Returning NaN for bin labels.")
             return pd.Series(np.nan, index=series.index, name=f'BIN_{series_name}')
 
     def _transform_and_pivot(self) -> None:
@@ -388,12 +390,12 @@ class GridAggregator:
         initial_rows = len(self._df_long)
         self._df_long = self._df_long.dropna(subset=[self.x_bin_col_name, self.y_bin_col_name], inplace=False)
         if len(self._df_long) < initial_rows:
-            print(f"Info: Dropped {initial_rows - len(self._df_long)} rows due to NaN values "
-                  f"in '{self.x_bin_col_name}' or '{self.y_bin_col_name}' after binning.")
+            info(f"Dropped {initial_rows - len(self._df_long)} rows due to NaN values "
+                 f"in '{self.x_bin_col_name}' or '{self.y_bin_col_name}' after binning.")
 
         if self._df_long.empty:
-            print("Warning: No data remaining after dropping rows with failed binning. "
-                  "Aggregated DataFrames will be empty.")
+            warn("No data remaining after dropping rows with failed binning. "
+                 "Aggregated DataFrames will be empty.")
             self._df_agg_wide = pd.DataFrame()
             self._df_agg_long = pd.DataFrame()
             return
@@ -411,8 +413,8 @@ class GridAggregator:
         self._df_long = self._df_long[self._df_long['BIN_COMBINED_STR'].isin(valid_bins)].copy()
 
         if self._df_long.empty:
-            print("Warning: No data remaining after filtering for minimum values per bin. "
-                  "Aggregated DataFrames will be empty.")
+            warn("No data remaining after filtering for minimum values per bin. "
+                 "Aggregated DataFrames will be empty.")
             self._df_agg_wide = pd.DataFrame()
             self._df_agg_long = pd.DataFrame()
             return

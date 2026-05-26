@@ -13,6 +13,8 @@ import pandas as pd
 from scipy import signal, fft as scipy_fft
 from typing import Dict, Tuple, Optional, List
 
+from diive.core.utils.console import detail
+
 
 def harmonic_analysis(
     series: pd.Series,
@@ -92,8 +94,8 @@ def harmonic_analysis(
                 })
 
     if verbose:
-        print(f"Harmonic analysis: period={period}, fundamental_freq={fundamental_freq:.6f}")
-        print(f"  Extracted {len(harmonics)} harmonics, window={window}")
+        detail(f"Harmonic analysis: period={period}, fundamental_freq={fundamental_freq:.6f}, "
+               f"extracted {len(harmonics)} harmonics, window={window}", verbose=verbose)
 
     return {
         'fundamental_frequency': fundamental_freq,
@@ -196,9 +198,9 @@ def periodogram(
     dominant_freq = frequencies[dominant_idx]
 
     if verbose:
-        print(f"Periodogram: {len(frequencies)} frequency bins, detrend={detrend_method}")
-        print(f"  Dominant frequency: {dominant_freq:.6f} (period ~{1/dominant_freq:.1f} if > 0)")
-        print(f"  Found {len(peaks)} spectral peaks")
+        detail(f"Periodogram: {len(frequencies)} frequency bins, detrend={detrend_method}, "
+               f"dominant_freq={dominant_freq:.6f} (period ~{1/dominant_freq:.1f} if > 0), "
+               f"spectral peaks found: {len(peaks)}", verbose=verbose)
 
     power_key = 'power' if return_power else 'amplitude'
 

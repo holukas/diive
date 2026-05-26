@@ -9,6 +9,8 @@ Part of the diive library: https://github.com/holukas/diive
 
 from pandas import DataFrame
 
+from diive.core.utils.console import detail
+
 
 def lagged_variants(df: DataFrame,
                     lag: list[int, int],
@@ -112,7 +114,8 @@ def lagged_variants(df: DataFrame,
             _included.append(col)
 
     if verbose:
-        print(f"++ Added new columns with lagged variants for: {_included} (lags between {lag[0]} and {lag[1]} "
-              f"with stepsize {stepsize}), no lagged variants for: {_excluded}. "
-              f"Shifting the time series created gaps which were then filled with the nearest value.")
+        detail(f"Added lagged variants for: {_included} (lags between {lag[0]} and {lag[1]} "
+               f"with stepsize {stepsize}), no lagged variants for: {_excluded}. "
+               f"Shifting the time series created gaps which were then filled with the nearest value.",
+               verbose=verbose)
     return df

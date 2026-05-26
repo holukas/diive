@@ -11,6 +11,8 @@ import pandas as pd
 from pandas import Series, DataFrame
 from statsmodels.tsa.stattools import grangercausalitytests
 
+from diive.core.utils.console import console as _console
+
 
 class GrangerCausality:
     """
@@ -108,26 +110,26 @@ class GrangerCausality:
         Interpretation: A p-value < alpha at a given lag means past values of X
         significantly improve predictions of Y beyond what Y's own past provides.
         """
-        print(f"\n{'=' * 70}")
-        print(f"GRANGER CAUSALITY TEST")
-        print(f"{'=' * 70}")
-        print(f"X variable: {self.x.name}")
-        print(f"Y variable: {self.y.name}")
-        print(f"Records: {len(self.data)}")
-        print(f"Max lag: {self.max_lag}")
-        print(f"Significance level: {alpha}")
-        print(f"{'=' * 70}\n")
+        _console.print(f"\n{'=' * 70}")
+        _console.print(f"GRANGER CAUSALITY TEST")
+        _console.print(f"{'=' * 70}")
+        _console.print(f"X variable: {self.x.name}")
+        _console.print(f"Y variable: {self.y.name}")
+        _console.print(f"Records: {len(self.data)}")
+        _console.print(f"Max lag: {self.max_lag}")
+        _console.print(f"Significance level: {alpha}")
+        _console.print(f"{'=' * 70}\n")
 
         p_df = self.p_values()
-        print("p-values by lag:")
+        _console.print("p-values by lag:")
         for _, row in p_df.iterrows():
             sig_marker = "*" if row['p_value'] < alpha else " "
-            print(f"  Lag {int(row['Lag'])}: p={row['p_value']:.4f} {sig_marker}")
+            _console.print(f"  Lag {int(row['Lag'])}: p={row['p_value']:.4f} {sig_marker}")
 
         sig_lag = self.significant_lag(alpha)
         if sig_lag:
-            print(f"\n[+] X GRANGER-CAUSES Y at lag {sig_lag} (p < {alpha})")
+            _console.print(f"\n[+] X GRANGER-CAUSES Y at lag {sig_lag} (p < {alpha})")
         else:
-            print(f"\n[-] X does NOT Granger-cause Y (all p >= {alpha})")
+            _console.print(f"\n[-] X does NOT Granger-cause Y (all p >= {alpha})")
 
-        print(f"{'=' * 70}\n")
+        _console.print(f"{'=' * 70}\n")

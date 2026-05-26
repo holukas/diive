@@ -1,6 +1,7 @@
 from pandas import DataFrame
 
 from diive.core.funcs.funcs import find_nearest_val
+from diive.core.utils.console import detail
 
 
 def neighboring_years(df: DataFrame, verbose: bool = False) -> dict:
@@ -32,7 +33,8 @@ def neighboring_years(df: DataFrame, verbose: bool = False) -> dict:
         yearpools_dict[str(year)]['poolyears'] = poolyears
 
         if verbose:
-            print(f"[{neighboring_years.__name__}] Assigned {poolyears} to data pool for {year}.")
+            detail(f"[{neighboring_years.__name__}] Assigned {poolyears} to data pool for {year}.",
+                   verbose=verbose)
 
         yearpools_dict[str(year)]['df'] = _limit_yearpool_data(df=df, poolyears=poolyears)
 

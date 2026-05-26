@@ -13,6 +13,7 @@ import pandas as pd
 from pandas import Series, DataFrame
 
 from diive.core.plotting.scatter import ScatterXY
+from diive.core.utils.console import console as _console
 
 
 def percentiles101(series: Series, showplot: bool = True, verbose: bool = True) -> DataFrame:
@@ -38,8 +39,8 @@ def percentiles101(series: Series, showplot: bool = True, verbose: bool = True) 
 
     if verbose:
         show = [0, 1, 5, 16, 25, 50, 75, 84, 95, 99, 100]
-        print(f"Showing some percentiles for {series.name}:")
-        print(percentiles_df[percentiles_df["PERCENTILE"].isin(show)])
+        _console.print(f"Showing some percentiles for {series.name}:")
+        _console.print(percentiles_df[percentiles_df["PERCENTILE"].isin(show)])
 
     if showplot:
         scatter = ScatterXY(x=percentiles_df['PERCENTILE'],

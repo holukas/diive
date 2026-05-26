@@ -11,6 +11,7 @@ import pandas as pd
 from pandas import Series, DatetimeIndex
 
 from diive.core.base.flagbase import FlagBase
+from diive.core.utils.console import detail
 from diive.core.utils.prints import ConsoleOutputDecorator
 
 
@@ -88,6 +89,6 @@ class ManualRemoval(FlagBase):
         ok = flag.index.difference(rejected)
 
         if self.verbose:
-            print(f"ITERATION#{iteration}: Manually removed {n_outliers} values")
+            detail(f"ITERATION#{iteration}: Manually removed {n_outliers} values", verbose=self.verbose)
 
         return ok, rejected, n_outliers

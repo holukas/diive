@@ -34,6 +34,7 @@ from pandas import Series, DatetimeIndex, DataFrame
 from sklearn.neighbors import LocalOutlierFactor as SKLocalOutlierFactor
 
 from diive.core.base.flagbase import FlagBase
+from diive.core.utils.console import detail
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.pkgs.preprocessing.outlier_detection.common import create_daytime_nighttime_flags
 
@@ -240,10 +241,10 @@ class LocalOutlierFactor(FlagBase):
 
             if self.verbose:
                 n_total = len(rejected_dt) + len(rejected_nt)
-                print(f"ITERATION#{iteration}")
-                print(f"Total found outliers: {len(rejected_dt)} values (daytime)")
-                print(f"Total found outliers: {len(rejected_nt)} values (nighttime)")
-                print(f"Total found outliers: {n_total} values (daytime+nighttime)")
+                detail(f"ITERATION#{iteration}", verbose=self.verbose)
+                detail(f"Total found outliers: {len(rejected_dt)} values (daytime)", verbose=self.verbose)
+                detail(f"Total found outliers: {len(rejected_nt)} values (nighttime)", verbose=self.verbose)
+                detail(f"Total found outliers: {n_total} values (daytime+nighttime)", verbose=self.verbose)
 
         else:
             ok, rejected, n_out = self._apply_lof_to_subset(self.filteredseries, suffix="")
@@ -251,7 +252,7 @@ class LocalOutlierFactor(FlagBase):
             flag.loc[rejected] = 2
 
             if self.verbose:
-                print(f"ITERATION#{iteration}: Total found outliers: {n_out} values (global)")
+                detail(f"ITERATION#{iteration}: Total found outliers: {n_out} values (global)", verbose=self.verbose)
 
         _, ok, rejected = self._finalize_flags(flag)
         n_outliers = (flag == 2).sum()

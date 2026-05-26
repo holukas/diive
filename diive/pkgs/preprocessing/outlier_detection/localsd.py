@@ -37,6 +37,7 @@ from pandas import DatetimeIndex, Series
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.base.flagbase import FlagBase
 from diive.core.plotting.plotfuncs import default_format, default_legend
+from diive.core.utils.console import detail
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.pkgs.preprocessing.outlier_detection.common import create_daytime_nighttime_flags
 
@@ -244,7 +245,7 @@ class LocalSD(FlagBase):
         rejected = rejected[rejected].index
         n_outliers = len(rejected)
         if self.verbose:
-            print(f"ITERATION#{iteration}{time_period}: Total found outliers: {len(rejected)} values")
+            detail(f"ITERATION#{iteration}{time_period}: Total found outliers: {len(rejected)} values", verbose=self.verbose)
         if self.showplot:
             self._plot_add_iteration(rmedian, upper_limit, lower_limit, iteration, time_period=time_period)
         return ok, rejected, n_outliers

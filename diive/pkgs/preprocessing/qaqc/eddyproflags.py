@@ -24,6 +24,7 @@ import pandas as pd
 from pandas import DataFrame, Series
 
 from diive.core.funcs.funcs import validate_id_string
+from diive.core.utils.console import info, detail
 from diive.pkgs.preprocessing.qaqc.flags import restrict_application
 
 
@@ -103,10 +104,10 @@ def flag_signal_strength_eddypro_test(df: DataFrame,
         raise Exception(f"Error in {flag_signal_strength_eddypro_test.__name__}, "
                         f"the method {method} is unknown.")
 
-    print(f"SIGNAL STRENGTH TEST: Generating new flag variable {flagname_out}, "
-          f"newly calculated from output variable {signal_strength_col}, with "
-          f"flag 0 (good values) where {signal_strength_col} {signs_str[0]} {threshold}, "
-          f"flag 2 (bad values) where {signal_strength_col} {signs_str[1]} {threshold} ...")
+    info(f"SIGNAL STRENGTH TEST: Generating new flag variable {flagname_out}, "
+         f"newly calculated from output variable {signal_strength_col}, with "
+         f"flag 0 (good values) where {signal_strength_col} {signs_str[0]} {threshold}, "
+         f"flag 2 (bad values) where {signal_strength_col} {signs_str[1]} {threshold} ...")
 
     return ss_flag
 
@@ -146,10 +147,10 @@ def flag_steadiness_horizontal_wind_eddypro_test(df: DataFrame,
     )
     nshw_flag.name = flagname_out
 
-    print(f"STEADINESS OF HORIZONTAL WIND TEST: Generated new flag variable {flagname_out}, "
-          f"values taken from output variable VM97_NSHW_HF, with "
-          f"flag 0 (good values) where test passed, "
-          f"flag 2 (bad values) where test failed ...")
+    info(f"STEADINESS OF HORIZONTAL WIND TEST: Generated new flag variable {flagname_out}, "
+         f"values taken from output variable VM97_NSHW_HF, with "
+         f"flag 0 (good values) where test passed, "
+         f"flag 2 (bad values) where test failed ...")
 
     return nshw_flag
 
@@ -197,10 +198,10 @@ def flag_angle_of_attack_eddypro_test(df: DataFrame,
                                         verbose=True,
                                         fill_value=np.nan)
 
-    print(f"ANGLE OF ATTACK TEST: Generated new flag variable {flagname_out}, "
-          f"values taken from output variable VM97_AOA_HF, with "
-          f"flag 0 (good values) where test passed, "
-          f"flag 2 (bad values) where test failed ...")
+    info(f"ANGLE OF ATTACK TEST: Generated new flag variable {flagname_out}, "
+         f"values taken from output variable VM97_AOA_HF, with "
+         f"flag 0 (good values) where test passed, "
+         f"flag 2 (bad values) where test failed ...")
 
     aoa_flag.name = flagname_out
     return aoa_flag
@@ -322,12 +323,12 @@ def flags_vm97_eddypro_fluxnetfile_tests(
     for i, c in flagcols_used.items():
         usedflags_df[c] = flags_df[c].copy()
 
-        print(f"RAW DATA TEST: Generated new flag variable {c}, "
-              f"values taken from output variable {vm97.name} from position {i}, "
-              f"based on {fluxbasevar}, with "
-              f"flag 0 (good values) where test passed, "
-              f"flag 2 (bad values) where test failed (for hard flags) or "
-              f"flag 1 (ok values) where test failed (for soft flags) ...")
+        info(f"RAW DATA TEST: Generated new flag variable {c}, "
+             f"values taken from output variable {vm97.name} from position {i}, "
+             f"based on {fluxbasevar}, with "
+             f"flag 0 (good values) where test passed, "
+             f"flag 2 (bad values) where test failed (for hard flags) or "
+             f"flag 1 (ok values) where test failed (for soft flags) ...")
 
     return usedflags_df
 
@@ -389,13 +390,11 @@ def flag_fluxbasevar_completeness_eddypro_test(df: DataFrame, flux: str,
     completeness_flag[(fluxbasevar_n_records_perc >= thres_ok) & (fluxbasevar_n_records_perc < thres_good)] = 1
     completeness_flag[fluxbasevar_n_records_perc < thres_ok] = 2
 
-    print(
-        f"FLUX BASE VARIABLE COMPLETENESS TEST: Generated new flag variable {flagname_out}, "
-        f"newly calculated from variable {fluxbasevar}, with "
-        f"flag 0 (good values) where available number of records for {fluxbasevar} >= {thres_good}, "
-        f"flag 1 (ok values) >= {thres_ok} and < {thres_good}, "
-        f"flag 2 (bad values) < {thres_ok}..."
-    )
+    info(f"FLUX BASE VARIABLE COMPLETENESS TEST: Generated new flag variable {flagname_out}, "
+         f"newly calculated from variable {fluxbasevar}, with "
+         f"flag 0 (good values) where available number of records for {fluxbasevar} >= {thres_good}, "
+         f"flag 1 (ok values) >= {thres_ok} and < {thres_good}, "
+         f"flag 2 (bad values) < {thres_ok}...")
 
     return completeness_flag
 
@@ -436,11 +435,11 @@ def flag_spectral_correction_factor_eddypro_test(
     scf_flag[(scf >= thres_good) & (scf < thres_ok)] = 1
     scf_flag[scf >= thres_ok] = 2
 
-    print(f"SPECTRAL CORRECTION FACTOR TEST: Generating new flag variable {scf_flag.name}, "
-          f"newly calculated from output variable {scf.name}, with"
-          f"flag 0 (good values) where {scf.name} < {thres_good}, "
-          f"flag 1 (ok values) where {scf.name} >= {thres_good} and < {thres_ok}, "
-          f"flag 2 (bad values) where {scf.name} >= {thres_ok}...")
+    info(f"SPECTRAL CORRECTION FACTOR TEST: Generating new flag variable {scf_flag.name}, "
+         f"newly calculated from output variable {scf.name}, with "
+         f"flag 0 (good values) where {scf.name} < {thres_good}, "
+         f"flag 1 (ok values) where {scf.name} >= {thres_good} and < {thres_ok}, "
+         f"flag 2 (bad values) where {scf.name} >= {thres_ok}...")
 
     return scf_flag
 
@@ -482,8 +481,8 @@ def flag_ssitc_eddypro_test(df: DataFrame, flux: str, setflag_timeperiod: dict =
     flagname = f'{flux}_SSITC_TEST'
     ssitc_flag = Series(index=df.index, data=df[flagname], name=flagname_out)
 
-    print(f"SSITC TEST: Generated new flag variable {flagname_out}, "
-          f"values taken from output variable {flagname} ...")
+    info(f"SSITC TEST: Generated new flag variable {flagname_out}, "
+         f"values taken from output variable {flagname} ...")
 
     if setflag_timeperiod:
         for flagval, dates in setflag_timeperiod.items():
@@ -493,7 +492,7 @@ def flag_ssitc_eddypro_test(df: DataFrame, flux: str, setflag_timeperiod: dict =
                 _to = fromto[2]
                 _locs = (ssitc_flag.index >= _from) & (ssitc_flag.index <= _to) & (ssitc_flag == _target)
                 ssitc_flag[_locs] = flagval
-                print(f"    Flag {flagname_out} with value {_target} was set to {flagval} "
-                      f"between {_from} and {_to}")
+                detail(f"    Flag {flagname_out} with value {_target} was set to {flagval} "
+                       f"between {_from} and {_to}")
 
     return ssitc_flag

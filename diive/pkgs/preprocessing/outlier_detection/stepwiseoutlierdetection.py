@@ -13,6 +13,7 @@ from pandas import Series, DataFrame
 
 from diive.core.funcs.funcs import validate_id_string
 from diive.core.plotting.timeseries import TimeSeries
+from diive.core.utils.console import info
 from diive.core.times.times import TimestampSanitizer
 from diive.pkgs.preprocessing.outlier_detection.absolutelimits import AbsoluteLimits
 from diive.pkgs.preprocessing.outlier_detection.hampel import Hampel
@@ -385,7 +386,7 @@ class StepwiseOutlierDetection:
         # Add flag column to results data
         if flag.name not in self.flags.columns:
             self._flags[flag.name] = flag.copy()
-            print(f"++Added flag column {flag.name} to flag data")
+            info(f"++Added flag column {flag.name} to flag data")
         else:
             # It is possible to re-run an outlier method, which produces a flag
             # with the same name as for the first (original) run. In this case
@@ -400,7 +401,7 @@ class StepwiseOutlierDetection:
                 rerun += 1
                 new_flagname = flag.name.replace('_TEST', f'_{rerun}_TEST')
             self._flags[new_flagname] = flag.copy()
-            print(f"++Added flag column {new_flagname} to flag data")
+            info(f"++Added flag column {new_flagname} to flag data")
 
     def _setup(self) -> tuple[DataFrame, Series, Series]:
         """Setup data for outlier detection"""

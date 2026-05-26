@@ -12,6 +12,7 @@ from typing import Optional, List, Dict
 
 import pandas as pd
 
+from diive.core.utils.console import info
 from diive.core.times.decomposition_utils import (
     stl_decompose, classical_decompose, harmonic_decompose,
     quality_weighted_decompose, reconstruct_from_components,
@@ -123,8 +124,8 @@ class SeasonalTrendDecomposition:
         self._detection_result = None
 
         if self.verbose:
-            print(f"SeasonalTrendDecomposition initialized: method={method}, "
-                  f"quality_weighted={self.quality_weighted}, verbose={verbose}")
+            info(f"SeasonalTrendDecomposition initialized: method={method}, "
+                 f"quality_weighted={self.quality_weighted}, verbose={verbose}", verbose=self.verbose)
 
     @property
     def seasonal(self) -> pd.Series:
@@ -272,7 +273,7 @@ class SeasonalTrendDecomposition:
         Result is cached for efficiency.
         """
         if self.verbose:
-            print(f"Computing {self.method} decomposition...")
+            info(f"Computing {self.method} decomposition...", verbose=self.verbose)
 
         # Get seasonal period
         period = self._get_seasonal_period()
@@ -324,7 +325,7 @@ class SeasonalTrendDecomposition:
             }
 
         if self.verbose:
-            print(f"Decomposition complete. Seasonality strength: {self.seasonality_strength:.3f}")
+            info(f"Decomposition complete. Seasonality strength: {self.seasonality_strength:.3f}", verbose=self.verbose)
 
     def _get_seasonal_period(self) -> int:
         """

@@ -15,6 +15,7 @@ from pandas import Series, DataFrame
 
 import diive.core.dfun.frames as frames
 from diive.core.plotting.plotfuncs import quickplot
+from diive.core.utils.console import detail
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.pkgs.analysis.histogram import Histogram
 from diive.pkgs.features.variables.daynightflag import DaytimeNighttimeFlag
@@ -101,8 +102,8 @@ class MeasurementOffsetFromReplicate:
             abs_diff = float(abs_diff)
             offsets_df.loc[len(offsets_df)] = [offset, abs_diff]
 
-            print(f"#{counter}   trying with offset: {offset:.{self.n_digits_after_comma}f}   "
-                  f"found absolute difference: {abs_diff}")
+            detail(f"#{counter}   trying with offset: {offset:.{self.n_digits_after_comma}f}   "
+                   f"found absolute difference: {abs_diff}")
             # fig = plt.figure()
             # r.plot(x_compat=True, label="true measurement")
             # m_shifted.plot(x_compat=True, label=f"corrected by offset")
@@ -386,7 +387,7 @@ class WindDirOffset:
         """ """
         shiftdict = {}
         for year in self.uniq_years:
-            print(f"Working on year {year} ...")
+            detail(f"Working on year {year} ...")
             s_year = self.winddir.loc[self.winddir.index.year == year].copy()
             shiftdf_year = pd.DataFrame(columns=['SHIFT', 'CORR_ABS'])
             for shift in np.arange(self.offset_start, self.offset_end, 1):

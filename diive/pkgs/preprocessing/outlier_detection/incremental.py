@@ -26,6 +26,7 @@ from pandas import Series, DatetimeIndex
 
 from diive.core.dfun.stats import double_diff_absolute
 from diive.core.base.flagbase import FlagBase
+from diive.core.utils.console import detail
 from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.pkgs.preprocessing.outlier_detection.zscore import zScore
 
@@ -142,8 +143,8 @@ class zScoreIncrements(FlagBase):
         n_outliers = len(rejected)
 
         if self.verbose:
-            print(
-                f"ITERATION#{iteration}: Total found outliers: {n_outliers} values (daytime+nighttime)")
+            detail(f"ITERATION#{iteration}: Total found outliers: {n_outliers} values (daytime+nighttime)",
+                   verbose=self.verbose)
 
         return ok, rejected, n_outliers
 

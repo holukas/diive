@@ -6,6 +6,7 @@ import pandas as pd
 from pandas import DataFrame
 
 import diive.core.io.filedetector as fd
+from diive.core.utils.console import console as _console, info, warn
 from diive.core.dfun.frames import trim_frame
 from diive.core.io.filereader import ReadFileType
 from diive.core.io.filereader import search_files
@@ -124,8 +125,7 @@ class FileSplitter:
         return self.filestats_df, self.splitstats_df
 
     def run(self):
-        print(f"\n\nWorking on file '{self.filepath.name}'")
-        print(f"    Path to file: {self.filepath}")
+        info(f"Working on file '{self.filepath.name}' ({self.filepath})")
 
         # Read file
         file_df, meta = ReadFileType(filepath=self.filepath,
@@ -192,8 +192,7 @@ class FileSplitter:
             if self.split_trim:
                 split_df = trim_frame(df=split_df, var=self.split_trim_var)
                 if len(split_df.index) == 0:
-                    print(f"    Skipping split {split_name} because {self.split_trim_var} "
-                          f"is empty.")
+                    info(f"Skipping split {split_name}: {self.split_trim_var} is empty.")
                     continue
 
             # Limit number of exported records, useful for testing
@@ -221,9 +220,9 @@ class FileSplitter:
                 split_filepath = 'error'
 
             # Export
-            print(f"    Saving split {split_name_ext} | n_records: {len(split_df.index)} "
-                  f"| n_columns: {len(split_df.columns)} "
-                  f"| start: {split_start} | end: {split_end} | wind_rotation: {self.rotation}")
+            info(f"Saving split {split_name_ext} | n_records: {len(split_df.index)} "
+                 f"| n_columns: {len(split_df.columns)} "
+                 f"| start: {split_start} | end: {split_end} | wind_rotation: {self.rotation}")
 
             splits_overview_df.loc[split_name, 'start'] = split_start
             splits_overview_df.loc[split_name, 'end'] = split_end
@@ -250,7 +249,7 @@ def setup_output_dirs(outdir: str, del_previous_results=False):
     # Make dirs
     for key, path in outdirs.items():
         if not Path.is_dir(path):
-            print(f"Creating folder {path} ...")
+            info(f"Creating folder {path} ...")
             os.makedirs(path)
         else:
             if del_previous_results:
@@ -258,12 +257,12 @@ def setup_output_dirs(outdir: str, del_previous_results=False):
                     filepath = os.path.join(path, filename)
                     try:
                         if os.path.isfile(filepath) or os.path.islink(filepath):
-                            print(f"Deleting file {filepath} ...")
+                            info(f"Deleting file {filepath} ...")
                             os.unlink(filepath)
                         # elif os.path.isdir(filepath):
                         #     shutil.rmtree(filepath)
                     except Exception as e:
-                        print('Failed to delete %s. Reason: %s' % (filepath, e))
+                        warn(f"Failed to delete {filepath}. Reason: {e}")
 
     return outdirs
 
@@ -435,7 +434,7 @@ class FileSplitterMulti:
 
     def _detect_files(self, filelist: list) -> DataFrame:
         # Detect expected and unexpected files from filelist
-        print("\nDetecting expected and unexpected files from filelist ...")
+        info("Detecting expected and unexpected files from filelist ...")
         fide = fd.FileDetector(filelist=filelist,
                                file_date_format=self.filename_date_format,
                                file_generation_res=self.file_generation_freq,
@@ -443,23 +442,23 @@ class FileSplitterMulti:
                                files_how_many=self.files_split_how_many)
         fide.run()
         files_overview_df = fide.get_results()
-        print(files_overview_df)
+        _console.print(files_overview_df)
         return files_overview_df
 
     def _setup_output_dirs(self) -> dict:
         # Create output dirs
-        print(f"\nCreating output dirs in folder {self.outdir} ...")
+        info(f"Creating output dirs in folder {self.outdir} ...")
         outdirs = setup_output_dirs(outdir=self.outdir, del_previous_results=True)
         for folder, path in outdirs.items():
-            print(f"    --> Created folder {folder} in {path}.")
+            info(f"  Created folder {folder} in {path}.")
         return outdirs
 
     def _search_files(self) -> list:
         # Search files with PATTERN
-        print(f"\nSearching files with pattern {self.filename_pattern} in dir {self.searchdirs} ...")
+        info(f"Searching files with pattern {self.filename_pattern} in dir {self.searchdirs} ...")
         filelist = search_files(searchdirs=self.searchdirs, pattern=self.filename_pattern)
         for filepath in filelist:
-            print(f"    --> Found file: {filepath.name} in {filepath}.")
+            info(f"  Found file: {filepath.name} in {filepath}.")
         return filelist
 
 

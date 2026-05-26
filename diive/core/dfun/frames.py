@@ -16,6 +16,7 @@ from pandas import Series
 from diive.core.funcs.funcs import find_duplicates_in_list
 from diive.core.times.times import current_time_microseconds_str
 # from diive.core.times.times import timedelta_to_string
+from diive.core.utils.console import info
 from diive.pkgs.gapfilling.interpolate import linear_interpolation
 
 pd.set_option('display.width', 1500)
@@ -404,7 +405,7 @@ def add_continuous_record_number(df: DataFrame) -> DataFrame:
     newcol = '.RECORDNUMBER'
     data = range(1, len(df) + 1)
     df[newcol] = data
-    print(f"++ Added new column {newcol} with record numbers from {df[newcol].iloc[0]} to {df[newcol].iloc[-1]}.")
+    info(f"Added new column {newcol} with record numbers from {df[newcol].iloc[0]} to {df[newcol].iloc[-1]}.")
     return df
 
 

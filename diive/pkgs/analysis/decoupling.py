@@ -17,6 +17,7 @@ import pandas as pd
 from diive.core.plotting.plotfuncs import default_format
 from diive.core.plotting.plotfuncs import default_legend
 from diive.core.plotting.plotfuncs import save_fig
+from diive.core.utils.console import warn
 from pandas import DataFrame
 from scipy.stats import zscore
 
@@ -165,7 +166,7 @@ class StratifiedAnalysis:
 
             # Check if the required number of bins was generated
             if len(set(group.tolist())) != self.n_bins_x:
-                print(f"(!)WARNING: Unable to produce requested number of bins for {label_zvar}, skipped.")
+                warn(f"Unable to produce requested number of bins for {label_zvar}, skipped.")
                 continue
 
             aggs = g_df.groupby(by=g_df[self.x_group_col], observed=True, as_index=True, sort=False,

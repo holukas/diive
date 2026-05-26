@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 from pandas import DataFrame
 
+from diive.core.utils.console import error
+
 pd.set_option('display.max_columns', 15)
 pd.set_option('display.width', 1000)
 
@@ -40,7 +42,7 @@ class FileDetector:
 
         # Check if there are files listed in filelist
         if not self.filelist:
-            print(f"\n(!)ERROR *filelist* must not be empty. Stopping script.")
+            error("*filelist* must not be empty. Stopping script.")
             sys.exit()
 
         self._files_overview_df = DataFrame()

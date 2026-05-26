@@ -18,6 +18,7 @@ from pandas.tseries.frequencies import to_offset
 import diive.core.dfun.frames as frames
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+from diive.core.utils.console import info, detail
 from diive.core.plotting.plotfuncs import default_format, default_legend, nice_date_ticks
 from diive.core.plotting.timeseries import TimeSeries
 from diive.core.times.resampling import resample_series_to_30MIN
@@ -145,7 +146,7 @@ class StepwiseMeteoScreeningDb:
 
         for field in self.fields:
             # Validate data_detailed
-            print(f"Validating data for variable {field} ... ")
+            info(f"Validating data for variable {field} ...")
             self._data_detailed[field] = self._validate_data_detailed(
                 data_detailed=self.data_detailed[field],
                 field=field)
@@ -197,7 +198,7 @@ class StepwiseMeteoScreeningDb:
         """Initiate step-wise outlier detection (sod) for each field.
         Each field gets its own sod instance."""
         for field in self.fields:
-            print(f"Starting step-wise outlier detection for variable {field} ...")
+            info(f"Starting step-wise outlier detection for variable {field} ...")
             self._outlier_detection[field] = StepwiseOutlierDetection(
                 dfin=self.data_detailed[field].copy(),
                 col=field,
@@ -665,7 +666,8 @@ class StepwiseMeteoScreeningDb:
                                                 other=self.data_detailed[field])
             self._data_detailed[field] = pd.concat(
                 [self.data_detailed[field], self.outlier_detection[field].flags[newcols]], axis=1)
-            [print(f"++Added new column {col}.") for col in newcols]
+            for col in newcols:
+                detail(f"++Added new column {col}.")
 
             # Calculate overall quality flag QCF
             qcf = FlagQCF(series=self.data_detailed[field][field],
@@ -839,8 +841,8 @@ class StepwiseMeteoScreeningDb:
         """Detect which frequencies have enough records to be used"""
         n_vals = group_counts.sum()
         n_freqs = group_counts.index.unique()
-        print(f"Found {len(n_freqs)} unique frequencies across {n_vals} records.")
-        print("Found frequencies:")
+        info(f"Found {len(n_freqs)} unique frequencies across {n_vals} records.")
+        info("Found frequencies:")
         cumulative_counts = 0
         used_freqs = []
         rejected_freqs = []
@@ -848,20 +850,20 @@ class StepwiseMeteoScreeningDb:
             counts = group_counts[freq]
             cumulative_counts += counts
             counts_perc = (counts / n_vals) * 100
-            print(f"    Found time resolution {freq} (seconds) with {counts} records "
-                  f"({counts_perc:.2f}% of total records).", end=" ")
             if counts_perc > 0.2:  # At least 0.2% of the data must have this resolution to be considered
                 used_freqs.append(freq)
-                print("")
+                detail(f"  Found time resolution {freq} (seconds) with {counts} records "
+                       f"({counts_perc:.2f}% of total records).")
             else:
                 rejected_freqs.append(freq)
-                print("  -->  Frequency will be ignored, too few records.")
-        print(f"The following frequencies will be used: {used_freqs} (seconds)")
+                detail(f"  Found time resolution {freq} (seconds) with {counts} records "
+                       f"({counts_perc:.2f}% of total records). --> Frequency will be ignored, too few records.")
+        info(f"The following frequencies will be used: {used_freqs} (seconds)")
         targetfreq = min(used_freqs)
         if len(used_freqs) > 1:
-            print(f"Note that there is more than one single time resolution and "
-                  f"all data will be upsampled to match the highest found time "
-                  f"resolution ({targetfreq}S).")
+            info(f"Note that there is more than one single time resolution and "
+                 f"all data will be upsampled to match the highest found time "
+                 f"resolution ({targetfreq}S).")
         return targetfreq, used_freqs, rejected_freqs
 
     def _filter_data(self, data_detailed, used_freqs):

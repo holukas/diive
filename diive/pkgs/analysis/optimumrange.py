@@ -20,6 +20,7 @@ from matplotlib.legend_handler import HandlerTuple
 from pandas import DataFrame
 
 from diive.core.plotting.plotfuncs import save_fig
+from diive.core.utils.console import info, warn
 
 
 class FindOptimumRange:
@@ -177,7 +178,7 @@ class FindOptimumRange:
         else:
             raise ValueError(f"define_optimum must be 'min' or 'max', got {self.define_optimum!r}")
         roptimum_val = rolling_df[use_rolling_agg][roptimum_bin]
-        print(f"Optimum {self.define_optimum} found in bin: {roptimum_bin}  /  value: {roptimum_val}")
+        info(f"Optimum {self.define_optimum} found in bin: {roptimum_bin}  /  value: {roptimum_val}")
         return roptimum_bin, roptimum_val
 
     def _get_optimum_range(self, grouped_df: DataFrame, rbin_aggs_df: DataFrame,
@@ -235,8 +236,8 @@ class FindOptimumRange:
         prominence = abs(roptimum_val - curve.mean()) / curve_std if curve_std > 0 else 0.0
         is_prominent = prominence >= self.prominence_threshold
         if not is_prominent:
-            print(f"(!) Optimum may not be meaningful: curve appears flat "
-                  f"(prominence={prominence:.2f} < {self.prominence_threshold})")
+            warn(f"Optimum may not be meaningful: curve appears flat "
+                 f"(prominence={prominence:.2f} < {self.prominence_threshold})")
         return dict(optimum_prominence=round(prominence, 3), is_optimum_prominent=is_prominent)
 
     def showfig(self,

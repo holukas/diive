@@ -10,6 +10,8 @@ Part of the diive library: https://github.com/holukas/diive
 import numpy as np
 import pandas as pd
 
+from diive.core.utils.console import info, warn
+
 
 def aerodynamic_resistance(u_ms: pd.Series, ustar_ms: pd.Series) -> pd.Series:
     """Calculates aerodynamic resistance (ra) using wind speed and friction velocity.
@@ -45,8 +47,8 @@ def aerodynamic_resistance(u_ms: pd.Series, ustar_ms: pd.Series) -> pd.Series:
     valid_count = ra.count()
     if valid_count < len(ra):
         dropped = len(ra) - valid_count
-        print(f"Warning: {dropped} data points resulted in NaN due to ustar <= 0.")
-    print(f"Aerodynamic resistance: Mean = {ra.mean():.2f} s m-1")
+        warn(f"{dropped} data points resulted in NaN due to ustar <= 0.")
+    info(f"Aerodynamic resistance: Mean = {ra.mean():.2f} s m-1")
     return ra
 
 
@@ -97,11 +99,11 @@ def dry_air_density(rho_a: pd.Series, rho_v: pd.Series) -> pd.Series:
 
     # Check for physical impossibility (Dry density cannot be negative)
     if (rho_d < 0).any():
-        print("Warning: Input data contains water vapor density higher than "
-              "total density. Negative dry air density detected.")
+        warn("Input data contains water vapor density higher than "
+             "total density. Negative dry air density detected.")
 
     # Output statistics
-    print(f"Dry air density: Mean = {rho_d.mean():.4f} kg m-3")
+    info(f"Dry air density: Mean = {rho_d.mean():.4f} kg m-3")
 
     rho_d.name = "DRY_AIR_DENSITY"
 
