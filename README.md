@@ -6,21 +6,19 @@
 [![PyPI Downloads](https://static.pepy.tech/badge/diive)](https://pepy.tech/projects/diive)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10884017.svg)](https://doi.org/10.5281/zenodo.10884017)
 
-_**`diive` is currently prepared for the v1.0 release.**_
+_**`diive` is currently being prepared for the v1.0 release.**_
 
 # Time series data processing
 
-`diive` is a Python library for time series processing, in particular ecosystem data. Originally developed
-by the [ETH Grassland Sciences group](https://gl.ethz.ch/) for [Swiss FluxNet](https://www.swissfluxnet.ethz.ch/).
+`diive` is a Python library for time series processing, focused on ecosystem data. It was originally developed by the [ETH Grassland Sciences group](https://gl.ethz.ch/) for [Swiss FluxNet](https://www.swissfluxnet.ethz.ch/).
 
-**Recent updates:** [CHANGELOG](CHANGELOG.md) • **Development:** [CLAUDE.md](CLAUDE.md) • **Releases:
-** [GitHub](https://github.com/holukas/diive/releases)
+[CHANGELOG](CHANGELOG.md) | [Releases](https://github.com/holukas/diive/releases)
 
 ---
 
 ## Citation
 
-Cite `diive` using the DOI [10.5281/zenodo.10884017](https://doi.org/10.5281/zenodo.10884017). This concept DOI resolves to the latest release; specify the version in your citation.
+Cite `diive` using DOI [10.5281/zenodo.10884017](https://doi.org/10.5281/zenodo.10884017). This concept DOI resolves to the latest release, so include the version number in your citation.
 
 **BibTeX format:**
 
@@ -38,9 +36,7 @@ Replace `version` and `year` with the values for your target release.
 
 ---
 
-## Getting Started
-
-### Installation
+## Installation
 
 Requires **Python 3.12+**
 
@@ -48,13 +44,13 @@ Requires **Python 3.12+**
 pip install diive
 ```
 
-Or use [uv](https://docs.astral.sh/uv/):
+Or with [uv](https://docs.astral.sh/uv/):
 
 ```bash
 uv pip install diive
 ```
 
-### Minimal Example
+### Quick start
 
 ```python
 import diive as dv
@@ -77,184 +73,94 @@ model.trainmodel()
 model.fillgaps()
 ```
 
-### Next Steps
-
-- **[104 Runnable Examples](examples/README.md)** — organized by topic (visualization, gap-filling, flux, etc.)
-    - Find examples by use case: [CATALOG.md](examples/CATALOG.md)
-    - Dataset documentation: [EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md)
-- **[Development Setup](CLAUDE.md)** — source setup, coding standards, testing
-
 ---
 
-## Quick API Access
+## API
 
-Classes are available directly from the `diive` namespace with both PascalCase and snake_case names:
+`diive` exposes its classes through a top-level namespace, available as both PascalCase and snake_case aliases:
 
 ```python
-# PascalCase (class name)
-from diive.core.plotting import TimeSeries
-
-plot = TimeSeries(series=data)
-
-# snake_case (alias)
 import diive as dv
 
-plot = dv.plot_time_series(series=data)
+plot = dv.plot_time_series(series=data)   # snake_case alias
+plot = dv.TimeSeries(series=data)         # PascalCase class name
 ```
 
-**Common exports:**
+| Area | Common exports |
+|---|---|
+| Plotting | `TimeSeries`, `Cumulative`, `DielCycle`, `HeatmapDateTime` |
+| Gap-filling | `RandomForestTS`, `XGBoostTS`, `FluxMDS` |
+| Analysis | `GridAggregator`, `SeasonalTrendDecomposition` |
+| Eddy covariance | `FluxProcessingChain`, `FluxDetectionLimit`, `WindDoubleRotation` |
+| I/O | `load_parquet`, `save_parquet`, `load_exampledata_parquet` |
 
-- **Plotting:** `time_series`, `TimeSeries`, `cumulative`, `Cumulative`, `diel_cycle`, `DielCycle`, `heatmap_datetime`,
-  `HeatmapDateTime`
-- **Gap-filling:** `randomforest_ts`, `RandomForestTS`, `xgboost_ts`, `XGBoostTS`, `flux_mds`, `FluxMDS`
-- **Analysis:** `gridaggregator`, `GridAggregator`, `seasonaltrend`, `SeasonalTrendDecomposition`
-- **Eddy Covariance:** `flux_processing_chain`, `FluxProcessingChain`, `flux_detection_limit`, `FluxDetectionLimit`, `WindDoubleRotation`, `reynolds_decomposition`
-- **I/O:** `load_parquet`, `save_parquet`, `load_exampledata_parquet`, `search_files`
-
-For the complete list, see `diive.__all__`.
+For the full list, see `diive.__all__`.
 
 ---
 
-## 104 Runnable Examples
+## Examples
 
-Organized by functional domain. All examples follow Sphinx Gallery format (`# %%` sections) — runnable as plain scripts
-and auto-converted to HTML docs.
-
-**Quick start:**
+104 runnable examples are organized by topic in [examples/](examples/README.md). They follow Sphinx Gallery format (`# %%` sections), so they run as plain scripts and convert to HTML docs automatically. Browse by use case in [CATALOG.md](examples/CATALOG.md), or check [EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md) for documentation of the 37-variable dataset used throughout.
 
 ```bash
-# Run individual examples
 uv run python examples/visualization/plot_heatmap_datetime_basic.py
 uv run python examples/analysis/analysis_daily_correlation.py
 uv run python examples/gapfilling/gapfill_randomforest.py
 uv run python examples/flux/fluxprocessingchain/fluxprocessingchain.py
 ```
 
-**Find your way:**
-
-- **[CATALOG.md](examples/CATALOG.md)** — organized by use case (visualization, analysis, gap-filling, etc.)
-- **[EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md)** — dataset documentation (37 variables, availability, quality)
-- **[examples/README.md](examples/README.md)** — quick start and folder structure
-
-**Example categories:**
-
-- **Visualization** (18 examples) — heatmaps, time series, diel cycles, cumulative plots, histograms, scatter, ridgelines, tree-ring spiral
-- **Times** (5 examples) — timestamp validation, frequency detection, diel cycles, temporal matrices
-- **Analysis** (12 examples) — correlation, daily correlation, seasonal decomposition, gap detection, gap statistics, gridding, spectral analysis
-- **Data Processing** (20 examples) — corrections (7), outlier detection (9), quality flags (2), other (2)
-- **Features** (11 examples) — VPD, unit conversions, day/night flags, lagged features, potential radiation
-- **Gap-Filling** (12 examples) — linear interpolation, Random Forest, XGBoost, MDS, comparisons, optimization, long-term, SW_IN physics+XGBoost
-- **Flux Processing** (18 examples) — flux chain, low-res analysis, high-res analysis, time lag, PWB batch detection (CLI + API), wind rotation, USTAR filtering, self-heating
-- **Curve Fitting** (2 examples) — polynomial and binned fitting
-- **I/O** (5 examples) — file reading, extraction, and data loading
-
-Browse [examples/README.md](examples/README.md) for the full index with descriptions.
-
 ---
 
-## Feature Overview
+## Features
 
-### Gap-Filling
+### Gap-filling
 
-**Feature Engineering Pipeline (v0.91.0)** · `FeatureEngineer`
+`FeatureEngineer` runs an 8-stage feature pipeline (lag features, rolling stats, differencing, EMA, polynomial terms, STL decomposition, timestamps, record numbering). You build the features once and reuse them across models.
 
-- 8-stage pipeline: lag features, rolling stats, differencing, EMA, polynomial, STL decomposition,
-  timestamps, record numbering
-- Pre-engineer once, reuse across multiple gap-filling models
-- Full examples: [examples/gapfilling/](examples/gapfilling/)
+| Method | How it works |
+|---|---|
+| `XGBoostTS` | Gradient boosting |
+| `RandomForestTS` | Ensemble learning with SHAP importance |
+| `FluxMDS` | Meteorological similarity, no training needed |
+| Linear interpolation | Short gaps only |
 
-**Methods:**
+Long-term variants support multi-year data with USTAR scenario options. See [examples/gapfilling/](examples/gapfilling/).
 
-- **XGBoostTS** — gradient boosting
-- **RandomForestTS** — ensemble learning with SHAP feature importance
-- **FluxMDS** — meteorological similarity, no training required
-- **Linear interpolation** — for simple gaps only
-- **Long-term variants** support multi-year data with USTAR scenario options
+### Flux processing chain
 
-**Flux Processing Chain** · `FluxProcessingChain`
+`FluxProcessingChain` handles post-processing from quality flags through gap-filling, covering Levels 2 to 4.1 following Swiss FluxNet standards. Call `data.gap_stats()` at any level for a monthly/annual breakdown with long-gap listing. `data.plot_gapfilled_heatmaps()` puts all gap-filling methods side by side; `data.plot_cumulative_comparison()` overlays their cumulative sums on one axes.
 
-- Post-processing pipeline covering quality flags, storage correction, outlier detection, USTAR filtering, and
-  gap-filling
-- Implements Levels 2–4.1 following Swiss FluxNet standards
-- On-demand gap analysis via `data.gap_stats()` (monthly/annual breakdown, long-gap listing) at any level
-- `data.plot_gapfilled_heatmaps()` — side-by-side heatmap comparison of all gap-filling methods; one figure per USTAR scenario
-- `data.plot_cumulative_comparison()` — overlay cumulative sums of all gap-filling methods on one axes
-- Example: [examples/flux/fluxprocessingchain/](examples/flux/fluxprocessingchain/)
+Reference: [Swiss FluxNet flux processing](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/) | Examples: [examples/flux/fluxprocessingchain/](examples/flux/fluxprocessingchain/)
 
-Reference: [Swiss FluxNet flux processing](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/)
+### Quality control and outlier detection
 
-### Quality Control & Outlier Detection
+`FlagQCF` merges multiple test flags into a single quality indicator with daytime/nighttime separation and USTAR scenario support.
 
-**Overall Quality Flag (QCF)** · `FlagQCF`
+Nine outlier detection methods are available: Hampel filter, Z-score (global, rolling, or split by day/night), local SD, Local Outlier Factor, absolute limits, incremental detection, manual removal, trimmed mean, and stepwise chaining across multiple methods. See [examples/preprocessing/outlier_detection/](examples/preprocessing/outlier_detection/).
 
-- Merges multiple test flags into a single quality indicator
-- Daytime/nighttime separation and USTAR scenario support
-- Example: [examples/preprocessing/qaqc/qc_overall_flag.py](examples/preprocessing/qaqc/qc_overall_flag.py)
+### Corrections and preprocessing
 
-**10 Outlier Detection Methods:**
-
-- **Hampel filter** — robust spike detection using MAD (median absolute deviation)
-- **Z-score** — global, rolling, or day/night variants
-- **Local SD** — adaptive local thresholds
-- **Local Outlier Factor (LOF)** — density-based anomaly detection
-- **Absolute limits** — physical bounds on values
-- **Incremental detection** — find abrupt changes between records
-- **Manual removal** — explicit period or point flagging
-- **Trimmed mean** — symmetric removal of high and low outliers
-- **Stepwise orchestration** — chain multiple methods together
-- Examples: [examples/preprocessing/outlier_detection/](examples/preprocessing/outlier_detection/)
-
-### Data Processing & Corrections
-
-- **Offset correction** — adjust measurement, radiation, humidity, and wind direction biases
-- **Set to threshold/missing** — apply thresholds or manual value replacements
-- **Timestamp sanitization** — validate, regularize, and detect frequency
-- Examples: [examples/preprocessing/corrections/](examples/preprocessing/corrections/),
-  [examples/times/](examples/times/)
+Tools cover offset correction for measurements, radiation, humidity, and wind direction; threshold and missing value handling; and timestamp sanitization (validation, regularization, frequency detection). See [examples/preprocessing/corrections/](examples/preprocessing/corrections/) and [examples/times/](examples/times/).
 
 ### Analysis
 
-- **Seasonal-Trend Decomposition** — STL, classical, or harmonic methods
-- **Correlation & decoupling** — lagged relationships and binned analysis
-- **Grid aggregation** — 2D binning and statistics
-- **Gap finder & gap statistics** — identify missing data patterns; monthly/annual breakdown, long-gap listing, Rich report (`GapStats`)
-- **Percentiles & histogram** — distribution analysis
-- Examples: [examples/analysis/](examples/analysis/)
+Seasonal-trend decomposition (STL, classical, or harmonic), lagged correlation and binned analysis, 2D grid aggregation, gap detection with monthly/annual breakdown, and percentiles/histograms. See [examples/analysis/](examples/analysis/).
 
-### Feature Engineering
+### Derived variables
 
-- **Vapor Pressure Deficit (VPD)** — calculate from temperature and humidity
-- **Day/night flags** — solar geometry classification
-- **Air properties** — density, resistance, heat capacity
-- **Unit conversions** — temperature, energy, and water
-- **Lagged features** — time-shifted variables
-- **Potential radiation** — clear-sky calculation
-- Examples: [examples/features/](examples/features/)
+VPD from temperature and humidity, day/night flags from solar geometry, air density, aerodynamic resistance, unit conversions, lagged features, and clear-sky potential radiation. See [examples/features/](examples/features/).
 
-### Eddy Covariance & Flux
+### Eddy covariance
 
-- **Flux detection limit** — signal-to-noise analysis from high-frequency (20 Hz) data
-- **Maximum covariance** — find optimal time lag
-- **PWB time-lag detection** — pre-whitening + block-bootstrap, robust for trace gases (CH4, N2O); single-period via `PreWhiteningBootstrap`, multi-file parallel via `PwbBatchDetection` or CLI (`python -m diive.pkgs.flux.hires.lag_pwb` / `diive-tlag-pwb-batch`)
-- **Wind rotation** — coordinate transformation, turbulent departures
-- **Self-heating correction** — open-path IRGA oxygen flux adjustment
-- **USTAR filtering** — threshold detection and filtering
-- **Uncertainty estimation** — random error propagation
-- Examples: [examples/flux/](examples/flux/)
+Flux detection limit from 20 Hz data, maximum covariance lag, pre-whitening bootstrap (PWB) for trace gases (CH4, N2O) with single-period and multi-file parallel variants, wind double rotation, self-heating correction for open-path IRGAs, USTAR filtering, and random error propagation. See [examples/flux/](examples/flux/).
 
 ### Visualization
 
-- **14+ plot types** — time series, cumulative, diel cycle, heatmap (datetime/year-month), hexbin, histogram,
-  ridge line, scatter, anomalies
-- **Interactive plots** — Matplotlib and Plotly support
-- Examples: [examples/visualization/](examples/visualization/)
+14+ plot types including time series, cumulative, diel cycle, heatmaps (datetime and year-month), hexbin, histogram, ridgeline, scatter, and anomaly plots. Both Matplotlib and Plotly are supported. See [examples/visualization/](examples/visualization/).
 
-### I/O & File Handling
+### I/O
 
-- **Load/save parquet** — efficient columnar format for time series
-- **Read EddyPro files** — single or batch file reading
-- **Detect/split files** — identify irregular files, split large datasets
-- **Format for FLUXNET** — prepare data for upload
+Load and save parquet files, read single or batch EddyPro output, detect and split irregular files, and format data for FLUXNET submission. See [examples/io/](examples/io/).
 
 ---
 
@@ -266,4 +172,4 @@ See [CLAUDE.md](CLAUDE.md) for development setup, coding standards, and testing.
 
 ## License
 
-`diive` is licensed under the [GNU General Public License v3.0](LICENSE).
+`diive` is released under the [GNU General Public License v3.0](LICENSE).
