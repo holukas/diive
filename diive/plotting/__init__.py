@@ -8,6 +8,7 @@ from diive.core.plotting.heatmap_xyz import HeatmapXYZ
 from diive.core.plotting.hexbin import HexbinPlot
 from diive.core.plotting.histogram import HistogramPlot
 from diive.core.plotting.ridgeline import RidgeLinePlot
+from diive.core.plotting.shifted_distribution import ShiftedDistributionPlot
 from diive.core.plotting.scatter import ScatterXY
 from diive.core.plotting.timeseries import TimeSeries
 from diive.core.plotting.treering import TreeRingPlot
