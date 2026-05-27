@@ -39,6 +39,7 @@ New to diive? Start with the **[Cookbook](COOKBOOK.md)** — 6 minimal workflows
 | [**plot_ridgeline_advanced.py**](visualization/plot_ridgeline_advanced.py) | Ridge line plots with monthly grouping |
 | [**plot_other_plots.py**](visualization/plot_other_plots.py) | Specialized plot types (long-term anomalies, trends) |
 | [**plot_treering_temperature.py**](visualization/plot_treering_temperature.py) | Tree-ring spiral plot: annual rings with color-coded values, month labels, year separators, colorbar extension |
+| [**plot_treering_line_temperature.py**](visualization/plot_treering_line_temperature.py) | Tree-ring radial line plot: each year as a line trace around a full circle, single-color and per-year colormap variants with optional fill |
 
 See: [visualization/README.md](visualization/README.md)
 
@@ -126,6 +127,8 @@ See: [preprocessing/corrections/README.md](preprocessing/corrections/README.md)
 | [**qc_overall_flag.py**](preprocessing/qaqc/qc_overall_flag.py) | Combine multiple test flags into overall QCF (0=good, 1=marginal, 2=poor) |
 | [**qc_eddypro_flags.py**](preprocessing/qaqc/qc_eddypro_flags.py) | Extract EddyPro quality flags (VM97 tests, signal strength, completeness) |
 | [**qaqc_detect_timestamp_shifts.py**](preprocessing/qaqc/qaqc_detect_timestamp_shifts.py) | Detect clock/timestamp errors via radiation phase analysis: FFT phase shift, cross-correlation, and noon-shift peak detection |
+| [**meteoscreening_stepwise_workflow.py**](preprocessing/qaqc/meteoscreening_stepwise_workflow.py) | Stepwise meteorological screening: multi-stage outlier detection, corrections, and resampling with `StepwiseMeteoScreeningDb` (requires database) |
+| [**meteoscreening_complete_workflow.py**](preprocessing/qaqc/meteoscreening_complete_workflow.py) | End-to-end QC workflow: database download, multi-stage screening, 30-min resampling, and upload (requires InfluxDB connection) |
 
 See: [preprocessing/outlier_detection/README.md](preprocessing/outlier_detection/README.md) and [preprocessing/qaqc/README.md](preprocessing/qaqc/README.md)
 

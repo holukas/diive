@@ -2,7 +2,7 @@
 
 Examples demonstrating visualization and plotting functions for time series and flux data.
 
-18 examples across 10+ plot types.
+19 examples across 10+ plot types.
 
 ## Examples by Plot Type
 
@@ -44,6 +44,9 @@ Examples demonstrating visualization and plotting functions for time series and 
 
 - **plot_treering_temperature.py** — Tree-ring spiral: annual data as concentric rings, color = value,
   month labels around circumference, optional month lines and year separators, colorbar auto-extension
+- **plot_treering_line_temperature.py** — Tree-ring radial line plot: each year as a line trace around
+  a full circle; radial displacement encodes value; single-color and per-year colormap variants with
+  optional fill between baseline and line
 
 ### Other Plots
 
@@ -92,4 +95,4 @@ uv run python examples/visualization/plot_scatter_xy_colored.py
 uv run python examples/run_all_examples.py
 ```
 
-All 18 examples follow the two-phase design pattern.
+All 19 examples follow the two-phase design pattern.

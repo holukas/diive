@@ -28,7 +28,7 @@ uv add package_name
 
 **Python:** 3.12-3.13 | **Package Manager:** `uv`
 
-**Key dependencies (v0.91.0+):** pandas 3.0.3, numpy 2.4+, scikit-learn 1.8+, xgboost 3.2+, matplotlib 3.10+, statsmodels 0.14+, pyarrow 19.0+
+**Key dependencies (v0.91.1+):** pandas 3.0.3, numpy 2.4+, scikit-learn 1.8+, xgboost 3.2+, matplotlib 3.10+, statsmodels 0.14+, pyarrow 19.0+
 
 ## Project Structure
 

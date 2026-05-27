@@ -342,3 +342,170 @@ class TreeRingPlot:
         if cb_label:
             cb.set_label(cb_label, fontsize=cb_labelsize, rotation=90, labelpad=10)
         cb.ax.tick_params(labelsize=cb_labelsize)
+
+    def plot_line(self,
+                  ax=None,
+                  figsize: tuple = (10, 10),
+                  figdpi: int = 100,
+                  title: str = None,
+                  vmin: float = None,
+                  vmax: float = None,
+                  color: str = '#2196F3',
+                  cmap: str = None,
+                  linewidth: float = 0.8,
+                  alpha: float = 0.85,
+                  amplitude_scale: float = 0.45,
+                  fill: bool = False,
+                  fill_alpha: float = 0.2,
+                  show_month_labels: bool = True,
+                  show_month_lines: bool = False,
+                  show_year_labels: bool = True,
+                  show_year_separators: bool = True,
+                  year_label_frequency: int = 10,
+                  month_label_fontsize: float = None,
+                  year_label_fontsize: float = None,
+                  title_fontsize: float = None):
+        """Render TreeRingPlot as radial line traces on a polar axis (Phase 2 alternative).
+
+        Each year traces one full revolution around the circle as a line plot. Radial
+        displacement from the ring's baseline encodes the data value — values above the
+        global midpoint push outward, values below pull inward. Inner rings are the
+        earliest years; outer rings the most recent.
+
+        All styling and presentation parameters live here. Can be called multiple times
+        on the same object to produce differently styled outputs.
+
+        Args:
+            ax: Polar matplotlib axes. If None, a new figure is created.
+            figsize: Figure size in inches (default (10, 10))
+            figdpi: Figure DPI (default 100)
+            title: Plot title text
+            vmin: Low anchor for normalisation (defaults to data minimum).
+                Values at vmin map to the inner edge of the ring.
+            vmax: High anchor for normalisation (defaults to data maximum).
+                Values at vmax map to the outer edge of the ring.
+            color: Line color when cmap is None (default '#2196F3', Material blue)
+            cmap: Colormap name to color each year differently. When set, overrides color.
+                Colors are assigned linearly from oldest (low end) to newest (high end) year.
+            linewidth: Line width in points (default 0.8)
+            alpha: Line opacity (default 0.85)
+            amplitude_scale: Maximum radial displacement as a fraction of one ring width.
+                0.45 keeps lines just inside the ring boundaries; increase for more drama,
+                decrease to avoid overlap between adjacent years.
+            fill: Fill between the ring baseline and the line (default False).
+                Helps distinguish above/below-midpoint regions at a glance.
+            fill_alpha: Opacity of the fill layer (default 0.2)
+            show_month_labels: Show month abbreviations outside the outer ring (default True)
+            show_month_lines: Draw thin radial spokes at each month boundary (default False)
+            show_year_labels: Show year numbers at the Jan-1 position of each ring (default True)
+            show_year_separators: Draw faint circles between year rings (default True)
+            year_label_frequency: Interval between year labels, e.g. 10 = every decade (default 10)
+            month_label_fontsize: Font size for month labels (default theme value)
+            year_label_fontsize: Font size for year labels (default theme value)
+            title_fontsize: Font size for the plot title (default theme value)
+        """
+        if month_label_fontsize is None:
+            month_label_fontsize = theme.AX_LABELS_FONTSIZE
+        if year_label_fontsize is None:
+            year_label_fontsize = theme.TICKS_LABELS_FONTSIZE - 4
+        if title_fontsize is None:
+            title_fontsize = theme.AX_LABELS_FONTSIZE
+
+        flat = self.grid[~np.isnan(self.grid)]
+        data_min = float(np.nanmin(flat))
+        data_max = float(np.nanmax(flat))
+        if vmin is None:
+            vmin = data_min
+        if vmax is None:
+            vmax = data_max
+
+        data_range = vmax - vmin if vmax != vmin else 1.0
+        data_mid = (vmin + vmax) / 2.0
+
+        if ax is None:
+            fig = plt.figure(figsize=figsize, dpi=figdpi)
+            ax = fig.add_subplot(111, projection='polar')
+            self._fig = fig
+        else:
+            self._fig = ax.figure
+        self.ax = ax
+
+        # Angle layout — Jan at bottom (6 o'clock), CCW progression, same as plot().
+        offset = 3.0 * np.pi / 2.0
+        slot_fracs = np.linspace(0, 1, self.n_days, endpoint=False)
+        theta = offset + slot_fracs * 2.0 * np.pi
+        theta_closed = np.append(theta, theta[0])
+
+        # Radius layout — same inner_gap and ring_width=1 as plot().
+        inner_gap = 1.5
+        radii = np.arange(self.n_years + 1, dtype=float) + inner_gap
+
+        if cmap is not None:
+            colormap = plt.get_cmap(cmap)
+            year_colors = [colormap(i / max(self.n_years - 1, 1)) for i in range(self.n_years)]
+        else:
+            year_colors = [color] * self.n_years
+
+        for i, year in enumerate(self.years):
+            r_base = radii[i] + 0.5  # centre of this year's 1-unit-wide ring
+            vals = self.grid[i, :]
+            # Normalise to [-amplitude_scale, +amplitude_scale] around r_base.
+            normalized = (vals - data_mid) / (data_range / 2.0) * amplitude_scale
+            r = r_base + normalized
+            r_closed = np.append(r, r[0])
+
+            line_color = year_colors[i]
+            ax.plot(theta_closed, r_closed,
+                    color=line_color, linewidth=linewidth, alpha=alpha, zorder=3)
+
+            if fill:
+                ax.fill_between(theta_closed, r_base, r_closed,
+                                alpha=fill_alpha, color=line_color, zorder=2)
+
+        ax.set_theta_zero_location('E')
+        ax.set_theta_direction(1)
+        ax.set_rlim(0, radii[-1] + 0.5)
+        ax.axis('off')
+
+        # Month boundary angles (non-leap reference year)
+        month_start_angles = []
+        for m in range(1, 13):
+            start_day = pd.Timestamp(2001, m, 1).dayofyear
+            month_start_angles.append(offset + (start_day - 1) / 365.0 * 2.0 * np.pi)
+
+        if show_month_lines:
+            for angle in month_start_angles:
+                ax.plot([angle, angle], [inner_gap, radii[-1]],
+                        color='#888888', linewidth=0.8, alpha=0.5, zorder=2)
+
+        if show_year_separators:
+            theta_circle = np.linspace(0, 2.0 * np.pi, 360)
+            for r in radii[1:-1]:
+                ax.plot(theta_circle, np.full_like(theta_circle, r),
+                        color='#cccccc', linewidth=0.4, alpha=0.5, zorder=1)
+
+        if show_month_labels:
+            month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                           'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+            label_radius = radii[-1] + 2.8
+            for m_idx, m_name in enumerate(month_names):
+                mid = pd.Timestamp(2001, m_idx + 1, 15).dayofyear
+                angle = offset + (mid - 1) / 365.0 * 2.0 * np.pi
+                ax.text(angle, label_radius, m_name,
+                        ha='center', va='center',
+                        fontsize=month_label_fontsize, fontweight='bold',
+                        color='#333333')
+
+        if show_year_labels:
+            jan1_angle = offset
+            for i, year in enumerate(self.years):
+                if (year % year_label_frequency == 0) or (i == 0) or (i == self.n_years - 1):
+                    r_mid = radii[i] + 0.5
+                    ax.text(jan1_angle, r_mid, str(year),
+                            ha='center', va='center',
+                            fontsize=year_label_fontsize, color='black',
+                            fontweight='bold', zorder=5)
+
+        if title:
+            self._fig.subplots_adjust(top=0.92)
+            self._fig.suptitle(title, fontsize=title_fontsize, fontweight='bold', y=0.97)

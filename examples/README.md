@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
 
-**104 examples across 9 organized folders by functional domain.**
+**105 examples across 9 organized folders by functional domain.**
 
 ## Structure
 
@@ -10,7 +10,7 @@ Examples are organized by **functional domain**, not source code structure:
 
 ```
 examples/
-├── visualization/         # Plotting and visualization (18 examples)
+├── visualization/         # Plotting and visualization (19 examples)
 │   ├── plot_heatmap_datetime_basic.py
 │   ├── plot_heatmap_advanced.py
 │   ├── plot_heatmap_xyz_basic.py
@@ -28,7 +28,8 @@ examples/
 │   ├── plot_ridgeline_advanced.py
 │   ├── plot_other_plots.py
 │   ├── plot_timeseries_interactive.py
-│   └── plot_treering_temperature.py
+│   ├── plot_treering_temperature.py
+│   └── plot_treering_line_temperature.py
 ├── times/                 # Timestamp handling (5 examples)
 │   ├── times_timestamp_sanitizer.py
 │   ├── times_frequency_detection.py
@@ -36,7 +37,6 @@ examples/
 │   ├── times_diel_cycles.py
 │   └── times_temporal_matrices.py
 ├── analysis/              # Time series analysis (12 examples)
-│   ├── analysis_correlation.py
 │   ├── analysis_seasonaltrend.py
 │   ├── analysis_gapfinder.py
 │   ├── analysis_gapstats.py
@@ -130,7 +130,7 @@ uv run python examples/gapfilling/gapfill_randomforest.py
 uv run python examples/run_all_examples.py
 ```
 
-This runs all 104 examples in parallel with 8 workers, reporting execution time and any errors.
+This runs all 105 examples in parallel with 8 workers, reporting execution time and any errors.
 
 ## Finding Examples
 
@@ -142,7 +142,7 @@ Each category folder has a **README.md** with:
 
 Browse by topic:
 
-- **visualization/README.md** — 18 plot types (heatmaps, scatter, timeseries, tree-ring, etc.)
+- **visualization/README.md** — 19 plot types (heatmaps, scatter, timeseries, tree-ring, etc.)
 - **times/README.md** — Timestamp validation and regularization
 - **analysis/README.md** — Correlation, decomposition, gap detection, spectral analysis
 - **features/README.md** — Variable creation, unit conversions, derived properties
@@ -158,7 +158,7 @@ Browse by topic:
 
 | Domain | Files | Topics |
 |--------|-------|--------|
-| **Visualization** | 18 | Heatmaps, scatter, timeseries, histograms, ridgelines, cumulative, diurnal cycles, tree-ring spiral |
+| **Visualization** | 19 | Heatmaps, scatter, timeseries, histograms, ridgelines, cumulative, diurnal cycles, tree-ring spiral and radial line |
 | **Times** | 5 | Timestamp validation, frequency detection, diel cycles, temporal matrices |
 | **Analysis** | 12 | Correlation, daily correlation, decomposition, gap detection, gap statistics, spatial aggregation, harmonic analysis |
 | **Features** | 11 | Feature engineering pipeline, air properties, unit conversions, day/night flags, VPD, lagged variants |
@@ -167,7 +167,7 @@ Browse by topic:
 | **Gapfilling** | 12 | Linear interpolation, Random Forest (4 variants), XGBoost (3 variants), MDS (2), SW_IN physics+XGBoost, comparison |
 | **IO** | 5 | Parquet file I/O, EddyPro CSV reading, binary value extraction |
 | **Preprocessing** | 21 | Corrections (7), outlier detection (9), QA/QC (3), other (2) |
-| **TOTAL** | **104** | |
+| **TOTAL** | **105** | |
 
 ## Running Options
 
