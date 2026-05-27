@@ -121,11 +121,32 @@
   `pkgs/io/formats`, `pkgs/analysis`, `pkgs/features`, `pkgs/preprocessing/qaqc`. Example functions and
   CLI entry points intentionally left unchanged.
 
+### Analysis
+
+- **`GapStats`** — extended gap analysis wrapping `GapFinder` via composition.  Adds monthly and annual
+  breakdowns, explicit long-gap listing, a Rich console report (`.report()`), and a four-panel figure
+  (availability heatmap, gap-spike timeline, monthly polar chart, gap-length histogram).  Available as
+  `dv.analysis.GapStats`.
+- **`FluxLevelData.gap_stats(level='L33')`** — on-demand gap analysis for any processed level.  Returns a
+  `dict[str, GapStats]` keyed by USTAR scenario (single-entry for L2/L31/L32, one per scenario for L33).
+  Not baked into any level function — call it any time after the relevant level has run.
+- **`FluxLevelData.plot_cumulative_comparison()`** — overlay cumulative sums of all gap-filling methods (RF,
+  XGBoost, MDS) for a given USTAR scenario on a single axes.  Optional measured-only dashed reference line.
+  Works with any subset of methods; only methods that have been run appear.
+- **`FluxLevelData.plot_gapfilled_heatmaps()`** — side-by-side `HeatmapDateTime` panels: measured flux
+  (before gap-filling) in the leftmost panel, one panel per gap-filling method.  All panels share a common
+  colour scale (2nd–98th percentile across all series).  When `ustar_scenario=None`, one figure is produced
+  per USTAR scenario.
+
 ### Examples & Documentation
 
 - New examples: `fluxprocessingchain_composable.py` (full L2->L4.1), `fluxprocessingchain_multiflux.py` (multi-flux
   loop), `qaqc_detect_timestamp_shifts.py`, `flux_lag_pwb.py`, `flux_lag_pwb_batch.py`, `plot_treering_temperature.py`,
-  4 I/O examples, USTAR method comparison, `gapfill_swin.py` (SW_IN physics + XGBoost). Total: 103 examples.
+  4 I/O examples, USTAR method comparison, `gapfill_swin.py` (SW_IN physics + XGBoost),
+  `analysis_gapstats.py` (gap distribution analysis). Total: 104 examples.
+- Updated `fluxprocessingchain_composable.py`: Step 5b gap analysis after L3.3 via `data.gap_stats()`;
+  Step 12 replaced with `data.plot_gapfilled_heatmaps()` (all methods side-by-side); Step 13 replaced
+  with `data.plot_cumulative_comparison()` (all methods on one axes).
 - 21 Jupyter notebooks archived; content migrated to Sphinx Gallery examples.
 - Switched from poetry to `uv` for dependency management.
 

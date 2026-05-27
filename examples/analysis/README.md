@@ -2,7 +2,7 @@
 
 Examples demonstrating statistical analysis, decomposition, and pattern detection for time series data.
 
-11 examples covering correlation, spectral analysis, gap detection, grid aggregation, and decomposition.
+12 examples covering correlation, spectral analysis, gap detection, grid aggregation, and decomposition.
 
 ## Examples by Method
 
@@ -26,6 +26,7 @@ Examples demonstrating statistical analysis, decomposition, and pattern detectio
 ### Data Characterization
 
 - **analysis_gapfinder.py** — Detect and characterize consecutive missing data periods; availability heatmap, gap-length histogram, size filters, summary statistics
+- **analysis_gapstats.py** — Extended gap analysis: monthly/annual breakdown, long-gap listing, Rich console report, four-panel figure (availability heatmap, gap-spike timeline, monthly polar chart, gap-length histogram)
 - **analysis_gridaggregator.py** — 2D grid aggregation with quantile, equal-width, and custom binning
 
 ## Common Patterns
@@ -103,5 +104,6 @@ See `diive.pkgs.analysis` for full API documentation:
 - `SeasonalTrendDecomposition` — STL decomposition
 - `Quantiles` — Percentile-based analysis
 - `GapFinder` — Gap detection and reporting
+- `GapStats` — Extended gap analysis: monthly/annual breakdowns, long-gap listing, Rich report, four-panel figure
 - `GridAggregator` — 2D grid aggregation (quantile, equal-width, custom binning)
 - `Harmonic` — Spectral and Fourier analysis

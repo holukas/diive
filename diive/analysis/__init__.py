@@ -14,7 +14,7 @@ from diive.analysis.granger import GrangerCausality
 daily_correlation = DailyCorrelation
 
 from diive.analysis.decoupling import StratifiedAnalysis
-from diive.analysis.gapfinder import GapFinder
+from diive.analysis.gapfinder import GapFinder, GapStats
 from diive.analysis.gridaggregator import GridAggregator
 from diive.analysis.harmonic import harmonic_analysis
 from diive.analysis.histogram import Histogram
@@ -28,6 +28,7 @@ __all__ = [
     'GrangerCausality',
     'StratifiedAnalysis',
     'GapFinder',
+    'GapStats',
     'GridAggregator',
     'harmonic_analysis',
     'Histogram',

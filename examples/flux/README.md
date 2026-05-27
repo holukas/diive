@@ -12,6 +12,7 @@ Examples demonstrating flux processing, quality control, and high-resolution ana
 
 ### Processing Chain
 - **fluxprocessingchain/fluxprocessingchain.py** — Complete multi-level Swiss FluxNet workflow (L2-L4.1): Quality flags, storage correction, outlier detection, USTAR filtering, gap-filling
+- **fluxprocessingchain/fluxprocessingchain_composable.py** — Full L2→L4.1 pipeline using composable callables; RF, XGBoost, and MDS gap-filling from the same L3.3 state; on-demand `gap_stats()` after L3.3; `plot_gapfilled_heatmaps()` (side-by-side heatmap comparison) and `plot_cumulative_comparison()` (all methods on one axes) after L4.1
 
 ### Low-Resolution Flux Processing
 - **lowres/flux_timelag_analysis.py** — Time lag detection and visualization for gas concentrations

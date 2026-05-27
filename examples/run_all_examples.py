@@ -47,6 +47,7 @@ EXAMPLE_FILES = [
     'analysis/analysis_granger.py',
     'analysis/analysis_decoupling.py',
     'analysis/analysis_gapfinder.py',
+    'analysis/analysis_gapstats.py',
     'analysis/analysis_gridaggregator.py',
     'analysis/analysis_harmonic.py',
     'analysis/analysis_histogram_distribution.py',

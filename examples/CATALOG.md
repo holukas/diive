@@ -54,6 +54,7 @@ See: [visualization/README.md](visualization/README.md)
 | [**analysis_seasonaltrend.py**](analysis/analysis_seasonaltrend.py) | STL decomposition, trend isolation, seasonality extraction |
 | [**analysis_decoupling.py**](analysis/analysis_decoupling.py) | Stratified binning to reveal how ecosystem responses change across temperature ranges |
 | [**analysis_gapfinder.py**](analysis/analysis_gapfinder.py) | Identify and characterize consecutive missing data periods in time series |
+| [**analysis_gapstats.py**](analysis/analysis_gapstats.py) | Extended gap analysis: monthly/annual breakdown, long-gap listing, Rich report, three-panel figure |
 | [**analysis_gridaggregator.py**](analysis/analysis_gridaggregator.py) | 2D grid aggregation with quantile, equal-width, and custom binning methods |
 | [**analysis_histogram_distribution.py**](analysis/analysis_histogram_distribution.py) | Histogram binning methods: fixed bins, unique values, fringe bin removal |
 | [**analysis_optimumrange.py**](analysis/analysis_optimumrange.py) | Find optimal value ranges, condition-based filtering |
@@ -155,7 +156,7 @@ See: [features/README.md](features/README.md)
 
 | Example | Description |
 |---------|-------------|
-| [**fluxprocessingchain_composable.py**](flux/fluxprocessingchain/fluxprocessingchain_composable.py) | Full L2→L4.1 pipeline using composable level callables; RF, XGBoost, and MDS gap-filling from the same L3.3 state; `HeatmapDateTime` and `CumulativeYear` plots |
+| [**fluxprocessingchain_composable.py**](flux/fluxprocessingchain/fluxprocessingchain_composable.py) | Full L2→L4.1 pipeline using composable level callables; RF, XGBoost, and MDS gap-filling from the same L3.3 state; `gap_stats()` after L3.3; `plot_gapfilled_heatmaps()` and `plot_cumulative_comparison()` after L4.1 |
 
 ### Low-Resolution (30-min) Processing
 

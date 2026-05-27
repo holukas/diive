@@ -216,6 +216,22 @@ print(f"After L3.3 (CUT_50): {flux_l33.dropna().count()} accepted  |  "
       f"{flux_l33_hq.dropna().count()} high-quality (QCF=0)")
 
 # %%
+# Step 5b: gap analysis — structure of missing data before gap-filling
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# This is the right moment to inspect gaps: every quality-screening step has
+# run and the series is exactly what the gap-filling models will receive.
+#
+# ``data.gap_stats()`` is a convenience method on the FluxLevelData container.
+# It works after any level ('L2', 'L31', 'L32', 'L33') and returns a
+# {scenario: GapStats} dict.  It is not part of any official level function —
+# call it whenever you need a gap audit.
+
+for scen, gs in data.gap_stats('L33').items():
+    gs.report()  # Rich console report
+    gs.showfig(title=f"Gap analysis before gap-filling  --  {scen}")
+
+# %%
 # Step 6: feature engineering for ML gap-filling
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
@@ -430,18 +446,15 @@ mds_model.showplot()
 # Step 12: heatmap of gap-filled flux
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# ``HeatmapDateTime`` arranges the time series on a date x time-of-day grid.
-# Measured vs. gap-filled periods are not distinguished here — use the
-# FLAG_*_ISFILLED column to mask gap-filled values if needed.
+# ``data.plot_gapfilled_heatmaps()`` shows the measured flux (before gap-filling)
+# in the top panel, followed by one panel per gap-filling method that has been run.
+# All panels share the same colour scale so structural differences between methods
+# are immediately comparable.  Works with any subset of methods.
 
-heatmap_rf = dv.plotting.HeatmapDateTime(series=rf_gapfilled)
-heatmap_rf.plot(title=f"RF gap-filled NEE  ({rf_col})")
-
-heatmap_xgb = dv.plotting.HeatmapDateTime(series=xgb_gapfilled)
-heatmap_xgb.plot(title=f"XGB gap-filled NEE  ({xgb_col})")
-
-heatmap_mds = dv.plotting.HeatmapDateTime(series=mds_gapfilled)
-heatmap_mds.plot(title=f"MDS gap-filled NEE  ({mds_col})")
+data.plot_gapfilled_heatmaps(
+    ustar_scenario='CUT_50',
+    units='umol m-2 s-1',
+)
 
 # %%
 # Step 13: cumulative gap-filled NEE
@@ -451,8 +464,8 @@ heatmap_mds.plot(title=f"MDS gap-filled NEE  ({mds_col})")
 # carbon budget.  The sign convention follows eddy covariance: negative = carbon
 # uptake by the ecosystem, positive = carbon release.
 #
-# Unit conversion from µmol CO2 m-2 s-1 to gC m-2:
-#   gC per timestep = µmol CO2 m-2 s-1  x  12.011 g mol-1  x  1e-6 mol µmol-1
+# Unit conversion from umol CO2 m-2 s-1 to gC m-2:
+#   gC per timestep = umol CO2 m-2 s-1  x  12.011 g mol-1  x  1e-6 mol umol-1
 #                     x  1800 s per 30-min timestep
 # Summing over the full time series gives the cumulative carbon balance in gC m-2.
 #
@@ -461,11 +474,18 @@ heatmap_mds.plot(title=f"MDS gap-filled NEE  ({mds_col})")
 
 UMOL_TO_GC = 12.011 * 1e-6 * 1800  # conversion factor for 30-min data
 
-for label, series in [("RF", rf_gapfilled), ("XGB", xgb_gapfilled), ("MDS", mds_gapfilled)]:
-    series_gC = series * UMOL_TO_GC
-    series_gC.name = series.name + "_gC"
-    cumul = dv.plotting.CumulativeYear(series=series_gC, series_units="gC m-2")
-    cumul.plot()
+# ``data.plot_cumulative_comparison()`` overlays RF, XGBoost, and MDS on a
+# single axes for the same USTAR scenario so structural differences between
+# methods are immediately visible.  The dashed grey line shows the measured-only
+# series (gaps contribute zero), making the magnitude of the gap-filling
+# correction transparent.  Works with any subset of methods — only the ones
+# that have been run appear in the plot.
+
+data.plot_cumulative_comparison(
+    ustar_scenario='CUT_50',
+    conv_factor=UMOL_TO_GC,
+    units='gC m-2',
+)
 
 # %%
 # Step 14: export the final dataframe

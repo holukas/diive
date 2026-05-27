@@ -59,7 +59,7 @@ tests/                        # Unit tests
 | `dv.outliers` | `AbsoluteLimits`, `Hampel`, `LocalSD`, `LocalOutlierFactor`, `zScore`, `zScoreRolling`, `zScoreIncrements`, `TrimLow`, `ManualRemoval`, + daytime/nighttime variants |
 | `dv.gapfilling` | `RandomForestTS`, `XGBoostTS`, `SWINGapFillerXGBoost`, `FluxMDS`, `QuickFillRFTS`, `OptimizeParamsRFTS`, `OptimizeParamsTS`, `FeatureEngineer`, `linear_interpolation` |
 | `dv.flux` | `FluxProcessingChain`, `WindDoubleRotation`, `reynolds_decomposition`, `MaxCovariance`, `PreWhiteningBootstrap`, `PwbBatchDetection`, `FluxDetectionLimit`, ustar classes |
-| `dv.analysis` | `DailyCorrelation`, `GrangerCausality`, `StratifiedAnalysis`, `GapFinder`, `GridAggregator`, `Histogram`, `FindOptimumRange`, `SeasonalTrendDecomposition`, `BinFitterCP`, `percentiles101` |
+| `dv.analysis` | `DailyCorrelation`, `GrangerCausality`, `StratifiedAnalysis`, `GapFinder`, `GapStats`, `GridAggregator`, `Histogram`, `FindOptimumRange`, `SeasonalTrendDecomposition`, `BinFitterCP`, `percentiles101` |
 | `dv.plotting` | `HeatmapDateTime`, `HeatmapXYZ`, `HeatmapYearMonth`, `HexbinPlot`, `ScatterXY`, `TimeSeries`, `DielCycle`, `RidgeLinePlot`, `HistogramPlot`, `Cumulative`, `CumulativeYear`, `LongtermAnomaliesYear`, `TreeRingPlot` |
 | `dv.times` | `TimestampSanitizer`, `DetectFrequency`, `resample_to_monthly_agg_matrix`, `timestamp_infer_freq_*` |
 | `dv.variables` | `DaytimeNighttimeFlag`, `TimeSince`, `potrad`, `potrad_eot`, `calc_vpd_from_ta_rh`, `aerodynamic_resistance`, `dry_air_density`, `et_from_le`, `latent_heat_of_vaporization`, `air_temp_from_sonic_temp`, `lagged_variants`, noise helpers |
@@ -137,6 +137,9 @@ final_df = data.fpc_df
 | `data.levels` | `LevelResults` | Typed bag of per-level outputs (see code for full field list) |
 | `data.summary()` | `str` | Per-level data availability with daytime/nighttime breakdown |
 | `data.gapfilled_cols()` | `dict` | Gap-filled column names per L4.1 method and USTAR scenario |
+| `data.gap_stats(level='L33')` | `dict[str, GapStats]` | On-demand gap analysis; keyed by USTAR scenario (single-entry for L2/L31/L32) |
+| `data.plot_cumulative_comparison(...)` | `None` | Overlay cumulative sums of all gap-filling methods on one axes |
+| `data.plot_gapfilled_heatmaps(...)` | `None` | Side-by-side heatmaps: measured + one panel per gap-filling method; one figure per USTAR scenario |
 
 Key `data.levels` fields: `level2`, `level2_qcf`, `level31`, `level32`, `level32_qcf`, `level33`, `level33_qcf`, `level41_mds`, `level41_rf`, `level41_xgb` (dicts keyed by ustar_scenario for L3.3+).
 

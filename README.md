@@ -79,7 +79,7 @@ model.fillgaps()
 
 ### Next Steps
 
-- **[101 Runnable Examples](examples/README.md)** — organized by topic (visualization, gap-filling, flux, etc.)
+- **[104 Runnable Examples](examples/README.md)** — organized by topic (visualization, gap-filling, flux, etc.)
     - Find examples by use case: [CATALOG.md](examples/CATALOG.md)
     - Dataset documentation: [EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md)
 - **[Development Setup](CLAUDE.md)** — source setup, coding standards, testing
@@ -115,7 +115,7 @@ For the complete list, see `diive.__all__`.
 
 ---
 
-## 101 Runnable Examples
+## 104 Runnable Examples
 
 Organized by functional domain. All examples follow Sphinx Gallery format (`# %%` sections) — runnable as plain scripts
 and auto-converted to HTML docs.
@@ -140,10 +140,10 @@ uv run python examples/flux/fluxprocessingchain/fluxprocessingchain.py
 
 - **Visualization** (18 examples) — heatmaps, time series, diel cycles, cumulative plots, histograms, scatter, ridgelines, tree-ring spiral
 - **Times** (5 examples) — timestamp validation, frequency detection, diel cycles, temporal matrices
-- **Analysis** (11 examples) — correlation, daily correlation, seasonal decomposition, gap detection, gridding, spectral analysis
+- **Analysis** (12 examples) — correlation, daily correlation, seasonal decomposition, gap detection, gap statistics, gridding, spectral analysis
 - **Data Processing** (20 examples) — corrections (7), outlier detection (9), quality flags (2), other (2)
 - **Features** (11 examples) — VPD, unit conversions, day/night flags, lagged features, potential radiation
-- **Gap-Filling** (11 examples) — linear interpolation, Random Forest, XGBoost, MDS, comparisons, optimization, long-term
+- **Gap-Filling** (12 examples) — linear interpolation, Random Forest, XGBoost, MDS, comparisons, optimization, long-term, SW_IN physics+XGBoost
 - **Flux Processing** (18 examples) — flux chain, low-res analysis, high-res analysis, time lag, PWB batch detection (CLI + API), wind rotation, USTAR filtering, self-heating
 - **Curve Fitting** (2 examples) — polynomial and binned fitting
 - **I/O** (5 examples) — file reading, extraction, and data loading
@@ -176,6 +176,9 @@ Browse [examples/README.md](examples/README.md) for the full index with descript
 - Post-processing pipeline covering quality flags, storage correction, outlier detection, USTAR filtering, and
   gap-filling
 - Implements Levels 2–4.1 following Swiss FluxNet standards
+- On-demand gap analysis via `data.gap_stats()` (monthly/annual breakdown, long-gap listing) at any level
+- `data.plot_gapfilled_heatmaps()` — side-by-side heatmap comparison of all gap-filling methods; one figure per USTAR scenario
+- `data.plot_cumulative_comparison()` — overlay cumulative sums of all gap-filling methods on one axes
 - Example: [examples/flux/fluxprocessingchain/](examples/flux/fluxprocessingchain/)
 
 Reference: [Swiss FluxNet flux processing](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/)
@@ -214,7 +217,7 @@ Reference: [Swiss FluxNet flux processing](https://www.swissfluxnet.ethz.ch/inde
 - **Seasonal-Trend Decomposition** — STL, classical, or harmonic methods
 - **Correlation & decoupling** — lagged relationships and binned analysis
 - **Grid aggregation** — 2D binning and statistics
-- **Gap finder** — identify missing data patterns
+- **Gap finder & gap statistics** — identify missing data patterns; monthly/annual breakdown, long-gap listing, Rich report (`GapStats`)
 - **Percentiles & histogram** — distribution analysis
 - Examples: [examples/analysis/](examples/analysis/)
 
