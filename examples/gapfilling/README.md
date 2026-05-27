@@ -52,7 +52,7 @@ No training. Fills gaps by finding similar conditions elsewhere in your data.
 
 Physics-constrained gap-filling for shortwave incoming radiation. Nighttime values are always set to zero; daytime gaps are filled with XGBoost trained on potential radiation and timestamp features. Only lat/lon/UTC offset required — no meteorological driver variables needed by default.
 
-- **gapfill_swin.py** — SW_IN gap-filling: nighttime zeroed by physics, daytime filled by XGBoost; optional context drivers (TA, VPD) and nighttime offset correction
+- **gapfill_swin.py** — SW_IN gap-filling with nighttime offset correction: physics sets nighttime to zero, XGBoost fills daytime gaps using SW_IN_POT and timestamp features only
 
 ### Comparison & Benchmarking
 
@@ -114,29 +114,32 @@ filled = mds.get_mds_filled()
 ## Running Examples
 
 ```bash
-uv run python examples/pkgs/gapfilling/gapfill_comparison.py
+uv run python examples/gapfilling/gapfill_comparison.py
 ```
 
 For individual methods:
 
 ```bash
 # Linear interpolation
-uv run python examples/pkgs/gapfilling/gapfill_interpolate_conservative.py
-uv run python examples/pkgs/gapfilling/gapfill_interpolate_generous.py
+uv run python examples/gapfilling/gapfill_interpolate_conservative.py
+uv run python examples/gapfilling/gapfill_interpolate_generous.py
 
 # Random Forest
-uv run python examples/pkgs/gapfilling/gapfill_randomforest.py
-uv run python examples/pkgs/gapfilling/gapfill_randomforest_longterm.py
-uv run python examples/pkgs/gapfilling/gapfill_quickfill.py
-uv run python examples/pkgs/gapfilling/gapfill_optimize_randomforest.py
+uv run python examples/gapfilling/gapfill_randomforest.py
+uv run python examples/gapfilling/gapfill_randomforest_longterm.py
+uv run python examples/gapfilling/gapfill_quickfill.py
+uv run python examples/gapfilling/gapfill_optimize_randomforest.py
 
 # XGBoost
-uv run python examples/pkgs/gapfilling/gapfill_xgboost.py
-uv run python examples/pkgs/gapfilling/gapfill_optimize_xgboost.py
+uv run python examples/gapfilling/gapfill_xgboost.py
+uv run python examples/gapfilling/gapfill_optimize_xgboost.py
 
 # MDS
-uv run python examples/pkgs/gapfilling/gapfill_mds.py
-uv run python examples/pkgs/gapfilling/gapfill_mds_comparison.py
+uv run python examples/gapfilling/gapfill_mds.py
+uv run python examples/gapfilling/gapfill_mds_comparison.py
+
+# SW_IN physics + XGBoost
+uv run python examples/gapfilling/gapfill_swin.py
 
 # All examples
 uv run python examples/run_all_examples.py

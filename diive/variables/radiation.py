@@ -119,7 +119,7 @@ def potrad(timestamp_index: DatetimeIndex, lat: float, lon: float, utc_offset: i
     """
     if lat < -90 or lat > 90:
         raise Exception(f"Latitude {lat} (deg N) is out of range.")
-    if lon < -180 or lat > 180:
+    if lon < -180 or lon > 180:
         raise Exception(f"Longitude {lon} (deg E) is out of range.")
     if utc_offset < -12 or utc_offset > 12:
         raise Exception(f"UTC-offset {utc_offset} hours is out of range.")

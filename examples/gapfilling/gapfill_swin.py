@@ -3,7 +3,8 @@
 SW_IN Gap-Filling (Physics + XGBoost)
 =====================================
 
-Gap-fill shortwave incoming radiation using physics-aware partitioning.
+Gap-fill shortwave incoming radiation using physics-aware partitioning
+combined with a nighttime sensor-offset correction.
 
 Nighttime gaps are set to zero (no solar radiation after sunset).
 Daytime gaps are filled with XGBoost using potential radiation and
@@ -16,24 +17,25 @@ complete, physically consistent time series.
 # ^^^^^^^^
 #
 # Shortwave incoming radiation (SW_IN) has a hard physical constraint:
-# it is exactly zero at night.  A generic gap-filler ignores this and
-# can produce small non-zero (or even negative) nighttime predictions.
+# it is exactly zero at night.  Most pyranometers, however, record small
+# non-zero (often slightly negative) values at night due to thermal
+# emission of the sensor body or electronic offsets, and a generic
+# gap-filler will happily reproduce these artefacts.
 #
-# SWINGapFillerXGBoost avoids this by:
+# SWINGapFillerXGBoost addresses both issues at once:
 #
-# 1. Calculating potential radiation (SW_IN_POT) from lat/lon
-# 2. Using SW_IN_POT as the daytime/nighttime divider (threshold 20 W/m2)
-# 3. Filling nighttime gaps with zero (physics)
-# 4. Filling daytime gaps with XGBoost trained on daytime data only
-# 5. Assembling the two parts into one gap-free series
+# 1. Calculate potential radiation (SW_IN_POT) from lat/lon
+# 2. Apply ``remove_radiation_zero_offset()`` to subtract the
+#    nighttime bias from the whole series (``correct_nighttime_offset=True``)
+# 3. Use SW_IN_POT as the daytime/nighttime divider (threshold 20 W/m2)
+# 4. Set nighttime gaps to zero (physics)
+# 5. Fill daytime gaps with XGBoost trained on daytime data only
+# 6. Assemble the two parts into one gap-free series
 #
-# No additional driver variables are needed by default.  SW_IN_POT alone
-# (plus lag/rolling features of SW_IN itself and timestamp features)
-# is sufficient.  Additional drivers such as TA or VPD can be supplied
-# via context_df to improve daytime prediction quality.
-#
-# An optional nighttime offset correction can be applied first to remove
-# the systematic sensor bias that causes small negative values at night.
+# No additional driver variables are needed.  SW_IN_POT plus timestamp
+# features and lag/rolling features of SW_IN_POT are sufficient — the
+# potential-radiation curve already encodes solar angle, day length and
+# seasonal amplitude, the dominant drivers of SW_IN variability.
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -44,10 +46,10 @@ import diive as dv
 # Site configuration and data loading
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-SITE_LAT = 47.286417   # CH-DAV Davos, Switzerland
+SITE_LAT = 47.286417  # CH-DAV Davos, Switzerland
 SITE_LON = 7.733750
 SITE_UTC_OFFSET = 1
-TARGET_COL = 'Rg_f'   # Shortwave incoming radiation (W/m2)
+TARGET_COL = 'Rg_f'  # Shortwave incoming radiation (W/m2)
 
 df_orig = dv.load_exampledata_parquet()
 df = df_orig.copy()
@@ -65,23 +67,26 @@ print(f"Missing values in {TARGET_COL}: {df[TARGET_COL].isnull().sum()} "
       f"({100 * df[TARGET_COL].isnull().mean():.1f}%)")
 
 # %%
-# Basic usage: SW_IN_POT + timestamps only (no extra drivers needed)
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# Run the gap-filler
+# ^^^^^^^^^^^^^^^^^^
 #
-# This is the default configuration.  Only potential radiation (SW_IN_POT)
-# and timestamp features are used as predictors, together with lag and
-# rolling features derived from SW_IN itself.
+# This is the recommended configuration for SW_IN:
+#
+# - ``correct_nighttime_offset=True`` strips the sensor's nighttime bias
+#   before any modelling, so the daytime model trains on physically
+#   consistent values and the published series is exactly zero at night.
+# - No ``context_df`` — only SW_IN_POT and timestamp features are used.
 
 gf = dv.gapfilling.SWINGapFillerXGBoost(
     series=df[TARGET_COL],
     lat=SITE_LAT,
     lon=SITE_LON,
     utc_offset=SITE_UTC_OFFSET,
-    nighttime_threshold=20,    # W/m2: below this = nighttime
-    correct_nighttime_offset=False,
+    nighttime_threshold=0.001,  # W/m2: SW_IN_POT < threshold -> night (matches remove_radiation_zero_offset)
+    correct_nighttime_offset=True,
     reduce_features=False,
     verbose=1,
-    # XGBoost hyperparameters (optional)
+    # XGBoost hyperparameters
     n_estimators=200,
     max_depth=6,
     learning_rate=0.05,
@@ -93,18 +98,24 @@ gf = dv.gapfilling.SWINGapFillerXGBoost(
 gf.run()
 
 # %%
-# Inspect results
+# Formatted report
 # ^^^^^^^^^^^^^^^^
+#
+# ``report()`` prints parameters, data & performance, the flag distribution,
+# and the daytime XGBoost scores.
+
+gf.report()
+
+# %%
+# Inspect results programmatically
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 r = gf.results
-
 gapfilled = r.gapfilled
 flag = r.flag
 
-print(f"\nGap-filling complete")
-print(f"  Observed (flag=0):               {(flag == 0).sum()}")
-print(f"  Gap-filled by XGBoost (flag=1):  {(flag == 1).sum()}")
-print(f"  Nighttime set to zero (flag=2):  {(flag == 2).sum()}")
+print(f"\nResult columns: {list(r.gapfilling_df.columns)}")
+print(f"  '{TARGET_COL}_offset_corrected' is the bias-corrected input series.")
 
 if r.scores_traintest:
     print(f"\nDaytime model performance (train/test split):")
@@ -116,77 +127,13 @@ if r.scores_traintest:
 # SHAP feature importances
 # ^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# SW_IN_POT should rank first, followed by lag and rolling features of SW_IN.
-# No meteorological drivers were needed to achieve strong performance.
+# SW_IN_POT and its lag/rolling variants should dominate, followed by
+# timestamp features (hour, DOY, sin/cos encodings).
 
 if r.feature_importances is not None:
     fi = r.feature_importances.copy()
     print(f"\nTop 10 features by SHAP importance (daytime model):")
     print(fi.head(10).to_string())
-
-# %%
-# Optional: include additional driver variables
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-#
-# Providing TA and VPD as context drivers lets the XGBoost model learn
-# how cloud cover correlates with temperature and humidity conditions.
-# This can improve prediction quality when those variables are available.
-
-gf_with_context = dv.gapfilling.SWINGapFillerXGBoost(
-    series=df[TARGET_COL],
-    lat=SITE_LAT,
-    lon=SITE_LON,
-    utc_offset=SITE_UTC_OFFSET,
-    context_df=df[['Tair_f', 'VPD_f']],
-    verbose=1,
-    n_estimators=200,
-    max_depth=6,
-    learning_rate=0.05,
-    subsample=0.8,
-    colsample_bytree=0.8,
-    random_state=42,
-    n_jobs=-1,
-)
-gf_with_context.run()
-r_ctx = gf_with_context.results
-
-if r_ctx.scores_traintest:
-    print(f"\nWith TA+VPD context:")
-    print(f"  R2:   {r_ctx.scores_traintest.get('r2', float('nan')):.3f}")
-    print(f"  RMSE: {r_ctx.scores_traintest.get('rmse', float('nan')):.2f} W/m2")
-
-# %%
-# Optional: nighttime offset correction
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-#
-# Some radiation sensors record small non-zero (often negative) values at night
-# due to thermal emission or electronic offsets.  Set correct_nighttime_offset=True
-# to first remove this bias via remove_radiation_zero_offset(), then gap-fill.
-# The corrected input is stored in results.gapfilling_df as '{col}_offset_corrected'.
-
-gf_corrected = dv.gapfilling.SWINGapFillerXGBoost(
-    series=df[TARGET_COL],
-    lat=SITE_LAT,
-    lon=SITE_LON,
-    utc_offset=SITE_UTC_OFFSET,
-    correct_nighttime_offset=True,
-    verbose=1,
-    n_estimators=200,
-    max_depth=6,
-    learning_rate=0.05,
-    subsample=0.8,
-    colsample_bytree=0.8,
-    random_state=42,
-    n_jobs=-1,
-)
-gf_corrected.run()
-r_corr = gf_corrected.results
-
-print(f"\nWith nighttime offset correction:")
-print(f"  Columns in gapfilling_df: {list(r_corr.gapfilling_df.columns)}")
-if r_corr.scores_traintest:
-    print(f"  R2:   {r_corr.scores_traintest.get('r2', float('nan')):.3f}")
-    print(f"  RMSE: {r_corr.scores_traintest.get('rmse', float('nan')):.2f} W/m2")
 
 # %%
 # Visualize: observed vs gap-filled heatmaps
@@ -204,7 +151,8 @@ axes[0].set_title('Observed SW_IN\n(with gaps)', fontsize=11, fontweight='bold')
 dv.plotting.HeatmapDateTime(series=gapfilled).plot(
     ax=axes[1],
     zlabel=r'$\mathrm{W\ m^{-2}}$')
-axes[1].set_title('Gap-Filled SW_IN\n(SW_IN_POT + XGBoost)', fontsize=11, fontweight='bold')
+axes[1].set_title('Gap-Filled SW_IN\n(offset-corrected + XGBoost)',
+                  fontsize=11, fontweight='bold')
 
 fig.suptitle('SW_IN Gap-Filling: Physics + XGBoost', fontsize=13, fontweight='bold')
 plt.show()
