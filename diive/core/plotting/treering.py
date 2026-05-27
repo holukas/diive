@@ -11,10 +11,12 @@ natural climate calendar where summer occupies the top of the plot.
 Part of the diive library: https://github.com/holukas/diive
 """
 
+import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
+from matplotlib.collections import LineCollection
 
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.utils.console import detail
@@ -223,13 +225,12 @@ class TreeRingPlot:
         self.ax = ax
 
         # --- Angle layout ---
-        # Standard matplotlib polar: 0 rad = right (3 o'clock), angles increase CCW.
-        # Counterclockwise progression maps visually as: bottom (Jan) -> right (Apr) ->
-        # top (Jul) -> left (Oct) -> bottom (Jan), matching the image layout.
-        # Jan 1 placed at 3pi/2 (bottom, 6 o'clock).
+        # Clockwise progression: 0 rad = right (3 o'clock), direction=-1 makes angles
+        # increase clockwise. Jan 1 placed at pi/2 (bottom, 6 o'clock) in CW mode.
+        # Months flow: Jan(bottom) -> Apr(left) -> Jul(top) -> Oct(right) -> Jan.
         day_fractions = np.linspace(0, 1, self.n_days + 1)
-        offset = 3.0 * np.pi / 2.0  # Jan 1 at bottom
-        angles = offset + day_fractions * 2.0 * np.pi  # CCW from Jan 1
+        offset = np.pi / 2.0  # Jan 1 at bottom (CW mode)
+        angles = offset + day_fractions * 2.0 * np.pi  # CW from Jan 1
 
         # --- Radius layout ---
         # Small inner hub keeps the plot readable; each year occupies one radial unit.
@@ -252,8 +253,8 @@ class TreeRingPlot:
         )
 
         # --- Polar axis cosmetics ---
-        ax.set_theta_zero_location('E')  # 0 rad = right (default, keeps our offset correct)
-        ax.set_theta_direction(1)  # counterclockwise (default)
+        ax.set_theta_zero_location('E')  # 0 rad = right (3 o'clock)
+        ax.set_theta_direction(-1)  # clockwise
         ax.set_rlim(0, radii[-1] + 0.5)
         ax.axis('off')  # hide default polar ticks/grid
 
@@ -350,27 +351,29 @@ class TreeRingPlot:
                   title: str = None,
                   vmin: float = None,
                   vmax: float = None,
-                  color: str = '#2196F3',
-                  cmap: str = None,
-                  linewidth: float = 0.8,
+                  cmap: str = 'RdYlBu_r',
+                  linewidth: float = 1.2,
                   alpha: float = 0.85,
-                  amplitude_scale: float = 0.45,
-                  fill: bool = False,
-                  fill_alpha: float = 0.2,
+                  amplitude_scale: float = 0.5,
+                  ring_width: float = 0.35,
                   show_month_labels: bool = True,
                   show_month_lines: bool = False,
-                  show_year_labels: bool = True,
-                  show_year_separators: bool = True,
-                  year_label_frequency: int = 10,
+                  show_year_labels: bool = False,
+                  show_year_separators: bool = False,
+                  year_label_frequency: int = 1,
+                  cb_label: str = None,
+                  cb_labelsize: float = None,
+                  cb_digits_after_comma: int = 1,
                   month_label_fontsize: float = None,
                   year_label_fontsize: float = None,
                   title_fontsize: float = None):
-        """Render TreeRingPlot as radial line traces on a polar axis (Phase 2 alternative).
+        """Render TreeRingPlot as concentric radial line traces colored by data value.
 
-        Each year traces one full revolution around the circle as a line plot. Radial
-        displacement from the ring's baseline encodes the data value — values above the
-        global midpoint push outward, values below pull inward. Inner rings are the
-        earliest years; outer rings the most recent.
+        Each year traces its own ring at a fixed base radius (oldest at center, newest
+        at the outer edge). Within each ring the line wiggles radially by
+        ``amplitude_scale`` around the base, encoding the data value. Segment color also
+        encodes the data value via ``cmap``, so both position and color carry the same
+        information — matching the reference spiral-plot style.
 
         All styling and presentation parameters live here. Can be called multiple times
         on the same object to produce differently styled outputs.
@@ -380,30 +383,29 @@ class TreeRingPlot:
             figsize: Figure size in inches (default (10, 10))
             figdpi: Figure DPI (default 100)
             title: Plot title text
-            vmin: Low anchor for normalisation (defaults to data minimum).
-                Values at vmin map to the inner edge of the ring.
-            vmax: High anchor for normalisation (defaults to data maximum).
-                Values at vmax map to the outer edge of the ring.
-            color: Line color when cmap is None (default '#2196F3', Material blue)
-            cmap: Colormap name to color each year differently. When set, overrides color.
-                Colors are assigned linearly from oldest (low end) to newest (high end) year.
+            vmin: Low colour anchor (defaults to data minimum).
+            vmax: High colour anchor (defaults to data maximum).
+            cmap: Colormap applied to data values (default 'RdYlBu_r', blue=low, red=high).
             linewidth: Line width in points (default 0.8)
             alpha: Line opacity (default 0.85)
             amplitude_scale: Maximum radial displacement as a fraction of one ring width.
-                0.45 keeps lines just inside the ring boundaries; increase for more drama,
-                decrease to avoid overlap between adjacent years.
-            fill: Fill between the ring baseline and the line (default False).
-                Helps distinguish above/below-midpoint regions at a glance.
-            fill_alpha: Opacity of the fill layer (default 0.2)
+                0.5 makes lines reach ring boundaries; >0.5 causes overlap (default 0.5).
+            ring_width: Radial width of each year's ring in data units (default 0.35).
+                Smaller values pack rings closer together.
             show_month_labels: Show month abbreviations outside the outer ring (default True)
             show_month_lines: Draw thin radial spokes at each month boundary (default False)
-            show_year_labels: Show year numbers at the Jan-1 position of each ring (default True)
-            show_year_separators: Draw faint circles between year rings (default True)
-            year_label_frequency: Interval between year labels, e.g. 10 = every decade (default 10)
+            show_year_labels: Show year numbers at each ring's midpoint (default True)
+            show_year_separators: Draw faint circles between year rings (default False)
+            year_label_frequency: Interval between year labels, e.g. 1 = every year (default 1)
+            cb_label: Colorbar label text
+            cb_labelsize: Font size for colorbar tick labels
+            cb_digits_after_comma: Decimal places on colorbar tick labels (default 1)
             month_label_fontsize: Font size for month labels (default theme value)
             year_label_fontsize: Font size for year labels (default theme value)
             title_fontsize: Font size for the plot title (default theme value)
         """
+        if cb_labelsize is None:
+            cb_labelsize = theme.AX_LABELS_FONTSIZE
         if month_label_fontsize is None:
             month_label_fontsize = theme.AX_LABELS_FONTSIZE
         if year_label_fontsize is None:
@@ -422,6 +424,17 @@ class TreeRingPlot:
         data_range = vmax - vmin if vmax != vmin else 1.0
         data_mid = (vmin + vmax) / 2.0
 
+        clipped_below = vmin > data_min
+        clipped_above = vmax < data_max
+        if clipped_below and clipped_above:
+            cb_extend = 'both'
+        elif clipped_below:
+            cb_extend = 'min'
+        elif clipped_above:
+            cb_extend = 'max'
+        else:
+            cb_extend = 'neither'
+
         if ax is None:
             fig = plt.figure(figsize=figsize, dpi=figdpi)
             ax = fig.add_subplot(111, projection='polar')
@@ -430,41 +443,43 @@ class TreeRingPlot:
             self._fig = ax.figure
         self.ax = ax
 
-        # Angle layout — Jan at bottom (6 o'clock), CCW progression, same as plot().
-        offset = 3.0 * np.pi / 2.0
+        # Angle layout — Jan at bottom (6 o'clock), CW progression, same as plot().
+        offset = np.pi / 2.0
         slot_fracs = np.linspace(0, 1, self.n_days, endpoint=False)
         theta = offset + slot_fracs * 2.0 * np.pi
         theta_closed = np.append(theta, theta[0])
 
-        # Radius layout — same inner_gap and ring_width=1 as plot().
+        # Radius layout — inner_gap reserves white center; ring_width controls spacing.
         inner_gap = 1.5
-        radii = np.arange(self.n_years + 1, dtype=float) + inner_gap
+        radii = np.arange(self.n_years + 1, dtype=float) * ring_width + inner_gap
 
-        if cmap is not None:
-            colormap = plt.get_cmap(cmap)
-            year_colors = [colormap(i / max(self.n_years - 1, 1)) for i in range(self.n_years)]
-        else:
-            year_colors = [color] * self.n_years
+        colormap = plt.get_cmap(cmap)
+        norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
 
         for i, year in enumerate(self.years):
-            r_base = radii[i] + 0.5  # centre of this year's 1-unit-wide ring
+            r_base = radii[i] + ring_width / 2.0  # midpoint of this year's ring
             vals = self.grid[i, :]
-            # Normalise to [-amplitude_scale, +amplitude_scale] around r_base.
-            normalized = (vals - data_mid) / (data_range / 2.0) * amplitude_scale
+            # Wiggle ±(amplitude_scale * ring_width) around the ring's base radius.
+            normalized = (vals - data_mid) / (data_range / 2.0) * amplitude_scale * ring_width
             r = r_base + normalized
             r_closed = np.append(r, r[0])
+            vals_closed = np.append(vals, vals[0])
 
-            line_color = year_colors[i]
-            ax.plot(theta_closed, r_closed,
-                    color=line_color, linewidth=linewidth, alpha=alpha, zorder=3)
+            # Segments in polar (theta, r) — polar axes transData handles the transform.
+            points = np.array([theta_closed, r_closed]).T.reshape(-1, 1, 2)
+            segments = np.concatenate([points[:-1], points[1:]], axis=1)
 
-            if fill:
-                ax.fill_between(theta_closed, r_base, r_closed,
-                                alpha=fill_alpha, color=line_color, zorder=2)
+            # Color each segment by the midpoint data value of its two endpoints.
+            seg_vals = (vals_closed[:-1] + vals_closed[1:]) / 2.0
+
+            lc = LineCollection(segments, cmap=colormap, norm=norm,
+                                linewidth=linewidth, alpha=alpha, zorder=3)
+            lc.set_array(seg_vals)
+            ax.add_collection(lc)
 
         ax.set_theta_zero_location('E')
-        ax.set_theta_direction(1)
-        ax.set_rlim(0, radii[-1] + 0.5)
+        ax.set_theta_direction(-1)  # clockwise
+        ax.set_rlim(0, radii[-1] + ring_width * 0.5)
         ax.axis('off')
 
         # Month boundary angles (non-leap reference year)
@@ -500,7 +515,7 @@ class TreeRingPlot:
             jan1_angle = offset
             for i, year in enumerate(self.years):
                 if (year % year_label_frequency == 0) or (i == 0) or (i == self.n_years - 1):
-                    r_mid = radii[i] + 0.5
+                    r_mid = radii[i] + ring_width / 2.0
                     ax.text(jan1_angle, r_mid, str(year),
                             ha='center', va='center',
                             fontsize=year_label_fontsize, color='black',
@@ -509,3 +524,20 @@ class TreeRingPlot:
         if title:
             self._fig.subplots_adjust(top=0.92)
             self._fig.suptitle(title, fontsize=title_fontsize, fontweight='bold', y=0.97)
+
+        # Colorbar — ScalarMappable since LineCollection has no standalone colorbar method.
+        fmt = mticker.FormatStrFormatter(f'%.{cb_digits_after_comma}f')
+        sm = plt.cm.ScalarMappable(cmap=colormap, norm=norm)
+        sm.set_array([])
+        cb = self._fig.colorbar(
+            sm,
+            ax=ax,
+            orientation='vertical',
+            shrink=0.6,
+            pad=0.12,
+            extend=cb_extend,
+            format=fmt
+        )
+        if cb_label:
+            cb.set_label(cb_label, fontsize=cb_labelsize, rotation=90, labelpad=10)
+        cb.ax.tick_params(labelsize=cb_labelsize)
