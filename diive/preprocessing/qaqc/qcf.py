@@ -78,7 +78,7 @@ class FlagQCF:
                  outname: str = None,
                  swinpot_col: str = None,
                  idstr: str = None,
-                 nighttime_threshold: float = 50,
+                 nighttime_threshold: float = 20,
                  ustar_scenarios: list = None
                  ):
         """Initialize QCF calculator.
@@ -97,7 +97,7 @@ class FlagQCF:
             swinpot_col: Column name of solar potential radiation for daytime/nighttime
                 separation. If provided, enables separate acceptance thresholds for day/night.
             nighttime_threshold: Solar radiation threshold (W/m²) below which records
-                are considered nighttime. Default 50 W/m².
+                are considered nighttime. Default 20 W/m².
             ustar_scenarios: List of USTAR filtering scenario names (e.g., ['CUT_50', 'CUT_75']).
                 If provided, automatically excludes irrelevant USTAR flags for current scenario.
 

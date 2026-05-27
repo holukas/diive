@@ -43,6 +43,14 @@
 
 ### Gap-Filling
 
+- **`SWINGapFillerXGBoost`** — physics-aware gap-filler for shortwave incoming radiation. Nighttime gaps are set to
+  zero (no solar radiation after sunset); daytime gaps are filled with XGBoost trained on daytime data only. Requires
+  only lat/lon/UTC offset — no meteorological driver variables needed by default. Optional `context_df` for TA/VPD
+  drivers; optional `correct_nighttime_offset` to remove sensor thermal bias first. Flag encoding: 0=observed,
+  1=XGBoost fill, 2=nighttime set to zero.
+- **Nighttime threshold standardised to 20 W/m²** — default `nighttime_threshold` changed from 50 to 20 W/m²
+  throughout diive (`DaytimeNighttimeFlag`, `daytime_nighttime_flag_from_swinpot`, `FlagQCF`, outlier detection
+  common helpers, USTAR threshold detection).
 - **`GapFillingResult` dataclass + `.results` property** — all gap-filling classes expose `.results` after `.run()`,
   bundling `gapfilled`, `flag`, `scores`, `feature_importances`, `model`, and related fields. Importable as
   `dv.gapfilling.GapFillingResult`.
@@ -73,6 +81,8 @@
   p16/p50/p84 thresholds.
 - **`GrangerCausality`** — predictive causality test between time series with lag identification.
 - **`TreeRingPlot`** — circular spiral plot displaying annual time series as concentric color-coded rings.
+- **`SWINGapFillerXGBoost`** — physics + XGBoost gap-filler for SW_IN; nighttime zeroed by physics, daytime filled
+  by gradient boosting trained on SW_IN_POT and timestamp features.
 - **`FeatureEngineer`** — standalone 8-stage feature engineering pipeline (lag, rolling, diff, EMA, poly, STL,
   timestamps, record number); pre-engineer once and reuse across models.
 
@@ -115,7 +125,7 @@
 
 - New examples: `fluxprocessingchain_composable.py` (full L2->L4.1), `fluxprocessingchain_multiflux.py` (multi-flux
   loop), `qaqc_detect_timestamp_shifts.py`, `flux_lag_pwb.py`, `flux_lag_pwb_batch.py`, `plot_treering_temperature.py`,
-  4 I/O examples, USTAR method comparison. Total: 98 examples.
+  4 I/O examples, USTAR method comparison, `gapfill_swin.py` (SW_IN physics + XGBoost). Total: 103 examples.
 - 21 Jupyter notebooks archived; content migrated to Sphinx Gallery examples.
 - Switched from poetry to `uv` for dependency management.
 

@@ -2,11 +2,11 @@
 
 Examples demonstrating various gap-filling approaches for time series data, from simple to advanced machine learning.
 
-11 examples across 4 gap-filling methods with optimization and comparison workflows.
+12 examples across 5 gap-filling methods with optimization and comparison workflows.
 
 ## Method Overview
 
-Linear interpolation is fast but works only for small gaps. Random Forest and XGBoost require training data but handle larger gaps and complex patterns. MDS (Meteorological Data Similarity) needs no training — it matches similar conditions across your dataset.
+Linear interpolation is fast but works only for small gaps. Random Forest and XGBoost require training data but handle larger gaps and complex patterns. MDS (Meteorological Data Similarity) needs no training — it matches similar conditions across your dataset. SW_IN Physics+XGBoost uses solar geometry to constrain nighttime values to zero and fills daytime gaps with gradient boosting.
 
 | Method | Training | Best For |
 |--------|----------|----------|
@@ -14,6 +14,7 @@ Linear interpolation is fast but works only for small gaps. Random Forest and XG
 | Random Forest | Yes | General purpose, handles nonlinear patterns |
 | XGBoost | Yes | High accuracy, best for large datasets |
 | MDS | No | When you lack training data |
+| SW_IN Physics+XGBoost | Yes | Shortwave radiation with physical nighttime constraint |
 
 ## Examples by Method
 
@@ -46,6 +47,12 @@ No training. Fills gaps by finding similar conditions elsewhere in your data.
 
 - **gapfill_mds.py** — Original MDS implementation
 - **gapfill_mds_comparison.py** — Comparison of original vs. optimized variants
+
+### SW_IN Physics + XGBoost
+
+Physics-constrained gap-filling for shortwave incoming radiation. Nighttime values are always set to zero; daytime gaps are filled with XGBoost trained on potential radiation and timestamp features. Only lat/lon/UTC offset required — no meteorological driver variables needed by default.
+
+- **gapfill_swin.py** — SW_IN gap-filling: nighttime zeroed by physics, daytime filled by XGBoost; optional context drivers (TA, VPD) and nighttime offset correction
 
 ### Comparison & Benchmarking
 

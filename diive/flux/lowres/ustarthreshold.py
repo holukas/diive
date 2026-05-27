@@ -176,7 +176,7 @@ class UstarThresholdConstantScenarios:
 
         # Detect daytime and nighttime from potential radiation
         self.daytime, self.nighttime = \
-            daytime_nighttime_flag_from_swinpot(swinpot=swinpot, nighttime_threshold=50)
+            daytime_nighttime_flag_from_swinpot(swinpot=swinpot, nighttime_threshold=20)
 
         # Convert 0/1 flags to False/True flag
         self.daytime = self.daytime == 1

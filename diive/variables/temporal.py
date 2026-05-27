@@ -26,7 +26,7 @@ class DaytimeNighttimeFlag:
                  utc_offset: int,
                  lat: float,
                  lon: float,
-                 nighttime_threshold: float = 50):
+                 nighttime_threshold: float = 20):
         """Calculate flags to identify daytime and nighttime data from potential radiation.
 
         Args:
@@ -108,7 +108,7 @@ class DaytimeNighttimeFlag:
 
 
 def daytime_nighttime_flag_from_swinpot(swinpot: Series,
-                                        nighttime_threshold: float = 50,
+                                        nighttime_threshold: float = 20,
                                         daytime_col: str = 'DAYTIME',
                                         nighttime_col: str = 'NIGHTTIME') -> tuple[Series, Series]:
     """

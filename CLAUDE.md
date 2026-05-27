@@ -134,7 +134,7 @@ tests/                        # Unit tests
 | Namespace | Contents |
 |---|---|
 | `dv.outliers` | `AbsoluteLimits`, `Hampel`, `LocalSD`, `LocalOutlierFactor`, `zScore`, `zScoreRolling`, `zScoreIncrements`, `TrimLow`, `ManualRemoval`, + daytime/nighttime variants |
-| `dv.gapfilling` | `RandomForestTS`, `XGBoostTS`, `FluxMDS`, `QuickFillRFTS`, `OptimizeParamsRFTS`, `OptimizeParamsTS`, `FeatureEngineer`, `linear_interpolation` |
+| `dv.gapfilling` | `RandomForestTS`, `XGBoostTS`, `SWINGapFillerXGBoost`, `FluxMDS`, `QuickFillRFTS`, `OptimizeParamsRFTS`, `OptimizeParamsTS`, `FeatureEngineer`, `linear_interpolation` |
 | `dv.flux` | `FluxProcessingChain`, `WindDoubleRotation`, `reynolds_decomposition`, `MaxCovariance`, `PreWhiteningBootstrap`, `PwbBatchDetection`, `FluxDetectionLimit`, ustar classes |
 | `dv.analysis` | `DailyCorrelation`, `GrangerCausality`, `StratifiedAnalysis`, `GapFinder`, `GridAggregator`, `Histogram`, `FindOptimumRange`, `SeasonalTrendDecomposition`, `BinFitterCP`, `percentiles101` |
 | `dv.plotting` | `HeatmapDateTime`, `HeatmapXYZ`, `HeatmapYearMonth`, `HexbinPlot`, `ScatterXY`, `TimeSeries`, `DielCycle`, `RidgeLinePlot`, `HistogramPlot`, `Cumulative`, `CumulativeYear`, `LongtermAnomaliesYear`, `TreeRingPlot` |
@@ -162,12 +162,13 @@ Used by `FeatureEngineer` class, fed into gap-filling models.
 
 ### Gap-Filling Methods
 
-| Method         | Training | Features                  | Use case              |
-|----------------|----------|---------------------------|-----------------------|
-| Random Forest  | Yes      | 8-stage engineered        | Interpretable, robust |
-| XGBoost        | Yes      | 8-stage engineered        | Non-linear, efficient |
-| MDS            | No       | Meteorological similarity | No overfitting risk   |
-| Linear Interp. | No       | None                      | Small gaps only       |
+| Method                | Training | Features                          | Use case                          |
+|-----------------------|----------|-----------------------------------|-----------------------------------|
+| Random Forest         | Yes      | 8-stage engineered                | Interpretable, robust             |
+| XGBoost               | Yes      | 8-stage engineered                | Non-linear, efficient             |
+| SWINGapFillerXGBoost  | Yes      | SW_IN_POT + timestamps (+ opt. TA/VPD) | SW_IN with physical nighttime constraint |
+| MDS                   | No       | Meteorological similarity         | No overfitting risk               |
+| Linear Interp.        | No       | None                              | Small gaps only                   |
 
 **Results:** All gap-filling classes expose `.results` property (after `.run()`) returning `GapFillingResult` with:
 - `gapfilled` — Series

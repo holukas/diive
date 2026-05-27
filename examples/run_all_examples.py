@@ -128,6 +128,7 @@ EXAMPLE_FILES = [
     'gapfilling/gapfill_xgboost.py',
     'gapfilling/gapfill_optimize_xgboost.py',
     'gapfilling/gapfill_comparison.py',
+    'gapfilling/gapfill_swin.py',
 ]
 
 MAX_WORKERS = 8  # Number of parallel workers

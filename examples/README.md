@@ -74,7 +74,7 @@ examples/
 │       ├── flux_lag_pwb_batch.py
 │       ├── flux_lag_pwb_batch_cli.py
 │       └── flux_windrotation.py
-├── gapfilling/            # Gap-filling methods (11 examples)
+├── gapfilling/            # Gap-filling methods (12 examples)
 │   ├── gapfill_interpolate_generous.py
 │   ├── gapfill_interpolate_conservative.py
 │   ├── gapfill_randomforest.py
@@ -85,6 +85,7 @@ examples/
 │   ├── gapfill_optimize_xgboost.py
 │   ├── gapfill_mds.py
 │   ├── gapfill_mds_comparison.py
+│   ├── gapfill_swin.py
 │   └── gapfill_comparison.py
 ├── io/                    # File I/O (5 examples)
 │   ├── io_load_save_parquet.py
@@ -128,7 +129,7 @@ uv run python examples/gapfilling/gapfill_randomforest.py
 uv run python examples/run_all_examples.py
 ```
 
-This runs all 102 examples in parallel with 8 workers, reporting execution time and any errors.
+This runs all 103 examples in parallel with 8 workers, reporting execution time and any errors.
 
 ## Finding Examples
 
@@ -162,10 +163,10 @@ Browse by topic:
 | **Features** | 11 | Feature engineering pipeline, air properties, unit conversions, day/night flags, VPD, lagged variants |
 | **Fits** | 2 | Binned fitting, ecosystem response fitting |
 | **Flux** | 18 | Time lag analysis, processing chain, HQ filtering, USTAR detection (3), self-heating (2), uncertainty, PWB batch detection (CLI + API), high-res analysis |
-| **Gapfilling** | 11 | Linear interpolation, Random Forest (4 variants), XGBoost (3 variants), MDS (2), comparison |
+| **Gapfilling** | 12 | Linear interpolation, Random Forest (4 variants), XGBoost (3 variants), MDS (2), SW_IN physics+XGBoost, comparison |
 | **IO** | 5 | Parquet file I/O, EddyPro CSV reading, binary value extraction |
 | **Preprocessing** | 21 | Corrections (7), outlier detection (9), QA/QC (3), other (2) |
-| **TOTAL** | **102** | |
+| **TOTAL** | **103** | |
 
 ## Running Options
 

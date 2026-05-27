@@ -202,6 +202,7 @@ See: [flux/README.md](flux/README.md)
 | [**gapfill_mds.py**](gapfilling/gapfill_mds.py) | Meteorological Data Similarity | No |
 | [**gapfill_mds_comparison.py**](gapfilling/gapfill_mds_comparison.py) | MDS variants comparison | No |
 | [**gapfill_comparison.py**](gapfilling/gapfill_comparison.py) | Compare all methods side-by-side | Mixed |
+| [**gapfill_swin.py**](gapfilling/gapfill_swin.py) | SW_IN physics + XGBoost (nighttime zero, daytime ML) | Yes |
 
 See: [gapfilling/README.md](gapfilling/README.md)
 

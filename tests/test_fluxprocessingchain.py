@@ -24,7 +24,7 @@ class TestFluxProcessingChain(unittest.TestCase):
         SITE_LAT = 46.583056  # CH-AWS
         SITE_LON = 9.790639  # CH-AWS
         UTC_OFFSET = 1
-        NIGHTTIME_THRESHOLD = 50  # Threshold for potential radiation in W m-2, conditions below threshold are nighttime
+        NIGHTTIME_THRESHOLD = 20  # Threshold for potential radiation in W m-2, conditions below threshold are nighttime
         DAYTIME_ACCEPT_QCF_BELOW = 2
         NIGHTTIMETIME_ACCEPT_QCF_BELOW = 2
 
@@ -324,7 +324,7 @@ class TestFluxProcessingChainComposable(unittest.TestCase):
         data = init_flux_data(
             df=df, fluxcol='FC',
             site_lat=46.583056, site_lon=9.790639, utc_offset=1,
-            nighttime_threshold=50,
+            nighttime_threshold=20,
             daytime_accept_qcf_below=2, nighttime_accept_qcf_below=2,
         )
         self.assertIsInstance(data, FluxLevelData)

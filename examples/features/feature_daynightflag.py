@@ -30,7 +30,7 @@ df = dv.load_exampledata_parquet()
 SITE_LAT = 47.286417
 SITE_LON = 7.733750
 UTC_OFFSET = 1
-NIGHTTIME_THRESHOLD = 50  # W/m²
+NIGHTTIME_THRESHOLD = 20  # W/m²
 
 print("Daytime/Nighttime Flag Calculation")
 print("=" * 50)

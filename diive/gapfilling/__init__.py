@@ -16,6 +16,7 @@ from diive.gapfilling.randomforest_ts import RandomForestTS
 from diive.gapfilling.xgboost_ts import XGBoostTS
 from diive.gapfilling.scores import prediction_scores
 from diive.gapfilling.longterm import LongTermGapFillingRandomForestTS, LongTermGapFillingXGBoostTS
+from diive.gapfilling.swin import SWINGapFillerXGBoost
 
 __all__ = [
     'FeatureEngineer',
@@ -27,4 +28,5 @@ __all__ = [
     'prediction_scores',
     'LongTermGapFillingRandomForestTS',
     'LongTermGapFillingXGBoostTS',
+    'SWINGapFillerXGBoost',
 ]

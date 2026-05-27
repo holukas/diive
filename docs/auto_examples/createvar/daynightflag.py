@@ -14,7 +14,7 @@ def example_daytime_nighttime_flag():
 
     Demonstrates identifying daytime and nighttime periods using solar geometry
     calculations. Flags are determined by comparing potential shortwave radiation
-    to a threshold (default 50 W/m²). Useful for quality control and analysis
+    to a threshold (default 20 W/m²). Useful for quality control and analysis
     of ecosystem processes that vary between day and night.
     """
     # Load example data
@@ -24,7 +24,7 @@ def example_daytime_nighttime_flag():
     SITE_LAT = 47.286417
     SITE_LON = 7.733750
     UTC_OFFSET = 1
-    NIGHTTIME_THRESHOLD = 50  # W/m²
+    NIGHTTIME_THRESHOLD = 20  # W/m²
 
     print("Example: Calculate daytime and nighttime flags")
     print(f"Site: CH-DAV (Davos)")
