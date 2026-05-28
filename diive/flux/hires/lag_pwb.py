@@ -196,6 +196,7 @@ References:
 Part of the diive library: https://github.com/holukas/diive
 """
 
+import datetime as dt
 import os
 import warnings
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -1824,15 +1825,71 @@ class PwboptLagPlot:
 # ProcessPoolExecutor (Windows spawn: each worker re-imports this module)
 # ---------------------------------------------------------------------------
 
+def _format_width(file_date_format: str) -> int:
+    """
+    Number of characters a fixed-width strptime format renders to.
+
+    Measured against a reference datetime whose every field is two digits
+    (month 12, day 23, ...) so fixed-width directives render at full width.
+    """
+    return len(dt.datetime(2222, 12, 23, 13, 24, 25).strftime(file_date_format))
+
+
+def _find_timestamp_offset(filename: str, file_date_format: str | None) -> int | None:
+    """
+    Locate the datetime token inside a filename by sliding-window ``strptime``.
+
+    Slides a window of the format's rendered width across *filename* and returns
+    the **leftmost** offset at which ``strptime`` succeeds, or ``None`` if no
+    substring parses (or no format is given).  This offset is determined once
+    from the first file and then reused for every subsequent file (see
+    ``PwbBatchDetection``), so the search cost is paid only once per batch.
+    """
+    if not file_date_format:
+        return None
+    n = _format_width(file_date_format)
+    for i in range(len(filename) - n + 1):
+        try:
+            dt.datetime.strptime(filename[i:i + n], file_date_format)
+            return i
+        except ValueError:
+            continue
+    return None
+
+
+def _parse_file_timestamp(
+        filename: str, file_date_format: str | None, offset: int | None
+) -> pd.Timestamp:
+    """
+    Parse a timestamp from *filename* at a known *offset*.
+
+    *file_date_format* is a ``datetime.strptime`` pattern for the datetime token
+    (diive ``file_date_format`` convention), e.g. ``'%Y%m%d-%H%M'`` for
+    ``'20210820-0930_rotated.txt'``.  *offset* is the start position previously
+    located by :func:`_find_timestamp_offset` on the first file.  Returns
+    ``pd.NaT`` when no format/offset is given or the slice does not parse.
+    """
+    if not file_date_format or offset is None:
+        return pd.NaT
+    n = _format_width(file_date_format)
+    try:
+        return pd.Timestamp(
+            dt.datetime.strptime(filename[offset:offset + n], file_date_format))
+    except (ValueError, TypeError):
+        return pd.NaT
+
+
 def _pwb_file_worker(args: tuple) -> dict:
     """Process one averaging-period file and return one result-row dict."""
     (filepath, scalars, col_w, col_tsonic,
      hz, lag_max_s, n_bootstrap, block_length_s,
      usecols, col_names, skiprows, na_values,
-     min_valid_frac, plot_dir, save_plots, seed, strict) = args
+     min_valid_frac, plot_dir, save_plots, seed, strict,
+     file_date_format, ts_offset) = args
 
     period_name = Path(filepath).name
-    row: dict = {'period': period_name}
+    row: dict = {'period': period_name,
+                 'timestamp': _parse_file_timestamp(period_name, file_date_format, ts_offset)}
 
     try:
         df = pd.read_csv(
@@ -2011,6 +2068,20 @@ class PwbBatchDetection:
     strict:
         If True, a worker re-raises the first exception instead of recording it
         in a ``*_error`` column. Defaults to False.
+    file_date_format:
+        Optional ``datetime.strptime`` pattern for the datetime token embedded in
+        each filename (diive ``file_date_format`` convention), e.g.
+        ``'%Y%m%d-%H%M'`` for ``'20210814-1100_raw_dataset_..._adv.txt'``.  The
+        token may appear anywhere in the name: its position is located **once**,
+        on the first file, by sliding a fixed-width window and taking the
+        leftmost substring that parses.  That offset is then applied to every
+        subsequent file — so all files must share the same naming pattern (same
+        datetime position), which is the caller's responsibility.  When provided,
+        a ``timestamp`` column is added to the results and used as the x-axis of
+        the summary plots.  Defaults to ``None`` (results carry ``NaT`` and plots
+        fall back to the integer period index).  The pattern must use fixed-width
+        directives (``%Y %m %d %H %M %S``); variable-width tokens such as ``%-d``
+        or month names are not supported.
 
     Example
     -------
@@ -2041,6 +2112,7 @@ class PwbBatchDetection:
             n_workers: int | None = None,
             random_state: int | None = None,
             strict: bool = False,
+            file_date_format: str | None = None,
     ):
         if usecols is None or col_names is None:
             raise ValueError("usecols and col_names must both be provided.")
@@ -2068,6 +2140,7 @@ class PwbBatchDetection:
         self.n_workers = n_workers or os.cpu_count()
         self.random_state = random_state
         self.strict = strict
+        self.file_date_format = file_date_format
 
         self._results: DataFrame | None = None
 
@@ -2099,6 +2172,18 @@ class PwbBatchDetection:
                 plot_dir = self.output_dir / 'plots'
                 plot_dir.mkdir(exist_ok=True)
 
+        # Locate the datetime token once, on the first file, then reuse the same
+        # offset for all files. The user is responsible for ensuring every file
+        # follows the same naming pattern (same datetime position).
+        ts_offset = None
+        if self.file_date_format and self.files:
+            ts_offset = _find_timestamp_offset(
+                self.files[0].name, self.file_date_format)
+            if ts_offset is None:
+                warn(f"Could not locate a {self.file_date_format!r} timestamp in "
+                     f"the first filename {self.files[0].name!r}; the 'timestamp' "
+                     f"column will be NaT for all files.")
+
         worker_args = [
             (
                 str(f),
@@ -2110,6 +2195,7 @@ class PwbBatchDetection:
                 self.save_plots,
                 None if self.random_state is None else self.random_state + i,
                 self.strict,
+                self.file_date_format, ts_offset,
             )
             for i, f in enumerate(self.files)
         ]
@@ -2321,8 +2407,29 @@ class PwbBatchDetection:
             'S2_optimal': '#ff7f0e',
             'S3_unreliable': '#d62728',
         }
-        px = np.arange(len(results))
         out = Path(output_dir) if output_dir else None
+
+        # X-axis: real timestamps when a parseable 'timestamp' column exists,
+        # otherwise the integer period index (backward-compatible fallback).
+        use_dates = ('timestamp' in results.columns
+                     and pd.to_datetime(results['timestamp'], errors='coerce').notna().any())
+        if use_dates:
+            px = pd.to_datetime(results['timestamp'], errors='coerce').values
+            # Bar width in matplotlib date units (days): 80% of the median spacing.
+            _spacing = np.median(np.diff(mdates.date2num(px))) if len(px) > 1 else 1.0
+            bar_full = float(_spacing) * 0.8
+            xlabel = 'Time'
+        else:
+            px = np.arange(len(results))
+            bar_full = 0.8
+            xlabel = 'Period index'
+
+        def _format_xaxis(ax):
+            """Date formatting for time-series panels when timestamps are used."""
+            if use_dates:
+                ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+                ax.xaxis.set_major_formatter(
+                    mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))
 
         for scalar_label in scalars:
             prefix = scalar_label.lower()
@@ -2374,6 +2481,7 @@ class PwbBatchDetection:
             ax.set_title('Detected lags per period (coloured by standard PWBOPT flag)')
             ax.legend(frameon=False, fontsize=8, ncol=4)
             ax.set_ylim(-lag_max_s - 0.5, lag_max_s + 0.5)
+            _format_xaxis(ax)
 
             # Panel 2: final (gap-filled) lags — S1/S2 anchor points +
             #          pre-filtered final lag as open black circles
@@ -2396,10 +2504,12 @@ class PwbBatchDetection:
             ax.set_title('Final (gap-filled) lags used for flux calculation')
             ax.legend(frameon=False, fontsize=8, ncol=3)
             ax.set_ylim(-lag_max_s - 0.5, lag_max_s + 0.5)
+            _format_xaxis(ax)
 
             # Panel 3: HDI range
             ax = axes[2]
-            ax.bar(px, hdi, color='#aec7e8', edgecolor='none', label='HDI range')
+            ax.bar(px, hdi, width=bar_full, color='#aec7e8', edgecolor='none',
+                   label='HDI range')
             ax.axhline(hdi_thresh, color='#2ca02c', linewidth=1.5, linestyle='--',
                        label=f'S1 threshold ({hdi_thresh} s)')
             if hdi_prefilter > 0:
@@ -2409,26 +2519,32 @@ class PwbBatchDetection:
             ax.set_ylabel('95% HDI range (s)')
             ax.set_title('Bootstrap uncertainty (HDI range) per period')
             ax.legend(frameon=False, fontsize=8)
+            _format_xaxis(ax)
 
-            # Panel 4: flag bars — standard (left) vs pre-filtered (right)
+            # Panel 4: flag bars — standard (left) vs pre-filtered (right).
+            # Iterate integer positions for .iloc; x-position comes from px so the
+            # bars line up with the timestamp (or index) axis of the other panels.
             ax = axes[3]
-            bar_w = 0.4
+            bar_w = bar_full / 2.0
+            x_num = mdates.date2num(px) if use_dates else px
             flag_cols = [(flag_std_col, 0)]
             if has_pf:
                 flag_cols.append((flag_pf_col, 1))
             for flag_col, offset in flag_cols:
-                for p in px:
-                    flag = results[flag_col].iloc[p]
-                    ax.bar(p + (offset - 0.5) * bar_w, 1, bar_w,
+                for i in range(len(results)):
+                    flag = results[flag_col].iloc[i]
+                    ax.bar(x_num[i] + (offset - 0.5) * bar_w, 1, bar_w,
                            color=FLAG_COLORS.get(flag, '#aaaaaa'), alpha=0.85)
             patches = [mpatches.Patch(color=c, label=f)
                        for f, c in FLAG_COLORS.items()]
             ax.legend(handles=patches, frameon=False, fontsize=8)
             ax.set_yticks([])
+            ax.set_xlabel(xlabel)
             ax.set_title(
                 'Flag per period: standard (left bar) vs. pre-filtered (right bar)'
                 if has_pf else 'Flag per period'
             )
+            _format_xaxis(ax)
 
             # Panel 5: histogram of detected lags
             ax = axes[4]
@@ -2470,6 +2586,7 @@ class PwbBatchDetection:
                 label_b='PWBOPT pre-filtered',
                 color_a='#0072B2',
                 color_b='#E05C2A',
+                timestamp_col='timestamp' if use_dates else None,
             )
             lag_plot.plot(
                 title='PWB optimal lag: standard vs. pre-filtered PWBOPT',
@@ -2544,6 +2661,11 @@ def _build_parser():
                    help='Save one diagnostic PNG per period per scalar.')
     p.add_argument('--random-state', type=int, default=None,
                    help='Base seed for reproducible bootstrap results.')
+    p.add_argument('--file-date-format', default=None,
+                   help="strptime pattern for the leading datetime in each "
+                        "filename, e.g. '%%Y%%m%%d-%%H%%M' for "
+                        "'20210820-0930_rotated.txt'. Adds a 'timestamp' column "
+                        "and uses dates as the summary-plot x-axis.")
     return p
 
 
@@ -2595,6 +2717,7 @@ def _cli_main():
         save_plots=args.save_plots,
         n_workers=args.n_workers,
         random_state=args.random_state,
+        file_date_format=args.file_date_format,
     )
 
     msg = (f'PWB batch detection  {len(files)} files  '

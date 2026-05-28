@@ -210,7 +210,8 @@
   threaded RNG (`random_state`) for reproducibility.
 - **`PwbBatchDetection`** — parallel batch PWB across many files using `ProcessPoolExecutor`. Crash-safe checkpointing;
   per-file deterministic seeding (`random_state`), `strict` mode, and per-scalar `*_error` columns; CLI:
-  `diive-tlag-pwb-batch`.
+  `diive-tlag-pwb-batch`. Optional `file_date_format` (CLI `--file-date-format`, e.g. `'%Y%m%d-%H%M'`) parses a
+  timestamp from each filename into a `timestamp` results column and uses real dates as the summary-plot x-axis.
 - **`reynolds_decomposition()`** — standalone `x' = x - mean(x)`; exported as `dv.flux.reynolds_decomposition`.
 - **`WindDoubleRotation`** (renamed from `WindRotation2D`) — scalar `c` removed; Reynolds decomposition is now a
   separate explicit step. Rotation angles use `atan2` (fixes `ZeroDivisionError` and wrong-quadrant results when

@@ -33,7 +33,12 @@ CLI usage reference
         --dev-thresh 0.5 \\
         --hdi-prefilter 1.0 \\
         --n-workers 4 \\
+        --file-date-format %Y%m%d-%H%M \\
         --save-plots
+
+``--file-date-format`` is optional: when given (here for filenames like
+``20210820-0930_rotated.txt``) the results gain a ``timestamp`` column and the
+summary plots use real dates instead of the period index.
 
 Example with uv alias (EddyPro rotated files, all parameters explicit)
 -----------------------------------------------------------------------
