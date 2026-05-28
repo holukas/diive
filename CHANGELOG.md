@@ -20,6 +20,40 @@
 
 ### Flux Processing Chain
 
+- **Harmonised level idstrs to dotted form.** `data.gap_stats()` now uses `'L2'` / `'L3.1'` / `'L3.2'` / `'L3.3'`
+  matching the rest of the package (`level_ids`, `idstr` arguments, column names). The dot-less variants
+  (`'L31'` / `'L32'` / `'L33'`) are silently aliased to the dotted form so existing callers keep working.
+- **`FluxConfig.ustar_labels` required for multi-threshold setups.** When `ustar_thresholds` has more than one
+  entry, `run_chain` now raises if `ustar_labels` is not supplied — avoids silently labelling percentile-based
+  thresholds as `CUT_0` / `CUT_1` / .... Single-threshold setups still auto-generate (`['CUT_0']`).
+- **Unified L4.1 method ordering.** `LevelResults.level41_methods()` and `FluxLevelData.gapfilled_cols()` now both
+  return keys in the canonical order `'mds'`, `'rf'`, `'xgb'` regardless of which order the methods actually ran.
+  Iterating either dict in tandem yields the same sequence.
+- **Better `run_level32` error for energy-flux users.** When called before `run_level31`, the error message now
+  spells out the `set_storage_to_zero=True` workaround for H / LE so users with no storage profile know how to
+  satisfy the chain's ordering requirement without skipping L3.1 entirely.
+- **L3.2 is now mandatory before L3.3.** `run_level33_constant_ustar` and `run_level33_ustar_detection` raise
+  `RuntimeError` when called on a `FluxLevelData` that has not been through L3.2 — USTAR filtering on
+  outlier-contaminated data biases the threshold's effect. Users who genuinely want to skip L3.2 (e.g. with upstream
+  manual screening) must use the composable per-level API and bypass the guard explicitly. Removed the `FluxConfig.run_l32`
+  field accordingly; `outlier_sigma_daytime` / `..._nighttime` are now unconditionally required by `run_chain`.
+- **`run_chain` validates referenced columns upfront.** All driver/feature column names referenced by `FluxConfig`
+  (`mds_swin/ta/vpd`, `ustar_bootstrap_ta_col/swin_col`, every entry in `gapfilling_features`) are checked against
+  `data.full_df` before any level runs, so typos fail fast with one cumulative `KeyError` instead of after L3.x.
+- **`run_chain` warns on a near-empty L2.** Calling `run_chain` with an empty `level2_test_settings` (only the always-on
+  missing-values test runs) now emits a `UserWarning` — pointing out that the resulting L2 QCF accepts essentially
+  every non-NaN record.
+- **L3.3 flag-column lookup tightened.** The per-scenario lookup now requires `FLAG_..._TEST` shape, so a user-supplied
+  non-flag column that happens to embed a scenario label (e.g. `'CUT_50_aux'`) cannot enter the candidate set.
+- **Level-3.1 now produces a proper QCF.** `run_level31` no longer just re-applies L2's mask via a bespoke
+  `pd.concat`; it now routes through `finalize_level` to produce a real `FlagQCF` on `LevelResults.level31_qcf`,
+  symmetric with `level2_qcf` / `level32_qcf` / `level33_qcf`. The previously-missing
+  `FLAG_L3.1_<outname>_QCF` overall flag and the `SUM_L3.1_<outname>_*FLAGS` aggregate columns now appear in
+  `fpc_df`. User-visible column names (`<outname>_L3.1_QCF`, `<outname>_L3.1_QCF0`) are unchanged.
+  `finalize_level` gained an optional `outname=` parameter to support this without double-idstr column names.
+  **L3.1 deliberately introduces no new quality test** — the storage-correction class's
+  `FLAG_..._ISFILLED` column is informational (0 = measured, 1 = gap-filled) and is excluded from QCF
+  aggregation by design (it has no `_TEST` suffix). Storage availability is provenance, not quality.
 - **`run_chain` supports bootstrap USTAR detection.** New `FluxConfig.ustar_detection_mode` field selects between
   `'constant'` (apply pre-computed thresholds — fastest) and `'bootstrap'` (detect thresholds from the data via the
   multi-year ONEFlux moving-point method, Papale et al. 2006). Bootstrap mode reads `ustar_bootstrap_ta_col` /
@@ -32,9 +66,8 @@
   `ustar_thresholds`, `ustar_labels`, `level2_test_settings` (renamed from `level2_tests`),
   `outlier_sigma_daytime` / `..._nighttime`, and
   `gapfilling_features` are now optional (`None` defaults) and validated by `run_chain` based on which features are
-  actually enabled. New `run_l32: bool = True` field lets users opt out of the Hampel L3.2 step entirely (and skip the
-  matching sigma requirements). When fields are missing, `run_chain` raises one cumulative `ValueError` listing every
-  missing field and the flag that requires it.
+  actually enabled. When fields are missing, `run_chain` raises one cumulative `ValueError` listing every missing field
+  and the flag that requires it.
 - **Level re-runs cascade.** Re-running L2/L3.1/L3.2/L3.3 on a `FluxLevelData` that already passed through that level
   now (a) drops the previous run's columns from `fpc_df` and (b) clears all downstream `LevelResults` state, before
   producing fresh outputs. Notebook users can iterate on outlier sigma / USTAR thresholds without rebuilding from

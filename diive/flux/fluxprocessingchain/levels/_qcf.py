@@ -28,6 +28,7 @@ def finalize_level(
         idstr: str,
         level_df: DataFrame,
         ustar_scenarios: list[str] | None = None,
+        outname: str | None = None,
 ) -> tuple[FluxLevelData, FlagQCF]:
     """
     Merge new flag columns into ``fpc_df`` and compute an overall quality flag.
@@ -39,6 +40,12 @@ def finalize_level(
         level_df: DataFrame produced by the level (containing new flag columns).
         ustar_scenarios: Optional list of USTAR scenario labels so FlagQCF
             picks the right ``FLAG_`` columns.
+        outname: Optional override for the output column basename. When
+            ``None`` (default) FlagQCF uses ``run_qcf_on_col`` and produces
+            columns like ``{run_qcf_on_col}{idstr}_QCF``. Pass an explicit
+            ``outname`` (e.g. the standardised ``meta.outname`` like ``'NEE'``)
+            when the target column already embeds an idstr — this prevents
+            double-idstr column names such as ``NEE_L3.1_L3.1_QCF``.
 
     Returns:
         (updated FluxLevelData, FlagQCF instance)
@@ -68,6 +75,7 @@ def finalize_level(
         swinpot_col=data.meta.swinpot_col,
         nighttime_threshold=data.meta.nighttime_threshold,
         ustar_scenarios=ustar_scenarios,
+        outname=outname,
     )
     qcf.calculate(
         daytime_accept_qcf_below=data.meta.daytime_accept_qcf_below,

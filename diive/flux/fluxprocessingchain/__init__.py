@@ -34,9 +34,14 @@ Two entry points
     data = init_flux_data(df, fluxcol='FC', site_lat=..., site_lon=..., utc_offset=1)
     data = run_chain(data, cfg)
 
-Use ``run_chain`` for standard FLUXNET-style processing; drop down to the
-composable API when you need custom L3.2 outlier logic, custom feature
-engineering, or fine control over per-level diagnostics.
+``run_chain`` is intentionally simple and **not** a parity superset of the
+composable API — it picks fixed defaults for every per-level knob beyond what
+``FluxConfig`` exposes (see the "What ``run_chain`` does *not* expose" section
+in :func:`run_chain` for the exact list). The composable per-level callables
+are the path to **full control** — every detector class, every model
+hyperparameter, every diagnostic flag is reachable there and only there. Reach
+for ``run_chain`` when you want a clean, low-friction default; reach for the
+composable API when you need to override anything beyond ``FluxConfig``.
 
 Why the per-level signatures look different
 -------------------------------------------
@@ -65,7 +70,13 @@ Level                          Shape                         Why this shape
 ============================== ============================= ===============================================
 
 If you find the per-level variation distracting, use ``run_chain(data, config)``
-— one ``FluxConfig`` covers all of them.
+as the **high-level entry point**: one ``FluxConfig`` carries the
+typical-user decisions (which L2 tests, which USTAR mode, which gap-filling
+methods, which driver columns), and ``run_chain`` picks fixed defaults for
+everything else. It is **not** a parity superset of the composable API —
+the per-detector and per-model knobs are reachable only by calling the
+per-level functions directly. See :func:`run_chain` for the explicit list
+of what it does and does not expose.
 
 Column naming convention
 ------------------------

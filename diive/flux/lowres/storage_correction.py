@@ -80,7 +80,12 @@ class FluxStorageCorrectionSinglePointEddyPro:
         self.gapfill_storage_term = gapfill_storage_term
         self.idstr = validate_id_string(idstr=idstr)
         self.flux_corrected_col, self.strgcol = self._detect_storage_var()
-        self.flagname = f'FLAG{self.idstr}_{self.fluxcol}_{self.strgcol}-MISSING_TEST'
+        # Note: this class deliberately does NOT emit a 'storage missing'
+        # quality-test flag (i.e. no FLAG_..._TEST column tied to NaN in the
+        # corrected flux). Whether a storage term was measured or gap-filled
+        # is provenance, not a quality criterion — captured by the
+        # FLAG_..._ISFILLED column when gap-fill is enabled. Quality
+        # aggregation at L3.1 inherits the L2 flags via FlagQCF.
         self.set_storage_to_zero = set_storage_to_zero
 
         # Name of gapfilled storage column and its flag

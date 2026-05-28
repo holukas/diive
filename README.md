@@ -130,8 +130,8 @@ Long-term variants support multi-year data with USTAR scenario options. See [exa
 
 Post-processing from quality flags through gap-filling, covering Levels 2 to 4.1 following Swiss FluxNet standards. Two entry points:
 
-- **`run_chain(data, config)`** — single call drives the full pipeline (L2 → L3.1 → L3.2 → L3.3 → L4.1) from one `FluxConfig`. Use this for the standard FLUXNET-style workflow.
-- **Composable per-level callables** (`run_level2`, `run_level31`, `make_level32_detector` + `run_level32`, `run_level33_constant_ustar`, `run_level41_mds` / `_rf` / `_xgb`) — drop down here for custom L3.2 outlier pipelines or custom feature engineering.
+- **`run_chain(data, config)`** — single call drives the full pipeline (L2 → L3.1 → L3.2 → L3.3 → L4.1) from one `FluxConfig`. Intentionally simple: fixed defaults for per-detector / per-model knobs (Hampel sub-options, MDS tolerances, ML hyperparameters). Use this for the standard FLUXNET-style workflow.
+- **Composable per-level callables** (`run_level2`, `run_level31`, `make_level32_detector` + `run_level32`, `run_level33_constant_ustar` / `run_level33_ustar_detection`, `run_level41_mds` / `_rf` / `_xgb`) — full control. Every detector class, model hyperparameter, MDS tolerance, and diagnostic flag is reachable here and only here.
 
 Need a computed driver (e.g. VPD in kPa) for L4.1? Use `add_driver(data, series)` to put it where L4.1 actually reads from. Call `data.gap_stats()` at any level for a monthly/annual breakdown with long-gap listing. `data.plot_gapfilled_heatmaps()` puts all gap-filling methods side by side; `data.plot_cumulative_comparison()` overlays their cumulative sums on one axes.
 

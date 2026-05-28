@@ -39,8 +39,8 @@ _LEVEL_FIELDS: dict[str, tuple[str, ...]] = {
         'filteredseries_hq',
     ),
     'L3.1': (
-        'level31', 'flux_corrected_col', 'filteredseries_level31_qcf',
-        'filteredseries_hq',
+        'level31', 'level31_qcf', 'flux_corrected_col',
+        'filteredseries_level31_qcf', 'filteredseries_hq',
     ),
     'L3.2': (
         'level32', 'level32_qcf', 'filteredseries_level32_qcf',

@@ -41,11 +41,22 @@ class FluxConfig:
     standard pipeline, or drop down to the composable per-level API for custom
     L3.2 outlier logic or custom feature engineering.
 
+    **Scope.** ``FluxConfig`` captures the *high-level* decisions a typical
+    user makes per flux — which L2 tests, which USTAR-detection mode, which
+    gap-filling methods, which MDS / ML driver columns. It does **not** cover
+    every knob each level exposes: Hampel sub-options (``use_differencing``,
+    ``repeat``, ``k``), non-Hampel L3.2 detectors, MDS tolerances, ML
+    hyperparameters, custom ``FeatureEngineer`` configurations, and L3.3
+    diagnostic plotting are all reachable only via the composable per-level
+    API. See :func:`run_chain` for the full list of what is and is not
+    exposed. The composable per-level callables are the path to full control.
+
     Only ``fluxcol`` and ``ustar_thresholds`` are unconditionally required.
     All other fields default to ``None`` / sensible booleans and are validated
     *contextually* by ``run_chain`` — e.g. ``gapfilling_features`` is required
     only when ``gapfill_rf`` or ``gapfill_xgb`` is ``True``;
-    ``outlier_sigma_*`` is required only when ``run_l32=True``;
+    ``outlier_sigma_*`` is unconditionally required by ``run_chain`` (L3.2
+    always runs because L3.3 depends on it);
     ``mds_swin`` / ``mds_ta`` / ``mds_vpd`` are required only when
     ``gapfill_mds=True``. This way each new flux declaration only needs the
     fields that match the features it actually enables.
@@ -151,10 +162,18 @@ class FluxConfig:
 
     ustar_labels: list | None = None
     """Short label per threshold (e.g. ``['CUT_50']``; ``['CUT_NONE']`` for H/LE).
-    When ``None``, defaults to ``['CUT_0', 'CUT_1', ...]`` (positional index,
-    not percentile). Pass explicit labels for percentile-based thresholds.
-    Ignored when ``ustar_detection_mode='bootstrap'`` (labels are derived
-    from the requested percentiles, e.g. ``CUT_16`` / ``CUT_50`` / ``CUT_84``)."""
+
+    - With a single threshold, ``None`` is allowed: ``run_chain`` lets the
+      underlying function auto-generate the label as ``['CUT_0']``.
+    - With **multiple** thresholds, ``run_chain`` **requires** explicit labels
+      to avoid silently emitting non-percentile names (``CUT_0``, ``CUT_1``,
+      ...) for what are typically percentile-based thresholds. Pass e.g.
+      ``['CUT_16', 'CUT_50', 'CUT_84']`` to match the percentile semantics
+      used everywhere else in the chain.
+
+    Ignored when ``ustar_detection_mode='bootstrap'`` — labels are derived
+    from ``ustar_bootstrap_percentiles`` (e.g. ``CUT_16`` / ``CUT_50`` /
+    ``CUT_84``)."""
 
     ustar_bootstrap_ta_col: str | None = None
     """Air temperature column (deg C) in ``data.full_df`` used by the bootstrap
@@ -203,20 +222,17 @@ class FluxConfig:
     ``None`` (the default) runs L2 with only the always-on missing-values
     test — no other QC test is applied."""
 
-    run_l32: bool = True
-    """Run Level-3.2 (Hampel-filter outlier detection) inside ``run_chain``.
-    Set to ``False`` for fluxes / sites where Hampel-style outlier removal is
-    not appropriate (e.g. when you have manual screening upstream)."""
-
     outlier_sigma_daytime: float | None = None
-    """Hampel filter sigma for daytime outlier detection. Required when
-    ``run_l32=True``; ignored otherwise. Must be chosen by inspecting the flux
-    record — no universal default applies. Typical range: 5–6 for CO2/H/LE;
-    3–5 for trace gases (N2O, CH4)."""
+    """Hampel filter sigma for daytime outlier detection. **Required by
+    `run_chain`** — L3.2 always runs because L3.3 USTAR filtering depends on
+    outlier-screened data. No universal default applies; choose by inspecting
+    the flux record. Typical range: 5–6 for CO2/H/LE; 3–5 for trace gases
+    (N2O, CH4). If you have screened outliers upstream and want to skip L3.2
+    entirely, use the composable per-level API instead of ``run_chain``."""
 
     outlier_sigma_nighttime: float | None = None
-    """Hampel filter sigma for nighttime outlier detection. Required when
-    ``run_l32=True``; ignored otherwise."""
+    """Hampel filter sigma for nighttime outlier detection. **Required by
+    ``run_chain``** for the same reason as ``outlier_sigma_daytime``."""
 
     gapfilling_features: list | None = None
     """Predictor column names for ML gap-filling (RF, XGBoost). Must exist in
@@ -345,12 +361,19 @@ class LevelResults:
 
     # Level-3.1
     level31: FluxStorageCorrectionSinglePointEddyPro | None = None
+    level31_qcf: FlagQCF | None = None
+    """``FlagQCF`` re-aggregating the L2-inherited flags on the
+    storage-corrected target. **L3.1 introduces no new quality test** —
+    storage availability is provenance, not quality, and the
+    ``FLAG_..._ISFILLED`` column the storage correction emits is
+    deliberately not picked up by ``FlagQCF`` (no ``_TEST`` suffix).
+    Provides the overall ``FLAG_L3.1_<outname>_QCF`` column and the
+    per-record ``SUM`` aggregates the other levels also expose."""
     flux_corrected_col: str | None = None
-    # Note: Level-3.1 has no quality test of its own.  filteredseries_level31_qcf
-    # is the Level-2 QCF re-applied to the storage-corrected flux — not a new
-    # L3.1-specific filter.  Record counts therefore match Level-2 unless some
-    # storage-corrected values happened to become NaN.
     filteredseries_level31_qcf: pd.Series | None = None
+    """User-accepted QCF-filtered storage-corrected flux. Equals
+    ``level31_qcf.filteredseries`` — kept as a separate field for symmetry
+    with the other levels."""
 
     # Level-3.2
     level32: StepwiseOutlierDetection | None = None
@@ -447,8 +470,13 @@ class FluxLevelData:
             n_valid = int(fs.dropna().count())
             n_total = len(fs)
             fs_str = f"{fs.name!r} ({n_valid}/{n_total} valid)"
+        elif 'L3.3' in self.level_ids:
+            # filteredseries is deliberately cleared by L3.3 because there is
+            # no single unambiguous filtered series across USTAR scenarios.
+            fs_str = "None (L3.3 ran; use data.levels.filteredseries_level33_qcf[<ustar_scenario>])"
         else:
-            fs_str = "None (use data.levels.filteredseries_level33_qcf after L3.3)"
+            # No level has run yet — filteredseries simply isn't populated.
+            fs_str = "None (no level has run yet)"
         all_cols = self.fpc_df.columns.tolist()
         _max_shown = 12
         if len(all_cols) <= _max_shown:
@@ -545,18 +573,19 @@ class FluxLevelData:
         return "\n".join(lines)
 
     def gap_stats(self,
-                 level: str = 'L33',
+                 level: str = 'L3.3',
                  long_gap_records: int = 48) -> dict[str, 'GapStats']:
         """Return gap statistics for the QCF-filtered series at the given level.
 
         Creates a :class:`~diive.analysis.GapStats` instance for each series
         available at the requested level.  For levels with USTAR scenarios
-        (L33) one entry is returned per scenario.
+        (L3.3) one entry is returned per scenario.
 
         Args:
-            level: Level whose QCF-filtered series to analyse.
-                One of ``'L2'``, ``'L31'``, ``'L32'``, ``'L33'``.
-                Defaults to ``'L33'`` — the series that goes into gap-filling.
+            level: Level whose QCF-filtered series to analyse. Use the
+                dotted idstrs that match the rest of the chain:
+                ``'L2'``, ``'L3.1'``, ``'L3.2'``, ``'L3.3'``.
+                Defaults to ``'L3.3'`` — the series that goes into gap-filling.
             long_gap_records: Gaps >= this many consecutive records are
                 flagged as *long gaps* in the report and figure.  Default 48
                 equals one day at 30-min resolution.
@@ -565,26 +594,27 @@ class FluxLevelData:
             ``{label: GapStats}`` — a flat mapping whose keys are whichever
             label uniquely identifies each result at that level:
 
-            - L2 / L31 / L32: one entry keyed by the level name itself
-              (``{'L2': gs}`` / ``{'L31': gs}`` / ``{'L32': gs}``).
-            - L33: one entry per USTAR scenario keyed by the scenario label
+            - L2 / L3.1 / L3.2: one entry keyed by the level name itself
+              (``{'L2': gs}`` / ``{'L3.1': gs}`` / ``{'L3.2': gs}``).
+            - L3.3: one entry per USTAR scenario keyed by the scenario label
               (``{'CUT_16': gs, 'CUT_50': gs, 'CUT_84': gs}``).
 
-            The label vocabulary differs by level on purpose: at L2/L31/L32
+            The label vocabulary differs by level on purpose: at L2/L3.1/L3.2
             there is only one filtered series so the level name is the
-            natural key, whereas at L33 the scenario label is the
+            natural key, whereas at L3.3 the scenario label is the
             distinguishing axis. A generic loop
             ``for label, gs in data.gap_stats(level).items(): ...``
             therefore works at every level — the ``label`` you get back is
             the right caption to render alongside each ``GapStats``.
 
         Raises:
-            ValueError: If the requested level has not been run yet.
+            ValueError: If the requested level has not been run yet, or if
+                an unknown level idstr is passed.
 
         Example::
 
             # Analyse gaps just before gap-filling
-            for scen, gs in data.gap_stats('L33').items():
+            for scen, gs in data.gap_stats('L3.3').items():
                 print(scen)
                 gs.report()
                 gs.showfig(title=f"Gap stats -- {scen}")
@@ -595,11 +625,18 @@ class FluxLevelData:
         """
         from diive.analysis.gapfinder import GapStats
 
+        # Accept the dotted form as the canonical input. The pre-harmonization
+        # dotless variants ('L31', 'L32', 'L33') are silently normalised to
+        # their dotted equivalents so existing code that still uses them keeps
+        # working — but they are not the recommended form.
+        _alias = {'L31': 'L3.1', 'L32': 'L3.2', 'L33': 'L3.3'}
+        level = _alias.get(level, level)
+
         lvl = self.levels
         _single = {
-            'L2':  lvl.filteredseries_level2_qcf,
-            'L31': lvl.filteredseries_level31_qcf,
-            'L32': lvl.filteredseries_level32_qcf,
+            'L2':   lvl.filteredseries_level2_qcf,
+            'L3.1': lvl.filteredseries_level31_qcf,
+            'L3.2': lvl.filteredseries_level32_qcf,
         }
 
         if level in _single:
@@ -611,10 +648,10 @@ class FluxLevelData:
                 )
             return {level: GapStats(series, long_gap_records=long_gap_records)}
 
-        if level == 'L33':
+        if level == 'L3.3':
             if not lvl.filteredseries_level33_qcf:
                 raise ValueError(
-                    "Level 'L33' has not been run yet — "
+                    "Level 'L3.3' has not been run yet — "
                     "call run_level33_constant_ustar() first."
                 )
             return {
@@ -624,7 +661,7 @@ class FluxLevelData:
 
         raise ValueError(
             f"Unknown level {level!r}. "
-            f"Valid options: 'L2', 'L31', 'L32', 'L33'."
+            f"Valid options: 'L2', 'L3.1', 'L3.2', 'L3.3'."
         )
 
     def plot_cumulative_comparison(
@@ -930,16 +967,20 @@ class FluxLevelData:
             gapfilled = data.fpc_df[cols['rf']['CUT_50']]
         """
         out: dict[str, dict[str, str]] = {}
+        # Insert in the canonical method order ('mds', 'rf', 'xgb') so the
+        # iteration order is identical to LevelResults.level41_methods() and
+        # the plot helpers — consumers can iterate either dict and get the
+        # same sequence.
         lvl = self.levels
+        if lvl.level41_mds:
+            out['mds'] = {scen: inst.get_gapfilled_target().name
+                          for scen, inst in lvl.level41_mds.items()}
         if lvl.level41_rf:
             out['rf'] = {scen: inst.gapfilled_.name
                          for scen, inst in lvl.level41_rf.items()}
         if lvl.level41_xgb:
             out['xgb'] = {scen: inst.gapfilled_.name
                           for scen, inst in lvl.level41_xgb.items()}
-        if lvl.level41_mds:
-            out['mds'] = {scen: inst.get_gapfilled_target().name
-                          for scen, inst in lvl.level41_mds.items()}
         return out
 
 

@@ -108,6 +108,15 @@ def run_level33_constant_ustar(
     """
     if data.levels.flux_corrected_col is None:
         raise RuntimeError("run_level31() must be called before run_level33_constant_ustar().")
+    if data.levels.level32_qcf is None:
+        raise RuntimeError(
+            "run_level32() must be called before run_level33_constant_ustar(). "
+            "USTAR filtering must operate on outlier-screened data — otherwise "
+            "an outlier at low USTAR can bias the threshold's effect and "
+            "spuriously suppress nighttime flux. If you have screened "
+            "outliers upstream and genuinely want to skip L3.2, call the "
+            "composable per-level API and bypass this guard explicitly."
+        )
 
     # Auto-generate positional labels when none supplied. We intentionally use
     # index labels (CUT_0, CUT_1, ...) rather than something that looks like a
@@ -189,13 +198,16 @@ def run_level33_constant_ustar(
     for ustar_scen in threshold_labels:
         # Match the label only at underscore-delimited boundaries so labels that
         # share a prefix (or appear as substrings of other columns) cannot be
-        # confused. Belt-and-braces with the substring-overlap check above.
+        # confused. We also require the column to be a flag column
+        # (`FLAG_..._TEST`) so a user-supplied non-flag column that happens to
+        # include the scenario label as a substring (e.g. ``'CUT_50_aux'``)
+        # never enters the candidate set.
         token = f"_{ustar_scen}_"
         flagcols = [c for c in level33.results
-                    if token in c
-                    or c.endswith(f"_{ustar_scen}")
-                    or c.startswith(f"{ustar_scen}_")
-                    or c == ustar_scen]
+                    if (str(c).startswith('FLAG_') and str(c).endswith('_TEST'))
+                    and (token in c
+                         or c.endswith(f"_{ustar_scen}_TEST")
+                         or c.startswith(f"FLAG_{ustar_scen}_"))]
         if len(flagcols) != 1:
             raise RuntimeError(
                 f"Could not uniquely identify the USTAR flag column for scenario "
@@ -313,6 +325,12 @@ def run_level33_ustar_detection(
 
     if data.levels.flux_corrected_col is None:
         raise RuntimeError("run_level31() must be called before run_level33_ustar_detection().")
+    if data.levels.level32_qcf is None:
+        raise RuntimeError(
+            "run_level32() must be called before run_level33_ustar_detection(). "
+            "Outliers at low USTAR bias the bootstrap threshold estimate — "
+            "screen them out at L3.2 first."
+        )
 
     if detector_class is None:
         detector_class = UstarMovingPointDetection

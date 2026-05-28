@@ -95,7 +95,13 @@ def run_level32(
         and ``levels.filteredseries_level32_qcf`` populated.
     """
     if data.levels.flux_corrected_col is None:
-        raise RuntimeError("run_level31() must be called before run_level32().")
+        raise RuntimeError(
+            "run_level31() must be called before run_level32(). For energy "
+            "fluxes (H, LE) without a storage profile, do not skip Level-3.1 "
+            "— call run_level31(data, set_storage_to_zero=True) to satisfy "
+            "the chain's ordering requirement; L3.1 will still run, it just "
+            "adds zero instead of a measured storage term."
+        )
 
     idstr = 'L3.2'
 

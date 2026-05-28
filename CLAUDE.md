@@ -162,7 +162,7 @@ final_df = data.fpc_df
 | `data.plot_gapfilled_heatmaps(..., showplot=True)` | `None` | Side-by-side heatmaps: measured + one panel per gap-filling method; one figure per USTAR scenario |
 | `data.levels.level41_methods()` | `dict[str, dict]` | Short keys: `'mds'`, `'rf'`, `'xgb'` (matches `gapfilled_cols()`) |
 
-Key `data.levels` fields: `level2`, `level2_qcf`, `level31`, `level32`, `level32_qcf`, `level33`, `level33_qcf`, `level41_mds`, `level41_rf`, `level41_xgb` (dicts keyed by ustar_scenario for L3.3+).
+Key `data.levels` fields: `level2`, `level2_qcf`, `level31`, `level31_qcf`, `level32`, `level32_qcf`, `level33`, `level33_qcf`, `level41_mds`, `level41_rf`, `level41_xgb` (dicts keyed by ustar_scenario for L3.3+). **Flag column naming convention**: `FLAG_..._TEST` (individual quality tests, 0/1/2) and `FLAG_..._QCF` (level-overall aggregated flag) are both consumed by `FlagQCF` when aggregating; `FLAG_..._ISFILLED` (e.g. storage-correction provenance) is **informational only** and explicitly NOT consumed by QCF. L3.1 introduces no new quality test — its QCF re-aggregates L2-inherited flags on the storage-corrected target.
 
 **Architecture notes:**
 
@@ -177,7 +177,7 @@ Key `data.levels` fields: `level2`, `level2_qcf`, `level31`, `level32`, `level32
 
 - MDS requires exact units: W/m² (radiation), °C (temp), **kPa (VPD)** — EddyPro outputs VPD in hPa; divide by 10. `run_level41_mds` warns when VPD median > 10 (likely hPa), TA median > 100 (likely Kelvin), TA median > 50, or SW_IN median > 2000.
 - USTAR filtering applies ONLY to CO2/CH4/N2O; for H/LE use `thresholds=[0], threshold_labels=['CUT_NONE']`. `run_level33_constant_ustar` raises if a non-zero threshold is passed for an energy-flux basevar (`H2O`, `T_SONIC`, lowercase variants).
-- L3.2 and L3.3 require L3.1; for H/LE call `run_level31(data, set_storage_to_zero=True)`.
+- L3.2 and L3.3 require L3.1; L3.3 also requires L3.2 (USTAR filtering must operate on outlier-screened data — `run_level33_*` raises if `level32_qcf` is None). For H/LE call `run_level31(data, set_storage_to_zero=True)`. `run_chain` runs L3.2 unconditionally; users who must skip it use the composable API.
 - L4.1 features and MDS driver columns must exist in `data.full_df`, not `data.fpc_df`. Use `add_driver()` to add computed drivers to the right place.
 - `init_flux_data` raises if `df` already contains `SW_IN_POT` / `DAYTIME` / `NIGHTTIME` (reserved names — would silently overwrite user data).
 - `nighttime_accept_qcf_below` (was `nighttimetime_accept_qcf_below` before v0.91.1 — typo fixed).

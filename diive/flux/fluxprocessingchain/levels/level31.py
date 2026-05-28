@@ -3,7 +3,8 @@ LEVEL 3.1: STORAGE CORRECTION
 ==============================
 
 Composable callable that applies single-point storage correction to the
-flux and re-applies the Level-2 QCF to the storage-corrected series.
+flux and computes the L3.1 QCF by re-aggregating the L2-inherited flags
+on the storage-corrected target.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -12,12 +13,9 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-import numpy as np
-import pandas as pd
-
-from diive.core.dfun.frames import detect_new_columns
-from diive.core.utils.console import detail, rule
+from diive.core.utils.console import rule
 from diive.flux.fluxprocessingchain.container import FluxLevelData
+from diive.flux.fluxprocessingchain.levels._qcf import finalize_level
 from diive.flux.fluxprocessingchain.levels._rerun import (
     cascade_reset,
     record_added_columns,
@@ -34,9 +32,33 @@ def run_level31(
         set_storage_to_zero: bool = False,
 ) -> FluxLevelData:
     """
-    Level-3.1: Apply single-point storage correction to the flux.
+    Level-3.1: Apply single-point storage correction and compute the L3.1 QCF.
 
     Requires Level-2 to have been run first (reads ``data.levels.level2_qcf``).
+
+    Produces:
+
+    - ``levels.level31`` — the fitted storage-correction object
+      (``FluxStorageCorrectionSinglePointEddyPro``).
+    - ``levels.level31_qcf`` — a ``FlagQCF`` re-aggregating the L2-inherited
+      flags on the storage-corrected target column. Symmetric with the
+      ``level2_qcf`` / ``level32_qcf`` / ``level33_qcf`` fields produced by
+      the other levels.
+    - ``levels.flux_corrected_col`` — name of the storage-corrected column
+      (e.g. ``'NEE_L3.1'``).
+    - ``levels.filteredseries_level31_qcf`` — the user-accepted filtered
+      series. Same content as ``level31_qcf.filteredseries``.
+    - ``levels.filteredseries_hq`` — the strictly-QCF=0 series (overwrites
+      whatever L2 wrote, with the storage-correction applied).
+
+    L3.1 introduces **no new quality test**. The ``FLAG_..._ISFILLED`` column
+    that ``FluxStorageCorrectionSinglePointEddyPro`` emits when
+    ``gapfill_storage_term=True`` is **informational only** (0 = storage was
+    measured, 1 = storage was gap-filled with a rolling median); it does
+    *not* end in ``_TEST`` and is therefore deliberately ignored by
+    ``FlagQCF``. Whether a record's storage term was measured or filled is
+    not a quality criterion — users who care about provenance read the
+    ISFILLED column directly from ``data.fpc_df``.
 
     Args:
         data: FluxLevelData after ``run_level2()``.
@@ -52,9 +74,7 @@ def run_level31(
             so that the chain's ordering guards are satisfied.
 
     Returns:
-        Updated FluxLevelData with ``levels.level31``,
-        ``levels.flux_corrected_col``, and ``levels.filteredseries_level31_qcf``
-        populated.
+        Updated FluxLevelData; see the field list above for what is populated.
     """
     if data.levels.level2_qcf is None:
         raise RuntimeError("run_level2() must be called before run_level31().")
@@ -80,52 +100,38 @@ def run_level31(
     )
     level31.storage_correction()
 
-    # Merge new columns from level31.results into fpc_df
-    new_cols = detect_new_columns(df=level31.results, other=data.fpc_df)
-    fpc_df = pd.concat([data.fpc_df, level31.results[new_cols]], axis=1)
-    for col in new_cols:
-        detail(f"Added column {col}.")
-
-    # Apply Level-2 QCF to storage-corrected flux
-    level2_qcf = data.levels.level2_qcf
     flux_corrected_col = level31.flux_corrected_col
 
-    # Align the L2-QCF NaN masks to the storage-corrected series by label.
-    # Without reindexing, .loc[<bool series>] would align by position and
-    # silently mis-mask if the indexes diverge by even one timestamp.
-    strg_qcf = level31.results[flux_corrected_col].copy()
-    mask_qcf = level2_qcf.filteredseries.reindex(strg_qcf.index).isnull()
-    strg_qcf.loc[mask_qcf] = np.nan
-    strg_qcf.name = f"{flux_corrected_col}_QCF"
-
-    strg_qcf0 = level31.results[flux_corrected_col].copy()
-    mask_hq = level2_qcf.filteredseries_hq.reindex(strg_qcf0.index).isnull()
-    strg_qcf0.loc[mask_hq] = np.nan
-    strg_qcf0.name = f"{flux_corrected_col}_QCF0"
-
-    fpc_df = pd.concat(
-        [fpc_df, pd.DataFrame({strg_qcf.name: strg_qcf, strg_qcf0.name: strg_qcf0})],
-        axis=1,
+    # finalize_level handles: (a) the index-equality check, (b) adding the
+    # storage-correction output columns (the corrected flux, the gap-filled
+    # storage term, and the informational FLAG_..._ISFILLED provenance flag)
+    # to fpc_df, (c) constructing a FlagQCF keyed by idstr=L3.1, (d) running
+    # QCF aggregation across the L2-inherited flag columns relevant to the
+    # corrected flux, and (e) writing the QCF / QCF0 filtered-series
+    # columns. The ISFILLED column does not end in '_TEST' and is therefore
+    # not picked up by FlagQCF — gap-filled storage is provenance, not a
+    # quality test. Passing outname=meta.outname keeps the user-visible
+    # column names compact (e.g. ``NEE_L3.1_QCF`` rather than
+    # ``NEE_L3.1_L3.1_QCF``).
+    updated, qcf = finalize_level(
+        data,
+        run_qcf_on_col=flux_corrected_col,
+        idstr=idstr,
+        level_df=level31.results,
+        outname=meta.outname,
     )
-    for c in (strg_qcf.name, strg_qcf0.name):
-        detail(f"Added column {c} (L3.1 with L2 quality flag applied).")
 
     new_levels = replace(
-        data.levels,
+        updated.levels,
         level31=level31,
+        level31_qcf=qcf,
         flux_corrected_col=flux_corrected_col,
-        filteredseries_level31_qcf=strg_qcf.copy(),
-        filteredseries_hq=strg_qcf0.copy(),
+        filteredseries_level31_qcf=updated.filteredseries.copy(),
+        filteredseries_hq=qcf.filteredseries_hq.copy(),
     )
-    level_ids = list(data.level_ids)
+    level_ids = list(updated.level_ids)
     if idstr not in level_ids:
         level_ids.append(idstr)
 
-    final = replace(
-        data,
-        fpc_df=fpc_df,
-        filteredseries=strg_qcf,
-        levels=new_levels,
-        level_ids=level_ids,
-    )
+    final = replace(updated, levels=new_levels, level_ids=level_ids)
     return replace(final, added_columns=record_added_columns(final, idstr, pre_columns))
