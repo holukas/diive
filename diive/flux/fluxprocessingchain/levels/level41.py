@@ -334,14 +334,17 @@ def run_level41_mds(
         else:
             detail(_msg)
 
+    # Require L3.3 *before* mutating state. If we dropped columns first and
+    # then raised, the caller's data would be left in a half-cleaned state
+    # if they tried to recover from the exception. Check ordering matters.
+    filteredseries_l33 = _require_level33(data)
+
     # Re-run cleanup: drop the previous run's MDS columns from fpc_df so
     # re-running this method doesn't accumulate duplicates. L4.1 is additive
     # *across methods* (mds / rf / xgb live in independent buckets), so this
     # cleanup is per-method; rf and xgb columns are untouched.
     data = drop_columns_for_key(data, 'L4.1_mds')
     pre_columns = list(data.fpc_df.columns)
-
-    filteredseries_l33 = _require_level33(data)
     fpc_df = data.fpc_df.copy()
     mds_results: dict = {}
 
@@ -400,14 +403,17 @@ def _run_level41_ml(
             f"Available columns: {list(data.full_df.columns)}"
         )
 
+    # Require L3.3 *before* mutating state — see the same guard in
+    # run_level41_mds. Dropping columns first and then raising would leave
+    # the caller's data in a half-cleaned state on a recovery path.
+    filteredseries_l33 = _require_level33(data)
+
     # Re-run cleanup: drop this method's previous columns from fpc_df. The
     # tracking key is e.g. 'L4.1_rf' for results_attr='level41_rf'.
     method_label = results_attr.removeprefix('level41_')
     tracking_key = f'L4.1_{method_label}'
     data = drop_columns_for_key(data, tracking_key)
     pre_columns = list(data.fpc_df.columns)
-
-    filteredseries_l33 = _require_level33(data)
     fpc_df = data.fpc_df.copy()
     ml_results: dict = {}
 
@@ -495,13 +501,19 @@ def run_level41_rf(
             ``FeatureEngineer`` requires a ``target_col`` argument, but for
             L4.1 gap-filling the value does not matter — pass any string that
             is not in your feature list (e.g. ``'_target_'``).  The engineered
-            features are computed from the predictor columns only::
+            features are computed from the predictor columns only.  Each
+            ``features_*`` parameter takes a list (or ``None`` to disable
+            the stage); see :class:`FeatureEngineer` for the full 8-stage
+            option set, or use :func:`make_level41_engineer` for a factory
+            pre-configured with sensible 30-min defaults that you can
+            override piecewise::
 
                 from diive.core.ml.feature_engineer import FeatureEngineer
                 engineer = FeatureEngineer(
                     target_col='_target_',   # placeholder; value irrelevant here
-                    features_lag=True,
-                    features_rolling=True,
+                    features_lag=[-2, 2],            # symmetric ±2-record lag window
+                    features_rolling=[4, 12, 48],    # rolling windows (records)
+                    features_rolling_stats=['median', 'std'],
                 )
 
         reduce_features: Apply SHAP-based feature selection across all years.

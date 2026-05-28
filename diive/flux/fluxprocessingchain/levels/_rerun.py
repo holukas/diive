@@ -113,8 +113,11 @@ def cascade_reset(data: FluxLevelData, from_idstr: str) -> FluxLevelData:
             cols_to_drop.update(cols)
         else:
             new_added[key] = list(cols)
+    # Always copy: the new FluxLevelData must not share fpc_df with the
+    # input. Downstream levels concat into the working frame, and an
+    # alias would let one container's writes leak into another.
     keep = [c for c in data.fpc_df.columns if c not in cols_to_drop]
-    fpc_df = data.fpc_df[keep].copy() if cols_to_drop else data.fpc_df
+    fpc_df = data.fpc_df[keep].copy() if cols_to_drop else data.fpc_df.copy()
 
     # 2. Reset LevelResults fields owned by the cleared levels (plus L4.1).
     resets: dict = {}

@@ -324,6 +324,15 @@ class LevelResults:
     not set fields, append to ``level41_*`` dicts, or modify ``filteredseries_*``
     in place — use ``replace`` if you need to extend the container.
 
+    **L4.1 additive semantics.** The ``level41_mds`` / ``_rf`` / ``_xgb``
+    dicts deliberately *accumulate* across method calls (``run_level41_*``
+    merges via ``{**existing, **new}``) so running RF then XGBoost leaves
+    both populated. From the field's perspective the value still changes
+    only via ``dataclasses.replace`` — the merged dict is a *new* object —
+    but logically the L4.1 fields are a write-then-extend record rather
+    than write-once. See :func:`_warn_scenario_overwrite` for the
+    same-scenario re-run case.
+
     **High-quality vs. accepted-quality series:**
 
     - ``filteredseries_hq`` — flux with QCF=0 *only* (strictest filter, no

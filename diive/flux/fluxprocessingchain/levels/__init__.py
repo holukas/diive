@@ -2,8 +2,15 @@
 LEVELS: COMPOSABLE FLUX PROCESSING LEVEL CALLABLES
 ====================================================
 
-Standalone pure functions, one per level.  Each function accepts a
-``FluxLevelData`` container and returns a new one — no shared mutable state.
+Standalone pure functions, one per level.  Each ``run_level*`` function
+accepts a ``FluxLevelData`` container and returns a new one — no shared
+mutable state.
+
+Exception — factories: ``make_level32_detector(data)`` returns a tuple
+``(data, sod)`` because it may pre-emptively cascade-reset the container
+in the L3.2 re-run case; the caller must rebind ``data`` to the returned
+value. ``make_level41_engineer(data, features, **kw)`` returns a
+``FeatureEngineer`` and does not modify ``data``.
 
 Part of the diive library: https://github.com/holukas/diive
 """

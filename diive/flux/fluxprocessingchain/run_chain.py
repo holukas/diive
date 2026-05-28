@@ -118,13 +118,16 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
     ---------------------------
 
     ``FluxConfig`` makes most fields optional and ``run_chain`` validates
-    that each enabled feature has the fields it needs
-    (``outlier_sigma_*`` when ``run_l32=True``, ``mds_swin`` / ``mds_ta`` /
-    ``mds_vpd`` when ``gapfill_mds=True``, ``gapfilling_features`` when
-    ``gapfill_rf`` or ``gapfill_xgb`` is ``True``,
-    ``ustar_thresholds`` in ``'constant'`` mode,
-    ``ustar_bootstrap_ta_col`` / ``..._swin_col`` in ``'bootstrap'`` mode).
-    A single ``ValueError`` lists every missing field.
+    that each enabled feature has the fields it needs:
+    ``outlier_sigma_daytime`` / ``..._nighttime`` are required
+    unconditionally (L3.2 is mandatory in ``run_chain`` because L3.3 USTAR
+    filtering depends on outlier-screened data); ``mds_swin`` / ``mds_ta`` /
+    ``mds_vpd`` are required when ``gapfill_mds=True``;
+    ``gapfilling_features`` is required when ``gapfill_rf`` or
+    ``gapfill_xgb`` is ``True``; ``ustar_thresholds`` is required in
+    ``'constant'`` mode; ``ustar_bootstrap_ta_col`` / ``..._swin_col`` are
+    required in ``'bootstrap'`` mode. A single ``ValueError`` lists every
+    missing field.
 
     Args:
         data: Initial container from ``init_flux_data()``.

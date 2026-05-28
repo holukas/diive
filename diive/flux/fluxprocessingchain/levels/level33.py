@@ -93,12 +93,14 @@ def run_level33_constant_ustar(
             data.levels.filteredseries_level33_qcf['CUT_50']
 
     Note:
-        **Level-3.2 is recommended but not required** before calling this
-        function.  Running USTAR filtering on data that still contains
-        outliers may bias the threshold estimate: a spike at low USTAR
-        could artificially suppress nighttime fluxes, leading to an
-        over-estimated threshold.  Run ``run_level32()`` first unless you
-        have a specific reason to skip outlier removal.
+        **Level-3.2 is required** before calling this function — running
+        USTAR filtering on outlier-contaminated data biases the threshold's
+        effect: a spike at low USTAR can artificially suppress nighttime
+        fluxes and inflate the apparent threshold. ``run_level33_*`` raises
+        a ``RuntimeError`` if ``data.levels.level32_qcf`` is ``None``. If
+        you have a deliberate reason to skip L3.2 (e.g. manual screening
+        upstream), you would need to bypass the guard by constructing the
+        downstream state yourself, which is intentionally awkward.
 
         **H and LE (energy fluxes):** USTAR filtering must not be applied
         to these variables.  To keep all records, pass

@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import pandas as pd
+
 from diive.core.utils.console import rule
 from diive.flux.fluxprocessingchain.container import FluxLevelData
 from diive.flux.fluxprocessingchain.levels._qcf import finalize_level
@@ -181,8 +183,15 @@ def run_level32(
     # renamed key for re-runs) into `.flags`. So if `_last_flag.name` matches no
     # column in `.flags` — neither directly nor under the `_N_TEST` re-run rename
     # — the user forgot to commit it.
+    # ``StepwiseOutlierDetection`` initialises ``_last_flag`` as an empty
+    # ``pd.DataFrame()`` (line 91 of stepwiseoutlierdetection.py). Each
+    # ``flag_outliers_*()`` method then assigns a ``pd.Series`` to
+    # ``_last_flag`` whose ``.name`` is the test's flag-column name. The
+    # check below only makes sense for the Series case — narrow with
+    # ``isinstance`` so the DataFrame initial-state path doesn't blow up
+    # on ``str(last.name)`` (DataFrame has no ``.name``).
     last = outlier_detector.last_flag
-    if last is not None and not last.empty:
+    if isinstance(last, pd.Series) and not last.empty:
         last_name = str(last.name)
         committed_cols = set(map(str, outlier_detector.flags.columns))
         if last_name not in committed_cols:
