@@ -22,16 +22,30 @@ from diive.flux.fluxprocessingchain.levels._rerun import (
 from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
 
 
-def make_level32_detector(data: FluxLevelData) -> StepwiseOutlierDetection:
+def make_level32_detector(
+        data: FluxLevelData,
+) -> tuple[FluxLevelData, StepwiseOutlierDetection]:
     """
     Factory for a Level-3.2 ``StepwiseOutlierDetection`` wired to ``data``.
 
     Uses the correct ``dfin``, ``col``, site coordinates and ``idstr='L3.2'``
     so the user doesn't have to reproduce that wiring by hand.
 
+    **Returns a tuple ``(data, sod)``.** The returned ``data`` is normally the
+    same container the caller passed in, *except* in the re-run case below.
+
+    **Re-run support:** if L3.3 has already run on the input container,
+    ``data.filteredseries`` is ``None`` (cleared by L3.3 because there is no
+    unambiguous filtered series across USTAR scenarios). To allow a re-run
+    of L3.2, this factory pre-emptively performs the L3.2 cascade reset on
+    the input and returns the cascaded container as the first element of
+    the tuple. The caller **must** rebind ``data`` to the returned value to
+    keep the rest of their script consistent — the detector's input column
+    only exists in the cascaded snapshot.
+
     Usage::
 
-        sod = make_level32_detector(data)
+        data, sod = make_level32_detector(data)
 
         # Each detector method + addflag() is one sequential step.
         # addflag() locks in the current flags so the *next* detector
@@ -45,13 +59,10 @@ def make_level32_detector(data: FluxLevelData) -> StepwiseOutlierDetection:
 
         data = run_level32(data, outlier_detector=sod)
     """
-    # Re-run support: if L3.3 has already run, filteredseries is None because
-    # L3.3 deliberately clears it (multi-scenario). For a re-run of L3.2 to
-    # work, we need to wire the detector against the L3.1 QCF series that the
-    # cascade reset will restore inside run_level32(). We apply the cascade
-    # pre-emptively here so the detector's input matches what run_level32()
-    # will see — otherwise the staleness guard there would reject this
-    # detector.
+    # Re-run support: when L3.3 already ran, filteredseries was cleared. We
+    # apply the cascade now and return the cascaded ``data`` to the caller
+    # explicitly (tuple return) so they can update their reference — staleness
+    # of the caller's data was a real footgun before this signature change.
     if 'L3.3' in data.level_ids:
         from diive.flux.fluxprocessingchain.levels._rerun import cascade_reset
         data = cascade_reset(data, 'L3.2')
@@ -61,7 +72,7 @@ def make_level32_detector(data: FluxLevelData) -> StepwiseOutlierDetection:
             "run_level31() (or run_level2()) must be called first; "
             "no filteredseries available to wire into the detector."
         )
-    return StepwiseOutlierDetection(
+    sod = StepwiseOutlierDetection(
         dfin=data.fpc_df,
         col=str(data.filteredseries.name),
         site_lat=data.meta.site_lat,
@@ -69,6 +80,7 @@ def make_level32_detector(data: FluxLevelData) -> StepwiseOutlierDetection:
         utc_offset=data.meta.utc_offset,
         idstr='L3.2',
     )
+    return data, sod
 
 
 def run_level32(
@@ -124,6 +136,24 @@ def run_level32(
             f"outlier_detector was wired to column {outlier_detector.col!r}, but "
             f"data.filteredseries is {expected_name!r}. Rebuild the detector via "
             f"make_level32_detector(data) after the most recent run_level31()."
+        )
+    # Check column existence on both sides BEFORE indexing — a mutated
+    # detector (.col reassigned out-of-sync with .dfin) or a fpc_df missing
+    # the expected column would otherwise raise a confusing KeyError instead
+    # of the intended "rebuild the detector" message.
+    if expected_name not in outlier_detector.dfin.columns:
+        raise RuntimeError(
+            f"outlier_detector.col={outlier_detector.col!r} but that column "
+            f"is not present in outlier_detector.dfin (columns: "
+            f"{list(outlier_detector.dfin.columns)}). The detector appears "
+            f"to have been mutated after construction; rebuild via "
+            f"make_level32_detector(data)."
+        )
+    if expected_name not in data.fpc_df.columns:
+        raise RuntimeError(
+            f"data.fpc_df does not contain the expected flux column "
+            f"{expected_name!r}; the chain state is inconsistent. Rebuild "
+            f"the chain from init_flux_data()."
         )
     if not outlier_detector.dfin[expected_name].equals(data.fpc_df[expected_name]):
         raise RuntimeError(

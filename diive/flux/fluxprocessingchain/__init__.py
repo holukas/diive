@@ -21,7 +21,7 @@ Two entry points
     data = init_flux_data(df, fluxcol='FC', site_lat=..., site_lon=..., utc_offset=1)
     data = run_level2(data, ssitc={'apply': True, ...}, ...)
     data = run_level31(data)
-    sod = make_level32_detector(data); sod.flag_outliers_hampel_test(...); sod.addflag()
+    data, sod = make_level32_detector(data); sod.flag_outliers_hampel_test(...); sod.addflag()
     data = run_level32(data, outlier_detector=sod)
     data = run_level33_constant_ustar(data, thresholds=[0.18], threshold_labels=['CUT_50'])
     data = run_level41_mds(data, swin='SW_IN', ta='TA', vpd='VPD_kPa')
@@ -115,6 +115,7 @@ from diive.flux.lowres.storage_correction import FluxStorageCorrectionSinglePoin
 from diive.flux.fluxprocessingchain.levels import (
     init_flux_data,
     make_level32_detector,
+    make_level41_engineer,
     run_level2,
     run_level31,
     run_level32,
@@ -143,6 +144,7 @@ __all__ = [
     'run_level32',
     'run_level33_constant_ustar',
     'run_level33_ustar_detection',
+    'make_level41_engineer',
     'run_level41_mds',
     'run_level41_rf',
     'run_level41_xgb',

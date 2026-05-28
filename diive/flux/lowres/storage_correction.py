@@ -39,7 +39,8 @@ class FluxStorageCorrectionSinglePointEddyPro:
                  basevar: str,
                  gapfill_storage_term: bool = True,
                  idstr: str = 'L3.1',
-                 set_storage_to_zero: bool = False):
+                 set_storage_to_zero: bool = False,
+                 strgcol: str | None = None):
         """Initialize the storage corrector.
 
         Args:
@@ -59,6 +60,12 @@ class FluxStorageCorrectionSinglePointEddyPro:
                 no storage profile is available (e.g. H, LE at low-canopy sites) or
                 when the single-point approximation is considered unreliable.
                 Default False.
+            strgcol: Explicit name of the storage-term column in ``df``. Overrides
+                the built-in auto-detection (FC -> SC_SINGLE, LE -> SLE_SINGLE,
+                ...). Use this when your storage column does not follow the
+                FLUXNET / Swiss FluxNet naming convention (e.g. ``'co2_strg'``
+                from EddyPro full-output files, or a custom site-specific
+                name). Default None (auto-detect).
 
         Attributes:
             results: DataFrame with corrected flux and gap-filling info.
@@ -79,7 +86,24 @@ class FluxStorageCorrectionSinglePointEddyPro:
         self.basevar = basevar
         self.gapfill_storage_term = gapfill_storage_term
         self.idstr = validate_id_string(idstr=idstr)
-        self.flux_corrected_col, self.strgcol = self._detect_storage_var()
+        # Storage-column resolution: when the user supplies an explicit
+        # ``strgcol`` we trust it (and only validate it exists in df). This
+        # path skips the auto-detect hardcoded-name lookup entirely so
+        # fluxcols that aren't in the auto-detect table (e.g. EddyPro
+        # full-output ``co2_flux``) still work.
+        if strgcol is not None:
+            if strgcol not in df.columns:
+                raise KeyError(
+                    f"strgcol={strgcol!r} not found in df. "
+                    f"Available columns: {list(df.columns)}"
+                )
+            self.strgcol = strgcol
+            self.flux_corrected_col = (
+                f'NEE{self.idstr}' if self.fluxcol == 'FC'
+                else f"{self.fluxcol}{self.idstr}"
+            )
+        else:
+            self.flux_corrected_col, self.strgcol = self._detect_storage_var()
         # Note: this class deliberately does NOT emit a 'storage missing'
         # quality-test flag (i.e. no FLAG_..._TEST column tied to NaN in the
         # corrected flux). Whether a storage term was measured or gap-filled

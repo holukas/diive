@@ -30,6 +30,7 @@ def run_level31(
         *,
         gapfill_storage_term: bool = True,
         set_storage_to_zero: bool = False,
+        strgcol: str | None = None,
 ) -> FluxLevelData:
     """
     Level-3.1: Apply single-point storage correction and compute the L3.1 QCF.
@@ -72,6 +73,13 @@ def run_level31(
             Even for H and LE, call this function with
             ``set_storage_to_zero=True`` rather than skipping it entirely,
             so that the chain's ordering guards are satisfied.
+        strgcol: Explicit name of the storage-term column in
+            ``data.full_df``. Overrides the built-in auto-detection
+            (``FC`` -> ``SC_SINGLE``, ``LE`` -> ``SLE_SINGLE``, ...). Pass
+            this when your storage column does not follow the FLUXNET /
+            Swiss FluxNet naming convention (e.g. EddyPro full-output
+            ``co2_strg``, or a custom site-specific name). Default ``None``
+            (auto-detect).
 
     Returns:
         Updated FluxLevelData; see the field list above for what is populated.
@@ -97,6 +105,7 @@ def run_level31(
         gapfill_storage_term=gapfill_storage_term,
         idstr=idstr,
         set_storage_to_zero=set_storage_to_zero,
+        strgcol=strgcol,
     )
     level31.storage_correction()
 

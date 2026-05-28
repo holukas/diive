@@ -33,6 +33,13 @@ _LEVEL_ORDER = ['L2', 'L3.1', 'L3.2', 'L3.3']
 
 # Fields on LevelResults that each cascade-aware level owns. Re-running the
 # level clears these along with any downstream level's fields.
+#
+# ``filteredseries_hq`` is deliberately listed under both L2 and L3.1: L2
+# initialises it (the QCF=0 mask on the raw flux) and L3.1 overwrites it
+# (same mask re-applied to the storage-corrected flux). Listing it under
+# both keys means a cascade from either level correctly nulls it before
+# the new run repopulates it. Resetting a single ``None`` field twice is
+# idempotent; the duplication is intentional, not a bug.
 _LEVEL_FIELDS: dict[str, tuple[str, ...]] = {
     'L2': (
         'level2', 'level2_qcf', 'filteredseries_level2_qcf',

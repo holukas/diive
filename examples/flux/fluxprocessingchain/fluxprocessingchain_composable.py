@@ -157,7 +157,7 @@ print(f"After L3.1: {data.filteredseries.dropna().count()} valid records "
 # site coordinates so you don't have to.  Chain additional ``flag_outliers_*``
 # / ``addflag()`` calls before ``run_level32`` if needed.
 
-sod = make_level32_detector(data)
+data, sod = make_level32_detector(data)
 sod.flag_outliers_hampel_test(
     window_length=48 * 13,  # 13-day rolling window (±6.5 days)
     n_sigma_daytime=5.5,

@@ -78,9 +78,15 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
     *Level-4.1 (gap-filling)* — runs only the methods whose
     ``config.gapfill_*`` flag is ``True``. MDS uses the underlying
     :class:`FluxMDS` defaults for tolerances and ``avg_min_n_vals``. RF and
-    XGBoost are built with a minimal ``FeatureEngineer`` (lag, rolling,
-    vectorized timestamps) and the model class's default hyperparameters;
-    SHAP feature reduction is **off**.
+    XGBoost are built with a default ``FeatureEngineer`` that ships with
+    the symmetric lag window ``[-2, 2]``, first- and second-order
+    differencing, 4 / 12 / 48-record rolling median + std, and vectorized
+    timestamps (see ``_default_engineer`` for the full rationale). SHAP-based
+    feature reduction is **on by default** (controlled by
+    ``config.gapfill_reduce_features``) — set to ``False`` for a diagnostic
+    run with the raw engineered feature set. Model hyperparameters
+    (``n_estimators``, ``max_depth``, ...) and custom ``FeatureEngineer``
+    configurations remain reachable only via the composable API.
 
     What ``run_chain`` does *not* expose
     ------------------------------------
@@ -103,10 +109,10 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
     - **L4.1 MDS** — ``swin_tol`` / ``ta_tol`` / ``vpd_tol`` /
       ``avg_min_n_vals`` (fixed at :class:`FluxMDS` defaults).
     - **L4.1 RF / XGBoost** — model hyperparameters (``n_estimators``,
-      ``max_depth``, ``learning_rate``, ...), the ``FeatureEngineer``
+      ``max_depth``, ``learning_rate``, ...) and the ``FeatureEngineer``
       itself (use ``engineer=`` on the per-level function for the full
-      8-stage configuration), and SHAP feature reduction
-      (``reduce_features=True``).
+      8-stage configuration). SHAP feature reduction *is* reachable from
+      ``run_chain`` via ``config.gapfill_reduce_features``.
 
     Contextual field validation
     ---------------------------
@@ -246,6 +252,30 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
             + f"\nAvailable columns: {list(data.full_df.columns)}"
         )
 
+    # Warn when a single threshold is passed without an explicit label —
+    # the underlying function will auto-generate 'CUT_0' (positional index,
+    # not percentile), and that's almost never what a FLUXNET-style user
+    # wants when they supply a real threshold value like 0.18. Same idea as
+    # the multi-threshold error above, just softened to a warning for the
+    # single-threshold case (no risk of *silent mislabelling between*
+    # scenarios — there is only one).
+    if (config.ustar_detection_mode == 'constant'
+            and config.ustar_thresholds
+            and len(config.ustar_thresholds) == 1
+            and not config.ustar_labels):
+        import warnings
+        warnings.warn(
+            f"FluxConfig.ustar_thresholds={config.ustar_thresholds} but "
+            f"ustar_labels is None — the L3.3 scenario will be labelled "
+            f"'CUT_0' (positional index, not percentile). For a "
+            f"percentile-based threshold pass an explicit label like "
+            f"ustar_labels=['CUT_50']; for a non-percentile threshold "
+            f"pass any descriptive name to make the scenario column "
+            f"self-documenting.",
+            UserWarning,
+            stacklevel=2,
+        )
+
     # Warn (don't fail) on a pipeline that runs L2 with nothing but the
     # always-on missing-values test — easy to do accidentally, and produces
     # an L2 QCF that flags only fully-missing records.
@@ -280,7 +310,7 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
     # cannot skip this step. Users who need a non-Hampel detector, a
     # multi-step pipeline, or want to skip L3.2 entirely must call the
     # composable per-level API directly.
-    sod = make_level32_detector(data)
+    data, sod = make_level32_detector(data)
     sod.flag_outliers_hampel_test(
         window_length=config.outlier_window_length,
         n_sigma_daytime=config.outlier_sigma_daytime,
@@ -333,34 +363,55 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
                 data,
                 features=list(config.gapfilling_features),
                 engineer=engineer,
+                reduce_features=config.gapfill_reduce_features,
             )
         if config.gapfill_xgb:
             data = run_level41_xgb(
                 data,
                 features=list(config.gapfilling_features),
                 engineer=engineer,
+                reduce_features=config.gapfill_reduce_features,
             )
 
     return data
 
 
 def _default_engineer(features: list[str]):
-    """Build a minimal FeatureEngineer for run_chain's ML gap-filling.
+    """Build the default FeatureEngineer for run_chain's ML gap-filling.
 
-    Stages enabled: lag (-1..-1), rolling (4, 12, 48), vectorized timestamps.
-    All other 8-stage knobs are off. For richer feature engineering use the
-    composable run_level41_rf / run_level41_xgb directly.
+    Stages enabled:
+
+    - **Lag**: symmetric two-record window ``[-2, 2]``. For 30-min EC data
+      this gives the four neighbouring records (±30 min, ±60 min) around
+      each target. Future lags are legitimate here because gap-FILLING
+      (unlike forecasting) operates on records bracketed by valid
+      neighbours on both sides — matches the MDS / Reichstein 2005 spirit
+      of using a symmetric time window.
+    - **Differencing**: first- and second-order. Inherently causal; gives
+      the ML model autocorrelation structure that raw lags can't fully
+      capture.
+    - **Rolling**: median and std over 4 / 12 / 48-record windows
+      (2 h / 6 h / 24 h at 30 min).
+    - **Vectorized timestamps**: encodes seasonal / diurnal structure.
+
+    Other 8-stage knobs (EMA, polynomial, STL, ...) are off — supply a
+    custom ``FeatureEngineer`` to ``run_level41_rf`` / ``run_level41_xgb``
+    directly if you need them.
     """
     from diive.core.ml.feature_engineer import FeatureEngineer
     return FeatureEngineer(
         target_col='_target_',  # placeholder; ignored by run_level41_*
-        # [-1, -1] is intentional, not a typo: FeatureEngineer treats the
-        # list as [min_lag, max_lag] (inclusive on both ends), so this
-        # produces a single lag feature at lag = -1 (one record into the
-        # past). For multi-lag windows, use the composable API and pass a
-        # built FeatureEngineer with e.g. features_lag=[-2, 2].
-        features_lag=[-1, -1],
+        # Symmetric lag window: features at t-2, t-1, t+1, t+2 around the
+        # target. Future lags are NOT data leakage in a gap-filling context
+        # — the gap is by definition bordered by valid records and we can
+        # legitimately use them, just like MDS does. Switch to past-only
+        # (e.g. [-2, -1]) by building your own FeatureEngineer via the
+        # composable API if you prefer a strictly causal model.
+        features_lag=[-2, 2],
         features_lag_stepsize=1,
+        # First- and second-order differencing — autocorrelation structure
+        # that lag features alone don't expose. Strictly causal.
+        features_diff=[1, 2],
         features_rolling=[4, 12, 48],
         features_rolling_stats=['median', 'std'],
         vectorize_timestamps=True,

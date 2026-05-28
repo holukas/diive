@@ -271,6 +271,15 @@ class FluxConfig:
     gapfill_mds: bool = True
     """Run MDS gap-filling (L4.1)."""
 
+    gapfill_reduce_features: bool = True
+    """SHAP-based feature reduction for the ML gap-fillers (RF / XGBoost).
+    Default ``True`` — the chain's L4.1 ML methods are designed around SHAP
+    importance ranking; with reduction disabled the model trains on every
+    engineered feature regardless of contribution and is typically weaker.
+    Set to ``False`` only when you want the raw (unreduced) feature set,
+    e.g. for diagnostic comparison. Ignored when both ``gapfill_rf`` and
+    ``gapfill_xgb`` are ``False``."""
+
     mds_swin: str | None = None
     """Shortwave incoming radiation column for MDS (W m-2; must be in ``data.full_df``)."""
 
@@ -354,10 +363,17 @@ class LevelResults:
     filteredseries_hq: pd.Series | None = None
     """Flux filtered at strictly QCF=0 (highest-quality reference). Written by
     Level-2 (initial QCF=0 mask on the raw flux) and by Level-3.1 (same mask
-    reapplied to the storage-corrected flux). Not touched by L3.2 / L3.3 —
-    those write their own series elsewhere on ``LevelResults``. The series
-    name uses the ``_QCF0`` suffix to mark the strict-zero filter (contrast
-    with ``_QCF`` for the user-accepted series)."""
+    reapplied to the storage-corrected flux). The series name uses the
+    ``_QCF0`` suffix to mark the strict-zero filter (contrast with ``_QCF``
+    for the user-accepted series).
+
+    **Lifecycle vs. L3.2 / L3.3.** L3.2 does run a QCF but does not overwrite
+    this field — its QCF=0 series can be read from ``levels.level32_qcf``
+    directly if needed. L3.3 does not touch this field at all and stores the
+    per-USTAR-scenario HQ series in ``filteredseries_level33_hq``. Therefore
+    once L3.2 or L3.3 has run, ``filteredseries_hq`` reflects only the
+    *L3.1-stage* HQ series — it is **stale** for downstream use. Reach for
+    ``levels.filteredseries_level33_hq[<scen>]`` post-L3.3."""
 
     # Level-3.1
     level31: FluxStorageCorrectionSinglePointEddyPro | None = None
@@ -971,16 +987,43 @@ class FluxLevelData:
         # iteration order is identical to LevelResults.level41_methods() and
         # the plot helpers — consumers can iterate either dict and get the
         # same sequence.
+        #
+        # Defensive lookup: the column name reported here is derived from
+        # the underlying model instance (``.get_gapfilled_target().name``
+        # for MDS, ``.gapfilled_.name`` for RF/XGB). That name must agree
+        # with the column that was actually merged into ``fpc_df``; if a
+        # future change to the underlying class ever returned a renamed
+        # copy, callers would silently get a column name that doesn't
+        # exist. Verify each reported name is in ``fpc_df.columns`` and
+        # raise a clear error otherwise.
         lvl = self.levels
+        _missing: list[str] = []
+
+        def _check(method: str, scen: str, name: str) -> str:
+            if name not in self.fpc_df.columns:
+                _missing.append(f"{method}/{scen}: {name!r}")
+            return name
+
         if lvl.level41_mds:
-            out['mds'] = {scen: inst.get_gapfilled_target().name
+            out['mds'] = {scen: _check('mds', scen, inst.get_gapfilled_target().name)
                           for scen, inst in lvl.level41_mds.items()}
         if lvl.level41_rf:
-            out['rf'] = {scen: inst.gapfilled_.name
+            out['rf'] = {scen: _check('rf', scen, inst.gapfilled_.name)
                          for scen, inst in lvl.level41_rf.items()}
         if lvl.level41_xgb:
-            out['xgb'] = {scen: inst.gapfilled_.name
+            out['xgb'] = {scen: _check('xgb', scen, inst.gapfilled_.name)
                           for scen, inst in lvl.level41_xgb.items()}
+
+        if _missing:
+            raise RuntimeError(
+                "gapfilled_cols(): model instance reported a column name "
+                "that is not present in data.fpc_df:\n"
+                + "\n".join(f"  - {m}" for m in _missing)
+                + "\nThis indicates the gap-filled column was renamed "
+                  "between L4.1 emission and now (e.g. the underlying class "
+                  "returned a renamed copy). Re-run the affected L4.1 method."
+            )
+
         return out
 
 

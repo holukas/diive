@@ -382,7 +382,7 @@ class TestFluxProcessingChainComposable(unittest.TestCase):
         self.assertIsNone(data2.levels.flux_corrected_col)
 
         # --- Level-3.2 with factory ---
-        sod = make_level32_detector(data31)
+        data31, sod = make_level32_detector(data31)
         sod.flag_outliers_abslim_test(
             separate_daytime_nighttime=True,
             daytime_minmax=[-50, 50], nighttime_minmax=[-50, 50],

@@ -32,6 +32,43 @@
 - **Better `run_level32` error for energy-flux users.** When called before `run_level31`, the error message now
   spells out the `set_storage_to_zero=True` workaround for H / LE so users with no storage profile know how to
   satisfy the chain's ordering requirement without skipping L3.1 entirely.
+- **`make_level32_detector` now returns `(data, sod)`.** Previously the factory silently cascaded `data` internally
+  in the L3.2 re-run case, leaving the caller's reference stale until `run_level32` ran. The new tuple return makes the
+  cascade explicit; callers rebind their `data` to the first element. Breaking change for callers using
+  `sod = make_level32_detector(data)` — use `data, sod = make_level32_detector(data)` instead.
+- **`run_chain` warns on a single threshold without labels.** Previously silently auto-generated `'CUT_0'`, which is
+  almost never what a user supplying a real threshold value like 0.18 wants. Mirrors the multi-threshold case but
+  softened to a warning (no silent mislabelling between scenarios when there's only one).
+- **`init_flux_data` warns on non-30-min frequency.** Several chain defaults (`outlier_window_length`, `_default_engineer`
+  rolling windows) are expressed in record counts that assume 30-min sampling. The warning fires at the earliest entry
+  point so users with hourly or finer-resolution data know to scale `FluxConfig.outlier_window_length` and consider a
+  custom `FeatureEngineer`.
+- **`_warn_scenario_overwrite` now also warns on unexpected-additive re-runs.** Previously warned only on
+  scenario-label overlap. Now also warns when L4.1 is re-run with completely different scenarios on top of existing
+  ones — that means the L3.3 cascade did not fire and `level41_*` holds outputs from two different L3.3 states.
+- **Composable parity: three gaps closed.** Closed the remaining knobs the composable per-level API didn't reach:
+  - **Storage-column override** — `FluxStorageCorrectionSinglePointEddyPro.__init__` and `run_level31` now accept
+    `strgcol: str | None = None`. Skips the hardcoded `FC → SC_SINGLE` / `LE → SLE_SINGLE` / ... table; useful for
+    EddyPro full-output files (`co2_strg`) or site-specific naming.
+  - **Day/night source override** — `init_flux_data` now accepts `swin_col: str | None = None`. Default is still
+    computed potential radiation (cloud-independent — the recommended source). Override only when there's a deliberate
+    reason (high-latitude topographic shadowing, pre-validated site flag); `meta.swinpot_col` records whichever column
+    actually drives the flags.
+  - **`make_level41_engineer(data, features, **engineer_kwargs)`** — new factory symmetric with
+    `make_level32_detector`. Returns a `FeatureEngineer` with the same defaults `run_chain` uses, but exposes the full
+    8-stage kwarg surface so users don't have to import `FeatureEngineer` themselves to customise it.
+- **`run_chain` ships richer default `FeatureEngineer` for ML gap-filling.** The minimal `[-1, -1]` single-lag default
+  is replaced with a symmetric ``[-2, 2]`` lag window (four neighbour records — ±30 min, ±60 min at 30-min sampling)
+  plus first- and second-order differencing, while keeping the existing 4/12/48-record rolling median + std and
+  vectorized timestamps. Symmetric lags are legitimate in gap-filling (the gap is bracketed by valid records) and
+  match the MDS spirit; differencing is strictly causal and adds autocorrelation structure RF/XGB can't infer from
+  raw lags alone. Rationale is documented inline in `_default_engineer`. Users who want a past-only / strictly
+  causal feature set build their own `FeatureEngineer` and pass it via the composable `run_level41_rf` /
+  `run_level41_xgb`.
+- **`run_chain` enables SHAP feature reduction by default.** New `FluxConfig.gapfill_reduce_features` field
+  (default `True`) is forwarded to `run_level41_rf` / `run_level41_xgb`. Previously the chain's ML gap-fillers ran
+  on the raw engineered feature set regardless of contribution — a silently weaker model than what the composable
+  API produced with the documented SHAP workflow. Set to `False` for a diagnostic run with the unreduced features.
 - **L3.2 is now mandatory before L3.3.** `run_level33_constant_ustar` and `run_level33_ustar_detection` raise
   `RuntimeError` when called on a `FluxLevelData` that has not been through L3.2 — USTAR filtering on
   outlier-contaminated data biases the threshold's effect. Users who genuinely want to skip L3.2 (e.g. with upstream
