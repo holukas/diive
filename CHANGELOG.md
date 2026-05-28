@@ -57,6 +57,9 @@
   - **`make_level41_engineer(data, features, **engineer_kwargs)`** — new factory symmetric with
     `make_level32_detector`. Returns a `FeatureEngineer` with the same defaults `run_chain` uses, but exposes the full
     8-stage kwarg surface so users don't have to import `FeatureEngineer` themselves to customise it.
+- **New `run_chain` example.** `examples/flux/fluxprocessingchain/fluxprocessingchain_runchain.py` demonstrates the
+  single-call entry point end-to-end: minimal `FluxConfig`, full L2→L4.1 pipeline, post-chain inspection helpers,
+  with a commented sidebar showing the bootstrap-USTAR alternative.
 - **`run_chain` ships richer default `FeatureEngineer` for ML gap-filling.** The minimal `[-1, -1]` single-lag default
   is replaced with a symmetric ``[-2, 2]`` lag window (four neighbour records — ±30 min, ±60 min at 30-min sampling)
   plus first- and second-order differencing, while keeping the existing 4/12/48-record rolling median + std and

@@ -56,6 +56,12 @@ from diive.flux.fluxprocessingchain import (
 
 df = load_exampledata_parquet_lae_level1_30MIN()
 df = df.loc['2024-06':'2024-06']  # one month for speed
+# The example dataset already contains ``SW_IN_POT`` / ``DAYTIME`` /
+# ``NIGHTTIME`` from earlier processing. ``init_flux_data`` reserves these
+# names (it computes its own from potential radiation) and raises if any
+# is pre-existing. Drop them so the chain can populate fresh values.
+df = df.drop(columns=[c for c in ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME')
+                      if c in df.columns])
 
 # %%
 # Step 1: initialise the FluxLevelData container

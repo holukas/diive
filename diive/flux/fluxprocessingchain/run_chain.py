@@ -138,6 +138,10 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
             ``data.meta.fluxcol``, or if any enabled feature is missing the
             fields it needs (see contextual-validation note above).
 
+    See also:
+        ``examples/flux/fluxprocessingchain/fluxprocessingchain_runchain.py``
+        for a runnable end-to-end example.
+
     Example::
 
         from diive.flux.fluxprocessingchain import (
