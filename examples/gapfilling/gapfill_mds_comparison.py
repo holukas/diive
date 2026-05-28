@@ -30,7 +30,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
 import diive as dv
-from diive.pkgs.gapfilling.mds import FluxMDS, _FluxMDS
+from diive.gapfilling.mds import FluxMDS, _FluxMDS
 
 # %%
 # Create comparison visualization function

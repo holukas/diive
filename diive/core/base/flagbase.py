@@ -44,6 +44,16 @@ class FlagBase:
             raise Exception('No overall flag available.')
         return self._overall_flag
 
+    def run(self, **kwargs):
+        """Unified trigger. Delegates to .calc()."""
+        self.calc(**kwargs)
+        return self
+
+    @property
+    def result(self) -> Series:
+        """Primary result: filtered series with outliers removed."""
+        return self.filteredseries
+
     def get_flag(self):
         return self.overall_flag
 

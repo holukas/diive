@@ -8,6 +8,8 @@ import pandas as pd
 from pandas import DataFrame, Series, DatetimeIndex, Index
 from pandas.tseries.frequencies import to_offset
 
+from diive.core.utils.console import rule, info, warn, detail
+
 # Define the default mapping outside the function for clean reference and mutability safety
 DEFAULT_SEASON_MAP = {
     # Season ID: [List of months (int)]
@@ -260,7 +262,7 @@ class TimestampSanitizer:
 
     def _run(self):
         if self.verbose:
-            print("\nTimestamp sanitization:")
+            rule("Timestamp sanitization", verbose=self.verbose)
 
         # Validate timestamp name
         if self.validate_naming:
@@ -307,7 +309,7 @@ class TimestampSanitizer:
         # If data had pre-existing freq, validate consistency
         if self.inferred_freq and detected_freq != str(self.inferred_freq):
             if self.verbose:
-                print(f"  WARNING: Frequency mismatch ({self.inferred_freq} → {detected_freq})")
+                warn(f"Frequency mismatch ({self.inferred_freq} -> {detected_freq})", verbose=self.verbose)
 
         # Always use detected frequency as it's more reliable
         self.inferred_freq = detected_freq
@@ -367,9 +369,6 @@ class DetectFrequency:
         self._run()
 
     def _run(self):
-        if self.verbose:
-            print(f"  Detect frequency: ", end="")
-
         freq_full, freqinfo_full = timestamp_infer_freq_from_fullset(timestamp_ix=self.index)
         freq_timedelta, freqinfo_timedelta = timestamp_infer_freq_from_timedelta(timestamp_ix=self.index)
         freq_progressive, freqinfo_progressive = timestamp_infer_freq_progressively(timestamp_ix=self.index)
@@ -420,7 +419,7 @@ class DetectFrequency:
                 except (ValueError, IndexError):
                     self.percent_matching = 100.0
                 if self.verbose:
-                    print(f"{self.freq} (all methods agree)")
+                    info(f"Detect frequency: {self.freq} (all methods agree)", verbose=self.verbose)
 
         elif freq_full:
             # High certainty, freq found from full range of dataset
@@ -434,7 +433,7 @@ class DetectFrequency:
             if freq_progressive:
                 self.alternatives.append(freq_progressive)
             if self.verbose:
-                print(f"{self.freq} (full data)")
+                info(f"Detect frequency: {self.freq} (full data)", verbose=self.verbose)
 
         elif freq_timedelta:
             # High certainty, freq found from most frequent timestep that
@@ -453,7 +452,8 @@ class DetectFrequency:
             if freq_progressive:
                 self.alternatives.append(freq_progressive)
             if self.verbose:
-                print(f"{self.freq} (timedelta, {self.confidence*100:.0f}% match)")
+                info(f"Detect frequency: {self.freq} (timedelta, {self.confidence*100:.0f}% match)",
+                     verbose=self.verbose)
 
         elif freq_progressive:
             # Medium certainty, freq found from start and end of dataset
@@ -462,7 +462,7 @@ class DetectFrequency:
             self.detection_method = "start_end_chunks"
             self.percent_matching = None  # Not calculated for progressive method
             if self.verbose:
-                print(f"{self.freq} (start/end)")
+                info(f"Detect frequency: {self.freq} (start/end)", verbose=self.verbose)
 
         else:
             raise RuntimeError(
@@ -502,7 +502,7 @@ def format_timestamp_to_fluxnet_format(df: DataFrame, timestamp_col: str) -> Ser
     ----
     The timestamp must exist as a data column in the DataFrame, not as the index.
     """
-    print(f"\nFormatting timestamp column {timestamp_col} to %Y%m%d%H%M ...")
+    info(f"Formatting timestamp column {timestamp_col} to %Y%m%d%H%M ...")
     timestamp = df[timestamp_col].dt.strftime('%Y%m%d%H%M')
     return timestamp
 
@@ -656,7 +656,7 @@ def sort_timestamp_ascending(data: Union[Series, DataFrame], verbose: bool = Fal
     >>> df_sorted = sort_timestamp_ascending(df, verbose=True)
     """
     if verbose:
-        print(f"  Sort ascending: OK")
+        info("Sort ascending: OK", verbose=verbose)
     data = data.sort_index()
     return data
 
@@ -698,14 +698,13 @@ def remove_rows_nat(df: Union[Series, DataFrame], verbose: bool = False) -> tupl
         df = df.loc[df.index[~no_date]].copy()
         pct_removed = 100 * n_rows / original_length
         if verbose:
-            print(f"  Remove NaT values: {n_rows} removed", end="")
             if pct_removed > 10:
-                print(f" [WARNING: {pct_removed:.1f}% of data]")
+                warn(f"Remove NaT values: {n_rows} removed [{pct_removed:.1f}% of data]", verbose=verbose)
             else:
-                print()
+                info(f"Remove NaT values: {n_rows} removed", verbose=verbose)
     else:
         if verbose:
-            print(f"  Remove NaT values: none")
+            info("Remove NaT values: none", verbose=verbose)
     return df, n_rows
 
 
@@ -738,12 +737,10 @@ def convert_timestamp_to_datetime(data: Union[Series, DataFrame], verbose: bool 
     --------
     >>> df_dt = convert_timestamp_to_datetime(df, verbose=True)
     """
-    if verbose:
-        print(f"  Convert to datetime: ", end="")
     try:
         data.index = pd.to_datetime(data.index, errors='coerce')
         if verbose:
-            print("OK")
+            info("Convert to datetime: OK", verbose=verbose)
     except (ValueError, TypeError) as e:
         raise ValueError(
             f"Failed to convert timestamp to datetime format. "
@@ -793,9 +790,6 @@ def validate_timestamp_naming(data: Union[Series, DataFrame], verbose: bool = Fa
     """
     timestamp_name = data.index.name
     allowed_timestamp_names = ['TIMESTAMP_END', 'TIMESTAMP_START', 'TIMESTAMP_MIDDLE']
-    if verbose:
-        print(f"  Validate naming ({timestamp_name}): ", end="")
-
     # Check if timestamp name is None
     if timestamp_name is None:
         raise ValueError(
@@ -808,7 +802,7 @@ def validate_timestamp_naming(data: Union[Series, DataFrame], verbose: bool = Fa
     # First check if timestamp already has one of the required names
     if any(fnmatch.fnmatch(timestamp_name, allowed_name) for allowed_name in allowed_timestamp_names):
         if verbose:
-            print("OK")
+            info(f"Validate naming ({timestamp_name}): OK", verbose=verbose)
         return timestamp_name
 
     else:
@@ -852,9 +846,6 @@ def validate_timestamp_monotonic(data: Union[Series, DataFrame], verbose: bool =
     --------
     >>> validate_timestamp_monotonic(df, verbose=True)
     """
-    if verbose:
-        print(f"  Validate monotonicity: ", end="")
-
     if not data.index.is_monotonic_increasing:
         # Find where monotonicity breaks to help debugging
         diffs = data.index.to_series().diff()
@@ -873,7 +864,7 @@ def validate_timestamp_monotonic(data: Union[Series, DataFrame], verbose: bool =
         )
 
     if verbose:
-        print("OK")
+        info("Validate monotonicity: OK", verbose=verbose)
 
 
 def current_unixtime() -> int:
@@ -1175,7 +1166,7 @@ def vectorize_timestamps(df,
         df[yearweek_col] = df[year_col] * 100 + df[week_col]
 
     if verbose > 0:
-        print(f"++ Added new columns with timestamp info: {newcols} {txt}")
+        info(f"++ Added new columns with timestamp info: {newcols} {txt}")
 
     return df
 
@@ -1226,7 +1217,7 @@ def insert_season(
     if len(all_months) != len(set(all_months)):
         raise ValueError("Season definitions overlap: A month is assigned to multiple seasons.")
     if len(all_months) != 12:
-        print("Warning: Not all 12 months are defined in the seasons. Unassigned months will be set to NaN.")
+        warn("Not all 12 months are defined in the seasons. Unassigned months will be set to NaN.")
 
     # Create a single Month-to-Season mapping dictionary
     # Example: {3: 1, 4: 1, 5: 1, 6: 2, ...}
@@ -1447,14 +1438,13 @@ def remove_index_duplicates(data: Union[Series, DataFrame],
     n_duplicates = data.index.duplicated().sum()
     if verbose:
         if n_duplicates > 0:
-            print(f"  Remove duplicates: {n_duplicates} removed", end="")
             pct_removed = 100 * n_duplicates / len(data)
             if pct_removed > 10:
-                print(f" [WARNING: {pct_removed:.1f}% of data]")
+                warn(f"Remove duplicates: {n_duplicates} removed [{pct_removed:.1f}% of data]", verbose=verbose)
             else:
-                print()
+                info(f"Remove duplicates: {n_duplicates} removed", verbose=verbose)
         else:
-            print(f"  Remove duplicates: none")
+            info("Remove duplicates: none", verbose=verbose)
 
     if n_duplicates > 0:
         data = data[~data.index.duplicated(keep=keep)]
@@ -1505,9 +1495,6 @@ def continuous_timestamp_freq(data: Union[Series, DataFrame], freq: str, verbose
     first_date = data.index[0]
     last_date = data.index[-1]
 
-    if verbose:
-        print(f"  Regularize gaps: ", end="")
-
     # Original timestamp name
     idx_name = data.index.name
 
@@ -1521,7 +1508,7 @@ def continuous_timestamp_freq(data: Union[Series, DataFrame], freq: str, verbose
     data.index = pd.to_datetime(data.index)
     data = data.asfreq(freq=freq)
     if verbose:
-        print("OK")
+        info("Regularize gaps: OK", verbose=verbose)
     return data
 
 
@@ -1587,8 +1574,8 @@ def insert_timestamp(
     timestamp_freqstr = data.index.freqstr
 
     if verbose:
-        print(f"\nAdding new timestamp column {new_timestamp_col} "
-              f"to show {convention} of averaging period ...")
+        info(f"Adding new timestamp column {new_timestamp_col} to show {convention} of averaging period ...",
+             verbose=verbose)
 
     # Interval of data records
     timedelta = pd.to_timedelta(timestamp_freq)
@@ -1633,12 +1620,11 @@ def insert_timestamp(
         data.insert(0, new_timestamp_col, first_col)
 
     if verbose:
-        print(f"    ++Added new timestamp column {new_timestamp_col}:\n"
-              f"        first date: {data[new_timestamp_col].iloc[0]}\n"
-              f"        last date:  {data[new_timestamp_col].iloc[-1]}")
-        print(f"    The timestamp index was not changed:\n"
-              f"        first date: {data.index[0]}\n"
-              f"        last date:  {data.index[-1]}")
+        detail(f"++Added new timestamp column {new_timestamp_col}: "
+               f"first={data[new_timestamp_col].iloc[0]}, last={data[new_timestamp_col].iloc[-1]}",
+               verbose=verbose)
+        detail(f"Timestamp index unchanged: first={data.index[0]}, last={data.index[-1]}",
+               verbose=verbose)
 
     if set_as_index:
         # This loses freq/freqstr info for timestamp index
@@ -1712,15 +1698,12 @@ def convert_series_timestamp_to_middle(data: Union[Series, DataFrame], verbose: 
 
     timestamp_freq = data.index.freq
 
-    if verbose:
-        print(f"  Convert to middle-of-period: ", end="")
-
     first_timestamp_before = data.index[0]
     last_timestamp_before = data.index[-1]
 
     if timestamp_name_before == 'TIMESTAMP_MIDDLE':
         if verbose:
-            print("OK (already middle)")
+            info("Convert to middle-of-period: OK (already middle)", verbose=verbose)
     else:
         timedelta = pd.to_timedelta(timestamp_freq) / 2
         if timestamp_name_before == 'TIMESTAMP_END':
@@ -1734,10 +1717,10 @@ def convert_series_timestamp_to_middle(data: Union[Series, DataFrame], verbose: 
                 f"or 'TIMESTAMP_MIDDLE'. This indicates the time period the timestamp "
                 f"represents. Check your data or rename the index before processing."
             )
+        if verbose:
+            info("Convert to middle-of-period: OK", verbose=verbose)
 
     data.index.name = 'TIMESTAMP_MIDDLE'
-    if verbose and timestamp_name_before != 'TIMESTAMP_MIDDLE':
-        print("OK")
 
     return data
 

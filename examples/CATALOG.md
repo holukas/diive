@@ -1,6 +1,7 @@
 # Examples Catalog
 
 Find examples by topic and use case.
+New to diive? Start with the **[Cookbook](COOKBOOK.md)** — 6 minimal workflows that cover the most common tasks.
 
 ## Quick Navigation
 
@@ -37,6 +38,8 @@ Find examples by topic and use case.
 | [**plot_ridgeline_basic.py**](visualization/plot_ridgeline_basic.py) | Ridge line plots with weekly grouping |
 | [**plot_ridgeline_advanced.py**](visualization/plot_ridgeline_advanced.py) | Ridge line plots with monthly grouping |
 | [**plot_other_plots.py**](visualization/plot_other_plots.py) | Specialized plot types (long-term anomalies, trends) |
+| [**plot_treering_temperature.py**](visualization/plot_treering_temperature.py) | Tree-ring spiral plot: annual rings with color-coded values, month labels, year separators, colorbar extension |
+| [**plot_treering_line_temperature.py**](visualization/plot_treering_line_temperature.py) | Tree-ring radial line plot: each year as a line trace around a full circle, single-color and per-year colormap variants with optional fill |
 
 See: [visualization/README.md](visualization/README.md)
 
@@ -52,6 +55,7 @@ See: [visualization/README.md](visualization/README.md)
 | [**analysis_seasonaltrend.py**](analysis/analysis_seasonaltrend.py) | STL decomposition, trend isolation, seasonality extraction |
 | [**analysis_decoupling.py**](analysis/analysis_decoupling.py) | Stratified binning to reveal how ecosystem responses change across temperature ranges |
 | [**analysis_gapfinder.py**](analysis/analysis_gapfinder.py) | Identify and characterize consecutive missing data periods in time series |
+| [**analysis_gapstats.py**](analysis/analysis_gapstats.py) | Extended gap analysis: monthly/annual breakdown, long-gap listing, Rich report, three-panel figure |
 | [**analysis_gridaggregator.py**](analysis/analysis_gridaggregator.py) | 2D grid aggregation with quantile, equal-width, and custom binning methods |
 | [**analysis_histogram_distribution.py**](analysis/analysis_histogram_distribution.py) | Histogram binning methods: fixed bins, unique values, fringe bin removal |
 | [**analysis_optimumrange.py**](analysis/analysis_optimumrange.py) | Find optimal value ranges, condition-based filtering |
@@ -122,6 +126,9 @@ See: [preprocessing/corrections/README.md](preprocessing/corrections/README.md)
 |---------|-------------|
 | [**qc_overall_flag.py**](preprocessing/qaqc/qc_overall_flag.py) | Combine multiple test flags into overall QCF (0=good, 1=marginal, 2=poor) |
 | [**qc_eddypro_flags.py**](preprocessing/qaqc/qc_eddypro_flags.py) | Extract EddyPro quality flags (VM97 tests, signal strength, completeness) |
+| [**qaqc_detect_timestamp_shifts.py**](preprocessing/qaqc/qaqc_detect_timestamp_shifts.py) | Detect clock/timestamp errors via radiation phase analysis: FFT phase shift, cross-correlation, and noon-shift peak detection |
+| [**meteoscreening_stepwise_workflow.py**](preprocessing/qaqc/meteoscreening_stepwise_workflow.py) | Stepwise meteorological screening: multi-stage outlier detection, corrections, and resampling with `StepwiseMeteoScreeningDb` (requires database) |
+| [**meteoscreening_complete_workflow.py**](preprocessing/qaqc/meteoscreening_complete_workflow.py) | End-to-end QC workflow: database download, multi-stage screening, 30-min resampling, and upload (requires InfluxDB connection) |
 
 See: [preprocessing/outlier_detection/README.md](preprocessing/outlier_detection/README.md) and [preprocessing/qaqc/README.md](preprocessing/qaqc/README.md)
 
@@ -152,7 +159,8 @@ See: [features/README.md](features/README.md)
 
 | Example | Description |
 |---------|-------------|
-| [**fluxprocessingchain.py**](flux/fluxprocessingchain/fluxprocessingchain.py) | Complete Swiss FluxNet workflow (L2-L4.1): quality flags, storage correction, outlier removal, USTAR filtering, gap-filling |
+| [**fluxprocessingchain_runchain.py**](flux/fluxprocessingchain/fluxprocessingchain_runchain.py) | Single-call `run_chain(data, FluxConfig)` — minimal config drives the full L2→L4.1 pipeline with sensible defaults. Shows the easy path; for full control over per-detector / per-model knobs use the composable example below |
+| [**fluxprocessingchain_composable.py**](flux/fluxprocessingchain/fluxprocessingchain_composable.py) | Full L2→L4.1 pipeline using composable level callables; RF, XGBoost, and MDS gap-filling from the same L3.3 state; `gap_stats()` after L3.3; `plot_gapfilled_heatmaps()` and `plot_cumulative_comparison()` after L4.1 |
 
 ### Low-Resolution (30-min) Processing
 
@@ -164,13 +172,19 @@ See: [features/README.md](features/README.md)
 | [**flux_selfheating.py**](flux/lowres/flux_selfheating.py) | SCOP self-heating correction workflow (quick demo with 5/5 settings) |
 | [**flux_selfheating_production.py**](flux/lowres/flux_selfheating_production.py) | Complete production workflow: create scaling factors table + apply to long-term data |
 | [**flux_uncertainty.py**](flux/lowres/flux_uncertainty.py) | Random uncertainty estimation (PAS20 method) |
-| [**flux_ustar_mp_detection.py**](flux/lowres/flux_ustar_mp_detection.py) | Moving Point (MP) USTAR detection |
+| [**flux_ustar_mp_detection.py**](flux/lowres/flux_ustar_mp_detection.py) | Moving Point (MP) USTAR detection (Papale et al. 2006) |
+| [**flux_ustar_vekuri_detection.py**](flux/lowres/flux_ustar_vekuri_detection.py) | Simplified quantile-based USTAR detection (Vekuri method) |
+| [**flux_ustar_method_comparison.py**](flux/lowres/flux_ustar_method_comparison.py) | Compare ONEFlux and Vekuri USTAR detection methods |
 
 ### High-Resolution (10 Hz) Analysis
 
 | Example | Description |
 |---------|-------------|
 | [**flux_lag.py**](flux/hires/flux_lag.py) | Time lag detection via covariance analysis |
+| [**flux_lag_pwb.py**](flux/hires/flux_lag_pwb.py) | PWB time lag detection: pre-whitening with block-bootstrap (Vitale et al. 2024), high-flux vs. low-flux comparison |
+| [**flux_lag_pwbopt.py**](flux/hires/flux_lag_pwbopt.py) | PWBOPT batch pipeline: multi-period PWB with S1/S2/S3 selection and strategy comparison; supports real EddyPro-rotated files |
+| [**flux_lag_pwb_batch.py**](flux/hires/flux_lag_pwb_batch.py) | PwbBatchDetection API demo: parallel PWB across many EddyPro files with live Rich progress display, PWBOPT post-processing (standard + pre-filtered), and batch summary figures |
+| [**flux_lag_pwb_batch_cli.py**](flux/hires/flux_lag_pwb_batch_cli.py) | CLI demo: drive PwbBatchDetection from the command line via `python -m diive.pkgs.flux.hires.lag_pwb`; shows all available flags |
 | [**flux_windrotation.py**](flux/hires/flux_windrotation.py) | Wind rotation and coordinate transformation |
 | [**flux_fluxdetectionlimit.py**](flux/hires/flux_fluxdetectionlimit.py) | Flux detection limit and measurement sensitivity |
 
@@ -185,6 +199,7 @@ See: [flux/README.md](flux/README.md)
 | [**gapfill_interpolate_conservative.py**](gapfilling/gapfill_interpolate_conservative.py) | Linear interpolation | No |
 | [**gapfill_interpolate_generous.py**](gapfilling/gapfill_interpolate_generous.py) | Linear interpolation | No |
 | [**gapfill_randomforest.py**](gapfilling/gapfill_randomforest.py) | Random Forest | Yes |
+| [**gapfill_randomforest_longterm.py**](gapfilling/gapfill_randomforest_longterm.py) | Random Forest with long-term year pooling | Yes |
 | [**gapfill_quickfill.py**](gapfilling/gapfill_quickfill.py) | Quick Random Forest | Yes |
 | [**gapfill_optimize_randomforest.py**](gapfilling/gapfill_optimize_randomforest.py) | Random Forest with hyperparameter tuning | Yes |
 | [**gapfill_xgboost.py**](gapfilling/gapfill_xgboost.py) | XGBoost | Yes |
@@ -192,6 +207,7 @@ See: [flux/README.md](flux/README.md)
 | [**gapfill_mds.py**](gapfilling/gapfill_mds.py) | Meteorological Data Similarity | No |
 | [**gapfill_mds_comparison.py**](gapfilling/gapfill_mds_comparison.py) | MDS variants comparison | No |
 | [**gapfill_comparison.py**](gapfilling/gapfill_comparison.py) | Compare all methods side-by-side | Mixed |
+| [**gapfill_swin.py**](gapfilling/gapfill_swin.py) | SW_IN physics + XGBoost (nighttime zero, daytime ML) | Yes |
 
 See: [gapfilling/README.md](gapfilling/README.md)
 
@@ -212,20 +228,10 @@ See: [fits/README.md](fits/README.md)
 
 | Example | Description |
 |---------|-------------|
+| [**io_load_save_parquet.py**](io/io_load_save_parquet.py) | Save and reload DataFrames as Parquet files with automatic timestamp sanitization |
+| [**io_read_single_file_with_datafilereader.py**](io/io_read_single_file_with_datafilereader.py) | Read single EddyPro CSV with manual parameter specification |
+| [**io_read_multiple_files_with_multidatafilereader.py**](io/io_read_multiple_files_with_multidatafilereader.py) | Load and merge multiple EddyPro CSV files with pre-defined filetype |
+| [**io_read_single_file_with_readfiletype.py**](io/io_read_single_file_with_readfiletype.py) | Read single EddyPro CSV with pre-defined filetype configuration |
 | [**io_extract.py**](io/io_extract.py) | Binary value extraction, bit-level data manipulation |
 
 See: [io/README.md](io/README.md)
-
----
-
-## Example Data
-
-The examples use a single standardized example dataset for consistency and reproducibility. However, this represents just one example of time series data structure and quality. Real-world datasets may have:
-
-- Different time frequencies (hourly, daily, sub-30min, etc.)
-- Different gap patterns and sizes
-- Different quality characteristics and noise levels
-- Domain-specific variables and units
-- Various timestamp formats and timezone conventions
-
-All examples demonstrate principles applicable to different datasets. Adapt the code to your specific data format and requirements.

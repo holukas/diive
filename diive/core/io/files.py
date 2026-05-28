@@ -7,6 +7,7 @@ from pathlib import Path
 from pandas import Series, DataFrame, read_parquet
 
 from diive.core.times.times import TimestampSanitizer
+from diive.core.utils.console import info, detail
 
 
 def set_outpath(outpath: str or None, filename: str, fileextension: str):
@@ -20,18 +21,31 @@ def set_outpath(outpath: str or None, filename: str, fileextension: str):
 
 def save_parquet(filename: str, data: DataFrame or Series, outpath: str or None = None) -> str:
     """
-    Save pandas Series or DataFrame as parquet file
+    Save pandas Series or DataFrame as Parquet file.
+
+    Parquet is a columnar format designed for efficient storage and retrieval.
+    Index and column names are preserved.
 
     Args:
-        filename: str
-            Name of the generated parquet file.
-        data: pandas Series or DataFrame
-        outpath: str or None
-            If *None*, file is saved to system default folder. When used within
-            a notebook, the file is saved in the same location as the notebook.
+        filename : str
+            Name of output file (without extension; .parquet is added automatically).
+        data : pandas.Series or pandas.DataFrame
+            Data to save. Series is converted to single-column DataFrame.
+            Index name is preserved (e.g., 'TIMESTAMP_END', 'TIMESTAMP_START', 'TIMESTAMP_MIDDLE').
+        outpath : str or Path, optional
+            Directory path for output file. Default None: saves to current working directory.
 
     Returns:
-        str, filepath to parquet file
+        str
+            Full filepath to saved Parquet file.
+
+    Notes:
+        Index name and frequency information are preserved in the Parquet file.
+        When reloading with load_parquet(), use output_middle_timestamp to convert
+        timestamp representation if needed.
+
+    Example:
+        See `examples/io/io_load_save_parquet.py`
     """
     filepath = set_outpath(outpath=outpath, filename=filename, fileextension='parquet')
     tic = time.time()
@@ -39,34 +53,64 @@ def save_parquet(filename: str, data: DataFrame or Series, outpath: str or None 
         data = data.to_frame()
     data.to_parquet(filepath)
     toc = time.time() - tic
-    print(f"Saved file {filepath} ({toc:.3f} seconds).")
+    info(f"Saved file {filepath} ({toc:.3f} seconds).")
     return str(filepath)
 
 
 def load_parquet(filepath: str or Path, output_middle_timestamp: bool = True,
                  sanitize_timestamp: bool = True) -> DataFrame:
     """
-    Load data from Parquet file to pandas DataFrame
+    Load data from Parquet file to pandas DataFrame.
+
+    Automatically detects time resolution and optionally converts timestamp representation.
+    Index name and data types are preserved from the Parquet file.
 
     Args:
-        filepath: str
-            filepath to parquet file
-        output_middle_timestamp: Converts the timestamp to show the middle
-            of the averaging interval.
-        sanitize_timestamp: Sanitize the timestamp, detect frequency, make regular.
+        filepath : str or Path
+            Path to Parquet file.
+        output_middle_timestamp : bool, optional (default True)
+            Convert timestamp index to middle-of-period representation.
+            Use when converting from 'TIMESTAMP_END' or 'TIMESTAMP_START' formats.
+            **Requires: sanitize_timestamp=True AND index name must be one of**
+            **'TIMESTAMP_END', 'TIMESTAMP_START', or 'TIMESTAMP_MIDDLE'.**
+        sanitize_timestamp : bool, optional (default True)
+            Validate and regularize timestamp index: check naming convention, auto-detect
+            frequency, fill small gaps, remove duplicate timestamps. Calls TimestampSanitizer.
+            Required for output_middle_timestamp to work.
 
     Returns:
-        pandas DataFrame, data from Parquet file as pandas DataFrame
+        pandas.DataFrame
+            Data with validated DatetimeIndex. Frequency is detected and stored.
+
+    Raises:
+        ValueError
+            If output_middle_timestamp=True but sanitize_timestamp=False.
+        ValueError
+            If index name is not recognized (see sanitize_timestamp parameter).
+
+    Notes:
+        Parquet preserves index names, so ensure data was saved with proper naming
+        (e.g., 'TIMESTAMP_END' for end-of-period data) before using output_middle_timestamp=True.
+
+    Example:
+        See `examples/io/io_load_save_parquet.py`
     """
+    if output_middle_timestamp and not sanitize_timestamp:
+        raise ValueError(
+            "output_middle_timestamp=True requires sanitize_timestamp=True. "
+            "Timestamp conversion (to middle-of-period) requires timestamp validation and "
+            "frequency detection, which are performed during sanitization."
+        )
+
     tic = time.time()
     df = read_parquet(filepath)
     toc = time.time() - tic
-    print(f"Loaded .parquet file {filepath} ({toc:.3f} seconds).")
+    info(f"Loaded .parquet file {filepath} ({toc:.3f} seconds).")
 
     if sanitize_timestamp:
         # Check timestamp, also detects frequency of time series, this info was lost when saving to the parquet file
         df = TimestampSanitizer(data=df, output_middle_timestamp=output_middle_timestamp).get()
-        print(f"    --> Detected time resolution of {df.index.freq} / {df.index.freqstr} ")
+        detail(f"Detected time resolution of {df.index.freq} / {df.index.freqstr}")
     return df
 
 
@@ -78,7 +122,7 @@ def save_as_pickle(outpath: str or None, filename: str, data) -> str:
     pickle.dump(data, pickle_out)
     pickle_out.close()
     toc = time.time() - tic
-    print(f"Saved pickle {filepath} ({toc:.3f} seconds).")
+    info(f"Saved pickle {filepath} ({toc:.3f} seconds).")
     return str(filepath)
 
 
@@ -88,7 +132,7 @@ def load_pickle(filepath: str):
     pickle_in = open(filepath, "rb")
     data = pickle.load(pickle_in)
     toc = time.time() - tic
-    print(f"Loaded pickle {filepath} ({toc:.3f} seconds).")
+    info(f"Loaded pickle {filepath} ({toc:.3f} seconds).")
     return data
 
 
@@ -119,14 +163,14 @@ def loadfiles(sourcedir: str, fileext: str, filetype: str,
     """Search and load data files of type *filetype*, merge data and store to one dataframe"""
     from diive.core.io.filereader import MultiDataFileReader
 
-    print(f"\nSearching for {filetype} files with extension {fileext} and"
-          f"ID {idstr} in folder {sourcedir} ...")
+    info(f"Searching for {filetype} files with extension {fileext} and ID {idstr} in folder {sourcedir} ...")
     filepaths = [f for f in os.listdir(sourcedir) if f.endswith(fileext)]
     filepaths = [f for f in filepaths if idstr in f]
     filepaths = [sourcedir + "/" + f for f in filepaths]
     filepaths = [Path(f) for f in filepaths]
-    print(f"    Found {len(filepaths)} files:")
-    [print(f"   --> {f}") for f in filepaths]
+    info(f"Found {len(filepaths)} files:")
+    for f in filepaths:
+        detail(f"  {f}")
     if limit_n_files:
         filepaths = filepaths[0:limit_n_files]
     mergedfiledata = MultiDataFileReader(filetype=filetype, filepaths=filepaths)

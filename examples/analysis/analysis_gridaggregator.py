@@ -66,7 +66,7 @@ print(f"{'='*60}")
 print(f"This divides data into bins with equal record counts.")
 print(f"Useful for: Understanding patterns across equal-populated regions.\n")
 
-qa = dv.ga(
+qa = dv.analysis.GridAggregator(
     x=subset[swin_col],
     y=subset[ta_col],
     z=subset[vpd_col],
@@ -94,7 +94,7 @@ print(f"{'='*60}")
 print(f"This divides data into bins with equal value ranges.")
 print(f"Useful for: Physical interpretation with consistent bin sizes.\n")
 
-qe = dv.ga(
+qe = dv.analysis.GridAggregator(
     x=subset[swin_col],
     y=subset[ta_col],
     z=subset[vpd_col],
@@ -125,7 +125,7 @@ print(f"Useful for: Aligning bins with ecologically meaningful thresholds.\n")
 custom_x_bins = list(range(0, 1300, 100))  # 0 to 1200 W/m2 in 100 W/m2 steps
 custom_y_bins = list(range(-7, 30, 1))     # -7 to 29 C in 1 C steps
 
-qc = dv.ga(
+qc = dv.analysis.GridAggregator(
     x=subset[swin_col],
     y=subset[ta_col],
     z=subset[vpd_col],

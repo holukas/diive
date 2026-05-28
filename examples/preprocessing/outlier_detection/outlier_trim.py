@@ -21,7 +21,7 @@ s = df['Tair_f'].copy()
 s = s.loc[s.index.year == 2018].copy()
 
 # Add synthetic impulse noise
-s_noise = dv.add_impulse_noise(
+s_noise = dv.features.add_impulse_noise(
     series=s,
     factor_low=-10,
     factor_high=4,
@@ -42,7 +42,7 @@ print(f"  Range: {s_noise.min():.2f} to {s_noise.max():.2f}°C")
 # Apply trimming to nighttime data only.
 # Useful when daytime varies widely but nighttime is stable.
 
-trim_night = dv.TrimLow(
+trim_night = dv.outliers.TrimLow(
     series=s_noise,
     trim_daytime=False,
     trim_nighttime=True,
@@ -71,7 +71,7 @@ print(f"  Data retained: {100*filtered_night.notna().sum()/s_noise.notna().sum()
 # Apply trimming to daytime data only.
 # Useful when daytime has measurement issues but nighttime is reliable.
 
-trim_day = dv.TrimLow(
+trim_day = dv.outliers.TrimLow(
     series=s_noise,
     trim_daytime=True,
     trim_nighttime=False,

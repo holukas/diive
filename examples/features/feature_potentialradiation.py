@@ -29,7 +29,7 @@ f = df.index.year == 2018
 df = df[f].copy()
 
 # Calculate potential radiation (Stull method)
-sw_in_pot = dv.potrad(
+sw_in_pot = dv.features.potrad(
     timestamp_index=df.index,
     lat=47.286417,  # Davos latitude
     lon=7.733750,  # Davos longitude
@@ -56,7 +56,7 @@ f = df.index.year == 2018
 df = df[f].copy()
 
 # Calculate using equation of time method
-sw_in_pot_eot = dv.potrad_eot(
+sw_in_pot_eot = dv.features.potrad_eot(
     timestamp_index=df.index,
     lat=47.286417,  # Davos latitude
     lon=7.733750,  # Davos longitude
@@ -85,7 +85,7 @@ df = df[f].copy()
 
 # Calculate using different methods
 # Method 1: Stull (1988)
-potrad_stull = dv.potrad(
+potrad_stull = dv.features.potrad(
     timestamp_index=df.index,
     lat=47.286417,
     lon=7.733750,
@@ -93,7 +93,7 @@ potrad_stull = dv.potrad(
 )
 
 # Method 2: Equation of Time - TOA
-potrad_eot_toa = dv.potrad_eot(
+potrad_eot_toa = dv.features.potrad_eot(
     timestamp_index=df.index,
     lat=47.286417,
     lon=7.733750,
@@ -102,7 +102,7 @@ potrad_eot_toa = dv.potrad_eot(
 )
 
 # Method 3: Equation of Time - Clear-sky surface
-potrad_eot_clearsky = dv.potrad_eot(
+potrad_eot_clearsky = dv.features.potrad_eot(
     timestamp_index=df.index,
     lat=47.286417,
     lon=7.733750,
@@ -178,7 +178,7 @@ f = df.index.year == 2018
 df = df[f].copy()
 
 # Calculate potential radiation
-sw_in_pot = dv.potrad(
+sw_in_pot = dv.features.potrad(
     timestamp_index=df.index,
     lat=47.286417,
     lon=7.733750,
@@ -186,7 +186,7 @@ sw_in_pot = dv.potrad(
 )
 
 # Create heatmap visualization
-dv.plot_heatmap_datetime(
+dv.plotting.HeatmapDateTime(
     series=sw_in_pot,
     ax_orientation='horizontal'
 ).plot(

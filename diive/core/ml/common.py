@@ -13,8 +13,10 @@ from xgboost import XGBRegressor
 from yellowbrick.regressor import PredictionError, ResidualsPlot
 
 import diive.core.dfun.frames as fr
+from diive.core.ml.results import GapFillingResult
 from diive.core.times.times import vectorize_timestamps
-from diive.pkgs.gapfilling.scores import prediction_scores
+from diive.core.utils.console import console as _console, detail, info, rule, warn
+from diive.gapfilling.scores import prediction_scores
 
 pd.set_option('display.max_rows', 50)
 pd.set_option('display.max_columns', 12)
@@ -29,6 +31,7 @@ class MlRegressorGapFillingBase:
                  target_col: str or tuple,
                  verbose: int = 0,
                  test_size: float = 0.25,
+                 below_zero: str = None,
                  **kwargs):
         """
         Base class for machine-learning gap-filling using Random Forest or XGBoost.
@@ -66,6 +69,14 @@ class MlRegressorGapFillingBase:
                 - Smaller test_size: tighter train set but more noise in test metrics
                 - Larger test_size: looser train set but better estimate stability
                 Standard value 0.25 balances both considerations.
+
+            below_zero:
+                How to treat predicted values below zero for variables that cannot be negative
+                (e.g. VPD, SW_IN, PPFD). Applied to gap-filled predictions only, not to
+                observed data.
+                - None (default): no treatment, keep predictions as-is.
+                - 'zero': clip negative predictions to 0.
+                - 'nan': set negative predictions to NaN (treated as unfillable).
 
             **kwargs:
                 Regressor-specific hyperparameters passed to the sklearn regressor.
@@ -109,6 +120,11 @@ class MlRegressorGapFillingBase:
         self.verbose = verbose
         self.kwargs = kwargs
 
+        _valid_below_zero = (None, 'zero', 'nan')
+        if below_zero not in _valid_below_zero:
+            raise ValueError(f"below_zero must be one of {_valid_below_zero}, got '{below_zero}'")
+        self.below_zero = below_zero
+
         self._random_state = self.kwargs['random_state'] if 'random_state' in self.kwargs else None
 
         if self.regressor == RandomForestRegressor:
@@ -119,10 +135,18 @@ class MlRegressorGapFillingBase:
             self.gfsuffix = '_gf'
 
         if verbose:
-            print(f"\n\n{'=' * 60}\nStarting gap-filling for\n{self.target_col}\nusing {self.regressor}\n{'=' * 60}")
+            rule(f"Gap-Filling: {self.target_col}", verbose=verbose)
+            info(f"Model: {self.regressor.__name__}", verbose=verbose)
 
         # Model dataframe is the pre-engineered input (features are already computed)
         self.model_df = input_df.copy()
+
+        if target_col not in self.model_df.columns:
+            available = self.model_df.columns.tolist()
+            raise KeyError(
+                f"target_col '{target_col}' not found in input_df. "
+                f"Available columns: {available}"
+            )
 
         # Original input features (all features except target)
         self.original_input_features = self.model_df.drop(columns=self.target_col).columns.tolist()
@@ -135,10 +159,9 @@ class MlRegressorGapFillingBase:
         not_complete = fstats.loc['count'] < n_vals_index
         not_complete = not_complete[not_complete].index.tolist()
         if len(not_complete) > 0:
-            print(f"(!)Some features are incomplete and have less than {n_vals_index} values:")
-            for nc in not_complete:
-                print(f"    --> {nc} ({fstats[nc]['count'].astype(int)} values)")
-            print(f"This means that not all target values can be predicted based on the full model.")
+            warn(f"Some features are incomplete (<{n_vals_index} values): "
+                 + ", ".join(f"{nc} ({fstats[nc]['count'].astype(int)})" for nc in not_complete))
+            warn("Not all target values can be predicted based on the full model.")
 
         # Create training (75%) and testing dataset (25%)
         # Sort index to keep original order
@@ -271,20 +294,24 @@ class MlRegressorGapFillingBase:
         random_importance = series.loc[self.random_col]
         random_sd = fi_df.loc[self.random_col, 'SHAP_SD'] if 'SHAP_SD' in fi_df.columns else 0
         threshold = random_importance + shap_threshold_factor * random_sd
-        print(f"{infotxt} >>> Setting threshold for feature rejection to {threshold}.")
-        print(f"{infotxt} >>> Random variable importance: {random_importance:.6f}, SD: {random_sd:.6f}")
+        info(f"Threshold: {threshold:.6f}  (random={random_importance:.6f}, SD={random_sd:.6f})",
+             verbose=self.verbose)
 
         # Get accepted features
         accepted_locs = ((series > threshold) & (series > 0))
         accepted_df = pd.DataFrame(series[accepted_locs])
         accepted_features = accepted_df.index.tolist()
-        print(f"\n{infotxt} >>> Accepted features and their importance:\n{accepted_df}")
+        if self.verbose:
+            info("Accepted features:", verbose=self.verbose)
+            _console.print(accepted_df.to_string())
 
         # Get rejected features (everything not accepted, incl. boundary and random col)
         rejected_locs = ~accepted_locs
         rejected_df = pd.DataFrame(series[rejected_locs])
         rejected_features = rejected_df.index.tolist()
-        print(f"\n{infotxt} >>> Rejected features and their importance:\n{rejected_df}")
+        if self.verbose:
+            info("Rejected features:", verbose=self.verbose)
+            _console.print(rejected_df.to_string())
 
         # Update dataframe, keep accepted columns
         accepted_cols = [self.target_col]
@@ -301,6 +328,46 @@ class MlRegressorGapFillingBase:
             model.fit(X=X_train, y=y_train, eval_set=[(X_train, y_train), (X_test, y_test)])
         return model
 
+    def run(self, **kwargs):
+        """Unified trigger: trains model then fills gaps."""
+        self.trainmodel(**kwargs)
+        self.fillgaps(**kwargs)
+        return self
+
+    @property
+    def result(self) -> DataFrame:
+        """Primary result: full gap-filling DataFrame (target + flag columns)."""
+        return self.gapfilling_df_
+
+    @property
+    def results(self) -> GapFillingResult:
+        """Structured result after .run() — all outputs in one object.
+
+        Returns a :class:`~diive.core.ml.results.GapFillingResult` with:
+        ``gapfilled``, ``flag``, ``scores``, ``scores_traintest``,
+        ``feature_importances``, ``feature_importances_traintest``,
+        ``gapfilling_df``, ``model``, ``accepted_features``, ``rejected_features``.
+
+        Raises:
+            Exception: if called before :meth:`run`.
+        """
+        if not isinstance(self._gapfilling_df, DataFrame):
+            raise Exception("Results not available: call .run() first.")
+        fi = self._feature_importances if isinstance(self._feature_importances, DataFrame) else None
+        fi_tt = self._feature_importances_traintest if isinstance(self._feature_importances_traintest, DataFrame) else None
+        return GapFillingResult(
+            gapfilled=self.get_gapfilled_target(),
+            flag=self.get_flag(),
+            scores=self._scores,
+            scores_traintest=self._scores_traintest or None,
+            feature_importances=fi,
+            feature_importances_traintest=fi_tt,
+            gapfilling_df=self._gapfilling_df,
+            model=self._model,
+            accepted_features=self._accepted_features or None,
+            rejected_features=self._rejected_features or None,
+        )
+
     def trainmodel(self,
                    showplot_scores: bool = True,
                    showplot_importance: bool = True):
@@ -315,7 +382,7 @@ class MlRegressorGapFillingBase:
 
         """
 
-        print("\nTraining final model ...")
+        info("Training final model ...", verbose=self.verbose)
         idtxt = f"TRAIN & TEST "
 
         # Set training and testing data
@@ -327,46 +394,46 @@ class MlRegressorGapFillingBase:
         X_names = self.train_df.drop(self.target_col, axis=1).columns.tolist()
 
         # Info
-        print(f">>> Training model {self.regressor} based on data between "
-              f"{self.train_df.index[0]} and {self.train_df.index[-1]} ...")
+        info(f"Training {self.regressor.__name__} on data between "
+             f"{self.train_df.index[0]} and {self.train_df.index[-1]} ...",
+             verbose=self.verbose)
 
         # Train the model on training data
-        print(f">>> Fitting model to training data ...")
+        info("Fitting model to training data ...", verbose=self.verbose)
         self._model = self._fitmodel(model=self._model, X_train=X_train, y_train=y_train, X_test=X_test, y_test=y_test)
 
         # Predict targets in test data
-        print(f">>> Using model to predict target {self.target_col} in unseen test data ...")
+        info(f"Predicting {self.target_col} on unseen test data ...", verbose=self.verbose)
         pred_y_test = self.model_.predict(X=X_test)
 
         # Calculate SHAP-based feature importance on test data and store in dataframe
-        print(f">>> Using model to calculate SHAP feature importance based on unseen test data ...")
+        info("Calculating SHAP feature importances from test data ...", verbose=self.verbose)
         self._feature_importances_traintest = self._shap_importance(
             model=self.model_, X=X_test, X_names=X_names)
 
         if showplot_importance:
-            print(">>> Plotting feature importances (SHAP) ...")
+            info("Plotting feature importances (SHAP) ...", verbose=self.verbose)
             plot_feature_importance(feature_importances=self.feature_importances_traintest_)
 
         # Scores
-        print(f">>> Calculating prediction scores based on predicting unseen test data of {self.target_col} ...")
+        info(f"Calculating prediction scores for {self.target_col} ...", verbose=self.verbose)
         self._scores_traintest = prediction_scores(predictions=pred_y_test, targets=y_test)
 
         if showplot_scores:
-            print(f">>> Plotting observed and predicted values ...")
+            info("Plotting observed vs predicted values ...", verbose=self.verbose)
             plot_observed_predicted(predictions=pred_y_test,
                                     targets=y_test,
                                     scores=self.scores_traintest_,
                                     infotxt=f"{idtxt} trained on training set, tested on test set",
                                     random_state=self._random_state)
 
-            print(f">>> Plotting residuals and prediction error ...")
+            info("Plotting residuals and prediction error ...", verbose=self.verbose)
             plot_prediction_residuals_error_regr(
                 model=self.model_, X_train=X_train, y_train=y_train, X_test=X_test, y_test=y_test,
                 infotxt=f"{idtxt} trained on training set, tested on test set")
 
         # Collect results
-        print(
-            f">>> Collecting results, details about training and testing can be accessed by calling .report_traintest().")
+        detail("Collecting results (call .report_traintest() for details).", verbose=self.verbose)
         self._traintest_details = dict(
             train_df=self.train_df,
             test_df=self.test_df,
@@ -375,7 +442,7 @@ class MlRegressorGapFillingBase:
             model=self.model_,
         )
 
-        print(f">>> Done.")
+        info("Training complete.", verbose=self.verbose)
 
     def report_traintest(self):
         """Results from model training on test data"""
@@ -386,11 +453,8 @@ class MlRegressorGapFillingBase:
         test_size_perc = self.test_size * 100
         training_size_perc = 100 - test_size_perc
 
-        print(
-            f"\n"
-            f"{'=' * len(idtxt)}\n"
-            f"{idtxt}\n"
-            f"{'=' * len(idtxt)}\n"
+        rule(idtxt)
+        _console.print(
             f"\n"
             f"## DATA\n"
             f"  > target: {self.target_col}\n"
@@ -398,36 +462,29 @@ class MlRegressorGapFillingBase:
             f"  > {len(self.model_df)} records (with missing)\n"
             f"  > {len(self.model_df.dropna())} available records for target and all features (no missing values)\n"
             f"  > training on {len(self.train_df)} records ({training_size_perc:.1f}%) "
-            f"of {len(self.train_df)} features between {self.train_df.index[0]} and {self.train_df.index[-1]}\n"
+            f"between {self.train_df.index[0]} and {self.train_df.index[-1]}\n"
             f"  > testing on {len(self.test_df)} unseen records ({test_size_perc:.1f}%) "
             f"of {self.target_col} between {self.test_df.index[0]} and {self.test_df.index[-1]}\n"
             f"\n"
             f"## MODEL\n"
-            f"  > the model was trained on training data ({len(self.train_df)} records)\n"
-            f"  > the model was tested on test data ({len(self.test_df)} values)\n"
             f"  > estimator:  {self.model_}\n"
             f"  > parameters:  {self.model_.get_params()}\n"
-            f"  > number of features used in model:  {len(results['X_names'])}\n"
-            f"  > names of features used in model:  {results['X_names']}\n"
+            f"  > number of features:  {len(results['X_names'])}\n"
+            f"  > feature names:  {results['X_names']}\n"
             f"\n"
             f"## FEATURE IMPORTANCES\n"
-            f"  > feature importances were calculated based on unseen test data of {self.target_col} "
-            f"({len(self.test_df[self.target_col])} records).\n"
-            f"  > feature importances show mean absolute SHAP values.\n"
+            f"  > calculated from unseen test data ({len(self.test_df[self.target_col])} records)\n"
+            f"  > shows mean absolute SHAP values\n"
+            f"\n{fi}\n"
             f"\n"
-            f"{fi}"
-            f"\n"
-            f"\n"
-            f"\n"
-            f"## MODEL SCORES\n"
-            f"  All scores were calculated based on unseen test data ({len(self.test_df[self.target_col])} records).\n"
-            f"  > MAE:  {self.scores_traintest_['mae']} (mean absolute error)\n"
-            f"  > MedAE:  {self.scores_traintest_['medae']} (median absolute error)\n"
-            f"  > MSE:  {self.scores_traintest_['mse']} (mean squared error)\n"
+            f"## MODEL SCORES (test set, {len(self.test_df[self.target_col])} records)\n"
+            f"  > MAE:   {self.scores_traintest_['mae']} (mean absolute error)\n"
+            f"  > MedAE: {self.scores_traintest_['medae']} (median absolute error)\n"
+            f"  > MSE:   {self.scores_traintest_['mse']} (mean squared error)\n"
             f"  > RMSE:  {self.scores_traintest_['rmse']} (root mean squared error)\n"
             f"  > MAXE:  {self.scores_traintest_['maxe']} (max error)\n"
             f"  > MAPE:  {self.scores_traintest_['mape']:.3f} (mean absolute percentage error)\n"
-            f"  > R2:  {self.scores_traintest_['r2']}\n"
+            f"  > R2:    {self.scores_traintest_['r2']}\n"
         )
 
     def fillgaps(self,
@@ -466,8 +523,8 @@ class MlRegressorGapFillingBase:
 
         infotxt = "[ FEATURE REDUCTION ]"
 
-        # Info
-        print(f"\n{infotxt} Feature reduction based on SHAP importance ...")
+        rule("Feature Reduction", verbose=self.verbose)
+        info("Reducing features based on SHAP importance ...", verbose=self.verbose)
 
         df = self.train_df.copy()
         df = df.dropna()
@@ -491,7 +548,7 @@ class MlRegressorGapFillingBase:
         # _ = tree.plot_tree(rf.estimators_[0], feature_names=X.columns, filled=True)
 
         # Calculate SHAP importance for all data
-        print(f"{infotxt} >>> Calculating feature importances (SHAP) ...")
+        info("Calculating SHAP feature importances ...", verbose=self.verbose)
         X_names = df.drop(self.target_col, axis=1).columns.tolist()
         feature_importances = self._shap_importance(model=model, X=X, X_names=X_names)
         self._feature_importances_reduction = feature_importances.sort_values(by='SHAP_IMPORTANCE', ascending=False)
@@ -502,7 +559,7 @@ class MlRegressorGapFillingBase:
         accepted_cols = self._remove_rejected_features(shap_threshold_factor=shap_threshold_factor)
 
         # Update model data, keep accepted features
-        print(f"{infotxt} >>> Removing rejected features from model data ...")
+        info("Removing rejected features from model data ...", verbose=self.verbose)
         self.train_df = self.train_df[accepted_cols].copy()
         self.test_df = self.test_df[accepted_cols].copy()
         self.model_df = self.model_df[accepted_cols].copy()
@@ -513,36 +570,23 @@ class MlRegressorGapFillingBase:
     def report_feature_reduction(self):
         """Results from feature reduction"""
 
-        idtxt = "FEATURE REDUCTION"
-
-        # # Original features without random variable
-        # _X_names = [x for x in fi.index if x != self.random_col]
-
-        print(
-            f"\n"
-            f"{'=' * len(idtxt)}\n"
-            f"{idtxt}\n"
-            f"{'=' * len(idtxt)}\n"
+        rule("Feature Reduction")
+        _console.print(
             f"\n"
             f"- Target variable: {self.target_col}\n"
-            f"\n"
-            f"- The random variable {self.random_col} was added to the original features, "
-            f"used as benchmark for detecting relevant feature importances.\n"
+            f"- Random variable {self.random_col} used as benchmark for importance threshold.\n"
             f"\n"
             f"SHAP IMPORTANCE (mean absolute SHAP values):\n"
             f"\n"
-            f"{self.feature_importances_reduction_}"
+            f"{self.feature_importances_reduction_}\n"
             f"\n"
+            f"- These results are from feature reduction. Final model importances are\n"
+            f"  recalculated during gap-filling.\n"
             f"\n"
-            f"- These results are from feature reduction. Note that feature importances for "
-            f"the final model are calculated during gap-filling.\n"
-            f"\n"
-            f"--> {len(self.original_input_features)} original input features (before feature reduction): "
-            f"{self.original_input_features}\n"
-            f"--> {len(self.rejected_features_)} rejected features (during feature reduction): "
-            f"{self.rejected_features_ if self.rejected_features_ else 'None.'}\n"
-            f"--> {len(self.accepted_features_)} accepted features (after feature reduction): "
-            f"{self.accepted_features_}\n"
+            f"  {len(self.original_input_features)} original input features: {self.original_input_features}\n"
+            f"  {len(self.rejected_features_)} rejected features: "
+            f"{self.rejected_features_ if self.rejected_features_ else 'none'}\n"
+            f"  {len(self.accepted_features_)} accepted features: {self.accepted_features_}\n"
         )
 
     def report_gapfilling(self):
@@ -571,51 +615,35 @@ class MlRegressorGapFillingBase:
         n_fallback = locs_fallback.sum()
         test_size_perc = self.test_size * 100
 
-        print(
+        rule(idtxt)
+        _console.print(
             f"\n"
-            f"{'=' * len(idtxt)}\n"
-            f"{idtxt}\n"
-            f"{'=' * len(idtxt)}\n"
-            f"\n"
-            f"Model scores and feature importances were calculated from high-quality "
-            f"predicted targets ({n_hq} values, {self.target_gapfilled_col} where flag=1) "
-            f"in comparison to observed targets ({n_observed} values, {self.target_col}).\n"
+            f"Scores and importances from predicted ({n_hq}) vs observed ({n_observed}) targets.\n"
             f"\n"
             f"## TARGET\n"
-            f"- first timestamp:  {df.index[0]}\n"
-            f"- last timestamp:  {df.index[-1]}\n"
-            f"- potential number of values: {n_potential} values)\n"
-            f"- target column (observed):  {self.target_col}\n"
-            f"- missing records (observed):  {df[self.target_col].isnull().sum()} "
-            f"(cross-check from flag: {n_observed_missing_fromflag})\n"
-            f"- target column (gap-filled):  {self.target_gapfilled_col}  ({n_available} values)\n"
-            f"- missing records (gap-filled):  {df[self.target_gapfilled_col].isnull().sum()}\n"
-            f"- gap-filling flag: {self.target_gapfilled_flag_col}\n"
-            f"  > flag 0 ... observed targets ({n_observed} values)\n"
-            f"  > flag 1 ... targets gap-filled with high-quality, all features available ({n_hq} values)\n"
-            f"  > flag 2 ... targets gap-filled with fallback ({n_fallback} values)\n"
+            f"- period:  {df.index[0]} to {df.index[-1]}\n"
+            f"- potential values: {n_potential}\n"
+            f"- observed ({self.target_col}):  missing {df[self.target_col].isnull().sum()}\n"
+            f"- gap-filled ({self.target_gapfilled_col}):  {n_available} values, "
+            f"missing {df[self.target_gapfilled_col].isnull().sum()}\n"
+            f"- flag {self.target_gapfilled_flag_col}:  "
+            f"0=observed ({n_observed})  1=gap-filled ({n_hq})  2=fallback ({n_fallback})\n"
             f"\n"
-            f"## FEATURE IMPORTANCES\n"
-            f"- names of features used in model:  {feature_names}\n"
-            f"- number of features used in model:  {n_features}\n"
-            f"- feature importances calculated using SHAP (TreeExplainer).\n"
+            f"## FEATURE IMPORTANCES  ({n_features} features, SHAP TreeExplainer)\n"
+            f"\n{fi}\n"
             f"\n"
-            f"{fi}"
-            f"\n"
-            f"\n"
-            f"## MODEL\n"
-            f"The model was trained on a training set with test size {test_size_perc:.2f}%.\n"
+            f"## MODEL  (test size {test_size_perc:.1f}%)\n"
             f"- estimator:  {model}\n"
             f"- parameters:  {model.get_params()}\n"
             f"\n"
             f"## MODEL SCORES\n"
-            f"- MAE:  {scores['mae']} (mean absolute error)\n"
-            f"- MedAE:  {scores['medae']} (median absolute error)\n"
-            f"- MSE:  {scores['mse']} (mean squared error)\n"
+            f"- MAE:   {scores['mae']} (mean absolute error)\n"
+            f"- MedAE: {scores['medae']} (median absolute error)\n"
+            f"- MSE:   {scores['mse']} (mean squared error)\n"
             f"- RMSE:  {scores['rmse']} (root mean squared error)\n"
             f"- MAXE:  {scores['maxe']} (max error)\n"
             f"- MAPE:  {scores['mape']:.3f} (mean absolute percentage error)\n"
-            f"- R2:  {scores['r2']}\n"
+            f"- R2:    {scores['r2']}\n"
         )
 
     def _shap_importance(self, model, X, X_names) -> DataFrame:
@@ -627,29 +655,46 @@ class MlRegressorGapFillingBase:
         """
 
         # Create explainer and calculate SHAP values
-        # Handle XGBoost base_score parameter format issue with monkey-patch
-        # Some XGBoost/environment combinations return base_score as '[-4.121306E0]' which
-        # float() cannot parse. We monkey-patch float() to handle this.
+        # XGBoost stores base_score internally as '[-3.18E0]' (bracket-enclosed scientific
+        # notation). Older shap versions parsed this via float(), newer ones use
+        # ast.literal_eval(). Python 3.13 tightened ast.literal_eval and rejects this
+        # format. Patch both entry points so the explainer initialises cleanly regardless
+        # of the shap/Python version combination in use.
+        import ast
+        import builtins
+
         _builtin_float = float
 
         def _patched_float(x):
-            """float() that handles bracket-enclosed scientific notation like '[-4.121306E0]'"""
+            """Handle bracket-enclosed scientific notation like '[-4.121306E0]'."""
             if isinstance(x, str):
                 x_stripped = x.strip('[]')
-                if x_stripped != x:  # Only use patched version if brackets were removed
+                if x_stripped != x:
                     return _builtin_float(x_stripped)
             return _builtin_float(x)
 
-        # Temporarily replace float in builtins
-        import builtins
-        original_float = builtins.float
+        _original_literal_eval = ast.literal_eval
+
+        def _patched_literal_eval(s):
+            """Handle bracket-enclosed scientific notation that Python 3.13 rejects."""
+            if isinstance(s, str):
+                stripped = s.strip()
+                if stripped.startswith('[') and stripped.endswith(']'):
+                    inner = stripped[1:-1].strip()
+                    try:
+                        return [float(inner)]
+                    except ValueError:
+                        pass
+            return _original_literal_eval(s)
+
         builtins.float = _patched_float
+        ast.literal_eval = _patched_literal_eval
 
         try:
             explainer = shap.TreeExplainer(model)
         finally:
-            # Always restore original float
-            builtins.float = original_float
+            builtins.float = _builtin_float
+            ast.literal_eval = _original_literal_eval
 
         shap_values = explainer.shap_values(X)
 
@@ -696,11 +741,32 @@ class MlRegressorGapFillingBase:
             raise Exception(f"(!) Stopping execution because dataset comprises "
                             f"only one single column : {self.model_df.columns}")
 
+    def _apply_below_zero_treatment(self, predictions: np.ndarray) -> np.ndarray:
+        """Clip or nullify negative predictions for physically non-negative variables.
+
+        Applied only when below_zero is set. Has no effect on observed data.
+        """
+        if self.below_zero is None:
+            return predictions
+        predictions = predictions.copy().astype(float)
+        neg_locs = predictions < 0
+        if neg_locs.any():
+            n_neg = int(neg_locs.sum())
+            if self.below_zero == 'zero':
+                predictions[neg_locs] = 0.0
+                detail(f"below_zero='zero': clipped {n_neg} negative prediction(s) to 0.",
+                       verbose=self.verbose)
+            elif self.below_zero == 'nan':
+                predictions[neg_locs] = np.nan
+                detail(f"below_zero='nan': set {n_neg} negative prediction(s) to NaN.",
+                       verbose=self.verbose)
+        return predictions
+
     def _fillgaps_fullmodel(self, showplot_scores, showplot_importance):
         """Apply model to fill missing targets for records where all features are available
         (high-quality gap-filling)"""
 
-        print("\nGap-filling using final model ...")
+        info("Gap-filling using final model ...", verbose=self.verbose)
 
         # Original input data, contains target and features
         # This dataframe has the full timestamp
@@ -715,24 +781,24 @@ class MlRegressorGapFillingBase:
             df=df, target_col=self.target_col, complete_rows=True)
 
         # Predict all targets (no test split)
-        print(f">>> Using final model on all data to predict target {self.target_col} ...")
+        info(f"Predicting {self.target_col} with full model on all data ...", verbose=self.verbose)
         pred_y = self.model_.predict(X=X)
 
         # Calculate SHAP-based feature importance and store in dataframe
-        print(f">>> Using final model on all data to calculate SHAP feature importance ...")
+        info("Calculating SHAP feature importances ...", verbose=self.verbose)
         self._feature_importances = self._shap_importance(
             model=self._model, X=X, X_names=X_names)
 
         if showplot_importance:
-            print(">>> Plotting feature importances (SHAP) ...")
+            info("Plotting feature importances (SHAP) ...", verbose=self.verbose)
             plot_feature_importance(feature_importances=self.feature_importances_)
 
         # Scores, using all targets
-        print(f">>> Calculating prediction scores based on all data predicting {self.target_col} ...")
+        info(f"Calculating prediction scores for {self.target_col} ...", verbose=self.verbose)
         self._scores = prediction_scores(predictions=pred_y, targets=y)
 
         if showplot_scores:
-            print(f">>> Plotting observed and predicted values based on all data ...")
+            info("Plotting observed vs predicted values ...", verbose=self.verbose)
             plot_observed_predicted(predictions=pred_y,
                                     targets=y,
                                     scores=self.scores_,
@@ -747,7 +813,6 @@ class MlRegressorGapFillingBase:
         # In the next step, all available features are used to
         # predict the target for records where all features are available.
         # Feature data for records where all features are available:
-        print(f">>> Predicting target {self.target_col} where all features are available ...", end=" ")
         features_df = df.drop(self.target_col, axis=1)  # Remove target data
         features_df = features_df.dropna()  # Keep rows where all features available
         X = features_df.to_numpy()  # Features are needed as numpy array
@@ -755,11 +820,12 @@ class MlRegressorGapFillingBase:
 
         # Predict targets for all records where all features are available
         pred_y = self.model_.predict(X=X)
-        print(f"predicted {len(pred_y)} records.")
+        pred_y = self._apply_below_zero_treatment(pred_y)
+        info(f"Predicted {len(pred_y)} records where all features available.", verbose=self.verbose)
 
         # Collect gapfilling results in df
         # Define column names for gapfilled_df
-        print(">>> Collecting results for final model ...")
+        detail("Collecting results for final model ...", verbose=self.verbose)
         self._define_cols()
 
         # Collect predictions in dataframe
@@ -789,13 +855,13 @@ class MlRegressorGapFillingBase:
         # Gap-filled time series
         # Fill missing records in target with predicions
         n_missing = self._gapfilling_df[self.target_col].isnull().sum()
-        print(f">>> Filling {n_missing} missing records in target with predictions from final model ...")
-        print(f">>> Storing gap-filled time series in variable {self.target_gapfilled_col} ...")
+        info(f"Filling {n_missing} missing records in {self.target_gapfilled_col} ...",
+             verbose=self.verbose)
         self._gapfilling_df[self.target_gapfilled_col] = \
             self._gapfilling_df[self.target_col].fillna(self._gapfilling_df[self.pred_fullmodel_col])
 
         # Restore original full timestamp
-        print(">>> Restoring original timestamp in results ...")
+        detail("Restoring original timestamp in results ...", verbose=self.verbose)
         self._gapfilling_df = self._gapfilling_df.reindex(df.index)
 
         # SHAP values
@@ -812,12 +878,13 @@ class MlRegressorGapFillingBase:
         _still_missing_locs = self._gapfilling_df[self.target_gapfilled_col].isnull()
         _num_still_missing = _still_missing_locs.sum()  # Count number of still-missing values
 
-        print(f"\nGap-filling {_num_still_missing} remaining missing records in "
-              f"{self.target_gapfilled_col} using fallback model ...")
+        info(f"Fallback: filling {_num_still_missing} remaining gaps in "
+             f"{self.target_gapfilled_col} ...", verbose=self.verbose)
 
         if _num_still_missing > 0:
 
-            print(f">>> Fallback model is trained on {self.target_gapfilled_col} and timestamp info ...")
+            info(f"Fallback model trained on {self.target_gapfilled_col} and timestamp features ...",
+                 verbose=self.verbose)
 
             fallback_predictions, \
                 fallback_timestamp = \
@@ -830,7 +897,7 @@ class MlRegressorGapFillingBase:
 
             self._gapfilling_df.loc[_still_missing_locs, self.target_gapfilled_flag_col] = 2  # Adjust flag, 2=fallback
         else:
-            print(f">>> Fallback model not necessary, all gaps were already filled.")
+            detail("Fallback model not needed — all gaps already filled.", verbose=self.verbose)
             self._gapfilling_df[self.pred_fallback_col] = None
 
         # Cumulative
@@ -839,7 +906,7 @@ class MlRegressorGapFillingBase:
 
     def _fillgaps_combinepredictions(self):
         """Combine predictions of full model with fallback predictions"""
-        print(">>> Combining predictions from full model and fallback model ...")
+        detail("Combining full-model and fallback predictions ...", verbose=self.verbose)
         # First add predictions from full model
         self._gapfilling_df[self.pred_col] = self._gapfilling_df[self.pred_fullmodel_col].copy()
         # Then fill remaining gaps with predictions from fallback model
@@ -869,8 +936,9 @@ class MlRegressorGapFillingBase:
         full_timestamp_df = gf_fallback_df.drop(self.target_gapfilled_col, axis=1)  # Remove target data
         X_fallback_full = full_timestamp_df.to_numpy()  # Features are needed as numpy array
 
-        print(f">>> Predicting target {self.target_gapfilled_col} using fallback model ...")
+        info(f"Predicting {self.target_gapfilled_col} using fallback model ...", verbose=self.verbose)
         pred_y_fallback = model_fallback.predict(X=X_fallback_full)  # Predict targets in test data
+        pred_y_fallback = self._apply_below_zero_treatment(pred_y_fallback)
         full_timestamp = full_timestamp_df.index
 
         return pred_y_fallback, full_timestamp
@@ -884,13 +952,15 @@ class MlRegressorGapFillingBase:
         _vals_fallback_filled = still_missing_locs.sum()
         _perc_fallback_filled = (_vals_fallback_filled / _vals_max) * 100
 
-        print(f"Gap-filling results for {self.target_col}\n"
-              f"max possible: {_vals_max} values\n"
-              f"before gap-filling: {_vals_before} values\n"
-              f"after gap-filling: {_vals_after} values\n"
-              f"gap-filled with fallback: {_vals_fallback_filled} values / {_perc_fallback_filled:.1f}%\n"
-              f"used features:\n{most_important_df}\n"
-              f"predictions vs targets, R2 = {model_r2:.3f}")
+        _console.print(
+            f"Gap-filling results for {self.target_col}\n"
+            f"max possible: {_vals_max} values\n"
+            f"before gap-filling: {_vals_before} values\n"
+            f"after gap-filling: {_vals_after} values\n"
+            f"gap-filled with fallback: {_vals_fallback_filled} values / {_perc_fallback_filled:.1f}%\n"
+            f"used features:\n{most_important_df}\n"
+            f"predictions vs targets, R2 = {model_r2:.3f}"
+        )
 
     def _define_cols(self):
         self.pred_col = ".PREDICTIONS"

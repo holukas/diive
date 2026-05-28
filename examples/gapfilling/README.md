@@ -2,11 +2,11 @@
 
 Examples demonstrating various gap-filling approaches for time series data, from simple to advanced machine learning.
 
-10 examples across 4 gap-filling methods with optimization and comparison workflows.
+12 examples across 5 gap-filling methods with optimization and comparison workflows.
 
 ## Method Overview
 
-Linear interpolation is fast but works only for small gaps. Random Forest and XGBoost require training data but handle larger gaps and complex patterns. MDS (Meteorological Data Similarity) needs no training — it matches similar conditions across your dataset.
+Linear interpolation is fast but works only for small gaps. Random Forest and XGBoost require training data but handle larger gaps and complex patterns. MDS (Meteorological Data Similarity) needs no training — it matches similar conditions across your dataset. SW_IN Physics+XGBoost uses solar geometry to constrain nighttime values to zero and fills daytime gaps with gradient boosting.
 
 | Method | Training | Best For |
 |--------|----------|----------|
@@ -14,6 +14,7 @@ Linear interpolation is fast but works only for small gaps. Random Forest and XG
 | Random Forest | Yes | General purpose, handles nonlinear patterns |
 | XGBoost | Yes | High accuracy, best for large datasets |
 | MDS | No | When you lack training data |
+| SW_IN Physics+XGBoost | Yes | Shortwave radiation with physical nighttime constraint |
 
 ## Examples by Method
 
@@ -26,9 +27,10 @@ Simple, no training required. Works for small gaps.
 
 ### Random Forest
 
-Training-based, interpretable, robust to outliers. Three versions: basic, quick prototype, and hyperparameter-tuned.
+Training-based, interpretable, robust to outliers. Four versions: basic, long-term year-pooling, quick prototype, and hyperparameter-tuned.
 
 - **gapfill_randomforest.py** — Basic Random Forest with 8-stage feature engineering
+- **gapfill_randomforest_longterm.py** — Long-term gap-filling using year-pooling strategy (optimal for multi-year datasets)
 - **gapfill_quickfill.py** — Quick prototype (faster for exploration)
 - **gapfill_optimize_randomforest.py** — Hyperparameter tuning via grid search
 
@@ -46,6 +48,12 @@ No training. Fills gaps by finding similar conditions elsewhere in your data.
 - **gapfill_mds.py** — Original MDS implementation
 - **gapfill_mds_comparison.py** — Comparison of original vs. optimized variants
 
+### SW_IN Physics + XGBoost
+
+Physics-constrained gap-filling for shortwave incoming radiation. Nighttime values are always set to zero; daytime gaps are filled with XGBoost trained on potential radiation and timestamp features. Only lat/lon/UTC offset required — no meteorological driver variables needed by default.
+
+- **gapfill_swin.py** — SW_IN gap-filling with nighttime offset correction: physics sets nighttime to zero, XGBoost fills daytime gaps using SW_IN_POT and timestamp features only
+
 ### Comparison & Benchmarking
 
 - **gapfill_comparison.py** — Run all 4 methods on the same data, compare R², MAE, RMSE, and runtime
@@ -55,7 +63,7 @@ No training. Fills gaps by finding similar conditions elsewhere in your data.
 **Linear interpolation:** Your gaps are small (a few hours or less) and you don't need high accuracy.
 
 ```python
-from diive.pkgs.gapfilling import linear_interpolation
+from diive.gapfilling import linear_interpolation
 
 filled = linear_interpolation(series=df['NEE'], limit=1)
 ```
@@ -64,7 +72,7 @@ filled = linear_interpolation(series=df['NEE'], limit=1)
 
 ```python
 from diive.core.ml.feature_engineer import FeatureEngineer
-from diive.pkgs.gapfilling import RandomForestTS
+from diive.gapfilling import RandomForestTS
 
 engineer = FeatureEngineer(
     target_col='NEE',
@@ -88,7 +96,7 @@ gapfilled = model.get_gapfilled_target()
 **MDS:** You have no training data, or you want to avoid potential overfitting from learned models.
 
 ```python
-from diive.pkgs.gapfilling import FluxMDS
+from diive.gapfilling import FluxMDS
 
 mds = FluxMDS(
     df=df,
@@ -106,28 +114,32 @@ filled = mds.get_mds_filled()
 ## Running Examples
 
 ```bash
-uv run python examples/pkgs/gapfilling/gapfill_comparison.py
+uv run python examples/gapfilling/gapfill_comparison.py
 ```
 
 For individual methods:
 
 ```bash
 # Linear interpolation
-uv run python examples/pkgs/gapfilling/gapfill_interpolate_conservative.py
-uv run python examples/pkgs/gapfilling/gapfill_interpolate_generous.py
+uv run python examples/gapfilling/gapfill_interpolate_conservative.py
+uv run python examples/gapfilling/gapfill_interpolate_generous.py
 
 # Random Forest
-uv run python examples/pkgs/gapfilling/gapfill_randomforest.py
-uv run python examples/pkgs/gapfilling/gapfill_quickfill.py
-uv run python examples/pkgs/gapfilling/gapfill_optimize_randomforest.py
+uv run python examples/gapfilling/gapfill_randomforest.py
+uv run python examples/gapfilling/gapfill_randomforest_longterm.py
+uv run python examples/gapfilling/gapfill_quickfill.py
+uv run python examples/gapfilling/gapfill_optimize_randomforest.py
 
 # XGBoost
-uv run python examples/pkgs/gapfilling/gapfill_xgboost.py
-uv run python examples/pkgs/gapfilling/gapfill_optimize_xgboost.py
+uv run python examples/gapfilling/gapfill_xgboost.py
+uv run python examples/gapfilling/gapfill_optimize_xgboost.py
 
 # MDS
-uv run python examples/pkgs/gapfilling/gapfill_mds.py
-uv run python examples/pkgs/gapfilling/gapfill_mds_comparison.py
+uv run python examples/gapfilling/gapfill_mds.py
+uv run python examples/gapfilling/gapfill_mds_comparison.py
+
+# SW_IN physics + XGBoost
+uv run python examples/gapfilling/gapfill_swin.py
 
 # All examples
 uv run python examples/run_all_examples.py

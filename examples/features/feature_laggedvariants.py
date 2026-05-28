@@ -31,7 +31,7 @@ print("Basic Lagged Variants")
 print("=" * 50)
 
 # Create lagged variants: [-2, -1, +1] (skip 0)
-results = dv.lagged_variants(
+results = dv.features.lagged_variants(
     df=df,
     lag=[-2, 1],  # Range from -2 to +1
     stepsize=1,  # Step of 1 record
@@ -62,7 +62,7 @@ print("=" * 50)
 
 # Create lagged variants with larger lags and step size
 # This creates lags: -24, -18, -12, -6 (skips 0) and +6, +12, +18
-results = dv.lagged_variants(
+results = dv.features.lagged_variants(
     df=df,
     lag=[-24, 18],  # Range from -24 to +18 records (half-hourly = 12h to 9h)
     stepsize=6,  # Step of 6 records (3 hours for half-hourly data)
@@ -87,7 +87,7 @@ df = df[locs].copy()
 df = df[['Tair_f', 'Rg_f']].copy()
 
 # Create lagged variants
-results = dv.lagged_variants(
+results = dv.features.lagged_variants(
     df=df,
     lag=[-2, 1],
     stepsize=1,
@@ -101,10 +101,10 @@ plotdf = results.head(10).copy()
 fig = plt.figure(facecolor='white', figsize=(16, 6), constrained_layout=True)
 ax1 = fig.add_subplot(111)
 
-dv.plot_time_series(series=plotdf['Tair_f']).plot(ax=ax1, color='#1565C0')
-dv.plot_time_series(series=plotdf['.Tair_f-1']).plot(ax=ax1, color='#D32F2F')
-dv.plot_time_series(series=plotdf['.Tair_f-2']).plot(ax=ax1, color='#00BCD4')
-dv.plot_time_series(series=plotdf['.Tair_f+1']).plot(ax=ax1, color='#AB47BC')
+dv.plotting.TimeSeries(series=plotdf['Tair_f']).plot(ax=ax1, color='#1565C0')
+dv.plotting.TimeSeries(series=plotdf['.Tair_f-1']).plot(ax=ax1, color='#D32F2F')
+dv.plotting.TimeSeries(series=plotdf['.Tair_f-2']).plot(ax=ax1, color='#00BCD4')
+dv.plotting.TimeSeries(series=plotdf['.Tair_f+1']).plot(ax=ax1, color='#AB47BC')
 
 # Add manual legend
 from matplotlib.lines import Line2D

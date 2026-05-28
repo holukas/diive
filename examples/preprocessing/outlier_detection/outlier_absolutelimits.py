@@ -35,7 +35,7 @@ print(f"  Mean: {series.mean():.2f}")
 # Single min/max range applied to all records.
 # Rejects values < 6 or > 74.
 
-al_basic = dv.AbsoluteLimits(
+al_basic = dv.outliers.AbsoluteLimits(
     series=series,
     minval=6,
     maxval=74,
@@ -64,7 +64,7 @@ data_dn = np.random.rand(rows) * 100
 tidx_dn = pd.date_range('2019-01-01 00:30:00', periods=rows, freq='30min')
 series_dn = pd.Series(data_dn, index=tidx_dn, name='flux')
 
-al_dtnt = dv.AbsoluteLimitsDaytimeNighttime(
+al_dtnt = dv.outliers.AbsoluteLimitsDaytimeNighttime(
     series=series_dn,
     daytime_minmax=[6.2, 74.9],   # Wider range for daytime
     nighttime_minmax=[29.5, 47.4],  # Narrower range for nighttime

@@ -71,7 +71,7 @@ print(f"\nKnown lag in synthetic data: {lag_records} records (1.0 second at 10 H
 # Run the MaxCovariance algorithm to find the time lag that maximizes
 # covariance between the wind and scalar variables.
 
-mc = dv.MaxCovariance(
+mc = dv.flux.MaxCovariance(
     df=df,
     var_reference='w_TURB',
     var_lagged='c_TURB',

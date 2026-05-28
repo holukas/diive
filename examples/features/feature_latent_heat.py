@@ -38,7 +38,7 @@ print("=" * 50)
 print(f"Temperature range: {ta.min():.1f} to {ta.max():.1f}°C")
 
 # Calculate latent heat
-lv = dv.latent_heat_of_vaporization(ta=ta)
+lv = dv.features.latent_heat_of_vaporization(ta=ta)
 
 print(f"\nLatent heat range: {lv.min():.0f} to {lv.max():.0f} J/kg")
 print(f"At 20°C: {lv.iloc[20]:.0f} J/kg (typical reference)")

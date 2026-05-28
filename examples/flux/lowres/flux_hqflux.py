@@ -20,7 +20,7 @@ Best for: Identifying and removing measurement spikes in CO2 flux data.
 # Load example eddy covariance data and select records with good quality flags.
 
 from diive.configs.exampledata import load_exampledata_parquet_cha
-from diive.pkgs.flux.lowres.hqflux import analyze_highest_quality_flux
+from diive.flux.lowres.hqflux import analyze_highest_quality_flux
 
 df = load_exampledata_parquet_cha()
 keeprows = df['FC_SSITC_TEST'] == 0

@@ -57,7 +57,7 @@ print(f"Valid values: {series.notna().sum()}, Missing: {series.isna().sum()}")
 # Calculate histogram with specific number of bins (10 bins).
 # Each bin covers equal width across the data range.
 
-hist1 = dv.Histogram(
+hist1 = dv.analysis.Histogram(
     s=series,
     method='n_bins',
     n_bins=10,
@@ -74,7 +74,7 @@ print(f"\nTop 5 peak bins: {hist1.peakbins}")
 # Same as Method 1 but exclude the first bin and last 2 bins.
 # This is useful when data accumulates at boundaries due to measurement limits.
 
-hist2 = dv.Histogram(
+hist2 = dv.analysis.Histogram(
     s=series,
     method='n_bins',
     n_bins=10,
@@ -91,7 +91,7 @@ print(f"\nTop 5 peak bins: {hist2.peakbins}")
 # Create one bin per unique value in the dataset.
 # This provides fine-grained distribution without binning assumptions.
 
-hist3 = dv.Histogram(
+hist3 = dv.analysis.Histogram(
     s=series,
     method='uniques',
     ignore_fringe_bins=None
@@ -109,7 +109,7 @@ print(f"\nTop 5 peak bins: {hist3.peakbins}")
 # Same as Method 3 but exclude first 8 and last 20 unique value bins.
 # This removes extreme outliers from the distribution analysis.
 
-hist4 = dv.Histogram(
+hist4 = dv.analysis.Histogram(
     s=series,
     method='uniques',
     ignore_fringe_bins=[8, 20]

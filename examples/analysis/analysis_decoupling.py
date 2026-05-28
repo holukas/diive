@@ -46,7 +46,7 @@ print(f"Loaded {len(df)} daytime records from summer")
 # bin by VPD. This shows if the radiation-VPD relationship changes
 # as temperature increases (decoupling).
 
-analysis = dv.StratifiedAnalysis(
+analysis = dv.analysis.StratifiedAnalysis(
     df=df,
     xvar=vpd_col,           # Bin by VPD on x-axis
     yvar=radiation_col,     # Show radiation on y-axis

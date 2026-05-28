@@ -73,12 +73,12 @@ class TestHeatmapXYZ(unittest.TestCase):
         z = pd.Series(z_vals, name="Z")
 
         # Aggregate with mean
-        q_mean = dv.ga(x=x, y=y, z=z, binning_type='quantiles', n_bins=2,
+        q_mean = dv.analysis.GridAggregator(x=x, y=y, z=z, binning_type='quantiles', n_bins=2,
                        min_n_vals_per_bin=1, aggfunc='mean')
         df_mean = q_mean.df_agg_long
 
         # Aggregate with std
-        q_std = dv.ga(x=x, y=y, z=z, binning_type='quantiles', n_bins=2,
+        q_std = dv.analysis.GridAggregator(x=x, y=y, z=z, binning_type='quantiles', n_bins=2,
                       min_n_vals_per_bin=1, aggfunc='std')
         df_std = q_std.df_agg_long
 
@@ -114,7 +114,7 @@ class TestHeatmapXYZFromGridAggregator(unittest.TestCase):
         z = pd.Series([100.0, 110.0, 200.0, 210.0, 300.0, 310.0, 400.0, 410.0], name="Z")
 
         # Create GridAggregator
-        q = self.dv.ga(x=x, y=y, z=z, binning_type='quantiles', n_bins=2,
+        q = self.dv.analysis.GridAggregator(x=x, y=y, z=z, binning_type='quantiles', n_bins=2,
                        min_n_vals_per_bin=1, aggfunc='mean')
 
         # Create heatmap using class method
@@ -132,7 +132,7 @@ class TestHeatmapXYZFromGridAggregator(unittest.TestCase):
         y = pd.Series([10.0, 10.0, 20.0, 20.0], name="Y")
         z = pd.Series([100.0, 110.0, 300.0, 310.0], name="Z")
 
-        q = self.dv.ga(x=x, y=y, z=z, binning_type='quantiles', n_bins=2,
+        q = self.dv.analysis.GridAggregator(x=x, y=y, z=z, binning_type='quantiles', n_bins=2,
                        min_n_vals_per_bin=1, aggfunc='mean')
 
         hm = HeatmapXYZ.from_gridaggregator(
@@ -152,7 +152,7 @@ class TestHeatmapXYZFromGridAggregator(unittest.TestCase):
         y = pd.Series([10.0, 10.0, 20.0, 20.0], name="Y")
         z = pd.Series([100.0, 110.0, 300.0, 310.0], name="Z")
 
-        q = self.dv.ga(x=x, y=y, z=z, binning_type='quantiles', n_bins=2,
+        q = self.dv.analysis.GridAggregator(x=x, y=y, z=z, binning_type='quantiles', n_bins=2,
                        min_n_vals_per_bin=1, aggfunc='mean')
 
         # Try to create heatmap with non-existent column name
@@ -165,7 +165,7 @@ class TestHeatmapXYZFromGridAggregator(unittest.TestCase):
         y = pd.Series([10.0, 10.0, 10.0, 10.0, 20.0, 20.0, 20.0, 20.0], name="Y")
         z = pd.Series([100.0, 110.0, 200.0, 210.0, 300.0, 310.0, 400.0, 410.0], name="Z")
 
-        q = self.dv.ga(x=x, y=y, z=z, binning_type='quantiles', n_bins=2,
+        q = self.dv.analysis.GridAggregator(x=x, y=y, z=z, binning_type='quantiles', n_bins=2,
                        min_n_vals_per_bin=1, aggfunc='mean')
 
         # Create heatmap using class method

@@ -31,7 +31,7 @@ print(f"Date range: {series.index[0]} to {series.index[-1]}")
 
 clean_series = series.copy()
 
-sanitizer = dv.TimestampSanitizer(
+sanitizer = dv.times.TimestampSanitizer(
     data=clean_series,
     output_middle_timestamp=True,
     validate_naming=True,
@@ -74,7 +74,7 @@ dup_idx[100] = dup_idx[99]
 minor_series.index = dup_idx
 minor_series.index.name = idx_name
 
-sanitizer = dv.TimestampSanitizer(
+sanitizer = dv.times.TimestampSanitizer(
     data=minor_series,
     output_middle_timestamp=True,
     validate_naming=True,
@@ -130,7 +130,7 @@ moderate_series = pd.concat([
 ])
 moderate_series.index.name = 'TIMESTAMP_END'
 
-sanitizer = dv.TimestampSanitizer(
+sanitizer = dv.times.TimestampSanitizer(
     data=moderate_series,
     output_middle_timestamp=True,
     validate_naming=True,
@@ -191,7 +191,7 @@ severe_series = pd.concat([
 severe_series.index.name = 'WRONG_TIMESTAMP'
 
 try:
-    sanitizer = dv.TimestampSanitizer(
+    sanitizer = dv.times.TimestampSanitizer(
         data=severe_series,
         output_middle_timestamp=True,
         validate_naming=True,
@@ -242,7 +242,7 @@ chunk = minimal_series.iloc[:500].iloc[::-1]
 minimal_series = pd.concat([chunk, minimal_series.iloc[500:]])
 minimal_series.index.name = 'TIMESTAMP_START'
 
-sanitizer = dv.TimestampSanitizer(
+sanitizer = dv.times.TimestampSanitizer(
     data=minimal_series,
     output_middle_timestamp=False,
     validate_naming=False,

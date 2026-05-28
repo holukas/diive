@@ -59,7 +59,7 @@ print(f"  Y (dependent): {ycol} - {df[ycol].min():.2f} to {df[ycol].max():.2f} h
 # ^^^^^^^^^^^^^^^^^^^^^
 # Configure BinFitterCP with binning and fitting parameters.
 
-bf = dv.BinFitterCP(
+bf = dv.analysis.BinFitterCP(
     df=df,
     xcol=xcol,           # X variable (predictor)
     ycol=ycol,           # Y variable (response)

@@ -24,7 +24,7 @@ print(f"  Years: {series.index[0].year} to {series.index[-1].year}")
 # Create monthly aggregation matrix
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-monthly_mean = dv.resample_to_monthly_agg_matrix(series=series, agg='mean')
+monthly_mean = dv.times.resample_to_monthly_agg_matrix(series=series, agg='mean')
 
 print("\nMonthly mean matrix:")
 print(f"  Shape: {monthly_mean.shape} (years × months)")
@@ -65,7 +65,7 @@ print(f"Coldest: {monthly_mean.index[min_year]} {month_names[min_month]} ({month
 #
 # Percentile ranking within each month (100=warmest, 0=coldest).
 
-monthly_rank = dv.resample_to_monthly_agg_matrix(series=series, agg='mean', ranks=True)
+monthly_rank = dv.times.resample_to_monthly_agg_matrix(series=series, agg='mean', ranks=True)
 
 print("\n" + "=" * 60)
 print("Monthly ranking")
@@ -81,9 +81,9 @@ print("\n" + "=" * 60)
 print("Other aggregation methods")
 print("=" * 60)
 
-monthly_sum = dv.resample_to_monthly_agg_matrix(series=series, agg='sum')
-monthly_max = dv.resample_to_monthly_agg_matrix(series=series, agg='max')
-monthly_min = dv.resample_to_monthly_agg_matrix(series=series, agg='min')
+monthly_sum = dv.times.resample_to_monthly_agg_matrix(series=series, agg='sum')
+monthly_max = dv.times.resample_to_monthly_agg_matrix(series=series, agg='max')
+monthly_min = dv.times.resample_to_monthly_agg_matrix(series=series, agg='min')
 
 methods = {
     'mean': monthly_mean,

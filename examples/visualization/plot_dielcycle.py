@@ -26,7 +26,7 @@ print(f"Loaded {len(series)} records from {df.index[0].date()} to {df.index[-1].
 #
 # Show diurnal cycles separated by month to reveal seasonal patterns.
 
-dc = dv.plot_diel_cycle(series=series)
+dc = dv.plotting.DielCycle(series=series)
 title = r'$\mathrm{Mean\ CO_2\ flux\ (2013-2024)}$'
 units = r'($\mathrm{µmol\ CO_2\ m^{-2}\ s^{-1}}$)'
 

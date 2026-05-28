@@ -8,5 +8,5 @@ class TestImports(unittest.TestCase):
         import diive.configs as b
         import diive.core as c
         import diive.core.plotting as d
-        import diive.pkgs as e
+        import diive.analysis as e
         print(a, b, c, d, e)

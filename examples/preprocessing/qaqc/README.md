@@ -6,10 +6,13 @@ Examples demonstrating quality control methods, flag generation, and data qualit
 
 - **qc_overall_flag.py** — Overall Quality Control Flag (QCF) combining multiple test flags
 - **qc_eddypro_flags.py** — EddyPro quality flag extraction (signal strength, VM97 tests, completeness)
+- **qaqc_detect_timestamp_shifts.py** — Detect clock/timestamp errors by comparing measured vs potential shortwave radiation (FFT phase shift, cross-correlation, noon-shift peak detection)
 
 ## Related Documentation
 
 See `diive.pkgs.preprocessing.qaqc` for:
+- `DetectTimestampShifts` — Timestamp shift detection via radiation phase analysis
+
 - `FlagQCF` — Overall quality flag combining individual tests
 - `flag_signal_strength_eddypro_test()` — Signal quality
 - `flags_vm97_eddypro_fluxnetfile_tests()` — Vickers & Mahrt (1997) raw data tests
@@ -20,7 +23,7 @@ See `diive.pkgs.preprocessing.qaqc` for:
 
 **Generate overall quality flag (QCF):**
 ```python
-from diive.pkgs.preprocessing.qaqc import FlagQCF
+from diive.preprocessing.qaqc import FlagQCF
 
 # Combine multiple individual quality tests into single QCF
 qcf = FlagQCF(
@@ -43,7 +46,7 @@ qcf.showplot_qcf_heatmaps()  # Visualization
 
 **Extract EddyPro quality flags:**
 ```python
-from diive.pkgs.preprocessing.qaqc import (
+from diive.preprocessing.qaqc import (
     flag_signal_strength_eddypro_test,
     flags_vm97_eddypro_fluxnetfile_tests,
     flag_ssitc_eddypro_test

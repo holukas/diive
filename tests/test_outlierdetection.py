@@ -4,15 +4,15 @@ import numpy as np
 import pandas as pd
 
 import diive.configs.exampledata as ed
-from diive.pkgs.features.variables import add_impulse_noise
-from diive.pkgs.preprocessing.outlierdetection import AbsoluteLimits, AbsoluteLimitsDaytimeNighttime
-from diive.pkgs.preprocessing.outlierdetection.hampel import HampelDaytimeNighttime
-from diive.pkgs.preprocessing.outlierdetection import zScoreIncrements
-from diive.pkgs.preprocessing.outlierdetection import LocalSD
-from diive.pkgs.preprocessing.outlierdetection import LocalOutlierFactorAllData
-from diive.pkgs.preprocessing.outlierdetection import TrimLow
-from diive.pkgs.preprocessing.outlierdetection import zScore, zScoreRolling
-from diive.pkgs.preprocessing.qaqc import MissingValues
+from diive.features.variables import add_impulse_noise
+from diive.preprocessing.outlier_detection import AbsoluteLimits, AbsoluteLimitsDaytimeNighttime
+from diive.preprocessing.outlier_detection.hampel import HampelDaytimeNighttime
+from diive.preprocessing.outlier_detection import zScoreIncrements
+from diive.preprocessing.outlier_detection import LocalSD
+from diive.preprocessing.outlier_detection import LocalOutlierFactorAllData
+from diive.preprocessing.outlier_detection import TrimLow
+from diive.preprocessing.outlier_detection import zScore, zScoreRolling
+from diive.preprocessing.qaqc import MissingValues
 
 
 # kudos https://medium.com/@ms_somanna/guide-to-adding-noise-to-your-data-using-python-and-numpy-c8be815df524

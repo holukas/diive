@@ -27,7 +27,7 @@ df_clean = df_clean[['Tair_f', 'VPD_f', 'NEE_CUT_REF_f']].dropna()
 print(f"Loaded {len(df_clean)} records for aggregation")
 
 # Aggregate data into 2D bins (temperature x VPD)
-q = dv.GridAggregator(
+q = dv.analysis.GridAggregator(
     x=df_clean['Tair_f'],  # Temperature on x-axis
     y=df_clean['VPD_f'],  # VPD on y-axis
     z=df_clean['NEE_CUT_REF_f'],  # NEE as color values
@@ -46,7 +46,7 @@ print(f"Created {q.df_agg_long.shape[0]} bins from gridaggregator")
 # Create heatmap directly from GridAggregator output using from_gridaggregator().
 # Automatically handles bin column naming and pre-aggregated data format.
 
-hm = dv.plot_heatmap_xyz.from_gridaggregator(
+hm = dv.plotting.HeatmapXYZ.from_gridaggregator(
     q,  # GridAggregator instance
     x_col='Tair_f',  # Original x series name
     y_col='VPD_f',  # Original y series name
@@ -74,7 +74,7 @@ print("Plotted HeatmapXYZ with temperature x VPD bins")
 #
 # Create heatmap with custom colormap and suppress value overlays for cleaner appearance.
 
-hm2 = dv.plot_heatmap_xyz.from_gridaggregator(
+hm2 = dv.plotting.HeatmapXYZ.from_gridaggregator(
     q,
     x_col='Tair_f',
     y_col='VPD_f',
@@ -102,7 +102,7 @@ print("Plotted HeatmapXYZ with continuous colormap")
 # Run GridAggregator with aggfunc='std' to see within-bin variability.
 # Complements the mean plot: high std where the flux response is uncertain or noisy.
 
-q_std = dv.GridAggregator(
+q_std = dv.analysis.GridAggregator(
     x=df_clean['Tair_f'],
     y=df_clean['VPD_f'],
     z=df_clean['NEE_CUT_REF_f'],
@@ -112,7 +112,7 @@ q_std = dv.GridAggregator(
     aggfunc='std'  # standard deviation within each bin
 )
 
-hm_std = dv.plot_heatmap_xyz.from_gridaggregator(
+hm_std = dv.plotting.HeatmapXYZ.from_gridaggregator(
     q_std,
     x_col='Tair_f',
     y_col='VPD_f',

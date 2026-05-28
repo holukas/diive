@@ -37,7 +37,7 @@ print(f"  Years available: {sorted(winddir.index.year.unique())}")
 # a reference wind direction histogram from these years, then search
 # for the yearly offset in other years that maximizes correlation.
 
-offset_corrector = dv.WindDirOffset(
+offset_corrector = dv.corrections.WindDirOffset(
     winddir=winddir,
     hist_ref_years=[2021, 2022],
     offset_start=-50,

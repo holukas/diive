@@ -55,7 +55,7 @@ print(f"Missing values in target: {df[TARGET_COL].isnull().sum()}")
 # differencing, exponential moving averages, polynomial terms, STL decomposition,
 # timestamp features, and continuous record number.
 
-engineer = dv.FeatureEngineer(
+engineer = dv.gapfilling.FeatureEngineer(
     target_col=TARGET_COL,
     features_lag=[-2, -1],
     features_lag_stepsize=1,
@@ -91,10 +91,13 @@ print(f"\nEngineered features created: {df_engineered.shape[1]} columns")
 # 2. Reduce features using SHAP importance (keep only important ones)
 # 3. Train on complete observations only
 
-xgbts = dv.XGBoostTS(
+xgbts = dv.gapfilling.XGBoostTS(
     input_df=df_engineered,
     target_col=TARGET_COL,
     verbose=1,
+    below_zero=None,  # How to treat negative predictions: None=keep, 'zero'=clip, 'nan'=set missing
+    # Use 'zero' or 'nan' for variables that cannot be negative (e.g. VPD, SW_IN, PPFD).
+    # NEE can be negative (carbon uptake), so None is correct here.
     n_estimators=50,
     random_state=42,
     max_depth=6,
@@ -137,10 +140,10 @@ fig, axes = plt.subplots(1, 2, figsize=(16, 5),
                          gridspec_kw={'wspace': 0.15},
                          constrained_layout=True)
 
-dv.plot_heatmap_datetime(series=observed).plot(ax=axes[0])
+dv.plotting.HeatmapDateTime(series=observed).plot(ax=axes[0])
 axes[0].set_title('Observed\n(with gaps)', fontsize=11, fontweight='bold')
 
-dv.plot_heatmap_datetime(series=gapfilled).plot(ax=axes[1])
+dv.plotting.HeatmapDateTime(series=gapfilled).plot(ax=axes[1])
 axes[1].set_title('XGBoost\nGap-Filled', fontsize=11, fontweight='bold')
 
 fig.suptitle('XGBoost Gap-Filling Comparison', fontsize=13, fontweight='bold', y=1.00)
@@ -161,7 +164,7 @@ df_cumulative = pd.DataFrame({
 df_cumulative = df_cumulative.multiply(0.02161926)
 series_units = r'($\mathrm{gC\ m^{-2}}$)'
 
-dv.plot_cumulative(
+dv.plotting.Cumulative(
     df=df_cumulative,
     units=series_units,
     start_year=2020,

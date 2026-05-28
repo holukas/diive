@@ -33,7 +33,7 @@ print(f"  First 12 hours:\n{series.head(12)}")
 # Set a single timestamp and a date range to a constant value (0).
 # This is useful for removing periods of sensor malfunction or known errors.
 
-series_corr = dv.setto_value(
+series_corr = dv.corrections.setto_value(
     series=series,
     dates=[
         '2022-06-01 01:00:00',  # Single timestamp

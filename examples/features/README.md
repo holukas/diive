@@ -43,7 +43,7 @@ Examples demonstrating creation and engineering of variables for time series ana
 Calculate environmental properties:
 
 ```python
-from diive.pkgs.features import feature_vpd, feature_air_density, feature_potentialradiation
+from diive.features import feature_vpd, feature_air_density, feature_potentialradiation
 
 vpd = feature_vpd(T_celsius=df['TA'], RH_percent=df['RH'])
 rho = feature_air_density(T_celsius=df['TA'], p_kpa=df['PA'])
@@ -53,7 +53,7 @@ sw_pot = feature_potentialradiation(df.index, lat=47.5, lon=8.4)
 Create modeling features:
 
 ```python
-from diive.pkgs.features import feature_laggedvariants, feature_timesince
+from diive.features import feature_laggedvariants, feature_timesince
 
 df_lagged = feature_laggedvariants(df, 'NEE', lags=[-2, -1, 1, 2])
 df['Days_Since_Fire'] = feature_timesince(fire_date)

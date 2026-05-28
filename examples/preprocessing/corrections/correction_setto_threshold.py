@@ -31,7 +31,7 @@ print(f"  Range: {series.min()} to {series.max()}")
 # Clip all values above 3.0 to exactly 3.0.
 # Values below the threshold remain unchanged.
 
-series_corr_max = dv.setto_threshold(
+series_corr_max = dv.corrections.setto_threshold(
     series=series.copy(),
     threshold=3.0,
     type='max',
@@ -50,7 +50,7 @@ print(f"  Values clipped: {(series > 3.0).sum()}")
 # Clip all values below 1.0 to exactly 1.0.
 # Values above the threshold remain unchanged.
 
-series_corr_min = dv.setto_threshold(
+series_corr_min = dv.corrections.setto_threshold(
     series=series.copy(),
     threshold=1.0,
     type='min',

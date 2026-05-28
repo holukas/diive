@@ -45,8 +45,8 @@ print(f"DIIVE version: v{version_diive}")
 #
 # Show the QuickFillRFTS class docstring explaining the rapid prototyping approach.
 
-print("\n" + dv.QuickFillRFTS.__name__)
-print(dv.QuickFillRFTS.__doc__)
+print("\n" + dv.gapfilling.QuickFillRFTS.__name__)
+print(dv.gapfilling.QuickFillRFTS.__doc__)
 
 # %%
 # Load and prepare data
@@ -75,7 +75,7 @@ df.describe()
 statsdf = dv.sstats(df[TARGET_COL])
 print(statsdf)
 
-dv.TimeSeries(series=df[TARGET_COL]).plot()
+dv.plotting.TimeSeries(series=df[TARGET_COL]).plot()
 
 # %%
 # Run QuickFill
@@ -83,7 +83,7 @@ dv.TimeSeries(series=df[TARGET_COL]).plot()
 #
 # Execute rapid gap-filling with minimal configuration.
 
-qf = dv.QuickFillRFTS(df=df, target_col=TARGET_COL)
+qf = dv.gapfilling.QuickFillRFTS(df=df, target_col=TARGET_COL)
 qf.fill()
 qf.report()
 gapfilled = qf.get_gapfilled_target()
@@ -94,7 +94,7 @@ gapfilled = qf.get_gapfilled_target()
 #
 # Display heatmap comparisons of observed vs. gap-filled data.
 
-dv.HeatmapDateTime(series=df[TARGET_COL]).show()
-dv.HeatmapDateTime(series=gapfilled).show()
+dv.plotting.HeatmapDateTime(series=df[TARGET_COL]).show()
+dv.plotting.HeatmapDateTime(series=gapfilled).show()
 
 print("✓ QuickFill gap-filling complete.")

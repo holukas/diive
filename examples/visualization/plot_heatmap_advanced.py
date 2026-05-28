@@ -29,7 +29,7 @@ print(f"Loaded {len(df)} records from {df.index[0].date()} to {df.index[-1].date
 series_temp = df['Tair_f'].copy()
 series_temp = series_temp.dropna()
 
-hm = dv.plot_heatmap_year_month(
+hm = dv.plotting.HeatmapYearMonth(
     series=series_temp,
     ax_orientation="vertical",  # Data computation: months on y-axis, years on x-axis
     ranks=False  # Data computation: use actual values (not ranks)
@@ -60,7 +60,7 @@ for ax, agg, cmap, label in [
     (axes[1], 'max', 'YlOrRd', 'Max °C'),
     (axes[2], 'std', 'Blues', 'Std dev °C'),
 ]:
-    dv.plot_heatmap_year_month(
+    dv.plotting.HeatmapYearMonth(
         series=series_temp,
         ax_orientation="vertical",
         agg=agg,  # aggregation applied to each year/month cell
@@ -84,7 +84,7 @@ print("Plotted HeatmapYearMonth with mean / max / std aggregation")
 # Rank 1 = highest value for that month across all years.
 # Useful for spotting record years without being distracted by absolute values.
 
-hm_ranks = dv.plot_heatmap_year_month(
+hm_ranks = dv.plotting.HeatmapYearMonth(
     series=series_temp,
     ax_orientation="vertical",
     agg='mean',
@@ -116,7 +116,7 @@ series_le = series_le.loc[locs]
 
 fig, axes = plt.subplots(1, 3, figsize=(20, 6), constrained_layout=True)
 
-dv.plot_heatmap_datetime(
+dv.plotting.HeatmapDateTime(
     series=series_nee,
     ax_orientation="vertical"  # Data: time on y-axis
 ).plot(
@@ -128,7 +128,7 @@ dv.plot_heatmap_datetime(
     cmap='RdBu_r'  # Colormap
 )
 
-dv.plot_heatmap_datetime(
+dv.plotting.HeatmapDateTime(
     series=series_tair,
     ax_orientation="vertical"
 ).plot(
@@ -140,7 +140,7 @@ dv.plot_heatmap_datetime(
     cmap='RdYlBu_r'
 )
 
-dv.plot_heatmap_datetime(
+dv.plotting.HeatmapDateTime(
     series=series_le,
     ax_orientation="vertical"
 ).plot(

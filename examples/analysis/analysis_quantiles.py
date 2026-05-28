@@ -25,7 +25,7 @@ df = dv.load_exampledata_parquet()
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 # Calculate percentiles 0-100 for air temperature
-percentiles_df = dv.percentiles101(series=df['Tair_f'], showplot=True, verbose=True)
+percentiles_df = dv.analysis.percentiles101(series=df['Tair_f'], showplot=True, verbose=True)
 
 # %%
 # Display full results

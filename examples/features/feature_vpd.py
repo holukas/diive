@@ -31,7 +31,7 @@ vpd_col = 'VPD_calculated'
 subset_df = df[[ta_col, rh_col]].copy()
 
 # Calculate VPD from TA and RH
-subset_df[vpd_col] = dv.calc_vpd_from_ta_rh(df=subset_df, ta_col=ta_col, rh_col=rh_col)
+subset_df[vpd_col] = dv.features.calc_vpd_from_ta_rh(df=subset_df, ta_col=ta_col, rh_col=rh_col)
 
 # Print statistics
 print("VPD Calculation")
@@ -63,7 +63,7 @@ df_subset = df.loc[(df.index.year == 2018)].copy()
 subset_df = df_subset[[ta_col, rh_col]].copy()
 
 # Calculate VPD
-subset_df[vpd_col] = dv.calc_vpd_from_ta_rh(df=subset_df, ta_col=ta_col, rh_col=rh_col)
+subset_df[vpd_col] = dv.features.calc_vpd_from_ta_rh(df=subset_df, ta_col=ta_col, rh_col=rh_col)
 
 print("\nVPD Calculation Analysis (Year 2018)")
 print("=" * 50)
@@ -86,7 +86,7 @@ print(f"RH: {subset_df[rh_col].min():.1f}% to {subset_df[rh_col].max():.1f}%")
 # XGBoostTS uses gradient boosting with configurable feature engineering for gap-filling.
 # Note: This section is computationally intensive and may take 1-2 minutes to run.
 
-from diive.pkgs.gapfilling.xgboost_ts import XGBoostTS
+from diive.gapfilling.xgboost_ts import XGBoostTS
 from diive.core.ml.feature_engineer import FeatureEngineer
 
 # Load example data - use 1 year subset for faster training
@@ -101,7 +101,7 @@ vpd_gf_col = 'VPD_hPa_gfilled'
 
 # Subset and calculate VPD
 subset_df = df_subset[[ta_col, rh_col]].copy()
-subset_df[vpd_col] = dv.calc_vpd_from_ta_rh(df=subset_df, ta_col=ta_col, rh_col=rh_col)
+subset_df[vpd_col] = dv.features.calc_vpd_from_ta_rh(df=subset_df, ta_col=ta_col, rh_col=rh_col)
 
 # Feature engineering for XGBoost
 engineer = FeatureEngineer(
@@ -161,7 +161,7 @@ vpd_col = 'VPD_hPa'
 
 # Subset and calculate VPD
 subset_df = df[[ta_col, rh_col]].copy()
-subset_df[vpd_col] = dv.calc_vpd_from_ta_rh(df=subset_df, ta_col=ta_col, rh_col=rh_col)
+subset_df[vpd_col] = dv.features.calc_vpd_from_ta_rh(df=subset_df, ta_col=ta_col, rh_col=rh_col)
 
 print("\nVPD Pattern Visualization")
 print("=" * 50)
@@ -180,9 +180,9 @@ ax1 = fig.add_subplot(gs[0, 0])
 ax2 = fig.add_subplot(gs[0, 1])
 ax3 = fig.add_subplot(gs[0, 2])
 
-dv.plot_heatmap_datetime(series=subset_df[vpd_col]).plot(ax=ax1)
-dv.plot_heatmap_datetime(series=subset_df[ta_col]).plot(ax=ax2)
-dv.plot_heatmap_datetime(series=subset_df[rh_col]).plot(ax=ax3)
+dv.plotting.HeatmapDateTime(series=subset_df[vpd_col]).plot(ax=ax1)
+dv.plotting.HeatmapDateTime(series=subset_df[ta_col]).plot(ax=ax2)
+dv.plotting.HeatmapDateTime(series=subset_df[rh_col]).plot(ax=ax3)
 
 ax1.set_title("VPD (kPa)", fontsize=12, fontweight='bold')
 ax2.set_title("Air Temperature (°C)", fontsize=12, fontweight='bold')

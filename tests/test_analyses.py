@@ -1,13 +1,13 @@
 import unittest
 
-from diive.pkgs.analysis.histogram import Histogram
+from diive.analysis.histogram import Histogram
 
 
 class TestAnalyses(unittest.TestCase):
 
     def test_percentiles(self):
         from diive.configs.exampledata import load_exampledata_parquet
-        from diive.pkgs.analysis.quantiles import percentiles101
+        from diive.analysis.quantiles import percentiles101
         df = load_exampledata_parquet()
         percentiles_df = percentiles101(series=df['Tair_f'], showplot=False, verbose=True)
         self.assertEqual(len(percentiles_df.columns), 2)
@@ -16,12 +16,12 @@ class TestAnalyses(unittest.TestCase):
 
     def test_gapfinder(self):
         from diive.configs.exampledata import load_exampledata_parquet
-        from diive.pkgs.analysis.gapfinder import GapFinder
+        from diive.analysis.gapfinder import GapFinder
         data_df = load_exampledata_parquet()
         series = data_df['NEE_CUT_REF_orig']
-        gf = GapFinder(series=series, limit=None, sort_results=True)
-        gapfinder_df = gf.get_results()
-        self.assertEqual(len(gapfinder_df.columns), 3)
+        gf = GapFinder(series=series, sort_results=True)
+        gapfinder_df = gf.results
+        self.assertEqual(len(gapfinder_df.columns), 4)
         self.assertEqual(len(gapfinder_df.index), 15602)
         self.assertEqual(gapfinder_df.iloc[0]['GAP_LENGTH'], 2633)
         self.assertEqual(gapfinder_df.iloc[1]['GAP_LENGTH'], 468)
@@ -30,7 +30,7 @@ class TestAnalyses(unittest.TestCase):
 
     def test_sorting_bins_method(self):
         from diive.configs.exampledata import load_exampledata_parquet
-        from diive.pkgs.analysis.decoupling import SortingBinsMethod
+        from diive.analysis.decoupling import SortingBinsMethod
         vpd_col = 'VPD_f'  # Vapor pressure deficit
         ta_col = 'Tair_f'  # Air temperature
         swin_col = 'Rg_f'  # Radiation used to detect daytime data
@@ -76,8 +76,8 @@ class TestAnalyses(unittest.TestCase):
 
     def test_daily_correlation(self):
         from diive.configs.exampledata import load_exampledata_parquet
-        from diive.pkgs.analysis import daily_correlation
-        from diive.pkgs.features.variables.potentialradiation import potrad
+        from diive.analysis import daily_correlation
+        from diive.features.variables.potentialradiation import potrad
         data_df = load_exampledata_parquet()
         # Use only year 2022
         data_df = data_df.loc[data_df.index.year == 2022].copy()
@@ -93,19 +93,10 @@ class TestAnalyses(unittest.TestCase):
                            lon=7.733750,
                            utc_offset=1)
         # Calculate daily correlation between Rg_f and SW_IN_POT
-        daycorrs = daily_correlation(
-            s1=rg_series,
-            s2=reference,
-            mincorr=0.8,
-            showplot=False
-        )
+        daycorrs = daily_correlation(s1=rg_series, s2=reference, mincorr=0.8).result
         self.assertEqual(daycorrs.sum(), 337.3189145385522)
         # Calculate daily correlation between Tair_f and NEE_CUT_REF_f
-        daycorrs = daily_correlation(
-            s1=ta_series,
-            s2=nee_series,
-            showplot=False
-        )
+        daycorrs = daily_correlation(s1=ta_series, s2=nee_series).result
         self.assertEqual(daycorrs.sum(), -167.25042524807637)
         self.assertEqual(daycorrs.min(), -0.9450031804629302)
         self.assertEqual(daycorrs.max(), 0.7109706199504967)

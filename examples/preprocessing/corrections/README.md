@@ -21,7 +21,7 @@ Examples demonstrating data corrections including sensor offset detection, bias 
 
 **Fix humidity oversaturation:**
 ```python
-from diive.pkgs.preprocessing.corrections import OffsetRH
+from diive.preprocessing.corrections import OffsetRH
 
 # RH sensor drifts >100% due to aging/contamination
 corrector = OffsetRH(series=df['RH'], max_saturation=100.0)
@@ -30,7 +30,7 @@ corrected = corrector.get_corrected()
 
 **Remove nighttime radiation offset:**
 ```python
-from diive.pkgs.preprocessing.corrections import OffsetRadiation
+from diive.preprocessing.corrections import OffsetRadiation
 
 # Radiation sensor reads non-zero at night (thermal offset)
 corrector = OffsetRadiation(
@@ -43,7 +43,7 @@ corrected = corrector.get_corrected()
 
 **Detect instrument offset:**
 ```python
-from diive.pkgs.preprocessing.corrections import OffsetMeasurementReplicates
+from diive.preprocessing.corrections import OffsetMeasurementReplicates
 
 # Two sensors show constant bias
 offset = OffsetMeasurementReplicates(
@@ -55,7 +55,7 @@ bias = offset.get_offset()  # Constant difference
 
 **Mask known problems:**
 ```python
-from diive.pkgs.preprocessing.corrections import SetToValue
+from diive.preprocessing.corrections import SetToValue
 
 # Instrument malfunction 2024-01-15 to 2024-01-17
 corrector = SetToValue(

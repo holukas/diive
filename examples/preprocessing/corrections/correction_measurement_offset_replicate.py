@@ -46,7 +46,7 @@ print(f"  Expected offset: 4.2")
 # Search over a range of potential offsets to find the one that
 # minimizes the mean absolute difference between measurement and reference.
 
-offset_corrector = dv.MeasurementOffsetFromReplicate(
+offset_corrector = dv.corrections.MeasurementOffsetFromReplicate(
     measurement=measurement,
     replicate=replicate,
     offset_start=-10,

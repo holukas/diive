@@ -3,17 +3,12 @@
 Moving Point (MP) USTAR Detection
 =====================================
 
-Detect USTAR threshold using the Moving Point (MP) method with bootstrapping.
+Detect USTAR threshold using the Moving Point method (Papale et al., 2006).
 
-The Moving Point method (Papale et al., 2006) is the standard FLUXNET approach
-for identifying the friction velocity (u*) threshold below which eddy covariance
-flux measurements become unreliable due to insufficient turbulent mixing.
-
-Algorithm stratifies nighttime data by season and temperature, then by friction
-velocity to identify where net ecosystem respiration (NEE) stabilizes. Bootstrap
-resampling provides uncertainty estimates.
-
-Best for: Robust USTAR threshold estimation following FLUXNET standards
+Nighttime data is stratified by season, temperature class, and USTAR class.
+The threshold is where NEE stops increasing with rising USTAR (forward mode).
+A 3-year sliding window bootstrap returns per-year p16/p50/p84 thresholds
+and a CUT (constant) threshold pooled across all years.
 """
 
 import diive as dv
@@ -24,93 +19,77 @@ import diive as dv
 
 df = dv.load_exampledata_parquet_lae()
 
-print("=" * 80)
+print("=" * 70)
 print("Moving Point (MP) USTAR Threshold Detection")
-print("=" * 80)
-
-print(f"\nData loaded: {len(df)} records")
-print(f"Period: {df.index.min()} to {df.index.max()}")
+print("=" * 70)
+print(f"\nData: {len(df)} records, {df.index.min().date()} to {df.index.max().date()}")
 
 # %%
-# Data overview
-# ^^^^^^^^^^^^^
-#
-# Inspect available USTAR and flux data for the analysis.
-
-# Find USTAR and flux columns
-ustar_col = [col for col in df.columns if 'USTAR' in col][0]
-flux_col = [col for col in df.columns if 'NEE' in col and 'QCF' in col][0]
-
-print(f"\nUsing columns:")
-print(f"  USTAR: {ustar_col}")
-print(f"  Flux: {flux_col}")
-
-# Filter to valid data
-valid_mask = df[flux_col].notna() & df[ustar_col].notna()
-n_valid = valid_mask.sum()
-
-print(f"\nData availability:")
-print(f"  Total records: {len(df)}")
-print(f"  Valid records: {n_valid}")
-print(f"  Mean USTAR: {df[ustar_col].mean():.4f} m/s")
-print(f"  USTAR range: {df[ustar_col].min():.4f} to {df[ustar_col].max():.4f} m/s")
-print(f"  Mean flux: {df[flux_col].mean():.3f} µmol m-2 s-1")
-
-# %%
-# Detect USTAR threshold with Moving Point method
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# Detect USTAR threshold
+# ^^^^^^^^^^^^^^^^^^^^^^
 #
 # Initialize detector with DataFrame. Column names are auto-detected.
-# Run detection across 4 seasons with 7 temperature classes per season.
+# detect() returns seasonal thresholds; get_annual_thresholds() returns the
+# conservative annual maximum across seasons.
 
-print(f"\n" + "=" * 80)
-print("Moving Point (MP) Detection (Papale et al., 2006)")
-print("=" * 80)
-
-detector = dv.UstarMovingPointDetection(
+detector = dv.flux.UstarMovingPointDetection(
     df=df,
-    ta_classes_count=7,  # Temperature stratification classes
+    ta_classes_count=7,  # Temperature stratification classes (ONEFlux default)
     ustar_classes_count=20,  # USTAR stratification classes per temperature class
-    bootstrapping_times=100,  # Bootstrap iterations for uncertainty
     verbose=1
 )
 
-# Run detection
 detector.detect()
 
-# %%
-# Display seasonal results
-# ^^^^^^^^^^^^^^^^^^^^^^^^
-#
-# Show detected thresholds for each season.
+print("\n" + detector.summary())
 
-print(f"\n" + detector.summary())
+annual = detector.get_annual_thresholds()
+print(f"\nAnnual threshold (max across seasons): {annual['threshold']:.4f} m/s")
 
 # %%
-# Annual threshold and bootstrap uncertainty
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# Multi-year bootstrap uncertainty
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# Get conservative annual threshold and bootstrap confidence intervals.
+# UstarBootstrapThresholds runs N bootstrap iterations per calendar year,
+# then extracts percentile thresholds from the resulting distribution.
+# p50 is the recommended annual threshold; p16/p84 bound the uncertainty.
+# get_cut_threshold() pools all years into a single CUT threshold.
 
-annual_thresholds = detector.get_annual_thresholds()
+boot = dv.flux.UstarBootstrapThresholds(
+    df=df,
+    detector_class=dv.flux.UstarMovingPointDetection,
+    detector_kwargs=dict(ta_classes_count=7, ustar_classes_count=20),
+    n_iter=100,
+    percentiles=(16, 50, 84),
+    n_jobs=-1,
+    verbose=1,
+)
 
-print(f"\nAnnual thresholds (conservative approach - maximum across seasons):")
-print(f"  Forward mode: {annual_thresholds['forward_mode']:.4f} m/s")
-print(f"  Back mode: {annual_thresholds['back_mode']:.4f} m/s")
+annual_boot = boot.run()
+cut = boot.get_cut_threshold()
+
+print("\n" + boot.summary())
 
 # %%
-# Bootstrap uncertainty estimation
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# Annual per-year thresholds
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# Run bootstrap resampling (100 iterations) to estimate confidence intervals.
+# The bootstrap DataFrame contains one row per year.
+# p50 is the recommended threshold to use for USTAR filtering.
 
-print(f"\n" + "=" * 80)
-print("Bootstrap Uncertainty Estimation")
-print("=" * 80)
+print("\nPer-year bootstrap thresholds (m/s):")
+print(annual_boot.round(4))
 
-bootstrap_stats = detector.bootstrap(n_iter=100)
+# %%
+# CUT threshold
+# ^^^^^^^^^^^^^^
+#
+# The CUT (constant) threshold pools all years' bootstrap samples
+# and returns a single threshold stable across the full record.
 
-print(f"\nBootstrap results (100 iterations):")
-print(bootstrap_stats)
+print(f"\nCUT (constant) threshold (m/s):")
+for pct, val in cut.items():
+    marker = "  <-- recommended" if pct == 'p50' else ""
+    print(f"  {pct}: {val:.4f}{marker}")
 
 print("\n[OK] Moving Point USTAR detection complete.")

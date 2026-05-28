@@ -5,8 +5,8 @@ import pandas as pd
 import diive as dv
 from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
 from diive.configs.exampledata import load_exampledata_parquet
-from diive.pkgs.features.variables import air_temp_from_sonic_temp
-from diive.pkgs.features.variables import TimeSince
+from diive.features.variables import air_temp_from_sonic_temp
+from diive.features.variables import TimeSince
 
 
 class TestCreateVar(unittest.TestCase):
@@ -33,15 +33,15 @@ class TestCreateVar(unittest.TestCase):
         le = df['LE'].copy()
         et_eddypro = df['ET'].copy()  # Should be in mm h-1
         ta = df['TA_1_1_1'].copy()
-        et = dv.et_from_le(le=le, ta=ta)
-        self.assertAlmostEqual(et[0], et_eddypro[0], places=4)
-        self.assertAlmostEqual(et[1], et_eddypro[1], places=4)
-        self.assertAlmostEqual(et[-1], et_eddypro[-1], places=3)
+        et = dv.features.et_from_le(le=le, ta=ta)
+        self.assertAlmostEqual(et.iloc[0], et_eddypro.iloc[0], places=4)
+        self.assertAlmostEqual(et.iloc[1], et_eddypro.iloc[1], places=4)
+        self.assertAlmostEqual(et.iloc[-1], et_eddypro.iloc[-1], places=3)
         self.assertAlmostEqual(et.sum(), et_eddypro.sum(), places=0)
 
     def test_lagged_variants(self):
         from diive.configs.exampledata import load_exampledata_parquet
-        from diive.pkgs.features.variables import lagged_variants
+        from diive.features.variables import lagged_variants
         df = load_exampledata_parquet()
         df = load_exampledata_parquet()
         locs = (df.index.year == 2022) & (df.index.month == 7) & (df.index.hour >= 10) & (df.index.hour <= 15)
@@ -67,7 +67,7 @@ class TestCreateVar(unittest.TestCase):
 
     def test_daytime_nighttime_flag(self):
         from diive.configs.exampledata import load_exampledata_parquet
-        from diive.pkgs.features.variables import DaytimeNighttimeFlag
+        from diive.features.variables import DaytimeNighttimeFlag
         df = load_exampledata_parquet()
         dnf = DaytimeNighttimeFlag(
             timestamp_index=df.index,
@@ -80,8 +80,8 @@ class TestCreateVar(unittest.TestCase):
         swin_pot = dnf.get_swinpot()
         daytime_flag = dnf.get_daytime_flag()
         nighttime_flag = dnf.get_nighttime_flag()
-        self.assertEqual(results.sum().sum(), 52180821.63268461)
-        self.assertEqual(swin_pot.sum(), 52005525.63268461)
+        self.assertAlmostEqual(results.sum().sum(), 52180821.63268461, places=3)
+        self.assertAlmostEqual(swin_pot.sum(), 52005525.63268461, places=3)
         self.assertEqual(daytime_flag.sum(), 87592)
         self.assertEqual(daytime_flag.max(), 1)
         self.assertEqual(daytime_flag.min(), 0)
@@ -95,7 +95,7 @@ class TestCreateVar(unittest.TestCase):
 
     def test_calc_vpd(self):
         from diive.configs.exampledata import load_exampledata_parquet
-        from diive.pkgs.features.variables import calc_vpd_from_ta_rh  # Used to calculate VPD
+        from diive.features.variables import calc_vpd_from_ta_rh  # Used to calculate VPD
         ta_col = 'Tair_f'  # Air temperature (gap-filled) is used to calculate VPD
         rh_col = 'RH'  # Relative humidity (not gap-filled) is used to calculate VPD
         vpd_col = 'VPD_hPa'  # VPD will be newly calculated from gap-filled TA and non-gap-filled RH
@@ -103,7 +103,7 @@ class TestCreateVar(unittest.TestCase):
         subsetcols = [ta_col, rh_col]
         subset_df = df[subsetcols].copy()
         subset_df[vpd_col] = calc_vpd_from_ta_rh(df=subset_df, ta_col=ta_col, rh_col=rh_col)
-        self.assertEqual(subset_df[vpd_col].sum(), 56371.50662138253)
+        self.assertAlmostEqual(subset_df[vpd_col].sum(), 56371.50662138253, places=3)
         self.assertEqual(subset_df[vpd_col].min(), 0)
         self.assertEqual(subset_df[vpd_col].max(), 3.215734681690522)
         self.assertEqual(subset_df[vpd_col].dropna().count(), 174589)

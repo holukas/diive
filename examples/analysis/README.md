@@ -2,7 +2,7 @@
 
 Examples demonstrating statistical analysis, decomposition, and pattern detection for time series data.
 
-11 examples covering correlation, spectral analysis, gap detection, grid aggregation, and decomposition.
+12 examples covering correlation, spectral analysis, gap detection, grid aggregation, and decomposition.
 
 ## Examples by Method
 
@@ -25,7 +25,8 @@ Examples demonstrating statistical analysis, decomposition, and pattern detectio
 
 ### Data Characterization
 
-- **analysis_gapfinder.py** — Identify and characterize consecutive missing data periods in time series
+- **analysis_gapfinder.py** — Detect and characterize consecutive missing data periods; availability heatmap, gap-length histogram, size filters, summary statistics
+- **analysis_gapstats.py** — Extended gap analysis: monthly/annual breakdown, long-gap listing, Rich console report, four-panel figure (availability heatmap, gap-spike timeline, monthly polar chart, gap-length histogram)
 - **analysis_gridaggregator.py** — 2D grid aggregation with quantile, equal-width, and custom binning
 
 ## Common Patterns
@@ -33,7 +34,7 @@ Examples demonstrating statistical analysis, decomposition, and pattern detectio
 **Decompose seasonal trends:**
 
 ```python
-from diive.pkgs.analysis import SeasonalTrendDecomposition
+from diive.analysis import SeasonalTrendDecomposition
 
 std = SeasonalTrendDecomposition(series=df['NEE'], period=365)
 trend = std.trend
@@ -43,7 +44,7 @@ seasonal = std.seasonal
 **Find lagged correlations (e.g., radiation vs. photosynthesis):**
 
 ```python
-from diive.pkgs.analysis import Correlation
+from diive.analysis import Correlation
 
 corr = Correlation(
     series1=df['PAR'],
@@ -56,7 +57,7 @@ max_correlation = corr.results[corr.max_lag]
 **Analyze diurnal cycles:**
 
 ```python
-from diive.pkgs.analysis import DielCycle
+from diive.analysis import DielCycle
 
 diel = DielCycle(series=df['NEE'])
 mean_by_hour = diel.mean_by_hour
@@ -74,8 +75,8 @@ uv run python examples/analysis/analysis_daily_correlation.py
 uv run python examples/analysis/analysis_granger.py
 
 # Data characterization
-uv run python examples/pkgs/analysis/analysis_gapfinder.py
-uv run python examples/pkgs/analysis/analysis_gridaggregator.py
+uv run python examples/analysis/analysis_gapfinder.py
+uv run python examples/analysis/analysis_gridaggregator.py
 uv run python examples/pkgs/analysis/analysis_quantiles.py
 
 # Distribution & range analysis
@@ -103,5 +104,6 @@ See `diive.pkgs.analysis` for full API documentation:
 - `SeasonalTrendDecomposition` — STL decomposition
 - `Quantiles` — Percentile-based analysis
 - `GapFinder` — Gap detection and reporting
+- `GapStats` — Extended gap analysis: monthly/annual breakdowns, long-gap listing, Rich report, four-panel figure
 - `GridAggregator` — 2D grid aggregation (quantile, equal-width, custom binning)
 - `Harmonic` — Spectral and Fourier analysis

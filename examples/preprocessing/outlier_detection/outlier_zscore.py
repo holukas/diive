@@ -31,7 +31,7 @@ print(f"  Range: {series.min():.2f} to {series.max():.2f}°C")
 # Single threshold applied across entire time series.
 # Simple and fast, but ignores time-of-day variation.
 
-detector_global = dv.zScore(
+detector_global = dv.outliers.zScore(
     series=series,
     thres_zscore=2.0,
     showplot=True,
@@ -51,7 +51,7 @@ print(f"  Data retained: {(flag_global != 2).sum()}")
 # Calculate z-scores separately for daytime and nighttime records.
 # Accounts for different signal characteristics across the day.
 
-detector_dtnt = dv.zScore(
+detector_dtnt = dv.outliers.zScore(
     series=series,
     separate_daytime_nighttime=True,
     lat=47.286417,
@@ -75,7 +75,7 @@ print(f"  Data retained: {(flag_dtnt != 2).sum()}")
 # Adaptive threshold based on rolling mean and standard deviation.
 # Better for non-stationary data where signal characteristics change over time.
 
-detector_rolling = dv.zScoreRolling(
+detector_rolling = dv.outliers.zScoreRolling(
     series=series,
     thres_zscore=2.5,
     winsize=48,  # 24 hours at 30-min resolution
@@ -96,7 +96,7 @@ print(f"  Data retained: {(flag_rolling != 2).sum()}")
 # Detects outliers as abrupt changes from one record to the next.
 # Useful for identifying instrumental spikes or sudden shifts.
 
-detector_incr = dv.zScoreIncrements(
+detector_incr = dv.outliers.zScoreIncrements(
     series=series,
     thres_zscore=2.5,
     showplot=True,
@@ -138,7 +138,7 @@ print("=" * 50)
 thresholds = [1.5, 2.0, 2.5, 3.0, 3.5, 4.0]
 
 for thresh in thresholds:
-    detector = dv.zScore(
+    detector = dv.outliers.zScore(
         series=series,
         thres_zscore=thresh,
         showplot=False,

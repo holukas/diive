@@ -45,7 +45,7 @@ print(f"Missing values: {subset['NEE_CUT_REF_orig'].isnull().sum()}")
 #
 # Run the 4-method hierarchical uncertainty quantification.
 
-randunc = dv.RandomUncertaintyPAS20(
+randunc = dv.flux.RandomUncertaintyPAS20(
     df=subset,
     fluxcol='NEE_CUT_REF_orig',
     fluxgapfilledcol='NEE_CUT_REF_f',

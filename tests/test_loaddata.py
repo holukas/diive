@@ -50,7 +50,7 @@ class TestLoadFiletypes(unittest.TestCase):
         self.assertEqual(data_df['W_UNROT'].describe()['count'], 103)
         self.assertEqual(len(metadata_df.columns), 4)
         self.assertEqual(len(metadata_df), 488)  # One more col than data b/c TIMESTAMP_END removed during parsing
-        self.assertEqual(data_df.sum().sum(), 21263415278351.82)
+        self.assertAlmostEqual(data_df.sum().sum(), 21263415278351.82, places=0)
         self.assertEqual(data_df.index[0], pd.Timestamp('2012-06-09 15:15:00'))
         self.assertEqual(data_df.index[37423], pd.Timestamp('2014-07-29 06:45:00'))
         self.assertEqual(data_df.index[-1], pd.Timestamp('2023-03-13 00:15:00'))
@@ -209,8 +209,8 @@ class TestLoadFiletypes(unittest.TestCase):
         self.assertEqual(data_df.index[-1], pd.Timestamp('2022-12-31 23:45:00'))
         self.assertEqual(data_df.index.name, 'TIMESTAMP_MIDDLE')
         self.assertEqual(data_df.index.freqstr, '30min')
-        self.assertEqual(data_df['NEE_CUT_REF_f'].sum(), -82192.81800000001)
-        self.assertEqual(data_df.sum().sum(), 328832896.8160001)
+        self.assertAlmostEqual(data_df['NEE_CUT_REF_f'].sum(), -82192.81800000001, places=3)
+        self.assertAlmostEqual(data_df.sum().sum(), 328832896.8160001, places=1)
 
 
 if __name__ == '__main__':

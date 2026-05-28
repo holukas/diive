@@ -26,7 +26,7 @@ print(f"Statistics: mean={series.mean():.2f}, std={series.std():.2f}")
 #
 # Show distribution with z-score overlay and peak bin highlighting.
 
-hist = dv.plot_histogram(
+hist = dv.plotting.HistogramPlot(
     s=series,
     method='n_bins',  # Binning method
     n_bins=20,  # Number of bins
@@ -58,7 +58,7 @@ print("\nPlotted histogram with z-scores and peak highlighting")
 
 custom_edges = [-30, -10, -5, -2, 0, 2, 5, 10, 30]  # unequal widths around zero
 
-hist_custom = dv.plot_histogram(
+hist_custom = dv.plotting.HistogramPlot(
     s=series,
     method='n_bins',
     n_bins=custom_edges,  # list of edges instead of integer count

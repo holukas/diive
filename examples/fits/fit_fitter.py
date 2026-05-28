@@ -68,7 +68,7 @@ print(f"\nCurve Fitting")
 print("=" * 50)
 
 # Create fitter and run
-bf = dv.BinFitterCP(
+bf = dv.analysis.BinFitterCP(
     df=subset,
     xcol=xcol,
     ycol=ycol,

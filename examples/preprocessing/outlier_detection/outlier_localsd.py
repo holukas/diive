@@ -25,7 +25,7 @@ s = s.loc[s.index.year == 2018].copy()
 s = s.loc[s.index.month == 7].copy()
 
 # Add synthetic impulse noise
-s_noise = dv.add_impulse_noise(
+s_noise = dv.features.add_impulse_noise(
     series=s,
     factor_low=-10,
     factor_high=3,
@@ -46,7 +46,7 @@ print(f"  Range: {s_noise.min():.2f} to {s_noise.max():.2f}°C")
 # Use separate window sizes and thresholds for daytime and nighttime.
 # Adapts to different signal characteristics across the day.
 
-lsd_dtnt = dv.LocalSD(
+lsd_dtnt = dv.outliers.LocalSD(
     series=s_noise,
     separate_daytime_nighttime=True,
     n_sd=[3, 2],
@@ -76,7 +76,7 @@ print(f"  Filtered range: {filtered_dtnt.min():.2f} to {filtered_dtnt.max():.2f}
 # Single window size and standard deviation threshold applied to all records.
 # Simpler computation, faster execution.
 
-lsd_global = dv.LocalSD(
+lsd_global = dv.outliers.LocalSD(
     series=s_noise,
     n_sd=2,
     winsize=48 * 2,  # 2-day rolling window
@@ -124,7 +124,7 @@ print("=" * 50)
 n_sd_values = [1.5, 2.0, 2.5, 3.0, 3.5]
 
 for n_sd in n_sd_values:
-    lsd = dv.LocalSD(
+    lsd = dv.outliers.LocalSD(
         series=s_noise,
         n_sd=n_sd,
         winsize=48 * 2,
@@ -156,7 +156,7 @@ print("=" * 50)
 window_sizes = [48, 48 * 2, 48 * 5, 48 * 10]  # 1 to 10 days at 30-min resolution
 
 for winsize in window_sizes:
-    lsd_win = dv.LocalSD(
+    lsd_win = dv.outliers.LocalSD(
         series=s_noise,
         n_sd=2.5,
         winsize=winsize,

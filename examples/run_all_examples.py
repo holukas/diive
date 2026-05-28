@@ -34,6 +34,8 @@ EXAMPLE_FILES = [
     'visualization/plot_ridgeline_advanced.py',
     'visualization/plot_scatter_xy_basic.py',
     'visualization/plot_scatter_xy_colored.py',
+    'visualization/plot_treering_temperature.py',
+    'visualization/plot_treering_line_temperature.py',
     # Times
     'times/times_timestamp_sanitizer.py',
     'times/times_frequency_detection.py',
@@ -46,6 +48,7 @@ EXAMPLE_FILES = [
     'analysis/analysis_granger.py',
     'analysis/analysis_decoupling.py',
     'analysis/analysis_gapfinder.py',
+    'analysis/analysis_gapstats.py',
     'analysis/analysis_gridaggregator.py',
     'analysis/analysis_harmonic.py',
     'analysis/analysis_histogram_distribution.py',
@@ -53,6 +56,10 @@ EXAMPLE_FILES = [
     'analysis/analysis_quantiles.py',
     'analysis/analysis_seasonaltrend.py',
     # I/O
+    'io/io_load_save_parquet.py',
+    'io/io_read_single_file_with_datafilereader.py',
+    'io/io_read_multiple_files_with_multidatafilereader.py',
+    'io/io_read_single_file_with_readfiletype.py',
     'io/io_extract.py',
     # Preprocessing - Corrections
     'preprocessing/corrections/correction_relativehumidity_offset.py',
@@ -75,6 +82,7 @@ EXAMPLE_FILES = [
     # Preprocessing - QA/QC
     'preprocessing/qaqc/qc_overall_flag.py',
     'preprocessing/qaqc/qc_eddypro_flags.py',
+    'preprocessing/qaqc/qaqc_detect_timestamp_shifts.py',
     # Features
     'features/feature_engineer.py',
     'features/feature_sonic_temp_conversion.py',
@@ -91,7 +99,8 @@ EXAMPLE_FILES = [
     'fits/fit_binfittercp.py',
     'fits/fit_fitter.py',
     # Flux - Processing chain
-    'flux/fluxprocessingchain/fluxprocessingchain.py',
+    'flux/fluxprocessingchain/fluxprocessingchain_runchain.py',
+    'flux/fluxprocessingchain/fluxprocessingchain_composable.py',
     # Flux - Low-resolution processing
     'flux/lowres/flux_timelag_analysis.py',
     'flux/lowres/flux_common.py',
@@ -100,9 +109,15 @@ EXAMPLE_FILES = [
     'flux/lowres/flux_selfheating_production.py',
     'flux/lowres/flux_uncertainty.py',
     'flux/lowres/flux_ustar_mp_detection.py',
+    'flux/lowres/flux_ustar_vekuri_detection.py',
+    'flux/lowres/flux_ustar_method_comparison.py',
     # Flux - High-resolution analysis
     'flux/hires/flux_fluxdetectionlimit.py',
     'flux/hires/flux_lag.py',
+    'flux/hires/flux_lag_pwb.py',
+    'flux/hires/flux_lag_pwbopt.py',
+    'flux/hires/flux_lag_pwb_batch.py',
+    'flux/hires/flux_lag_pwb_batch_cli.py',
     'flux/hires/flux_windrotation.py',
     # Gap-filling
     'gapfilling/gapfill_interpolate_generous.py',
@@ -110,11 +125,13 @@ EXAMPLE_FILES = [
     'gapfilling/gapfill_mds.py',
     'gapfilling/gapfill_mds_comparison.py',
     'gapfilling/gapfill_randomforest.py',
+    'gapfilling/gapfill_randomforest_longterm.py',
     'gapfilling/gapfill_quickfill.py',
     'gapfilling/gapfill_optimize_randomforest.py',
     'gapfilling/gapfill_xgboost.py',
     'gapfilling/gapfill_optimize_xgboost.py',
     'gapfilling/gapfill_comparison.py',
+    'gapfilling/gapfill_swin.py',
 ]
 
 MAX_WORKERS = 8  # Number of parallel workers

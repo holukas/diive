@@ -86,7 +86,7 @@ print(f"  w (m/s): {w.mean():.2f} ± {w.std():.2f}")
 #
 # Run the detection limit calculation based on noise in the covariance function.
 
-fdl = dv.FluxDetectionLimit(
+fdl = dv.flux.FluxDetectionLimit(
     df=df,
     u_col='u',
     v_col='v',

@@ -34,7 +34,7 @@ print(f"Unit conversion factor: {conversion_factor}")
 # Plot annual cumulative sums with mean and standard deviation from reference period.
 # Gray band shows climatological range, helping identify anomalous years.
 
-dv.plot_cumulative_year(
+dv.plotting.CumulativeYear(
     series=series,
     series_units=series_units,
     yearly_end_date=None,
@@ -53,7 +53,7 @@ print("\nPlotted yearly cumulative sums with reference band (2015-2017 baseline)
 #
 # Emphasize a single year for detailed comparison against reference period.
 
-dv.plot_cumulative_year(
+dv.plotting.CumulativeYear(
     series=series,
     series_units=series_units,
     yearly_end_date=None,

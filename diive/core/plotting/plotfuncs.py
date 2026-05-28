@@ -12,6 +12,7 @@ from pandas import DataFrame, Series
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.plotting.styles.LightTheme import *
 from diive.core.times.times import current_datetime
+from diive.core.utils.console import info
 
 
 # TODO generalize for other classes
@@ -438,7 +439,7 @@ def save_fig(fig,
     else:
         outfilepath = filename_out
     fig.savefig(outfilepath)
-    print(f"Saved plot {outfilepath}")
+    info(f"Saved plot {outfilepath}")
 
 
 def create_ax(facecolor: str = 'white',

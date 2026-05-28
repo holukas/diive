@@ -15,7 +15,7 @@ diive.pkgs.flux.selfheating : Self-heating correction classes (ScopPhysics, Scop
 """
 import time
 
-from diive.pkgs.flux.lowres.selfheating import ScopPhysics, ScopOptimizer, ScopApplicator
+from diive.flux.lowres.selfheating import ScopPhysics, ScopOptimizer, ScopApplicator
 
 
 def example_selfheating_ch_lae():

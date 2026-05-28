@@ -31,9 +31,7 @@ print(f"  Period: {series.index.min()} to {series.index.max()}")
 # Detects frequency as part of a 10-step validation pipeline. This gives
 # a confidence score combining multiple detection methods.
 
-from diive import TimestampSanitizer
-
-sanitizer = TimestampSanitizer(
+sanitizer = dv.times.TimestampSanitizer(
     data=pd.DataFrame({'value': series}),
     regularize=False,  # Skip gap-filling
     verbose=False
@@ -71,15 +69,9 @@ if status['frequency_alternatives']:
 # Three independent functions for frequency analysis. Each method has different
 # strengths - compare results to assess reliability.
 
-from diive.core.times.times import (
-    timestamp_infer_freq_progressively,
-    timestamp_infer_freq_from_fullset,
-    timestamp_infer_freq_from_timedelta
-)
-
-freq_prog, info_prog = timestamp_infer_freq_progressively(series.index)
-freq_full, info_full = timestamp_infer_freq_from_fullset(series.index)
-freq_delta, info_delta = timestamp_infer_freq_from_timedelta(series.index)
+freq_prog, info_prog = dv.times.timestamp_infer_freq_progressively(series.index)
+freq_full, info_full = dv.times.timestamp_infer_freq_from_fullset(series.index)
+freq_delta, info_delta = dv.times.timestamp_infer_freq_from_timedelta(series.index)
 
 print("\n" + "=" * 60)
 print("Direct Detection Functions")
@@ -116,9 +108,7 @@ else:
 # Lower-level class used internally by TimestampSanitizer. Shows which
 # detection method won and details about alternatives.
 
-from diive.core.times.times import DetectFrequency
-
-detector = DetectFrequency(index=series.index, verbose=False)
+detector = dv.times.DetectFrequency(index=series.index, verbose=False)
 
 print("\n" + "=" * 60)
 print("DetectFrequency Class")

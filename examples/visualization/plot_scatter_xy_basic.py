@@ -23,7 +23,7 @@ print(f"Loaded {len(df_2022)} records for 2022")
 # Create scatter plot
 # ^^^^^^^^^^^^^^^^^^^
 
-scatter = dv.plot_scatter_xy(
+scatter = dv.plotting.ScatterXY(
     x=df_2022['Tair_f'],
     y=df_2022['VPD_f'],
     z=None,  # No third variable

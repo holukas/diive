@@ -41,7 +41,7 @@ series_label = "Air temperature"
 # Red bars indicate years warmer than the reference mean, blue bars indicate cooler years.
 # Reference statistics and last 10 years summary displayed in the plot.
 
-anomaly_plot = dv.plot_longterm_anomalies_year(
+anomaly_plot = dv.plotting.LongtermAnomaliesYear(
     series=series,                    # Annual mean temperature per year
     series_label=series_label,        # Variable name for plot title
     series_units='(°C)',              # Units appended to y-axis label

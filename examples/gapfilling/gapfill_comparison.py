@@ -27,8 +27,9 @@ Methods compared:
 # 6. Visualize cumulative carbon flux from all three methods
 
 import time
-import pandas as pd
+
 import matplotlib.pyplot as plt
+import pandas as pd
 
 import diive as dv
 from diive.core.ml.feature_engineer import FeatureEngineer
@@ -66,7 +67,7 @@ print("-" * 80)
 
 start_time = time.perf_counter()
 
-mds = dv.FluxMDS(
+mds = dv.gapfilling.FluxMDS(
     df=df,
     flux=TARGET_COL,
     ta='Tair_f',
@@ -128,10 +129,13 @@ engineer = FeatureEngineer(
 df_engineered = engineer.fit_transform(df_rf)
 
 # Create and train RF model
-rfts = dv.RandomForestTS(
+rfts = dv.gapfilling.RandomForestTS(
     input_df=df_engineered,
     target_col=TARGET_COL,
     verbose=0,
+    below_zero=None,  # How to treat negative predictions: None=keep, 'zero'=clip, 'nan'=set missing
+    # Use 'zero' or 'nan' for variables that cannot be negative (e.g. VPD, SW_IN, PPFD).
+    # NEE can be negative (carbon uptake), so None is correct here.
     n_estimators=50,
     random_state=42,
     max_depth=None,
@@ -165,10 +169,13 @@ print("-" * 80)
 start_time = time.perf_counter()
 
 # Reuse engineered features from Random Forest (same features for fair comparison)
-xgbts = dv.XGBoostTS(
+xgbts = dv.gapfilling.XGBoostTS(
     input_df=df_engineered,
     target_col=TARGET_COL,
     verbose=0,
+    below_zero=None,  # How to treat negative predictions: None=keep, 'zero'=clip, 'nan'=set missing
+    # Use 'zero' or 'nan' for variables that cannot be negative (e.g. VPD, SW_IN, PPFD).
+    # NEE can be negative (carbon uptake), so None is correct here.
     n_estimators=50,
     random_state=42,
     max_depth=6,
@@ -228,7 +235,7 @@ df_cumulative = df_cumulative.multiply(0.02161926)
 series_units = r'($\mathrm{gC\ m^{-2}}$)'
 
 # Create cumulative plot
-dv.plot_cumulative(
+dv.plotting.Cumulative(
     df=df_cumulative,
     units=series_units,
     start_year=2022,
@@ -248,19 +255,19 @@ fig, axes = plt.subplots(1, 4, figsize=(28, 5),
                          constrained_layout=True)
 
 # Observed
-dv.plot_heatmap_datetime(series=observed).plot(ax=axes[0])
+dv.plotting.HeatmapDateTime(series=observed).plot(ax=axes[0])
 axes[0].set_title('Observed\n(with gaps)', fontsize=11, fontweight='bold')
 
 # MDS gap-filled
-dv.plot_heatmap_datetime(series=mds_gapfilled).plot(ax=axes[1])
+dv.plotting.HeatmapDateTime(series=mds_gapfilled).plot(ax=axes[1])
 axes[1].set_title('MDS\nGap-Filled', fontsize=11, fontweight='bold')
 
 # RF gap-filled
-dv.plot_heatmap_datetime(series=rf_gapfilled).plot(ax=axes[2])
+dv.plotting.HeatmapDateTime(series=rf_gapfilled).plot(ax=axes[2])
 axes[2].set_title('Random Forest\nGap-Filled', fontsize=11, fontweight='bold')
 
 # XGB gap-filled
-dv.plot_heatmap_datetime(series=xgb_gapfilled).plot(ax=axes[3])
+dv.plotting.HeatmapDateTime(series=xgb_gapfilled).plot(ax=axes[3])
 axes[3].set_title('XGBoost\nGap-Filled', fontsize=11, fontweight='bold')
 
 fig.suptitle('Gap-Filling Method Comparison', fontsize=13, fontweight='bold', y=1.00)

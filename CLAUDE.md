@@ -1,166 +1,215 @@
 # CLAUDE.md - DIIVE Development Guide
 
-Quick reference for DIIVE development. See `CHANGELOG.md` for version history and recent implementations.
+See `CHANGELOG.md` for version history.
+
+## Behavioral Guidelines
+
+**Bias toward caution over speed. For trivial tasks, use judgment.**
+
+**Think before coding:** State assumptions explicitly. If multiple interpretations exist, present them. If something is unclear, ask. Push back when a simpler approach exists.
+
+**Simplicity first:** Minimum code to solve the problem. No speculative features, abstractions for single-use code, or error handling for impossible scenarios.
+
+**Surgical changes:** Touch only what you must. Don't "improve" adjacent code. Match existing style. Mention unrelated dead code — don't delete it. Remove only imports/variables that YOUR changes made unused.
+
+**Goal-driven execution:** For multi-step tasks, state a plan with verifiable success criteria before coding.
 
 ## Quick Start
-
-**Setup (first time):**
 
 ```bash
 uv sync
 uv run pytest tests/test_gapfilling.py -v
+uv run python script.py
+uv run pytest tests/ -v
+uv add package_name
 ```
-
-**Common commands:**
-
-```bash
-uv run python script.py              # Run script
-uv run pytest tests/ -v              # Run tests
-uv add package_name                  # Add dependency
-uv pip list                          # List packages
-```
-
-**Legacy conda (optional):**
-
-```bash
-conda env create -f environment.yml && conda activate diive
-python -m pytest tests/test_gapfilling.py -v
-```
-
-## Project Overview
-
-**DIIVE** — Python library for time series processing, particularly ecosystem flux data.
-
-**Core capabilities:**
-
-- Timestamp sanitization (10-step validation, frequency detection)
-- Feature engineering (8-stage pipeline)
-- ML gap-filling (Random Forest, XGBoost, MDS)
-- Flux processing chain (5-level workflow)
-- Outlier detection & quality control
-- Data visualization (14+ plot types)
 
 ## Development Environment
 
-**Python:** 3.12-3.13 (via `pyproject.toml`)  
-**Package Manager:** `uv` (modern, fast, deterministic via `uv.lock`)  
-[Install uv](https://docs.astral.sh/uv/getting-started/)
+**Python:** 3.12-3.13 | **Package Manager:** `uv`
 
-**Key dependencies (v0.91.0+):**
-
-- pandas 3.0.3, numpy 2.4+, scikit-learn 1.8+, xgboost 3.2+
-- matplotlib 3.10+, statsmodels 0.14+, pyarrow 19.0+
-
-All pinned in `pyproject.toml` for reproducibility.
+**Key dependencies (v0.91.1+):** pandas 3.0.3, numpy 2.4+, scikit-learn 1.8+, xgboost 3.2+, matplotlib 3.10+, statsmodels 0.14+, pyarrow 19.0+
 
 ## Project Structure
 
 ```
 diive/
 ├── core/ml/                  # Feature engineering, ML base classes
-├── core/plotting/            # 14+ visualization types
+├── core/plotting/            # Visualization types
 ├── core/times/               # Timestamp handling
 ├── core/io/                  # File I/O
-├── pkgs/gapfilling/          # RF, XGBoost, MDS gap-filling
-├── pkgs/flux/                # Flux processing (lowres, hires, chain)
-├── pkgs/preprocessing/       # Outlier detection, corrections, QA/QC
-├── pkgs/analysis/            # Time series analysis, decomposition
-└── pkgs/features/            # Variable calculations
-examples/                      # Runnable examples (86)
+├── gapfilling/               # Gap-filling (RF, XGBoost, MDS)
+├── flux/                     # Flux processing (lowres, hires, chain)
+├── preprocessing/            # Wrapper for domain-based preprocessing modules
+├── corrections/              # Offset/gain removal, value corrections
+├── outliers/                 # 10+ outlier detection methods
+├── qaqc/                     # Quality control flags and screening
+├── analysis/                 # Time series analysis
+└── variables/                # Feature engineering and calculations
+examples/                      # ~100 runnable examples
 tests/                        # Unit tests
 ```
 
+## Public API Overview
+
+`import diive as dv` exposes 9 domain namespaces:
+
+| Namespace | Contents |
+|---|---|
+| `dv.outliers` | `AbsoluteLimits`, `Hampel`, `LocalSD`, `LocalOutlierFactor`, `zScore`, `zScoreRolling`, `zScoreIncrements`, `TrimLow`, `ManualRemoval`, + daytime/nighttime variants |
+| `dv.gapfilling` | `RandomForestTS`, `XGBoostTS`, `SWINGapFillerXGBoost`, `FluxMDS`, `QuickFillRFTS`, `OptimizeParamsRFTS`, `OptimizeParamsTS`, `FeatureEngineer`, `linear_interpolation` |
+| `dv.flux` | `FluxConfig`, `FluxLevelData`, `run_chain`, `init_flux_data`, `add_driver`, `WindDoubleRotation`, `reynolds_decomposition`, `MaxCovariance`, `PreWhiteningBootstrap`, `PwbBatchDetection`, `FluxDetectionLimit`, ustar classes. Per-level `run_level*` and `make_level32_detector` live in `diive.flux.fluxprocessingchain`. |
+| `dv.analysis` | `DailyCorrelation`, `GrangerCausality`, `StratifiedAnalysis`, `GapFinder`, `GapStats`, `GridAggregator`, `Histogram`, `FindOptimumRange`, `SeasonalTrendDecomposition`, `BinFitterCP`, `percentiles101` |
+| `dv.plotting` | `HeatmapDateTime`, `HeatmapXYZ`, `HeatmapYearMonth`, `HexbinPlot`, `ScatterXY`, `TimeSeries`, `DielCycle`, `RidgeLinePlot`, `HistogramPlot`, `Cumulative`, `CumulativeYear`, `LongtermAnomaliesYear`, `TreeRingPlot` |
+| `dv.times` | `TimestampSanitizer`, `DetectFrequency`, `resample_to_monthly_agg_matrix`, `timestamp_infer_freq_*` |
+| `dv.variables` | `DaytimeNighttimeFlag`, `TimeSince`, `potrad`, `potrad_eot`, `calc_vpd_from_ta_rh`, `aerodynamic_resistance`, `dry_air_density`, `et_from_le`, `latent_heat_of_vaporization`, `air_temp_from_sonic_temp`, `lagged_variants`, noise helpers |
+| `dv.corrections` | `MeasurementOffsetFromReplicate`, `WindDirOffset`, `remove_radiation_zero_offset`, `remove_relativehumidity_offset`, `set_exact_values_to_missing`, `setto_threshold`, `setto_value` |
+| `dv.qaqc` | `FlagQCF`, `StepwiseMeteoScreeningDb` |
+
+Top-level (no namespace): `load_exampledata_parquet`, `load_parquet`, `save_parquet`, `ReadFileType`, `search_files`, `sstats`, `transform_yearmonth_matrix_to_longform`, `get_encoded_value_from_int`, `get_encoded_value_series`
+
 ## Core Concepts
 
-### Feature Engineering (8-stage pipeline)
+### Feature Engineering (8-stage)
 
-1. **Lag features** — Past/future values
-2. **Rolling stats** — Mean, median, min, max, std, quantiles
-3. **Differencing** — 1st/2nd order rate of change
-4. **EMA** — Exponential moving averages
-5. **Polynomial** — Squared/cubic terms
-6. **STL** — Trend, seasonal, residual decomposition
-7. **Timestamps** — Year, season, month, hour (vectorized)
-8. **Record number** — Temporal ordering
+1. Lag features (past/future values)
+2. Rolling stats (mean, std, quantiles, etc.)
+3. Differencing (1st/2nd order rate of change)
+4. EMA (exponential moving averages)
+5. Polynomial (squared/cubic terms)
+6. STL decomposition (trend, seasonal, residual)
+7. Timestamps (year, season, month, hour)
+8. Record number (temporal ordering)
 
-Used by: `FeatureEngineer` class, fed into gap-filling models.
+Used by `FeatureEngineer` class, fed into gap-filling models.
 
 ### Gap-Filling Methods
 
-| Method         | Training | Features                  | Accuracy     | Use case              |
-|----------------|----------|---------------------------|--------------|-----------------------|
-| Random Forest  | Yes      | 8-stage engineered        | R² 0.60-0.80 | Interpretable, robust |
-| XGBoost        | Yes      | 8-stage engineered        | R² 0.65-0.85 | Non-linear, efficient |
-| MDS            | No       | Meteorological similarity | R² 0.40-0.70 | No overfitting risk   |
-| Linear Interp. | No       | None                      | Simple       | Small gaps only       |
+| Method                | Training | Features                          | Use case                          |
+|-----------------------|----------|-----------------------------------|-----------------------------------|
+| Random Forest         | Yes      | 8-stage engineered                | Interpretable, robust             |
+| XGBoost               | Yes      | 8-stage engineered                | Non-linear, efficient             |
+| SWINGapFillerXGBoost  | Yes      | SW_IN_POT + timestamps (+ opt. TA/VPD) | SW_IN with physical nighttime constraint; `nighttime_threshold=0.001` matches `remove_radiation_zero_offset` |
+| MDS                   | No       | Meteorological similarity         | No overfitting risk               |
+| Linear Interp.        | No       | None                              | Small gaps only                   |
+
+**Results:** All gap-filling classes expose `.results` (after `.run()`) returning `GapFillingResult`:
+- `gapfilled` — Series; `flag` — 0=observed, 1=gap-filled, 2=fallback
+- `scores['r2']`, `feature_importances` (SHAP, ML only), `model` (ML only)
+
+Legacy `.result` property (raw DataFrame) still available.
 
 ### Timestamp Sanitization
 
-10-step validation pipeline (configurable, monotonicity required):
-
 ```python
-from diive import TimestampSanitizer
-
-sanitizer = TimestampSanitizer(
-    data=df,
-    output_middle_timestamp=True,  # Convert to mid-period
-    nominal_freq='30min',  # Expected frequency
-    verbose=True
-)
+sanitizer = dv.times.TimestampSanitizer(df, nominal_freq='30min', verbose=True)
 clean_df = sanitizer.get()
-status = sanitizer.get_status()  # Diagnostics: rows removed/added, frequency confidence, detection method
+status = sanitizer.get_status()  # rows removed/added, detection method
 ```
-
-**Example:** `examples/times/times_timestamp_sanitizer.py` demonstrates 5 severity levels (clean → corrupted).
 
 ## Flux Processing Chain (Swiss FluxNet Workflow)
 
-5-level eddy covariance flux post-processing following FLUXNET/Swiss standards.
+5-level eddy covariance post-processing: L2 (quality flags) → L3.1 (storage correction) → L3.2 (outlier removal) → L3.3 (USTAR filtering) → L4.1 (gap-filling).
 
-**Levels:**
+Each level is a pure function — never mutate input. **Two entry points:**
 
-- **L2** — Quality flag expansion (7 tests)
-- **L3.1** — Storage correction
-- **L3.2** — Outlier removal (sequential chain)
-- **L3.3** — USTAR turbulence filtering (nighttime only)
-- **L4.1** — Gap-filling (RF, XGBoost, MDS)
+**Single-call driver** — `run_chain(data, FluxConfig)` for the standard FLUXNET-style pipeline:
+
+```python
+from diive.flux.fluxprocessingchain import FluxConfig, init_flux_data, run_chain
+
+cfg = FluxConfig(
+    fluxcol='FC', ustar_thresholds=[0.18], ustar_labels=['CUT_50'],
+    outlier_sigma_daytime=5.5, outlier_sigma_nighttime=5.5,
+    gapfilling_features=['TA', 'SW_IN', 'VPD_kPa'],
+    level2_test_settings={'ssitc': {'apply': True, 'setflag_timeperiod': None}},
+    mds_swin='SW_IN', mds_ta='TA', mds_vpd='VPD_kPa',
+)
+data = init_flux_data(df, fluxcol='FC', site_lat=46.6, site_lon=9.8, utc_offset=1)
+data = run_chain(data, cfg)
+```
+
+**Composable per-level callables** — for custom L3.2 pipelines or custom feature engineering:
+
+```python
+from diive.flux.fluxprocessingchain import (
+    init_flux_data, run_level2, run_level31, run_level33_constant_ustar, run_level41_mds,
+)
+
+data = init_flux_data(df, fluxcol='FC', site_lat=46.6, site_lon=9.8, utc_offset=1)
+data = run_level2(data, ssitc={'apply': True, 'setflag_timeperiod': None}, ...)
+data = run_level31(data, gapfill_storage_term=True)
+data = run_level33_constant_ustar(data, thresholds=[0.30])  # labels auto-generated as CUT_0
+data = run_level41_mds(data, swin='SW_IN', ta='TA', vpd='VPD_kPa')
+final_df = data.fpc_df
+```
+
+**Per-level signatures intentionally differ** (per-test dicts at L2, booleans at L3.1, pre-built object at L3.2, parallel lists at L3.3, built engineer + kwargs at L4.1). Shape matches what each level controls; see `diive/flux/fluxprocessingchain/__init__.py` docstring for the rule of thumb. `FluxConfig` is consumed only by `run_chain`, never by `run_level*`.
+
+**Container fields:**
+
+| Field | Type | Description |
+|---|---|---|
+| `data.fpc_df` | `DataFrame` | Working dataframe; grows as levels append columns. Use for results/export. |
+| `data.full_df` | `DataFrame` | Full input (with day/night flags). Read-only source for L2, L3.1, L4.1 driver columns. |
+| `data.filteredseries` | `Series\|None` | QCF-filtered flux from most recent level |
+| `data.meta` | `FluxMeta` (frozen) | Site coordinates, fluxcol, swinpot_col, QCF thresholds |
+| `data.levels` | `LevelResults` | Typed bag of per-level outputs (see code for full field list) |
+| `data.summary()` | `str` | Per-level data availability with daytime/nighttime breakdown |
+| `data.gapfilled_cols()` | `dict` | Gap-filled column names per L4.1 method and USTAR scenario |
+| `data.gap_stats(level='L33')` | `dict[str, GapStats]` | On-demand gap analysis; `{label: GapStats}` — label = level name for L2/L31/L32, USTAR scenario label for L33 |
+| `data.plot_cumulative_comparison(..., showplot=True)` | `None` | Overlay cumulative sums of all gap-filling methods on one axes; pass `showplot=False` for headless |
+| `data.plot_gapfilled_heatmaps(..., showplot=True)` | `None` | Side-by-side heatmaps: measured + one panel per gap-filling method; one figure per USTAR scenario |
+| `data.levels.level41_methods()` | `dict[str, dict]` | Short keys: `'mds'`, `'rf'`, `'xgb'` (matches `gapfilled_cols()`) |
+
+Key `data.levels` fields: `level2`, `level2_qcf`, `level31`, `level31_qcf`, `level32`, `level32_qcf`, `level33`, `level33_qcf`, `level41_mds`, `level41_rf`, `level41_xgb` (dicts keyed by ustar_scenario for L3.3+). **Flag column naming convention**: `FLAG_..._TEST` (individual quality tests, 0/1/2) and `FLAG_..._QCF` (level-overall aggregated flag) are both consumed by `FlagQCF` when aggregating; `FLAG_..._ISFILLED` (e.g. storage-correction provenance) is **informational only** and explicitly NOT consumed by QCF. L3.1 introduces no new quality test — its QCF re-aggregates L2-inherited flags on the storage-corrected target.
+
+**Architecture notes:**
+
+- L3.2 uses the multi-call pattern (stateful): `make_level32_detector(data)` → multiple `flag_outliers_*` + `addflag()` pairs → `run_level32(data, outlier_detector=sod)`. `run_level32` validates the detector is wired to the *current* `data` snapshot (raises if you rebuilt `data` without rebuilding the detector) and rejects detectors with no committed flags or with an uncommitted last test.
+- `run_level41_rf` / `run_level41_xgb` take a pre-built `FeatureEngineer` instance.
+- `finalize_level2/31/33()` are no-ops with `DeprecationWarning`.
+- `LevelResults` is not `frozen=True` but treat as immutable — every level rebuilds it via `dataclasses.replace`. Don't mutate fields or `level41_*` dict keys in place.
+- `add_driver(data, series, name=None)` puts a Series into `data.full_df` (where L4.1 reads from) instead of `data.fpc_df`; validates index, name, and absence of column collision.
+- **Re-runs cascade.** Re-running L2/L3.1/L3.2/L3.3 on a `data` that already passed through that level drops the previous run's `fpc_df` columns and downstream `LevelResults` fields before producing fresh output (see `levels/_rerun.py`). Cascade: re-running level N invalidates N and every later level, because those levels' state was computed against the now-stale upstream. Columns are tracked in `data.added_columns: dict[idstr -> list[col]]`. L4.1 is per-method (`'L4.1_mds'`/`'L4.1_rf'`/`'L4.1_xgb'`) and additive across methods — each `run_level41_*` drops its own previous columns but leaves the other methods' results alone.
 
 **Critical pitfalls:**
 
-- Wrong USTAR threshold filters too much/little nighttime
-- MDS requires exact units: W/m² (radiation), °C (temp), hPa (VPD)
-- USTAR filtering applies ONLY to CO2/CH4/N2O, not H/LE (energy fluxes)
+- MDS requires exact units: W/m² (radiation), °C (temp), **kPa (VPD)** — EddyPro outputs VPD in hPa; divide by 10. `run_level41_mds` warns when VPD median > 10 (likely hPa), TA median > 100 (likely Kelvin), TA median > 50, or SW_IN median > 2000.
+- USTAR filtering applies ONLY to CO2/CH4/N2O; for H/LE use `thresholds=[0], threshold_labels=['CUT_NONE']`. `run_level33_constant_ustar` raises if a non-zero threshold is passed for an energy-flux basevar (`H2O`, `T_SONIC`, lowercase variants).
+- L3.2 and L3.3 require L3.1; L3.3 also requires L3.2 (USTAR filtering must operate on outlier-screened data — `run_level33_*` raises if `level32_qcf` is None). For H/LE call `run_level31(data, set_storage_to_zero=True)`. `run_chain` runs L3.2 unconditionally; users who must skip it use the composable API.
+- L4.1 features and MDS driver columns must exist in `data.full_df`, not `data.fpc_df`. Use `add_driver()` to add computed drivers to the right place.
+- `init_flux_data` raises if `df` already contains `SW_IN_POT` / `DAYTIME` / `NIGHTTIME` (reserved names — would silently overwrite user data).
+- `nighttime_accept_qcf_below` (was `nighttimetime_accept_qcf_below` before v0.91.1 — typo fixed).
+- Default `daytime_accept_qcf_below=1` is stricter than FLUXNET convention of `2`; QCF=0 all pass, QCF=1 soft warning, QCF=2 hard failure.
+- `run_level33_constant_ustar` only supports constant thresholds; for in-pipeline bootstrap detection use `run_level33_ustar_detection` (composable) or `FluxConfig(ustar_detection_mode='bootstrap', ustar_bootstrap_ta_col=..., ustar_bootstrap_swin_col=...)` (via `run_chain`). `threshold_labels` is optional — auto-generates `CUT_0`, `CUT_1`, ... (positional index, **not** percentile); pass explicit labels like `['CUT_16', 'CUT_50', 'CUT_84']` for percentile-based thresholds. Length and uniqueness are validated; substring overlap (e.g. `CUT_5` inside `CUT_50`) is also rejected.
+- `run_level33_ustar_detection` raises if `detector_kwargs` contains `nee_col` / `ta_col` / `ustar_col` / `swin_col` (these are set internally).
+- `run_level41_*` emits a `UserWarning` when a re-run would overwrite previously stored scenarios in `levels.level41_*`.
+- `FeatureEngineer(target_col='_target_', ...)` — `target_col` is a required placeholder; any string not in the feature list works.
 
-**Example:** `examples/flux/fluxprocessingchain/fluxprocessingchain.py` (all 5 levels, both gap-filling methods).
+**Example:** `examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py`
 
-## Outlier Detection Methods
+## High-Resolution EC Analysis (hires)
 
-10 built-in methods:
+Tools for 10/20 Hz data. Workflow: `raw 20 Hz → WindDoubleRotation → reynolds_decomposition → flux`
 
-1. **AbsoluteLimits** — Min/max threshold
-2. **Hampel** — Robust spike detection (MAD-based)
-3. **LocalSD** — Adaptive local standard deviation
-4. **zScore** (4 variants) — Global, rolling, increments, day/night
-5. **LocalOutlierFactor** — Density-based anomalies
-6. **TrimLow** — Trimmed mean approach
-7. **ManualRemoval** — Explicit removal
+```python
+wr = dv.flux.WindDoubleRotation(u=df['u'], v=df['v'], w=df['w'])
+w_prime = dv.flux.reynolds_decomposition(wr.w2)   # use rotated w2, not raw w
+c_prime = dv.flux.reynolds_decomposition(df['CO2'])
+flux = (w_prime * c_prime).mean()
+```
 
-**Chain multiple methods sequentially:** `StepwiseOutlierDetection` class orchestrates each method operating on data
-filtered by previous tests.
+**Classes:** `WindDoubleRotation`, `reynolds_decomposition`, `MaxCovariance`, `FluxDetectionLimit`, `PreWhiteningBootstrap`, `PwbBatchDetection`.
 
-**Examples:** `examples/preprocessing/outlier_detection/` (9 files, one per method + stepwise).
+## Outlier Detection & QC
 
-## Quality Control (QCF)
-
-**FlagQCF** combines multiple test flags into single quality indicator:
-
-- **QCF=0** — Good (all tests pass)
-- **QCF=1** — Marginal (1-3 soft warnings)
-- **QCF=2** — Poor (>3 soft warnings or ≥2 hard fails)
-
-Features: Auto-detect test flags, day/night separation, USTAR scenario support, impact analysis.
-
-**Example:** `examples/preprocessing/qaqc/qc_overall_flag.py`
+- **Single method:** `dv.outliers.Hampel(series).run()`
+- **Chained:** `dv.outliers.StepwiseOutlierDetection()` (orchestrates multiple methods)
+- **Corrections:** `dv.corrections.MeasurementOffsetFromReplicate()`, `remove_radiation_zero_offset()`, `setto_*()`
+- **QCF aggregation:** `dv.qaqc.FlagQCF()` → 0 (good) / 1 (marginal) / 2 (poor)
+- **Full pipeline:** `dv.qaqc.StepwiseMeteoScreeningDb()` — corrections → outlier detection → quality flags
+- **Timestamp shift:** three methods comparing measured vs. theoretical radiation (requires clear days)
 
 ## Coding Standards
 
@@ -168,147 +217,86 @@ Features: Auto-detect test flags, day/night separation, USTAR scenario support, 
 
 Only at system boundaries (user input, external data). Trust internal code.
 
-```python
-def process_data(df, target_col):
-    if df is None or df.empty:
-        raise ValueError("DataFrame cannot be empty")
-    if target_col not in df.columns:
-        raise KeyError(f"Column '{target_col}' not found")
-```
-
 ### Error handling
 
 Let exceptions propagate unless you can recover.
-
-```python
-try:
-    result = operation()
-except FileNotFoundError:
-    logger.info("Using fallback")
-```
 
 ### Comments
 
 Only WHY, not WHAT. Hidden constraints, workarounds, non-obvious logic.
 
-```python
-# Good: explains constraint
-# Exclude dot columns to avoid circular dependency with gap-filling
+### Console Output & Verbosity
 
-# Bad: explains what code does
-# Add 1 to result
-result = result + 1
+**All production output uses Rich console helpers** from `diive/core/utils/console.py`. **NO `print()` in production code** (allowed in `examples/*/`, docstrings, `__main__` blocks, `_cli_main()`).
+
+```python
+from diive.core.utils.console import console as _console, info, detail, warn, success, rule
 ```
+
+| Function | Level | Use case |
+|----------|-------|----------|
+| `rule(title)` | PROGRESS (2) | Section headers |
+| `info(msg)` | PROGRESS (2) | Key progress, results |
+| `success(msg)` | PROGRESS (2) | Operation completion |
+| `warn(msg)` | ERROR (1) | Warnings (always visible) |
+| `error(msg)` | ERROR (1) | Errors (always visible) |
+| `detail(msg)` | DEBUG (3) | Inner-loop details |
+| `_console.print(msg)` | None | User-facing formatted reports |
+
+Levels: `VERBOSE_SILENT=0`, `VERBOSE_ERROR=1`, `VERBOSE_PROGRESS=2` (default), `VERBOSE_DEBUG=3`.
+
+All helpers accept `verbose=` arg. When using integer `if self.verbose >= N:` guards, call helpers WITHOUT `verbose=` inside the block.
+
+**Do NOT:** use `print()`, create separate `Console` instances, use `logging` for general output, mix `print()` and Rich in the same file.
 
 ### Examples (Sphinx Gallery format)
 
-- No file I/O (show API only, not `.to_csv()`)
-- Use `# %%` cell markers (becomes sections in Sphinx)
-- Single year of data for speed
-- Disable `showplot=True` (matplotlib blocks rendering)
-- Explicit parameters with inline comments
+Use `# %%` cell markers. No file I/O (API only). Single year of data. Disable `showplot=True`.
 
-```python
-"""
-===================
-Example Title
-===================
-
-Brief description of what this teaches.
-"""
-
-# %%
-# Section Title
-# ^^^^^^^^^^^^^^
-# Explanatory text about this section
-
-import diive as dv
-
-data = dv.load_exampledata_parquet()
-```
-
-**Documentation checklist (7-point):**
-
-1. Category README.md — Add file description
-2. examples/run_all_examples.py — Register file path
-3. examples/CATALOG.md — Add to workflow table
-4. examples/README.md — Update file count
-5. Source code docstring "Example" section — Reference file
-6. CHANGELOG.md — Note new/updated example
-7. Run example to verify no errors
+**Checklist for new examples:**
+1. Register in `examples/run_all_examples.py` and `examples/CATALOG.md`
+2. Add category README description
+3. Reference in source docstring "Example" section
+4. Update `examples/README.md` file count
+5. Note in CHANGELOG.md
+6. Verify it runs without errors
 
 ## Plotting Class Design (Two-Phase Pattern)
 
-**Phase 1: `__init__()`** — Data + computation ONLY
+**Phase 1: `__init__()`** — data + computation parameters ONLY (no `ax`, title, labels, colors, limits).
 
-- Accept data (Series, DataFrame, arrays)
-- Accept computation parameters (nbins, aggregation, etc.)
-- DO NOT include: ax, title, labels, colors, limits
-
-**Phase 2: `plot()`** — All styling + rendering
-
-- Accept `ax` (plot destination, default `None` = new figure)
-- Accept styling (title, labels, colors, limits, etc.)
-- Can be called multiple times with different styles/axes
-- All parameters have sensible defaults
-
-**Rationale:** Separates concerns, enables replotting same data with different styles, follows matplotlib convention.
-
-**Example:**
+**Phase 2: `plot(ax=None, ...)`** — all styling + rendering. `ax=None` creates a new figure. Can be called multiple times with different styles/axes.
 
 ```python
-# Create once
-scatter = dv.plot_scatter_xy(x=df['A'], y=df['B'])
-
-# Render multiple times with different styles
-fig, axes = plt.subplots(1, 2)
+scatter = dv.plotting.ScatterXY(x=df['A'], y=df['B'])
 scatter.plot(ax=axes[0], title='Linear')
 scatter.plot(ax=axes[1], title='Log', ylim='auto')
 ```
 
-**Checklist:**
+## Plotting Conventions
 
-- `__init__()` contains ONLY data + computation parameters
-- `ax` parameter in `plot()` method (first parameter)
-- All styling parameters moved to `plot()`
-- `ax=None` creates new figure via `pf.create_ax()`
-- Examples call `plot()` for styling, not `__init__()`
+**Colors:** Material Design 300-level (bars/lines) and 500-level (backgrounds): blue `#2196F3`, red `#F44336`, amber `#FFC107`, grey `#455A64`.
 
-**Refactoring status (May 2026):**
+**Bar labels:** `va='center_baseline'` (not `va='center'`) for digit-only strings inside bars.
 
-- ✅ HeatmapBase, HeatmapDateTime, HeatmapXYZ, HexbinPlot
-- ✅ All 17 visualization examples
+**Label contrast:** `text_color = 'white' if 0.299*r + 0.587*g + 0.114*b < 0.5 else 'black'`
 
-See `CHANGELOG.md` for detailed refactoring notes.
+**Dynamic height:** `height = max(1.5, n_years * 0.38)` inches for multi-year panels.
 
 ## Development Workflow
 
 **[CRITICAL] NEVER COMMIT CHANGES.** User stages and commits exclusively.
 
-**Commit message style:**
-
-- One-line title (< 50 chars)
-- Bullet points for details
-- Example: `Refine hyperparameter optimization\n- Filter single-value parameters\n- Remove redundant legend`
-
-**[CRITICAL] NEVER RUN EXAMPLE SUITE.** Only test individual examples during development.
-
+**[CRITICAL] NEVER RUN EXAMPLE SUITE.** Only test individual examples during development:
 ```bash
 uv run python examples/gapfilling/gapfill_randomforest.py
 ```
 
-User runs `examples/run_all_examples.py` for full validation.
+**Commit message style:** One-line title (< 50 chars) + bullet points for details.
 
-**Do NOT:**
-
-- Run `uv` commands without explicit approval
-- Skip pre-commit hooks (`--no-verify`)
-- Force-push to main/master
-- Include Claude as co-author in commit messages
+**Do NOT:** run `uv` commands without explicit approval, skip pre-commit hooks (`--no-verify`), force-push to main/master, include Claude as co-author in commit messages.
 
 ## Testing
-
-**Run tests:**
 
 ```bash
 pytest tests/test_gapfilling.py -v              # Gap-filling
@@ -316,15 +304,10 @@ pytest tests/test_fluxprocessingchain.py -v     # Flux chain
 pytest tests/ -v                                 # All
 ```
 
-**Guidelines:**
-
 - Use flexible assertion ranges (`assertGreater/assertLess`) for SHAP variability
-- Validate at API boundaries (user input, external data), not internal contracts
 - Don't mock databases in integration tests
 
 ## Module Docstring Format
-
-**Standard format (reStructuredText):**
 
 ```python
 """
@@ -343,60 +326,25 @@ Use `/llm-detox` skill for all written content (documentation, comments, commit 
 
 ## Known Issues & Workarounds
 
-| Issue                                     | Workaround                                    |
-|-------------------------------------------|-----------------------------------------------|
-| SHAP importance fluctuates ±5-10%         | Use flexible assertion ranges in tests        |
+| Issue | Workaround |
+|-------|-----------|
+| SHAP importance fluctuates ±5-10% | Use flexible ranges in tests (`assertGreater/Less`) |
 | XGBoost base_score in scientific notation | Monkey-patched in `MlRegressorGapFillingBase` |
-| Feature reduction too strict              | Reduce `shap_threshold_factor` (default 0.5)  |
-| Unicode encoding on Windows (→ char)      | Use ASCII equivalents (>, >) in examples      |
-
-## Examples (86 runnable scripts)
-
-Organized by functional domain. Each category has a README with file descriptions and usage.
-
-**Structure:**
-
-- `visualization/` — 17 plotting examples
-- `times/` — 6 timestamp handling
-- `analysis/` — 10 time series analysis
-- `features/` — 11 variable engineering
-- `fits/` — 2 data fitting
-- `io/` — 1 file I/O
-- `preprocessing/` — 18 (corrections, outlier detection, QA/QC)
-- `flux/` — 11 (processing chain, low-res, high-res)
-- `gapfilling/` — 10 (RF, XGBoost, MDS, interpolation, comparison)
-
-**Running examples:**
-
-```bash
-uv run python examples/gapfilling/gapfill_randomforest.py
-python examples/run_all_examples.py  # All in parallel (8 workers)
-```
-
-See `examples/CATALOG.md` for complete listing and `examples/README.md` for details.
+| Feature reduction too strict | Reduce `shap_threshold_factor` (default 0.5) |
+| Unicode on Windows (arrow chars) | Use ASCII (>, ->) in examples |
 
 ## Common Workflows
 
-### Adding new feature engineering stage
-
-1. Add parameter to `FeatureEngineer.__init__()` (default None)
+**Add feature engineering stage:**
+1. Add parameter to `FeatureEngineer.__init__()`
 2. Implement `_stagename_features()` method
 3. Call from `_create_features()` orchestrator
 4. Use naming: `.{col}_TYPE{detail}` (e.g., `.Tair_f_POL2`)
 
-### Adding gap-filling method to FluxProcessingChain
-
-1. Create `level41_newmethod()` with all 24 feature parameters
-2. Create `FeatureEngineer`, apply to data
-3. Create and train gap-filling model
-4. Store results in `self._level41['new_method'][ustar_scenario]`
-
-### Debugging SHAP importance issues
-
-1. Check `.RANDOM` baseline feature included
-2. Verify threshold: `random_mean + k * random_sd`
-3. Check feature counts before/after reduction
-4. Inspect `model_.feature_importances_traintest_`
+**Debug SHAP importance:**
+1. Check `.RANDOM` baseline included
+2. Verify threshold calculation
+3. Inspect feature counts before/after reduction
 
 ## Quick Reference
 
@@ -412,6 +360,4 @@ See `examples/CATALOG.md` for complete listing and `examples/README.md` for deta
 
 ---
 
-**Last Updated:** 2026-05-15  
-**Version:** v0.91.0+  
-**Package Manager:** `uv`
+**Last Updated:** 2026-05-27 | **Version:** v0.91.0+ | **Package Manager:** `uv`

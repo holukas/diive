@@ -34,7 +34,7 @@ See `diive.pkgs.preprocessing.outlier_detection` for available detection classes
 
 **Quick spike detection (Hampel filter):**
 ```python
-from diive.pkgs.preprocessing.outlier_detection import Hampel
+from diive.preprocessing.outlier_detection import Hampel
 
 # Fast, robust detection using Median Absolute Deviation
 detector = Hampel(
@@ -49,7 +49,7 @@ cleaned = df[detector.flags_outliers != 2]
 
 **Statistical thresholding (Z-score):**
 ```python
-from diive.pkgs.preprocessing.outlier_detection import StepwiseOutlierDetection
+from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
 
 # Global z-score
 detector = StepwiseOutlierDetection(dfin=df, col='FCH4', site_lat=47.5, site_lon=8.4, utc_offset=1)
@@ -64,7 +64,7 @@ detector.flag_outliers_zscore_test(
 
 **Absolute physical limits:**
 ```python
-from diive.pkgs.preprocessing.outlier_detection import AbsoluteLimits
+from diive.preprocessing.outlier_detection import AbsoluteLimits
 
 # Enforce known physical bounds
 detector = AbsoluteLimits(
@@ -77,7 +77,7 @@ detector = AbsoluteLimits(
 
 **Multi-stage filtering (sequential chain):**
 ```python
-from diive.pkgs.preprocessing.outlier_detection import StepwiseOutlierDetection
+from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
 
 # Progressive filtering: aggressive first, then refine
 detector = StepwiseOutlierDetection(dfin=df, col='NEE', site_lat=46.8, site_lon=8.6)

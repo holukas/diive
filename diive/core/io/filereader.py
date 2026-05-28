@@ -19,6 +19,7 @@ from diive.configs.filetypes import get_filetypes
 from diive.core.dfun.frames import compare_len_header_vs_data, parse_header, get_len_data, \
     sort_multiindex_columns_names, rename_cols, convert_data_to_numeric
 from diive.core.times.times import continuous_timestamp_freq, TimestampSanitizer
+from diive.core.utils.console import info, warn
 
 
 def search_folders(searchdirs: str or list) -> list:
@@ -207,12 +208,11 @@ class ColumnNamesSanitizer:
         uniq_duplicate_names = list(set(duplicate_names))
 
         if uniq_duplicate_names:
-            print(f"(!)WARNING: Duplicate column names found")
-            print(f"(!)WARNING: Duplicate columns will be renamed")
+            warn("Duplicate column names found — will be renamed")
 
             for u in uniq_duplicate_names:
                 occurrences = len(self.df[u].columns)
-                print(f"(!)WARNING There are {occurrences} columns with name {u}")
+                warn(f"There are {occurrences} columns with name {u}")
 
             newcols = []
             for col in self.df.columns:
@@ -227,7 +227,7 @@ class ColumnNamesSanitizer:
                         # increase the integer suffix until a free name is found
                         counter += 1
                         newcol = f'{col}.{counter}'
-                    print(f"(!)WARNING Duplicate column names found: {col} was renamed to --> {newcol}")
+                    warn(f"Duplicate column names found: {col} was renamed to --> {newcol}")
                     col = newcol
                 newcols.append(col)
 
@@ -330,7 +330,7 @@ class ReadFileType:
 
     def _readfile(self) -> tuple[DataFrame, DataFrame]:
         """Load data"""
-        print(f"Reading file {self.filepath.name} ...")
+        info(f"Reading file {self.filepath.name} ...")
         datafilereader = DataFileReader(
             filepath=self.filepath,
             data_skip_rows=self.filetypeconfig['DATA']['SKIP_ROWS'],

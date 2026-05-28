@@ -49,7 +49,7 @@ print(f"Number of records: {len(le)}")
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 # Apply temperature-dependent conversion
 
-et_calculated = dv.et_from_le(le=le, ta=ta)
+et_calculated = dv.features.et_from_le(le=le, ta=ta)
 
 # %%
 # Compare with EddyPro reference
@@ -95,9 +95,9 @@ ax1 = fig.add_subplot(gs[0, 0])
 ax2 = fig.add_subplot(gs[0, 1])
 ax3 = fig.add_subplot(gs[0, 2])
 
-dv.plot_heatmap_datetime(series=et_calculated).plot(ax=ax1)
-dv.plot_heatmap_datetime(series=et_eddypro_valid).plot(ax=ax2)
-dv.plot_heatmap_datetime(series=(et_valid - et_eddypro_valid)).plot(ax=ax3)
+dv.plotting.HeatmapDateTime(series=et_calculated).plot(ax=ax1)
+dv.plotting.HeatmapDateTime(series=et_eddypro_valid).plot(ax=ax2)
+dv.plotting.HeatmapDateTime(series=(et_valid - et_eddypro_valid)).plot(ax=ax3)
 
 ax1.set_title("ET from Latent Heat Flux (mm/h)", fontsize=12, fontweight='bold')
 ax2.set_title("ET from EddyPro Reference (mm/h)", fontsize=12, fontweight='bold')

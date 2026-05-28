@@ -49,7 +49,7 @@ print(stats)
 
 # Visualize the target time series
 print(f"\nGenerating time series plot...")
-ts_plot = dv.TimeSeries(series=subset[TARGET_COL])
+ts_plot = dv.plotting.TimeSeries(series=subset[TARGET_COL])
 ts_plot.plot()
 
 # %%
@@ -87,7 +87,7 @@ print(f"\n" + "=" * 80)
 print("Starting hyperparameter optimization...")
 print("=" * 80)
 
-opt = dv.OptimizeParamsTS(
+opt = dv.gapfilling.OptimizeParamsTS(
     df=subset,
     target_col=TARGET_COL,
     regressor_class=RandomForestRegressor,

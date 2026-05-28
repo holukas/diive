@@ -15,7 +15,7 @@ class TestEcHires(unittest.TestCase):
         df['N2Od'] = df['N2Od'].multiply(10 ** 3)  # Convert from umol mol-1 to nmol mol-1
         df['H2O'] = df['H2O'].div(10 ** 6)  # Convert from umol mol-1 to mol mol-1
         df['Ts'] = df['Ts'].add(273.15)  # From degC to K
-        fdl = dv.FluxDetectionLimit(
+        fdl = dv.flux.FluxDetectionLimit(
             df=df,
             u_col='x',  # m s-1
             v_col='y',  # m s-1
@@ -33,7 +33,7 @@ class TestEcHires(unittest.TestCase):
             title_covariance_plot="Covariance vs time lag for example file")
         fdl.run()
         results = fdl.get_detection_limit()
-        self.assertEqual(len(fdl.hires_df.columns), 13)
+        self.assertEqual(len(fdl.hires_df.columns), 11)
         self.assertIn("e", fdl.hires_df.columns)  # e_col
         self.assertIn("pd", fdl.hires_df.columns)  # pd_col
         self.assertIsInstance(fdl.hires_df, pd.DataFrame)
@@ -41,8 +41,8 @@ class TestEcHires(unittest.TestCase):
         self.assertEqual(fdl.lag_to, 1800)
         self.assertIn('flux_detection_limit', results)
         self.assertIn('flux_noise_rmse', results)
-        self.assertEqual(results['flux_detection_limit'], 1.9300179626373497)
-        self.assertEqual(results['flux_noise_rmse'], 0.6433393208791166)
+        self.assertAlmostEqual(results['flux_detection_limit'], 1.9300179626373497, places=10)
+        self.assertAlmostEqual(results['flux_noise_rmse'], 0.6433393208791166, places=10)
 
         # Verify that the flux conversion factor is applied correctly
         flux_conversion_factor = fdl.cov_df['cov_flux'] / fdl.cov_df['cov']

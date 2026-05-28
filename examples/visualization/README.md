@@ -2,7 +2,7 @@
 
 Examples demonstrating visualization and plotting functions for time series and flux data.
 
-17 examples across 10+ plot types.
+19 examples across 10+ plot types.
 
 ## Examples by Plot Type
 
@@ -40,6 +40,14 @@ Examples demonstrating visualization and plotting functions for time series and 
 - **plot_ridgeline_basic.py** — Ridge plots grouped by week
 - **plot_ridgeline_advanced.py** — Ridge plots grouped by month with styling options
 
+### Circular / Spiral
+
+- **plot_treering_temperature.py** — Tree-ring spiral: annual data as concentric rings, color = value,
+  month labels around circumference, optional month lines and year separators, colorbar auto-extension
+- **plot_treering_line_temperature.py** — Tree-ring radial line plot: each year as a line trace around
+  a full circle; radial displacement encodes value; single-color and per-year colormap variants with
+  optional fill between baseline and line
+
 ### Other Plots
 
 - **plot_other_plots.py** — Long-term anomalies and trend visualization
@@ -74,6 +82,7 @@ See `diive.core.plotting` for the complete API:
 - `HistogramPlot` — Distribution histograms
 - `HexbinPlot` — 2D hexagonal binning
 - `RidgeLinePlot` — Ridge line plots
+- `TreeRingPlot` — Circular spiral: annual rings with color-coded values
 
 ## Running Examples
 
@@ -86,4 +95,4 @@ uv run python examples/visualization/plot_scatter_xy_colored.py
 uv run python examples/run_all_examples.py
 ```
 
-All 17 examples follow the two-phase design pattern.
+All 19 examples follow the two-phase design pattern.

@@ -14,7 +14,7 @@ Examples demonstrating curve fitting and regression for time series analysis and
 
 **Fit polynomial to light-response relationship:**
 ```python
-from diive.pkgs.fits import Fitter
+from diive.fits import Fitter
 
 # Fit polynomial (e.g., CO2 uptake vs. light)
 fitter = Fitter(
@@ -29,7 +29,7 @@ curve = fitter.get_fitted_curve()
 
 **Fit rectangular hyperbola (light saturation curve):**
 ```python
-from diive.pkgs.fits import Fitter
+from diive.fits import Fitter
 
 # Hyperbolic function: y = (a*x) / (b + x)
 fitter = Fitter(
@@ -41,7 +41,7 @@ fitter = Fitter(
 
 **Fit temperature response curves:**
 ```python
-from diive.pkgs.fits import Fitter
+from diive.fits import Fitter
 
 # Lloyd-Taylor or exponential temperature response
 fitter = Fitter(
