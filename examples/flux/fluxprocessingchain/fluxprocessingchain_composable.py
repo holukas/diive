@@ -216,6 +216,34 @@ print(f"After L3.3 (CUT_50): {flux_l33.dropna().count()} accepted  |  "
       f"{flux_l33_hq.dropna().count()} high-quality (QCF=0)")
 
 # %%
+# Alternative: detect USTAR thresholds via bootstrap (FLUXNET standard)
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# ``run_level33_ustar_detection`` runs the multi-year bootstrap detection
+# (ONEFlux moving-point method, Papale et al. 2006) and applies the resulting
+# percentile thresholds as separate USTAR scenarios in one call.  Use this
+# when you want the threshold computed from the data inside the pipeline
+# rather than pre-supplying it from an external analysis (e.g. REddyProc).
+#
+# Not run here to keep the example fast; the call would look like::
+#
+#     from diive.flux.fluxprocessingchain import run_level33_ustar_detection
+#     data = run_level33_ustar_detection(
+#         data,
+#         ta_col='TA_1_1_1',
+#         swin_col='SW_IN_1_1_1',
+#         n_iter=100,
+#         percentiles=(16, 50, 84),   # produces CUT_16 / CUT_50 / CUT_84
+#         showplot=False, verbose=True,
+#     )
+#     # Inspect the fitted bootstrap result afterwards:
+#     print(data.levels.ustar_detection.summary())
+#
+# The same dispatch is available in ``run_chain`` via
+# ``FluxConfig(ustar_detection_mode='bootstrap', ustar_bootstrap_ta_col=...,
+# ustar_bootstrap_swin_col=...)``.
+
+# %%
 # Step 5b: gap analysis — structure of missing data before gap-filling
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #

@@ -41,8 +41,14 @@ class FluxConfig:
     standard pipeline, or drop down to the composable per-level API for custom
     L3.2 outlier logic or custom feature engineering.
 
-    **Required fields** (no defaults) force you to make explicit choices for every
-    flux rather than silently inheriting wrong values from another variable.
+    Only ``fluxcol`` and ``ustar_thresholds`` are unconditionally required.
+    All other fields default to ``None`` / sensible booleans and are validated
+    *contextually* by ``run_chain`` — e.g. ``gapfilling_features`` is required
+    only when ``gapfill_rf`` or ``gapfill_xgb`` is ``True``;
+    ``outlier_sigma_*`` is required only when ``run_l32=True``;
+    ``mds_swin`` / ``mds_ta`` / ``mds_vpd`` are required only when
+    ``gapfill_mds=True``. This way each new flux declaration only needs the
+    fields that match the features it actually enables.
 
     Example — NEE, H, and N2O configs::
 
@@ -55,7 +61,7 @@ class FluxConfig:
             outlier_sigma_daytime=5.5,
             outlier_sigma_nighttime=5.5,
             gapfilling_features=['TA_1_1_1', 'SW_IN_1_1_1', 'VPD_1_1_1'],
-            level2_tests={
+            level2_test_settings={
                 'ssitc': {'apply': True, 'setflag_timeperiod': None},
                 'gas_completeness': {'apply': True},
                 'spectral_correction_factor': {'apply': True},
@@ -72,7 +78,7 @@ class FluxConfig:
             outlier_sigma_daytime=5.5,
             outlier_sigma_nighttime=5.5,
             gapfilling_features=['TA_1_1_1', 'SW_IN_1_1_1'],
-            level2_tests={
+            level2_test_settings={
                 'ssitc': {'apply': True, 'setflag_timeperiod': None},
             },
             mds_swin='SW_IN_1_1_1',
@@ -87,49 +93,146 @@ class FluxConfig:
             outlier_sigma_daytime=4.0,    # chosen by inspecting the N2O record
             outlier_sigma_nighttime=3.5,  # trace gases typically need lower sigma
             gapfilling_features=['TA_1_1_1', 'SW_IN_1_1_1'],
-            level2_tests={
+            level2_test_settings={
                 'ssitc': {'apply': True, 'setflag_timeperiod': None},
                 'gas_completeness': {'apply': True},
             },
             gapfill_mds=False,  # MDS not appropriate for N2O without dedicated drivers
         )
+
+    Example — detect USTAR thresholds via bootstrap (FLUXNET standard)::
+
+        nee_boot_cfg = FluxConfig(
+            fluxcol='FC',
+            ustar_detection_mode='bootstrap',
+            ustar_bootstrap_ta_col='TA_1_1_1',
+            ustar_bootstrap_swin_col='SW_IN_1_1_1',
+            ustar_bootstrap_percentiles=(16, 50, 84),  # produces CUT_16/50/84
+            outlier_sigma_daytime=5.5,
+            outlier_sigma_nighttime=5.5,
+            gapfilling_features=['TA_1_1_1', 'SW_IN_1_1_1', 'VPD_1_1_1'],
+            level2_test_settings={'ssitc': {'apply': True, 'setflag_timeperiod': None}},
+            mds_swin='SW_IN_1_1_1', mds_ta='TA_1_1_1', mds_vpd='VPD_kPa_1_1_1',
+        )
+        # The fitted bootstrap instance is available on data.levels.ustar_detection
+        # after run_chain() for inspection of annual/per-year statistics.
     """
 
     # ------------------------------------------------------------------ required
     fluxcol: str
     """Target flux column (e.g. ``'FC'``, ``'H'``, ``'N2O'``)."""
 
-    ustar_thresholds: list
-    """USTAR threshold(s) in m s-1 — one per scenario.
-    Use ``[0.0]`` for energy fluxes (H, LE) to keep all records."""
-
-    ustar_labels: list
-    """Short label per threshold (e.g. ``['CUT_50']``; ``['CUT_NONE']`` for H/LE)."""
-
-    outlier_sigma_daytime: float
-    """Hampel filter sigma for daytime outlier detection.
-    Must be chosen by inspecting the flux record — no universal default applies.
-    Typical range: 5–6 for CO2/H/LE; 3–5 for trace gases (N2O, CH4)."""
-
-    outlier_sigma_nighttime: float
-    """Hampel filter sigma for nighttime outlier detection.
-    Must be chosen by inspecting the flux record — no universal default applies."""
-
-    gapfilling_features: list
-    """Predictor column names for ML gap-filling (RF, XGBoost).
-    Must exist in ``data.full_df``.  Ignored when both ``gapfill_rf`` and
-    ``gapfill_xgb`` are ``False``."""
-
-    level2_tests: dict
-    """Keyword arguments forwarded verbatim to :func:`run_level2`
-    (``ssitc``, ``gas_completeness``, ``spectral_correction_factor``,
-    ``signal_strength``, ``raw_data_screening_vm97``,
-    ``angle_of_attack``, ``steadiness_of_horizontal_wind``)."""
-
     # ------------------------------------------------------------------ optional
+    # Each field below is only consulted when the corresponding feature is
+    # enabled. ``run_chain`` validates these contextually — e.g. it raises if
+    # ``gapfill_rf=True`` but ``gapfilling_features`` is empty, but accepts
+    # ``gapfilling_features=None`` when both ML methods are off.
+
+    # ----- USTAR filtering (Level-3.3) -----
+    ustar_detection_mode: str = 'constant'
+    """How USTAR thresholds are obtained for Level-3.3.
+
+    - ``'constant'`` (default) — use the values you provide in
+      ``ustar_thresholds`` directly (e.g. previously computed by REddyProc).
+      Fastest; no per-call computation. Required field: ``ustar_thresholds``.
+    - ``'bootstrap'`` — detect thresholds from the data itself via
+      multi-year bootstrap (ONEFlux moving-point method by default,
+      Papale et al. 2006). Slower but fully reproducible within the
+      pipeline. Required fields: ``ustar_bootstrap_ta_col`` and
+      ``ustar_bootstrap_swin_col``. ``ustar_thresholds`` /
+      ``ustar_labels`` are ignored in this mode — thresholds and
+      ``CUT_<p>`` labels are produced from
+      ``ustar_bootstrap_percentiles``."""
+
+    ustar_thresholds: list | None = None
+    """USTAR threshold(s) in m s-1 — one per scenario. Required when
+    ``ustar_detection_mode='constant'``. Use ``[0.0]`` for energy fluxes
+    (H, LE) to keep all records."""
+
+    ustar_labels: list | None = None
+    """Short label per threshold (e.g. ``['CUT_50']``; ``['CUT_NONE']`` for H/LE).
+    When ``None``, defaults to ``['CUT_0', 'CUT_1', ...]`` (positional index,
+    not percentile). Pass explicit labels for percentile-based thresholds.
+    Ignored when ``ustar_detection_mode='bootstrap'`` (labels are derived
+    from the requested percentiles, e.g. ``CUT_16`` / ``CUT_50`` / ``CUT_84``)."""
+
+    ustar_bootstrap_ta_col: str | None = None
+    """Air temperature column (deg C) in ``data.full_df`` used by the bootstrap
+    detector to stratify nighttime records into temperature classes. Required
+    when ``ustar_detection_mode='bootstrap'``; ignored otherwise."""
+
+    ustar_bootstrap_swin_col: str | None = None
+    """Shortwave incoming radiation column (W m-2) in ``data.full_df`` used by
+    the bootstrap detector to identify nighttime periods. Required when
+    ``ustar_detection_mode='bootstrap'``; ignored otherwise."""
+
+    ustar_bootstrap_n_iter: int = 100
+    """Bootstrap iterations per year window. Larger values give tighter
+    percentile estimates at proportional runtime cost. Used only when
+    ``ustar_detection_mode='bootstrap'``."""
+
+    ustar_bootstrap_n_jobs: int = 1
+    """Parallel workers for the bootstrap (1 = sequential, -1 = all CPUs).
+    Used only when ``ustar_detection_mode='bootstrap'``."""
+
+    ustar_bootstrap_percentiles: tuple = (16, 50, 84)
+    """Bootstrap percentiles to compute and use as separate USTAR scenarios.
+    Each value ``p`` produces one scenario labelled ``CUT_<p>``. Used only
+    when ``ustar_detection_mode='bootstrap'``."""
+
+    level2_test_settings: dict | None = None
+    """Which Level-2 quality tests to run, and the settings for each.
+
+    Shape is a **dict-of-dicts**: each top-level key is a test name, each
+    value is that test's settings dict (always including ``'apply': True``
+    to enable it). Example::
+
+        level2_test_settings = {
+            'ssitc': {'apply': True, 'setflag_timeperiod': None},
+            'gas_completeness': {'apply': True},
+            'spectral_correction_factor': {'apply': True},
+        }
+
+    Recognised top-level keys (each name selects a Level-2 test;
+    omit a key to skip that test): ``ssitc``, ``gas_completeness``,
+    ``spectral_correction_factor``, ``signal_strength``,
+    ``raw_data_screening_vm97``, ``angle_of_attack``,
+    ``steadiness_of_horizontal_wind``. See :func:`run_level2` for the
+    settings each test accepts.
+
+    ``None`` (the default) runs L2 with only the always-on missing-values
+    test — no other QC test is applied."""
+
+    run_l32: bool = True
+    """Run Level-3.2 (Hampel-filter outlier detection) inside ``run_chain``.
+    Set to ``False`` for fluxes / sites where Hampel-style outlier removal is
+    not appropriate (e.g. when you have manual screening upstream)."""
+
+    outlier_sigma_daytime: float | None = None
+    """Hampel filter sigma for daytime outlier detection. Required when
+    ``run_l32=True``; ignored otherwise. Must be chosen by inspecting the flux
+    record — no universal default applies. Typical range: 5–6 for CO2/H/LE;
+    3–5 for trace gases (N2O, CH4)."""
+
+    outlier_sigma_nighttime: float | None = None
+    """Hampel filter sigma for nighttime outlier detection. Required when
+    ``run_l32=True``; ignored otherwise."""
+
+    gapfilling_features: list | None = None
+    """Predictor column names for ML gap-filling (RF, XGBoost). Must exist in
+    ``data.full_df``. Required when ``gapfill_rf=True`` or ``gapfill_xgb=True``;
+    ignored otherwise."""
+
     set_storage_to_zero: bool = False
     """Set to ``True`` when no storage measurement is available for this flux.
     The storage correction (L3.1) still runs; it just adds zero."""
+
+    gapfill_storage_term: bool = True
+    """Whether L3.1 should gap-fill missing storage values with a rolling
+    median before adding the storage term to the flux. Default ``True``
+    matches ``run_level31``'s own default. Set to ``False`` to add only the
+    raw (non-gap-filled) storage term — any nighttime record with missing
+    storage then becomes NaN. Ignored when ``set_storage_to_zero=True``."""
 
     outlier_window_length: int = 48 * 13
     """Hampel filter rolling window length, **expressed as a record count** (not a
@@ -200,7 +303,12 @@ class LevelResults:
 
     - ``filteredseries_hq`` — flux with QCF=0 *only* (strictest filter, no
       soft warnings tolerated).  Used as the reference series for gap-filling
-      model training.  Updated by each level that runs a QCF.
+      model training.  Written by L2 (where the QCF=0 mask is computed) and
+      by L3.1 (which reapplies that same L2 QCF=0 mask to the
+      storage-corrected flux — L3.1 itself has no new QC test).  L3.2 stores
+      its QCF=0 series only in ``filteredseries_level32_qcf``-adjacent
+      attributes (it does not overwrite this field), and L3.3 keeps the
+      per-USTAR-scenario HQ series in ``filteredseries_level33_hq`` instead.
     - ``filteredseries_level*_qcf`` — flux accepted at QCF < threshold (set by
       ``daytime_accept_qcf_below`` / ``nighttime_accept_qcf_below`` in
       ``init_flux_data``).  The threshold is usually 1 or 2 depending on the
@@ -228,9 +336,12 @@ class LevelResults:
     level2_qcf: FlagQCF | None = None
     filteredseries_level2_qcf: pd.Series | None = None
     filteredseries_hq: pd.Series | None = None
-    """Flux filtered at strictly QCF=0 (highest-quality reference). Updated by
-    each level that runs a QCF; the series name uses the ``_QCF0`` suffix to
-    mark the strict-zero filter (contrast with ``_QCF`` for user-accepted)."""
+    """Flux filtered at strictly QCF=0 (highest-quality reference). Written by
+    Level-2 (initial QCF=0 mask on the raw flux) and by Level-3.1 (same mask
+    reapplied to the storage-corrected flux). Not touched by L3.2 / L3.3 —
+    those write their own series elsewhere on ``LevelResults``. The series
+    name uses the ``_QCF0`` suffix to mark the strict-zero filter (contrast
+    with ``_QCF`` for the user-accepted series)."""
 
     # Level-3.1
     level31: FluxStorageCorrectionSinglePointEddyPro | None = None
@@ -315,6 +426,14 @@ class FluxLevelData:
     meta: FluxMeta
     levels: LevelResults = field(default_factory=LevelResults)
     level_ids: list[str] = field(default_factory=list)
+    """Ordered list of level idstrs that have run (``'L2'``, ``'L3.1'``,
+    ``'L3.2'``, ``'L3.3'``, ``'L4.1'``). Records the *cascade-aware* level
+    boundaries only — for L4.1 the single entry ``'L4.1'`` is appended
+    whichever subset of MDS / RF / XGBoost ran; it does not tell you which
+    methods produced output. To discover which gap-filling methods are
+    available, use :meth:`gapfilled_cols` or
+    :meth:`LevelResults.level41_methods`. Cleared by the re-run cascade
+    (see ``levels/_rerun.py``)."""
     added_columns: dict[str, list[str]] = field(default_factory=dict)
     """Columns each level added to ``fpc_df``, keyed by level idstr (``'L2'``,
     ``'L3.1'``, ``'L3.2'``, ``'L3.3'``) or per-method L4.1 key
@@ -605,11 +724,29 @@ class FluxLevelData:
                         alpha=0.8, label=legend_label, zorder=2)
 
         # One line per gap-filling method
+        import warnings
         for method_key, scen_cols in cols.items():
             if ustar_scenario not in scen_cols:
                 continue
             gf_col = scen_cols[ustar_scenario]
             s = self.fpc_df[gf_col]
+            # Gap-filling is expected to leave no NaN — but in edge cases an
+            # ML model may fail to predict a stretch (e.g. an entire year
+            # missing all features). The cumulative line below treats any
+            # residual NaN as zero, which can mislead the reader into thinking
+            # nothing was missing. Warn so the user knows the line is not a
+            # complete record.
+            n_missing = int(s.isna().sum())
+            if n_missing:
+                warnings.warn(
+                    f"Gap-filled series {gf_col!r} still has {n_missing} NaN "
+                    f"record(s) for USTAR scenario {ustar_scenario!r}; the "
+                    f"cumulative line treats these as zero contribution. "
+                    f"Inspect data.levels.level41_{method_key}[{ustar_scenario!r}] "
+                    f"to see why the gap-filler could not produce a value there.",
+                    UserWarning,
+                    stacklevel=2,
+                )
             cumul = (s * conv_factor).fillna(0).cumsum()
             final = cumul.iloc[-1]
             base_label = _LABELS.get(method_key, method_key.upper())
@@ -852,10 +989,22 @@ def add_driver(
         )
 
     if not series.index.equals(data.full_df.index):
+        # Strict equality is intentional: a silent reindex would mask
+        # legitimate caller mistakes (wrong frequency, off-by-one start, a
+        # subset that was meant to be full coverage). Surface the mismatch
+        # and tell the user how to opt in to a reindex if that is what they
+        # actually wanted.
+        only_in_series = series.index.difference(data.full_df.index)
+        only_in_full = data.full_df.index.difference(series.index)
         raise ValueError(
             f"series index does not match data.full_df.index "
-            f"(series: {len(series)} rows, full_df: {len(data.full_df)} rows). "
-            f"Align the series to the full_df timestamp first."
+            f"(series: {len(series)} rows, full_df: {len(data.full_df)} rows; "
+            f"{len(only_in_series)} timestamps only in series, "
+            f"{len(only_in_full)} only in full_df). "
+            f"If the series is a subset (e.g. daytime-only) and the missing "
+            f"timestamps should become NaN, reindex it first: "
+            f"add_driver(data, series.reindex(data.full_df.index), name=...). "
+            f"Otherwise check the frequency / start / end of the series."
         )
 
     if col_name in data.full_df.columns:
@@ -865,5 +1014,9 @@ def add_driver(
         )
 
     new_full_df = data.full_df.copy()
-    new_full_df[col_name] = series.values
+    # Assign the Series itself rather than ``series.values``: indexes are
+    # already equal so alignment is a no-op, and this preserves extension
+    # dtypes (Int64, boolean, nullable string) that ``.values`` would
+    # silently demote to object / float.
+    new_full_df[col_name] = series
     return dataclasses.replace(data, full_df=new_full_df)

@@ -122,7 +122,7 @@ cfg = FluxConfig(
     fluxcol='FC', ustar_thresholds=[0.18], ustar_labels=['CUT_50'],
     outlier_sigma_daytime=5.5, outlier_sigma_nighttime=5.5,
     gapfilling_features=['TA', 'SW_IN', 'VPD_kPa'],
-    level2_tests={'ssitc': {'apply': True, 'setflag_timeperiod': None}},
+    level2_test_settings={'ssitc': {'apply': True, 'setflag_timeperiod': None}},
     mds_swin='SW_IN', mds_ta='TA', mds_vpd='VPD_kPa',
 )
 data = init_flux_data(df, fluxcol='FC', site_lat=46.6, site_lon=9.8, utc_offset=1)
@@ -182,7 +182,7 @@ Key `data.levels` fields: `level2`, `level2_qcf`, `level31`, `level32`, `level32
 - `init_flux_data` raises if `df` already contains `SW_IN_POT` / `DAYTIME` / `NIGHTTIME` (reserved names — would silently overwrite user data).
 - `nighttime_accept_qcf_below` (was `nighttimetime_accept_qcf_below` before v0.91.1 — typo fixed).
 - Default `daytime_accept_qcf_below=1` is stricter than FLUXNET convention of `2`; QCF=0 all pass, QCF=1 soft warning, QCF=2 hard failure.
-- `run_level33_constant_ustar` only supports constant thresholds; use REddyProc externally for bootstrap, then pass percentile values here. `threshold_labels` is optional — auto-generates `CUT_0`, `CUT_1`, ... (positional index, **not** percentile); pass explicit labels like `['CUT_16', 'CUT_50', 'CUT_84']` for percentile-based thresholds. Length and uniqueness are validated.
+- `run_level33_constant_ustar` only supports constant thresholds; for in-pipeline bootstrap detection use `run_level33_ustar_detection` (composable) or `FluxConfig(ustar_detection_mode='bootstrap', ustar_bootstrap_ta_col=..., ustar_bootstrap_swin_col=...)` (via `run_chain`). `threshold_labels` is optional — auto-generates `CUT_0`, `CUT_1`, ... (positional index, **not** percentile); pass explicit labels like `['CUT_16', 'CUT_50', 'CUT_84']` for percentile-based thresholds. Length and uniqueness are validated; substring overlap (e.g. `CUT_5` inside `CUT_50`) is also rejected.
 - `run_level33_ustar_detection` raises if `detector_kwargs` contains `nee_col` / `ta_col` / `ustar_col` / `swin_col` (these are set internally).
 - `run_level41_*` emits a `UserWarning` when a re-run would overwrite previously stored scenarios in `levels.level41_*`.
 - `FeatureEngineer(target_col='_target_', ...)` — `target_col` is a required placeholder; any string not in the feature list works.

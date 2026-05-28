@@ -20,6 +20,21 @@
 
 ### Flux Processing Chain
 
+- **`run_chain` supports bootstrap USTAR detection.** New `FluxConfig.ustar_detection_mode` field selects between
+  `'constant'` (apply pre-computed thresholds — fastest) and `'bootstrap'` (detect thresholds from the data via the
+  multi-year ONEFlux moving-point method, Papale et al. 2006). Bootstrap mode reads `ustar_bootstrap_ta_col` /
+  `ustar_bootstrap_swin_col` / `ustar_bootstrap_n_iter` / `ustar_bootstrap_n_jobs` / `ustar_bootstrap_percentiles`
+  and dispatches to `run_level33_ustar_detection`; the fitted `UstarBootstrapThresholds` is exposed on
+  `data.levels.ustar_detection`. The bootstrap path is also documented as a sidebar in
+  `examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py`. `ustar_thresholds` is now optional (required
+  only in constant mode).
+- **`FluxConfig` required/optional split made contextual.** Only `fluxcol` is unconditionally required.
+  `ustar_thresholds`, `ustar_labels`, `level2_test_settings` (renamed from `level2_tests`),
+  `outlier_sigma_daytime` / `..._nighttime`, and
+  `gapfilling_features` are now optional (`None` defaults) and validated by `run_chain` based on which features are
+  actually enabled. New `run_l32: bool = True` field lets users opt out of the Hampel L3.2 step entirely (and skip the
+  matching sigma requirements). When fields are missing, `run_chain` raises one cumulative `ValueError` listing every
+  missing field and the flag that requires it.
 - **Level re-runs cascade.** Re-running L2/L3.1/L3.2/L3.3 on a `FluxLevelData` that already passed through that level
   now (a) drops the previous run's columns from `fpc_df` and (b) clears all downstream `LevelResults` state, before
   producing fresh outputs. Notebook users can iterate on outlier sigma / USTAR thresholds without rebuilding from

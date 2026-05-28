@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Callable
 
 import pandas as pd
 
-from diive.core.utils.console import rule
+from diive.core.utils.console import detail, rule, warn
 from diive.flux.fluxprocessingchain.container import FluxLevelData
 from diive.flux.fluxprocessingchain.levels._rerun import (
     drop_columns_for_key,
@@ -173,6 +173,25 @@ def run_level41_mds(
         )
 
     rule("Level 4.1: Gap-Filling (MDS)")
+
+    # Driver coverage check: MDS fills a target record by averaging neighbours
+    # whose driver values fall within tolerance. Gaps in TA / SW_IN / VPD
+    # themselves therefore directly cap the achievable fill rate, but the
+    # final gap-filled column gives no hint that the driver coverage is the
+    # bottleneck. Log coverage upfront so a low fill rate downstream is
+    # explainable rather than mysterious; warn when any driver is below 80%
+    # because that is usually the dominant cause of poor MDS performance.
+    n_total = len(data.full_df)
+    for _drv_label, _drv_col in (('SW_IN', swin), ('TA', ta), ('VPD', vpd)):
+        _n_valid = int(data.full_df[_drv_col].notna().sum())
+        _coverage = _n_valid / n_total if n_total else 0.0
+        _msg = (f"MDS driver coverage: {_drv_label}={_drv_col!r}  "
+                f"{_n_valid}/{n_total} valid ({_coverage:.1%})")
+        if _coverage < 0.80:
+            warn(f"{_msg} - low driver coverage will cap the gap-fill rate "
+                 f"regardless of model quality")
+        else:
+            detail(_msg)
 
     # Re-run cleanup: drop the previous run's MDS columns from fpc_df so
     # re-running this method doesn't accumulate duplicates. L4.1 is additive

@@ -67,7 +67,7 @@ cfg = FluxConfig(
     ustar_thresholds=[0.18], ustar_labels=['CUT_50'],
     outlier_sigma_daytime=5.5, outlier_sigma_nighttime=5.5,
     gapfilling_features=['TA_1_1_1', 'SW_IN_1_1_1', 'VPD_kPa_1_1_1'],
-    level2_tests={'ssitc': {'apply': True, 'setflag_timeperiod': None}},
+    level2_test_settings={'ssitc': {'apply': True, 'setflag_timeperiod': None}},
     mds_swin='SW_IN_1_1_1', mds_ta='TA_1_1_1', mds_vpd='VPD_kPa_1_1_1',
 )
 data = init_flux_data(df, fluxcol='FC', site_lat=47.48, site_lon=8.36, utc_offset=1)
