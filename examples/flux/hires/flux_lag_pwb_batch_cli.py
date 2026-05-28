@@ -5,7 +5,7 @@ Batch Time Lag Detection via CLI (PwbBatchDetection)
 
 Demonstrates calling ``PwbBatchDetection`` from the command line via::
 
-    python -m diive.pkgs.flux.hires.lag_pwb [options]
+    python -m diive.flux.hires.lag_pwb [options]
 
 This script creates synthetic EddyPro-format files in a temporary input
 directory, invokes the module CLI as a subprocess, and prints the generated
@@ -15,7 +15,7 @@ CLI usage reference
 -------------------
 .. code-block:: text
 
-    python -m diive.pkgs.flux.hires.lag_pwb \\
+    python -m diive.flux.hires.lag_pwb \\
         --input-dir  /path/to/hires_files \\
         --output-dir /path/to/results \\
         --scalar CH4:ch4 --scalar N2O:n2o \\
@@ -75,7 +75,7 @@ Short alias (after ``uv sync`` or ``pip install diive``)
 
 ``diive-tlag-pwb-batch`` is a console-script entry point defined in
 ``pyproject.toml`` that calls the same ``_cli_main()`` function as
-``python -m diive.pkgs.flux.hires.lag_pwb``.
+``python -m diive.flux.hires.lag_pwb``.
 
 Run ``uv run diive-tlag-pwb-batch --help`` for all options.
 """
@@ -149,7 +149,7 @@ if __name__ == '__main__':
     # Build the CLI command
     # ------------------------------------------------------------------
     cmd = [
-        sys.executable, '-m', 'diive.pkgs.flux.hires.lag_pwb',
+        sys.executable, '-m', 'diive.flux.hires.lag_pwb',
         '--input-dir', input_dir,
         '--output-dir', output_dir,
         '--scalar', 'CH4:ch4',

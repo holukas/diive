@@ -161,6 +161,7 @@ if __name__ == '__main__':
         output_dir=None,  # no checkpoint CSV written
         save_plots=False,  # no PNG files written
         n_workers=N_WORKERS,
+        random_state=42,  # reproducible regardless of worker completion order
     )
 
     console.print(f"\n[bold]Batch PWB detection[/bold]  "

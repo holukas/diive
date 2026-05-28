@@ -17,6 +17,10 @@
 - **Plotting aliases use `plot_` prefix** — old unprefixed names removed.
 - **`HeatmapXYZ` requires pre-aggregated input.**
 - **`DailyCorrelation` is now a class** — old function-based API removed.
+- **PWB time-lag detection: `var_tsonic` / `col_tsonic` now required.** `PreWhiteningBootstrap` and
+  `PwbBatchDetection` always run the full 4-combination RFlux v3.2.0 logic; the 2-combination (cw/wc) fallback was
+  removed. Pass a sonic-temperature column. Result keys `tlag_opt_s`, `corr_est`, `cv5pct`, `cv1pct` were removed;
+  `corr_pw` (un-smoothed PW peak correlation) and `cov_pwb` (raw cross-covariance at the selected lag) added.
 
 ### Flux Processing Chain
 
@@ -200,9 +204,13 @@
 
 - **`DetectTimestampShifts`** — detects clock errors by comparing measured vs. potential shortwave radiation. Three
   detection methods (`fft_phase_shift`, `crosscorr`, `noon_shift`) with five plot methods.
-- **`PreWhiteningBootstrap`** — Vitale et al. (2024) PWB time-lag detection for low-magnitude fluxes (CH4, N2O).
+- **`PreWhiteningBootstrap`** — Vitale et al. (2024) PWB time-lag detection for low-magnitude fluxes (CH4, N2O),
+  aligned with RFlux v3.2.0 numerics: Breitung (2002) variance-ratio unit-root test, overlapping moving-block
+  bootstrap (`tsboot(sim="fixed")`), un-smoothed PW peak, single Bartlett band (`±3.291/√(n·13)`), and a
+  threaded RNG (`random_state`) for reproducibility.
 - **`PwbBatchDetection`** — parallel batch PWB across many files using `ProcessPoolExecutor`. Crash-safe checkpointing;
-  CLI: `diive-tlag-pwb-batch`.
+  per-file deterministic seeding (`random_state`), `strict` mode, and per-scalar `*_error` columns; CLI:
+  `diive-tlag-pwb-batch`.
 - **`reynolds_decomposition()`** — standalone `x' = x - mean(x)`; exported as `dv.flux.reynolds_decomposition`.
 - **`WindDoubleRotation`** (renamed from `WindRotation2D`) — scalar `c` removed; Reynolds decomposition is now a
   separate explicit step. Rotation angles use `atan2` (fixes `ZeroDivisionError` and wrong-quadrant results when
