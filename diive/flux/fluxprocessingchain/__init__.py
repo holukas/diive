@@ -104,6 +104,7 @@ Part of the diive library: https://github.com/holukas/diive
 """
 
 from diive.flux.fluxprocessingchain.container import (
+    DEFAULT_LEVEL2_TEST_SETTINGS,
     FluxConfig,
     FluxLevelData,
     FluxMeta,
@@ -129,6 +130,7 @@ from diive.flux.fluxprocessingchain.run_chain import run_chain
 
 __all__ = [
     # Containers / config
+    'DEFAULT_LEVEL2_TEST_SETTINGS',
     'FluxConfig',
     'FluxLevelData',
     'FluxMeta',

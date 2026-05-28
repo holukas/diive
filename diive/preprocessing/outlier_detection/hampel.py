@@ -60,10 +60,10 @@ class Hampel(FlagBase):
                  lat: float = None,
                  lon: float = None,
                  utc_offset: int = None,
-                 window_length: int = 13,
+                 window_length: int = 48 * 13,
                  n_sigma: float = 5.5,
-                 n_sigma_daytime: float = None,
-                 n_sigma_nighttime: float = None,
+                 n_sigma_daytime: float = 5.5,
+                 n_sigma_nighttime: float = 5.5,
                  n_sigma_dt: float = None,
                  n_sigma_nt: float = None,
                  k: float = 1.4826,
@@ -92,8 +92,12 @@ class Hampel(FlagBase):
             lat (float): Latitude of the site (Required if ``separate_day_night=True``).
             lon (float): Longitude of the site (Required if ``separate_day_night=True``).
             utc_offset (int): UTC offset in hours (Required if ``separate_day_night=True``).
-            window_length (int): The size of the sliding window centered on the point.
-                Default is 13 (approx. 6 hours for half-hourly data).
+            window_length (int): The size of the sliding window centered on the point,
+                expressed as a record count (not a duration). Default is
+                ``48 * 13 = 624`` records, which equals **13 days at the
+                half-hourly (30-min) sampling rate** typical of eddy-covariance
+                data — matching the Papale et al. 2006 spike-detection window.
+                Scale for other sampling rates (e.g. ``24 * 13`` for hourly).
             n_sigma (float): The number of standard deviations for the threshold.
                 Default is 5.5. Used for:
                 * **Global mode (separate_day_night=False):** Applied to all records.

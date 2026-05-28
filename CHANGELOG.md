@@ -60,6 +60,24 @@
 - **New `run_chain` example.** `examples/flux/fluxprocessingchain/fluxprocessingchain_runchain.py` demonstrates the
   single-call entry point end-to-end: minimal `FluxConfig`, full L2→L4.1 pipeline, post-chain inspection helpers,
   with a commented sidebar showing the bootstrap-USTAR alternative.
+- **`run_chain` defers to Hampel filter defaults for L3.2.** The `Hampel` class now ships sensible defaults
+  matching the Papale et al. 2006 spike-detection convention: `window_length=48*13` records (13 days at 30-min
+  sampling), `n_sigma_daytime=n_sigma_nighttime=5.5`, `use_differencing=True`, `separate_day_night=True`,
+  `repeat=True`. The chain no longer needs to pass them explicitly.
+  `FluxConfig.outlier_sigma_daytime` / `outlier_sigma_nighttime` / `outlier_window_length` are now true
+  **optional overrides** (default `None`); leave them unset to use the Hampel defaults, set them only to
+  deviate. Sigma fields are no longer required by the contextual validator. No behaviour change for users
+  who relied on the previous `outlier_window_length = 48 * 13` chain default — the value is now the Hampel
+  default and is applied automatically. The example uses the defaults; the composable example still
+  demonstrates explicit kwargs because it is the full-control path.
+- **`run_chain` ships sensible Level-2 defaults.** A new module constant
+  `DEFAULT_LEVEL2_TEST_SETTINGS` (exported from the package) enables the four universal L2 tests when
+  `FluxConfig.level2_test_settings` is `None`: `ssitc`, `gas_completeness`, `spectral_correction_factor`, and
+  `raw_data_screening_vm97` (spikes + dropout). The analyzer-specific signal-strength test is opt-in via the new
+  `FluxConfig.signal_strength_col` field — supplying a column name adds the test on top of the defaults with
+  sensible `method='discard below'` / `threshold=60` settings; supply the full `signal_strength` entry inside
+  `level2_test_settings` for any other configuration. The "empty L2" warning now fires only on an explicit
+  `level2_test_settings={}` (deliberate opt-out), not on `None` (defaults apply).
 - **`run_chain` ships richer default `FeatureEngineer` for ML gap-filling.** The minimal `[-1, -1]` single-lag default
   is replaced with a symmetric ``[-2, 2]`` lag window (four neighbour records — ±30 min, ±60 min at 30-min sampling)
   plus first- and second-order differencing, while keeping the existing 4/12/48-record rolling median + std and

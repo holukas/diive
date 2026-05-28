@@ -26,6 +26,25 @@ if TYPE_CHECKING:
     from diive.preprocessing.qaqc import FlagQCF
 
 
+# Default Level-2 test configuration applied by ``run_chain`` when
+# ``FluxConfig.level2_test_settings`` is ``None``. These four tests are
+# universal across IRGA models and FLUXNET-style EC sites; the
+# analyzer-specific signal-strength test is *not* included here because
+# it depends on a column name and threshold direction the chain can't
+# infer — opt into it via ``FluxConfig.signal_strength_col``.
+DEFAULT_LEVEL2_TEST_SETTINGS: dict = {
+    'ssitc': {'apply': True, 'setflag_timeperiod': None},
+    'gas_completeness': {'apply': True},
+    'spectral_correction_factor': {'apply': True},
+    'raw_data_screening_vm97': {
+        'apply': True,
+        'spikes': True, 'amplitude': False, 'dropout': True,
+        'abslim': False, 'skewkurt_hf': False, 'skewkurt_sf': False,
+        'discont_hf': False, 'discont_sf': False,
+    },
+}
+
+
 @dataclass
 class FluxConfig:
     """
@@ -219,20 +238,53 @@ class FluxConfig:
     ``steadiness_of_horizontal_wind``. See :func:`run_level2` for the
     settings each test accepts.
 
-    ``None`` (the default) runs L2 with only the always-on missing-values
-    test — no other QC test is applied."""
+    ``None`` (the default) runs the four universal tests baked into
+    ``DEFAULT_LEVEL2_TEST_SETTINGS``: ``ssitc``, ``gas_completeness``,
+    ``spectral_correction_factor``, and ``raw_data_screening_vm97`` (with
+    spikes + dropout enabled). Pass an explicit dict to take full control;
+    pass ``{}`` to disable every test except the always-on missing-values
+    one (a warning fires in that case).
+
+    Use the separate ``signal_strength_col`` field to opt into the
+    analyzer-specific signal-strength test on top of the defaults — that
+    test is not included unconditionally because it depends on a column
+    name and threshold direction the chain can't infer."""
+
+    signal_strength_col: str | None = None
+    """Column name of the IRGA signal-strength / AGC diagnostic
+    (e.g. ``'CUSTOM_SIGNAL_STRENGTH_IRGA72_MEAN'``). When set,
+    ``run_chain`` adds the Level-2 ``signal_strength`` test on top of
+    ``level2_test_settings`` (or on top of the defaults if
+    ``level2_test_settings`` is ``None``) with
+    ``method='discard below'`` and ``threshold=60`` — sensible for the
+    LI-7200 / LI-7500 family where *low* AGC signals optical
+    contamination. For a different method/threshold (e.g.
+    ``'discard above'`` for some analyzer firmwares), supply the full
+    ``signal_strength`` entry inside ``level2_test_settings`` and leave
+    this field ``None``. Ignored when ``level2_test_settings`` already
+    contains a ``'signal_strength'`` key (the user's explicit config
+    wins; a warning is emitted to surface the conflict)."""
 
     outlier_sigma_daytime: float | None = None
-    """Hampel filter sigma for daytime outlier detection. **Required by
-    `run_chain`** — L3.2 always runs because L3.3 USTAR filtering depends on
-    outlier-screened data. No universal default applies; choose by inspecting
-    the flux record. Typical range: 5–6 for CO2/H/LE; 3–5 for trace gases
-    (N2O, CH4). If you have screened outliers upstream and want to skip L3.2
-    entirely, use the composable per-level API instead of ``run_chain``."""
+    """Hampel filter sigma override for daytime outlier detection.
+
+    ``None`` (the default) defers to
+    :class:`~diive.preprocessing.outlier_detection.hampel.Hampel`'s own
+    ``n_sigma_daytime`` default (currently 5.5). Override only when you have
+    inspected the flux record and have a reason to pick a different
+    threshold — typical bands are 5–6 for CO2/H/LE and 3–5 for trace gases
+    (N2O, CH4). L3.2 always runs in ``run_chain`` because L3.3 USTAR
+    filtering depends on outlier-screened data; the override knob does
+    not let you skip L3.2."""
 
     outlier_sigma_nighttime: float | None = None
-    """Hampel filter sigma for nighttime outlier detection. **Required by
-    ``run_chain``** for the same reason as ``outlier_sigma_daytime``."""
+    """Hampel filter sigma override for nighttime outlier detection.
+
+    ``None`` (the default) defers to
+    :class:`~diive.preprocessing.outlier_detection.hampel.Hampel`'s own
+    ``n_sigma_nighttime`` default (currently 5.5). Override only when you
+    have a deliberate reason to choose a different nighttime threshold;
+    see ``outlier_sigma_daytime`` for typical ranges."""
 
     gapfilling_features: list | None = None
     """Predictor column names for ML gap-filling (RF, XGBoost). Must exist in
@@ -250,17 +302,21 @@ class FluxConfig:
     raw (non-gap-filled) storage term — any nighttime record with missing
     storage then becomes NaN. Ignored when ``set_storage_to_zero=True``."""
 
-    outlier_window_length: int = 48 * 13
-    """Hampel filter rolling window length, **expressed as a record count** (not a
-    duration). Default ``48 * 13 = 624`` records, which equals **13 days at the
-    half-hourly (30-min) sampling rate** assumed throughout the flux processing
-    chain.
+    outlier_window_length: int | None = None
+    """Hampel filter rolling window length override, **expressed as a record
+    count** (not a duration).
 
-    The chain is designed for half-hourly EddyPro output. If your data has a
-    different sampling rate, scale this value yourself — e.g. for hourly data
-    use ``24 * 13`` to keep the same 13-day window. The value is forwarded
-    verbatim to :meth:`StepwiseOutlierDetection.flag_outliers_hampel_test` and
-    is interpreted in records, never in time units."""
+    ``None`` (the default) defers to
+    :class:`~diive.preprocessing.outlier_detection.hampel.Hampel`'s own
+    ``window_length`` default, ``48 * 13 = 624`` records — that's 13 days
+    of half-hourly data, matching Papale et al. 2006. Override only when
+    you have a reason to widen or narrow the local-window MAD computation.
+
+    For non-half-hourly inputs (the chain is designed for 30-min EddyPro
+    output), scale this value yourself — e.g. for hourly data use
+    ``24 * 13`` to preserve a 13-day window. The value is forwarded
+    verbatim to :meth:`StepwiseOutlierDetection.flag_outliers_hampel_test`
+    and is always interpreted in records, never in time units."""
 
     gapfill_rf: bool = True
     """Run Random Forest gap-filling (L4.1)."""

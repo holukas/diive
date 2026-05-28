@@ -14,7 +14,11 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 from diive.core.utils.console import rule
-from diive.flux.fluxprocessingchain.container import FluxConfig, FluxLevelData
+from diive.flux.fluxprocessingchain.container import (
+    DEFAULT_LEVEL2_TEST_SETTINGS,
+    FluxConfig,
+    FluxLevelData,
+)
 from diive.flux.fluxprocessingchain.levels import (
     make_level32_detector,
     run_level2,
@@ -46,21 +50,33 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
     -------------------
 
     *Level-2 (quality flags)* — runs the tests listed in
-    ``config.level2_test_settings``; the always-on missing-values test runs
-    regardless.
+    ``config.level2_test_settings``; the always-on missing-values test
+    runs regardless. When ``level2_test_settings is None`` (default), the
+    chain applies the universal :data:`DEFAULT_LEVEL2_TEST_SETTINGS`
+    (``ssitc`` + ``gas_completeness`` + ``spectral_correction_factor`` +
+    ``raw_data_screening_vm97`` with spikes + dropout). Setting
+    ``config.signal_strength_col`` adds the analyzer-specific
+    ``signal_strength`` test on top with ``method='discard below'`` /
+    ``threshold=60`` — sensible LI-7200-style defaults.
 
     *Level-3.1 (storage correction)* — controlled by
     ``config.set_storage_to_zero`` and ``config.gapfill_storage_term``.
 
     *Level-3.2 (outlier detection)* — **unconditional in ``run_chain``**
     because L3.3 USTAR filtering depends on outlier-screened data. Uses a
-    single Hampel filter with separate day / night sigmas
-    (``config.outlier_sigma_daytime`` / ``..._nighttime``) and the rolling
-    window ``config.outlier_window_length``. All other Hampel knobs
-    (``use_differencing``, ``repeat``, ``k``, ...) are fixed at the underlying
-    function's defaults. If you have screened outliers upstream and genuinely
-    want to skip L3.2, use the composable per-level API instead of
-    ``run_chain``.
+    single Hampel filter that ships its own sensible defaults
+    (``window_length=48*13`` records = 13 days at 30-min sampling,
+    Papale 2006; ``n_sigma_daytime=n_sigma_nighttime=5.5``;
+    ``use_differencing=True``; ``separate_daytime_nighttime=True``;
+    ``repeat=True``). The optional ``config.outlier_window_length`` /
+    ``outlier_sigma_daytime`` / ``outlier_sigma_nighttime`` fields are
+    *overrides* — set them only when you want to deviate from the defaults;
+    leave them ``None`` (the default) to defer to
+    :class:`~diive.preprocessing.outlier_detection.hampel.Hampel`. All
+    other Hampel knobs (``k``, ``use_differencing``, ``repeat``, ...) are
+    fixed at the underlying function's defaults. If you have screened
+    outliers upstream and genuinely want to skip L3.2, use the composable
+    per-level API instead of ``run_chain``.
 
     *Level-3.3 (USTAR filtering)* — dispatches on
     ``config.ustar_detection_mode``:
@@ -119,9 +135,7 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
 
     ``FluxConfig`` makes most fields optional and ``run_chain`` validates
     that each enabled feature has the fields it needs:
-    ``outlier_sigma_daytime`` / ``..._nighttime`` are required
-    unconditionally (L3.2 is mandatory in ``run_chain`` because L3.3 USTAR
-    filtering depends on outlier-screened data); ``mds_swin`` / ``mds_ta`` /
+    ``mds_swin`` / ``mds_ta`` /
     ``mds_vpd`` are required when ``gapfill_mds=True``;
     ``gapfilling_features`` is required when ``gapfill_rf`` or
     ``gapfill_xgb`` is ``True``; ``ustar_thresholds`` is required in
@@ -205,15 +219,11 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
             _missing.append(
                 "ustar_bootstrap_swin_col (ustar_detection_mode='bootstrap')"
             )
-    # L3.2 is unconditional in run_chain because L3.3 USTAR filtering depends
-    # on outlier-screened data — running USTAR detection on outlier-contaminated
-    # records biases the threshold's effect and can spuriously reject good
-    # nighttime flux. Users who genuinely want to skip L3.2 must drop to the
-    # composable per-level API.
-    if config.outlier_sigma_daytime is None:
-        _missing.append("outlier_sigma_daytime (L3.2 is mandatory in run_chain)")
-    if config.outlier_sigma_nighttime is None:
-        _missing.append("outlier_sigma_nighttime (L3.2 is mandatory in run_chain)")
+    # L3.2 runs unconditionally in run_chain (L3.3 depends on it), but the
+    # Hampel filter ships its own sensible defaults — window_length=13,
+    # n_sigma_daytime/nighttime=5.5, use_differencing=True, day/night split.
+    # The FluxConfig outlier_* fields are pure overrides; we don't require
+    # them.
     if config.gapfill_mds:
         if not (config.mds_swin and config.mds_ta and config.mds_vpd):
             _missing.append("mds_swin / mds_ta / mds_vpd (gapfill_mds=True)")
@@ -283,26 +293,62 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
             stacklevel=2,
         )
 
-    # Warn (don't fail) on a pipeline that runs L2 with nothing but the
-    # always-on missing-values test — easy to do accidentally, and produces
-    # an L2 QCF that flags only fully-missing records.
-    if not config.level2_test_settings:
-        import warnings
-        warnings.warn(
-            "FluxConfig.level2_test_settings is empty — Level-2 will run only "
-            "the always-on missing-values test, so the L2 QCF will accept "
-            "essentially every record where the flux is non-NaN. This is "
-            "almost certainly not what you want for a production chain; "
-            "supply at least an SSITC test (e.g. "
-            "level2_test_settings={'ssitc': {'apply': True, 'setflag_timeperiod': None}}).",
-            UserWarning,
-            stacklevel=2,
-        )
+    # Resolve effective Level-2 test settings.
+    #   - ``level2_test_settings is None``  -> use the chain defaults
+    #     (ssitc, gas_completeness, spectral_correction_factor,
+    #     raw_data_screening_vm97 with spikes + dropout).
+    #   - ``level2_test_settings == {}``    -> user explicitly opted out
+    #     of every test; warn loudly because the resulting L2 QCF then
+    #     flags only fully-missing records.
+    #   - ``level2_test_settings`` is a non-empty dict -> use as-is.
+    # The optional ``signal_strength_col`` field opts in to the analyzer-
+    # specific signal-strength test on top, with sensible LI-7200-style
+    # method='discard below' / threshold=60 defaults. If the user already
+    # supplied their own 'signal_strength' entry, that wins (with a
+    # warning).
+    import copy
+    import warnings
+    if config.level2_test_settings is None:
+        effective_l2 = copy.deepcopy(DEFAULT_LEVEL2_TEST_SETTINGS)
+    else:
+        effective_l2 = copy.deepcopy(config.level2_test_settings)
+        if not effective_l2:
+            warnings.warn(
+                "FluxConfig.level2_test_settings={} — Level-2 will run only "
+                "the always-on missing-values test, so the L2 QCF will accept "
+                "essentially every record where the flux is non-NaN. This is "
+                "almost certainly not what you want for a production chain; "
+                "either omit the field to use the chain defaults "
+                "(ssitc + gas_completeness + spectral_correction_factor + "
+                "raw_data_screening_vm97), or supply your own dict.",
+                UserWarning,
+                stacklevel=2,
+            )
+
+    if config.signal_strength_col:
+        if 'signal_strength' in effective_l2:
+            warnings.warn(
+                "FluxConfig.signal_strength_col is set but "
+                "level2_test_settings already contains a 'signal_strength' "
+                "entry — the explicit entry in level2_test_settings wins; "
+                "signal_strength_col is ignored. To use the convenience "
+                "field, drop the 'signal_strength' key from "
+                "level2_test_settings.",
+                UserWarning,
+                stacklevel=2,
+            )
+        else:
+            effective_l2['signal_strength'] = {
+                'apply': True,
+                'signal_strength_col': config.signal_strength_col,
+                'method': 'discard below',
+                'threshold': 60,
+            }
 
     rule(f"run_chain: full pipeline for {config.fluxcol}")
 
     # ---------------------------------------------------------------- Level-2
-    data = run_level2(data, **(config.level2_test_settings or {}))
+    data = run_level2(data, **effective_l2)
 
     # -------------------------------------------------------------- Level-3.1
     data = run_level31(
@@ -312,20 +358,28 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
     )
 
     # -------------------------------------------------------------- Level-3.2
-    # Single Hampel filter with separate day/night sigmas. Unconditional —
-    # L3.3 USTAR filtering depends on outlier-screened data, so the chain
-    # cannot skip this step. Users who need a non-Hampel detector, a
-    # multi-step pipeline, or want to skip L3.2 entirely must call the
-    # composable per-level API directly.
+    # Single Hampel filter. Unconditional — L3.3 USTAR filtering depends on
+    # outlier-screened data, so the chain cannot skip this step. Users who
+    # need a non-Hampel detector, a multi-step pipeline, or want to skip
+    # L3.2 entirely must call the composable per-level API directly.
+    #
+    # Only forward the kwargs the user explicitly overrode on FluxConfig —
+    # the Hampel filter ships sensible defaults of its own (window_length=
+    # 48*13 records = 13 days at 30-min sampling, n_sigma_daytime/nighttime
+    # =5.5, use_differencing=True, separate_daytime_nighttime=True,
+    # repeat=True), and the run_chain contract is that this is the simple
+    # path: don't pass parameters that would just duplicate the underlying
+    # defaults.
+    hampel_kwargs: dict = {'showplot': False, 'verbose': False}
+    if config.outlier_window_length is not None:
+        hampel_kwargs['window_length'] = config.outlier_window_length
+    if config.outlier_sigma_daytime is not None:
+        hampel_kwargs['n_sigma_daytime'] = config.outlier_sigma_daytime
+    if config.outlier_sigma_nighttime is not None:
+        hampel_kwargs['n_sigma_nighttime'] = config.outlier_sigma_nighttime
+
     data, sod = make_level32_detector(data)
-    sod.flag_outliers_hampel_test(
-        window_length=config.outlier_window_length,
-        n_sigma_daytime=config.outlier_sigma_daytime,
-        n_sigma_nighttime=config.outlier_sigma_nighttime,
-        separate_daytime_nighttime=True,
-        showplot=False,
-        verbose=False,
-    )
+    sod.flag_outliers_hampel_test(**hampel_kwargs)
     sod.addflag()
     data = run_level32(data, outlier_detector=sod)
 

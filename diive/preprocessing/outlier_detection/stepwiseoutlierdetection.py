@@ -168,16 +168,20 @@ class StepwiseOutlierDetection:
         flagtest.calc()
         self._last_flag = flagtest.get_flag()
 
-    def flag_outliers_hampel_test(self, window_length: int = 13, n_sigma: float = 5.5, n_sigma_daytime: float = None,
-                                  n_sigma_nighttime: float = None, k: float = 1.4826, use_differencing: bool = True,
-                                  separate_daytime_nighttime: bool = False, showplot: bool = False,
+    def flag_outliers_hampel_test(self, window_length: int = 48 * 13, n_sigma: float = 5.5,
+                                  n_sigma_daytime: float = 5.5, n_sigma_nighttime: float = 5.5,
+                                  k: float = 1.4826, use_differencing: bool = True,
+                                  separate_daytime_nighttime: bool = True, showplot: bool = False,
                                   verbose: bool = False, repeat: bool = True):
         """Identify outliers in a sliding window based on the Hampel filter (global or separate day/night).
 
         Parameters
         ----------
-        window_length : int, default 13
-            Size of the sliding window for median/MAD calculation
+        window_length : int, default 48*13 (=624)
+            Size of the sliding window for median/MAD calculation, in record
+            counts (not a duration). The default ``48 * 13 = 624`` corresponds
+            to 13 days of half-hourly data — matching Papale et al. 2006.
+            Scale for other sampling rates (e.g. ``24 * 13`` for hourly).
         n_sigma : float, default 5.5
             Threshold multiplier for global mode (number of MADs above median)
         n_sigma_daytime : float, optional

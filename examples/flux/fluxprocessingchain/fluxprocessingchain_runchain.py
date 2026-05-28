@@ -107,11 +107,12 @@ if 'VPD_T1_47_1_gfXG' in df.columns:
 # them, ``run_chain`` raises one cumulative error listing every missing
 # field instead of failing partway through.
 #
-# ``level2_test_settings`` is a dict-of-dicts: each top-level key names a
-# quality test (``ssitc``, ``gas_completeness``, ``signal_strength``,
-# ``raw_data_screening_vm97``, ``angle_of_attack``,
-# ``spectral_correction_factor``, ``steadiness_of_horizontal_wind``); the
-# value is that test's settings dict including ``'apply': True``.
+# Omitting ``level2_test_settings`` lets the chain apply
+# :data:`DEFAULT_LEVEL2_TEST_SETTINGS` — ``ssitc`` + ``gas_completeness`` +
+# ``spectral_correction_factor`` + ``raw_data_screening_vm97`` with
+# spikes and dropout enabled. To opt into the analyzer-specific
+# signal-strength test, set ``signal_strength_col=...`` on the config.
+# To take full control, pass an explicit ``level2_test_settings`` dict.
 
 cfg = FluxConfig(
     fluxcol='FC',
@@ -119,22 +120,23 @@ cfg = FluxConfig(
     # multiple thresholds you would also pass ustar_labels=['CUT_16', ...].
     ustar_thresholds=[0.18],
     ustar_labels=['CUT_50'],
-    # L3.2 Hampel — sigma must be chosen by inspecting the flux record;
-    # 5.5 is typical for CO2 / H / LE, 3-5 for trace gases.
-    outlier_sigma_daytime=5.5,
-    outlier_sigma_nighttime=5.5,
-    # L2 quality tests
-    level2_test_settings={
-        'ssitc': {'apply': True, 'setflag_timeperiod': None},
-    },
+    # L3.2 Hampel: chain uses the Hampel filter's own defaults
+    # (window_length=48*13 records = 13 days at 30-min sampling,
+    # n_sigma_daytime=n_sigma_nighttime=5.5, use_differencing=True,
+    # separate day/night). Set outlier_sigma_daytime / outlier_sigma_nighttime
+    # / outlier_window_length only when you need to deviate.
+    #
+    # L2 quality tests: defaults apply (ssitc + gas_completeness + scf +
+    # vm97). Uncomment to add the optional signal-strength test:
+    signal_strength_col='CUSTOM_SIGNAL_STRENGTH_IRGA72_MEAN',
     # L4.1 MDS (driver columns must already be in data.full_df)
     mds_swin='SW_IN_T1_47_1_gfXG',
     mds_ta='TA_T1_47_1_gfXG',
     mds_vpd='VPD_kPa',
     # L4.1 ML — turn off XGBoost for a faster example; RF stays on.
     gapfill_mds=True,
-    gapfill_rf=True,
-    gapfill_xgb=False,
+    gapfill_rf=False,
+    gapfill_xgb=True,
     gapfill_reduce_features=True,  # SHAP reduction — the default
     gapfilling_features=['TA_T1_47_1_gfXG', 'SW_IN_T1_47_1_gfXG', 'VPD_kPa'],
 )
