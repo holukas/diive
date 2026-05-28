@@ -171,6 +171,7 @@ Key `data.levels` fields: `level2`, `level2_qcf`, `level31`, `level32`, `level32
 - `finalize_level2/31/33()` are no-ops with `DeprecationWarning`.
 - `LevelResults` is not `frozen=True` but treat as immutable — every level rebuilds it via `dataclasses.replace`. Don't mutate fields or `level41_*` dict keys in place.
 - `add_driver(data, series, name=None)` puts a Series into `data.full_df` (where L4.1 reads from) instead of `data.fpc_df`; validates index, name, and absence of column collision.
+- **Re-runs cascade.** Re-running L2/L3.1/L3.2/L3.3 on a `data` that already passed through that level drops the previous run's `fpc_df` columns and downstream `LevelResults` fields before producing fresh output (see `levels/_rerun.py`). Cascade: re-running level N invalidates N and every later level, because those levels' state was computed against the now-stale upstream. Columns are tracked in `data.added_columns: dict[idstr -> list[col]]`. L4.1 is per-method (`'L4.1_mds'`/`'L4.1_rf'`/`'L4.1_xgb'`) and additive across methods — each `run_level41_*` drops its own previous columns but leaves the other methods' results alone.
 
 **Critical pitfalls:**
 

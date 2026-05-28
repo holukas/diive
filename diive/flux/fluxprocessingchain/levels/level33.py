@@ -24,6 +24,10 @@ import numpy as np
 from diive.core.utils.console import console as _console, info, rule
 from diive.flux.fluxprocessingchain.container import FluxLevelData
 from diive.flux.fluxprocessingchain.levels._qcf import finalize_level
+from diive.flux.fluxprocessingchain.levels._rerun import (
+    cascade_reset,
+    record_added_columns,
+)
 from diive.flux.lowres.ustarthreshold import FlagMultipleConstantUstarThresholds
 
 if TYPE_CHECKING:
@@ -118,8 +122,11 @@ def run_level33_constant_ustar(
     # interpretation for those fluxes. The documented escape hatch for keeping
     # the chain's level ordering is to pass thresholds=[0], which flags nothing
     # (USTAR is always >= 0); we therefore only reject *positive* thresholds.
-    _energy_basevars = {'H2O', 'h2o', 'T_SONIC', 'sonic_temperature'}
-    if data.meta.fluxbasevar in _energy_basevars and any(t > 0 for t in thresholds):
+    # Case-fold both sides because detect_fluxbasevar() returns uppercase for
+    # FluxNet-output files and lowercase for full-output files.
+    _energy_basevars_lower = {'h2o', 't_sonic', 'sonic_temperature'}
+    if (str(data.meta.fluxbasevar).lower() in _energy_basevars_lower
+            and any(t > 0 for t in thresholds)):
         raise ValueError(
             f"USTAR filtering with a non-zero threshold is not valid for energy "
             f"fluxes (got fluxcol={data.meta.fluxcol!r}, basevar="
@@ -138,10 +145,29 @@ def run_level33_constant_ustar(
         raise ValueError(
             f"threshold_labels must be unique; got {threshold_labels}."
         )
+    # Substring-overlap check: a label that contains another label as a substring
+    # would silently match the wrong flag column at lookup time (e.g. 'CUT_5' is
+    # contained in 'FLAG_..._CUT_50_..._TEST'). Reject up front so the user can
+    # pick distinct labels (e.g. 'CUT_05' / 'CUT_50') before any work happens.
+    for a in threshold_labels:
+        for b in threshold_labels:
+            if a != b and a in b:
+                raise ValueError(
+                    f"threshold_labels overlap by substring: {a!r} is contained "
+                    f"in {b!r}. This would cause flag-column lookup to match the "
+                    f"wrong scenario. Use distinct labels (e.g. {a!r} -> "
+                    f"{a + '_X'!r} or zero-pad like 'CUT_05' / 'CUT_50')."
+                )
 
     idstr = 'L3.3'
     meta = data.meta
     flux_corrected_col = data.levels.flux_corrected_col
+
+    # Re-run cleanup: drop columns from any previous L3.3 invocation (which
+    # may have used different USTAR labels), and clear L4.1 downstream state.
+    if idstr in data.level_ids:
+        data = cascade_reset(data, idstr)
+    pre_columns = list(data.fpc_df.columns)
 
     rule("Level 3.3: USTAR Filtering")
 
@@ -161,13 +187,21 @@ def run_level33_constant_ustar(
     current = data
 
     for ustar_scen in threshold_labels:
-        flagcols = [c for c in level33.results if ustar_scen in c]
+        # Match the label only at underscore-delimited boundaries so labels that
+        # share a prefix (or appear as substrings of other columns) cannot be
+        # confused. Belt-and-braces with the substring-overlap check above.
+        token = f"_{ustar_scen}_"
+        flagcols = [c for c in level33.results
+                    if token in c
+                    or c.endswith(f"_{ustar_scen}")
+                    or c.startswith(f"{ustar_scen}_")
+                    or c == ustar_scen]
         if len(flagcols) != 1:
             raise RuntimeError(
                 f"Could not uniquely identify the USTAR flag column for scenario "
                 f"{ustar_scen!r}: found {len(flagcols)} matching columns "
-                f"({flagcols}). Threshold labels must be unique substrings that "
-                f"do not overlap with each other or with other column names."
+                f"({flagcols}). Threshold labels must be unique and must not "
+                f"appear as substrings of each other or of unrelated column names."
             )
         flagcol = flagcols[0]
         udf = level33.results[[flux_corrected_col, meta.ustarcol, flagcol]].copy()
@@ -198,7 +232,8 @@ def run_level33_constant_ustar(
     # Set filteredseries to None: with multiple USTAR scenarios there is no single
     # unambiguous "the" filtered series. Force users to access the scenario dict
     # explicitly via data.levels.filteredseries_level33_qcf['CUT_50'].
-    return replace(current, levels=new_levels, level_ids=level_ids, filteredseries=None)
+    final = replace(current, levels=new_levels, level_ids=level_ids, filteredseries=None)
+    return replace(final, added_columns=record_added_columns(final, idstr, pre_columns))
 
 
 def run_level33_ustar_detection(

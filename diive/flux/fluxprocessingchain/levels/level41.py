@@ -17,6 +17,10 @@ import pandas as pd
 
 from diive.core.utils.console import rule
 from diive.flux.fluxprocessingchain.container import FluxLevelData
+from diive.flux.fluxprocessingchain.levels._rerun import (
+    drop_columns_for_key,
+    record_added_columns,
+)
 
 if TYPE_CHECKING:
     from diive.core.ml.feature_engineer import FeatureEngineer
@@ -170,6 +174,13 @@ def run_level41_mds(
 
     rule("Level 4.1: Gap-Filling (MDS)")
 
+    # Re-run cleanup: drop the previous run's MDS columns from fpc_df so
+    # re-running this method doesn't accumulate duplicates. L4.1 is additive
+    # *across methods* (mds / rf / xgb live in independent buckets), so this
+    # cleanup is per-method; rf and xgb columns are untouched.
+    data = drop_columns_for_key(data, 'L4.1_mds')
+    pre_columns = list(data.fpc_df.columns)
+
     filteredseries_l33 = _require_level33(data)
     fpc_df = data.fpc_df.copy()
     mds_results: dict = {}
@@ -192,12 +203,13 @@ def run_level41_mds(
 
     _warn_scenario_overwrite(data.levels.level41_mds, mds_results, 'mds')
     new_levels = replace(data.levels, level41_mds={**data.levels.level41_mds, **mds_results})
-    return replace(
+    final = replace(
         data,
         fpc_df=fpc_df,
         levels=new_levels,
         level_ids=_append_level_id(data.level_ids),
     )
+    return replace(final, added_columns=record_added_columns(final, 'L4.1_mds', pre_columns))
 
 
 def _run_level41_ml(
@@ -221,6 +233,13 @@ def _run_level41_ml(
             f"not only in data.fpc_df. "
             f"Available columns: {list(data.full_df.columns)}"
         )
+
+    # Re-run cleanup: drop this method's previous columns from fpc_df. The
+    # tracking key is e.g. 'L4.1_rf' for results_attr='level41_rf'.
+    method_label = results_attr.removeprefix('level41_')
+    tracking_key = f'L4.1_{method_label}'
+    data = drop_columns_for_key(data, tracking_key)
+    pre_columns = list(data.fpc_df.columns)
 
     filteredseries_l33 = _require_level33(data)
     fpc_df = data.fpc_df.copy()
@@ -264,15 +283,15 @@ def _run_level41_ml(
         ml_results[ustar_scen] = instance
 
     existing = getattr(data.levels, results_attr)
-    # results_attr is 'level41_rf' or 'level41_xgb'; method_label is the suffix.
-    _warn_scenario_overwrite(existing, ml_results, results_attr.removeprefix('level41_'))
+    _warn_scenario_overwrite(existing, ml_results, method_label)
     new_levels = replace(data.levels, **{results_attr: {**existing, **ml_results}})
-    return replace(
+    final = replace(
         data,
         fpc_df=fpc_df,
         levels=new_levels,
         level_ids=_append_level_id(data.level_ids),
     )
+    return replace(final, added_columns=record_added_columns(final, tracking_key, pre_columns))
 
 
 def run_level41_rf(

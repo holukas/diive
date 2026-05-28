@@ -20,6 +20,12 @@
 
 ### Flux Processing Chain
 
+- **Level re-runs cascade.** Re-running L2/L3.1/L3.2/L3.3 on a `FluxLevelData` that already passed through that level
+  now (a) drops the previous run's columns from `fpc_df` and (b) clears all downstream `LevelResults` state, before
+  producing fresh outputs. Notebook users can iterate on outlier sigma / USTAR thresholds without rebuilding from
+  `init_flux_data`. L4.1 is per-method and additive: each `run_level41_*` drops only its own previously produced
+  columns and leaves results from the other gap-filling methods intact. Columns are tracked on a new
+  `FluxLevelData.added_columns: dict[str, list[str]]` field. See `diive/flux/fluxprocessingchain/levels/_rerun.py`.
 - **`run_chain(data, config)`** — single-call convenience driver for the standard FLUXNET-style pipeline. Routes one
   `FluxConfig` through L2 -> L3.1 -> L3.2 (Hampel day/night) -> L3.3 -> L4.1, running only the gap-filling methods
   enabled by `gapfill_mds` / `gapfill_rf` / `gapfill_xgb`. The composable per-level API stays available for custom

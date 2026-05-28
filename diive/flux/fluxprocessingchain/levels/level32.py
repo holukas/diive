@@ -15,6 +15,10 @@ from dataclasses import replace
 from diive.core.utils.console import rule
 from diive.flux.fluxprocessingchain.container import FluxLevelData
 from diive.flux.fluxprocessingchain.levels._qcf import finalize_level
+from diive.flux.fluxprocessingchain.levels._rerun import (
+    cascade_reset,
+    record_added_columns,
+)
 from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
 
 
@@ -41,15 +45,18 @@ def make_level32_detector(data: FluxLevelData) -> StepwiseOutlierDetection:
 
         data = run_level32(data, outlier_detector=sod)
     """
+    # Re-run support: if L3.3 has already run, filteredseries is None because
+    # L3.3 deliberately clears it (multi-scenario). For a re-run of L3.2 to
+    # work, we need to wire the detector against the L3.1 QCF series that the
+    # cascade reset will restore inside run_level32(). We apply the cascade
+    # pre-emptively here so the detector's input matches what run_level32()
+    # will see — otherwise the staleness guard there would reject this
+    # detector.
+    if 'L3.3' in data.level_ids:
+        from diive.flux.fluxprocessingchain.levels._rerun import cascade_reset
+        data = cascade_reset(data, 'L3.2')
+
     if data.filteredseries is None:
-        if 'L3.3' in data.level_ids:
-            raise RuntimeError(
-                "data.filteredseries is None because Level-3.3 has already run "
-                "and cleared it (multiple USTAR scenarios produce no single "
-                "unambiguous filtered series). Level-3.2 must be applied "
-                "*before* Level-3.3 — rebuild the chain from L3.1 if you want "
-                "to add outlier detection."
-            )
         raise RuntimeError(
             "run_level31() (or run_level2()) must be called first; "
             "no filteredseries available to wire into the detector."
@@ -89,6 +96,16 @@ def run_level32(
     """
     if data.levels.flux_corrected_col is None:
         raise RuntimeError("run_level31() must be called before run_level32().")
+
+    idstr = 'L3.2'
+
+    # Re-run cleanup: cascade-clear L3.2 and downstream state from any prior
+    # invocation before running fresh. The detector staleness guards below
+    # then operate against the post-cascade snapshot, so passing in a
+    # pre-cascade detector correctly fails with a "rebuild" message.
+    if idstr in data.level_ids:
+        data = cascade_reset(data, idstr)
+    pre_columns = list(data.fpc_df.columns)
 
     # Guard: the detector holds a *copy* of fpc_df made at construction time.
     # If the user rebuilt `data` (e.g. re-ran run_level31 with different
@@ -144,7 +161,6 @@ def run_level32(
                     f"the QCF. Call sod.addflag() before run_level32()."
                 )
 
-    idstr = 'L3.2'
     rule("Level 3.2: Stepwise Outlier Detection")
 
     updated, qcf = finalize_level(
@@ -164,4 +180,5 @@ def run_level32(
     if idstr not in level_ids:
         level_ids.append(idstr)
 
-    return replace(updated, levels=new_levels, level_ids=level_ids)
+    final = replace(updated, levels=new_levels, level_ids=level_ids)
+    return replace(final, added_columns=record_added_columns(final, idstr, pre_columns))

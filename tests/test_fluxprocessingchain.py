@@ -316,6 +316,10 @@ class TestFluxProcessingChainComposable(unittest.TestCase):
         )
 
         df, _ = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
+        # Drop reserved columns init_flux_data computes itself; otherwise the
+        # reserved-name guard rejects the input.
+        df = df.drop(columns=[c for c in ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME')
+                              if c in df.columns])
         df['TA_1_1_1'] = df['TA_1_1_1'].bfill()
         df['SW_IN_1_1_1'] = df['SW_IN_1_1_1'].bfill()
         df['VPD_EP'] = df['VPD_EP'].bfill()
@@ -402,6 +406,8 @@ class TestFluxProcessingChainComposable(unittest.TestCase):
         )
 
         df, _ = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
+        df = df.drop(columns=[c for c in ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME')
+                              if c in df.columns])
         data = init_flux_data(
             df=df, fluxcol='FC',
             site_lat=46.583056, site_lon=9.790639, utc_offset=1,

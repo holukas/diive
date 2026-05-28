@@ -44,6 +44,19 @@ def finalize_level(
         (updated FluxLevelData, FlagQCF instance)
     """
     new_cols = detect_new_columns(df=level_df, other=data.fpc_df)
+    # pd.concat(axis=1) aligns by label and silently NaN-pads divergent
+    # indexes — that would let a level whose internal frame has gained or
+    # lost timestamps poison the working dataframe without warning. Assert
+    # index equality up front so any divergence is loud and traceable.
+    if not level_df.index.equals(data.fpc_df.index):
+        only_in_level = level_df.index.difference(data.fpc_df.index)
+        only_in_fpc = data.fpc_df.index.difference(level_df.index)
+        raise RuntimeError(
+            f"finalize_level({idstr!r}): level_df index does not match "
+            f"data.fpc_df index. {len(only_in_level)} timestamp(s) only in "
+            f"level_df, {len(only_in_fpc)} only in fpc_df. The two must align "
+            f"exactly before flag columns can be merged."
+        )
     fpc_df = pd.concat([data.fpc_df, level_df[new_cols]], axis=1)
     for col in new_cols:
         detail(f"Added column {col}.")

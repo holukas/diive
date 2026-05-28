@@ -14,8 +14,12 @@ from dataclasses import replace
 
 from diive.core.utils.console import rule
 from diive.flux.fluxprocessingchain.container import FluxLevelData
-from diive.flux.lowres.quality_flags import FluxQualityFlagsEddyPro
 from diive.flux.fluxprocessingchain.levels._qcf import finalize_level
+from diive.flux.fluxprocessingchain.levels._rerun import (
+    cascade_reset,
+    record_added_columns,
+)
+from diive.flux.lowres.quality_flags import FluxQualityFlagsEddyPro
 
 
 def run_level2(
@@ -109,6 +113,13 @@ def run_level2(
     idstr = 'L2'
     meta = data.meta
 
+    # If this level (or any downstream level) has already run, clear that
+    # state first so a re-run produces clean output instead of duplicated /
+    # stale columns. See levels/_rerun.py for the cascade semantics.
+    if idstr in data.level_ids:
+        data = cascade_reset(data, idstr)
+    pre_columns = list(data.fpc_df.columns)
+
     rule("Level 2: Quality Flag Expansion")
 
     level2 = FluxQualityFlagsEddyPro(
@@ -165,4 +176,5 @@ def run_level2(
     if idstr not in level_ids:
         level_ids.append(idstr)
 
-    return replace(updated, levels=new_levels, level_ids=level_ids)
+    final = replace(updated, levels=new_levels, level_ids=level_ids)
+    return replace(final, added_columns=record_added_columns(final, idstr, pre_columns))

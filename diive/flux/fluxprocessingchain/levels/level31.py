@@ -18,6 +18,10 @@ import pandas as pd
 from diive.core.dfun.frames import detect_new_columns
 from diive.core.utils.console import detail, rule
 from diive.flux.fluxprocessingchain.container import FluxLevelData
+from diive.flux.fluxprocessingchain.levels._rerun import (
+    cascade_reset,
+    record_added_columns,
+)
 from diive.flux.lowres.storage_correction import (
     FluxStorageCorrectionSinglePointEddyPro,
 )
@@ -56,6 +60,12 @@ def run_level31(
         raise RuntimeError("run_level2() must be called before run_level31().")
 
     idstr = 'L3.1'
+
+    # Re-run cleanup: drop columns and downstream state from any prior L3.1
+    # invocation before producing fresh ones. See levels/_rerun.py.
+    if idstr in data.level_ids:
+        data = cascade_reset(data, idstr)
+    pre_columns = list(data.fpc_df.columns)
 
     rule("Level 3.1: Storage Correction")
     meta = data.meta
@@ -111,10 +121,11 @@ def run_level31(
     if idstr not in level_ids:
         level_ids.append(idstr)
 
-    return replace(
+    final = replace(
         data,
         fpc_df=fpc_df,
         filteredseries=strg_qcf,
         levels=new_levels,
         level_ids=level_ids,
     )
+    return replace(final, added_columns=record_added_columns(final, idstr, pre_columns))

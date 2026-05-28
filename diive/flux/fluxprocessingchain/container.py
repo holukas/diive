@@ -132,7 +132,16 @@ class FluxConfig:
     The storage correction (L3.1) still runs; it just adds zero."""
 
     outlier_window_length: int = 48 * 13
-    """Hampel filter rolling window in half-hours (default = 13 days = 624 records)."""
+    """Hampel filter rolling window length, **expressed as a record count** (not a
+    duration). Default ``48 * 13 = 624`` records, which equals **13 days at the
+    half-hourly (30-min) sampling rate** assumed throughout the flux processing
+    chain.
+
+    The chain is designed for half-hourly EddyPro output. If your data has a
+    different sampling rate, scale this value yourself — e.g. for hourly data
+    use ``24 * 13`` to keep the same 13-day window. The value is forwarded
+    verbatim to :meth:`StepwiseOutlierDetection.flag_outliers_hampel_test` and
+    is interpreted in records, never in time units."""
 
     gapfill_rf: bool = True
     """Run Random Forest gap-filling (L4.1)."""
@@ -197,6 +206,13 @@ class LevelResults:
       ``init_flux_data``).  The threshold is usually 1 or 2 depending on the
       level and site protocol.
 
+    The corresponding columns in ``data.fpc_df`` carry the same distinction in
+    their suffixes: ``..._QCF`` for the user-accepted series and ``..._QCF0``
+    for the strictly-QCF=0 series.  When ``accept_qcf_below=1`` the two
+    contain identical values, but the names stay distinct so that the
+    *intent* of each column is preserved across re-runs with different
+    thresholds.
+
     **USTAR scenario dicts:** ``level33_qcf``, ``filteredseries_level33_qcf``,
     ``filteredseries_level33_hq``, ``level41_*`` are keyed by the scenario labels
     supplied to ``run_level33_constant_ustar()`` (e.g. ``'CUT_16'``, ``'CUT_50'``,
@@ -211,7 +227,10 @@ class LevelResults:
     level2: FluxQualityFlagsEddyPro | None = None
     level2_qcf: FlagQCF | None = None
     filteredseries_level2_qcf: pd.Series | None = None
-    filteredseries_hq: pd.Series | None = None  # QCF=0 only; updated by each level
+    filteredseries_hq: pd.Series | None = None
+    """Flux filtered at strictly QCF=0 (highest-quality reference). Updated by
+    each level that runs a QCF; the series name uses the ``_QCF0`` suffix to
+    mark the strict-zero filter (contrast with ``_QCF`` for user-accepted)."""
 
     # Level-3.1
     level31: FluxStorageCorrectionSinglePointEddyPro | None = None
@@ -296,6 +315,11 @@ class FluxLevelData:
     meta: FluxMeta
     levels: LevelResults = field(default_factory=LevelResults)
     level_ids: list[str] = field(default_factory=list)
+    added_columns: dict[str, list[str]] = field(default_factory=dict)
+    """Columns each level added to ``fpc_df``, keyed by level idstr (``'L2'``,
+    ``'L3.1'``, ``'L3.2'``, ``'L3.3'``) or per-method L4.1 key
+    (``'L4.1_mds'``, ``'L4.1_rf'``, ``'L4.1_xgb'``). Used to clean up stale
+    columns when a level is re-run."""
 
     def __repr__(self) -> str:
         rows, cols = self.fpc_df.shape

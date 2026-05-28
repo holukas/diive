@@ -67,6 +67,28 @@ Level                          Shape                         Why this shape
 If you find the per-level variation distracting, use ``run_chain(data, config)``
 — one ``FluxConfig`` covers all of them.
 
+Column naming convention
+------------------------
+
+Filtered flux columns in ``data.fpc_df`` carry one of two QCF suffixes that
+encode *which* quality threshold was applied:
+
+- ``..._QCF`` — the flux filtered at the **user-defined** acceptance threshold
+  (``daytime_accept_qcf_below`` / ``nighttime_accept_qcf_below``, set in
+  ``init_flux_data``).  This is the "accepted-quality" series that drives
+  gap-filling and most downstream analysis.
+- ``..._QCF0`` — the flux filtered at **strictly QCF=0** (all quality tests
+  passed; no soft warnings tolerated).  This is the "highest-quality"
+  reference series, used as the training target for ML gap-filling and
+  anywhere you want to be conservative.
+
+When ``accept_qcf_below=1`` the two contain identical values (both keep only
+QCF=0), but the column names still differ to preserve the *intent* — re-run
+with ``accept_qcf_below=2`` and they diverge without renaming.  The same
+distinction shows up on ``LevelResults`` fields: ``filteredseries_*_qcf``
+(user-accepted) vs ``filteredseries_hq`` / ``filteredseries_level33_hq``
+(strictly QCF=0, "hq" = high-quality).
+
 Part of the diive library: https://github.com/holukas/diive
 """
 
