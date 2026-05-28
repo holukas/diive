@@ -20,6 +20,26 @@
 
 ### Flux Processing Chain
 
+- **`run_chain(data, config)`** — single-call convenience driver for the standard FLUXNET-style pipeline. Routes one
+  `FluxConfig` through L2 -> L3.1 -> L3.2 (Hampel day/night) -> L3.3 -> L4.1, running only the gap-filling methods
+  enabled by `gapfill_mds` / `gapfill_rf` / `gapfill_xgb`. The composable per-level API stays available for custom
+  L3.2 pipelines and custom feature engineering. Exported as `diive.flux.fluxprocessingchain.run_chain`.
+- **`add_driver(data, series, name=None)`** — helper that puts a Series into `data.full_df` (the read-only driver
+  source L4.1 reads from), not `data.fpc_df`. Removes the common L4.1 footgun where users add a computed VPD/RH
+  column to `fpc_df` and then get "not in full_df" at gap-filling time. Validates index match against `full_df.index`,
+  resolves a name from `series.name` when not supplied, and raises on duplicate column names. Returns a new
+  `FluxLevelData` via `dataclasses.replace`.
+- **`run_level33_constant_ustar` — `threshold_labels` is now optional.** When omitted, labels default to
+  `['CUT_0', 'CUT_1', ...]` (positional index — deliberately not percentile-styled). For percentile-based thresholds
+  pass explicit labels (e.g. `['CUT_16', 'CUT_50', 'CUT_84']`) so the provenance is preserved in column names and
+  result dict keys.
+- **Package docstring documents the per-level shape pattern** — `diive/flux/fluxprocessingchain/__init__.py` now
+  explains why each level uses a different kwarg shape (per-test dicts, booleans, pre-built object, parallel lists,
+  built object + kwargs) and when to use `run_chain` versus the composable API.
+- **`LevelResults.level41_methods()` keys renamed** — `'long_term_random_forest'` -> `'rf'`,
+  `'long_term_xgboost'` -> `'xgb'` (MDS unchanged). Aligns with the existing short keys used by `gapfilled_cols()`,
+  plot helpers, and the `level41_rf` / `level41_xgb` / `level41_mds` attribute names. **Breaking change** for callers
+  reading `data.levels.level41_methods()['long_term_random_forest']`.
 - **Composable architecture** — monolithic `FluxProcessingChain` (2387 lines) replaced with typed containers (
   `FluxLevelData`, `FluxMeta`, `LevelResults`) and one pure callable per level. The `FluxProcessingChain` class is kept
   as a slim orchestrator; all existing methods and properties unchanged. `finalize_level2/31/33()` now no-ops with

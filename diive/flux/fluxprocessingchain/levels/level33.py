@@ -34,7 +34,7 @@ def run_level33_constant_ustar(
         data: FluxLevelData,
         *,
         thresholds: list[float],
-        threshold_labels: list[str],
+        threshold_labels: list[str] | None = None,
         showplot: bool = True,
         verbose: bool = True,
 ) -> FluxLevelData:
@@ -69,6 +69,11 @@ def run_level33_constant_ustar(
             downstream column names.  Conventional names follow the pattern
             ``'CUT_16'``, ``'CUT_50'``, ``'CUT_84'`` (percentile of the
             bootstrap distribution), but any unique strings work.
+
+            Optional — if omitted, labels default to ``['CUT_0', 'CUT_1', ...]``
+            (positional index, **not** percentile). For percentile-based
+            thresholds always pass explicit labels so the provenance is
+            preserved in column names and result keys.
         showplot: Show diagnostic plots. Defaults to True.
         verbose: Print progress. Defaults to True.
 
@@ -100,6 +105,40 @@ def run_level33_constant_ustar(
     if data.levels.flux_corrected_col is None:
         raise RuntimeError("run_level31() must be called before run_level33_constant_ustar().")
 
+    # Auto-generate positional labels when none supplied. We intentionally use
+    # index labels (CUT_0, CUT_1, ...) rather than something that looks like a
+    # percentile, so callers don't mistake an auto-label for a CUT_50-style
+    # percentile annotation.
+    if threshold_labels is None:
+        threshold_labels = [f'CUT_{i}' for i in range(len(thresholds))]
+
+    # USTAR filtering is defined only for scalar fluxes (CO2, CH4, N2O).
+    # Applying a non-zero threshold to energy fluxes (H, LE, ET, FH2O) would
+    # silently drop nighttime records based on a quantity that has no physical
+    # interpretation for those fluxes. The documented escape hatch for keeping
+    # the chain's level ordering is to pass thresholds=[0], which flags nothing
+    # (USTAR is always >= 0); we therefore only reject *positive* thresholds.
+    _energy_basevars = {'H2O', 'h2o', 'T_SONIC', 'sonic_temperature'}
+    if data.meta.fluxbasevar in _energy_basevars and any(t > 0 for t in thresholds):
+        raise ValueError(
+            f"USTAR filtering with a non-zero threshold is not valid for energy "
+            f"fluxes (got fluxcol={data.meta.fluxcol!r}, basevar="
+            f"{data.meta.fluxbasevar!r}). USTAR filtering applies only to CO2, "
+            f"CH4 and N2O fluxes. To satisfy the chain's L3.3 ordering "
+            f"requirement for H/LE, call with thresholds=[0], "
+            f"threshold_labels=['CUT_NONE']."
+        )
+
+    if len(thresholds) != len(threshold_labels):
+        raise ValueError(
+            f"thresholds and threshold_labels must have the same length; "
+            f"got {len(thresholds)} thresholds and {len(threshold_labels)} labels."
+        )
+    if len(set(threshold_labels)) != len(threshold_labels):
+        raise ValueError(
+            f"threshold_labels must be unique; got {threshold_labels}."
+        )
+
     idstr = 'L3.3'
     meta = data.meta
     flux_corrected_col = data.levels.flux_corrected_col
@@ -123,7 +162,14 @@ def run_level33_constant_ustar(
 
     for ustar_scen in threshold_labels:
         flagcols = [c for c in level33.results if ustar_scen in c]
-        flagcol = flagcols[0] if len(flagcols) == 1 else None
+        if len(flagcols) != 1:
+            raise RuntimeError(
+                f"Could not uniquely identify the USTAR flag column for scenario "
+                f"{ustar_scen!r}: found {len(flagcols)} matching columns "
+                f"({flagcols}). Threshold labels must be unique substrings that "
+                f"do not overlap with each other or with other column names."
+            )
+        flagcol = flagcols[0]
         udf = level33.results[[flux_corrected_col, meta.ustarcol, flagcol]].copy()
 
         current, qcf = finalize_level(
@@ -243,9 +289,20 @@ def run_level33_ustar_detection(
     det_df = data.full_df[[ta_col, swin_col, meta.ustarcol]].copy()
     det_df[flux_corrected_col] = data.fpc_df[flux_corrected_col]
 
-    # Build detector kwargs — column names are set here; user must not duplicate them
-    kw = {k: v for k, v in (detector_kwargs or {}).items()
-          if k not in ('nee_col', 'ta_col', 'ustar_col', 'swin_col')}
+    # Column-name kwargs are set here from the explicit ta_col / swin_col /
+    # data.meta.ustarcol arguments; allowing detector_kwargs to also supply
+    # them would silently override one of two conflicting truths. Raise so the
+    # user removes the duplicate rather than guessing which one wins.
+    _reserved = ('nee_col', 'ta_col', 'ustar_col', 'swin_col')
+    conflicts = sorted(set(_reserved).intersection(detector_kwargs or {}))
+    if conflicts:
+        raise ValueError(
+            f"detector_kwargs contains reserved column-name key(s) {conflicts}. "
+            f"These are set automatically from the explicit arguments "
+            f"(ta_col, swin_col, data.meta.ustarcol) and the storage-corrected "
+            f"flux column. Remove them from detector_kwargs."
+        )
+    kw = dict(detector_kwargs or {})
     kw['nee_col'] = flux_corrected_col
     kw['ta_col'] = ta_col
     kw['ustar_col'] = meta.ustarcol

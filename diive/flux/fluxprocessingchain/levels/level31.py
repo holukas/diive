@@ -80,12 +80,17 @@ def run_level31(
     level2_qcf = data.levels.level2_qcf
     flux_corrected_col = level31.flux_corrected_col
 
+    # Align the L2-QCF NaN masks to the storage-corrected series by label.
+    # Without reindexing, .loc[<bool series>] would align by position and
+    # silently mis-mask if the indexes diverge by even one timestamp.
     strg_qcf = level31.results[flux_corrected_col].copy()
-    strg_qcf.loc[level2_qcf.filteredseries.isnull()] = np.nan
+    mask_qcf = level2_qcf.filteredseries.reindex(strg_qcf.index).isnull()
+    strg_qcf.loc[mask_qcf] = np.nan
     strg_qcf.name = f"{flux_corrected_col}_QCF"
 
     strg_qcf0 = level31.results[flux_corrected_col].copy()
-    strg_qcf0.loc[level2_qcf.filteredseries_hq.isnull()] = np.nan
+    mask_hq = level2_qcf.filteredseries_hq.reindex(strg_qcf0.index).isnull()
+    strg_qcf0.loc[mask_hq] = np.nan
     strg_qcf0.name = f"{flux_corrected_col}_QCF0"
 
     fpc_df = pd.concat(

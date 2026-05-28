@@ -58,7 +58,7 @@ tests/                        # Unit tests
 |---|---|
 | `dv.outliers` | `AbsoluteLimits`, `Hampel`, `LocalSD`, `LocalOutlierFactor`, `zScore`, `zScoreRolling`, `zScoreIncrements`, `TrimLow`, `ManualRemoval`, + daytime/nighttime variants |
 | `dv.gapfilling` | `RandomForestTS`, `XGBoostTS`, `SWINGapFillerXGBoost`, `FluxMDS`, `QuickFillRFTS`, `OptimizeParamsRFTS`, `OptimizeParamsTS`, `FeatureEngineer`, `linear_interpolation` |
-| `dv.flux` | `FluxProcessingChain`, `WindDoubleRotation`, `reynolds_decomposition`, `MaxCovariance`, `PreWhiteningBootstrap`, `PwbBatchDetection`, `FluxDetectionLimit`, ustar classes |
+| `dv.flux` | `FluxConfig`, `FluxLevelData`, `run_chain`, `init_flux_data`, `add_driver`, `WindDoubleRotation`, `reynolds_decomposition`, `MaxCovariance`, `PreWhiteningBootstrap`, `PwbBatchDetection`, `FluxDetectionLimit`, ustar classes. Per-level `run_level*` and `make_level32_detector` live in `diive.flux.fluxprocessingchain`. |
 | `dv.analysis` | `DailyCorrelation`, `GrangerCausality`, `StratifiedAnalysis`, `GapFinder`, `GapStats`, `GridAggregator`, `Histogram`, `FindOptimumRange`, `SeasonalTrendDecomposition`, `BinFitterCP`, `percentiles101` |
 | `dv.plotting` | `HeatmapDateTime`, `HeatmapXYZ`, `HeatmapYearMonth`, `HexbinPlot`, `ScatterXY`, `TimeSeries`, `DielCycle`, `RidgeLinePlot`, `HistogramPlot`, `Cumulative`, `CumulativeYear`, `LongtermAnomaliesYear`, `TreeRingPlot` |
 | `dv.times` | `TimestampSanitizer`, `DetectFrequency`, `resample_to_monthly_agg_matrix`, `timestamp_infer_freq_*` |
@@ -111,20 +111,40 @@ status = sanitizer.get_status()  # rows removed/added, detection method
 
 5-level eddy covariance post-processing: L2 (quality flags) → L3.1 (storage correction) → L3.2 (outlier removal) → L3.3 (USTAR filtering) → L4.1 (gap-filling).
 
-Each level is a pure function — never mutate input.
+Each level is a pure function — never mutate input. **Two entry points:**
+
+**Single-call driver** — `run_chain(data, FluxConfig)` for the standard FLUXNET-style pipeline:
+
+```python
+from diive.flux.fluxprocessingchain import FluxConfig, init_flux_data, run_chain
+
+cfg = FluxConfig(
+    fluxcol='FC', ustar_thresholds=[0.18], ustar_labels=['CUT_50'],
+    outlier_sigma_daytime=5.5, outlier_sigma_nighttime=5.5,
+    gapfilling_features=['TA', 'SW_IN', 'VPD_kPa'],
+    level2_tests={'ssitc': {'apply': True, 'setflag_timeperiod': None}},
+    mds_swin='SW_IN', mds_ta='TA', mds_vpd='VPD_kPa',
+)
+data = init_flux_data(df, fluxcol='FC', site_lat=46.6, site_lon=9.8, utc_offset=1)
+data = run_chain(data, cfg)
+```
+
+**Composable per-level callables** — for custom L3.2 pipelines or custom feature engineering:
 
 ```python
 from diive.flux.fluxprocessingchain import (
-    init_flux_data, run_level2, run_level31, run_level33_constant_ustar, run_level41_mds
+    init_flux_data, run_level2, run_level31, run_level33_constant_ustar, run_level41_mds,
 )
 
 data = init_flux_data(df, fluxcol='FC', site_lat=46.6, site_lon=9.8, utc_offset=1)
 data = run_level2(data, ssitc={'apply': True, 'setflag_timeperiod': None}, ...)
 data = run_level31(data, gapfill_storage_term=True)
-data = run_level33_constant_ustar(data, ustar_thresholds=[0.30])
-data = run_level41_mds(data, mds_swin='SW_IN', mds_ta='TA', mds_vpd='VPD')
+data = run_level33_constant_ustar(data, thresholds=[0.30])  # labels auto-generated as CUT_0
+data = run_level41_mds(data, swin='SW_IN', ta='TA', vpd='VPD_kPa')
 final_df = data.fpc_df
 ```
+
+**Per-level signatures intentionally differ** (per-test dicts at L2, booleans at L3.1, pre-built object at L3.2, parallel lists at L3.3, built engineer + kwargs at L4.1). Shape matches what each level controls; see `diive/flux/fluxprocessingchain/__init__.py` docstring for the rule of thumb. `FluxConfig` is consumed only by `run_chain`, never by `run_level*`.
 
 **Container fields:**
 
@@ -137,27 +157,33 @@ final_df = data.fpc_df
 | `data.levels` | `LevelResults` | Typed bag of per-level outputs (see code for full field list) |
 | `data.summary()` | `str` | Per-level data availability with daytime/nighttime breakdown |
 | `data.gapfilled_cols()` | `dict` | Gap-filled column names per L4.1 method and USTAR scenario |
-| `data.gap_stats(level='L33')` | `dict[str, GapStats]` | On-demand gap analysis; keyed by USTAR scenario (single-entry for L2/L31/L32) |
-| `data.plot_cumulative_comparison(...)` | `None` | Overlay cumulative sums of all gap-filling methods on one axes |
-| `data.plot_gapfilled_heatmaps(...)` | `None` | Side-by-side heatmaps: measured + one panel per gap-filling method; one figure per USTAR scenario |
+| `data.gap_stats(level='L33')` | `dict[str, GapStats]` | On-demand gap analysis; `{label: GapStats}` — label = level name for L2/L31/L32, USTAR scenario label for L33 |
+| `data.plot_cumulative_comparison(..., showplot=True)` | `None` | Overlay cumulative sums of all gap-filling methods on one axes; pass `showplot=False` for headless |
+| `data.plot_gapfilled_heatmaps(..., showplot=True)` | `None` | Side-by-side heatmaps: measured + one panel per gap-filling method; one figure per USTAR scenario |
+| `data.levels.level41_methods()` | `dict[str, dict]` | Short keys: `'mds'`, `'rf'`, `'xgb'` (matches `gapfilled_cols()`) |
 
 Key `data.levels` fields: `level2`, `level2_qcf`, `level31`, `level32`, `level32_qcf`, `level33`, `level33_qcf`, `level41_mds`, `level41_rf`, `level41_xgb` (dicts keyed by ustar_scenario for L3.3+).
 
 **Architecture notes:**
 
-- L3.2 uses the multi-call pattern (stateful): `make_level32_detector(data)` → multiple `level32_flag_*` calls → `run_level32(data, outlier_detector=sod)`.
+- L3.2 uses the multi-call pattern (stateful): `make_level32_detector(data)` → multiple `flag_outliers_*` + `addflag()` pairs → `run_level32(data, outlier_detector=sod)`. `run_level32` validates the detector is wired to the *current* `data` snapshot (raises if you rebuilt `data` without rebuilding the detector) and rejects detectors with no committed flags or with an uncommitted last test.
 - `run_level41_rf` / `run_level41_xgb` take a pre-built `FeatureEngineer` instance.
 - `finalize_level2/31/33()` are no-ops with `DeprecationWarning`.
+- `LevelResults` is not `frozen=True` but treat as immutable — every level rebuilds it via `dataclasses.replace`. Don't mutate fields or `level41_*` dict keys in place.
+- `add_driver(data, series, name=None)` puts a Series into `data.full_df` (where L4.1 reads from) instead of `data.fpc_df`; validates index, name, and absence of column collision.
 
 **Critical pitfalls:**
 
-- MDS requires exact units: W/m² (radiation), °C (temp), **kPa (VPD)** — EddyPro outputs VPD in hPa; divide by 10.
-- USTAR filtering applies ONLY to CO2/CH4/N2O; for H/LE use `thresholds=[0], threshold_labels=['CUT_NONE']`.
+- MDS requires exact units: W/m² (radiation), °C (temp), **kPa (VPD)** — EddyPro outputs VPD in hPa; divide by 10. `run_level41_mds` warns when VPD median > 10 (likely hPa), TA median > 100 (likely Kelvin), TA median > 50, or SW_IN median > 2000.
+- USTAR filtering applies ONLY to CO2/CH4/N2O; for H/LE use `thresholds=[0], threshold_labels=['CUT_NONE']`. `run_level33_constant_ustar` raises if a non-zero threshold is passed for an energy-flux basevar (`H2O`, `T_SONIC`, lowercase variants).
 - L3.2 and L3.3 require L3.1; for H/LE call `run_level31(data, set_storage_to_zero=True)`.
-- L4.1 features and MDS driver columns must exist in `data.full_df`, not `data.fpc_df`.
+- L4.1 features and MDS driver columns must exist in `data.full_df`, not `data.fpc_df`. Use `add_driver()` to add computed drivers to the right place.
+- `init_flux_data` raises if `df` already contains `SW_IN_POT` / `DAYTIME` / `NIGHTTIME` (reserved names — would silently overwrite user data).
 - `nighttime_accept_qcf_below` (was `nighttimetime_accept_qcf_below` before v0.91.1 — typo fixed).
 - Default `daytime_accept_qcf_below=1` is stricter than FLUXNET convention of `2`; QCF=0 all pass, QCF=1 soft warning, QCF=2 hard failure.
-- `run_level33_constant_ustar` only supports constant thresholds; use REddyProc externally for bootstrap, then pass percentile values here.
+- `run_level33_constant_ustar` only supports constant thresholds; use REddyProc externally for bootstrap, then pass percentile values here. `threshold_labels` is optional — auto-generates `CUT_0`, `CUT_1`, ... (positional index, **not** percentile); pass explicit labels like `['CUT_16', 'CUT_50', 'CUT_84']` for percentile-based thresholds. Length and uniqueness are validated.
+- `run_level33_ustar_detection` raises if `detector_kwargs` contains `nee_col` / `ta_col` / `ustar_col` / `swin_col` (these are set internally).
+- `run_level41_*` emits a `UserWarning` when a re-run would overwrite previously stored scenarios in `levels.level41_*`.
 - `FeatureEngineer(target_col='_target_', ...)` — `target_col` is a required placeholder; any string not in the feature list works.
 
 **Example:** `examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py`

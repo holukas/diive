@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from pandas import DataFrame
 
-from diive.core.utils.console import detail, info, rule, warn
+from diive.core.utils.console import detail, info, rule
 from diive.variables import daytime_nighttime_flag_from_swinpot
 from diive.variables.radiation import potrad
 from diive.flux.fluxprocessingchain.container import FluxLevelData, FluxMeta
@@ -83,6 +83,21 @@ def init_flux_data(
             f"Available columns: {list(df.columns)}"
         )
 
+    # Reserved column names this function computes and writes into full_df.
+    # full_df is the read-only driver source for downstream levels; silently
+    # overwriting a user-supplied column with the same name would mean the
+    # user's data is replaced by ours without them noticing.
+    reserved = ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME')
+    conflicts = [c for c in reserved if c in df.columns]
+    if conflicts:
+        raise ValueError(
+            f"Input df already contains reserved column(s) {conflicts}. "
+            f"init_flux_data() computes these from potential radiation and "
+            f"writes them into full_df, which is treated as a read-only "
+            f"driver source by later levels. Rename or drop these columns "
+            f"before calling init_flux_data()."
+        )
+
     rule(f"Initializing flux data: {fluxcol}")
 
     full_df = df.copy()
@@ -111,14 +126,11 @@ def init_flux_data(
     fpc_df[nighttime_flag_col] = nighttime_flag.copy()
 
     # Mirror new columns back into full_df so they are available as ML
-    # features in later levels.
+    # features in later levels. Reserved-name check above guarantees these
+    # do not collide with user-supplied columns.
     for col in (swinpot_col, daytime_flag_col, nighttime_flag_col):
-        overwritten = col in full_df.columns
         full_df[col] = fpc_df[col].copy()
-        if overwritten:
-            warn(f"Added column {col} (overwrote existing)")
-        else:
-            detail(f"Added column {col}")
+        detail(f"Added column {col}")
 
     # CO2 flux (FC) is renamed to NEE during Level-3.1
     outname = 'NEE' if fluxcol == 'FC' else fluxcol

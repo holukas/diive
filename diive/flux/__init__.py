@@ -14,6 +14,9 @@ from diive.flux import fluxprocessingchain
 from diive.flux.fluxprocessingchain import (
     FluxConfig,
     FluxLevelData,
+    add_driver,
+    init_flux_data,
+    run_chain,
 )
 from diive.flux.hires.fluxdetectionlimit import FluxDetectionLimit
 from diive.flux.hires.lag import MaxCovariance
@@ -38,6 +41,9 @@ __all__ = [
     'fluxprocessingchain',
     'FluxConfig',
     'FluxLevelData',
+    'add_driver',
+    'init_flux_data',
+    'run_chain',
     'FluxDetectionLimit',
     'MaxCovariance',
     'PreWhiteningBootstrap',

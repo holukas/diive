@@ -32,6 +32,29 @@ def _append_level_id(level_ids: list[str]) -> list[str]:
     return new
 
 
+def _warn_scenario_overwrite(existing: dict, new: dict, method_label: str) -> None:
+    """Warn when a re-run would silently replace previously-stored scenario results.
+
+    Each ``run_level41_*`` call stores its per-scenario instance in
+    ``data.levels.level41_<method>[scen]``. Calling the same method twice with
+    overlapping scenario labels (e.g. hyperparameter sweeps) silently drops the
+    prior instance via the standard ``{**existing, **new}`` dict-merge pattern,
+    making earlier runs unrecoverable. Warn so the user knows it happened.
+    """
+    import warnings
+    overlap = sorted(set(existing).intersection(new))
+    if overlap:
+        warnings.warn(
+            f"run_level41_{method_label}() is replacing previously-stored "
+            f"scenario result(s) for: {overlap}. The earlier instance(s) for "
+            f"these scenarios will be lost. To keep both runs, give the "
+            f"USTAR scenarios distinct labels (e.g. add a suffix at L3.3) or "
+            f"copy data.levels.level41_{method_label} before re-running.",
+            UserWarning,
+            stacklevel=3,
+        )
+
+
 def _extract_gapfilling_flag_col(gapfilling_df: pd.DataFrame) -> str | None:
     """Find the single ``FLAG_*_ISFILLED`` column in a gap-filling DataFrame."""
     candidates = [c for c in gapfilling_df.columns
@@ -97,14 +120,50 @@ def run_level41_mds(
             f"Available columns: {list(data.full_df.columns)}"
         )
 
-    # Sanity-check VPD units: MDS requires kPa, but EddyPro outputs hPa.
-    # A median VPD > 10 almost certainly means the column is in hPa.
+    # Sanity-check driver units. MDS uses absolute tolerances on raw values,
+    # so wrong units silently break similarity matching without raising —
+    # warn loudly when medians fall outside the physical range expected for
+    # the documented units.
+
+    # VPD must be kPa (typical 0.05–3). EddyPro outputs hPa (10x larger).
     vpd_median = data.full_df[vpd].median()
     if vpd_median > 10:
         warnings.warn(
             f"VPD column '{vpd}' has a median of {vpd_median:.1f} — this looks "
-            f"like hPa, but MDS requires kPa (typical daytime values: 0.5–3 kPa). "
+            f"like hPa, but MDS requires kPa (typical daytime values: 0.5-3 kPa). "
             f"Divide your VPD column by 10 before calling run_level41_mds().",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    # TA must be degrees Celsius (typical -30..+40). A median > 100 is almost
+    # certainly Kelvin (typical median ~283); a median > 50 is implausible.
+    ta_median = data.full_df[ta].median()
+    if ta_median > 100:
+        warnings.warn(
+            f"TA column '{ta}' has a median of {ta_median:.1f} - this looks "
+            f"like Kelvin, but MDS requires degrees Celsius (typical values "
+            f"-30..+40 deg C). Subtract 273.15 before calling run_level41_mds().",
+            UserWarning,
+            stacklevel=2,
+        )
+    elif ta_median > 50:
+        warnings.warn(
+            f"TA column '{ta}' has a median of {ta_median:.1f} deg C - this is "
+            f"outside the plausible range for air temperature. Check the unit "
+            f"and column choice before calling run_level41_mds().",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    # SW_IN must be W m-2 (overall median typically 50-300; nighttime zeros pull
+    # it down). A median > 2000 is implausible for half-hourly SW_IN in W m-2.
+    swin_median = data.full_df[swin].median()
+    if swin_median > 2000:
+        warnings.warn(
+            f"SW_IN column '{swin}' has a median of {swin_median:.0f} - this is "
+            f"implausibly high for shortwave-in (W m-2). Check unit and column "
+            f"choice before calling run_level41_mds().",
             UserWarning,
             stacklevel=2,
         )
@@ -131,6 +190,7 @@ def run_level41_mds(
         fpc_df = pd.concat([fpc_df, instance.get_gapfilled_target(), instance.get_flag()], axis=1)
         mds_results[ustar_scen] = instance
 
+    _warn_scenario_overwrite(data.levels.level41_mds, mds_results, 'mds')
     new_levels = replace(data.levels, level41_mds={**data.levels.level41_mds, **mds_results})
     return replace(
         data,
@@ -190,9 +250,12 @@ def _run_level41_ml(
             candidates = [c for c in instance.gapfilling_df_.columns
                           if str(c).startswith("FLAG_")]
             raise RuntimeError(
-                f"Could not identify a unique FLAG_*_ISFILLED column for USTAR scenario "
-                f"'{ustar_scen}'. Found: {candidates}. "
-                f"This is an internal error — please report it."
+                f"Could not identify a unique FLAG_*_ISFILLED column for USTAR "
+                f"scenario {ustar_scen!r}. Found FLAG_ columns: {candidates}. "
+                f"Expected exactly one column matching the pattern "
+                f"FLAG_*_ISFILLED in the gap-filling model's gapfilling_df_. "
+                f"If you supplied a custom model_factory, check that it produces "
+                f"this column; otherwise please open an issue."
             )
         fpc_df = pd.concat(
             [fpc_df, instance.gapfilled_.copy(), instance.gapfilling_df_[flag_col]],
@@ -201,6 +264,8 @@ def _run_level41_ml(
         ml_results[ustar_scen] = instance
 
     existing = getattr(data.levels, results_attr)
+    # results_attr is 'level41_rf' or 'level41_xgb'; method_label is the suffix.
+    _warn_scenario_overwrite(existing, ml_results, results_attr.removeprefix('level41_'))
     new_levels = replace(data.levels, **{results_attr: {**existing, **ml_results}})
     return replace(
         data,

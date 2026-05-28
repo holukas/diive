@@ -11,8 +11,7 @@ Examples demonstrating flux processing, quality control, and high-resolution ana
 ## Contents
 
 ### Processing Chain
-- **fluxprocessingchain/fluxprocessingchain.py** — Complete multi-level Swiss FluxNet workflow (L2-L4.1): Quality flags, storage correction, outlier detection, USTAR filtering, gap-filling
-- **fluxprocessingchain/fluxprocessingchain_composable.py** — Full L2→L4.1 pipeline using composable callables; RF, XGBoost, and MDS gap-filling from the same L3.3 state; on-demand `gap_stats()` after L3.3; `plot_gapfilled_heatmaps()` (side-by-side heatmap comparison) and `plot_cumulative_comparison()` (all methods on one axes) after L4.1
+- **fluxprocessingchain/fluxprocessingchain_composable.py** — Full L2→L4.1 pipeline using composable callables; RF, XGBoost, and MDS gap-filling from the same L3.3 state; on-demand `gap_stats()` after L3.3; `plot_gapfilled_heatmaps()` (side-by-side heatmap comparison) and `plot_cumulative_comparison()` (all methods on one axes) after L4.1. For the single-call equivalent, see `run_chain(data, config)` in the API docs.
 
 ### Low-Resolution Flux Processing
 - **lowres/flux_timelag_analysis.py** — Time lag detection and visualization for gas concentrations
@@ -47,7 +46,9 @@ Available classes and functions in `diive.pkgs.flux`:
 - **UstarVekuriThresholdDetection** — Quantile-based USTAR detection (Vekuri method)
 - **UstarBootstrapThresholds** — Multi-year bootstrap wrapper for any USTAR detector; 3-year sliding window, per-year p16/p50/p84, pooled CUT threshold
 - **ScopApplicator** — SCOP self-heating correction for open-path IRGA
-- **FluxProcessingChain** — Complete multi-level flux processing workflow
+- **`run_chain` / `FluxConfig`** — Single-call driver for the full L2→L4.1 flux processing pipeline; one `FluxConfig` per flux variable
+- **Composable level callables** — `init_flux_data`, `run_level2`, `run_level31`, `make_level32_detector` + `run_level32`, `run_level33_constant_ustar`, `run_level41_mds` / `_rf` / `_xgb`; pure functions on a typed `FluxLevelData` container
+- **`add_driver(data, series)`** — Add a computed driver column to `data.full_df` where L4.1 will read it
 - **WindDoubleRotation** — Double rotation tilt correction (Wilczak et al. 2001): aligns coordinate system with mean wind direction; exposes `theta`, `phi`, `u2`, `v2`, `w2`
 - **reynolds_decomposition** — Reynolds decomposition `x' = x - mean(x)`; applied after rotation to extract turbulent fluctuations of wind components and scalars before flux covariance calculation
 - High-resolution analysis methods (lag detection, wind rotation)
@@ -55,36 +56,28 @@ Available classes and functions in `diive.pkgs.flux`:
 
 ## Use Cases
 
-**Process raw eddy covariance data:**
+**Process raw eddy covariance data — single-call driver:**
 ```python
-from diive.flux.fluxprocessingchain import FluxProcessingChain
+from diive.flux.fluxprocessingchain import (
+    FluxConfig, init_flux_data, run_chain,
+)
 
-# Complete multi-level workflow
-fpc = FluxProcessingChain(
-    df=df,
+cfg = FluxConfig(
     fluxcol='FC',
-    site_lat=47.48,
-    site_lon=8.36,
-    utc_offset=1
+    ustar_thresholds=[0.18], ustar_labels=['CUT_50'],
+    outlier_sigma_daytime=5.5, outlier_sigma_nighttime=5.5,
+    gapfilling_features=['TA_1_1_1', 'SW_IN_1_1_1', 'VPD_kPa_1_1_1'],
+    level2_tests={'ssitc': {'apply': True, 'setflag_timeperiod': None}},
+    mds_swin='SW_IN_1_1_1', mds_ta='TA_1_1_1', mds_vpd='VPD_kPa_1_1_1',
 )
+data = init_flux_data(df, fluxcol='FC', site_lat=47.48, site_lon=8.36, utc_offset=1)
+data = run_chain(data, cfg)
 
-# L2: Quality flag expansion
-fpc.level2_quality_flag_expansion()
-fpc.finalize_level2()
-
-# L3.1-L3.3: Corrections, outlier removal, USTAR filtering
-fpc.level31_storage_correction()
-fpc.level32_stepwise_outlier_detection()
-fpc.level33_constant_ustar(thresholds=[0.09])
-
-# L4.1: Gap-fill with machine learning
-fpc.level41_longterm_xgboost(
-    features=['TA', 'VPD', 'SW_IN'],
-    n_estimators=500
-)
-
-results = fpc.get_data()
+results = data.fpc_df          # all per-level and gap-filled columns
+cols = data.gapfilled_cols()   # {'rf': {'CUT_50': '...'}, 'xgb': ..., 'mds': ...}
 ```
+
+**Composable per-level API** — for custom L3.2 outlier pipelines, custom feature engineering, or per-level inspection, call each `run_level*` directly. See `examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py`.
 
 **Analyze time lag and measurement quality:**
 ```python
@@ -136,7 +129,7 @@ mc.run()
 
 ```bash
 # Complete multi-level processing workflow (recommended starting point)
-uv run python examples/flux/fluxprocessingchain/fluxprocessingchain.py
+uv run python examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py
 
 # Low-resolution (30-min) processing
 uv run python examples/flux/lowres/flux_timelag_analysis.py

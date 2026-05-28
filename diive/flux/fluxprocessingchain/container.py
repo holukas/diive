@@ -9,6 +9,7 @@ Part of the diive library: https://github.com/holukas/diive
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -19,6 +20,7 @@ if TYPE_CHECKING:
     from diive.flux.lowres.storage_correction import (
         FluxStorageCorrectionSinglePointEddyPro,
     )
+    from diive.flux.lowres.ustar_bootstrap import UstarBootstrapThresholds
     from diive.flux.lowres.ustarthreshold import FlagMultipleConstantUstarThresholds
     from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
     from diive.preprocessing.qaqc import FlagQCF
@@ -32,6 +34,12 @@ class FluxConfig:
     Captures every setting that differs between fluxes (CO2, H, LE, N2O, CH4, …)
     so that a composable-function loop can process each variable without repeating
     site-level parameters.
+
+    **Consumed by** :func:`~diive.flux.fluxprocessingchain.run_chain`.  The
+    per-level ``run_level*`` functions take their own specific arguments — they
+    do **not** accept a ``FluxConfig``.  Use ``run_chain(data, config)`` for the
+    standard pipeline, or drop down to the composable per-level API for custom
+    L3.2 outlier logic or custom feature engineering.
 
     **Required fields** (no defaults) force you to make explicit choices for every
     flux rather than silently inheriting wrong values from another variable.
@@ -170,6 +178,15 @@ class LevelResults:
     All fields default to ``None`` / empty so a partial pipeline (e.g. L2 only)
     leaves later fields unset.
 
+    **Treat as immutable.** Unlike :class:`FluxMeta`, this dataclass is not
+    declared ``frozen=True`` — freezing would block field reassignment but
+    leave the nested dicts (``level41_mds`` / ``_rf`` / ``_xgb``) and Series
+    fields mutable, so it would only be half a guarantee. The chain instead
+    enforces immutability by convention: every ``run_level*`` function rebuilds
+    a fresh ``LevelResults`` via ``dataclasses.replace(data.levels, …)``.  Do
+    not set fields, append to ``level41_*`` dicts, or modify ``filteredseries_*``
+    in place — use ``replace`` if you need to extend the container.
+
     **High-quality vs. accepted-quality series:**
 
     - ``filteredseries_hq`` — flux with QCF=0 *only* (strictest filter, no
@@ -215,7 +232,9 @@ class LevelResults:
     level33_qcf: dict[str, FlagQCF] = field(default_factory=dict)
     filteredseries_level33_qcf: dict[str, pd.Series] = field(default_factory=dict)
     filteredseries_level33_hq: dict[str, pd.Series] = field(default_factory=dict)
-    ustar_detection: Any = None  # UstarBootstrapThresholds instance when detection was run
+    ustar_detection: 'UstarBootstrapThresholds | None' = None
+    """``UstarBootstrapThresholds`` instance when ``run_level33_ustar_detection``
+    was used; ``None`` otherwise."""
 
     # Level-4.1 — one dict per gap-filling method, keyed by USTAR scenario
     level41_mds: dict[str, Any] = field(default_factory=dict)
@@ -227,14 +246,19 @@ class LevelResults:
         return bool(self.level41_mds or self.level41_rf or self.level41_xgb)
 
     def level41_methods(self) -> dict[str, dict[str, Any]]:
-        """Return all L4.1 method dicts that have results, keyed by method name."""
+        """Return all L4.1 method dicts that have results, keyed by short method name.
+
+        Keys are ``'mds'``, ``'rf'``, ``'xgb'`` — matching the suffixes of the
+        underlying ``level41_*`` attributes and the keys used by
+        ``gapfilled_cols()`` and the plot helpers.
+        """
         out: dict[str, dict[str, Any]] = {}
         if self.level41_mds:
             out['mds'] = self.level41_mds
         if self.level41_rf:
-            out['long_term_random_forest'] = self.level41_rf
+            out['rf'] = self.level41_rf
         if self.level41_xgb:
-            out['long_term_xgboost'] = self.level41_xgb
+            out['xgb'] = self.level41_xgb
         return out
 
 
@@ -258,6 +282,10 @@ class FluxLevelData:
       meteorological driver columns (e.g. ``TA_1_1_1``, ``SW_IN``) from here
       as gap-filling features.  Do not modify this dataframe — level callables
       use it read-only.
+
+    Need a new driver mid-pipeline (e.g. a computed VPD column for MDS)?
+    Use ``add_driver(data, series, name=...)`` — it adds the column to
+    ``full_df`` where L4.1 will actually look for it, not to ``fpc_df``.
     """
 
     fpc_df: pd.DataFrame
@@ -391,8 +419,21 @@ class FluxLevelData:
                 equals one day at 30-min resolution.
 
         Returns:
-            ``{label: GapStats}`` — single entry for L2/L31/L32, one entry
-            per USTAR scenario for L33.
+            ``{label: GapStats}`` — a flat mapping whose keys are whichever
+            label uniquely identifies each result at that level:
+
+            - L2 / L31 / L32: one entry keyed by the level name itself
+              (``{'L2': gs}`` / ``{'L31': gs}`` / ``{'L32': gs}``).
+            - L33: one entry per USTAR scenario keyed by the scenario label
+              (``{'CUT_16': gs, 'CUT_50': gs, 'CUT_84': gs}``).
+
+            The label vocabulary differs by level on purpose: at L2/L31/L32
+            there is only one filtered series so the level name is the
+            natural key, whereas at L33 the scenario label is the
+            distinguishing axis. A generic loop
+            ``for label, gs in data.gap_stats(level).items(): ...``
+            therefore works at every level — the ``label`` you get back is
+            the right caption to render alongside each ``GapStats``.
 
         Raises:
             ValueError: If the requested level has not been run yet.
@@ -452,6 +493,7 @@ class FluxLevelData:
             title: str | None = None,
             saveplot: bool = False,
             path: str | None = None,
+            showplot: bool = True,
     ) -> None:
         """Overlay cumulative sums of all gap-filled methods for direct comparison.
 
@@ -476,6 +518,9 @@ class FluxLevelData:
             title: Figure title.  Defaults to an auto-generated title.
             saveplot: Save the figure to disk.  Defaults to ``False``.
             path: Output directory when ``saveplot=True``.
+            showplot: Call ``plt.show()`` after rendering.  Set to ``False``
+                for headless / batch use or when embedding the figure into
+                a larger composite.  Defaults to ``True``.
 
         Raises:
             RuntimeError: If no L4.1 method has been run yet.
@@ -561,11 +606,13 @@ class FluxLevelData:
         ax.set_title(title or auto_title, fontsize=11)
 
         fig.tight_layout()
-        plt.show()
 
         if saveplot:
             from diive.core.plotting.plotfuncs import save_fig
             save_fig(fig=fig, title=title or auto_title, path=path)
+
+        if showplot:
+            plt.show()
 
     def plot_gapfilled_heatmaps(
             self,
@@ -577,6 +624,7 @@ class FluxLevelData:
             title: str | None = None,
             saveplot: bool = False,
             path: str | None = None,
+            showplot: bool = True,
     ) -> None:
         """Multi-panel heatmap: measured flux + one panel per gap-filling method.
 
@@ -599,6 +647,9 @@ class FluxLevelData:
             title: Figure suptitle.  Auto-generated when ``None``.
             saveplot: Save the figure to disk.  Defaults to ``False``.
             path: Output directory when ``saveplot=True``.
+            showplot: Call ``plt.show()`` after rendering.  Set to ``False``
+                for headless / batch use or when embedding the figure into
+                a larger composite.  Defaults to ``True``.
 
         Raises:
             RuntimeError: If no L4.1 method has been run yet.
@@ -638,12 +689,12 @@ class FluxLevelData:
             self._plot_heatmaps_one_scenario(
                 scen, cols=cols, vmin=vmin, vmax=vmax,
                 cmap=cmap, units=units, title=title,
-                saveplot=saveplot, path=path,
+                saveplot=saveplot, path=path, showplot=showplot,
             )
 
     def _plot_heatmaps_one_scenario(
             self, ustar_scenario, *, cols, vmin, vmax,
-            cmap, units, title, saveplot, path,
+            cmap, units, title, saveplot, path, showplot,
     ) -> None:
         import numpy as np
         import matplotlib.pyplot as plt
@@ -690,11 +741,13 @@ class FluxLevelData:
         auto_title = (f"Gap-filled flux heatmaps  --  "
                       f"{self.meta.fluxcol}  |  USTAR scenario: {ustar_scenario}")
         fig.suptitle(title or auto_title, fontsize=12, fontweight='bold')
-        plt.show()
 
         if saveplot:
             from diive.core.plotting.plotfuncs import save_fig
             save_fig(fig=fig, title=title or auto_title, path=path)
+
+        if showplot:
+            plt.show()
 
     def gapfilled_cols(self) -> dict[str, dict[str, str]]:
         """
@@ -727,3 +780,66 @@ class FluxLevelData:
             out['mds'] = {scen: inst.get_gapfilled_target().name
                           for scen, inst in lvl.level41_mds.items()}
         return out
+
+
+def add_driver(
+        data: FluxLevelData,
+        series: pd.Series,
+        name: str | None = None,
+) -> FluxLevelData:
+    """Add a Series as a driver column to ``data.full_df``.
+
+    L4.1 gap-filling reads its driver / feature columns from ``data.full_df``,
+    not ``data.fpc_df`` — a footgun, because the working dataframe (``fpc_df``)
+    is the one that grows level-by-level and feels like the natural place to
+    add a new variable. Use this helper to put the column where L4.1 will
+    actually look for it.
+
+    Args:
+        data: Current FluxLevelData.
+        series: Driver series. Its index must match ``data.full_df.index``.
+        name: Column name to register the series under. Defaults to
+            ``series.name``; required if ``series.name`` is ``None``.
+
+    Returns:
+        New ``FluxLevelData`` with the column added to ``full_df``.  The input
+        is not mutated.
+
+    Raises:
+        ValueError: If ``series`` has no name and ``name`` is not supplied,
+            its index does not match ``data.full_df.index``, or a column
+            with the resolved name already exists in ``full_df``.
+
+    Example::
+
+        from diive.flux.fluxprocessingchain import add_driver
+        from diive.variables import calc_vpd_from_ta_rh
+
+        vpd = calc_vpd_from_ta_rh(ta=data.full_df['TA'], rh=data.full_df['RH'])
+        data = add_driver(data, vpd, name='VPD_kPa')
+    """
+    col_name = name if name is not None else (
+        str(series.name) if series.name is not None else None
+    )
+    if col_name is None:
+        raise ValueError(
+            "series has no name and no name= argument was supplied; cannot "
+            "decide which column to register the driver under."
+        )
+
+    if not series.index.equals(data.full_df.index):
+        raise ValueError(
+            f"series index does not match data.full_df.index "
+            f"(series: {len(series)} rows, full_df: {len(data.full_df)} rows). "
+            f"Align the series to the full_df timestamp first."
+        )
+
+    if col_name in data.full_df.columns:
+        raise ValueError(
+            f"Column {col_name!r} already exists in data.full_df. Pick a "
+            f"different name= or drop the existing column before adding."
+        )
+
+    new_full_df = data.full_df.copy()
+    new_full_df[col_name] = series.values
+    return dataclasses.replace(data, full_df=new_full_df)

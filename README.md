@@ -106,7 +106,7 @@ For the full list, see `diive.__all__`.
 uv run python examples/visualization/plot_heatmap_datetime_basic.py
 uv run python examples/analysis/analysis_daily_correlation.py
 uv run python examples/gapfilling/gapfill_randomforest.py
-uv run python examples/flux/fluxprocessingchain/fluxprocessingchain.py
+uv run python examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py
 ```
 
 ---
@@ -128,7 +128,12 @@ Long-term variants support multi-year data with USTAR scenario options. See [exa
 
 ### Flux processing chain
 
-`FluxProcessingChain` handles post-processing from quality flags through gap-filling, covering Levels 2 to 4.1 following Swiss FluxNet standards. Call `data.gap_stats()` at any level for a monthly/annual breakdown with long-gap listing. `data.plot_gapfilled_heatmaps()` puts all gap-filling methods side by side; `data.plot_cumulative_comparison()` overlays their cumulative sums on one axes.
+Post-processing from quality flags through gap-filling, covering Levels 2 to 4.1 following Swiss FluxNet standards. Two entry points:
+
+- **`run_chain(data, config)`** — single call drives the full pipeline (L2 → L3.1 → L3.2 → L3.3 → L4.1) from one `FluxConfig`. Use this for the standard FLUXNET-style workflow.
+- **Composable per-level callables** (`run_level2`, `run_level31`, `make_level32_detector` + `run_level32`, `run_level33_constant_ustar`, `run_level41_mds` / `_rf` / `_xgb`) — drop down here for custom L3.2 outlier pipelines or custom feature engineering.
+
+Need a computed driver (e.g. VPD in kPa) for L4.1? Use `add_driver(data, series)` to put it where L4.1 actually reads from. Call `data.gap_stats()` at any level for a monthly/annual breakdown with long-gap listing. `data.plot_gapfilled_heatmaps()` puts all gap-filling methods side by side; `data.plot_cumulative_comparison()` overlays their cumulative sums on one axes.
 
 Reference: [Swiss FluxNet flux processing](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/) | Examples: [examples/flux/fluxprocessingchain/](examples/flux/fluxprocessingchain/)
 

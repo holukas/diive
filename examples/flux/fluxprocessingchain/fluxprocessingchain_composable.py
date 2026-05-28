@@ -374,8 +374,8 @@ print("MDS gap-filling complete")
 
 all_models = data.levels.level41_methods()
 # {'mds': {'CUT_50': <FluxMDS>},
-#  'long_term_random_forest': {'CUT_50': <LongTermGapFillingRandomForestTS>},
-#  'long_term_xgboost': {'CUT_50': <LongTermGapFillingXGBoostTS>}}
+#  'rf':  {'CUT_50': <LongTermGapFillingRandomForestTS>},
+#  'xgb': {'CUT_50': <LongTermGapFillingXGBoostTS>}}
 
 cols = data.gapfilled_cols()
 # {'rf': {'CUT_50': 'NEE_..._gfRF'}, 'xgb': {'CUT_50': '..._gfXG'}, 'mds': {'CUT_50': '...'}}
