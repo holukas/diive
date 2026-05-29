@@ -232,7 +232,10 @@ class MlRegressorGapFillingBase:
 
     @property
     def scores_(self) -> dict:
-        """Return model scores for model used in gap-filling"""
+        """In-sample scores of the gap-filling model: the final model predicting on
+        ALL complete rows, including the rows it was trained on, so these are
+        optimistically biased. For an honest generalization estimate use
+        scores_traintest_ (computed on the held-out test set)."""
         if not self._scores:
             raise Exception(f'Not available: model scores for gap-filling.')
         return self._scores
@@ -636,7 +639,8 @@ class MlRegressorGapFillingBase:
             f"- estimator:  {model}\n"
             f"- parameters:  {model.get_params()}\n"
             f"\n"
-            f"## MODEL SCORES\n"
+            f"## MODEL SCORES (in-sample: predicted on ALL data incl. training rows; "
+            f"optimistically biased)\n"
             f"- MAE:   {scores['mae']} (mean absolute error)\n"
             f"- MedAE: {scores['medae']} (median absolute error)\n"
             f"- MSE:   {scores['mse']} (mean squared error)\n"
@@ -645,6 +649,22 @@ class MlRegressorGapFillingBase:
             f"- MAPE:  {scores['mape']:.3f} (mean absolute percentage error)\n"
             f"- R2:    {scores['r2']}\n"
         )
+
+        # Held-out scores from the train/test split are the honest generalization
+        # estimate; surface them alongside the (biased) in-sample scores above.
+        if self._scores_traintest:
+            scores_tt = self._scores_traintest
+            _console.print(
+                f"## MODEL SCORES (out-of-sample: held-out test set, {test_size_perc:.1f}%; "
+                f"generalization estimate)\n"
+                f"- MAE:   {scores_tt['mae']} (mean absolute error)\n"
+                f"- MedAE: {scores_tt['medae']} (median absolute error)\n"
+                f"- MSE:   {scores_tt['mse']} (mean squared error)\n"
+                f"- RMSE:  {scores_tt['rmse']} (root mean squared error)\n"
+                f"- MAXE:  {scores_tt['maxe']} (max error)\n"
+                f"- MAPE:  {scores_tt['mape']:.3f} (mean absolute percentage error)\n"
+                f"- R2:    {scores_tt['r2']}\n"
+            )
 
     def _shap_importance(self, model, X, X_names) -> DataFrame:
         """

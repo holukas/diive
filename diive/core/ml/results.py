@@ -24,9 +24,13 @@ class GapFillingResult:
     Attributes:
         gapfilled: Gap-filled target time series (observed + filled values).
         flag: Quality flag — 0 = observed, 1 = gap-filled, 2 = fallback (ML only).
-        scores: Performance metrics dict with keys mae, medae, mse, rmse, mape, maxe, r2.
+        scores: In-sample performance metrics — the final model predicting on ALL
+            complete rows, including the rows it was trained on, so these are
+            optimistically biased. Dict with keys mae, medae, mse, rmse, mape, maxe,
+            r2. Use *scores_traintest* for an honest generalization estimate.
         gapfilling_df: Full results DataFrame (all auxiliary columns included).
-        scores_traintest: Train/test split metrics — same keys as *scores*. None for MDS.
+        scores_traintest: Held-out (out-of-sample) metrics from the train/test split —
+            the generalization estimate; same keys as *scores*. None for MDS.
         feature_importances: SHAP importances from the gap-filling model. None for MDS.
         feature_importances_traintest: SHAP importances from the train/test model. None for MDS.
         model: Trained sklearn/XGBoost regressor. None for MDS.
