@@ -42,12 +42,20 @@ diive-tlag-pwb-batch = "diive.flux.hires.lag_pwb:_cli_main"
 [tool.uv]
 python-preference = "managed"
 
+# Local editable source for dbc-influxdb. Only consulted when the opt-in 'db'
+# group below is synced (uv sync --group db), so contributors who run the
+# default `uv sync` never need the ../poet checkout. dbc-influxdb is also on
+# PyPI (https://pypi.org/project/dbc-influxdb/) for anyone who wants it without
+# the local checkout.
 [tool.uv.sources]
-dbc-influxdb = { path = "../poet/dbc-influxdb" }
+dbc-influxdb = { path = "../poet/dbc-influxdb", editable = true }
 
 [dependency-groups]
+# dbc-influxdb is a personal dev dependency (local InfluxDB workflow) and is NOT
+# part of the default sync — other contributors use their own database setup.
+# Opt in with: uv sync --group db
+db = ["dbc-influxdb"]
 dev = [
-    "dbc-influxdb",
     "jupyterlab>=4.3.6,<5.0.0",
     "ipykernel>=7.2.0",
     "pandas-stubs>=2.0.0,<3.0.0",

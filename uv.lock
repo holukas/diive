@@ -404,7 +404,7 @@ wheels = [
 [[package]]
 name = "dbc-influxdb"
 version = "0.14.0"
-source = { directory = "../poet/dbc-influxdb" }
+source = { editable = "../poet/dbc-influxdb" }
 dependencies = [
     { name = "influxdb-client" },
     { name = "pandas" },
@@ -495,9 +495,11 @@ dependencies = [
 ]
 
 [package.dev-dependencies]
+db = [
+    { name = "dbc-influxdb" },
+]
 dev = [
     { name = "autopep8" },
-    { name = "dbc-influxdb" },
     { name = "furo" },
     { name = "ghp-import" },
     { name = "ipykernel" },
@@ -541,9 +543,9 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
+db = [{ name = "dbc-influxdb", editable = "../poet/dbc-influxdb" }]
 dev = [
     { name = "autopep8", specifier = ">=2.3.2" },
-    { name = "dbc-influxdb", directory = "../poet/dbc-influxdb" },
     { name = "furo", specifier = ">=2025.12.19" },
     { name = "ghp-import", specifier = ">=2.1.0" },
     { name = "ipykernel", specifier = ">=7.2.0" },
