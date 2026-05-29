@@ -322,13 +322,28 @@ class MlRegressorGapFillingBase:
 
         return accepted_cols
 
-    @staticmethod
-    def _fitmodel(model, X_train, y_train, X_test, y_test):
-        """Fit model."""
+    def _fitmodel(self, model, X_train, y_train, X_test, y_test):
+        """Fit model.
+
+        For XGBoost, ``early_stopping_rounds`` monitors the LAST ``eval_set``
+        entry, so that entry must be a genuine hold-out. The feature-reduction
+        and fallback paths call this with the training data itself as the eval
+        set (``X_test is X_train``); left as-is, early stopping would only ever
+        see training loss — which keeps falling as trees are added — so it would
+        never trigger and the model would overfit. In that case, carve out a
+        small validation split so early stopping watches unseen data. When early
+        stopping is not configured, behaviour is unchanged.
+        """
         if isinstance(model, RandomForestRegressor):
             model.fit(X=X_train, y=y_train)
         elif isinstance(model, XGBRegressor):
-            model.fit(X=X_train, y=y_train, eval_set=[(X_train, y_train), (X_test, y_test)])
+            if getattr(model, 'early_stopping_rounds', None) and X_test is X_train:
+                X_tr, X_val, y_tr, y_val = train_test_split(
+                    X_train, y_train, test_size=0.1,
+                    random_state=self._random_state, shuffle=True)
+                model.fit(X=X_tr, y=y_tr, eval_set=[(X_tr, y_tr), (X_val, y_val)])
+            else:
+                model.fit(X=X_train, y=y_train, eval_set=[(X_train, y_train), (X_test, y_test)])
         return model
 
     def run(self, **kwargs):

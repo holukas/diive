@@ -319,13 +319,16 @@ class TestGapFilling(unittest.TestCase):
         # plt.show()
 
         # Note: Values updated to reflect SHAP-based feature importance and shap_threshold_factor=0.5
-        # Using flexible ranges due to slight variability in SHAP calculations
+        # Using flexible ranges due to slight variability in SHAP calculations.
+        # Upper bound of the gap-filled sum widened after early stopping was fixed
+        # to use a genuine hold-out in the feature-reduction path (early_stopping_rounds
+        # is set here), which shifts the fitted model slightly.
         self.assertGreater(scores['mae'], 1.2)
         self.assertLess(scores['mae'], 1.6)
         self.assertGreater(scores['r2'], 0.82)
         self.assertLess(scores['r2'], 0.92)
         self.assertGreater(gfdf['NEE_CUT_REF_orig_gfXG'].sum(), -2000)
-        self.assertLess(gfdf['NEE_CUT_REF_orig_gfXG'].sum(), -1400)
+        self.assertLess(gfdf['NEE_CUT_REF_orig_gfXG'].sum(), -1200)
         self.assertEqual(gfdf['NEE_CUT_REF_orig_gfXG'].sum(), gapfilled.sum())
         self.assertGreater(fi['SHAP_IMPORTANCE']['Rg_f'], 2.5)
         self.assertLess(fi['SHAP_IMPORTANCE']['Rg_f'], 3.5)
