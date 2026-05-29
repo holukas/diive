@@ -34,9 +34,16 @@ print(f"\nData: {len(df)} records, {df.index.min().date()} to {df.index.max().da
 
 detector = dv.flux.UstarMovingPointDetection(
     df=df,
+    nee_col=None,  # NEE column; None = auto-detect (prefers NEE+QCF, then NEE)
+    ta_col=None,  # Air temperature column; None = auto-detect (TA_*, then TA/TSYS/TAIR)
+    ustar_col=None,  # USTAR column; None = auto-detect (*USTAR*, then U_STAR)
+    swin_col=None,  # Shortwave-in column; None = auto-detect (*SW_IN*)
     ta_classes_count=7,  # Temperature stratification classes (ONEFlux default)
     ustar_classes_count=20,  # USTAR stratification classes per temperature class
-    verbose=1
+    forward_mode_n=2,  # Forward-mode window size (Fw2); must be >= 1
+    season_groups=None,  # Custom season month-groupings, e.g. [[12,1,2],[3,4,5],...]; None = default
+    bootstrapping_times=100,  # Internal bootstrap iterations
+    verbose=1,  # Verbosity level (0=silent)
 )
 
 detector.detect()
@@ -59,7 +66,7 @@ boot = dv.flux.UstarBootstrapThresholds(
     df=df,
     detector_class=dv.flux.UstarMovingPointDetection,
     detector_kwargs=dict(ta_classes_count=7, ustar_classes_count=20),
-    n_iter=100,
+    n_iter=20,
     percentiles=(16, 50, 84),
     n_jobs=-1,
     verbose=1,
