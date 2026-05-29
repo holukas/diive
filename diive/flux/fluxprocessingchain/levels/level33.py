@@ -220,6 +220,13 @@ def run_level33_constant_ustar(
         flagcol = flagcols[0]
         udf = level33.results[[flux_corrected_col, meta.ustarcol, flagcol]].copy()
 
+        # No outname override here (unlike L3.1): run_qcf_on_col is the
+        # L3.1-corrected flux (e.g. 'NEE_L3.1'), and the storage-correction tag
+        # is meaningful provenance that must be preserved. Appending idstr
+        # 'L3.3_<scen>' yields 'NEE_L3.1_L3.3_CUT_50_QCF' — storage-corrected
+        # (L3.1) then USTAR-filtered (L3.3) — matching L3.2's 'NEE_L3.1_L3.2_QCF'.
+        # L3.1 passes outname only to collapse its redundant self-repeat
+        # ('L3.1_L3.1'), which is a different case.
         current, qcf = finalize_level(
             current,
             run_qcf_on_col=flux_corrected_col,
