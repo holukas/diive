@@ -162,7 +162,7 @@ See `diive.core.ml.feature_engineer.FeatureEngineer` for details.
 
 ## Related Documentation
 
-See `diive.pkgs.gapfilling` for API documentation:
+See `dv.gapfilling` for API documentation:
 - `RandomForestTS` — Random Forest time series with 8-stage feature engineering
 - `XGBoostTS` — XGBoost gradient boosting with tunable hyperparameters
 - `linear_interpolation()` — Simple linear interpolation

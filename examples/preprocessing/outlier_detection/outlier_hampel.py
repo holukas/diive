@@ -25,7 +25,7 @@ s = df['Tair_f'].copy()
 s = s.loc[s.index.year == 2018].copy()
 
 # Add synthetic impulse noise
-s_noise = dv.features.add_impulse_noise(
+s_noise = dv.variables.add_impulse_noise(
     series=s,
     factor_low=-10,
     factor_high=4,

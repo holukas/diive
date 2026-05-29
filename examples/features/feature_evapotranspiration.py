@@ -49,7 +49,7 @@ print(f"Number of records: {len(le)}")
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 # Apply temperature-dependent conversion
 
-et_calculated = dv.features.et_from_le(le=le, ta=ta)
+et_calculated = dv.variables.et_from_le(le=le, ta=ta)
 
 # %%
 # Compare with EddyPro reference

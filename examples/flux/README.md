@@ -36,7 +36,7 @@ Examples demonstrating flux processing, quality control, and high-resolution ana
 
 ## Related Documentation
 
-Available classes and functions in `diive.pkgs.flux`:
+Available classes and functions in `dv.flux`:
 - **TimeLagAnalysis** — Time lag detection and visualization for gas concentrations
 - **MaxCovariance** — Time lag detection via cross-covariance maximisation
 - **PreWhiteningBootstrap** — PWB time lag detection (Vitale et al. 2024): pre-whitening + block-bootstrap, robust for low-magnitude fluxes (CH4, N2O). Provide `var_tsonic` to enable the full 4-combination RFlux v3.2.0 logic (strongly recommended for trace gases). **Requires wind-rotation-corrected input** (double rotation or planar-fit; e.g. EddyPro "Advanced" rotated output) — a non-zero mean W biases the cross-correlation.

@@ -43,20 +43,31 @@ Examples demonstrating creation and engineering of variables for time series ana
 Calculate environmental properties:
 
 ```python
-from diive.features import feature_vpd, feature_air_density, feature_potentialradiation
+import diive as dv
 
-vpd = feature_vpd(T_celsius=df['TA'], RH_percent=df['RH'])
-rho = feature_air_density(T_celsius=df['TA'], p_kpa=df['PA'])
-sw_pot = feature_potentialradiation(df.index, lat=47.5, lon=8.4)
+# Vapor pressure deficit (kPa) from air temperature and relative humidity
+vpd = dv.variables.calc_vpd_from_ta_rh(df=df, ta_col='TA', rh_col='RH')
+
+# Aerodynamic resistance and dry air density
+ra = dv.variables.aerodynamic_resistance(u_ms=df['WS'], ustar_ms=df['USTAR'])
+rho_d = dv.variables.dry_air_density(rho_a=rho_a, rho_v=rho_v)
+
+# Potential (clear-sky) shortwave radiation
+sw_pot = dv.variables.potrad(timestamp_index=df.index, lat=47.5, lon=8.4, utc_offset=1)
 ```
 
 Create modeling features:
 
 ```python
-from diive.features import feature_laggedvariants, feature_timesince
+import diive as dv
 
-df_lagged = feature_laggedvariants(df, 'NEE', lags=[-2, -1, 1, 2])
-df['Days_Since_Fire'] = feature_timesince(fire_date)
+# Lagged / shifted variables (lag range -2 to +1, excluding the target)
+df_lagged = dv.variables.lagged_variants(df=df, lag=[-2, 1], stepsize=1,
+                                         exclude_cols=['NEE'])
+
+# Records since the last time a condition held (e.g. since last rain)
+ts = dv.variables.TimeSince(df['PREC'], lower_lim=0, include_lim=False)
+ts.calc()
 ```
 
 ## Running Examples
@@ -93,7 +104,7 @@ uv run python examples/run_all_examples.py
 
 ## Available Functions
 
-See `diive.pkgs.features` for the complete API including:
+See `dv.variables` for the complete API including:
 
 - Air: density, resistance, heat capacity, viscosity
 - Radiation: potential radiation, clear-sky models

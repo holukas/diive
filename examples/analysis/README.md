@@ -96,7 +96,7 @@ uv run python examples/run_all_examples.py
 
 ## Related Classes
 
-See `diive.pkgs.analysis` for full API documentation:
+See `dv.analysis` for full API documentation:
 
 - `DailyCorrelation` — Daily correlation coefficients, summary statistics, anomaly detection
 - `Correlation` — Cross-correlation and lag detection

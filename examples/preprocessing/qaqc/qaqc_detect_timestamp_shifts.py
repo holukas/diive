@@ -62,7 +62,7 @@ dts = DetectTimestampShifts(
 # If the potential radiation is already in the DataFrame, pass it directly.
 # No lat/lon required.
 
-from diive.features.variables.potentialradiation import potrad
+from diive.variables.radiation import potrad
 
 df_with_pot = df.copy()
 df_with_pot['SW_IN_POT'] = potrad(

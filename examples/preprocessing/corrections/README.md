@@ -69,7 +69,7 @@ corrected = corrector.get_corrected()
 
 ## Related Documentation
 
-See `diive.pkgs.preprocessing.corrections` for available correction classes:
+See `dv.corrections` for available correction classes:
 - `OffsetRH` — Relative humidity saturation correction
 - `OffsetRadiation` — Nighttime radiation offset removal
 - `OffsetMeasurementReplicates` — Instrument bias detection

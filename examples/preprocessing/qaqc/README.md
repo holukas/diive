@@ -10,7 +10,7 @@ Examples demonstrating quality control methods, flag generation, and data qualit
 
 ## Related Documentation
 
-See `diive.pkgs.preprocessing.qaqc` for:
+See `dv.qaqc` for:
 - `DetectTimestampShifts` — Timestamp shift detection via radiation phase analysis
 
 - `FlagQCF` — Overall quality flag combining individual tests

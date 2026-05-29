@@ -47,7 +47,7 @@ print(f"Wind speed range: {u_ms.min():.2f} to {u_ms.max():.2f} m/s")
 print(f"Friction velocity range: {ustar_ms.min():.2f} to {ustar_ms.max():.2f} m/s")
 
 # Calculate aerodynamic resistance
-ra = dv.features.aerodynamic_resistance(u_ms=u_ms, ustar_ms=ustar_ms)
+ra = dv.variables.aerodynamic_resistance(u_ms=u_ms, ustar_ms=ustar_ms)
 
 print(f"\nAerodynamic resistance range: {ra.min():.2f} to {ra.max():.2f} s/m")
 print(f"Median aerodynamic resistance: {ra.median():.2f} s/m")
@@ -82,7 +82,7 @@ print(f"Total air density range: {rho_a.min():.4f} to {rho_a.max():.4f} kg/m³")
 print(f"Water vapor density range: {rho_v.min():.4f} to {rho_v.max():.4f} kg/m³")
 
 # Calculate dry air density
-rho_d = dv.features.dry_air_density(rho_a=rho_a, rho_v=rho_v)
+rho_d = dv.variables.dry_air_density(rho_a=rho_a, rho_v=rho_v)
 
 print(f"\nDry air density range: {rho_d.min():.4f} to {rho_d.max():.4f} kg/m³")
 print(f"Dry air density is {(rho_a - rho_v).mean():.4f} kg/m³ on average")

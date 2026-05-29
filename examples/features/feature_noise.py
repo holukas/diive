@@ -23,7 +23,7 @@ import matplotlib.gridspec as gridspec
 import diive as dv
 
 # Generate synthetic data with default parameters
-df = dv.features.generate_noisy_timeseries()
+df = dv.variables.generate_noisy_timeseries()
 
 print("Synthetic Time Series (Default Parameters)")
 print("=" * 50)
@@ -57,7 +57,7 @@ fig.show()
 # noise levels, and outlier fractions for different scenarios.
 
 # Generate data with stronger trend and seasonality
-df_strong = dv.features.generate_noisy_timeseries(
+df_strong = dv.variables.generate_noisy_timeseries(
     start_date='2023-01-01',
     periods=365,
     freq='D',
@@ -69,7 +69,7 @@ df_strong = dv.features.generate_noisy_timeseries(
 )
 
 # Generate data with minimal trend and high noise
-df_noisy = dv.features.generate_noisy_timeseries(
+df_noisy = dv.variables.generate_noisy_timeseries(
     start_date='2023-01-01',
     periods=365,
     freq='D',
@@ -122,7 +122,7 @@ fig.show()
 # to simulate measurement errors or data corruption.
 
 # Create a clean synthetic time series
-df = dv.features.generate_noisy_timeseries(
+df = dv.variables.generate_noisy_timeseries(
     periods=365,
     noise_level=0.5,  # Very low noise for clean signal
     outlier_fraction=0.0,  # No outliers
@@ -130,7 +130,7 @@ df = dv.features.generate_noisy_timeseries(
 )
 
 # Add impulse noise
-series_with_impulse = dv.features.add_impulse_noise(
+series_with_impulse = dv.variables.add_impulse_noise(
     series=df['observed_value'],
     factor_low=-5,
     factor_high=5,
@@ -179,7 +179,7 @@ fig.show()
 # and their combination in a multi-panel figure.
 
 # Generate synthetic data
-df = dv.features.generate_noisy_timeseries(
+df = dv.variables.generate_noisy_timeseries(
     periods=180,  # Half year for clearer visualization
     trend_slope=0.05,
     seasonal_strength=5.0,

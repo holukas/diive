@@ -37,7 +37,7 @@ detecting measurement quality issues, and identifying anomalous days.
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 import diive as dv
-from diive.features.variables.potentialradiation import potrad
+from diive.variables.radiation import potrad
 
 # Load example data (use full year 2022)
 df = dv.load_exampledata_parquet()

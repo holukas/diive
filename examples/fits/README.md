@@ -54,7 +54,7 @@ fitter = Fitter(
 
 ## Related Documentation
 
-See `diive.pkgs.fits` for available fitting classes:
+See `dv.analysis` (e.g. `BinFitterCP`) for available fitting classes:
 - Polynomial fitting (linear, quadratic, cubic, etc.)
 - Custom function fitting
 - Parameter uncertainty estimation
