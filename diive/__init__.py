@@ -1,3 +1,5 @@
+from importlib.metadata import PackageNotFoundError, version
+
 from diive import analysis
 from diive import corrections
 from diive import variables
@@ -19,7 +21,14 @@ from diive.core.io.files import save_parquet
 from diive.io.binary.extract import get_encoded_value_from_int
 from diive.io.binary.extract import get_encoded_value_series
 
+try:
+    __version__ = version("diive")
+except PackageNotFoundError:
+    # Package not installed (e.g. running from a source tree without an install).
+    __version__ = "0.91.0"
+
 __all__ = [
+    '__version__',
     # Namespace submodules
     'analysis',
     'corrections',

@@ -28,7 +28,7 @@ uv add package_name
 
 **Python:** 3.12-3.13 | **Package Manager:** `uv`
 
-**Key dependencies (v0.91.1+):** pandas 3.0.3, numpy 2.4+, scikit-learn 1.8+, xgboost 3.2+, matplotlib 3.10+, statsmodels 0.14+, pyarrow 19.0+
+**Key dependencies (minimum pins):** pandas 3.0+, numpy 2.2+, scikit-learn 1.6+, xgboost 3.0+, matplotlib 3.10+, statsmodels 0.14+, pyarrow 19.0+
 
 ## Project Structure
 
@@ -180,7 +180,7 @@ Key `data.levels` fields: `level2`, `level2_qcf`, `level31`, `level31_qcf`, `lev
 - L3.2 and L3.3 require L3.1; L3.3 also requires L3.2 (USTAR filtering must operate on outlier-screened data — `run_level33_*` raises if `level32_qcf` is None). For H/LE call `run_level31(data, set_storage_to_zero=True)`. `run_chain` runs L3.2 unconditionally; users who must skip it use the composable API.
 - L4.1 features and MDS driver columns must exist in `data.full_df`, not `data.fpc_df`. Use `add_driver()` to add computed drivers to the right place.
 - `init_flux_data` raises if `df` already contains `SW_IN_POT` / `DAYTIME` / `NIGHTTIME` (reserved names — would silently overwrite user data).
-- `nighttime_accept_qcf_below` (was `nighttimetime_accept_qcf_below` before v0.91.1 — typo fixed).
+- `nighttime_accept_qcf_below` (was `nighttimetime_accept_qcf_below` before v0.91.0 — typo fixed).
 - Default `daytime_accept_qcf_below=1` is stricter than FLUXNET convention of `2`; QCF=0 all pass, QCF=1 soft warning, QCF=2 hard failure.
 - `run_level33_constant_ustar` only supports constant thresholds; for in-pipeline bootstrap detection use `run_level33_ustar_detection` (composable) or `FluxConfig(ustar_detection_mode='bootstrap', ustar_bootstrap_ta_col=..., ustar_bootstrap_swin_col=...)` (via `run_chain`). `threshold_labels` is optional — auto-generates `CUT_0`, `CUT_1`, ... (positional index, **not** percentile); pass explicit labels like `['CUT_16', 'CUT_50', 'CUT_84']` for percentile-based thresholds. Length and uniqueness are validated; substring overlap (e.g. `CUT_5` inside `CUT_50`) is also rejected.
 - `run_level33_ustar_detection` raises if `detector_kwargs` contains `nee_col` / `ta_col` / `ustar_col` / `swin_col` (these are set internally).
@@ -360,4 +360,4 @@ Use `/llm-detox` skill for all written content (documentation, comments, commit 
 
 ---
 
-**Last Updated:** 2026-05-27 | **Version:** v0.91.0+ | **Package Manager:** `uv`
+**Last Updated:** 2026-05-30 | **Version:** v0.91.0 | **Package Manager:** `uv`
