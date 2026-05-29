@@ -28,6 +28,7 @@ New to diive? Start with the **[Cookbook](COOKBOOK.md)** — 6 minimal workflows
 | [**plot_scatter_xy_colored.py**](visualization/plot_scatter_xy_colored.py) | 3D scatter with color coding, bin aggregation, trend visualization |
 | [**plot_timeseries.py**](visualization/plot_timeseries.py) | Time series line plots with matplotlib |
 | [**plot_timeseries_interactive.py**](visualization/plot_timeseries_interactive.py) | Interactive Bokeh plots with zoom, pan, export |
+| [**plot_timeseries_rangetool.py**](visualization/plot_timeseries_rangetool.py) | Interactive Bokeh plot with a RangeTool overview for navigating long series |
 | [**plot_cumulative_basic.py**](visualization/plot_cumulative_basic.py) | Cumulative flux across all time, scenario comparison |
 | [**plot_cumulative_year.py**](visualization/plot_cumulative_year.py) | Yearly cumulative sums with reference bands, annual budgets |
 | [**plot_dielcycle.py**](visualization/plot_dielcycle.py) | Diurnal cycle analysis by month/season |

@@ -2,7 +2,7 @@
 
 Examples demonstrating visualization and plotting functions for time series and flux data.
 
-19 examples across 10+ plot types.
+20 examples across 10+ plot types.
 
 ## Examples by Plot Type
 
@@ -21,6 +21,7 @@ Examples demonstrating visualization and plotting functions for time series and 
 
 - **plot_timeseries.py** — Line plots with matplotlib
 - **plot_timeseries_interactive.py** — Interactive Bokeh plots with zoom, pan, and export
+- **plot_timeseries_rangetool.py** — Interactive Bokeh plot with a RangeTool overview for navigating long series
 
 ### Diurnal & Cumulative Patterns
 
@@ -95,4 +96,4 @@ uv run python examples/visualization/plot_scatter_xy_colored.py
 uv run python examples/run_all_examples.py
 ```
 
-All 19 examples follow the two-phase design pattern.
+All 20 examples follow the two-phase design pattern.

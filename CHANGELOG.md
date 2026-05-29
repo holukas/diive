@@ -230,6 +230,10 @@
   by gradient boosting trained on SW_IN_POT and timestamp features.
 - **`FeatureEngineer`** — standalone 8-stage feature engineering pipeline (lag, rolling, diff, EMA, poly, STL,
   timestamps, record number); pre-engineer once and reuse across models.
+- **`TimeSeries.plot_rangetool()`** — interactive Bokeh plot with a linked RangeTool overview for navigating long
+  series (detail panel + draggable full-series selector). `TimeSeries` also keeps gaps visible by default
+  (`drop_gaps=False`), adopts the Material Design palette, and `plot()` gained `linewidth`/`alpha`/`marker` and
+  returns the axes. Example: `examples/visualization/plot_timeseries_rangetool.py`.
 
 ### Refactoring
 

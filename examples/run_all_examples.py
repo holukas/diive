@@ -27,6 +27,7 @@ EXAMPLE_FILES = [
     'visualization/plot_other_plots.py',
     'visualization/plot_timeseries.py',
     'visualization/plot_timeseries_interactive.py',
+    'visualization/plot_timeseries_rangetool.py',
     'visualization/plot_dielcycle.py',
     'visualization/plot_histogram_basic.py',
     'visualization/plot_histogram_yearly.py',

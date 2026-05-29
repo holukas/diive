@@ -1,8 +1,9 @@
 import os
 import tempfile
 import pandas as pd
+from bokeh.layouts import column
 from bokeh.models import BoxZoomTool, PanTool, ResetTool, WheelZoomTool, WheelPanTool, UndoTool, \
-    RedoTool, SaveTool, HoverTool, BoxSelectTool
+    RedoTool, SaveTool, HoverTool, BoxSelectTool, RangeTool
 from bokeh.models import ColumnDataSource
 from bokeh.plotting import figure, show, output_file
 from pandas import Series
@@ -34,6 +35,7 @@ class TimeSeries:
     Example:
         See `examples/visualization/plot_timeseries.py` for matplotlib examples.
         See `examples/visualization/plot_timeseries_interactive.py` for Bokeh examples.
+        See `examples/visualization/plot_timeseries_rangetool.py` for the RangeTool overview.
     """
 
     def __init__(self,
@@ -189,6 +191,84 @@ class TimeSeries:
 
         # Show plot
         show(p)
+
+    def plot_rangetool(self, height: int = 300, width: int = 900, overview_height: int = 130,
+                       init_range: float = 0.25, save_to_file: bool = False):
+        """
+        Render an interactive Bokeh plot with a RangeTool overview.
+
+        Two linked panels: a detail plot (top) showing a slice of the series, and a
+        smaller overview plot (bottom) showing the full series with a draggable
+        RangeTool. Drag or resize the shaded selection on the overview to pan and
+        zoom the detail plot. The detail panel's y-axis auto-scales to the data in
+        the visible x-window, so the curve always fills the panel. Useful for
+        navigating long time series without losing the overall context.
+
+        See https://docs.bokeh.org/en/latest/docs/examples/interaction/tools/range_tool.html
+
+        Args:
+            height: Detail-panel height in pixels (default: 300).
+            width: Plot width in pixels (default: 900).
+            overview_height: Overview-panel height in pixels (default: 130).
+            init_range: Fraction of the series shown in the detail panel initially,
+                measured from the start (default: 0.25 = first quarter).
+            save_to_file: Save to a named HTML file instead of a temp file
+                (default: False, opens in browser only).
+
+        Example:
+            >>> ts = dv.plotting.TimeSeries(series=data)
+            >>> ts.plot_rangetool(init_range=0.1)  # start zoomed to the first 10%
+        """
+        if save_to_file:
+            output_file(filename=f"{self.series.name}_rangetool.html", title=self.series.name)
+        else:
+            temp_file = os.path.join(tempfile.gettempdir(), f"bokeh_rangetool_{id(self)}.html")
+            output_file(filename=temp_file, title=self.series.name)
+
+        df = pd.DataFrame({'date': pd.to_datetime(self.series.index), 'value': self.series.to_numpy()})
+        source = ColumnDataSource(df)
+
+        # Initial detail window: the first `init_range` fraction of the record.
+        n = len(df)
+        end_ix = max(1, min(n - 1, int(n * init_range)))
+        x_start, x_end = df['date'].iloc[0], df['date'].iloc[end_ix]
+
+        # Detail panel (top): pan/zoom along x; x-axis on top like the Bokeh example.
+        # window_axis='x' auto-scales the y-axis to the data inside the visible
+        # x-window, so the detail view always fills the panel as you pan/zoom.
+        detail = figure(height=height, width=width, x_axis_type='datetime', x_axis_location='above',
+                        window_axis='x', x_range=(x_start, x_end), tools='xpan,xwheel_zoom,reset',
+                        toolbar_location='right', background_fill_color='#FAFAFA',
+                        border_fill_color='white', title=f"{self.series.name}")
+        detail.line('date', 'value', source=source, line_width=2.0, color=_COLOR_LINE, alpha=0.95)
+        detail.yaxis.axis_label = self.series.name
+        detail.xaxis.axis_label = self.series.index.name
+
+        # Overview panel (bottom): the full series with its own (full-range) y-axis,
+        # independent of the detail panel's auto-scaling, plus the RangeTool linked
+        # to the detail's x-range.
+        overview = figure(height=overview_height, width=width,
+                          x_axis_type='datetime', y_axis_type=None, tools='',
+                          toolbar_location=None, background_fill_color='#FAFAFA',
+                          border_fill_color='white')
+        overview.x_range.range_padding = 0
+        overview.x_range.bounds = 'auto'
+        range_tool = RangeTool(x_range=detail.x_range, start_gesture='pan')
+        range_tool.overlay.fill_color = _COLOR_LINE
+        range_tool.overlay.fill_alpha = 0.2
+        overview.line('date', 'value', source=source, line_width=1.2, color=_COLOR_LINE, alpha=0.7)
+        overview.ygrid.grid_line_color = None
+        overview.add_tools(range_tool)
+
+        # Shared Material Design styling.
+        for p in (detail, overview):
+            p.title.text_color = _COLOR_INK
+            p.axis.axis_label_text_color = _COLOR_INK
+            p.axis.major_label_text_color = _COLOR_INK
+            p.grid.grid_line_color = _COLOR_GRID
+            p.grid.grid_line_alpha = 0.3
+
+        show(column(detail, overview))
 
     def plot(self, ax=None, color: str = None, series_units: str = None, xlabel: str = None, ylabel: str = None,
              title: str = None, linewidth: float = 2.2, alpha: float = 0.95, marker: bool = False):
