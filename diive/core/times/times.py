@@ -61,8 +61,6 @@ class TimestampSanitizer:
 
     Warnings
     --------
-    - **Data modification**: Input data is modified in place. Use ``data.copy()``
-      before passing to TimestampSanitizer if you need the original data.
     - **Regularization side effect**: When regularize=True, gaps are filled with
       NaN data rows. This may increase the number of rows significantly.
     - **No rollback**: If processing fails mid-pipeline, data is partially
