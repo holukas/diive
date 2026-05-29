@@ -10,9 +10,10 @@ Part of the diive library: https://github.com/holukas/diive
 
 from diive.core.ml.feature_engineer import FeatureEngineer
 from diive.core.ml.results import GapFillingResult
+from diive.core.ml.optimization import OptimizeParamsTS
 from diive.gapfilling.interpolate import linear_interpolation
-from diive.gapfilling.mds import _FluxMDS
-from diive.gapfilling.randomforest_ts import RandomForestTS
+from diive.gapfilling.mds import FluxMDS
+from diive.gapfilling.randomforest_ts import RandomForestTS, QuickFillRFTS, OptimizeParamsRFTS
 from diive.gapfilling.xgboost_ts import XGBoostTS
 from diive.gapfilling.scores import prediction_scores
 from diive.gapfilling.longterm import LongTermGapFillingRandomForestTS, LongTermGapFillingXGBoostTS
@@ -22,8 +23,11 @@ __all__ = [
     'FeatureEngineer',
     'GapFillingResult',
     'linear_interpolation',
-    '_FluxMDS',
+    'FluxMDS',
     'RandomForestTS',
+    'QuickFillRFTS',
+    'OptimizeParamsTS',
+    'OptimizeParamsRFTS',
     'XGBoostTS',
     'prediction_scores',
     'LongTermGapFillingRandomForestTS',

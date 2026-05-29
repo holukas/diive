@@ -5,8 +5,8 @@ import pandas as pd
 import diive as dv
 from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
 from diive.configs.exampledata import load_exampledata_parquet
-from diive.features.variables import air_temp_from_sonic_temp
-from diive.features.variables import TimeSince
+from diive.variables import air_temp_from_sonic_temp
+from diive.variables import TimeSince
 
 
 class TestCreateVar(unittest.TestCase):
@@ -33,7 +33,7 @@ class TestCreateVar(unittest.TestCase):
         le = df['LE'].copy()
         et_eddypro = df['ET'].copy()  # Should be in mm h-1
         ta = df['TA_1_1_1'].copy()
-        et = dv.features.et_from_le(le=le, ta=ta)
+        et = dv.variables.et_from_le(le=le, ta=ta)
         self.assertAlmostEqual(et.iloc[0], et_eddypro.iloc[0], places=4)
         self.assertAlmostEqual(et.iloc[1], et_eddypro.iloc[1], places=4)
         self.assertAlmostEqual(et.iloc[-1], et_eddypro.iloc[-1], places=3)
@@ -41,7 +41,7 @@ class TestCreateVar(unittest.TestCase):
 
     def test_lagged_variants(self):
         from diive.configs.exampledata import load_exampledata_parquet
-        from diive.features.variables import lagged_variants
+        from diive.variables import lagged_variants
         df = load_exampledata_parquet()
         df = load_exampledata_parquet()
         locs = (df.index.year == 2022) & (df.index.month == 7) & (df.index.hour >= 10) & (df.index.hour <= 15)
@@ -67,7 +67,7 @@ class TestCreateVar(unittest.TestCase):
 
     def test_daytime_nighttime_flag(self):
         from diive.configs.exampledata import load_exampledata_parquet
-        from diive.features.variables import DaytimeNighttimeFlag
+        from diive.variables import DaytimeNighttimeFlag
         df = load_exampledata_parquet()
         dnf = DaytimeNighttimeFlag(
             timestamp_index=df.index,
@@ -95,7 +95,7 @@ class TestCreateVar(unittest.TestCase):
 
     def test_calc_vpd(self):
         from diive.configs.exampledata import load_exampledata_parquet
-        from diive.features.variables import calc_vpd_from_ta_rh  # Used to calculate VPD
+        from diive.variables import calc_vpd_from_ta_rh  # Used to calculate VPD
         ta_col = 'Tair_f'  # Air temperature (gap-filled) is used to calculate VPD
         rh_col = 'RH'  # Relative humidity (not gap-filled) is used to calculate VPD
         vpd_col = 'VPD_hPa'  # VPD will be newly calculated from gap-filled TA and non-gap-filled RH

@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 import diive.configs.exampledata as ed
-from diive.features.variables import add_impulse_noise
+from diive.variables import add_impulse_noise
 from diive.preprocessing.outlier_detection import AbsoluteLimits, AbsoluteLimitsDaytimeNighttime
 from diive.preprocessing.outlier_detection.hampel import HampelDaytimeNighttime
 from diive.preprocessing.outlier_detection import zScoreIncrements

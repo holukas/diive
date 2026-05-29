@@ -21,8 +21,10 @@ from diive.analysis.histogram import Histogram
 from diive.analysis.optimumrange import FindOptimumRange
 from diive.analysis.quantiles import percentiles101
 from diive.analysis.seasonaltrend import SeasonalTrendDecomposition
+from diive.fits.fitter import BinFitterCP
 
 __all__ = [
+    'BinFitterCP',
     'DailyCorrelation',
     'daily_correlation',
     'GrangerCausality',
