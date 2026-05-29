@@ -76,7 +76,6 @@ class MlRegressorGapFillingBase:
                 observed data.
                 - None (default): no treatment, keep predictions as-is.
                 - 'zero': clip negative predictions to 0.
-                - 'nan': set negative predictions to NaN (treated as unfillable).
 
             **kwargs:
                 Regressor-specific hyperparameters passed to the sklearn regressor.
@@ -120,7 +119,7 @@ class MlRegressorGapFillingBase:
         self.verbose = verbose
         self.kwargs = kwargs
 
-        _valid_below_zero = (None, 'zero', 'nan')
+        _valid_below_zero = (None, 'zero')
         if below_zero not in _valid_below_zero:
             raise ValueError(f"below_zero must be one of {_valid_below_zero}, got '{below_zero}'")
         self.below_zero = below_zero
@@ -797,7 +796,7 @@ class MlRegressorGapFillingBase:
                             f"only one single column : {self.model_df.columns}")
 
     def _apply_below_zero_treatment(self, predictions: np.ndarray) -> np.ndarray:
-        """Clip or nullify negative predictions for physically non-negative variables.
+        """Clip negative predictions to 0 for physically non-negative variables.
 
         Applied only when below_zero is set. Has no effect on observed data.
         """
@@ -807,14 +806,10 @@ class MlRegressorGapFillingBase:
         neg_locs = predictions < 0
         if neg_locs.any():
             n_neg = int(neg_locs.sum())
-            if self.below_zero == 'zero':
-                predictions[neg_locs] = 0.0
-                detail(f"below_zero='zero': clipped {n_neg} negative prediction(s) to 0.",
-                       verbose=self.verbose)
-            elif self.below_zero == 'nan':
-                predictions[neg_locs] = np.nan
-                detail(f"below_zero='nan': set {n_neg} negative prediction(s) to NaN.",
-                       verbose=self.verbose)
+            # below_zero == 'zero'
+            predictions[neg_locs] = 0.0
+            detail(f"below_zero='zero': clipped {n_neg} negative prediction(s) to 0.",
+                   verbose=self.verbose)
         return predictions
 
     def _fillgaps_fullmodel(self, showplot_scores, showplot_importance):
@@ -950,7 +945,10 @@ class MlRegressorGapFillingBase:
             self._gapfilling_df[self.target_gapfilled_col] = \
                 self._gapfilling_df[self.target_gapfilled_col].fillna(fallback_series)
 
-            self._gapfilling_df.loc[_still_missing_locs, self.target_gapfilled_flag_col] = 2  # Adjust flag, 2=fallback
+            # The fallback is the last-resort fill and leaves no gaps (its
+            # predictions are always finite; below_zero only clips to 0, never
+            # to NaN), so every still-missing record is now filled.
+            self._gapfilling_df.loc[_still_missing_locs, self.target_gapfilled_flag_col] = 2  # 2=fallback
         else:
             detail("Fallback model not needed — all gaps already filled.", verbose=self.verbose)
             self._gapfilling_df[self.pred_fallback_col] = None

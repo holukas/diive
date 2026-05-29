@@ -193,8 +193,8 @@
 - **`.run()` / `.result` unified across class families** — `FlagBase`, `MlRegressorGapFillingBase`, `FluxMDS`,
   `DailyCorrelation`, `StratifiedAnalysis`, `BinFitterCP` all share the same two-step API. Enables
   `series = dv.outliers.Hampel(s, n_sigma=5).run().result`.
-- **`below_zero` param** — controls handling of below-zero predictions: `None` (keep), `'zero'` (clip), `'nan'` (treat
-  as unfillable). Available in `RandomForestTS`, `XGBoostTS`, and longterm variants.
+- **`below_zero` param** — controls handling of below-zero predictions: `None` (keep) or `'zero'` (clip to 0).
+  Available in `RandomForestTS`, `XGBoostTS`, and longterm variants.
 - **`OptimizeParamsRFTS` -> `OptimizeParamsTS`** — generalized hyperparameter optimization for any sklearn-compatible
   regressor.
 - **SHAP-based feature reduction** — replaced permutation importance with SHAP values.

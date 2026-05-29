@@ -39,7 +39,7 @@ class XGBoostTS(MlRegressorGapFillingBase):
                       Default: 0.25. Only complete rows used for split.
             below_zero: How to treat predicted values below zero for variables that
                        cannot be negative (e.g. VPD, SW_IN, PPFD).
-                       None (default): keep as-is. 'zero': clip to 0. 'nan': set to NaN.
+                       None (default): keep as-is. 'zero': clip to 0.
             **kwargs: XGBoost hyperparameters (n_estimators, max_depth,
                      learning_rate, min_child_weight, early_stopping_rounds,
                      random_state, n_jobs, subsample, colsample_bytree, etc).

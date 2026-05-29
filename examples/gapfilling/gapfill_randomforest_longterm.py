@@ -84,7 +84,7 @@ gf = LongTermGapFillingRandomForestTS(
     input_df=df_engineered,
     target_col=TARGET_COL,
     verbose=2,
-    below_zero=None,  # How to treat negative predictions: None=keep, 'zero'=clip, 'nan'=set missing
+    below_zero=None,  # How to treat negative predictions: None=keep, 'zero'=clip to 0
     # Use 'zero' or 'nan' for variables that cannot be negative (e.g. VPD, SW_IN, PPFD).
     # NEE can be negative (carbon uptake), so None is correct here.
     n_estimators=3,  # Reduced from standard 300 for speed (demo only)
