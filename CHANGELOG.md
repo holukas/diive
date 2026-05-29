@@ -216,6 +216,10 @@
 - **`WindDoubleRotation`** (renamed from `WindRotation2D`) — scalar `c` removed; Reynolds decomposition is now a
   separate explicit step. Rotation angles use `atan2` (fixes `ZeroDivisionError` and wrong-quadrant results when
   `u_mean <= 0`).
+- **`UstarMovingPointDetection`** — ONEFlux moving-point USTAR detection (Papale et al. 2006). Constants match the
+  ONEFlux `ustar_mp` source (correlation cutoff 0.5, first-class gate 0.2, 7 TA / 20 USTAR classes, forward window 10).
+  New `forward_mode_n` parameter selects the forward-mode order; default `2` (Fw2) matches the ONEFlux and REddyProc
+  defaults — pass `forward_mode_n=1` for the looser Fw1, which never yields a higher threshold.
 - **`UstarVekuriThresholdDetection`** — quantile-based USTAR detection; simpler alternative to the ONEFlux moving-point
   method.
 - **`UstarBootstrapThresholds`** — multi-year bootstrap wrapper for any USTAR detection method; returns per-year
