@@ -133,13 +133,42 @@ class TrimLow(FlagBase):
 
         flag = pd.Series(index=s.index, data=np.nan)
 
+        # Determine which subsets to trim. When both daytime and nighttime are
+        # enabled, each is trimmed independently against its own distribution and
+        # the flags are combined; otherwise only the single enabled subset is
+        # trimmed. (A previous if/elif silently left nighttime unscreened when
+        # both modes were True.)
+        subsets = []
         if self.trim_daytime:
-            _s = s[self.is_daytime].copy()
-        elif self.trim_nighttime:
-            _s = s[self.is_nighttime].copy()
-        else:
+            subsets.append(s[self.is_daytime].copy())
+        if self.trim_nighttime:
+            subsets.append(s[self.is_nighttime].copy())
+        if not subsets:
             raise ValueError('Either trim_daytime or trim_nighttime must be True.')
 
+        for _s in subsets:
+            self._trim_subset(_s, flag)
+
+        flag = flag.fillna(0)
+
+        n_outliers = (flag == 2).sum()
+        ok = (flag == 0)
+        ok = ok[ok].index
+        rejected = (flag == 2)
+        rejected = rejected[rejected].index
+
+        if self.verbose:
+            kept = s.loc[flag == 0]
+            detail(f"ITERATION#{iteration}: Total found outliers: "
+                   f"{n_outliers}, "
+                   f"minimum value: {kept.min()}, "
+                   f"maximum value: {kept.max()}", verbose=self.verbose)
+
+        return ok, rejected, n_outliers
+
+    def _trim_subset(self, _s: Series, flag: Series) -> None:
+        """Apply the symmetric trim to one subset, writing 0 (valid) / 2 (outlier)
+        into ``flag`` at the subset's indices. Modifies ``flag`` in place."""
         s_sorted = _s.sort_values(ascending=False)
         s_sorted_below = s_sorted.loc[s_sorted < self.lower_limit].copy()
         n_vals_below = s_sorted_below.count()
@@ -161,19 +190,3 @@ class TrimLow(FlagBase):
 
             flag.loc[_ok] = 0
             flag.loc[_rejected] = 2
-
-        flag = flag.fillna(0)
-
-        n_outliers = (flag == 2).sum()
-        ok = (flag == 0)
-        ok = ok[ok].index
-        rejected = (flag == 2)
-        rejected = rejected[rejected].index
-
-        if self.verbose:
-            detail(f"ITERATION#{iteration}: Total found outliers: "
-                   f"{n_outliers}, "
-                   f"minimum value: {_s.loc[flag == 0].min()}, "
-                   f"maximum value: {_s.loc[flag == 0].max()}", verbose=self.verbose)
-
-        return ok, rejected, n_outliers
