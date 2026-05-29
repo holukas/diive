@@ -15,7 +15,7 @@ from pandas import DataFrame
 from diive.core.dfun.stats import sstats  # Time series stats
 from diive.core.funcs.funcs import validate_id_string
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
-from diive.core.utils.console import console as _console, detail, info, rule
+from diive.core.utils.console import console as _console, detail, info, rule, warn
 
 
 class FluxStorageCorrectionSinglePointEddyPro:
@@ -250,11 +250,24 @@ class FluxStorageCorrectionSinglePointEddyPro:
         prev_n_still_missing_strg = n_still_missing_strg
         detail(f"Missing values for storage term {self.gapfilled_strgcol}: {n_still_missing_strg}")
 
-        # Fill gaps with rolling mean in expanding time window
+        # Fill gaps with rolling median in expanding time window.
+        # Two termination guards keep this from looping forever:
+        #  - The rolling median requires min_periods=3 valid values within the
+        #    window. If the storage column holds fewer than 3 valid values in
+        #    total (all-NaN or very sparse), no window size can ever fill a gap,
+        #    so skip the loop entirely and let the fallback below handle it.
+        #  - Otherwise the window is capped at 2*len+1: a centered window that
+        #    size already spans the entire series from any position, so once
+        #    there are >=3 valid values the loop is guaranteed to fill every gap
+        #    at or before the cap (it normally exits much earlier).
+        strg_series = self.results[self.strgcol]
+        n_total = len(strg_series)
+        n_valid = int(strg_series.notna().sum())
+        max_window = 2 * n_total + 1
         window_size = 0
-        while n_still_missing_strg > 0:
+        while n_valid >= 3 and n_still_missing_strg > 0 and window_size < max_window:
             window_size = 3 if window_size == 0 else window_size + 2
-            rmedian = self.results[self.strgcol].rolling(window=window_size, center=True, min_periods=3).median()
+            rmedian = strg_series.rolling(window=window_size, center=True, min_periods=3).median()
             locs = gapfilled_df[self.gapfilled_strgcol].isnull()
             gapfilled_df.loc[locs, self.gapfilled_strgcol] = rmedian
             gapfilled_df.loc[locs, self.flag_isgapfilled] = 1
@@ -263,6 +276,18 @@ class FluxStorageCorrectionSinglePointEddyPro:
                 detail(f"Gap-filling {self.strgcol} with rolling median "
                        f"(window={window_size})  |  still missing: {n_still_missing_strg}")
                 prev_n_still_missing_strg = n_still_missing_strg
+
+        # Every flux value must carry a storage term in the end. Whatever the
+        # rolling median could not fill (sparse/all-NaN storage) falls back to 0,
+        # i.e. no storage contribution, flagged as filled. Warn so it is not silent.
+        if n_still_missing_strg > 0:
+            locs = gapfilled_df[self.gapfilled_strgcol].isnull()
+            n_fallback = int(locs.sum())
+            gapfilled_df.loc[locs, self.gapfilled_strgcol] = 0.0
+            gapfilled_df.loc[locs, self.flag_isgapfilled] = 1
+            warn(f"Storage term '{self.strgcol}': {n_fallback} flux record(s) could not be "
+                 f"gap-filled by rolling median (fewer than 3 valid storage values within "
+                 f"reach); set to 0 so every flux value still carries a storage term.")
 
         gapfilled_df = gapfilled_df[[self.gapfilled_strgcol, self.flag_isgapfilled]].copy()
 
