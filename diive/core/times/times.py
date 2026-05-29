@@ -401,7 +401,10 @@ class DetectFrequency:
             freq_progressive = to_offset(pd.Timedelta(freq_progressive)).freqstr
 
         list_of_found_freqs = [freq_full, freq_timedelta, freq_progressive]
-        if all(i == list_of_found_freqs[0] for i in list_of_found_freqs):
+        # The all-agree branch must exclude the all-None case: three Nones are
+        # "equal", so without this guard undetectable frequencies would silently
+        # fall through here instead of reaching the RuntimeError below.
+        if list_of_found_freqs[0] is not None and all(i == list_of_found_freqs[0] for i in list_of_found_freqs):
             # if all(f for f in [freq_full, freq_timedelta, freq_progressive]):
 
             # List of {Set of detected freqs}

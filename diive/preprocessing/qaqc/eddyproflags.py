@@ -86,7 +86,7 @@ def flag_signal_strength_eddypro_test(df: DataFrame,
     flagname_out = f'FLAG{idstr}_{var_col}_SIGNAL_STRENGTH_TEST'
 
     if signal_strength_col not in df.columns:
-        raise f"The column {signal_strength_col} is not in data, please check."
+        raise KeyError(f"The column {signal_strength_col} is not in data, please check.")
 
     # Get original signal strength values and then
     # replace values with flag
