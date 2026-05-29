@@ -55,52 +55,55 @@ uv pip install diive
 ```python
 import diive as dv
 
-# Load example data
+# Load example data (a 37-variable ecosystem dataset)
 df = dv.load_exampledata_parquet()
 
-# Plot time series
-dv.plot_time_series(series=df['NEE']).plot()
+# Plot a time series — two-phase: construct, then .plot()
+dv.plotting.TimeSeries(series=df['NEE_CUT_REF_orig']).plot()
 
 # Gap-fill with Random Forest
 from diive.core.ml.feature_engineer import FeatureEngineer
 from diive.gapfilling.randomforest_ts import RandomForestTS
 
-engineer = FeatureEngineer(target_col='NEE', features_lag=[-1, 1], features_rolling=[12, 24])
+engineer = FeatureEngineer(target_col='NEE_CUT_REF_orig', features_lag=[-1, 1])
 df_engineered = engineer.fit_transform(df)
 
-model = RandomForestTS(input_df=df_engineered, target_col='NEE', n_estimators=100)
-model.trainmodel()
-model.fillgaps()
+model = RandomForestTS(input_df=df_engineered, target_col='NEE_CUT_REF_orig', n_estimators=100)
+model.run()                       # trains the model, then fills gaps
+gapfilled = model.results.gapfilled
 ```
 
 ---
 
 ## API
 
-`diive` exposes its classes through a top-level namespace, available as both PascalCase and snake_case aliases:
+`import diive as dv` exposes nine domain namespaces. Classes live under the namespace for their area:
 
 ```python
 import diive as dv
 
-plot = dv.plot_time_series(series=data)   # snake_case alias
-plot = dv.TimeSeries(series=data)         # PascalCase class name
+plot = dv.plotting.TimeSeries(series=data)
+model = dv.gapfilling.RandomForestTS(input_df=df, target_col='NEE')
 ```
 
-| Area | Common exports |
+| Namespace | Common exports |
 |---|---|
-| Plotting | `TimeSeries`, `Cumulative`, `DielCycle`, `HeatmapDateTime` |
-| Gap-filling | `RandomForestTS`, `XGBoostTS`, `FluxMDS` |
-| Analysis | `GridAggregator`, `SeasonalTrendDecomposition` |
-| Eddy covariance | `FluxProcessingChain`, `FluxDetectionLimit`, `WindDoubleRotation` |
-| I/O | `load_parquet`, `save_parquet`, `load_exampledata_parquet` |
+| `dv.plotting` | `TimeSeries`, `Cumulative`, `DielCycle`, `HeatmapDateTime` |
+| `dv.gapfilling` | `RandomForestTS`, `XGBoostTS`, `FluxMDS` |
+| `dv.analysis` | `GridAggregator`, `SeasonalTrendDecomposition`, `BinFitterCP` |
+| `dv.flux` | `run_chain`, `FluxConfig`, `FluxDetectionLimit`, `WindDoubleRotation` |
+| `dv.outliers` / `dv.corrections` / `dv.qaqc` | outlier methods, offset corrections, `FlagQCF` |
+| `dv.times` / `dv.variables` | timestamp sanitization, derived variables (VPD, potential radiation, ...) |
 
-For the full list, see `diive.__all__`.
+A few I/O helpers are top-level: `dv.load_parquet`, `dv.save_parquet`, `dv.load_exampledata_parquet`.
+
+For the full list, see `diive.__all__` and each namespace's `__all__`.
 
 ---
 
 ## Examples
 
-104 runnable examples are organized by topic in [examples/](examples/README.md). They follow Sphinx Gallery format (`# %%` sections), so they run as plain scripts and convert to HTML docs automatically. Browse by use case in [CATALOG.md](examples/CATALOG.md), or check [EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md) for documentation of the 37-variable dataset used throughout.
+105 runnable examples are organized by topic in [examples/](examples/README.md). They follow Sphinx Gallery format (`# %%` sections), so they run as plain scripts and convert to HTML docs automatically. Browse by use case in [CATALOG.md](examples/CATALOG.md), or check [EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md) for documentation of the 37-variable dataset used throughout.
 
 ```bash
 uv run python examples/visualization/plot_heatmap_datetime_basic.py
