@@ -666,6 +666,57 @@ class MlRegressorGapFillingBase:
                 f"- R2:    {scores_tt['r2']}\n"
             )
 
+    @staticmethod
+    def _build_tree_explainer(model):
+        """Build a shap TreeExplainer, scoping the XGBoost base_score parse
+        workaround to shap's own module namespace (see _shap_importance)."""
+        try:
+            from shap.explainers import _tree as _shap_tree
+        except ImportError:
+            # Unexpected shap layout: fall back to the native path.
+            return shap.TreeExplainer(model)
+
+        _real_float = _shap_tree.__dict__.get('float', float)
+        _real_ast = getattr(_shap_tree, 'ast', None)
+
+        def _patched_float(x):
+            """Strip XGBoost's enclosing brackets, e.g. '[-4.12E0]' -> -4.12."""
+            if isinstance(x, str):
+                stripped = x.strip('[]')
+                if stripped != x:
+                    return _real_float(stripped)
+            return _real_float(x)
+
+        class _AstShim:
+            """Delegates to the real ast, but strips XGBoost's brackets first."""
+
+            def literal_eval(self, s):
+                if isinstance(s, str):
+                    stripped = s.strip()
+                    if stripped.startswith('[') and stripped.endswith(']'):
+                        try:
+                            return [float(stripped[1:-1].strip())]
+                        except ValueError:
+                            pass
+                return _real_ast.literal_eval(s)
+
+            def __getattr__(self, name):
+                return getattr(_real_ast, name)
+
+        had_float = 'float' in _shap_tree.__dict__
+        _shap_tree.float = _patched_float
+        if _real_ast is not None:
+            _shap_tree.ast = _AstShim()
+        try:
+            return shap.TreeExplainer(model)
+        finally:
+            if had_float:
+                _shap_tree.float = _real_float
+            else:
+                del _shap_tree.float
+            if _real_ast is not None:
+                _shap_tree.ast = _real_ast
+
     def _shap_importance(self, model, X, X_names) -> DataFrame:
         """
         Calculate SHAP-based feature importance.
@@ -674,48 +725,17 @@ class MlRegressorGapFillingBase:
         Returns mean absolute SHAP values as feature importance.
         """
 
-        # Create explainer and calculate SHAP values
-        # XGBoost stores base_score internally as '[-3.18E0]' (bracket-enclosed scientific
-        # notation). Older shap versions parsed this via float(), newer ones use
-        # ast.literal_eval(). Python 3.13 tightened ast.literal_eval and rejects this
-        # format. Patch both entry points so the explainer initialises cleanly regardless
-        # of the shap/Python version combination in use.
-        import ast
-        import builtins
-
-        _builtin_float = float
-
-        def _patched_float(x):
-            """Handle bracket-enclosed scientific notation like '[-4.121306E0]'."""
-            if isinstance(x, str):
-                x_stripped = x.strip('[]')
-                if x_stripped != x:
-                    return _builtin_float(x_stripped)
-            return _builtin_float(x)
-
-        _original_literal_eval = ast.literal_eval
-
-        def _patched_literal_eval(s):
-            """Handle bracket-enclosed scientific notation that Python 3.13 rejects."""
-            if isinstance(s, str):
-                stripped = s.strip()
-                if stripped.startswith('[') and stripped.endswith(']'):
-                    inner = stripped[1:-1].strip()
-                    try:
-                        return [float(inner)]
-                    except ValueError:
-                        pass
-            return _original_literal_eval(s)
-
-        builtins.float = _patched_float
-        ast.literal_eval = _patched_literal_eval
-
-        try:
-            explainer = shap.TreeExplainer(model)
-        finally:
-            builtins.float = _builtin_float
-            ast.literal_eval = _original_literal_eval
-
+        # Create explainer and calculate SHAP values.
+        # XGBoost serializes base_score as bracket-enclosed scientific notation
+        # (e.g. '[-3.18E0]'). Depending on the shap/Python combination, shap's tree
+        # loader parses this via builtins float() (older shap, which a bare '[..]'
+        # string breaks) or via ast.literal_eval() (newer shap, which Python 3.13
+        # tightened). We override these ONLY inside shap's tree-explainer module
+        # namespace — never process-global builtins.float / ast — so concurrent
+        # threads (e.g. joblib parallel gap-filling) are unaffected. This works
+        # because a bare float() call inside shap resolves against that module's
+        # globals before falling back to builtins.
+        explainer = self._build_tree_explainer(model)
         shap_values = explainer.shap_values(X)
 
         # Handle case where shap_values is a list (for some model types)
