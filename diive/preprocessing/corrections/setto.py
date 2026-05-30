@@ -145,13 +145,14 @@ def setto_threshold(series: Series,
     flag = pd.Series(index=series.index, data=np.nan)
 
     # Detect values over threshold
-    over_thres_ix = range_ok_ix = None
     if type == 'max':
         over_thres_ix = series > threshold
         range_ok_ix = series <= threshold
-    if type == 'min':
+    elif type == 'min':
         over_thres_ix = series < threshold
         range_ok_ix = series >= threshold
+    else:
+        raise ValueError(f"type must be 'min' or 'max', got {type!r}.")
 
     flag.loc[over_thres_ix] = 1
     flag.loc[range_ok_ix] = 0

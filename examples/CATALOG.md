@@ -38,6 +38,7 @@ New to diive? Start with the **[Cookbook](COOKBOOK.md)** — 6 minimal workflows
 | [**plot_histogram_yearly.py**](visualization/plot_histogram_yearly.py) | Yearly comparison histograms for temporal patterns |
 | [**plot_ridgeline_basic.py**](visualization/plot_ridgeline_basic.py) | Ridge line plots with weekly grouping |
 | [**plot_ridgeline_advanced.py**](visualization/plot_ridgeline_advanced.py) | Ridge line plots with monthly grouping |
+| [**plot_shifted_distribution.py**](visualization/plot_shifted_distribution.py) | Distribution shift between a reference and comparison period with color-coded zones |
 | [**plot_other_plots.py**](visualization/plot_other_plots.py) | Specialized plot types (long-term anomalies, trends) |
 | [**plot_treering_temperature.py**](visualization/plot_treering_temperature.py) | Tree-ring spiral plot: annual rings with color-coded values, month labels, year separators, colorbar extension |
 | [**plot_treering_line_temperature.py**](visualization/plot_treering_line_temperature.py) | Tree-ring radial line plot: each year as a line trace around a full circle, single-color and per-year colormap variants with optional fill |
@@ -75,7 +76,6 @@ See: [analysis/README.md](analysis/README.md)
 | [**times_frequency_detection.py**](times/times_frequency_detection.py) | Auto-detect time resolution with confidence scoring and alternative frequencies |
 | [**times_diel_cycles.py**](times/times_diel_cycles.py) | Calculate hourly aggregation patterns (annual and monthly diel cycles) |
 | [**times_temporal_matrices.py**](times/times_temporal_matrices.py) | Convert time series to year × month matrix for heatmap visualization |
-| [**times_time_features.py**](times/times_time_features.py) | Extract ML-ready temporal features (year, month, hour) with sin/cos encoding |
 | [**times_statistics.py**](times/times_statistics.py) | Quick statistical profiling and data quality assessment |
 
 See: [times/README.md](times/README.md)

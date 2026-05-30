@@ -299,7 +299,7 @@ class TimeSeries:
             >>> ts.plot(title='Same Data, Different Style')  # New figure with different styling
         """
         # Create axis
-        if ax:
+        if ax is not None:
             # If ax is given, plot directly to ax, no fig needed
             self.fig = None
             self.ax = ax

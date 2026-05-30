@@ -61,8 +61,8 @@ class XGBoostTS(MlRegressorGapFillingBase):
             scores_: Model performance metrics (MAE, RMSE, R²).
 
         Examples:
-            See examples/pkgs/gapfilling/gapfill_xgboost_ts.py for complete example.
-            See examples/pkgs/gapfilling/gapfill_comparison.py for side-by-side comparison
+            See examples/gapfilling/gapfill_xgboost.py for complete example.
+            See examples/gapfilling/gapfill_comparison.py for side-by-side comparison
             with MDS and Random Forest gap-filling.
         """
 

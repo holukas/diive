@@ -28,6 +28,7 @@ EXAMPLE_FILES = [
     'visualization/plot_timeseries.py',
     'visualization/plot_timeseries_interactive.py',
     'visualization/plot_timeseries_rangetool.py',
+    'visualization/plot_shifted_distribution.py',
     'visualization/plot_dielcycle.py',
     'visualization/plot_histogram_basic.py',
     'visualization/plot_histogram_yearly.py',
@@ -40,7 +41,6 @@ EXAMPLE_FILES = [
     # Times
     'times/times_timestamp_sanitizer.py',
     'times/times_frequency_detection.py',
-    'times/times_time_features.py',
     'times/times_diel_cycles.py',
     'times/times_temporal_matrices.py',
     'times/times_statistics.py',
