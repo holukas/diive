@@ -1,5 +1,6 @@
 import unittest
 
+import numpy as np
 import pandas as pd
 
 import diive as dv
@@ -128,6 +129,45 @@ class TestCreateVar(unittest.TestCase):
         # outpath = Path(r"F:\TMP") / 'ts_full_results.csv'
         # ts_full_results.to_csv(outpath, index=False)
         # ts_series = ts.get_timesince()
+
+    def test_aerodynamic_resistance(self):
+        from diive.variables import aerodynamic_resistance
+        u = pd.Series([2.0, 4.0, 1.0, 3.0], name='u')
+        ustar = pd.Series([0.5, 0.4, 0.0, 0.5], name='ustar')  # ustar=0 -> NaN
+        ra = aerodynamic_resistance(u_ms=u, ustar_ms=ustar)
+        # ra = u / ustar^2
+        self.assertAlmostEqual(ra.iloc[0], 2.0 / 0.5 ** 2, places=6)
+        self.assertAlmostEqual(ra.iloc[1], 4.0 / 0.4 ** 2, places=6)
+        self.assertTrue(np.isnan(ra.iloc[2]))  # ustar <= 0 -> NaN
+
+    def test_dry_air_density(self):
+        from diive.variables import dry_air_density
+        rho_a = pd.Series([1.20, 1.18, 1.22], name='rho_a')
+        rho_v = pd.Series([0.01, 0.012, 0.009], name='rho_v')
+        rho_d = dry_air_density(rho_a=rho_a, rho_v=rho_v)
+        self.assertTrue(np.allclose(rho_d.to_numpy(), (rho_a - rho_v).to_numpy()))
+
+    def test_latent_heat_of_vaporization(self):
+        from diive.variables import latent_heat_of_vaporization
+        ta = pd.Series([0.0, 20.0, 30.0], name='ta')
+        lv = latent_heat_of_vaporization(ta=ta)
+        # (2.501 - 0.00237*ta) * 1e6
+        self.assertAlmostEqual(lv.iloc[0], 2.501e6, places=0)
+        self.assertAlmostEqual(lv.iloc[1], (2.501 - 0.00237 * 20.0) * 1e6, places=0)
+        # decreases with temperature, stays in a physical range (~2.4-2.5 MJ/kg)
+        self.assertTrue(lv.iloc[2] < lv.iloc[1] < lv.iloc[0])
+        self.assertTrue((lv > 2.4e6).all() and (lv < 2.55e6).all())
+
+    def test_potrad(self):
+        from diive.variables import potrad
+        # One summer day at 30-min resolution, mid-latitude.
+        idx = pd.date_range('2022-06-21 00:00', '2022-06-21 23:30', freq='30min', name='TIMESTAMP_END')
+        swin_pot = potrad(timestamp_index=idx, lat=47.0, lon=8.0, utc_offset=1)
+        self.assertEqual(len(swin_pot), len(idx))
+        self.assertTrue((swin_pot >= 0).all())          # never negative
+        self.assertGreater(swin_pot.max(), 700)         # strong midday clear-sky radiation
+        # Deep night (around local midnight) is zero.
+        self.assertEqual(swin_pot.loc['2022-06-21 00:00':'2022-06-21 01:00'].max(), 0)
 
 
 if __name__ == '__main__':

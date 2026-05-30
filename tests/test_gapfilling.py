@@ -208,6 +208,29 @@ class TestGapFilling(unittest.TestCase):
         # The gap-filled series is complete (no remaining gaps).
         self.assertEqual(int(gf.isna().sum()), 0)
 
+    def test_swin_gapfiller(self):
+        """SW_IN gap-filling with the physical nighttime constraint."""
+        import pandas as pd
+        from diive.gapfilling.swin import SWINGapFillerXGBoost
+        from diive.variables import potrad
+        lat, lon, utc = 47.0, 8.0, 1
+        idx = pd.date_range('2022-06-01', '2022-06-30 23:30', freq='30min', name='TIMESTAMP_END')
+        pot = potrad(timestamp_index=idx, lat=lat, lon=lon, utc_offset=utc)
+        rng = np.random.RandomState(0)
+        swin = (pot * (0.7 + 0.3 * rng.rand(len(idx)))).clip(lower=0)  # cloudy modulation
+        swin.name = 'SW_IN'
+        swin_gappy = swin.copy()
+        swin_gappy[rng.rand(len(idx)) < 0.3] = np.nan  # punch ~30% gaps
+
+        g = SWINGapFillerXGBoost(series=swin_gappy, lat=lat, lon=lon, utc_offset=utc, verbose=0)
+        g.run()
+        gf = g.results.gapfilled
+        self.assertEqual(int(gf.isna().sum()), 0)   # complete after gap-filling
+        self.assertTrue((gf >= 0).all())            # radiation is non-negative
+        # Nighttime (SW_IN_POT below threshold) is forced to ~0 by physics.
+        night = pot < 0.001
+        self.assertLess(float(gf[night].abs().max()), 1.0)
+
     def test_gapfilling_randomforest(self):
         """Fill gaps using random forest"""
         df = ed.load_exampledata_parquet()

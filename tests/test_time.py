@@ -87,6 +87,42 @@ class TestTime(unittest.TestCase):
         self.assertEqual(df.index.name, 'TIMESTAMP_END')
         self.assertEqual(df.index.freqstr, 'min')
 
+    def test_sanitizer_sorts_and_deduplicates(self):
+        from diive.core.times.times import TimestampSanitizer
+        base = pd.date_range('2022-01-01 00:00', periods=5, freq='30min')
+        # Unsorted, with one duplicate timestamp.
+        idx = pd.DatetimeIndex([base[2], base[0], base[1], base[1], base[3], base[4]],
+                               name='TIMESTAMP_END')
+        s = pd.Series(range(len(idx)), index=idx, name='x', dtype=float)
+        clean = TimestampSanitizer(data=s, validate_naming=False, output_middle_timestamp=False,
+                                   regularize=True, verbose=False).get()
+        self.assertTrue(clean.index.is_monotonic_increasing)
+        self.assertFalse(clean.index.has_duplicates)
+        self.assertEqual(len(clean), 5)  # 6 input rows, 1 duplicate removed
+
+    def test_sanitizer_regularizes_gaps(self):
+        from diive.core.times.times import TimestampSanitizer
+        full = pd.date_range('2022-01-01 00:00', periods=10, freq='30min', name='TIMESTAMP_END')
+        # Drop two interior timestamps to create gaps.
+        idx = full.delete([4, 7])
+        s = pd.Series(1.0, index=idx, name='x')
+        clean = TimestampSanitizer(data=s, validate_naming=False, output_middle_timestamp=False,
+                                   regularize=True, nominal_freq='30min', verbose=False).get()
+        # Regularization restores the continuous 30-min grid; gaps become NaN rows.
+        self.assertEqual(len(clean), 10)
+        self.assertEqual(int(clean.isna().sum()), 2)
+        self.assertEqual(clean.index.freqstr, '30min')
+
+    def test_sanitizer_irregular_raises(self):
+        from diive.core.times.times import TimestampSanitizer
+        # Highly irregular timestamps: no frequency can be detected.
+        idx = pd.DatetimeIndex(['2022-01-01 00:00', '2022-01-01 00:03', '2022-01-01 01:17',
+                                '2022-01-02 09:00', '2022-01-05 23:41'], name='TIMESTAMP_END')
+        s = pd.Series(range(len(idx)), index=idx, name='x', dtype=float)
+        with self.assertRaises(RuntimeError):
+            TimestampSanitizer(data=s, validate_naming=False, output_middle_timestamp=False,
+                               regularize=True, verbose=False).get()
+
 
 if __name__ == '__main__':
     unittest.main()

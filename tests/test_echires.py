@@ -57,6 +57,33 @@ class TestEcHires(unittest.TestCase):
         # Check the detection limit follows 3 * RMSE rule
         self.assertEqual(detection_limit, 3 * noise_rmse)
 
+    def test_reynolds_decomposition(self):
+        import numpy as np
+        from diive.flux import reynolds_decomposition
+        x = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0], name='w')
+        xprime = reynolds_decomposition(x)
+        # x' = x - mean(x); fluctuations sum to (approximately) zero
+        self.assertAlmostEqual(xprime.mean(), 0.0, places=10)
+        self.assertTrue(np.allclose(xprime.to_numpy(), x.to_numpy() - x.mean()))
+        self.assertEqual(xprime.name, 'w')
+
+    def test_wind_double_rotation(self):
+        import numpy as np
+        from diive.flux import WindDoubleRotation
+        rng = np.random.RandomState(0)
+        n = 2000
+        # Mean wind tilted in both horizontal and vertical: u has offset, v and w
+        # carry a mean (tilt) plus turbulence.
+        u = pd.Series(3.0 + rng.normal(0, 0.5, n), name='u')
+        v = pd.Series(1.0 + rng.normal(0, 0.5, n), name='v')
+        w = pd.Series(0.4 + rng.normal(0, 0.2, n), name='w')
+        wr = WindDoubleRotation(u=u, v=v, w=w)
+        # After double rotation: mean(v2) and mean(w2) are ~0 (defining property),
+        # and the rotated streamwise component aligns with the mean horizontal wind.
+        self.assertAlmostEqual(wr.v2.mean(), 0.0, places=8)
+        self.assertAlmostEqual(wr.w2.mean(), 0.0, places=8)
+        self.assertGreater(wr.u2.mean(), 0.0)
+
 
 if __name__ == '__main__':
     unittest.main()
