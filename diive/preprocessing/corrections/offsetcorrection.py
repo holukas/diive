@@ -65,7 +65,7 @@ class MeasurementOffsetFromReplicate:
         self.n_digits_after_comma = abs(d.as_tuple().exponent)
 
         # Find the best-fitting constant offset.
-        self.offset = self._calc_shift_correlations()
+        self.offset = self._find_best_offset()
 
         # Apply it to the measurement.
         self.measurement_corrected = self._correct_measurement()
@@ -81,8 +81,9 @@ class MeasurementOffsetFromReplicate:
         measurement_corrected = self.measurement.add(self.offset)
         return measurement_corrected
 
-    def _calc_shift_correlations(self):
-        """ """
+    def _find_best_offset(self):
+        """Scan candidate offsets and return the one minimizing the summed
+        absolute difference between the offset-shifted measurement and the replicate."""
         m = self.measurement.copy()
         r = self.replicate.copy()
         offsets_df = pd.DataFrame(columns=['OFFSET', 'ABS_DIFF'])

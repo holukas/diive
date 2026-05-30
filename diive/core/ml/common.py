@@ -81,14 +81,6 @@ class MlRegressorGapFillingBase:
                 Regressor-specific hyperparameters passed to the sklearn regressor.
                 For RandomForestRegressor: n_estimators, max_depth, min_samples_split, etc.
                 For XGBRegressor: n_estimators, max_depth, learning_rate, early_stopping_rounds, etc.
-                Effect on Data: De-trends data (removes level); DIFF1 makes I(1) series I(0);
-                DIFF2 captures acceleration (useful for curvature). Emphasizes transitions.
-                Advantages: Captures change velocity essential for forecasting turning points;
-                computationally trivial; no NaN inflation.
-                Disadvantages: Loses level information (absolute value); amplifies noise
-                (high-frequency components); DIFF2 extremely noisy unless data is smooth.
-                Example: features_diff=[1, 2] creates 1st and 2nd order differences.
-                Column naming: '.{col}_DIFF{order}' (e.g., '.Tair_f_DIFF1', '.Tair_f_DIFF2').
 
         Attributes:
             model_: Trained regressor instance.
@@ -201,7 +193,7 @@ class MlRegressorGapFillingBase:
 
     @property
     def model_(self):
-        """Return model, trained on test data"""
+        """Return the model (trained on the training set)."""
         if not self._model:
             raise Exception(f'Not available: model.')
         return self._model

@@ -144,7 +144,10 @@ class OptimizeParamsTS:
                                  target_col=self.target_col,
                                  complete_rows=True)
 
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
+        # shuffle=False keeps the rows in chronological order: the holdout is the
+        # last 25%, and TimeSeriesSplit (below) requires time-ordered data to give
+        # leakage-free folds. A shuffled split would defeat that.
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, shuffle=False)
 
         # Calculate total combinations for progress tracking
         total_combinations = 1
