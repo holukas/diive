@@ -478,7 +478,7 @@ def _example_longterm_xgbts():
         # excl_years_from_reference=None,
         excl_years_from_reference=[2008, 2009],
         # highlight_year=2022,
-        highlight_year_color='#F44336').plot()
+    ).plot(highlight_year_color='#F44336')
 
 
 def _example_longterm_rfts():
@@ -608,7 +608,7 @@ def _example_longterm_rfts():
         # excl_years_from_reference=None,
         excl_years_from_reference=[2008, 2009],
         # highlight_year=2022,
-        highlight_year_color='#F44336').plot()
+    ).plot(highlight_year_color='#F44336')
 
 
 if __name__ == '__main__':

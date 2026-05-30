@@ -38,13 +38,13 @@ hm = dv.plotting.HexbinPlot(
     normalize_axes=True,  # Data: use percentile scale (0-100)
     gridsize=11,  # Data: number of hexagons per side
     mincnt=5,  # Data: hide bins with fewer than 5 values
-    xlabel='Air temperature (percentile)',
-    ylabel='Vapor pressure deficit (percentile)',
-    zlabel='NEE aggregated'
 )
 hm.plot(
     ax=None,  # Create new figure
     cmap='RdYlBu_r',  # Styling: colormap name
+    xlabel='Air temperature (percentile)',  # Styling: axis labels
+    ylabel='Vapor pressure deficit (percentile)',
+    zlabel='NEE aggregated',
     show_values=True,  # Styling: don't show values on hexagons
     cb_digits_after_comma=1  # Styling: colorbar decimal places
 )

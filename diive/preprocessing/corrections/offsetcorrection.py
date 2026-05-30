@@ -394,7 +394,7 @@ class WindDirOffset:
                 s_year_shifted = s_year.copy()
                 s_year_shifted += shift
                 s_year_shifted = self._correct_degrees(s=s_year_shifted)
-                histo_shifted = Histogram(s=s_year_shifted, method='n_bins', n_bins=360)
+                histo_shifted = Histogram(series=s_year_shifted, method='n_bins', n_bins=360)
                 results_shifted = histo_shifted.results
                 corr_abs = abs(results_shifted['COUNTS'].corr(self.ref_results['COUNTS']))
                 shiftdf_year.loc[len(shiftdf_year)] = [shift, corr_abs]
@@ -413,6 +413,6 @@ class WindDirOffset:
         """Calculate reference histogram"""
         select_years = self.winddir.index.year.isin(self.hist_ref_years)
         ref_s = self.winddir[select_years]
-        ref_histo = Histogram(s=ref_s, method='n_bins', n_bins=self.hist_n_bins)
+        ref_histo = Histogram(series=ref_s, method='n_bins', n_bins=self.hist_n_bins)
         ref_results = ref_histo.results
         return ref_results

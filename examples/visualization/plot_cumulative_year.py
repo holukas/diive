@@ -42,8 +42,7 @@ dv.plotting.CumulativeYear(
     end_year=2019,
     show_reference=True,
     excl_years_from_reference=None,
-    highlight_year_color='#F44336'
-).plot()
+).plot(highlight_year_color='#F44336')
 
 print("\nPlotted yearly cumulative sums with reference band (2015-2017 baseline)")
 
@@ -62,8 +61,7 @@ dv.plotting.CumulativeYear(
     show_reference=True,
     excl_years_from_reference=None,
     highlight_year=2017,
-    highlight_year_color='#F44336'
-).plot()
+).plot(highlight_year_color='#F44336')
 
 print("Plotted yearly cumulative sums with year 2017 highlighted")
 print("Highlighting enables easy identification of outlier years and trends")

@@ -40,6 +40,8 @@ Example with absolute values::
     hm.show()
 """
 
+import warnings
+
 import numpy as np
 
 from diive.core.plotting.heatmap_base import HeatmapBase
@@ -71,7 +73,7 @@ class HexbinPlot(HeatmapBase):
                  reduce_C_function=np.median,
                  normalize_axes: bool = False,
                  mincnt: int = 0,
-                 edgecolors: str = 'none',
+                 edgecolors: str = None,
                  xlabel: str = None,
                  ylabel: str = None,
                  zlabel: str = None,
@@ -125,6 +127,12 @@ class HexbinPlot(HeatmapBase):
         self.reduce_C_function = reduce_C_function
         self.normalize_axes = normalize_axes
         self.mincnt = mincnt
+
+        # Styling belongs in plot(); these are kept here only as deprecated
+        # pass-throughs (labels still auto-default from the data's .name).
+        if any(v is not None for v in (edgecolors, xlabel, ylabel, zlabel)):
+            warnings.warn("HexbinPlot: `edgecolors`/`xlabel`/`ylabel`/`zlabel` in the constructor "
+                          "are deprecated; pass them to plot() instead.", DeprecationWarning, stacklevel=2)
         self.edgecolors = edgecolors
 
         # Store original Series
@@ -250,6 +258,9 @@ class HexbinPlot(HeatmapBase):
              vmax: float = None,
              cmap: str = 'RdYlBu_r',
              zlabel: str = None,
+             xlabel: str = None,
+             ylabel: str = None,
+             edgecolors: str = None,
              cb_digits_after_comma: int = 2,
              cb_labelsize: float = None,
              cb_extend: str = None,
@@ -299,9 +310,16 @@ class HexbinPlot(HeatmapBase):
         Returns:
             None (displays plot if ax=None, otherwise renders on provided axes)
         """
-        # Use provided zlabel or fall back to __init__ value
+        # Use the provided styling, or fall back to the (deprecated) __init__
+        # value. Labels auto-default from the data's .name (set in __init__).
         if zlabel is None:
             zlabel = self.zlabel
+        if xlabel is None:
+            xlabel = self.xlabel
+        if ylabel is None:
+            ylabel = self.ylabel
+        if edgecolors is None:
+            edgecolors = self.edgecolors if self.edgecolors is not None else 'none'
 
         # Use theme defaults if not provided
         if cb_labelsize is None:
@@ -371,7 +389,7 @@ class HexbinPlot(HeatmapBase):
             reduce_C_function=self.reduce_C_function,
             mincnt=self.mincnt,
             cmap=cmap,
-            edgecolors=self.edgecolors,
+            edgecolors=edgecolors,
             linewidths=1,
             vmin=vmin,
             vmax=vmax,
@@ -383,8 +401,8 @@ class HexbinPlot(HeatmapBase):
         self.ax.apply_aspect()
 
         # Format axes with styling
-        self.ax.set_xlabel(self.xlabel, fontsize=axlabels_fontsize)
-        self.ax.set_ylabel(self.ylabel, fontsize=axlabels_fontsize)
+        self.ax.set_xlabel(xlabel, fontsize=axlabels_fontsize)
+        self.ax.set_ylabel(ylabel, fontsize=axlabels_fontsize)
         self.ax.xaxis.set_tick_params(labelsize=ticks_labelsize)
         self.ax.yaxis.set_tick_params(labelsize=ticks_labelsize)
 
@@ -393,4 +411,4 @@ class HexbinPlot(HeatmapBase):
             self.show_vals_in_plot()
 
         # Apply base formatting (title, colorbar, spines, grid, etc.)
-        self.format(plot=self.p, ax_xlabel_txt=self.xlabel, ax_ylabel_txt=self.ylabel)
+        self.format(plot=self.p, ax_xlabel_txt=xlabel, ax_ylabel_txt=ylabel)

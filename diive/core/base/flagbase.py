@@ -292,9 +292,9 @@ class FlagBase:
                           alpha=.9, color='red', label=f"outlier ({df['OUTLIER_NT'].count()} values)")
 
         # Column 1
-        HistogramPlot(s=df['UNFILTERED'], **hist_computation_kwargs).plot(ax=ax_series_hist, **hist_styling_kwargs)
-        HistogramPlot(s=df['UNFILTERED_DT'], **hist_computation_kwargs).plot(ax=ax_series_dt_hist, **hist_styling_kwargs)
-        HistogramPlot(s=df['UNFILTERED_NT'], **hist_computation_kwargs).plot(ax=ax_series_nt_hist, **hist_styling_kwargs)
+        HistogramPlot(series=df['UNFILTERED'], **hist_computation_kwargs).plot(ax=ax_series_hist, **hist_styling_kwargs)
+        HistogramPlot(series=df['UNFILTERED_DT'], **hist_computation_kwargs).plot(ax=ax_series_dt_hist, **hist_styling_kwargs)
+        HistogramPlot(series=df['UNFILTERED_NT'], **hist_computation_kwargs).plot(ax=ax_series_nt_hist, **hist_styling_kwargs)
 
         # Column 2
         ax_cleaned.plot(df.index, df['CLEANED'], label=f"cleaned ({df['CLEANED'].count()} values)", **series_kwargs)
@@ -304,9 +304,9 @@ class FlagBase:
                            **series_kwargs)
 
         # Column 3
-        HistogramPlot(s=df['CLEANED'], **hist_computation_kwargs).plot(ax=ax_cleaned_hist, **hist_styling_kwargs)
-        HistogramPlot(s=df['CLEANED_DT'], **hist_computation_kwargs).plot(ax=ax_cleaned_dt_hist, **hist_styling_kwargs)
-        HistogramPlot(s=df['CLEANED_NT'], **hist_computation_kwargs).plot(ax=ax_cleaned_nt_hist, **hist_styling_kwargs)
+        HistogramPlot(series=df['CLEANED'], **hist_computation_kwargs).plot(ax=ax_cleaned_hist, **hist_styling_kwargs)
+        HistogramPlot(series=df['CLEANED_DT'], **hist_computation_kwargs).plot(ax=ax_cleaned_dt_hist, **hist_styling_kwargs)
+        HistogramPlot(series=df['CLEANED_NT'], **hist_computation_kwargs).plot(ax=ax_cleaned_nt_hist, **hist_styling_kwargs)
 
         for a in axes_series:
             default_format(ax=a, ax_ylabel_txt="value")

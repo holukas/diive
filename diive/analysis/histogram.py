@@ -8,6 +8,7 @@ Supports fringe bin removal and detailed bin-wise statistics.
 Part of the diive library: https://github.com/holukas/diive
 """
 
+import warnings
 from typing import Literal
 
 import numpy as np
@@ -18,14 +19,15 @@ from pandas import DataFrame, Series
 class Histogram:
 
     def __init__(self,
-                 s: Series,
+                 series: Series = None,
                  method: Literal['n_bins', 'uniques'] = 'n_bins',
                  n_bins: int = 10,
-                 ignore_fringe_bins: list = None):
+                 ignore_fringe_bins: list = None,
+                 s: Series = None):
         """Calculate histogram from Series.
 
         Args:
-            s: A pandas Series.
+            series: A pandas Series.
             method: Method used for binning data
                 Options:
                     - 'uniques': Each unique value in the dataset is a separate bin
@@ -35,22 +37,32 @@ class Histogram:
                 If a list is provided, then the first i and last j number of
                 bins are removed from the results and ignored during
                 distribution analysis.
+            s: Deprecated alias for *series*.
 
         Properties:
             .results: Histogram results as DataFrame with BIN_START_INCL and COUNTS columns
             .peakbins: Top 5 bins by count
 
         Example:
-            See `examples/pkgs/analysis/analysis_histogram_distribution.py` for complete examples.
+            See `examples/analysis/analysis_histogram_distribution.py` for complete examples.
 
         See Also:
             Histogram : This class.
         """
+        # `s` is the deprecated name for `series` (renamed for consistency with
+        # the other diive classes, which all take `series`).
+        if s is not None:
+            warnings.warn("Histogram: the `s` argument is deprecated, use `series` instead.",
+                          DeprecationWarning, stacklevel=2)
+            series = s if series is None else series
+        if series is None:
+            raise ValueError("Histogram requires `series`.")
+
         self.method = method
         self.n_bins = n_bins
         self.ignore_edge_bins = ignore_fringe_bins
 
-        self.series = s.copy().dropna().to_numpy()
+        self.series = series.copy().dropna().to_numpy()
         self._results_df = None
 
         self._calc()

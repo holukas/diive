@@ -1,5 +1,5 @@
 import math
-
+import warnings
 
 import pandas as pd
 
@@ -21,7 +21,7 @@ class HistogramPlot:
     Visualize data distribution with optional z-score overlay and peak bin highlighting.
 
     Args:
-        s: Series to plot
+        series: Series to plot
         method: Binning method (e.g., 'n_bins')
         n_bins: Number of bins for histogram (int or list)
         ignore_fringe_bins: Whether to ignore fringe bins
@@ -29,17 +29,28 @@ class HistogramPlot:
     Call `plot()` to render with styling options (title, labels, display options).
 
     See Also:
-        examples/core/visualization/plot_histogram.py — Histogram variations with z-score overlays
+        examples/visualization/plot_histogram_basic.py — Histogram variations with z-score overlays
     """
 
-    def __init__(self, s: Series, method, n_bins: int or list = None, ignore_fringe_bins: list = False):
+    def __init__(self, series: Series = None, method=None, n_bins: int or list = None,
+                 ignore_fringe_bins: list = False, s: Series = None):
 
-        self.s = s
+        # `s` is the deprecated name for `series` (renamed for consistency with
+        # the other plotting classes, which all take `series`).
+        if s is not None:
+            warnings.warn("HistogramPlot: the `s` argument is deprecated, use `series` instead.",
+                          DeprecationWarning, stacklevel=2)
+            series = s if series is None else series
+        if series is None:
+            raise ValueError("HistogramPlot requires `series`.")
+
+        self.series = series
+        self.s = series  # internal alias retained for backwards compatibility
         self.method = method
         self.n_bins = n_bins
         self.ignore_fringe_bins = ignore_fringe_bins
-        self.first_date = s.index[0]
-        self.last_date = s.index[-1]
+        self.first_date = series.index[0]
+        self.last_date = series.index[-1]
 
         self.fig = None
         self.ax = None

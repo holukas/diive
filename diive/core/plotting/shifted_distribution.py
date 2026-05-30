@@ -9,6 +9,8 @@ reference period's standard deviation (Hansen et al. methodology).
 Part of the diive library: https://github.com/holukas/diive
 """
 
+import warnings
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
@@ -32,13 +34,12 @@ class ShiftedDistributionPlot:
         series: Time-indexed Series with the variable to plot.
         ref_period: (start, end) date strings for the reference period.
         comp_period: (start, end) date strings for the comparison period.
-        zone_labels: 5 zone labels from lowest to highest. Defaults to temperature labels.
-        zone_colors: 5 fill colors for the zones (lowest to highest).
 
-    Call `plot()` to render with styling options.
+    Call `plot()` to render with styling options (including ``zone_labels`` and
+    ``zone_colors``).
 
     See Also:
-        examples/core/visualization/plot_shifted_distribution.py
+        examples/visualization/plot_shifted_distribution.py
     """
 
     _DEFAULT_LABELS = ['Extremely cold', 'Cold', 'Normal', 'Hot', 'Extremely hot']
@@ -55,8 +56,12 @@ class ShiftedDistributionPlot:
         self.series = series
         self.ref_period = ref_period
         self.comp_period = comp_period
-        self.zone_labels = zone_labels or self._DEFAULT_LABELS
-        self.zone_colors = zone_colors or self._DEFAULT_COLORS
+        # Styling belongs in plot(); kept here only as deprecated pass-throughs.
+        if zone_labels is not None or zone_colors is not None:
+            warnings.warn("ShiftedDistributionPlot: `zone_labels`/`zone_colors` in the constructor "
+                          "are deprecated; pass them to plot() instead.", DeprecationWarning, stacklevel=2)
+        self.zone_labels = zone_labels
+        self.zone_colors = zone_colors
 
         self.fig = None
         self.ax = None
@@ -108,6 +113,8 @@ class ShiftedDistributionPlot:
         show_xaxis: bool = True,
         show_yaxis: bool = True,
         figsize: tuple = (16, 7),
+        zone_labels: list = None,
+        zone_colors: list = None,
     ):
         """Render the shifted distribution plot.
 
@@ -122,7 +129,14 @@ class ShiftedDistributionPlot:
             show_xaxis: Show x-axis spine, ticks, and tick labels (default True).
             show_yaxis: Show y-axis spine, ticks, and tick labels (default True).
             figsize: Figure size when ax is None.
+            zone_labels: 5 zone labels from lowest to highest. Defaults to temperature labels.
+            zone_colors: 5 fill colors for the zones (lowest to highest).
         """
+        # Resolve styling: plot() arg wins, then the (deprecated) constructor value,
+        # then the class defaults.
+        zone_labels = zone_labels or self.zone_labels or self._DEFAULT_LABELS
+        zone_colors = zone_colors or self.zone_colors or self._DEFAULT_COLORS
+
         self.ax = ax
         self.fig, self.ax, showplot = pf.setup_figax(ax=self.ax, figsize=figsize)
 
@@ -145,7 +159,7 @@ class ShiftedDistributionPlot:
             if mask.any():
                 self.ax.fill_between(
                     x[mask], self._comp_kde[mask],
-                    color=self.zone_colors[i], alpha=0.5, linewidth=0, zorder=2,
+                    color=zone_colors[i], alpha=0.5, linewidth=0, zorder=2,
                 )
 
         # Thin outline on comparison KDE
@@ -184,7 +198,7 @@ class ShiftedDistributionPlot:
         # Zone labels: text annotations just above the top spine, in data-x / axes-y coords
         trans = blended_transform_factory(self.ax.transData, self.ax.transAxes)
         label_positions = [(zone_edges[i] + zone_edges[i + 1]) / 2 for i in range(5)]
-        for pos, label, color in zip(label_positions, self.zone_labels, self.zone_colors):
+        for pos, label, color in zip(label_positions, zone_labels, zone_colors):
             self.ax.text(
                 pos, 1.01, label,
                 transform=trans, color=color, fontsize=11, fontweight='bold',

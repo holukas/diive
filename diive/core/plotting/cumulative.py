@@ -1,3 +1,5 @@
+import warnings
+
 from pandas import Series
 from pandas.core.interchange.dataframe_protocol import DataFrame
 
@@ -25,12 +27,12 @@ class CumulativeYear:
                  show_reference: bool = False,
                  excl_years_from_reference: list = None,
                  highlight_year: int = None,
-                 highlight_year_color: str = '#F44336'):
+                 highlight_year_color: str = None):
         """
 
         Args:
             series: Data for cumulative
-            ax: XXX
+            highlight_year_color: Deprecated — pass this styling option to plot() instead.
             yearly_end_date: Calculate cumulatives up to this date, given as string,
                 e.g. "08-11" means that cumulatives for each year are calculated until
                     11 August of each year.
@@ -48,6 +50,10 @@ class CumulativeYear:
         self.show_reference = show_reference
         self.excl_years_from_reference = excl_years_from_reference
         self.highlight_year = highlight_year
+        # Styling belongs in plot(); kept here only as a deprecated pass-through.
+        if highlight_year_color is not None:
+            warnings.warn("CumulativeYear: `highlight_year_color` in the constructor is deprecated; "
+                          "pass it to plot() instead.", DeprecationWarning, stacklevel=2)
         self.highlight_year_color = highlight_year_color
 
         self.series = self.series.dropna()
@@ -66,9 +72,10 @@ class CumulativeYear:
         # Remove data for DOY 366
         self.cumulatives_per_year_df = self.cumulatives_per_year_df.loc[self.cumulatives_per_year_df.index < 366]
 
-        # Create axis
-        self.fig, self.ax = pf.create_ax()
-        self.ax.xaxis.axis_date()
+        # Figure/axis are created in plot() (phase 2), or supplied by the caller.
+        self.fig = None
+        self.ax = None
+        self._own_fig = False
 
 
     def _add_reference(self, digits_after_comma):
@@ -99,7 +106,10 @@ class CumulativeYear:
     def _apply_format(self):
         title = f"Cumulatives per year ({self.uniq_years.min()}-{self.uniq_years.max()}), " \
                 f"until DOY {int(self.cumulatives_per_year_df.index[-1])}"
-        self.fig.suptitle(title, fontsize=theme.FIGHEADER_FONTSIZE)
+        if self._own_fig:
+            self.fig.suptitle(title, fontsize=theme.FIGHEADER_FONTSIZE)
+        else:
+            self.ax.set_title(title, fontsize=theme.FIGHEADER_FONTSIZE)
 
         ymin = self.cumulatives_per_year_df.min().min()
         ymax = self.cumulatives_per_year_df.max().max()
@@ -127,14 +137,29 @@ class CumulativeYear:
         return self.ax
 
 
-    def plot(self, showplot: bool = True, digits_after_comma: int = 2):
+    def plot(self, ax=None, showplot: bool = True, digits_after_comma: int = 2,
+             highlight_year_color: str = None):
+        # Phase 2: use the caller's axes, or create a standalone figure.
+        if ax is None:
+            self.fig, self.ax = pf.create_ax()
+            self._own_fig = True
+        else:
+            self.ax = ax
+            self.fig = ax.get_figure()
+            self._own_fig = False
+        self.ax.xaxis.axis_date()
+
+        # Resolve highlight color: plot() arg wins, then the (deprecated) constructor
+        # value, then the default.
+        hl_color = highlight_year_color or self.highlight_year_color or '#F44336'
+
         color_list = theme.colorwheel_36()  # get some colors
 
         # Plot yearly cumulatives
         for ix, year in enumerate(self.cumulatives_per_year_df.columns):
             label = f"{year}: {self.cumulatives_per_year_df[year].dropna().iloc[-1]:.{digits_after_comma}f}"
             lw = theme.WIDTH_LINE_WIDER if year == self.highlight_year else theme.WIDTH_LINE_DEFAULT
-            color = self.highlight_year_color if year == self.highlight_year else color_list[ix]
+            color = hl_color if year == self.highlight_year else color_list[ix]
 
             self.ax.plot(self.cumulatives_per_year_df.index,
                          self.cumulatives_per_year_df[year],
@@ -149,8 +174,10 @@ class CumulativeYear:
 
         self._apply_format()
 
-        if showplot:
+        if self._own_fig and showplot:
             self.fig.show()
+
+        return self.ax
 
 
 class Cumulative:
@@ -190,14 +217,18 @@ class Cumulative:
 
         self.cumulative = self.df.cumsum()
 
-        # Create axis
-        self.fig, self.ax = pf.create_ax()
-        self.ax.xaxis.axis_date()
+        # Figure/axis are created in plot() (phase 2), or supplied by the caller.
+        self.fig = None
+        self.ax = None
+        self._own_fig = False
 
     def _apply_format(self):
         if self.show_title:
             title = f"Cumulatives ({self.cumulative.index.min()}-{self.cumulative.index.max()})"
-            self.fig.suptitle(title, fontsize=theme.FIGHEADER_FONTSIZE)
+            if self._own_fig:
+                self.fig.suptitle(title, fontsize=theme.FIGHEADER_FONTSIZE)
+            else:
+                self.ax.set_title(title, fontsize=theme.FIGHEADER_FONTSIZE)
         ymin = self.cumulative.min().min()
         ymax = self.cumulative.max().max()
         ymax = ymax * 1.05 if ymax > 0 else ymax * 0.95
@@ -223,13 +254,23 @@ class Cumulative:
         """Return axis"""
         return self.ax
 
-    def plot(self, showplot: bool = True,
+    def plot(self, ax=None, showplot: bool = True,
              digits_after_comma: int = 0,
              show_grid: bool = True,
              show_legend: bool = True,
              ylabel: str = None,
              show_title: bool = True
              ):
+        # Phase 2: use the caller's axes, or create a standalone figure.
+        if ax is None:
+            self.fig, self.ax = pf.create_ax()
+            self._own_fig = True
+        else:
+            self.ax = ax
+            self.fig = ax.get_figure()
+            self._own_fig = False
+        self.ax.xaxis.axis_date()
+
         self.show_grid = show_grid
         self.show_legend = show_legend
         self.ylabel = ylabel
@@ -262,5 +303,7 @@ class Cumulative:
 
         self._apply_format()
 
-        if showplot:
+        if self._own_fig and showplot:
             self.fig.show()
+
+        return self.ax
