@@ -878,41 +878,39 @@ class MlRegressorGapFillingBase:
         detail("Collecting results for final model ...", verbose=self.verbose)
         self._define_cols()
 
-        # Collect predictions in dataframe
-        self._gapfilling_df = pd.DataFrame(data={self.pred_fullmodel_col: pred_y}, index=features_df.index)
-
-        # Add target to dataframe
+        # Collect results on the FULL timestamp (df.index), NOT only the rows
+        # where all features are available. This is critical for data integrity:
+        # a target value that is OBSERVED at a row where some feature is missing
+        # (e.g. a driver gap that does not coincide with the target gap) must be
+        # preserved as observed — never dropped and re-filled by the fallback.
+        # Full-model predictions exist only where all features are available;
+        # they are aligned to the full index (NaN elsewhere).
+        self._gapfilling_df = pd.DataFrame(index=df.index)
         self._gapfilling_df[self.target_col] = df[self.target_col].copy()
+        self._gapfilling_df[self.pred_fullmodel_col] = pd.Series(data=pred_y, index=features_df.index)
 
-        # Gap locations
-        # Make column that contains predicted values
-        # for rows where target is missing
-        _gap_locs = self._gapfilling_df[self.target_col].isnull()  # Locations where target is missing
+        # Gap locations: where the observed target is missing
+        _gap_locs = self._gapfilling_df[self.target_col].isnull()
+        # Full-model predictions at the gap locations (NaN where the model could
+        # not predict because a feature was missing there).
         self._gapfilling_df[self.pred_gaps_col] = self._gapfilling_df.loc[
             _gap_locs, self.pred_fullmodel_col]
 
-        # Flag
-        # Make flag column that indicates where predictions for
-        # missing targets are available, where 0=observed, 1=gapfilled
-        # todo Note that missing predicted gaps = 0. change?
-        _gapfilled_locs = self._gapfilling_df[self.pred_gaps_col].isnull()  # Non-gapfilled locations
-        _gapfilled_locs = ~_gapfilled_locs  # Inverse for gapfilled locations
-        self._gapfilling_df[self.target_gapfilled_flag_col] = _gapfilled_locs
-        self._gapfilling_df[self.target_gapfilled_flag_col] = self._gapfilling_df[
-            self.target_gapfilled_flag_col].astype(
-            int)
-
-        # Gap-filled time series
-        # Fill missing records in target with predicions
-        n_missing = self._gapfilling_df[self.target_col].isnull().sum()
+        # Gap-filled series: keep every observed value, fill gaps with the full
+        # model where it could predict. fillna never overwrites observed values.
+        n_missing = int(_gap_locs.sum())
         info(f"Filling {n_missing} missing records in {self.target_gapfilled_col} ...",
              verbose=self.verbose)
         self._gapfilling_df[self.target_gapfilled_col] = \
             self._gapfilling_df[self.target_col].fillna(self._gapfilling_df[self.pred_fullmodel_col])
 
-        # Restore original full timestamp
-        detail("Restoring original timestamp in results ...", verbose=self.verbose)
-        self._gapfilling_df = self._gapfilling_df.reindex(df.index)
+        # Flag: 0 = observed, 1 = gap-filled by the full model. Records still
+        # missing here (target gap AND no full-model prediction) keep flag 0 for
+        # now and are set to 2 by the fallback in _fillgaps_fallback.
+        flag = pd.Series(0, index=df.index, dtype=int)
+        _filled_by_model = _gap_locs & self._gapfilling_df[self.pred_fullmodel_col].notna()
+        flag[_filled_by_model] = 1
+        self._gapfilling_df[self.target_gapfilled_flag_col] = flag
 
         # SHAP values
         # https://pypi.org/project/shap/

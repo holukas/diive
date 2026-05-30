@@ -179,6 +179,35 @@ class TestGapFilling(unittest.TestCase):
         self.assertEqual(series_gapfilled.isnull().sum(), 7856)
         self.assertEqual(series.isnull().sum(), 11412)
 
+    def test_observed_preserved_when_feature_missing(self):
+        """Observed targets must never be overwritten/mis-flagged when a feature
+        is missing at that row (driver gap not aligned with the target gap)."""
+        import pandas as pd
+        idx = pd.date_range('2022-07-01', periods=400, freq='30min', name='TIMESTAMP_END')
+        rng = np.random.RandomState(1)
+        f1 = rng.normal(size=400).astype(float)
+        target = (3 * f1 + rng.normal(scale=0.3, size=400)).astype(float)
+        df = pd.DataFrame({'target': target, 'f1': f1}, index=idx)
+        # Driver-only gaps at rows where the target IS observed, plus real target gaps.
+        driver_gap_rows = [100, 150, 200, 250]
+        df.loc[df.index[driver_gap_rows], 'f1'] = np.nan
+        df.loc[df.index[[120, 170]], 'target'] = np.nan
+        observed = df['target'].copy()
+
+        rf = RandomForestTS(input_df=df, target_col='target', n_estimators=30, verbose=0)
+        rf.run(showplot_scores=False, showplot_importance=False)
+        gf, flag = rf.results.gapfilled, rf.results.flag
+
+        obs_mask = observed.notna()
+        # Every observed value is preserved exactly and flagged 0 (observed)...
+        self.assertTrue(np.allclose(gf[obs_mask], observed[obs_mask]))
+        self.assertTrue((flag[obs_mask] == 0).all())
+        # ...including the rows where the driver was missing.
+        self.assertTrue(np.allclose(gf.iloc[driver_gap_rows], observed.iloc[driver_gap_rows]))
+        self.assertTrue((flag.iloc[driver_gap_rows] == 0).all())
+        # The gap-filled series is complete (no remaining gaps).
+        self.assertEqual(int(gf.isna().sum()), 0)
+
     def test_gapfilling_randomforest(self):
         """Fill gaps using random forest"""
         df = ed.load_exampledata_parquet()
