@@ -178,15 +178,14 @@ class TrimLow(FlagBase):
             # No low outliers found, all values are valid
             flag.loc[_s.index] = 0
         else:
-            # Trim symmetric: remove top N values equal to number of low outliers
-            s_sorted_top = s_sorted.iloc[0:n_vals_below].copy()
-            upper_lim = s_sorted_top.iloc[-1]
+            # Symmetric trim: reject the values below lower_limit, plus an equal
+            # number (n_vals_below) of the highest values. Reject by POSITION
+            # rather than by an upper-limit value threshold, so ties at the
+            # boundary don't reject more (or fewer) than the intended count and
+            # the kept/rejected sets stay strictly complementary.
+            low_idx = _s.index[_s < self.lower_limit]
+            high_idx = s_sorted.iloc[0:n_vals_below].index  # s_sorted is descending
+            rejected_idx = low_idx.union(high_idx)
 
-            # Classify: keep values in [lower_limit, upper_lim), reject others
-            _ok = (_s >= self.lower_limit) & (_s < upper_lim)
-            _ok = _ok[_ok].index
-            _rejected = (_s <= self.lower_limit) | (_s >= upper_lim)
-            _rejected = _rejected[_rejected].index
-
-            flag.loc[_ok] = 0
-            flag.loc[_rejected] = 2
+            flag.loc[_s.index] = 0
+            flag.loc[rejected_idx] = 2

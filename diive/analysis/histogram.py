@@ -106,8 +106,10 @@ class Histogram:
     def _ignore_fringe_bins(self, counts, bin_edges):
         _start = self.ignore_edge_bins[0]
         _end = self.ignore_edge_bins[1]
-        counts = counts[_start:-_end]
-        bin_edges = bin_edges[_start:-(_end + 1)]
+        # Use len()-based stops so that _end == 0 trims nothing from the end.
+        # A naive counts[_start:-_end] would be counts[_start:0] (empty) when _end is 0.
+        counts = counts[_start:len(counts) - _end]
+        bin_edges = bin_edges[_start:len(bin_edges) - _end - 1]
         return counts, bin_edges
 
     def _binning_method(self):

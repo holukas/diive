@@ -9,7 +9,7 @@
 ### Breaking Changes
 
 - **Public API: 9 domain namespaces** — flat 145-export namespace replaced with `dv.outliers`, `dv.gapfilling`,
-  `dv.flux`, `dv.analysis`, `dv.plotting`, `dv.times`, `dv.features`, `dv.corrections`, `dv.qaqc`. All old flat names
+  `dv.flux`, `dv.analysis`, `dv.plotting`, `dv.times`, `dv.variables`, `dv.corrections`, `dv.qaqc`. All old flat names
   removed. Update all imports.
 - **Gap-filling: feature parameters moved to `FeatureEngineer`** — `RandomForestTS` / `XGBoostTS` no longer accept
   `features_*` parameters; pass a pre-built `FeatureEngineer` instance instead.
