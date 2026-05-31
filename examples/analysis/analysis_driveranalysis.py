@@ -1,7 +1,14 @@
 """
 ================================
-Driver Attribution by Epistemic Level
+Driver Attribution by Epistemic Level (EXPERIMENTAL)
 ================================
+
+.. note::
+
+    EXPERIMENTAL feature. ``DriverAnalysis`` lives in the
+    ``dv.analysis.experimental`` subnamespace, not the stable ``dv.analysis`` API,
+    and its interface may change without a deprecation cycle. Instantiating it
+    emits a one-time ``ExperimentalWarning``.
 
 Attribute a flux time series to its candidate drivers and read the evidence by
 *epistemic level* — association, temporal prediction, causation — instead of as a
@@ -58,7 +65,7 @@ print(f"Target: {target.notna().sum()} valid records; {len(drivers.columns)} dri
 # the previous 6 hours (12 half-hourly records). Bootstrapping reports ranking
 # stability (SHAP fluctuates a few percent between fits).
 
-da = dv.analysis.DriverAnalysis(
+da = dv.analysis.experimental.DriverAnalysis(
     target=target,
     drivers=drivers,
     model='rf',

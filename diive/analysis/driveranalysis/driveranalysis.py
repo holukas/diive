@@ -45,7 +45,29 @@ _MD = {
     'grey': '#455A64', 'grey_bg': '#CFD8DC',
 }
 
+# Name of the injected pure-noise benchmark column. Every model is trained with
+# this column present; a real driver must score *above* it on SHAP importance to
+# count as relevant. It is the noise floor that turns raw importances into a
+# yes/weak/no decision. (Borrowed from diive's gap-filler feature-reduction path.)
 _RANDOM_COL = '.RANDOM'
+
+# ---------------------------------------------------------------------------
+# How the pieces fit together (read this first):
+#
+#   1. fit_model()        trains ONE headline model on all drivers (+ .RANDOM),
+#                         time-aware split, and scores it out-of-sample.
+#   2. shap() / ale()     interrogate that one model -> Layer 1 (association).
+#   3. lagged/scale/strat fit ADDITIONAL throwaway models on transformed data
+#                         (lagged drivers, STL components, per-regime subsets)
+#                         -> Layer 2 (temporal). Each returns per-driver SHAP.
+#   4. granger/pcmci/cate optional Layer 3 (causation), opt-in + heavy deps.
+#   5. _synthesize()      collapses every method's per-driver output into ONE
+#                         ternary relevance ({yes,weak,no}) + direction, then
+#                         compares them -> agreement + verdict (the headline).
+#
+# The recurring primitive is "(drivers, target) -> per-driver SHAP importance",
+# implemented by _fit_importance(); the synthesis is just bookkeeping on top.
+# ---------------------------------------------------------------------------
 
 
 def _stl_components(series: Series, period: int, robust: bool = True):
@@ -117,8 +139,20 @@ class DriverAnalysisResult:
     stability: Optional[DataFrame] = None
 
 
+# Module-level latch so the ExperimentalWarning fires only once per process,
+# no matter how many DriverAnalysis instances are created.
+_EXPERIMENTAL_WARNED = False
+
+
 class DriverAnalysis:
     """Evidence-triangulation driver attribution for flux time series.
+
+    .. warning::
+
+        EXPERIMENTAL / provisional. Lives in ``dv.analysis.experimental`` (not the
+        stable ``dv.analysis`` namespace); the API and the convergence-table
+        schema may change without a deprecation cycle. Instantiating this class
+        emits a one-time :class:`ExperimentalWarning`.
 
     Two-phase: ``__init__`` takes data + computation config; :meth:`run` does the
     work; results live on :attr:`results`; :meth:`summary` and the ``plot_*``
@@ -172,6 +206,18 @@ class DriverAnalysis:
         top_k: int = 3,
         stl_period: Optional[int] = None,
     ):
+        # Announce experimental status once per process (see _EXPERIMENTAL_WARNED).
+        global _EXPERIMENTAL_WARNED
+        if not _EXPERIMENTAL_WARNED:
+            import warnings
+            from diive.analysis.driveranalysis import ExperimentalWarning
+            warnings.warn(
+                "DriverAnalysis is experimental: its API and the convergence-table "
+                "schema may change without a deprecation cycle. It lives in "
+                "dv.analysis.experimental until it stabilizes.",
+                ExperimentalWarning, stacklevel=2)
+            _EXPERIMENTAL_WARNED = True
+
         if not isinstance(target, Series):
             raise TypeError("target must be a pandas Series.")
         if not isinstance(drivers, DataFrame):
@@ -194,26 +240,34 @@ class DriverAnalysis:
         self.granger_alpha = granger_alpha
         self.top_k = top_k
 
-        # Align target and drivers on a common index.
+        # Align target and drivers on a common index. Everything downstream
+        # assumes target and drivers share exactly this index.
         common = target.index.intersection(drivers.index)
         self.target = target.loc[common].copy()
         self.drivers_df = drivers.loc[common].copy()
         self.driver_names = list(self.drivers_df.columns)
+        # Records per seasonal (daily) cycle — needed by every STL call, since
+        # statsmodels can't infer the period for sub-daily data.
         self._stl_period = stl_period if stl_period else self._infer_daily_period(self.target.index)
 
+        # Optional shared preprocessing: strip the seasonal cycle up front so
+        # every layer sees deseasonalized data (recommended before causal tests).
         if self.deseasonalize:
             self._apply_deseasonalize()
 
+        # An ALE curve whose vertical range is below this is treated as "flat"
+        # (no response). Scaled to the target's spread so it is unit-agnostic.
         self.ale_range_threshold = (ale_range_threshold if ale_range_threshold is not None
                                     else 0.1 * float(self.target.std()))
 
-        # Populated by run()/fit_model().
+        # Populated lazily by run()/fit_model(); kept on the instance so SHAP and
+        # ALE can reuse the single fitted model without retraining.
         self.model_ = None
         self._X = None          # full feature matrix (incl. .RANDOM), modeling rows
         self._y = None
-        self._X_attrib = None   # feature matrix without .RANDOM, for ALE
-        self._random_baseline = None
-        self._stratified_directions = None
+        self._X_attrib = None   # matrix ALE perturbs over (also incl. .RANDOM)
+        self._random_baseline = None     # mean|SHAP| of .RANDOM = the noise floor
+        self._stratified_directions = None  # {regime: {driver: ALE direction}}
         self._result = DriverAnalysisResult(model=None, model_scores={},
                                             drivers=self.driver_names)
 
@@ -268,6 +322,9 @@ class DriverAnalysis:
         Applies the optional FeatureEngineer, appends a ``.RANDOM`` benchmark
         column, and drops rows with any missing value (time-aware: no shuffling).
         """
+        # Optionally expand raw drivers into the 8-stage engineered feature set.
+        # The FeatureEngineer needs the target column present during transform,
+        # so we attach it, transform, then drop it back out.
         if self.feature_engineer is not None:
             tname = target.name
             eng_in = drivers_df.copy()
@@ -278,10 +335,13 @@ class DriverAnalysis:
         else:
             feats = drivers_df.copy()
 
+        # Inject the pure-noise benchmark column (the relevance noise floor).
         if add_random:
             rng = np.random.RandomState(self.random_state)
             feats[_RANDOM_COL] = rng.randn(len(feats))
 
+        # Listwise-drop rows with any NaN. We do NOT shuffle: row order stays
+        # chronological so the caller's time-aware holdout remains leak-free.
         df = feats.copy()
         df[target.name] = target
         df = df.dropna()
@@ -290,20 +350,31 @@ class DriverAnalysis:
         return X, y
 
     def _feature_to_driver(self, feature: str) -> Optional[str]:
-        """Map a (possibly engineered/lagged) feature column to its parent driver."""
+        """Map a (possibly engineered/lagged) feature column to its parent driver.
+
+        Engineered columns look like ``.TA_MEAN12`` or ``.VPD-2``; we strip the
+        leading dot and find the driver whose name prefixes it. Sorting by length
+        descending ensures the most specific match wins, so a driver named 'TA'
+        never steals a column that actually belongs to 'Tair_f'.
+        """
         if feature == _RANDOM_COL:
-            return None
+            return None  # the noise benchmark belongs to no driver
         if feature in self.driver_names:
-            return feature
+            return feature  # raw, untransformed driver column
         stripped = feature[1:] if feature.startswith('.') else feature
-        # Longest driver name that is a substring wins (avoids 'TA' vs 'Tair_f').
         for d in sorted(self.driver_names, key=len, reverse=True):
             if stripped == d or stripped.startswith(d) or d in feature:
                 return d
         return None
 
     def _shap_per_driver(self, model, X: DataFrame) -> tuple[Series, float]:
-        """Per-driver SHAP importance (summed over engineered cols) + RANDOM baseline."""
+        """Per-driver SHAP importance (summed over engineered cols) + RANDOM baseline.
+
+        A driver may appear as several engineered columns (lags, rolling means,
+        ...). Its overall importance is the SUM of |SHAP| over all of them, so a
+        driver isn't penalised for having its signal spread across variants.
+        Returns the per-driver Series plus the .RANDOM value (the noise floor).
+        """
         imp = _mean_abs_shap(model, X)
         random_val = float(imp.get(_RANDOM_COL, 0.0))
         agg = {d: 0.0 for d in self.driver_names}
@@ -314,9 +385,14 @@ class DriverAnalysis:
         return pd.Series(agg), random_val
 
     def _relevance(self, value: float, baseline: float) -> str:
-        """Ternary relevance of an importance ``value`` vs a noise ``baseline``."""
+        """Ternary relevance of an importance ``value`` vs a noise ``baseline``.
+
+        This is the normalization that makes heterogeneous methods comparable:
+        every method ultimately reduces to yes / weak / no. Here, "above the
+        noise floor" = yes, "at least half the floor" = weak, else no.
+        """
         if baseline <= 0:
-            baseline = 1e-12
+            baseline = 1e-12  # guard against a degenerate (zero) noise floor
         if value >= baseline:
             return 'yes'
         if value >= 0.5 * baseline:
@@ -335,11 +411,13 @@ class DriverAnalysis:
         """
         levels = tuple(levels)
         rule("DriverAnalysis", verbose=self.verbose)
+        # Always train the headline model first — Layer 1 reads directly from it.
         self.fit_model()
 
         if 'static' in levels:
             info("Layer 1 (association): SHAP + ALE", verbose=self.verbose)
             self.shap()
+            # One ALE response curve per driver (interrogates the headline model).
             for d in self.driver_names:
                 self._result.ale[d] = self.ale(d)
             # SHAP interaction values are expensive (O(n_features^2)); call
@@ -348,7 +426,7 @@ class DriverAnalysis:
         if 'temporal' in levels:
             info("Layer 2 (temporal-prediction): lagged / scale-resolved / stratified",
                  verbose=self.verbose)
-            if self.lags:
+            if self.lags:  # lagged importance is only meaningful if lags were asked for
                 self.lagged_importance()
             self.scale_resolved()
             self.stratified(by='season')
@@ -356,8 +434,11 @@ class DriverAnalysis:
         if 'causal' in levels:
             info("Layer 3 (causation): Granger sanity check (deseasonalized)",
                  verbose=self.verbose)
+            # Only the cheap Granger check runs automatically; pcmci()/cate()
+            # stay explicit because of their heavy deps and assumptions.
             self.granger()
 
+        # Collapse every method's output into the per-driver verdict table.
         self._synthesize()
         self._result.levels_run = list(levels)
         success("DriverAnalysis complete.", verbose=self.verbose)
@@ -371,9 +452,11 @@ class DriverAnalysis:
         if len(X) < 20:
             raise ValueError(f"Too few complete rows ({len(X)}) to fit a model.")
 
+        # Hold out the most recent slice for scoring. Because _build_matrix keeps
+        # rows in chronological order, slicing the tail = "train on the past,
+        # test on the future" — the leak-free split this whole module insists on.
         n_test = max(1, int(round(len(X) * self.test_size)))
         if self.time_aware_split:
-            # Chronological holdout: train on the past, test on the future.
             X_train, y_train = X.iloc[:-n_test], y.iloc[:-n_test]
             X_test, y_test = X.iloc[-n_test:], y.iloc[-n_test:]
         else:
@@ -406,7 +489,9 @@ class DriverAnalysis:
         if self.model_ is None:
             self.fit_model()
         imp, random_val = self._shap_per_driver(self.model_, self._X)
+        # Cache the noise floor; the synthesis layer reuses it for every method.
         self._random_baseline = random_val
+        # Rank highest-importance first, then label each driver against the floor.
         out = imp.sort_values(ascending=False).to_frame('shap_importance')
         out['shap_rank'] = range(1, len(out) + 1)
         out['shap_relevant'] = [self._relevance(v, random_val) for v in out['shap_importance']]
@@ -474,6 +559,10 @@ class DriverAnalysis:
             raise ValueError("No lags configured; pass lags=... to the constructor.")
         from diive.variables.temporal import lagged_variants
 
+        # Build every lagged variant of every driver over [min..max] lags, fit one
+        # model on the whole lot, then attribute each lagged column's importance
+        # back to its (driver, lag) cell. The lag where a driver peaks reveals its
+        # response timescale (instant vs hours vs days).
         lo, hi = min(self.lags), max(self.lags)
         lagged = lagged_variants(self.drivers_df.copy(), lag=[lo, hi], stepsize=1,
                                  verbose=0)
@@ -483,6 +572,8 @@ class DriverAnalysis:
 
         imp = _mean_abs_shap(model, X)
 
+        # Rows = drivers, columns = lags (in records). Accumulate importance into
+        # the matching cell; unmatched columns (e.g. .RANDOM) are ignored.
         lag_values = sorted(set(range(lo, hi + 1)))
         out = DataFrame(0.0, index=self.driver_names, columns=lag_values)
         for feat, val in imp.items():
@@ -494,7 +585,12 @@ class DriverAnalysis:
         return out
 
     def _parse_lagged_feature(self, feature: str) -> tuple[Optional[str], Optional[int]]:
-        """Split a lagged-variant column name into (driver, lag_in_records)."""
+        """Split a lagged-variant column name into (driver, lag_in_records).
+
+        ``lagged_variants`` names columns like ``.TA-2`` (TA two records back) and
+        ``.SW_IN+1`` (one record ahead). We peel off the driver prefix and parse
+        the signed integer suffix; ``int('-2')`` and ``int('+1')`` both work.
+        """
         if feature == _RANDOM_COL:
             return None, None
         if feature in self.driver_names:
@@ -520,7 +616,10 @@ class DriverAnalysis:
         confined to one STL component) responds on a different timescale than its
         raw importance suggests.
         """
-        cols = {}
+        cols = {}  # column name (scale) -> per-driver importance Series
+        # (a) STL components: attribute drivers to the slow trend, the recurring
+        # seasonal cycle, and the fast residual separately. A driver that only
+        # matters for one component acts on that timescale.
         if 'stl' in scales:
             try:
                 trend, seasonal, resid = _stl_components(self.target, self._stl_period)
@@ -535,26 +634,30 @@ class DriverAnalysis:
                 imp, _ = self._fit_importance(self.drivers_df, comp)
                 cols[comp_name] = imp
 
+        # (b) Temporal aggregations: re-attribute at coarser resolutions. A driver
+        # that's weak half-hourly but strong monthly responds slowly. Whenever any
+        # aggregation is requested we also include the native ('halfhourly')
+        # resolution as the baseline to compare the aggregations against.
         agg_map = {'halfhourly': None, 'daily': 'D', 'monthly': 'MS'}
+        want_agg = ('daily' in scales) or ('monthly' in scales)
         for scale in ('halfhourly', 'daily', 'monthly'):
-            if scale not in scales and not (scale == 'halfhourly' and
-                                            ('daily' in scales or 'monthly' in scales)):
-                if scale not in scales:
-                    continue
+            requested = (scale in scales) or (scale == 'halfhourly' and want_agg)
+            if not requested:
+                continue
             freq = agg_map[scale]
             if freq is None:
-                d_df, t = self.drivers_df, self.target
+                d_df, t = self.drivers_df, self.target  # native resolution
             else:
                 d_df = self.drivers_df.resample(freq).mean()
                 t = self.target.resample(freq).mean()
                 t.name = self.target.name
-            if len(t.dropna()) < 20:
+            if len(t.dropna()) < 20:  # too few rows to fit a meaningful model
                 detail(f"Scale '{scale}' has too few rows; skipped.", verbose=self.verbose)
                 continue
             imp, _ = self._fit_importance(d_df, t)
             cols[scale] = imp
 
-        out = DataFrame(cols)
+        out = DataFrame(cols)  # rows = drivers, columns = scales
         out.index.name = 'driver'
         self._result.scale_resolved = out
         return out
@@ -569,16 +672,21 @@ class DriverAnalysis:
         """
         regimes = self._regime_labels(by)
         cols, directions = {}, {}
+        # Fit a separate model within each regime (season, day/night, ...). If a
+        # driver's relevance or ALE *direction* flips between regimes, its effect
+        # is context-dependent — caught later as regime_dependence in the verdict.
         for label in pd.unique(regimes.dropna()):
             mask = (regimes == label)
             d_df = self.drivers_df.loc[mask]
             t = self.target.loc[mask]
-            if len(t.dropna()) < 30:
+            if len(t.dropna()) < 30:  # too small to trust a per-regime model
                 detail(f"Regime '{label}' too small ({int(mask.sum())} rows); skipped.",
                        verbose=self.verbose)
                 continue
             imp, model_X = self._fit_importance(d_df, t, return_model=True)
             cols[str(label)] = imp
+            # Also record each driver's ALE shape within this regime, so we can
+            # later detect a sign flip across regimes.
             model, X_attrib = model_X
             dir_map = {}
             for d in self.driver_names:
@@ -587,7 +695,7 @@ class DriverAnalysis:
                                                       grid_size=min(10, self.ale_grid_size))
                     dir_map[d] = curve.direction(self.ale_range_threshold)
                 except Exception:
-                    dir_map[d] = 'flat'
+                    dir_map[d] = 'flat'  # ALE failed (e.g. constant feature)
             directions[str(label)] = dir_map
 
         out = DataFrame(cols)
@@ -649,9 +757,14 @@ class DriverAnalysis:
                         return_model: bool = False):
         """Fit a fresh model on (drivers, target) and return per-driver SHAP.
 
-        Helper for the temporal layer: each scale/regime/window needs its own
-        model. Returns a per-driver importance Series (and optionally the model +
-        attribution matrix for downstream ALE)."""
+        The workhorse of Layer 2: the lagged, scale-resolved, stratified, and
+        rolling analyses all reduce to "transform the data, then call this". Each
+        gets its OWN model (the headline model is for Layer 1 only). Returns a
+        per-driver importance Series, and optionally (model, X) so the caller can
+        compute ALE on the same fitted model.
+
+        Note: this fit is for attribution, not scoring — it uses all rows (no
+        holdout), which is fine because we never report its accuracy."""
         X, y = self._build_matrix(drivers_df, target, add_random=True)
         model = self._new_model()
         model.fit(X, y)
@@ -751,14 +864,20 @@ class DriverAnalysis:
 
     # ------------------------------------------------------------- synthesis
     def _bootstrap_stability(self) -> Optional[DataFrame]:
-        """Fraction of bootstrap resamples in which each driver lands in top-k."""
+        """Fraction of bootstrap resamples in which each driver lands in top-k.
+
+        SHAP rankings wobble a few percent between fits (noted in CLAUDE.md), so a
+        rank means little if it isn't stable. We resample rows with replacement,
+        refit, and count how often each driver stays in the top-k. A low fraction
+        => "unstable_rank" flag and an 'inconclusive' verdict downstream.
+        """
         if self.n_bootstrap <= 0:
             return None
         counts = {d: 0 for d in self.driver_names}
         rng = np.random.RandomState(self.random_state)
         n = len(self._X)
         for _ in range(self.n_bootstrap):
-            sel = rng.randint(0, n, n)
+            sel = rng.randint(0, n, n)  # bootstrap sample of row positions
             Xb = self._X.iloc[sel]
             yb = self._y.iloc[sel]
             model = self._new_model()
@@ -774,11 +893,20 @@ class DriverAnalysis:
         return out
 
     def _synthesize(self):
-        """Build the per-driver convergence/divergence table across all run methods."""
+        """Build the per-driver convergence/divergence table across all run methods.
+
+        This is the headline. One row per driver, assembling whatever each layer
+        produced: SHAP + ALE (association), lag/scale/regime fields (temporal),
+        Granger/PCMCI/CATE (causal), plus bootstrap stability. The per-method
+        relevances are then compared in _finalize_verdicts() to decide agreement
+        and a final verdict. Methods that weren't run simply leave NaN — they
+        don't count against a driver.
+        """
         if self._result.shap_importance is None:
             self.shap()
         shap_df = self._result.shap_importance
         stability = self._bootstrap_stability()
+        # Convert a dominant lag (in records) into wall-clock for timescale labels.
         freq_min = 86400.0 / self._stl_period / 60.0  # minutes per record (approx)
 
         rows = []
@@ -820,18 +948,22 @@ class DriverAnalysis:
         return 'no'
 
     def _temporal_fields(self, d: str, freq_min: float) -> dict:
+        """Summarise the Layer-2 results for one driver into convergence columns."""
         out = {'dominant_lag': np.nan, 'timescale': None,
                'scale_dependence': False, 'regime_dependence': False}
+        # Dominant lag = the lag at which this driver's importance peaks.
         li = self._result.lagged_importance
         if li is not None and d in li.index and li.loc[d].abs().sum() > 0:
             dom = int(li.loc[d].astype(float).idxmax())
             out['dominant_lag'] = dom
             out['timescale'] = self._timescale(dom, freq_min)
+        # Scale dependence = relevance differs across STL components / aggregations.
         sr = self._result.scale_resolved
         if sr is not None and d in sr.index:
             rels = [self._relevance(v, self._random_baseline or 0.0)
                     for v in sr.loc[d].dropna()]
             out['scale_dependence'] = len(set(rels)) > 1
+        # Regime dependence = relevance OR ALE direction differs across regimes.
         st = self._result.stratified
         if st is not None and d in st.index:
             rels = [self._relevance(v, self._random_baseline or 0.0)
@@ -872,6 +1004,9 @@ class DriverAnalysis:
         t_idx = var_names.index(info['target'])
         if graph is None:
             return
+        # tigramite's graph is an array indexed [cause, effect, lag], where each
+        # cell is a link-type string. We look for a directed link from driver d
+        # into the target at ANY lag tau; the first one found gives pcmci_lag.
         for d in self.driver_names:
             if d not in var_names:
                 continue
@@ -879,16 +1014,23 @@ class DriverAnalysis:
             link = False
             lag = np.nan
             for tau in range(graph.shape[2]):
-                if graph[j, t_idx, tau] in ('-->', 'o->'):
+                if graph[j, t_idx, tau] in ('-->', 'o->'):  # directed / partially-directed
                     link = True
                     lag = tau
                     break
             conv.loc[d, 'pcmci_link'] = link
             conv.loc[d, 'pcmci_lag'] = lag
+        # Re-run synthesis so the new causal column changes the verdicts.
         self._finalize_verdicts(conv)
 
     def _finalize_verdicts(self, conv: DataFrame):
-        """Compute agreement, verdict, flags, votes per driver (in place)."""
+        """Compute agreement, verdict, flags, votes per driver (in place).
+
+        For each driver this (1) collects each run method's relevance vote into a
+        common {yes,weak,no} list plus any direction (+/-), (2) decides whether
+        those votes converge / partially agree / diverge, (3) raises diagnostic
+        flags for known conflict patterns, and (4) maps everything to a verdict.
+        """
         # Pre-create object columns so per-cell list assignment (flags) doesn't
         # get broadcast across the row by pandas.
         for col in ['relevance_votes', 'agreement', 'verdict', 'flags']:
@@ -898,71 +1040,77 @@ class DriverAnalysis:
         for d in conv.index:
             r = conv.loc[d]
             votes, flags = [], []
-            relevances, directions = [], []
+            relevances, directions = [], []  # normalized votes + signed directions
 
-            # SHAP (unsigned)
+            # --- step 1: normalize each method that ran into a relevance vote ---
+            # SHAP (unsigned: importance only, no direction)
             if pd.notna(r.get('shap_relevant')):
                 votes.append(f"shap:{r['shap_relevant']}")
                 relevances.append(r['shap_relevant'])
-            # ALE (signed)
+            # ALE (signed: contributes both relevance and a +/- direction)
             if r.get('ale_relevant') is not None:
                 votes.append(f"ale:{r['ale_relevant']}")
                 relevances.append(r['ale_relevant'])
                 if r.get('ale_direction') in ('+', '-'):
                     directions.append(r['ale_direction'])
-            # Granger
+            # Granger: significant p-value => relevant
             if pd.notna(r.get('granger_p')):
                 gr = 'yes' if r['granger_p'] < self.granger_alpha else 'no'
                 votes.append(f"granger:{gr}")
                 relevances.append(gr)
-            # PCMCI
+            # PCMCI: a causal link at any lag => relevant (and may carry a sign)
             if pd.notna(r.get('pcmci_link')):
                 pr = 'yes' if bool(r['pcmci_link']) else 'no'
                 votes.append(f"pcmci:{pr}")
                 relevances.append(pr)
                 if r.get('pcmci_sign') in ('+', '-'):
                     directions.append(r['pcmci_sign'])
-            # CATE
+            # CATE: only ever recorded when a treatment effect was estimated
             if pd.notna(r.get('cate')):
                 votes.append("cate:yes")
                 relevances.append('yes')
 
+            # --- step 2: agreement over the methods that actually ran ---
             n_methods = len(relevances)
             yes = sum(v == 'yes' for v in relevances)
             no = sum(v == 'no' for v in relevances)
             weak = sum(v == 'weak' for v in relevances)
-            dir_conflict = ('+' in directions) and ('-' in directions)
-            rel_conflict = yes > 0 and no > 0
+            dir_conflict = ('+' in directions) and ('-' in directions)  # opposite signs
+            rel_conflict = yes > 0 and no > 0  # some say relevant, some say not
 
             if n_methods == 0:
                 agreement = 'partial'
             elif rel_conflict or dir_conflict:
-                agreement = 'diverge'
+                agreement = 'diverge'        # the scientifically interesting case
             elif weak > 0 and yes == 0:
-                agreement = 'partial'
+                agreement = 'partial'        # only lukewarm support
             elif (yes == n_methods) or (no == n_methods):
-                agreement = 'converge'
+                agreement = 'converge'       # unanimous (all yes or all no)
             else:
                 agreement = 'partial'
 
-            # --- flags ---
+            # --- step 3: diagnostic flags for specific known conflict patterns ---
+            # Important but flat response => correlation/interaction artifact.
             if r.get('shap_relevant') == 'yes' and r.get('ale_relevant') == 'no':
                 flags.append('shap_high_ale_flat')
+            # Bivariate temporal link that disappears under confounder control.
             if (pd.notna(r.get('granger_p')) and r['granger_p'] < self.granger_alpha
                     and pd.notna(r.get('pcmci_link')) and not bool(r['pcmci_link'])):
                 flags.append('granger_sig_pcmci_null')
+            # Direction reverses (across ALE/PCMCI signs, or across regimes).
             if dir_conflict:
                 flags.append('sign_flip_by_regime')
             if bool(r.get('regime_dependence')):
                 if 'sign_flip_by_regime' not in flags:
                     flags.append('sign_flip_by_regime') if self._regime_dir_conflict(d) else None
+            # Ranking didn't survive bootstrapping.
             stab = r.get('stability')
             if pd.notna(stab) and stab < 0.5:
                 flags.append('unstable_rank')
 
-            # --- verdict (priority order) ---
+            # --- step 4: collapse all of the above into one verdict ---
             verdict = self._verdict(r, relevances, agreement, flags, stab)
-            level = self._highest_level(r)
+            level = self._highest_level(r)  # deepest epistemic level reached
             levels.append(level)
 
             conv.loc[d, 'n_methods_run'] = n_methods
@@ -980,36 +1128,61 @@ class DriverAnalysis:
         return len(dirs) > 1
 
     def _verdict(self, r, relevances, agreement, flags, stab) -> str:
+        """Map a driver's evidence to a single verdict via a PRIORITY CASCADE.
+
+        Order matters: the first matching rule wins, strongest disqualifiers
+        first. The cascade reads top-to-bottom as "is it unreliable? -> not a
+        driver at all? -> important-but-no-response (artifact)? -> only in some
+        regimes? -> confirmed causal? -> association only?".
+        """
         yes = sum(v == 'yes' for v in relevances)
         no = sum(v == 'no' for v in relevances)
         n = len(relevances)
+        # Did a causal method run, and did it confirm a link?
         has_causal = pd.notna(r.get('pcmci_link')) or pd.notna(r.get('cate'))
         causal_yes = (bool(r.get('pcmci_link')) if pd.notna(r.get('pcmci_link')) else False) \
             or (pd.notna(r.get('cate')))
         shap_yes = r.get('shap_relevant') == 'yes'
-        ale_shape = r.get('ale_direction') in ('+', '-', '∩', '∪')
-        ale_flat = r.get('ale_relevant') == 'no'
+        ale_shape = r.get('ale_direction') in ('+', '-', '∩', '∪')  # any real shape
+        ale_flat = r.get('ale_relevant') == 'no'                    # no response
 
+        # 1. Unstable ranking -> we can't trust anything else about it.
         if pd.notna(stab) and stab < 0.5:
             return 'inconclusive'
+        # 2. Every method that ran said "no".
         if n > 0 and no == n:
             return 'not_a_driver'
+        # 3. High importance but a flat ALE -> importance without response shape,
+        #    the classic correlation/interaction artifact.
         if shap_yes and ale_flat:
             return 'spurious_correlate'
+        # 4. Relevance/direction changes across regimes -> only a driver in context.
         if bool(r.get('regime_dependence')):
             return 'context_dependent'
+        # 5. Important + real response + a causal method CONFIRMS it (and no
+        #    contradiction) -> the strongest verdict we can give.
         if shap_yes and ale_shape and has_causal and causal_yes and agreement != 'diverge':
             return 'robust_driver'
+        # 6. Important but a causal method ran and found NO link -> likely
+        #    confounded; association is real but do not call it causal.
         if shap_yes and has_causal and not causal_yes:
             return 'associational_only'
+        # 7. Important + real response, but no causal test was run.
         if shap_yes and ale_shape:
             return 'associational_only'
+        # 8. Anything left (contradictory or weak with no clear pattern).
         if agreement == 'diverge':
             return 'inconclusive'
         return 'inconclusive'
 
     @staticmethod
     def _highest_level(r) -> str:
+        """Deepest epistemic level for which this driver has a verdict.
+
+        Reported in the summary so the reader knows how far the evidence reaches:
+        causal (a Layer-3 method ran) > temporal (Layer-2 produced something) >
+        association (only Layer-1 SHAP/ALE).
+        """
         if pd.notna(r.get('pcmci_link')) or pd.notna(r.get('cate')) or pd.notna(r.get('granger_p')):
             return 'causal'
         if pd.notna(r.get('dominant_lag')) or bool(r.get('scale_dependence')) \

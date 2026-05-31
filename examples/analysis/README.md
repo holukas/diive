@@ -9,7 +9,7 @@ Examples demonstrating statistical analysis, decomposition, and pattern detectio
 ### Correlation & Covariance
 
 - **analysis_daily_correlation.py** — Daily correlation coefficients for quality checks, relationship analysis, and statistical methods
-- **analysis_driveranalysis.py** — Evidence-triangulation driver attribution organized by epistemic level (association → temporal prediction → causation), with a convergence/divergence summary across SHAP, ALE, lagged/scale-resolved/stratified importance, and Granger
+- **analysis_driveranalysis.py** — _(experimental; `dv.analysis.experimental`)_ Evidence-triangulation driver attribution organized by epistemic level (association → temporal prediction → causation), with a convergence/divergence summary across SHAP, ALE, lagged/scale-resolved/stratified importance, and Granger
 - **analysis_granger.py** — Granger causality testing to detect predictive relationships between time series
 - **analysis_decoupling.py** — Stratified binning to reveal how ecosystem responses change across temperature ranges
 

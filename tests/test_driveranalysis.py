@@ -198,11 +198,33 @@ class TestDriverAnalysisValidation(unittest.TestCase):
 
 class TestPublicApi(unittest.TestCase):
 
-    def test_namespace_exports(self):
+    def test_experimental_namespace_exports(self):
+        # DriverAnalysis is exposed via the experimental subnamespace, NOT the
+        # stable dv.analysis namespace.
         for name in ['DriverAnalysis', 'DriverAnalysisResult', 'AleCurve',
                      'Ale2DResult', 'accumulated_local_effects',
                      'accumulated_local_effects_2d']:
-            self.assertTrue(hasattr(dv.analysis, name), f"missing dv.analysis.{name}")
+            self.assertTrue(hasattr(dv.analysis.experimental, name),
+                            f"missing dv.analysis.experimental.{name}")
+
+    def test_not_in_stable_namespace(self):
+        # Guard the experimental boundary: it must stay out of dv.analysis until
+        # promoted, so accidental re-exports get caught.
+        self.assertFalse(hasattr(dv.analysis, 'DriverAnalysis'),
+                         "DriverAnalysis leaked into the stable dv.analysis namespace")
+
+    def test_instantiation_warns_experimental(self):
+        # Instantiating must emit an ExperimentalWarning at least once. Reset the
+        # module latch so this test is order-independent.
+        import warnings
+        import diive.analysis.driveranalysis.driveranalysis as da_mod
+        from diive.analysis.driveranalysis import ExperimentalWarning
+        da_mod._EXPERIMENTAL_WARNED = False
+        target, drivers = _synthetic(months=1)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            DriverAnalysis(target=target, drivers=drivers, verbose=0)
+        self.assertTrue(any(issubclass(w.category, ExperimentalWarning) for w in caught))
 
 
 if __name__ == '__main__':

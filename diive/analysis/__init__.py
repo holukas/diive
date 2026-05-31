@@ -14,14 +14,9 @@ from diive.analysis.granger import GrangerCausality
 daily_correlation = DailyCorrelation
 
 from diive.analysis.decoupling import StratifiedAnalysis
-from diive.analysis.driveranalysis import (
-    DriverAnalysis,
-    DriverAnalysisResult,
-    AleCurve,
-    Ale2DResult,
-    accumulated_local_effects,
-    accumulated_local_effects_2d,
-)
+# DriverAnalysis is EXPERIMENTAL and deliberately NOT exported at this level.
+# Reach it via the `experimental` subnamespace: dv.analysis.experimental.DriverAnalysis
+from diive.analysis import experimental
 from diive.analysis.gapfinder import GapFinder, GapStats
 from diive.analysis.gridaggregator import GridAggregator
 from diive.analysis.harmonic import harmonic_analysis
@@ -37,12 +32,7 @@ __all__ = [
     'daily_correlation',
     'GrangerCausality',
     'StratifiedAnalysis',
-    'DriverAnalysis',
-    'DriverAnalysisResult',
-    'AleCurve',
-    'Ale2DResult',
-    'accumulated_local_effects',
-    'accumulated_local_effects_2d',
+    'experimental',
     'GapFinder',
     'GapStats',
     'GridAggregator',

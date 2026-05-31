@@ -53,7 +53,7 @@ See: [visualization/README.md](visualization/README.md)
 |---------|-------------|
 | [**analysis_correlation.py**](analysis/analysis_correlation.py) | Cross-correlation, autocorrelation, lag detection, anomaly detection |
 | [**analysis_daily_correlation.py**](analysis/analysis_daily_correlation.py) | Daily correlation coefficients between time series, quality checks, relationship analysis |
-| [**analysis_driveranalysis.py**](analysis/analysis_driveranalysis.py) | Evidence-triangulation driver attribution by epistemic level: SHAP + ALE (association), lagged/scale-resolved/stratified importance (temporal), Granger/PCMCI/CATE (causal), with a convergence/divergence summary |
+| [**analysis_driveranalysis.py**](analysis/analysis_driveranalysis.py) | _(experimental)_ Evidence-triangulation driver attribution by epistemic level: SHAP + ALE (association), lagged/scale-resolved/stratified importance (temporal), Granger/PCMCI/CATE (causal), with a convergence/divergence summary |
 | [**analysis_granger.py**](analysis/analysis_granger.py) | Granger causality testing for predictive relationships between time series |
 | [**analysis_seasonaltrend.py**](analysis/analysis_seasonaltrend.py) | STL decomposition, trend isolation, seasonality extraction |
 | [**analysis_decoupling.py**](analysis/analysis_decoupling.py) | Stratified binning to reveal how ecosystem responses change across temperature ranges |

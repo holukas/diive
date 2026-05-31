@@ -210,6 +210,7 @@ def accumulated_local_effects(model, X: pd.DataFrame, feature: str,
     if feature not in X.columns:
         raise KeyError(f"Feature '{feature}' not found in X columns.")
 
+    # Bin the feature by quantiles, so each bin holds roughly equal data mass.
     x = X[feature].to_numpy(dtype=float)
     edges = _quantile_edges(x, grid_size)
     n_bins = edges.size - 1
@@ -218,6 +219,11 @@ def accumulated_local_effects(model, X: pd.DataFrame, feature: str,
     idx = np.searchsorted(edges, x, side='left')
     idx = np.clip(idx, 1, n_bins)
 
+    # The ALE core idea: within each bin, take the rows that ACTUALLY fall there,
+    # move the feature from the bin's lower edge to its upper edge, and measure how
+    # the prediction changes. Averaging over the rows that live in the bin is what
+    # keeps ALE honest under correlation — unlike PDP, we never ask the model about
+    # feature combinations that don't occur in the data.
     local_delta = np.zeros(n_bins, dtype=float)
     counts = np.zeros(n_bins, dtype=int)
     for k in range(1, n_bins + 1):
@@ -227,14 +233,17 @@ def accumulated_local_effects(model, X: pd.DataFrame, feature: str,
             continue
         X_lo = X.loc[mask].copy()
         X_hi = X_lo.copy()
-        X_lo[feature] = edges[k - 1]
-        X_hi[feature] = edges[k]
+        X_lo[feature] = edges[k - 1]   # feature pinned to bin's lower edge
+        X_hi[feature] = edges[k]       # ... and to its upper edge
+        # Mean per-bin effect = average prediction change across the move.
         local_delta[k - 1] = float(np.mean(_predict(model, X_hi) - _predict(model, X_lo)))
 
-    # Accumulate, defining the uncentered ALE at each edge (first edge = 0).
+    # "Accumulate" = cumulative-sum the per-bin effects into a running curve
+    # defined at the bin edges (the first edge is the zero reference point).
     ale_uncentered = np.concatenate([[0.0], np.cumsum(local_delta)])
 
-    # Center so the size-weighted mean effect is zero.
+    # Center the curve so its data-weighted mean is zero. Then a value reads as a
+    # deviation from the average prediction (in target units), not an absolute.
     if counts.sum() > 0:
         seg_mid = (ale_uncentered[:-1] + ale_uncentered[1:]) / 2.0
         weighted_mean = float(np.sum(seg_mid * counts) / counts.sum())
@@ -277,6 +286,10 @@ def accumulated_local_effects_2d(model, X: pd.DataFrame, f1: str, f2: str,
     xi = np.clip(np.searchsorted(xe, x, side='left'), 1, nx)
     yi = np.clip(np.searchsorted(ye, y, side='left'), 1, ny)
 
+    # 2D analogue of the 1D move: for the rows in each (x,y) cell, evaluate the
+    # prediction at all FOUR corners and take the "second difference"
+    # (ur - ul - lr + ll). That combination cancels each feature's solo effect,
+    # leaving only what the two features do *jointly* — the interaction.
     delta = np.zeros((ny, nx), dtype=float)
     counts = np.zeros((ny, nx), dtype=int)
     for a in range(1, nx + 1):
@@ -286,7 +299,7 @@ def accumulated_local_effects_2d(model, X: pd.DataFrame, f1: str, f2: str,
             if not mask.any():
                 continue
             base = X.loc[mask].copy()
-            # Four corners of the cell.
+            # Four corners of the cell (ll=low/low, ur=high/high, etc.).
             ll = base.copy(); ll[f1] = xe[a - 1]; ll[f2] = ye[b - 1]
             lr = base.copy(); lr[f1] = xe[a];     lr[f2] = ye[b - 1]
             ul = base.copy(); ul[f1] = xe[a - 1]; ul[f2] = ye[b]
