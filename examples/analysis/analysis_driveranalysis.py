@@ -35,7 +35,7 @@ import diive as dv
 df = dv.load_exampledata_parquet()
 
 # Keep one growing season to keep the example fast; in practice use more data.
-df = df.loc[(df.index.year == 2020) & (df.index.month >= 5) & (df.index.month <= 9)].copy()
+df = df.loc[(df.index.year == 2020) & (df.index.month >= 5) & (df.index.month <= 5)].copy()
 
 # Target: original (unfilled) net ecosystem exchange. Drop low-quality records so
 # we attribute observed fluxes, not gap-filled ones.
@@ -92,19 +92,19 @@ print(conv[['shap_relevant', 'ale_direction', 'ale_relevant', 'dominant_lag',
 # Driver x method relevance grid (green = relevant, grey = weak, red = not),
 # with ALE direction glyphs. Disagreement across a row flags a non-robust driver.
 
-da.plot_convergence(showplot=False)
+da.plot_convergence(showplot=True)
 
 # %%
 # Layer 1: SHAP importance and an ALE response curve
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-da.plot_importance(showplot=False)
+da.plot_importance(showplot=True)
 
 # ALE describes how the model responds to VPD (association, not causation).
 ale_vpd = da.results.ale['VPD']
 print(f"VPD ALE range = {ale_vpd.ale_range:.3g}, "
       f"shape = {ale_vpd.direction(da.ale_range_threshold)}")
-ale_vpd.plot(showplot=False)
+ale_vpd.plot(showplot=True)
 
 # %%
 # Layer 1: 2D ALE for an interaction (VPD x TA)
@@ -115,14 +115,14 @@ ale_vpd.plot(showplot=False)
 
 ale2d = da.ale_2d('VPD', 'TA')
 print(f"VPD x TA interaction strength = {ale2d.interaction_strength:.3g}")
-ale2d.plot(showplot=False)
+ale2d.plot(showplot=True)
 
 # %%
 # Layer 2: response-timescale fingerprint and scale-resolved importance
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-da.plot_lagged(showplot=False)
-da.plot_scale_resolved(showplot=False)
+da.plot_lagged(showplot=True)
+da.plot_scale_resolved(showplot=True)
 
 # %%
 # Layer 3 (opt-in): deseasonalized Granger sanity check
