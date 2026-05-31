@@ -26,6 +26,7 @@
 .claude/memory/
 .claude/worktrees/
 .claude/scheduled-tasks/
+.claude/
 
 # But DO commit these:
 # .claude/settings.json    ← shared harness config
