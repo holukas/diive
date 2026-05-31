@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
 
-**106 examples across 9 organized folders by functional domain.**
+**107 examples across 9 organized folders by functional domain.**
 
 ## Structure
 
@@ -38,8 +38,9 @@ examples/
 │   ├── times_statistics.py
 │   ├── times_diel_cycles.py
 │   └── times_temporal_matrices.py
-├── analysis/              # Time series analysis (11 examples)
+├── analysis/              # Time series analysis (12 examples)
 │   ├── analysis_seasonaltrend.py
+│   ├── analysis_driveranalysis.py
 │   ├── analysis_gapfinder.py
 │   ├── analysis_gapstats.py
 │   └── ...
@@ -131,7 +132,7 @@ uv run python examples/gapfilling/gapfill_randomforest.py
 uv run python examples/run_all_examples.py
 ```
 
-This runs all 106 examples in parallel with 8 workers, reporting execution time and any errors.
+This runs all 107 examples in parallel with 8 workers, reporting execution time and any errors.
 
 ## Finding Examples
 
@@ -161,7 +162,7 @@ Browse by topic:
 |--------|-------|--------|
 | **Visualization** | 21 | Heatmaps, scatter, timeseries (+ interactive & range-tool), shifted distribution, histograms, ridgelines, cumulative, diurnal cycles, tree-ring spiral and radial line |
 | **Times** | 5 | Timestamp validation, frequency detection, diel cycles, temporal matrices |
-| **Analysis** | 11 | Correlation, daily correlation, decomposition, gap detection, gap statistics, spatial aggregation, harmonic analysis |
+| **Analysis** | 12 | Correlation, daily correlation, driver attribution, decomposition, gap detection, gap statistics, spatial aggregation, harmonic analysis |
 | **Features** | 11 | Feature engineering pipeline, air properties, unit conversions, day/night flags, VPD, lagged variants |
 | **Fits** | 2 | Binned fitting, ecosystem response fitting |
 | **Flux** | 18 | Time lag analysis, processing chain, HQ filtering, USTAR detection (3), self-heating (2), uncertainty, PWB batch detection (CLI + API), high-res analysis |

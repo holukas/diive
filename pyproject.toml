@@ -36,6 +36,16 @@ dependencies = [
     "rich>=15.0.0",
 ]
 
+[project.optional-dependencies]
+# Heavy causal-discovery libraries used only by DriverAnalysis Layer 3
+# (DriverAnalysis.pcmci / .cate). They are lazy-imported, so the core install
+# never needs them. Install with: pip install 'diive[causal]'  (or, with uv:
+# uv sync --extra causal). tigramite -> PCMCI(+); econml -> CATE.
+causal = [
+    "tigramite>=5.2",
+    "econml>=0.15",
+]
+
 [project.scripts]
 diive-tlag-pwb-batch = "diive.flux.hires.lag_pwb:_cli_main"
 

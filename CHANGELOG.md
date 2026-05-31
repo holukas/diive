@@ -272,6 +272,18 @@
 
 ### Analysis
 
+- **`DriverAnalysis`** — evidence-triangulation driver attribution for flux time series, organized by
+  epistemic level (association → temporal prediction → causation) and led by a convergence/divergence
+  summary across methods.  Layer 1 (association): SHAP importance vs a `.RANDOM` benchmark and
+  correlation-robust ALE response curves (1D + 2D, implemented from scratch — no new dependency).  Layer 2
+  (temporal): lagged importance (response-timescale fingerprint), scale-resolved importance (STL components
+  and ½-hourly/daily/monthly aggregations), and regime-stratified importance — all reusing existing diive
+  infrastructure.  Layer 3 (opt-in causal): a deseasonalized `GrangerCausality` sanity check, plus PCMCI(+)
+  and CATE behind the optional `diive[causal]` extra (lazy-imported).  All train/test splits are time-aware
+  (no shuffling) and model scores are held-out; SHAP/ALE are never presented as causal.  Also exposes the
+  standalone, dependency-free `accumulated_local_effects` / `accumulated_local_effects_2d` helpers and an
+  `AleCurve` with two-phase plotting.  Available as `dv.analysis.DriverAnalysis`; see
+  `examples/analysis/analysis_driveranalysis.py`.
 - **`GapStats`** — extended gap analysis wrapping `GapFinder` via composition.  Adds monthly and annual
   breakdowns, explicit long-gap listing, a Rich console report (`.report()`), and a four-panel figure
   (availability heatmap, gap-spike timeline, monthly polar chart, gap-length histogram).  Available as
