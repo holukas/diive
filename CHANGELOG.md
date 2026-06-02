@@ -224,21 +224,27 @@
   happens on rotated files but the lag must be removed from raw files with different filenames, `--period-key-regex` /
   `--file-key-regex` extract a common key (typically a timestamp) from each side so the apply step finds the right raw
   file per period. After alignment, downstream flux processing should run with EC time-lag maximization disabled.
-- **`PerFilePipeline`** / `process_one_file` — per-chunk end-to-end PWB pipeline
-  (`diive.flux.hires.detect_and_remove_tlag`). For each raw EC file the pipeline reads once (preserving all metadata
-  + columns), then splits the data into fixed-length chunks (`--chunk-seconds`, default 1800 s = 30 min); for each
-  chunk it applies `WindDoubleRotation` in memory, runs `PreWhiteningBootstrap` on the rotated W + each scalar + sonic
-  temperature, shifts the scalar columns in the UNROTATED chunk by the detected lag, and writes the lag-corrected
-  chunk as its own output file. One 6-hour input file produces up to twelve 30-minute output files; short trailing
-  chunks (< `--min-chunk-seconds`, default 300 s) are skipped. The rotated data are never written to disk. Output
-  chunk files are drop-in replacements (same metadata header, same column order). Chunk filenames are composed via
-  `--chunk-name-template` (placeholders: `{stem}`, `{suffix}`, `{index}`, optional `{starttime}` requiring
-  `--start-time-regex` / `--start-time-format`). Parallel unit of work is **one chunk** — chunks across all files
-  dispatch into a `ProcessPoolExecutor` via `--n-workers` (default `os.cpu_count()`; `--n-workers 1` runs sequentially
-  in-process). With `N` workers all `N` cores stay busy even when there's just one input file: each chunk worker
-  reads only its slice from the file via `pd.read_csv(skiprows, nrows)`. A checkpoint CSV
-  (`detect_and_remove_tlag_checkpoint.csv`) is written to the output directory after every chunk completes, so an
-  interrupted run leaves a usable snapshot on disk. Workers emit live `start`/`done` events through
+- **`PerFilePipeline`** / `process_one_file` — two-phase per-chunk end-to-end PWB pipeline
+  (`diive.flux.hires.detect_and_remove_tlag`). Each raw EC file is split into fixed-length chunks (`--chunk-seconds`,
+  default 1800 s = 30 min). **Phase 1 (detect):** for each chunk the pipeline applies `WindDoubleRotation` in memory
+  and runs `PreWhiteningBootstrap` on the rotated W + each scalar + sonic temperature — no data is written yet.
+  **PWBOPT** then chooses the *best* lag per chunk across the full chunk sequence (S1/S2/S3 carry-forward + gap-fill,
+  paper Section 2.3). **Phase 2 (remove):** each successfully-detected chunk's scalar columns are shifted in the
+  UNROTATED chunk by that PWBOPT lag — the column named by `--lag-column-template` (default `{prefix}_tlag_final_pf_s`,
+  the pre-filtered gap-filled lag, the same one `diive-tlag-apply-batch` removes) — and written as its own output
+  file. Removing the PWBOPT lag rather than the raw per-chunk detection means a wide-HDI chunk's spurious mode lag is
+  replaced by its neighbour's optimal lag. One 6-hour input file produces up to twelve 30-minute output files; short
+  trailing chunks (< `--min-chunk-seconds`, default 300 s) are skipped. The rotated data are never written to disk.
+  Output chunk files are drop-in replacements (same metadata header, same column order). Chunk filenames are composed
+  via `--chunk-name-template` (placeholders: `{stem}`, `{suffix}`, `{index}`, optional `{starttime}` requiring
+  `--start-time-regex` / `--start-time-format`). Parallel unit of work is **one chunk** — each phase dispatches all
+  chunks across all files into a `ProcessPoolExecutor` via `--n-workers` (default `os.cpu_count()`; `--n-workers 1`
+  runs sequentially in-process). With `N` workers all `N` cores stay busy even when there's just one input file: each
+  chunk worker reads only its slice from the file via `pd.read_csv(skiprows, nrows)`. The number of chunks is counted
+  **per file** (not assumed from the first file), so files longer than the first no longer lose their trailing chunks.
+  Per-phase checkpoint CSVs (`detect_and_remove_tlag_checkpoint.csv` for detect, `..._remove_checkpoint.csv` for
+  remove) are written after every chunk completes, so an interrupted run leaves a usable snapshot on disk. Workers
+  emit live `start`/`done` events through
   a `multiprocessing.Manager` queue, so the main process drives a per-chunk progress bar and the description shows
   each parallel worker's current (file, chunk) live. Every run writes a plain-text `log.txt` to the output directory
   recording every console line (run metadata + per-chunk progress + errors + summary), saved even on exception. The

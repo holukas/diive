@@ -9,20 +9,34 @@ tube delay can drift too, so a single rotation / lag estimate across 6 h
 is the wrong granularity.
 
 This module therefore reads each long raw file once and processes it in
-**fixed-length chunks** (default 30 minutes = ``hz * 1800`` rows). For
-each chunk:
+**fixed-length chunks** (default 30 minutes = ``hz * 1800`` rows), in two
+phases.
 
-1. Slice the chunk out of the full-file DataFrame (unrotated; all original
-   columns preserved).
+**Phase 1 — detect (every chunk):**
+
+1. Read the chunk's rows (unrotated; all original columns preserved).
 2. Apply double rotation to the wind vector (u, v, w) of the chunk
    **in memory** using ``diive.flux.WindDoubleRotation``. The rotated W
    is the input to PWB — the rotated data are never written to disk.
 3. Run ``PreWhiteningBootstrap`` (Vitale et al. 2024) on the rotated W +
    each scalar + sonic temperature, producing one ``tlag_s`` per gas
-   per chunk.
-4. Shift each scalar column in the **unrotated** chunk DataFrame backward
-   by ``round(tlag_s * hz)`` rows (``pd.Series.shift(periods=-n)``),
-   aligning it with the wind.
+   per chunk. Nothing is written yet.
+
+**PWBOPT — choose the best lag:** with every chunk's raw detection in hand,
+apply the PWBOPT decision rule (S1/S2/S3 carry-forward + gap-fill, paper
+Section 2.3) across the full chunk sequence in temporal order. This is what
+makes the split necessary — PWBOPT needs the *whole* sequence, so the lag
+cannot be removed during phase 1.
+
+**Phase 2 — remove (every successfully-detected chunk):**
+
+4. Shift each scalar column in the **unrotated** chunk backward by
+   ``round(tlag_best * hz)`` rows (``pd.Series.shift(periods=-n)``), where
+   ``tlag_best`` is the PWBOPT-optimised lag (the column named by
+   ``--lag-column-template``, default ``{prefix}_tlag_final_pf_s`` — the
+   pre-filtered, gap-filled "best" lag, the same column
+   ``diive-tlag-apply-batch`` removes). A wide-HDI chunk's *raw* mode lag
+   can be spurious; PWBOPT replaces it with the neighbouring optimal lag.
 5. Write the lag-corrected (unrotated) chunk to ``--output-dir`` as its
    own file, with the original metadata header rows and column order
    preserved.
@@ -39,11 +53,11 @@ slice via ``pd.read_csv(skiprows, nrows)``). Set ``--n-workers 1`` for
 sequential in-process execution. All functions live in this single
 module.
 
-A checkpoint snapshot
-(``<output-dir>/detect_and_remove_tlag_checkpoint.csv``) is written
-after every chunk completes — so an interrupted run leaves a partial
-result on disk you can inspect or post-process. When the run finishes
-cleanly the full results land in
+Checkpoint snapshots are written after every chunk completes, so an
+interrupted run leaves a partial result on disk:
+``<output-dir>/detect_and_remove_tlag_checkpoint.csv`` for phase 1
+(detect — the expensive part) and ``..._remove_checkpoint.csv`` for
+phase 2 (remove). When the run finishes cleanly the full results land in
 ``detect_and_remove_tlag_summary.csv``.
 
 Every CLI run writes a plain-text ``log.txt`` to the output directory
@@ -109,7 +123,10 @@ Outputs in ``--output-dir``:
   ``is_reliable`` / ``tlag_pw_s`` / ``corr_pw`` / ``cov_pwb`` /
   ``ar_order`` / ``best_combination``, plus the PWBOPT post-processing
   columns ``pwbopt_s_std`` / ``flag_std`` / ``pwbopt_s_pf`` /
-  ``flag_pf`` / ``tlag_final_s`` / ``tlag_final_pf_s``.
+  ``flag_pf`` / ``tlag_final_s`` / ``tlag_final_pf_s``, and the applied-shift
+  bookkeeping ``{prefix}_applied_records`` (records actually shifted = the
+  PWBOPT lag from ``--lag-column-template``, **not** the raw ``tlag_s``) /
+  ``{prefix}_status``.
 - ``plots/`` (when ``--save-plots`` is set) containing:
 
   - One ``<chunk_stem>_<gas>.png`` per chunk per gas — the 3-panel PWB
@@ -123,19 +140,21 @@ Outputs in ``--output-dir``:
   - ``summary_lag_comparison.png`` — the cross-scalar
     ``PwboptLagPlot`` scatter + KDE comparing standard vs. pre-filtered
     PWBOPT for every gas.
-- ``detect_and_remove_tlag_checkpoint.csv`` — periodically written
-  snapshot of the rows accumulated so far; left intact after a clean
-  run so it can be diffed against the final summary if useful.
+- ``detect_and_remove_tlag_checkpoint.csv`` /
+  ``detect_and_remove_tlag_remove_checkpoint.csv`` — per-phase snapshots of
+  the rows accumulated so far; left intact after a clean run so they can be
+  diffed against the final summary if useful.
 - ``log.txt`` capturing every console line from the run.
 
 Public API
 ----------
 This module exposes:
 
-- ``PerFilePipeline`` — class wrapping the loop; ``.run()`` processes all
-  files and returns a per-file summary DataFrame.
-- ``process_one_file`` — module-level function that runs the full Read →
-  Rotate → Detect → Remove → Write sequence on a single file. Useful from
+- ``PerFilePipeline`` — class wrapping the two-phase loop; ``.run()``
+  processes all files and returns a per-(file, chunk) summary DataFrame.
+- ``process_one_file`` — module-level function that runs the full
+  read-once → detect-all-chunks → PWBOPT → remove-best-lag → write
+  sequence on a single file. Useful from
   Python without the CLI.
 
 Part of the diive library: https://github.com/holukas/diive
@@ -330,7 +349,62 @@ def _chunk_filename(
 
 
 # ---------------------------------------------------------------------------
-# Core per-file pipeline — Read → (chunk × Rotate → Detect → Remove → Write)
+# PWBOPT lag selection — shared by the per-file path and PerFilePipeline
+# ---------------------------------------------------------------------------
+
+def _pwbopt_final_lags(
+        rows: list,
+        scalars: dict,
+        hdi_thresh: float,
+        dev_thresh: float,
+        hdi_prefilter: float,
+        lag_column_template: str,
+) -> dict:
+    """Pick the per-chunk PWBOPT lag to remove, as ``{(chunk_index, label): lag_s}``.
+
+    Runs the same S1/S2/S3 carry-forward + gap-fill as
+    ``PerFilePipeline._apply_pwbopt_postprocessing`` over the chunk
+    detections (in temporal order) and returns the column selected by
+    ``lag_column_template`` — by default ``{prefix}_tlag_final_pf_s`` (the
+    pre-filtered, gap-filled "best" lag), the same column ``TlagApplier``
+    removes. Detections for skipped/error chunks are NaN and treated as
+    gaps, so PWBOPT carries forward the neighbouring optimal lag.
+    """
+    if not rows:
+        return {}
+    ordered = sorted(rows, key=lambda r: r.get('chunk_index', -1))
+    cidx = [r.get('chunk_index') for r in ordered]
+    out: dict = {}
+    for label in scalars:
+        pfx = label.lower()
+        tlag = np.array([float(r.get(f'{pfx}_tlag_s', np.nan)) for r in ordered],
+                        dtype=float)
+        hdi = np.array([float(r.get(f'{pfx}_hdi_range_s', np.nan)) for r in ordered],
+                       dtype=float)
+        std = PwbBatchDetection.apply_pwbopt(tlag, hdi, hdi_thresh, dev_thresh)
+        if hdi_prefilter and hdi_prefilter > 0:
+            tlag_pf = PwbBatchDetection.apply_hdi_prefilter(tlag, hdi, hdi_prefilter)
+            pf_pwbopt = PwbBatchDetection.apply_pwbopt(
+                tlag_pf, hdi, hdi_thresh, dev_thresh)['pwbopt_s'].to_numpy()
+        else:
+            pf_pwbopt = std['pwbopt_s'].to_numpy()
+        final_std = PwbBatchDetection.fill_tlag_gaps(
+            std['pwbopt_s'].to_numpy(), tlag_s_raw=tlag)
+        final_pf = PwbBatchDetection.fill_tlag_gaps(pf_pwbopt, tlag_s_raw=tlag)
+        # Honour the requested column; default (and anything ending _pf_s) uses
+        # the pre-filtered series, otherwise the standard PWBOPT series.
+        col = lag_column_template.format(prefix=pfx)
+        chosen = final_std if col.endswith('_tlag_final_s') else final_pf
+        for k, ci in enumerate(cidx):
+            out[(ci, label)] = float(chosen[k])
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Core per-file pipeline — Read once → detect every chunk → PWBOPT → remove
+# the best lag from each chunk → write. Two-phase so the lag actually removed
+# is the PWBOPT-optimised lag (needs the whole chunk sequence), not the raw
+# per-chunk detection.
 # ---------------------------------------------------------------------------
 
 def process_one_file(
@@ -360,42 +434,49 @@ def process_one_file(
         strict: bool = False,
         save_plots: bool = False,
         plots_dir: Path | None = None,
+        hdi_thresh: float = 0.5,
+        dev_thresh: float = 0.5,
+        hdi_prefilter: float = 1.0,
+        lag_column_template: str = '{prefix}_tlag_final_pf_s',
         progress_queue=None,
 ) -> list:
-    """Run the per-chunk PWB pipeline on one (possibly multi-hour) input file.
+    """Run the two-phase PWB pipeline on one (possibly multi-hour) input file.
 
     The input is read once and split into fixed-length chunks of
-    ``round(chunk_seconds * hz)`` rows. Each chunk independently goes
-    through Rotate → Detect → Remove → Write. The last chunk may be
-    shorter; if its length is below ``round(min_chunk_seconds * hz)`` it
-    is skipped (PWB needs enough records for a meaningful bootstrap).
+    ``round(chunk_seconds * hz)`` rows. **Phase 1** detects the time lag for
+    every chunk (Rotate in memory → PWB per scalar). **Phase 2** runs PWBOPT
+    over the file's chunk detections (S1/S2/S3 carry-forward + gap-fill,
+    paper Section 2.3) and shifts each scalar by the resulting *optimised*
+    lag — the column named by ``lag_column_template`` (default
+    ``{prefix}_tlag_final_pf_s``) — before writing one file per chunk. This
+    is the same "best" lag ``TlagApplier`` removes; the raw per-chunk
+    detection is reported in the summary but never applied.
 
-    Output filenames are composed via ``chunk_name_template`` (see the
-    module docstring for placeholder semantics). The same preserved-
-    header lines from the input are written verbatim at the top of every
-    chunk file.
+    The last chunk may be shorter; if its length is below
+    ``round(min_chunk_seconds * hz)`` it is skipped (PWB needs enough records
+    for a meaningful bootstrap). Output filenames are composed via
+    ``chunk_name_template`` (see the module docstring for placeholder
+    semantics). The preserved header lines from the input are written
+    verbatim at the top of every chunk file.
 
     ``scalars`` maps gas labels (e.g. ``'CH4'``) to column names in the
     raw file (e.g. ``'CH4_DRY_[LGR-A]'``).
 
-    Returns a list of per-chunk summary dicts. Each dict has keys:
-    ``period`` (output chunk filename), ``parent`` (input filename),
-    ``chunk_index``, ``chunk_records``, ``status`` (``ok`` / ``error`` /
-    ``skipped:short``), ``error``, ``theta_deg``, ``phi_deg``
-    (rotation angles for the chunk), and per-gas ``{prefix}_tlag_s``,
+    Returns a list of per-chunk summary dicts: ``period`` (output chunk
+    filename), ``parent`` (input filename), ``chunk_index``,
+    ``chunk_records``, ``status`` (``ok`` / ``error`` / ``skipped:short``),
+    ``error``, ``theta_deg``, ``phi_deg``, and per-gas ``{prefix}_tlag_s``,
     ``{prefix}_hdi_range_s``, ``{prefix}_is_reliable``,
-    ``{prefix}_applied_records``, ``{prefix}_status``.
+    ``{prefix}_applied_records`` (records shifted = the PWBOPT lag), and
+    ``{prefix}_status``.
 
     On error (when ``strict=False``), one error row is returned for the
     file as a whole (status=``error``, ``error`` field carries the
     exception class + message).
 
-    When ``progress_queue`` is provided (a ``multiprocessing.Queue`` or
-    ``Manager.Queue`` proxy), the function emits live progress events as
-    it works through the chunks: ``{'event': 'start', ...}`` when each
-    chunk begins, and ``{'event': 'done', ...}`` (or ``'error'`` /
-    ``'skipped'``) when it finishes. The main process can drain this
-    queue to drive a per-chunk progress display.
+    When ``progress_queue`` is provided, the function emits one
+    ``{'event': 'start'}`` / ``{'event': 'done'}`` pair per chunk during
+    phase 1 (detection, the expensive part); phase 2 runs silently.
     """
     if na_values is None:
         na_values = list(_DEFAULT_NA_VALUES)
@@ -407,43 +488,16 @@ def process_one_file(
     def _empty_chunk_row(chunk_index: int, chunk_period: str,
                          n_rows: int, status: str, err: str = '',
                          t_chunk: 'datetime | None' = None) -> dict:
-        """Build a row with all per-gas fields populated as NaN/default.
-
-        Field layout mirrors ``tlag_results.csv`` produced by
-        ``diive-tlag-pwb-batch`` so the summary CSV from this pipeline is
-        a drop-in equivalent (downstream tools that already read the PWB
-        batch results will work unchanged).
-        """
-        r: dict = {
-            'period': chunk_period,
-            'parent': parent_name,
-            'timestamp': t_chunk.isoformat() if t_chunk is not None else '',
-            'chunk_index': chunk_index,
-            'chunk_records': n_rows,
-            'status': status,
-            'error': err,
-            'theta_deg': np.nan,
-            'phi_deg': np.nan,
-        }
-        for label in scalars:
-            pfx = label.lower()
-            # Mirror the PWB batch result schema
-            r[f'{pfx}_tlag_s'] = np.nan
-            r[f'{pfx}_hdi_lo_s'] = np.nan
-            r[f'{pfx}_hdi_hi_s'] = np.nan
-            r[f'{pfx}_hdi_range_s'] = np.nan
-            r[f'{pfx}_is_reliable'] = False
-            r[f'{pfx}_tlag_pw_s'] = np.nan
-            r[f'{pfx}_corr_pw'] = np.nan
-            r[f'{pfx}_cov_pwb'] = np.nan
-            r[f'{pfx}_ar_order'] = np.nan
-            r[f'{pfx}_best_combination'] = ''
-            # Applied-shift bookkeeping (specific to this pipeline)
-            r[f'{pfx}_applied_records'] = np.nan
-            r[f'{pfx}_status'] = 'pending'
-        return r
+        """Build a row with all per-gas fields populated as NaN/default."""
+        return _empty_detect_row(
+            scalars, chunk_period, parent_name,
+            t_chunk.isoformat() if t_chunk is not None else '',
+            chunk_index, n_rows, status, err,
+        )
 
     rows: list = []
+    # ok chunks carry forward to phase 2: (chunk_row, i0, i1, chunk_period)
+    detect_ok: list = []
     output_dir = Path(output_dir)
     worker_pid = os.getpid()
 
@@ -476,6 +530,7 @@ def process_one_file(
         n_total = len(df_raw)
         n_chunks = (n_total + chunk_records - 1) // chunk_records
 
+        # ================= PHASE 1: detect every chunk ===================
         for ci in range(n_chunks):
             i0 = ci * chunk_records
             i1 = min(i0 + chunk_records, n_total)
@@ -518,7 +573,6 @@ def process_one_file(
                 chunk_row['phi_deg'] = float(np.degrees(wr.phi))
 
                 # ---- DETECT (PWB on rotated W per scalar) ---------------
-                detected_lags: dict = {}
                 for gi, (label, col_name) in enumerate(scalars.items()):
                     pfx = label.lower()
                     pwb_df = pd.DataFrame({
@@ -543,7 +597,6 @@ def process_one_file(
                     )
                     pwb.run()
                     res = pwb.results
-                    detected_lags[label] = res['tlag_s']
 
                     # Full schema (matches diive-tlag-pwb-batch results CSV)
                     chunk_row[f'{pfx}_tlag_s'] = float(res.get('tlag_s', np.nan))
@@ -579,25 +632,7 @@ def process_one_file(
                             # Plotting must never fail the detection itself.
                             pass
 
-                # ---- REMOVE (shift scalars in the UNROTATED chunk) ------
-                df_out = df_chunk.copy()
-                for label, col_name in scalars.items():
-                    pfx = label.lower()
-                    lag_s = detected_lags[label]
-                    if not np.isfinite(lag_s):
-                        chunk_row[f'{pfx}_status'] = 'skipped:lag_nan'
-                        continue
-                    n_records = int(round(lag_s * hz))
-                    df_out[col_name] = df_out[col_name].shift(periods=-n_records)
-                    chunk_row[f'{pfx}_applied_records'] = n_records
-                    chunk_row[f'{pfx}_status'] = 'ok'
-
-                # ---- WRITE chunk as its own file ------------------------
-                output_path = output_dir / chunk_period
-                _write_raw_file(
-                    output_path, preserved_lines, df_out,
-                    sep=sep, lineterm=lineterm, na_rep=na_rep,
-                )
+                detect_ok.append((chunk_row, i0, i1, chunk_period))
 
             except Exception as ce:
                 if strict:
@@ -608,6 +643,38 @@ def process_one_file(
             rows.append(chunk_row)
             _emit('done', chunk_index=ci, chunk_period=chunk_period,
                   row=chunk_row)
+
+        # ============ PWBOPT: best lag per (chunk, gas) ==================
+        final_lags = _pwbopt_final_lags(
+            rows, scalars, hdi_thresh, dev_thresh, hdi_prefilter,
+            lag_column_template,
+        )
+
+        # ============ PHASE 2: remove the best lag + write ===============
+        for chunk_row, i0, i1, chunk_period in detect_ok:
+            ci = chunk_row['chunk_index']
+            try:
+                df_out = df_raw.iloc[i0:i1].copy()
+                for label, col_name in scalars.items():
+                    pfx = label.lower()
+                    lag_s = final_lags.get((ci, label), np.nan)
+                    if not np.isfinite(lag_s):
+                        chunk_row[f'{pfx}_status'] = 'skipped:lag_nan'
+                        continue
+                    n_records = int(round(lag_s * hz))
+                    df_out[col_name] = df_out[col_name].shift(periods=-n_records)
+                    chunk_row[f'{pfx}_applied_records'] = n_records
+                    chunk_row[f'{pfx}_status'] = 'ok'
+
+                _write_raw_file(
+                    output_dir / chunk_period, preserved_lines, df_out,
+                    sep=sep, lineterm=lineterm, na_rep=na_rep,
+                )
+            except Exception as ce:
+                if strict:
+                    raise
+                chunk_row['status'] = 'error'
+                chunk_row['error'] = f'{type(ce).__name__}: {ce}'
 
     except Exception as e:
         if strict:
@@ -627,15 +694,61 @@ def process_one_file(
 
 
 # ---------------------------------------------------------------------------
-# Per-chunk processor — the actual unit of work dispatched by the parallel
-# pipeline. Reads only its slice from the input file (via pd.read_csv with
-# skiprows + nrows), runs Rotate → Detect → Remove → Write for that one
-# chunk, and returns its row dict. Pickle-safe (module-level function).
+# Per-chunk processors for the TWO-PHASE parallel pipeline.
+#
+# Phase 1 (``detect_one_chunk``): read the chunk slice, rotate the wind in
+# memory, run PWB per scalar, return the detection row. No data file is
+# written — the lag cannot be removed yet, because the lag that *should* be
+# removed is the PWBOPT-optimised lag, and PWBOPT needs the full temporal
+# sequence of per-chunk detections (S1/S2/S3 carry-forward) which only exists
+# once every chunk has been detected.
+#
+# Phase 2 (``remove_one_chunk``): re-read the chunk slice, shift each scalar
+# by the PWBOPT lag chosen across all chunks, write the lag-corrected file.
+#
+# Both read only their own slice via ``pd.read_csv(skiprows, nrows)`` and are
+# pickle-safe (module-level) for ``ProcessPoolExecutor``.
 # ---------------------------------------------------------------------------
 
-def process_one_chunk(
+def _empty_detect_row(scalars: dict, period: str, parent: str,
+                      timestamp_iso: str, chunk_index: int, n_rows: int,
+                      status: str, err: str = '') -> dict:
+    """Detection-row skeleton; per-gas fields default to NaN/pending.
+
+    Schema mirrors ``tlag_results.csv`` from ``diive-tlag-pwb-batch`` so the
+    summary CSV stays a drop-in equivalent. ``{pfx}_applied_records`` /
+    ``{pfx}_status`` are placeholders filled in during phase 2 (remove).
+    """
+    r: dict = {
+        'period': period,
+        'parent': parent,
+        'timestamp': timestamp_iso,
+        'chunk_index': chunk_index,
+        'chunk_records': n_rows,
+        'status': status,
+        'error': err,
+        'theta_deg': np.nan,
+        'phi_deg': np.nan,
+    }
+    for label in scalars:
+        pfx = label.lower()
+        r[f'{pfx}_tlag_s'] = np.nan
+        r[f'{pfx}_hdi_lo_s'] = np.nan
+        r[f'{pfx}_hdi_hi_s'] = np.nan
+        r[f'{pfx}_hdi_range_s'] = np.nan
+        r[f'{pfx}_is_reliable'] = False
+        r[f'{pfx}_tlag_pw_s'] = np.nan
+        r[f'{pfx}_corr_pw'] = np.nan
+        r[f'{pfx}_cov_pwb'] = np.nan
+        r[f'{pfx}_ar_order'] = np.nan
+        r[f'{pfx}_best_combination'] = ''
+        r[f'{pfx}_applied_records'] = np.nan
+        r[f'{pfx}_status'] = 'pending'
+    return r
+
+
+def detect_one_chunk(
         input_path: Path,
-        output_dir: Path,
         chunk_index: int,
         chunk_records: int,
         min_chunk_records: int,
@@ -655,38 +768,29 @@ def process_one_chunk(
         skiprows: int,
         extra_rows: int,
         sep: str,
-        lineterm: str,
         na_values: list,
-        na_rep: str,
         random_state: int | None,
         strict: bool,
         save_plots: bool,
         plots_dir: Path | None,
         progress_queue=None,
 ) -> dict:
-    """Run Rotate → Detect → Remove → Write for one chunk inside one file.
+    """Phase 1: detect the per-gas time lag for one chunk (writes no data).
 
-    Reads only this chunk's data slice from the file (header lines from
-    the top, then ``pd.read_csv(skiprows=n_header + chunk_index *
-    chunk_records, nrows=chunk_records)``). Pickle-safe so it can be
-    dispatched directly to a ``ProcessPoolExecutor``.
+    Reads only this chunk's data slice, applies double rotation in memory,
+    and runs ``PreWhiteningBootstrap`` on the rotated W vs each scalar. The
+    lag is *not* removed here — removal happens in ``remove_one_chunk`` using
+    the PWBOPT-optimised lag chosen across all chunks. Pickle-safe.
 
-    Returns one chunk-row dict (same schema as one element of
-    ``process_one_file``'s return list).
+    Returns one detection-row dict (one element of the per-file summary).
     """
     parent_name = Path(input_path).name
     worker_pid = os.getpid()
-    output_dir = Path(output_dir)
-
-    chunk_period, t_chunk = _chunk_filename(
-        input_path=Path(input_path),
-        chunk_index=chunk_index,
-        chunk_seconds=chunk_seconds,
-        name_template=chunk_name_template,
-        start_time_regex=start_time_regex,
-        start_time_format=start_time_format,
-    )
-    timestamp_iso = t_chunk.isoformat() if t_chunk is not None else ''
+    # Fallback label used only if filename templating fails below, so the
+    # failure becomes a visible 'error' row instead of a vanished chunk
+    # (a swallowed worker exception in the parallel path).
+    chunk_period = f'{Path(input_path).stem}#chunk{chunk_index}'
+    timestamp_iso = ''
 
     def _emit(event: str, **extra):
         if progress_queue is None:
@@ -701,38 +805,22 @@ def process_one_chunk(
         except Exception:
             pass
 
-    def _empty_row(status: str, n_rows: int, err: str = '') -> dict:
-        r = {
-            'period': chunk_period,
-            'parent': parent_name,
-            'timestamp': timestamp_iso,  # ISO chunk-start; empty if no regex
-            'chunk_index': chunk_index,
-            'chunk_records': n_rows,
-            'status': status,
-            'error': err,
-            'theta_deg': np.nan,
-            'phi_deg': np.nan,
-        }
-        for label in scalars:
-            pfx = label.lower()
-            r[f'{pfx}_tlag_s'] = np.nan
-            r[f'{pfx}_hdi_lo_s'] = np.nan
-            r[f'{pfx}_hdi_hi_s'] = np.nan
-            r[f'{pfx}_hdi_range_s'] = np.nan
-            r[f'{pfx}_is_reliable'] = False
-            r[f'{pfx}_tlag_pw_s'] = np.nan
-            r[f'{pfx}_corr_pw'] = np.nan
-            r[f'{pfx}_cov_pwb'] = np.nan
-            r[f'{pfx}_ar_order'] = np.nan
-            r[f'{pfx}_best_combination'] = ''
-            r[f'{pfx}_applied_records'] = np.nan
-            r[f'{pfx}_status'] = 'pending'
-        return r
-
     n_preserved = skiprows + 1 + extra_rows
     skiprows_total = n_preserved + chunk_index * chunk_records
 
     try:
+        # Resolve the output filename first; a templating/regex error here is
+        # a config mistake — surface it as an error row, not a lost chunk.
+        chunk_period, t_chunk = _chunk_filename(
+            input_path=Path(input_path),
+            chunk_index=chunk_index,
+            chunk_seconds=chunk_seconds,
+            name_template=chunk_name_template,
+            start_time_regex=start_time_regex,
+            start_time_format=start_time_format,
+        )
+        timestamp_iso = t_chunk.isoformat() if t_chunk is not None else ''
+
         # ---- Read preserved header (small) -------------------------------
         with open(input_path, 'r', encoding='utf-8', errors='replace') as fh:
             preserved_lines = [next(fh) for _ in range(n_preserved)]
@@ -759,10 +847,10 @@ def process_one_chunk(
         # Short trailing chunk (file shorter than expected): emit a single
         # 'done' event with skipped status so the bar still advances.
         if chunk_n < min_chunk_records:
-            row = _empty_row(
-                status='skipped:short',
-                n_rows=chunk_n,
-                err=f'chunk has {chunk_n} rows < min {min_chunk_records}',
+            row = _empty_detect_row(
+                scalars, chunk_period, parent_name, timestamp_iso,
+                chunk_index, chunk_n, 'skipped:short',
+                f'chunk has {chunk_n} rows < min {min_chunk_records}',
             )
             _emit('done', chunk_index=chunk_index,
                   chunk_period=chunk_period, row=row)
@@ -786,7 +874,8 @@ def process_one_chunk(
 
         _emit('start', chunk_index=chunk_index, chunk_period=chunk_period)
 
-        row = _empty_row(status='ok', n_rows=chunk_n)
+        row = _empty_detect_row(scalars, chunk_period, parent_name,
+                                timestamp_iso, chunk_index, chunk_n, 'ok')
 
         # ---- Rotate ------------------------------------------------------
         wr = WindDoubleRotation(
@@ -798,7 +887,6 @@ def process_one_chunk(
         row['phi_deg'] = float(np.degrees(wr.phi))
 
         # ---- Detect (PWB on rotated W per scalar) -----------------------
-        detected_lags: dict = {}
         for gi, (label, col_name) in enumerate(scalars.items()):
             pfx = label.lower()
             pwb_df = pd.DataFrame({
@@ -822,7 +910,6 @@ def process_one_chunk(
             )
             pwb.run()
             res = pwb.results
-            detected_lags[label] = res['tlag_s']
 
             row[f'{pfx}_tlag_s'] = float(res.get('tlag_s', np.nan))
             row[f'{pfx}_hdi_lo_s'] = float(res.get('hdi_lo_s', np.nan))
@@ -840,6 +927,7 @@ def process_one_chunk(
             if 'best_combination' in res and res['best_combination']:
                 row[f'{pfx}_best_combination'] = str(res['best_combination'])
 
+            # Save the 3-panel PWB diagnostic plot (one per chunk per gas).
             if save_plots and plots_dir is not None:
                 try:
                     chunk_stem = Path(chunk_period).stem
@@ -852,38 +940,137 @@ def process_one_chunk(
                 except Exception:
                     pass
 
-        # ---- Remove (shift scalars in the UNROTATED chunk) --------------
-        df_out = df_chunk.copy()
+    except Exception as e:
+        if strict:
+            raise
+        row = _empty_detect_row(scalars, chunk_period, parent_name,
+                                timestamp_iso, chunk_index, 0, 'error',
+                                f'{type(e).__name__}: {e}')
+        _emit('done', chunk_index=chunk_index, chunk_period=chunk_period,
+              row=row)
+        return row
+
+    _emit('done', chunk_index=chunk_index, chunk_period=chunk_period, row=row)
+    return row
+
+
+def remove_one_chunk(
+        input_path: Path,
+        output_dir: Path,
+        chunk_index: int,
+        chunk_records: int,
+        chunk_period: str,
+        scalars: dict,
+        lags: dict,
+        hz: int,
+        skiprows: int,
+        extra_rows: int,
+        sep: str,
+        lineterm: str,
+        na_values: list,
+        na_rep: str,
+        strict: bool,
+        progress_queue=None,
+) -> dict:
+    """Phase 2: remove the PWBOPT lag from one chunk and write the file.
+
+    Re-reads this chunk's slice, shifts each scalar column backward by
+    ``round(lags[label] * hz)`` rows, and writes the lag-corrected
+    (unrotated) chunk with the original header preserved. ``lags`` carries
+    the per-gas PWBOPT-optimised lag chosen across all chunks in phase 1.
+    Pickle-safe.
+
+    Returns a dict carrying ``parent`` / ``chunk_index`` / ``period`` plus
+    per-gas ``{pfx}_applied_records`` / ``{pfx}_status`` and the write
+    outcome (``write_status`` / ``write_error``) for merging back into the
+    detection summary.
+    """
+    parent_name = Path(input_path).name
+    worker_pid = os.getpid()
+    output_dir = Path(output_dir)
+    n_preserved = skiprows + 1 + extra_rows
+    skiprows_total = n_preserved + chunk_index * chunk_records
+
+    def _emit(event: str, **extra):
+        if progress_queue is None:
+            return
+        try:
+            progress_queue.put({
+                'event': event,
+                'pid': worker_pid,
+                'parent': parent_name,
+                **extra,
+            })
+        except Exception:
+            pass
+
+    out: dict = {
+        'parent': parent_name,
+        'chunk_index': chunk_index,
+        'period': chunk_period,
+        'write_status': 'ok',
+        'write_error': '',
+    }
+    for label in scalars:
+        pfx = label.lower()
+        out[f'{pfx}_applied_records'] = np.nan
+        out[f'{pfx}_status'] = 'pending'
+
+    _emit('start', chunk_index=chunk_index, chunk_period=chunk_period)
+    try:
+        # ---- Read preserved header + this chunk's slice ------------------
+        with open(input_path, 'r', encoding='utf-8', errors='replace') as fh:
+            preserved_lines = [next(fh) for _ in range(n_preserved)]
+        header_line = preserved_lines[skiprows].rstrip('\n').rstrip('\r')
+        if sep == _WHITESPACE_SEP:
+            header_cols = header_line.split()
+        else:
+            header_cols = [c.strip() for c in header_line.split(sep)]
+
+        df_chunk = pd.read_csv(
+            input_path,
+            skiprows=skiprows_total,
+            nrows=chunk_records,
+            header=None,
+            sep=sep,
+            na_values=na_values,
+            low_memory=False,
+            engine='python' if sep == _WHITESPACE_SEP else 'c',
+        )
+        if df_chunk.shape[1] != len(header_cols):
+            raise ValueError(
+                f"Header has {len(header_cols)} columns but chunk data "
+                f"has {df_chunk.shape[1]} for {parent_name} chunk "
+                f"{chunk_index}. Check --skiprows / --extra-rows / --sep."
+            )
+        df_chunk.columns = header_cols
+
+        # ---- Shift scalars by the PWBOPT lag -----------------------------
         for label, col_name in scalars.items():
             pfx = label.lower()
-            lag_s = detected_lags[label]
+            lag_s = lags.get(label, np.nan)
             if not np.isfinite(lag_s):
-                row[f'{pfx}_status'] = 'skipped:lag_nan'
+                out[f'{pfx}_status'] = 'skipped:lag_nan'
                 continue
             n_records = int(round(lag_s * hz))
-            df_out[col_name] = df_out[col_name].shift(periods=-n_records)
-            row[f'{pfx}_applied_records'] = n_records
-            row[f'{pfx}_status'] = 'ok'
+            df_chunk[col_name] = df_chunk[col_name].shift(periods=-n_records)
+            out[f'{pfx}_applied_records'] = n_records
+            out[f'{pfx}_status'] = 'ok'
 
         # ---- Write -------------------------------------------------------
-        output_path = output_dir / chunk_period
         _write_raw_file(
-            output_path, preserved_lines, df_out,
+            output_dir / chunk_period, preserved_lines, df_chunk,
             sep=sep, lineterm=lineterm, na_rep=na_rep,
         )
 
     except Exception as e:
         if strict:
             raise
-        row = _empty_row(status='error', n_rows=0,
-                         err=f'{type(e).__name__}: {e}')
-        _emit('done', chunk_index=chunk_index, chunk_period=chunk_period,
-              row=row)
-        return row
+        out['write_status'] = 'error'
+        out['write_error'] = f'{type(e).__name__}: {e}'
 
-    _emit('done', chunk_index=chunk_index, chunk_period=chunk_period,
-          row=row)
-    return row
+    _emit('done', chunk_index=chunk_index, chunk_period=chunk_period, row=out)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -892,14 +1079,14 @@ def process_one_chunk(
 # spawn; module-level functions are required.
 # ---------------------------------------------------------------------------
 
-def _chunk_worker(kwargs: dict, progress_queue=None) -> dict:
-    """Run ``process_one_chunk`` in a child process."""
-    return process_one_chunk(progress_queue=progress_queue, **kwargs)
+def _detect_worker(kwargs: dict, progress_queue=None) -> dict:
+    """Run ``detect_one_chunk`` (phase 1) in a child process."""
+    return detect_one_chunk(progress_queue=progress_queue, **kwargs)
 
 
-def _per_file_worker(kwargs: dict, progress_queue=None) -> list:
-    """Run ``process_one_file`` in a child process (sequential per-file path)."""
-    return process_one_file(progress_queue=progress_queue, **kwargs)
+def _remove_worker(kwargs: dict, progress_queue=None) -> dict:
+    """Run ``remove_one_chunk`` (phase 2) in a child process."""
+    return remove_one_chunk(progress_queue=progress_queue, **kwargs)
 
 
 def _count_data_rows(path: Path, header_lines: int) -> int:
@@ -926,16 +1113,32 @@ def _count_data_rows(path: Path, header_lines: int) -> int:
 # ---------------------------------------------------------------------------
 
 class PerFilePipeline:
-    """Sequential per-file PWB detect + remove pipeline.
+    """Two-phase per-chunk PWB detect + remove pipeline.
 
-    For each file matched by ``file_pattern`` in ``input_dir``, performs
-    Read → Rotate → Detect → Remove → Write end-to-end before moving on to
-    the next file.
+    Splits every file matched by ``file_pattern`` in ``input_dir`` into
+    fixed-length chunks, then runs two parallel phases:
+
+    1. **Detect** — rotate each chunk's wind in memory and run PWB per
+       scalar. No data is written; this only collects per-chunk lags.
+    2. **Remove** — after PWBOPT (S1/S2/S3 carry-forward + gap-fill) has
+       chosen the *best* lag per chunk across the whole sequence, shift each
+       scalar by that lag and write the lag-corrected chunk file.
+
+    Removing the PWBOPT lag (not the raw per-chunk detection) is the whole
+    point of the split: a wide-HDI chunk's raw mode lag can be spurious, so
+    the lag actually applied is the same pre-filtered, gap-filled column
+    ``TlagApplier`` uses (``lag_column_template``, default
+    ``{prefix}_tlag_final_pf_s``).
+
+    The unit of parallel work is one chunk: chunks across all files are
+    dispatched into a ``ProcessPoolExecutor`` (``n_workers > 1``) so a single
+    multi-chunk file still saturates every core.
 
     See the module docstring for the full workflow rationale and the CLI
     flag reference. After ``.run()``, ``.summary`` returns a DataFrame with
-    one row per file (rotation angles, detected lag per gas, applied
-    records, reliability flags, error messages).
+    one row per (file, chunk): rotation angles, detected lag per gas, the
+    PWBOPT columns, applied records (= the removed PWBOPT lag), reliability
+    flags, and error messages.
     """
 
     def __init__(
@@ -971,6 +1174,7 @@ class PerFilePipeline:
             hdi_thresh: float = 0.5,
             dev_thresh: float = 0.5,
             hdi_prefilter: float = 1.0,
+            lag_column_template: str = '{prefix}_tlag_final_pf_s',
     ):
         self.input_dir = Path(input_dir)
         self.output_dir = Path(output_dir)
@@ -1006,6 +1210,10 @@ class PerFilePipeline:
         self.hdi_thresh = hdi_thresh
         self.dev_thresh = dev_thresh
         self.hdi_prefilter = hdi_prefilter
+        # Which PWBOPT lag column to actually remove in phase 2. Default is
+        # the pre-filtered, gap-filled "best" lag — the same column
+        # TlagApplier removes.
+        self.lag_column_template = lag_column_template
 
         self._summary: DataFrame | None = None
 
@@ -1026,23 +1234,25 @@ class PerFilePipeline:
     def run(self,
             on_progress: Callable | None = None,
             on_active: Callable | None = None) -> DataFrame:
-        """Process every matching file. Return a per-chunk summary DataFrame.
+        """Detect (phase 1) then remove the PWBOPT lag (phase 2) for every chunk.
 
-        Each file is processed in one worker (its 30-min chunks run
-        sequentially within that worker). Multiple files run in parallel
-        via ``ProcessPoolExecutor`` when ``n_workers > 1``; when
-        ``n_workers == 1`` the loop runs in-process for cleaner stack
-        traces during debugging.
+        Phase 1 runs ``detect_one_chunk`` on every chunk of every file (no
+        data written). PWBOPT then chooses the best lag per chunk across the
+        full temporal sequence. Phase 2 runs ``remove_one_chunk`` on each
+        successfully-detected chunk, shifting scalars by that PWBOPT lag and
+        writing the output file. Each phase is an independent
+        ``ProcessPoolExecutor`` fan-out (``n_workers > 1``) so all workers
+        stay busy even for a single multi-chunk file; ``n_workers == 1`` runs
+        in-process for cleaner stack traces.
 
         Args:
             on_progress: Optional callback
-                ``f(chunks_completed, total_chunks_estimate, chunk_row)``
-                fired once per chunk as work progresses.
-            on_active: Optional callback ``f(active_dict)`` where
+                ``f(chunks_completed, total, chunk_row, phase)`` fired once
+                per chunk completion. ``phase`` is ``'detect'`` or
+                ``'remove'``.
+            on_active: Optional callback ``f(active_dict, phase)`` where
                 ``active_dict`` maps worker pid -> ``{'parent', 'chunk_index',
-                'chunk_period'}``. Fired whenever the in-flight set
-                changes (a chunk starts or finishes), so a CLI can render
-                a live "currently processing" display.
+                'chunk_period'}``. Fired whenever the in-flight set changes.
 
         Returns:
             DataFrame with one row per (file, chunk), sorted by input-file
@@ -1060,26 +1270,27 @@ class PerFilePipeline:
             plots_dir.mkdir(parents=True, exist_ok=True)
 
         total_files = len(files)
-        chunks_per_file = self.estimate_chunks_per_file(files[0])
-        total_chunks_est = total_files * chunks_per_file
-
+        parent_to_idx = {f.name: i for i, f in enumerate(files)}
+        file_by_name = {f.name: f for f in files}
         chunk_records = int(round(self.chunk_seconds * self.hz))
         min_chunk_records = int(round(self.min_chunk_seconds * self.hz))
 
-        # Build a flat list of CHUNK tasks (file × chunk_index). The actual
-        # number of chunks per file is determined when each worker reads
-        # its slice — short trailing chunks are returned with
-        # ``status='skipped:short'`` so the bar still advances cleanly.
-        chunk_kwargs_list: list[dict] = []
+        # Per-file chunk count (NOT files[0] applied to all): a file longer
+        # than the first no longer loses its trailing chunks, and shorter
+        # files no longer spawn phantom over-read tasks.
+        file_chunk_counts = {f: self.estimate_chunks_per_file(f) for f in files}
+        total_chunks = sum(file_chunk_counts.values())
+
+        # ============== PHASE 1: detect (parallel, no writes) ============
+        detect_kwargs_list: list[dict] = []
         for i, f in enumerate(files):
             file_seed_base = (None if self.random_state is None
                               else int(self.random_state) + i * 10_000)
-            for ci in range(chunks_per_file):
+            for ci in range(file_chunk_counts[f]):
                 chunk_seed = (None if file_seed_base is None
                               else file_seed_base + ci * 100)
-                chunk_kwargs_list.append(dict(
+                detect_kwargs_list.append(dict(
                     input_path=f,
-                    output_dir=self.output_dir,
                     chunk_index=ci,
                     chunk_records=chunk_records,
                     min_chunk_records=min_chunk_records,
@@ -1099,36 +1310,109 @@ class PerFilePipeline:
                     skiprows=self.skiprows,
                     extra_rows=self.extra_rows,
                     sep=self.sep,
-                    lineterm=self.lineterm,
                     na_values=self.na_values,
-                    na_rep=self.na_rep,
                     random_state=chunk_seed,
                     strict=self.strict,
                     save_plots=self.save_plots,
                     plots_dir=plots_dir,
                 ))
-        total_chunks_est = len(chunk_kwargs_list)
 
-        # Path for the checkpoint snapshot. Written after every chunk
-        # completes so an interrupted run can be inspected (and, in
-        # principle, manually re-driven by feeding the surviving rows
-        # back through `_apply_pwbopt_postprocessing`).
-        checkpoint_path = self.output_dir / 'detect_and_remove_tlag_checkpoint.csv'
+        detect_rows = self._run_pool(
+            detect_kwargs_list, _detect_worker,
+            total=total_chunks, phase='detect',
+            checkpoint_path=self.output_dir / 'detect_and_remove_tlag_checkpoint.csv',
+            parent_to_idx=parent_to_idx, total_files=total_files,
+            on_progress=on_progress, on_active=on_active,
+        )
 
+        detect_rows.sort(key=lambda r: (
+            parent_to_idx.get(r.get('parent', ''), total_files),
+            r.get('chunk_index', -1),
+        ))
+        summary = pd.DataFrame(detect_rows)
+        # PWBOPT across ALL chunks in temporal order -> best lag per chunk.
+        summary = self._apply_pwbopt_postprocessing(summary)
+
+        # ============== PHASE 2: remove the PWBOPT lag + write ===========
+        remove_kwargs_list: list[dict] = []
+        for _, r in summary.iterrows():
+            if r.get('status') != 'ok':
+                continue  # error / skipped:short chunks produce no output file
+            f = file_by_name.get(r['parent'])
+            if f is None:
+                continue
+            lags = {}
+            for label in self.scalars:
+                col = self.lag_column_template.format(prefix=label.lower())
+                lags[label] = (float(r[col]) if col in summary.columns
+                               else np.nan)
+            remove_kwargs_list.append(dict(
+                input_path=f,
+                output_dir=self.output_dir,
+                chunk_index=int(r['chunk_index']),
+                chunk_records=chunk_records,
+                chunk_period=r['period'],
+                scalars=self.scalars,
+                lags=lags,
+                hz=self.hz,
+                skiprows=self.skiprows,
+                extra_rows=self.extra_rows,
+                sep=self.sep,
+                lineterm=self.lineterm,
+                na_values=self.na_values,
+                na_rep=self.na_rep,
+                strict=self.strict,
+            ))
+
+        remove_rows = self._run_pool(
+            remove_kwargs_list, _remove_worker,
+            total=len(remove_kwargs_list), phase='remove',
+            checkpoint_path=self.output_dir / 'detect_and_remove_tlag_remove_checkpoint.csv',
+            parent_to_idx=parent_to_idx, total_files=total_files,
+            on_progress=on_progress, on_active=on_active,
+        )
+
+        # ---- Merge phase-2 outcomes back into the detection summary -----
+        remove_by_key = {(rr['parent'], int(rr['chunk_index'])): rr
+                         for rr in remove_rows}
+        for idx in summary.index:
+            key = (summary.at[idx, 'parent'], int(summary.at[idx, 'chunk_index']))
+            rr = remove_by_key.get(key)
+            if rr is None:
+                continue
+            for label in self.scalars:
+                pfx = label.lower()
+                summary.at[idx, f'{pfx}_applied_records'] = rr.get(
+                    f'{pfx}_applied_records', np.nan)
+                summary.at[idx, f'{pfx}_status'] = rr.get(f'{pfx}_status', 'pending')
+            if rr.get('write_status') == 'error':
+                summary.at[idx, 'status'] = 'error'
+                summary.at[idx, 'error'] = rr.get('write_error', '')
+
+        self._summary = summary
+        return self._summary
+
+    def _run_pool(self, kwargs_list, worker_fn, total, phase,
+                  checkpoint_path, parent_to_idx, total_files,
+                  on_progress, on_active) -> list:
+        """Dispatch one phase's chunk tasks; collect and checkpoint result rows.
+
+        ``worker_fn`` is the picklable module-level worker (``_detect_worker``
+        or ``_remove_worker``). Drains the progress queue in the main process,
+        snapshots a checkpoint CSV after every completion, and forwards the
+        ``on_progress`` / ``on_active`` callbacks tagged with ``phase``.
+        """
         rows: list[dict] = []
         active: dict = {}  # pid -> {'parent', 'chunk_index', 'chunk_period'}
-        chunks_done = 0
-        # Map input-file name -> dispatch order, for stable sorting
-        parent_to_idx = {f.name: i for i, f in enumerate(files)}
+        done = 0
 
         def _checkpoint_save():
-            """Persist current rows so an interrupted run can be inspected.
+            """Persist current rows so an interrupted phase can be inspected.
 
-            Sort by (parent, chunk_index) for reader-friendliness. Wrapped
-            in try/except so a locked CSV (e.g. open in Excel) never kills
-            the run — matches ``PwbBatchDetection``'s pattern.
+            Wrapped in try/except so a locked CSV (e.g. open in Excel) never
+            kills the run — matches ``PwbBatchDetection``'s pattern.
             """
-            if not rows:
+            if not rows or checkpoint_path is None:
                 return
             sorted_rows = sorted(rows, key=lambda r: (
                 parent_to_idx.get(r.get('parent', ''), total_files),
@@ -1141,7 +1425,7 @@ class PerFilePipeline:
 
         def _handle_event(ev: dict):
             """Apply one queue event: update active set, append row, fan out."""
-            nonlocal chunks_done
+            nonlocal done
             pid = ev.get('pid')
             kind = ev['event']
             if kind == 'start':
@@ -1151,45 +1435,42 @@ class PerFilePipeline:
                     'chunk_period': ev['chunk_period'],
                 }
                 if on_active is not None:
-                    on_active(active)
+                    on_active(active, phase)
             elif kind == 'done':
                 active.pop(pid, None)
-                row = ev['row']
-                rows.append(row)
-                chunks_done += 1
-                # Snapshot after every chunk so a crash leaves a usable
-                # CSV. ~thousands of small writes on local SSD is cheap;
-                # if it ever becomes a bottleneck we can throttle.
+                rows.append(ev['row'])
+                done += 1
                 _checkpoint_save()
                 if on_progress is not None:
-                    on_progress(chunks_done, total_chunks_est, row)
+                    on_progress(done, total, ev['row'], phase)
                 if on_active is not None:
-                    on_active(active)
+                    on_active(active, phase)
+
+        if not kwargs_list:
+            return rows
 
         if self.n_workers == 1:
-            # In-process loop. Drain start/done events synchronously via
-            # a small queue-like callback (no real IPC needed). Iterates
-            # the same per-chunk task list the parallel path dispatches,
-            # so behaviour matches exactly.
+            # In-process loop: drain start/done events synchronously through a
+            # tiny queue-like shim (no real IPC), so behaviour matches the
+            # parallel path exactly.
             class _SyncQueue:
                 def put(self, ev):
                     _handle_event(ev)
 
             sync_q = _SyncQueue()
-            for kwargs in chunk_kwargs_list:
-                process_one_chunk(progress_queue=sync_q, **kwargs)
+            for kwargs in kwargs_list:
+                worker_fn(kwargs, sync_q)
         else:
-            # Parallel: spin up a Manager queue, dispatch ALL chunks as
-            # independent tasks, drain the queue in the main process while
-            # workers run. With N workers and M chunks, all N workers stay
-            # busy until min(M, N) chunks remain — including the case of
-            # one input file with 12 chunks and 4 workers (3 chunks each).
+            # Parallel: dispatch ALL tasks as independent chunks and drain the
+            # Manager queue in the main process while workers run. With N
+            # workers and M chunks all N workers stay busy until min(M, N)
+            # chunks remain — including one file with 12 chunks and 4 workers.
             with Manager() as manager:
                 progress_queue = manager.Queue()
                 with ProcessPoolExecutor(max_workers=self.n_workers) as executor:
                     futures = [
-                        executor.submit(_chunk_worker, kwargs, progress_queue)
-                        for kwargs in chunk_kwargs_list
+                        executor.submit(worker_fn, kwargs, progress_queue)
+                        for kwargs in kwargs_list
                     ]
 
                     pending = set(futures)
@@ -1221,16 +1502,7 @@ class PerFilePipeline:
                         except Exception:
                             pass
 
-        # Final sort (some chunks may have arrived out of order)
-        rows.sort(key=lambda r: (
-            parent_to_idx.get(r.get('parent', ''), total_files),
-            r.get('chunk_index', -1),
-        ))
-
-        summary = pd.DataFrame(rows)
-        summary = self._apply_pwbopt_postprocessing(summary)
-        self._summary = summary
-        return self._summary
+        return rows
 
     def _apply_pwbopt_postprocessing(self, summary: DataFrame) -> DataFrame:
         """Add PWBOPT std + pre-filtered + filled-final columns to the summary.
@@ -1391,6 +1663,13 @@ def _build_parser():
                    help='Pre-filter [s]: lags with HDI range above this are '
                         'set to NaN before PWBOPT (pre-filtered variant). '
                         'Set to 0 to disable.')
+    p.add_argument('--lag-column-template', default='{prefix}_tlag_final_pf_s',
+                   help='Which PWBOPT lag column to actually remove in phase '
+                        '2. Use {prefix} for the lowercased scalar label. '
+                        'Default {prefix}_tlag_final_pf_s (pre-filtered, '
+                        'gap-filled "best" lag; matches diive-tlag-apply-batch). '
+                        'Use {prefix}_tlag_final_s for the non-pre-filtered '
+                        'PWBOPT lag.')
     # --- Plots ---
     p.add_argument('--save-plots', action='store_true',
                    help='Save the 3-panel PWB diagnostic figure per chunk '
@@ -1480,6 +1759,7 @@ def _cli_main():
         hdi_thresh=args.hdi_thresh,
         dev_thresh=args.dev_thresh,
         hdi_prefilter=args.hdi_prefilter,
+        lag_column_template=args.lag_column_template,
     )
 
     files = sorted(input_dir.glob(args.file_pattern))
@@ -1530,6 +1810,9 @@ def _cli_main():
     console.print(f'[dim]PWBOPT:[/dim]  hdi-thresh {args.hdi_thresh} s    '
                   f'dev-thresh {args.dev_thresh} s    '
                   f'hdi-prefilter {args.hdi_prefilter} s')
+    console.print(f'[dim]remove:[/dim]  lag column '
+                  f'[bold]{args.lag_column_template}[/bold] '
+                  f'[dim](phase 2 shifts scalars by this PWBOPT lag)[/dim]')
     console.print(f'[dim]plots :[/dim]  '
                   f'{"yes (output_dir/plots/)" if args.save_plots else "no"}')
     console.print()
@@ -1570,13 +1853,34 @@ def _cli_main():
         return Path(period).stem
 
     summary = None
+    # Tracks the active phase so the bar resets (new total) when phase 1
+    # (detect) hands off to phase 2 (remove).
+    phase_state = {'phase': None}
+
+    def _phase_tag(phase: str) -> str:
+        return ('[magenta]detect[/magenta]' if phase == 'detect'
+                else '[blue]remove[/blue]')
+
     try:
         with prog:
-            def _on_progress(done, total_chunks, row):
-                # Fires once per chunk completion (or skip).
-                period = row.get('period', '')
-                period_short = _short_period(period)
-                if row.get('status') == 'error':
+            def _on_progress(done, total_chunks, row, phase):
+                # Fires once per chunk completion. ``phase`` is 'detect' or
+                # 'remove'; the two phases have different row schemas.
+                if phase != phase_state['phase']:
+                    phase_state['phase'] = phase
+                    prog.reset(task_id, total=total_chunks)
+                    prog.update(task_id,
+                                description=f'[cyan]{mode}[/cyan] {_phase_tag(phase)}')
+                period_short = _short_period(row.get('period', ''))
+                if phase == 'remove':
+                    if row.get('write_status') == 'error':
+                        parts = f'[red]ERR[/red] {row.get("write_error", "")[:60]}'
+                    else:
+                        applied = '  '.join(
+                            f'{g}={row.get(f"{g.lower()}_applied_records", "--")}rec'
+                            for g in scalars)
+                        parts = f'[green]written[/green] {applied}'
+                elif row.get('status') == 'error':
                     parts = f'[red]ERR[/red] {row.get("error", "")[:60]}'
                 elif row.get('status') == 'skipped:short':
                     parts = (f'[yellow]SKIP[/yellow] '
@@ -1591,15 +1895,16 @@ def _cli_main():
                 console.log(f'[dim]{period_short}[/dim]  {parts}')
                 prog.update(task_id, completed=done)
 
-            def _on_active(active):
+            def _on_active(active, phase):
                 # Fires every time the in-flight set changes. Show each
                 # worker's current (file, chunk) compactly so the user can
                 # see which chunks of which files are being processed in
                 # parallel right now. ``active`` is a dict keyed by worker
                 # pid; values have ``parent``, ``chunk_index``,
                 # ``chunk_period``.
+                base = f'[cyan]{mode}[/cyan] {_phase_tag(phase)}'
                 if not active:
-                    desc = f'[cyan]{mode}[/cyan]'
+                    desc = base
                 else:
                     # Sort by pid for stable visual order.
                     parts = []
@@ -1613,8 +1918,7 @@ def _cli_main():
                             f'[bold cyan]{parent_stem}[/bold cyan]'
                             f'[dim]·c{info["chunk_index"]:02d}[/dim]'
                         )
-                    desc = (f'[cyan]{mode}[/cyan]  '
-                            + '  '.join(parts))
+                    desc = base + '  ' + '  '.join(parts)
                 prog.update(task_id, description=desc)
 
             summary = pipeline.run(on_progress=_on_progress,
@@ -1622,6 +1926,12 @@ def _cli_main():
 
         # Per-chunk outcome counts
         n_chunks = len(summary)
+        if n_chunks == 0 or 'status' not in summary.columns:
+            console.print('[yellow]WARN[/yellow] No chunk rows were produced — '
+                          'nothing written. Check --col-* names, '
+                          '--skiprows / --extra-rows / --sep, and '
+                          '--chunk-name-template.')
+            raise SystemExit(1)
         n_ok = int((summary['status'] == 'ok').sum())
         n_err = int((summary['status'] == 'error').sum())
         n_skip = int((summary['status'] == 'skipped:short').sum())
