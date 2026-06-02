@@ -31,6 +31,7 @@ Examples demonstrating flux processing, quality control, and high-resolution ana
 - **hires/flux_lag_pwbopt.py** — PWBOPT batch pipeline: multi-period PWB detection with S1/S2/S3 selection and standard vs. pre-filtered strategy comparison
 - **hires/flux_lag_pwb_batch.py** — `PwbBatchDetection` Python API demo: distributes PWB detection across CPU cores with `ProcessPoolExecutor`, shows live Rich progress (growing results table + progress bar), applies PWBOPT post-processing (standard and pre-filtered strategies), and generates batch summary figures (3-panel per scalar + scatter/KDE via `PwboptLagPlot`)
 - **hires/flux_lag_pwb_batch_cli.py** — CLI demo: generates synthetic EddyPro files and invokes `python -m diive.flux.hires.lag_pwb` as a subprocess; shows all available CLI flags
+- **hires/flux_apply_tlag_cli.py** — `TlagApplier` CLI demo (`diive-tlag-apply-batch`): applies PWBOPT-detected lags from a `tlag_results.csv` to raw EC files, shifting each scalar by `round(tlag_s · hz)` rows; format-agnostic, with `--period-key-regex` / `--file-key-regex` bridging rotated-vs-raw filenames
 - **hires/flux_windrotation.py** — Double rotation tilt correction (`WindDoubleRotation`) followed by Reynolds decomposition (`reynolds_decomposition`) to extract turbulent fluctuations and compute eddy covariance fluxes
 - **hires/flux_fluxdetectionlimit.py** — Flux detection limit and measurement sensitivity
 
@@ -41,6 +42,8 @@ Available classes and functions in `dv.flux`:
 - **MaxCovariance** — Time lag detection via cross-covariance maximisation
 - **PreWhiteningBootstrap** — PWB time lag detection (Vitale et al. 2024): pre-whitening + block-bootstrap, robust for low-magnitude fluxes (CH4, N2O). Provide `var_tsonic` to enable the full 4-combination RFlux v3.2.0 logic (strongly recommended for trace gases). **Requires wind-rotation-corrected input** (double rotation or planar-fit; e.g. EddyPro "Advanced" rotated output) — a non-zero mean W biases the cross-correlation.
 - **PwbBatchDetection** — Parallel batch wrapper around `PreWhiteningBootstrap`. **Requires wind-rotation-corrected input** (same requirement as above).: distributes many EddyPro averaging-period files across CPU cores, collects results into a single DataFrame, writes a checkpoint CSV after every completed file (crash-safe), applies PWBOPT S1/S2/S3 selection and optional HDI pre-filter, and produces batch summary figures. Also callable as a CLI module: `python -m diive.flux.hires.lag_pwb --help` (alias: `diive-tlag-pwb-batch`).
+- **TlagApplier** — Applies already-detected lags to raw EC files: reads a `tlag_results.csv` (from `PwbBatchDetection`) and shifts each scalar column backward by `round(tlag_s · hz)` rows, writing a parallel directory of lag-corrected files with the original header and column order preserved. Default lag column is `{prefix}_tlag_final_pf_s` (pre-filtered, gap-filled PWBOPT). Format-agnostic (`--sep` / `--skiprows` / `--extra-rows`); when detection ran on rotated files but the lag must be removed from differently-named raw files, `--period-key-regex` / `--file-key-regex` extract a common key per period. CLI: `diive-tlag-apply-batch`.
+- **PerFilePipeline / `process_one_file`** — End-to-end **two-phase per-chunk** PWB pipeline. Splits each long raw file into fixed-length chunks (default 30 min); **phase 1 (detect)** rotates each chunk's wind in memory and runs PWB per scalar (no data written), PWBOPT then picks the *best* lag per chunk across the full sequence, and **phase 2 (remove)** shifts each scalar by that PWBOPT lag and writes one lag-corrected file per chunk. Unlike raw per-chunk removal, wide-HDI chunks get the neighbouring optimal lag. Parallel unit is one chunk (`ProcessPoolExecutor`); the live display stacks one row per worker plus an overall bar with ETA. Output is numbered by phase: `1_lag_detection/` (summary CSV, checkpoints, plots) and `2_lag_removed/` (the corrected chunk files — a clean input directory for the next flux step). CLI: `diive-tlag-pwb-detect-remove`. **Downstream flux software must run with EC time-lag maximization disabled.**
 - **RandomUncertaintyPAS20** — Measurement uncertainty quantification
 - **FlagMultipleConstantUstarThresholds** — USTAR filtering with multiple thresholds
 - **UstarMovingPointDetection** — Moving-point USTAR detection (Papale et al. 2006)
@@ -160,6 +163,28 @@ uv run diive-tlag-pwb-batch \
     --usecols 0 1 2 3 6 7 \
     --col-names u v w ts ch4 n2o \
     --skiprows 9 --hz 20 --n-bootstrap 99 --n-workers 4 --save-plots
+
+# Per-chunk detect + remove (two-phase): writes lag-corrected files ready for
+# the next flux step. Splits long raw files into chunks, detects the lag per
+# chunk, optimises it across chunks (PWBOPT), then removes the best lag.
+# 10 Hz / 60-min chunks: just pass --hz 10 / --chunk-seconds 3600.
+uv run diive-tlag-pwb-detect-remove \
+    --input-dir /path/to/raw_6h_csv_files \
+    --output-dir /path/to/output \
+    --col-u u --col-v v --col-w w --col-tsonic ts \
+    --scalar CH4:ch4 --scalar N2O:n2o \
+    --skiprows 0 --extra-rows 2 --sep "," \
+    --hz 20 --chunk-seconds 1800 --min-chunk-seconds 300 \
+    --n-workers 8 --save-plots
+# -> /path/to/output/2_lag_removed/  holds the corrected chunk files
+
+# Apply already-detected lags from a tlag_results.csv to raw files (standalone)
+uv run diive-tlag-apply-batch \
+    --input-dir /path/to/raw_files \
+    --output-dir /path/to/aligned \
+    --results-csv /path/to/tlag_results.csv \
+    --scalar CH4:ch4 --scalar N2O:n2o \
+    --hz 20 --skiprows 9
 
 # Run all flux examples
 uv run python examples/run_all_examples.py

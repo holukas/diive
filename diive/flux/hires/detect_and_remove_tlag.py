@@ -54,13 +54,14 @@ sequential in-process execution. All functions live in this single
 module.
 
 Checkpoint snapshots are written after every chunk completes, so an
-interrupted run leaves a partial result on disk:
-``<output-dir>/detect_and_remove_tlag_checkpoint.csv`` for phase 1
-(detect — the expensive part) and ``..._remove_checkpoint.csv`` for
+interrupted run leaves a partial result on disk — both inside the
+step-1 detect folder (``--detect-subdir``, default ``1_lag_detection/``):
+``detect_and_remove_tlag_checkpoint.csv`` for phase 1 (detect — the
+expensive part) and ``detect_and_remove_tlag_remove_checkpoint.csv`` for
 phase 2 (remove). When the run finishes cleanly the full results land in
-``detect_and_remove_tlag_summary.csv``.
+``<--detect-subdir>/detect_and_remove_tlag_summary.csv``.
 
-Every CLI run writes a plain-text ``log.txt`` to the output directory
+Every CLI run writes a plain-text ``log.txt`` to the output-directory root
 containing every console line (run metadata, per-file progress, errors,
 final summary). The log is saved even on exception / KeyboardInterrupt
 so a crashed run is still diagnosable.
@@ -111,11 +112,15 @@ Examples:
   ``"CH-CHA_{starttime}{suffix}"`` produces
   ``CH-CHA_20210722-1100.csv``, ``CH-CHA_20210722-1130.csv``, ...
 
-Outputs in ``--output-dir``:
+Outputs in ``--output-dir`` (subfolders numbered by pipeline phase; the root
+itself holds only those two folders plus ``log.txt``):
 
-- One lag-corrected 30-min file per chunk (``hz * 1800`` rows each by
-  default).
-- ``detect_and_remove_tlag_summary.csv`` with one row per chunk. Schema
+- ``<--data-subdir>/`` (default ``2_lag_removed/``) — step 2 (remove): the
+  lag-corrected 30-min chunk files (``hz * 1800`` rows each by default), and
+  **only** those. Kept separate from the CSV / log / plots so this folder can
+  be handed straight to the next flux-processing step as its input directory.
+- ``<--detect-subdir>/detect_and_remove_tlag_summary.csv`` (default
+  ``1_lag_detection/``) with one row per chunk. Schema
   mirrors ``tlag_results.csv`` from ``diive-tlag-pwb-batch`` plus this
   pipeline's extras: parent filename, ``chunk_index``, chunk filename,
   rotation angles ``theta_deg`` / ``phi_deg``, and per gas
@@ -127,24 +132,32 @@ Outputs in ``--output-dir``:
   bookkeeping ``{prefix}_applied_records`` (records actually shifted = the
   PWBOPT lag from ``--lag-column-template``, **not** the raw ``tlag_s``) /
   ``{prefix}_status``.
-- ``plots/`` (when ``--save-plots`` is set) containing:
+- ``<--detect-subdir>/plots/`` (default ``1_lag_detection/plots/``, when
+  ``--save-plots`` is set) — step 1 (detect) per-chunk diagnostics: one
+  ``<chunk_stem>_<gas>.png`` per chunk per gas — the 3-panel PWB diagnostic
+  (pre-whitened CCF + raw cross-covariance + bootstrap lag histogram with
+  the 95% HDI shaded).
+- ``<--detect-subdir>/plots_summary/`` (when ``--save-plots`` is set) — the
+  batch-level overviews, kept separate from the per-chunk diagnostics:
 
-  - One ``<chunk_stem>_<gas>.png`` per chunk per gas — the 3-panel PWB
-    diagnostic: pre-whitened CCF + raw cross-covariance + bootstrap lag
-    histogram with the 95% HDI shaded.
-  - One ``summary_<gas>.png`` per scalar — the batch-level 5-panel
-    overview from ``PwbBatchDetection.plot_summary``: detected lags
-    coloured by S1/S2/S3 flag, gap-filled lags, 95% HDI bars with
-    threshold lines, per-period flag bars (standard vs. pre-filtered
-    PWBOPT side by side), and a histogram of detected lags.
-  - ``summary_lag_comparison.png`` — the cross-scalar
-    ``PwboptLagPlot`` scatter + KDE comparing standard vs. pre-filtered
-    PWBOPT for every gas.
-- ``detect_and_remove_tlag_checkpoint.csv`` /
-  ``detect_and_remove_tlag_remove_checkpoint.csv`` — per-phase snapshots of
-  the rows accumulated so far; left intact after a clean run so they can be
-  diffed against the final summary if useful.
-- ``log.txt`` capturing every console line from the run.
+  - One ``summary_<gas>.png`` per scalar — the 5-panel overview from
+    ``PwbBatchDetection.plot_summary``: detected lags coloured by S1/S2/S3
+    flag, gap-filled lags, 95% HDI bars with threshold lines, per-period
+    flag bars (standard vs. pre-filtered PWBOPT side by side), and a
+    histogram of detected lags.
+  - ``summary_lag_comparison.png`` — the cross-scalar ``PwboptLagPlot``
+    scatter + KDE comparing standard vs. pre-filtered PWBOPT for every gas.
+- ``<--detect-subdir>/detect_and_remove_tlag_checkpoint.csv`` /
+  ``<--detect-subdir>/detect_and_remove_tlag_remove_checkpoint.csv`` —
+  per-phase snapshots of the rows accumulated so far; left intact after a
+  clean run so they can be diffed against the final summary if useful.
+- ``README.txt`` (at the output root) — auto-generated each run; describes the
+  folder layout and points at the ``<--data-subdir>/`` folder as the next
+  step's input.
+- ``log.txt`` (at the output root) — plain-text record of the run: the static
+  header, one line per completed chunk, and the final summary. The animated
+  live display (spinners, bars, per-worker rows) is deliberately NOT written
+  here, so the log stays clean and free of terminal control characters.
 
 Public API
 ----------
@@ -1170,6 +1183,8 @@ class PerFilePipeline:
             n_workers: int | None = None,
             strict: bool = False,
             save_plots: bool = False,
+            detect_subdir: str = '1_lag_detection',
+            data_subdir: str = '2_lag_removed',
             plots_subdir: str = 'plots',
             hdi_thresh: float = 0.5,
             dev_thresh: float = 0.5,
@@ -1205,6 +1220,14 @@ class PerFilePipeline:
         self.n_workers = n_workers if n_workers and n_workers > 0 else (os.cpu_count() or 1)
         self.strict = strict
         self.save_plots = save_plots
+        # Output folders numbered by pipeline phase so the layout reads in
+        # order. Step 1 (detect): diagnostics under detect_subdir. Step 2
+        # (remove): lag-corrected chunk files under data_subdir — kept on
+        # their own so that folder is a clean input directory for the next
+        # flux-processing step (conceptually step 3), uncluttered by the
+        # summary CSV / log / checkpoints / plots.
+        self.detect_subdir = detect_subdir
+        self.data_subdir = data_subdir
         self.plots_subdir = plots_subdir
         # PWBOPT post-processing thresholds (paper Section 2.3 defaults)
         self.hdi_thresh = hdi_thresh
@@ -1265,7 +1288,16 @@ class PerFilePipeline:
             )
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        plots_dir = (self.output_dir / self.plots_subdir) if self.save_plots else None
+        # Step 2 (remove) output: lag-corrected chunk files in their own
+        # subfolder (clean input for the next flux-processing step).
+        data_dir = self.output_dir / self.data_subdir
+        data_dir.mkdir(parents=True, exist_ok=True)
+        # Step 1 (detect) folder holds the checkpoints, the summary CSV
+        # (written by the CLI), and the diagnostic plots — so the output root
+        # stays just the two numbered folders + log.txt.
+        detect_dir = self.output_dir / self.detect_subdir
+        detect_dir.mkdir(parents=True, exist_ok=True)
+        plots_dir = (detect_dir / self.plots_subdir) if self.save_plots else None
         if plots_dir is not None:
             plots_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1320,7 +1352,7 @@ class PerFilePipeline:
         detect_rows = self._run_pool(
             detect_kwargs_list, _detect_worker,
             total=total_chunks, phase='detect',
-            checkpoint_path=self.output_dir / 'detect_and_remove_tlag_checkpoint.csv',
+            checkpoint_path=detect_dir / 'detect_and_remove_tlag_checkpoint.csv',
             parent_to_idx=parent_to_idx, total_files=total_files,
             on_progress=on_progress, on_active=on_active,
         )
@@ -1348,7 +1380,7 @@ class PerFilePipeline:
                                else np.nan)
             remove_kwargs_list.append(dict(
                 input_path=f,
-                output_dir=self.output_dir,
+                output_dir=data_dir,
                 chunk_index=int(r['chunk_index']),
                 chunk_records=chunk_records,
                 chunk_period=r['period'],
@@ -1367,7 +1399,7 @@ class PerFilePipeline:
         remove_rows = self._run_pool(
             remove_kwargs_list, _remove_worker,
             total=len(remove_kwargs_list), phase='remove',
-            checkpoint_path=self.output_dir / 'detect_and_remove_tlag_remove_checkpoint.csv',
+            checkpoint_path=detect_dir / 'detect_and_remove_tlag_remove_checkpoint.csv',
             parent_to_idx=parent_to_idx, total_files=total_files,
             on_progress=on_progress, on_active=on_active,
         )
@@ -1390,7 +1422,69 @@ class PerFilePipeline:
                 summary.at[idx, 'error'] = rr.get('write_error', '')
 
         self._summary = summary
+        self._write_readme()
         return self._summary
+
+    def _write_readme(self) -> None:
+        """Write a README.txt to ``output_dir`` describing the folder layout.
+
+        Regenerated on every ``run()`` so the output folder is always
+        self-documenting (which subfolder holds what, and which one to feed
+        to the next flux step).
+        """
+        scalars_str = ', '.join(f'{k} <- {v}' for k, v in self.scalars.items())
+        plots_note = ('present' if self.save_plots
+                      else 'not generated (pass --save-plots to enable)')
+        text = (
+            "diive PWB time-lag detection + removal -- output folder\n"
+            "=======================================================\n"
+            "\n"
+            "Produced by diive-tlag-pwb-detect-remove (PerFilePipeline): a\n"
+            "two-phase, per-chunk pre-whitening-bootstrap (PWB) time-lag\n"
+            "pipeline. Each raw high-resolution EC file is split into\n"
+            "fixed-length chunks; the scalar-vs-wind tube-delay lag is detected\n"
+            "per chunk (phase 1), optimised across all chunks (PWBOPT), then\n"
+            "removed (phase 2).\n"
+            "\n"
+            "Folder layout\n"
+            "-------------\n"
+            f"{self.detect_subdir}/   STEP 1 -- DETECT (diagnostics + results)\n"
+            f"    {self.plots_subdir}/             per-chunk PWB diagnostic figures "
+            f"({plots_note})\n"
+            f"    plots_summary/      batch-level overview figures ({plots_note})\n"
+            "    detect_and_remove_tlag_summary.csv           one row per chunk:\n"
+            "                        detected lag, HDI, reliability, PWBOPT\n"
+            "                        columns, applied records (written by the CLI)\n"
+            "    detect_and_remove_tlag_checkpoint.csv        phase-1 snapshot\n"
+            "    detect_and_remove_tlag_remove_checkpoint.csv phase-2 snapshot\n"
+            "\n"
+            f"{self.data_subdir}/   STEP 2 -- REMOVE (the deliverable)\n"
+            "    Lag-corrected chunk files, and ONLY those. Each scalar column\n"
+            "    has been shifted by the PWBOPT-optimised lag.\n"
+            f"    >>> Use THIS folder ({self.data_subdir}/) as the input directory\n"
+            "    for the next flux-processing step. <<<\n"
+            "\n"
+            "log.txt             Plain-text console log of the run.\n"
+            "README.txt          This file.\n"
+            "\n"
+            "Run configuration\n"
+            "-----------------\n"
+            f"scalars : {scalars_str}\n"
+            f"hz      : {self.hz}\n"
+            f"chunk   : {self.chunk_seconds:g} s (min {self.min_chunk_seconds:g} s)\n"
+            f"removed : column {self.lag_column_template} "
+            "(pre-filtered, gap-filled PWBOPT lag)\n"
+            "\n"
+            "IMPORTANT\n"
+            "---------\n"
+            "Downstream flux software MUST run with EC time-lag maximization DISABLED:\n"
+            f"the tube delay has already been removed in {self.data_subdir}/.\n"
+        )
+        try:
+            (self.output_dir / 'README.txt').write_text(text, encoding='utf-8')
+        except Exception:
+            # A README failure must never abort the run.
+            pass
 
     def _run_pool(self, kwargs_list, worker_fn, total, phase,
                   checkpoint_path, parent_to_idx, total_files,
@@ -1670,10 +1764,23 @@ def _build_parser():
                         'gap-filled "best" lag; matches diive-tlag-apply-batch). '
                         'Use {prefix}_tlag_final_s for the non-pre-filtered '
                         'PWBOPT lag.')
+    # --- Output layout (numbered by pipeline phase) ---
+    p.add_argument('--detect-subdir', default='1_lag_detection',
+                   help='Subfolder of --output-dir for step-1 (detect) '
+                        'diagnostics: plots/ and plots_summary/ '
+                        '(default: 1_lag_detection).')
+    p.add_argument('--data-subdir', default='2_lag_removed',
+                   help='Subfolder of --output-dir for step-2 (remove) output: '
+                        'the lag-corrected chunk files (default: 2_lag_removed). '
+                        'Kept separate from the summary CSV / log / plots so it '
+                        'can be used directly as the input directory for the '
+                        'next flux step.')
     # --- Plots ---
     p.add_argument('--save-plots', action='store_true',
-                   help='Save the 3-panel PWB diagnostic figure per chunk '
-                        'per scalar into <output-dir>/plots/.')
+                   help='Save the 3-panel PWB diagnostic figure per chunk per '
+                        'scalar into <output-dir>/<detect-subdir>/plots/, and '
+                        'the batch-overview figures into '
+                        '<output-dir>/<detect-subdir>/plots_summary/.')
     # --- Execution ---
     p.add_argument('--n-workers', type=int, default=None,
                    help='Parallel worker processes. Default: os.cpu_count(). '
@@ -1688,13 +1795,31 @@ def _build_parser():
 def _cli_main():
     import sys
     from datetime import datetime, timezone
-    from rich.console import Console as _Console
+    from rich.console import Console as _Console, Group
+    from rich.live import Live
     from rich.progress import (BarColumn, MofNCompleteColumn, Progress,
                                SpinnerColumn, TextColumn,
                                TimeElapsedColumn, TimeRemainingColumn)
-    # record=True keeps every printed message in memory; we dump it to
-    # <output-dir>/log.txt at the end (also on exception, via try/finally).
-    console = _Console(log_path=False, record=True)
+    from rich.text import Text as _RichText
+    # On-screen console only. The plain-text log is built explicitly in
+    # ``log_lines`` (NOT via console recording), so the animated live display
+    # — spinners, pulsing bars, the stacked worker rows — never pollutes
+    # log.txt; only the static header, per-chunk completions, and the summary
+    # are written there.
+    console = _Console(log_path=False)
+    log_lines: list = []
+
+    def _logline(markup: str = '') -> None:
+        """Append a plain-text (markup-stripped) line to the log buffer."""
+        try:
+            log_lines.append(_RichText.from_markup(markup).plain)
+        except Exception:
+            log_lines.append(str(markup))
+
+    def out(markup: str = '') -> None:
+        """Print a static line on screen AND record it for log.txt."""
+        console.print(markup)
+        _logline(markup)
 
     args = _build_parser().parse_args()
 
@@ -1756,6 +1881,8 @@ def _cli_main():
         n_workers=args.n_workers,
         strict=args.strict,
         save_plots=args.save_plots,
+        detect_subdir=args.detect_subdir,
+        data_subdir=args.data_subdir,
         hdi_thresh=args.hdi_thresh,
         dev_thresh=args.dev_thresh,
         hdi_prefilter=args.hdi_prefilter,
@@ -1783,43 +1910,46 @@ def _cli_main():
         timespec='seconds')
     mode = 'sequential' if pipeline.n_workers == 1 else f'{pipeline.n_workers} workers'
 
-    # Header: run metadata is recorded in the log along with the per-file
-    # progress lines below, so the log.txt file is self-describing.
-    console.print()
-    console.print(f'[dim]started:[/dim] {started_at}')
-    console.print(f'[dim]input :[/dim]  {input_dir}')
-    console.print(f'[dim]output:[/dim]  {output_dir}')
-    console.print(f'[dim]files :[/dim]  {total}  ([dim]pattern[/dim] {args.file_pattern!r})')
-    console.print(f'[dim]mode  :[/dim]  {mode}')
-    console.print(f'[dim]hz    :[/dim]  {args.hz}    '
-                  f'[dim]lag-max[/dim] {args.lag_max} s    '
-                  f'[dim]n-boot[/dim] {args.n_bootstrap}    '
-                  f'[dim]block[/dim] {args.block_length} s')
-    console.print(f'[dim]chunk :[/dim]  {args.chunk_seconds:g} s  '
-                  f'[dim](min-chunk[/dim] {args.min_chunk_seconds:g} s[dim])[/dim]  '
-                  f'[dim]≈{chunks_per_file}/file → {total_chunks_est} total[/dim]  '
-                  f'[dim]template[/dim] {args.chunk_name_template!r}')
+    # Header: static run metadata, mirrored into log.txt via out().
+    out()
+    out(f'[dim]started:[/dim] {started_at}')
+    out(f'[dim]input :[/dim]  {input_dir}')
+    out(f'[dim]output:[/dim]  {output_dir}')
+    out(f'[dim]files :[/dim]  {total}  ([dim]pattern[/dim] {args.file_pattern!r})')
+    out(f'[dim]mode  :[/dim]  {mode}')
+    out(f'[dim]hz    :[/dim]  {args.hz}    '
+        f'[dim]lag-max[/dim] {args.lag_max} s    '
+        f'[dim]n-boot[/dim] {args.n_bootstrap}    '
+        f'[dim]block[/dim] {args.block_length} s')
+    out(f'[dim]chunk :[/dim]  {args.chunk_seconds:g} s  '
+        f'[dim](min-chunk[/dim] {args.min_chunk_seconds:g} s[dim])[/dim]  '
+        f'[dim]≈{chunks_per_file}/file → {total_chunks_est} total[/dim]  '
+        f'[dim]template[/dim] {args.chunk_name_template!r}')
     if args.start_time_regex:
-        console.print(f'[dim]time  :[/dim]  regex {args.start_time_regex!r}  '
-                      f'[dim]format[/dim] {args.start_time_format!r}')
-    console.print(f'[dim]wind  :[/dim]  '
-                  f'U={args.col_u!r}  V={args.col_v!r}  W={args.col_w!r}  '
-                  f'T_SONIC={args.col_tsonic!r}')
+        out(f'[dim]time  :[/dim]  regex {args.start_time_regex!r}  '
+            f'[dim]format[/dim] {args.start_time_format!r}')
+    out(f'[dim]wind  :[/dim]  '
+        f'U={args.col_u!r}  V={args.col_v!r}  W={args.col_w!r}  '
+        f'T_SONIC={args.col_tsonic!r}')
     for label, col in scalars.items():
-        console.print(f'[dim]scalar:[/dim]  [bold]{label}[/bold]  <- {col!r}')
-    console.print(f'[dim]PWBOPT:[/dim]  hdi-thresh {args.hdi_thresh} s    '
-                  f'dev-thresh {args.dev_thresh} s    '
-                  f'hdi-prefilter {args.hdi_prefilter} s')
-    console.print(f'[dim]remove:[/dim]  lag column '
-                  f'[bold]{args.lag_column_template}[/bold] '
-                  f'[dim](phase 2 shifts scalars by this PWBOPT lag)[/dim]')
-    console.print(f'[dim]plots :[/dim]  '
-                  f'{"yes (output_dir/plots/)" if args.save_plots else "no"}')
-    console.print()
+        out(f'[dim]scalar:[/dim]  [bold]{label}[/bold]  <- {col!r}')
+    out(f'[dim]PWBOPT:[/dim]  hdi-thresh {args.hdi_thresh} s    '
+        f'dev-thresh {args.dev_thresh} s    '
+        f'hdi-prefilter {args.hdi_prefilter} s')
+    out(f'[dim]remove:[/dim]  lag column '
+        f'[bold]{args.lag_column_template}[/bold] '
+        f'[dim](phase 2 shifts scalars by this PWBOPT lag)[/dim]')
+    out(f'[dim]data  :[/dim]  lag-corrected chunks -> '
+        f'[bold]{output_dir / args.data_subdir}[/bold]  '
+        f'[dim](step 2; next-step input)[/dim]')
+    out(f'[dim]plots :[/dim]  '
+        f'{f"yes (step 1: {args.detect_subdir}/plots + plots_summary)" if args.save_plots else "no"}')
+    out()
 
     msg = (f'PWB per-chunk pipeline  {total} files  '
            f'{mode}  -> {output_dir}')
-    console.print(f'[bold]{msg}[/bold]\n')
+    out(f'[bold]{msg}[/bold]')
+    out()
 
     def _fmt(row, gas):
         pfx = gas.lower()
@@ -1832,29 +1962,50 @@ def _cli_main():
         return (f'{gas}=[bold]{v:.2f}s[/bold] '
                 f'HDI=[{hdi_color}]{h:.2f}[/{hdi_color}]')
 
-    prog = Progress(
-        SpinnerColumn(),
+    # Two-tier live display:
+    #   - one stacked row per worker (spinner + pulsing bar + current chunk),
+    #     so many workers stack vertically instead of overflowing the width;
+    #   - one overall bar with M/N count, elapsed, and ETA.
+    overall = Progress(
         TextColumn('[progress.description]{task.description}'),
         BarColumn(bar_width=40),
         MofNCompleteColumn(),
         TimeElapsedColumn(),
         TimeRemainingColumn(),
         console=console,
-        refresh_per_second=8,
     )
-    # Progress bar counts CHUNKS (the actual unit of work). Total is the
-    # pre-scan estimate; the bar may finish slightly short if some files
-    # have fewer chunks than the first (short trailing chunks are skipped
-    # explicitly so still counted).
-    task_id = prog.add_task(f'[cyan]{mode}[/cyan]', total=total_chunks_est)
+    workers = Progress(
+        SpinnerColumn(),
+        BarColumn(bar_width=18),
+        TextColumn('{task.description}'),
+        console=console,
+    )
+    overall_id = overall.add_task(f'[cyan]{mode}[/cyan]', total=total_chunks_est)
+
+    # One reusable row per worker slot (capped so a huge core count can't
+    # flood the screen). Rows are assigned to worker PIDs as they appear and
+    # released when that worker finishes its chunk. total=None -> the bar
+    # pulses while the chunk is in flight (no sub-chunk progress to report).
+    n_rows = max(1, min(pipeline.n_workers, 24))
+    IDLE_DESC = '[dim]idle[/dim]'
+    worker_ids = [workers.add_task(IDLE_DESC, total=None, start=False)
+                  for _ in range(n_rows)]
+    free_rows = list(worker_ids)
+    pid_to_row: dict = {}
+
+    live_group = Group(overall, workers)
+
+    def _short_parent(name: str) -> str:
+        stem = Path(name).stem
+        return stem if len(stem) <= 24 else stem[:11] + '…' + stem[-12:]
 
     def _short_period(period: str) -> str:
         """Trim the chunk-period filename for compact display."""
         return Path(period).stem
 
     summary = None
-    # Tracks the active phase so the bar resets (new total) when phase 1
-    # (detect) hands off to phase 2 (remove).
+    # Tracks the active phase so the overall bar resets (new total) when
+    # phase 1 (detect) hands off to phase 2 (remove).
     phase_state = {'phase': None}
 
     def _phase_tag(phase: str) -> str:
@@ -1862,15 +2013,17 @@ def _cli_main():
                 else '[blue]remove[/blue]')
 
     try:
-        with prog:
+        with Live(live_group, console=console, refresh_per_second=8,
+                  transient=True):
             def _on_progress(done, total_chunks, row, phase):
                 # Fires once per chunk completion. ``phase`` is 'detect' or
                 # 'remove'; the two phases have different row schemas.
                 if phase != phase_state['phase']:
                     phase_state['phase'] = phase
-                    prog.reset(task_id, total=total_chunks)
-                    prog.update(task_id,
-                                description=f'[cyan]{mode}[/cyan] {_phase_tag(phase)}')
+                    overall.reset(overall_id, total=total_chunks)
+                    overall.update(
+                        overall_id,
+                        description=f'[cyan]{mode}[/cyan] {_phase_tag(phase)}')
                 period_short = _short_period(row.get('period', ''))
                 if phase == 'remove':
                     if row.get('write_status') == 'error':
@@ -1893,33 +2046,36 @@ def _cli_main():
                         parts += (f'  [dim]θ={theta:+.1f}° '
                                   f'φ={phi:+.1f}°[/dim]')
                 console.log(f'[dim]{period_short}[/dim]  {parts}')
-                prog.update(task_id, completed=done)
+                _logline(f'{period_short}  {parts}')
+                overall.update(overall_id, completed=done)
 
             def _on_active(active, phase):
-                # Fires every time the in-flight set changes. Show each
-                # worker's current (file, chunk) compactly so the user can
-                # see which chunks of which files are being processed in
-                # parallel right now. ``active`` is a dict keyed by worker
-                # pid; values have ``parent``, ``chunk_index``,
-                # ``chunk_period``.
-                base = f'[cyan]{mode}[/cyan] {_phase_tag(phase)}'
-                if not active:
-                    desc = base
-                else:
-                    # Sort by pid for stable visual order.
-                    parts = []
-                    for pid in sorted(active.keys()):
-                        info = active[pid]
-                        parent_stem = Path(info['parent']).stem
-                        # Keep it short — large filenames would overflow.
-                        if len(parent_stem) > 24:
-                            parent_stem = parent_stem[:11] + '…' + parent_stem[-12:]
-                        parts.append(
-                            f'[bold cyan]{parent_stem}[/bold cyan]'
-                            f'[dim]·c{info["chunk_index"]:02d}[/dim]'
-                        )
-                    desc = base + '  ' + '  '.join(parts)
-                prog.update(task_id, description=desc)
+                # Fires whenever the in-flight set changes. Each active worker
+                # gets its own stacked row (PID -> row), so the display height
+                # is bounded by worker count and never overflows the width.
+                # ``active`` maps worker pid -> {'parent', 'chunk_index',
+                # 'chunk_period'}.
+                for pid in [p for p in pid_to_row if p not in active]:
+                    tid = pid_to_row.pop(pid)
+                    workers.stop_task(tid)
+                    workers.update(tid, description=IDLE_DESC)
+                    free_rows.append(tid)
+                for pid in sorted(active):
+                    info = active[pid]
+                    if pid not in pid_to_row:
+                        if not free_rows:
+                            continue  # more workers than rows; skip extras
+                        tid = free_rows.pop(0)
+                        pid_to_row[pid] = tid
+                        workers.start_task(tid)
+                    tid = pid_to_row[pid]
+                    workers.update(
+                        tid,
+                        description=(
+                            f'{_phase_tag(phase)} '
+                            f'[bold cyan]{_short_parent(info["parent"])}[/bold cyan]'
+                            f'[dim]·c{info["chunk_index"]:02d}[/dim]'),
+                    )
 
             summary = pipeline.run(on_progress=_on_progress,
                                    on_active=_on_active)
@@ -1927,10 +2083,10 @@ def _cli_main():
         # Per-chunk outcome counts
         n_chunks = len(summary)
         if n_chunks == 0 or 'status' not in summary.columns:
-            console.print('[yellow]WARN[/yellow] No chunk rows were produced — '
-                          'nothing written. Check --col-* names, '
-                          '--skiprows / --extra-rows / --sep, and '
-                          '--chunk-name-template.')
+            out('[yellow]WARN[/yellow] No chunk rows were produced — '
+                'nothing written. Check --col-* names, '
+                '--skiprows / --extra-rows / --sep, and '
+                '--chunk-name-template.')
             raise SystemExit(1)
         n_ok = int((summary['status'] == 'ok').sum())
         n_err = int((summary['status'] == 'error').sum())
@@ -1941,19 +2097,23 @@ def _cli_main():
                       f'{f", {n_err} errors" if n_err else ""}'
                       f' (across {total} files, estimate was '
                       f'{total_chunks_est} chunks).[/{color}]')
-        console.print(f'\n{msg_chunks}')
+        out()
+        out(msg_chunks)
 
-        summary_csv = output_dir / 'detect_and_remove_tlag_summary.csv'
+        summary_csv = (output_dir / args.detect_subdir
+                       / 'detect_and_remove_tlag_summary.csv')
+        summary_csv.parent.mkdir(parents=True, exist_ok=True)
         summary.to_csv(summary_csv, index=False)
-        console.print(f'[dim]Summary saved to:[/dim] [cyan]{summary_csv}[/cyan]')
+        out(f'[dim]Summary saved to:[/dim] [cyan]{summary_csv}[/cyan]')
 
         # Batch-level overview plots — one 5-panel figure per scalar plus
-        # the cross-scalar PwboptLagPlot. Reuses the same routine that
-        # ``diive-tlag-pwb-batch`` calls in its own _cli_main, so the
-        # figures look identical (same flag colors, same axes, same KDE).
+        # the cross-scalar PwboptLagPlot. Written to a SEPARATE folder
+        # (plots_summary/) so they don't get mixed in with the per-chunk
+        # diagnostics in plots/. Reuses the same routine that
+        # ``diive-tlag-pwb-batch`` calls, so the figures look identical.
         if args.save_plots:
-            plots_dir = output_dir / 'plots'
-            plots_dir.mkdir(parents=True, exist_ok=True)
+            summary_plots_dir = output_dir / args.detect_subdir / 'plots_summary'
+            summary_plots_dir.mkdir(parents=True, exist_ok=True)
             try:
                 PwbBatchDetection.plot_summary(
                     results=summary,
@@ -1961,17 +2121,17 @@ def _cli_main():
                     hdi_thresh=args.hdi_thresh,
                     hdi_prefilter=args.hdi_prefilter,
                     lag_max_s=args.lag_max,
-                    output_dir=plots_dir,
+                    output_dir=summary_plots_dir,
                     showplot=False,
                 )
-                console.print(
+                out(
                     f'[dim]Overview plots saved to:[/dim] '
-                    f'[cyan]{plots_dir}[/cyan]  '
+                    f'[cyan]{summary_plots_dir}[/cyan]  '
                     f'[dim](summary_<scalar>.png + summary_lag_comparison.png)[/dim]'
                 )
             except Exception as e:
                 # Never fail the run because of a plotting issue.
-                console.print(
+                out(
                     f'[yellow]WARN[/yellow] overview-plot generation failed: '
                     f'{type(e).__name__}: {e}'
                 )
@@ -1979,17 +2139,17 @@ def _cli_main():
     except BaseException as e:
         # Capture into the log before re-raising. BaseException catches
         # KeyboardInterrupt + SystemExit too — important for crash diagnosis.
-        console.print(f'\n[bold red]ABORT[/bold red] '
-                      f'{type(e).__name__}: {e}')
+        out(f'[bold red]ABORT[/bold red] {type(e).__name__}: {e}')
         # Re-raise after the finally block has dumped the log.
         raise
     finally:
         finished_at = datetime.now(timezone.utc).astimezone().isoformat(
             timespec='seconds')
-        console.print(f'[dim]finished:[/dim] {finished_at}')
-        # save_text strips Rich markup, producing a clean plain-text log.
+        out(f'[dim]finished:[/dim] {finished_at}')
+        # Write the explicit plain-text buffer — only static lines + per-chunk
+        # completions, never the animated live frames.
         try:
-            console.save_text(str(log_path), clear=False)
+            log_path.write_text('\n'.join(log_lines) + '\n', encoding='utf-8')
         except Exception:
             # Never let log-saving fail the whole run.
             pass

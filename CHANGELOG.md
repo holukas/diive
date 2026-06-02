@@ -248,18 +248,28 @@
   a `multiprocessing.Manager` queue, so the main process drives a per-chunk progress bar and the description shows
   each parallel worker's current (file, chunk) live. Every run writes a plain-text `log.txt` to the output directory
   recording every console line (run metadata + per-chunk progress + errors + summary), saved even on exception. The
-  summary CSV (`detect_and_remove_tlag_summary.csv`) carries one row per chunk and mirrors `diive-tlag-pwb-batch`'s
+  live display stacks one spinner/pulse row per worker plus a single overall bar with M/N count and ETA, so many
+  workers no longer overflow the terminal width. Output subfolders are numbered by pipeline phase: step-1 (detect)
+  outputs — the summary CSV, both checkpoints, and (with `--save-plots`) the plots — go in `--detect-subdir`
+  (default `1_lag_detection/`), and the step-2 (remove) lag-corrected chunk files go in `--data-subdir`
+  (default `2_lag_removed/`), so that folder can be handed straight to the next flux-processing step as its input
+  directory. The output root holds only those two numbered folders plus `log.txt` and an auto-generated `README.txt`
+  (regenerated each run) documenting the layout and pointing at the data folder as the next step's input. `log.txt`
+  is a clean plain-text record (static header, one line per completed chunk, final summary); the animated live
+  display is deliberately excluded so the log no longer fills with spinner/bar control characters. The summary CSV
+  (`detect_and_remove_tlag_summary.csv`) carries one row per chunk and mirrors `diive-tlag-pwb-batch`'s
   `tlag_results.csv` schema: per-gas `tlag_s` / `hdi_lo_s` / `hdi_hi_s` / `hdi_range_s` / `is_reliable` / `tlag_pw_s` /
   `corr_pw` / `cov_pwb` / `ar_order` / `best_combination`, plus the PWBOPT post-processing columns `pwbopt_s_std` /
   `flag_std` / `pwbopt_s_pf` / `flag_pf` / `tlag_final_s` / `tlag_final_pf_s` (paper Section 2.3, thresholds via
-  `--hdi-thresh` / `--dev-thresh` / `--hdi-prefilter`). When `--save-plots` is set, three kinds of figure land in
-  `<output-dir>/plots/`: (a) one 3-panel PWB diagnostic per chunk per gas, (b) one `summary_<gas>.png` per scalar — the
-  same 5-panel batch overview that `PwbBatchDetection.plot_summary` produces (detected lags coloured by S1/S2/S3,
-  gap-filled lags, HDI bars with threshold lines, per-period flag bars for standard vs pre-filtered PWBOPT, histogram
-  of detected lags), and (c) `summary_lag_comparison.png` — the cross-scalar scatter+KDE comparison from
-  `PwboptLagPlot`. The chunk summary CSV includes a `timestamp` column (chunk start in ISO format) when
-  `--start-time-regex` is provided, which the overview plot uses as the x-axis. CLI: `diive-tlag-pwb-detect-remove`.
-  Downstream flux software must run with EC time-lag maximization disabled.
+  `--hdi-thresh` / `--dev-thresh` / `--hdi-prefilter`). When `--save-plots` is set, the per-chunk 3-panel PWB
+  diagnostics land in `<output-dir>/<detect-subdir>/plots/`, while the batch-level overviews go in a separate
+  `<output-dir>/<detect-subdir>/plots_summary/`: one `summary_<gas>.png` per scalar (the same 5-panel overview
+  `PwbBatchDetection.plot_summary` produces — detected lags coloured by S1/S2/S3, gap-filled lags, HDI bars with
+  threshold lines, per-period flag bars for standard vs pre-filtered PWBOPT, histogram of detected lags) plus
+  `summary_lag_comparison.png`, the cross-scalar scatter+KDE comparison from `PwboptLagPlot`. The chunk summary CSV
+  includes a `timestamp` column (chunk start in ISO format) when `--start-time-regex` is provided, which the overview
+  plot uses as the x-axis. CLI: `diive-tlag-pwb-detect-remove`. Downstream flux software must run with EC time-lag
+  maximization disabled.
 - **`reynolds_decomposition()`** — standalone `x' = x - mean(x)`; exported as `dv.flux.reynolds_decomposition`.
 - **`WindDoubleRotation`** (renamed from `WindRotation2D`) — scalar `c` removed; Reynolds decomposition is now a
   separate explicit step. Rotation angles use `atan2` (fixes `ZeroDivisionError` and wrong-quadrant results when
