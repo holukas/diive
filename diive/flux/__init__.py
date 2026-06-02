@@ -23,6 +23,9 @@ from diive.flux.hires.lag import MaxCovariance
 from diive.flux.hires.lag_pwb import PreWhiteningBootstrap
 from diive.flux.hires.lag_pwb import PwbBatchDetection
 from diive.flux.hires.lag_pwb import PwboptLagPlot
+from diive.flux.hires.apply_tlag import TlagApplier
+from diive.flux.hires.detect_and_remove_tlag import PerFilePipeline
+from diive.flux.hires.detect_and_remove_tlag import process_one_file
 from diive.flux.hires.windrotation import WindDoubleRotation
 from diive.flux.hires.windrotation import reynolds_decomposition
 from diive.flux.lowres.timelag_analysis import TimeLagAnalysis
@@ -49,6 +52,9 @@ __all__ = [
     'PreWhiteningBootstrap',
     'PwbBatchDetection',
     'PwboptLagPlot',
+    'TlagApplier',
+    'PerFilePipeline',
+    'process_one_file',
     'WindDoubleRotation',
     'reynolds_decomposition',
     'TimeLagAnalysis',

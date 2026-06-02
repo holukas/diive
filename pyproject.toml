@@ -48,6 +48,8 @@ causal = [
 
 [project.scripts]
 diive-tlag-pwb-batch = "diive.flux.hires.lag_pwb:_cli_main"
+diive-tlag-apply-batch = "diive.flux.hires.apply_tlag:_cli_main"
+diive-tlag-pwb-detect-remove = "diive.flux.hires.detect_and_remove_tlag:_cli_main"
 
 [tool.uv]
 python-preference = "managed"

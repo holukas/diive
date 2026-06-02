@@ -212,6 +212,48 @@
   per-file deterministic seeding (`random_state`), `strict` mode, and per-scalar `*_error` columns; CLI:
   `diive-tlag-pwb-batch`. Optional `file_date_format` (CLI `--file-date-format`, e.g. `'%Y%m%d-%H%M'`) parses a
   timestamp from each filename into a `timestamp` results column and uses real dates as the summary-plot x-axis.
+- **`TlagApplier`** — applies PWB-detected lags to raw EC files. Reads a `tlag_results.csv` produced by
+  `PwbBatchDetection` and shifts each scalar column backward by `round(tlag_s · hz)` rows (`pd.Series.shift`), writing a
+  parallel directory of lag-corrected files with the original metadata header and column order preserved. Default lag
+  column is `{prefix}_tlag_final_pf_s` (pre-filtered, gap-filled PWBOPT); configurable via `--lag-column-template`.
+  Only scalars listed in `--scalar` are shifted; all other columns (wind, sonic temperature, gases not detected, etc.)
+  pass through unchanged. Parallel via `ProcessPoolExecutor`; CLI: `diive-tlag-apply-batch`. Per-file summary CSV
+  written next to the aligned output. Example: `examples/flux/hires/flux_apply_tlag_cli.py`.
+  Handles arbitrary text formats via `--sep` (default whitespace; use `,` for CSV), `--skiprows` (lines before header),
+  `--extra-rows` (rows between header and data; e.g. units + instrument-tag rows), and `--lineterm`. When detection
+  happens on rotated files but the lag must be removed from raw files with different filenames, `--period-key-regex` /
+  `--file-key-regex` extract a common key (typically a timestamp) from each side so the apply step finds the right raw
+  file per period. After alignment, downstream flux processing should run with EC time-lag maximization disabled.
+- **`PerFilePipeline`** / `process_one_file` — per-chunk end-to-end PWB pipeline
+  (`diive.flux.hires.detect_and_remove_tlag`). For each raw EC file the pipeline reads once (preserving all metadata
+  + columns), then splits the data into fixed-length chunks (`--chunk-seconds`, default 1800 s = 30 min); for each
+  chunk it applies `WindDoubleRotation` in memory, runs `PreWhiteningBootstrap` on the rotated W + each scalar + sonic
+  temperature, shifts the scalar columns in the UNROTATED chunk by the detected lag, and writes the lag-corrected
+  chunk as its own output file. One 6-hour input file produces up to twelve 30-minute output files; short trailing
+  chunks (< `--min-chunk-seconds`, default 300 s) are skipped. The rotated data are never written to disk. Output
+  chunk files are drop-in replacements (same metadata header, same column order). Chunk filenames are composed via
+  `--chunk-name-template` (placeholders: `{stem}`, `{suffix}`, `{index}`, optional `{starttime}` requiring
+  `--start-time-regex` / `--start-time-format`). Parallel unit of work is **one chunk** — chunks across all files
+  dispatch into a `ProcessPoolExecutor` via `--n-workers` (default `os.cpu_count()`; `--n-workers 1` runs sequentially
+  in-process). With `N` workers all `N` cores stay busy even when there's just one input file: each chunk worker
+  reads only its slice from the file via `pd.read_csv(skiprows, nrows)`. A checkpoint CSV
+  (`detect_and_remove_tlag_checkpoint.csv`) is written to the output directory after every chunk completes, so an
+  interrupted run leaves a usable snapshot on disk. Workers emit live `start`/`done` events through
+  a `multiprocessing.Manager` queue, so the main process drives a per-chunk progress bar and the description shows
+  each parallel worker's current (file, chunk) live. Every run writes a plain-text `log.txt` to the output directory
+  recording every console line (run metadata + per-chunk progress + errors + summary), saved even on exception. The
+  summary CSV (`detect_and_remove_tlag_summary.csv`) carries one row per chunk and mirrors `diive-tlag-pwb-batch`'s
+  `tlag_results.csv` schema: per-gas `tlag_s` / `hdi_lo_s` / `hdi_hi_s` / `hdi_range_s` / `is_reliable` / `tlag_pw_s` /
+  `corr_pw` / `cov_pwb` / `ar_order` / `best_combination`, plus the PWBOPT post-processing columns `pwbopt_s_std` /
+  `flag_std` / `pwbopt_s_pf` / `flag_pf` / `tlag_final_s` / `tlag_final_pf_s` (paper Section 2.3, thresholds via
+  `--hdi-thresh` / `--dev-thresh` / `--hdi-prefilter`). When `--save-plots` is set, three kinds of figure land in
+  `<output-dir>/plots/`: (a) one 3-panel PWB diagnostic per chunk per gas, (b) one `summary_<gas>.png` per scalar — the
+  same 5-panel batch overview that `PwbBatchDetection.plot_summary` produces (detected lags coloured by S1/S2/S3,
+  gap-filled lags, HDI bars with threshold lines, per-period flag bars for standard vs pre-filtered PWBOPT, histogram
+  of detected lags), and (c) `summary_lag_comparison.png` — the cross-scalar scatter+KDE comparison from
+  `PwboptLagPlot`. The chunk summary CSV includes a `timestamp` column (chunk start in ISO format) when
+  `--start-time-regex` is provided, which the overview plot uses as the x-axis. CLI: `diive-tlag-pwb-detect-remove`.
+  Downstream flux software must run with EC time-lag maximization disabled.
 - **`reynolds_decomposition()`** — standalone `x' = x - mean(x)`; exported as `dv.flux.reynolds_decomposition`.
 - **`WindDoubleRotation`** (renamed from `WindRotation2D`) — scalar `c` removed; Reynolds decomposition is now a
   separate explicit step. Rotation angles use `atan2` (fixes `ZeroDivisionError` and wrong-quadrant results when
