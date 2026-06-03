@@ -902,20 +902,37 @@ def detect_one_chunk(
             header_cols = [c.strip() for c in header_line.split(sep)]
 
         # ---- Read only this chunk's data slice ---------------------------
-        df_chunk = pd.read_csv(
-            input_path,
-            skiprows=skiprows_total,
-            nrows=chunk_records,
-            header=None,
-            sep=sep,
-            na_values=na_values,
-            low_memory=False,
-            engine='python' if sep == _WHITESPACE_SEP else 'c',
-        )
-        chunk_n = len(df_chunk)
+        try:
+            df_chunk = pd.read_csv(
+                input_path,
+                skiprows=skiprows_total,
+                nrows=chunk_records,
+                header=None,
+                sep=sep,
+                na_values=na_values,
+                low_memory=False,
+                engine='python' if sep == _WHITESPACE_SEP else 'c',
+            )
+        except pd.errors.EmptyDataError:
+            # Chunk starts at/after EOF: a phantom chunk from the padded
+            # row-count estimate. Fall through to the empty:eof path below.
+            df_chunk = None
+        chunk_n = 0 if df_chunk is None else len(df_chunk)
 
-        # Short trailing chunk (file shorter than expected): emit a single
-        # 'done' event with skipped status so the bar still advances.
+        # Phantom past-EOF chunk (nothing read at all): the padded estimate
+        # dispatched one chunk too many for this file. Return a sentinel the
+        # collector discards — never a user-visible row, never an output file.
+        if chunk_n == 0:
+            row = _empty_detect_row(
+                scalars, chunk_period, parent_name, timestamp_iso,
+                chunk_index, 0, 'empty:eof', '',
+            )
+            _emit('done', chunk_index=chunk_index,
+                  chunk_period=chunk_period, row=row)
+            return row
+
+        # Short trailing chunk (real data, but fewer rows than the bootstrap
+        # needs): emit a single 'done' with skipped status so the bar advances.
         if chunk_n < min_chunk_records:
             row = _empty_detect_row(
                 scalars, chunk_period, parent_name, timestamp_iso,
@@ -1161,11 +1178,14 @@ def _remove_worker(kwargs: dict, progress_queue=None) -> dict:
 
 
 def _count_data_rows(path: Path, header_lines: int) -> int:
-    """Fast newline count of a text file, minus the header rows.
+    """Exact newline count of a text file, minus the header rows.
 
-    Used to estimate the per-file chunk count up-front so the progress
-    bar can show an accurate total. Reads the file in 1 MiB chunks via
-    binary mode — for a 100 MiB CSV this takes ~200 ms on SSD.
+    Reads the whole file in 1 MiB binary blocks — O(filesize). Used by the
+    preflight Check and as the fallback for the fast sampling estimator
+    ``_estimate_data_rows`` (tiny files / pathologically long lines). The
+    per-file chunk planning in ``PerFilePipeline`` uses the sampling estimator
+    instead, so a folder of large files is not read end-to-end just to count
+    rows.
     """
     n_lines = 0
     with open(path, 'rb') as fh:
@@ -1177,6 +1197,48 @@ def _count_data_rows(path: Path, header_lines: int) -> int:
     # Most files end without a trailing newline; the last data row still
     # counts. Subtract only the preserved header.
     return max(0, n_lines - header_lines)
+
+
+def _estimate_data_rows(path: Path, header_lines: int,
+                        sample_bytes: int = 1 << 18) -> int:
+    """Estimate the data-row count from file size — without reading it all.
+
+    Reads only the first ``sample_bytes`` (256 KiB) to derive an average
+    bytes-per-line, then scales by the file size from ``stat`` — so the cost
+    is O(sample) per file instead of O(filesize). For EC raw data the row
+    width is near-uniform (a few thousand rows sampled give a sub-percent
+    estimate of the mean), so this is accurate to well under one 30-min chunk.
+
+    The estimate is only ever used to decide how many per-chunk tasks to
+    dispatch; callers pad it (``PerFilePipeline._padded_chunk_count``) so a
+    small under-estimate can never drop a file's trailing chunk, and phantom
+    chunks that land past EOF are discarded by the detect worker.
+
+    Falls back to the exact ``_count_data_rows`` when the file fits inside the
+    sample (then the count is exact and just as cheap) or when the sample does
+    not even reach past the header rows.
+    """
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return _count_data_rows(path, header_lines)
+    with open(path, 'rb') as fh:
+        sample = fh.read(sample_bytes)
+    if not sample:
+        return 0
+    # Whole file fit in the sample -> the newline count is exact (and cheap).
+    if len(sample) < sample_bytes:
+        n_lines = sample.count(b'\n')
+        if sample[-1:] not in (b'\n', b''):
+            n_lines += 1  # last line without a trailing newline still counts
+        return max(0, n_lines - header_lines)
+    s_lines = sample.count(b'\n')
+    if s_lines <= header_lines:
+        # Header alone exceeds the sample (very long lines) -> count exactly.
+        return _count_data_rows(path, header_lines)
+    bytes_per_line = len(sample) / s_lines
+    est_total_lines = int(size / bytes_per_line)
+    return max(0, est_total_lines - header_lines)
 
 
 # ---------------------------------------------------------------------------
@@ -1325,16 +1387,37 @@ class PerFilePipeline:
         return self._summary_plots_dir
 
     def estimate_chunks_per_file(self, sample_file: Path) -> int:
-        """Quick newline count of one file to estimate per-file chunk count."""
+        """Estimate one file's chunk count (fast: reads only a 256 KiB sample).
+
+        Uses ``_estimate_data_rows`` (file size + sampled bytes-per-line)
+        rather than a full newline count, so scanning a folder of large files
+        is near-instant. This returns the *honest* estimate; the detect
+        dispatch pads it via ``_padded_chunk_count`` so an under-estimate can
+        never silently drop a file's trailing chunk.
+        """
         header_lines = self.skiprows + 1 + self.extra_rows
-        n_rows = _count_data_rows(sample_file, header_lines)
+        n_rows = _estimate_data_rows(sample_file, header_lines)
         chunk_records = int(round(self.chunk_seconds * self.hz))
         return max(1, (n_rows + chunk_records - 1) // chunk_records)
+
+    @staticmethod
+    def _padded_chunk_count(est_chunks: int) -> int:
+        """Chunk count to dispatch for a file given its honest estimate.
+
+        Dispatches a few extra chunks beyond the estimate so sampling error in
+        ``_estimate_data_rows`` cannot drop trailing data: +1 covers the common
+        case, +1 per 50 chunks covers proportionally larger error on very long
+        files. Any dispatched chunk that lands past EOF is read as empty and
+        discarded by the detect worker (status ``'empty:eof'``), so this
+        over-count is invisible — no phantom rows, no extra output files.
+        """
+        return est_chunks + 1 + est_chunks // 50
 
     def run(self,
             on_progress: Callable | None = None,
             on_active: Callable | None = None,
-            cancel_event=None) -> DataFrame:
+            cancel_event=None,
+            on_status: Callable | None = None) -> DataFrame:
         """Detect (phase 1) then remove the PWBOPT lag (phase 2) for every chunk.
 
         Phase 1 runs ``detect_one_chunk`` on every chunk of every file (no
@@ -1359,12 +1442,28 @@ class PerFilePipeline:
                 remove phase is skipped if cancelled during detect, and the
                 partial summary collected so far is returned. ``run()`` adds a
                 ``cancelled`` attribute (bool) to the returned DataFrame.
+            on_status: Optional callback ``f(message: str)`` for coarse-grained
+                progress that has no per-chunk granularity — chiefly the
+                up-front file scan (counting each file's rows to plan chunks),
+                which reads every input file and would otherwise leave a
+                TUI/CLI silent before the first chunk callback fires.
 
         Returns:
             DataFrame with one row per (file, chunk), sorted by input-file
             order then chunk_index.
         """
         self._cancelled = False
+
+        def _status(msg: str) -> None:
+            """Emit a coarse status line (file scan / planning) if requested."""
+            if on_status is None:
+                return
+            try:
+                on_status(msg)
+            except Exception:
+                # A flaky status sink must never abort the run.
+                pass
+
         files = sorted(self.input_dir.glob(self.file_pattern))
         if not files:
             raise FileNotFoundError(
@@ -1425,44 +1524,66 @@ class PerFilePipeline:
 
         # Per-file chunk count (NOT files[0] applied to all): a file longer
         # than the first no longer loses its trailing chunks, and shorter
-        # files no longer spawn phantom over-read tasks.
-        file_chunk_counts = {f: self.estimate_chunks_per_file(f) for f in files}
+        # files no longer spawn phantom over-read tasks. Each estimate reads
+        # the whole file to count rows, so for many/large inputs this loop is
+        # a slow, callback-free stretch before phase 1 — report scan progress
+        # via on_status so a TUI/CLI is not left silent. Throttle to ~20
+        # updates regardless of file count.
+        _status(f'scanning {total_files} file(s) to plan chunks…')
+        file_chunk_counts: dict = {}
+        scan_step = max(1, total_files // 20)
+        for fi, f in enumerate(files, start=1):
+            file_chunk_counts[f] = self.estimate_chunks_per_file(f)
+            if fi == total_files or fi % scan_step == 0:
+                _status(f'scanning input files… {fi}/{total_files}')
         total_chunks = sum(file_chunk_counts.values())
+        _status(f'planned {total_chunks} chunk(s) across {total_files} '
+                f'file(s); starting detection…')
 
-        # Validate that the chunk-name template maps every (file, chunk) to a
-        # distinct output filename. A template lacking {stem} (or a unique
-        # {starttime}) collapses each file's chunk<i> to the same name, so phase
-        # 2 would silently overwrite earlier files' chunks. Computing the names
-        # here also surfaces any template/regex error before the expensive
-        # phase 1 instead of as one error row per chunk.
-        seen_names: dict = {}
-        for f in files:
-            for ci in range(file_chunk_counts[f]):
-                name, _ = _chunk_filename(
-                    input_path=f,
-                    chunk_index=ci,
-                    chunk_seconds=self.chunk_seconds,
-                    name_template=self.chunk_name_template,
-                    start_time_regex=self.start_time_regex,
-                    start_time_format=self.start_time_format,
-                )
-                if name in seen_names:
-                    of, oci = seen_names[name]
-                    raise ValueError(
-                        f"--chunk-name-template {self.chunk_name_template!r} "
-                        f"produces the duplicate output filename {name!r} for "
-                        f"both {of.name} (chunk {oci}) and {f.name} (chunk "
-                        f"{ci}). Include {{stem}} or a unique {{starttime}} so "
-                        f"every chunk maps to its own file."
-                    )
-                seen_names[name] = (f, ci)
+        # Surface a template / start-time-regex / format error up front (cheap),
+        # instead of as one error row per chunk from every worker.
+        _chunk_filename(
+            input_path=files[0], chunk_index=0, chunk_seconds=self.chunk_seconds,
+            name_template=self.chunk_name_template,
+            start_time_regex=self.start_time_regex,
+            start_time_format=self.start_time_format,
+        )
+
+        # Validate the chunk-name template can produce distinct names —
+        # *structurally*, not by enumerating estimated chunk names. Enumerating
+        # would (a) make a one-chunk over-estimate raise a false collision and
+        # (b) reject legitimate start-time overlaps between contiguous files
+        # (file N's trailing chunk shares a wall-clock slot with file N+1's
+        # leading chunk). Those real, harmless overlaps are instead resolved at
+        # write time (phase 2) by keeping one chunk and skipping the other.
+        tmpl = self.chunk_name_template
+        uses_index = '{index' in tmpl
+        uses_start = '{starttime' in tmpl
+        uses_stem = '{stem' in tmpl
+        if total_files > 1 and not uses_stem and not uses_start:
+            raise ValueError(
+                f"--chunk-name-template {tmpl!r} has neither {{stem}} nor "
+                f"{{starttime}}, so chunks from different input files collapse "
+                f"to the same output name. Add {{stem}} or {{starttime}}."
+            )
+        if max(file_chunk_counts.values()) > 1 and not uses_index \
+                and not uses_start:
+            raise ValueError(
+                f"--chunk-name-template {tmpl!r} has neither {{index}} nor "
+                f"{{starttime}}, so the multiple chunks within a file collapse "
+                f"to the same output name. Add {{index}} (e.g. {{index:02d}}) "
+                f"or {{starttime}}."
+            )
 
         # ============== PHASE 1: detect (parallel, no writes) ============
         detect_kwargs_list: list[dict] = []
         for i, f in enumerate(files):
             file_seed_base = (None if self.random_state is None
                               else int(self.random_state) + i * 10_000)
-            for ci in range(file_chunk_counts[f]):
+            # Dispatch a few extra chunks beyond the (sampled) estimate so a
+            # small under-count never drops a file's trailing chunk; the extras
+            # that land past EOF are recognised and dropped by the worker.
+            for ci in range(self._padded_chunk_count(file_chunk_counts[f])):
                 chunk_seed = (None if file_seed_base is None
                               else file_seed_base + ci * 100)
                 detect_kwargs_list.append(dict(
@@ -1502,6 +1623,11 @@ class PerFilePipeline:
             cancel_event=cancel_event,
         )
 
+        # Drop phantom past-EOF chunks dispatched by the padded estimate: they
+        # carry no data and must not appear in the summary, the counts, or the
+        # phase-2 write list.
+        detect_rows = [r for r in detect_rows
+                       if r.get('status') != 'empty:eof']
         detect_rows.sort(key=lambda r: (
             parent_to_idx.get(r.get('parent', ''), total_files),
             r.get('chunk_index', -1),
@@ -1518,11 +1644,48 @@ class PerFilePipeline:
             self._write_summary_and_plots(summary)
             return summary
 
+        # ---- Resolve output-name collisions before writing --------------
+        # Two real 'ok' chunks can map to the same output filename — typically
+        # a start-time overlap where a file's trailing chunk lands on the same
+        # 30-min slot as the next (contiguous) file's leading chunk. Rather
+        # than abort the whole batch, keep one chunk and skip the other so it
+        # is never overwritten. Prefer the LOWER chunk_index: a chunk 0 is the
+        # next file's full leading period, which should win over the previous
+        # file's overflow trailing chunk.
+        if 'period' in summary.columns:
+            kept_for_name: dict = {}  # output name -> summary index of winner
+            for idx in summary.index:
+                if summary.at[idx, 'status'] != 'ok':
+                    continue
+                name = summary.at[idx, 'period']
+                ci = int(summary.at[idx, 'chunk_index'])
+                win = kept_for_name.get(name)
+                if win is None:
+                    kept_for_name[name] = idx
+                    continue
+                if ci < int(summary.at[win, 'chunk_index']):
+                    loser_idx, keep_idx = win, idx
+                    kept_for_name[name] = idx
+                else:
+                    loser_idx, keep_idx = idx, win
+                msg = (
+                    f"duplicate output {name!r}: kept "
+                    f"{summary.at[keep_idx, 'parent']} chunk "
+                    f"{int(summary.at[keep_idx, 'chunk_index'])}, skipped "
+                    f"{summary.at[loser_idx, 'parent']} chunk "
+                    f"{int(summary.at[loser_idx, 'chunk_index'])} to avoid "
+                    f"overwrite (output-name overlap between files, usually "
+                    f"contiguous start times)")
+                summary.at[loser_idx, 'status'] = 'skipped:duplicate'
+                summary.at[loser_idx, 'error'] = msg
+                warn(msg)
+                _status(msg)
+
         # ============== PHASE 2: remove the PWBOPT lag + write ===========
         remove_kwargs_list: list[dict] = []
         for _, r in summary.iterrows():
             if r.get('status') != 'ok':
-                continue  # error / skipped:short chunks produce no output file
+                continue  # error / skipped / duplicate chunks produce no file
             f = file_by_name.get(r['parent'])
             if f is None:
                 continue
@@ -1745,11 +1908,15 @@ class PerFilePipeline:
                     on_active(active, phase)
             elif kind == 'done':
                 active.pop(pid, None)
-                rows.append(ev['row'])
+                row = ev['row']
+                rows.append(row)
                 done += 1
                 _checkpoint_save()
-                if on_progress is not None:
-                    on_progress(done, total, ev['row'], phase)
+                # Phantom past-EOF chunks (from the padded estimate) are kept
+                # for pool accounting but hidden from the user-facing log/bar;
+                # run() drops them from the summary afterwards.
+                if on_progress is not None and row.get('status') != 'empty:eof':
+                    on_progress(done, total, row, phase)
                 if on_active is not None:
                     on_active(active, phase)
 
@@ -2340,8 +2507,15 @@ def _cli_main():
                             f'[dim]·c{info["chunk_index"]:02d}[/dim]'),
                     )
 
+            def _on_status(msg):
+                # Coarse pre-phase-1 progress (the up-front file scan reads
+                # every input file before any chunk callback fires).
+                console.log(f'[dim]{msg}[/dim]')
+                _logline(msg)
+
             summary = pipeline.run(on_progress=_on_progress,
-                                   on_active=_on_active)
+                                   on_active=_on_active,
+                                   on_status=_on_status)
 
         # Per-chunk outcome counts
         n_chunks = len(summary)

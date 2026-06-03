@@ -644,7 +644,10 @@ def _summary_lines(summary, scalars, hz, cancelled: bool = False) -> list:
     n = len(summary)
     st = summary['status'] if 'status' in summary.columns else None
     n_ok = int((st == 'ok').sum()) if st is not None else 0
-    n_skip = int((st == 'skipped:short').sum()) if st is not None else 0
+    # Count every skipped:* variant (short trailing chunks + duplicate output
+    # names) under the generic "skipped" tally.
+    n_skip = (int(st.astype(str).str.startswith('skipped').sum())
+              if st is not None else 0)
     n_err = int((st == 'error').sum()) if st is not None else 0
     head = Text()
     head.append('── summary ──  ', style=f'bold {_BLUE}')
@@ -1383,6 +1386,20 @@ class DetectRemoveTUI(App):
     def _status(self, msg: str, color: str = _DIM) -> None:
         self.query_one('#status', Static).update(f'[{color}]{msg}[/]')
 
+    def _scan_status(self, msg: str) -> None:
+        """Surface coarse pre-phase-1 progress (the up-front file scan).
+
+        Drives both the one-line status (live counter) and the console log
+        (so the big console pane is not empty while many/large inputs are
+        being counted before the first chunk completes). Guarded against
+        teardown races like the other live-update methods.
+        """
+        try:
+            self._status(msg, _BLUE)
+            self._log_only(Text(msg, style=_DIM))
+        except NoMatches:
+            return
+
     def ui_update(self, phase: str, done: int, total: int, line) -> None:
         try:
             bar = self.query_one('#bar', ProgressBar)
@@ -1480,13 +1497,20 @@ class DetectRemoveTUI(App):
                 # active fires at chunk START -> show the live worker rows.
                 self.call_from_thread(self.ui_active, dict(active), phase)
 
+            def on_status(msg):
+                # Coarse pre-phase-1 progress (the up-front file scan reads
+                # every input file and emits no per-chunk callback, so without
+                # this the console sits empty while large inputs are counted).
+                self.call_from_thread(self._scan_status, msg)
+
             # Remember the output dir for the Open button (even on cancel).
             self._last_output_dir = cfg['output_dir']
 
             # run() writes the summary CSV + overview plots itself; the cancel
             # event lets the Stop button abort mid-run.
             summary = pipeline.run(on_progress=on_progress, on_active=on_active,
-                                   cancel_event=self._cancel_event)
+                                   cancel_event=self._cancel_event,
+                                   on_status=on_status)
             n_ok = int((summary['status'] == 'ok').sum()) if 'status' in summary else 0
             if pipeline.summary_csv_path is not None:
                 self.call_from_thread(
@@ -1511,7 +1535,11 @@ class DetectRemoveTUI(App):
                     self._finish,
                     f'done — {n_ok}/{len(summary)} chunks -> {cfg["output_dir"]}')
         except Exception as e:
-            self.call_from_thread(self._error, f'{type(e).__name__}: {e}')
+            # Surface the full error in the console log (the status line alone
+            # truncates it), then mark the run failed.
+            msg = f'{type(e).__name__}: {e}'
+            self.call_from_thread(self._log_only, Text(f'ERROR  {msg}', style=_RED))
+            self.call_from_thread(self._error, msg)
 
     def _collect(self) -> dict:
         def g(i):

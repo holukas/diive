@@ -313,6 +313,24 @@
   folder, an unwritable output path, or a path field accidentally doubled by a drag-and-drop (some terminals *type*
   a dropped path, appending it to existing text) now raises a clear, actionable message instead of a cryptic
   `OSError: WinError 123`.
+- **Fast file scan (no longer reads every file end-to-end).** Before phase 1, `PerFilePipeline` plans each file's
+  chunk count. It previously read every input file in full just to count rows — for a folder of large EC files that
+  is a multi-second to multi-minute, callback-free stretch (and the same bytes are read again in phase 1). It now
+  estimates the row count from the file size plus a 256 KiB sample of the average bytes-per-line (`_estimate_data_rows`),
+  so the scan is near-instant. The estimate is accurate to well under one 30-min chunk; the detect dispatch pads it by
+  a small margin so a sampling under-count can never drop a file's trailing chunk, and any padded chunk that lands past
+  EOF is recognised and discarded (it never produces a row or an output file). `run()` also gained an `on_status`
+  callback that reports the scan (`scanning input files… 47/120`, throttled to ~20 updates regardless of file count);
+  the TUI shows it on the status line and in the console log, and the CLI logs it too.
+- **Output-name collisions are handled, not fatal.** The chunk-name-template check used to abort the whole batch the
+  moment two chunks mapped to the same output filename. With per-file row *estimates* this could mis-fire, and it also
+  rejected legitimate **start-time overlaps** between contiguous files (a file's trailing 30-min chunk sharing a
+  wall-clock slot with the next file's leading chunk under `{starttime}` naming). The up-front check is now
+  *structural* (it only rejects a template that genuinely cannot disambiguate files/chunks — missing `{stem}`/
+  `{starttime}` across files, or `{index}`/`{starttime}` within a file); a real same-name collision is resolved at
+  write time by **keeping the lower-index chunk** (the next file's full leading period wins over the previous file's
+  overflow) and skipping the other (`status` `skipped:duplicate`), with the decision reported to the console/log
+  rather than crashing the run.
 - **Output line endings preserved.** `detect_and_remove_tlag` now writes each lag-corrected file with the **same line
   terminator as its input** (`--lineterm auto`, the new default): CRLF for typical Windows EC logger files, LF for
   Unix — so the output is a true drop-in replacement. The preserved metadata/header lines are normalised to that same
