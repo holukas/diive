@@ -34,6 +34,7 @@ dependencies = [
     "jupyter-bokeh>=4.0.5,<5.0.0",
     "shap>=0.48.0,<1.0.0",
     "rich>=15.0.0",
+    "textual>=8.2.7",
 ]
 
 [project.optional-dependencies]
@@ -50,6 +51,7 @@ causal = [
 diive-tlag-pwb-batch = "diive.flux.hires.lag_pwb:_cli_main"
 diive-tlag-apply-batch = "diive.flux.hires.apply_tlag:_cli_main"
 diive-tlag-pwb-detect-remove = "diive.flux.hires.detect_and_remove_tlag:_cli_main"
+diive-tlag-pwb-detect-remove-tui = "diive.flux.hires.detect_and_remove_tlag_tui:_tui_main"
 
 [tool.uv]
 python-preference = "managed"

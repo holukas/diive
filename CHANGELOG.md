@@ -270,6 +270,16 @@
   includes a `timestamp` column (chunk start in ISO format) when `--start-time-regex` is provided, which the overview
   plot uses as the x-axis. CLI: `diive-tlag-pwb-detect-remove`. Downstream flux software must run with EC time-lag
   maximization disabled.
+- **`DetectRemoveTUI`** — a [Textual](https://textual.textualize.io/) TUI front-end for
+  `diive-tlag-pwb-detect-remove` (`diive.flux.hires.detect_and_remove_tlag_tui`; CLI:
+  `diive-tlag-pwb-detect-remove-tui`). Two-column, soft modern palette: a **labelled** settings form on the left
+  (paths, wind/sonic columns, scalars, PWB/chunk params, workers, save-plots) and a live console on the right —
+  a progress bar plus a `RichLog` into which `PerFilePipeline` (run in a worker thread) streams its Rich-styled
+  per-chunk output (same HDI colour coding as the CLI). **Settings persist** in `~/.diive/detect_remove_tui.yaml`:
+  loaded on start and saved on *Run* or via the *Save* button, so columns/paths/params are entered only once.
+  `--demo` runs a synthetic two-phase pipeline that needs no input data, purely to preview the interface; example:
+  `examples/flux/hires/flux_detect_remove_tui_demo.py`. Requires the `textual` dependency (now a runtime dep; a `tui`
+  extra is also provided).
 - **`reynolds_decomposition()`** — standalone `x' = x - mean(x)`; exported as `dv.flux.reynolds_decomposition`.
 - **`WindDoubleRotation`** (renamed from `WindRotation2D`) — scalar `c` removed; Reynolds decomposition is now a
   separate explicit step. Rotation angles use `atan2` (fixes `ZeroDivisionError` and wrong-quadrant results when
