@@ -28,6 +28,7 @@ Examples demonstrating visualization and plotting functions for time series and 
 - **plot_dielcycle.py** — Diurnal cycles grouped by month or season
 - **plot_cumulative_basic.py** — Cumulative flux over time with scenario comparison
 - **plot_cumulative_year.py** — Yearly cumulative sums with reference bands
+- **plot_waterfall.py** — Daily CO2 uptake/release waterfall building a running flux budget
 
 ### Distributions
 

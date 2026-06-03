@@ -348,6 +348,10 @@
 - **`UstarBootstrapThresholds`** — multi-year bootstrap wrapper for any USTAR detection method; returns per-year
   p16/p50/p84 thresholds.
 - **`GrangerCausality`** — predictive causality test between time series with lag identification.
+- **`WaterfallPlot`** — financial-style waterfall chart of sequential contributions to a running total, e.g. daily
+  CO2 uptake/release building up a seasonal or annual flux budget. Aggregates the input series to one bar per period
+  internally (default daily sum); bars are colored by sign via `uptake_is_negative` (NEE convention by default).
+  Example: `examples/visualization/plot_waterfall.py`.
 - **`TreeRingPlot`** — circular spiral plot displaying annual time series as concentric color-coded rings.
 - **`SWINGapFillerXGBoost`** — physics + XGBoost gap-filler for SW_IN; nighttime zeroed by physics, daytime filled
   by gradient boosting trained on SW_IN_POT and timestamp features.
@@ -373,6 +377,12 @@
 
 ### Fixes
 
+- **`import diive` no longer forces the non-interactive matplotlib `Agg` backend.** The PWB time-lag tool
+  (`detect_and_remove_tlag`) called `matplotlib.use('Agg', force=True)` at module import, which leaked through
+  `import diive` and silently disabled interactive plot windows library-wide (`.plot(showplot=True)` warned
+  `FigureCanvasAgg is non-interactive`). The headless switch is now applied only where plots are actually rendered —
+  the worker processes (via the `ProcessPoolExecutor` initializer), the serial/standalone plotting paths, the batch
+  summary writer, and the CLI — so the batch tool stays headless-safe while interactive sessions keep their backend.
 - **XGBoost/SHAP incompatibility with Python 3.13** — extended monkey-patch to cover `ast.literal_eval` so
   `TreeExplainer` initialises correctly.
 - **Pandas 3.0.3 compatibility** — replaced `iterrows`, `inplace=True`, and `.values` patterns library-wide.

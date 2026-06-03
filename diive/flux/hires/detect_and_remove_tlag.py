@@ -187,12 +187,6 @@ from typing import Callable
 # has already imported this module before ``-m`` re-executes it.
 warnings.filterwarnings('ignore', category=RuntimeWarning, module='runpy')
 
-# Force headless matplotlib backend BEFORE importing anything that pulls in
-# pyplot — required so worker processes can save plots without an X display
-# (Windows spawn re-runs this top-level code in every worker).
-import matplotlib  # noqa: E402
-matplotlib.use('Agg', force=True)
-
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 from pandas import DataFrame, Series  # noqa: E402
@@ -476,6 +470,22 @@ def _pwbopt_final_lags(
 # per-chunk detection.
 # ---------------------------------------------------------------------------
 
+def _ensure_headless_backend() -> None:
+    """Switch matplotlib to the non-interactive ``Agg`` backend in this process.
+
+    PWB plots are only ever saved to disk, never shown, and worker processes
+    (and headless servers) have no display. Forcing ``Agg`` here — at the entry
+    of each plotting path rather than at module import — keeps ``import diive``
+    from hijacking an interactive user's backend, while still letting every
+    plotting path render without an X display. Idempotent: only switches when
+    the current backend is not already ``Agg`` (so it never closes figures on a
+    repeat call, and only ever switches once per process).
+    """
+    import matplotlib
+    if matplotlib.get_backend().lower() != 'agg':
+        matplotlib.use('Agg', force=True)
+
+
 def process_one_file(
         input_path: Path,
         output_dir: Path,
@@ -547,6 +557,8 @@ def process_one_file(
     ``{'event': 'start'}`` / ``{'event': 'done'}`` pair per chunk during
     phase 1 (detection, the expensive part); phase 2 runs silently.
     """
+    _ensure_headless_backend()
+
     if na_values is None:
         na_values = list(_DEFAULT_NA_VALUES)
 
@@ -854,6 +866,8 @@ def detect_one_chunk(
 
     Returns one detection-row dict (one element of the per-file summary).
     """
+    _ensure_headless_backend()
+
     parent_name = Path(input_path).name
     worker_pid = os.getpid()
     # Fallback label used only if filename templating fails below, so the
@@ -1777,6 +1791,7 @@ class PerFilePipeline:
             warn(f'could not write summary CSV (locked?): {summary_csv}')
 
         if self.save_plots:
+            _ensure_headless_backend()
             summary_plots_dir = detect_dir / 'plots_summary'
             summary_plots_dir.mkdir(parents=True, exist_ok=True)
             try:
@@ -1944,7 +1959,8 @@ class PerFilePipeline:
             # chunks remain — including one file with 12 chunks and 4 workers.
             with Manager() as manager:
                 progress_queue = manager.Queue()
-                with ProcessPoolExecutor(max_workers=self.n_workers) as executor:
+                with ProcessPoolExecutor(max_workers=self.n_workers,
+                                         initializer=_ensure_headless_backend) as executor:
                     futures = [
                         executor.submit(worker_fn, kwargs, progress_queue)
                         for kwargs in kwargs_list
@@ -2209,6 +2225,7 @@ def _build_parser():
 
 
 def _cli_main():
+    _ensure_headless_backend()
     import sys
     from datetime import datetime, timezone
     from rich.console import Console as _Console, Group

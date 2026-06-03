@@ -103,7 +103,7 @@ For the full list, see `diive.__all__` and each namespace's `__all__`.
 
 ## Examples
 
-106 runnable examples are organized by topic in [examples/](examples/README.md). They follow Sphinx Gallery format (`# %%` sections), so they run as plain scripts and convert to HTML docs automatically. Browse by use case in [CATALOG.md](examples/CATALOG.md), or check [EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md) for documentation of the 37-variable dataset used throughout.
+109 runnable examples are organized by topic in [examples/](examples/README.md). They follow Sphinx Gallery format (`# %%` sections), so they run as plain scripts and convert to HTML docs automatically. Browse by use case in [CATALOG.md](examples/CATALOG.md), or check [EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md) for documentation of the 37-variable dataset used throughout.
 
 ```bash
 uv run python examples/visualization/plot_heatmap_datetime_basic.py
@@ -164,7 +164,7 @@ Flux detection limit from 20 Hz data, maximum covariance lag, pre-whitening boot
 
 ### Visualization
 
-14+ plot types including time series, cumulative, diel cycle, heatmaps (datetime and year-month), hexbin, histogram, ridgeline, scatter, and anomaly plots. Both Matplotlib and Plotly are supported. See [examples/visualization/](examples/visualization/).
+19+ plot types including time series, cumulative, diel cycle, heatmaps (datetime and year-month), hexbin, histogram, ridgeline, scatter, tree-ring, and anomaly plots. Both Matplotlib and Plotly are supported. See [examples/visualization/](examples/visualization/).
 
 ### I/O
 

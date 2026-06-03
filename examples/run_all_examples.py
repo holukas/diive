@@ -24,6 +24,7 @@ EXAMPLE_FILES = [
     'visualization/plot_hexbin_advanced.py',
     'visualization/plot_cumulative_basic.py',
     'visualization/plot_cumulative_year.py',
+    'visualization/plot_waterfall.py',
     'visualization/plot_other_plots.py',
     'visualization/plot_timeseries.py',
     'visualization/plot_timeseries_interactive.py',
@@ -120,6 +121,7 @@ EXAMPLE_FILES = [
     'flux/hires/flux_lag_pwbopt.py',
     'flux/hires/flux_lag_pwb_batch.py',
     'flux/hires/flux_lag_pwb_batch_cli.py',
+    'flux/hires/flux_apply_tlag_cli.py',
     'flux/hires/flux_windrotation.py',
     # Gap-filling
     'gapfilling/gapfill_interpolate_generous.py',

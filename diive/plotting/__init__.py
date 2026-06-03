@@ -12,6 +12,7 @@ from diive.core.plotting.shifted_distribution import ShiftedDistributionPlot
 from diive.core.plotting.scatter import ScatterXY
 from diive.core.plotting.timeseries import TimeSeries
 from diive.core.plotting.treering import TreeRingPlot
+from diive.core.plotting.waterfall import WaterfallPlot
 
 __all__ = [
     'LongtermAnomaliesYear',
@@ -28,4 +29,5 @@ __all__ = [
     'ScatterXY',
     'TimeSeries',
     'TreeRingPlot',
+    'WaterfallPlot',
 ]

@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
 
-**107 examples across 9 organized folders by functional domain.**
+**110 examples across 9 organized folders by functional domain.**
 
 ## Structure
 
@@ -10,7 +10,7 @@ Examples are organized by **functional domain**, not source code structure:
 
 ```
 examples/
-├── visualization/         # Plotting and visualization (21 examples)
+├── visualization/         # Plotting and visualization (22 examples)
 │   ├── plot_heatmap_datetime_basic.py
 │   ├── plot_heatmap_advanced.py
 │   ├── plot_heatmap_xyz_basic.py
@@ -55,7 +55,7 @@ examples/
 ├── fits/                  # Data fitting (2 examples)
 │   ├── fit_fitter.py
 │   └── fit_binfittercp.py
-├── flux/                  # Eddy covariance flux processing (18 examples)
+├── flux/                  # Eddy covariance flux processing (20 examples)
 │   ├── fluxprocessingchain/
 │   │   ├── fluxprocessingchain_runchain.py
 │   │   └── fluxprocessingchain_composable.py
@@ -69,13 +69,15 @@ examples/
 │   │   ├── flux_ustar_mp_detection.py
 │   │   ├── flux_ustar_vekuri_detection.py
 │   │   └── flux_ustar_method_comparison.py
-│   └── hires/             # High-resolution analysis (7 examples)
+│   └── hires/             # High-resolution analysis (9 examples)
 │       ├── flux_fluxdetectionlimit.py
 │       ├── flux_lag.py
 │       ├── flux_lag_pwb.py
 │       ├── flux_lag_pwbopt.py
 │       ├── flux_lag_pwb_batch.py
 │       ├── flux_lag_pwb_batch_cli.py
+│       ├── flux_apply_tlag_cli.py
+│       ├── flux_detect_remove_tui_demo.py
 │       └── flux_windrotation.py
 ├── gapfilling/            # Gap-filling methods (12 examples)
 │   ├── gapfill_interpolate_generous.py
@@ -96,7 +98,7 @@ examples/
 │   ├── io_read_multiple_files_with_multidatafilereader.py
 │   ├── io_read_single_file_with_readfiletype.py
 │   └── io_extract.py
-└── preprocessing/         # Data quality & corrections (20 examples)
+└── preprocessing/         # Data quality & corrections (21 examples)
     ├── corrections/       # Offset & bias corrections (7 examples)
     │   ├── correction_relativehumidity_offset.py
     │   ├── correction_radiation_offset.py
@@ -105,16 +107,18 @@ examples/
     │   ├── correction_set_exact_values_to_missing.py
     │   ├── correction_setto_value.py
     │   └── correction_setto_threshold.py
-    ├── outlierdetection/  # 9 detection methods (9 examples)
+    ├── outlier_detection/ # 9 detection methods (9 examples)
     │   ├── outlier_hampel.py
     │   ├── outlier_zscore.py
     │   ├── outlier_localsd.py
     │   ├── outlier_lof.py
     │   └── ...
-    └── qaqc/              # Quality flags & EddyPro QC (3 examples)
+    └── qaqc/              # Quality flags & EddyPro QC (5 examples)
         ├── qc_overall_flag.py
         ├── qc_eddypro_flags.py
-        └── qaqc_detect_timestamp_shifts.py
+        ├── qaqc_detect_timestamp_shifts.py
+        ├── meteoscreening_complete_workflow.py
+        └── meteoscreening_stepwise_workflow.py
 ```
 
 ## Quick Start
@@ -132,7 +136,7 @@ uv run python examples/gapfilling/gapfill_randomforest.py
 uv run python examples/run_all_examples.py
 ```
 
-This runs all 107 examples in parallel with 8 workers, reporting execution time and any errors.
+This runs the headless-safe suite (106 scripts) in parallel with 8 workers, reporting execution time and any errors. Three examples are excluded from the runner: the two database-backed meteoscreening workflows and the interactive TUI demo.
 
 ## Finding Examples
 
@@ -165,11 +169,11 @@ Browse by topic:
 | **Analysis** | 12 | Correlation, daily correlation, driver attribution, decomposition, gap detection, gap statistics, spatial aggregation, harmonic analysis |
 | **Features** | 11 | Feature engineering pipeline, air properties, unit conversions, day/night flags, VPD, lagged variants |
 | **Fits** | 2 | Binned fitting, ecosystem response fitting |
-| **Flux** | 18 | Time lag analysis, processing chain, HQ filtering, USTAR detection (3), self-heating (2), uncertainty, PWB batch detection (CLI + API), high-res analysis |
+| **Flux** | 20 | Time lag analysis, processing chain, HQ filtering, USTAR detection (3), self-heating (2), uncertainty, PWB batch detection (CLI + API), PWB detect-remove (apply CLI + TUI demo), high-res analysis |
 | **Gapfilling** | 12 | Linear interpolation, Random Forest (4 variants), XGBoost (3 variants), MDS (2), SW_IN physics+XGBoost, comparison |
 | **IO** | 5 | Parquet file I/O, EddyPro CSV reading, binary value extraction |
-| **Preprocessing** | 21 | Corrections (7), outlier detection (9), QA/QC (3), other (2) |
-| **TOTAL** | **106** | |
+| **Preprocessing** | 21 | Corrections (7), outlier detection (9), QA/QC (5) |
+| **TOTAL** | **109** | |
 
 ## Running Options
 

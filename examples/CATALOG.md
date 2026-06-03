@@ -31,6 +31,7 @@ New to diive? Start with the **[Cookbook](COOKBOOK.md)** — 6 minimal workflows
 | [**plot_timeseries_rangetool.py**](visualization/plot_timeseries_rangetool.py) | Interactive Bokeh plot with a RangeTool overview for navigating long series |
 | [**plot_cumulative_basic.py**](visualization/plot_cumulative_basic.py) | Cumulative flux across all time, scenario comparison |
 | [**plot_cumulative_year.py**](visualization/plot_cumulative_year.py) | Yearly cumulative sums with reference bands, annual budgets |
+| [**plot_waterfall.py**](visualization/plot_waterfall.py) | Daily CO2 uptake/release waterfall building a running flux budget |
 | [**plot_dielcycle.py**](visualization/plot_dielcycle.py) | Diurnal cycle analysis by month/season |
 | [**plot_hexbin_basic.py**](visualization/plot_hexbin_basic.py) | 2D hexagonal binning with percentile normalization, sparse-bin filtering (mincnt) |
 | [**plot_hexbin_advanced.py**](visualization/plot_hexbin_advanced.py) | Advanced hexbin with absolute values and overlays |
