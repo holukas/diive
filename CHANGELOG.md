@@ -243,8 +243,10 @@
   chunk worker reads only its slice from the file via `pd.read_csv(skiprows, nrows)`. The number of chunks is counted
   **per file** (not assumed from the first file), so files longer than the first no longer lose their trailing chunks.
   Per-phase checkpoint CSVs (`detect_and_remove_tlag_checkpoint.csv` for detect, `..._remove_checkpoint.csv` for
-  remove) are written after every chunk completes, so an interrupted run leaves a usable snapshot on disk. Workers
-  emit live `start`/`done` events through
+  remove) are written after every chunk completes, so an interrupted run leaves a usable snapshot on disk.
+  `run(cancel_event=...)` accepts a `threading.Event` for cooperative cancellation: pending chunks are cancelled and
+  in-flight ones finish, the remove phase is skipped if cancelled during detect, and the partial summary is returned
+  (`PerFilePipeline.cancelled` reports it). Workers emit live `start`/`done` events through
   a `multiprocessing.Manager` queue, so the main process drives a per-chunk progress bar and the description shows
   each parallel worker's current (file, chunk) live. Every run writes a plain-text `log.txt` to the output directory
   recording every console line (run metadata + per-chunk progress + errors + summary), saved even on exception. The
@@ -295,7 +297,18 @@
   `PerFilePipeline.run()` itself, so the TUI and bare-Python callers produce the same result files as the CLI.
   The TUI form now covers **all** CLI options (PWBOPT thresholds, lag-column template, NA values/rep, line terminator,
   output subfolder names, random seed, strict mode) and every field has a hover tooltip + focus help line explaining
-  what it does. Defaults: random seed 42 (reproducible; clear for a random run) and chunk naming pre-filled for the
+  what it does. Run controls: **Check** (preflight — counts matching files, reads the first file's header, verifies
+  every configured column exists, reports the chunk plan + first output filename, all in under a second so
+  misconfigurations are caught before a long run), **Stop** (aborts a running pipeline via a cancel hook in
+  `PerFilePipeline.run(cancel_event=...)` — pending chunks are cancelled, in-flight ones finish, the partial summary
+  is written), and **Open** (opens the output folder in the OS file manager when a run finishes). The settings form is
+  greyed out while a run is in progress, and a post-run **summary** block (aligned/skipped/errors counts, % reliable
+  (S1) and median lag per gas) is appended to the log. Column entry is assisted: a **▾ picker** beside each
+  wind/sonic column (and the scalars field) scans the first input file's header and lets you select the exact
+  (bracketed) column name from a list instead of typing it; **Check** also lists every column it found. **Run**
+  auto-preflights (files match + all configured columns present) and aborts with a clear message instead of failing
+  mid-run, warns when the output folder already holds files that would be overwritten, and numeric/regex fields are
+  validated live (invalid entries turn red). Defaults: random seed 42 (reproducible; clear for a random run) and chunk naming pre-filled for the
   common 12-digit `YYYYMMDDHHMM` filenames. Input/output paths are validated before a run — a non-existent input
   folder, an unwritable output path, or a path field accidentally doubled by a drag-and-drop (some terminals *type*
   a dropped path, appending it to existing text) now raises a clear, actionable message instead of a cryptic

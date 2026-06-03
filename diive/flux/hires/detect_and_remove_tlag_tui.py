@@ -59,25 +59,62 @@ Part of the diive library: https://github.com/holukas/diive
 
 from __future__ import annotations
 
+import os
 import random
 import re
+import subprocess
+import sys
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+
+def _open_in_file_manager(path: Path) -> None:
+    """Open a folder in the OS file manager (Windows / macOS / Linux)."""
+    if sys.platform.startswith('win'):
+        os.startfile(str(path))                      # noqa: S606 (Windows only)
+    elif sys.platform == 'darwin':
+        subprocess.run(['open', str(path)], check=False)
+    else:
+        subprocess.run(['xdg-open', str(path)], check=False)
+
 import yaml
 from rich.text import Text
-from textual import events, on, work
+from textual import events, on
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.css.query import NoMatches
-from textual.widgets import (Button, Footer, Input, Label, ProgressBar,
-                             RichLog, Static, Switch)
+from textual.validation import Function, Integer, Number
+from textual.widgets import (Button, Footer, Input, Label, OptionList,
+                             ProgressBar, RichLog, Static, Switch)
+from textual.widgets.option_list import Option
 
 from diive.flux.hires.detect_and_remove_tlag import (
     _WHITESPACE_SEP, PerFilePipeline)
+
+
+def _scan_columns(input_dir: str, file_pattern: str, skiprows: int,
+                  extra_rows: int, sep: str) -> tuple:
+    """Read the first matching file's header. Return (first_file, files, cols).
+
+    Raises ``FileNotFoundError`` if nothing matches, or other exceptions on a
+    bad format. Reads only the header lines, so it is fast even for big files.
+    """
+    files = sorted(Path(input_dir).glob(file_pattern))
+    if not files:
+        raise FileNotFoundError(
+            f"no files match '{file_pattern}' in {input_dir}")
+    f0 = files[0]
+    n_pre = skiprows + 1 + extra_rows
+    with open(f0, 'r', encoding='utf-8', errors='replace') as fh:
+        head = [next(fh) for _ in range(n_pre)]
+    line = head[skiprows].rstrip('\r\n')
+    cols = (line.split() if sep == _WHITESPACE_SEP
+            else [c.strip() for c in line.split(sep)])
+    return f0, files, cols
 
 
 def _clean_dropped_path(raw: str) -> str | None:
@@ -184,10 +221,15 @@ Switch { height: 1; border: none; background: #24283b; }
 Switch.-on { background: #2f334d; }
 
 #controls { height: 3; margin: 1 0 0 0; }
+#controls2 { height: 3; }
 Button { margin: 0 1 0 0; min-width: 8; height: 3; }
 Button#run { background: #7aa2f7; color: #1a1b26; text-style: bold; }
+Button#check { background: #2f334d; color: #e0af68; }
+Button#stop { background: #2f334d; color: #f7768e; }
+Button#open { background: #2f334d; color: #7dcfff; }
 Button#save { background: #2f334d; color: #c0caf5; }
 Button#quit { background: #2f334d; color: #c0caf5; }
+Button:disabled { color: #565f89; text-style: none; }
 
 #status { height: 1; color: #565f89; }
 #progressrow { height: 1; }
@@ -221,6 +263,19 @@ InfoScreen { align: center middle; background: #1a1b26 70%; }
     margin: 1 0;
 }
 #loadpath:focus { border: round #7aa2f7; }
+
+.pickbtn {
+    width: 3; min-width: 3; height: 1; margin: 0 0 0 1; border: none;
+    background: #2f334d; color: #7aa2f7; content-align: center middle;
+}
+.pickbtn:hover { background: #3b4261; }
+ColumnPickerScreen { align: center middle; background: #1a1b26 70%; }
+#colpick {
+    width: 70; height: auto; max-height: 80%;
+    background: #16161e; border: round #7aa2f7; padding: 1 2;
+}
+#collist { height: auto; max-height: 22; border: round #2f334d; margin: 1 0; }
+.fin.-invalid { background: #3a2330; color: #f7768e; }
 """
 
 _INFO_TEXT = (
@@ -272,6 +327,43 @@ class InfoScreen(ModalScreen):
     @on(Button.Pressed, '#close')
     def _on_close(self) -> None:
         self.dismiss()
+
+
+class ColumnPickerScreen(ModalScreen):
+    """Pick a column name from a scanned file header. Dismisses with the
+    chosen column string, or None on cancel."""
+
+    BINDINGS = [('escape', 'cancel', 'Cancel')]
+
+    def __init__(self, title: str, columns: list):
+        super().__init__()
+        self._title = title
+        self._columns = columns
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id='colpick'):
+            yield Static(f'[b #7aa2f7]{self._title}[/]\n'
+                         'Select a column (Enter), or Esc to cancel:')
+            ol = OptionList(*[Option(c, id=str(i))
+                              for i, c in enumerate(self._columns)],
+                            id='collist')
+            yield ol
+            with Horizontal():
+                yield Button('Cancel', id='colcancel')
+
+    def on_mount(self) -> None:
+        self.query_one('#collist', OptionList).focus()
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+    @on(Button.Pressed, '#colcancel')
+    def _cancel(self) -> None:
+        self.dismiss(None)
+
+    @on(OptionList.OptionSelected, '#collist')
+    def _picked(self, event: OptionList.OptionSelected) -> None:
+        self.dismiss(self._columns[int(event.option.id)])
 
 
 class LoadScreen(ModalScreen):
@@ -351,6 +443,56 @@ _FIELD_IDS = [f[0] for f in _FIELDS]
 # Path fields get a clear (✕) button and accept drag-and-drop of a folder
 # or file (file -> its parent folder).
 _PATH_FIELDS = ['input_dir', 'output_dir']
+
+# Column fields that get a ▾ button to pick the name from the scanned file
+# header. The four single-column fields replace their value on pick; the
+# scalars field inserts the column at the cursor (so you build LABEL:column).
+_COL_PICK_FIELDS = ['col_u', 'col_v', 'col_w', 'col_tsonic', 'scalars']
+
+
+# --- Live field validation (blank is always allowed = use default) ---------
+def _opt_int(v: str) -> bool:
+    v = v.strip()
+    return v == '' or v.lstrip('+-').isdigit()
+
+
+def _opt_num(v: str) -> bool:
+    v = v.strip()
+    if v == '':
+        return True
+    try:
+        float(v)
+        return True
+    except ValueError:
+        return False
+
+
+def _opt_regex(v: str) -> bool:
+    v = v.strip()
+    if v == '':
+        return True
+    try:
+        re.compile(v)
+        return True
+    except re.error:
+        return False
+
+
+_VALIDATORS = {
+    'hz': [Function(_opt_int, 'whole number, e.g. 20')],
+    'chunk': [Function(_opt_num, 'a number of seconds')],
+    'minchunk': [Function(_opt_num, 'a number of seconds')],
+    'nboot': [Function(_opt_int, 'whole number, e.g. 99')],
+    'lagmax': [Function(_opt_num, 'a number of seconds')],
+    'block': [Function(_opt_num, 'a number of seconds')],
+    'workers': [Function(_opt_int, 'whole number (blank = all cores)')],
+    'skiprows': [Function(_opt_int, 'whole number')],
+    'extrarows': [Function(_opt_int, 'whole number')],
+    'hdithresh': [Function(_opt_num, 'a number of seconds')],
+    'devthresh': [Function(_opt_num, 'a number of seconds')],
+    'hdiprefilter': [Function(_opt_num, 'a number of seconds')],
+    'streg': [Function(_opt_regex, 'not a valid regular expression')],
+}
 
 # Boolean settings rendered as a Switch (not an Input). Persisted alongside
 # the text fields.
@@ -492,6 +634,48 @@ def _load_settings() -> dict:
         return {}
 
 
+def _summary_lines(summary, scalars, hz, cancelled: bool = False) -> list:
+    """Build the post-run summary block: counts + reliability + median lag."""
+    import numpy as np
+    lines: list = []
+    if summary is None or len(summary) == 0:
+        lines.append(Text('summary: no chunks processed', style=_DIM))
+        return lines
+    n = len(summary)
+    st = summary['status'] if 'status' in summary.columns else None
+    n_ok = int((st == 'ok').sum()) if st is not None else 0
+    n_skip = int((st == 'skipped:short').sum()) if st is not None else 0
+    n_err = int((st == 'error').sum()) if st is not None else 0
+    head = Text()
+    head.append('── summary ──  ', style=f'bold {_BLUE}')
+    head.append(f'{n_ok} aligned', style=_GREEN)
+    if n_skip:
+        head.append(f'  {n_skip} skipped', style=_AMBER)
+    if n_err:
+        head.append(f'  {n_err} errors', style=_RED)
+    if cancelled:
+        head.append('  (stopped early)', style=_AMBER)
+    lines.append(head)
+    for g in scalars:
+        pfx = g.lower()
+        tcol = f'{pfx}_tlag_s'
+        if tcol not in summary.columns:
+            continue
+        vals = summary[tcol].astype(float).dropna()
+        med = float(np.nanmedian(vals)) if len(vals) else float('nan')
+        rcol = f'{pfx}_is_reliable'
+        rel = (int(summary[rcol].fillna(False).astype(bool).sum())
+               if rcol in summary.columns else 0)
+        pct = (100.0 * rel / n) if n else 0.0
+        t = Text()
+        t.append(f'{g}: ', style=f'bold {_FG}')
+        t.append(f'median lag {med:.2f}s', style=_FG)
+        t.append(f'   reliable(S1) {rel}/{n} ({pct:.0f}%)',
+                 style=_GREEN if pct >= 50 else _AMBER)
+        lines.append(t)
+    return lines
+
+
 def _detect_line(stem: str, row: dict, scalars) -> Text:
     """Render one detection row as a Rich Text line (colour-coded by HDI)."""
     t = Text()
@@ -515,9 +699,10 @@ class DetectRemoveTUI(App):
 
     CSS = _CSS
     TITLE = 'diive · PWB time-lag detect + remove'
-    BINDINGS = [('r', 'run', 'Run'), ('s', 'save', 'Save'),
-                ('l', 'load', 'Load'), ('d', 'reset', 'Reset'),
-                ('c', 'copy', 'Copy log'),
+    BINDINGS = [('r', 'run', 'Run'), ('k', 'check', 'Check'),
+                ('x', 'stop', 'Stop'), ('o', 'open', 'Open output folder'),
+                ('s', 'save', 'Save'), ('l', 'load', 'Load'),
+                ('d', 'reset', 'Reset'), ('c', 'copy', 'Copy log'),
                 ('i', 'info', 'Info'), ('q', 'quit', 'Quit')]
 
     def __init__(self, demo: bool = False):
@@ -526,6 +711,9 @@ class DetectRemoveTUI(App):
         self._phase = None  # tracks detect->remove handoff for the bar
         self._logbuf: list[str] = []  # plain-text mirror of the console log
         self._last_path_field = 'input_dir'  # most recently focused path field
+        self._cancel_event = None       # threading.Event for the active run
+        self._last_output_dir = None    # output dir of the last run (for Open)
+        self._busy = False           # a run/check is in progress
 
     # ---- layout: title / [settings | console] / footer ----------------
     def compose(self) -> ComposeResult:
@@ -576,6 +764,10 @@ class DetectRemoveTUI(App):
                 yield self._switch_row('Strict', 'strict')
                 with Horizontal(id='controls'):
                     yield Button('Run', id='run', variant='primary')
+                    yield Button('Check', id='check')
+                    yield Button('Stop', id='stop')
+                    yield Button('Open output folder', id='open')
+                with Horizontal(id='controls2'):
                     yield Button('Save', id='save')
                     yield Button('Load', id='load')
                     yield Button('Reset', id='reset')
@@ -606,10 +798,17 @@ class DetectRemoveTUI(App):
         inp_cls = PathInput if fid in _PATH_FIELDS else Input
         inp = inp_cls(placeholder=ph, id=fid, classes='fin')
         inp.tooltip = help_txt  # hover anywhere on the field shows the help
+        # Live validation on the relevant fields (Textual marks them
+        # ``-invalid`` automatically; CSS paints them red).
+        validators = _VALIDATORS.get(fid)
+        if validators:
+            inp.validators = validators
         children = [lbl, inp]
-        # Path fields also get a small ✕ clear button.
+        # Path fields get a ✕ clear button; column fields get a ▾ picker.
         if fid in _PATH_FIELDS:
             children.append(Button('✕', id=f'clr_{fid}', classes='clearbtn'))
+        elif fid in _COL_PICK_FIELDS:
+            children.append(Button('▾', id=f'pick_{fid}', classes='pickbtn'))
         return Horizontal(*children, classes='field')
 
     def _switch_row(self, label: str, sid: str) -> Horizontal:
@@ -619,6 +818,48 @@ class DetectRemoveTUI(App):
         sw = Switch(value=False, id=sid)
         sw.tooltip = help_txt
         return Horizontal(lbl, sw, classes='field')
+
+    # ---- column picker (▾ next to the column fields) -------------------
+    @on(Button.Pressed, '.pickbtn')
+    def _on_pick(self, event: Button.Pressed) -> None:
+        event.stop()
+        fid = (event.button.id or '')[5:]  # strip 'pick_'
+        if not fid:
+            return
+
+        def g(i):
+            return self.query_one(f'#{i}', Input).value.strip()
+
+        in_dir = g('input_dir')
+        if not in_dir:
+            self._status('set Input dir first, then pick columns', _AMBER)
+            return
+        try:
+            f0, _files, cols = _scan_columns(
+                in_dir, g('filepattern') or '*.csv',
+                int(g('skiprows') or 0), int(g('extrarows') or 2),
+                _unescape_sep(g('sep') or ','))
+        except Exception as e:
+            self._status(f'could not read columns: {e}', _RED)
+            return
+        if not cols:
+            self._status('no columns found in the header', _AMBER)
+            return
+
+        def _assign(choice) -> None:
+            if not choice:
+                return
+            inp = self.query_one(f'#{fid}', Input)
+            if fid == 'scalars':
+                # Build LABEL:column — insert the column at the cursor so the
+                # user can prefix a label (e.g. 'CH4:' then pick the column).
+                inp.insert_text_at_cursor(choice)
+            else:
+                inp.value = choice
+            inp.focus()
+
+        self.push_screen(ColumnPickerScreen(f'Columns in {f0.name}', cols),
+                         _assign)
 
     def on_descendant_focus(self, event: events.DescendantFocus) -> None:
         """Echo a field's help into the status line when it gains focus, so
@@ -689,6 +930,64 @@ class DetectRemoveTUI(App):
             self.query_one(f'#{fid}', Input).focus()
         event.stop()
 
+    # ---- form enable/disable + run-control button states ---------------
+    def _set_form_enabled(self, enabled: bool) -> None:
+        """Grey out (or restore) every settings widget during a run."""
+        for fid in _FIELD_IDS:
+            self.query_one(f'#{fid}', Input).disabled = not enabled
+        for sid in _SWITCHES:
+            self.query_one(f'#{sid}', Switch).disabled = not enabled
+        for bid in ('save', 'load', 'reset',
+                    *(f'clr_{f}' for f in _PATH_FIELDS),
+                    *(f'pick_{f}' for f in _COL_PICK_FIELDS)):
+            try:
+                self.query_one(f'#{bid}', Button).disabled = not enabled
+            except NoMatches:
+                pass
+
+    def _controls_running(self, running: bool) -> None:
+        """Toggle Run/Check/Stop button availability for a run in progress."""
+        self.query_one('#run', Button).disabled = running
+        self.query_one('#check', Button).disabled = running
+        self.query_one('#stop', Button).disabled = not running
+        self._set_form_enabled(not running)
+
+    # ---- Check (preflight) ---------------------------------------------
+    def action_check(self) -> None:
+        if not self._busy:
+            self._start_check()
+
+    @on(Button.Pressed, '#check')
+    def _on_check(self) -> None:
+        self.action_check()
+
+    # ---- Stop ----------------------------------------------------------
+    def action_stop(self) -> None:
+        if self._busy and self._cancel_event is not None:
+            self._cancel_event.set()
+            self.query_one('#stop', Button).disabled = True
+            self._status('stopping… (finishing in-flight chunks)', _AMBER)
+
+    @on(Button.Pressed, '#stop')
+    def _on_stop(self) -> None:
+        self.action_stop()
+
+    # ---- Open output folder --------------------------------------------
+    def action_open(self) -> None:
+        d = self._last_output_dir
+        if not d or not Path(d).exists():
+            self._status('no output folder yet — run first', _DIM)
+            return
+        try:
+            _open_in_file_manager(Path(d))
+            self._status(f'opened {d}', _GREEN)
+        except Exception as e:
+            self._status(f'could not open folder: {e}', _RED)
+
+    @on(Button.Pressed, '#open')
+    def _on_open(self) -> None:
+        self.action_open()
+
     def on_mount(self) -> None:
         # Worker-row pool: all hidden until a worker becomes active.
         self._wfree: list[int] = list(range(_MAX_WORKER_ROWS))
@@ -700,6 +999,10 @@ class DetectRemoveTUI(App):
             self.query_one(f'#wrow{i}', Label).display = False
         # Drive the spinner animation: re-render active rows ~12x/second.
         self.set_interval(1 / 12, self._tick_spinners)
+
+        # Stop is only usable during a run; Open only after one produced output.
+        self.query_one('#stop', Button).disabled = True
+        self.query_one('#open', Button).disabled = True
 
         loaded = _load_settings()
         for fid in _FIELD_IDS:
@@ -808,17 +1111,181 @@ class DetectRemoveTUI(App):
         self._start()
 
     def _start(self) -> None:
+        if self._busy:
+            return
+        # Demo needs no config.
+        if self.demo:
+            self.query_one('#log', RichLog).clear()
+            self._logbuf.clear()
+            self._clear_workers()
+            self._busy = True
+            self._cancel_event = threading.Event()
+            self._controls_running(True)
+            self._phase = None
+            self._status('running…', _BLUE)
+            threading.Thread(target=self._demo_impl, daemon=True).start()
+            return
+        # Collect + validate on the UI thread (so we never read widgets from a
+        # worker thread, and a bad config is reported without disabling the
+        # form first).
+        try:
+            cfg = self._collect()
+        except Exception as e:
+            self._status(f'bad input: {e}', _RED)
+            return
+        # Auto-preflight: cheap validation (files match + columns present) so
+        # a misconfigured run aborts now instead of failing mid-way.
+        ok, msg = self._quick_preflight(cfg)
+        if not ok:
+            self._status(f'cannot run: {msg} — press Check for details', _RED)
+            return
         self.query_one('#log', RichLog).clear()
         self._logbuf.clear()
         self._clear_workers()
-        self.query_one('#run', Button).disabled = True
+        self._busy = True
+        self._cancel_event = threading.Event()
+        self._controls_running(True)
         self._phase = None
+        # Overwrite guard: note pre-existing output so a re-run into the wrong
+        # folder is not silently destructive.
+        existing = self._count_existing_output(cfg)
+        if existing:
+            self._log_only(Text(
+                f'note: {cfg["data_subdir"]}/ already has {existing} file(s) '
+                f'— matching chunks will be overwritten', style=_AMBER))
         self._status('running…', _BLUE)
-        if self.demo:
-            self._worker_demo()
-        else:
-            self._save_settings(announce=False)  # remember what we ran
-            self._worker_real()
+        self._save_settings(announce=False)  # remember what we ran
+        threading.Thread(target=self._real_impl, args=(cfg,),
+                         daemon=True).start()
+
+    def _quick_preflight(self, cfg: dict) -> tuple:
+        """Fast pre-run validation. Return (ok, message). Reads only the
+        first file's header — no chunk processing."""
+        try:
+            f0, files, cols = _scan_columns(
+                cfg['input_dir'], cfg['file_pattern'], cfg['skiprows'],
+                cfg['extra_rows'], cfg['sep'])
+        except FileNotFoundError as e:
+            return False, str(e)
+        except Exception as e:
+            return False, f'cannot read header: {e}'
+        colset = set(cols)
+        needed = {'U': cfg['col_u'], 'V': cfg['col_v'], 'W': cfg['col_w'],
+                  'T_SONIC': cfg['col_tsonic']}
+        needed.update(cfg['scalars'])
+        missing = [f'{role} ({col!r})'
+                   for role, col in needed.items() if col not in colset]
+        if missing:
+            return False, 'columns not in header: ' + ', '.join(missing)
+        return True, f'{len(files)} file(s), {len(cols)} columns'
+
+    def _count_existing_output(self, cfg: dict) -> int:
+        """Count files already present in the output data subfolder."""
+        try:
+            d = Path(cfg['output_dir']) / cfg['data_subdir']
+            return sum(1 for _ in d.glob('*')) if d.exists() else 0
+        except Exception:
+            return 0
+
+    def _start_check(self) -> None:
+        """Run the preflight checks (no pipeline) in a worker thread."""
+        if self._busy:
+            return
+        try:
+            cfg = self._collect()
+        except Exception as e:
+            self._status(f'check failed: {e}', _RED)
+            return
+        self.query_one('#log', RichLog).clear()
+        self._logbuf.clear()
+        self._busy = True
+        self._controls_running(True)
+        self.query_one('#stop', Button).disabled = True  # nothing to stop
+        self._status('checking configuration…', _BLUE)
+        threading.Thread(target=self._check_impl, args=(cfg,),
+                         daemon=True).start()
+
+    def _check_impl(self, cfg: dict) -> None:
+        """Preflight: validate paths, file count, header columns, chunk plan.
+
+        Reads only the first matching file's header (fast), so a
+        misconfiguration is caught in well under a second instead of after a
+        long run. ``cfg`` was already collected on the UI thread.
+        """
+        from diive.flux.hires.detect_and_remove_tlag import (
+            _WHITESPACE_SEP as _WS, _chunk_filename, _count_data_rows)
+
+        def log(line):
+            self.call_from_thread(self._log_only, line)
+
+        ok = True
+        try:
+            in_dir = Path(cfg['input_dir'])
+            files = sorted(in_dir.glob(cfg['file_pattern']))
+            if not files:
+                log(Text(f"✗ no files match '{cfg['file_pattern']}' in {in_dir}",
+                         style=_RED))
+                self.call_from_thread(self._finish_check, 'check: no input files', False)
+                return
+            log(Text(f"✓ {len(files)} file(s) match "
+                     f"'{cfg['file_pattern']}'", style=_GREEN))
+
+            f0 = files[0]
+            skiprows, extra = cfg['skiprows'], cfg['extra_rows']
+            sep = cfg['sep']
+            n_pre = skiprows + 1 + extra
+            with open(f0, 'r', encoding='utf-8', errors='replace') as fh:
+                head = [next(fh) for _ in range(n_pre)]
+            header_line = head[skiprows].rstrip('\r\n')
+            cols = (header_line.split() if sep == _WS
+                    else [c.strip() for c in header_line.split(sep)])
+            log(Text(f"✓ first file {f0.name}: {len(cols)} columns parsed "
+                     f"(skiprows={skiprows}, extra-rows={extra})", style=_GREEN))
+            # List every column so the exact (bracketed) names can be copied
+            # or picked via the ▾ buttons.
+            log(Text('  columns: ' + '  '.join(cols), style=_DIM))
+
+            # Verify every configured column exists in the header.
+            needed = {'U': cfg['col_u'], 'V': cfg['col_v'], 'W': cfg['col_w'],
+                      'T_SONIC': cfg['col_tsonic']}
+            for lbl, col in cfg['scalars'].items():
+                needed[lbl] = col
+            colset = set(cols)
+            for role, col in needed.items():
+                if col in colset:
+                    log(Text(f"✓ {role}: '{col}' found", style=_GREEN))
+                else:
+                    ok = False
+                    log(Text(f"✗ {role}: '{col}' NOT in header — check the "
+                             f"name / separator / skiprows", style=_RED))
+
+            # Chunk plan + first output filename.
+            n_rows = _count_data_rows(f0, n_pre)
+            chunk_records = int(round(cfg['chunk_seconds'] * cfg['hz']))
+            n_chunks = max(1, (n_rows + chunk_records - 1) // chunk_records)
+            log(Text(f"✓ {f0.name}: ~{n_rows} data rows -> ~{n_chunks} "
+                     f"chunk(s)/file (≈{n_chunks * len(files)} total)",
+                     style=_CYAN))
+            try:
+                name0, _ = _chunk_filename(
+                    f0, 0, cfg['chunk_seconds'], cfg['chunk_name_template'],
+                    cfg['start_time_regex'], cfg['start_time_format'])
+                log(Text(f"✓ first output file would be: {name0}", style=_CYAN))
+            except Exception as e:
+                ok = False
+                log(Text(f"✗ chunk naming: {e}", style=_RED))
+
+            msg = ('check passed — ready to Run' if ok
+                   else 'check found problems (see log)')
+            self.call_from_thread(self._finish_check, msg, ok)
+        except Exception as e:
+            self.call_from_thread(self._finish_check,
+                                  f'check error: {type(e).__name__}: {e}', False)
+
+    def _finish_check(self, msg: str, ok: bool) -> None:
+        self._busy = False
+        self._controls_running(False)
+        self._status(msg, _GREEN if ok else _RED)
 
     # ---- live per-worker rows (driven by the pipeline's on_active) ------
     def ui_active(self, active: dict, phase: str) -> None:
@@ -962,24 +1429,24 @@ class DetectRemoveTUI(App):
     def _on_copy(self) -> None:
         self.action_copy()
 
-    def _finish(self, msg: str) -> None:
+    def _finish(self, msg: str, color: str = _GREEN) -> None:
         self._clear_workers()
-        self.query_one('#run', Button).disabled = False
-        self._status(msg, _GREEN)
+        self._busy = False
+        self._cancel_event = None
+        self._controls_running(False)
+        if self._last_output_dir and Path(self._last_output_dir).exists():
+            self.query_one('#open', Button).disabled = False
+        self._status(msg, color)
 
     def _error(self, msg: str) -> None:
         self._clear_workers()
-        self.query_one('#run', Button).disabled = False
+        self._busy = False
+        self._cancel_event = None
+        self._controls_running(False)
         self._status(msg, _RED)
 
     # ---- real pipeline (worker thread) ---------------------------------
-    @work(thread=True)
-    def _worker_real(self) -> None:
-        try:
-            cfg = self._collect()
-        except Exception as e:
-            self.call_from_thread(self._error, f'bad input: {e}')
-            return
+    def _real_impl(self, cfg: dict) -> None:
         try:
             pipeline = PerFilePipeline(**cfg)
             scalars = pipeline.scalars
@@ -1013,9 +1480,13 @@ class DetectRemoveTUI(App):
                 # active fires at chunk START -> show the live worker rows.
                 self.call_from_thread(self.ui_active, dict(active), phase)
 
-            # run() now writes the summary CSV and (when Save plots is on)
-            # the batch overview plots itself, so the TUI no longer needs to.
-            summary = pipeline.run(on_progress=on_progress, on_active=on_active)
+            # Remember the output dir for the Open button (even on cancel).
+            self._last_output_dir = cfg['output_dir']
+
+            # run() writes the summary CSV + overview plots itself; the cancel
+            # event lets the Stop button abort mid-run.
+            summary = pipeline.run(on_progress=on_progress, on_active=on_active,
+                                   cancel_event=self._cancel_event)
             n_ok = int((summary['status'] == 'ok').sum()) if 'status' in summary else 0
             if pipeline.summary_csv_path is not None:
                 self.call_from_thread(
@@ -1026,8 +1497,19 @@ class DetectRemoveTUI(App):
                     self._log_only,
                     Text(f'overview plots -> {pipeline.summary_plots_dir}',
                          style=_CYAN))
-            self.call_from_thread(
-                self._finish, f'done — {n_ok}/{len(summary)} chunks -> {cfg["output_dir"]}')
+            # Post-run summary block (counts, reliability, median lags).
+            for ln in _summary_lines(summary, list(scalars), hz,
+                                     cancelled=pipeline.cancelled):
+                self.call_from_thread(self._log_only, ln)
+            if pipeline.cancelled:
+                self.call_from_thread(
+                    self._finish,
+                    f'stopped — {n_ok}/{len(summary)} chunks aligned '
+                    f'-> {cfg["output_dir"]}', _AMBER)
+            else:
+                self.call_from_thread(
+                    self._finish,
+                    f'done — {n_ok}/{len(summary)} chunks -> {cfg["output_dir"]}')
         except Exception as e:
             self.call_from_thread(self._error, f'{type(e).__name__}: {e}')
 
@@ -1117,8 +1599,7 @@ class DetectRemoveTUI(App):
         )
 
     # ---- demo (no input data) ------------------------------------------
-    @work(thread=True)
-    def _worker_demo(self) -> None:
+    def _demo_impl(self) -> None:
         scalars = ['CH4', 'N2O']
         files = ['CH-CHA_202107261300', 'CH-CHA_202107271300',
                  'CH-CHA_202107281300']
@@ -1126,6 +1607,10 @@ class DetectRemoveTUI(App):
         total = len(chunks)
         n_workers = 4
         pids = [1000 + k for k in range(n_workers)]   # fake worker pids
+
+        def _cancelled():
+            return (self._cancel_event is not None
+                    and self._cancel_event.is_set())
 
         def _phase(phase: str, hold: float, write: bool):
             # Simulate N workers each grabbing the next chunk: emit an
@@ -1146,6 +1631,8 @@ class DetectRemoveTUI(App):
                                    'chunk_period': f}
             self.call_from_thread(self.ui_active, dict(active), phase)
             while inflight:
+                if _cancelled():
+                    return
                 time.sleep(hold)
                 # Finish one worker's chunk, hand it the next.
                 pid = next(iter(inflight))
@@ -1174,9 +1661,13 @@ class DetectRemoveTUI(App):
                 self.call_from_thread(self.ui_active, dict(active), phase)
 
         _phase('detect', 0.12, write=False)
-        _phase('remove', 0.08, write=True)
-        self.call_from_thread(self._finish,
-                              f'demo done — {total} chunks (no files written)')
+        if not _cancelled():
+            _phase('remove', 0.08, write=True)
+        if _cancelled():
+            self.call_from_thread(self._finish, 'demo stopped', _AMBER)
+        else:
+            self.call_from_thread(
+                self._finish, f'demo done — {total} chunks (no files written)')
 
 
 def _tui_main() -> None:

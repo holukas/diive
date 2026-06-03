@@ -216,6 +216,10 @@ Three CLIs (console scripts in `pyproject.toml`), all requiring **wind-rotation-
 
 `diive-tlag-pwb-detect-remove` ([detect_and_remove_tlag.py](diive/flux/hires/detect_and_remove_tlag.py)) splits each long raw file into fixed-length chunks (`--chunk-seconds`, default 30 min): **phase 1** rotates each chunk in memory + runs PWB per scalar (no write); **PWBOPT** picks the best lag per chunk across the full sequence; **phase 2** shifts each scalar by that lag (`--lag-column-template`, default `{prefix}_tlag_final_pf_s` — the same column `TlagApplier` removes, NOT raw `tlag_s`) and writes one file per chunk. Parallel unit is one chunk; chunk count is measured **per file**. Everything is parameterized in seconds × `--hz`, so 10 Hz / 60-min chunks just need `--hz 10` / `--chunk-seconds 3600` (one uniform format per run). Output is numbered by phase: `1_lag_detection/` (summary CSV, checkpoints, plots/, plots_summary/) and `2_lag_removed/` (corrected chunk files — clean input for the next flux step); root holds only those two folders + `log.txt`. **Downstream flux processing must run with EC time-lag maximization disabled.**
 
+- Per-chunk output filenames come from `--chunk-name-template` ({stem}/{suffix}/{index}/{starttime}); `{starttime}` needs `--start-time-regex` + `--start-time-format` and names each chunk by its own start time (e.g. `CH-CHA_{starttime}{suffix}` → `..._202107271330.csv`). The output line terminator defaults to `--lineterm auto` (reproduces the input file's CRLF/LF; header lines normalised to match — never mixed).
+- `PerFilePipeline.run(cancel_event=threading.Event())` is cooperative-cancellable: pending chunks cancelled, in-flight ones finish, remove phase skipped if cancelled during detect; `pipeline.cancelled` reports it. `run()` writes the summary CSV + overview plots itself (so TUI/CLI/Python callers all produce them).
+- **TUI** (`DetectRemoveTUI`, `--demo` for no-data preview): full CLI-option coverage with per-field tooltips + focus help; **Check** preflight (file count, header columns listed + verified, chunk plan); **Stop** (cancel); **Open output folder**; **▾ column picker** (scan first file's header, pick the exact bracketed name); auto-preflight on Run; overwrite guard; live field validation; per-worker animated spinner rows; log lines show `parent › chunk`; the lag-removal phase is shown as **"align"** (paper's "temporal alignment"), not "remove".
+
 ## Outlier Detection & QC
 
 - **Single method:** `dv.outliers.Hampel(series).run()`
@@ -346,6 +350,8 @@ Use `/llm-detox` skill for all written content (documentation, comments, commit 
 | XGBoost base_score in scientific notation | Monkey-patched in `MlRegressorGapFillingBase` |
 | Feature reduction too strict | Reduce `shap_threshold_factor` (default 0.5) |
 | Unicode on Windows (arrow chars) | Use ASCII (>, ->) in examples |
+| Textual `App` already has internal `_running`/`_workers` attrs | Don't name your own App attributes `_running` (use e.g. `_busy`); Textual sets `_running=True` on mount, silently breaking your guards |
+| Textual `@work` method not starting when called from a non-handler context | Dispatch background work with `threading.Thread(target=…, daemon=True)`; `call_from_thread` delivers UI updates from any thread |
 
 ## Common Workflows
 

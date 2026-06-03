@@ -177,7 +177,7 @@ import os
 import queue as _queue_mod
 import re
 import warnings
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import CancelledError, ProcessPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from multiprocessing import Manager
 from pathlib import Path
@@ -1300,6 +1300,7 @@ class PerFilePipeline:
         # Result-file paths, populated by run() -> _write_summary_and_plots.
         self._summary_csv_path: Path | None = None
         self._summary_plots_dir: Path | None = None
+        self._cancelled: bool = False  # set by run() when cancel_event fired
 
     @property
     def summary(self) -> DataFrame:
@@ -1307,6 +1308,11 @@ class PerFilePipeline:
         if self._summary is None:
             raise RuntimeError('Call run() first.')
         return self._summary
+
+    @property
+    def cancelled(self) -> bool:
+        """True if the last ``run()`` was stopped via its cancel_event."""
+        return self._cancelled
 
     @property
     def summary_csv_path(self) -> Path | None:
@@ -1327,7 +1333,8 @@ class PerFilePipeline:
 
     def run(self,
             on_progress: Callable | None = None,
-            on_active: Callable | None = None) -> DataFrame:
+            on_active: Callable | None = None,
+            cancel_event=None) -> DataFrame:
         """Detect (phase 1) then remove the PWBOPT lag (phase 2) for every chunk.
 
         Phase 1 runs ``detect_one_chunk`` on every chunk of every file (no
@@ -1347,11 +1354,17 @@ class PerFilePipeline:
             on_active: Optional callback ``f(active_dict, phase)`` where
                 ``active_dict`` maps worker pid -> ``{'parent', 'chunk_index',
                 'chunk_period'}``. Fired whenever the in-flight set changes.
+            cancel_event: Optional ``threading.Event``. When set, the current
+                phase stops dispatching new chunks (running ones finish), the
+                remove phase is skipped if cancelled during detect, and the
+                partial summary collected so far is returned. ``run()`` adds a
+                ``cancelled`` attribute (bool) to the returned DataFrame.
 
         Returns:
             DataFrame with one row per (file, chunk), sorted by input-file
             order then chunk_index.
         """
+        self._cancelled = False
         files = sorted(self.input_dir.glob(self.file_pattern))
         if not files:
             raise FileNotFoundError(
@@ -1486,6 +1499,7 @@ class PerFilePipeline:
             checkpoint_path=detect_dir / 'detect_and_remove_tlag_checkpoint.csv',
             parent_to_idx=parent_to_idx, total_files=total_files,
             on_progress=on_progress, on_active=on_active,
+            cancel_event=cancel_event,
         )
 
         detect_rows.sort(key=lambda r: (
@@ -1495,6 +1509,14 @@ class PerFilePipeline:
         summary = pd.DataFrame(detect_rows)
         # PWBOPT across ALL chunks in temporal order -> best lag per chunk.
         summary = self._apply_pwbopt_postprocessing(summary)
+
+        # If the user cancelled during detect, skip phase 2 entirely and
+        # return the partial detection summary (no files aligned).
+        if cancel_event is not None and cancel_event.is_set():
+            self._cancelled = True
+            self._summary = summary
+            self._write_summary_and_plots(summary)
+            return summary
 
         # ============== PHASE 2: remove the PWBOPT lag + write ===========
         remove_kwargs_list: list[dict] = []
@@ -1533,6 +1555,7 @@ class PerFilePipeline:
             checkpoint_path=detect_dir / 'detect_and_remove_tlag_remove_checkpoint.csv',
             parent_to_idx=parent_to_idx, total_files=total_files,
             on_progress=on_progress, on_active=on_active,
+            cancel_event=cancel_event,
         )
 
         # ---- Merge phase-2 outcomes back into the detection summary -----
@@ -1552,6 +1575,8 @@ class PerFilePipeline:
                 summary.at[idx, 'status'] = 'error'
                 summary.at[idx, 'error'] = rr.get('write_error', '')
 
+        # Cancelled during the remove phase: some chunks aligned, some not.
+        self._cancelled = bool(cancel_event is not None and cancel_event.is_set())
         self._summary = summary
         self._write_readme()
         self._write_summary_and_plots(summary)
@@ -1670,14 +1695,20 @@ class PerFilePipeline:
 
     def _run_pool(self, kwargs_list, worker_fn, total, phase,
                   checkpoint_path, parent_to_idx, total_files,
-                  on_progress, on_active) -> list:
+                  on_progress, on_active, cancel_event=None) -> list:
         """Dispatch one phase's chunk tasks; collect and checkpoint result rows.
 
         ``worker_fn`` is the picklable module-level worker (``_detect_worker``
         or ``_remove_worker``). Drains the progress queue in the main process,
         snapshots a checkpoint CSV after every completion, and forwards the
         ``on_progress`` / ``on_active`` callbacks tagged with ``phase``.
+
+        ``cancel_event`` (a ``threading.Event``) lets a caller abort mid-phase:
+        it is checked while draining; when set, pending futures are cancelled
+        and already-running chunks are allowed to finish, then the partial
+        rows collected so far are returned.
         """
+        cancelled = False
         rows: list[dict] = []
         active: dict = {}  # pid -> {'parent', 'chunk_index', 'chunk_period'}
         done = 0
@@ -1735,6 +1766,9 @@ class PerFilePipeline:
 
             sync_q = _SyncQueue()
             for kwargs in kwargs_list:
+                if cancel_event is not None and cancel_event.is_set():
+                    cancelled = True
+                    break
                 worker_fn(kwargs, sync_q)
         else:
             # Parallel: dispatch ALL tasks as independent chunks and drain the
@@ -1751,6 +1785,13 @@ class PerFilePipeline:
 
                     pending = set(futures)
                     while True:
+                        if (cancel_event is not None and cancel_event.is_set()
+                                and not cancelled):
+                            # Abort: cancel queued chunks, let running ones
+                            # finish (bounded by n_workers), stop draining.
+                            cancelled = True
+                            executor.shutdown(wait=False, cancel_futures=True)
+                            break
                         try:
                             ev = progress_queue.get(timeout=0.1)
                         except _queue_mod.Empty:
@@ -1781,6 +1822,8 @@ class PerFilePipeline:
                     for fut in futures:
                         try:
                             fut.result()
+                        except CancelledError:
+                            pass  # pending chunk cancelled by Stop — expected
                         except Exception as fe:
                             worker_errors.append(fe)
                     if worker_errors:
@@ -1794,8 +1837,9 @@ class PerFilePipeline:
 
         # Every dispatched task should produce exactly one row. A shortfall
         # means chunks were lost (e.g. a killed worker) — surface it rather
-        # than returning a silently-incomplete summary.
-        if len(rows) < len(kwargs_list):
+        # than returning a silently-incomplete summary. (Skip when the user
+        # cancelled: a shortfall is then expected.)
+        if not cancelled and len(rows) < len(kwargs_list):
             warn(f"{phase}: only {len(rows)} of {len(kwargs_list)} dispatched "
                  f"chunks reported a result; {len(kwargs_list) - len(rows)} "
                  f"are missing from the summary.")
