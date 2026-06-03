@@ -274,12 +274,36 @@
   `diive-tlag-pwb-detect-remove` (`diive.flux.hires.detect_and_remove_tlag_tui`; CLI:
   `diive-tlag-pwb-detect-remove-tui`). Two-column, soft modern palette: a **labelled** settings form on the left
   (paths, wind/sonic columns, scalars, PWB/chunk params, workers, save-plots) and a live console on the right —
-  a progress bar plus a `RichLog` into which `PerFilePipeline` (run in a worker thread) streams its Rich-styled
-  per-chunk output (same HDI colour coding as the CLI). **Settings persist** in `~/.diive/detect_remove_tui.yaml`:
+  an overall progress bar, **a row per busy worker showing the file·chunk it is *currently* processing prefixed by an
+  animated spinner** (appears the instant a worker starts a chunk, so in-flight work is visible, not only finished
+  chunks; when the chunk finishes its result line lands in the log), and a `RichLog` into which `PerFilePipeline`
+  (run in a worker thread) streams its Rich-styled per-chunk output (same HDI colour coding as the CLI). Each log
+  line shows the **source (6 h) file** the chunk came from, then the chunk: `parent › chunk  CH4=… HDI=…` (the CLI
+  per-chunk log does the same), so every result is traceable to its input file. The lag-removal phase is labelled
+  **"align"** in the live display (TUI and CLI) — the time *lag* is removed by aligning the scalar to the wind
+  (the paper's "temporal alignment"), so the label can't be misread as deleting a file. **Settings persist** in
+  `~/.diive/detect_remove_tui.yaml`:
   loaded on start and saved on *Run* or via the *Save* button, so columns/paths/params are entered only once.
   `--demo` runs a synthetic two-phase pipeline that needs no input data, purely to preview the interface; example:
   `examples/flux/hires/flux_detect_remove_tui_demo.py`. Requires the `textual` dependency (now a runtime dep; a `tui`
-  extra is also provided).
+  extra is also provided). The form also exposes the raw-file format (skip-rows, extra header rows, separator, file
+  glob) and the chunk-naming rule (start-time regex/format + filename template) so each 30-min output chunk is named
+  by its own start time (e.g. `CH-CHA_{starttime}{suffix}` -> `CH-CHA_202107271300.csv`, `..._202107271330.csv`, …).
+  Path fields accept drag-and-drop of a folder (or a file -> its parent) and have a ✕ clear button; the console
+  prefixes each line with a wall-clock time and a *Copy log* button / `c` key copies the whole buffer to the
+  clipboard. The summary CSV and (with *Save plots*) the batch overview figures are now written by
+  `PerFilePipeline.run()` itself, so the TUI and bare-Python callers produce the same result files as the CLI.
+  The TUI form now covers **all** CLI options (PWBOPT thresholds, lag-column template, NA values/rep, line terminator,
+  output subfolder names, random seed, strict mode) and every field has a hover tooltip + focus help line explaining
+  what it does. Defaults: random seed 42 (reproducible; clear for a random run) and chunk naming pre-filled for the
+  common 12-digit `YYYYMMDDHHMM` filenames. Input/output paths are validated before a run — a non-existent input
+  folder, an unwritable output path, or a path field accidentally doubled by a drag-and-drop (some terminals *type*
+  a dropped path, appending it to existing text) now raises a clear, actionable message instead of a cryptic
+  `OSError: WinError 123`.
+- **Output line endings preserved.** `detect_and_remove_tlag` now writes each lag-corrected file with the **same line
+  terminator as its input** (`--lineterm auto`, the new default): CRLF for typical Windows EC logger files, LF for
+  Unix — so the output is a true drop-in replacement. The preserved metadata/header lines are normalised to that same
+  terminator (no mixed CRLF/LF). Force a specific ending with `--lineterm "\r\n"` or `--lineterm "\n"`.
 - **`reynolds_decomposition()`** — standalone `x' = x - mean(x)`; exported as `dv.flux.reynolds_decomposition`.
 - **`WindDoubleRotation`** (renamed from `WindRotation2D`) — scalar `c` removed; Reynolds decomposition is now a
   separate explicit step. Rotation angles use `atan2` (fixes `ZeroDivisionError` and wrong-quadrant results when

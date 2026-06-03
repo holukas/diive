@@ -265,6 +265,31 @@ def _read_raw_file(
     return preserved_lines, df
 
 
+def _detect_lineterm(path: Path, default: str = '\n') -> str:
+    r"""Return the line terminator a text file uses (``'\r\n'`` or ``'\n'``).
+
+    Raw EC files written by Windows loggers are almost always CRLF; Unix
+    tooling writes LF. To keep the lag-corrected file a true drop-in
+    replacement, the writer reproduces whichever the input used. Peeks the
+    first 64 KiB in binary and reports CRLF when the first newline is
+    preceded by a carriage return.
+    """
+    try:
+        with open(path, 'rb') as fh:
+            chunk = fh.read(65536)
+    except Exception:
+        return default
+    i = chunk.find(b'\n')
+    if i == -1:
+        return default
+    return '\r\n' if i > 0 and chunk[i - 1:i] == b'\r' else '\n'
+
+
+def _resolve_lineterm(lineterm: str, input_path: Path) -> str:
+    """Resolve the ``'auto'`` sentinel to the input file's line terminator."""
+    return _detect_lineterm(Path(input_path)) if lineterm == 'auto' else lineterm
+
+
 def _write_raw_file(
         output_path: Path,
         preserved_lines: list,
@@ -275,14 +300,18 @@ def _write_raw_file(
 ) -> None:
     """Write the lag-corrected file: header lines verbatim, then the data.
 
-    pandas ``to_csv`` requires a literal separator; the whitespace sentinel
-    is written as a single space.
+    ``lineterm`` must already be resolved to a literal terminator (use
+    ``_resolve_lineterm`` to expand the ``'auto'`` sentinel first). The
+    preserved header lines — read in text mode, so always ``'\\n'``-ended —
+    are re-terminated with ``lineterm`` so the whole file uses one
+    consistent convention (no mixed CRLF/LF). pandas ``to_csv`` requires a
+    literal separator; the whitespace sentinel is written as a single space.
     """
     out_sep = ' ' if sep == _WHITESPACE_SEP else sep
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, 'w', encoding='utf-8', newline='') as fh:
         for line in preserved_lines:
-            fh.write(line)
+            fh.write(line.rstrip('\r\n') + lineterm)
         df.to_csv(fh, sep=out_sep, index=False, header=False,
                   na_rep=na_rep, lineterminator=lineterm)
 
@@ -467,7 +496,7 @@ def process_one_file(
         skiprows: int = 0,
         extra_rows: int = 2,
         sep: str = ',',
-        lineterm: str = '\n',
+        lineterm: str = 'auto',
         na_values: list | None = None,
         na_rep: str = '-9999',
         random_state: int | None = None,
@@ -708,7 +737,8 @@ def process_one_file(
 
                 _write_raw_file(
                     output_dir / chunk_period, preserved_lines, df_out,
-                    sep=sep, lineterm=lineterm, na_rep=na_rep,
+                    sep=sep, lineterm=_resolve_lineterm(lineterm, input_path),
+                    na_rep=na_rep,
                 )
             except Exception as ce:
                 if strict:
@@ -1100,7 +1130,8 @@ def remove_one_chunk(
         # ---- Write -------------------------------------------------------
         _write_raw_file(
             output_dir / chunk_period, preserved_lines, df_chunk,
-            sep=sep, lineterm=lineterm, na_rep=na_rep,
+            sep=sep, lineterm=_resolve_lineterm(lineterm, input_path),
+            na_rep=na_rep,
         )
 
     except Exception as e:
@@ -1203,7 +1234,7 @@ class PerFilePipeline:
             skiprows: int = 0,
             extra_rows: int = 2,
             sep: str = ',',
-            lineterm: str = '\n',
+            lineterm: str = 'auto',
             na_values: list | None = None,
             na_rep: str = '-9999',
             random_state: int | None = None,
@@ -1266,6 +1297,9 @@ class PerFilePipeline:
         self.lag_column_template = lag_column_template
 
         self._summary: DataFrame | None = None
+        # Result-file paths, populated by run() -> _write_summary_and_plots.
+        self._summary_csv_path: Path | None = None
+        self._summary_plots_dir: Path | None = None
 
     @property
     def summary(self) -> DataFrame:
@@ -1273,6 +1307,16 @@ class PerFilePipeline:
         if self._summary is None:
             raise RuntimeError('Call run() first.')
         return self._summary
+
+    @property
+    def summary_csv_path(self) -> Path | None:
+        """Path to the summary CSV written by ``run()`` (or None)."""
+        return self._summary_csv_path
+
+    @property
+    def summary_plots_dir(self) -> Path | None:
+        """Path to the overview-plots folder written by ``run()`` (or None)."""
+        return self._summary_plots_dir
 
     def estimate_chunks_per_file(self, sample_file: Path) -> int:
         """Quick newline count of one file to estimate per-file chunk count."""
@@ -1510,7 +1554,58 @@ class PerFilePipeline:
 
         self._summary = summary
         self._write_readme()
+        self._write_summary_and_plots(summary)
         return self._summary
+
+    def _write_summary_and_plots(self, summary: DataFrame) -> None:
+        """Write the summary CSV and (when enabled) the batch overview plots.
+
+        Called automatically at the end of ``run()`` so every caller — the
+        CLI, the TUI, or a bare ``PerFilePipeline(...).run()`` from Python —
+        produces the same set of result files. The resulting paths are
+        stored on ``self.summary_csv_path`` / ``self.summary_plots_dir``
+        for callers that want to log them.
+
+        - ``<detect_subdir>/detect_and_remove_tlag_summary.csv``
+        - ``<detect_subdir>/plots_summary/`` (only when ``save_plots``):
+          the per-scalar 5-panel overviews + the cross-scalar comparison,
+          via ``PwbBatchDetection.plot_summary``.
+        """
+        self._summary_csv_path = None
+        self._summary_plots_dir = None
+        if summary is None or summary.empty:
+            return
+
+        detect_dir = self.output_dir / self.detect_subdir
+        detect_dir.mkdir(parents=True, exist_ok=True)
+
+        summary_csv = detect_dir / 'detect_and_remove_tlag_summary.csv'
+        try:
+            summary.to_csv(summary_csv, index=False)
+            self._summary_csv_path = summary_csv
+        except PermissionError:
+            # File locked (e.g. open in Excel) — leave the checkpoint as the
+            # best available snapshot rather than aborting the run.
+            warn(f'could not write summary CSV (locked?): {summary_csv}')
+
+        if self.save_plots:
+            summary_plots_dir = detect_dir / 'plots_summary'
+            summary_plots_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                PwbBatchDetection.plot_summary(
+                    results=summary,
+                    scalars=self.scalars,
+                    hdi_thresh=self.hdi_thresh,
+                    hdi_prefilter=self.hdi_prefilter,
+                    lag_max_s=self.lag_max_s,
+                    output_dir=summary_plots_dir,
+                    showplot=False,
+                )
+                self._summary_plots_dir = summary_plots_dir
+            except Exception as e:
+                # Plotting must never fail the run.
+                warn(f'overview-plot generation failed: '
+                     f'{type(e).__name__}: {e}')
 
     def _write_readme(self) -> None:
         """Write a README.txt to ``output_dir`` describing the folder layout.
@@ -1845,9 +1940,11 @@ def _build_parser():
     p.add_argument('--sep', default=',',
                    help=r"Field separator. Default ',' (CSV). Use '\s+' for "
                         r"whitespace or '\t' for TSV.")
-    p.add_argument('--lineterm', default='\n',
-                   help=r"Line terminator written between data rows. "
-                        r"Default '\n'.")
+    p.add_argument('--lineterm', default='auto',
+                   help=r"Line terminator for the output file. Default "
+                        r"'auto' reproduces the input file's convention "
+                        r"(CRLF for typical Windows EC logger files, LF for "
+                        r"Unix). Override with '\r\n' or '\n' to force one.")
     p.add_argument('--na-values', nargs='+',
                    default=list(_DEFAULT_NA_VALUES),
                    help='Strings to treat as NaN on read.')
@@ -2044,9 +2141,9 @@ def _cli_main():
     out(f'[dim]PWBOPT:[/dim]  hdi-thresh {args.hdi_thresh} s    '
         f'dev-thresh {args.dev_thresh} s    '
         f'hdi-prefilter {args.hdi_prefilter} s')
-    out(f'[dim]remove:[/dim]  lag column '
+    out(f'[dim]align :[/dim]  lag column '
         f'[bold]{args.lag_column_template}[/bold] '
-        f'[dim](phase 2 shifts scalars by this PWBOPT lag)[/dim]')
+        f'[dim](phase 2 shifts scalars by this PWBOPT lag to remove it)[/dim]')
     out(f'[dim]data  :[/dim]  lag-corrected chunks -> '
         f'[bold]{output_dir / args.data_subdir}[/bold]  '
         f'[dim](step 2; next-step input)[/dim]')
@@ -2117,8 +2214,10 @@ def _cli_main():
     phase_state = {'phase': None}
 
     def _phase_tag(phase: str) -> str:
+        # 'remove' = remove the time LAG (align scalar to wind), not any file;
+        # shown as 'align' (the paper's 'temporal alignment').
         return ('[magenta]detect[/magenta]' if phase == 'detect'
-                else '[blue]remove[/blue]')
+                else '[blue]align[/blue]')
 
     try:
         with Live(live_group, console=console, refresh_per_second=8,
@@ -2132,15 +2231,27 @@ def _cli_main():
                     overall.update(
                         overall_id,
                         description=f'[cyan]{mode}[/cyan] {_phase_tag(phase)}')
-                period_short = _short_period(row.get('period', ''))
+                chunk_short = _short_period(row.get('period', ''))
+                parent_short = _short_period(row.get('parent', ''))
+                # Show source (6 h) file then chunk, so each line is
+                # traceable to its input file.
+                period_short = (f'{parent_short} › {chunk_short}'
+                                if parent_short else chunk_short)
                 if phase == 'remove':
                     if row.get('write_status') == 'error':
                         parts = f'[red]ERR[/red] {row.get("write_error", "")[:60]}'
                     else:
-                        applied = '  '.join(
-                            f'{g}={row.get(f"{g.lower()}_applied_records", "--")}rec'
-                            for g in scalars)
-                        parts = f'[green]written[/green] {applied}'
+                        # Applied lag in seconds = shifted records / hz (the
+                        # shift is by whole records, so this is the exact lag).
+                        cells = []
+                        for g in scalars:
+                            rec = row.get(f'{g.lower()}_applied_records')
+                            if rec is None or rec != rec:
+                                cells.append(f'{g}=--')
+                            else:
+                                rec = int(rec)
+                                cells.append(f'{g}={rec / args.hz:.2f}s ({rec}rec)')
+                        parts = f'[green]aligned[/green] ' + '  '.join(cells)
                 elif row.get('status') == 'error':
                     parts = f'[red]ERR[/red] {row.get("error", "")[:60]}'
                 elif row.get('status') == 'skipped:short':
@@ -2208,41 +2319,17 @@ def _cli_main():
         out()
         out(msg_chunks)
 
-        summary_csv = (output_dir / args.detect_subdir
-                       / 'detect_and_remove_tlag_summary.csv')
-        summary_csv.parent.mkdir(parents=True, exist_ok=True)
-        summary.to_csv(summary_csv, index=False)
-        out(f'[dim]Summary saved to:[/dim] [cyan]{summary_csv}[/cyan]')
-
-        # Batch-level overview plots — one 5-panel figure per scalar plus
-        # the cross-scalar PwboptLagPlot. Written to a SEPARATE folder
-        # (plots_summary/) so they don't get mixed in with the per-chunk
-        # diagnostics in plots/. Reuses the same routine that
-        # ``diive-tlag-pwb-batch`` calls, so the figures look identical.
-        if args.save_plots:
-            summary_plots_dir = output_dir / args.detect_subdir / 'plots_summary'
-            summary_plots_dir.mkdir(parents=True, exist_ok=True)
-            try:
-                PwbBatchDetection.plot_summary(
-                    results=summary,
-                    scalars=scalars,
-                    hdi_thresh=args.hdi_thresh,
-                    hdi_prefilter=args.hdi_prefilter,
-                    lag_max_s=args.lag_max,
-                    output_dir=summary_plots_dir,
-                    showplot=False,
-                )
-                out(
-                    f'[dim]Overview plots saved to:[/dim] '
-                    f'[cyan]{summary_plots_dir}[/cyan]  '
-                    f'[dim](summary_<scalar>.png + summary_lag_comparison.png)[/dim]'
-                )
-            except Exception as e:
-                # Never fail the run because of a plotting issue.
-                out(
-                    f'[yellow]WARN[/yellow] overview-plot generation failed: '
-                    f'{type(e).__name__}: {e}'
-                )
+        # run() already wrote the summary CSV and (when --save-plots) the
+        # batch overview plots via _write_summary_and_plots — log the paths
+        # it stored. (Centralising the writing there means the TUI and bare
+        # Python callers produce the same files as the CLI.)
+        if pipeline.summary_csv_path:
+            out(f'[dim]Summary saved to:[/dim] '
+                f'[cyan]{pipeline.summary_csv_path}[/cyan]')
+        if pipeline.summary_plots_dir:
+            out(f'[dim]Overview plots saved to:[/dim] '
+                f'[cyan]{pipeline.summary_plots_dir}[/cyan]  '
+                f'[dim](summary_<scalar>.png + summary_lag_comparison.png)[/dim]')
 
     except BaseException as e:
         # Capture into the log before re-raising. BaseException catches

@@ -4,14 +4,46 @@ DETECT_AND_REMOVE_TLAG_TUI: Textual front-end for diive-tlag-pwb-detect-remove
 
 A two-column terminal UI (Textual) around ``PerFilePipeline``
 (``diive.flux.hires.detect_and_remove_tlag``). The left column is a labelled
-settings form; the right column is a live console: a progress bar plus a
-``RichLog`` into which the two-phase pipeline (detect -> PWBOPT -> remove)
-streams its Rich-styled per-chunk output (same colour coding as the CLI).
+settings form; the right column is a live console: an overall progress bar,
+a row per busy worker showing the file·chunk it is *currently* processing
+prefixed by an animated spinner, and a ``RichLog`` into which the two-phase
+pipeline (detect -> PWBOPT -> remove) streams its Rich-styled per-chunk
+output (same colour coding as the CLI). A worker's spinner row appears the
+instant it starts a chunk; when that chunk finishes the result line
+(CH4=… HDI=…) is appended to the log below — so you see what is in flight,
+not only what has already finished.
+
+The form covers paths, wind/sonic columns, scalars, PWB & chunking
+parameters, the raw-file format (skip-rows, extra header rows, separator,
+file glob) and the chunk-naming rule (start-time regex/format and filename
+template). The naming fields let each 30-min output chunk be named by its
+own start time — e.g. ``CH-CHA_{starttime}{suffix}`` with regex
+``(\\d{12})`` turns ``CH-CHA_202107271300.csv`` into per-chunk files
+``CH-CHA_202107271300.csv`` (00:00), ``CH-CHA_202107271330.csv`` (00:30), …
 
 Settings persist between sessions in a small YAML file
 (``~/.diive/detect_remove_tui.yaml``): they are loaded on start, and saved on
 *Run* or via the *Save* button — so column names, paths and parameters need to
 be entered only once.
+
+Convenience:
+
+- Every field has a hover tooltip; focusing a field also echoes its help
+  into the status line (so keyboard users see the same explanation).
+- Drag a folder (or a file — its parent folder is used) into the window to
+  fill a path field; the drop prefers an *empty* path field, so once
+  *Input dir* is set the next drop fills *Output dir* without clicking it.
+  Drop directly onto a field to force that one; the ✕ button clears it.
+  (Some terminals "type" a dropped path into the focused field instead of
+  pasting it — there, click/clear the target field first.)
+- The console prefixes each line with a wall-clock time, and *Copy log*
+  (or the ``c`` key) copies the whole console buffer to the clipboard.
+- ``run()`` writes the summary CSV and, when *Save plots* is on, the
+  batch overview figures — so they appear from the TUI exactly as from
+  the CLI.
+- The form exposes every CLI option. Defaults worth noting: random seed
+  42 (reproducible — clear it for a random run) and line terminator
+  ``auto`` (the output matches the input file's CRLF/LF convention).
 
 A ``--demo`` mode runs a synthetic pipeline that needs no input data, purely so
 the interface can be previewed.
@@ -28,8 +60,11 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 import random
+import re
 import time
+from datetime import datetime
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 import yaml
 from rich.text import Text
@@ -37,10 +72,77 @@ from textual import events, on, work
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
+from textual.css.query import NoMatches
 from textual.widgets import (Button, Footer, Input, Label, ProgressBar,
                              RichLog, Static, Switch)
 
-from diive.flux.hires.detect_and_remove_tlag import PerFilePipeline
+from diive.flux.hires.detect_and_remove_tlag import (
+    _WHITESPACE_SEP, PerFilePipeline)
+
+
+def _clean_dropped_path(raw: str) -> str | None:
+    """Normalise a drag-and-drop / pasted path to a folder path string.
+
+    Terminals deliver a dropped file or folder as its path (often quoted,
+    sometimes ``file://`` URL-encoded). Returns the folder: the path itself
+    when it is a directory, its parent when it is a file. Returns None when
+    the text is not an existing filesystem path (so the caller can treat it
+    as ordinary pasted text).
+    """
+    if not raw:
+        return None
+    cand = raw.splitlines()[0].strip().strip('"').strip("'")
+    if cand.startswith('file://'):
+        cand = unquote(urlparse(cand).path)
+        # Windows file:///F:/x -> /F:/x : strip the leading slash before drive
+        if re.match(r'^/[A-Za-z]:', cand):
+            cand = cand[1:]
+    if not cand:
+        return None
+    p = Path(cand).expanduser()
+    if not p.exists():
+        return None
+    return str(p if p.is_dir() else p.parent)
+
+
+class PathInput(Input):
+    """Input that turns a dropped file/folder into a folder path.
+
+    A dropped folder fills a path field with that folder; a dropped file
+    fills it with the file's containing folder (never the file itself).
+    Routing of *which* path field receives the drop is delegated to the app
+    (``_apply_dropped_path``), which prefers an empty path field — so with
+    Input dir already set, a drop lands in the empty Output dir without
+    needing to click it first. Non-path text pastes normally into this field.
+    """
+
+    def _on_paste(self, event: events.Paste) -> None:
+        app = self.app
+        handled = False
+        if hasattr(app, '_apply_dropped_path'):
+            handled = app._apply_dropped_path(event.text or '', preferred=self.id)
+        if not handled:
+            # Ordinary text: paste into this field at the cursor.
+            self.insert_text_at_cursor(event.text or '')
+        event.stop()
+
+
+def _phase_label(phase: str) -> str:
+    """User-facing verb for a pipeline phase.
+
+    The internal phase name 'remove' refers to removing the *time lag* (by
+    shifting the scalar to align it with the wind), not removing any file —
+    so it is shown as 'align' (the paper's term is 'temporal alignment').
+    """
+    return 'align' if phase == 'remove' else phase
+
+
+def _unescape_sep(s: str) -> str:
+    """Translate literal backslash escapes a user may type for sep/lineterm."""
+    return (s.replace('\\t', '\t')
+             .replace('\\s+', _WHITESPACE_SEP)
+             .replace('\\r', '\r')
+             .replace('\\n', '\n'))
 
 # Soft, modern palette (Tokyo Night-ish): muted slate surfaces, pastel accents.
 _FG = '#c0caf5'
@@ -73,6 +175,11 @@ Screen { background: #1a1b26; color: #a9b1d6; }
     padding: 0 1;
 }
 .fin:focus { background: #2f334d; color: #c0caf5; }
+.clearbtn {
+    width: 3; min-width: 3; height: 1; margin: 0 0 0 1; border: none;
+    background: #2f334d; color: #f7768e; content-align: center middle;
+}
+.clearbtn:hover { background: #3b4261; color: #f7768e; }
 Switch { height: 1; border: none; background: #24283b; }
 Switch.-on { background: #2f334d; }
 
@@ -88,10 +195,16 @@ Button#quit { background: #2f334d; color: #c0caf5; }
 ProgressBar { width: 1fr; }
 #bar Bar > .bar--bar { color: #7aa2f7; }
 #bar Bar > .bar--complete { color: #9ece6a; }
+#wpool {
+    height: auto; max-height: 9; margin: 1 0 0 0; scrollbar-size: 1 1;
+}
+.wrow { height: 1; width: 1fr; color: #7dcfff; content-align: left middle; }
 #log {
     height: 1fr; background: #16161e; border: round #2f334d; padding: 0 1;
     scrollbar-size: 1 1;
 }
+#logcontrols { height: 3; align: right middle; }
+Button#copy { background: #2f334d; color: #7dcfff; min-width: 12; }
 Footer { background: #16161e; color: #565f89; }
 
 InfoScreen { align: center middle; background: #1a1b26 70%; }
@@ -209,9 +322,39 @@ _FIELDS = [
     ('nboot', 'Bootstraps', 'default 99  (PWB replicates, paper value)'),
     ('lagmax', 'Lag max s', 'default 10.0  (CCF search half-width)'),
     ('block', 'Block s', 'default 20.0  (bootstrap block length)'),
+    # --- PWBOPT (best-lag selection across chunks) ---
+    ('hdithresh', 'HDI thresh', 'default 0.5  (S1: reliable if HDI range <)'),
+    ('devthresh', 'Dev thresh', 'default 0.5  (S2: accept if within of prev)'),
+    ('hdiprefilter', 'HDI prefilt', 'default 1.0  (drop lags HDI >; 0 = off)'),
+    ('lagcol', 'Lag column', 'default {prefix}_tlag_final_pf_s  (lag removed)'),
+    # --- File format (how each raw file is read) ---
+    ('skiprows', 'Skip rows', 'default 0  (metadata lines before header row)'),
+    ('extrarows', 'Extra rows', 'default 2  (units/source rows after header)'),
+    ('sep', 'Separator', r'default ,   (use \t for tab, \s+ for whitespace)'),
+    ('filepattern', 'File glob', 'default *.csv'),
+    ('navalues', 'NA values', 'default -9999 -9999.0 …  (space-separated)'),
+    ('narep', 'NA out', 'default -9999  (written for NaN)'),
+    ('lineterm', 'Line term', r'auto = match input  (or force \r\n / \n)'),
+    # --- Chunk naming (controls output filenames) ---
+    ('streg', 'Start regex', r'e.g. (\d{12})  — capture file start from name'),
+    ('stfmt', 'Start format', 'e.g. %Y%m%d%H%M  (parses the captured text)'),
+    ('ctmpl', 'Name tmpl', '{stem}_chunk{index:02d}{suffix}'),
+    # --- Output layout ---
+    ('detectsub', 'Detect dir', 'default 1_lag_detection  (diagnostics)'),
+    ('datasub', 'Data dir', 'default 2_lag_removed  (corrected chunks)'),
+    # --- Execution ---
     ('workers', 'Workers', 'default: all CPU cores'),
+    ('randomstate', 'Random seed', 'blank = non-deterministic bootstrap'),
 ]
 _FIELD_IDS = [f[0] for f in _FIELDS]
+
+# Path fields get a clear (✕) button and accept drag-and-drop of a folder
+# or file (file -> its parent folder).
+_PATH_FIELDS = ['input_dir', 'output_dir']
+
+# Boolean settings rendered as a Switch (not an Input). Persisted alongside
+# the text fields.
+_SWITCHES = ['saveplots', 'strict']
 
 # Fields pre-filled with a concrete value on start (no sensible blank fallback).
 # The PWB & chunking params and paths are left blank so their placeholder shows
@@ -219,13 +362,126 @@ _FIELD_IDS = [f[0] for f in _FIELDS]
 _DEFAULTS = {
     'col_u': 'u', 'col_v': 'v', 'col_w': 'w', 'col_tsonic': 'ts',
     'scalars': 'CH4:ch4,N2O:n2o',
+    'sep': ',',
+    # Chunk naming pre-filled for the common 12-digit YYYYMMDDHHMM filename
+    # (e.g. CH-CHA_202107271300.csv -> per-chunk CH-CHA_202107271330.csv …).
+    'streg': r'(\d{12})',
+    'stfmt': '%Y%m%d%H%M',
+    'ctmpl': 'CH-CHA_{starttime}{suffix}',
+    'lagcol': '{prefix}_tlag_final_pf_s',
+    'detectsub': '1_lag_detection',
+    'datasub': '2_lag_removed',
+    'narep': '-9999',
+    'lineterm': 'auto',
+    # Reproducible bootstrap by default (override with a blank field for a
+    # non-deterministic run).
+    'randomstate': '42',
 }
 
 # PWB & chunking params that fall back to a default when left blank (see
 # _collect). The Reset button clears exactly these.
-_RESET_FIELDS = ['hz', 'chunk', 'minchunk', 'nboot', 'lagmax', 'block', 'workers']
+_RESET_FIELDS = ['hz', 'chunk', 'minchunk', 'nboot', 'lagmax', 'block',
+                 'workers', 'hdithresh', 'devthresh', 'hdiprefilter']
+
+# Longer per-field explanations. Shown as a hover tooltip on the field and
+# its label, and echoed to the status line when the field gains focus, so
+# both mouse and keyboard users see what each setting means.
+_HELP = {
+    'input_dir':
+        'Folder with the raw (unrotated) high-frequency EC files to process.',
+    'output_dir':
+        'Where results go. Creates 1_lag_detection/ (diagnostics, summary, '
+        'plots) and 2_lag_removed/ (the lag-corrected chunk files to feed the '
+        'next flux step).',
+    'col_u': 'Column name of the horizontal wind component U, exactly as it '
+             'appears in the file header.',
+    'col_v': 'Column name of the horizontal wind component V.',
+    'col_w': 'Column name of the vertical wind component W.',
+    'col_tsonic': 'Column name of the sonic temperature. Used as a second '
+                  'reference signal in PWB (the 4-combination logic).',
+    'scalars':
+        'Gases to time-align. Format LABEL:column, comma-separated, e.g. '
+        'CH4:CH4_DRY_[LGR-A],N2O:N2O_DRY_[LGR-A]. LABEL is your short name; '
+        'column is the header name in the file.',
+    'hz': 'Sampling frequency in Hz (samples per second). Typically 10 or 20.',
+    'chunk': 'Length of each processing chunk in seconds. 1800 = 30 min, the '
+             'standard EC averaging interval. One output file per chunk.',
+    'minchunk': 'Chunks shorter than this many seconds are skipped — PWB needs '
+                'enough records for the block-bootstrap. Default 300 (5 min).',
+    'nboot': 'Number of block-bootstrap replicates per chunk. 99 is the paper '
+             'value; fewer is faster but noisier HDIs.',
+    'lagmax': 'Half-width of the lag search window in seconds. The detector '
+              'looks for lags within ±this range. Default 10.',
+    'block': 'Bootstrap block length in seconds (preserves short-range '
+             'autocorrelation when resampling). Paper value 20.',
+    'hdithresh':
+        'S1 threshold (seconds). A chunk whose 95% HDI range is below this is '
+        'flagged reliable (S1) and its detected lag is trusted directly.',
+    'devthresh':
+        'S2 threshold (seconds). An uncertain chunk is still accepted if its '
+        'lag is within this distance of the previous reliable lag.',
+    'hdiprefilter':
+        'Pre-filter (seconds). Lags with an HDI range wider than this are '
+        'dropped before PWBOPT (the pre-filtered variant). 0 disables it.',
+    'lagcol':
+        'Which PWBOPT lag column is actually removed in phase 2. Default '
+        '{prefix}_tlag_final_pf_s (pre-filtered, gap-filled "best" lag). Use '
+        '{prefix}_tlag_final_s for the non-pre-filtered PWBOPT lag.',
+    'skiprows':
+        'Number of metadata lines BEFORE the column-name (header) row. 0 if '
+        'the header is the first line; EddyPro rotated files use 9.',
+    'extrarows':
+        'Rows AFTER the header but BEFORE the data — e.g. a units row and an '
+        'instrument-source row. Typical raw EC CSV: 2.',
+    'sep': r'Field separator. , for CSV, \t for tab, \s+ for any whitespace. '
+           'Used for both reading and writing.',
+    'filepattern': 'Glob selecting which files in the input folder to process, '
+                   'e.g. *.csv or *.dat.',
+    'navalues': 'Strings in the input treated as missing (NaN), '
+                'space-separated. Default covers the -9999 family.',
+    'narep': 'Value written for missing data in the output files. Default '
+             '-9999 (the trailing rows of each shifted column become this).',
+    'lineterm':
+        "Line ending of the output file. 'auto' (default) reproduces the "
+        "input file's convention — CRLF for typical Windows EC logger files, "
+        r"LF for Unix. Force with \r\n or \n.",
+    'streg':
+        r'Regex capturing the file START timestamp from its name. e.g. '
+        r'(\d{12}) grabs 202107271300 from CH-CHA_202107271300.csv. Capture '
+        'groups are concatenated, then parsed with Start format.',
+    'stfmt':
+        'strptime/strftime pattern for the captured timestamp, e.g. '
+        '%Y%m%d%H%M for 202107271300. Also used to format {starttime} in the '
+        'output name.',
+    'ctmpl':
+        'Output filename template. Placeholders: {stem} {suffix} {index} '
+        '{starttime}. With {starttime} each chunk is named by its own start '
+        'time, e.g. CH-CHA_{starttime}{suffix} -> CH-CHA_202107271330.csv.',
+    'detectsub': 'Name of the subfolder (under Output dir) holding step-1 '
+                 'diagnostics: summary CSV, plots, checkpoints. Default '
+                 '1_lag_detection.',
+    'datasub': 'Name of the subfolder holding the deliverable: the '
+               'lag-corrected chunk files. Feed THIS folder to the next flux '
+               'step. Default 2_lag_removed.',
+    'workers': 'Parallel worker processes. Blank = all CPU cores. 1 = '
+               'sequential (slower but easier to debug).',
+    'randomstate': 'Seed for the bootstrap RNG. A fixed number (default 42) '
+                   'makes runs reproducible; clear it for a random run.',
+    'saveplots': 'Save diagnostic figures: a 3-panel PWB plot per chunk per '
+                 'gas, plus the batch overview plots.',
+    'strict': 'Stop on the first error instead of recording it per chunk and '
+              'continuing. Useful for debugging a misconfiguration.',
+}
 
 _SETTINGS_PATH = Path.home() / '.diive' / 'detect_remove_tui.yaml'
+
+# Number of live per-worker rows shown in the console (each with an animated
+# spinner). Runs with more workers than this still work; only the first
+# _MAX_WORKER_ROWS busy workers get a visible row at any moment.
+_MAX_WORKER_ROWS = 16
+
+# Braille "dots" spinner frames (the classic terminal spinner animation).
+_SPINNER = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 
 
 def _load_settings() -> dict:
@@ -261,12 +517,15 @@ class DetectRemoveTUI(App):
     TITLE = 'diive · PWB time-lag detect + remove'
     BINDINGS = [('r', 'run', 'Run'), ('s', 'save', 'Save'),
                 ('l', 'load', 'Load'), ('d', 'reset', 'Reset'),
+                ('c', 'copy', 'Copy log'),
                 ('i', 'info', 'Info'), ('q', 'quit', 'Quit')]
 
     def __init__(self, demo: bool = False):
         super().__init__()
         self.demo = demo
         self._phase = None  # tracks detect->remove handoff for the bar
+        self._logbuf: list[str] = []  # plain-text mirror of the console log
+        self._last_path_field = 'input_dir'  # most recently focused path field
 
     # ---- layout: title / [settings | console] / footer ----------------
     def compose(self) -> ComposeResult:
@@ -290,12 +549,31 @@ class DetectRemoveTUI(App):
                 yield self._field('nboot')
                 yield self._field('lagmax')
                 yield self._field('block')
+                yield Static('PWBOPT (best-lag selection)', classes='section')
+                yield self._field('hdithresh')
+                yield self._field('devthresh')
+                yield self._field('hdiprefilter')
+                yield self._field('lagcol')
+                yield Static('File format', classes='section')
+                yield self._field('skiprows')
+                yield self._field('extrarows')
+                yield self._field('sep')
+                yield self._field('filepattern')
+                yield self._field('navalues')
+                yield self._field('narep')
+                yield self._field('lineterm')
+                yield Static('Chunk naming', classes='section')
+                yield self._field('streg')
+                yield self._field('stfmt')
+                yield self._field('ctmpl')
+                yield Static('Output layout', classes='section')
+                yield self._field('detectsub')
+                yield self._field('datasub')
+                yield Static('Execution', classes='section')
                 yield self._field('workers')
-                yield Horizontal(
-                    Label('Save plots', classes='flabel'),
-                    Switch(value=False, id='saveplots'),
-                    classes='field',
-                )
+                yield self._field('randomstate')
+                yield self._switch_row('Save plots', 'saveplots')
+                yield self._switch_row('Strict', 'strict')
                 with Horizontal(id='controls'):
                     yield Button('Run', id='run', variant='primary')
                     yield Button('Save', id='save')
@@ -307,19 +585,122 @@ class DetectRemoveTUI(App):
                 with Horizontal(id='progressrow'):
                     yield Static(f'[{_LAV}]detect[/]', id='phase')
                     yield ProgressBar(id='bar')
+                # One row per live worker: an animated spinner + the file·chunk
+                # it is currently processing. Hidden until a worker is active;
+                # when its chunk finishes the result line lands in the log
+                # below.
+                with VerticalScroll(id='wpool'):
+                    for i in range(_MAX_WORKER_ROWS):
+                        yield Label('', classes='wrow', id=f'wrow{i}')
                 yield RichLog(id='log', wrap=True, markup=False, highlight=False)
+                with Horizontal(id='logcontrols'):
+                    yield Button('Copy log', id='copy')
         yield Footer()
 
     def _field(self, fid: str) -> Horizontal:
         label = next(lbl for i, lbl, _ in _FIELDS if i == fid)
         ph = next(p for i, _, p in _FIELDS if i == fid)
-        return Horizontal(
-            Label(label, classes='flabel'),
-            Input(placeholder=ph, id=fid, classes='fin'),
-            classes='field',
-        )
+        help_txt = _HELP.get(fid, ph)
+        lbl = Label(label, classes='flabel')
+        lbl.tooltip = help_txt
+        inp_cls = PathInput if fid in _PATH_FIELDS else Input
+        inp = inp_cls(placeholder=ph, id=fid, classes='fin')
+        inp.tooltip = help_txt  # hover anywhere on the field shows the help
+        children = [lbl, inp]
+        # Path fields also get a small ✕ clear button.
+        if fid in _PATH_FIELDS:
+            children.append(Button('✕', id=f'clr_{fid}', classes='clearbtn'))
+        return Horizontal(*children, classes='field')
+
+    def _switch_row(self, label: str, sid: str) -> Horizontal:
+        help_txt = _HELP.get(sid, label)
+        lbl = Label(label, classes='flabel')
+        lbl.tooltip = help_txt
+        sw = Switch(value=False, id=sid)
+        sw.tooltip = help_txt
+        return Horizontal(lbl, sw, classes='field')
+
+    def on_descendant_focus(self, event: events.DescendantFocus) -> None:
+        """Echo a field's help into the status line when it gains focus, so
+        keyboard users get the same explanation as the hover tooltip. Also
+        remember the last-focused path field as a drop target."""
+        wid = getattr(getattr(event, 'widget', None), 'id', None)
+        if wid in _PATH_FIELDS:
+            self._last_path_field = wid
+        if wid in _HELP:
+            self._status(_HELP[wid], _DIM)
+
+    def _drop_target(self, preferred: str | None = None) -> str:
+        """Choose which path field a dropped folder fills.
+
+        Rule (so a drop usually lands where you expect without clicking):
+        1. the *preferred* field (the one focused / dropped onto) if empty;
+        2. otherwise the single empty path field, if exactly one is empty
+           (Input dir filled + Output dir empty -> Output dir);
+        3. otherwise the preferred field, else the last-focused path field.
+        """
+        def _empty(fid: str) -> bool:
+            return not self.query_one(f'#{fid}', Input).value.strip()
+
+        if preferred in _PATH_FIELDS and _empty(preferred):
+            return preferred
+        empties = [f for f in _PATH_FIELDS if _empty(f)]
+        if len(empties) == 1:
+            return empties[0]
+        if preferred in _PATH_FIELDS:
+            return preferred
+        return self._last_path_field
+
+    def _apply_dropped_path(self, text: str, preferred: str | None = None) -> bool:
+        """Route a dropped/pasted path. Returns True if it was a path/YAML.
+
+        A dropped ``.yaml`` / ``.yml`` is auto-loaded as settings. Any other
+        existing folder/file (file -> its parent) fills the path field chosen
+        by ``_drop_target``. Returns False for ordinary text so the caller
+        can paste it normally.
+        """
+        raw = (text or '').strip()
+        if not raw:
+            return False
+        cand = raw.splitlines()[0].strip().strip('"').strip("'")
+        if cand.startswith('file://'):
+            cand = unquote(urlparse(cand).path)
+            if re.match(r'^/[A-Za-z]:', cand):
+                cand = cand[1:]
+        low = cand.lower()
+        if (low.endswith('.yaml') or low.endswith('.yml')) \
+                and Path(cand).expanduser().is_file():
+            self._load_path(cand)
+            return True
+        folder = _clean_dropped_path(raw)
+        if folder is None:
+            return False
+        target = self._drop_target(preferred)
+        self.query_one(f'#{target}', Input).value = folder
+        self._status(f'{target.replace("_", " ")} set from dropped folder',
+                     _GREEN)
+        return True
+
+    @on(Button.Pressed, '.clearbtn')
+    def _on_clear(self, event: Button.Pressed) -> None:
+        fid = (event.button.id or '')[4:]  # strip 'clr_'
+        if fid:
+            self.query_one(f'#{fid}', Input).value = ''
+            self.query_one(f'#{fid}', Input).focus()
+        event.stop()
 
     def on_mount(self) -> None:
+        # Worker-row pool: all hidden until a worker becomes active.
+        self._wfree: list[int] = list(range(_MAX_WORKER_ROWS))
+        self._wpid: dict[int, int] = {}    # worker pid -> row index
+        self._wtext: dict[int, str] = {}   # row index -> static label markup
+        self._wphase: str | None = None    # phase the current rows belong to
+        self._spin = 0                     # current spinner frame index
+        for i in range(_MAX_WORKER_ROWS):
+            self.query_one(f'#wrow{i}', Label).display = False
+        # Drive the spinner animation: re-render active rows ~12x/second.
+        self.set_interval(1 / 12, self._tick_spinners)
+
         loaded = _load_settings()
         for fid in _FIELD_IDS:
             saved = loaded.get(fid)
@@ -330,7 +711,8 @@ class DetectRemoveTUI(App):
             else:
                 value = ''                  # leave blank -> placeholder shows default
             self.query_one(f'#{fid}', Input).value = value
-        self.query_one('#saveplots', Switch).value = bool(loaded.get('saveplots', False))
+        for sid in _SWITCHES:
+            self.query_one(f'#{sid}', Switch).value = bool(loaded.get(sid, False))
 
         if self.demo:
             self.query_one('#input_dir', Input).value = '(demo — no data needed)'
@@ -402,24 +784,23 @@ class DetectRemoveTUI(App):
         for fid in _FIELD_IDS:
             if data.get(fid) is not None:
                 self.query_one(f'#{fid}', Input).value = str(data[fid])
-        if 'saveplots' in data:
-            self.query_one('#saveplots', Switch).value = bool(data['saveplots'])
+        for sid in _SWITCHES:
+            if sid in data:
+                self.query_one(f'#{sid}', Switch).value = bool(data[sid])
         self._status(f'settings loaded from {p}', _GREEN)
         return True
 
     def on_paste(self, event: events.Paste) -> None:
-        """Drag-and-drop: most terminals paste the dropped file's path. If it's
-        an existing .yaml/.yml file, load it automatically."""
-        raw = (event.text or '').strip()
-        if not raw:
-            return
-        cand = raw.splitlines()[0].strip().strip('"').strip("'")
-        if cand.startswith('file://'):
-            cand = cand[7:]
-        low = cand.lower()
-        if (low.endswith('.yaml') or low.endswith('.yml')) \
-                and Path(cand).expanduser().is_file():
-            self._load_path(cand)
+        """Handle a drag-and-drop / paste that reaches the app.
+
+        Fires for drops that don't land on a focused ``PathInput`` (which
+        routes its own). A dropped ``.yaml`` is auto-loaded; any other
+        folder/file fills the path field chosen by ``_drop_target`` —
+        preferring an empty one, so a drop fills Output dir once Input dir
+        is set, without clicking it first.
+        """
+        if self._apply_dropped_path(event.text or '',
+                                    preferred=self._last_path_field):
             event.stop()
 
     @on(Button.Pressed, '#run')
@@ -428,6 +809,8 @@ class DetectRemoveTUI(App):
 
     def _start(self) -> None:
         self.query_one('#log', RichLog).clear()
+        self._logbuf.clear()
+        self._clear_workers()
         self.query_one('#run', Button).disabled = True
         self._phase = None
         self._status('running…', _BLUE)
@@ -437,10 +820,88 @@ class DetectRemoveTUI(App):
             self._save_settings(announce=False)  # remember what we ran
             self._worker_real()
 
+    # ---- live per-worker rows (driven by the pipeline's on_active) ------
+    def ui_active(self, active: dict, phase: str) -> None:
+        """Show one spinner row per busy worker: '⠹ <phase> <file>·cNN'.
+
+        ``active`` maps worker pid -> {'parent', 'chunk_index',
+        'chunk_period'} and is delivered the instant a worker STARTS a chunk
+        (not when it finishes), so the current file/chunk appears immediately.
+        Each row shows an animated spinner (driven by ``_tick_spinners``)
+        while the worker is busy; when its chunk finishes the result line
+        (CH4=… HDI=…) is appended to the log below. Rows stay assigned to a
+        pid for the whole run (workers are reused), so they don't flicker.
+        """
+        try:
+            # Phase boundary: detect and remove run in separate process pools
+            # (different pids), so drop the previous phase's rows before
+            # showing the new phase's workers — otherwise stale 'detect …'
+            # rows linger while 'remove' is running.
+            if phase != self._wphase:
+                self._clear_workers()
+                self._wphase = phase
+            for pid in sorted(active):
+                info = active[pid]
+                if pid not in self._wpid:
+                    if not self._wfree:
+                        continue  # more busy workers than rows; skip extras
+                    idx = self._wfree.pop(0)
+                    self._wpid[pid] = idx
+                    self.query_one(f'#wrow{idx}', Label).display = True
+                idx = self._wpid[pid]
+                stem = Path(info.get('parent', '')).stem
+                if len(stem) > 20:
+                    stem = stem[:9] + '…' + stem[-10:]
+                ci = info.get('chunk_index', 0)
+                ptag = _LAV if phase == 'detect' else _CYAN
+                disp = _phase_label(phase)
+                # Static part of the row (spinner frame is prepended on tick).
+                self._wtext[idx] = f'[{ptag}]{disp}[/] [b]{stem}[/b]·c{ci:02d}'
+            self._render_spinners()
+            self._status(f'{_phase_label(phase)} · {len(active)} workers busy',
+                         _BLUE)
+        except NoMatches:
+            # App is tearing down (quit mid-run): widgets gone, nothing to do.
+            return
+
+    def _render_spinners(self) -> None:
+        """Paint the current spinner frame onto every active worker row."""
+        frame = _SPINNER[self._spin]
+        try:
+            for idx in self._wpid.values():
+                txt = self._wtext.get(idx)
+                if txt is not None:
+                    self.query_one(f'#wrow{idx}', Label).update(
+                        f'[{_CYAN}]{frame}[/] {txt}')
+        except NoMatches:
+            pass
+
+    def _tick_spinners(self) -> None:
+        """Advance the spinner animation (called on a timer)."""
+        if not self._wpid:
+            return
+        self._spin = (self._spin + 1) % len(_SPINNER)
+        self._render_spinners()
+
+    def _clear_workers(self) -> None:
+        """Hide and release every worker row (run start / end)."""
+        try:
+            for idx in range(_MAX_WORKER_ROWS):
+                row = self.query_one(f'#wrow{idx}', Label)
+                row.display = False
+                row.update('')
+        except NoMatches:
+            pass
+        self._wpid = {}
+        self._wtext = {}
+        self._wfree = list(range(_MAX_WORKER_ROWS))
+        self._wphase = None
+
     # ---- settings persistence ------------------------------------------
     def _save_settings(self, announce: bool) -> None:
         data = {fid: self.query_one(f'#{fid}', Input).value for fid in _FIELD_IDS}
-        data['saveplots'] = self.query_one('#saveplots', Switch).value
+        for sid in _SWITCHES:
+            data[sid] = self.query_one(f'#{sid}', Switch).value
         try:
             _SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
             _SETTINGS_PATH.write_text(yaml.safe_dump(data, sort_keys=False),
@@ -456,21 +917,58 @@ class DetectRemoveTUI(App):
         self.query_one('#status', Static).update(f'[{color}]{msg}[/]')
 
     def ui_update(self, phase: str, done: int, total: int, line) -> None:
-        bar = self.query_one('#bar', ProgressBar)
+        try:
+            bar = self.query_one('#bar', ProgressBar)
+        except NoMatches:
+            return  # app tearing down
         if phase != self._phase:
             self._phase = phase
             bar.update(total=total, progress=0)
             tag = _LAV if phase == 'detect' else _CYAN
-            self.query_one('#phase', Static).update(f'[{tag}]{phase}[/]')
+            self.query_one('#phase', Static).update(
+                f'[{tag}]{_phase_label(phase)}[/]')
         bar.update(total=total, progress=done)
         if line is not None:
-            self.query_one('#log', RichLog).write(line)
+            # Prefix every console line with a wall-clock timestamp, matching
+            # the CLI's `console.log` style, and mirror the plain text into
+            # the copy buffer (issues: time in output + copyable log).
+            ts = datetime.now().strftime('%H:%M:%S')
+            stamped = Text.assemble((f'{ts} ', _DIM), line)
+            self.query_one('#log', RichLog).write(stamped)
+            self._logbuf.append(stamped.plain)
+
+    def _log_only(self, line) -> None:
+        """Write one line to the console log (timestamped) without touching
+        the progress bar. Used for end-of-run notices."""
+        ts = datetime.now().strftime('%H:%M:%S')
+        stamped = Text.assemble((f'{ts} ', _DIM), line)
+        self.query_one('#log', RichLog).write(stamped)
+        self._logbuf.append(stamped.plain)
+
+    def action_copy(self) -> None:
+        """Copy the entire console log to the system clipboard."""
+        if not self._logbuf:
+            self._status('nothing to copy yet', _DIM)
+            return
+        text = '\n'.join(self._logbuf)
+        try:
+            self.copy_to_clipboard(text)
+            self._status(f'copied {len(self._logbuf)} log lines to clipboard',
+                         _GREEN)
+        except Exception as e:
+            self._status(f'copy failed: {e}', _RED)
+
+    @on(Button.Pressed, '#copy')
+    def _on_copy(self) -> None:
+        self.action_copy()
 
     def _finish(self, msg: str) -> None:
+        self._clear_workers()
         self.query_one('#run', Button).disabled = False
         self._status(msg, _GREEN)
 
     def _error(self, msg: str) -> None:
+        self._clear_workers()
         self.query_one('#run', Button).disabled = False
         self._status(msg, _RED)
 
@@ -485,33 +983,49 @@ class DetectRemoveTUI(App):
         try:
             pipeline = PerFilePipeline(**cfg)
             scalars = pipeline.scalars
+            hz = pipeline.hz
+
+            def _applied(row, g):
+                # The applied lag in seconds = shifted records / hz (the shift
+                # is by whole records, so this is the exact lag removed).
+                rec = row.get(f'{g.lower()}_applied_records')
+                if rec is None or rec != rec:   # NaN -> not applied
+                    return f'{g}=--'
+                rec = int(rec)
+                return f'{g}={rec / hz:.2f}s ({rec}rec)'
 
             def on_progress(done, total, row, phase):
-                stem = Path(row.get('period', '')).stem
+                chunk = Path(row.get('period', '')).stem
+                parent = Path(row.get('parent', '')).stem
+                # Show the source (6 h) file the chunk came from, then the
+                # chunk itself, so each line is traceable to its input file.
+                label = f'{parent} › {chunk}' if parent else chunk
                 if phase == 'remove':
-                    applied = '  '.join(
-                        f'{g}={row.get(f"{g.lower()}_applied_records", "--")}rec'
-                        for g in scalars)
-                    line = Text(f'{stem}  written {applied}', style=_GREEN)
+                    applied = '  '.join(_applied(row, g) for g in scalars)
+                    line = Text(f'{label}  aligned {applied}', style=_GREEN)
                 elif row.get('status') == 'error':
-                    line = Text(f'{stem}  ERROR {row.get("error", "")[:50]}', style=_RED)
+                    line = Text(f'{label}  ERROR {row.get("error", "")[:50]}', style=_RED)
                 else:
-                    line = _detect_line(stem, row, scalars)
+                    line = _detect_line(label, row, scalars)
                 self.call_from_thread(self.ui_update, phase, done, total, line)
 
             def on_active(active, phase):
-                self.call_from_thread(
-                    self._status, f'{phase} · {len(active)} workers active', _BLUE)
+                # active fires at chunk START -> show the live worker rows.
+                self.call_from_thread(self.ui_active, dict(active), phase)
 
+            # run() now writes the summary CSV and (when Save plots is on)
+            # the batch overview plots itself, so the TUI no longer needs to.
             summary = pipeline.run(on_progress=on_progress, on_active=on_active)
-            try:
-                csv = (pipeline.output_dir / pipeline.detect_subdir
-                       / 'detect_and_remove_tlag_summary.csv')
-                csv.parent.mkdir(parents=True, exist_ok=True)
-                summary.to_csv(csv, index=False)
-            except Exception:
-                pass
             n_ok = int((summary['status'] == 'ok').sum()) if 'status' in summary else 0
+            if pipeline.summary_csv_path is not None:
+                self.call_from_thread(
+                    self._log_only,
+                    Text(f'summary -> {pipeline.summary_csv_path}', style=_CYAN))
+            if pipeline.summary_plots_dir is not None:
+                self.call_from_thread(
+                    self._log_only,
+                    Text(f'overview plots -> {pipeline.summary_plots_dir}',
+                         style=_CYAN))
             self.call_from_thread(
                 self._finish, f'done — {n_ok}/{len(summary)} chunks -> {cfg["output_dir"]}')
         except Exception as e:
@@ -530,11 +1044,42 @@ class DetectRemoveTUI(App):
             scalars[label.strip()] = col.strip()
         if not scalars:
             raise ValueError('no scalars (use LABEL:column, comma-separated)')
-        if not g('input_dir') or not g('output_dir'):
+        in_dir, out_dir = g('input_dir'), g('output_dir')
+        if not in_dir or not out_dir:
             raise ValueError('input dir and output dir are required')
+        # Catch a botched drag-and-drop: some terminals (e.g. Windows
+        # Terminal) deliver a dropped path as typed keystrokes, so dropping
+        # onto a filled field appends instead of replaces, producing a string
+        # with two drive letters like 'F:\a\bF:\a\b'. That yields a cryptic
+        # WinError 123 later — flag it here with a fix instead.
+        for nm, val in (('Input dir', in_dir), ('Output dir', out_dir)):
+            if len(re.findall(r'[A-Za-z]:[\\/]', val)) > 1 or '\x00' in val:
+                raise ValueError(
+                    f'{nm} looks like two paths joined together — clear the '
+                    f'field (clear button next to it) and enter it once '
+                    f'({val!r}).')
+        ip = Path(in_dir).expanduser()
+        if not ip.is_dir():
+            raise ValueError(f'Input dir is not an existing folder: {in_dir}')
+        op = Path(out_dir).expanduser()
+        try:
+            op.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            raise ValueError(f'Output dir is not a valid path: {out_dir} ({e})')
         workers = int(g('workers') or 0)
+        # Chunk naming: only pass a start-time regex when given. The pipeline
+        # raises a clear error if the template uses {starttime} without one.
+        streg = g('streg') or None
+        ctmpl = g('ctmpl') or '{stem}_chunk{index:02d}{suffix}'
+        if '{starttime}' in ctmpl and not streg:
+            raise ValueError(
+                "Name tmpl uses {starttime} but Start regex is empty — "
+                "set Start regex (e.g. (\\d{12})) and Start format, or drop "
+                "{starttime} from the template.")
+        rs = g('randomstate')
+        navalues = g('navalues').split()  # space-separated; [] -> pipeline default
         return dict(
-            input_dir=g('input_dir'), output_dir=g('output_dir'),
+            input_dir=in_dir, output_dir=out_dir,
             col_u=g('col_u'), col_v=g('col_v'), col_w=g('col_w'),
             col_tsonic=g('col_tsonic'), scalars=scalars,
             hz=int(g('hz') or 20),
@@ -545,29 +1090,93 @@ class DetectRemoveTUI(App):
             min_chunk_seconds=float(g('minchunk') or 300),
             n_workers=workers if workers > 0 else None,
             save_plots=self.query_one('#saveplots', Switch).value,
+            strict=self.query_one('#strict', Switch).value,
+            random_state=int(rs) if rs else None,
+            # PWBOPT best-lag selection
+            hdi_thresh=float(g('hdithresh') or 0.5),
+            dev_thresh=float(g('devthresh') or 0.5),
+            hdi_prefilter=float(g('hdiprefilter') or 1.0),
+            lag_column_template=g('lagcol') or '{prefix}_tlag_final_pf_s',
+            # File format
+            skiprows=int(g('skiprows') or 0),
+            extra_rows=int(g('extrarows') or 2),
+            sep=_unescape_sep(g('sep') or ','),
+            file_pattern=g('filepattern') or '*.csv',
+            na_values=navalues if navalues else None,
+            na_rep=g('narep') or '-9999',
+            # 'auto' (default) reproduces the input file's CRLF/LF convention.
+            lineterm=(lt if (lt := g('lineterm')) == 'auto'
+                      else _unescape_sep(lt or 'auto')),
+            # Chunk naming (controls the output filenames)
+            start_time_regex=streg,
+            start_time_format=g('stfmt') or '%Y%m%d-%H%M',
+            chunk_name_template=ctmpl,
+            # Output layout
+            detect_subdir=g('detectsub') or '1_lag_detection',
+            data_subdir=g('datasub') or '2_lag_removed',
         )
 
     # ---- demo (no input data) ------------------------------------------
     @work(thread=True)
     def _worker_demo(self) -> None:
         scalars = ['CH4', 'N2O']
-        files = ['CH-CHA_20210726', 'CH-CHA_20210727', 'CH-CHA_20210728']
+        files = ['CH-CHA_202107261300', 'CH-CHA_202107271300',
+                 'CH-CHA_202107281300']
         chunks = [(f, ci) for f in files for ci in range(12)]
         total = len(chunks)
-        for i, (f, ci) in enumerate(chunks, start=1):
-            time.sleep(0.045)
-            row = {}
-            for g in scalars:
-                pfx = g.lower()
-                row[f'{pfx}_tlag_s'] = 1.7 + 0.25 * random.random()
-                row[f'{pfx}_hdi_range_s'] = random.choice([0.05, 0.1, 0.6, 1.4]) * random.random()
-            line = _detect_line(f'{f}·c{ci:02d}', row, scalars)
-            self.call_from_thread(self.ui_update, 'detect', i, total, line)
-        for i, (f, ci) in enumerate(chunks, start=1):
-            time.sleep(0.03)
-            line = Text(f'{f}·c{ci:02d}  written CH4=35rec  N2O=36rec', style=_GREEN)
-            self.call_from_thread(self.ui_update, 'remove', i, total, line)
-        self.call_from_thread(self._finish, f'demo done — {total} chunks (no files written)')
+        n_workers = 4
+        pids = [1000 + k for k in range(n_workers)]   # fake worker pids
+
+        def _phase(phase: str, hold: float, write: bool):
+            # Simulate N workers each grabbing the next chunk: emit an
+            # 'active' snapshot when a chunk STARTS (so the live rows + bars
+            # appear up front), then the completion line when it finishes.
+            active: dict = {}
+            done = 0
+            it = iter(enumerate(chunks))
+            buffered = list(it)
+            pos = 0
+            # Prime: assign the first batch of chunks to workers.
+            inflight: dict = {}  # pid -> (i, f, ci)
+            for pid in pids:
+                if pos < len(buffered):
+                    i, (f, ci) = buffered[pos]; pos += 1
+                    inflight[pid] = (i, f, ci)
+                    active[pid] = {'parent': f, 'chunk_index': ci,
+                                   'chunk_period': f}
+            self.call_from_thread(self.ui_active, dict(active), phase)
+            while inflight:
+                time.sleep(hold)
+                # Finish one worker's chunk, hand it the next.
+                pid = next(iter(inflight))
+                i, f, ci = inflight.pop(pid)
+                done += 1
+                if write:
+                    line = Text(
+                        f'{f}·c{ci:02d}  aligned '
+                        f'CH4=1.75s (35rec)  N2O=1.80s (36rec)', style=_GREEN)
+                else:
+                    row = {}
+                    for g in scalars:
+                        pfx = g.lower()
+                        row[f'{pfx}_tlag_s'] = 1.7 + 0.25 * random.random()
+                        row[f'{pfx}_hdi_range_s'] = (
+                            random.choice([0.05, 0.1, 0.6, 1.4]) * random.random())
+                    line = _detect_line(f'{f}·c{ci:02d}', row, scalars)
+                self.call_from_thread(self.ui_update, phase, done, total, line)
+                if pos < len(buffered):
+                    i, (f, ci) = buffered[pos]; pos += 1
+                    inflight[pid] = (i, f, ci)
+                    active[pid] = {'parent': f, 'chunk_index': ci,
+                                   'chunk_period': f}
+                else:
+                    active.pop(pid, None)
+                self.call_from_thread(self.ui_active, dict(active), phase)
+
+        _phase('detect', 0.12, write=False)
+        _phase('remove', 0.08, write=True)
+        self.call_from_thread(self._finish,
+                              f'demo done — {total} chunks (no files written)')
 
 
 def _tui_main() -> None:
