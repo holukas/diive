@@ -23,12 +23,16 @@ from diive.variables import DaytimeNighttimeFlag
 
 class MeasurementOffsetFromReplicate:
     """
-    Compare yearly measurement histograms to reference, detect
-    offset and gain in comparison to reference and correct measurement
-    for offset and gain per year
+    Detect and remove a constant additive offset between a measurement and a
+    co-located replicate.
+
+    Scans candidate offsets and selects the one that minimizes the summed
+    absolute difference between the offset-shifted measurement and the
+    replicate, then returns the corrected measurement (``measurement + offset``).
+    A single global offset is applied — no per-year handling and no gain term.
 
     Example:
-        See `examples/pkgs/preprocessing/corrections/correction_measurement_offset_replicate.py`
+        See `examples/preprocessing/corrections/correction_measurement_offset_replicate.py`
     """
 
     def __init__(self,
@@ -37,24 +41,19 @@ class MeasurementOffsetFromReplicate:
                  offset_start: int = -100,
                  offset_end: int = 100,
                  offset_stepsize: float = 0.1):
-        """
-        Build histogram of wind directions for each year and compare to reference
-        histogram built from data in reference years
+        """Find the additive offset that best aligns *measurement* with *replicate*.
 
-        (1) Build reference histogram of wind directions from reference years
-        (2) For each year:
-            2a: Add constant offset to wind directions, starting with *offset_start*
-            2b: Build histogram of wind directions
-            2c: Calculate absolute correlation between 2b and reference
-            2d: Continue with next offset, ending with *offset_end*
-            2e: Detect offset that yielded maximum absolute correlation with reference
+        For each offset in ``arange(offset_start, offset_end, offset_stepsize)``,
+        the measurement is shifted by that offset and the summed absolute
+        difference to the replicate is computed. The offset with the smallest
+        summed absolute difference is selected and added to the measurement.
 
         Args:
-            measurement: Time series of wind directions in degrees
-            hist_ref_years: List of years for building reference histogram, e.g. "[2021, 2022]"
-            offset_start: Minimum offset in degrees to shift *s*
-            offset_end: Maximum offset in degrees to shift *s*
-            hist_n_bins: Number of bins for building histograms
+            measurement: Time series to be corrected.
+            replicate: Co-located reference series the measurement is aligned to.
+            offset_start: Smallest offset to try (same units as the data).
+            offset_end: Largest offset to try (exclusive).
+            offset_stepsize: Step between candidate offsets.
         """
         self.measurement = measurement
         self.replicate = replicate
@@ -65,29 +64,26 @@ class MeasurementOffsetFromReplicate:
         d = decimal.Decimal(str(offset_stepsize))
         self.n_digits_after_comma = abs(d.as_tuple().exponent)
 
-        # Wind directions shifted by offset that yielded maximum absolute
-        # correlation with reference
-        self.measurement_shifted = self.measurement.copy()
+        # Find the best-fitting constant offset.
+        self.offset = self._find_best_offset()
 
-        # Find offset per year and store results in dict
-        self.offset = self._calc_shift_correlations()
-
-        # Correct wind directions
-        self.replicate_corrected = self._correct_measurement()
+        # Apply it to the measurement.
+        self.measurement_corrected = self._correct_measurement()
 
     def get_corrected_measurement(self):
-        return self.replicate_corrected
+        return self.measurement_corrected
 
     def get_offset(self):
         return self.offset
 
     def _correct_measurement(self):
-        """Correct wind directions by yearly offsets"""
+        """Add the detected offset to the measurement."""
         measurement_corrected = self.measurement.add(self.offset)
         return measurement_corrected
 
-    def _calc_shift_correlations(self):
-        """ """
+    def _find_best_offset(self):
+        """Scan candidate offsets and return the one minimizing the summed
+        absolute difference between the offset-shifted measurement and the replicate."""
         m = self.measurement.copy()
         r = self.replicate.copy()
         offsets_df = pd.DataFrame(columns=['OFFSET', 'ABS_DIFF'])
@@ -394,7 +390,7 @@ class WindDirOffset:
                 s_year_shifted = s_year.copy()
                 s_year_shifted += shift
                 s_year_shifted = self._correct_degrees(s=s_year_shifted)
-                histo_shifted = Histogram(s=s_year_shifted, method='n_bins', n_bins=360)
+                histo_shifted = Histogram(series=s_year_shifted, method='n_bins', n_bins=360)
                 results_shifted = histo_shifted.results
                 corr_abs = abs(results_shifted['COUNTS'].corr(self.ref_results['COUNTS']))
                 shiftdf_year.loc[len(shiftdf_year)] = [shift, corr_abs]
@@ -413,6 +409,6 @@ class WindDirOffset:
         """Calculate reference histogram"""
         select_years = self.winddir.index.year.isin(self.hist_ref_years)
         ref_s = self.winddir[select_years]
-        ref_histo = Histogram(s=ref_s, method='n_bins', n_bins=self.hist_n_bins)
+        ref_histo = Histogram(series=ref_s, method='n_bins', n_bins=self.hist_n_bins)
         ref_results = ref_histo.results
         return ref_results

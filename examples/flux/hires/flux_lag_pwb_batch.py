@@ -129,9 +129,14 @@ if __name__ == '__main__':
     tmp_dir_obj = tempfile.TemporaryDirectory()
     tmp_dir = Path(tmp_dir_obj.name)
 
+    # Filenames carry a leading datetime token (yyyymmdd-HHMM) for consecutive
+    # 30-minute periods; file_date_format lets PwbBatchDetection parse it into a
+    # 'timestamp' column and use real dates as the summary-plot x-axis.
+    base_time = pd.Timestamp('2021-08-20 09:30')
     file_paths = []
     for i, df_period in enumerate(synthetic_dfs):
-        path = tmp_dir / f'period_{i:04d}.txt'
+        stamp = (base_time + i * pd.Timedelta(minutes=30)).strftime('%Y%m%d-%H%M')
+        path = tmp_dir / f'{stamp}_rotated.txt'
         with open(path, 'w') as fh:
             for j in range(FILE_SKIPROWS):
                 fh.write(f'metadata_line_{j}\n')
@@ -161,6 +166,8 @@ if __name__ == '__main__':
         output_dir=None,  # no checkpoint CSV written
         save_plots=False,  # no PNG files written
         n_workers=N_WORKERS,
+        random_state=42,  # reproducible regardless of worker completion order
+        file_date_format='%Y%m%d-%H%M',  # parse 'timestamp' from the filename
     )
 
     console.print(f"\n[bold]Batch PWB detection[/bold]  "
@@ -241,6 +248,10 @@ if __name__ == '__main__':
         results = det.run(on_progress=_progress)
 
     console.print(f"[green]Done — {len(results)} periods processed.[/green]")
+
+    # Timestamps parsed from the filenames (file_date_format='%Y%m%d-%H%M')
+    ts = pd.to_datetime(results['timestamp'])
+    print(f"\nParsed timestamps : {ts.min()} -> {ts.max()}  (n={ts.notna().sum()})")
 
     # ------------------------------------------------------------------
     # PWBOPT S1/S2/S3 selection -- standard strategy

@@ -72,7 +72,7 @@ class DailyCorrelation:
             .rename('daycorrs')
         )
         daycorrs.index = pd.to_datetime(daycorrs.index)
-        daycorrs = daycorrs.asfreq('1d')
+        daycorrs = daycorrs.asfreq('1D')
 
         self.daycorrs_ = daycorrs
         self.df_ = df

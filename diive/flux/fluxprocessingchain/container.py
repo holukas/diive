@@ -1042,8 +1042,11 @@ class FluxLevelData:
         Example::
 
             cols = data.gapfilled_cols()
-            # {'rf': {'CUT_50': 'NEE_L3.3_CUT_50_QCF_f'},
-            #  'mds': {'CUT_50': 'NEE_L3.3_CUT_50_QCF_MDS_f'}}
+            # {'mds': {'CUT_50': 'NEE_L3.1_L3.3_CUT_50_QCF_gfMDS'},
+            #  'rf':  {'CUT_50': 'NEE_L3.1_L3.3_CUT_50_QCF_gfRF'},
+            #  'xgb': {'CUT_50': 'NEE_L3.1_L3.3_CUT_50_QCF_gfXG'}}
+            # The 'L3.1' tag is the storage-correction provenance (kept through
+            # every later level); 'L3.3_CUT_50' is the USTAR scenario.
 
             gapfilled = data.fpc_df[cols['rf']['CUT_50']]
         """

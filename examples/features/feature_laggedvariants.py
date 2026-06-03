@@ -31,7 +31,7 @@ print("Basic Lagged Variants")
 print("=" * 50)
 
 # Create lagged variants: [-2, -1, +1] (skip 0)
-results = dv.features.lagged_variants(
+results = dv.variables.lagged_variants(
     df=df,
     lag=[-2, 1],  # Range from -2 to +1
     stepsize=1,  # Step of 1 record
@@ -62,7 +62,7 @@ print("=" * 50)
 
 # Create lagged variants with larger lags and step size
 # This creates lags: -24, -18, -12, -6 (skips 0) and +6, +12, +18
-results = dv.features.lagged_variants(
+results = dv.variables.lagged_variants(
     df=df,
     lag=[-24, 18],  # Range from -24 to +18 records (half-hourly = 12h to 9h)
     stepsize=6,  # Step of 6 records (3 hours for half-hourly data)
@@ -87,7 +87,7 @@ df = df[locs].copy()
 df = df[['Tair_f', 'Rg_f']].copy()
 
 # Create lagged variants
-results = dv.features.lagged_variants(
+results = dv.variables.lagged_variants(
     df=df,
     lag=[-2, 1],
     stepsize=1,

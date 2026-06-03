@@ -28,6 +28,7 @@ New to diive? Start with the **[Cookbook](COOKBOOK.md)** — 6 minimal workflows
 | [**plot_scatter_xy_colored.py**](visualization/plot_scatter_xy_colored.py) | 3D scatter with color coding, bin aggregation, trend visualization |
 | [**plot_timeseries.py**](visualization/plot_timeseries.py) | Time series line plots with matplotlib |
 | [**plot_timeseries_interactive.py**](visualization/plot_timeseries_interactive.py) | Interactive Bokeh plots with zoom, pan, export |
+| [**plot_timeseries_rangetool.py**](visualization/plot_timeseries_rangetool.py) | Interactive Bokeh plot with a RangeTool overview for navigating long series |
 | [**plot_cumulative_basic.py**](visualization/plot_cumulative_basic.py) | Cumulative flux across all time, scenario comparison |
 | [**plot_cumulative_year.py**](visualization/plot_cumulative_year.py) | Yearly cumulative sums with reference bands, annual budgets |
 | [**plot_dielcycle.py**](visualization/plot_dielcycle.py) | Diurnal cycle analysis by month/season |
@@ -37,6 +38,7 @@ New to diive? Start with the **[Cookbook](COOKBOOK.md)** — 6 minimal workflows
 | [**plot_histogram_yearly.py**](visualization/plot_histogram_yearly.py) | Yearly comparison histograms for temporal patterns |
 | [**plot_ridgeline_basic.py**](visualization/plot_ridgeline_basic.py) | Ridge line plots with weekly grouping |
 | [**plot_ridgeline_advanced.py**](visualization/plot_ridgeline_advanced.py) | Ridge line plots with monthly grouping |
+| [**plot_shifted_distribution.py**](visualization/plot_shifted_distribution.py) | Distribution shift between a reference and comparison period with color-coded zones |
 | [**plot_other_plots.py**](visualization/plot_other_plots.py) | Specialized plot types (long-term anomalies, trends) |
 | [**plot_treering_temperature.py**](visualization/plot_treering_temperature.py) | Tree-ring spiral plot: annual rings with color-coded values, month labels, year separators, colorbar extension |
 | [**plot_treering_line_temperature.py**](visualization/plot_treering_line_temperature.py) | Tree-ring radial line plot: each year as a line trace around a full circle, single-color and per-year colormap variants with optional fill |
@@ -51,6 +53,7 @@ See: [visualization/README.md](visualization/README.md)
 |---------|-------------|
 | [**analysis_correlation.py**](analysis/analysis_correlation.py) | Cross-correlation, autocorrelation, lag detection, anomaly detection |
 | [**analysis_daily_correlation.py**](analysis/analysis_daily_correlation.py) | Daily correlation coefficients between time series, quality checks, relationship analysis |
+| [**analysis_driveranalysis.py**](analysis/analysis_driveranalysis.py) | _(experimental)_ Evidence-triangulation driver attribution by epistemic level: SHAP + ALE (association), lagged/scale-resolved/stratified importance (temporal), Granger/PCMCI/CATE (causal), with a convergence/divergence summary |
 | [**analysis_granger.py**](analysis/analysis_granger.py) | Granger causality testing for predictive relationships between time series |
 | [**analysis_seasonaltrend.py**](analysis/analysis_seasonaltrend.py) | STL decomposition, trend isolation, seasonality extraction |
 | [**analysis_decoupling.py**](analysis/analysis_decoupling.py) | Stratified binning to reveal how ecosystem responses change across temperature ranges |
@@ -74,7 +77,6 @@ See: [analysis/README.md](analysis/README.md)
 | [**times_frequency_detection.py**](times/times_frequency_detection.py) | Auto-detect time resolution with confidence scoring and alternative frequencies |
 | [**times_diel_cycles.py**](times/times_diel_cycles.py) | Calculate hourly aggregation patterns (annual and monthly diel cycles) |
 | [**times_temporal_matrices.py**](times/times_temporal_matrices.py) | Convert time series to year × month matrix for heatmap visualization |
-| [**times_time_features.py**](times/times_time_features.py) | Extract ML-ready temporal features (year, month, hour) with sin/cos encoding |
 | [**times_statistics.py**](times/times_statistics.py) | Quick statistical profiling and data quality assessment |
 
 See: [times/README.md](times/README.md)
@@ -184,7 +186,7 @@ See: [features/README.md](features/README.md)
 | [**flux_lag_pwb.py**](flux/hires/flux_lag_pwb.py) | PWB time lag detection: pre-whitening with block-bootstrap (Vitale et al. 2024), high-flux vs. low-flux comparison |
 | [**flux_lag_pwbopt.py**](flux/hires/flux_lag_pwbopt.py) | PWBOPT batch pipeline: multi-period PWB with S1/S2/S3 selection and strategy comparison; supports real EddyPro-rotated files |
 | [**flux_lag_pwb_batch.py**](flux/hires/flux_lag_pwb_batch.py) | PwbBatchDetection API demo: parallel PWB across many EddyPro files with live Rich progress display, PWBOPT post-processing (standard + pre-filtered), and batch summary figures |
-| [**flux_lag_pwb_batch_cli.py**](flux/hires/flux_lag_pwb_batch_cli.py) | CLI demo: drive PwbBatchDetection from the command line via `python -m diive.pkgs.flux.hires.lag_pwb`; shows all available flags |
+| [**flux_lag_pwb_batch_cli.py**](flux/hires/flux_lag_pwb_batch_cli.py) | CLI demo: drive PwbBatchDetection from the command line via `python -m diive.flux.hires.lag_pwb`; shows all available flags |
 | [**flux_windrotation.py**](flux/hires/flux_windrotation.py) | Wind rotation and coordinate transformation |
 | [**flux_fluxdetectionlimit.py**](flux/hires/flux_fluxdetectionlimit.py) | Flux detection limit and measurement sensitivity |
 

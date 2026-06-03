@@ -83,3 +83,29 @@ ts_color.plot(
 )
 
 print("\nPlotted temperature with custom color")
+
+# %%
+# Gaps stay visible, with point markers
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# By default missing values are kept, so the line breaks at gaps instead of
+# drawing a continuous line across missing periods (which would misrepresent
+# data coverage). Use the measured (un-gap-filled) flux to see this, and enable
+# point markers. Pass ``drop_gaps=True`` if you instead want NaNs removed.
+
+series_measured = df['NEE_CUT_REF_orig'].copy()  # measured NEE, contains gaps
+
+ts_gaps = dv.plotting.TimeSeries(
+    series=series_measured
+)
+ts_gaps.plot(
+    ax=None,
+    series_units=r'($\mathrm{µmol\ CO_2\ m^{-2}\ s^{-1}}$)',
+    ylabel='Measured NEE',
+    title='Measured NEE — gaps shown as line breaks',
+    marker=True,       # draw a marker at each observation
+    linewidth=1.2,     # thinner line
+    alpha=0.85
+)
+
+print("\nPlotted measured NEE with visible gaps and point markers")

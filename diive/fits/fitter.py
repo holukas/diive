@@ -202,8 +202,10 @@ class BinFitterCP:
             a, b = unc.correlated_values(fit_params_opt, fit_params_cov)
             fit_y = a * fit_x ** 2 + b * fit_x
 
-        # Calc r2
-        fit_r2 = 1.0 - (sum((y - self.equation(**kwargs)) ** 2) / ((len_y - 1.0) * np.var(y, ddof=1)))
+        # Calc r2. Use len(y) — the array actually being fit (the binned aggregate
+        # in binned mode), NOT len_y (the full unbinned record count), so the
+        # SS_tot denominator (N-1)*var(y) matches the residual sum of squares.
+        fit_r2 = 1.0 - (sum((y - self.equation(**kwargs)) ** 2) / ((len(y) - 1.0) * np.var(y, ddof=1)))
 
         # Calculate parameter confidence interval
         # Calculate regression confidence interval
@@ -269,11 +271,14 @@ class BinFitterCP:
                  ylabel: str = None
                  ):
 
-        # Fitplot
-        fig = plt.figure(facecolor='white', figsize=(9, 9), dpi=100)
-        gs = gridspec.GridSpec(1, 1)  # rows, cols
-        # gs.update(wspace=0, hspace=0, left=.2, right=.8, top=.8, bottom=.2)
-        ax = fig.add_subplot(gs[0, 0])
+        # Fitplot. Honor a caller-supplied axes (two-phase contract); only create
+        # and show our own figure when ax is None.
+        own_fig = ax is None
+        if own_fig:
+            fig = plt.figure(facecolor='white', figsize=(9, 9), dpi=100)
+            gs = gridspec.GridSpec(1, 1)  # rows, cols
+            # gs.update(wspace=0, hspace=0, left=.2, right=.8, top=.8, bottom=.2)
+            ax = fig.add_subplot(gs[0, 0])
 
         # x/y
         _numvals_y = len(self.fit_results['bins_y'])
@@ -335,7 +340,7 @@ class BinFitterCP:
                 edgecolor='#455A64', color='#FFD54F',  # amber 300
                 alpha=1, s=100,
                 label=f"{label} {highlight_year} ({_numvals_y} days)",
-                zorder=98, marker=marker)
+                zorder=98, marker=bin_marker)
         else:
             line_highlight = None
 
@@ -393,5 +398,6 @@ class BinFitterCP:
         # ax.locator_params(axis='x', nbins=self.usebins)
         # ax.locator_params(axis='y', nbins=self.usebins)
         # default_legend(ax=ax, ncol=1, loc=(.07, .75))
-        fig.show()
+        if own_fig:
+            fig.show()
         return line_xy, line_fit, line_fit_ci, line_fit_pb, line_highlight

@@ -55,7 +55,7 @@ class RandomForestTS(MlRegressorGapFillingBase):
                       Default: 0.25. Only complete rows used for split.
             below_zero: How to treat predicted values below zero for variables that
                        cannot be negative (e.g. VPD, SW_IN, PPFD).
-                       None (default): keep as-is. 'zero': clip to 0. 'nan': set to NaN.
+                       None (default): keep as-is. 'zero': clip to 0.
             **kwargs: Random Forest hyperparameters (n_estimators, max_depth,
                      min_samples_split, min_samples_leaf, random_state, n_jobs, etc).
                      See scikit-learn RandomForestRegressor documentation.
@@ -76,8 +76,8 @@ class RandomForestTS(MlRegressorGapFillingBase):
             scores_: Model performance metrics (MAE, RMSE, R²).
 
         Examples:
-            See examples/pkgs/gapfilling/gapfill_randomforest_ts.py for complete examples.
-            See examples/pkgs/gapfilling/gapfill_comparison.py for side-by-side comparison
+            See examples/gapfilling/gapfill_randomforest.py for complete examples.
+            See examples/gapfilling/gapfill_comparison.py for side-by-side comparison
             with MDS and XGBoost gap-filling.
         """
 

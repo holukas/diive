@@ -17,7 +17,7 @@ Read, write, and manipulate data in various formats.
 
 ## Related Documentation
 
-See `diive.pkgs.io.binary` for:
+See `diive.io.binary` for:
 - `get_encoded_value_from_int()` — Extract bits from a single integer
 - `get_encoded_value_series()` — Extract bits from a series of integers
 

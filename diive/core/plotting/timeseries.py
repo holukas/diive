@@ -1,13 +1,21 @@
 import os
 import tempfile
 import pandas as pd
+from bokeh.layouts import column
 from bokeh.models import BoxZoomTool, PanTool, ResetTool, WheelZoomTool, WheelPanTool, UndoTool, \
-    RedoTool, SaveTool, HoverTool, BoxSelectTool
+    RedoTool, SaveTool, HoverTool, BoxSelectTool, RangeTool
 from bokeh.models import ColumnDataSource
 from bokeh.plotting import figure, show, output_file
 from pandas import Series
 
 import diive.core.plotting.plotfuncs as pf
+
+# Material Design palette, matching diive's plotting conventions (CLAUDE.md):
+# blue 500 for lines, blue-grey shades for ink/gridlines/reference.
+_COLOR_LINE = '#2196F3'  # blue 500 — the series line/markers
+_COLOR_INK = '#455A64'   # blue-grey 700 — text, spines, ticks, legend edge
+_COLOR_GRID = '#B0BEC5'  # blue-grey 200 — subtle gridlines
+_COLOR_ZERO = '#90A4AE'  # blue-grey 300 — zero reference line
 
 
 # output_notebook()
@@ -25,24 +33,31 @@ class TimeSeries:
         plot_interactive : Render interactive Bokeh plot with zoom, pan, selection tools
 
     Example:
-        See `examples/core/visualization/plot_timeseries.py` for matplotlib examples.
-        See `examples/core/visualization/plot_timeseries_interactive.py` for Bokeh examples.
+        See `examples/visualization/plot_timeseries.py` for matplotlib examples.
+        See `examples/visualization/plot_timeseries_interactive.py` for Bokeh examples.
+        See `examples/visualization/plot_timeseries_rangetool.py` for the RangeTool overview.
     """
 
     def __init__(self,
-                 series: Series):
+                 series: Series,
+                 drop_gaps: bool = False):
         """
         Prepare time series data for plotting.
 
         Args:
             series: Data to plot (pandas Series with datetime index)
+            drop_gaps: If True, drop missing values before plotting. Default False
+                so gaps remain visible — matplotlib and Bokeh break the line at
+                NaNs rather than drawing a continuous line across missing periods,
+                which would misrepresent data coverage.
 
         See Also:
             plot : Render the time series with matplotlib styling options
         """
         self.series = series.copy()
         self.varname = series.name
-        self.series = self.series.dropna()
+        if drop_gaps:
+            self.series = self.series.dropna()
 
     def plot_interactive(self, height: int = 600, width: int = 1200, save_to_file: bool = False):
         """
@@ -67,7 +82,7 @@ class TimeSeries:
             - Save: Export plot as PNG image
 
         Example:
-            >>> ts = dv.plot_time_series(series=data)
+            >>> ts = dv.plotting.TimeSeries(series=data)
             >>> ts.plot_interactive(height=800, width=1600)  # Larger interactive plot
         """
         # Handle file output: temp file if not saving, named file if saving
@@ -113,9 +128,9 @@ class TimeSeries:
                    border_fill_color='white')
 
         # Modern line styling (publication-ready)
-        p.line(x='date', y='value', line_width=2.0, source=source, color='#2E86AB', alpha=0.95,
+        p.line(x='date', y='value', line_width=2.0, source=source, color=_COLOR_LINE, alpha=0.95,
                legend_label=self.series.name)
-        p.scatter(x='date', y='value', size=4, source=source, color='#2E86AB', alpha=0.6)
+        p.scatter(x='date', y='value', size=4, source=source, color=_COLOR_LINE, alpha=0.6)
 
         # Modern axis styling
         p.yaxis.axis_label = self.series.name
@@ -123,15 +138,15 @@ class TimeSeries:
 
         # Modern typography and aesthetics
         p.title.text_font_size = '13pt'
-        p.title.text_color = '#2C3E50'
+        p.title.text_color = _COLOR_INK
         p.axis.axis_label_text_font_size = '11pt'
-        p.axis.axis_label_text_color = '#2C3E50'
+        p.axis.axis_label_text_color = _COLOR_INK
         p.axis.major_label_text_font_size = '10pt'
-        p.axis.major_label_text_color = '#2C3E50'
+        p.axis.major_label_text_color = _COLOR_INK
 
         # Gridlines
         p.grid.grid_line_alpha = 0.2
-        p.grid.grid_line_color = '#CCCCCC'
+        p.grid.grid_line_color = _COLOR_GRID
         p.grid.grid_line_width = 0.5
 
         # Legend styling
@@ -177,8 +192,86 @@ class TimeSeries:
         # Show plot
         show(p)
 
+    def plot_rangetool(self, height: int = 300, width: int = 900, overview_height: int = 130,
+                       init_range: float = 0.25, save_to_file: bool = False):
+        """
+        Render an interactive Bokeh plot with a RangeTool overview.
+
+        Two linked panels: a detail plot (top) showing a slice of the series, and a
+        smaller overview plot (bottom) showing the full series with a draggable
+        RangeTool. Drag or resize the shaded selection on the overview to pan and
+        zoom the detail plot. The detail panel's y-axis auto-scales to the data in
+        the visible x-window, so the curve always fills the panel. Useful for
+        navigating long time series without losing the overall context.
+
+        See https://docs.bokeh.org/en/latest/docs/examples/interaction/tools/range_tool.html
+
+        Args:
+            height: Detail-panel height in pixels (default: 300).
+            width: Plot width in pixels (default: 900).
+            overview_height: Overview-panel height in pixels (default: 130).
+            init_range: Fraction of the series shown in the detail panel initially,
+                measured from the start (default: 0.25 = first quarter).
+            save_to_file: Save to a named HTML file instead of a temp file
+                (default: False, opens in browser only).
+
+        Example:
+            >>> ts = dv.plotting.TimeSeries(series=data)
+            >>> ts.plot_rangetool(init_range=0.1)  # start zoomed to the first 10%
+        """
+        if save_to_file:
+            output_file(filename=f"{self.series.name}_rangetool.html", title=self.series.name)
+        else:
+            temp_file = os.path.join(tempfile.gettempdir(), f"bokeh_rangetool_{id(self)}.html")
+            output_file(filename=temp_file, title=self.series.name)
+
+        df = pd.DataFrame({'date': pd.to_datetime(self.series.index), 'value': self.series.to_numpy()})
+        source = ColumnDataSource(df)
+
+        # Initial detail window: the first `init_range` fraction of the record.
+        n = len(df)
+        end_ix = max(1, min(n - 1, int(n * init_range)))
+        x_start, x_end = df['date'].iloc[0], df['date'].iloc[end_ix]
+
+        # Detail panel (top): pan/zoom along x; x-axis on top like the Bokeh example.
+        # window_axis='x' auto-scales the y-axis to the data inside the visible
+        # x-window, so the detail view always fills the panel as you pan/zoom.
+        detail = figure(height=height, width=width, x_axis_type='datetime', x_axis_location='above',
+                        window_axis='x', x_range=(x_start, x_end), tools='xpan,xwheel_zoom,reset',
+                        toolbar_location='right', background_fill_color='#FAFAFA',
+                        border_fill_color='white', title=f"{self.series.name}")
+        detail.line('date', 'value', source=source, line_width=2.0, color=_COLOR_LINE, alpha=0.95)
+        detail.yaxis.axis_label = self.series.name
+        detail.xaxis.axis_label = self.series.index.name
+
+        # Overview panel (bottom): the full series with its own (full-range) y-axis,
+        # independent of the detail panel's auto-scaling, plus the RangeTool linked
+        # to the detail's x-range.
+        overview = figure(height=overview_height, width=width,
+                          x_axis_type='datetime', y_axis_type=None, tools='',
+                          toolbar_location=None, background_fill_color='#FAFAFA',
+                          border_fill_color='white')
+        overview.x_range.range_padding = 0
+        overview.x_range.bounds = 'auto'
+        range_tool = RangeTool(x_range=detail.x_range, start_gesture='pan')
+        range_tool.overlay.fill_color = _COLOR_LINE
+        range_tool.overlay.fill_alpha = 0.2
+        overview.line('date', 'value', source=source, line_width=1.2, color=_COLOR_LINE, alpha=0.7)
+        overview.ygrid.grid_line_color = None
+        overview.add_tools(range_tool)
+
+        # Shared Material Design styling.
+        for p in (detail, overview):
+            p.title.text_color = _COLOR_INK
+            p.axis.axis_label_text_color = _COLOR_INK
+            p.axis.major_label_text_color = _COLOR_INK
+            p.grid.grid_line_color = _COLOR_GRID
+            p.grid.grid_line_alpha = 0.3
+
+        show(column(detail, overview))
+
     def plot(self, ax=None, color: str = None, series_units: str = None, xlabel: str = None, ylabel: str = None,
-             title: str = None):
+             title: str = None, linewidth: float = 2.2, alpha: float = 0.95, marker: bool = False):
         """
         Render time series plot with matplotlib styling (Phase 2 of two-phase design).
 
@@ -187,22 +280,26 @@ class TimeSeries:
 
         Args:
             ax: Matplotlib axes to plot on. If None, creates new figure and displays it
-            color: Line color (default: modern scientific blue #1f77b4)
+            color: Line color (default: Material Design blue #2196F3)
             series_units: Units label appended to y-axis label (optional, e.g., '(°C)')
             xlabel: X-axis label (default: 'Date')
             ylabel: Y-axis label (default: series name)
             title: Figure title (default: series name if creating new figure)
+            linewidth: Line width in points (default: 2.2)
+            alpha: Line/marker opacity, 0-1 (default: 0.95)
+            marker: If True, draw a point marker at each observation (default: False)
 
         Returns:
-            None (displays plot if ax=None, otherwise renders on provided axes)
+            The matplotlib axes the series was drawn on (the new axes when ax=None),
+            so callers can apply further styling.
 
         Example:
-            >>> ts = dv.plot_time_series(series=data)
-            >>> ts.plot(ax=ax1, color='#2E86AB', title='My Plot')  # Plot on axis
+            >>> ts = dv.plotting.TimeSeries(series=data)
+            >>> ax = ts.plot(ax=ax1, color='#2196F3', title='My Plot')  # Plot on axis
             >>> ts.plot(title='Same Data, Different Style')  # New figure with different styling
         """
         # Create axis
-        if ax:
+        if ax is not None:
             # If ax is given, plot directly to ax, no fig needed
             self.fig = None
             self.ax = ax
@@ -213,15 +310,19 @@ class TimeSeries:
             self.ax.xaxis.axis_date()
             self.showplot = True
 
-        # Modern scientific color palette (colorblind-friendly)
-        color = color if color else '#2E86AB'  # Professional blue
+        color = color if color else _COLOR_LINE
         label = self.series.name
 
+        # NaNs are kept (unless drop_gaps=True) so the line breaks at gaps
+        # instead of bridging them.
         self.ax.plot(self.series.index,
                      self.series,
-                     color=color, alpha=0.95,
-                     linewidth=2.2,  # Publication-ready, slightly thicker
-                     linestyle='-', markeredgecolor='none', ms=0,
+                     color=color, alpha=alpha,
+                     linewidth=linewidth,
+                     linestyle='-',
+                     marker='o' if marker else None,
+                     markersize=3 if marker else 0,
+                     markeredgecolor='none',
                      zorder=99, label=label)
 
         self._apply_format(series_units=series_units, xlabel=xlabel, ylabel=ylabel, color=color)
@@ -232,42 +333,44 @@ class TimeSeries:
             self.ax.set_facecolor('white')
 
             if title:
-                self.fig.suptitle(title, fontsize=16, fontweight=500, color='#2C3E50', y=0.98)
+                self.fig.suptitle(title, fontsize=16, fontweight=500, color=_COLOR_INK, y=0.98)
             else:
-                self.fig.suptitle(self.series.name, fontsize=16, fontweight=500, color='#2C3E50', y=0.98)
+                self.fig.suptitle(self.series.name, fontsize=16, fontweight=500, color=_COLOR_INK, y=0.98)
             self.fig.tight_layout(pad=1.2)
             self.fig.show()
+
+        return self.ax
 
     def _apply_format(self, series_units: str = None, xlabel: str = None, ylabel: str = None, color: str = None):
         """Format matplotlib plot with modern scientific design principles"""
 
         # Publication-ready gridline styling (subtle, not distracting)
-        self.ax.grid(True, axis='y', alpha=0.2, linestyle='-', linewidth=0.7, color='#CCCCCC')
+        self.ax.grid(True, axis='y', alpha=0.2, linestyle='-', linewidth=0.7, color=_COLOR_GRID)
         self.ax.set_axisbelow(True)
 
         # Publication-ready spine styling (all spines visible for professional look)
         for spine in ['top', 'right', 'left', 'bottom']:
-            self.ax.spines[spine].set_color('#2C3E50')
+            self.ax.spines[spine].set_color(_COLOR_INK)
             self.ax.spines[spine].set_linewidth(1.2)
 
         # Zero line if applicable (subtle reference)
         if self.series.min() < 0 < self.series.max():
-            self.ax.axhline(y=0, color='#7F8C8D', linestyle='--', linewidth=1.0, alpha=0.5, zorder=0)
+            self.ax.axhline(y=0, color=_COLOR_ZERO, linestyle='--', linewidth=1.0, alpha=0.5, zorder=0)
 
         # Publication-ready axis labels and tick styling (all larger)
-        self.ax.set_xlabel(xlabel or 'Date', fontsize=13, fontweight=600, color='#2C3E50', labelpad=10)
+        self.ax.set_xlabel(xlabel or 'Date', fontsize=13, fontweight=600, color=_COLOR_INK, labelpad=10)
         self.ax.set_ylabel((ylabel or self.varname) + (f' {series_units}' if series_units else ''),
-                           fontsize=13, fontweight=600, color='#2C3E50', labelpad=10)
+                           fontsize=13, fontweight=600, color=_COLOR_INK, labelpad=10)
 
         # Publication-ready tick styling
-        self.ax.tick_params(axis='both', which='major', labelsize=12, colors='#2C3E50',
+        self.ax.tick_params(axis='both', which='major', labelsize=12, colors=_COLOR_INK,
                            length=6, width=1.0, pad=6)
         self.ax.tick_params(axis='both', which='minor', length=4, width=0.7)
 
         # Publication-ready legend styling
         if self.ax.get_legend_handles_labels()[0]:
             legend = self.ax.legend(loc='upper left', framealpha=0.98, fancybox=False,
-                                    edgecolor='#2C3E50', facecolor='white', fontsize=11,
+                                    edgecolor=_COLOR_INK, facecolor='white', fontsize=11,
                                     frameon=True, shadow=False)
             legend.get_frame().set_linewidth(1.0)
 

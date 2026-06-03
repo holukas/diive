@@ -28,7 +28,7 @@ uv add package_name
 
 **Python:** 3.12-3.13 | **Package Manager:** `uv`
 
-**Key dependencies (v0.91.1+):** pandas 3.0.3, numpy 2.4+, scikit-learn 1.8+, xgboost 3.2+, matplotlib 3.10+, statsmodels 0.14+, pyarrow 19.0+
+**Key dependencies (minimum pins):** pandas 3.0+, numpy 2.2+, scikit-learn 1.6+, xgboost 3.0+, matplotlib 3.10+, statsmodels 0.14+, pyarrow 19.0+
 
 ## Project Structure
 
@@ -57,16 +57,17 @@ tests/                        # Unit tests
 | Namespace | Contents |
 |---|---|
 | `dv.outliers` | `AbsoluteLimits`, `Hampel`, `LocalSD`, `LocalOutlierFactor`, `zScore`, `zScoreRolling`, `zScoreIncrements`, `TrimLow`, `ManualRemoval`, + daytime/nighttime variants |
-| `dv.gapfilling` | `RandomForestTS`, `XGBoostTS`, `SWINGapFillerXGBoost`, `FluxMDS`, `QuickFillRFTS`, `OptimizeParamsRFTS`, `OptimizeParamsTS`, `FeatureEngineer`, `linear_interpolation` |
-| `dv.flux` | `FluxConfig`, `FluxLevelData`, `run_chain`, `init_flux_data`, `add_driver`, `WindDoubleRotation`, `reynolds_decomposition`, `MaxCovariance`, `PreWhiteningBootstrap`, `PwbBatchDetection`, `FluxDetectionLimit`, ustar classes. Per-level `run_level*` and `make_level32_detector` live in `diive.flux.fluxprocessingchain`. |
-| `dv.analysis` | `DailyCorrelation`, `GrangerCausality`, `StratifiedAnalysis`, `GapFinder`, `GapStats`, `GridAggregator`, `Histogram`, `FindOptimumRange`, `SeasonalTrendDecomposition`, `BinFitterCP`, `percentiles101` |
-| `dv.plotting` | `HeatmapDateTime`, `HeatmapXYZ`, `HeatmapYearMonth`, `HexbinPlot`, `ScatterXY`, `TimeSeries`, `DielCycle`, `RidgeLinePlot`, `HistogramPlot`, `Cumulative`, `CumulativeYear`, `LongtermAnomaliesYear`, `TreeRingPlot` |
+| `dv.gapfilling` | `RandomForestTS`, `XGBoostTS`, `SWINGapFillerXGBoost`, `FluxMDS`, `QuickFillRFTS`, `OptimizeParamsRFTS`, `OptimizeParamsTS`, `LongTermGapFillingRandomForestTS`, `LongTermGapFillingXGBoostTS`, `FeatureEngineer`, `GapFillingResult`, `prediction_scores`, `linear_interpolation` |
+| `dv.flux` | `FluxConfig`, `FluxLevelData`, `run_chain`, `init_flux_data`, `add_driver`, `WindDoubleRotation`, `reynolds_decomposition`, `MaxCovariance`, `PreWhiteningBootstrap`, `PwbBatchDetection`, `TlagApplier`, `PerFilePipeline`, `process_one_file`, `FluxDetectionLimit`, ustar classes. Per-level `run_level*` and `make_level32_detector` live in `diive.flux.fluxprocessingchain`. |
+| `dv.analysis` | `DailyCorrelation`, `GrangerCausality`, `StratifiedAnalysis`, `GapFinder`, `GapStats`, `GridAggregator`, `Histogram`, `FindOptimumRange`, `SeasonalTrendDecomposition`, `BinFitterCP`, `harmonic_analysis`, `percentiles101` |
+| `dv.analysis.experimental` | **(provisional, API may change)** `DriverAnalysis`, `DriverAnalysisResult`, `AleCurve`, `Ale2DResult`, `accumulated_local_effects`, `accumulated_local_effects_2d`, `ExperimentalWarning` — evidence-triangulation driver attribution; emits a one-time `ExperimentalWarning` on use |
+| `dv.plotting` | `HeatmapDateTime`, `HeatmapXYZ`, `HeatmapYearMonth`, `HexbinPlot`, `ScatterXY`, `TimeSeries`, `DielCycle`, `RidgeLinePlot`, `HistogramPlot`, `ShiftedDistributionPlot`, `Cumulative`, `CumulativeYear`, `LongtermAnomaliesYear`, `TreeRingPlot` |
 | `dv.times` | `TimestampSanitizer`, `DetectFrequency`, `resample_to_monthly_agg_matrix`, `timestamp_infer_freq_*` |
-| `dv.variables` | `DaytimeNighttimeFlag`, `TimeSince`, `potrad`, `potrad_eot`, `calc_vpd_from_ta_rh`, `aerodynamic_resistance`, `dry_air_density`, `et_from_le`, `latent_heat_of_vaporization`, `air_temp_from_sonic_temp`, `lagged_variants`, noise helpers |
+| `dv.variables` | `DaytimeNighttimeFlag`, `daytime_nighttime_flag_from_swinpot`, `TimeSince`, `potrad`, `potrad_eot`, `calc_vpd_from_ta_rh`, `aerodynamic_resistance`, `dry_air_density`, `et_from_le`, `latent_heat_of_vaporization`, `air_temp_from_sonic_temp`, `lagged_variants`, noise helpers |
 | `dv.corrections` | `MeasurementOffsetFromReplicate`, `WindDirOffset`, `remove_radiation_zero_offset`, `remove_relativehumidity_offset`, `set_exact_values_to_missing`, `setto_threshold`, `setto_value` |
 | `dv.qaqc` | `FlagQCF`, `StepwiseMeteoScreeningDb` |
 
-Top-level (no namespace): `load_exampledata_parquet`, `load_parquet`, `save_parquet`, `ReadFileType`, `search_files`, `sstats`, `transform_yearmonth_matrix_to_longform`, `get_encoded_value_from_int`, `get_encoded_value_series`
+Top-level (no namespace): `load_exampledata_parquet`, `load_exampledata_parquet_lae`, `load_parquet`, `save_parquet`, `ReadFileType`, `search_files`, `sstats`, `transform_yearmonth_matrix_to_longform`, `get_encoded_value_from_int`, `get_encoded_value_series`
 
 ## Core Concepts
 
@@ -180,7 +181,7 @@ Key `data.levels` fields: `level2`, `level2_qcf`, `level31`, `level31_qcf`, `lev
 - L3.2 and L3.3 require L3.1; L3.3 also requires L3.2 (USTAR filtering must operate on outlier-screened data — `run_level33_*` raises if `level32_qcf` is None). For H/LE call `run_level31(data, set_storage_to_zero=True)`. `run_chain` runs L3.2 unconditionally; users who must skip it use the composable API.
 - L4.1 features and MDS driver columns must exist in `data.full_df`, not `data.fpc_df`. Use `add_driver()` to add computed drivers to the right place.
 - `init_flux_data` raises if `df` already contains `SW_IN_POT` / `DAYTIME` / `NIGHTTIME` (reserved names — would silently overwrite user data).
-- `nighttime_accept_qcf_below` (was `nighttimetime_accept_qcf_below` before v0.91.1 — typo fixed).
+- `nighttime_accept_qcf_below` (was `nighttimetime_accept_qcf_below` before v0.91.0 — typo fixed).
 - Default `daytime_accept_qcf_below=1` is stricter than FLUXNET convention of `2`; QCF=0 all pass, QCF=1 soft warning, QCF=2 hard failure.
 - `run_level33_constant_ustar` only supports constant thresholds; for in-pipeline bootstrap detection use `run_level33_ustar_detection` (composable) or `FluxConfig(ustar_detection_mode='bootstrap', ustar_bootstrap_ta_col=..., ustar_bootstrap_swin_col=...)` (via `run_chain`). `threshold_labels` is optional — auto-generates `CUT_0`, `CUT_1`, ... (positional index, **not** percentile); pass explicit labels like `['CUT_16', 'CUT_50', 'CUT_84']` for percentile-based thresholds. Length and uniqueness are validated; substring overlap (e.g. `CUT_5` inside `CUT_50`) is also rejected.
 - `run_level33_ustar_detection` raises if `detector_kwargs` contains `nee_col` / `ta_col` / `ustar_col` / `swin_col` (these are set internally).
@@ -200,7 +201,24 @@ c_prime = dv.flux.reynolds_decomposition(df['CO2'])
 flux = (w_prime * c_prime).mean()
 ```
 
-**Classes:** `WindDoubleRotation`, `reynolds_decomposition`, `MaxCovariance`, `FluxDetectionLimit`, `PreWhiteningBootstrap`, `PwbBatchDetection`.
+**Classes:** `WindDoubleRotation`, `reynolds_decomposition`, `MaxCovariance`, `FluxDetectionLimit`, `PreWhiteningBootstrap`, `PwbBatchDetection`, `TlagApplier`, `PerFilePipeline`, `process_one_file`.
+
+### Time-lag detection & removal (PWB)
+
+Three CLIs (console scripts in `pyproject.toml`), all requiring **wind-rotation-corrected** W for detection (or done in-memory):
+
+| CLI | Class | Does |
+|---|---|---|
+| `diive-tlag-pwb-batch` | `PwbBatchDetection` | Detect lags across many averaging-period files → `tlag_results.csv` (+ PWBOPT S1/S2/S3 columns) |
+| `diive-tlag-apply-batch` | `TlagApplier` | Apply lags from a `tlag_results.csv` to raw files (shift scalars by `round(tlag_s·hz)`) |
+| `diive-tlag-pwb-detect-remove` | `PerFilePipeline` | **Two-phase per-chunk** detect+remove in one run |
+| `diive-tlag-pwb-detect-remove-tui` | `DetectRemoveTUI` | Textual TUI wrapping `PerFilePipeline`; `--demo` previews it without data |
+
+`diive-tlag-pwb-detect-remove` ([detect_and_remove_tlag.py](diive/flux/hires/detect_and_remove_tlag.py)) splits each long raw file into fixed-length chunks (`--chunk-seconds`, default 30 min): **phase 1** rotates each chunk in memory + runs PWB per scalar (no write); **PWBOPT** picks the best lag per chunk across the full sequence; **phase 2** shifts each scalar by that lag (`--lag-column-template`, default `{prefix}_tlag_final_pf_s` — the same column `TlagApplier` removes, NOT raw `tlag_s`) and writes one file per chunk. Parallel unit is one chunk; chunk count is measured **per file**. Everything is parameterized in seconds × `--hz`, so 10 Hz / 60-min chunks just need `--hz 10` / `--chunk-seconds 3600` (one uniform format per run). Output is numbered by phase: `1_lag_detection/` (summary CSV, checkpoints, plots/, plots_summary/) and `2_lag_removed/` (corrected chunk files — clean input for the next flux step); root holds only those two folders + `log.txt`. **Downstream flux processing must run with EC time-lag maximization disabled.**
+
+- Per-chunk output filenames come from `--chunk-name-template` ({stem}/{suffix}/{index}/{starttime}); `{starttime}` needs `--start-time-regex` + `--start-time-format` and names each chunk by its own start time (e.g. `CH-CHA_{starttime}{suffix}` → `..._202107271330.csv`). The output line terminator defaults to `--lineterm auto` (reproduces the input file's CRLF/LF; header lines normalised to match — never mixed).
+- `PerFilePipeline.run(cancel_event=threading.Event())` is cooperative-cancellable: pending chunks cancelled, in-flight ones finish, remove phase skipped if cancelled during detect; `pipeline.cancelled` reports it. `run()` writes the summary CSV + overview plots itself (so TUI/CLI/Python callers all produce them).
+- **TUI** (`DetectRemoveTUI`, `--demo` for no-data preview): full CLI-option coverage with per-field tooltips + focus help; **Check** preflight (file count, header columns listed + verified, chunk plan); **Stop** (cancel); **Open output folder**; **▾ column picker** (scan first file's header, pick the exact bracketed name); auto-preflight on Run; overwrite guard; live field validation; per-worker animated spinner rows; log lines show `parent › chunk`; the lag-removal phase is shown as **"align"** (paper's "temporal alignment"), not "remove".
 
 ## Outlier Detection & QC
 
@@ -332,6 +350,8 @@ Use `/llm-detox` skill for all written content (documentation, comments, commit 
 | XGBoost base_score in scientific notation | Monkey-patched in `MlRegressorGapFillingBase` |
 | Feature reduction too strict | Reduce `shap_threshold_factor` (default 0.5) |
 | Unicode on Windows (arrow chars) | Use ASCII (>, ->) in examples |
+| Textual `App` already has internal `_running`/`_workers` attrs | Don't name your own App attributes `_running` (use e.g. `_busy`); Textual sets `_running=True` on mount, silently breaking your guards |
+| Textual `@work` method not starting when called from a non-handler context | Dispatch background work with `threading.Thread(target=…, daemon=True)`; `call_from_thread` delivers UI updates from any thread |
 
 ## Common Workflows
 
@@ -360,4 +380,4 @@ Use `/llm-detox` skill for all written content (documentation, comments, commit 
 
 ---
 
-**Last Updated:** 2026-05-27 | **Version:** v0.91.0+ | **Package Manager:** `uv`
+**Last Updated:** 2026-05-30 | **Version:** v0.91.0 | **Package Manager:** `uv`

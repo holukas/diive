@@ -59,6 +59,13 @@ class UstarMovingPointDetection:
         Number of temperature stratification classes per season (matches ONEFlux default)
     ustar_classes_count : int, default=20
         Number of USTAR stratification classes per temperature class (matches ONEFlux default)
+    forward_mode_n : int, default=2
+        Number of consecutive USTAR classes that must satisfy the plateau condition before a
+        threshold is accepted (forward-mode order). n=2 is "Fw2", the default in both ONEFlux
+        (only forward_mode_2 is enabled by default) and REddyProc (usEstUstarThresholdSingleFw2Binned).
+        n=1 is "Fw1": looser, fires on a single bin, and never yields a higher threshold than Fw2.
+        Higher n is stricter (requires a longer confirmed plateau), giving an equal-or-higher
+        threshold that is more robust to single-bin noise.
     season_groups : List[List[int]], optional
         Custom season grouping by month numbers [1-12]
         Default: [[12,1,2], [3,4,5], [6,7,8], [9,10,11]] for DJF, MAM, JJA, SON
@@ -122,6 +129,7 @@ class UstarMovingPointDetection:
         swin_col: Optional[str] = None,
         ta_classes_count: int = 7,
         ustar_classes_count: int = 20,
+        forward_mode_n: int = 2,
         season_groups: Optional[List[List[int]]] = None,
         bootstrapping_times: int = 100,
         verbose: int = 0,
@@ -129,6 +137,8 @@ class UstarMovingPointDetection:
         # Validate input
         if df is None or df.empty:
             raise ValueError("Input DataFrame cannot be None or empty")
+        if forward_mode_n < 1:
+            raise ValueError(f"forward_mode_n must be >= 1, got {forward_mode_n}")
 
         # Auto-detect columns if not specified
         if nee_col is None:
@@ -178,6 +188,7 @@ class UstarMovingPointDetection:
 
         self.ta_classes_count = ta_classes_count
         self.ustar_classes_count = ustar_classes_count
+        self.forward_mode_n = forward_mode_n
         self.bootstrapping_times = bootstrapping_times
         self.verbose = verbose
 
@@ -512,8 +523,9 @@ class UstarMovingPointDetection:
         # ============================================================================
         # Search ascending through USTAR classes for where respiration stabilizes
         # Window size = 10 classes (ONEFlux default WINDOWS_SIZE_FOR_FORWARD_MODE)
-        # n = 1 (check next 1 class for stability)
-        threshold = self._forward_mode(ustar_means, nee_means, n=1, window_size=10)
+        # n = forward_mode_n consecutive classes must satisfy the plateau condition
+        # (n=2 = Fw2, the ONEFlux and REddyProc default; n=1 = Fw1)
+        threshold = self._forward_mode(ustar_means, nee_means, n=self.forward_mode_n, window_size=10)
 
         return threshold
 
@@ -598,6 +610,7 @@ class UstarMovingPointDetection:
                     swin_col=self.swin_col,
                     ta_classes_count=self.ta_classes_count,
                     ustar_classes_count=self.ustar_classes_count,
+                    forward_mode_n=self.forward_mode_n,
                     season_groups=self.season_groups,
                     verbose=0,
                 )

@@ -86,7 +86,7 @@ def flag_signal_strength_eddypro_test(df: DataFrame,
     flagname_out = f'FLAG{idstr}_{var_col}_SIGNAL_STRENGTH_TEST'
 
     if signal_strength_col not in df.columns:
-        raise f"The column {signal_strength_col} is not in data, please check."
+        raise KeyError(f"The column {signal_strength_col} is not in data, please check.")
 
     # Get original signal strength values and then
     # replace values with flag
@@ -182,6 +182,7 @@ def flag_angle_of_attack_eddypro_test(df: DataFrame,
     See Also:
         See examples/pkgs/preprocessing/qaqc/qc_eddypro_flags.py for a complete working example.
     """
+    idstr = validate_id_string(idstr=idstr)
     flagname_out = f"FLAG{idstr}_{flux}_VM97_AOA_HF_TEST"
     aoa_flag = _extract_and_convert_flag_from_multidigit(
         df=df,

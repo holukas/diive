@@ -39,7 +39,7 @@ print(f"Coordinates: {SITE_LAT}°N, {SITE_LON}°E")
 print(f"Nighttime threshold: {NIGHTTIME_THRESHOLD} W/m²")
 
 # Calculate daytime/nighttime flags
-dnf = dv.features.DaytimeNighttimeFlag(
+dnf = dv.variables.DaytimeNighttimeFlag(
     timestamp_index=df.index,
     nighttime_threshold=NIGHTTIME_THRESHOLD,
     lat=SITE_LAT,

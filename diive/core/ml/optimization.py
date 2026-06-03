@@ -126,7 +126,9 @@ class OptimizeParamsTS:
     @property
     def best_score(self) -> float:
         """Mean cross-validated score of the best_estimator"""
-        if not self._best_score:
+        # `is None`, not falsy: with neg_MSE scoring a best_score of exactly 0.0
+        # (perfect fit) is valid and must not be treated as "not available".
+        if self._best_score is None:
             raise Exception(f'Not available: cv scores.')
         return self._best_score
 
@@ -144,7 +146,10 @@ class OptimizeParamsTS:
                                  target_col=self.target_col,
                                  complete_rows=True)
 
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
+        # shuffle=False keeps the rows in chronological order: the holdout is the
+        # last 25%, and TimeSeriesSplit (below) requires time-ordered data to give
+        # leakage-free folds. A shuffled split would defeat that.
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, shuffle=False)
 
         # Calculate total combinations for progress tracking
         total_combinations = 1

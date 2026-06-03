@@ -65,10 +65,11 @@ class GrangerCausality:
     def _run_test(self):
         """Run Granger causality test across lags."""
         try:
+            # Note: statsmodels deprecated the `verbose` kwarg (removed in 0.15)
+            # and the test is silent by default; we don't pass it.
             self.results = grangercausalitytests(
                 self.data[['y', 'x']],
                 self.max_lag,
-                verbose=self.verbose
             )
         except Exception as e:
             raise ValueError(f"Granger causality test failed: {e}")

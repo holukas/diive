@@ -35,6 +35,8 @@ References:
     https://matplotlib.org/stable/gallery/images_contours_and_fields/pcolormesh_levels.html
 """
 
+import warnings
+
 import numpy as np
 import pandas as pd
 
@@ -124,6 +126,11 @@ class HeatmapXYZ(HeatmapBase):
         self._y_series = y
         self._z_series = z
 
+        # Axis/colorbar labels are styling and belong in plot(); the constructor
+        # still accepts them (auto-defaulting from the data's .name) but warns.
+        if any(v is not None for v in (xlabel, ylabel, zlabel)):
+            warnings.warn("HeatmapXYZ: `xlabel`/`ylabel`/`zlabel` in the constructor are deprecated; "
+                          "pass them to plot() instead.", DeprecationWarning, stacklevel=2)
         # Use is None so that an explicit empty string is honoured
         self.xlabel = x.name if xlabel is None else xlabel
         self.ylabel = y.name if ylabel is None else ylabel
@@ -209,12 +216,13 @@ class HeatmapXYZ(HeatmapBase):
         z = df_agg[z_col].copy()
         z.name = z_col
 
-        # Infer axis labels from column names if not provided
-        xlabel = xlabel if xlabel is not None else x_col
-        ylabel = ylabel if ylabel is not None else y_col
-        zlabel = zlabel if zlabel is not None else z_col
-
-        return cls(x=x, y=y, z=z, xlabel=xlabel, ylabel=ylabel, zlabel=zlabel, **kwargs)
+        # Set labels via attributes (not the deprecated constructor params) so this
+        # data-loading factory can still accept column-derived labels without warning.
+        inst = cls(x=x, y=y, z=z, **kwargs)
+        inst.xlabel = xlabel if xlabel is not None else x_col
+        inst.ylabel = ylabel if ylabel is not None else y_col
+        inst.zlabel = zlabel if zlabel is not None else z_col
+        return inst
 
     def _prepare_data(self):
         """Pivots the x/y/z Series into a 2-D grid and computes cell boundaries.
@@ -283,7 +291,10 @@ class HeatmapXYZ(HeatmapBase):
              show_values: bool = False,
              show_values_fontsize: float = None,
              show_values_n_dec_places: int = 0,
-             show_grid: bool = False):
+             show_grid: bool = False,
+             xlabel: str = None,
+             ylabel: str = None,
+             zlabel: str = None):
         """Render HeatmapXYZ with matplotlib styling (Phase 2 of two-phase design).
 
         All styling and presentation parameters go here. Can be called multiple times
@@ -320,6 +331,15 @@ class HeatmapXYZ(HeatmapBase):
             cb_labelsize = theme.AX_LABELS_FONTSIZE
         if axlabels_fontsize is None:
             axlabels_fontsize = theme.AX_LABELS_FONTSIZE
+
+        # Labels: plot() arg wins, else the value stored at construction
+        # (which auto-defaults from the data's .name).
+        if xlabel is None:
+            xlabel = self.xlabel
+        if ylabel is None:
+            ylabel = self.ylabel
+        if zlabel is None:
+            zlabel = self.zlabel
         if ticks_labelsize is None:
             ticks_labelsize = theme.TICKS_LABELS_FONTSIZE
         if show_values_fontsize is None:
@@ -336,7 +356,7 @@ class HeatmapXYZ(HeatmapBase):
             vmin=vmin,
             vmax=vmax,
             cmap=cmap,
-            zlabel=self.zlabel,
+            zlabel=zlabel,
             cb_digits_after_comma=cb_digits_after_comma,
             cb_labelsize=cb_labelsize,
             cb_extend=cb_extend,
@@ -368,8 +388,8 @@ class HeatmapXYZ(HeatmapBase):
 
         self.format(
             plot=self.p,
-            ax_xlabel_txt=self.xlabel,
-            ax_ylabel_txt=self.ylabel,
+            ax_xlabel_txt=xlabel,
+            ax_ylabel_txt=ylabel,
         )
 
         if self.showplot:

@@ -135,7 +135,13 @@ class Hampel(FlagBase):
         self.verbose = verbose
         self.window_length = window_length
         self.n_sigma = n_sigma
-        # Short-form aliases (n_sigma_dt/n_sigma_nt) take precedence over long-form
+        # n_sigma_dt / n_sigma_nt are deprecated short-form aliases for
+        # n_sigma_daytime / n_sigma_nighttime. They still take precedence when set.
+        if n_sigma_dt is not None or n_sigma_nt is not None:
+            import warnings
+            warnings.warn("Hampel: `n_sigma_dt`/`n_sigma_nt` are deprecated; use "
+                          "`n_sigma_daytime`/`n_sigma_nighttime` instead.",
+                          DeprecationWarning, stacklevel=2)
         _n_sigma_daytime = n_sigma_dt if n_sigma_dt is not None else n_sigma_daytime
         _n_sigma_nighttime = n_sigma_nt if n_sigma_nt is not None else n_sigma_nighttime
         self.n_sigma_daytime = _n_sigma_daytime if _n_sigma_daytime is not None else n_sigma

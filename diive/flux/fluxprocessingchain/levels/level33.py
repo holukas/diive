@@ -220,6 +220,13 @@ def run_level33_constant_ustar(
         flagcol = flagcols[0]
         udf = level33.results[[flux_corrected_col, meta.ustarcol, flagcol]].copy()
 
+        # No outname override here (unlike L3.1): run_qcf_on_col is the
+        # L3.1-corrected flux (e.g. 'NEE_L3.1'), and the storage-correction tag
+        # is meaningful provenance that must be preserved. Appending idstr
+        # 'L3.3_<scen>' yields 'NEE_L3.1_L3.3_CUT_50_QCF' — storage-corrected
+        # (L3.1) then USTAR-filtered (L3.3) — matching L3.2's 'NEE_L3.1_L3.2_QCF'.
+        # L3.1 passes outname only to collapse its redundant self-repeat
+        # ('L3.1_L3.1'), which is a different case.
         current, qcf = finalize_level(
             current,
             run_qcf_on_col=flux_corrected_col,
@@ -301,9 +308,11 @@ def run_level33_ustar_detection(
         n_jobs: Parallel workers for the bootstrap (1 = sequential, -1 = all CPUs).
             Defaults to 1.
         percentiles: Bootstrap percentiles to compute and use as separate USTAR
-            scenarios.  Each value ``p`` produces one scenario labelled ``CUT_p``
-            (e.g. ``(16, 50, 84)`` -> scenarios ``CUT_16``, ``CUT_50``, ``CUT_84``).
-            Defaults to ``(16, 50, 84)``.
+            scenarios.  Each value ``p`` produces one scenario labelled
+            ``CUT_<p>``, zero-padded to a uniform width so labels can never be
+            substrings of each other (e.g. ``(16, 50, 84)`` -> ``CUT_16`` /
+            ``CUT_50`` / ``CUT_84``; ``(5, 50, 95)`` -> ``CUT_05`` / ``CUT_50``
+            / ``CUT_95``).  Defaults to ``(16, 50, 84)``.
         showplot: Show diagnostic plots from USTAR filtering. Defaults to True.
         verbose: Print progress and detection summary. Defaults to True.
 
@@ -393,7 +402,15 @@ def run_level33_ustar_detection(
                 "(>= 3000 total, >= 160 per season)."
             )
         thresholds.append(float(thr))
-    threshold_labels = [f'CUT_{p}' for p in percentiles]
+    # Zero-pad to a uniform width so labels can never be substrings of one
+    # another (two distinct equal-length strings can't contain each other).
+    # Without this, e.g. percentiles=(5, 50, 95) would generate 'CUT_5' /
+    # 'CUT_50' / 'CUT_95' and trip run_level33_constant_ustar's
+    # substring-overlap guard ('CUT_5' in 'CUT_50') — crashing *after* the
+    # expensive bootstrap had already run. The default (16, 50, 84) is
+    # unaffected (all already two digits).
+    _label_width = max(2, max(len(str(int(p))) for p in percentiles))
+    threshold_labels = [f'CUT_{int(p):0{_label_width}d}' for p in percentiles]
 
     # Apply detected thresholds as constant USTAR scenarios
     updated = run_level33_constant_ustar(

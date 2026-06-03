@@ -80,6 +80,11 @@ def resample_series_to_30MIN(series: Series,
 
     """
 
+    # '30T' is the deprecated pandas alias for '30min' (removed in pandas 4);
+    # normalize so the deprecated form keeps working without emitting warnings.
+    if to_freqstr == '30T':
+        to_freqstr = '30min'
+
     current_freq = to_offset(series.index.freqstr)
     requested_freq = to_offset(to_freqstr)
 

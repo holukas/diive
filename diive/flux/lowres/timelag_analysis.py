@@ -401,7 +401,7 @@ class TimeLagAnalysis:
 
         # Create histogram using Histogram class
         hist = Histogram(
-            s=series,
+            series=series,
             method='uniques',
             ignore_fringe_bins=self.ignore_fringe_bins
         )

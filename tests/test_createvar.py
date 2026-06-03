@@ -1,12 +1,13 @@
 import unittest
 
+import numpy as np
 import pandas as pd
 
 import diive as dv
 from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
 from diive.configs.exampledata import load_exampledata_parquet
-from diive.features.variables import air_temp_from_sonic_temp
-from diive.features.variables import TimeSince
+from diive.variables import air_temp_from_sonic_temp
+from diive.variables import TimeSince
 
 
 class TestCreateVar(unittest.TestCase):
@@ -33,7 +34,7 @@ class TestCreateVar(unittest.TestCase):
         le = df['LE'].copy()
         et_eddypro = df['ET'].copy()  # Should be in mm h-1
         ta = df['TA_1_1_1'].copy()
-        et = dv.features.et_from_le(le=le, ta=ta)
+        et = dv.variables.et_from_le(le=le, ta=ta)
         self.assertAlmostEqual(et.iloc[0], et_eddypro.iloc[0], places=4)
         self.assertAlmostEqual(et.iloc[1], et_eddypro.iloc[1], places=4)
         self.assertAlmostEqual(et.iloc[-1], et_eddypro.iloc[-1], places=3)
@@ -41,7 +42,7 @@ class TestCreateVar(unittest.TestCase):
 
     def test_lagged_variants(self):
         from diive.configs.exampledata import load_exampledata_parquet
-        from diive.features.variables import lagged_variants
+        from diive.variables import lagged_variants
         df = load_exampledata_parquet()
         df = load_exampledata_parquet()
         locs = (df.index.year == 2022) & (df.index.month == 7) & (df.index.hour >= 10) & (df.index.hour <= 15)
@@ -67,7 +68,7 @@ class TestCreateVar(unittest.TestCase):
 
     def test_daytime_nighttime_flag(self):
         from diive.configs.exampledata import load_exampledata_parquet
-        from diive.features.variables import DaytimeNighttimeFlag
+        from diive.variables import DaytimeNighttimeFlag
         df = load_exampledata_parquet()
         dnf = DaytimeNighttimeFlag(
             timestamp_index=df.index,
@@ -95,7 +96,7 @@ class TestCreateVar(unittest.TestCase):
 
     def test_calc_vpd(self):
         from diive.configs.exampledata import load_exampledata_parquet
-        from diive.features.variables import calc_vpd_from_ta_rh  # Used to calculate VPD
+        from diive.variables import calc_vpd_from_ta_rh  # Used to calculate VPD
         ta_col = 'Tair_f'  # Air temperature (gap-filled) is used to calculate VPD
         rh_col = 'RH'  # Relative humidity (not gap-filled) is used to calculate VPD
         vpd_col = 'VPD_hPa'  # VPD will be newly calculated from gap-filled TA and non-gap-filled RH
@@ -128,6 +129,45 @@ class TestCreateVar(unittest.TestCase):
         # outpath = Path(r"F:\TMP") / 'ts_full_results.csv'
         # ts_full_results.to_csv(outpath, index=False)
         # ts_series = ts.get_timesince()
+
+    def test_aerodynamic_resistance(self):
+        from diive.variables import aerodynamic_resistance
+        u = pd.Series([2.0, 4.0, 1.0, 3.0], name='u')
+        ustar = pd.Series([0.5, 0.4, 0.0, 0.5], name='ustar')  # ustar=0 -> NaN
+        ra = aerodynamic_resistance(u_ms=u, ustar_ms=ustar)
+        # ra = u / ustar^2
+        self.assertAlmostEqual(ra.iloc[0], 2.0 / 0.5 ** 2, places=6)
+        self.assertAlmostEqual(ra.iloc[1], 4.0 / 0.4 ** 2, places=6)
+        self.assertTrue(np.isnan(ra.iloc[2]))  # ustar <= 0 -> NaN
+
+    def test_dry_air_density(self):
+        from diive.variables import dry_air_density
+        rho_a = pd.Series([1.20, 1.18, 1.22], name='rho_a')
+        rho_v = pd.Series([0.01, 0.012, 0.009], name='rho_v')
+        rho_d = dry_air_density(rho_a=rho_a, rho_v=rho_v)
+        self.assertTrue(np.allclose(rho_d.to_numpy(), (rho_a - rho_v).to_numpy()))
+
+    def test_latent_heat_of_vaporization(self):
+        from diive.variables import latent_heat_of_vaporization
+        ta = pd.Series([0.0, 20.0, 30.0], name='ta')
+        lv = latent_heat_of_vaporization(ta=ta)
+        # (2.501 - 0.00237*ta) * 1e6
+        self.assertAlmostEqual(lv.iloc[0], 2.501e6, places=0)
+        self.assertAlmostEqual(lv.iloc[1], (2.501 - 0.00237 * 20.0) * 1e6, places=0)
+        # decreases with temperature, stays in a physical range (~2.4-2.5 MJ/kg)
+        self.assertTrue(lv.iloc[2] < lv.iloc[1] < lv.iloc[0])
+        self.assertTrue((lv > 2.4e6).all() and (lv < 2.55e6).all())
+
+    def test_potrad(self):
+        from diive.variables import potrad
+        # One summer day at 30-min resolution, mid-latitude.
+        idx = pd.date_range('2022-06-21 00:00', '2022-06-21 23:30', freq='30min', name='TIMESTAMP_END')
+        swin_pot = potrad(timestamp_index=idx, lat=47.0, lon=8.0, utc_offset=1)
+        self.assertEqual(len(swin_pot), len(idx))
+        self.assertTrue((swin_pot >= 0).all())          # never negative
+        self.assertGreater(swin_pot.max(), 700)         # strong midday clear-sky radiation
+        # Deep night (around local midnight) is zero.
+        self.assertEqual(swin_pot.loc['2022-06-21 00:00':'2022-06-21 01:00'].max(), 0)
 
 
 if __name__ == '__main__':

@@ -36,14 +36,14 @@ hm = dv.plotting.HexbinPlot(
     z=data['NEE_CUT_REF_f'],
     normalize_axes=False,              # Data: use original data values (not percentile)
     gridsize=15,                       # Data: number of hexagons per side
-    xlabel='Air temperature (°C)',
-    ylabel='Vapor pressure deficit (hPa)',
-    zlabel='Mean NEE',
     reduce_C_function=np.mean          # Data: use mean aggregation (not median)
 )
 hm.plot(
     ax=None,                           # Create new figure
     cmap='RdYlBu_r',                   # Styling: colormap name
+    xlabel='Air temperature (°C)',     # Styling: axis labels
+    ylabel='Vapor pressure deficit (hPa)',
+    zlabel='Mean NEE',
     show_values=False,                 # Styling: don't show values on hexagons
     cb_digits_after_comma=0            # Styling: colorbar decimal places
 )
@@ -64,14 +64,14 @@ hm = dv.plotting.HexbinPlot(
     z=data['NEE_CUT_REF_f'],
     normalize_axes=True,               # Data: use percentile scale (0-100)
     gridsize=20,                       # Data: number of hexagons per side
-    xlabel='Temperature (percentile)',
-    ylabel='VPD (percentile)',
-    zlabel='Mean NEE',
     reduce_C_function=np.mean          # Data: use mean aggregation
 )
 hm.plot(
     ax=None,                           # Create new figure
     cmap='RdYlBu_r',                   # Styling: colormap name
+    xlabel='Temperature (percentile)',  # Styling: axis labels
+    ylabel='VPD (percentile)',
+    zlabel='Mean NEE',
     show_values=True,                  # Styling: display values on hexagon centers
     show_values_fontsize=8,            # Styling: font size for overlay values
     show_values_n_dec_places=0,        # Styling: decimal places in overlay

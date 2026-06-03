@@ -21,7 +21,7 @@ Examples demonstrating 10 outlier detection methods for quality control, anomaly
 
 ## Related Documentation
 
-See `diive.pkgs.preprocessing.outlier_detection` for available detection classes:
+See `dv.outliers` for available detection classes:
 - `AbsoluteLimits` — Threshold-based detection
 - `Hampel` — MAD-based robust detection
 - `LocalSD` — Adaptive local threshold

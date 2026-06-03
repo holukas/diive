@@ -12,3 +12,20 @@ from diive.core.plotting.shifted_distribution import ShiftedDistributionPlot
 from diive.core.plotting.scatter import ScatterXY
 from diive.core.plotting.timeseries import TimeSeries
 from diive.core.plotting.treering import TreeRingPlot
+
+__all__ = [
+    'LongtermAnomaliesYear',
+    'Cumulative',
+    'CumulativeYear',
+    'DielCycle',
+    'HeatmapDateTime',
+    'HeatmapYearMonth',
+    'HeatmapXYZ',
+    'HexbinPlot',
+    'HistogramPlot',
+    'RidgeLinePlot',
+    'ShiftedDistributionPlot',
+    'ScatterXY',
+    'TimeSeries',
+    'TreeRingPlot',
+]

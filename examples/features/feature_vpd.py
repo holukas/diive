@@ -31,7 +31,7 @@ vpd_col = 'VPD_calculated'
 subset_df = df[[ta_col, rh_col]].copy()
 
 # Calculate VPD from TA and RH
-subset_df[vpd_col] = dv.features.calc_vpd_from_ta_rh(df=subset_df, ta_col=ta_col, rh_col=rh_col)
+subset_df[vpd_col] = dv.variables.calc_vpd_from_ta_rh(df=subset_df, ta_col=ta_col, rh_col=rh_col)
 
 # Print statistics
 print("VPD Calculation")
@@ -63,7 +63,7 @@ df_subset = df.loc[(df.index.year == 2018)].copy()
 subset_df = df_subset[[ta_col, rh_col]].copy()
 
 # Calculate VPD
-subset_df[vpd_col] = dv.features.calc_vpd_from_ta_rh(df=subset_df, ta_col=ta_col, rh_col=rh_col)
+subset_df[vpd_col] = dv.variables.calc_vpd_from_ta_rh(df=subset_df, ta_col=ta_col, rh_col=rh_col)
 
 print("\nVPD Calculation Analysis (Year 2018)")
 print("=" * 50)
@@ -101,7 +101,7 @@ vpd_gf_col = 'VPD_hPa_gfilled'
 
 # Subset and calculate VPD
 subset_df = df_subset[[ta_col, rh_col]].copy()
-subset_df[vpd_col] = dv.features.calc_vpd_from_ta_rh(df=subset_df, ta_col=ta_col, rh_col=rh_col)
+subset_df[vpd_col] = dv.variables.calc_vpd_from_ta_rh(df=subset_df, ta_col=ta_col, rh_col=rh_col)
 
 # Feature engineering for XGBoost
 engineer = FeatureEngineer(
@@ -161,7 +161,7 @@ vpd_col = 'VPD_hPa'
 
 # Subset and calculate VPD
 subset_df = df[[ta_col, rh_col]].copy()
-subset_df[vpd_col] = dv.features.calc_vpd_from_ta_rh(df=subset_df, ta_col=ta_col, rh_col=rh_col)
+subset_df[vpd_col] = dv.variables.calc_vpd_from_ta_rh(df=subset_df, ta_col=ta_col, rh_col=rh_col)
 
 print("\nVPD Pattern Visualization")
 print("=" * 50)

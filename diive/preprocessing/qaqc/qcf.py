@@ -53,17 +53,14 @@ class FlagQCF:
     flags for each record, and calculates QCF based on flag sums. Supports optional
     daytime/nighttime separation and USTAR filtering scenarios.
 
-    Flag Values & Sums:
-        Individual flags: 0=pass, 1=soft warning (minor issue), 2=hard fail (critical)
-        Flag sums count how many tests raised flags:
-            - Sum of all flags: Total number of raised flags
-            - Sum of hard flags: Count of critical issues (value 2)
-            - Sum of soft flags: Count of minor issues (value 1)
+    Flags: 0=pass, 1=soft (minor), 2=hard (critical). Sums add flag *values*, so
+    sumsoftflags == soft count but sumhardflags == 2 x hard count.
 
-    QCF Decision Logic (based on sums):
-        QCF = 0: All flags pass (total flag sum = 0)
-        QCF = 1: 1-3 soft flags raised AND no hard flags
-        QCF = 2: >3 soft flags OR >=2 hard flags OR rejected by daytime/nighttime logic
+    QCF:
+        0: no flags
+        1: 1-3 soft flags, no hard flags
+        2: >3 soft flags OR >=1 hard flag OR rejected by day/night logic
+           (code tests sumhardflags >= 2, i.e. 2 x count, so one hard flag suffices)
 
     Data Access:
         - flagqcf: Overall QCF flag for each record
@@ -178,9 +175,9 @@ class FlagQCF:
         Returns:
             DataFrame with original test flags plus calculated QCF columns:
                 - FLAG*_QCF: Overall quality flag (0/1/2)
-                - SUM*_FLAGS: Total flag count
-                - SUM*_HARDFLAGS: Count of hard flags (value 2)
-                - SUM*_SOFTFLAGS: Count of soft flags (value 1)
+                - SUM*_FLAGS: Sum of all flag values (soft sum + hard sum)
+                - SUM*_HARDFLAGS: Sum of hard-flag values (2 x hard-flag count)
+                - SUM*_SOFTFLAGS: Sum of soft-flag values (== soft-flag count)
                 - *_QCF: Quality-controlled series (NaN for QCF=2)
                 - *_QCF0: Highest-quality series (NaN for QCF>0)
         """

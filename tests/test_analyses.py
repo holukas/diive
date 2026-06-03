@@ -77,7 +77,7 @@ class TestAnalyses(unittest.TestCase):
     def test_daily_correlation(self):
         from diive.configs.exampledata import load_exampledata_parquet
         from diive.analysis import daily_correlation
-        from diive.features.variables.potentialradiation import potrad
+        from diive.variables import potrad
         data_df = load_exampledata_parquet()
         # Use only year 2022
         data_df = data_df.loc[data_df.index.year == 2022].copy()
@@ -107,7 +107,7 @@ class TestAnalyses(unittest.TestCase):
         data_df = load_exampledata_parquet()
         series = data_df['NEE_CUT_REF_f'].copy()
 
-        hist = Histogram(s=series, method='n_bins', n_bins=10, ignore_fringe_bins=None)
+        hist = Histogram(series=series, method='n_bins', n_bins=10, ignore_fringe_bins=None)
         results = hist.results
         bin_starts = hist.results['BIN_START_INCL'].copy()
         self.assertEqual(bin_starts.iloc[0], -40.811)
@@ -119,7 +119,7 @@ class TestAnalyses(unittest.TestCase):
         self.assertEqual(results.iloc[checkix]['COUNTS'], 112210)
         self.assertEqual(hist.peakbins, [-1.1503999999999976, -7.7605, -14.3706, 5.459699999999998, -20.9807])
 
-        hist = Histogram(s=series, method='n_bins', n_bins=10, ignore_fringe_bins=[1, 3])
+        hist = Histogram(series=series, method='n_bins', n_bins=10, ignore_fringe_bins=[1, 3])
         results = hist.results
         bin_starts = hist.results['BIN_START_INCL'].copy()
         self.assertEqual(bin_starts.iloc[0], -34.2009)
@@ -132,7 +132,7 @@ class TestAnalyses(unittest.TestCase):
         self.assertEqual(results.iloc[checkix]['COUNTS'], 112210)
         self.assertEqual(hist.peakbins, [-1.1503999999999976, -7.7605, -14.3706, -20.9807, -27.5908])
 
-        hist = Histogram(s=series, method='uniques', n_bins=10, ignore_fringe_bins=[1, 3])
+        hist = Histogram(series=series, method='uniques', n_bins=10, ignore_fringe_bins=[1, 3])
         results = hist.results
         bin_starts = hist.results['BIN_START_INCL'].copy()
         self.assertEqual(bin_starts.iloc[0], -39.817)

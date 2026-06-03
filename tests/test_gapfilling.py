@@ -179,6 +179,58 @@ class TestGapFilling(unittest.TestCase):
         self.assertEqual(series_gapfilled.isnull().sum(), 7856)
         self.assertEqual(series.isnull().sum(), 11412)
 
+    def test_observed_preserved_when_feature_missing(self):
+        """Observed targets must never be overwritten/mis-flagged when a feature
+        is missing at that row (driver gap not aligned with the target gap)."""
+        import pandas as pd
+        idx = pd.date_range('2022-07-01', periods=400, freq='30min', name='TIMESTAMP_END')
+        rng = np.random.RandomState(1)
+        f1 = rng.normal(size=400).astype(float)
+        target = (3 * f1 + rng.normal(scale=0.3, size=400)).astype(float)
+        df = pd.DataFrame({'target': target, 'f1': f1}, index=idx)
+        # Driver-only gaps at rows where the target IS observed, plus real target gaps.
+        driver_gap_rows = [100, 150, 200, 250]
+        df.loc[df.index[driver_gap_rows], 'f1'] = np.nan
+        df.loc[df.index[[120, 170]], 'target'] = np.nan
+        observed = df['target'].copy()
+
+        rf = RandomForestTS(input_df=df, target_col='target', n_estimators=30, verbose=0)
+        rf.run(showplot_scores=False, showplot_importance=False)
+        gf, flag = rf.results.gapfilled, rf.results.flag
+
+        obs_mask = observed.notna()
+        # Every observed value is preserved exactly and flagged 0 (observed)...
+        self.assertTrue(np.allclose(gf[obs_mask], observed[obs_mask]))
+        self.assertTrue((flag[obs_mask] == 0).all())
+        # ...including the rows where the driver was missing.
+        self.assertTrue(np.allclose(gf.iloc[driver_gap_rows], observed.iloc[driver_gap_rows]))
+        self.assertTrue((flag.iloc[driver_gap_rows] == 0).all())
+        # The gap-filled series is complete (no remaining gaps).
+        self.assertEqual(int(gf.isna().sum()), 0)
+
+    def test_swin_gapfiller(self):
+        """SW_IN gap-filling with the physical nighttime constraint."""
+        import pandas as pd
+        from diive.gapfilling.swin import SWINGapFillerXGBoost
+        from diive.variables import potrad
+        lat, lon, utc = 47.0, 8.0, 1
+        idx = pd.date_range('2022-06-01', '2022-06-30 23:30', freq='30min', name='TIMESTAMP_END')
+        pot = potrad(timestamp_index=idx, lat=lat, lon=lon, utc_offset=utc)
+        rng = np.random.RandomState(0)
+        swin = (pot * (0.7 + 0.3 * rng.rand(len(idx)))).clip(lower=0)  # cloudy modulation
+        swin.name = 'SW_IN'
+        swin_gappy = swin.copy()
+        swin_gappy[rng.rand(len(idx)) < 0.3] = np.nan  # punch ~30% gaps
+
+        g = SWINGapFillerXGBoost(series=swin_gappy, lat=lat, lon=lon, utc_offset=utc, verbose=0)
+        g.run()
+        gf = g.results.gapfilled
+        self.assertEqual(int(gf.isna().sum()), 0)   # complete after gap-filling
+        self.assertTrue((gf >= 0).all())            # radiation is non-negative
+        # Nighttime (SW_IN_POT below threshold) is forced to ~0 by physics.
+        night = pot < 0.001
+        self.assertLess(float(gf[night].abs().max()), 1.0)
+
     def test_gapfilling_randomforest(self):
         """Fill gaps using random forest"""
         df = ed.load_exampledata_parquet()
@@ -319,13 +371,16 @@ class TestGapFilling(unittest.TestCase):
         # plt.show()
 
         # Note: Values updated to reflect SHAP-based feature importance and shap_threshold_factor=0.5
-        # Using flexible ranges due to slight variability in SHAP calculations
+        # Using flexible ranges due to slight variability in SHAP calculations.
+        # Upper bound of the gap-filled sum widened after early stopping was fixed
+        # to use a genuine hold-out in the feature-reduction path (early_stopping_rounds
+        # is set here), which shifts the fitted model slightly.
         self.assertGreater(scores['mae'], 1.2)
         self.assertLess(scores['mae'], 1.6)
         self.assertGreater(scores['r2'], 0.82)
         self.assertLess(scores['r2'], 0.92)
         self.assertGreater(gfdf['NEE_CUT_REF_orig_gfXG'].sum(), -2000)
-        self.assertLess(gfdf['NEE_CUT_REF_orig_gfXG'].sum(), -1400)
+        self.assertLess(gfdf['NEE_CUT_REF_orig_gfXG'].sum(), -1200)
         self.assertEqual(gfdf['NEE_CUT_REF_orig_gfXG'].sum(), gapfilled.sum())
         self.assertGreater(fi['SHAP_IMPORTANCE']['Rg_f'], 2.5)
         self.assertLess(fi['SHAP_IMPORTANCE']['Rg_f'], 3.5)

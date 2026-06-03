@@ -14,7 +14,9 @@ class TestHeatmapXYZ(unittest.TestCase):
         self.z = pd.Series(np.array([10, 20, 30, 40]), name="Z")
 
     def test_initialization(self):
-        heatmap = HeatmapXYZ(self.x, self.y, self.z, xlabel="Custom X", ylabel="Custom Y", zlabel="Custom Z")
+        # Labels in the constructor are deprecated (pass them to plot()) but still work.
+        with self.assertWarns(DeprecationWarning):
+            heatmap = HeatmapXYZ(self.x, self.y, self.z, xlabel="Custom X", ylabel="Custom Y", zlabel="Custom Z")
         self.assertEqual(heatmap.xlabel, "Custom X")
         self.assertEqual(heatmap.ylabel, "Custom Y")
         self.assertEqual(heatmap.zlabel, "Custom Z")

@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
 
-**105 examples across 9 organized folders by functional domain.**
+**107 examples across 9 organized folders by functional domain.**
 
 ## Structure
 
@@ -10,7 +10,7 @@ Examples are organized by **functional domain**, not source code structure:
 
 ```
 examples/
-├── visualization/         # Plotting and visualization (19 examples)
+├── visualization/         # Plotting and visualization (21 examples)
 │   ├── plot_heatmap_datetime_basic.py
 │   ├── plot_heatmap_advanced.py
 │   ├── plot_heatmap_xyz_basic.py
@@ -28,16 +28,19 @@ examples/
 │   ├── plot_ridgeline_advanced.py
 │   ├── plot_other_plots.py
 │   ├── plot_timeseries_interactive.py
+│   ├── plot_timeseries_rangetool.py
+│   ├── plot_shifted_distribution.py
 │   ├── plot_treering_temperature.py
 │   └── plot_treering_line_temperature.py
 ├── times/                 # Timestamp handling (5 examples)
 │   ├── times_timestamp_sanitizer.py
 │   ├── times_frequency_detection.py
-│   ├── times_time_features.py
+│   ├── times_statistics.py
 │   ├── times_diel_cycles.py
 │   └── times_temporal_matrices.py
 ├── analysis/              # Time series analysis (12 examples)
 │   ├── analysis_seasonaltrend.py
+│   ├── analysis_driveranalysis.py
 │   ├── analysis_gapfinder.py
 │   ├── analysis_gapstats.py
 │   └── ...
@@ -52,7 +55,7 @@ examples/
 ├── fits/                  # Data fitting (2 examples)
 │   ├── fit_fitter.py
 │   └── fit_binfittercp.py
-├── flux/                  # Eddy covariance flux processing (20 examples)
+├── flux/                  # Eddy covariance flux processing (18 examples)
 │   ├── fluxprocessingchain/
 │   │   ├── fluxprocessingchain_runchain.py
 │   │   └── fluxprocessingchain_composable.py
@@ -129,7 +132,7 @@ uv run python examples/gapfilling/gapfill_randomforest.py
 uv run python examples/run_all_examples.py
 ```
 
-This runs all 105 examples in parallel with 8 workers, reporting execution time and any errors.
+This runs all 107 examples in parallel with 8 workers, reporting execution time and any errors.
 
 ## Finding Examples
 
@@ -157,16 +160,16 @@ Browse by topic:
 
 | Domain | Files | Topics |
 |--------|-------|--------|
-| **Visualization** | 19 | Heatmaps, scatter, timeseries, histograms, ridgelines, cumulative, diurnal cycles, tree-ring spiral and radial line |
+| **Visualization** | 21 | Heatmaps, scatter, timeseries (+ interactive & range-tool), shifted distribution, histograms, ridgelines, cumulative, diurnal cycles, tree-ring spiral and radial line |
 | **Times** | 5 | Timestamp validation, frequency detection, diel cycles, temporal matrices |
-| **Analysis** | 12 | Correlation, daily correlation, decomposition, gap detection, gap statistics, spatial aggregation, harmonic analysis |
+| **Analysis** | 12 | Correlation, daily correlation, driver attribution, decomposition, gap detection, gap statistics, spatial aggregation, harmonic analysis |
 | **Features** | 11 | Feature engineering pipeline, air properties, unit conversions, day/night flags, VPD, lagged variants |
 | **Fits** | 2 | Binned fitting, ecosystem response fitting |
 | **Flux** | 18 | Time lag analysis, processing chain, HQ filtering, USTAR detection (3), self-heating (2), uncertainty, PWB batch detection (CLI + API), high-res analysis |
 | **Gapfilling** | 12 | Linear interpolation, Random Forest (4 variants), XGBoost (3 variants), MDS (2), SW_IN physics+XGBoost, comparison |
 | **IO** | 5 | Parquet file I/O, EddyPro CSV reading, binary value extraction |
 | **Preprocessing** | 21 | Corrections (7), outlier detection (9), QA/QC (3), other (2) |
-| **TOTAL** | **105** | |
+| **TOTAL** | **106** | |
 
 ## Running Options
 

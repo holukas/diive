@@ -48,7 +48,7 @@ df = dv.load_exampledata_parquet()
 series_prec = df.loc[(df.index.year == 2022) & (df.index.month == 7),
     "PREC_TOT_T1_25+20_1"].copy()
 
-ts_prec = dv.features.TimeSince(series_prec, lower_lim=0, include_lim=False)
+ts_prec = dv.variables.TimeSince(series_prec, lower_lim=0, include_lim=False)
 ts_prec.calc()
 
 print("Time Since Last Precipitation Event")
@@ -139,7 +139,7 @@ df = dv.load_exampledata_parquet()
 series_ta = df.loc[(df.index.year == 2022) & (df.index.month == 3),
     "Tair_f"].copy()
 
-ts_ta = dv.features.TimeSince(series_ta, upper_lim=0, include_lim=True)
+ts_ta = dv.variables.TimeSince(series_ta, upper_lim=0, include_lim=True)
 ts_ta.calc()
 
 print("\nTime Since Last Freezing Temperature")
@@ -211,7 +211,7 @@ series_prec = df.loc[(df.index.year == 2022) & (df.index.month == 7),
     "PREC_TOT_T1_25+20_1"].copy()
 
 # Create TimeSince counter
-ts_prec = dv.features.TimeSince(series_prec, lower_lim=0, include_lim=False)
+ts_prec = dv.variables.TimeSince(series_prec, lower_lim=0, include_lim=False)
 ts_prec.calc()
 ts_prec_df = ts_prec.get_full_results()
 

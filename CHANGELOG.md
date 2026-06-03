@@ -9,7 +9,7 @@
 ### Breaking Changes
 
 - **Public API: 9 domain namespaces** — flat 145-export namespace replaced with `dv.outliers`, `dv.gapfilling`,
-  `dv.flux`, `dv.analysis`, `dv.plotting`, `dv.times`, `dv.features`, `dv.corrections`, `dv.qaqc`. All old flat names
+  `dv.flux`, `dv.analysis`, `dv.plotting`, `dv.times`, `dv.variables`, `dv.corrections`, `dv.qaqc`. All old flat names
   removed. Update all imports.
 - **Gap-filling: feature parameters moved to `FeatureEngineer`** — `RandomForestTS` / `XGBoostTS` no longer accept
   `features_*` parameters; pass a pre-built `FeatureEngineer` instance instead.
@@ -17,6 +17,10 @@
 - **Plotting aliases use `plot_` prefix** — old unprefixed names removed.
 - **`HeatmapXYZ` requires pre-aggregated input.**
 - **`DailyCorrelation` is now a class** — old function-based API removed.
+- **PWB time-lag detection: `var_tsonic` / `col_tsonic` now required.** `PreWhiteningBootstrap` and
+  `PwbBatchDetection` always run the full 4-combination RFlux v3.2.0 logic; the 2-combination (cw/wc) fallback was
+  removed. Pass a sonic-temperature column. Result keys `tlag_opt_s`, `corr_est`, `cv5pct`, `cv1pct` were removed;
+  `corr_pw` (un-smoothed PW peak correlation) and `cov_pwb` (raw cross-covariance at the selected lag) added.
 
 ### Flux Processing Chain
 
@@ -189,8 +193,8 @@
 - **`.run()` / `.result` unified across class families** — `FlagBase`, `MlRegressorGapFillingBase`, `FluxMDS`,
   `DailyCorrelation`, `StratifiedAnalysis`, `BinFitterCP` all share the same two-step API. Enables
   `series = dv.outliers.Hampel(s, n_sigma=5).run().result`.
-- **`below_zero` param** — controls handling of below-zero predictions: `None` (keep), `'zero'` (clip), `'nan'` (treat
-  as unfillable). Available in `RandomForestTS`, `XGBoostTS`, and longterm variants.
+- **`below_zero` param** — controls handling of below-zero predictions: `None` (keep) or `'zero'` (clip to 0).
+  Available in `RandomForestTS`, `XGBoostTS`, and longterm variants.
 - **`OptimizeParamsRFTS` -> `OptimizeParamsTS`** — generalized hyperparameter optimization for any sklearn-compatible
   regressor.
 - **SHAP-based feature reduction** — replaced permutation importance with SHAP values.
@@ -200,13 +204,127 @@
 
 - **`DetectTimestampShifts`** — detects clock errors by comparing measured vs. potential shortwave radiation. Three
   detection methods (`fft_phase_shift`, `crosscorr`, `noon_shift`) with five plot methods.
-- **`PreWhiteningBootstrap`** — Vitale et al. (2024) PWB time-lag detection for low-magnitude fluxes (CH4, N2O).
+- **`PreWhiteningBootstrap`** — Vitale et al. (2024) PWB time-lag detection for low-magnitude fluxes (CH4, N2O),
+  aligned with RFlux v3.2.0 numerics: Breitung (2002) variance-ratio unit-root test, overlapping moving-block
+  bootstrap (`tsboot(sim="fixed")`), un-smoothed PW peak, single Bartlett band (`±3.291/√(n·13)`), and a
+  threaded RNG (`random_state`) for reproducibility.
 - **`PwbBatchDetection`** — parallel batch PWB across many files using `ProcessPoolExecutor`. Crash-safe checkpointing;
-  CLI: `diive-tlag-pwb-batch`.
+  per-file deterministic seeding (`random_state`), `strict` mode, and per-scalar `*_error` columns; CLI:
+  `diive-tlag-pwb-batch`. Optional `file_date_format` (CLI `--file-date-format`, e.g. `'%Y%m%d-%H%M'`) parses a
+  timestamp from each filename into a `timestamp` results column and uses real dates as the summary-plot x-axis.
+- **`TlagApplier`** — applies PWB-detected lags to raw EC files. Reads a `tlag_results.csv` produced by
+  `PwbBatchDetection` and shifts each scalar column backward by `round(tlag_s · hz)` rows (`pd.Series.shift`), writing a
+  parallel directory of lag-corrected files with the original metadata header and column order preserved. Default lag
+  column is `{prefix}_tlag_final_pf_s` (pre-filtered, gap-filled PWBOPT); configurable via `--lag-column-template`.
+  Only scalars listed in `--scalar` are shifted; all other columns (wind, sonic temperature, gases not detected, etc.)
+  pass through unchanged. Parallel via `ProcessPoolExecutor`; CLI: `diive-tlag-apply-batch`. Per-file summary CSV
+  written next to the aligned output. Example: `examples/flux/hires/flux_apply_tlag_cli.py`.
+  Handles arbitrary text formats via `--sep` (default whitespace; use `,` for CSV), `--skiprows` (lines before header),
+  `--extra-rows` (rows between header and data; e.g. units + instrument-tag rows), and `--lineterm`. When detection
+  happens on rotated files but the lag must be removed from raw files with different filenames, `--period-key-regex` /
+  `--file-key-regex` extract a common key (typically a timestamp) from each side so the apply step finds the right raw
+  file per period. After alignment, downstream flux processing should run with EC time-lag maximization disabled.
+- **`PerFilePipeline`** / `process_one_file` — two-phase per-chunk end-to-end PWB pipeline
+  (`diive.flux.hires.detect_and_remove_tlag`). Each raw EC file is split into fixed-length chunks (`--chunk-seconds`,
+  default 1800 s = 30 min). **Phase 1 (detect):** for each chunk the pipeline applies `WindDoubleRotation` in memory
+  and runs `PreWhiteningBootstrap` on the rotated W + each scalar + sonic temperature — no data is written yet.
+  **PWBOPT** then chooses the *best* lag per chunk across the full chunk sequence (S1/S2/S3 carry-forward + gap-fill,
+  paper Section 2.3). **Phase 2 (remove):** each successfully-detected chunk's scalar columns are shifted in the
+  UNROTATED chunk by that PWBOPT lag — the column named by `--lag-column-template` (default `{prefix}_tlag_final_pf_s`,
+  the pre-filtered gap-filled lag, the same one `diive-tlag-apply-batch` removes) — and written as its own output
+  file. Removing the PWBOPT lag rather than the raw per-chunk detection means a wide-HDI chunk's spurious mode lag is
+  replaced by its neighbour's optimal lag. One 6-hour input file produces up to twelve 30-minute output files; short
+  trailing chunks (< `--min-chunk-seconds`, default 300 s) are skipped. The rotated data are never written to disk.
+  Output chunk files are drop-in replacements (same metadata header, same column order). Chunk filenames are composed
+  via `--chunk-name-template` (placeholders: `{stem}`, `{suffix}`, `{index}`, optional `{starttime}` requiring
+  `--start-time-regex` / `--start-time-format`). Parallel unit of work is **one chunk** — each phase dispatches all
+  chunks across all files into a `ProcessPoolExecutor` via `--n-workers` (default `os.cpu_count()`; `--n-workers 1`
+  runs sequentially in-process). With `N` workers all `N` cores stay busy even when there's just one input file: each
+  chunk worker reads only its slice from the file via `pd.read_csv(skiprows, nrows)`. The number of chunks is counted
+  **per file** (not assumed from the first file), so files longer than the first no longer lose their trailing chunks.
+  Per-phase checkpoint CSVs (`detect_and_remove_tlag_checkpoint.csv` for detect, `..._remove_checkpoint.csv` for
+  remove) are written after every chunk completes, so an interrupted run leaves a usable snapshot on disk.
+  `run(cancel_event=...)` accepts a `threading.Event` for cooperative cancellation: pending chunks are cancelled and
+  in-flight ones finish, the remove phase is skipped if cancelled during detect, and the partial summary is returned
+  (`PerFilePipeline.cancelled` reports it). Workers emit live `start`/`done` events through
+  a `multiprocessing.Manager` queue, so the main process drives a per-chunk progress bar and the description shows
+  each parallel worker's current (file, chunk) live. Every run writes a plain-text `log.txt` to the output directory
+  recording every console line (run metadata + per-chunk progress + errors + summary), saved even on exception. The
+  live display stacks one spinner/pulse row per worker plus a single overall bar with M/N count and ETA, so many
+  workers no longer overflow the terminal width. Output subfolders are numbered by pipeline phase: step-1 (detect)
+  outputs — the summary CSV, both checkpoints, and (with `--save-plots`) the plots — go in `--detect-subdir`
+  (default `1_lag_detection/`), and the step-2 (remove) lag-corrected chunk files go in `--data-subdir`
+  (default `2_lag_removed/`), so that folder can be handed straight to the next flux-processing step as its input
+  directory. The output root holds only those two numbered folders plus `log.txt` and an auto-generated `README.txt`
+  (regenerated each run) documenting the layout and pointing at the data folder as the next step's input. `log.txt`
+  is a clean plain-text record (static header, one line per completed chunk, final summary); the animated live
+  display is deliberately excluded so the log no longer fills with spinner/bar control characters. The summary CSV
+  (`detect_and_remove_tlag_summary.csv`) carries one row per chunk and mirrors `diive-tlag-pwb-batch`'s
+  `tlag_results.csv` schema: per-gas `tlag_s` / `hdi_lo_s` / `hdi_hi_s` / `hdi_range_s` / `is_reliable` / `tlag_pw_s` /
+  `corr_pw` / `cov_pwb` / `ar_order` / `best_combination`, plus the PWBOPT post-processing columns `pwbopt_s_std` /
+  `flag_std` / `pwbopt_s_pf` / `flag_pf` / `tlag_final_s` / `tlag_final_pf_s` (paper Section 2.3, thresholds via
+  `--hdi-thresh` / `--dev-thresh` / `--hdi-prefilter`). When `--save-plots` is set, the per-chunk 3-panel PWB
+  diagnostics land in `<output-dir>/<detect-subdir>/plots/`, while the batch-level overviews go in a separate
+  `<output-dir>/<detect-subdir>/plots_summary/`: one `summary_<gas>.png` per scalar (the same 5-panel overview
+  `PwbBatchDetection.plot_summary` produces — detected lags coloured by S1/S2/S3, gap-filled lags, HDI bars with
+  threshold lines, per-period flag bars for standard vs pre-filtered PWBOPT, histogram of detected lags) plus
+  `summary_lag_comparison.png`, the cross-scalar scatter+KDE comparison from `PwboptLagPlot`. The chunk summary CSV
+  includes a `timestamp` column (chunk start in ISO format) when `--start-time-regex` is provided, which the overview
+  plot uses as the x-axis. CLI: `diive-tlag-pwb-detect-remove`. Downstream flux software must run with EC time-lag
+  maximization disabled.
+- **`DetectRemoveTUI`** — a [Textual](https://textual.textualize.io/) TUI front-end for
+  `diive-tlag-pwb-detect-remove` (`diive.flux.hires.detect_and_remove_tlag_tui`; CLI:
+  `diive-tlag-pwb-detect-remove-tui`). Two-column, soft modern palette: a **labelled** settings form on the left
+  (paths, wind/sonic columns, scalars, PWB/chunk params, workers, save-plots) and a live console on the right —
+  an overall progress bar, **a row per busy worker showing the file·chunk it is *currently* processing prefixed by an
+  animated spinner** (appears the instant a worker starts a chunk, so in-flight work is visible, not only finished
+  chunks; when the chunk finishes its result line lands in the log), and a `RichLog` into which `PerFilePipeline`
+  (run in a worker thread) streams its Rich-styled per-chunk output (same HDI colour coding as the CLI). Each log
+  line shows the **source (6 h) file** the chunk came from, then the chunk: `parent › chunk  CH4=… HDI=…` (the CLI
+  per-chunk log does the same), so every result is traceable to its input file. The lag-removal phase is labelled
+  **"align"** in the live display (TUI and CLI) — the time *lag* is removed by aligning the scalar to the wind
+  (the paper's "temporal alignment"), so the label can't be misread as deleting a file. **Settings persist** in
+  `~/.diive/detect_remove_tui.yaml`:
+  loaded on start and saved on *Run* or via the *Save* button, so columns/paths/params are entered only once.
+  `--demo` runs a synthetic two-phase pipeline that needs no input data, purely to preview the interface; example:
+  `examples/flux/hires/flux_detect_remove_tui_demo.py`. Requires the `textual` dependency (now a runtime dep; a `tui`
+  extra is also provided). The form also exposes the raw-file format (skip-rows, extra header rows, separator, file
+  glob) and the chunk-naming rule (start-time regex/format + filename template) so each 30-min output chunk is named
+  by its own start time (e.g. `CH-CHA_{starttime}{suffix}` -> `CH-CHA_202107271300.csv`, `..._202107271330.csv`, …).
+  Path fields accept drag-and-drop of a folder (or a file -> its parent) and have a ✕ clear button; the console
+  prefixes each line with a wall-clock time and a *Copy log* button / `c` key copies the whole buffer to the
+  clipboard. The summary CSV and (with *Save plots*) the batch overview figures are now written by
+  `PerFilePipeline.run()` itself, so the TUI and bare-Python callers produce the same result files as the CLI.
+  The TUI form now covers **all** CLI options (PWBOPT thresholds, lag-column template, NA values/rep, line terminator,
+  output subfolder names, random seed, strict mode) and every field has a hover tooltip + focus help line explaining
+  what it does. Run controls: **Check** (preflight — counts matching files, reads the first file's header, verifies
+  every configured column exists, reports the chunk plan + first output filename, all in under a second so
+  misconfigurations are caught before a long run), **Stop** (aborts a running pipeline via a cancel hook in
+  `PerFilePipeline.run(cancel_event=...)` — pending chunks are cancelled, in-flight ones finish, the partial summary
+  is written), and **Open** (opens the output folder in the OS file manager when a run finishes). The settings form is
+  greyed out while a run is in progress, and a post-run **summary** block (aligned/skipped/errors counts, % reliable
+  (S1) and median lag per gas) is appended to the log. Column entry is assisted: a **▾ picker** beside each
+  wind/sonic column (and the scalars field) scans the first input file's header and lets you select the exact
+  (bracketed) column name from a list instead of typing it; **Check** also lists every column it found. **Run**
+  auto-preflights (files match + all configured columns present) and aborts with a clear message instead of failing
+  mid-run, warns when the output folder already holds files that would be overwritten, and numeric/regex fields are
+  validated live (invalid entries turn red). Defaults: random seed 42 (reproducible; clear for a random run) and chunk naming pre-filled for the
+  common 12-digit `YYYYMMDDHHMM` filenames. Input/output paths are validated before a run — a non-existent input
+  folder, an unwritable output path, or a path field accidentally doubled by a drag-and-drop (some terminals *type*
+  a dropped path, appending it to existing text) now raises a clear, actionable message instead of a cryptic
+  `OSError: WinError 123`.
+- **Output line endings preserved.** `detect_and_remove_tlag` now writes each lag-corrected file with the **same line
+  terminator as its input** (`--lineterm auto`, the new default): CRLF for typical Windows EC logger files, LF for
+  Unix — so the output is a true drop-in replacement. The preserved metadata/header lines are normalised to that same
+  terminator (no mixed CRLF/LF). Force a specific ending with `--lineterm "\r\n"` or `--lineterm "\n"`.
 - **`reynolds_decomposition()`** — standalone `x' = x - mean(x)`; exported as `dv.flux.reynolds_decomposition`.
 - **`WindDoubleRotation`** (renamed from `WindRotation2D`) — scalar `c` removed; Reynolds decomposition is now a
   separate explicit step. Rotation angles use `atan2` (fixes `ZeroDivisionError` and wrong-quadrant results when
   `u_mean <= 0`).
+- **`UstarMovingPointDetection`** — ONEFlux moving-point USTAR detection (Papale et al. 2006). Constants match the
+  ONEFlux `ustar_mp` source (correlation cutoff 0.5, first-class gate 0.2, 7 TA / 20 USTAR classes, forward window 10).
+  New `forward_mode_n` parameter selects the forward-mode order; default `2` (Fw2) matches the ONEFlux and REddyProc
+  defaults — pass `forward_mode_n=1` for the looser Fw1, which never yields a higher threshold.
 - **`UstarVekuriThresholdDetection`** — quantile-based USTAR detection; simpler alternative to the ONEFlux moving-point
   method.
 - **`UstarBootstrapThresholds`** — multi-year bootstrap wrapper for any USTAR detection method; returns per-year
@@ -217,6 +335,10 @@
   by gradient boosting trained on SW_IN_POT and timestamp features.
 - **`FeatureEngineer`** — standalone 8-stage feature engineering pipeline (lag, rolling, diff, EMA, poly, STL,
   timestamps, record number); pre-engineer once and reuse across models.
+- **`TimeSeries.plot_rangetool()`** — interactive Bokeh plot with a linked RangeTool overview for navigating long
+  series (detail panel + draggable full-series selector). `TimeSeries` also keeps gaps visible by default
+  (`drop_gaps=False`), adopts the Material Design palette, and `plot()` gained `linewidth`/`alpha`/`marker` and
+  returns the axes. Example: `examples/visualization/plot_timeseries_rangetool.py`.
 
 ### Refactoring
 
@@ -242,6 +364,15 @@
 - **`calc_vpd_from_ta_rh`** now exported from `diive.pkgs.features.variables`.
 - **`SortingBinsMethod`** alias added for `StratifiedAnalysis` (backward compatibility).
 - **Import path fixes** — corrected 7 misrouted exports in `__init__.py` files.
+- **`PerFilePipeline`: PWBOPT carry-forward now ordered by time, not just filename.** The S2/S3 carry-forward inherits
+  the *preceding* optimal lag, so it requires a chronological file sequence. `run()` now sorts input files by their
+  parsed start time when `--start-time-regex` is given, and warns when it is not (carry-forward then relies on the
+  filename sort, which is only chronological if names sort that way) — closing a silent path where a wrong file order
+  fed the wrong neighbour's lag into an unreliable chunk's removal (`diive-tlag-pwb-detect-remove`).
+- **`PerFilePipeline`: chunk-filename collisions now raised up front.** A `--chunk-name-template` lacking `{stem}` (or a
+  unique `{starttime}`) collapses every file's `chunk<i>` to the same output name, silently overwriting earlier files'
+  chunks in phase 2. `run()` now validates that every `(file, chunk)` maps to a distinct filename and raises a clear
+  `ValueError` before detection starts (also surfacing template/regex errors early instead of as one error row per chunk).
 - All 63 active tests pass.
 
 ### Console Output
@@ -255,6 +386,21 @@
 
 ### Analysis
 
+- **`DriverAnalysis` (EXPERIMENTAL)** — evidence-triangulation driver attribution for flux time series,
+  organized by epistemic level (association → temporal prediction → causation) and led by a
+  convergence/divergence summary across methods.  Layer 1 (association): SHAP importance vs a `.RANDOM`
+  benchmark and correlation-robust ALE response curves (1D + 2D, implemented from scratch — no new
+  dependency).  Layer 2 (temporal): lagged importance (response-timescale fingerprint), scale-resolved
+  importance (STL components and ½-hourly/daily/monthly aggregations), and regime-stratified importance —
+  all reusing existing diive infrastructure.  Layer 3 (opt-in causal): a deseasonalized `GrangerCausality`
+  sanity check, plus PCMCI(+) and CATE behind the optional `diive[causal]` extra (lazy-imported).  All
+  train/test splits are time-aware (no shuffling) and model scores are held-out; SHAP/ALE are never
+  presented as causal.  Also exposes the standalone, dependency-free `accumulated_local_effects` /
+  `accumulated_local_effects_2d` helpers and an `AleCurve` with two-phase plotting.  **Provisional:** lives
+  in the `dv.analysis.experimental` subnamespace (NOT the stable `dv.analysis` API) and emits a one-time
+  `ExperimentalWarning` on instantiation — the API and convergence-table schema may change without a
+  deprecation cycle.  Access via `dv.analysis.experimental.DriverAnalysis`; see
+  `examples/analysis/analysis_driveranalysis.py`.
 - **`GapStats`** — extended gap analysis wrapping `GapFinder` via composition.  Adds monthly and annual
   breakdowns, explicit long-gap listing, a Rich console report (`.report()`), and a four-panel figure
   (availability heatmap, gap-spike timeline, monthly polar chart, gap-length histogram).  Available as

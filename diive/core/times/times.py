@@ -61,8 +61,6 @@ class TimestampSanitizer:
 
     Warnings
     --------
-    - **Data modification**: Input data is modified in place. Use ``data.copy()``
-      before passing to TimestampSanitizer if you need the original data.
     - **Regularization side effect**: When regularize=True, gaps are filled with
       NaN data rows. This may increase the number of rows significantly.
     - **No rollback**: If processing fails mid-pipeline, data is partially
@@ -401,7 +399,10 @@ class DetectFrequency:
             freq_progressive = to_offset(pd.Timedelta(freq_progressive)).freqstr
 
         list_of_found_freqs = [freq_full, freq_timedelta, freq_progressive]
-        if all(i == list_of_found_freqs[0] for i in list_of_found_freqs):
+        # The all-agree branch must exclude the all-None case: three Nones are
+        # "equal", so without this guard undetectable frequencies would silently
+        # fall through here instead of reaching the RuntimeError below.
+        if list_of_found_freqs[0] is not None and all(i == list_of_found_freqs[0] for i in list_of_found_freqs):
             # if all(f for f in [freq_full, freq_timedelta, freq_progressive]):
 
             # List of {Set of detected freqs}
@@ -1381,7 +1382,7 @@ def timestamp_infer_freq_from_timedelta(timestamp_ix: pd.DatetimeIndex) -> tuple
     most_frequent_delta_counts = detected_deltas[
         most_frequent_delta]  # Number of occurrences for most frequent delta
     most_frequent_delta_perc = most_frequent_delta_counts / n_rows  # Fraction
-    # Check whether the most frequent delta appears in >99% of all data rows
+    # Check whether the most frequent delta appears in >50% of all data rows
     if most_frequent_delta_perc > 0.50:
         inferred_freq = to_offset(most_frequent_delta)
         inferred_freq = inferred_freq.freqstr

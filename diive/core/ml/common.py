@@ -76,20 +76,11 @@ class MlRegressorGapFillingBase:
                 observed data.
                 - None (default): no treatment, keep predictions as-is.
                 - 'zero': clip negative predictions to 0.
-                - 'nan': set negative predictions to NaN (treated as unfillable).
 
             **kwargs:
                 Regressor-specific hyperparameters passed to the sklearn regressor.
                 For RandomForestRegressor: n_estimators, max_depth, min_samples_split, etc.
                 For XGBRegressor: n_estimators, max_depth, learning_rate, early_stopping_rounds, etc.
-                Effect on Data: De-trends data (removes level); DIFF1 makes I(1) series I(0);
-                DIFF2 captures acceleration (useful for curvature). Emphasizes transitions.
-                Advantages: Captures change velocity essential for forecasting turning points;
-                computationally trivial; no NaN inflation.
-                Disadvantages: Loses level information (absolute value); amplifies noise
-                (high-frequency components); DIFF2 extremely noisy unless data is smooth.
-                Example: features_diff=[1, 2] creates 1st and 2nd order differences.
-                Column naming: '.{col}_DIFF{order}' (e.g., '.Tair_f_DIFF1', '.Tair_f_DIFF2').
 
         Attributes:
             model_: Trained regressor instance.
@@ -105,11 +96,11 @@ class MlRegressorGapFillingBase:
             timestamps, record number).
 
         See Also:
-            diive.pkgs.gapfilling.randomforest_ts.RandomForestTS — Random Forest subclass
-            diive.pkgs.gapfilling.xgboost_ts.XGBoostTS — XGBoost subclass
-            examples/gap_filling/randomforest_ts.py — Random Forest gap-filling with feature engineering
-            examples/gap_filling/xgboost_ts.py — XGBoost gap-filling with feature engineering
-            examples/gap_filling/comparison.py — Multi-method comparison
+            diive.gapfilling.randomforest_ts.RandomForestTS — Random Forest subclass
+            diive.gapfilling.xgboost_ts.XGBoostTS — XGBoost subclass
+            examples/gapfilling/gapfill_randomforest.py — Random Forest gap-filling with feature engineering
+            examples/gapfilling/gapfill_xgboost.py — XGBoost gap-filling with feature engineering
+            examples/gapfilling/gapfill_comparison.py — Multi-method comparison
         """
 
         # Store arguments
@@ -120,7 +111,7 @@ class MlRegressorGapFillingBase:
         self.verbose = verbose
         self.kwargs = kwargs
 
-        _valid_below_zero = (None, 'zero', 'nan')
+        _valid_below_zero = (None, 'zero')
         if below_zero not in _valid_below_zero:
             raise ValueError(f"below_zero must be one of {_valid_below_zero}, got '{below_zero}'")
         self.below_zero = below_zero
@@ -202,7 +193,7 @@ class MlRegressorGapFillingBase:
 
     @property
     def model_(self):
-        """Return model, trained on test data"""
+        """Return the model (trained on the training set)."""
         if not self._model:
             raise Exception(f'Not available: model.')
         return self._model
@@ -232,7 +223,10 @@ class MlRegressorGapFillingBase:
 
     @property
     def scores_(self) -> dict:
-        """Return model scores for model used in gap-filling"""
+        """In-sample scores of the gap-filling model: the final model predicting on
+        ALL complete rows, including the rows it was trained on, so these are
+        optimistically biased. For an honest generalization estimate use
+        scores_traintest_ (computed on the held-out test set)."""
         if not self._scores:
             raise Exception(f'Not available: model scores for gap-filling.')
         return self._scores
@@ -319,13 +313,28 @@ class MlRegressorGapFillingBase:
 
         return accepted_cols
 
-    @staticmethod
-    def _fitmodel(model, X_train, y_train, X_test, y_test):
-        """Fit model."""
+    def _fitmodel(self, model, X_train, y_train, X_test, y_test):
+        """Fit model.
+
+        For XGBoost, ``early_stopping_rounds`` monitors the LAST ``eval_set``
+        entry, so that entry must be a genuine hold-out. The feature-reduction
+        and fallback paths call this with the training data itself as the eval
+        set (``X_test is X_train``); left as-is, early stopping would only ever
+        see training loss — which keeps falling as trees are added — so it would
+        never trigger and the model would overfit. In that case, carve out a
+        small validation split so early stopping watches unseen data. When early
+        stopping is not configured, behaviour is unchanged.
+        """
         if isinstance(model, RandomForestRegressor):
             model.fit(X=X_train, y=y_train)
         elif isinstance(model, XGBRegressor):
-            model.fit(X=X_train, y=y_train, eval_set=[(X_train, y_train), (X_test, y_test)])
+            if getattr(model, 'early_stopping_rounds', None) and X_test is X_train:
+                X_tr, X_val, y_tr, y_val = train_test_split(
+                    X_train, y_train, test_size=0.1,
+                    random_state=self._random_state, shuffle=True)
+                model.fit(X=X_tr, y=y_tr, eval_set=[(X_tr, y_tr), (X_val, y_val)])
+            else:
+                model.fit(X=X_train, y=y_train, eval_set=[(X_train, y_train), (X_test, y_test)])
         return model
 
     def run(self, **kwargs):
@@ -636,7 +645,8 @@ class MlRegressorGapFillingBase:
             f"- estimator:  {model}\n"
             f"- parameters:  {model.get_params()}\n"
             f"\n"
-            f"## MODEL SCORES\n"
+            f"## MODEL SCORES (in-sample: predicted on ALL data incl. training rows; "
+            f"optimistically biased)\n"
             f"- MAE:   {scores['mae']} (mean absolute error)\n"
             f"- MedAE: {scores['medae']} (median absolute error)\n"
             f"- MSE:   {scores['mse']} (mean squared error)\n"
@@ -646,6 +656,73 @@ class MlRegressorGapFillingBase:
             f"- R2:    {scores['r2']}\n"
         )
 
+        # Held-out scores from the train/test split are the honest generalization
+        # estimate; surface them alongside the (biased) in-sample scores above.
+        if self._scores_traintest:
+            scores_tt = self._scores_traintest
+            _console.print(
+                f"## MODEL SCORES (out-of-sample: held-out test set, {test_size_perc:.1f}%; "
+                f"generalization estimate)\n"
+                f"- MAE:   {scores_tt['mae']} (mean absolute error)\n"
+                f"- MedAE: {scores_tt['medae']} (median absolute error)\n"
+                f"- MSE:   {scores_tt['mse']} (mean squared error)\n"
+                f"- RMSE:  {scores_tt['rmse']} (root mean squared error)\n"
+                f"- MAXE:  {scores_tt['maxe']} (max error)\n"
+                f"- MAPE:  {scores_tt['mape']:.3f} (mean absolute percentage error)\n"
+                f"- R2:    {scores_tt['r2']}\n"
+            )
+
+    @staticmethod
+    def _build_tree_explainer(model):
+        """Build a shap TreeExplainer, scoping the XGBoost base_score parse
+        workaround to shap's own module namespace (see _shap_importance)."""
+        try:
+            from shap.explainers import _tree as _shap_tree
+        except ImportError:
+            # Unexpected shap layout: fall back to the native path.
+            return shap.TreeExplainer(model)
+
+        _real_float = _shap_tree.__dict__.get('float', float)
+        _real_ast = getattr(_shap_tree, 'ast', None)
+
+        def _patched_float(x):
+            """Strip XGBoost's enclosing brackets, e.g. '[-4.12E0]' -> -4.12."""
+            if isinstance(x, str):
+                stripped = x.strip('[]')
+                if stripped != x:
+                    return _real_float(stripped)
+            return _real_float(x)
+
+        class _AstShim:
+            """Delegates to the real ast, but strips XGBoost's brackets first."""
+
+            def literal_eval(self, s):
+                if isinstance(s, str):
+                    stripped = s.strip()
+                    if stripped.startswith('[') and stripped.endswith(']'):
+                        try:
+                            return [float(stripped[1:-1].strip())]
+                        except ValueError:
+                            pass
+                return _real_ast.literal_eval(s)
+
+            def __getattr__(self, name):
+                return getattr(_real_ast, name)
+
+        had_float = 'float' in _shap_tree.__dict__
+        _shap_tree.float = _patched_float
+        if _real_ast is not None:
+            _shap_tree.ast = _AstShim()
+        try:
+            return shap.TreeExplainer(model)
+        finally:
+            if had_float:
+                _shap_tree.float = _real_float
+            else:
+                del _shap_tree.float
+            if _real_ast is not None:
+                _shap_tree.ast = _real_ast
+
     def _shap_importance(self, model, X, X_names) -> DataFrame:
         """
         Calculate SHAP-based feature importance.
@@ -654,48 +731,17 @@ class MlRegressorGapFillingBase:
         Returns mean absolute SHAP values as feature importance.
         """
 
-        # Create explainer and calculate SHAP values
-        # XGBoost stores base_score internally as '[-3.18E0]' (bracket-enclosed scientific
-        # notation). Older shap versions parsed this via float(), newer ones use
-        # ast.literal_eval(). Python 3.13 tightened ast.literal_eval and rejects this
-        # format. Patch both entry points so the explainer initialises cleanly regardless
-        # of the shap/Python version combination in use.
-        import ast
-        import builtins
-
-        _builtin_float = float
-
-        def _patched_float(x):
-            """Handle bracket-enclosed scientific notation like '[-4.121306E0]'."""
-            if isinstance(x, str):
-                x_stripped = x.strip('[]')
-                if x_stripped != x:
-                    return _builtin_float(x_stripped)
-            return _builtin_float(x)
-
-        _original_literal_eval = ast.literal_eval
-
-        def _patched_literal_eval(s):
-            """Handle bracket-enclosed scientific notation that Python 3.13 rejects."""
-            if isinstance(s, str):
-                stripped = s.strip()
-                if stripped.startswith('[') and stripped.endswith(']'):
-                    inner = stripped[1:-1].strip()
-                    try:
-                        return [float(inner)]
-                    except ValueError:
-                        pass
-            return _original_literal_eval(s)
-
-        builtins.float = _patched_float
-        ast.literal_eval = _patched_literal_eval
-
-        try:
-            explainer = shap.TreeExplainer(model)
-        finally:
-            builtins.float = _builtin_float
-            ast.literal_eval = _original_literal_eval
-
+        # Create explainer and calculate SHAP values.
+        # XGBoost serializes base_score as bracket-enclosed scientific notation
+        # (e.g. '[-3.18E0]'). Depending on the shap/Python combination, shap's tree
+        # loader parses this via builtins float() (older shap, which a bare '[..]'
+        # string breaks) or via ast.literal_eval() (newer shap, which Python 3.13
+        # tightened). We override these ONLY inside shap's tree-explainer module
+        # namespace — never process-global builtins.float / ast — so concurrent
+        # threads (e.g. joblib parallel gap-filling) are unaffected. This works
+        # because a bare float() call inside shap resolves against that module's
+        # globals before falling back to builtins.
+        explainer = self._build_tree_explainer(model)
         shap_values = explainer.shap_values(X)
 
         # Handle case where shap_values is a list (for some model types)
@@ -742,7 +788,7 @@ class MlRegressorGapFillingBase:
                             f"only one single column : {self.model_df.columns}")
 
     def _apply_below_zero_treatment(self, predictions: np.ndarray) -> np.ndarray:
-        """Clip or nullify negative predictions for physically non-negative variables.
+        """Clip negative predictions to 0 for physically non-negative variables.
 
         Applied only when below_zero is set. Has no effect on observed data.
         """
@@ -752,14 +798,10 @@ class MlRegressorGapFillingBase:
         neg_locs = predictions < 0
         if neg_locs.any():
             n_neg = int(neg_locs.sum())
-            if self.below_zero == 'zero':
-                predictions[neg_locs] = 0.0
-                detail(f"below_zero='zero': clipped {n_neg} negative prediction(s) to 0.",
-                       verbose=self.verbose)
-            elif self.below_zero == 'nan':
-                predictions[neg_locs] = np.nan
-                detail(f"below_zero='nan': set {n_neg} negative prediction(s) to NaN.",
-                       verbose=self.verbose)
+            # below_zero == 'zero'
+            predictions[neg_locs] = 0.0
+            detail(f"below_zero='zero': clipped {n_neg} negative prediction(s) to 0.",
+                   verbose=self.verbose)
         return predictions
 
     def _fillgaps_fullmodel(self, showplot_scores, showplot_importance):
@@ -828,41 +870,39 @@ class MlRegressorGapFillingBase:
         detail("Collecting results for final model ...", verbose=self.verbose)
         self._define_cols()
 
-        # Collect predictions in dataframe
-        self._gapfilling_df = pd.DataFrame(data={self.pred_fullmodel_col: pred_y}, index=features_df.index)
-
-        # Add target to dataframe
+        # Collect results on the FULL timestamp (df.index), NOT only the rows
+        # where all features are available. This is critical for data integrity:
+        # a target value that is OBSERVED at a row where some feature is missing
+        # (e.g. a driver gap that does not coincide with the target gap) must be
+        # preserved as observed — never dropped and re-filled by the fallback.
+        # Full-model predictions exist only where all features are available;
+        # they are aligned to the full index (NaN elsewhere).
+        self._gapfilling_df = pd.DataFrame(index=df.index)
         self._gapfilling_df[self.target_col] = df[self.target_col].copy()
+        self._gapfilling_df[self.pred_fullmodel_col] = pd.Series(data=pred_y, index=features_df.index)
 
-        # Gap locations
-        # Make column that contains predicted values
-        # for rows where target is missing
-        _gap_locs = self._gapfilling_df[self.target_col].isnull()  # Locations where target is missing
+        # Gap locations: where the observed target is missing
+        _gap_locs = self._gapfilling_df[self.target_col].isnull()
+        # Full-model predictions at the gap locations (NaN where the model could
+        # not predict because a feature was missing there).
         self._gapfilling_df[self.pred_gaps_col] = self._gapfilling_df.loc[
             _gap_locs, self.pred_fullmodel_col]
 
-        # Flag
-        # Make flag column that indicates where predictions for
-        # missing targets are available, where 0=observed, 1=gapfilled
-        # todo Note that missing predicted gaps = 0. change?
-        _gapfilled_locs = self._gapfilling_df[self.pred_gaps_col].isnull()  # Non-gapfilled locations
-        _gapfilled_locs = ~_gapfilled_locs  # Inverse for gapfilled locations
-        self._gapfilling_df[self.target_gapfilled_flag_col] = _gapfilled_locs
-        self._gapfilling_df[self.target_gapfilled_flag_col] = self._gapfilling_df[
-            self.target_gapfilled_flag_col].astype(
-            int)
-
-        # Gap-filled time series
-        # Fill missing records in target with predicions
-        n_missing = self._gapfilling_df[self.target_col].isnull().sum()
+        # Gap-filled series: keep every observed value, fill gaps with the full
+        # model where it could predict. fillna never overwrites observed values.
+        n_missing = int(_gap_locs.sum())
         info(f"Filling {n_missing} missing records in {self.target_gapfilled_col} ...",
              verbose=self.verbose)
         self._gapfilling_df[self.target_gapfilled_col] = \
             self._gapfilling_df[self.target_col].fillna(self._gapfilling_df[self.pred_fullmodel_col])
 
-        # Restore original full timestamp
-        detail("Restoring original timestamp in results ...", verbose=self.verbose)
-        self._gapfilling_df = self._gapfilling_df.reindex(df.index)
+        # Flag: 0 = observed, 1 = gap-filled by the full model. Records still
+        # missing here (target gap AND no full-model prediction) keep flag 0 for
+        # now and are set to 2 by the fallback in _fillgaps_fallback.
+        flag = pd.Series(0, index=df.index, dtype=int)
+        _filled_by_model = _gap_locs & self._gapfilling_df[self.pred_fullmodel_col].notna()
+        flag[_filled_by_model] = 1
+        self._gapfilling_df[self.target_gapfilled_flag_col] = flag
 
         # SHAP values
         # https://pypi.org/project/shap/
@@ -895,7 +935,10 @@ class MlRegressorGapFillingBase:
             self._gapfilling_df[self.target_gapfilled_col] = \
                 self._gapfilling_df[self.target_gapfilled_col].fillna(fallback_series)
 
-            self._gapfilling_df.loc[_still_missing_locs, self.target_gapfilled_flag_col] = 2  # Adjust flag, 2=fallback
+            # The fallback is the last-resort fill and leaves no gaps (its
+            # predictions are always finite; below_zero only clips to 0, never
+            # to NaN), so every still-missing record is now filled.
+            self._gapfilling_df.loc[_still_missing_locs, self.target_gapfilled_flag_col] = 2  # 2=fallback
         else:
             detail("Fallback model not needed — all gaps already filled.", verbose=self.verbose)
             self._gapfilling_df[self.pred_fallback_col] = None

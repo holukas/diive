@@ -1,307 +1,4 @@
 import unittest
-import pytest
-
-
-@pytest.mark.skip(reason="Old monolithic FluxProcessingChain class was removed. Use composable API instead.")
-class TestFluxProcessingChain(unittest.TestCase):
-
-    def test_fluxprocessingchain(self):
-        from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
-        from diive.flux.fluxprocessingchain import FluxProcessingChain
-        df, meta = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
-
-        # Meteo variables have 1 missing value, fill
-        # Used as features during gap-filling, should be gapless
-        df['TA_1_1_1'] = df['TA_1_1_1'].bfill()
-        df['TA_1_1_1'].isnull().sum()
-        df['SW_IN_1_1_1'] = df['SW_IN_1_1_1'].bfill()
-        df['SW_IN_1_1_1'].isnull().sum()
-        df['VPD_EP'] = df['VPD_EP'].bfill()
-        df['VPD_EP'].isnull().sum()
-
-        # Flux processing chain settings
-        FLUXVAR = "FC"
-        SITE_LAT = 46.583056  # CH-AWS
-        SITE_LON = 9.790639  # CH-AWS
-        UTC_OFFSET = 1
-        NIGHTTIME_THRESHOLD = 20  # Threshold for potential radiation in W m-2, conditions below threshold are nighttime
-        DAYTIME_ACCEPT_QCF_BELOW = 2
-        NIGHTTIMETIME_ACCEPT_QCF_BELOW = 2
-
-        fpc = FluxProcessingChain(
-            df=df,
-            fluxcol=FLUXVAR,
-            site_lat=SITE_LAT,
-            site_lon=SITE_LON,
-            utc_offset=UTC_OFFSET,
-            nighttime_threshold=NIGHTTIME_THRESHOLD,
-            daytime_accept_qcf_below=DAYTIME_ACCEPT_QCF_BELOW,
-            nighttime_accept_qcf_below=NIGHTTIMETIME_ACCEPT_QCF_BELOW
-        )
-        self.assertEqual(len(fpc.fpc_df.columns), 5)
-
-        # --------------------
-        # Level-2
-        # --------------------
-        TEST_SSITC = True  # Default True
-        TEST_SSITC_SETFLAG_TIMEPERIOD = None
-        TEST_GAS_COMPLETENESS = True  # Default True
-        TEST_SPECTRAL_CORRECTION_FACTOR = True  # Default True
-        TEST_SIGNAL_STRENGTH = True
-        TEST_SIGNAL_STRENGTH_COL = 'CUSTOM_SIGNAL_STRENGTH_IRGA72_MEAN'
-        TEST_SIGNAL_STRENGTH_METHOD = 'discard below'
-        TEST_SIGNAL_STRENGTH_THRESHOLD = 60
-        TEST_RAWDATA = True  # Default True
-        TEST_RAWDATA_SPIKES = True  # Default True
-        TEST_RAWDATA_AMPLITUDE = False  # Default True
-        TEST_RAWDATA_DROPOUT = True  # Default True
-        TEST_RAWDATA_ABSLIM = False  # Default False
-        TEST_RAWDATA_SKEWKURT_HF = False  # Default False
-        TEST_RAWDATA_SKEWKURT_SF = False  # Default False
-        TEST_RAWDATA_DISCONT_HF = False  # Default False
-        TEST_RAWDATA_DISCONT_SF = False  # Default False
-        TEST_RAWDATA_ANGLE_OF_ATTACK = True  # Default False
-        TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES = [['2023-07-01', '2023-09-01']]  # Default False
-        # TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES = False  # Default False
-        TEST_RAWDATA_STEADINESS_OF_HORIZONTAL_WIND = False  # Default False
-
-        LEVEL2_SETTINGS = {
-            'signal_strength': {
-                'apply': TEST_SIGNAL_STRENGTH,
-                'signal_strength_col': TEST_SIGNAL_STRENGTH_COL,
-                'method': TEST_SIGNAL_STRENGTH_METHOD,
-                'threshold': TEST_SIGNAL_STRENGTH_THRESHOLD},
-            'raw_data_screening_vm97': {
-                'apply': TEST_RAWDATA,
-                'spikes': TEST_RAWDATA_SPIKES,
-                'amplitude': TEST_RAWDATA_AMPLITUDE,
-                'dropout': TEST_RAWDATA_DROPOUT,
-                'abslim': TEST_RAWDATA_ABSLIM,
-                'skewkurt_hf': TEST_RAWDATA_SKEWKURT_HF,
-                'skewkurt_sf': TEST_RAWDATA_SKEWKURT_SF,
-                'discont_hf': TEST_RAWDATA_DISCONT_HF,
-                'discont_sf': TEST_RAWDATA_DISCONT_SF},
-            'ssitc': {
-                'apply': TEST_SSITC,
-                'setflag_timeperiod': TEST_SSITC_SETFLAG_TIMEPERIOD},
-            'gas_completeness': {
-                'apply': TEST_GAS_COMPLETENESS},
-            'spectral_correction_factor': {
-                'apply': TEST_SPECTRAL_CORRECTION_FACTOR},
-            'angle_of_attack': {
-                'apply': TEST_RAWDATA_ANGLE_OF_ATTACK,
-                'application_dates': TEST_RAWDATA_ANGLE_OF_ATTACK_APPLICATION_DATES},
-            'steadiness_of_horizontal_wind': {
-                'apply': TEST_RAWDATA_STEADINESS_OF_HORIZONTAL_WIND}
-        }
-        fpc.level2_quality_flag_expansion(**LEVEL2_SETTINGS)
-        fpc.finalize_level2()
-        from diive.flux.fluxprocessingchain.level2_qualityflags import FluxQualityFlagsEddyPro
-        self.assertEqual(type(fpc.level2), FluxQualityFlagsEddyPro)
-        # fpc.level2_qcf.showplot_qcf_heatmaps()
-        # fpc.level2_qcf.report_qcf_evolution()
-        # fpc.level2_qcf.report_qcf_flags()
-        # fpc.level2.results
-        # fpc.fpc_df
-        # fpc.filteredseries
-        # [x for x in fpc.fpc_df.columns if 'L2' in x]
-        # print(fpc.fpc_df)
-
-        res = fpc.level2.results
-        self.assertEqual(len(res.columns), 9)
-
-        flagcols = []
-        [flagcols.append(c) for c in res.columns if str(c).startswith("FLAG_") & str(c).endswith("_TEST")]
-        self.assertEqual(len(flagcols), 8)
-        self.assertEqual(res[flagcols].sum().sum(), 1797)
-
-        self.assertEqual(df[FLUXVAR].dropna().count(), 811)
-        self.assertEqual(fpc.filteredseries.dropna().count(), 778)
-        self.assertEqual(fpc.filteredseries.name, f'{FLUXVAR}_L2_QCF')
-        self.assertEqual(len(fpc.fpc_df.columns), 19)
-
-        # --------------------
-        # Level-3.1
-        # --------------------
-        fpc.level31_storage_correction(gapfill_storage_term=True)
-        fpc.finalize_level31()
-        from diive.flux.fluxprocessingchain import FluxStorageCorrectionSinglePointEddyPro
-        self.assertEqual(type(fpc.level31), FluxStorageCorrectionSinglePointEddyPro)
-        self.assertEqual(fpc.level31.gapfilled_strgcol, "SC_SINGLE_gfRMED_L3.1")
-        self.assertEqual(fpc.filteredseries.dropna().count(), 778)
-        self.assertEqual(fpc.filteredseries.name, "NEE_L3.1_QCF")
-        self.assertEqual(len(fpc.fpc_df.columns), 25)
-
-        # fpc.level31.report()
-        # fpc.level31.showplot(maxflux=50)
-        # fpc.fpc_df
-        # fpc.filteredseries
-        # fpc.level31.results
-        # [x for x in fpc.fpc_df.columns if 'L3.1' in x]
-
-        # --------------------
-        # Level-3.2
-        # --------------------
-        fpc.level32_stepwise_outlier_detection()
-        kwargs = dict(showplot=False, verbose=False)
-        fpc.level32_flag_outliers_abslim_test(
-            separate_daytime_nighttime=True,
-            daytime_minmax=[-50, 50], nighttime_minmax=[-50, 50], **kwargs)
-        fpc.level32_addflag()
-        fpc.level32_flag_outliers_hampel_test(
-            window_length=48 * 3, n_sigma_daytime=3.5, n_sigma_nighttime=3.5,
-            separate_daytime_nighttime=True, repeat=False, **kwargs)
-        fpc.level32_addflag()
-        fpc.level32_flag_manualremoval_test(
-            remove_dates=[['2022-07-01 12:15:00', '2022-07-01 13:45:00']], **kwargs)
-        fpc.level32_addflag()
-        fpc.level32_flag_outliers_zscore_test(
-            thres_zscore=4, separate_daytime_nighttime=True,
-            lat=SITE_LAT, lon=SITE_LON, utc_offset=UTC_OFFSET,
-            repeat=True, **kwargs)
-        fpc.level32_addflag()
-        fpc.level32_flag_outliers_hampel_test(
-            window_length=48 * 7, separate_daytime_nighttime=True, repeat=False, **kwargs)
-        fpc.level32_addflag()
-        fpc.level32_flag_outliers_zscore_rolling_test(
-            winsize=48 * 7, thres_zscore=5, repeat=True, **kwargs)
-        fpc.level32_addflag()
-        fpc.level32_flag_outliers_localsd_test(
-            n_sd=5, winsize=48 * 7, constant_sd=False, repeat=True, **kwargs)
-        fpc.level32_addflag()
-        fpc.level32_flag_outliers_localsd_test(
-            n_sd=3, winsize=48 * 7, constant_sd=True, repeat=True, **kwargs)
-        fpc.level32_addflag()
-        fpc.level32_flag_outliers_localsd_test(
-            n_sd=[3.5, 3], winsize=[48 * 3, 48 * 3], constant_sd=False,
-            separate_daytime_nighttime=True, repeat=False, **kwargs)
-        fpc.level32_addflag()
-        fpc.level32_flag_outliers_increments_zcore_test(thres_zscore=5, repeat=True, **kwargs)
-        fpc.level32_addflag()
-        fpc.level32_flag_outliers_lof_test(n_neighbors=48 * 7, contamination=None,
-                                           separate_daytime_nighttime=True, repeat=True, n_jobs=-1,
-                                           **kwargs)
-        fpc.level32_addflag()
-        fpc.level32_flag_outliers_lof_test(n_neighbors=100, contamination=None, repeat=False, n_jobs=-1, **kwargs)
-        fpc.level32_addflag()
-        fpc.level32_flag_outliers_zscore_test(thres_zscore=5, repeat=True, **kwargs)
-        fpc.level32_addflag()
-        fpc.level32_flag_outliers_abslim_test(minval=-50, maxval=50, **kwargs)
-        fpc.level32_addflag()
-        fpc.level32_flag_outliers_trim_low_test(trim_nighttime=True, lower_limit=-2.5, **kwargs)
-        fpc.level32_addflag()
-        fpc.finalize_level32()
-        from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
-        self.assertEqual(type(fpc.level32), StepwiseOutlierDetection)
-        self.assertEqual(len(fpc.fpc_df.columns), 46)
-        flagcols = [c for c in fpc.fpc_df.columns if str(c).startswith("FLAG_") and str(c).endswith("_TEST")]
-        self.assertEqual(len(flagcols), 23)
-
-        # --------------------
-        # Level-3.3
-        # --------------------
-        ustar_scenarios = ['CUT_16', 'CUT_50', 'CUT_84']
-        ustar_thresholds = [0.05, 0.07, 0.1]
-        fpc.level33_constant_ustar(thresholds=ustar_thresholds,
-                                   threshold_labels=ustar_scenarios,
-                                   showplot=False)
-        # Finalize: stores results for each USTAR scenario in a dict
-        fpc.finalize_level33()
-        from diive.flux.lowres.ustarthreshold import FlagMultipleConstantUstarThresholds
-        self.assertEqual(type(fpc.level33), FlagMultipleConstantUstarThresholds)
-        self.assertEqual(len(fpc.fpc_df.columns), 67)
-        flagcols = [c for c in fpc.fpc_df.columns if str(c).startswith("FLAG_") and str(c).endswith("_TEST")]
-        self.assertEqual(len(flagcols), 26)
-
-        # --------------------
-        # Level-4.1
-        # --------------------
-        FEATURES = ["TA_1_1_1", "SW_IN_1_1_1", "VPD_EP"]
-        fpc.level41_longterm_random_forest(
-            features=FEATURES,
-            sanitize_timestamp=True,
-            features_lag=[-1, -1],
-            features_lag_stepsize=1,
-            features_lag_exclude_cols=None,
-            features_rolling=None,
-            features_rolling_exclude_cols=None,
-            features_rolling_stats=None,
-            features_diff=None,
-            features_diff_exclude_cols=None,
-            features_poly_degree=None,
-            features_poly_exclude_cols=None,
-            reduce_features=False,
-            vectorize_timestamps=True,
-            add_continuous_record_number=True,
-            verbose=True,
-            n_estimators=3,
-            min_samples_split=2,
-            min_samples_leaf=1,
-            n_jobs=-1,
-            random_state=42,
-        )
-
-        fpc.level41_longterm_xgboost(
-            features=FEATURES,
-            sanitize_timestamp=True,
-            features_lag=[-1, -1],
-            features_lag_stepsize=1,
-            features_lag_exclude_cols=None,
-            features_rolling=None,
-            features_rolling_exclude_cols=None,
-            features_rolling_stats=None,
-            features_diff=None,
-            features_diff_exclude_cols=None,
-            features_poly_degree=None,
-            features_poly_exclude_cols=None,
-            reduce_features=False,
-            vectorize_timestamps=True,
-            add_continuous_record_number=True,
-            verbose=True,
-            n_estimators=3,
-            max_depth=3,
-            learning_rate=0.3,
-            early_stopping_rounds=10,
-            n_jobs=-1,
-            random_state=42,
-        )
-
-        fpc.level41_mds(
-            swin="SW_IN_1_1_1",
-            ta="TA_1_1_1",
-            vpd="VPD_EP",
-            swin_tol=[20, 50],
-            ta_tol=2.5,
-            vpd_tol=0.5,
-            avg_min_n_vals=5
-        )
-
-        # fpc.showplot_gapfilled_heatmap()
-        # fpc.showplot_gapfilled_cumulative()
-        from diive.gapfilling.longterm import LongTermGapFillingRandomForestTS, LongTermGapFillingXGBoostTS
-        from diive.gapfilling.mds import FluxMDS
-        self.assertEqual(type(fpc.level41['long_term_random_forest']['CUT_16']), LongTermGapFillingRandomForestTS)
-        self.assertEqual(type(fpc.level41['long_term_random_forest']['CUT_50']), LongTermGapFillingRandomForestTS)
-        self.assertEqual(type(fpc.level41['long_term_random_forest']['CUT_84']), LongTermGapFillingRandomForestTS)
-        self.assertEqual(type(fpc.level41['long_term_xgboost']['CUT_16']), LongTermGapFillingXGBoostTS)
-        self.assertEqual(type(fpc.level41['long_term_xgboost']['CUT_50']), LongTermGapFillingXGBoostTS)
-        self.assertEqual(type(fpc.level41['long_term_xgboost']['CUT_84']), LongTermGapFillingXGBoostTS)
-        # RF gap-filling sums vary ±10-15% due to SHAP feature selection; check ballpark only
-        self.assertGreater(fpc.level41['long_term_random_forest']['CUT_16'].gapfilled_.sum(), -1300)
-        self.assertLess(fpc.level41['long_term_random_forest']['CUT_16'].gapfilled_.sum(), -800)
-        self.assertGreater(fpc.level41['long_term_random_forest']['CUT_50'].gapfilled_.sum(), -750)
-        self.assertLess(fpc.level41['long_term_random_forest']['CUT_50'].gapfilled_.sum(), -350)
-        self.assertGreater(fpc.level41['long_term_random_forest']['CUT_84'].gapfilled_.sum(), -500)
-        self.assertLess(fpc.level41['long_term_random_forest']['CUT_84'].gapfilled_.sum(), -180)
-        self.assertEqual(type(fpc.level41['mds']['CUT_16']), FluxMDS)
-        self.assertEqual(type(fpc.level41['mds']['CUT_50']), FluxMDS)
-        self.assertEqual(type(fpc.level41['mds']['CUT_84']), FluxMDS)
-        self.assertAlmostEqual(fpc.level41['mds']['CUT_16'].get_gapfilled_target().sum(), -1372.1043138550303, places=5)
-        self.assertAlmostEqual(fpc.level41['mds']['CUT_50'].get_gapfilled_target().sum(), -1323.1231981977835, places=5)
-        self.assertAlmostEqual(fpc.level41['mds']['CUT_84'].get_gapfilled_target().sum(), -1300.4652042901628, places=5)
-        self.assertEqual(len(fpc.fpc_df.columns), 85)  # 79 (before XGB) + 6 (3 scenarios × 2 columns per scenario: flux + flag)
-        flagcols = [c for c in fpc.fpc_df.columns if str(c).startswith("FLAG_") and str(c).endswith("_TEST")]
-        self.assertEqual(len(flagcols), 26)
 
 
 class TestFluxProcessingChainComposable(unittest.TestCase):
@@ -429,6 +126,44 @@ class TestFluxProcessingChainComposable(unittest.TestCase):
         # run_level41_mds without run_level33
         with self.assertRaises(RuntimeError):
             run_level41_mds(data, swin='SW_IN_1_1_1', ta='TA_1_1_1', vpd='VPD_EP')
+
+    def test_run_chain_single_call_driver(self):
+        """Smoke-test the headline single-call FLUXNET driver (run_chain + FluxConfig)."""
+        from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
+        from diive.flux.fluxprocessingchain import (
+            FluxConfig, FluxLevelData, init_flux_data, run_chain,
+        )
+        df, _ = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
+        df = df.drop(columns=[c for c in ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME') if c in df.columns])
+        df['TA_1_1_1'] = df['TA_1_1_1'].bfill()
+        df['SW_IN_1_1_1'] = df['SW_IN_1_1_1'].bfill()
+        df['VPD_kPa'] = df['VPD_EP'].bfill().multiply(0.1)  # hPa -> kPa for MDS
+
+        data = init_flux_data(df=df, fluxcol='FC',
+                              site_lat=46.583056, site_lon=9.790639, utc_offset=1)
+
+        cfg = FluxConfig(
+            fluxcol='FC',
+            ustar_thresholds=[0.1], ustar_labels=['CUT_50'],
+            outlier_sigma_daytime=5.5, outlier_sigma_nighttime=5.5,
+            level2_test_settings={'ssitc': {'apply': True, 'setflag_timeperiod': None}},
+            gapfill_rf=False, gapfill_xgb=False, gapfill_mds=True,   # MDS only (no ML training)
+            mds_swin='SW_IN_1_1_1', mds_ta='TA_1_1_1', mds_vpd='VPD_kPa',
+        )
+        out = run_chain(data, cfg)
+
+        self.assertIsInstance(out, FluxLevelData)
+        # All levels ran in order.
+        for lvl in ('L2', 'L3.1', 'L3.2', 'L3.3'):
+            self.assertIn(lvl, out.level_ids)
+        # L3.3 QCF column carries the chained-idstr provenance.
+        self.assertTrue(any('L3.3' in str(c) and str(c).endswith('_QCF')
+                            for c in out.fpc_df.columns))
+        # MDS gap-filled column is produced for the USTAR scenario.
+        gf = out.gapfilled_cols()
+        self.assertIn('mds', gf)
+        self.assertIn('CUT_50', gf['mds'])
+        self.assertIn(gf['mds']['CUT_50'], out.fpc_df.columns)
 
 
 if __name__ == '__main__':

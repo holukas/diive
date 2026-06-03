@@ -79,7 +79,7 @@ class GapFinder:
         if len(series) > 1:
             median_delta = series.index.to_series().diff().median()
             self._records_per_hour = (
-                pd.Timedelta('1H') / median_delta
+                pd.Timedelta('1h') / median_delta
                 if pd.notna(median_delta) and median_delta > pd.Timedelta(0)
                 else None
             )
@@ -107,7 +107,7 @@ class GapFinder:
         ).reset_index(drop=True)
 
         if self._records_per_hour is not None:
-            record_duration = pd.Timedelta('1H') / self._records_per_hour
+            record_duration = pd.Timedelta('1h') / self._records_per_hour
             result['GAP_DURATION'] = result['GAP_LENGTH'] * record_duration
         else:
             result['GAP_DURATION'] = pd.NaT

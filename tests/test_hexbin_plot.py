@@ -25,16 +25,15 @@ class TestHexbinPlot(unittest.TestCase):
         self.assertEqual(hb.zlabel, "NEP")
 
     def test_custom_labels(self):
-        """Test initialization with custom axis labels."""
-        hb = HexbinPlot(
-            self.x, self.y, self.z,
-            xlabel="Temperature (°C)",
-            ylabel="Water Content (%)",
-            zlabel="NEP (µmol m⁻² s⁻¹)"
-        )
-        self.assertEqual(hb.xlabel, "Temperature (°C)")
-        self.assertEqual(hb.ylabel, "Water Content (%)")
-        self.assertEqual(hb.zlabel, "NEP (µmol m⁻² s⁻¹)")
+        """Custom axis labels are passed to plot(); the constructor path is deprecated."""
+        # Canonical: labels via plot()
+        hb = HexbinPlot(self.x, self.y, self.z)
+        hb.plot(xlabel="Temperature (°C)", ylabel="Water Content (%)", zlabel="NEP (µmol m⁻² s⁻¹)")
+        # Deprecated: labels via the constructor still work but warn
+        with self.assertWarns(DeprecationWarning):
+            hb2 = HexbinPlot(self.x, self.y, self.z, xlabel="Temperature (°C)",
+                             ylabel="Water Content (%)", zlabel="NEP (µmol m⁻² s⁻¹)")
+        self.assertEqual(hb2.xlabel, "Temperature (°C)")
 
     def test_custom_gridsize(self):
         """Test initialization with custom gridsize."""
@@ -140,12 +139,9 @@ class TestHexbinPlot(unittest.TestCase):
             gridsize=15,
             reduce_C_function=np.mean,
             mincnt=2,
-            xlabel="Custom X",
-            ylabel="Custom Y",
-            zlabel="Custom Z",
         )
         try:
-            hb.plot(figsize=(10, 8))
+            hb.plot(figsize=(10, 8), xlabel="Custom X", ylabel="Custom Y", zlabel="Custom Z")
         except Exception as e:
             self.fail(f"plot() with custom params raised: {e}")
 
@@ -267,11 +263,9 @@ class TestHexbinPlotEdgeCases(unittest.TestCase):
         y = pd.Series(np.random.uniform(0, 10, 50), name="Y")
         z = pd.Series(np.random.uniform(0, 5, 50), name="Z")
 
-        hb = HexbinPlot(x, y, z, edgecolors='black')
-        self.assertEqual(hb.edgecolors, 'black')
-
+        hb = HexbinPlot(x, y, z)
         try:
-            hb.plot()
+            hb.plot(edgecolors='black')
         except Exception as e:
             self.fail(f"HexbinPlot with edgecolors='black' raised: {e}")
 

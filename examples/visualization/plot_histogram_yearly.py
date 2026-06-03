@@ -32,7 +32,7 @@ for year in years:
         continue
 
     hist = dv.plotting.HistogramPlot(
-        s=year_series,
+        series=year_series,
         method='n_bins',              # Binning method
         n_bins=15,                    # Number of bins
         ignore_fringe_bins=False      # Include edge bins
