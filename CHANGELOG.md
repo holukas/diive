@@ -327,6 +327,15 @@
 - **`calc_vpd_from_ta_rh`** now exported from `diive.pkgs.features.variables`.
 - **`SortingBinsMethod`** alias added for `StratifiedAnalysis` (backward compatibility).
 - **Import path fixes** — corrected 7 misrouted exports in `__init__.py` files.
+- **`PerFilePipeline`: PWBOPT carry-forward now ordered by time, not just filename.** The S2/S3 carry-forward inherits
+  the *preceding* optimal lag, so it requires a chronological file sequence. `run()` now sorts input files by their
+  parsed start time when `--start-time-regex` is given, and warns when it is not (carry-forward then relies on the
+  filename sort, which is only chronological if names sort that way) — closing a silent path where a wrong file order
+  fed the wrong neighbour's lag into an unreliable chunk's removal (`diive-tlag-pwb-detect-remove`).
+- **`PerFilePipeline`: chunk-filename collisions now raised up front.** A `--chunk-name-template` lacking `{stem}` (or a
+  unique `{starttime}`) collapses every file's `chunk<i>` to the same output name, silently overwriting earlier files'
+  chunks in phase 2. `run()` now validates that every `(file, chunk)` maps to a distinct filename and raises a clear
+  `ValueError` before detection starts (also surfacing template/regex errors early instead of as one error row per chunk).
 - All 63 active tests pass.
 
 ### Console Output

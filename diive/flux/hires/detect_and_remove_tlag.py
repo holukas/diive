@@ -203,6 +203,7 @@ from diive.flux.hires.lag_pwb import (  # noqa: E402
     PwbBatchDetection,
 )
 from diive.flux.hires.windrotation import WindDoubleRotation  # noqa: E402
+from diive.core.utils.console import warn  # noqa: E402
 
 # Sentinel used in the CLI parser for "whitespace separator". pandas parses
 # regex ``r'\s+'`` on read; for writing we substitute a single space.
@@ -359,6 +360,32 @@ def _chunk_filename(
             f"--chunk-name-template {name_template!r} uses placeholder {e}; "
             f"available: {sorted(fields.keys())}"
         )
+
+
+def _parse_file_start_time(
+        name: str,
+        start_time_regex: str | None,
+        start_time_format: str,
+) -> 'datetime | None':
+    """Extract a file's start timestamp from its name, or None.
+
+    Same extraction rule as ``_chunk_filename``: search ``start_time_regex``
+    in ``name``, concatenate capture groups (or take the whole match), and
+    parse with ``start_time_format``. Returns None when the regex is absent,
+    does not match, or the captured text does not parse — callers fall back to
+    filename order in that case.
+    """
+    if not start_time_regex:
+        return None
+    m = re.search(start_time_regex, name)
+    if m is None:
+        return None
+    s = (''.join(g for g in m.groups() if g is not None)
+         if m.groups() else m.group(0))
+    try:
+        return datetime.strptime(s, start_time_format)
+    except ValueError:
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -1287,6 +1314,38 @@ class PerFilePipeline:
                 f'No files matched {self.file_pattern!r} in {self.input_dir}'
             )
 
+        # PWBOPT carry-forward (S2/S3) is temporal: an unreliable chunk inherits
+        # the *preceding* optimal lag, so the file sequence must be in time
+        # order. When --start-time-regex is given, sort files by their parsed
+        # start time; otherwise the order is the filename sort above, which is
+        # only chronological if the names happen to sort that way -- warn so a
+        # wrong order cannot silently feed the wrong neighbour's lag into the
+        # carry-forward. (Single file: cross-file order is irrelevant.)
+        if len(files) > 1:
+            if self.start_time_regex:
+                parsed = [
+                    (_parse_file_start_time(
+                        f.name, self.start_time_regex, self.start_time_format), f)
+                    for f in files
+                ]
+                n_unparsed = sum(1 for t, _ in parsed if t is None)
+                if n_unparsed:
+                    warn(f"{n_unparsed}/{len(files)} input files did not yield a "
+                         f"parseable start time with --start-time-regex "
+                         f"{self.start_time_regex!r} / --start-time-format "
+                         f"{self.start_time_format!r}; those files keep filename "
+                         f"order for the PWBOPT carry-forward.")
+                files = [f for _, f in sorted(
+                    parsed,
+                    key=lambda tf: (tf[0] is None, tf[0] or datetime.max, tf[1].name))]
+            else:
+                warn("PWBOPT carry-forward order is the filename sort of "
+                     f"{self.file_pattern!r} in {self.input_dir} (no "
+                     "--start-time-regex given). If these filenames do not sort "
+                     "chronologically, pass --start-time-regex / "
+                     "--start-time-format so the S2/S3 carry-forward uses true "
+                     "time order.")
+
         self.output_dir.mkdir(parents=True, exist_ok=True)
         # Step 2 (remove) output: lag-corrected chunk files in their own
         # subfolder (clean input for the next flux-processing step).
@@ -1312,6 +1371,34 @@ class PerFilePipeline:
         # files no longer spawn phantom over-read tasks.
         file_chunk_counts = {f: self.estimate_chunks_per_file(f) for f in files}
         total_chunks = sum(file_chunk_counts.values())
+
+        # Validate that the chunk-name template maps every (file, chunk) to a
+        # distinct output filename. A template lacking {stem} (or a unique
+        # {starttime}) collapses each file's chunk<i> to the same name, so phase
+        # 2 would silently overwrite earlier files' chunks. Computing the names
+        # here also surfaces any template/regex error before the expensive
+        # phase 1 instead of as one error row per chunk.
+        seen_names: dict = {}
+        for f in files:
+            for ci in range(file_chunk_counts[f]):
+                name, _ = _chunk_filename(
+                    input_path=f,
+                    chunk_index=ci,
+                    chunk_seconds=self.chunk_seconds,
+                    name_template=self.chunk_name_template,
+                    start_time_regex=self.start_time_regex,
+                    start_time_format=self.start_time_format,
+                )
+                if name in seen_names:
+                    of, oci = seen_names[name]
+                    raise ValueError(
+                        f"--chunk-name-template {self.chunk_name_template!r} "
+                        f"produces the duplicate output filename {name!r} for "
+                        f"both {of.name} (chunk {oci}) and {f.name} (chunk "
+                        f"{ci}). Include {{stem}} or a unique {{starttime}} so "
+                        f"every chunk maps to its own file."
+                    )
+                seen_names[name] = (f, ci)
 
         # ============== PHASE 1: detect (parallel, no writes) ============
         detect_kwargs_list: list[dict] = []
