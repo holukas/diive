@@ -1677,12 +1677,33 @@ class PerFilePipeline:
                             continue
                         _handle_event(ev)
 
+                    # A worker that raised (strict mode re-raise) or died hard
+                    # (OOM, segfault, BrokenProcessPool) emits no 'done' event,
+                    # so its chunk silently vanishes from ``rows``. Collect the
+                    # future exceptions instead of swallowing them: re-raise in
+                    # strict mode, otherwise warn so the loss is visible.
+                    worker_errors = []
                     for fut in futures:
                         try:
                             fut.result()
-                        except Exception:
-                            pass
+                        except Exception as fe:
+                            worker_errors.append(fe)
+                    if worker_errors:
+                        if self.strict:
+                            raise worker_errors[0]
+                        warn(f"{phase}: {len(worker_errors)} worker process(es) "
+                             f"failed without reporting a result row "
+                             f"(first error: {type(worker_errors[0]).__name__}: "
+                             f"{worker_errors[0]}). The affected chunks were "
+                             f"NOT written.")
 
+        # Every dispatched task should produce exactly one row. A shortfall
+        # means chunks were lost (e.g. a killed worker) — surface it rather
+        # than returning a silently-incomplete summary.
+        if len(rows) < len(kwargs_list):
+            warn(f"{phase}: only {len(rows)} of {len(kwargs_list)} dispatched "
+                 f"chunks reported a result; {len(kwargs_list) - len(rows)} "
+                 f"are missing from the summary.")
         return rows
 
     def _apply_pwbopt_postprocessing(self, summary: DataFrame) -> DataFrame:

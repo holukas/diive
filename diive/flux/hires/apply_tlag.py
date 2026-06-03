@@ -213,16 +213,28 @@ def _extract_key(pattern: str | None, name: str) -> str | None:
 def _build_filename_map(input_dir: Path, file_pattern: str | None) -> dict:
     """Scan ``input_dir`` and return ``{key: Path}`` for regular files.
 
-    First match per key wins, with files visited in sorted order so the
-    mapping is deterministic across runs.
+    Files are visited in sorted order so the mapping is deterministic. A key
+    collision (two raw files extracting the same key, e.g. an over-broad
+    ``--file-key-regex`` that only captures the date) is a configuration
+    error: it would silently apply one file's lag to the other and drop a
+    file. Raise with both offending names rather than picking one silently.
     """
     name_map: dict = {}
     for f in sorted(input_dir.iterdir()):
         if not f.is_file():
             continue
         key = _extract_key(file_pattern, f.name)
-        if key is not None and key not in name_map:
-            name_map[key] = f
+        if key is None:
+            continue
+        if key in name_map:
+            raise ValueError(
+                f"--file-key-regex {file_pattern!r} maps two input files to "
+                f"the same key {key!r}: {name_map[key].name!r} and "
+                f"{f.name!r}. Tighten the regex so every raw file gets a "
+                f"unique key, otherwise one file's lag would be applied to "
+                f"the wrong file."
+            )
+        name_map[key] = f
     return name_map
 
 
@@ -476,8 +488,11 @@ class TlagApplier:
             Summary DataFrame, one row per input file, sorted to match the
             order of the results CSV.
         """
-        # Read the results CSV; require the period column.
-        results = pd.read_csv(self.results_csv)
+        # Read the results CSV; require the period column. Force the period
+        # column to string: a numeric-looking filename (e.g. "202107221100")
+        # would otherwise be inferred as int/float, breaking regex key
+        # extraction and producing a "...1100.0" path that never matches.
+        results = pd.read_csv(self.results_csv, dtype={self.period_col: str})
         if self.period_col not in results.columns:
             raise ValueError(
                 f"Results CSV missing required column {self.period_col!r}. "
@@ -510,6 +525,9 @@ class TlagApplier:
 
         worker_args: list = []
         prerows: list[dict] = []  # rows we resolve here (e.g. lookup failures)
+        # Guard against two results rows resolving to the same output file:
+        # each would overwrite the other with a different lag, silently.
+        seen_outputs: dict = {}
         for _, row in results.iterrows():
             period_name = row[self.period_col]
             if use_keymap:
@@ -530,6 +548,17 @@ class TlagApplier:
             else:
                 input_path = self.input_dir / period_name
                 output_path = self.output_dir / period_name
+
+            out_key = str(output_path)
+            if out_key in seen_outputs:
+                raise ValueError(
+                    f"Results CSV maps two rows to the same output file "
+                    f"{output_path.name!r} (periods {seen_outputs[out_key]!r} "
+                    f"and {period_name!r}). One would silently overwrite the "
+                    f"other with a different lag. Check the {self.period_col!r} "
+                    f"column for duplicates or a too-broad --period-key-regex."
+                )
+            seen_outputs[out_key] = period_name
 
             lags_per_gas = {
                 label: float(row[lag_cols[label]]) for label in self.scalars
