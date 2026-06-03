@@ -38,7 +38,10 @@ class TestFits(unittest.TestCase):
         self.assertAlmostEqual(fit_results['fit_params_opt'][0], 0.005026230803512368, places=5)
         self.assertAlmostEqual(fit_results['fit_params_opt'][1], -0.042381023692167855, places=5)
         self.assertAlmostEqual(fit_results['fit_params_opt'][2], 0.18422391667068622, places=5)
-        self.assertEqual(fit_results['fit_r2'], 0.999999685472016)
+        # r2 computed over the binned points (N=n_bins): the previous value
+        # (0.999999685) used the full unbinned record count in the SS_tot
+        # denominator, which inflated r2 ~3000x toward 1.
+        self.assertAlmostEqual(fit_results['fit_r2'], 0.9989086228432604, places=6)
         self.assertEqual(fit_results['n_vals_per_bin'], {'min': 3088.0, 'max': 3150.0})
         self.assertEqual(fit_results['bins_x'].sum(), fit_results['bin_df'][xcol]['mean'].sum())
         self.assertEqual(fit_results['bins_y'].sum(), fit_results['bin_df'][ycol]['mean'].sum())

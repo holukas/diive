@@ -126,7 +126,9 @@ class OptimizeParamsTS:
     @property
     def best_score(self) -> float:
         """Mean cross-validated score of the best_estimator"""
-        if not self._best_score:
+        # `is None`, not falsy: with neg_MSE scoring a best_score of exactly 0.0
+        # (perfect fit) is valid and must not be treated as "not available".
+        if self._best_score is None:
             raise Exception(f'Not available: cv scores.')
         return self._best_score
 

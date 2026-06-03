@@ -127,6 +127,44 @@ class TestFluxProcessingChainComposable(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             run_level41_mds(data, swin='SW_IN_1_1_1', ta='TA_1_1_1', vpd='VPD_EP')
 
+    def test_run_chain_single_call_driver(self):
+        """Smoke-test the headline single-call FLUXNET driver (run_chain + FluxConfig)."""
+        from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
+        from diive.flux.fluxprocessingchain import (
+            FluxConfig, FluxLevelData, init_flux_data, run_chain,
+        )
+        df, _ = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
+        df = df.drop(columns=[c for c in ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME') if c in df.columns])
+        df['TA_1_1_1'] = df['TA_1_1_1'].bfill()
+        df['SW_IN_1_1_1'] = df['SW_IN_1_1_1'].bfill()
+        df['VPD_kPa'] = df['VPD_EP'].bfill().multiply(0.1)  # hPa -> kPa for MDS
+
+        data = init_flux_data(df=df, fluxcol='FC',
+                              site_lat=46.583056, site_lon=9.790639, utc_offset=1)
+
+        cfg = FluxConfig(
+            fluxcol='FC',
+            ustar_thresholds=[0.1], ustar_labels=['CUT_50'],
+            outlier_sigma_daytime=5.5, outlier_sigma_nighttime=5.5,
+            level2_test_settings={'ssitc': {'apply': True, 'setflag_timeperiod': None}},
+            gapfill_rf=False, gapfill_xgb=False, gapfill_mds=True,   # MDS only (no ML training)
+            mds_swin='SW_IN_1_1_1', mds_ta='TA_1_1_1', mds_vpd='VPD_kPa',
+        )
+        out = run_chain(data, cfg)
+
+        self.assertIsInstance(out, FluxLevelData)
+        # All levels ran in order.
+        for lvl in ('L2', 'L3.1', 'L3.2', 'L3.3'):
+            self.assertIn(lvl, out.level_ids)
+        # L3.3 QCF column carries the chained-idstr provenance.
+        self.assertTrue(any('L3.3' in str(c) and str(c).endswith('_QCF')
+                            for c in out.fpc_df.columns))
+        # MDS gap-filled column is produced for the USTAR scenario.
+        gf = out.gapfilled_cols()
+        self.assertIn('mds', gf)
+        self.assertIn('CUT_50', gf['mds'])
+        self.assertIn(gf['mds']['CUT_50'], out.fpc_df.columns)
+
 
 if __name__ == '__main__':
     unittest.main()
