@@ -2483,26 +2483,34 @@ class PwbBatchDetection:
             ax.set_ylim(-lag_max_s - 0.5, lag_max_s + 0.5)
             _format_xaxis(ax)
 
-            # Panel 2: final (gap-filled) lags — S1/S2 anchor points +
-            #          pre-filtered final lag as open black circles
+            # Panel 2: the lag ACTUALLY applied (final pre-filtered, gap-filled)
+            # drawn as a solid black line ON TOP of the raw per-chunk detections
+            # that PWBOPT accepted (S1/S2). The coloured dots are the *raw*
+            # detections (the input), NOT the applied lag — only the black line
+            # is removed from the data. Keeping the dots faint and small and the
+            # final lag as a bold named line makes that unambiguous (a wide-HDI
+            # raw detection that dips away from the black line was pre-filtered
+            # out and replaced, so it was never applied).
             ax = axes[1]
             ax.axhline(0, color='#888888', linewidth=0.8, linestyle='-', zorder=1)
-            for flag in ('S1_optimal', 'S2_optimal'):
+            for flag, lbl in (('S1_optimal', 'Raw detection · S1 reliable'),
+                              ('S2_optimal', 'Raw detection · S2 carried')):
                 mask = flag_std == flag
-                ax.scatter(px[mask], tlag[mask], color=FLAG_COLORS[flag], s=50,
-                           zorder=4, label=flag)
+                ax.scatter(px[mask], tlag[mask], color=FLAG_COLORS[flag], s=20,
+                           alpha=0.45, linewidths=0, zorder=3, label=lbl)
             if has_final_pf:
                 final_pf = results[final_pf_col].values.astype(float)
-                ax.scatter(px, final_pf, color='none', edgecolors='black',
-                           linewidths=1.0, s=50, zorder=3,
-                           label='Final lag — pre-filtered')
+                ax.plot(px, final_pf, color='black', linewidth=1.4, zorder=5,
+                        label=f'APPLIED lag for flux ({final_pf_col})')
             if not np.isnan(mode_lag):
                 ax.axhline(mode_lag, color='#9467bd', linewidth=1.2,
                            linestyle='-.', zorder=2,
                            label=f'mode = {mode_lag:.2f} s')
             ax.set_ylabel('Time lag (s)')
-            ax.set_title('Final (gap-filled) lags used for flux calculation')
-            ax.legend(frameon=False, fontsize=8, ncol=3)
+            ax.set_title('Applied lag = black line (final, gap-filled). '
+                         'Coloured points are raw detections, NOT the applied '
+                         'lag.')
+            ax.legend(frameon=False, fontsize=8, ncol=2)
             ax.set_ylim(-lag_max_s - 0.5, lag_max_s + 0.5)
             _format_xaxis(ax)
 

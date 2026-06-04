@@ -322,6 +322,40 @@
   EOF is recognised and discarded (it never produces a row or an output file). `run()` also gained an `on_status`
   callback that reports the scan (`scanning input files… 47/120`, throttled to ~20 updates regardless of file count);
   the TUI shows it on the status line and in the console log, and the CLI logs it too.
+- **Run settings + folder README written up front.** `PerFilePipeline.run()` now writes `run_settings.txt` (every
+  parameter the run used — paths, columns, scalars, PWB/PWBOPT/chunking/format/execution settings) and the folder
+  `README.txt` **the moment the output folders are created**, before any processing — so an interrupted, cancelled or
+  still-running job already documents what it was asked to do. (The README was previously written only at the end.)
+- **TUI layout is now responsive.** The settings column was a fixed 66 cells wide, so on a terminal whose cell grid
+  is smaller (a high-DPI / scaled monitor presents fewer character cells for the same window) the left column was
+  clipped and a scrollbar appeared. It now scales with the terminal (`44%`, clamped to 42–68 cells), and below 96
+  cells the two panes stack vertically (via `HORIZONTAL_BREAKPOINTS`) so the form is full width and nothing is
+  clipped. Modal dialogs use percentage widths too, and the long "Open output folder" button is shortened to "Open".
+  Verified clip-free from 240×67 down to 60×20.
+- **TUI drops a reloadable settings YAML in the output folder.** When a run starts, `DetectRemoveTUI` writes
+  `detect_remove_tui_settings.yaml` into the run's output folder, in the same schema as its persisted settings — so
+  the run can be reproduced or inspected by loading that file straight back into the TUI (Load button, or drag the
+  file onto the window). Written at run start (alongside the core `run_settings.txt`).
+- **30-min output files are aligned to the wall-clock grid.** Previously the per-chunk output of
+  `diive-tlag-pwb-detect-remove` was cut every `chunk_seconds` from each raw file's *start*, so a file starting
+  off-grid (e.g. 10:10) produced off-grid 30-min files (10:10, 10:40, 11:10, …). 30-min flux files must sit on the
+  :00 / :30 grid so downstream software bins them by clock time. Chunks are now snapped to the grid: an off-grid
+  file's first chunk is a shorter **leading partial** up to the next boundary (10:10→10:30, named by the file's real
+  start), then full chunks follow on the grid (10:30, 11:00, …); a leading partial shorter than `min_chunk_seconds`
+  is skipped. Files already on the grid (or with no parseable start time) are unchanged. Applies to `PerFilePipeline`
+  and the standalone `process_one_file`; requires `--start-time-regex` / `--start-time-format`.
+- **Clearer "applied lag" panel in `summary_<scalar>.png`.** Panel 2 of `PwbBatchDetection.plot_summary` previously
+  drew the raw per-chunk detections as bold filled S1/S2 dots and the actually-applied lag as faint open circles under
+  a title ("Final lags used for flux calculation") that invited reading the coloured dots as the applied lag. It now
+  draws the applied lag (`{prefix}_tlag_final_pf_s`) as a bold black line named `APPLIED lag for flux (...)` on top of
+  small, faint raw-detection dots, with a title that states the coloured points are raw detections, not the applied
+  lag — so a wide-HDI raw detection that dips away from the black line (pre-filtered out and replaced) can't be
+  mistaken for what was removed.
+- **Summary CSV is now self-documenting.** `run()` writes a companion data dictionary
+  `detect_and_remove_tlag_summary_columns.md` next to `detect_and_remove_tlag_summary.csv` (and references it in
+  the folder `README.txt`), describing every column — the general per-chunk fields and the per-gas block (raw lag,
+  HDI, reliability, the four pre-whitening combinations, PWBOPT standard/pre-filtered/gap-filled lags, applied
+  records) — with the lag column actually removed flagged. Built from the run's real scalars, hz and chunk settings.
 - **Output-name collisions are handled, not fatal.** The chunk-name-template check used to abort the whole batch the
   moment two chunks mapped to the same output filename. With per-file row *estimates* this could mis-fire, and it also
   rejected legitimate **start-time overlaps** between contiguous files (a file's trailing 30-min chunk sharing a

@@ -12,6 +12,16 @@ This module therefore reads each long raw file once and processes it in
 **fixed-length chunks** (default 30 minutes = ``hz * 1800`` rows), in two
 phases.
 
+**Wall-clock grid alignment.** 30-min flux files must sit on the wall-clock
+grid (:00 / :30) so downstream software bins them by clock time. When a file
+start time is available (via ``--start-time-regex`` / ``--start-time-format``),
+chunk boundaries are snapped to that grid: a file starting off-grid (e.g.
+10:10) yields a shorter **leading partial** chunk up to the first boundary
+(10:10 -> 10:30, named by the file's real start), then full ``chunk_seconds``
+chunks on the grid (10:30, 11:00, ...). A leading partial shorter than
+``min_chunk_seconds`` is skipped. A file already on the grid, or one with no
+parseable start time, is chunked the legacy way (fixed steps from its start).
+
 **Phase 1 — detect (every chunk):**
 
 1. Read the chunk's rows (unrotated; all original columns preserved).
@@ -373,7 +383,7 @@ def _chunk_filename(
                     f"--start-time-format {start_time_format!r} failed: {e}. "
                     f"Check that the format spec matches the captured text."
                 )
-            t_chunk = t0 + timedelta(seconds=chunk_index * chunk_seconds)
+            t_chunk = _chunk_start_time(t0, chunk_index, chunk_seconds)
             fields['starttime'] = t_chunk.strftime(start_time_format)
 
     try:
@@ -409,6 +419,77 @@ def _parse_file_start_time(
         return datetime.strptime(s, start_time_format)
     except ValueError:
         return None
+
+
+# ---------------------------------------------------------------------------
+# Wall-clock grid alignment
+#
+# 30-min flux files must sit on the wall-clock grid (:00 / :30) so downstream
+# software bins them by clock time. A raw file that starts off-grid (e.g.
+# 10:10) is therefore split so its FIRST chunk is a shorter partial running
+# from the file start to the next grid boundary (10:10 -> 10:30), and every
+# chunk after that is a full ``chunk_seconds`` window on the grid (10:30,
+# 11:00, ...). Grid boundaries are integer multiples of ``chunk_seconds``
+# since midnight. A file that already starts on the grid is chunked the legacy
+# way (fixed steps from its start). Without a parseable file start time the
+# grid is unknown, so the legacy fixed-offset chunking is used as a fallback.
+# ---------------------------------------------------------------------------
+
+def _grid_lead_seconds(file_start: 'datetime | None',
+                       chunk_seconds: float) -> float:
+    """Seconds from ``file_start`` to the next wall-clock grid boundary.
+
+    Grid boundaries are integer multiples of ``chunk_seconds`` since midnight
+    (:00 / :30 for the 1800 s default). Returns 0.0 when the file already
+    starts on the grid, or when ``file_start`` is None.
+    """
+    if file_start is None:
+        return 0.0
+    secs = (file_start.hour * 3600 + file_start.minute * 60
+            + file_start.second + file_start.microsecond / 1e6)
+    return (chunk_seconds - (secs % chunk_seconds)) % chunk_seconds
+
+
+def _chunk_start_time(file_start: 'datetime | None', chunk_index: int,
+                      chunk_seconds: float) -> 'datetime | None':
+    """Grid-aligned start time of chunk ``chunk_index``.
+
+    Chunk 0 of an off-grid file keeps the file's real start time (the partial
+    up to the first grid boundary); chunks 1..n start on the grid. A file that
+    already starts on the grid behaves like fixed ``chunk_seconds`` steps.
+    Returns None when ``file_start`` is None.
+    """
+    if file_start is None:
+        return None
+    lead = _grid_lead_seconds(file_start, chunk_seconds)
+    if lead == 0:
+        return file_start + timedelta(seconds=chunk_index * chunk_seconds)
+    if chunk_index == 0:
+        return file_start
+    return file_start + timedelta(
+        seconds=lead + (chunk_index - 1) * chunk_seconds)
+
+
+def _chunk_row_slice(file_start: 'datetime | None', chunk_index: int,
+                     chunk_seconds: float, hz: int) -> 'tuple[int, int]':
+    """Data-row offset and requested length for a chunk (grid-aligned).
+
+    Mirrors ``_chunk_start_time`` in row space: chunk 0 of an off-grid file is
+    a short partial (``lead`` rows, up to the first grid boundary); later
+    chunks are full ``chunk_seconds * hz`` windows. Returns
+    ``(row_offset, n_rows)`` relative to the first data row; the reader caps
+    the trailing chunk at EOF, so fewer rows may actually be read. With
+    ``file_start = None`` this is the legacy fixed-offset chunking.
+    """
+    c = int(round(chunk_seconds * hz))
+    if file_start is None:
+        return chunk_index * c, c
+    lead = int(round(_grid_lead_seconds(file_start, chunk_seconds) * hz))
+    if lead == 0:
+        return chunk_index * c, c
+    if chunk_index == 0:
+        return 0, lead
+    return lead + (chunk_index - 1) * c, c
 
 
 # ---------------------------------------------------------------------------
@@ -609,12 +690,26 @@ def process_one_file(
             raise ValueError(f'columns missing from {parent_name}: {missing}')
 
         n_total = len(df_raw)
-        n_chunks = (n_total + chunk_records - 1) // chunk_records
+        # Grid-align chunks to the wall-clock :00/:30 boundaries: an off-grid
+        # file's first chunk is a partial up to the first boundary, then full
+        # chunks follow; a file already on the grid is chunked the legacy way.
+        file_start = _parse_file_start_time(
+            parent_name, start_time_regex, start_time_format)
+        lead_records = int(round(
+            _grid_lead_seconds(file_start, chunk_seconds) * hz))
+        if lead_records > 0:
+            n_chunks = 1 + max(
+                0, (n_total - lead_records + chunk_records - 1) // chunk_records)
+        else:
+            n_chunks = (n_total + chunk_records - 1) // chunk_records
+        n_chunks = max(1, n_chunks)
 
         # ================= PHASE 1: detect every chunk ===================
         for ci in range(n_chunks):
-            i0 = ci * chunk_records
-            i1 = min(i0 + chunk_records, n_total)
+            row_offset, n_rows = _chunk_row_slice(
+                file_start, ci, chunk_seconds, hz)
+            i0 = row_offset
+            i1 = min(i0 + n_rows, n_total)
             chunk_n = i1 - i0
             chunk_period, _t_chunk = _chunk_filename(
                 input_path=Path(input_path),
@@ -890,7 +985,13 @@ def detect_one_chunk(
             pass
 
     n_preserved = skiprows + 1 + extra_rows
-    skiprows_total = n_preserved + chunk_index * chunk_records
+    # Grid-aligned slice: chunk 0 of an off-grid file is a shorter partial up
+    # to the first :00/:30 boundary, then full chunks follow.
+    _file_start = _parse_file_start_time(
+        Path(input_path).name, start_time_regex, start_time_format)
+    _row_offset, _chunk_nrows = _chunk_row_slice(
+        _file_start, chunk_index, chunk_seconds, hz)
+    skiprows_total = n_preserved + _row_offset
 
     try:
         # Resolve the output filename first; a templating/regex error here is
@@ -920,7 +1021,7 @@ def detect_one_chunk(
             df_chunk = pd.read_csv(
                 input_path,
                 skiprows=skiprows_total,
-                nrows=chunk_records,
+                nrows=_chunk_nrows,
                 header=None,
                 sep=sep,
                 na_values=na_values,
@@ -1071,6 +1172,9 @@ def remove_one_chunk(
         na_values: list,
         na_rep: str,
         strict: bool,
+        chunk_seconds: float,
+        start_time_regex: str | None,
+        start_time_format: str,
         progress_queue=None,
 ) -> dict:
     """Phase 2: remove the PWBOPT lag from one chunk and write the file.
@@ -1090,7 +1194,12 @@ def remove_one_chunk(
     worker_pid = os.getpid()
     output_dir = Path(output_dir)
     n_preserved = skiprows + 1 + extra_rows
-    skiprows_total = n_preserved + chunk_index * chunk_records
+    # Grid-aligned slice, identical to the one phase 1 detected on.
+    _file_start = _parse_file_start_time(
+        parent_name, start_time_regex, start_time_format)
+    _row_offset, _chunk_nrows = _chunk_row_slice(
+        _file_start, chunk_index, chunk_seconds, hz)
+    skiprows_total = n_preserved + _row_offset
 
     def _emit(event: str, **extra):
         if progress_queue is None:
@@ -1131,7 +1240,7 @@ def remove_one_chunk(
         df_chunk = pd.read_csv(
             input_path,
             skiprows=skiprows_total,
-            nrows=chunk_records,
+            nrows=_chunk_nrows,
             header=None,
             sep=sep,
             na_values=na_values,
@@ -1253,6 +1362,189 @@ def _estimate_data_rows(path: Path, header_lines: int,
     bytes_per_line = len(sample) / s_lines
     est_total_lines = int(size / bytes_per_line)
     return max(0, est_total_lines - header_lines)
+
+
+# ---------------------------------------------------------------------------
+# Summary data dictionary — describes every column of the summary CSV
+# ---------------------------------------------------------------------------
+
+# General (non per-gas) columns, in CSV order. {N}/{M} are filled per run.
+_SUMMARY_GENERAL_COLS = [
+    ('period',
+     "Output filename of this chunk's lag-corrected file (written into the "
+     "data subfolder). One row = one output file; this is the key that joins "
+     "the summary to the files in the data folder."),
+    ('parent',
+     "Name of the raw input file this chunk was read from."),
+    ('timestamp',
+     "ISO-8601 start time of the chunk, derived from the parent filename via "
+     "--start-time-regex / --start-time-format plus the chunk offset. Empty "
+     "when no start-time regex was given."),
+    ('chunk_index',
+     "0-based index of the chunk within its parent file."),
+    ('chunk_records',
+     "Number of data rows in the chunk. A full chunk has chunk_seconds * hz = "
+     "{N} rows; the trailing chunk of a file may be shorter."),
+    ('status',
+     "Detect-phase outcome of the chunk: 'ok' (lag detected and file written), "
+     "'skipped:short' (fewer than min_chunk_seconds * hz = {M} rows, too few "
+     "for the bootstrap, not written), 'skipped:duplicate' (its output name "
+     "collided with a lower-index chunk and was skipped to avoid overwriting "
+     "it), 'error' (processing failed - see the error column)."),
+    ('error',
+     "Exception type and message when status = 'error', or the reason text "
+     "when status = 'skipped:duplicate'. Empty otherwise."),
+    ('theta_deg',
+     "First double-rotation angle (yaw): horizontal wind rotated into the mean "
+     "wind direction, in degrees."),
+    ('phi_deg',
+     "Second double-rotation angle (pitch): vertical tilt correction so mean w "
+     "= 0, in degrees."),
+]
+
+# Per-gas columns, in CSV order. Each applies to every scalar; {gas} is the
+# lowercased scalar label (e.g. CH4 -> ch4_tlag_s). {hz} is filled per run.
+_SUMMARY_PERGAS_COLS = [
+    ('{gas}_tlag_s',
+     "RAW detected time lag (s): the bootstrap mode lag between vertical wind W "
+     "and this scalar for this chunk. The unprocessed PWB estimate - not "
+     "necessarily the lag that was applied (see {gas}_tlag_final_pf_s)."),
+    ('{gas}_hdi_lo_s',
+     "Lower bound of the 95% highest-density interval (HDI) of the bootstrap "
+     "lag distribution (s)."),
+    ('{gas}_hdi_hi_s',
+     "Upper bound of the 95% HDI (s)."),
+    ('{gas}_hdi_range_s',
+     "Width of the 95% HDI (hi - lo, s). The reliability metric: a narrow HDI "
+     "means a well-determined lag, a wide HDI means a noisy / undetermined one."),
+    ('{gas}_is_reliable',
+     "True if the chunk passed the S1 reliability test (HDI range below "
+     "--hdi-thresh)."),
+    ('{gas}_tlag_pw_s',
+     "Lag (s) of the peak of the pre-whitened cross-correlation function - the "
+     "single, non-bootstrap pre-whitened estimate."),
+    ('{gas}_corr_pw',
+     "Correlation at that pre-whitened CCF peak (-1..1)."),
+    ('{gas}_cov_pwb',
+     "Raw (un-whitened) W-scalar cross-covariance evaluated at the selected "
+     "lag."),
+    ('{gas}_ar_order',
+     "Order of the autoregressive model used to pre-whiten this chunk."),
+    ('{gas}_best_combination',
+     "Which of the four pre-whitening combinations won the selection: 'cw' "
+     "(scalar x W, scalar AR), 'wc' (scalar x W, W AR), 'ct' (scalar x "
+     "T_SONIC, scalar AR), 'tc' (scalar x T_SONIC, T_SONIC AR). Strong fluxes "
+     "usually win on cw/wc; weak trace gases may fall back to the T_SONIC "
+     "pair."),
+    ('{gas}_applied_records',
+     "Number of records the scalar column was shifted by in phase 2 = "
+     "round(applied_lag_s * hz). The applied lag in seconds = this / hz "
+     "(hz = {hz}). NaN if the chunk was not written."),
+    ('{gas}_status',
+     "Alignment (phase-2) outcome for this gas: 'ok' (shifted and written), "
+     "'skipped:lag_nan' (no finite PWBOPT lag to apply), 'pending' (the chunk "
+     "never reached phase 2, e.g. a detect error or short chunk)."),
+    ('{gas}_pwbopt_s_std',
+     "PWBOPT-selected lag (s), STANDARD rule: the S1/S2/S3 carry-forward "
+     "applied directly to the raw mode lag across the full time-ordered "
+     "sequence of chunks."),
+    ('{gas}_flag_std',
+     "PWBOPT decision flag for the standard series: 'S1_optimal' (reliable "
+     "detection), 'S2_optimal' (uncertain but within --dev-thresh of the "
+     "preceding optimal lag, so carried forward), 'S3_unreliable' (neither; "
+     "filled from neighbours in the final column)."),
+    ('{gas}_pwbopt_s_pf',
+     "PWBOPT-selected lag (s), PRE-FILTERED rule: detections with an HDI range "
+     "wider than --hdi-prefilter are dropped before the S1/S2/S3 logic runs."),
+    ('{gas}_flag_pf',
+     "PWBOPT decision flag for the pre-filtered series (same S1/S2/S3 meaning "
+     "as flag_std)."),
+    ('{gas}_tlag_final_s',
+     "Final lag (s) from the STANDARD PWBOPT series after gap-filling any "
+     "remaining leading/trailing NaNs."),
+    ('{gas}_tlag_final_pf_s',
+     "Final lag (s) from the PRE-FILTERED PWBOPT series after gap-filling. This "
+     "is the pre-filtered, gap-filled best lag - removed by default."),
+]
+
+
+def _summary_columns_doc(scalars: dict, lag_column_template: str,
+                         hz: int, chunk_seconds: float,
+                         min_chunk_seconds: float) -> str:
+    """Build a Markdown data dictionary for the summary CSV columns.
+
+    Describes every column of ``detect_and_remove_tlag_summary.csv``: the
+    general per-chunk columns plus the per-gas block (one set per scalar). The
+    column actually removed in phase 2 (``lag_column_template``) is flagged so
+    a reader knows which lag was applied. Returned as a Markdown string; the
+    pipeline writes it next to the CSV as
+    ``detect_and_remove_tlag_summary_columns.md``.
+    """
+    n_full = int(round(chunk_seconds * hz))
+    n_min = int(round(min_chunk_seconds * hz))
+    applied_suffix = lag_column_template.format(prefix='').lstrip('_')
+
+    def _row(col: str, desc: str) -> str:
+        return f"| `{col}` | {desc} |"
+
+    lines: list[str] = []
+    lines.append("# `detect_and_remove_tlag_summary.csv` - column reference")
+    lines.append("")
+    lines.append(
+        "One row per processed chunk from the PWB time-lag detect + remove "
+        "pipeline (`diive-tlag-pwb-detect-remove`). Each raw input file is "
+        "split into fixed-length chunks; the scalar-vs-wind tube-delay lag is "
+        "detected per chunk, optimised across all chunks (PWBOPT), then removed "
+        "from the written output.")
+    lines.append("")
+    lines.append(
+        f"Run settings reflected here: hz = {hz}, chunk = {chunk_seconds:g} s "
+        f"({n_full} rows/full chunk), min chunk = {min_chunk_seconds:g} s "
+        f"({n_min} rows), applied lag column = "
+        f"`{lag_column_template}`.")
+    lines.append("")
+
+    lines.append("## General columns")
+    lines.append("")
+    lines.append("| Column | Description |")
+    lines.append("|---|---|")
+    for col, desc in _SUMMARY_GENERAL_COLS:
+        lines.append(_row(col, desc.format(N=n_full, M=n_min)))
+    lines.append("")
+
+    lines.append("## Per-gas columns")
+    lines.append("")
+    prefixes = ', '.join(f"{label} -> `{label.lower()}_*`" for label in scalars)
+    lines.append(
+        f"The block below repeats once per scalar, with `{{gas}}` replaced by "
+        f"the lowercased label. In this run: {prefixes}.")
+    lines.append("")
+    lines.append("| Column | Description |")
+    lines.append("|---|---|")
+    for col, desc in _SUMMARY_PERGAS_COLS:
+        desc = desc.format(gas='{gas}', hz=hz)
+        if col == f'{{gas}}_{applied_suffix}':
+            desc += (" **This is the lag column removed in this run "
+                     "(see applied lag column above).**")
+        lines.append(_row(col, desc))
+    lines.append("")
+
+    lines.append("## Notes")
+    lines.append("")
+    lines.append(
+        "- `tlag_s` is the raw per-chunk detection; the lag actually removed "
+        "is the PWBOPT-optimised, gap-filled column named above. A wide-HDI "
+        "chunk's raw lag can be spurious, so PWBOPT replaces it with the "
+        "neighbouring reliable lag.")
+    lines.append(
+        "- Only rows with `status = ok` produce an output file. "
+        "`skipped:short`, `skipped:duplicate` and `error` rows are reported "
+        "for traceability but write nothing.")
+    lines.append(
+        "- The applied lag in seconds for a gas equals "
+        "`{gas}_applied_records / hz`.")
+    lines.append("")
+    return '\n'.join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -1408,10 +1700,22 @@ class PerFilePipeline:
         is near-instant. This returns the *honest* estimate; the detect
         dispatch pads it via ``_padded_chunk_count`` so an under-estimate can
         never silently drop a file's trailing chunk.
+
+        Accounts for wall-clock grid alignment: an off-grid file is split into
+        a leading partial plus full chunks, which is one chunk more than a
+        naive ``ceil(rows / chunk)`` for the same row count.
         """
         header_lines = self.skiprows + 1 + self.extra_rows
         n_rows = _estimate_data_rows(sample_file, header_lines)
         chunk_records = int(round(self.chunk_seconds * self.hz))
+        file_start = _parse_file_start_time(
+            sample_file.name, self.start_time_regex, self.start_time_format)
+        lead = int(round(
+            _grid_lead_seconds(file_start, self.chunk_seconds) * self.hz))
+        if lead > 0:
+            # Leading partial + full chunks for the remaining rows.
+            return max(1, 1 + max(
+                0, (n_rows - lead + chunk_records - 1) // chunk_records))
         return max(1, (n_rows + chunk_records - 1) // chunk_records)
 
     @staticmethod
@@ -1529,6 +1833,13 @@ class PerFilePipeline:
         plots_dir = (detect_dir / self.plots_subdir) if self.save_plots else None
         if plots_dir is not None:
             plots_dir.mkdir(parents=True, exist_ok=True)
+
+        # Write the run settings and the folder README up front — the moment
+        # the folders exist, before any processing — so a crashed, cancelled
+        # or still-running job already documents what it was asked to do and
+        # what each folder holds.
+        self._write_run_settings()
+        self._write_readme()
 
         total_files = len(files)
         parent_to_idx = {f.name: i for i, f in enumerate(files)}
@@ -1724,6 +2035,9 @@ class PerFilePipeline:
                 na_values=self.na_values,
                 na_rep=self.na_rep,
                 strict=self.strict,
+                chunk_seconds=self.chunk_seconds,
+                start_time_regex=self.start_time_regex,
+                start_time_format=self.start_time_format,
             ))
 
         remove_rows = self._run_pool(
@@ -1755,7 +2069,6 @@ class PerFilePipeline:
         # Cancelled during the remove phase: some chunks aligned, some not.
         self._cancelled = bool(cancel_event is not None and cancel_event.is_set())
         self._summary = summary
-        self._write_readme()
         self._write_summary_and_plots(summary)
         return self._summary
 
@@ -1790,6 +2103,19 @@ class PerFilePipeline:
             # best available snapshot rather than aborting the run.
             warn(f'could not write summary CSV (locked?): {summary_csv}')
 
+        # Companion data dictionary: a Markdown file describing every column of
+        # the summary CSV (general + per-gas), so the CSV is self-documenting.
+        doc_md = detect_dir / 'detect_and_remove_tlag_summary_columns.md'
+        try:
+            doc_md.write_text(
+                _summary_columns_doc(
+                    self.scalars, self.lag_column_template, self.hz,
+                    self.chunk_seconds, self.min_chunk_seconds),
+                encoding='utf-8')
+        except Exception:
+            # A failed data dictionary must never abort the run.
+            pass
+
         if self.save_plots:
             _ensure_headless_backend()
             summary_plots_dir = detect_dir / 'plots_summary'
@@ -1810,12 +2136,90 @@ class PerFilePipeline:
                 warn(f'overview-plot generation failed: '
                      f'{type(e).__name__}: {e}')
 
+    def _write_run_settings(self) -> None:
+        """Write the run's settings to ``run_settings.txt`` in the output root.
+
+        Called at the start of ``run()`` (the moment the output folders exist,
+        before any processing) so an interrupted or crashed run still records
+        exactly what it was asked to do. Plain text, one setting per line.
+        """
+        scalars_str = ('\n'.join(f'    {k} <- {v}'
+                                 for k, v in self.scalars.items())
+                       if self.scalars else '    (none)')
+        lines = [
+            'diive PWB time-lag detect + remove -- run settings',
+            '==================================================',
+            '',
+            'Settings used for this run (written at run start). The output is',
+            f'produced by diive-tlag-pwb-detect-remove into: {self.output_dir}',
+            '',
+            'paths',
+            '-----',
+            f'input_dir            : {self.input_dir}',
+            f'output_dir           : {self.output_dir}',
+            f'file_pattern         : {self.file_pattern}',
+            '',
+            'columns',
+            '-------',
+            f'wind U / V / W       : {self.col_u} / {self.col_v} / {self.col_w}',
+            f'sonic temperature    : {self.col_tsonic}',
+            'scalars (label <- column):',
+            scalars_str,
+            '',
+            'PWB detection',
+            '-------------',
+            f'hz                   : {self.hz}',
+            f'lag_max_s            : {self.lag_max_s}',
+            f'n_bootstrap          : {self.n_bootstrap}',
+            f'block_length_s       : {self.block_length_s}',
+            f'random_state         : {self.random_state}',
+            '',
+            'chunking',
+            '--------',
+            f'chunk_seconds        : {self.chunk_seconds}',
+            f'min_chunk_seconds    : {self.min_chunk_seconds}',
+            f'chunk_name_template  : {self.chunk_name_template}',
+            f'start_time_regex     : {self.start_time_regex}',
+            f'start_time_format    : {self.start_time_format}',
+            '',
+            'PWBOPT (best-lag selection)',
+            '---------------------------',
+            f'hdi_thresh           : {self.hdi_thresh}',
+            f'dev_thresh           : {self.dev_thresh}',
+            f'hdi_prefilter        : {self.hdi_prefilter}',
+            f'lag_column_template  : {self.lag_column_template}',
+            '',
+            'file format',
+            '-----------',
+            f'skiprows             : {self.skiprows}',
+            f'extra_rows           : {self.extra_rows}',
+            f'sep                  : {self.sep!r}',
+            f'lineterm             : {self.lineterm!r}',
+            f'na_values            : {self.na_values}',
+            f'na_rep               : {self.na_rep}',
+            '',
+            'execution / output layout',
+            '-------------------------',
+            f'n_workers            : {self.n_workers}',
+            f'strict               : {self.strict}',
+            f'save_plots           : {self.save_plots}',
+            f'detect_subdir        : {self.detect_subdir}',
+            f'data_subdir          : {self.data_subdir}',
+            '',
+        ]
+        try:
+            (self.output_dir / 'run_settings.txt').write_text(
+                '\n'.join(lines), encoding='utf-8')
+        except Exception:
+            # A settings dump must never abort the run.
+            pass
+
     def _write_readme(self) -> None:
         """Write a README.txt to ``output_dir`` describing the folder layout.
 
-        Regenerated on every ``run()`` so the output folder is always
-        self-documenting (which subfolder holds what, and which one to feed
-        to the next flux step).
+        Written up front in ``run()`` (the moment the folders exist) so the
+        output folder is self-documenting even for an interrupted run — which
+        subfolder holds what, and which one to feed to the next flux step.
         """
         scalars_str = ', '.join(f'{k} <- {v}' for k, v in self.scalars.items())
         plots_note = ('present' if self.save_plots
@@ -1840,6 +2244,8 @@ class PerFilePipeline:
             "    detect_and_remove_tlag_summary.csv           one row per chunk:\n"
             "                        detected lag, HDI, reliability, PWBOPT\n"
             "                        columns, applied records (written by the CLI)\n"
+            "    detect_and_remove_tlag_summary_columns.md    data dictionary:\n"
+            "                        describes every column of the summary CSV\n"
             "    detect_and_remove_tlag_checkpoint.csv        phase-1 snapshot\n"
             "    detect_and_remove_tlag_remove_checkpoint.csv phase-2 snapshot\n"
             "\n"
@@ -1849,6 +2255,8 @@ class PerFilePipeline:
             f"    >>> Use THIS folder ({self.data_subdir}/) as the input directory\n"
             "    for the next flux-processing step. <<<\n"
             "\n"
+            "run_settings.txt    All settings used for this run "
+            "(written at run start).\n"
             "log.txt             Plain-text console log of the run.\n"
             "README.txt          This file.\n"
             "\n"

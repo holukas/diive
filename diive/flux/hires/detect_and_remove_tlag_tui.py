@@ -198,8 +198,13 @@ Screen { background: #1a1b26; color: #a9b1d6; }
     content-align: center middle;
 }
 #body { height: 1fr; }
+/* Responsive left column: scales with the terminal's cell grid (which varies
+   with font size / DPI scaling, so a "4k monitor" can present very different
+   widths), but stays within a readable band instead of a fixed 66 cells that
+   gets clipped on a narrow grid. */
 #settings {
-    width: 66; background: #16161e; border-right: solid #2f334d; padding: 0 1;
+    width: 44%; min-width: 42; max-width: 68;
+    background: #16161e; border-right: solid #2f334d; padding: 0 1;
     scrollbar-size: 1 1;
 }
 #console { width: 1fr; padding: 0 1; }
@@ -251,7 +256,7 @@ Footer { background: #16161e; color: #565f89; }
 
 InfoScreen { align: center middle; background: #1a1b26 70%; }
 #dialog {
-    width: 76; height: auto; max-height: 90%;
+    width: 80%; max-width: 76; height: auto; max-height: 90%;
     background: #16161e; border: round #7aa2f7; padding: 1 2;
 }
 #infoscroll { height: auto; max-height: 26; scrollbar-size: 1 1; }
@@ -271,11 +276,23 @@ InfoScreen { align: center middle; background: #1a1b26 70%; }
 .pickbtn:hover { background: #3b4261; }
 ColumnPickerScreen { align: center middle; background: #1a1b26 70%; }
 #colpick {
-    width: 70; height: auto; max-height: 80%;
+    width: 80%; max-width: 72; height: auto; max-height: 80%;
     background: #16161e; border: round #7aa2f7; padding: 1 2;
 }
 #collist { height: auto; max-height: 22; border: round #2f334d; margin: 1 0; }
 .fin.-invalid { background: #3a2330; color: #f7768e; }
+
+/* Narrow terminals (small cell grid from high-DPI scaling / a small window):
+   stack the two panes vertically so the settings form is full width and
+   nothing is clipped horizontally. The -narrow class is added to the Screen
+   by HORIZONTAL_BREAKPOINTS below a threshold width. */
+.-narrow #body { layout: vertical; }
+.-narrow #settings {
+    width: 100%; min-width: 0; max-width: 100%;
+    height: auto; max-height: 55%;
+    border-right: none; border-bottom: solid #2f334d;
+}
+.-narrow #console { width: 100%; height: 1fr; }
 """
 
 _INFO_TEXT = (
@@ -617,6 +634,10 @@ _HELP = {
 
 _SETTINGS_PATH = Path.home() / '.diive' / 'detect_remove_tui.yaml'
 
+# Filename of the per-run settings YAML dropped into each run's output folder
+# (same schema as _SETTINGS_PATH, so it loads straight back into the TUI).
+_OUTPUT_SETTINGS_NAME = 'detect_remove_tui_settings.yaml'
+
 # Number of live per-worker rows shown in the console (each with an animated
 # spinner). Runs with more workers than this still work; only the first
 # _MAX_WORKER_ROWS busy workers get a visible row at any moment.
@@ -702,6 +723,10 @@ class DetectRemoveTUI(App):
 
     CSS = _CSS
     TITLE = 'diive · PWB time-lag detect + remove'
+    # Responsive layout: below 96 cells wide the Screen gets the '-narrow'
+    # class and the two panes stack vertically (see the CSS). This keeps the
+    # form usable whatever cell grid the terminal/monitor presents.
+    HORIZONTAL_BREAKPOINTS = [(0, '-narrow'), (96, '-wide')]
     BINDINGS = [('r', 'run', 'Run'), ('k', 'check', 'Check'),
                 ('x', 'stop', 'Stop'), ('o', 'open', 'Open output folder'),
                 ('s', 'save', 'Save'), ('l', 'load', 'Load'),
@@ -769,7 +794,7 @@ class DetectRemoveTUI(App):
                     yield Button('Run', id='run', variant='primary')
                     yield Button('Check', id='check')
                     yield Button('Stop', id='stop')
-                    yield Button('Open output folder', id='open')
+                    yield Button('Open', id='open')
                 with Horizontal(id='controls2'):
                     yield Button('Save', id='save')
                     yield Button('Load', id='load')
@@ -1157,7 +1182,12 @@ class DetectRemoveTUI(App):
                 f'note: {cfg["data_subdir"]}/ already has {existing} file(s) '
                 f'— matching chunks will be overwritten', style=_AMBER))
         self._status('running…', _BLUE)
-        self._save_settings(announce=False)  # remember what we ran
+        self._save_settings(announce=False)  # remember what we ran (home file)
+        # Drop a TUI-loadable settings YAML into the run's output folder, at
+        # run start, so the run is reproducible straight from its own output.
+        saved = self._save_settings_to_output(cfg['output_dir'])
+        if saved:
+            self._log_only(Text(f'settings -> {saved}', style=_CYAN))
         threading.Thread(target=self._real_impl, args=(cfg,),
                          daemon=True).start()
 
@@ -1368,10 +1398,15 @@ class DetectRemoveTUI(App):
         self._wphase = None
 
     # ---- settings persistence ------------------------------------------
-    def _save_settings(self, announce: bool) -> None:
+    def _settings_dict(self) -> dict:
+        """Current form values keyed by field id (the TUI's YAML schema)."""
         data = {fid: self.query_one(f'#{fid}', Input).value for fid in _FIELD_IDS}
         for sid in _SWITCHES:
             data[sid] = self.query_one(f'#{sid}', Switch).value
+        return data
+
+    def _save_settings(self, announce: bool) -> None:
+        data = self._settings_dict()
         try:
             _SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
             _SETTINGS_PATH.write_text(yaml.safe_dump(data, sort_keys=False),
@@ -1381,6 +1416,22 @@ class DetectRemoveTUI(App):
         except Exception as e:
             if announce:
                 self._status(f'could not save settings: {e}', _RED)
+
+    def _save_settings_to_output(self, output_dir: str) -> str | None:
+        """Drop a TUI-loadable settings YAML into the run's output folder.
+
+        Same schema as the persisted settings file, so it can be loaded
+        straight back into the TUI (Load button, or drag the file onto the
+        window) to reproduce or inspect the run. Returns the path written, or
+        None on failure (never raises — a settings copy must not block a run).
+        """
+        try:
+            path = Path(output_dir) / _OUTPUT_SETTINGS_NAME
+            path.write_text(yaml.safe_dump(self._settings_dict(), sort_keys=False),
+                            encoding='utf-8')
+            return str(path)
+        except Exception:
+            return None
 
     # ---- UI updates (always called via call_from_thread) ---------------
     def _status(self, msg: str, color: str = _DIM) -> None:
