@@ -2,10 +2,13 @@
 GUI.WIDGETS.OPEN_DATA_DIALOG: FILE + FILETYPE PICKER WITH PREVIEW
 ================================================================
 
-A dialog for opening a data file: pick the file, choose its filetype, and see a
-live preview of the first parsed rows before committing. Reading is done by the
-library (`dv.load_parquet` / `dv.ReadFileType`); this dialog only orchestrates
-the choice and shows the result.
+A dialog for opening data file(s): pick one or more files, choose their
+filetype, and see a live preview of the first parsed rows before committing.
+Reading is done by the library (`dv.load_parquet` / `dv.ReadFileType`, or
+`MultiDataFileReader` when several files are selected); this dialog only
+orchestrates the choice and shows the result.
+
+Selecting multiple files merges them into one dataset (same filetype assumed).
 
 No default filetype is assumed (there are many) -- the user picks explicitly,
 except for ``.parquet`` which is unambiguous and preselected. The preview reads
@@ -15,10 +18,13 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
 import diive as dv
 from diive.configs.filetypes import get_filetypes
+from diive.core.io.filereader import MultiDataFileReader
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -60,8 +66,33 @@ def _read(filepath: str, choice: str, nrows: int | None):
     return df
 
 
+def _read_many(filepaths: list[str], choice: str):
+    """Read and merge one or more full files of the chosen filetype.
+
+    A single file uses :func:`_read`. Multiple files are merged: configured
+    filetypes via `MultiDataFileReader`; parquet files via `combine_first`
+    (existing values win, later files fill gaps).
+    """
+    if len(filepaths) == 1:
+        return _read(filepaths[0], choice, nrows=None)
+    if choice == _PARQUET_CHOICE:
+        merged = None
+        for fp in filepaths:
+            df = dv.load_parquet(filepath=fp)
+            merged = df if merged is None else merged.combine_first(df)
+        return merged
+    return MultiDataFileReader(filepaths=filepaths, filetype=choice).data_df
+
+
 class OpenDataDialog(QDialog):
-    """Pick a file + filetype with a parsed preview; exposes the loaded df."""
+    """Pick file(s) + filetype with a parsed preview; exposes the loaded df.
+
+    Multiple files of the same filetype are merged into one DataFrame.
+    """
+
+    #: Emitted from the load worker thread with the loaded DataFrame / error.
+    _load_done = Signal(object)
+    _load_failed = Signal(str)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -69,6 +100,7 @@ class OpenDataDialog(QDialog):
         self.resize(760, 500)
         self.dataframe = None      # set on successful Load
         self.source_name = ""
+        self._paths: list[str] = []
 
         layout = QVBoxLayout(self)
 
@@ -76,7 +108,7 @@ class OpenDataDialog(QDialog):
         file_row = QHBoxLayout()
         self.path_edit = QLineEdit()
         self.path_edit.setReadOnly(True)
-        self.path_edit.setPlaceholderText("No file selected")
+        self.path_edit.setPlaceholderText("No file(s) selected")
         browse = QPushButton("Browse...")
         browse.clicked.connect(self._browse)
         file_row.addWidget(self.path_edit, stretch=1)
@@ -124,6 +156,10 @@ class OpenDataDialog(QDialog):
         layout.addWidget(self.buttons)
         self._set_load_enabled(False)
 
+        # Loading runs on a worker thread; results return via these signals.
+        self._load_done.connect(self._on_load_done)
+        self._load_failed.connect(self._on_load_failed)
+
     def _set_load_enabled(self, enabled: bool) -> None:
         self.buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(enabled)
 
@@ -131,25 +167,33 @@ class OpenDataDialog(QDialog):
         return self.ft_combo.currentData() if self.ft_combo.currentIndex() >= 0 else None
 
     def _browse(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Select data file", "",
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, "Select data file(s)", "",
             "Data files (*.parquet *.csv *.csv.gz *.dat *.zip *.gz);;All files (*)",
         )
-        if not path:
+        if not paths:
             return
-        self.path_edit.setText(path)
-        if Path(path).suffix.lower() == ".parquet":
+        self._paths = [str(p) for p in paths]
+        if len(self._paths) == 1:
+            self.path_edit.setText(self._paths[0])
+        else:
+            self.path_edit.setText(f"{len(self._paths)} files selected")
+        if all(Path(p).suffix.lower() == ".parquet" for p in self._paths):
             self.ft_combo.setCurrentIndex(self.ft_combo.findData(_PARQUET_CHOICE))
         self._preview()
 
     def _preview(self) -> None:
-        """Read a few rows with the current choice and show them; enable Load."""
+        """Preview the first file's first rows with the current choice.
+
+        Only the first file is previewed (to confirm the filetype parses);
+        loading merges all selected files.
+        """
         self._set_load_enabled(False)
-        path, choice = self.path_edit.text(), self._choice()
-        if not path or not choice:
+        choice = self._choice()
+        if not self._paths or not choice:
             return
         try:
-            df = _read(path, choice, nrows=_PREVIEW_ROWS)
+            df = _read(self._paths[0], choice, nrows=_PREVIEW_ROWS)
         except Exception as err:
             self.preview.clear()
             self.preview.setRowCount(0)
@@ -157,7 +201,9 @@ class OpenDataDialog(QDialog):
             self.status.setText(f"Preview failed: {err}")
             return
         self._fill_preview(df)
-        self.status.setText(f"{df.shape[1]} columns detected. Ready to load.")
+        n = len(self._paths)
+        suffix = f" (preview of first of {n} files; all will be merged)" if n > 1 else ""
+        self.status.setText(f"{df.shape[1]} columns detected. Ready to load.{suffix}")
         self._set_load_enabled(True)
 
     def _fill_preview(self, df) -> None:
@@ -173,16 +219,41 @@ class OpenDataDialog(QDialog):
         self.preview.resizeColumnsToContents()
 
     def _load(self) -> None:
-        """Read the full file with the chosen filetype, then accept."""
-        path, choice = self.path_edit.text(), self._choice()
-        if not path or not choice:
+        """Read (and merge, if multiple) the selected files on a worker thread.
+
+        Reading large / many files can take seconds; doing it off the GUI thread
+        keeps the window responsive and lets the output console show progress
+        live. The result returns via `_load_done` / `_load_failed`.
+        """
+        choice = self._choice()
+        if not self._paths or not choice:
             return
+        self._set_load_enabled(False)
+        n = len(self._paths)
+        self.status.setText(f"Loading {n} file(s)..." if n > 1 else "Loading...")
+        paths = list(self._paths)
+        threading.Thread(
+            target=self._load_worker, args=(paths, choice), daemon=True,
+        ).start()
+
+    def _load_worker(self, paths: list[str], choice: str) -> None:
         try:
-            self.dataframe = _read(path, choice, nrows=None)
+            df = _read_many(paths, choice)
         except Exception as err:
-            self.status.setText(f"Load failed: {err}")
+            self._load_failed.emit(str(err))
             return
+        self._load_done.emit(df)
+
+    def _on_load_done(self, df) -> None:
+        self.dataframe = df
         global _last_choice
-        _last_choice = choice
-        self.source_name = Path(path).name
+        _last_choice = self._choice()
+        self.source_name = (
+            Path(self._paths[0]).name if len(self._paths) == 1
+            else f"{len(self._paths)} files (merged)"
+        )
         self.accept()
+
+    def _on_load_failed(self, msg: str) -> None:
+        self.status.setText(f"Load failed: {msg}")
+        self._set_load_enabled(True)

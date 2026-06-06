@@ -24,7 +24,65 @@ VERBOSE_ERROR = 1
 VERBOSE_PROGRESS = 2
 VERBOSE_DEBUG = 3
 
-console = Console(highlight=False)
+
+class _TeeConsole(Console):
+    """Rich Console that also forwards output to registered mirror consoles.
+
+    Lets an external consumer (e.g. the desktop GUI) receive a copy of all
+    library console output without the library depending on it: register a
+    mirror with :func:`add_console_sink` and it gets every ``print`` / ``log``
+    / ``rule`` call. Mirror errors are swallowed so a failing sink never breaks
+    library output.
+    """
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._mirrors: list = []
+
+    def add_mirror(self, mirror) -> None:
+        if mirror not in self._mirrors:
+            self._mirrors.append(mirror)
+
+    def remove_mirror(self, mirror) -> None:
+        if mirror in self._mirrors:
+            self._mirrors.remove(mirror)
+
+    def _forward(self, method: str, args, kwargs) -> None:
+        for mirror in list(self._mirrors):
+            try:
+                getattr(mirror, method)(*args, **kwargs)
+            except Exception:
+                pass  # a broken sink must not break library output
+
+    def print(self, *args, **kwargs) -> None:
+        super().print(*args, **kwargs)
+        self._forward("print", args, kwargs)
+
+    def log(self, *args, **kwargs) -> None:
+        super().log(*args, **kwargs)
+        self._forward("log", args, kwargs)
+
+    def rule(self, *args, **kwargs) -> None:
+        super().rule(*args, **kwargs)
+        self._forward("rule", args, kwargs)
+
+
+console = _TeeConsole(highlight=False)
+
+
+def add_console_sink(mirror) -> None:
+    """Register a mirror console to receive a copy of all library output.
+
+    Args:
+        mirror: Any object with ``print`` / ``log`` / ``rule`` methods (e.g. a
+            Rich ``Console`` writing to a GUI panel).
+    """
+    console.add_mirror(mirror)
+
+
+def remove_console_sink(mirror) -> None:
+    """Stop forwarding library output to a previously registered mirror."""
+    console.remove_mirror(mirror)
 
 
 def _vlevel(verbose: int | bool) -> int:

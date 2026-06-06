@@ -11,10 +11,12 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 from diive.gui.tabs.base import DiiveTab
+from diive.gui.tabs.log import LogTab
 from diive.gui.tabs.plotting import PlottingTab
 
 #: Tab classes shown in the main window, in display order.
 #: Future: append FluxChainTab, OutlierTab, GapFillingTab, ...
 TAB_CLASSES: list[type[DiiveTab]] = [
     PlottingTab,
+    LogTab,
 ]

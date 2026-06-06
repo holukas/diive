@@ -39,21 +39,29 @@ _DARK = QColor("#212121")
 #: GUI styling per variable kind (from `dv.variables.classify_variable`):
 #: kind -> (label, background, text_color). The library owns the name->kind
 #: classification; this map owns only the colours/labels.
-_PILL_STYLE = {
-    "NEE": ("NEE", QColor("#2E7D32"), _WHITE),    # green 800
-    "FC": ("FC", QColor("#2E7D32"), _WHITE),      # CO2 flux (pre-NEE) -> green
+# Five maximally distinct Material hues (green / blue / red / purple / orange),
+# one per semantic group. Grouped variables share a colour by design
+# (NEE+FC = carbon, LE+ET = water, all radiation = orange).
+_GREEN = QColor("#388E3C")    # green 700
+_BLUE = QColor("#1976D2")     # blue 700
+_RED = QColor("#D32F2F")      # red 700
+_PURPLE = QColor("#8E24AA")   # purple 600
+_ORANGE = QColor("#FB8C00")   # orange 600 (dark text for contrast)
 
-    "GPP": ("GPP", QColor("#1E88E5"), _WHITE),    # blue 600
-    "Reco": ("RECO", QColor("#C62828"), _WHITE),  # red 800
-    # LE and ET are the same water flux in different units -> shared teal.
-    "LE": ("LE", QColor("#00838F"), _WHITE),      # cyan 800
-    "ET": ("ET", QColor("#00838F"), _WHITE),
-    # Radiation -> shared yellow-orange (dark text for contrast).
-    "Rg": ("Rg", QColor("#FFB300"), _DARK),       # amber 600
-    "SW_IN": ("SW_IN", QColor("#FFB300"), _DARK),
-    "PPFD": ("PPFD", QColor("#FFB300"), _DARK),
-    "PAR": ("PAR", QColor("#FFB300"), _DARK),
-    "LW": ("LW", QColor("#FFB300"), _DARK),
+_PILL_STYLE = {
+    "NEE": ("NEE", _GREEN, _WHITE),
+    "FC": ("FC", _GREEN, _WHITE),       # CO2 flux (pre-NEE) -> carbon green
+    "GPP": ("GPP", _BLUE, _WHITE),
+    "Reco": ("RECO", _RED, _WHITE),
+    # LE and ET are the same water flux in different units -> shared purple.
+    "LE": ("LE", _PURPLE, _WHITE),
+    "ET": ("ET", _PURPLE, _WHITE),
+    # Radiation -> shared orange (dark text for contrast).
+    "Rg": ("Rg", _ORANGE, _DARK),
+    "SW_IN": ("SW_IN", _ORANGE, _DARK),
+    "PPFD": ("PPFD", _ORANGE, _DARK),
+    "PAR": ("PAR", _ORANGE, _DARK),
+    "LW": ("LW", _ORANGE, _DARK),
 }
 
 
