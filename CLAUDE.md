@@ -45,7 +45,8 @@ diive/
 ├── outliers/                 # 10+ outlier detection methods
 ├── qaqc/                     # Quality control flags and screening
 ├── analysis/                 # Time series analysis
-└── variables/                # Feature engineering and calculations
+├── variables/                # Feature engineering and calculations
+└── gui/                      # PySide6 desktop GUI (optional 'gui' extra)
 examples/                      # ~100 runnable examples
 tests/                        # Unit tests
 ```
@@ -189,6 +190,29 @@ Key `data.levels` fields: `level2`, `level2_qcf`, `level31`, `level31_qcf`, `lev
 - `FeatureEngineer(target_col='_target_', ...)` — `target_col` is a required placeholder; any string not in the feature list works.
 
 **Example:** `examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py`
+
+## Desktop GUI (`diive.gui`)
+
+PySide6 desktop app. **Optional dependency** (`gui` extra, lazy-imported like `causal`) — never pulled into a headless
+install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `diive.gui._cli:_gui_main`). See
+`diive/gui/README.md` for the file map.
+
+- **Registry-driven tabs.** `MainWindow` iterates `registry.TAB_CLASSES` (a list of `DiiveTab` subclasses) — it knows
+  nothing about concrete tabs. Add a feature area = write a `DiiveTab` (`title` + `build()`) and append it. This is how
+  the flux processing chain will plug in later.
+- **Two-phase plot classes are GUI-ready.** The plotting tab renders diive plots straight into an embedded canvas via
+  `Plot(series).plot(ax=canvas.ax, fig=canvas.fig)`; no GUI-specific plot variants needed.
+
+**PySide6 gotchas (already handled in code — don't reintroduce):**
+
+- **Retain tab instances** (`MainWindow._tabs`). Qt owns the QWidgets, but the Python `DiiveTab` objects hold the
+  signal slots; if GC'd, their signals silently go inert (symptom: clicks stop working after startup).
+- **A stylesheet touching `QListWidget::item` disables per-item `setBackground`/`setForeground`.** Row colouring goes
+  through a `QStyledItemDelegate` (`VariableDelegate`), not item roles. The delegate also draws the NEE/GPP/Reco pills.
+- **Matplotlib's Qt toolbar recolours icons from the widget palette.** `MplCanvas` sets a light palette *before*
+  building the toolbar (else icons render white-on-white on dark system themes).
+- **Use synchronous `canvas.draw()`, not `draw_idle()`,** after a user action so the canvas repaints immediately.
+- **Share axes for comparison panels** via `subplots(..., sharex=True, sharey=True)` so pan/zoom is synchronised.
 
 ## High-Resolution EC Analysis (hires)
 
@@ -380,4 +404,4 @@ Use `/llm-detox` skill for all written content (documentation, comments, commit 
 
 ---
 
-**Last Updated:** 2026-05-30 | **Version:** v0.91.0 | **Package Manager:** `uv`
+**Last Updated:** 2026-06-06 | **Version:** v0.91.0 | **Package Manager:** `uv`

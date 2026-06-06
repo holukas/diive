@@ -22,6 +22,17 @@
   removed. Pass a sonic-temperature column. Result keys `tlag_opt_s`, `corr_est`, `cv5pct`, `cv1pct` were removed;
   `corr_pw` (un-smoothed PW peak correlation) and `cov_pwb` (raw cross-covariance at the selected lag) added.
 
+### Desktop GUI (new)
+
+- **PySide6 desktop GUI** — new `diive.gui` subpackage with a multi-tab main window, launched via the `diive-gui`
+  console script. PySide6 is an optional dependency; install with `uv sync --extra gui` (or `pip install 'diive[gui]'`).
+  Tabs are registry-driven (`diive/gui/registry.py`) so new feature areas (e.g. the flux processing chain) plug in as
+  new `DiiveTab` subclasses without touching the main window.
+- **Interactive plotting tab** — variable list on the left, embedded matplotlib heatmaps on the right. Plain click
+  shows one variable; Ctrl+click adds/removes up to five side-by-side panels (shared x/y axes for synchronised
+  pan/zoom). A custom item delegate highlights selected variables and tags NEE / GPP / Reco columns with colored pills.
+  Colorbar decimals adapt to each variable's value range. Light theme with modern scrollbars.
+
 ### Flux Processing Chain
 
 - **Harmonised level idstrs to dotted form.** `data.gap_stats()` now uses `'L2'` / `'L3.1'` / `'L3.2'` / `'L3.3'`
