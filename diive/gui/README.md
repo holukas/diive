@@ -25,6 +25,11 @@ diive-gui                # or: uv run diive-gui
 **Adding a tab:** write a `DiiveTab` subclass and append its class to `TAB_CLASSES`. The main window is agnostic to
 concrete tabs — it just iterates the registry. This is how the flux processing chain will plug in later.
 
+**Plot menu:** the menu bar's **Plot** menu is built generically from any tab exposing `plot_type_labels()` /
+`set_plot_type()` (the plotting tab). It's an exclusive checkable selector; the first type (Heatmap) is the default,
+checked and applied on startup. Add a plot type by extending `_PLOT_TYPES` + `_draw_one` in `tabs/plotting.py`. Ctrl+click
+adds comparison panels: heatmaps go side by side (shared x/y), time series stack top-to-bottom (shared time x-axis).
+
 **Data flow:** **File ▸ Open data file…** shows `OpenDataDialog` — pick one or more files, choose the filetype, and
 preview the first parsed rows before loading (parquet via `dv.load_parquet`, other formats via `dv.ReadFileType`).
 Selecting multiple files merges them (`MultiDataFileReader`, or `combine_first` for parquet). All reading is library

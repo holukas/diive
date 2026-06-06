@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QActionGroup
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -139,10 +139,34 @@ class MainWindow(QMainWindow):
         exit_act.triggered.connect(self.close)
         file_menu.addAction(exit_act)
 
+        self._build_plot_menu(menubar)
+
         help_menu = menubar.addMenu("&Help")
         about_act = QAction("&About", self)
         about_act.triggered.connect(self._about)
         help_menu.addAction(about_act)
+
+    def _build_plot_menu(self, menubar) -> None:
+        """Build a 'Plot' menu from any tab that declares plot types.
+
+        Plot types are owned by the plotting tab; the menu is just an exclusive,
+        checkable selector. The first type is the default — checked and applied
+        on startup.
+        """
+        tab = next((t for t in self._tabs if hasattr(t, "plot_type_labels")), None)
+        if tab is None:
+            return
+        plot_menu = menubar.addMenu("&Plot")
+        group = QActionGroup(self)
+        group.setExclusive(True)
+        for i, label in enumerate(tab.plot_type_labels()):
+            act = QAction(label, self, checkable=True)
+            act.triggered.connect(lambda _checked, t=tab, lab=label: t.set_plot_type(lab))
+            group.addAction(act)
+            plot_menu.addAction(act)
+            if i == 0:
+                act.setChecked(True)
+                tab.set_plot_type(label)  # default selected on startup
 
     def _set_data(self, df, source: str) -> None:
         """Push a freshly loaded dataset to every tab and update the title."""

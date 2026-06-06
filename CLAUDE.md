@@ -211,6 +211,9 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   the flux processing chain will plug in later.
 - **Two-phase plot classes are GUI-ready.** The plotting tab renders diive plots straight into an embedded canvas via
   `Plot(series).plot(ax=canvas.ax, fig=canvas.fig)`; no GUI-specific plot variants needed.
+- **`Plot` menu** is built generically from any tab exposing `plot_type_labels()` / `set_plot_type()` (currently the
+  plotting tab). Exclusive checkable selector; first type (Heatmap) is the default, checked + applied on startup. Add a
+  type via `_PLOT_TYPES` + `_draw_one` in `tabs/plotting.py`.
 - **Data flow.** The `File` menu loads data via `OpenDataDialog` (parquet → `dv.load_parquet`, else `dv.ReadFileType`;
   multiple files → `MultiDataFileReader` / parquet `combine_first`; reading is library work, the dialog only calls it).
   `MainWindow` holds the current DataFrame and pushes it to every tab via the `DiiveTab.on_data_loaded(df)` hook;

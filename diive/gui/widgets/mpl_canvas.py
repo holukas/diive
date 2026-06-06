@@ -64,19 +64,23 @@ class MplCanvas(QWidget):
         bottom.addWidget(self._toolbar)
         layout.addLayout(bottom)
 
-    def new_axes(self, ncols: int = 1, sharex: bool = False,
-                 sharey: bool = False) -> list[Axes]:
-        """Clear the figure and return a fresh row of `ncols` axes.
+    def new_axes(self, n: int = 1, orientation: str = "horizontal",
+                 sharex: bool = False, sharey: bool = False) -> list[Axes]:
+        """Clear the figure and return a fresh strip of `n` axes.
 
-        Clearing the whole figure (not just `ax.clear()`) discards any extra
-        axes a previous render added -- e.g. the colorbar `HeatmapDateTime`
-        appends -- so they do not stack up across renders. `sharex`/`sharey`
-        link the panels' axes so pan/zoom on one applies to all.
+        `orientation='horizontal'` lays panels side by side (one row);
+        `'vertical'` stacks them top to bottom (one column). Clearing the whole
+        figure (not just `ax.clear()`) discards any extra axes a previous render
+        added -- e.g. the colorbar `HeatmapDateTime` appends -- so they do not
+        stack up across renders. `sharex`/`sharey` link the panels' axes so
+        pan/zoom on one applies to all.
         """
         self.fig.clear()
-        axes = self.fig.subplots(1, ncols, squeeze=False,
-                                 sharex=sharex, sharey=sharey)[0]
-        return list(axes)
+        if orientation == "vertical":
+            grid = self.fig.subplots(n, 1, squeeze=False, sharex=sharex, sharey=sharey)
+            return list(grid[:, 0])
+        grid = self.fig.subplots(1, n, squeeze=False, sharex=sharex, sharey=sharey)
+        return list(grid[0])
 
     def draw(self) -> None:
         """Force a synchronous repaint of the canvas.

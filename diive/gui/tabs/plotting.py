@@ -48,15 +48,26 @@ _DEFAULT_VAR = "NEE_CUT_REF_f"
 #: Maximum number of side-by-side panels (further Ctrl+clicks are ignored).
 _MAX_PANELS = 5
 
+#: Plot types offered in the Plot menu (first is the default). Add new diive
+#: plot types here; `_draw_one` dispatches on the chosen label.
+_HEATMAP = "Heatmap (date/time)"
+_TIMESERIES = "Time series"
+_PLOT_TYPES = [_HEATMAP, _TIMESERIES]
+
+#: Maximally distinct line colors for stacked time-series panels (one per
+#: panel, by order). Material 600/700 hues spread around the wheel.
+_TS_COLORS = ["#1976D2", "#E53935", "#43A047", "#FB8C00", "#8E24AA"]
+
 
 class PlottingTab(DiiveTab):
-    """Pick variables on the left, render one or more heatmaps on the right."""
+    """Pick variables on the left, render one or more plots on the right."""
 
     title = "Plotting"
 
     def build(self) -> QWidget:
         self._df = None
         self._panels: list[str] = []
+        self._plot_type = _PLOT_TYPES[0]
 
         root = QWidget()
         layout = QHBoxLayout(root)
@@ -117,6 +128,15 @@ class PlottingTab(DiiveTab):
             self.var_list.addItem(item)
         self._select_default()
 
+    def plot_type_labels(self) -> list[str]:
+        """Plot types this tab can render (for the Plot menu)."""
+        return list(_PLOT_TYPES)
+
+    def set_plot_type(self, label: str) -> None:
+        """Switch the active plot type and re-render."""
+        self._plot_type = label
+        self._render()
+
     def _filter_list(self, text: str) -> None:
         """Hide variables not matching `text`.
 
@@ -159,11 +179,11 @@ class PlottingTab(DiiveTab):
         self._render()
 
     def _render(self) -> None:
-        """Render one panel per entry in `self._panels`, left to right.
+        """Render one panel per entry in `self._panels`.
 
-        All variables share the same date index and time-of-day axis, so the
-        panels share both x and y; the date labels are kept only on the
-        leftmost panel.
+        Heatmaps go side by side (shared date/time-of-day axes; date labels on
+        the leftmost only). Time series stack top to bottom (shared time x-axis;
+        x labels on the bottom panel only, independent y per panel).
         """
         if not self._panels:
             # All panels toggled off -- show a blank canvas.
@@ -171,29 +191,51 @@ class PlottingTab(DiiveTab):
             self.canvas.draw()
             self._mark_selected()
             return
-        axes = self.canvas.new_axes(len(self._panels), sharex=True, sharey=True)
-        for ax, name in zip(axes, self._panels):
-            self._draw_one(ax, name)
-        # Drop the redundant date axis from every panel but the first.
-        for ax in axes[1:]:
-            ax.set_ylabel("")
-            ax.tick_params(labelleft=False)
+
+        if self._plot_type == _HEATMAP:
+            axes = self.canvas.new_axes(
+                len(self._panels), orientation="horizontal", sharex=True, sharey=True)
+        else:
+            axes = self.canvas.new_axes(
+                len(self._panels), orientation="vertical", sharex=True, sharey=False)
+
+        for i, (ax, name) in enumerate(zip(axes, self._panels)):
+            self._draw_one(ax, name, i)
+
+        if self._plot_type == _HEATMAP:
+            # Date axis only on the leftmost panel.
+            for ax in axes[1:]:
+                ax.set_ylabel("")
+                ax.tick_params(labelleft=False)
+        else:
+            # Shared time axis: x labels/ticks only on the bottom panel.
+            for ax in axes[:-1]:
+                ax.set_xlabel("")
+                ax.tick_params(labelbottom=False)
+
         self.canvas.draw()
         self._mark_selected()
 
-    def _draw_one(self, ax, name: str) -> None:
+    def _draw_one(self, ax, name: str, index: int = 0) -> None:
         """Draw one variable into `ax`, or an explanatory message on failure.
 
-        Columns that cannot be heatmapped (non-numeric, all-NaN) show a message
-        instead of raising, so the variable list stays usable.
+        `index` is the panel position, used to pick a distinct time-series
+        color. Columns that cannot be plotted (non-numeric, all-NaN) show a
+        message instead of raising, so the variable list stays usable.
         """
         series = self._df[name]
         try:
-            hm = dv.plotting.HeatmapDateTime(series)
-            hm.plot(
-                ax=ax, fig=self.canvas.fig, title=name,
-                cb_digits_after_comma='auto',
-            )
+            if self._plot_type == _HEATMAP:
+                dv.plotting.HeatmapDateTime(series).plot(
+                    ax=ax, fig=self.canvas.fig, title=name,
+                    cb_digits_after_comma='auto',
+                )
+            elif self._plot_type == _TIMESERIES:
+                dv.plotting.TimeSeries(series).plot(
+                    ax=ax, title=name, color=_TS_COLORS[index % len(_TS_COLORS)],
+                )
+            else:
+                raise ValueError(f"Unknown plot type: {self._plot_type}")
         except Exception as err:
             ax.text(
                 0.5, 0.5, f"Cannot plot '{name}':\n{err}",
