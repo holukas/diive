@@ -22,14 +22,15 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
-import math
+import re
 
-import numpy as np
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QHBoxLayout,
+    QLineEdit,
     QListWidgetItem,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -59,9 +60,20 @@ class PlottingTab(DiiveTab):
         root = QWidget()
         layout = QHBoxLayout(root)
 
-        # Left: variable list. Plain click resets; Ctrl+click toggles a panel.
-        # The variable name is stored in UserRole so the display text can carry
-        # a panel-order prefix without affecting click handling.
+        # Left column: a filter field above the variable list.
+        left = QWidget()
+        left.setFixedWidth(260)
+        left_layout = QVBoxLayout(left)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.search = QLineEdit()
+        self.search.setClearButtonEnabled(True)
+        self.search.setPlaceholderText("Filter variables...")
+        self.search.textChanged.connect(self._filter_list)
+
+        # Variable list. Plain click resets; Ctrl+click toggles a panel. The
+        # variable name is stored in NAME_ROLE so the delegate can render a
+        # panel-order prefix and pills without affecting click handling.
         self.var_list = VariableList()
         # A custom delegate paints rows (highlight + NEE pill); disable Qt's
         # own selection highlight, and enable mouse tracking for hover.
@@ -73,17 +85,32 @@ class PlottingTab(DiiveTab):
             item.setData(NAME_ROLE, str(col))
             item.setData(PANEL_ROLE, 0)
             self.var_list.addItem(item)
-        self.var_list.setFixedWidth(260)
         self.var_list.selected.connect(self._on_selected)
+
+        left_layout.addWidget(self.search)
+        left_layout.addWidget(self.var_list, stretch=1)
 
         # Right: embedded matplotlib canvas.
         self.canvas = MplCanvas()
 
-        layout.addWidget(self.var_list)
+        layout.addWidget(left)
         layout.addWidget(self.canvas, stretch=1)
 
         self._select_default()
         return root
+
+    def _filter_list(self, text: str) -> None:
+        """Hide variables not matching `text`.
+
+        Matches as a subsequence over the normalized (lowercased,
+        separator-stripped) name, so the typed characters need only appear in
+        order -- e.g. 'gpp16' matches 'GPP_CUT_16_f'.
+        """
+        needle = _normalize(text)
+        for i in range(self.var_list.count()):
+            item = self.var_list.item(i)
+            name = _normalize(item.data(NAME_ROLE) or "")
+            item.setHidden(not _is_subsequence(needle, name))
 
     def _select_default(self) -> None:
         """Highlight and render the startup variable in a single panel."""
@@ -147,7 +174,7 @@ class PlottingTab(DiiveTab):
             hm = dv.plotting.HeatmapDateTime(series)
             hm.plot(
                 ax=ax, fig=self.canvas.fig, title=name,
-                cb_digits_after_comma=_cb_decimals(series),
+                cb_digits_after_comma='auto',
             )
         except Exception as err:
             ax.text(
@@ -169,20 +196,12 @@ class PlottingTab(DiiveTab):
         self.var_list.viewport().update()
 
 
-def _cb_decimals(series) -> int:
-    """Pick colorbar decimal places from a series' value range.
+def _normalize(text: str) -> str:
+    """Lowercase and strip non-alphanumeric chars for separator-insensitive search."""
+    return re.sub(r"[^a-z0-9]", "", text.lower())
 
-    Scales the precision to the spacing between colorbar ticks (~range/6), so
-    wide-range variables show whole numbers instead of trailing ``.00`` and
-    narrow-range variables keep enough digits to be distinguishable.
-    """
-    vals = series.to_numpy(dtype="float64")
-    finite = vals[np.isfinite(vals)]
-    if finite.size == 0:
-        return 2
-    rng = float(finite.max() - finite.min())
-    if rng <= 0:
-        return 2
-    step = rng / 6.0
-    decimals = -math.floor(math.log10(step))
-    return int(min(max(decimals, 0), 4))
+
+def _is_subsequence(needle: str, hay: str) -> bool:
+    """True if every char of `needle` appears in `hay` in order (gaps allowed)."""
+    it = iter(hay)
+    return all(c in it for c in needle)

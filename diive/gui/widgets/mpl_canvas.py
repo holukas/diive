@@ -48,7 +48,7 @@ class MplCanvas(QWidget):
             pal.setColor(role, QColor("#212121"))
         self.setPalette(pal)
 
-        self.fig = Figure(layout="constrained")
+        self.fig = Figure(layout="constrained", facecolor="white")
         self._canvas = FigureCanvasQTAgg(self.fig)
         self._toolbar = NavigationToolbar2QT(self._canvas, self)
 

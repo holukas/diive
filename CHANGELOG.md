@@ -32,6 +32,13 @@
   shows one variable; Ctrl+click adds/removes up to five side-by-side panels (shared x/y axes for synchronised
   pan/zoom). A custom item delegate highlights selected variables and tags NEE / GPP / Reco columns with colored pills.
   Colorbar decimals adapt to each variable's value range. Light theme with modern scrollbars.
+- **`HeatmapDateTime` gains `cb_digits_after_comma='auto'`** — colorbar precision chosen from the data range
+  (whole numbers for wide ranges, more digits for narrow ones). New helper `auto_colorbar_digits` in
+  `diive.core.plotting.heatmap_base`. Extracted from the GUI so all library users benefit.
+- **`dv.variables.classify_variable(name)`** — classifies a column into its kind (NEE / GPP / Reco / LE / ET /
+  Rg / SW_IN / PPFD / PAR / LW) and physical category (carbon / water / radiation) from FLUXNET naming
+  conventions. Returns a `VariableClass(kind, category)` namedtuple, or None. Library-owned domain knowledge the
+  GUI uses for its variable tags.
 
 ### Flux Processing Chain
 

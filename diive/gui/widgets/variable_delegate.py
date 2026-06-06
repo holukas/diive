@@ -5,8 +5,9 @@ GUI.WIDGETS.VARIABLE_DELEGATE: LIST ITEM RENDERER
 `VariableDelegate` paints variable-list rows itself so the panel highlight is
 reliable: once a `QListWidget` is styled via a stylesheet, Qt ignores per-item
 `setBackground`/`setForeground`, so role-based colouring silently fails. The
-delegate also draws a colored "pill" tag next to variables whose name starts
-with ``NEE_``.
+delegate also draws a colored "pill" tag for recognised variables. The
+name->kind classification comes from `dv.variables.classify_variable` (library
+domain knowledge); this module only maps a kind to its pill colour/label.
 
 Each item carries its panel position in `PANEL_ROLE` (0 = not shown; 1 = the
 primary panel; 2+ = additional panels), which the delegate maps to colours.
@@ -19,6 +20,8 @@ from PySide6.QtCore import QRect, QSize, Qt
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import QStyle, QStyledItemDelegate
 
+from diive.variables import classify_variable
+
 #: Variable name (shared with VariableList click handling).
 NAME_ROLE = Qt.ItemDataRole.UserRole
 #: Panel position: 0 = unselected, 1 = primary, 2+ = additional panels.
@@ -30,24 +33,38 @@ _EXTRA_BG = QColor("#BBDEFB")     # blue 100
 _EXTRA_FG = QColor("#0D47A1")     # blue 900
 _TEXT_FG = QColor("#212121")
 _HOVER_BG = QColor("#E3F2FD")     # blue 50
-_PILL_FG = QColor("#FFFFFF")
+_WHITE = QColor("#FFFFFF")
+_DARK = QColor("#212121")
 
-#: Pill tags by variable-name prefix: (prefix, label, background). The first
-#: matching prefix wins, so list more specific prefixes first.
-_PILL_RULES = (
-    ("NEE", "NEE", QColor("#2E7D32")),    # green 800
-    ("GPP", "GPP", QColor("#1E88E5")),    # blue 600
-    ("Reco", "RECO", QColor("#C62828")),  # red 800
-)
+#: GUI styling per variable kind (from `dv.variables.classify_variable`):
+#: kind -> (label, background, text_color). The library owns the name->kind
+#: classification; this map owns only the colours/labels.
+_PILL_STYLE = {
+    "NEE": ("NEE", QColor("#2E7D32"), _WHITE),    # green 800
+    "GPP": ("GPP", QColor("#1E88E5"), _WHITE),    # blue 600
+    "Reco": ("RECO", QColor("#C62828"), _WHITE),  # red 800
+    # LE and ET are the same water flux in different units -> shared teal.
+    "LE": ("LE", QColor("#00838F"), _WHITE),      # cyan 800
+    "ET": ("ET", QColor("#00838F"), _WHITE),
+    # Radiation -> shared yellow-orange (dark text for contrast).
+    "Rg": ("Rg", QColor("#FFB300"), _DARK),       # amber 600
+    "SW_IN": ("SW_IN", QColor("#FFB300"), _DARK),
+    "PPFD": ("PPFD", QColor("#FFB300"), _DARK),
+    "PAR": ("PAR", QColor("#FFB300"), _DARK),
+    "LW": ("LW", QColor("#FFB300"), _DARK),
+}
 
 
 def _pill_for(name):
-    """Return ``(label, color)`` for the first matching prefix, or None."""
-    if isinstance(name, str):
-        for prefix, label, color in _PILL_RULES:
-            if name.startswith(prefix):
-                return label, color
-    return None
+    """Return ``(label, background, text_color)`` for a variable, or None.
+
+    Classification (name -> kind) is the library's job; this only maps the
+    kind to GUI colours.
+    """
+    vc = classify_variable(name)
+    if vc is None:
+        return None
+    return _PILL_STYLE.get(vc.kind)
 
 
 class VariableDelegate(QStyledItemDelegate):
@@ -84,7 +101,7 @@ class VariableDelegate(QStyledItemDelegate):
         # reserve for the text.
         pill_w = 0
         if pill is not None:
-            pill_label, pill_color = pill
+            pill_label, pill_color, pill_fg = pill
             pill_font = QFont(option.font)
             pill_font.setBold(True)
             pill_font.setPointSizeF(max(7.0, option.font.pointSizeF() - 1.0))
@@ -99,7 +116,7 @@ class VariableDelegate(QStyledItemDelegate):
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(pill_color)
             painter.drawRoundedRect(pill_rect, ph / 2.0, ph / 2.0)
-            painter.setPen(_PILL_FG)
+            painter.setPen(pill_fg)
             painter.drawText(pill_rect, Qt.AlignmentFlag.AlignCenter, pill_label)
             pill_w = pw + 12
 

@@ -35,6 +35,15 @@ from diive.variables.utilities import (
     add_impulse_noise,
 )
 
+# Classification
+from diive.variables.classification import (
+    classify_variable,
+    VariableClass,
+    CATEGORY_CARBON,
+    CATEGORY_WATER,
+    CATEGORY_RADIATION,
+)
+
 __all__ = [
     # radiation
     'potrad',
@@ -54,4 +63,10 @@ __all__ = [
     # utilities
     'generate_noisy_timeseries',
     'add_impulse_noise',
+    # classification
+    'classify_variable',
+    'VariableClass',
+    'CATEGORY_CARBON',
+    'CATEGORY_WATER',
+    'CATEGORY_RADIATION',
 ]

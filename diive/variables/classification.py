@@ -1,0 +1,74 @@
+"""
+VARIABLES.CLASSIFICATION: VARIABLE CATEGORY FROM NAME
+=====================================================
+
+Classify a variable into its kind and physical category from its name, using
+the column naming conventions of the Swiss FluxNet / FLUXNET workflow. This is
+the authoritative place for "what kind of variable is this column" — callers
+(e.g. the GUI) use it instead of re-encoding name prefixes themselves.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+from __future__ import annotations
+
+from typing import NamedTuple
+
+#: Physical categories.
+CATEGORY_CARBON = "carbon"
+CATEGORY_WATER = "water"
+CATEGORY_RADIATION = "radiation"
+
+
+class VariableClass(NamedTuple):
+    """Result of :func:`classify_variable`.
+
+    Attributes:
+        kind: Canonical short variable label, e.g. ``'NEE'``, ``'GPP'``,
+            ``'Reco'``, ``'LE'``, ``'ET'``, ``'Rg'``, ``'SW_IN'``, ``'PPFD'``,
+            ``'PAR'``, ``'LW'``.
+        category: One of ``'carbon'``, ``'water'``, ``'radiation'``.
+    """
+    kind: str
+    category: str
+
+
+# Name prefix -> (kind, category). First match wins; list more specific
+# prefixes first. Matching is case-sensitive, following column conventions.
+_RULES: tuple[tuple[str, str, str], ...] = (
+    ("NEE", "NEE", CATEGORY_CARBON),
+    ("GPP", "GPP", CATEGORY_CARBON),
+    ("Reco", "Reco", CATEGORY_CARBON),
+    ("LE_", "LE", CATEGORY_WATER),
+    ("ET_", "ET", CATEGORY_WATER),
+    ("Rg_", "Rg", CATEGORY_RADIATION),
+    ("SW_IN_", "SW_IN", CATEGORY_RADIATION),
+    ("PPFD_", "PPFD", CATEGORY_RADIATION),
+    ("PAR_", "PAR", CATEGORY_RADIATION),
+    ("LW_", "LW", CATEGORY_RADIATION),
+)
+
+
+def classify_variable(name: str) -> VariableClass | None:
+    """Classify a variable from its column name.
+
+    Args:
+        name: Variable / column name, e.g. ``'GPP_CUT_REF_f'``.
+
+    Returns:
+        A :class:`VariableClass` (``kind``, ``category``) for recognised
+        variables, or ``None`` if the name matches no known prefix.
+
+    Examples:
+        >>> classify_variable('NEE_CUT_REF_f')
+        VariableClass(kind='NEE', category='carbon')
+        >>> classify_variable('LE_f')
+        VariableClass(kind='LE', category='water')
+        >>> classify_variable('TA_f') is None
+        True
+    """
+    if not isinstance(name, str):
+        return None
+    for prefix, kind, category in _RULES:
+        if name.startswith(prefix):
+            return VariableClass(kind=kind, category=category)
+    return None

@@ -64,7 +64,7 @@ tests/                        # Unit tests
 | `dv.analysis.experimental` | **(provisional, API may change)** `DriverAnalysis`, `DriverAnalysisResult`, `AleCurve`, `Ale2DResult`, `accumulated_local_effects`, `accumulated_local_effects_2d`, `ExperimentalWarning` — evidence-triangulation driver attribution; emits a one-time `ExperimentalWarning` on use |
 | `dv.plotting` | `HeatmapDateTime`, `HeatmapXYZ`, `HeatmapYearMonth`, `HexbinPlot`, `ScatterXY`, `TimeSeries`, `DielCycle`, `RidgeLinePlot`, `HistogramPlot`, `ShiftedDistributionPlot`, `Cumulative`, `CumulativeYear`, `LongtermAnomaliesYear`, `TreeRingPlot` |
 | `dv.times` | `TimestampSanitizer`, `DetectFrequency`, `resample_to_monthly_agg_matrix`, `timestamp_infer_freq_*` |
-| `dv.variables` | `DaytimeNighttimeFlag`, `daytime_nighttime_flag_from_swinpot`, `TimeSince`, `potrad`, `potrad_eot`, `calc_vpd_from_ta_rh`, `aerodynamic_resistance`, `dry_air_density`, `et_from_le`, `latent_heat_of_vaporization`, `air_temp_from_sonic_temp`, `lagged_variants`, noise helpers |
+| `dv.variables` | `DaytimeNighttimeFlag`, `daytime_nighttime_flag_from_swinpot`, `TimeSince`, `potrad`, `potrad_eot`, `calc_vpd_from_ta_rh`, `aerodynamic_resistance`, `dry_air_density`, `et_from_le`, `latent_heat_of_vaporization`, `air_temp_from_sonic_temp`, `lagged_variants`, `classify_variable`, noise helpers |
 | `dv.corrections` | `MeasurementOffsetFromReplicate`, `WindDirOffset`, `remove_radiation_zero_offset`, `remove_relativehumidity_offset`, `set_exact_values_to_missing`, `setto_threshold`, `setto_value` |
 | `dv.qaqc` | `FlagQCF`, `StepwiseMeteoScreeningDb` |
 
@@ -192,6 +192,15 @@ Key `data.levels` fields: `level2`, `level2_qcf`, `level31`, `level31_qcf`, `lev
 **Example:** `examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py`
 
 ## Desktop GUI (`diive.gui`)
+
+**[CRITICAL] Strict GUI ↔ library separation.** `diive/gui/` contains ONLY GUI code — Qt widgets, layout, rendering
+glue, event handling, and presentation choices (colors, labels, styling). ALL algorithms and domain logic
+(gap-filling, flux processing, variable classification, data computations, plotting math) live in the main library;
+the GUI *calls* them, never reimplements them. The dependency arrow points one way: `gui` → library, never the reverse
+(no other diive module may import from `diive.gui`). When building a GUI feature, if any piece of functionality would be
+reusable, is domain knowledge, or is an algorithm, it belongs in the library — **notify the user and propose the move**
+rather than putting it in `gui/`. (Examples already moved out: `cb_digits_after_comma='auto'` on `HeatmapDateTime`;
+`dv.variables.classify_variable`.)
 
 PySide6 desktop app. **Optional dependency** (`gui` extra, lazy-imported like `causal`) — never pulled into a headless
 install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `diive.gui._cli:_gui_main`). See

@@ -25,6 +25,14 @@ QWidget { background: #FFFFFF; color: #212121; }
 QTabWidget::pane { border: 1px solid #E0E0E0; }
 QTabBar::tab { background: #F5F5F5; padding: 6px 14px; border: 1px solid #E0E0E0; }
 QTabBar::tab:selected { background: #FFFFFF; border-bottom: 2px solid #2196F3; }
+QLineEdit {
+    background: #FFFFFF;
+    border: 1px solid #B0BEC5;
+    border-radius: 6px;
+    padding: 5px 8px;
+    margin-bottom: 4px;
+}
+QLineEdit:focus { border: 1px solid #2196F3; }
 QListWidget {
     background: #ECEFF1;
     border: 1px solid #B0BEC5;
