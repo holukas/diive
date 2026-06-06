@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLineEdit,
     QListWidgetItem,
+    QSplitter,
     QVBoxLayout,
     QWidget,
 )
@@ -54,15 +55,18 @@ class PlottingTab(DiiveTab):
     title = "Plotting"
 
     def build(self) -> QWidget:
-        self._df = dv.load_exampledata_parquet()
+        self._df = None
         self._panels: list[str] = []
 
         root = QWidget()
         layout = QHBoxLayout(root)
+        layout.setContentsMargins(0, 0, 0, 0)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
 
-        # Left column: a filter field above the variable list.
+        # Left column: a filter field above the variable list. Width is
+        # user-resizable via the splitter handle.
         left = QWidget()
-        left.setFixedWidth(260)
+        left.setMinimumWidth(160)
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 0, 0)
 
@@ -80,11 +84,10 @@ class PlottingTab(DiiveTab):
         self.var_list.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         self.var_list.setItemDelegate(VariableDelegate(self.var_list))
         self.var_list.setMouseTracking(True)
-        for col in self._df.columns:
-            item = QListWidgetItem(str(col))
-            item.setData(NAME_ROLE, str(col))
-            item.setData(PANEL_ROLE, 0)
-            self.var_list.addItem(item)
+        # Names are elided by the delegate; never scroll horizontally (it would
+        # push the right-aligned pills out of view).
+        self.var_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.var_list.setWordWrap(False)
         self.var_list.selected.connect(self._on_selected)
 
         left_layout.addWidget(self.search)
@@ -93,11 +96,26 @@ class PlottingTab(DiiveTab):
         # Right: embedded matplotlib canvas.
         self.canvas = MplCanvas()
 
-        layout.addWidget(left)
-        layout.addWidget(self.canvas, stretch=1)
-
-        self._select_default()
+        splitter.addWidget(left)
+        splitter.addWidget(self.canvas)
+        splitter.setStretchFactor(0, 0)   # list keeps its width
+        splitter.setStretchFactor(1, 1)   # canvas takes extra space
+        splitter.setSizes([260, 840])
+        layout.addWidget(splitter)
         return root
+
+    def on_data_loaded(self, df) -> None:
+        """Populate the variable list from a newly loaded dataset and render."""
+        self._df = df
+        self._panels = []
+        self.search.clear()
+        self.var_list.clear()
+        for col in df.columns:
+            item = QListWidgetItem(str(col))
+            item.setData(NAME_ROLE, str(col))
+            item.setData(PANEL_ROLE, 0)
+            self.var_list.addItem(item)
+        self._select_default()
 
     def _filter_list(self, text: str) -> None:
         """Hide variables not matching `text`.

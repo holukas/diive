@@ -211,6 +211,9 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   the flux processing chain will plug in later.
 - **Two-phase plot classes are GUI-ready.** The plotting tab renders diive plots straight into an embedded canvas via
   `Plot(series).plot(ax=canvas.ax, fig=canvas.fig)`; no GUI-specific plot variants needed.
+- **Data flow.** The `File` menu loads data (parquet → `dv.load_parquet`, else `dv.ReadFileType`; reading is library
+  work, the menu only calls it). `MainWindow` holds the current DataFrame and pushes it to every tab via the
+  `DiiveTab.on_data_loaded(df)` hook; data-presenting tabs override it. Example data auto-loads on startup.
 
 **PySide6 gotchas (already handled in code — don't reintroduce):**
 

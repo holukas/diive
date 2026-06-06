@@ -68,6 +68,10 @@ def classify_variable(name: str) -> VariableClass | None:
     """
     if not isinstance(name, str):
         return None
+    # FC is the CO2 flux (the pre-NEE stage). Match it on a word boundary so it
+    # does not also catch FCH4 (methane flux).
+    if name == "FC" or name.startswith("FC_"):
+        return VariableClass(kind="FC", category=CATEGORY_CARBON)
     for prefix, kind, category in _RULES:
         if name.startswith(prefix):
             return VariableClass(kind=kind, category=category)

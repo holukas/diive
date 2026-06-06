@@ -32,7 +32,7 @@ _PRIMARY_FG = QColor("#FFFFFF")
 _EXTRA_BG = QColor("#BBDEFB")     # blue 100
 _EXTRA_FG = QColor("#0D47A1")     # blue 900
 _TEXT_FG = QColor("#212121")
-_HOVER_BG = QColor("#E3F2FD")     # blue 50
+_HOVER_BG = QColor("#FFCC80")     # orange 200 -- matches the menu hover
 _WHITE = QColor("#FFFFFF")
 _DARK = QColor("#212121")
 
@@ -41,6 +41,8 @@ _DARK = QColor("#212121")
 #: classification; this map owns only the colours/labels.
 _PILL_STYLE = {
     "NEE": ("NEE", QColor("#2E7D32"), _WHITE),    # green 800
+    "FC": ("FC", QColor("#2E7D32"), _WHITE),      # CO2 flux (pre-NEE) -> green
+
     "GPP": ("GPP", QColor("#1E88E5"), _WHITE),    # blue 600
     "Reco": ("RECO", QColor("#C62828"), _WHITE),  # red 800
     # LE and ET are the same water flux in different units -> shared teal.
@@ -71,11 +73,15 @@ class VariableDelegate(QStyledItemDelegate):
     """Render a variable row: highlight + optional NEE pill."""
 
     def sizeHint(self, option, index) -> QSize:
+        # Width 1 so long names never force a horizontal scrollbar (which would
+        # push the right-aligned pill out of view). Rows still paint at the
+        # full viewport width via option.rect; we elide the name ourselves.
         s = super().sizeHint(option, index)
-        return QSize(s.width(), max(s.height(), 26))
+        return QSize(1, max(s.height(), 26))
 
     def paint(self, painter, option, index) -> None:
         painter.save()
+        painter.setClipRect(option.rect)  # never draw past the row
         painter.setRenderHint(painter.RenderHint.Antialiasing, True)
 
         rect: QRect = option.rect

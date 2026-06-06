@@ -41,3 +41,12 @@ class DiiveTab(ABC):
         if self._widget is None:
             self._widget = self.build()
         return self._widget
+
+    def on_data_loaded(self, df) -> None:
+        """Called by the main window when a new dataset is loaded.
+
+        Tabs that present data override this to refresh themselves (e.g. the
+        plotting tab repopulates its variable list). Default is a no-op so
+        tabs that don't consume data need not implement it.
+        """
+

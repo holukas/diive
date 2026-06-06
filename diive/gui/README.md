@@ -11,16 +11,22 @@ diive-gui                # or: uv run diive-gui
 
 | File | Role |
 |---|---|
-| `app.py` | `QApplication` bootstrap, `MainWindow` (a `QTabWidget`), light-theme stylesheet |
+| `app.py` | `QApplication` bootstrap, `MainWindow` (menu bar + `QTabWidget`), light-theme stylesheet |
 | `registry.py` | `TAB_CLASSES` — the single list the main window builds tabs from |
-| `tabs/base.py` | `DiiveTab` ABC: `title` + `build()` — the extension point |
+| `tabs/base.py` | `DiiveTab` ABC: `title` + `build()` + `on_data_loaded(df)` — the extension point |
 | `tabs/plotting.py` | Interactive plotting tab (variable list + heatmap panels) |
 | `widgets/mpl_canvas.py` | `MplCanvas` — embedded matplotlib figure + bottom-right toolbar |
 | `widgets/variable_list.py` | `VariableList` — list emitting `selected(name, ctrl_held)` |
 | `widgets/variable_delegate.py` | `VariableDelegate` — paints row highlight + NEE/GPP/Reco pills |
+| `widgets/open_data_dialog.py` | `OpenDataDialog` — file + filetype picker with a parsed live preview |
 
 **Adding a tab:** write a `DiiveTab` subclass and append its class to `TAB_CLASSES`. The main window is agnostic to
 concrete tabs — it just iterates the registry. This is how the flux processing chain will plug in later.
+
+**Data flow:** **File ▸ Open data file…** shows `OpenDataDialog` — pick the file, choose its filetype, and preview the
+first parsed rows before loading (parquet via `dv.load_parquet`, other formats via `dv.ReadFileType`). All reading is
+library work, the dialog only orchestrates it. `MainWindow` holds the current DataFrame and pushes it to every tab via
+`DiiveTab.on_data_loaded(df)`; tabs that present data override that hook to refresh. Example data auto-loads on startup.
 
 ## PySide6 gotchas baked into this code
 
