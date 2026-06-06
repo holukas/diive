@@ -46,12 +46,18 @@ causal = [
     "tigramite>=5.2",
     "econml>=0.15",
 ]
+# PySide6 (Qt) desktop GUI. Optional so headless/library users never pull in
+# Qt. Install with: pip install 'diive[gui]'  (or: uv sync --extra gui).
+gui = [
+    "pyside6>=6.8,<7.0",
+]
 
 [project.scripts]
 diive-tlag-pwb-batch = "diive.flux.hires.lag_pwb:_cli_main"
 diive-tlag-apply-batch = "diive.flux.hires.apply_tlag:_cli_main"
 diive-tlag-pwb-detect-remove = "diive.flux.hires.detect_and_remove_tlag:_cli_main"
 diive-tlag-pwb-detect-remove-tui = "diive.flux.hires.detect_and_remove_tlag_tui:_tui_main"
+diive-gui = "diive.gui._cli:_gui_main"
 
 [tool.uv]
 python-preference = "managed"
