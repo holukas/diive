@@ -164,6 +164,82 @@ def test_daterange_dialog_clamps_and_orders(app):
     assert got_start >= start and got_end <= end
 
 
+def test_overview_layout_frozen_on_zoom(window):
+    # Constrained layout reflows on every draw, making panels jump while
+    # zooming; the canvas freezes it after the initial render so zoom/pan stay
+    # stable. Verify a simulated zoom does not move any panel.
+    overview = window._tabs[0]
+    overview._on_select("NEE_CUT_REF_f")
+    QApplication.processEvents()
+    fig = overview.canvas.fig
+    before = [tuple(a.get_position().bounds) for a in fig.axes]
+    ts_ax = fig.axes[0]
+    x0, x1 = ts_ax.get_xlim()
+    ts_ax.set_xlim(x0 + (x1 - x0) * 0.3, x0 + (x1 - x0) * 0.6)  # zoom in
+    overview.canvas.draw()
+    QApplication.processEvents()
+    after = [tuple(a.get_position().bounds) for a in fig.axes]
+    assert before == after  # panels stayed put
+
+    # ...but a resize must re-solve the frozen layout to the new size (otherwise
+    # a layout computed at the tiny pre-show size stays collapsed). After a
+    # resize the bottom panels should have a sensible (non-collapsed) width.
+    fig.set_size_inches(20, 11)
+    overview.canvas._on_resize(None)
+    QApplication.processEvents()
+    bottom_widths = [a.get_position().width for a in fig.axes
+                     if a.get_position().y0 < 0.45]
+    assert sum(w > 0.1 for w in bottom_widths) >= 3
+
+
+def test_hover_value_lookup(app):
+    import types
+    import numpy as np
+    from diive.gui.widgets.hover import HoverAnnotator
+    from diive.gui.widgets.mpl_canvas import MplCanvas
+
+    df = dv.load_exampledata_parquet()
+    series = df["Tair_f"]
+
+    # Line panel: snaps to the nearest sample and reports its value.
+    canvas = MplCanvas()
+    assert isinstance(canvas.hover, HoverAnnotator)
+    # Toolbar coordinate readout is hidden; a "Hover values" toggle controls it.
+    assert canvas._toolbar.coordinates is False
+    assert canvas._hover_toggle.isChecked() and canvas.hover._enabled
+    canvas._hover_toggle.setChecked(False)
+    assert canvas.hover._enabled is False
+    canvas._hover_toggle.setChecked(True)
+    ax = canvas.new_axes(1)[0]
+    dv.plotting.TimeSeries(series).plot(ax=ax)
+    canvas.draw()
+    line = next(l for l in ax.get_lines() if np.asarray(l.get_xdata()).size > 2)
+    x = np.asarray(line.get_xdata(orig=False), float)
+    y = np.asarray(line.get_ydata(orig=False), float)
+    i = 5000
+    px, py = ax.transData.transform((x[i], y[i]))
+    ev = types.SimpleNamespace(inaxes=ax, xdata=x[i], ydata=y[i], x=px, y=py)
+    hx, hy, text, marker = canvas.hover._value_at(ax, ev)
+    assert marker is True
+    assert abs(hy - y[i]) < 1e-9
+    assert f"{y[i]:.4g}" in text
+
+    # Heatmap panel: reads the cell under the cursor.
+    canvas2 = MplCanvas()
+    ax2 = canvas2.new_axes(1)[0]
+    dv.plotting.HeatmapDateTime(series).plot(
+        ax=ax2, fig=canvas2.fig, cb_digits_after_comma="auto")
+    canvas2.draw()
+    qm = next(c for c in ax2.collections if c.__class__.__name__ == "QuadMesh")
+    xb, yb, vals = canvas2.hover._mesh_grid(qm)
+    xc = 0.5 * (xb[10] + xb[11])
+    yc = 0.5 * (yb[5] + yb[6])
+    ev2 = types.SimpleNamespace(inaxes=ax2, xdata=xc, ydata=yc, x=0, y=0)
+    _, _, text2, marker2 = canvas2.hover._heatmap_value(ax2, qm, ev2)
+    assert marker2 is False
+    assert f"{float(vals[5, 10]):.4g}" in text2
+
+
 def test_appearance_singleton(window):
     window._open_menu_tab("Appearance")
     window._open_menu_tab("Appearance")

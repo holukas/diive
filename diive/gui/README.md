@@ -25,7 +25,8 @@ diive-gui                # or: uv run diive-gui
 | `widgets/plot_settings.py` | `PlotSettingsPanel(plot_type)` — live plot-parameter controls (between list and canvas); `changed` re-renders; defines `HEATMAP`/`TIMESERIES` |
 | `tabs/features.py` | Feature engineering tab (FeatureEngineer; created features get a "NEW" pill) |
 | `tabs/log.py` | Log tab wrapping `ConsolePanel` (live coloured library output) |
-| `widgets/mpl_canvas.py` | `MplCanvas` — embedded matplotlib figure + bottom-right toolbar |
+| `widgets/mpl_canvas.py` | `MplCanvas` — embedded matplotlib figure + bottom-right toolbar; attaches a `HoverAnnotator` |
+| `widgets/hover.py` | `HoverAnnotator` — value-under-cursor tooltip (line snap + heatmap cell) via blitting |
 | `widgets/variable_panel.py` | **`VariablePanel`** — the shared variable list (filter + pills) used by every tab |
 | `widgets/variable_list.py` | `VariableList` — list emitting `selected(name, ctrl_held)` |
 | `widgets/variable_delegate.py` | `VariableDelegate` — paints row highlight + NEE/GPP/Reco pills |
@@ -82,6 +83,15 @@ event loop (true animation would need off-thread Agg rendering).
 which calls `on_data_loaded(df, created)` on all active tabs. A menu tab gets the current data on open and is then
 subscribed; on close it's removed so it can't go stale.
 
+**Hover tooltip (`HoverAnnotator`):** `MplCanvas` attaches one in its constructor; it works on every figure rendered into the
+canvas (Overview, plotting tabs) with no per-tab wiring. On mouse-move it shows a small box with the value under the cursor:
+**line** artists snap to the nearest sample along x (`np.searchsorted` on the unit-converted floats — use `get_xdata(orig=False)`,
+not the raw datetimes — so it stays O(log n) on large series) and show a marker; **`pcolormesh`** heatmaps read the cell from the
+grid (`get_coordinates()` + reshaped `get_array()`, cached per draw). It renders by **blitting** (cache the background on
+`draw_event`, redraw just the annotation on move), so it never forces a full repaint. Pure presentation — no data/domain logic —
+so it lives in the GUI. A **"Hover values"** checkbox in the canvas's bottom row (next to the navigation toolbar) toggles it
+(`hover.set_enabled`); the toolbar's own x/y coordinate readout is disabled (`coordinates=False`) since the tooltip replaces it.
+
 **Output console:** the **Log** tab (`LogTab` → `ConsolePanel`) mirrors diive's Rich output in colour. It registers a
 Rich mirror console via `add_console_sink` (in `diive.core.utils.console`) — the library tees its output to any
 registered sink; the panel renders the ANSI stream into a `QTextEdit`. The redirect hook lives in the library; the
@@ -100,3 +110,14 @@ panel only renders.
   small `QObject` helper (see `FeatureEngineerTab`).
 - **matplotlib renders synchronously** on the GUI thread (blocks the event loop), so loading indicators are static
   cues, not smooth animations.
+- **Hover snapping must use `line.get_xdata(orig=False)`** (the unit-converted floats), not `get_xdata()` (the raw
+  datetimes). `event.xdata` and `transData` are in the converted coordinate system; mixing the two snaps to the wrong
+  point and breaks `num2date`. The `HoverAnnotator` re-captures its blit background on every `draw_event`, so it stays
+  correct across re-renders, pan/zoom, and resize.
+- **Constrained layout is frozen after the initial render, but re-solved on resize.** `constrained_layout` re-solves on
+  every draw, so during interactive pan/zoom the panels jump as tick-label widths change. `MplCanvas.draw()` turns the
+  layout engine off (`set_layout_engine("none")`) once the panels are placed; each new render re-enables it via
+  `MplCanvas.reset_layout()` (call that, not `fig.clear()`, when building panels directly — e.g. the Overview's gridspec).
+  **But** the first render happens at the tiny pre-show canvas size, so the frozen layout must adapt when the widget gets
+  its real size: `_on_resize` (on `resize_event`) briefly re-enables constrained, solves via `draw_without_rendering()`,
+  and re-freezes. Pan/zoom never resizes, so it stays frozen there. Forgetting the resize half leaves panels collapsed.

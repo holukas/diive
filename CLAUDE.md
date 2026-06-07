@@ -256,6 +256,11 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   (2×4: time series, `Cumulative`, `DielCycle` mean diel cycle, daily-mean time series via `dv.times.resample_to_daily_agg`,
   date/time heatmap; extensible via `_PANELS`). Bottom: a full-width strip of KPI-style stat cards (`_StatCard`) from
   `dv.sstats`.
+- **Hover tooltip.** `MplCanvas` attaches a `HoverAnnotator` (`widgets/hover.py`) in its constructor, so every embedded
+  figure (Overview, plotting tabs) shows the value under the cursor with no per-tab wiring. Lines snap to the nearest
+  sample (`np.searchsorted` on `get_xdata(orig=False)` — the unit-converted floats, **not** raw datetimes); `pcolormesh`
+  heatmaps read the cell from `get_coordinates()`/`get_array()`. Renders by blitting (background re-captured on
+  `draw_event`); GUI-only presentation, no domain logic.
 - **Feature engineering tab.** Menu-activated (`Tools ▸ Feature engineering`, from `registry.MENU_TAB_CLASSES`) — not in
   the tab bar until selected, and closable (always-on tabs get their close button removed). Runs `FeatureEngineer`
   (library) on selected variables, emits new columns via a `featuresCreated` signal; `MainWindow` merges them, tracks

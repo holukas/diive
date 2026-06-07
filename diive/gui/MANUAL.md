@@ -129,6 +129,10 @@ colour. Use **Save…** to write the log to a file.
 
 ## Tips
 
+- **Hover over any plot** to see the value under the cursor in a small box — on
+  line plots it snaps to the nearest data point (with a marker); on heatmaps it
+  shows the cell's date, time, and value. Untick **Hover values** (bottom-right,
+  next to the plot toolbar) to switch it off.
 - Your appearance settings, window size/position, and last-used filetype are
   **remembered** between sessions.
 - The window sizes itself to your screen on first launch.

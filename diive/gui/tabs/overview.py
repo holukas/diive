@@ -190,7 +190,9 @@ class OverviewTab(DiiveTab):
 
     def _render_figure(self, series, name: str) -> None:
         fig = self.canvas.fig
-        fig.clear()
+        # Clear + re-enable constrained layout (canvas.draw() freezes it after,
+        # so zoom/pan don't reflow the panels).
+        self.canvas.reset_layout()
         gs = fig.add_gridspec(2, 4)
         for (rows, cols), plot_type in _PANELS:
             ax = fig.add_subplot(gs[rows, cols])
