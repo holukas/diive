@@ -63,7 +63,7 @@ tests/                        # Unit tests
 | `dv.analysis` | `DailyCorrelation`, `GrangerCausality`, `StratifiedAnalysis`, `GapFinder`, `GapStats`, `GridAggregator`, `Histogram`, `FindOptimumRange`, `SeasonalTrendDecomposition`, `BinFitterCP`, `harmonic_analysis`, `percentiles101` |
 | `dv.analysis.experimental` | **(provisional, API may change)** `DriverAnalysis`, `DriverAnalysisResult`, `AleCurve`, `Ale2DResult`, `accumulated_local_effects`, `accumulated_local_effects_2d`, `ExperimentalWarning` — evidence-triangulation driver attribution; emits a one-time `ExperimentalWarning` on use |
 | `dv.plotting` | `HeatmapDateTime`, `HeatmapXYZ`, `HeatmapYearMonth`, `HexbinPlot`, `ScatterXY`, `TimeSeries`, `DielCycle`, `RidgeLinePlot`, `HistogramPlot`, `ShiftedDistributionPlot`, `Cumulative`, `CumulativeYear`, `LongtermAnomaliesYear`, `TreeRingPlot` |
-| `dv.times` | `TimestampSanitizer`, `DetectFrequency`, `resample_to_monthly_agg_matrix`, `timestamp_infer_freq_*` |
+| `dv.times` | `TimestampSanitizer`, `DetectFrequency`, `keep_daterange` (non-destructive date-range subselection; inclusive `start`/`end`, either bound optional), `resample_to_monthly_agg_matrix`, `timestamp_infer_freq_*` |
 | `dv.variables` | `DaytimeNighttimeFlag`, `daytime_nighttime_flag_from_swinpot`, `TimeSince`, `potrad`, `potrad_eot`, `calc_vpd_from_ta_rh`, `aerodynamic_resistance`, `dry_air_density`, `et_from_le`, `latent_heat_of_vaporization`, `air_temp_from_sonic_temp`, `lagged_variants`, `classify_variable`, noise helpers |
 | `dv.corrections` | `MeasurementOffsetFromReplicate`, `WindDirOffset`, `remove_radiation_zero_offset`, `remove_relativehumidity_offset`, `set_exact_values_to_missing`, `setto_threshold`, `setto_value` |
 | `dv.qaqc` | `FlagQCF`, `StepwiseMeteoScreeningDb` |
@@ -246,6 +246,12 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   hook; data-presenting tabs override it. Example data auto-loads on startup. **File ▸ Save data as parquet…** writes a
   diive-format parquet via `dv.save_parquet`; `app.to_diive_parquet_frame` enforces single-level columns (one header
   row) + a valid `TIMESTAMP_END/MIDDLE/START` index name (prompts if unset).
+- **Date-range subselection (`Data` menu).** Non-destructive: `MainWindow` keeps the full record in `_full_data`; `_data`
+  (what every tab sees) is `_full_data` optionally narrowed to `_range=(start,end)` via `dv.times.keep_daterange`.
+  **Data ▸ Select date range…** opens `DateRangeDialog` (from/to pickers seeded + clamped to the data span) and sets
+  `_range`; **Data ▸ Reset to full range** clears it. `_apply_range()` re-derives `_data`, updates the title with the
+  active window, toggles the reset action, and pushes to tabs. Engineered features merge into `_full_data` (so they
+  survive a range reset; out-of-range rows align to NaN). The slicing math is the library's `keep_daterange`, not the GUI.
 - **Overview tab.** First tab, focused on every load (`setCurrentIndex(0)`). Top: variable list + a GridSpec figure
   (time series, `Cumulative`, `DielCycle` mean diel cycle, date/time heatmap; extensible via `_PANELS`). Bottom: a
   full-width strip of KPI-style stat cards (`_StatCard`) from `dv.sstats`.
@@ -464,4 +470,4 @@ Use `/llm-detox` skill for all written content (documentation, comments, commit 
 
 ---
 
-**Last Updated:** 2026-06-06 | **Version:** v0.91.0 | **Package Manager:** `uv`
+**Last Updated:** 2026-06-07 | **Version:** v0.91.0 | **Package Manager:** `uv`

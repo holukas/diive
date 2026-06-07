@@ -33,6 +33,17 @@ so you can try everything right away.
 Selecting several files of the same type **merges** them into one dataset. The
 filetype you used is remembered for next time.
 
+### Focusing on a date range
+
+**Data ▸ Select date range…** (Ctrl+R) narrows the dataset to a *from / to*
+window. Pick the two dates (the pickers start at the full span and can't go
+outside it) and **OK** — every tab, plot, and processing step then works on just
+that window, and saving writes only that window.
+
+This is **non-destructive**: the full record is kept in the background, so
+**Data ▸ Reset to full range** brings everything back at any time. Features you
+engineer while a range is active are kept too, and reappear when you reset.
+
 ### Saving your data
 
 **File ▸ Save data as parquet…** (Ctrl+S) writes the current dataset — including

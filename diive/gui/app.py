@@ -35,6 +35,7 @@ from diive.gui.registry import (
     TAB_CLASSES,
 )
 from diive.core.io.files import ALLOWED_TIMESTAMP_NAMES
+from diive.gui.widgets.daterange_dialog import DateRangeDialog
 from diive.gui.widgets.open_data_dialog import OpenDataDialog
 
 
@@ -59,7 +60,14 @@ class MainWindow(QMainWindow):
         # QWidgets, but the Python tab objects (which hold the signal slots,
         # e.g. PlottingTab._render) would otherwise be garbage-collected after
         # this loop, leaving their signal connections inert.
+        # `_full_data` holds the complete loaded record (plus any engineered
+        # features); `_data` is `_full_data` optionally narrowed to `_range`
+        # (a (start, end) tuple) for a non-destructive date-range subselection.
+        # Tabs always see `_data`. Reset restores the full range.
+        self._full_data = None
         self._data = None
+        self._range: tuple | None = None
+        self._source = ""
         self._created: set = set()  # user-engineered feature column names
         self._menu_tab_list: list = []  # open menu-activated tabs (multi-instance)
 
@@ -118,6 +126,16 @@ class MainWindow(QMainWindow):
         exit_act.triggered.connect(self.close)
         file_menu.addAction(exit_act)
 
+        data_menu = menubar.addMenu("&Data")
+        range_act = QAction("Select date &range...", self)
+        range_act.setShortcut("Ctrl+R")
+        range_act.triggered.connect(self._select_daterange)
+        data_menu.addAction(range_act)
+        self._reset_range_act = QAction("Reset to &full range", self)
+        self._reset_range_act.triggered.connect(self._reset_range)
+        self._reset_range_act.setEnabled(False)
+        data_menu.addAction(self._reset_range_act)
+
         for menu_name, group in MENU_TABS.items():
             menu = menubar.addMenu(f"&{menu_name}")
             for label in group:
@@ -136,12 +154,59 @@ class MainWindow(QMainWindow):
             tab.on_data_loaded(self._data, self._created)
 
     def _set_data(self, df, source: str) -> None:
-        """Set a freshly loaded dataset, reset created features, push to tabs."""
-        self.setWindowTitle(f"{self._base_title} — {source}")
-        self._data = df
+        """Set a freshly loaded dataset, reset created features + range, push."""
+        self._full_data = df
+        self._source = source
+        self._range = None  # a new dataset starts at its full range
         self._created = set()  # fresh dataset has no user-created features
-        self._push_data()
+        self._apply_range()
         self._tabwidget.setCurrentIndex(0)  # show the Overview tab on load
+
+    def _apply_range(self) -> None:
+        """Derive `_data` from `_full_data` (+ active `_range`) and push to tabs.
+
+        The full record is kept in `_full_data`, so narrowing or resetting the
+        range is non-destructive. The window title reflects the active window.
+        """
+        if self._full_data is None:
+            return
+        if self._range is None:
+            self._data = self._full_data
+            title = f"{self._base_title} — {self._source}"
+        else:
+            start, end = self._range
+            self._data = diive.times.keep_daterange(self._full_data, start, end)
+            title = (f"{self._base_title} — {self._source} "
+                     f"[{start:%Y-%m-%d %H:%M} to {end:%Y-%m-%d %H:%M}]")
+        self.setWindowTitle(title)
+        self._reset_range_act.setEnabled(self._range is not None)
+        self._push_data()
+
+    def _select_daterange(self) -> None:
+        """Pick a from/to window and narrow the dataset to it (non-destructive)."""
+        if self._full_data is None or self._full_data.empty:
+            QMessageBox.information(self, "Select date range", "No data loaded yet.")
+            return
+        full_start = self._full_data.index.min()
+        full_end = self._full_data.index.max()
+        cur_start, cur_end = self._range if self._range else (full_start, full_end)
+        dlg = DateRangeDialog(full_start, full_end, cur_start, cur_end, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        start, end = dlg.selected_range()
+        self._range = None if (start <= full_start and end >= full_end) else (start, end)
+        self._apply_range()
+        if self._data is not None:
+            self.statusBar().showMessage(
+                f"Date range: {len(self._data)} records selected", 5000)
+
+    def _reset_range(self) -> None:
+        """Revert to the full loaded date range (discard the subselection)."""
+        if self._range is None:
+            return
+        self._range = None
+        self._apply_range()
+        self.statusBar().showMessage("Reverted to full date range", 5000)
 
     def _open_menu_tab(self, label: str) -> None:
         """Open a menu-activated tab.
@@ -194,13 +259,18 @@ class MainWindow(QMainWindow):
                 return
 
     def _add_features(self, new_df) -> None:
-        """Merge engineered features into the dataset and re-push to tabs."""
-        if new_df is None or new_df.empty or self._data is None:
+        """Merge engineered features into the dataset and re-push to tabs.
+
+        Features merge into `_full_data` (the full record), so they survive a
+        later range reset; rows outside a computed feature's range align to NaN.
+        The active range is then re-derived so tabs see the new columns.
+        """
+        if new_df is None or new_df.empty or self._full_data is None:
             return
         for col in new_df.columns:
-            self._data[col] = new_df[col]  # aligns on index
+            self._full_data[col] = new_df[col]  # aligns on index
         self._created |= {str(c) for c in new_df.columns}
-        self._push_data()
+        self._apply_range()
 
     def _load_example(self) -> None:
         df = diive.load_exampledata_parquet()

@@ -30,6 +30,7 @@ diive-gui                # or: uv run diive-gui
 | `widgets/variable_list.py` | `VariableList` — list emitting `selected(name, ctrl_held)` |
 | `widgets/variable_delegate.py` | `VariableDelegate` — paints row highlight + NEE/GPP/Reco pills |
 | `widgets/open_data_dialog.py` | `OpenDataDialog` — file + filetype picker with a parsed live preview |
+| `widgets/daterange_dialog.py` | `DateRangeDialog` — from/to picker (clamped to the data span) for date-range subselection |
 | `widgets/console_panel.py` | `ConsolePanel` — mirrors diive's Rich output in colour (used by the Log tab) |
 
 **Adding a tab:** always-on tabs (Overview, Log) go in `TAB_CLASSES`. Menu-opened tabs go in `registry.MENU_TABS`
@@ -57,6 +58,13 @@ work, the dialog only orchestrates it. `MainWindow` holds the current DataFrame 
 `DiiveTab.on_data_loaded(df, created)`; tabs that present data override that hook to refresh. Example data auto-loads on
 startup. **File ▸ Save data as parquet…** writes a diive-format parquet (`to_diive_parquet_frame`: single-level columns
 + valid `TIMESTAMP_*` index name) via `dv.save_parquet`.
+
+**Date-range subselection (`Data` menu):** non-destructive. `MainWindow` keeps the whole loaded record in `_full_data`;
+`_data` (pushed to every tab) is `_full_data` optionally narrowed to `_range=(start,end)` via `dv.times.keep_daterange`.
+**Data ▸ Select date range…** opens `DateRangeDialog` (from/to pickers seeded and clamped to the data span); **Data ▸
+Reset to full range** clears the window. `_apply_range()` re-derives `_data`, retitles the window with the active
+window, enables/disables the reset action, and re-pushes. Engineered features merge into `_full_data`, so they survive a
+reset (out-of-range rows align to NaN). All plots and processing then run on the narrowed `_data`; saving writes it too.
 
 **Feature engineering:** opened from **Tools ▸ Feature engineering** (a menu-activated tab — `registry.MENU_TAB_CLASSES`
 — not shown until selected, and closable; always-on tabs have their close button removed). It runs `FeatureEngineer`

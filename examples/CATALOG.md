@@ -75,6 +75,7 @@ See: [analysis/README.md](analysis/README.md)
 | Example | Description |
 |---------|-------------|
 | [**times_timestamp_sanitizer.py**](times/times_timestamp_sanitizer.py) | Clean, validate, regularize datetime indices, gap filling, frequency detection |
+| [**times_keep_daterange.py**](times/times_keep_daterange.py) | Non-destructive date-range subselection (keep a time window, open or closed bounds) |
 | [**times_frequency_detection.py**](times/times_frequency_detection.py) | Auto-detect time resolution with confidence scoring and alternative frequencies |
 | [**times_diel_cycles.py**](times/times_diel_cycles.py) | Calculate hourly aggregation patterns (annual and monthly diel cycles) |
 | [**times_temporal_matrices.py**](times/times_temporal_matrices.py) | Convert time series to year × month matrix for heatmap visualization |

@@ -41,6 +41,7 @@ EXAMPLE_FILES = [
     'visualization/plot_treering_line_temperature.py',
     # Times
     'times/times_timestamp_sanitizer.py',
+    'times/times_keep_daterange.py',
     'times/times_frequency_detection.py',
     'times/times_diel_cycles.py',
     'times/times_temporal_matrices.py',

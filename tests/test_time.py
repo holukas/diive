@@ -5,10 +5,37 @@ import pandas as pd
 import diive.configs.exampledata as ed
 from diive.core.times.resampling import resample_series_to_30MIN
 from diive.core.times.times import DetectFrequency, insert_timestamp
+from diive.core.times.times import keep_daterange
 from diive.core.times.times import vectorize_timestamps
 
 
 class TestTime(unittest.TestCase):
+
+    def test_keep_daterange(self):
+        df, _ = ed.load_exampledata_DIIVE_CSV_30MIN()
+        n_full = len(df)
+
+        # Closed window (inclusive on both ends).
+        start, end = df.index[10], df.index[20]
+        sub = keep_daterange(df, start, end)
+        self.assertEqual(len(sub), 11)
+        self.assertEqual(sub.index.min(), start)
+        self.assertEqual(sub.index.max(), end)
+        self.assertEqual(len(df), n_full)  # non-destructive
+
+        # Open bounds.
+        self.assertEqual(len(keep_daterange(df, start=df.index[5])), n_full - 5)
+        self.assertEqual(len(keep_daterange(df, end=df.index[5])), 6)
+        self.assertEqual(len(keep_daterange(df)), n_full)  # both None -> full copy
+
+        # Works on a Series too.
+        self.assertEqual(len(keep_daterange(df.iloc[:, 0], start, end)), 11)
+
+        # Inverted bounds raise; non-datetime index raises.
+        with self.assertRaises(ValueError):
+            keep_daterange(df, end, start)
+        with self.assertRaises(TypeError):
+            keep_daterange(df.reset_index(drop=True), start, end)
 
     def test_vectorize_timestamps(self):
         df, _ = ed.load_exampledata_DIIVE_CSV_30MIN()

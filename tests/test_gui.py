@@ -122,6 +122,48 @@ def test_plot_settings_live_render(window):
     assert not _fallback(ts)
 
 
+def test_keep_daterange_library():
+    df = dv.load_exampledata_parquet()
+    sub = dv.times.keep_daterange(df, "2021-06-01", "2021-06-30 23:30")
+    assert sub.index.min() >= pd.Timestamp("2021-06-01")
+    assert sub.index.max() <= pd.Timestamp("2021-06-30 23:30")
+    assert len(sub) < len(df)
+    assert df.shape[0] == 175296  # original untouched (non-destructive)
+    # Open bounds and invalid order.
+    assert dv.times.keep_daterange(df, start="2022-01-01").index.min() >= pd.Timestamp("2022-01-01")
+    with pytest.raises(ValueError):
+        dv.times.keep_daterange(df, "2022-01-01", "2021-01-01")
+
+
+def test_gui_daterange_subselection(window):
+    full_shape = window._full_data.shape
+    assert window._data is window._full_data  # full range initially
+    assert not window._reset_range_act.isEnabled()
+    # Narrow to one month (non-destructive: full record kept in the background).
+    window._range = (pd.Timestamp("2021-06-01"), pd.Timestamp("2021-06-30 23:30"))
+    window._apply_range()
+    QApplication.processEvents()
+    assert window._data.shape[0] < full_shape[0]
+    assert window._full_data.shape == full_shape  # original intact
+    assert window._reset_range_act.isEnabled()
+    # Tabs see the narrowed data.
+    assert window._tabs[0].varpanel.list.count() == window._data.shape[1]
+    # Reset restores the full range.
+    window._reset_range()
+    QApplication.processEvents()
+    assert window._data.shape == full_shape
+    assert not window._reset_range_act.isEnabled()
+
+
+def test_daterange_dialog_clamps_and_orders(app):
+    from diive.gui.widgets.daterange_dialog import DateRangeDialog
+    start, end = pd.Timestamp("2020-01-01"), pd.Timestamp("2020-12-31 23:30")
+    dlg = DateRangeDialog(start, end)
+    # Picks default to the full span and stay within bounds.
+    got_start, got_end = dlg.selected_range()
+    assert got_start >= start and got_end <= end
+
+
 def test_appearance_singleton(window):
     window._open_menu_tab("Appearance")
     window._open_menu_tab("Appearance")

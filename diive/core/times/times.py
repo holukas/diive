@@ -1789,6 +1789,54 @@ def keep_years(data: Union[Series, DataFrame],
     return data
 
 
+def keep_daterange(data: Union[Series, DataFrame],
+                   start=None,
+                   end=None,
+                   verbose: bool = False) -> Union[Series, DataFrame]:
+    """Keep only records whose timestamp falls within ``[start, end]`` (inclusive).
+
+    A non-destructive date-range subselection: returns a copy restricted to the
+    given window, leaving the input untouched so the caller can keep the full
+    record and revert. Either bound may be omitted to leave that side open.
+
+    Args:
+        data: Series or DataFrame with a ``DatetimeIndex``.
+        start: Lower bound (inclusive). A ``pandas.Timestamp``, ``datetime``, or
+            any string pandas can parse (e.g. ``'2021-06-01'``,
+            ``'2021-06-01 12:30'``). ``None`` leaves the start open.
+        end: Upper bound (inclusive), same accepted types as ``start``. ``None``
+            leaves the end open.
+        verbose: Print how many records were kept.
+
+    Returns:
+        A copy of ``data`` containing only the in-range records. With both bounds
+        ``None`` the full data is returned (as a copy).
+
+    Raises:
+        TypeError: If ``data`` does not have a ``DatetimeIndex``.
+        ValueError: If ``start`` is after ``end``.
+    """
+    if not isinstance(data.index, DatetimeIndex):
+        raise TypeError("keep_daterange requires data with a DatetimeIndex.")
+
+    start_ts = pd.Timestamp(start) if start is not None else None
+    end_ts = pd.Timestamp(end) if end is not None else None
+    if start_ts is not None and end_ts is not None and start_ts > end_ts:
+        raise ValueError(f"start ({start_ts}) is after end ({end_ts}).")
+
+    keep = np.ones(len(data), dtype=bool)
+    if start_ts is not None:
+        keep &= data.index >= start_ts
+    if end_ts is not None:
+        keep &= data.index <= end_ts
+
+    out = data.loc[keep].copy()
+    if verbose:
+        info(f"Kept {len(out)} of {len(data)} records "
+             f"in date range [{start_ts}, {end_ts}].")
+    return out
+
+
 def calc_doy_timefraction(input_series: Series) -> DataFrame:
     df = pd.DataFrame(input_series)
     df['YEAR'] = df.index.year
