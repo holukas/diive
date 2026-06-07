@@ -30,8 +30,16 @@ import diive as dv
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.mpl_canvas import MplCanvas
-from diive.gui.widgets.plot_settings import HEATMAP, TIMESERIES, PlotSettingsPanel
+from diive.gui.widgets.plot_settings import (
+    HEATMAP,
+    HEATMAP_YEARMONTH,
+    TIMESERIES,
+    PlotSettingsPanel,
+)
 from diive.gui.widgets.variable_panel import VariablePanel
+
+#: Plot types laid out like a heatmap (panels side by side, shared axes).
+_HEATMAP_TYPES = (HEATMAP, HEATMAP_YEARMONTH)
 
 #: Column selected on startup -- gap-filled (continuous) NEE from the bundled
 #: CH-DAV example dataset.
@@ -151,7 +159,7 @@ class PlottingTab(DiiveTab):
             self._mark_selected()
             return
 
-        if self._plot_type == HEATMAP:
+        if self._plot_type in _HEATMAP_TYPES:
             axes = self.canvas.new_axes(
                 len(self._panels), orientation="horizontal", sharex=True, sharey=True)
         else:
@@ -161,8 +169,8 @@ class PlottingTab(DiiveTab):
         for i, (ax, name) in enumerate(zip(axes, self._panels)):
             self._draw_one(ax, name, i)
 
-        if self._plot_type == HEATMAP:
-            # Date axis only on the leftmost panel.
+        if self._plot_type in _HEATMAP_TYPES:
+            # y axis only on the leftmost panel.
             for ax in axes[1:]:
                 ax.set_ylabel("")
                 ax.tick_params(labelleft=False)
@@ -203,6 +211,25 @@ class PlottingTab(DiiveTab):
                     ticks_labelsize=opts["ticks_labelsize"],
                     cb_labelsize=opts["cb_labelsize"],
                     minticks=opts["minticks"], maxticks=opts["maxticks"],
+                )
+            elif self._plot_type == HEATMAP_YEARMONTH:
+                dv.plotting.HeatmapYearMonth(
+                    series, agg=opts["agg"], ranks=opts["ranks"],
+                    ax_orientation=opts["ax_orientation"]).plot(
+                    ax=ax, fig=self.canvas.fig, title=name,
+                    cmap=opts["cmap"], vmin=opts["vmin"], vmax=opts["vmax"],
+                    color_bad=opts["color_bad"], zlabel=opts["zlabel"],
+                    cb_digits_after_comma=opts["cb_digits_after_comma"],
+                    cb_extend=opts["cb_extend"],
+                    show_colormap=opts["show_colormap"],
+                    show_grid=opts["show_grid"],
+                    show_less_xticklabels=opts["show_less_xticklabels"],
+                    show_values=opts["show_values"],
+                    show_values_n_dec_places=opts["show_values_n_dec_places"],
+                    show_values_fontsize=opts["show_values_fontsize"],
+                    axlabels_fontsize=opts["axlabels_fontsize"],
+                    ticks_labelsize=opts["ticks_labelsize"],
+                    cb_labelsize=opts["cb_labelsize"],
                 )
             elif self._plot_type == TIMESERIES:
                 ts_colors = theme.manager.ts_colors

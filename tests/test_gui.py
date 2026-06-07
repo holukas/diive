@@ -75,17 +75,17 @@ def test_pill_classification():
 
 
 def test_multi_instance_plot_tabs(window):
-    window._open_menu_tab("Heatmap")
-    window._open_menu_tab("Heatmap")
+    window._open_menu_tab("Heatmap date/time")
+    window._open_menu_tab("Heatmap date/time")
     window._open_menu_tab("Time series")
-    assert "Heatmap 1" in _tabs(window)
-    assert "Heatmap 2" in _tabs(window)
+    assert "Heatmap date/time 1" in _tabs(window)
+    assert "Heatmap date/time 2" in _tabs(window)
     assert "Time series 1" in _tabs(window)
 
 
 def test_plot_settings_live_render(window):
     from diive.gui.widgets.plot_settings import HEATMAP, PlotSettingsPanel
-    window._open_menu_tab("Heatmap")
+    window._open_menu_tab("Heatmap date/time")
     tab = window._menu_tab_list[-1]
     # Settings panel is present and exposes the heatmap parameter set.
     assert isinstance(tab.settings, PlotSettingsPanel)
@@ -120,6 +120,19 @@ def test_plot_settings_live_render(window):
     ts.settings.series_units.setText("umol")
     QApplication.processEvents()
     assert not _fallback(ts)
+
+    # Year/month heatmap: distinct settings (aggregation + ranks) and renders.
+    window._open_menu_tab("Heatmap year/month")
+    ym = window._menu_tab_list[-1]
+    vals = ym.settings.values()
+    assert {"agg", "ranks", "cmap"} <= set(vals)
+    assert vals["cmap"] is None  # default "auto"
+    assert ym._panels and not _fallback(ym)
+    ym.settings.agg.setCurrentText("sum")
+    ym.settings.ranks.setChecked(True)
+    ym.settings.orientation.setCurrentText("horizontal")
+    QApplication.processEvents()
+    assert not _fallback(ym)
 
 
 def test_keep_daterange_library():

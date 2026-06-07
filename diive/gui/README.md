@@ -38,10 +38,11 @@ diive-gui                # or: uv run diive-gui
 (grouped by menu; values are factories) — they open as **new numbered instances** each time (Heatmap 1, 2, 3 ...), all
 closable, unless listed in `SINGLE_INSTANCE_TABS` (e.g. Appearance). The main window is agnostic to concrete tabs.
 
-**Plot menu:** each method is its own closable tab. The **Plot** menu lists methods (Heatmap, Time series); selecting one
-opens a new `PlottingTab(plot_type, title)` instance. Add a method via a factory in `registry.MENU_TABS["Plot"]` + a
-branch in `plotting._draw_one`. Ctrl+click adds comparison panels: heatmaps go side by side (shared x/y), time series
-stack top-to-bottom (shared time x-axis).
+**Plot menu:** each method is its own closable tab. The **Plot** menu lists methods (Heatmap date/time, Heatmap
+year/month, Time series); selecting one opens a new `PlottingTab(plot_type, title)` instance. Add a method via a factory
+in `registry.MENU_TABS["Plot"]` + a branch in `plotting._draw_one` (and matching controls in `plot_settings`). Ctrl+click
+adds comparison panels: heatmaps (both kinds, in `_HEATMAP_TYPES`) go side by side (shared x/y), time series stack
+top-to-bottom (shared time x-axis).
 
 **Live plot settings:** between the variable list and the canvas sits a `PlotSettingsPanel(plot_type)` — a scrollable
 strip of controls, one per `plot()` parameter of the underlying diive plot class (heatmap: colormap, vmin/vmax,

@@ -236,10 +236,11 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   button removed; `_next_menu_index` reuses the smallest free number.
 - **Two-phase plot classes are GUI-ready.** The plotting tab renders diive plots straight into an embedded canvas via
   `Plot(series).plot(ax=canvas.ax, fig=canvas.fig)`; no GUI-specific plot variants needed.
-- **`Plot` menu = one closable tab per method.** There is no single "Plotting" tab. Each plot method (Heatmap, Time
-  series, ...) is a menu-activated, closable `PlottingTab(plot_type, title)` instance, registered as a factory in
-  `registry.MENU_TABS["Plot"]`. Add a method = add a factory there + a branch in `plotting._draw_one` (dispatch on the
-  `HEATMAP`/`TIMESERIES`/... constants).
+- **`Plot` menu = one closable tab per method.** There is no single "Plotting" tab. Each plot method (Heatmap date/time,
+  Heatmap year/month, Time series, ...) is a menu-activated, closable `PlottingTab(plot_type, title)` instance,
+  registered as a factory in `registry.MENU_TABS["Plot"]`. Add a method = add a factory there + a branch in
+  `plotting._draw_one` + matching controls in `plot_settings` (dispatch on the `HEATMAP`/`HEATMAP_YEARMONTH`/`TIMESERIES`
+  constants; the two heatmap kinds share `_HEATMAP_TYPES` for the side-by-side layout).
 - **Data flow.** The `File` menu loads data via `OpenDataDialog` (parquet → `dv.load_parquet`, else `dv.ReadFileType`;
   multiple files → `MultiDataFileReader` / parquet `combine_first`; reading is library work, the dialog only calls it).
   `MainWindow` holds the current DataFrame and pushes it to every tab via the `DiiveTab.on_data_loaded(df, created)`

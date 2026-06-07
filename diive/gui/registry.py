@@ -14,7 +14,12 @@ from diive.gui.tabs.base import DiiveTab
 from diive.gui.tabs.features import FeatureEngineerTab
 from diive.gui.tabs.log import LogTab
 from diive.gui.tabs.overview import OverviewTab
-from diive.gui.tabs.plotting import HEATMAP, TIMESERIES, PlottingTab
+from diive.gui.tabs.plotting import (
+    HEATMAP,
+    HEATMAP_YEARMONTH,
+    TIMESERIES,
+    PlottingTab,
+)
 from diive.gui.tabs.settings import SettingsTab
 
 #: Tab classes always shown in the main window, in display order.
@@ -30,7 +35,8 @@ TAB_CLASSES: list[type[DiiveTab]] = [
 #: factory here (and a branch in plotting._draw_one).
 MENU_TABS: dict[str, dict[str, callable]] = {
     "Plot": {
-        "Heatmap": lambda: PlottingTab(HEATMAP, "Heatmap"),
+        "Heatmap date/time": lambda: PlottingTab(HEATMAP, "Heatmap date/time"),
+        "Heatmap year/month": lambda: PlottingTab(HEATMAP_YEARMONTH, "Heatmap year/month"),
         "Time series": lambda: PlottingTab(TIMESERIES, "Time series"),
     },
     "Tools": {

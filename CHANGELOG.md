@@ -29,8 +29,9 @@
   `diive/gui/README.md` (developer). Highlights:
   - **Overview tab** (default) — per-variable `dv.sstats` cards + multi-panel figure (time series, cumulative, mean
     diel cycle, heatmap).
-  - **Per-method plot tabs** opened from the Plot menu (Heatmap, Time series), openable multiple times (numbered) and
-    closable. Ctrl+click compares variables across panels (heatmaps side by side, time series stacked).
+  - **Per-method plot tabs** opened from the Plot menu (Heatmap date/time, Heatmap year/month, Time series), openable
+    multiple times (numbered) and closable, each with a live settings panel. Ctrl+click compares variables across panels
+    (heatmaps side by side, time series stacked).
   - **Feature engineering tab** (`FeatureEngineer`); created columns tagged with a NEW pill.
   - **Appearance settings tab** with live preview; **shared variable list** (filter + colored pills) identical across
     tabs; output **Log** tab mirroring the Rich console; preferences (theme, geometry, last filetype) persist.
@@ -435,6 +436,9 @@
 
 ### Fixes
 
+- **`HeatmapYearMonth` no longer raises `AttributeError`.** It called the non-existent
+  `dv.resample_to_monthly_agg_matrix` (the function lives in `dv.times`, not the top level); now imports
+  `resample_to_monthly_agg_matrix` directly. The class (and the `plot_heatmap_advanced.py` example) was broken before.
 - **`import diive` no longer forces the non-interactive matplotlib `Agg` backend.** The PWB time-lag tool
   (`detect_and_remove_tlag`) called `matplotlib.use('Agg', force=True)` at module import, which leaked through
   `import diive` and silently disabled interactive plot windows library-wide (`.plot(showplot=True)` warned

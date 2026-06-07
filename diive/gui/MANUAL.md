@@ -77,13 +77,16 @@ Click a variable to see, for that variable:
 - a **strip of statistic cards** along the bottom (count, mean, SD, min/max,
   percentiles, …).
 
-### Plot ▸ Heatmap / Time series
+### Plot ▸ Heatmap date/time · Heatmap year/month · Time series
 
 Each plot method opens as its own tab.
 
+- **Heatmap date/time** — date × time-of-day grid.
+- **Heatmap year/month** — one cell per year × month (pick the aggregation —
+  mean, sum, … — and optionally show *ranks*).
 - **Click** a variable to plot it.
 - **Ctrl + click** more variables to compare them in extra panels (up to 5):
-  - *Heatmaps* line up **side by side** (shared date axis).
+  - *Heatmaps* line up **side by side** (shared axes).
   - *Time series* **stack** top-to-bottom (shared time axis), each its own colour.
 - **Ctrl + click** a shown variable again to remove its panel.
 - Use the small toolbar (bottom-right of the plot) to **pan, zoom, and save** the

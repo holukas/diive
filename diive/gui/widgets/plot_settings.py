@@ -34,7 +34,11 @@ from PySide6.QtWidgets import (
 #: Plot-method identifiers; the tab dispatches on these and passes one to this
 #: panel so it can build the matching set of controls.
 HEATMAP = "Heatmap (date/time)"
+HEATMAP_YEARMONTH = "Heatmap (year/month)"
 TIMESERIES = "Time series"
+
+#: Year/month aggregation methods offered in the dropdown.
+_YEARMONTH_AGGS = ["mean", "median", "sum", "min", "max", "std"]
 
 #: Curated colormaps offered in the heatmap dropdown (it stays editable, so any
 #: valid matplotlib name can also be typed). Diverging first (the diive
@@ -69,21 +73,24 @@ class PlotSettingsPanel(QScrollArea):
         self._col = QVBoxLayout(inner)
         self._col.setContentsMargins(8, 8, 8, 8)
 
-        if plot_type == HEATMAP:
-            self._build_heatmap()
+        if plot_type in (HEATMAP, HEATMAP_YEARMONTH):
+            self._build_heatmap(yearmonth=plot_type == HEATMAP_YEARMONTH)
         elif plot_type == TIMESERIES:
             self._build_timeseries()
 
         self._col.addStretch(1)
         self.setWidget(inner)
 
-    # --- heatmap controls ---
-    def _build_heatmap(self) -> None:
+    # --- heatmap controls (shared by date/time and year/month) ---
+    def _build_heatmap(self, yearmonth: bool = False) -> None:
+        self._yearmonth = yearmonth
+
         colors = QGroupBox("Colors")
         form = QFormLayout(colors)
         self.cmap = QComboBox()
         self.cmap.setEditable(True)
-        self.cmap.addItems(_COLORMAPS)
+        # Year/month defaults to "auto" (RdYlBu for ranks, RdYlBu_r otherwise).
+        self.cmap.addItems((["auto"] + _COLORMAPS) if yearmonth else _COLORMAPS)
         self.cmap.currentTextChanged.connect(self.changed)
         form.addRow("Colormap", self.cmap)
 
@@ -109,8 +116,17 @@ class PlotSettingsPanel(QScrollArea):
         self.orientation.addItems(["vertical", "horizontal"])
         self.orientation.currentTextChanged.connect(self.changed)
         form.addRow("Orientation", self.orientation)
-        self.minticks = self._spin(3, 1, 50, form, "Date min ticks")
-        self.maxticks = self._spin(10, 1, 100, form, "Date max ticks")
+        if yearmonth:
+            # Year/month aggregates each month across years; offer the method and
+            # a rank transform (highest value per month -> rank 1).
+            self.agg = QComboBox()
+            self.agg.addItems(_YEARMONTH_AGGS)
+            self.agg.currentTextChanged.connect(self.changed)
+            form.addRow("Aggregation", self.agg)
+            self.ranks = self._check("Show ranks", form)
+        else:
+            self.minticks = self._spin(3, 1, 50, form, "Date min ticks")
+            self.maxticks = self._spin(10, 1, 100, form, "Date max ticks")
         self.show_less_xticklabels = self._check("Skip every 2nd x-label", form)
         self.show_grid = self._check("Show grid", form)
         self._col.addWidget(layout)
@@ -223,19 +239,17 @@ class PlotSettingsPanel(QScrollArea):
 
     def values(self) -> dict:
         """Current settings as a dict keyed by the library plot() parameter."""
-        if self._plot_type == HEATMAP:
+        if self._plot_type in (HEATMAP, HEATMAP_YEARMONTH):
             digits = self.cb_digits.currentText()
             # Font-size spinboxes use 0 ("auto") to mean "library default" (None).
             def _font(sp):
                 return sp.value() or None
-            return {
-                "cmap": self.cmap.currentText().strip() or "RdYlBu_r",
+            cmap_text = self.cmap.currentText().strip()
+            opts = {
                 "vmin": self._float_or_none(self.vmin.text()),
                 "vmax": self._float_or_none(self.vmax.text()),
                 "color_bad": self.color_bad.currentText().strip() or "grey",
                 "ax_orientation": self.orientation.currentText(),
-                "minticks": self.minticks.value(),
-                "maxticks": self.maxticks.value(),
                 "show_less_xticklabels": self.show_less_xticklabels.isChecked(),
                 "show_grid": self.show_grid.isChecked(),
                 "show_colormap": self.show_colormap.isChecked(),
@@ -249,6 +263,16 @@ class PlotSettingsPanel(QScrollArea):
                 "ticks_labelsize": _font(self.ticks_labelsize),
                 "cb_labelsize": _font(self.cb_labelsize),
             }
+            if self._plot_type == HEATMAP_YEARMONTH:
+                # "auto"/empty -> None so HeatmapYearMonth picks the rank-aware default.
+                opts["cmap"] = None if cmap_text in ("", "auto") else cmap_text
+                opts["agg"] = self.agg.currentText()
+                opts["ranks"] = self.ranks.isChecked()
+            else:
+                opts["cmap"] = cmap_text or "RdYlBu_r"
+                opts["minticks"] = self.minticks.value()
+                opts["maxticks"] = self.maxticks.value()
+            return opts
         return {
             "linewidth": self.linewidth.value(),
             "alpha": self.alpha.value(),
