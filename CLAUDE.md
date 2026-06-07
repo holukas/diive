@@ -216,8 +216,17 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   type via `_PLOT_TYPES` + `_draw_one` in `tabs/plotting.py`.
 - **Data flow.** The `File` menu loads data via `OpenDataDialog` (parquet → `dv.load_parquet`, else `dv.ReadFileType`;
   multiple files → `MultiDataFileReader` / parquet `combine_first`; reading is library work, the dialog only calls it).
-  `MainWindow` holds the current DataFrame and pushes it to every tab via the `DiiveTab.on_data_loaded(df)` hook;
-  data-presenting tabs override it. Example data auto-loads on startup.
+  `MainWindow` holds the current DataFrame and pushes it to every tab via the `DiiveTab.on_data_loaded(df, created)`
+  hook; data-presenting tabs override it. Example data auto-loads on startup.
+- **Feature engineering tab.** Menu-activated (`Tools ▸ Feature engineering`, from `registry.MENU_TAB_CLASSES`) — not in
+  the tab bar until selected, and closable (always-on tabs get their close button removed). Runs `FeatureEngineer`
+  (library) on selected variables, emits new columns via a `featuresCreated` signal; `MainWindow` merges them, tracks
+  them in a `created` set, re-pushes. Created columns get a pink **✦ NEW** pill (delegate `CREATED_ROLE`). Tab signals
+  live on a `QObject` helper because `DiiveTab` is a plain `ABC`, not a `QObject` — class-level `Signal`s on a `DiiveTab`
+  won't bind. When lazily creating a menu tab, call `tab.widget()` (builds it) **before** connecting `featuresCreated`,
+  which `build()` sets.
+- **Var list sync.** All tabs refresh via `MainWindow._push_data()` → `on_data_loaded(df, created)` on every data
+  change; menu tabs get current data on open and are dropped from the push list on close.
 - **Output console.** The `Log` tab (`LogTab` → `ConsolePanel`) mirrors diive's Rich output in colour. The library tees
   output to any sink registered via `add_console_sink` (`diive.core.utils.console`); the panel renders the ANSI stream.
   The redirect hook is library-owned; the panel only renders (separation rule).

@@ -38,7 +38,12 @@ from PySide6.QtWidgets import (
 import diive as dv
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.mpl_canvas import MplCanvas
-from diive.gui.widgets.variable_delegate import NAME_ROLE, PANEL_ROLE, VariableDelegate
+from diive.gui.widgets.variable_delegate import (
+    CREATED_ROLE,
+    NAME_ROLE,
+    PANEL_ROLE,
+    VariableDelegate,
+)
 from diive.gui.widgets.variable_list import VariableList
 
 #: Column selected on startup -- gap-filled (continuous) NEE from the bundled
@@ -115,8 +120,12 @@ class PlottingTab(DiiveTab):
         layout.addWidget(splitter)
         return root
 
-    def on_data_loaded(self, df) -> None:
-        """Populate the variable list from a newly loaded dataset and render."""
+    def on_data_loaded(self, df, created: set | None = None) -> None:
+        """Populate the variable list from the dataset and render.
+
+        `created` marks user-engineered columns so they get the "NEW" pill.
+        """
+        created = created or set()
         self._df = df
         self._panels = []
         self.search.clear()
@@ -125,6 +134,7 @@ class PlottingTab(DiiveTab):
             item = QListWidgetItem(str(col))
             item.setData(NAME_ROLE, str(col))
             item.setData(PANEL_ROLE, 0)
+            item.setData(CREATED_ROLE, str(col) in created)
             self.var_list.addItem(item)
         self._select_default()
 

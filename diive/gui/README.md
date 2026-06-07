@@ -15,6 +15,7 @@ diive-gui                # or: uv run diive-gui
 | `registry.py` | `TAB_CLASSES` — the single list the main window builds tabs from |
 | `tabs/base.py` | `DiiveTab` ABC: `title` + `build()` + `on_data_loaded(df)` — the extension point |
 | `tabs/plotting.py` | Interactive plotting tab (variable list + heatmap panels) |
+| `tabs/features.py` | Feature engineering tab (FeatureEngineer; created features get a "NEW" pill) |
 | `tabs/log.py` | Log tab wrapping `ConsolePanel` (live coloured library output) |
 | `widgets/mpl_canvas.py` | `MplCanvas` — embedded matplotlib figure + bottom-right toolbar |
 | `widgets/variable_list.py` | `VariableList` — list emitting `selected(name, ctrl_held)` |
@@ -34,7 +35,18 @@ adds comparison panels: heatmaps go side by side (shared x/y), time series stack
 preview the first parsed rows before loading (parquet via `dv.load_parquet`, other formats via `dv.ReadFileType`).
 Selecting multiple files merges them (`MultiDataFileReader`, or `combine_first` for parquet). All reading is library
 work, the dialog only orchestrates it. `MainWindow` holds the current DataFrame and pushes it to every tab via
-`DiiveTab.on_data_loaded(df)`; tabs that present data override that hook to refresh. Example data auto-loads on startup.
+`DiiveTab.on_data_loaded(df, created)`; tabs that present data override that hook to refresh. Example data auto-loads on
+startup.
+
+**Feature engineering:** opened from **Tools ▸ Feature engineering** (a menu-activated tab — `registry.MENU_TAB_CLASSES`
+— not shown until selected, and closable; always-on tabs have their close button removed). It runs `FeatureEngineer`
+(library) on user-selected variables and emits the new columns via a `featuresCreated` signal; `MainWindow` merges them
+into the dataset, records them in a `created` set, and re-pushes. The plotting list tags created columns with a pink
+**✦ NEW** pill (delegate `CREATED_ROLE`). Heavy runs go on a worker thread; progress shows in the Log tab.
+
+**Variable list stays in sync:** every data change (file load, feature add) goes through `MainWindow._push_data()`,
+which calls `on_data_loaded(df, created)` on all active tabs. A menu tab gets the current data on open and is then
+subscribed; on close it's removed so it can't go stale.
 
 **Output console:** the **Log** tab (`LogTab` → `ConsolePanel`) mirrors diive's Rich output in colour. It registers a
 Rich mirror console via `add_console_sink` (in `diive.core.utils.console`) — the library tees its output to any

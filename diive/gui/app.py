@@ -18,11 +18,12 @@ from PySide6.QtWidgets import (
     QDialog,
     QMainWindow,
     QMessageBox,
+    QTabBar,
     QTabWidget,
 )
 
 import diive
-from diive.gui.registry import TAB_CLASSES
+from diive.gui.registry import MENU_TAB_CLASSES, TAB_CLASSES
 from diive.gui.widgets.open_data_dialog import OpenDataDialog
 
 #: Light theme: white app/plot background, with the variable list given a
@@ -108,13 +109,23 @@ class MainWindow(QMainWindow):
         # QWidgets, but the Python tab objects (which hold the signal slots,
         # e.g. PlottingTab._render) would otherwise be garbage-collected after
         # this loop, leaving their signal connections inert.
+        self._data = None
+        self._created: set = set()  # user-engineered feature column names
+        self._menu_tabs: dict = {}  # label -> lazily-created DiiveTab instance
+
         self._tabs = []
-        tabs = QTabWidget()
+        self._tabwidget = QTabWidget()
         for tab_cls in TAB_CLASSES:
             tab = tab_cls()
             self._tabs.append(tab)
-            tabs.addTab(tab.widget(), tab.title)
-        self.setCentralWidget(tabs)
+            self._tabwidget.addTab(tab.widget(), tab.title)
+        # Always-on tabs are not closable; menu-opened tabs (added later) are.
+        self._tabwidget.setTabsClosable(True)
+        bar = self._tabwidget.tabBar()
+        for i in range(self._tabwidget.count()):
+            bar.setTabButton(i, QTabBar.ButtonPosition.RightSide, None)
+        self._tabwidget.tabCloseRequested.connect(self._on_tab_close)
+        self.setCentralWidget(self._tabwidget)
 
         self._build_menu()
         # Auto-load the bundled example data so the app is usable on startup.
@@ -140,6 +151,12 @@ class MainWindow(QMainWindow):
         file_menu.addAction(exit_act)
 
         self._build_plot_menu(menubar)
+
+        tools_menu = menubar.addMenu("&Tools")
+        for label in MENU_TAB_CLASSES:
+            act = QAction(label, self)
+            act.triggered.connect(lambda _checked, lab=label: self._open_menu_tab(lab))
+            tools_menu.addAction(act)
 
         help_menu = menubar.addMenu("&Help")
         about_act = QAction("&About", self)
@@ -168,11 +185,51 @@ class MainWindow(QMainWindow):
                 act.setChecked(True)
                 tab.set_plot_type(label)  # default selected on startup
 
-    def _set_data(self, df, source: str) -> None:
-        """Push a freshly loaded dataset to every tab and update the title."""
-        self.setWindowTitle(f"{self._base_title} — {source}")
+    def _push_data(self) -> None:
         for tab in self._tabs:
-            tab.on_data_loaded(df)
+            tab.on_data_loaded(self._data, self._created)
+
+    def _set_data(self, df, source: str) -> None:
+        """Set a freshly loaded dataset, reset created features, push to tabs."""
+        self.setWindowTitle(f"{self._base_title} — {source}")
+        self._data = df
+        self._created = set()  # fresh dataset has no user-created features
+        self._push_data()
+
+    def _open_menu_tab(self, label: str) -> None:
+        """Open (or focus) a menu-activated tab; create it lazily on first use."""
+        tab = self._menu_tabs.get(label)
+        if tab is None:
+            tab = MENU_TAB_CLASSES[label]()
+            self._menu_tabs[label] = tab
+            self._tabs.append(tab)  # now receives data pushes
+            # Build first (widget()/build sets featuresCreated) before connecting.
+            self._tabwidget.addTab(tab.widget(), tab.title)
+            if hasattr(tab, "featuresCreated"):
+                tab.featuresCreated.connect(self._add_features)
+            if self._data is not None:
+                tab.on_data_loaded(self._data, self._created)  # up to date on open
+        self._tabwidget.setCurrentWidget(tab.widget())
+
+    def _on_tab_close(self, index: int) -> None:
+        """Close a menu-opened tab (always-on tabs have no close button)."""
+        widget = self._tabwidget.widget(index)
+        for label, tab in list(self._menu_tabs.items()):
+            if tab.widget() is widget:
+                self._tabwidget.removeTab(index)
+                if tab in self._tabs:
+                    self._tabs.remove(tab)
+                del self._menu_tabs[label]
+                return
+
+    def _add_features(self, new_df) -> None:
+        """Merge engineered features into the dataset and re-push to tabs."""
+        if new_df is None or new_df.empty or self._data is None:
+            return
+        for col in new_df.columns:
+            self._data[col] = new_df[col]  # aligns on index
+        self._created |= {str(c) for c in new_df.columns}
+        self._push_data()
 
     def _load_example(self) -> None:
         df = diive.load_exampledata_parquet()

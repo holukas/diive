@@ -42,11 +42,12 @@ class DiiveTab(ABC):
             self._widget = self.build()
         return self._widget
 
-    def on_data_loaded(self, df) -> None:
-        """Called by the main window when a new dataset is loaded.
+    def on_data_loaded(self, df, created: set | None = None) -> None:
+        """Called by the main window when the dataset changes.
 
         Tabs that present data override this to refresh themselves (e.g. the
-        plotting tab repopulates its variable list). Default is a no-op so
-        tabs that don't consume data need not implement it.
+        plotting tab repopulates its variable list). `created` is the set of
+        column names produced by the feature engineer (for "NEW" tagging).
+        Default is a no-op so tabs that don't consume data need not implement it.
         """
 

@@ -14,9 +14,17 @@ from diive.gui.tabs.base import DiiveTab
 from diive.gui.tabs.log import LogTab
 from diive.gui.tabs.plotting import PlottingTab
 
-#: Tab classes shown in the main window, in display order.
+#: Tab classes always shown in the main window, in display order.
 #: Future: append FluxChainTab, OutlierTab, GapFillingTab, ...
 TAB_CLASSES: list[type[DiiveTab]] = [
     PlottingTab,
     LogTab,
 ]
+
+#: Tabs opened on demand from a menu (not shown until selected, closable).
+#: Maps menu label -> tab class.
+from diive.gui.tabs.features import FeatureEngineerTab  # noqa: E402
+
+MENU_TAB_CLASSES: dict[str, type[DiiveTab]] = {
+    "Feature engineering": FeatureEngineerTab,
+}

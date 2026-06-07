@@ -26,6 +26,8 @@ from diive.variables import classify_variable
 NAME_ROLE = Qt.ItemDataRole.UserRole
 #: Panel position: 0 = unselected, 1 = primary, 2+ = additional panels.
 PANEL_ROLE = Qt.ItemDataRole.UserRole + 1
+#: True for features created by the user (feature engineer) -> "NEW" pill.
+CREATED_ROLE = Qt.ItemDataRole.UserRole + 2
 
 _PRIMARY_BG = QColor("#1565C0")   # blue 800 -- solid, white text reads clearly
 _PRIMARY_FG = QColor("#FFFFFF")
@@ -47,6 +49,10 @@ _BLUE = QColor("#1976D2")     # blue 700
 _RED = QColor("#D32F2F")      # red 700
 _PURPLE = QColor("#8E24AA")   # purple 600
 _ORANGE = QColor("#FB8C00")   # orange 600 (dark text for contrast)
+_PINK = QColor("#D81B60")     # pink 600 -- user-created features
+
+#: Pill for user-created (feature-engineered) variables.
+_NEW_PILL = ("✦ NEW", _PINK, QColor("#FFFFFF"))  # ✦ NEW
 
 _PILL_STYLE = {
     "NEE": ("NEE", _GREEN, _WHITE),
@@ -109,7 +115,8 @@ class VariableDelegate(QStyledItemDelegate):
             painter.setBrush(bg)
             painter.drawRoundedRect(rect.adjusted(2, 1, -2, -1), 4, 4)
 
-        pill = _pill_for(name)
+        # User-created features get the "NEW" pill; otherwise classify by name.
+        pill = _NEW_PILL if index.data(CREATED_ROLE) else _pill_for(name)
 
         # Pill tag (right-aligned), drawn first so we know how much width to
         # reserve for the text.
