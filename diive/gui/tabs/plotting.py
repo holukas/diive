@@ -2,10 +2,11 @@
 GUI.TABS.PLOTTING: INTERACTIVE PLOTTING TAB
 ===========================================
 
-Two-column plotting tab: a list of variables on the left, the plot area on the
-right. On startup the bundled example dataset is loaded, the variable list is
-populated from its columns, and NEE is selected and rendered as a date x
-time-of-day heatmap.
+Three-column plotting tab: a list of variables on the left, a live plot-settings
+panel in the middle, the plot area on the right. On startup the bundled example
+dataset is loaded, the variable list is populated from its columns, and NEE is
+selected and rendered as a date x time-of-day heatmap. Editing any setting
+re-renders the current panels for a live preview (see `plot_settings.py`).
 
 Selection model:
 - Plain click  -> reset to a single panel showing the clicked variable.
@@ -29,6 +30,7 @@ import diive as dv
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.mpl_canvas import MplCanvas
+from diive.gui.widgets.plot_settings import HEATMAP, TIMESERIES, PlotSettingsPanel
 from diive.gui.widgets.variable_panel import VariablePanel
 
 #: Column selected on startup -- gap-filled (continuous) NEE from the bundled
@@ -38,11 +40,8 @@ _DEFAULT_VAR = "NEE_CUT_REF_f"
 #: Maximum number of side-by-side panels (further Ctrl+clicks are ignored).
 _MAX_PANELS = 5
 
-#: Plot-method identifiers; `_draw_one` dispatches on these. Each method is
-#: opened as its own tab from the Plot menu (see registry).
-HEATMAP = "Heatmap (date/time)"
-TIMESERIES = "Time series"
-
+# Plot-method identifiers (HEATMAP / TIMESERIES) are defined in plot_settings
+# and re-exported here so the registry can keep importing them from this module.
 # Time-series line colors are read live from theme.manager.ts_colors.
 
 
@@ -68,14 +67,21 @@ class PlottingTab(DiiveTab):
         self.varpanel = VariablePanel()
         self.varpanel.selected.connect(self._on_selected)
 
+        # Middle: live plot-parameter controls. Editing any control re-renders
+        # the current panels (live preview).
+        self.settings = PlotSettingsPanel(self._plot_type)
+        self.settings.changed.connect(self._on_settings_changed)
+
         # Right: embedded matplotlib canvas.
         self.canvas = MplCanvas()
 
         splitter.addWidget(self.varpanel)
+        splitter.addWidget(self.settings)
         splitter.addWidget(self.canvas)
         splitter.setStretchFactor(0, 0)   # list keeps its width
-        splitter.setStretchFactor(1, 1)   # canvas takes extra space
-        splitter.setSizes([260, 840])
+        splitter.setStretchFactor(1, 0)   # settings keep their width
+        splitter.setStretchFactor(2, 1)   # canvas takes extra space
+        splitter.setSizes([220, 250, 780])
         layout.addWidget(splitter)
 
         # Live theme preview: repaint pills, and re-render if colors affect the
@@ -87,6 +93,12 @@ class PlottingTab(DiiveTab):
         # The panel repaints its own pills; re-render only if colors affect the
         # current plot (time-series line colors).
         if self._plot_type == TIMESERIES and self._panels:
+            self._render()
+
+    def _on_settings_changed(self) -> None:
+        # A plot parameter changed -- re-render the current panels for a live
+        # preview (no-op while nothing is plotted yet).
+        if self._panels:
             self._render()
 
     def on_data_loaded(self, df, created: set | None = None) -> None:
@@ -171,16 +183,34 @@ class PlottingTab(DiiveTab):
         message instead of raising, so the variable list stays usable.
         """
         series = self._df[name]
+        opts = self.settings.values()
         try:
             if self._plot_type == HEATMAP:
-                dv.plotting.HeatmapDateTime(series).plot(
+                dv.plotting.HeatmapDateTime(
+                    series, ax_orientation=opts["ax_orientation"]).plot(
                     ax=ax, fig=self.canvas.fig, title=name,
-                    cb_digits_after_comma='auto',
+                    cmap=opts["cmap"], vmin=opts["vmin"], vmax=opts["vmax"],
+                    color_bad=opts["color_bad"], zlabel=opts["zlabel"],
+                    cb_digits_after_comma=opts["cb_digits_after_comma"],
+                    cb_extend=opts["cb_extend"],
+                    show_colormap=opts["show_colormap"],
+                    show_grid=opts["show_grid"],
+                    show_less_xticklabels=opts["show_less_xticklabels"],
+                    show_values=opts["show_values"],
+                    show_values_n_dec_places=opts["show_values_n_dec_places"],
+                    show_values_fontsize=opts["show_values_fontsize"],
+                    axlabels_fontsize=opts["axlabels_fontsize"],
+                    ticks_labelsize=opts["ticks_labelsize"],
+                    cb_labelsize=opts["cb_labelsize"],
+                    minticks=opts["minticks"], maxticks=opts["maxticks"],
                 )
             elif self._plot_type == TIMESERIES:
                 ts_colors = theme.manager.ts_colors
-                dv.plotting.TimeSeries(series).plot(
+                dv.plotting.TimeSeries(series, drop_gaps=opts["drop_gaps"]).plot(
                     ax=ax, title=name, color=ts_colors[index % len(ts_colors)],
+                    linewidth=opts["linewidth"], alpha=opts["alpha"],
+                    marker=opts["marker"], xlabel=opts["xlabel"],
+                    ylabel=opts["ylabel"], series_units=opts["series_units"],
                 )
             else:
                 raise ValueError(f"Unknown plot type: {self._plot_type}")

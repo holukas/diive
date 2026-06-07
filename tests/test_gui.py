@@ -83,6 +83,45 @@ def test_multi_instance_plot_tabs(window):
     assert "Time series 1" in _tabs(window)
 
 
+def test_plot_settings_live_render(window):
+    from diive.gui.widgets.plot_settings import HEATMAP, PlotSettingsPanel
+    window._open_menu_tab("Heatmap")
+    tab = window._menu_tab_list[-1]
+    # Settings panel is present and exposes the heatmap parameter set.
+    assert isinstance(tab.settings, PlotSettingsPanel)
+    vals = tab.settings.values()
+    assert {"cmap", "vmin", "vmax", "ax_orientation"} <= set(vals)
+    assert tab._panels  # default variable rendered
+
+    def _fallback(tab):
+        # _draw_one writes a "Cannot plot ..." text into the axes on failure.
+        return [t for ax in tab.canvas.fig.axes for t in ax.texts
+                if "Cannot plot" in t.get_text()]
+
+    # Toggle a spread of non-default settings; each edit re-renders live and the
+    # heatmap must still draw (no error-fallback text).
+    tab.settings.cmap.setCurrentText("viridis")
+    tab.settings.orientation.setCurrentText("horizontal")
+    tab.settings.vmin.setText("-5")
+    tab.settings.vmax.setText("5")
+    tab.settings.show_values.setChecked(True)
+    tab.settings.cb_extend.setCurrentText("both")
+    tab.settings.axlabels_fontsize.setValue(8)
+    QApplication.processEvents()
+    assert tab.settings.values()["cmap"] == "viridis"
+    assert not _fallback(tab)
+
+    window._open_menu_tab("Time series")
+    ts = window._menu_tab_list[-1]
+    assert {"linewidth", "alpha", "marker", "drop_gaps"} <= set(ts.settings.values())
+    ts.settings.marker.setChecked(True)
+    ts.settings.drop_gaps.setChecked(True)
+    ts.settings.linewidth.setValue(4.0)
+    ts.settings.series_units.setText("umol")
+    QApplication.processEvents()
+    assert not _fallback(ts)
+
+
 def test_appearance_singleton(window):
     window._open_menu_tab("Appearance")
     window._open_menu_tab("Appearance")

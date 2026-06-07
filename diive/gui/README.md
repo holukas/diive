@@ -21,7 +21,8 @@ diive-gui                # or: uv run diive-gui
 | `registry.py` | `TAB_CLASSES` (always-on), `MENU_TABS` (menu-opened factories), `SINGLE_INSTANCE_TABS` |
 | `tabs/base.py` | `DiiveTab` ABC: `title` + `build()` + `on_data_loaded(df, created)` — the extension point |
 | `tabs/overview.py` | Overview tab (first/default): figure (top) + full-width KPI stat-card strip (bottom) |
-| `tabs/plotting.py` | `PlottingTab(plot_type)` — one closable tab per plot method (opened from the Plot menu) |
+| `tabs/plotting.py` | `PlottingTab(plot_type)` — one closable tab per plot method (opened from the Plot menu); var list + live settings panel + canvas |
+| `widgets/plot_settings.py` | `PlotSettingsPanel(plot_type)` — live plot-parameter controls (between list and canvas); `changed` re-renders; defines `HEATMAP`/`TIMESERIES` |
 | `tabs/features.py` | Feature engineering tab (FeatureEngineer; created features get a "NEW" pill) |
 | `tabs/log.py` | Log tab wrapping `ConsolePanel` (live coloured library output) |
 | `widgets/mpl_canvas.py` | `MplCanvas` — embedded matplotlib figure + bottom-right toolbar |
@@ -39,6 +40,15 @@ closable, unless listed in `SINGLE_INSTANCE_TABS` (e.g. Appearance). The main wi
 opens a new `PlottingTab(plot_type, title)` instance. Add a method via a factory in `registry.MENU_TABS["Plot"]` + a
 branch in `plotting._draw_one`. Ctrl+click adds comparison panels: heatmaps go side by side (shared x/y), time series
 stack top-to-bottom (shared time x-axis).
+
+**Live plot settings:** between the variable list and the canvas sits a `PlotSettingsPanel(plot_type)` — a scrollable
+strip of controls, one per `plot()` parameter of the underlying diive plot class (heatmap: colormap, vmin/vmax,
+orientation, colorbar, cell-value overlay, ticks, grid, …; time series: line width, opacity, markers, drop-gaps,
+labels/units). Editing any control emits `changed`; the tab re-renders the current panels (`_on_settings_changed` →
+`_render`), and `_draw_one` reads `settings.values()` into the library plot call. The panel is GUI-only (it just
+collects parameters); the `HEATMAP`/`TIMESERIES` constants live in `plot_settings.py` and `plotting.py` re-exports them
+(so no import cycle). Line *colours* stay theme-driven (`theme.manager.ts_colors`, Appearance tab), not duplicated here.
+Add a parameter = add a control in `plot_settings._build_*` + a key in `values()` + pass it through in `_draw_one`.
 
 **Data flow:** **File ▸ Open data file…** shows `OpenDataDialog` — pick one or more files, choose the filetype, and
 preview the first parsed rows before loading (parquet via `dv.load_parquet`, other formats via `dv.ReadFileType`).

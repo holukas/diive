@@ -78,6 +78,18 @@ Each plot method opens as its own tab.
 - Use the small toolbar (bottom-right of the plot) to **pan, zoom, and save** the
   figure. Zooming one panel zooms them all.
 
+**Settings (middle column) — live preview.** Between the variable list and the
+plot is a panel of controls for the plot. Change one and the plot updates
+immediately:
+- *Heatmap*: colormap, min/max colour values, missing-value colour, orientation
+  (vertical/horizontal), date-axis ticks, grid, colorbar (show, label, decimals,
+  extend arrows), and optionally overlaying the numeric values on the cells.
+- *Time series*: line width, opacity, point markers, whether to connect across
+  gaps, and the axis labels/units.
+
+  Line *colours* for time series come from **Settings ▸ Appearance** (so a
+  variable keeps the same colour everywhere).
+
 ### Tools ▸ Feature engineering
 
 Build new features (lags, rolling stats, differences, EMA, polynomials, STL,
