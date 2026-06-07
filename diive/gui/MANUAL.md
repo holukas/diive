@@ -121,6 +121,18 @@ timestamp parts, …) with diive's feature engineer:
 4. **Add features to variable list** — the new columns appear everywhere with a
    **✦ NEW** pill and can be plotted like any other variable.
 
+### Tools ▸ Flux processing chain
+
+A guided workspace for the flux processing chain *(early — currently the Input +
+Level 2 steps)*. Pick the flux column and site, choose which Level-2 quality
+tests to run, and **Run Level 2** — the accepted (QCF-filtered) flux shows as a
+heatmap. **Copy Python** puts the exact, reproducible diive script for what you
+did on the clipboard, so a point-and-click run stays scriptable.
+
+> Needs eddy-covariance input with the raw EddyPro columns (FC, USTAR, the
+> `*_TEST` flags). The bundled CH-DAV example is a processed product and won't
+> run the chain — load a level-1 EC dataset.
+
 ### Settings ▸ Appearance
 
 Customise the look with a **live preview** — colours update across the whole app as

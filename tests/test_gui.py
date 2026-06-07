@@ -287,6 +287,33 @@ def test_feature_engineer_index_only(window):
     assert tab.add_btn.isEnabled()
 
 
+def test_flux_chain_tab_level2(app):
+    # The flux chain needs real EddyPro-FLUXNET input (FC, USTAR, *_TEST cols),
+    # so load the dedicated EC example dataset (one month for speed).
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
+
+    tab = FluxChainTab()
+    tab.widget()  # build
+    tab.on_data_loaded(df)
+    assert tab.fluxcol.currentText() == "FC"  # default flux column detected
+
+    # Copy-Python emits runnable composable code matching what Run does.
+    code = tab._code()
+    compile(code, "<gen>", "exec")
+    assert "run_level2(" in code and "init_flux_data(" in code
+
+    # Run Level 2 (synchronous core) and render into the canvas.
+    data = tab._compute(df, tab._init_kwargs(), tab._level2_settings())
+    assert data.filteredseries is not None
+    assert data.filteredseries.dropna().count() > 0
+    tab._on_done(data)
+    QApplication.processEvents()
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts
+                if "Cannot plot" in t.get_text()]
+
+
 def test_all_menu_items_have_icons(window):
     # Every (non-separator) menu entry carries a drawn icon.
     menubar = window.menuBar()

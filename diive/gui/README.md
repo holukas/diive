@@ -25,6 +25,7 @@ diive-gui                # or: uv run diive-gui
 | `icons.py` | `menu_icon(label)` — tiny `QPainter`-drawn glyphs for **all** menu entries (folder/disk/calendar/gear/palette/… + plot shapes), keyword-matched |
 | `widgets/plot_settings.py` | `PlotSettingsPanel(plot_type)` — live plot-parameter controls (between list and canvas); `changed` re-renders; defines `HEATMAP`/`TIMESERIES` |
 | `tabs/features.py` | Feature engineering tab (FeatureEngineer; created features get a "NEW" pill) |
+| `tabs/fluxchain.py` | Flux processing chain tab — Input + Level 2 (first slice); runs `init_flux_data`/`run_level2`, **Copy Python** emits a reproducible script |
 | `tabs/log.py` | Log tab wrapping `ConsolePanel` (live coloured library output) |
 | `widgets/mpl_canvas.py` | `MplCanvas` — embedded matplotlib figure + bottom-right toolbar; attaches a `HoverAnnotator` |
 | `widgets/hover.py` | `HoverAnnotator` — value-under-cursor tooltip (line snap + heatmap cell) via blitting |
@@ -75,6 +76,16 @@ startup. **File ▸ Save data as parquet…** writes a diive-format parquet (`to
 Reset to full range** clears the window. `_apply_range()` re-derives `_data`, retitles the window with the active
 window, enables/disables the reset action, and re-pushes. Engineered features merge into `_full_data`, so they survive a
 reset (out-of-range rows align to NaN). All plots and processing then run on the narrowed `_data`; saving writes it too.
+
+**Flux processing chain (`tabs/fluxchain.py`):** opened from **Tools ▸ Flux processing chain** (single-instance). A
+guided tab for the Swiss-FluxNet chain. **First slice = Input + Level 2:** collects site/flux-column + which L2 quality
+tests to run, then on a worker thread calls the composable library callables (`init_flux_data` → `run_level2`), shows the
+L2 QCF-filtered flux as a date/time heatmap, and — the point of the feature — **Copy Python** emits the exact runnable
+script via the library's `level2_to_code`. The script-gen lives in the library (`flux/fluxprocessingchain/codegen.py`:
+`chain_to_code` for the full `run_chain`/`FluxConfig` path, `level2_to_code` for the composable path) because it encodes
+the API call shape; the GUI only calls it. Needs real EddyPro-FLUXNET input (FC/USTAR/`*_TEST` columns) —
+`load_exampledata_parquet_lae_level1_30MIN`, not the default CH-DAV. **Later slices** add L3.1/3.2/3.3/4.1 groups and
+switch to `run_chain`/`chain_to_code`; per-level live preview can reuse the cascade-aware `run_level*` callables.
 
 **Feature engineering:** opened from **Tools ▸ Feature engineering** (a menu-activated tab — `registry.MENU_TAB_CLASSES`
 — not shown until selected, and closable; always-on tabs have their close button removed). It runs `FeatureEngineer`

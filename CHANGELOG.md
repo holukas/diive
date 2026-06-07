@@ -35,6 +35,10 @@
   - **Drawn menu icons** — every menu entry (File/Data/Plot/Tools/Settings/Help) carries a small `QPainter`-drawn glyph
     (no image assets), keyword-matched to the label.
   - **Feature engineering tab** (`FeatureEngineer`); created columns tagged with a NEW pill.
+  - **Flux processing chain tab** (Tools menu; first slice = Input + Level 2) — runs the composable `init_flux_data` /
+    `run_level2`, shows the L2 QCF-filtered flux, and **Copy Python** emits the exact reproducible script. The
+    script-generators `chain_to_code` / `level2_to_code` (new, in `flux.fluxprocessingchain`) render the choices as a
+    runnable `run_chain` / composable script, omitting default-valued kwargs.
   - **Appearance settings tab** with live preview; **shared variable list** (filter + colored pills) identical across
     tabs; output **Log** tab mirroring the Rich console; preferences (theme, geometry, last filetype) persist.
   - **Save data as parquet** in diive format (one header row + valid timestamp index name).

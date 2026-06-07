@@ -215,6 +215,17 @@ def _palette_icon() -> QIcon:  # Appearance
     return QIcon(pm)
 
 
+def _chain_icon() -> QIcon:  # Flux processing chain
+    pm, p = _canvas()
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.setPen(QPen(_BLUE, 1.7))
+    p.drawRoundedRect(QRectF(1.5, 5, 7.5, 6), 3, 3)
+    p.setPen(QPen(_GREEN, 1.7))
+    p.drawRoundedRect(QRectF(7, 5, 7.5, 6), 3, 3)
+    p.end()
+    return QIcon(pm)
+
+
 def _info_icon() -> QIcon:  # About
     pm, p = _canvas()
     p.setPen(Qt.PenStyle.NoPen)
@@ -240,6 +251,8 @@ _RULES = [
     ("date range", _calendar_icon),
     ("reset", _reset_icon),
     ("feature", _gear_icon),
+    ("chain", _chain_icon),
+    ("flux", _chain_icon),
     ("appearance", _palette_icon),
     ("about", _info_icon),
 ]

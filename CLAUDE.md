@@ -59,7 +59,7 @@ tests/                        # Unit tests
 |---|---|
 | `dv.outliers` | `AbsoluteLimits`, `Hampel`, `LocalSD`, `LocalOutlierFactor`, `zScore`, `zScoreRolling`, `zScoreIncrements`, `TrimLow`, `ManualRemoval`, + daytime/nighttime variants |
 | `dv.gapfilling` | `RandomForestTS`, `XGBoostTS`, `SWINGapFillerXGBoost`, `FluxMDS`, `QuickFillRFTS`, `OptimizeParamsRFTS`, `OptimizeParamsTS`, `LongTermGapFillingRandomForestTS`, `LongTermGapFillingXGBoostTS`, `FeatureEngineer`, `GapFillingResult`, `prediction_scores`, `linear_interpolation` |
-| `dv.flux` | `FluxConfig`, `FluxLevelData`, `run_chain`, `init_flux_data`, `add_driver`, `WindDoubleRotation`, `reynolds_decomposition`, `MaxCovariance`, `PreWhiteningBootstrap`, `PwbBatchDetection`, `TlagApplier`, `PerFilePipeline`, `process_one_file`, `FluxDetectionLimit`, ustar classes. Per-level `run_level*` and `make_level32_detector` live in `diive.flux.fluxprocessingchain`. |
+| `dv.flux` | `FluxConfig`, `FluxLevelData`, `run_chain`, `init_flux_data`, `add_driver`, `WindDoubleRotation`, `reynolds_decomposition`, `MaxCovariance`, `PreWhiteningBootstrap`, `PwbBatchDetection`, `TlagApplier`, `PerFilePipeline`, `process_one_file`, `FluxDetectionLimit`, ustar classes. Per-level `run_level*`, `make_level32_detector`, and `chain_to_code`/`level2_to_code` (render chain choices as a reproducible script) live in `diive.flux.fluxprocessingchain`. |
 | `dv.analysis` | `DailyCorrelation`, `GrangerCausality`, `StratifiedAnalysis`, `GapFinder`, `GapStats`, `GridAggregator`, `Histogram`, `FindOptimumRange`, `SeasonalTrendDecomposition`, `BinFitterCP`, `harmonic_analysis`, `percentiles101` |
 | `dv.analysis.experimental` | **(provisional, API may change)** `DriverAnalysis`, `DriverAnalysisResult`, `AleCurve`, `Ale2DResult`, `accumulated_local_effects`, `accumulated_local_effects_2d`, `ExperimentalWarning` — evidence-triangulation driver attribution; emits a one-time `ExperimentalWarning` on use |
 | `dv.plotting` | `HeatmapDateTime`, `HeatmapXYZ`, `HeatmapYearMonth`, `HexbinPlot`, `ScatterXY`, `TimeSeries`, `DielCycle`, `RidgeLinePlot`, `HistogramPlot`, `ShiftedDistributionPlot`, `Cumulative`, `CumulativeYear`, `LongtermAnomaliesYear`, `TreeRingPlot` |
@@ -267,6 +267,14 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   sample (`np.searchsorted` on `get_xdata(orig=False)` — the unit-converted floats, **not** raw datetimes); `pcolormesh`
   heatmaps read the cell from `get_coordinates()`/`get_array()`. Renders by blitting (background re-captured on
   `draw_event`); GUI-only presentation, no domain logic.
+- **Flux processing chain tab** (`tabs/fluxchain.py`, `Tools ▸ Flux processing chain`, single-instance). Guided
+  Swiss-FluxNet chain. **First slice = Input + Level 2**: collects site/flux-column + L2 test toggles, runs the
+  composable `init_flux_data` → `run_level2` on a worker thread, shows the L2 QCF-filtered flux as a heatmap, and
+  **Copy Python** emits a reproducible script via the library's `level2_to_code`. Script-gen lives in the library
+  (`flux/fluxprocessingchain/codegen.py`: `chain_to_code` for the `run_chain`/`FluxConfig` path, `level2_to_code` for the
+  composable path; both omit default-valued kwargs) — the GUI only calls it. Needs real EddyPro-FLUXNET input
+  (`load_exampledata_parquet_lae_level1_30MIN`), not the default CH-DAV. Later slices add L3.1/3.2/3.3/4.1 + switch to
+  `run_chain`/`chain_to_code`.
 - **Feature engineering tab.** Menu-activated (`Tools ▸ Feature engineering`, from `registry.MENU_TAB_CLASSES`) — not in
   the tab bar until selected, and closable (always-on tabs get their close button removed). Runs `FeatureEngineer`
   (library) on selected variables, emits new columns via a `featuresCreated` signal; `MainWindow` merges them, tracks

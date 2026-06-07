@@ -127,6 +127,7 @@ from diive.flux.fluxprocessingchain.levels import (
     run_level41_xgb,
 )
 from diive.flux.fluxprocessingchain.run_chain import run_chain
+from diive.flux.fluxprocessingchain.codegen import chain_to_code, level2_to_code
 
 __all__ = [
     # Containers / config
@@ -137,6 +138,9 @@ __all__ = [
     'LevelResults',
     # Single-call convenience driver
     'run_chain',
+    # Reproducible-script codegen
+    'chain_to_code',
+    'level2_to_code',
     # Composable callables
     'init_flux_data',
     'add_driver',
