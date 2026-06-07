@@ -11,22 +11,41 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 from diive.gui.tabs.base import DiiveTab
+from diive.gui.tabs.features import FeatureEngineerTab
 from diive.gui.tabs.log import LogTab
-from diive.gui.tabs.plotting import PlottingTab
+from diive.gui.tabs.overview import OverviewTab
+from diive.gui.tabs.plotting import HEATMAP, TIMESERIES, PlottingTab
+from diive.gui.tabs.settings import SettingsTab
 
 #: Tab classes always shown in the main window, in display order.
 #: Future: append FluxChainTab, OutlierTab, GapFillingTab, ...
 TAB_CLASSES: list[type[DiiveTab]] = [
-    PlottingTab,
+    OverviewTab,
     LogTab,
 ]
 
-#: Tabs opened on demand from a menu (not shown until selected, closable).
-#: Maps menu label -> tab class.
-from diive.gui.tabs.features import FeatureEngineerTab  # noqa: E402
-from diive.gui.tabs.settings import SettingsTab  # noqa: E402
-
-MENU_TAB_CLASSES: dict[str, type[DiiveTab]] = {
-    "Feature engineering": FeatureEngineerTab,
-    "Appearance settings": SettingsTab,
+#: Tabs opened on demand from a menu (not shown until selected, closable),
+#: grouped by the top-level menu they appear under: {menu: {label: factory}}.
+#: Each plot method is its own tab; add a new method by adding a PlottingTab
+#: factory here (and a branch in plotting._draw_one).
+MENU_TABS: dict[str, dict[str, callable]] = {
+    "Plot": {
+        "Heatmap": lambda: PlottingTab(HEATMAP, "Heatmap"),
+        "Time series": lambda: PlottingTab(TIMESERIES, "Time series"),
+    },
+    "Tools": {
+        "Feature engineering": FeatureEngineerTab,
+    },
+    "Settings": {
+        "Appearance": SettingsTab,
+    },
 }
+
+#: Flat label -> factory lookup (used to open a tab by its menu label).
+MENU_TAB_CLASSES: dict[str, callable] = {
+    label: factory for group in MENU_TABS.values() for label, factory in group.items()
+}
+
+#: Menu tabs that may exist only once (re-selecting focuses the existing one).
+#: Everything else opens a new, numbered instance each time.
+SINGLE_INSTANCE_TABS: set[str] = {"Appearance"}

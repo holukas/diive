@@ -213,18 +213,38 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   `changed`; the Settings tab shows a sample variable list as a pill/highlight preview. (Which *variable name* maps to
   which pill kind stays in the library: `dv.variables.classify_variable`. Only colours/labels are GUI.)
 
-- **Registry-driven tabs.** `MainWindow` iterates `registry.TAB_CLASSES` (a list of `DiiveTab` subclasses) — it knows
+- **Shared variable list: `widgets/variable_panel.py` (`VariablePanel`).** Every tab's left-hand variable list MUST be
+  this one component (filter + `VariableList` + `VariableDelegate` pills + subsequence filtering) so styling, pills, and
+  filtering are identical everywhere. Tabs differ only in how they react to `selected(name, ctrl_held)` and what they
+  pass to `set_panels(...)`/`set_variables(...)`. Don't build ad-hoc variable lists. Its width is a shared appearance
+  setting (`theme.manager.list_width`, editable in Appearance settings) applied as a fixed width, so it's identical in
+  every tab — don't set per-tab widths on it. `run_with_loading(name, fn)` shows a busy indicator (`LOADING_ROLE`:
+  translucent wash + bottom bar) on the clicked variable plus a wait cursor, force-repaints it, then runs `fn` (the
+  render) one tick later. matplotlib renders synchronously (blocks the event loop), so the indicator is a *static*
+  busy cue painted before the freeze — it cannot smoothly animate. True animation would require off-thread Agg
+  rendering (losing the interactive toolbar).
+- **Window sizing.** `MainWindow._size_to_screen()` sizes the window to ~88% of the available screen and centres it
+  (adapts to resolution); Qt handles high-DPI scaling.
+- **Registry-driven tabs.** `MainWindow` iterates `registry.TAB_CLASSES` (always-on tabs: Overview, Log) — it knows
   nothing about concrete tabs. Add a feature area = write a `DiiveTab` (`title` + `build()`) and append it. This is how
   the flux processing chain will plug in later.
+- **Menu tabs are multi-instance.** Tabs opened from menus (`registry.MENU_TABS`, factories) open a NEW numbered
+  instance each time (Heatmap 1, 2, 3 ...), all closable; tracked in `MainWindow._menu_tab_list`. Labels in
+  `registry.SINGLE_INSTANCE_TABS` (e.g. Appearance) instead focus the existing one. Always-on tabs have their close
+  button removed; `_next_menu_index` reuses the smallest free number.
 - **Two-phase plot classes are GUI-ready.** The plotting tab renders diive plots straight into an embedded canvas via
   `Plot(series).plot(ax=canvas.ax, fig=canvas.fig)`; no GUI-specific plot variants needed.
-- **`Plot` menu** is built generically from any tab exposing `plot_type_labels()` / `set_plot_type()` (currently the
-  plotting tab). Exclusive checkable selector; first type (Heatmap) is the default, checked + applied on startup. Add a
-  type via `_PLOT_TYPES` + `_draw_one` in `tabs/plotting.py`.
+- **`Plot` menu = one closable tab per method.** There is no single "Plotting" tab. Each plot method (Heatmap, Time
+  series, ...) is a menu-activated, closable `PlottingTab(plot_type, title)` instance, registered as a factory in
+  `registry.MENU_TABS["Plot"]`. Add a method = add a factory there + a branch in `plotting._draw_one` (dispatch on the
+  `HEATMAP`/`TIMESERIES`/... constants).
 - **Data flow.** The `File` menu loads data via `OpenDataDialog` (parquet → `dv.load_parquet`, else `dv.ReadFileType`;
   multiple files → `MultiDataFileReader` / parquet `combine_first`; reading is library work, the dialog only calls it).
   `MainWindow` holds the current DataFrame and pushes it to every tab via the `DiiveTab.on_data_loaded(df, created)`
   hook; data-presenting tabs override it. Example data auto-loads on startup.
+- **Overview tab.** First tab, focused on every load (`setCurrentIndex(0)`). Top: variable list + a GridSpec figure
+  (time series, `Cumulative`, `DielCycle` mean diel cycle, date/time heatmap; extensible via `_PANELS`). Bottom: a
+  full-width strip of KPI-style stat cards (`_StatCard`) from `dv.sstats`.
 - **Feature engineering tab.** Menu-activated (`Tools ▸ Feature engineering`, from `registry.MENU_TAB_CLASSES`) — not in
   the tab bar until selected, and closable (always-on tabs get their close button removed). Runs `FeatureEngineer`
   (library) on selected variables, emits new columns via a `featuresCreated` signal; `MainWindow` merges them, tracks

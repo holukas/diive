@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QPushButton,
     QScrollArea,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -91,6 +92,7 @@ class SettingsTab(DiiveTab):
         col.addWidget(self._pill_group())
         col.addWidget(self._ui_group())
         col.addWidget(self._timeseries_group())
+        col.addWidget(self._layout_group())
 
         reset = QPushButton("Reset to defaults")
         reset.clicked.connect(lambda: theme.manager.reset(silent=False))
@@ -160,6 +162,23 @@ class SettingsTab(DiiveTab):
         row.addStretch(1)
         return box
 
+    def _layout_group(self) -> QGroupBox:
+        box = QGroupBox("Layout")
+        form = QFormLayout(box)
+        self.width_spin = QSpinBox()
+        self.width_spin.setRange(140, 500)
+        self.width_spin.setSingleStep(10)
+        self.width_spin.setSuffix(" px")
+        self.width_spin.setValue(theme.manager.list_width)
+        self.width_spin.valueChanged.connect(self._set_list_width)
+        form.addRow("Variable list width", self.width_spin)
+        return box
+
+    @staticmethod
+    def _set_list_width(value: int) -> None:
+        theme.manager.list_width = value
+        theme.manager.apply()
+
     def _swatch(self, get_hex, set_hex) -> _ColorSwatch:
         sw = _ColorSwatch(get_hex, set_hex)
         self._swatches.append(sw)
@@ -189,4 +208,7 @@ class SettingsTab(DiiveTab):
     def _on_theme_changed(self) -> None:
         for sw in self._swatches:
             sw.refresh()
+        self.width_spin.blockSignals(True)
+        self.width_spin.setValue(theme.manager.list_width)
+        self.width_spin.blockSignals(False)
         self.preview.viewport().update()

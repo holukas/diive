@@ -29,6 +29,8 @@ NAME_ROLE = Qt.ItemDataRole.UserRole
 PANEL_ROLE = Qt.ItemDataRole.UserRole + 1
 #: True for features created by the user (feature engineer) -> "NEW" pill.
 CREATED_ROLE = Qt.ItemDataRole.UserRole + 2
+#: True while the variable's plot is loading -> animated loading bar.
+LOADING_ROLE = Qt.ItemDataRole.UserRole + 3
 
 def _tok(name: str) -> QColor:
     """Live theme token as a QColor (re-read each call for live preview)."""
@@ -57,7 +59,7 @@ def _new_pill():
 
 
 class VariableDelegate(QStyledItemDelegate):
-    """Render a variable row: highlight + optional NEE pill."""
+    """Render a variable row: highlight + optional pill + loading indicator."""
 
     def sizeHint(self, option, index) -> QSize:
         # Width 1 so long names never force a horizontal scrollbar (which would
@@ -87,6 +89,21 @@ class VariableDelegate(QStyledItemDelegate):
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(bg)
             painter.drawRoundedRect(rect.adjusted(2, 1, -2, -1), 4, 4)
+
+        # Loading indicator: a translucent accent wash over the row plus a
+        # solid accent bar along the bottom. Static (matplotlib renders
+        # synchronously, blocking the event loop) but painted before the render
+        # so it's visible during the wait.
+        if index.data(LOADING_ROLE):
+            band = rect.adjusted(2, 1, -2, -1)
+            wash = QColor(_tok("ACCENT"))
+            wash.setAlpha(45)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(wash)
+            painter.drawRoundedRect(band, 4, 4)
+            bar = QColor(_tok("ACCENT"))
+            painter.setBrush(bar)
+            painter.drawRect(band.left(), band.bottom() - 3, band.width(), 3)
 
         # User-created features get the "NEW" pill; otherwise classify by name.
         pill = _new_pill() if index.data(CREATED_ROLE) else _pill_for(name)

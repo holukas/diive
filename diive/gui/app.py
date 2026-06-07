@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtGui import QAction, QActionGroup
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -24,7 +24,12 @@ from PySide6.QtWidgets import (
 
 import diive
 from diive.gui import theme
-from diive.gui.registry import MENU_TAB_CLASSES, TAB_CLASSES
+from diive.gui.registry import (
+    MENU_TAB_CLASSES,
+    MENU_TABS,
+    SINGLE_INSTANCE_TABS,
+    TAB_CLASSES,
+)
 from diive.gui.widgets.open_data_dialog import OpenDataDialog
 
 class MainWindow(QMainWindow):
@@ -34,7 +39,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._base_title = f"diive {diive.__version__}"
         self.setWindowTitle(self._base_title)
-        self.resize(1100, 720)
+        self._size_to_screen()
         # The stylesheet is applied app-wide by theme.manager (see run()), so
         # live edits propagate everywhere; no per-window stylesheet here.
 
@@ -44,7 +49,7 @@ class MainWindow(QMainWindow):
         # this loop, leaving their signal connections inert.
         self._data = None
         self._created: set = set()  # user-engineered feature column names
-        self._menu_tabs: dict = {}  # label -> lazily-created DiiveTab instance
+        self._menu_tab_list: list = []  # open menu-activated tabs (multi-instance)
 
         self._tabs = []
         self._tabwidget = QTabWidget()
@@ -63,6 +68,18 @@ class MainWindow(QMainWindow):
         self._build_menu()
         # Auto-load the bundled example data so the app is usable on startup.
         self._load_example()
+
+    def _size_to_screen(self) -> None:
+        """Size the window relative to the available screen and center it."""
+        screen = QApplication.primaryScreen()
+        if screen is None:
+            self.resize(1100, 720)
+            return
+        avail = screen.availableGeometry()
+        self.resize(int(avail.width() * 0.88), int(avail.height() * 0.88))
+        frame = self.frameGeometry()
+        frame.moveCenter(avail.center())
+        self.move(frame.topLeft())
 
     def _build_menu(self) -> None:
         menubar = self.menuBar()
@@ -83,40 +100,18 @@ class MainWindow(QMainWindow):
         exit_act.triggered.connect(self.close)
         file_menu.addAction(exit_act)
 
-        self._build_plot_menu(menubar)
-
-        tools_menu = menubar.addMenu("&Tools")
-        for label in MENU_TAB_CLASSES:
-            act = QAction(label, self)
-            act.triggered.connect(lambda _checked, lab=label: self._open_menu_tab(lab))
-            tools_menu.addAction(act)
+        for menu_name, group in MENU_TABS.items():
+            menu = menubar.addMenu(f"&{menu_name}")
+            for label in group:
+                act = QAction(label, self)
+                act.triggered.connect(
+                    lambda _checked, lab=label: self._open_menu_tab(lab))
+                menu.addAction(act)
 
         help_menu = menubar.addMenu("&Help")
         about_act = QAction("&About", self)
         about_act.triggered.connect(self._about)
         help_menu.addAction(about_act)
-
-    def _build_plot_menu(self, menubar) -> None:
-        """Build a 'Plot' menu from any tab that declares plot types.
-
-        Plot types are owned by the plotting tab; the menu is just an exclusive,
-        checkable selector. The first type is the default — checked and applied
-        on startup.
-        """
-        tab = next((t for t in self._tabs if hasattr(t, "plot_type_labels")), None)
-        if tab is None:
-            return
-        plot_menu = menubar.addMenu("&Plot")
-        group = QActionGroup(self)
-        group.setExclusive(True)
-        for i, label in enumerate(tab.plot_type_labels()):
-            act = QAction(label, self, checkable=True)
-            act.triggered.connect(lambda _checked, t=tab, lab=label: t.set_plot_type(lab))
-            group.addAction(act)
-            plot_menu.addAction(act)
-            if i == 0:
-                act.setChecked(True)
-                tab.set_plot_type(label)  # default selected on startup
 
     def _push_data(self) -> None:
         for tab in self._tabs:
@@ -128,31 +123,56 @@ class MainWindow(QMainWindow):
         self._data = df
         self._created = set()  # fresh dataset has no user-created features
         self._push_data()
+        self._tabwidget.setCurrentIndex(0)  # show the Overview tab on load
 
     def _open_menu_tab(self, label: str) -> None:
-        """Open (or focus) a menu-activated tab; create it lazily on first use."""
-        tab = self._menu_tabs.get(label)
-        if tab is None:
-            tab = MENU_TAB_CLASSES[label]()
-            self._menu_tabs[label] = tab
-            self._tabs.append(tab)  # now receives data pushes
-            # Build first (widget()/build sets featuresCreated) before connecting.
-            self._tabwidget.addTab(tab.widget(), tab.title)
-            if hasattr(tab, "featuresCreated"):
-                tab.featuresCreated.connect(self._add_features)
-            if self._data is not None:
-                tab.on_data_loaded(self._data, self._created)  # up to date on open
+        """Open a menu-activated tab.
+
+        Most tabs open a new, numbered instance each time (Heatmap 1, 2, ...);
+        singletons (see registry.SINGLE_INSTANCE_TABS) focus the existing one.
+        """
+        index = 0
+        if label in SINGLE_INSTANCE_TABS:
+            for tab in self._menu_tab_list:
+                if tab._menu_label == label:
+                    self._tabwidget.setCurrentWidget(tab.widget())
+                    return
+            title = label
+        else:
+            index = self._next_menu_index(label)
+            title = f"{label} {index}"
+
+        tab = MENU_TAB_CLASSES[label]()
+        tab._menu_label = label
+        tab._menu_index = index
+        self._menu_tab_list.append(tab)
+        self._tabs.append(tab)  # now receives data pushes
+        # Build first (widget()/build sets featuresCreated) before connecting.
+        self._tabwidget.addTab(tab.widget(), title)
+        if hasattr(tab, "featuresCreated"):
+            tab.featuresCreated.connect(self._add_features)
+        if self._data is not None:
+            tab.on_data_loaded(self._data, self._created)  # up to date on open
         self._tabwidget.setCurrentWidget(tab.widget())
+
+    def _next_menu_index(self, label: str) -> int:
+        """Smallest unused 1-based index among open tabs of this menu label."""
+        used = {getattr(t, "_menu_index", 0)
+                for t in self._menu_tab_list if t._menu_label == label}
+        i = 1
+        while i in used:
+            i += 1
+        return i
 
     def _on_tab_close(self, index: int) -> None:
         """Close a menu-opened tab (always-on tabs have no close button)."""
         widget = self._tabwidget.widget(index)
-        for label, tab in list(self._menu_tabs.items()):
+        for tab in list(self._menu_tab_list):
             if tab.widget() is widget:
                 self._tabwidget.removeTab(index)
                 if tab in self._tabs:
                     self._tabs.remove(tab)
-                del self._menu_tabs[label]
+                self._menu_tab_list.remove(tab)
                 return
 
     def _add_features(self, new_df) -> None:

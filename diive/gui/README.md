@@ -1,5 +1,8 @@
 # diive desktop GUI
 
+> Using the app? See the **[user manual](MANUAL.md)**. This file is the developer
+> map (architecture, gotchas).
+
 PySide6 desktop application for diive. Optional dependency — install and launch with:
 
 ```bash
@@ -13,25 +16,28 @@ diive-gui                # or: uv run diive-gui
 |---|---|
 | `theme.py` | **Central appearance config** — `ThemeManager` (`manager`): editable colour tokens, pill colours/labels, time-series palette, stylesheet; emits `changed` |
 | `tabs/settings.py` | Appearance settings tab — live colour editing with a pill/highlight preview |
-| `app.py` | `QApplication` bootstrap, `MainWindow` (menu bar + `QTabWidget`) |
-| `registry.py` | `TAB_CLASSES` — the single list the main window builds tabs from |
-| `tabs/base.py` | `DiiveTab` ABC: `title` + `build()` + `on_data_loaded(df)` — the extension point |
-| `tabs/plotting.py` | Interactive plotting tab (variable list + heatmap panels) |
+| `app.py` | `QApplication` bootstrap, `MainWindow` (menu bar + `QTabWidget`); window sized to ~88% of screen |
+| `registry.py` | `TAB_CLASSES` (always-on), `MENU_TABS` (menu-opened factories), `SINGLE_INSTANCE_TABS` |
+| `tabs/base.py` | `DiiveTab` ABC: `title` + `build()` + `on_data_loaded(df, created)` — the extension point |
+| `tabs/overview.py` | Overview tab (first/default): figure (top) + full-width KPI stat-card strip (bottom) |
+| `tabs/plotting.py` | `PlottingTab(plot_type)` — one closable tab per plot method (opened from the Plot menu) |
 | `tabs/features.py` | Feature engineering tab (FeatureEngineer; created features get a "NEW" pill) |
 | `tabs/log.py` | Log tab wrapping `ConsolePanel` (live coloured library output) |
 | `widgets/mpl_canvas.py` | `MplCanvas` — embedded matplotlib figure + bottom-right toolbar |
+| `widgets/variable_panel.py` | **`VariablePanel`** — the shared variable list (filter + pills) used by every tab |
 | `widgets/variable_list.py` | `VariableList` — list emitting `selected(name, ctrl_held)` |
 | `widgets/variable_delegate.py` | `VariableDelegate` — paints row highlight + NEE/GPP/Reco pills |
 | `widgets/open_data_dialog.py` | `OpenDataDialog` — file + filetype picker with a parsed live preview |
-| `widgets/console_panel.py` | `ConsolePanel` — dockable panel mirroring diive's Rich output in colour |
+| `widgets/console_panel.py` | `ConsolePanel` — mirrors diive's Rich output in colour (used by the Log tab) |
 
-**Adding a tab:** write a `DiiveTab` subclass and append its class to `TAB_CLASSES`. The main window is agnostic to
-concrete tabs — it just iterates the registry. This is how the flux processing chain will plug in later.
+**Adding a tab:** always-on tabs (Overview, Log) go in `TAB_CLASSES`. Menu-opened tabs go in `registry.MENU_TABS`
+(grouped by menu; values are factories) — they open as **new numbered instances** each time (Heatmap 1, 2, 3 ...), all
+closable, unless listed in `SINGLE_INSTANCE_TABS` (e.g. Appearance). The main window is agnostic to concrete tabs.
 
-**Plot menu:** the menu bar's **Plot** menu is built generically from any tab exposing `plot_type_labels()` /
-`set_plot_type()` (the plotting tab). It's an exclusive checkable selector; the first type (Heatmap) is the default,
-checked and applied on startup. Add a plot type by extending `_PLOT_TYPES` + `_draw_one` in `tabs/plotting.py`. Ctrl+click
-adds comparison panels: heatmaps go side by side (shared x/y), time series stack top-to-bottom (shared time x-axis).
+**Plot menu:** each method is its own closable tab. The **Plot** menu lists methods (Heatmap, Time series); selecting one
+opens a new `PlottingTab(plot_type, title)` instance. Add a method via a factory in `registry.MENU_TABS["Plot"]` + a
+branch in `plotting._draw_one`. Ctrl+click adds comparison panels: heatmaps go side by side (shared x/y), time series
+stack top-to-bottom (shared time x-axis).
 
 **Data flow:** **File ▸ Open data file…** shows `OpenDataDialog` — pick one or more files, choose the filetype, and
 preview the first parsed rows before loading (parquet via `dv.load_parquet`, other formats via `dv.ReadFileType`).
@@ -45,6 +51,12 @@ startup.
 (library) on user-selected variables and emits the new columns via a `featuresCreated` signal; `MainWindow` merges them
 into the dataset, records them in a `created` set, and re-pushes. The plotting list tags created columns with a pink
 **✦ NEW** pill (delegate `CREATED_ROLE`). Heavy runs go on a worker thread; progress shows in the Log tab.
+
+**Shared variable list (`VariablePanel`):** every tab's left list MUST be this one widget so styling, pills, filtering
+(separator-insensitive subsequence), and width are identical everywhere. Its width is a shared appearance setting
+(`theme.manager.list_width`, editable in Appearance). `run_with_loading(name, fn)` shows a busy indicator on the clicked
+variable + wait cursor while `fn` (a synchronous matplotlib render) runs — a static cue, since the render blocks the
+event loop (true animation would need off-thread Agg rendering).
 
 **Variable list stays in sync:** every data change (file load, feature add) goes through `MainWindow._push_data()`,
 which calls `on_data_loaded(df, created)` on all active tabs. A menu tab gets the current data on open and is then
@@ -64,3 +76,7 @@ panel only renders.
 - **The matplotlib Qt toolbar recolours icons from the widget palette.** `MplCanvas` sets a light palette *before*
   building the toolbar so icons stay dark on the white background (otherwise white-on-white on dark system themes).
 - **Use synchronous `canvas.draw()`, not `draw_idle()`,** after a user action so the plot updates immediately.
+- **`DiiveTab` is a plain `ABC`, not a `QObject`** — class-level `Signal`s on it won't bind. Put tab signals on a
+  small `QObject` helper (see `FeatureEngineerTab`).
+- **matplotlib renders synchronously** on the GUI thread (blocks the event loop), so loading indicators are static
+  cues, not smooth animations.

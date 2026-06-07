@@ -59,6 +59,9 @@ DEFAULT_NEW_PILL: list[str] = ["✦ NEW", "#D81B60", WHITE]
 DEFAULT_TIMESERIES_COLORS: list[str] = [
     "#1976D2", "#E53935", "#43A047", "#FB8C00", "#8E24AA"]
 
+#: Shared width (px) of the variable list panel, identical across all tabs.
+DEFAULT_LIST_WIDTH = 240
+
 
 def build_qss(t: dict[str, str]) -> str:
     """Build the application stylesheet from a token dict."""
@@ -131,6 +134,7 @@ class ThemeManager(QObject):
         self.pills = {k: list(v) for k, v in DEFAULT_PILL_STYLE.items()}
         self.new_pill = list(DEFAULT_NEW_PILL)
         self.ts_colors = list(DEFAULT_TIMESERIES_COLORS)
+        self.list_width = DEFAULT_LIST_WIDTH
         if not silent:
             self.apply()
 

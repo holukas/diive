@@ -50,6 +50,13 @@ Or with [uv](https://docs.astral.sh/uv/):
 uv pip install diive
 ```
 
+**Optional desktop GUI** (PySide6, not installed by default):
+
+```bash
+pip install 'diive[gui]'   # or: uv sync --extra gui
+diive-gui                  # launch
+```
+
 ### Quick start
 
 ```python
@@ -169,6 +176,10 @@ Flux detection limit from 20 Hz data, maximum covariance lag, pre-whitening boot
 ### I/O
 
 Load and save parquet files, read single or batch EddyPro output, detect and split irregular files, and format data for FLUXNET submission. See [examples/io/](examples/io/).
+
+### Desktop GUI (optional)
+
+A PySide6 desktop app (`diive-gui`, install with the `gui` extra) for interactive exploration: an Overview tab (per-variable stats + multi-panel figure), per-method plot tabs (heatmap, time series — opened from the Plot menu, multiple at once), a feature-engineering tab, a live Appearance settings tab, and a colour-mirrored output log. See the [GUI user manual](diive/gui/MANUAL.md).
 
 ---
 

@@ -22,30 +22,14 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
-import re
-
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (
-    QAbstractItemView,
-    QHBoxLayout,
-    QLineEdit,
-    QListWidgetItem,
-    QSplitter,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtWidgets import QHBoxLayout, QSplitter, QWidget
 
 import diive as dv
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.mpl_canvas import MplCanvas
-from diive.gui.widgets.variable_delegate import (
-    CREATED_ROLE,
-    NAME_ROLE,
-    PANEL_ROLE,
-    VariableDelegate,
-)
-from diive.gui.widgets.variable_list import VariableList
+from diive.gui.widgets.variable_panel import VariablePanel
 
 #: Column selected on startup -- gap-filled (continuous) NEE from the bundled
 #: CH-DAV example dataset.
@@ -54,64 +38,40 @@ _DEFAULT_VAR = "NEE_CUT_REF_f"
 #: Maximum number of side-by-side panels (further Ctrl+clicks are ignored).
 _MAX_PANELS = 5
 
-#: Plot types offered in the Plot menu (first is the default). Add new diive
-#: plot types here; `_draw_one` dispatches on the chosen label.
-_HEATMAP = "Heatmap (date/time)"
-_TIMESERIES = "Time series"
-_PLOT_TYPES = [_HEATMAP, _TIMESERIES]
+#: Plot-method identifiers; `_draw_one` dispatches on these. Each method is
+#: opened as its own tab from the Plot menu (see registry).
+HEATMAP = "Heatmap (date/time)"
+TIMESERIES = "Time series"
 
 # Time-series line colors are read live from theme.manager.ts_colors.
 
 
 class PlottingTab(DiiveTab):
-    """Pick variables on the left, render one or more plots on the right."""
+    """One plot method (heatmap, time series, ...) as its own closable tab."""
 
-    title = "Plotting"
+    def __init__(self, plot_type: str, title: str | None = None) -> None:
+        super().__init__()
+        self._plot_type = plot_type
+        self.title = title or plot_type
 
     def build(self) -> QWidget:
         self._df = None
         self._panels: list[str] = []
-        self._plot_type = _PLOT_TYPES[0]
 
         root = QWidget()
         layout = QHBoxLayout(root)
         layout.setContentsMargins(0, 0, 0, 0)
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
-        # Left column: a filter field above the variable list. Width is
-        # user-resizable via the splitter handle.
-        left = QWidget()
-        left.setMinimumWidth(160)
-        left_layout = QVBoxLayout(left)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-
-        self.search = QLineEdit()
-        self.search.setClearButtonEnabled(True)
-        self.search.setPlaceholderText("Filter variables...")
-        self.search.textChanged.connect(self._filter_list)
-
-        # Variable list. Plain click resets; Ctrl+click toggles a panel. The
-        # variable name is stored in NAME_ROLE so the delegate can render a
-        # panel-order prefix and pills without affecting click handling.
-        self.var_list = VariableList()
-        # A custom delegate paints rows (highlight + NEE pill); disable Qt's
-        # own selection highlight, and enable mouse tracking for hover.
-        self.var_list.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
-        self.var_list.setItemDelegate(VariableDelegate(self.var_list))
-        self.var_list.setMouseTracking(True)
-        # Names are elided by the delegate; never scroll horizontally (it would
-        # push the right-aligned pills out of view).
-        self.var_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.var_list.setWordWrap(False)
-        self.var_list.selected.connect(self._on_selected)
-
-        left_layout.addWidget(self.search)
-        left_layout.addWidget(self.var_list, stretch=1)
+        # Shared variable list (filter + pills). Plain click resets to one
+        # panel; Ctrl+click toggles additional panels.
+        self.varpanel = VariablePanel()
+        self.varpanel.selected.connect(self._on_selected)
 
         # Right: embedded matplotlib canvas.
         self.canvas = MplCanvas()
 
-        splitter.addWidget(left)
+        splitter.addWidget(self.varpanel)
         splitter.addWidget(self.canvas)
         splitter.setStretchFactor(0, 0)   # list keeps its width
         splitter.setStretchFactor(1, 1)   # canvas takes extra space
@@ -124,8 +84,9 @@ class PlottingTab(DiiveTab):
         return root
 
     def _on_theme_changed(self) -> None:
-        self.var_list.viewport().update()
-        if self._plot_type == _TIMESERIES and self._panels:
+        # The panel repaints its own pills; re-render only if colors affect the
+        # current plot (time-series line colors).
+        if self._plot_type == TIMESERIES and self._panels:
             self._render()
 
     def on_data_loaded(self, df, created: set | None = None) -> None:
@@ -133,52 +94,20 @@ class PlottingTab(DiiveTab):
 
         `created` marks user-engineered columns so they get the "NEW" pill.
         """
-        created = created or set()
         self._df = df
         self._panels = []
-        self.search.clear()
-        self.var_list.clear()
-        for col in df.columns:
-            item = QListWidgetItem(str(col))
-            item.setData(NAME_ROLE, str(col))
-            item.setData(PANEL_ROLE, 0)
-            item.setData(CREATED_ROLE, str(col) in created)
-            self.var_list.addItem(item)
+        self.varpanel.set_variables(df.columns, created)
         self._select_default()
-
-    def plot_type_labels(self) -> list[str]:
-        """Plot types this tab can render (for the Plot menu)."""
-        return list(_PLOT_TYPES)
-
-    def set_plot_type(self, label: str) -> None:
-        """Switch the active plot type and re-render."""
-        self._plot_type = label
-        self._render()
-
-    def _filter_list(self, text: str) -> None:
-        """Hide variables not matching `text`.
-
-        Matches as a subsequence over the normalized (lowercased,
-        separator-stripped) name, so the typed characters need only appear in
-        order -- e.g. 'gpp16' matches 'GPP_CUT_16_f'.
-        """
-        needle = _normalize(text)
-        for i in range(self.var_list.count()):
-            item = self.var_list.item(i)
-            name = _normalize(item.data(NAME_ROLE) or "")
-            item.setHidden(not _is_subsequence(needle, name))
 
     def _select_default(self) -> None:
         """Highlight and render the startup variable in a single panel."""
         cols = [str(c) for c in self._df.columns]
         if _DEFAULT_VAR in cols:
-            row = cols.index(_DEFAULT_VAR)
+            self._panels = [_DEFAULT_VAR]
         elif cols:
-            row = 0
+            self._panels = [cols[0]]
         else:
-            return
-        self.var_list.setCurrentRow(row)
-        self._panels = [cols[row]]
+            self._panels = []
         self._render()
 
     def _on_selected(self, name: str, additive: bool) -> None:
@@ -194,7 +123,7 @@ class PlottingTab(DiiveTab):
                 return  # cap reached -- ignore further panels
         else:
             self._panels = [name]
-        self._render()
+        self.varpanel.run_with_loading(name, self._render)
 
     def _render(self) -> None:
         """Render one panel per entry in `self._panels`.
@@ -210,7 +139,7 @@ class PlottingTab(DiiveTab):
             self._mark_selected()
             return
 
-        if self._plot_type == _HEATMAP:
+        if self._plot_type == HEATMAP:
             axes = self.canvas.new_axes(
                 len(self._panels), orientation="horizontal", sharex=True, sharey=True)
         else:
@@ -220,7 +149,7 @@ class PlottingTab(DiiveTab):
         for i, (ax, name) in enumerate(zip(axes, self._panels)):
             self._draw_one(ax, name, i)
 
-        if self._plot_type == _HEATMAP:
+        if self._plot_type == HEATMAP:
             # Date axis only on the leftmost panel.
             for ax in axes[1:]:
                 ax.set_ylabel("")
@@ -243,12 +172,12 @@ class PlottingTab(DiiveTab):
         """
         series = self._df[name]
         try:
-            if self._plot_type == _HEATMAP:
+            if self._plot_type == HEATMAP:
                 dv.plotting.HeatmapDateTime(series).plot(
                     ax=ax, fig=self.canvas.fig, title=name,
                     cb_digits_after_comma='auto',
                 )
-            elif self._plot_type == _TIMESERIES:
+            elif self._plot_type == TIMESERIES:
                 ts_colors = theme.manager.ts_colors
                 dv.plotting.TimeSeries(series).plot(
                     ax=ax, title=name, color=ts_colors[index % len(ts_colors)],
@@ -262,25 +191,5 @@ class PlottingTab(DiiveTab):
             )
 
     def _mark_selected(self) -> None:
-        """Tag each list entry with its panel position for the delegate.
-
-        Order 1 = primary panel, 2+ = additional panels, 0 = not shown. The
-        delegate maps these to colours and the panel-number prefix.
-        """
-        for i in range(self.var_list.count()):
-            item = self.var_list.item(i)
-            name = item.data(NAME_ROLE)
-            order = self._panels.index(name) + 1 if name in self._panels else 0
-            item.setData(PANEL_ROLE, order)
-        self.var_list.viewport().update()
-
-
-def _normalize(text: str) -> str:
-    """Lowercase and strip non-alphanumeric chars for separator-insensitive search."""
-    return re.sub(r"[^a-z0-9]", "", text.lower())
-
-
-def _is_subsequence(needle: str, hay: str) -> bool:
-    """True if every char of `needle` appears in `hay` in order (gaps allowed)."""
-    it = iter(hay)
-    return all(c in it for c in needle)
+        """Highlight the selected panels in the shared variable list."""
+        self.varpanel.set_panels(self._panels)

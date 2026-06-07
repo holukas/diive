@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import threading
 
-from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QFormLayout,
@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
 
 from diive.core.ml.feature_engineer import FeatureEngineer
 from diive.gui.tabs.base import DiiveTab
+from diive.gui.widgets.variable_panel import VariablePanel
 
 #: Placeholder target column (FeatureEngineer requires one; excluded from output).
 _TARGET = "__fe_target__"
@@ -69,33 +70,20 @@ class FeatureEngineerTab(DiiveTab):
         root = QWidget()
         layout = QHBoxLayout(root)
 
-        # --- Available variables (left) ---
+        # --- Available variables (left): shared variable list. Click a variable
+        #     to add it as a feature. ---
         avail_box = QVBoxLayout()
-        avail_box.addWidget(QLabel("Available variables"))
-        self.available = QListWidget()
-        self.available.itemDoubleClicked.connect(self._to_selected)
+        avail_box.addWidget(QLabel("Available variables (click to add)"))
+        self.available = VariablePanel()
+        self.available.selected.connect(lambda name, _ctrl: self._add_feature(name))
         avail_box.addWidget(self.available)
         layout.addLayout(avail_box)
 
-        # --- Move buttons ---
-        mid = QVBoxLayout()
-        mid.addStretch(1)
-        add_one = QPushButton("→")
-        add_one.setToolTip("Add selected variable as a feature")
-        add_one.clicked.connect(lambda: self._to_selected(self.available.currentItem()))
-        rem_one = QPushButton("←")
-        rem_one.setToolTip("Remove feature")
-        rem_one.clicked.connect(lambda: self._to_available(self.selected.currentItem()))
-        mid.addWidget(add_one)
-        mid.addWidget(rem_one)
-        mid.addStretch(1)
-        layout.addLayout(mid)
-
-        # --- Selected features (middle) ---
+        # --- Selected features (middle): double-click to remove ---
         sel_box = QVBoxLayout()
-        sel_box.addWidget(QLabel("Selected features"))
+        sel_box.addWidget(QLabel("Selected features (double-click to remove)"))
         self.selected = QListWidget()
-        self.selected.itemDoubleClicked.connect(self._to_available)
+        self.selected.itemDoubleClicked.connect(self._remove_feature)
         sel_box.addWidget(self.selected)
         layout.addLayout(sel_box)
 
@@ -192,28 +180,25 @@ class FeatureEngineerTab(DiiveTab):
         return box
 
     # --- list moves ---
-    def _to_selected(self, item) -> None:
-        if item is None:
+    def _add_feature(self, name: str) -> None:
+        if not name:
             return
-        name = item.text()
-        self.available.takeItem(self.available.row(item))
+        self.available.remove_name(name)
         self.selected.addItem(name)
 
-    def _to_available(self, item) -> None:
+    def _remove_feature(self, item) -> None:
         if item is None:
             return
         name = item.text()
         self.selected.takeItem(self.selected.row(item))
-        self.available.addItem(name)
-        self.available.sortItems()
+        self.available.add_name(name)
 
     # --- data ---
     def on_data_loaded(self, df, created: set | None = None) -> None:
         self._df = df
         self._created_df = None
-        self.available.clear()
         self.selected.clear()
-        self.available.addItems([str(c) for c in df.columns])
+        self.available.set_variables(df.columns, created)
         self.add_btn.setEnabled(False)
         self.status.setText("")
 
