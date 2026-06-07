@@ -22,6 +22,7 @@ diive-gui                # or: uv run diive-gui
 | `tabs/base.py` | `DiiveTab` ABC: `title` + `build()` + `on_data_loaded(df, created)` — the extension point |
 | `tabs/overview.py` | Overview tab (first/default): 2×4 panel figure (top) + full-width KPI stat-card strip (bottom); panels via `_PANELS` |
 | `tabs/plotting.py` | `PlottingTab(plot_type)` — one closable tab per plot method (opened from the Plot menu); var list + live settings panel + canvas |
+| `icons.py` | `menu_icon(label)` — tiny `QPainter`-drawn glyphs for **all** menu entries (folder/disk/calendar/gear/palette/… + plot shapes), keyword-matched |
 | `widgets/plot_settings.py` | `PlotSettingsPanel(plot_type)` — live plot-parameter controls (between list and canvas); `changed` re-renders; defines `HEATMAP`/`TIMESERIES` |
 | `tabs/features.py` | Feature engineering tab (FeatureEngineer; created features get a "NEW" pill) |
 | `tabs/log.py` | Log tab wrapping `ConsolePanel` (live coloured library output) |
@@ -38,11 +39,18 @@ diive-gui                # or: uv run diive-gui
 (grouped by menu; values are factories) — they open as **new numbered instances** each time (Heatmap 1, 2, 3 ...), all
 closable, unless listed in `SINGLE_INSTANCE_TABS` (e.g. Appearance). The main window is agnostic to concrete tabs.
 
-**Plot menu:** each method is its own closable tab. The **Plot** menu lists methods (Heatmap date/time, Heatmap
-year/month, Time series); selecting one opens a new `PlottingTab(plot_type, title)` instance. Add a method via a factory
-in `registry.MENU_TABS["Plot"]` + a branch in `plotting._draw_one` (and matching controls in `plot_settings`). Ctrl+click
-adds comparison panels: heatmaps (both kinds, in `_HEATMAP_TYPES`) go side by side (shared x/y), time series stack
-top-to-bottom (shared time x-axis).
+**Menu icons:** every menu entry (File/Data/Plot/Tools/Settings/Help) gets a small `QPainter`-drawn glyph via
+`gui/icons.py::menu_icon(label)`, matched to the label by keyword (`&` mnemonics stripped first). `_build_menu` wraps
+each action with it. Add a menu entry → add a keyword rule in `icons._RULES` (unknown labels fall back to a chart glyph).
+
+**Plot menu:** each method is its own closable tab, with a small drawn icon. The **Plot** menu lists methods (Heatmap
+date/time, Heatmap year/month, Time series, Ridgeline); selecting one
+opens a new `PlottingTab(plot_type, title)` instance. Add a method via a factory in `registry.MENU_TABS["Plot"]` + a
+branch in `plotting._draw_one` (and matching controls in `plot_settings`). Ctrl+click adds comparison panels: heatmaps
+(both kinds, in `_HEATMAP_TYPES`) go side by side (shared x/y), time series stack top-to-bottom (shared time x-axis).
+The **ridgeline** is single-variable and whole-figure: `RidgeLinePlot` builds its own stacked-density gridspec, so the
+tab passes `canvas.fig` to the class's `fig=` param and sets `canvas.auto_layout=False` (so the constrained-layout
+freeze/resize machinery doesn't reflow its overlapping ridges) — see `_render_ridgeline`.
 
 **Live plot settings:** between the variable list and the canvas sits a `PlotSettingsPanel(plot_type)` — a scrollable
 strip of controls, one per `plot()` parameter of the underlying diive plot class (heatmap: colormap, vmin/vmax,

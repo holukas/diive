@@ -36,6 +36,10 @@ from PySide6.QtWidgets import (
 HEATMAP = "Heatmap (date/time)"
 HEATMAP_YEARMONTH = "Heatmap (year/month)"
 TIMESERIES = "Time series"
+RIDGELINE = "Ridgeline"
+
+#: Period grouping for the ridgeline (one density ridge per group).
+_RIDGELINE_HOW = ["monthly", "weekly", "yearly"]
 
 #: Year/month aggregation methods offered in the dropdown.
 _YEARMONTH_AGGS = ["mean", "median", "sum", "min", "max", "std"]
@@ -77,6 +81,8 @@ class PlotSettingsPanel(QScrollArea):
             self._build_heatmap(yearmonth=plot_type == HEATMAP_YEARMONTH)
         elif plot_type == TIMESERIES:
             self._build_timeseries()
+        elif plot_type == RIDGELINE:
+            self._build_ridgeline()
 
         self._col.addStretch(1)
         self.setWidget(inner)
@@ -188,6 +194,30 @@ class PlotSettingsPanel(QScrollArea):
         form.addRow("Y units", self.series_units)
         self._col.addWidget(labels)
 
+    # --- ridgeline controls ---
+    def _build_ridgeline(self) -> None:
+        grp = QGroupBox("Ridges")
+        form = QFormLayout(grp)
+        self.how = QComboBox()
+        self.how.addItems(_RIDGELINE_HOW)
+        self.how.currentTextChanged.connect(self.changed)
+        form.addRow("Group by", self.how)
+        self.hspace = self._dspin(-0.5, -1.0, 0.5, 0.1, 2, form, "Overlap")
+        self.shade_percentile = self._dspin(0.5, 0.0, 1.0, 0.05, 2, form, "Shade percentile")
+        self.bandwidth = self._dspin(0.0, 0.0, 100.0, 0.5, 2, form, "KDE bandwidth")
+        self.bandwidth.setSpecialValueText("auto")  # 0 -> default KernelDensity
+        self.show_mean_line = self._check("Show mean line", form)
+        self.ascending = self._check("Ascending order", form)
+        self._col.addWidget(grp)
+
+        labels = QGroupBox("Labels")
+        form = QFormLayout(labels)
+        self.xlabel = QLineEdit()
+        self.xlabel.setPlaceholderText("(variable name)")
+        self.xlabel.editingFinished.connect(self.changed)
+        form.addRow("X label", self.xlabel)
+        self._col.addWidget(labels)
+
     # --- control factories (wire each to `changed`) ---
     def _spin(self, value, lo, hi, form, label) -> QSpinBox:
         sp = QSpinBox()
@@ -273,6 +303,17 @@ class PlotSettingsPanel(QScrollArea):
                 opts["minticks"] = self.minticks.value()
                 opts["maxticks"] = self.maxticks.value()
             return opts
+        if self._plot_type == RIDGELINE:
+            bw = self.bandwidth.value()
+            return {
+                "how": self.how.currentText(),
+                "hspace": self.hspace.value(),
+                "shade_percentile": self.shade_percentile.value(),
+                "show_mean_line": self.show_mean_line.isChecked(),
+                "ascending": self.ascending.isChecked(),
+                "xlabel": self.xlabel.text().strip() or None,
+                "kd_kwargs": {"bandwidth": bw} if bw > 0 else None,
+            }
         return {
             "linewidth": self.linewidth.value(),
             "alpha": self.alpha.value(),

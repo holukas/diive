@@ -55,7 +55,8 @@ class RidgeLinePlot:
     def _update_params(self, xlim: list, ylim: list, hspace: float, xlabel: str,
                        fig_width: float, fig_height: float, shade_percentile: float,
                        show_mean_line: bool, fig_title: str, fig_dpi: float, showplot: bool,
-                       ascending: bool, verbose: bool = False, kd_kwargs: dict = None):
+                       ascending: bool, verbose: bool = False, kd_kwargs: dict = None,
+                       fig=None):
         self.xlim = xlim
         self.ylim = ylim
         self.hspace = hspace
@@ -70,18 +71,30 @@ class RidgeLinePlot:
         self.ascending = ascending
         self.verbose = verbose
         self.kd_kwargs = kd_kwargs
+        self._fig_external = fig
         return None
 
     def plot(self, xlim: list = None, ylim: list = None, hspace: float = -0.5, xlabel: str = None,
              fig_width: float = 8, fig_height: float = 8,
              shade_percentile: float = 0.5, show_mean_line: bool = False,
              fig_title: str = None, fig_dpi: float = 72, showplot: bool = True,
-             ascending: bool = False, how: str = 'weekly', kd_kwargs: dict = None):
+             ascending: bool = False, how: str = 'weekly', kd_kwargs: dict = None,
+             fig=None):
+        """Render the ridgeline plot.
+
+        Args:
+            fig: Existing matplotlib ``Figure`` to draw into (cleared first). When
+                given, the plot builds its stacked-density grid on it instead of
+                creating a new figure -- e.g. for embedding in a GUI canvas. The
+                ``fig_width``/``fig_height``/``fig_dpi`` args are then ignored.
+                Pass ``showplot=False`` with this.
+            (other args unchanged)
+        """
         self._update_params(xlim=xlim, ylim=ylim, hspace=hspace, xlabel=xlabel,
                             fig_width=fig_width, fig_height=fig_height,
                             shade_percentile=shade_percentile, show_mean_line=show_mean_line,
                             fig_title=fig_title, fig_dpi=fig_dpi, showplot=showplot,
-                            ascending=ascending, kd_kwargs=kd_kwargs)
+                            ascending=ascending, kd_kwargs=kd_kwargs, fig=fig)
         self.ys, self.ys_unique = self._y_index(how=how)
         self.colors = iter(cm.Spectral_r(np.linspace(0, 1, len(self.ys_unique))))
         self.assigned_colors = self._assign_colors(how=how)
@@ -125,8 +138,14 @@ class RidgeLinePlot:
 
     def _plot(self):
 
-        self.fig = plt.figure(figsize=(self.fig_width, self.fig_height),
-                              layout=None, dpi=self.fig_dpi)
+        # Draw into a caller-supplied figure (e.g. a GUI canvas) when given,
+        # otherwise create a standalone one.
+        if getattr(self, "_fig_external", None) is not None:
+            self.fig = self._fig_external
+            self.fig.clear()
+        else:
+            self.fig = plt.figure(figsize=(self.fig_width, self.fig_height),
+                                  layout=None, dpi=self.fig_dpi)
 
         gs = (grid_spec.GridSpec(len(self.ys_unique), 1))
         gs.update(wspace=0, hspace=0, left=0.09, right=0.97, top=0.95, bottom=0.07)

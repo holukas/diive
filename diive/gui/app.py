@@ -102,52 +102,42 @@ class MainWindow(QMainWindow):
         self.move(frame.topLeft())
 
     def _build_menu(self) -> None:
+        from diive.gui.icons import menu_icon
+
+        def _act(text, slot, shortcut=None):
+            """A QAction with a keyword-matched menu icon."""
+            action = QAction(menu_icon(text), text, self)
+            if shortcut:
+                action.setShortcut(shortcut)
+            action.triggered.connect(slot)
+            return action
+
         menubar = self.menuBar()
 
         file_menu = menubar.addMenu("&File")
-        open_act = QAction("&Open data file...", self)
-        open_act.setShortcut("Ctrl+O")
-        open_act.triggered.connect(self._open_file)
-        file_menu.addAction(open_act)
-
-        example_act = QAction("Load &example data", self)
-        example_act.triggered.connect(self._load_example)
-        file_menu.addAction(example_act)
-
+        file_menu.addAction(_act("&Open data file...", self._open_file, "Ctrl+O"))
+        file_menu.addAction(_act("Load &example data", self._load_example))
         file_menu.addSeparator()
-        save_act = QAction("&Save data as parquet...", self)
-        save_act.setShortcut("Ctrl+S")
-        save_act.triggered.connect(self._save_file)
-        file_menu.addAction(save_act)
-
+        file_menu.addAction(_act("&Save data as parquet...", self._save_file, "Ctrl+S"))
         file_menu.addSeparator()
-        exit_act = QAction("E&xit", self)
-        exit_act.setShortcut("Ctrl+Q")
-        exit_act.triggered.connect(self.close)
-        file_menu.addAction(exit_act)
+        file_menu.addAction(_act("E&xit", self.close, "Ctrl+Q"))
 
         data_menu = menubar.addMenu("&Data")
-        range_act = QAction("Select date &range...", self)
-        range_act.setShortcut("Ctrl+R")
-        range_act.triggered.connect(self._select_daterange)
-        data_menu.addAction(range_act)
-        self._reset_range_act = QAction("Reset to &full range", self)
-        self._reset_range_act.triggered.connect(self._reset_range)
+        data_menu.addAction(_act("Select date &range...", self._select_daterange, "Ctrl+R"))
+        self._reset_range_act = _act("Reset to &full range", self._reset_range)
         self._reset_range_act.setEnabled(False)
         data_menu.addAction(self._reset_range_act)
 
         for menu_name, group in MENU_TABS.items():
             menu = menubar.addMenu(f"&{menu_name}")
             for label in group:
-                act = QAction(label, self)
+                act = QAction(menu_icon(label), label, self)
                 act.triggered.connect(
                     lambda _checked, lab=label: self._open_menu_tab(lab))
                 menu.addAction(act)
 
         help_menu = menubar.addMenu("&Help")
-        about_act = QAction("&About", self)
-        about_act.triggered.connect(self._about)
-        help_menu.addAction(about_act)
+        help_menu.addAction(_act("&About", self._about))
 
     def _push_data(self) -> None:
         for tab in self._tabs:

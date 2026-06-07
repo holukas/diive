@@ -33,6 +33,7 @@ from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.plot_settings import (
     HEATMAP,
     HEATMAP_YEARMONTH,
+    RIDGELINE,
     TIMESERIES,
     PlotSettingsPanel,
 )
@@ -82,6 +83,10 @@ class PlottingTab(DiiveTab):
 
         # Right: embedded matplotlib canvas.
         self.canvas = MplCanvas()
+        # The ridgeline builds its own overlapping gridspec; keep the canvas
+        # from re-flowing it (constrained layout / resize).
+        if self._plot_type == RIDGELINE:
+            self.canvas.auto_layout = False
 
         splitter.addWidget(self.varpanel)
         splitter.addWidget(self.settings)
@@ -133,6 +138,11 @@ class PlottingTab(DiiveTab):
     def _on_selected(self, name: str, additive: bool) -> None:
         if not name:
             return
+        if self._plot_type == RIDGELINE:
+            # The ridgeline uses the whole figure -> single variable only.
+            self._panels = [name]
+            self.varpanel.run_with_loading(name, self._render)
+            return
         if additive:
             # Ctrl+click toggles a panel: remove if already shown, else append.
             if name in self._panels:
@@ -150,8 +160,13 @@ class PlottingTab(DiiveTab):
 
         Heatmaps go side by side (shared date/time-of-day axes; date labels on
         the leftmost only). Time series stack top to bottom (shared time x-axis;
-        x labels on the bottom panel only, independent y per panel).
+        x labels on the bottom panel only, independent y per panel). The
+        ridgeline is single-variable and manages its own figure.
         """
+        if self._plot_type == RIDGELINE:
+            self._render_ridgeline()
+            return
+
         if not self._panels:
             # All panels toggled off -- show a blank canvas.
             self.canvas.new_axes(1)
@@ -180,6 +195,35 @@ class PlottingTab(DiiveTab):
                 ax.set_xlabel("")
                 ax.tick_params(labelbottom=False)
 
+        self.canvas.draw()
+        self._mark_selected()
+
+    def _render_ridgeline(self) -> None:
+        """Render the ridgeline, which builds its own stacked-density figure.
+
+        Unlike the other plot types (one diive plot per `ax`), `RidgeLinePlot`
+        lays out one density ridge per period on the whole figure, so it gets the
+        canvas figure directly (via its `fig=` parameter) and we leave the layout
+        to it (`canvas.auto_layout` is False for this tab).
+        """
+        fig = self.canvas.fig
+        fig.clear()
+        fig.set_layout_engine("none")
+        if self._panels:
+            name = self._panels[0]
+            opts = self.settings.values()
+            series = self._df[name].dropna()  # KDE can't fit NaNs
+            try:
+                dv.plotting.RidgeLinePlot(series).plot(
+                    fig=fig, showplot=False, how=opts["how"],
+                    hspace=opts["hspace"], shade_percentile=opts["shade_percentile"],
+                    show_mean_line=opts["show_mean_line"], ascending=opts["ascending"],
+                    xlabel=opts["xlabel"], kd_kwargs=opts["kd_kwargs"],
+                )
+            except Exception as err:
+                ax = fig.add_subplot(111)
+                ax.text(0.5, 0.5, f"Cannot plot '{name}':\n{err}", ha="center",
+                        va="center", wrap=True, transform=ax.transAxes)
         self.canvas.draw()
         self._mark_selected()
 

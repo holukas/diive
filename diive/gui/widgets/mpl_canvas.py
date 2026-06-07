@@ -48,6 +48,12 @@ class MplCanvas(QWidget):
             pal.setColor(role, QColor("#212121"))
         self.setPalette(pal)
 
+        # When True (default), draw() freezes constrained layout and resize
+        # re-solves it. Set False for plots that manage their own figure layout
+        # (e.g. the ridgeline's manual overlapping gridspec), so neither touches
+        # their positions.
+        self.auto_layout = True
+
         self.fig = Figure(layout="constrained", facecolor="white")
         self._canvas = FigureCanvasQTAgg(self.fig)
         # coordinates=False drops the toolbar's x/y readout label (not needed
@@ -109,6 +115,8 @@ class MplCanvas(QWidget):
         engine, solve at the new size with `draw_without_rendering()`, then turn
         it off again -- leaving correct, frozen positions for the resize repaint.
         """
+        if not self.auto_layout:
+            return  # the plot manages its own layout (e.g. ridgeline)
         self.fig.set_layout_engine("constrained")
         try:
             self.fig.draw_without_rendering()
@@ -141,5 +149,6 @@ class MplCanvas(QWidget):
         it via `reset_layout()`.
         """
         self._canvas.draw()
-        self.fig.set_layout_engine("none")
+        if self.auto_layout:
+            self.fig.set_layout_engine("none")
         self._canvas.flush_events()

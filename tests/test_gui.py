@@ -28,8 +28,21 @@ def app():
     yield QApplication.instance() or QApplication([])
 
 
+@pytest.fixture(scope="module")
+def example_year():
+    # One year of the example data: 10x fewer rows than the full record, so the
+    # heatmap renders in the GUI tests are ~10x cheaper. Loaded/sliced once.
+    df = dv.load_exampledata_parquet()
+    return dv.times.keep_daterange(df, "2021-01-01", "2021-12-31 23:30")
+
+
 @pytest.fixture
-def window(app):
+def window(app, monkeypatch, example_year):
+    # Make the GUI use only one year of example data, including the constructor's
+    # auto-load -- patch the loader the main window calls. A fresh copy per call
+    # keeps tests isolated (feature engineering mutates the loaded frame).
+    import diive
+    monkeypatch.setattr(diive, "load_exampledata_parquet", lambda: example_year.copy())
     from diive.gui.app import MainWindow
     win = MainWindow()
     win.show()
@@ -205,14 +218,13 @@ def test_overview_layout_frozen_on_zoom(window):
     assert sum(w > 0.1 for w in bottom_widths) >= 3
 
 
-def test_hover_value_lookup(app):
+def test_hover_value_lookup(app, example_year):
     import types
     import numpy as np
     from diive.gui.widgets.hover import HoverAnnotator
     from diive.gui.widgets.mpl_canvas import MplCanvas
 
-    df = dv.load_exampledata_parquet()
-    series = df["Tair_f"]
+    series = example_year["Tair_f"]  # one year -> cheaper heatmap mesh
 
     # Line panel: snaps to the nearest sample and reports its value.
     canvas = MplCanvas()
@@ -273,6 +285,42 @@ def test_feature_engineer_index_only(window):
     assert n > 0
     assert tab.created_list.count() == n  # explicit "newly created" list populated
     assert tab.add_btn.isEnabled()
+
+
+def test_all_menu_items_have_icons(window):
+    # Every (non-separator) menu entry carries a drawn icon.
+    menubar = window.menuBar()
+    count = 0
+    for menu_action in menubar.actions():
+        menu = menu_action.menu()
+        if menu is None:
+            continue
+        for action in menu.actions():
+            if action.isSeparator():
+                continue
+            count += 1
+            assert not action.icon().isNull(), action.text()
+    assert count >= 12  # File/Data/Plot/Tools/Settings/Help entries
+
+
+def test_ridgeline_and_plot_icons(window):
+    from diive.gui.icons import plot_menu_icon
+    # Every Plot-menu method gets a non-empty drawn icon.
+    for label in ("Heatmap date/time", "Heatmap year/month", "Time series", "Ridgeline"):
+        assert not plot_menu_icon(label).isNull()
+
+    window._open_menu_tab("Ridgeline")
+    tab = window._menu_tab_list[-1]
+    # Ridgeline manages its own figure layout (not the canvas constrained one).
+    assert tab.canvas.auto_layout is False
+    assert tab._panels  # default variable rendered
+    fig = tab.canvas.fig
+    assert len(fig.axes) > 1  # one density ridge per period
+    assert not [t for a in fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+    # Single-variable: ctrl+click does not add a comparison panel.
+    tab._on_selected("Tair_f", True)
+    QApplication.processEvents()
+    assert tab._panels == ["Tair_f"]
 
 
 def test_appearance_singleton(window):

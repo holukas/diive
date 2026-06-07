@@ -29,9 +29,11 @@
   `diive/gui/README.md` (developer). Highlights:
   - **Overview tab** (default) — per-variable `dv.sstats` cards + multi-panel figure (time series, cumulative, mean
     diel cycle, heatmap).
-  - **Per-method plot tabs** opened from the Plot menu (Heatmap date/time, Heatmap year/month, Time series), openable
-    multiple times (numbered) and closable, each with a live settings panel. Ctrl+click compares variables across panels
-    (heatmaps side by side, time series stacked).
+  - **Per-method plot tabs** opened from the Plot menu (Heatmap date/time, Heatmap year/month, Time series, Ridgeline),
+    openable multiple times (numbered) and closable, each with a live settings panel. Ctrl+click compares variables
+    across panels (heatmaps side by side, time series stacked; the ridgeline is single-variable).
+  - **Drawn menu icons** — every menu entry (File/Data/Plot/Tools/Settings/Help) carries a small `QPainter`-drawn glyph
+    (no image assets), keyword-matched to the label.
   - **Feature engineering tab** (`FeatureEngineer`); created columns tagged with a NEW pill.
   - **Appearance settings tab** with live preview; **shared variable list** (filter + colored pills) identical across
     tabs; output **Log** tab mirroring the Rich console; preferences (theme, geometry, last filetype) persist.
@@ -227,6 +229,8 @@
 
 ### New Classes & Functions
 
+- **`RidgeLinePlot.plot(fig=...)`** — optional `fig` parameter to render the stacked-density ridges into an existing
+  figure (cleared first) instead of creating a new one, e.g. to embed in a GUI canvas. Backward-compatible.
 - **`DetectTimestampShifts`** — detects clock errors by comparing measured vs. potential shortwave radiation. Three
   detection methods (`fft_phase_shift`, `crosscorr`, `noon_shift`) with five plot methods.
 - **`PreWhiteningBootstrap`** — Vitale et al. (2024) PWB time-lag detection for low-magnitude fluxes (CH4, N2O),

@@ -17,6 +17,7 @@ from diive.gui.tabs.overview import OverviewTab
 from diive.gui.tabs.plotting import (
     HEATMAP,
     HEATMAP_YEARMONTH,
+    RIDGELINE,
     TIMESERIES,
     PlottingTab,
 )
@@ -38,6 +39,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Heatmap date/time": lambda: PlottingTab(HEATMAP, "Heatmap date/time"),
         "Heatmap year/month": lambda: PlottingTab(HEATMAP_YEARMONTH, "Heatmap year/month"),
         "Time series": lambda: PlottingTab(TIMESERIES, "Time series"),
+        "Ridgeline": lambda: PlottingTab(RIDGELINE, "Ridgeline"),
     },
     "Tools": {
         "Feature engineering": FeatureEngineerTab,

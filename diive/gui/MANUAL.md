@@ -77,17 +77,20 @@ Click a variable to see, for that variable:
 - a **strip of statistic cards** along the bottom (count, mean, SD, min/max,
   percentiles, …).
 
-### Plot ▸ Heatmap date/time · Heatmap year/month · Time series
+### Plot ▸ Heatmap date/time · Heatmap year/month · Time series · Ridgeline
 
-Each plot method opens as its own tab.
+Each plot method opens as its own tab (the menu shows a small icon for each).
 
 - **Heatmap date/time** — date × time-of-day grid.
 - **Heatmap year/month** — one cell per year × month (pick the aggregation —
   mean, sum, … — and optionally show *ranks*).
+- **Ridgeline** — one stacked density curve per period (group by month, week, or
+  year); set the overlap, shading, and KDE bandwidth. One variable at a time.
 - **Click** a variable to plot it.
 - **Ctrl + click** more variables to compare them in extra panels (up to 5):
   - *Heatmaps* line up **side by side** (shared axes).
   - *Time series* **stack** top-to-bottom (shared time axis), each its own colour.
+  - *(The ridgeline shows a single variable, so Ctrl+click just switches it.)*
 - **Ctrl + click** a shown variable again to remove its panel.
 - Use the small toolbar (bottom-right of the plot) to **pan, zoom, and save** the
   figure. Zooming one panel zooms them all.

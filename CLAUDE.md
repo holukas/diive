@@ -237,10 +237,15 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
 - **Two-phase plot classes are GUI-ready.** The plotting tab renders diive plots straight into an embedded canvas via
   `Plot(series).plot(ax=canvas.ax, fig=canvas.fig)`; no GUI-specific plot variants needed.
 - **`Plot` menu = one closable tab per method.** There is no single "Plotting" tab. Each plot method (Heatmap date/time,
-  Heatmap year/month, Time series, ...) is a menu-activated, closable `PlottingTab(plot_type, title)` instance,
-  registered as a factory in `registry.MENU_TABS["Plot"]`. Add a method = add a factory there + a branch in
-  `plotting._draw_one` + matching controls in `plot_settings` (dispatch on the `HEATMAP`/`HEATMAP_YEARMONTH`/`TIMESERIES`
-  constants; the two heatmap kinds share `_HEATMAP_TYPES` for the side-by-side layout).
+  Heatmap year/month, Time series, Ridgeline, ...) is a menu-activated, closable `PlottingTab(plot_type, title)` instance,
+  registered as a factory in `registry.MENU_TABS["Plot"]`. **All** menu entries (every menu, not just Plot) get a small
+  `QPainter`-drawn glyph via `gui/icons.py::menu_icon(label)` (keyword-matched; `&` mnemonics stripped). Add a method =
+  add a factory there + a branch in `plotting._draw_one` + matching
+  controls in `plot_settings` (dispatch on the `HEATMAP`/`HEATMAP_YEARMONTH`/`TIMESERIES`/`RIDGELINE` constants; the two
+  heatmap kinds share `_HEATMAP_TYPES` for the side-by-side layout). The **ridgeline** is the exception to the per-`ax`
+  model: `RidgeLinePlot` builds its own stacked-density gridspec on the whole figure, so it's single-variable, gets
+  `canvas.fig` via the class's `fig=` param, and the tab sets `canvas.auto_layout=False` so the constrained-layout
+  freeze/resize machinery leaves its manual gridspec alone (see `_render_ridgeline`).
 - **Data flow.** The `File` menu loads data via `OpenDataDialog` (parquet → `dv.load_parquet`, else `dv.ReadFileType`;
   multiple files → `MultiDataFileReader` / parquet `combine_first`; reading is library work, the dialog only calls it).
   `MainWindow` holds the current DataFrame and pushes it to every tab via the `DiiveTab.on_data_loaded(df, created)`
