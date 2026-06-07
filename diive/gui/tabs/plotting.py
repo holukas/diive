@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
 )
 
 import diive as dv
+from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.variable_delegate import (
@@ -59,9 +60,7 @@ _HEATMAP = "Heatmap (date/time)"
 _TIMESERIES = "Time series"
 _PLOT_TYPES = [_HEATMAP, _TIMESERIES]
 
-#: Maximally distinct line colors for stacked time-series panels (one per
-#: panel, by order). Material 600/700 hues spread around the wheel.
-_TS_COLORS = ["#1976D2", "#E53935", "#43A047", "#FB8C00", "#8E24AA"]
+# Time-series line colors are read live from theme.manager.ts_colors.
 
 
 class PlottingTab(DiiveTab):
@@ -118,7 +117,16 @@ class PlottingTab(DiiveTab):
         splitter.setStretchFactor(1, 1)   # canvas takes extra space
         splitter.setSizes([260, 840])
         layout.addWidget(splitter)
+
+        # Live theme preview: repaint pills, and re-render if colors affect the
+        # current plot (time-series line colors).
+        theme.manager.changed.connect(self._on_theme_changed)
         return root
+
+    def _on_theme_changed(self) -> None:
+        self.var_list.viewport().update()
+        if self._plot_type == _TIMESERIES and self._panels:
+            self._render()
 
     def on_data_loaded(self, df, created: set | None = None) -> None:
         """Populate the variable list from the dataset and render.
@@ -241,8 +249,9 @@ class PlottingTab(DiiveTab):
                     cb_digits_after_comma='auto',
                 )
             elif self._plot_type == _TIMESERIES:
+                ts_colors = theme.manager.ts_colors
                 dv.plotting.TimeSeries(series).plot(
-                    ax=ax, title=name, color=_TS_COLORS[index % len(_TS_COLORS)],
+                    ax=ax, title=name, color=ts_colors[index % len(ts_colors)],
                 )
             else:
                 raise ValueError(f"Unknown plot type: {self._plot_type}")

@@ -11,7 +11,9 @@ diive-gui                # or: uv run diive-gui
 
 | File | Role |
 |---|---|
-| `app.py` | `QApplication` bootstrap, `MainWindow` (menu bar + `QTabWidget`), light-theme stylesheet |
+| `theme.py` | **Central appearance config** — `ThemeManager` (`manager`): editable colour tokens, pill colours/labels, time-series palette, stylesheet; emits `changed` |
+| `tabs/settings.py` | Appearance settings tab — live colour editing with a pill/highlight preview |
+| `app.py` | `QApplication` bootstrap, `MainWindow` (menu bar + `QTabWidget`) |
 | `registry.py` | `TAB_CLASSES` — the single list the main window builds tabs from |
 | `tabs/base.py` | `DiiveTab` ABC: `title` + `build()` + `on_data_loaded(df)` — the extension point |
 | `tabs/plotting.py` | Interactive plotting tab (variable list + heatmap panels) |

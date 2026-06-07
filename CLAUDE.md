@@ -206,6 +206,13 @@ PySide6 desktop app. **Optional dependency** (`gui` extra, lazy-imported like `c
 install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `diive.gui._cli:_gui_main`). See
 `diive/gui/README.md` for the file map.
 
+- **Central appearance config: `diive/gui/theme.py`.** The `ThemeManager` singleton (`theme.manager`) holds the live,
+  editable colours (`tokens`, `pills`, `new_pill`, `ts_colors`) and builds the stylesheet via `build_qss(tokens)`. It
+  emits `changed` on edit; `apply()` re-applies the stylesheet app-wide. The **Appearance settings** tab (Tools menu)
+  edits these with a live preview — the pill delegate and time-series plot read from `theme.manager` and repaint on
+  `changed`; the Settings tab shows a sample variable list as a pill/highlight preview. (Which *variable name* maps to
+  which pill kind stays in the library: `dv.variables.classify_variable`. Only colours/labels are GUI.)
+
 - **Registry-driven tabs.** `MainWindow` iterates `registry.TAB_CLASSES` (a list of `DiiveTab` subclasses) — it knows
   nothing about concrete tabs. Add a feature area = write a `DiiveTab` (`title` + `build()`) and append it. This is how
   the flux processing chain will plug in later.

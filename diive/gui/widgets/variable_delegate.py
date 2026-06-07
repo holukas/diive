@@ -20,6 +20,7 @@ from PySide6.QtCore import QRect, QSize, Qt
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import QStyle, QStyledItemDelegate
 
+from diive.gui import theme
 from diive.variables import classify_variable
 
 #: Variable name (shared with VariableList click handling).
@@ -29,58 +30,30 @@ PANEL_ROLE = Qt.ItemDataRole.UserRole + 1
 #: True for features created by the user (feature engineer) -> "NEW" pill.
 CREATED_ROLE = Qt.ItemDataRole.UserRole + 2
 
-_PRIMARY_BG = QColor("#1565C0")   # blue 800 -- solid, white text reads clearly
-_PRIMARY_FG = QColor("#FFFFFF")
-_EXTRA_BG = QColor("#BBDEFB")     # blue 100
-_EXTRA_FG = QColor("#0D47A1")     # blue 900
-_TEXT_FG = QColor("#212121")
-_HOVER_BG = QColor("#FFCC80")     # orange 200 -- matches the menu hover
-_WHITE = QColor("#FFFFFF")
-_DARK = QColor("#212121")
-
-#: GUI styling per variable kind (from `dv.variables.classify_variable`):
-#: kind -> (label, background, text_color). The library owns the name->kind
-#: classification; this map owns only the colours/labels.
-# Five maximally distinct Material hues (green / blue / red / purple / orange),
-# one per semantic group. Grouped variables share a colour by design
-# (NEE+FC = carbon, LE+ET = water, all radiation = orange).
-_GREEN = QColor("#388E3C")    # green 700
-_BLUE = QColor("#1976D2")     # blue 700
-_RED = QColor("#D32F2F")      # red 700
-_PURPLE = QColor("#8E24AA")   # purple 600
-_ORANGE = QColor("#FB8C00")   # orange 600 (dark text for contrast)
-_PINK = QColor("#D81B60")     # pink 600 -- user-created features
-
-#: Pill for user-created (feature-engineered) variables.
-_NEW_PILL = ("✦ NEW", _PINK, QColor("#FFFFFF"))  # ✦ NEW
-
-_PILL_STYLE = {
-    "NEE": ("NEE", _GREEN, _WHITE),
-    "FC": ("FC", _GREEN, _WHITE),       # CO2 flux (pre-NEE) -> carbon green
-    "GPP": ("GPP", _BLUE, _WHITE),
-    "Reco": ("RECO", _RED, _WHITE),
-    # LE and ET are the same water flux in different units -> shared purple.
-    "LE": ("LE", _PURPLE, _WHITE),
-    "ET": ("ET", _PURPLE, _WHITE),
-    # Radiation -> shared orange (dark text for contrast).
-    "Rg": ("Rg", _ORANGE, _DARK),
-    "SW_IN": ("SW_IN", _ORANGE, _DARK),
-    "PPFD": ("PPFD", _ORANGE, _DARK),
-    "PAR": ("PAR", _ORANGE, _DARK),
-    "LW": ("LW", _ORANGE, _DARK),
-}
+def _tok(name: str) -> QColor:
+    """Live theme token as a QColor (re-read each call for live preview)."""
+    return QColor(theme.manager.tokens[name])
 
 
 def _pill_for(name):
     """Return ``(label, background, text_color)`` for a variable, or None.
 
-    Classification (name -> kind) is the library's job; this only maps the
-    kind to GUI colours.
+    Reads the live theme (`theme.manager`) so Settings edits preview instantly.
+    Classification (name -> kind) is the library's job; colours/labels are GUI.
     """
     vc = classify_variable(name)
     if vc is None:
         return None
-    return _PILL_STYLE.get(vc.kind)
+    entry = theme.manager.pills.get(vc.kind)
+    if entry is None:
+        return None
+    label, bg, fg = entry
+    return label, QColor(bg), QColor(fg)
+
+
+def _new_pill():
+    label, bg, fg = theme.manager.new_pill
+    return label, QColor(bg), QColor(fg)
 
 
 class VariableDelegate(QStyledItemDelegate):
@@ -102,21 +75,21 @@ class VariableDelegate(QStyledItemDelegate):
         name = index.data(NAME_ROLE) or index.data(Qt.ItemDataRole.DisplayRole) or ""
         order = index.data(PANEL_ROLE) or 0
 
-        # Row background by selection state (or hover).
-        bg, fg, bold = None, _TEXT_FG, False
+        # Row background by selection state (or hover). Colours read live.
+        bg, fg, bold = None, _tok("TEXT_FG"), False
         if order == 1:
-            bg, fg, bold = _PRIMARY_BG, _PRIMARY_FG, True
+            bg, fg, bold = _tok("PRIMARY_BG"), _tok("PRIMARY_FG"), True
         elif order > 1:
-            bg, fg, bold = _EXTRA_BG, _EXTRA_FG, True
+            bg, fg, bold = _tok("EXTRA_BG"), _tok("EXTRA_FG"), True
         elif option.state & QStyle.StateFlag.State_MouseOver:
-            bg = _HOVER_BG
+            bg = _tok("HOVER_BG")
         if bg is not None:
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(bg)
             painter.drawRoundedRect(rect.adjusted(2, 1, -2, -1), 4, 4)
 
         # User-created features get the "NEW" pill; otherwise classify by name.
-        pill = _NEW_PILL if index.data(CREATED_ROLE) else _pill_for(name)
+        pill = _new_pill() if index.data(CREATED_ROLE) else _pill_for(name)
 
         # Pill tag (right-aligned), drawn first so we know how much width to
         # reserve for the text.

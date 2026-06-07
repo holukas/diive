@@ -24,7 +24,9 @@ TAB_CLASSES: list[type[DiiveTab]] = [
 #: Tabs opened on demand from a menu (not shown until selected, closable).
 #: Maps menu label -> tab class.
 from diive.gui.tabs.features import FeatureEngineerTab  # noqa: E402
+from diive.gui.tabs.settings import SettingsTab  # noqa: E402
 
 MENU_TAB_CLASSES: dict[str, type[DiiveTab]] = {
     "Feature engineering": FeatureEngineerTab,
+    "Appearance settings": SettingsTab,
 }
