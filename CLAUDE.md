@@ -68,7 +68,7 @@ tests/                        # Unit tests
 | `dv.corrections` | `MeasurementOffsetFromReplicate`, `WindDirOffset`, `remove_radiation_zero_offset`, `remove_relativehumidity_offset`, `set_exact_values_to_missing`, `setto_threshold`, `setto_value` |
 | `dv.qaqc` | `FlagQCF`, `StepwiseMeteoScreeningDb` |
 
-Top-level (no namespace): `load_exampledata_parquet`, `load_exampledata_parquet_lae`, `load_parquet`, `save_parquet`, `ReadFileType`, `search_files`, `sstats`, `transform_yearmonth_matrix_to_longform`, `get_encoded_value_from_int`, `get_encoded_value_series`
+Top-level (no namespace): `load_exampledata_parquet`, `load_exampledata_parquet_lae`, `load_parquet`, `save_parquet` (with `enforce_diive_format=True` → single header row + valid `TIMESTAMP_*` index name), `to_diive_format`, `ReadFileType`, `search_files`, `sstats`, `transform_yearmonth_matrix_to_longform`, `get_encoded_value_from_int`, `get_encoded_value_series`
 
 ## Core Concepts
 
@@ -224,7 +224,9 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   busy cue painted before the freeze — it cannot smoothly animate. True animation would require off-thread Agg
   rendering (losing the interactive toolbar).
 - **Window sizing.** `MainWindow._size_to_screen()` sizes the window to ~88% of the available screen and centres it
-  (adapts to resolution); Qt handles high-DPI scaling.
+  (adapts to resolution); Qt handles high-DPI scaling. Restored from saved geometry if present.
+- **Persisted preferences.** `gui/config.py` saves/loads JSON (`QStandardPaths` config dir) on close/launch: theme
+  (`ThemeManager.as_dict`/`load_dict`), window geometry, last-used filetype. Best-effort (failures swallowed).
 - **Registry-driven tabs.** `MainWindow` iterates `registry.TAB_CLASSES` (always-on tabs: Overview, Log) — it knows
   nothing about concrete tabs. Add a feature area = write a `DiiveTab` (`title` + `build()`) and append it. This is how
   the flux processing chain will plug in later.
@@ -241,7 +243,9 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
 - **Data flow.** The `File` menu loads data via `OpenDataDialog` (parquet → `dv.load_parquet`, else `dv.ReadFileType`;
   multiple files → `MultiDataFileReader` / parquet `combine_first`; reading is library work, the dialog only calls it).
   `MainWindow` holds the current DataFrame and pushes it to every tab via the `DiiveTab.on_data_loaded(df, created)`
-  hook; data-presenting tabs override it. Example data auto-loads on startup.
+  hook; data-presenting tabs override it. Example data auto-loads on startup. **File ▸ Save data as parquet…** writes a
+  diive-format parquet via `dv.save_parquet`; `app.to_diive_parquet_frame` enforces single-level columns (one header
+  row) + a valid `TIMESTAMP_END/MIDDLE/START` index name (prompts if unset).
 - **Overview tab.** First tab, focused on every load (`setCurrentIndex(0)`). Top: variable list + a GridSpec figure
   (time series, `Cumulative`, `DielCycle` mean diel cycle, date/time heatmap; extensible via `_PANELS`). Bottom: a
   full-width strip of KPI-style stat cards (`_StatCard`) from `dv.sstats`.
@@ -398,6 +402,7 @@ uv run python examples/gapfilling/gapfill_randomforest.py
 ```bash
 pytest tests/test_gapfilling.py -v              # Gap-filling
 pytest tests/test_fluxprocessingchain.py -v     # Flux chain
+pytest tests/test_gui.py -v                      # Desktop GUI (offscreen, needs 'gui' extra)
 pytest tests/ -v                                 # All
 ```
 

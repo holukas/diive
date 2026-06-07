@@ -18,6 +18,7 @@ from diive.core.io.filereader import ReadFileType
 from diive.core.io.filereader import search_files
 from diive.core.io.files import load_parquet
 from diive.core.io.files import save_parquet
+from diive.core.io.files import to_diive_format
 from diive.io.binary.extract import get_encoded_value_from_int
 from diive.io.binary.extract import get_encoded_value_series
 
@@ -48,6 +49,7 @@ __all__ = [
     'search_files',
     'load_parquet',
     'save_parquet',
+    'to_diive_format',
     'get_encoded_value_from_int',
     'get_encoded_value_series',
 ]

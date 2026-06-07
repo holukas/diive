@@ -11,11 +11,15 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
+from PySide6.QtCore import QByteArray, Qt
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
+    QFileDialog,
+    QInputDialog,
     QMainWindow,
     QMessageBox,
     QTabBar,
@@ -23,23 +27,31 @@ from PySide6.QtWidgets import (
 )
 
 import diive
-from diive.gui import theme
+from diive.gui import config, theme
 from diive.gui.registry import (
     MENU_TAB_CLASSES,
     MENU_TABS,
     SINGLE_INSTANCE_TABS,
     TAB_CLASSES,
 )
+from diive.core.io.files import ALLOWED_TIMESTAMP_NAMES
 from diive.gui.widgets.open_data_dialog import OpenDataDialog
+
 
 class MainWindow(QMainWindow):
     """Top-level window holding one tab per registered `DiiveTab`."""
 
-    def __init__(self) -> None:
+    def __init__(self, config: dict | None = None) -> None:
         super().__init__()
+        self._config = config or {}
         self._base_title = f"diive {diive.__version__}"
         self.setWindowTitle(self._base_title)
-        self._size_to_screen()
+        # Restore saved window geometry if available, else size to screen.
+        geo = self._config.get("geometry")
+        if geo:
+            self.restoreGeometry(QByteArray.fromBase64(geo.encode("ascii")))
+        else:
+            self._size_to_screen()
         # The stylesheet is applied app-wide by theme.manager (see run()), so
         # live edits propagate everywhere; no per-window stylesheet here.
 
@@ -93,6 +105,12 @@ class MainWindow(QMainWindow):
         example_act = QAction("Load &example data", self)
         example_act.triggered.connect(self._load_example)
         file_menu.addAction(example_act)
+
+        file_menu.addSeparator()
+        save_act = QAction("&Save data as parquet...", self)
+        save_act.setShortcut("Ctrl+S")
+        save_act.triggered.connect(self._save_file)
+        file_menu.addAction(save_act)
 
         file_menu.addSeparator()
         exit_act = QAction("E&xit", self)
@@ -193,6 +211,37 @@ class MainWindow(QMainWindow):
         if dlg.exec() == QDialog.DialogCode.Accepted and dlg.dataframe is not None:
             self._set_data(dlg.dataframe, source=dlg.source_name)
 
+    def _save_file(self) -> None:
+        """Save the current dataset as a diive-format parquet file."""
+        if self._data is None:
+            QMessageBox.information(self, "Save data", "No data loaded yet.")
+            return
+        # Need a valid timestamp index name; ask if the current one isn't valid.
+        ts_name = self._data.index.name
+        if ts_name not in ALLOWED_TIMESTAMP_NAMES:
+            ts_name, ok = QInputDialog.getItem(
+                self, "Timestamp name",
+                "Name the timestamp index (what the timestamp marks):",
+                ALLOWED_TIMESTAMP_NAMES, 1, False)
+            if not ok:
+                return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save data as parquet", "data.parquet", "Parquet (*.parquet)")
+        if not path:
+            return
+        p = Path(path)
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            diive.save_parquet(
+                filename=p.stem, data=self._data, outpath=str(p.parent),
+                enforce_diive_format=True, timestamp_name=ts_name)
+        except Exception as err:
+            QApplication.restoreOverrideCursor()
+            QMessageBox.critical(self, "Save failed", f"Could not save:\n{err}")
+            return
+        QApplication.restoreOverrideCursor()
+        self.statusBar().showMessage(f"Saved {p.stem}.parquet", 5000)
+
     def _about(self) -> None:
         QMessageBox.about(
             self, "About diive",
@@ -200,16 +249,33 @@ class MainWindow(QMainWindow):
             f"ecosystem and flux data.\nhttps://github.com/holukas/diive",
         )
 
+    def closeEvent(self, event) -> None:
+        """Persist preferences (theme, window geometry, last filetype) on exit."""
+        from diive.gui.widgets import open_data_dialog as odd
+        config.save_config({
+            "theme": theme.manager.as_dict(),
+            "geometry": bytes(self.saveGeometry().toBase64()).decode("ascii"),
+            "last_filetype": odd._last_choice,
+        })
+        super().closeEvent(event)
+
 
 def run() -> int:
     """Boot the QApplication, show the main window, run the event loop."""
     app = QApplication.instance() or QApplication(sys.argv)
+    app.setOrganizationName("diive")
+    app.setApplicationName("diive-gui")
     # Fusion style honours stylesheet item-selection colours consistently
     # (the native Windows style ignores them in combo-box popups).
     app.setStyle("Fusion")
-    # Apply the theme app-wide (covers dialogs and combo popups too); editing
-    # settings re-applies via theme.manager for a live preview.
+
+    # Restore saved preferences before building the window.
+    cfg = config.load_config()
+    theme.manager.load_dict(cfg.get("theme", {}))
     theme.manager.apply()
-    window = MainWindow()
+    from diive.gui.widgets import open_data_dialog as odd
+    odd._last_choice = cfg.get("last_filetype")
+
+    window = MainWindow(cfg)
     window.show()
     return app.exec()

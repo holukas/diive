@@ -14,7 +14,8 @@ diive-gui                # or: uv run diive-gui
 
 | File | Role |
 |---|---|
-| `theme.py` | **Central appearance config** — `ThemeManager` (`manager`): editable colour tokens, pill colours/labels, time-series palette, stylesheet; emits `changed` |
+| `theme.py` | **Central appearance config** — `ThemeManager` (`manager`): editable colour tokens, pill colours/labels, time-series palette, stylesheet; emits `changed`; `as_dict`/`load_dict` for persistence |
+| `config.py` | Persist preferences (theme, window geometry, last filetype) as JSON in the user config dir |
 | `tabs/settings.py` | Appearance settings tab — live colour editing with a pill/highlight preview |
 | `app.py` | `QApplication` bootstrap, `MainWindow` (menu bar + `QTabWidget`); window sized to ~88% of screen |
 | `registry.py` | `TAB_CLASSES` (always-on), `MENU_TABS` (menu-opened factories), `SINGLE_INSTANCE_TABS` |
@@ -44,7 +45,8 @@ preview the first parsed rows before loading (parquet via `dv.load_parquet`, oth
 Selecting multiple files merges them (`MultiDataFileReader`, or `combine_first` for parquet). All reading is library
 work, the dialog only orchestrates it. `MainWindow` holds the current DataFrame and pushes it to every tab via
 `DiiveTab.on_data_loaded(df, created)`; tabs that present data override that hook to refresh. Example data auto-loads on
-startup.
+startup. **File ▸ Save data as parquet…** writes a diive-format parquet (`to_diive_parquet_frame`: single-level columns
++ valid `TIMESTAMP_*` index name) via `dv.save_parquet`.
 
 **Feature engineering:** opened from **Tools ▸ Feature engineering** (a menu-activated tab — `registry.MENU_TAB_CLASSES`
 — not shown until selected, and closable; always-on tabs have their close button removed). It runs `FeatureEngineer`

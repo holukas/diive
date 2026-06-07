@@ -24,14 +24,20 @@
 
 ### Desktop GUI (new)
 
-- **PySide6 desktop GUI** — new `diive.gui` subpackage with a multi-tab main window, launched via the `diive-gui`
-  console script. PySide6 is an optional dependency; install with `uv sync --extra gui` (or `pip install 'diive[gui]'`).
-  Tabs are registry-driven (`diive/gui/registry.py`) so new feature areas (e.g. the flux processing chain) plug in as
-  new `DiiveTab` subclasses without touching the main window.
-- **Interactive plotting tab** — variable list on the left, embedded matplotlib heatmaps on the right. Plain click
-  shows one variable; Ctrl+click adds/removes up to five side-by-side panels (shared x/y axes for synchronised
-  pan/zoom). A custom item delegate highlights selected variables and tags NEE / GPP / Reco columns with colored pills.
-  Colorbar decimals adapt to each variable's value range. Light theme with modern scrollbars.
+- **PySide6 desktop GUI** — new `diive.gui` subpackage, launched via the `diive-gui` console script (optional `gui`
+  extra: `uv sync --extra gui` / `pip install 'diive[gui]'`). See `diive/gui/MANUAL.md` (user) and
+  `diive/gui/README.md` (developer). Highlights:
+  - **Overview tab** (default) — per-variable `dv.sstats` cards + multi-panel figure (time series, cumulative, mean
+    diel cycle, heatmap).
+  - **Per-method plot tabs** opened from the Plot menu (Heatmap, Time series), openable multiple times (numbered) and
+    closable. Ctrl+click compares variables across panels (heatmaps side by side, time series stacked).
+  - **Feature engineering tab** (`FeatureEngineer`); created columns tagged with a NEW pill.
+  - **Appearance settings tab** with live preview; **shared variable list** (filter + colored pills) identical across
+    tabs; output **Log** tab mirroring the Rich console; preferences (theme, geometry, last filetype) persist.
+  - **Save data as parquet** in diive format (one header row + valid timestamp index name).
+- **`save_parquet(..., enforce_diive_format=True, timestamp_name=...)` and `dv.to_diive_format(df, timestamp_name=...)`**
+  — coerce a DataFrame to the diive parquet format: single-level columns (one header row) + a validly-named timestamp
+  index (`TIMESTAMP_END` / `TIMESTAMP_MIDDLE` / `TIMESTAMP_START`).
 - **`HeatmapDateTime` gains `cb_digits_after_comma='auto'`** — colorbar precision chosen from the data range
   (whole numbers for wide ranges, more digits for narrow ones). New helper `auto_colorbar_digits` in
   `diive.core.plotting.heatmap_base`. Extracted from the GUI so all library users benefit.

@@ -33,6 +33,14 @@ so you can try everything right away.
 Selecting several files of the same type **merges** them into one dataset. The
 filetype you used is remembered for next time.
 
+### Saving your data
+
+**File ▸ Save data as parquet…** (Ctrl+S) writes the current dataset — including
+any features you engineered — as a **diive-format parquet** file: a single header
+row and a properly named timestamp index (`TIMESTAMP_MIDDLE` / `TIMESTAMP_END` /
+`TIMESTAMP_START`; you're asked which if it isn't already set). These files load
+straight back into diive (GUI or library).
+
 ### The variable list (left side, every tab)
 
 - **Filter box** — type to narrow the list. Matching is fuzzy and ignores
@@ -98,7 +106,9 @@ colour. Use **Save…** to write the log to a file.
 
 ## Tips
 
-- The window sizes itself to your screen on launch.
+- Your appearance settings, window size/position, and last-used filetype are
+  **remembered** between sessions.
+- The window sizes itself to your screen on first launch.
 - A short loading cue appears on a variable while its plot is being drawn.
 - Stuck or something looks off? Check the **Log** tab for messages.
 

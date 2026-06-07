@@ -148,6 +148,31 @@ class ThemeManager(QObject):
             app.setStyleSheet(self.qss())
         self.changed.emit()
 
+    def as_dict(self) -> dict:
+        """Serialise the current theme (for persisting preferences)."""
+        return {
+            "tokens": dict(self.tokens),
+            "pills": {k: list(v) for k, v in self.pills.items()},
+            "new_pill": list(self.new_pill),
+            "ts_colors": list(self.ts_colors),
+            "list_width": self.list_width,
+        }
+
+    def load_dict(self, data: dict) -> None:
+        """Load a serialised theme (tolerant of missing/old keys); no emit."""
+        if not data:
+            return
+        self.tokens.update(data.get("tokens", {}))
+        for kind, value in data.get("pills", {}).items():
+            if kind in self.pills:
+                self.pills[kind] = list(value)
+        if "new_pill" in data:
+            self.new_pill = list(data["new_pill"])
+        if "ts_colors" in data:
+            self.ts_colors = list(data["ts_colors"])
+        if "list_width" in data:
+            self.list_width = int(data["list_width"])
+
 
 #: Singleton used across the GUI.
 manager = ThemeManager()

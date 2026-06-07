@@ -6,8 +6,50 @@ from pathlib import Path
 
 from pandas import Series, DataFrame, read_parquet
 
-from diive.core.times.times import TimestampSanitizer
+from diive.core.times.times import TimestampSanitizer, validate_timestamp_naming
 from diive.core.utils.console import info, detail
+
+#: Allowed names for a timestamp index in a diive parquet file.
+ALLOWED_TIMESTAMP_NAMES = ['TIMESTAMP_END', 'TIMESTAMP_MIDDLE', 'TIMESTAMP_START']
+
+
+def to_diive_format(data: DataFrame, timestamp_name: str = None) -> DataFrame:
+    """Coerce a DataFrame to the diive parquet format.
+
+    Ensures the data follows the diive convention:
+
+    - **One header row**: MultiIndex columns are flattened to their top level so
+      there is a single level of column names.
+    - **Named timestamp index**: the index name must be one of
+      ``'TIMESTAMP_END'``, ``'TIMESTAMP_MIDDLE'`` or ``'TIMESTAMP_START'``
+      (indicating what the timestamp marks). Pass ``timestamp_name`` to set it;
+      otherwise the existing index name is validated.
+
+    Args:
+        data: DataFrame to coerce.
+        timestamp_name: Optional timestamp index name to set before validation.
+            Must be one of :data:`ALLOWED_TIMESTAMP_NAMES`.
+
+    Returns:
+        A (possibly copied) DataFrame in diive format.
+
+    Raises:
+        ValueError: If no valid timestamp index name is available.
+    """
+    out = data
+    if out.columns.nlevels > 1:
+        out = out.copy()
+        out.columns = out.columns.get_level_values(0)
+    if timestamp_name is not None:
+        if timestamp_name not in ALLOWED_TIMESTAMP_NAMES:
+            raise ValueError(
+                f"timestamp_name must be one of {ALLOWED_TIMESTAMP_NAMES}, "
+                f"got '{timestamp_name}'.")
+        if out.index.name != timestamp_name:
+            out = out.copy()
+            out.index.name = timestamp_name
+    validate_timestamp_naming(out)  # raises if the index name is not allowed
+    return out
 
 
 def set_outpath(outpath: str or None, filename: str, fileextension: str):
@@ -19,7 +61,8 @@ def set_outpath(outpath: str or None, filename: str, fileextension: str):
     return filepath
 
 
-def save_parquet(filename: str, data: DataFrame or Series, outpath: str or None = None) -> str:
+def save_parquet(filename: str, data: DataFrame or Series, outpath: str or None = None,
+                 enforce_diive_format: bool = False, timestamp_name: str = None) -> str:
     """
     Save pandas Series or DataFrame as Parquet file.
 
@@ -34,6 +77,14 @@ def save_parquet(filename: str, data: DataFrame or Series, outpath: str or None 
             Index name is preserved (e.g., 'TIMESTAMP_END', 'TIMESTAMP_START', 'TIMESTAMP_MIDDLE').
         outpath : str or Path, optional
             Directory path for output file. Default None: saves to current working directory.
+        enforce_diive_format : bool, optional (default False)
+            If True, coerce the data to the diive parquet format before saving
+            (see :func:`to_diive_format`): one header row (flattened columns) and
+            a validly-named timestamp index. Raises ValueError if the index name
+            is not valid and ``timestamp_name`` is not given.
+        timestamp_name : str, optional
+            Timestamp index name to set when ``enforce_diive_format`` is True.
+            One of 'TIMESTAMP_END', 'TIMESTAMP_MIDDLE', 'TIMESTAMP_START'.
 
     Returns:
         str
@@ -51,6 +102,8 @@ def save_parquet(filename: str, data: DataFrame or Series, outpath: str or None 
     tic = time.time()
     if isinstance(data, Series):
         data = data.to_frame()
+    if enforce_diive_format:
+        data = to_diive_format(data, timestamp_name=timestamp_name)
     data.to_parquet(filepath)
     toc = time.time() - tic
     info(f"Saved file {filepath} ({toc:.3f} seconds).")
