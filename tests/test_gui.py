@@ -240,6 +240,28 @@ def test_hover_value_lookup(app):
     assert f"{float(vals[5, 10]):.4g}" in text2
 
 
+def test_feature_engineer_index_only(window):
+    import time
+    # Timestamp + record-number features need no selected variables (they derive
+    # from the index); created features are listed explicitly.
+    window._open_menu_tab("Feature engineering")
+    tab = window._menu_tab_list[-1]
+    assert tab.selected.count() == 0  # nothing selected
+    tab.ts_cb.setChecked(True)
+    tab.rec_cb.setChecked(True)
+    tab._run()
+    for _ in range(200):
+        QApplication.processEvents()
+        time.sleep(0.02)
+        if tab._created_df is not None:
+            break
+    assert tab._created_df is not None
+    n = len(tab._created_df.columns)
+    assert n > 0
+    assert tab.created_list.count() == n  # explicit "newly created" list populated
+    assert tab.add_btn.isEnabled()
+
+
 def test_appearance_singleton(window):
     window._open_menu_tab("Appearance")
     window._open_menu_tab("Appearance")

@@ -107,8 +107,11 @@ Build new features (lags, rolling stats, differences, EMA, polynomials, STL,
 timestamp parts, …) with diive's feature engineer:
 
 1. **Click** variables to move them into *Selected features*.
-2. Tick the stages you want and set their options.
-3. **Run feature engineering**.
+2. Tick the stages you want and set their options. *Timestamp features* and
+   *Continuous record number* work on the time index alone — they need **no**
+   selected variable.
+3. **Run feature engineering** — the new columns are listed under *Newly created
+   features*.
 4. **Add features to variable list** — the new columns appear everywhere with a
    **✦ NEW** pill and can be plotted like any other variable.
 

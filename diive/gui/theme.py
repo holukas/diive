@@ -110,6 +110,25 @@ QListWidget {{
     border-radius: 6px; padding: 4px; outline: 0;
 }}
 
+QGroupBox {{
+    border: 1px solid {t['BORDER']}; border-radius: 6px;
+    margin-top: 10px; padding: 8px 6px 6px 6px;
+}}
+QGroupBox::title {{
+    subcontrol-origin: margin; subcontrol-position: top left;
+    left: 8px; padding: 0 4px; color: {t['TEXT_FG']}; font-weight: 600;
+}}
+
+QCheckBox {{ spacing: 7px; padding: 2px 0; }}
+QCheckBox::indicator {{
+    width: 16px; height: 16px; border-radius: 3px;
+    border: 1px solid {t['SCROLL_HANDLE_HOVER']}; background: {WHITE};
+}}
+QCheckBox::indicator:hover {{ border: 1px solid {t['ACCENT']}; }}
+QCheckBox::indicator:checked {{
+    background: {t['ACCENT']}; border: 1px solid {t['ACCENT']};
+}}
+
 QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px; }}
 QScrollBar:horizontal {{ background: transparent; height: 10px; margin: 2px; }}
 QScrollBar::handle:vertical {{ background: {t['SCROLL_HANDLE']}; border-radius: 5px; min-height: 30px; }}

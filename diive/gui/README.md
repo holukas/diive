@@ -71,7 +71,11 @@ reset (out-of-range rows align to NaN). All plots and processing then run on the
 — not shown until selected, and closable; always-on tabs have their close button removed). It runs `FeatureEngineer`
 (library) on user-selected variables and emits the new columns via a `featuresCreated` signal; `MainWindow` merges them
 into the dataset, records them in a `created` set, and re-pushes. The plotting list tags created columns with a pink
-**✦ NEW** pill (delegate `CREATED_ROLE`). Heavy runs go on a worker thread; progress shows in the Log tab.
+**✦ NEW** pill (delegate `CREATED_ROLE`). Heavy runs go on a worker thread; progress shows in the Log tab. The created
+columns are also listed explicitly in a "Newly created features" panel in the tab. Three fixed-width columns
+(available / selected / settings) packed left keep it compact. **Timestamp features and the continuous record number
+need no selected variable** (they derive from the index) — the run only requires a selected variable when a per-variable
+stage (lag/rolling/diff/EMA/poly/STL) is enabled.
 
 **Shared variable list (`VariablePanel`):** every tab's left list MUST be this one widget so styling, pills, filtering
 (separator-insensitive subsequence), and width are identical everywhere. Its width is a shared appearance setting

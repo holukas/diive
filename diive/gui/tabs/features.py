@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from diive.core.ml.feature_engineer import FeatureEngineer
+from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.variable_panel import VariablePanel
 
@@ -70,25 +71,35 @@ class FeatureEngineerTab(DiiveTab):
         root = QWidget()
         layout = QHBoxLayout(root)
 
-        # --- Available variables (left): shared variable list. Click a variable
-        #     to add it as a feature. ---
-        avail_box = QVBoxLayout()
-        avail_box.addWidget(QLabel("Available variables (click to add)"))
+        # Fixed-width columns packed left (trailing stretch), so the controls
+        # stay compact and readable instead of stretching across the wide window.
+        # --- Available variables (left): shared variable list. ---
+        avail_col = QWidget()
+        avail_col.setFixedWidth(self.available_width())
+        avail_box = QVBoxLayout(avail_col)
+        avail_box.setContentsMargins(0, 0, 0, 0)
+        avail_box.addWidget(self._caption("Available variables", "click to add"))
         self.available = VariablePanel()
         self.available.selected.connect(lambda name, _ctrl: self._add_feature(name))
         avail_box.addWidget(self.available)
-        layout.addLayout(avail_box)
+        layout.addWidget(avail_col)
 
         # --- Selected features (middle): double-click to remove ---
-        sel_box = QVBoxLayout()
-        sel_box.addWidget(QLabel("Selected features (double-click to remove)"))
+        sel_col = QWidget()
+        sel_col.setFixedWidth(220)
+        sel_box = QVBoxLayout(sel_col)
+        sel_box.setContentsMargins(0, 0, 0, 0)
+        sel_box.addWidget(self._caption("Selected features", "double-click to remove"))
         self.selected = QListWidget()
         self.selected.itemDoubleClicked.connect(self._remove_feature)
         sel_box.addWidget(self.selected)
-        layout.addLayout(sel_box)
+        layout.addWidget(sel_col)
 
         # --- Settings + run (right) ---
-        layout.addWidget(self._build_settings(), stretch=1)
+        settings = self._build_settings()
+        settings.setFixedWidth(380)
+        layout.addWidget(settings)
+        layout.addStretch(1)
 
         self._sig.run_done.connect(self._on_run_done)
         self._sig.run_failed.connect(self._on_run_failed)
@@ -161,12 +172,33 @@ class FeatureEngineerTab(DiiveTab):
         self.status.setWordWrap(True)
         outer.addWidget(self.status)
 
+        # Explicit list of the features created by the last run (they also show
+        # up in the variable list, but this is a clear, named confirmation).
+        self.created_label = QLabel("Newly created features")
+        outer.addWidget(self.created_label)
+        self.created_list = QListWidget()
+        self.created_list.setSelectionMode(QListWidget.SelectionMode.NoSelection)
+        self.created_list.setMaximumHeight(160)
+        outer.addWidget(self.created_list)
+
         self.add_btn = QPushButton("Add features to variable list")
         self.add_btn.setEnabled(False)
         self.add_btn.clicked.connect(self._add)
         outer.addWidget(self.add_btn)
 
         return panel
+
+    @staticmethod
+    def available_width() -> int:
+        """Fixed width of the available-variables column (matches the var list)."""
+        return theme.manager.list_width
+
+    @staticmethod
+    def _caption(title: str, hint: str) -> QLabel:
+        """A compact column caption: bold title + a smaller grey hint."""
+        label = QLabel(f"<b>{title}</b> <span style='color:#90A4AE'>({hint})</span>")
+        label.setWordWrap(True)
+        return label
 
     @staticmethod
     def _group(title: str, checkbox: QCheckBox, rows: list) -> QGroupBox:
@@ -201,24 +233,37 @@ class FeatureEngineerTab(DiiveTab):
         self.available.set_variables(df.columns, created)
         self.add_btn.setEnabled(False)
         self.status.setText("")
+        self.created_list.clear()
+        self.created_label.setText("Newly created features")
 
     # --- run ---
     def _run(self) -> None:
         if self._df is None:
             return
         names = [self.selected.item(i).text() for i in range(self.selected.count())]
-        if not names:
-            self.status.setText("Select at least one feature variable first.")
+        # Timestamp features and the record number derive from the index alone;
+        # the other stages transform selected variables and so need at least one.
+        per_var = any(cb.isChecked() for cb in (
+            self.lag_cb, self.roll_cb, self.diff_cb,
+            self.ema_cb, self.poly_cb, self.stl_cb))
+        index_only = self.ts_cb.isChecked() or self.rec_cb.isChecked()
+        if not per_var and not index_only:
+            self.status.setText("Enable at least one feature stage first.")
+            return
+        if per_var and not names:
+            self.status.setText("Select at least one variable for the chosen stages.")
             return
         try:
             kwargs = self._collect_settings()
         except ValueError as err:
             self.status.setText(f"Invalid settings: {err}")
             return
-        work = self._df[names].copy()
+        # No selected variables (timestamp/record only) -> keep just the index.
+        work = (self._df[names].copy() if names else self._df[[]].copy())
         work[_TARGET] = 0.0
         self.run_btn.setEnabled(False)
         self.add_btn.setEnabled(False)
+        self.created_list.clear()
         self.status.setText("Running feature engineering...")
         threading.Thread(
             target=self._run_worker, args=(work, kwargs), daemon=True).start()
@@ -262,10 +307,14 @@ class FeatureEngineerTab(DiiveTab):
         self._created_df = new_df
         n = len(new_df.columns)
         self.run_btn.setEnabled(True)
+        self.created_list.clear()
         if n:
+            self.created_list.addItems([str(c) for c in new_df.columns])
+            self.created_label.setText(f"Newly created features ({n})")
             self.status.setText(f"Created {n} features. Click 'Add' to use them.")
             self.add_btn.setEnabled(True)
         else:
+            self.created_label.setText("Newly created features")
             self.status.setText("No features created (enable at least one stage).")
 
     def _on_run_failed(self, msg: str) -> None:
