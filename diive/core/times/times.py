@@ -1815,6 +1815,9 @@ def keep_daterange(data: Union[Series, DataFrame],
     Raises:
         TypeError: If ``data`` does not have a ``DatetimeIndex``.
         ValueError: If ``start`` is after ``end``.
+
+    See Also:
+        examples/times/times_keep_daterange.py — date-range subselection examples
     """
     if not isinstance(data.index, DatetimeIndex):
         raise TypeError("keep_daterange requires data with a DatetimeIndex.")

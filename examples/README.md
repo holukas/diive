@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use DIIVE for time series processing, gap-filling, quality control, and visualization.
 
-**111 examples across 9 organized folders by functional domain.**
+**112 examples across 9 organized folders by functional domain.**
 
 ## Structure
 
@@ -32,9 +32,10 @@ examples/
 │   ├── plot_shifted_distribution.py
 │   ├── plot_treering_temperature.py
 │   └── plot_treering_line_temperature.py
-├── times/                 # Timestamp handling (6 examples)
+├── times/                 # Timestamp handling (7 examples)
 │   ├── times_timestamp_sanitizer.py
 │   ├── times_keep_daterange.py
+│   ├── times_resample_daily.py
 │   ├── times_frequency_detection.py
 │   ├── times_statistics.py
 │   ├── times_diel_cycles.py

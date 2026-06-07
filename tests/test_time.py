@@ -4,12 +4,36 @@ import pandas as pd
 
 import diive.configs.exampledata as ed
 from diive.core.times.resampling import resample_series_to_30MIN
+from diive.core.times.resampling import resample_to_daily_agg
 from diive.core.times.times import DetectFrequency, insert_timestamp
 from diive.core.times.times import keep_daterange
 from diive.core.times.times import vectorize_timestamps
 
 
 class TestTime(unittest.TestCase):
+
+    def test_resample_to_daily_agg(self):
+        df, _ = ed.load_exampledata_DIIVE_CSV_30MIN()
+        series = df.iloc[:, 0]
+        n_days = len(series.resample('D').mean())
+
+        daily = resample_to_daily_agg(series, agg='mean')
+        self.assertEqual(len(daily), n_days)
+        self.assertEqual(daily.name, series.name)
+        # One value per calendar day, sorted, daily frequency.
+        self.assertTrue((daily.index.normalize() == daily.index).all())
+
+        # Aggregation methods are honoured: daily max >= daily mean elementwise.
+        daily_max = resample_to_daily_agg(series, agg='max')
+        self.assertTrue((daily_max.dropna() >= daily.dropna()).all())
+
+        # Completeness filter keeps at most all days.
+        strict = resample_to_daily_agg(series, agg='mean', mincounts_perc=1.0)
+        self.assertLessEqual(len(strict), len(daily))
+
+        # Non-datetime index raises.
+        with self.assertRaises(TypeError):
+            resample_to_daily_agg(series.reset_index(drop=True))
 
     def test_keep_daterange(self):
         df, _ = ed.load_exampledata_DIIVE_CSV_30MIN()

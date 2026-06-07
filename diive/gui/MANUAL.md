@@ -72,8 +72,8 @@ can be closed (×). Most can be opened **multiple times** — you'll get *Heatma
 ### Overview (first tab)
 
 Click a variable to see, for that variable:
-- a **figure** with several panels — full time series, cumulative sum, mean daily
-  cycle, and a date/time heatmap;
+- a **figure** with several panels — full time series, cumulative sum, mean diel
+  cycle, daily-mean time series, and a date/time heatmap;
 - a **strip of statistic cards** along the bottom (count, mean, SD, min/max,
   percentiles, …).
 

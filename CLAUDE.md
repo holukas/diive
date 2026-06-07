@@ -63,7 +63,7 @@ tests/                        # Unit tests
 | `dv.analysis` | `DailyCorrelation`, `GrangerCausality`, `StratifiedAnalysis`, `GapFinder`, `GapStats`, `GridAggregator`, `Histogram`, `FindOptimumRange`, `SeasonalTrendDecomposition`, `BinFitterCP`, `harmonic_analysis`, `percentiles101` |
 | `dv.analysis.experimental` | **(provisional, API may change)** `DriverAnalysis`, `DriverAnalysisResult`, `AleCurve`, `Ale2DResult`, `accumulated_local_effects`, `accumulated_local_effects_2d`, `ExperimentalWarning` — evidence-triangulation driver attribution; emits a one-time `ExperimentalWarning` on use |
 | `dv.plotting` | `HeatmapDateTime`, `HeatmapXYZ`, `HeatmapYearMonth`, `HexbinPlot`, `ScatterXY`, `TimeSeries`, `DielCycle`, `RidgeLinePlot`, `HistogramPlot`, `ShiftedDistributionPlot`, `Cumulative`, `CumulativeYear`, `LongtermAnomaliesYear`, `TreeRingPlot` |
-| `dv.times` | `TimestampSanitizer`, `DetectFrequency`, `keep_daterange` (non-destructive date-range subselection; inclusive `start`/`end`, either bound optional), `resample_to_monthly_agg_matrix`, `timestamp_infer_freq_*` |
+| `dv.times` | `TimestampSanitizer`, `DetectFrequency`, `keep_daterange` (non-destructive date-range subselection; inclusive `start`/`end`, either bound optional), `resample_to_daily_agg` (sub-daily → one value per calendar day; `agg=`, `mincounts_perc=`), `resample_to_monthly_agg_matrix`, `timestamp_infer_freq_*` |
 | `dv.variables` | `DaytimeNighttimeFlag`, `daytime_nighttime_flag_from_swinpot`, `TimeSince`, `potrad`, `potrad_eot`, `calc_vpd_from_ta_rh`, `aerodynamic_resistance`, `dry_air_density`, `et_from_le`, `latent_heat_of_vaporization`, `air_temp_from_sonic_temp`, `lagged_variants`, `classify_variable`, noise helpers |
 | `dv.corrections` | `MeasurementOffsetFromReplicate`, `WindDirOffset`, `remove_radiation_zero_offset`, `remove_relativehumidity_offset`, `set_exact_values_to_missing`, `setto_threshold`, `setto_value` |
 | `dv.qaqc` | `FlagQCF`, `StepwiseMeteoScreeningDb` |
@@ -253,8 +253,9 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
   active window, toggles the reset action, and pushes to tabs. Engineered features merge into `_full_data` (so they
   survive a range reset; out-of-range rows align to NaN). The slicing math is the library's `keep_daterange`, not the GUI.
 - **Overview tab.** First tab, focused on every load (`setCurrentIndex(0)`). Top: variable list + a GridSpec figure
-  (time series, `Cumulative`, `DielCycle` mean diel cycle, date/time heatmap; extensible via `_PANELS`). Bottom: a
-  full-width strip of KPI-style stat cards (`_StatCard`) from `dv.sstats`.
+  (2×4: time series, `Cumulative`, `DielCycle` mean diel cycle, daily-mean time series via `dv.times.resample_to_daily_agg`,
+  date/time heatmap; extensible via `_PANELS`). Bottom: a full-width strip of KPI-style stat cards (`_StatCard`) from
+  `dv.sstats`.
 - **Feature engineering tab.** Menu-activated (`Tools ▸ Feature engineering`, from `registry.MENU_TAB_CLASSES`) — not in
   the tab bar until selected, and closable (always-on tabs get their close button removed). Runs `FeatureEngineer`
   (library) on selected variables, emits new columns via a `featuresCreated` signal; `MainWindow` merges them, tracks
