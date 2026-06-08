@@ -41,6 +41,7 @@ RIDGELINE = "Ridgeline"
 DIELCYCLE = "Diel cycle"
 CUMULATIVE_YEAR = "Cumulative year"
 HEXBIN = "Hexbin"
+SCATTER = "Scatter (XY)"
 
 #: Period grouping for the ridgeline (one density ridge per group).
 _RIDGELINE_HOW = ["monthly", "weekly", "yearly"]
@@ -93,6 +94,8 @@ class PlotSettingsPanel(QScrollArea):
             self._build_cumulative_year()
         elif plot_type == HEXBIN:
             self._build_hexbin()
+        elif plot_type == SCATTER:
+            self._build_scatter()
 
         self._col.addStretch(1)
         # Keep every form within the panel's fixed width: wrap a row's field
@@ -118,6 +121,7 @@ class PlotSettingsPanel(QScrollArea):
             DIELCYCLE: dv.plotting.DielCycle.plot,
             CUMULATIVE_YEAR: dv.plotting.CumulativeYear.__init__,
             HEXBIN: dv.plotting.HexbinPlot.plot,
+            SCATTER: dv.plotting.ScatterXY.plot,
         }.get(self._plot_type)
         docs = param_docs(method) if method else {}
 
@@ -174,6 +178,19 @@ class PlotSettingsPanel(QScrollArea):
             for param, widget in [("gridsize", self.gridsize),
                                   ("normalize_axes", self.normalize_axes),
                                   ("mincnt", self.mincnt)]:
+                tip = init_docs.get(param)
+                if tip:
+                    widget.setToolTip(tip)
+        elif self._plot_type == SCATTER:
+            pairs = [
+                ("cmap", self.sc_cmap), ("show_colorbar", self.sc_show_colorbar),
+                ("xlabel", self.sc_xlabel), ("ylabel", self.sc_ylabel),
+                ("zlabel", self.sc_zlabel), ("xunits", self.sc_xunits),
+                ("yunits", self.sc_yunits),
+            ]
+            # nbins/binagg are __init__ params, not in plot().
+            init_docs = param_docs(dv.plotting.ScatterXY.__init__)
+            for param, widget in [("nbins", self.sc_nbins), ("binagg", self.sc_binagg)]:
                 tip = init_docs.get(param)
                 if tip:
                     widget.setToolTip(tip)
@@ -409,12 +426,65 @@ class PlotSettingsPanel(QScrollArea):
         self._col.addWidget(fonts)
 
     def set_xyz(self, x: str | None, y: str | None, z: str | None) -> None:
-        """Update the X/Y/Z role readout (hexbin only)."""
-        if self._plot_type != HEXBIN:
+        """Update the X/Y/Z role readout (hexbin / scatter)."""
+        if self._plot_type not in (HEXBIN, SCATTER):
             return
         self.x_role.setText(x or "—")
         self.y_role.setText(y or "—")
         self.z_role.setText(z or "—")
+
+    # --- scatter (XY) controls ---
+    def _build_scatter(self) -> None:
+        roles = QGroupBox("Variables")
+        form = QFormLayout(roles)
+        hint = QLabel("Click list in order →")
+        hint.setStyleSheet("color: #90A4AE;")
+        form.addRow(hint)
+        self.x_role = QLabel("—")
+        self.y_role = QLabel("—")
+        self.z_role = QLabel("—")
+        for lbl in (self.x_role, self.y_role, self.z_role):
+            lbl.setStyleSheet("color: #455A64;")
+        form.addRow("X", self.x_role)
+        form.addRow("Y", self.y_role)
+        form.addRow("Z (colour, optional)", self.z_role)
+        self._col.addWidget(roles)
+
+        binning = QGroupBox("Binning")
+        form = QFormLayout(binning)
+        self.sc_nbins = self._spin(0, 0, 100, form, "Bins (0 = raw)")
+        self.sc_binagg = QComboBox()
+        self.sc_binagg.addItems(["median", "mean"])
+        self.sc_binagg.currentTextChanged.connect(self.changed)
+        form.addRow("Bin aggregation", self.sc_binagg)
+        self._col.addWidget(binning)
+
+        colors = QGroupBox("Colour (Z)")
+        form = QFormLayout(colors)
+        self.sc_cmap = QComboBox()
+        self.sc_cmap.setEditable(True)
+        self.sc_cmap.addItems(["viridis", "plasma", "inferno", "magma", "cividis",
+                               "coolwarm", "RdYlBu_r", "Spectral_r"])
+        self.sc_cmap.currentTextChanged.connect(self.changed)
+        form.addRow("Colormap", self.sc_cmap)
+        self.sc_show_colorbar = self._check("Show colorbar", form, checked=True)
+        self._col.addWidget(colors)
+
+        labels = QGroupBox("Labels")
+        form = QFormLayout(labels)
+        self.sc_xlabel = self._lineedit("(X name)", form, "X label")
+        self.sc_ylabel = self._lineedit("(Y name)", form, "Y label")
+        self.sc_zlabel = self._lineedit("(Z name)", form, "Z label")
+        self.sc_xunits = self._lineedit("e.g. °C", form, "X units")
+        self.sc_yunits = self._lineedit("e.g. µmol m⁻²s⁻¹", form, "Y units")
+        self._col.addWidget(labels)
+
+    def _lineedit(self, placeholder, form, label) -> QLineEdit:
+        edit = QLineEdit()
+        edit.setPlaceholderText(placeholder)
+        edit.editingFinished.connect(self.changed)
+        form.addRow(label, edit)
+        return edit
 
     # --- diel-cycle controls ---
     def _build_dielcycle(self) -> None:
@@ -606,6 +676,18 @@ class PlotSettingsPanel(QScrollArea):
                 "axlabels_fontsize": _font(self.axlabels_fontsize),
                 "ticks_labelsize": _font(self.ticks_labelsize),
                 "cb_labelsize": _font(self.cb_labelsize),
+            }
+        if self._plot_type == SCATTER:
+            return {
+                "nbins": self.sc_nbins.value(),
+                "binagg": self.sc_binagg.currentText(),
+                "cmap": self.sc_cmap.currentText().strip() or "viridis",
+                "show_colorbar": self.sc_show_colorbar.isChecked(),
+                "xlabel": self.sc_xlabel.text().strip() or None,
+                "ylabel": self.sc_ylabel.text().strip() or None,
+                "zlabel": self.sc_zlabel.text().strip() or None,
+                "xunits": self.sc_xunits.text().strip() or None,
+                "yunits": self.sc_yunits.text().strip() or None,
             }
         return {
             "linewidth": self.linewidth.value(),

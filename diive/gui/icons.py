@@ -215,6 +215,18 @@ def _palette_icon() -> QIcon:  # Appearance
     return QIcon(pm)
 
 
+def _scatter_icon() -> QIcon:  # Scatter XY
+    pm, p = _canvas()
+    p.setPen(Qt.PenStyle.NoPen)
+    dots = [(3, 12, _BLUE), (6, 8, _GREEN), (8, 11, _AMBER), (10, 5, _RED),
+            (13, 7, _BLUE), (5, 4, _GREEN), (12, 12, _AMBER)]
+    for x, y, col in dots:
+        p.setBrush(col)
+        p.drawEllipse(QRectF(x - 1.4, y - 1.4, 2.8, 2.8))
+    p.end()
+    return QIcon(pm)
+
+
 def _cumulative_icon() -> QIcon:  # Cumulative year
     pm, p = _canvas()
     # Several rising curves fanning out (one cumulative per year).
@@ -274,6 +286,7 @@ _RULES = [
     ("ridge", _ridgeline_icon),
     ("diel", _dielcycle_icon),
     ("cumulative", _cumulative_icon),
+    ("scatter", _scatter_icon),
     ("time", _timeseries_icon),
     ("series", _timeseries_icon),
     ("open", _folder_icon),

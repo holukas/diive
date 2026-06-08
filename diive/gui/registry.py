@@ -22,6 +22,7 @@ from diive.gui.tabs.plotting import (
     HEATMAP_YEARMONTH,
     HEXBIN,
     RIDGELINE,
+    SCATTER,
     TIMESERIES,
     PlottingTab,
 )
@@ -46,6 +47,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Diel cycle": lambda: PlottingTab(DIELCYCLE, "Diel cycle"),
         "Cumulative year": lambda: PlottingTab(CUMULATIVE_YEAR, "Cumulative year"),
         "Ridgeline": lambda: PlottingTab(RIDGELINE, "Ridgeline"),
+        "Scatter XY": lambda: PlottingTab(SCATTER, "Scatter XY"),
         "Hexbin": lambda: PlottingTab(HEXBIN, "Hexbin"),
     },
     "Tools": {

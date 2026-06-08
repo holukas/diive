@@ -237,12 +237,14 @@ install. Launch: `uv sync --extra gui` then `diive-gui` (console script → `dii
 - **Two-phase plot classes are GUI-ready.** The plotting tab renders diive plots straight into an embedded canvas via
   `Plot(series).plot(ax=canvas.ax, fig=canvas.fig)`; no GUI-specific plot variants needed.
 - **`Plot` menu = one closable tab per method.** There is no single "Plotting" tab. Each plot method (Heatmap date/time,
-  Heatmap year/month, Time series, Diel cycle, Cumulative year, Ridgeline, Hexbin, ...) is a menu-activated, closable
-  `PlottingTab(plot_type, title)` instance, registered as a factory in `registry.MENU_TABS["Plot"]`. **All** menu entries
-  (every menu, not just Plot) get a small `QPainter`-drawn glyph via `gui/icons.py::menu_icon(label)` (keyword-matched;
-  `&` mnemonics stripped). Add a method = add a factory there + a branch in `plotting._draw_one` + matching controls in
-  `plot_settings` (dispatch on the `HEATMAP`/`HEATMAP_YEARMONTH`/`TIMESERIES`/`DIELCYCLE`/`CUMULATIVE_YEAR`/`RIDGELINE`/`HEXBIN`
-  constants; the two heatmap kinds share `_HEATMAP_TYPES` for the side-by-side layout; the others stack vertically). The **ridgeline** is the exception to the per-`ax`
+  Heatmap year/month, Time series, Diel cycle, Cumulative year, Ridgeline, Scatter XY, Hexbin, ...) is a menu-activated,
+  closable `PlottingTab(plot_type, title)` instance, registered as a factory in `registry.MENU_TABS["Plot"]`. **All** menu
+  entries (every menu, not just Plot) get a small `QPainter`-drawn glyph via `gui/icons.py::menu_icon(label)`
+  (keyword-matched; `&` mnemonics stripped). Add a method = add a factory there + a branch in `plotting._draw_one` +
+  matching controls in `plot_settings`. Most types pick **comparison panels** (Ctrl+click); Hexbin and Scatter XY instead
+  pick variables by **X/Y/Z role** (`_XYZ_TYPES`, role readout via `settings.set_xyz`) — Scatter needs X+Y (Z optional for
+  colour), Hexbin needs all three. The two heatmap kinds share `_HEATMAP_TYPES` for the side-by-side layout; the per-var
+  line plots stack vertically. The **ridgeline** is the exception to the per-`ax`
   model: `RidgeLinePlot` builds its own stacked-density gridspec on the whole figure, so it's single-variable, gets
   `canvas.fig` via the class's `fig=` param, and the tab sets `canvas.auto_layout=False` so the constrained-layout
   freeze/resize machinery leaves its manual gridspec alone (see `_render_ridgeline`).

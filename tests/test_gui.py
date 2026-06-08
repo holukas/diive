@@ -351,6 +351,24 @@ def test_diel_cycle_tab(window):
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
 
 
+def test_scatter_tab(window):
+    from diive.gui.icons import menu_icon
+    assert not menu_icon("Scatter XY").isNull()
+    window._open_menu_tab("Scatter XY")
+    tab = window._menu_tab_list[-1]
+    # Seeded with X, Y (2 vars) -> plain scatter renders.
+    assert len(tab._xyz) >= 2
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+    assert {"nbins", "binagg", "cmap", "show_colorbar"} <= set(tab.settings.values())
+    # Add a third variable (Z) -> colour scatter (extra colorbar axis).
+    tab._xyz = ["Tair_f", "NEE_CUT_REF_f", "VPD_f"]
+    tab._render()
+    QApplication.processEvents()
+    assert len(tab.canvas.fig.axes) >= 2  # scatter + colorbar
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+    assert tab.settings.z_role.text() == "VPD_f"  # role readout updated
+
+
 def test_cumulative_year_tab(window):
     from diive.gui.icons import menu_icon
     assert not menu_icon("Cumulative year").isNull()

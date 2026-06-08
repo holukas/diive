@@ -37,9 +37,13 @@ from diive.gui.widgets.plot_settings import (
     HEATMAP_YEARMONTH,
     HEXBIN,
     RIDGELINE,
+    SCATTER,
     TIMESERIES,
     PlotSettingsPanel,
 )
+
+#: Plot types that pick variables by X/Y/Z role (not comparison panels).
+_XYZ_TYPES = (HEXBIN, SCATTER)
 from diive.gui.widgets.variable_panel import VariablePanel
 
 #: Plot types laid out like a heatmap (panels side by side, shared axes).
@@ -68,7 +72,7 @@ class PlottingTab(DiiveTab):
     def build(self) -> QWidget:
         self._df = None
         self._panels: list[str] = []
-        self._xyz: list[str] = []  # hexbin role order: [X, Y, Z]
+        self._xyz: list[str] = []  # hexbin/scatter role order: [X, Y, Z]
 
         root = QWidget()
         layout = QHBoxLayout(root)
@@ -139,6 +143,12 @@ class PlottingTab(DiiveTab):
             self._xyz = preferred if all(c in cols for c in preferred) else cols[:3]
             self._render()
             return
+        if self._plot_type == SCATTER:
+            # Scatter needs X and Y (Z optional for colour); seed a driver/flux pair.
+            preferred = ["Tair_f", "NEE_CUT_REF_f"]
+            self._xyz = preferred if all(c in cols for c in preferred) else cols[:2]
+            self._render()
+            return
         if _DEFAULT_VAR in cols:
             self._panels = [_DEFAULT_VAR]
         elif cols:
@@ -150,7 +160,7 @@ class PlottingTab(DiiveTab):
     def _on_selected(self, name: str, additive: bool) -> None:
         if not name:
             return
-        if self._plot_type == HEXBIN:
+        if self._plot_type in _XYZ_TYPES:
             # Click cycles roles: fill X, then Y, then Z; clicking an assigned
             # variable removes it; once all three are set a new pick replaces the
             # oldest (X), sliding Y->X, Z->Y, new->Z.
@@ -189,6 +199,10 @@ class PlottingTab(DiiveTab):
         """
         if self._plot_type == HEXBIN:
             self._render_hexbin()
+            return
+
+        if self._plot_type == SCATTER:
+            self._render_scatter()
             return
 
         if self._plot_type == RIDGELINE:
@@ -301,6 +315,43 @@ class PlottingTab(DiiveTab):
         self.canvas.draw()
         self._mark_selected()
 
+    def _render_scatter(self) -> None:
+        """Scatter X vs Y, with an optional third variable (Z) colouring points.
+
+        Single panel, picked by role (1=X, 2=Y, 3=Z). X and Y are required; Z is
+        optional (omit it for a plain 2-variable scatter).
+        """
+        self.settings.set_xyz(*(self._xyz + [None, None, None])[:3])
+        ax = self.canvas.new_axes(1)[0]
+        if len(self._xyz) < 2:
+            ax.text(0.5, 0.5,
+                    f"Click 2 variables to set X, Y  (Z optional for colour)  "
+                    f"({len(self._xyz)}/2)",
+                    ha="center", va="center", transform=ax.transAxes)
+            self.canvas.draw()
+            self._mark_selected()
+            return
+        xn, yn = self._xyz[0], self._xyz[1]
+        zn = self._xyz[2] if len(self._xyz) >= 3 else None
+        opts = self.settings.values()
+        try:
+            cols = [xn, yn] + ([zn] if zn else [])
+            sub = self._df[cols].dropna(subset=[xn, yn])
+            dv.plotting.ScatterXY(
+                x=sub[xn], y=sub[yn], z=(sub[zn] if zn else None),
+                nbins=opts["nbins"], binagg=opts["binagg"],
+            ).plot(
+                ax=ax, cmap=opts["cmap"], show_colorbar=opts["show_colorbar"],
+                xlabel=opts["xlabel"], ylabel=opts["ylabel"], zlabel=opts["zlabel"],
+                xunits=opts["xunits"], yunits=opts["yunits"],
+            )
+        except Exception as err:
+            ax.clear()
+            ax.text(0.5, 0.5, f"Cannot plot scatter:\n{err}", ha="center",
+                    va="center", wrap=True, transform=ax.transAxes)
+        self.canvas.draw()
+        self._mark_selected()
+
     def _draw_one(self, ax, name: str, index: int = 0) -> None:
         """Draw one variable into `ax`, or an explanatory message on failure.
 
@@ -384,8 +435,8 @@ class PlottingTab(DiiveTab):
     def _mark_selected(self) -> None:
         """Highlight the selected variables in the shared list.
 
-        Hexbin numbers its three role picks (1=X, 2=Y, 3=Z); other plot types
+        Hexbin/scatter number their role picks (1=X, 2=Y, 3=Z); other plot types
         number their panels left-to-right / top-to-bottom.
         """
-        marks = self._xyz if self._plot_type == HEXBIN else self._panels
+        marks = self._xyz if self._plot_type in _XYZ_TYPES else self._panels
         self.varpanel.set_panels(marks)

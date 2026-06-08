@@ -88,6 +88,8 @@ Each plot method opens as its own tab (the menu shows a small icon for each).
   optionally one curve per month.
 - **Cumulative year** — one cumulative-sum curve per year (overlaid by day of
   year); optionally highlight a year and show a mean reference.
+- **Scatter XY** — click two variables for X and Y (a third, optional, colours
+  the points); optionally bin the x-axis and show a trend. One panel.
 - **Ridgeline** — one stacked density curve per period (group by month, week, or
   year); set the overlap, shading, and KDE bandwidth. One variable at a time.
 - **Click** a variable to plot it.
