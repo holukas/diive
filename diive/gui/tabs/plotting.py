@@ -31,6 +31,7 @@ from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.plot_settings import (
+    DIELCYCLE,
     HEATMAP,
     HEATMAP_YEARMONTH,
     HEXBIN,
@@ -106,8 +107,8 @@ class PlottingTab(DiiveTab):
 
     def _on_theme_changed(self) -> None:
         # The panel repaints its own pills; re-render only if colors affect the
-        # current plot (time-series line colors).
-        if self._plot_type == TIMESERIES and self._panels:
+        # current plot (per-panel line colors come from the theme palette).
+        if self._plot_type in (TIMESERIES, DIELCYCLE) and self._panels:
             self._render()
 
     def _on_settings_changed(self) -> None:
@@ -354,6 +355,15 @@ class PlottingTab(DiiveTab):
                     linewidth=opts["linewidth"], alpha=opts["alpha"],
                     marker=opts["marker"], xlabel=opts["xlabel"],
                     ylabel=opts["ylabel"], series_units=opts["series_units"],
+                )
+            elif self._plot_type == DIELCYCLE:
+                ts_colors = theme.manager.ts_colors
+                dv.plotting.DielCycle(series).plot(
+                    ax=ax, title=name, color=ts_colors[index % len(ts_colors)],
+                    mean=opts["mean"], std=opts["std"], each_month=opts["each_month"],
+                    show_legend=opts["show_legend"], showgrid=opts["showgrid"],
+                    legend_n_col=opts["legend_n_col"], ylabel=opts["ylabel"],
+                    txt_ylabel_units=opts["txt_ylabel_units"],
                 )
             else:
                 raise ValueError(f"Unknown plot type: {self._plot_type}")

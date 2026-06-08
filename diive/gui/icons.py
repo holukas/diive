@@ -215,6 +215,24 @@ def _palette_icon() -> QIcon:  # Appearance
     return QIcon(pm)
 
 
+def _dielcycle_icon() -> QIcon:  # Diel cycle
+    pm, p = _canvas()
+    purple = QColor("#7E57C2")
+    curve = [(x, 8 - 4 * math.sin(2 * math.pi * x / _SIZE)) for x in range(_SIZE + 1)]
+    band = _poly([(x, y - 2.2) for x, y in curve]
+                 + [(x, y + 2.2) for x, y in reversed(curve)])
+    fill = QColor(purple)
+    fill.setAlpha(60)
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(fill)
+    p.drawPolygon(band)
+    p.setPen(QPen(purple, 1.6))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawPolyline(_poly(curve))
+    p.end()
+    return QIcon(pm)
+
+
 def _chain_icon() -> QIcon:  # Flux processing chain
     pm, p = _canvas()
     p.setBrush(Qt.BrushStyle.NoBrush)
@@ -242,6 +260,7 @@ def _info_icon() -> QIcon:  # About
 _RULES = [
     ("heatmap", _heatmap_icon),
     ("ridge", _ridgeline_icon),
+    ("diel", _dielcycle_icon),
     ("time", _timeseries_icon),
     ("series", _timeseries_icon),
     ("open", _folder_icon),

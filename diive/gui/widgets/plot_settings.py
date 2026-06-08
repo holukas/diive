@@ -38,6 +38,7 @@ HEATMAP = "Heatmap (date/time)"
 HEATMAP_YEARMONTH = "Heatmap (year/month)"
 TIMESERIES = "Time series"
 RIDGELINE = "Ridgeline"
+DIELCYCLE = "Diel cycle"
 HEXBIN = "Hexbin"
 
 #: Period grouping for the ridgeline (one density ridge per group).
@@ -85,6 +86,8 @@ class PlotSettingsPanel(QScrollArea):
             self._build_timeseries()
         elif plot_type == RIDGELINE:
             self._build_ridgeline()
+        elif plot_type == DIELCYCLE:
+            self._build_dielcycle()
         elif plot_type == HEXBIN:
             self._build_hexbin()
 
@@ -109,6 +112,7 @@ class PlotSettingsPanel(QScrollArea):
             HEATMAP_YEARMONTH: dv.plotting.HeatmapYearMonth.plot,
             TIMESERIES: dv.plotting.TimeSeries.plot,
             RIDGELINE: dv.plotting.RidgeLinePlot.plot,
+            DIELCYCLE: dv.plotting.DielCycle.plot,
             HEXBIN: dv.plotting.HexbinPlot.plot,
         }.get(self._plot_type)
         docs = param_docs(method) if method else {}
@@ -140,6 +144,11 @@ class PlotSettingsPanel(QScrollArea):
                      ("shade_percentile", self.shade_percentile), ("kd_kwargs", self.bandwidth),
                      ("show_mean_line", self.show_mean_line), ("ascending", self.ascending),
                      ("xlabel", self.xlabel)]
+        elif self._plot_type == DIELCYCLE:
+            pairs = [("mean", self.dc_mean), ("std", self.dc_std),
+                     ("each_month", self.dc_each_month), ("show_legend", self.dc_show_legend),
+                     ("showgrid", self.dc_show_grid), ("legend_n_col", self.dc_legend_ncol),
+                     ("ylabel", self.dc_ylabel), ("txt_ylabel_units", self.dc_units)]
         elif self._plot_type == HEXBIN:
             pairs = [
                 ("cmap", self.cmap), ("vmin", self.vmin), ("vmax", self.vmax),
@@ -399,6 +408,30 @@ class PlotSettingsPanel(QScrollArea):
         self.y_role.setText(y or "—")
         self.z_role.setText(z or "—")
 
+    # --- diel-cycle controls ---
+    def _build_dielcycle(self) -> None:
+        grp = QGroupBox("Diel cycle")
+        form = QFormLayout(grp)
+        self.dc_mean = self._check("Show mean", form, checked=True)
+        self.dc_std = self._check("Show ± SD band", form, checked=True)
+        self.dc_each_month = self._check("One curve per month", form)
+        self.dc_show_legend = self._check("Show legend", form, checked=True)
+        self.dc_show_grid = self._check("Show grid", form, checked=True)
+        self.dc_legend_ncol = self._spin(1, 1, 6, form, "Legend columns")
+        self._col.addWidget(grp)
+
+        labels = QGroupBox("Labels")
+        form = QFormLayout(labels)
+        self.dc_ylabel = QLineEdit()
+        self.dc_ylabel.setPlaceholderText("(variable name)")
+        self.dc_ylabel.editingFinished.connect(self.changed)
+        form.addRow("Y label", self.dc_ylabel)
+        self.dc_units = QLineEdit()
+        self.dc_units.setPlaceholderText("e.g. °C")
+        self.dc_units.editingFinished.connect(self.changed)
+        form.addRow("Y units", self.dc_units)
+        self._col.addWidget(labels)
+
     # --- control factories (wire each to `changed`) ---
     def _spin(self, value, lo, hi, form, label) -> QSpinBox:
         sp = QSpinBox()
@@ -494,6 +527,17 @@ class PlotSettingsPanel(QScrollArea):
                 "ascending": self.ascending.isChecked(),
                 "xlabel": self.xlabel.text().strip() or None,
                 "kd_kwargs": {"bandwidth": bw} if bw > 0 else None,
+            }
+        if self._plot_type == DIELCYCLE:
+            return {
+                "mean": self.dc_mean.isChecked(),
+                "std": self.dc_std.isChecked(),
+                "each_month": self.dc_each_month.isChecked(),
+                "show_legend": self.dc_show_legend.isChecked(),
+                "showgrid": self.dc_show_grid.isChecked(),
+                "legend_n_col": self.dc_legend_ncol.value(),
+                "ylabel": self.dc_ylabel.text().strip() or None,
+                "txt_ylabel_units": self.dc_units.text().strip() or None,
             }
         if self._plot_type == HEXBIN:
             def _font(sp):

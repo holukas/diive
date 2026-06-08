@@ -335,6 +335,22 @@ def test_all_menu_items_have_icons(window):
     assert count >= 12  # File/Data/Plot/Tools/Settings/Help entries
 
 
+def test_diel_cycle_tab(window):
+    from diive.gui.icons import menu_icon
+    assert not menu_icon("Diel cycle").isNull()
+    window._open_menu_tab("Diel cycle")
+    tab = window._menu_tab_list[-1]
+    assert tab._panels  # default variable rendered
+    fig = tab.canvas.fig
+    assert not [t for a in fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+    assert {"mean", "std", "each_month"} <= set(tab.settings.values())
+    # Ctrl+click stacks a second variable (shared time-of-day x-axis).
+    tab._on_selected("Tair_f", True)
+    QApplication.processEvents()
+    assert tab._panels == ["NEE_CUT_REF_f", "Tair_f"]
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+
+
 def test_ridgeline_and_plot_icons(window):
     from diive.gui.icons import plot_menu_icon
     # Every Plot-menu method gets a non-empty drawn icon.
