@@ -8,7 +8,7 @@ import datetime
 import fnmatch
 import os
 from pathlib import Path
-from typing import Literal
+from typing import Callable, Literal, Optional
 
 import pandas as pd
 import pandas.errors
@@ -249,7 +249,8 @@ class MultiDataFileReader:
         >>> meta = reader.metadata_df
     """
 
-    def __init__(self, filepaths: list, filetype: str, output_middle_timestamp: bool = True):
+    def __init__(self, filepaths: list, filetype: str, output_middle_timestamp: bool = True,
+                 progress_callback: Optional[Callable[[str, int, int, object], None]] = None):
         """
         Args:
             filepaths: List of file paths to read. All must be the same
@@ -259,6 +260,13 @@ class MultiDataFileReader:
                 ``'DIIVE-CSV-30MIN'``.
             output_middle_timestamp: If *True*, the output timestamp index marks
                 the middle of each averaging interval. Defaults to *True*.
+            progress_callback: Optional callable invoked while merging so callers
+                (e.g. a GUI) can report per-file progress. Called as
+                ``callback(phase, done, total, filepath)`` with ``phase`` either
+                ``'reading'`` (before a file is read) or ``'done'`` (after it has
+                been merged); ``done`` is the count of finished files and
+                ``total`` the number of files. Empty (skipped) files still emit a
+                ``'done'`` event so the count stays consistent.
         """
 
         # Getting configs for filetype
@@ -266,6 +274,7 @@ class MultiDataFileReader:
         self.filetypeconfig = ConfigFileReader(configfilepath=configfilepath, validation='filetype').read()
         self.filepaths = filepaths
         self.output_middle_timestamp = output_middle_timestamp
+        self.progress_callback = progress_callback
 
         # Collect data from all files listed in filepaths
         self._data_df, self._metadata_df = self._get_incoming_data()
@@ -290,8 +299,11 @@ class MultiDataFileReader:
         """Merge data across all files"""
         data_df = None
         metadata_df = None
-        for filepath in self.filepaths:
+        total = len(self.filepaths)
+        for idx, filepath in enumerate(self.filepaths):
             # print(f"\n{'-' * 40}\nReading file {filepath.stem}\n{'-' * 40}")
+            if self.progress_callback:
+                self.progress_callback('reading', idx, total, filepath)
             try:
                 incoming_data_df, incoming_metadata_df = \
                     ReadFileType(filepath=filepath, filetypeconfig=self.filetypeconfig,
@@ -301,6 +313,9 @@ class MultiDataFileReader:
                                               incoming_metadata_df=incoming_metadata_df, metadata_df=metadata_df)
             except pandas.errors.EmptyDataError:
                 continue
+            finally:
+                if self.progress_callback:
+                    self.progress_callback('done', idx + 1, total, filepath)
         data_df = sort_multiindex_columns_names(df=data_df, priority_vars=None)
         return data_df, metadata_df
 

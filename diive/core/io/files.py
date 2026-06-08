@@ -3,6 +3,7 @@ import pickle
 import time
 import zipfile as zf
 from pathlib import Path
+from typing import Callable, Optional
 
 from pandas import Series, DataFrame, read_parquet
 
@@ -165,6 +166,44 @@ def load_parquet(filepath: str or Path, output_middle_timestamp: bool = True,
         df = TimestampSanitizer(data=df, output_middle_timestamp=output_middle_timestamp).get()
         detail(f"Detected time resolution of {df.index.freq} / {df.index.freqstr}")
     return df
+
+
+def load_parquet_many(filepaths: list, output_middle_timestamp: bool = True,
+                      sanitize_timestamp: bool = True,
+                      progress_callback: Optional[Callable[[str, int, int, object], None]] = None) -> DataFrame:
+    """Load several parquet files and merge them into one DataFrame.
+
+    Each file is read with :func:`load_parquet` and merged with the running
+    result via ``DataFrame.combine_first`` (existing values take precedence; the
+    incoming file fills gaps). This is the parquet counterpart to
+    :class:`diive.core.io.filereader.MultiDataFileReader` and shares its
+    ``progress_callback`` contract.
+
+    Args:
+        filepaths: Parquet file paths to read and merge, in order.
+        output_middle_timestamp: Forwarded to :func:`load_parquet`.
+        sanitize_timestamp: Forwarded to :func:`load_parquet`.
+        progress_callback: Optional callable invoked while merging so callers
+            (e.g. a GUI) can report per-file progress. Called as
+            ``callback(phase, done, total, filepath)`` with ``phase`` either
+            ``'reading'`` (before a file is read) or ``'done'`` (after it has
+            been merged); ``done`` is the count of finished files and ``total``
+            the number of files.
+
+    Returns:
+        The merged DataFrame.
+    """
+    merged = None
+    total = len(filepaths)
+    for idx, filepath in enumerate(filepaths):
+        if progress_callback:
+            progress_callback('reading', idx, total, filepath)
+        df = load_parquet(filepath=filepath, output_middle_timestamp=output_middle_timestamp,
+                          sanitize_timestamp=sanitize_timestamp)
+        merged = df if merged is None else merged.combine_first(df)
+        if progress_callback:
+            progress_callback('done', idx + 1, total, filepath)
+    return merged
 
 
 def save_as_pickle(outpath: str or None, filename: str, data) -> str:

@@ -33,10 +33,14 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QProgressBar,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
+    QWidget,
 )
 
 #: Combo entry for parquet files (read via dv.load_parquet, no filetype config).
@@ -66,22 +70,56 @@ def _read(filepath: str, choice: str, nrows: int | None):
     return df
 
 
-def _read_many(filepaths: list[str], choice: str):
+def _read_many(filepaths: list[str], choice: str, progress_callback=None):
     """Read and merge one or more full files of the chosen filetype.
 
-    A single file uses :func:`_read`. Multiple files are merged: configured
-    filetypes via `MultiDataFileReader`; parquet files via `combine_first`
-    (existing values win, later files fill gaps).
+    A single file uses :func:`_read`. Multiple files are merged by the library:
+    configured filetypes via `MultiDataFileReader`, parquet files via
+    `dv.load_parquet_many` (both combine_first: existing values win, later files
+    fill gaps).
+
+    `progress_callback`, if given, is forwarded to the library reader and called
+    per file as ``callback(phase, done, total, filepath)`` (``phase`` in
+    ``{'reading', 'done'}``) so a caller can show per-file progress. Only fires
+    for the multi-file case.
     """
     if len(filepaths) == 1:
         return _read(filepaths[0], choice, nrows=None)
     if choice == _PARQUET_CHOICE:
-        merged = None
-        for fp in filepaths:
-            df = dv.load_parquet(filepath=fp)
-            merged = df if merged is None else merged.combine_first(df)
-        return merged
-    return MultiDataFileReader(filepaths=filepaths, filetype=choice).data_df
+        return dv.load_parquet_many(filepaths=filepaths, progress_callback=progress_callback)
+    return MultiDataFileReader(
+        filepaths=filepaths, filetype=choice, progress_callback=progress_callback,
+    ).data_df
+
+
+class _FileProgressRow(QWidget):
+    """One row in the multi-file list: a filename label + a progress bar.
+
+    The bar is indeterminate (busy) while its file is being read and full once
+    the file has been merged. Pending files show an empty bar.
+    """
+
+    def __init__(self, filename: str, parent=None) -> None:
+        super().__init__(parent)
+        row = QHBoxLayout(self)
+        row.setContentsMargins(6, 2, 6, 2)
+        label = QLabel(filename)
+        label.setToolTip(filename)
+        label.setMinimumWidth(180)
+        row.addWidget(label, stretch=1)
+        self.bar = QProgressBar()
+        self.bar.setRange(0, 1)
+        self.bar.setValue(0)
+        self.bar.setTextVisible(False)
+        self.bar.setFixedHeight(14)
+        row.addWidget(self.bar, stretch=1)
+
+    def set_reading(self) -> None:
+        self.bar.setRange(0, 0)  # indeterminate / busy
+
+    def set_done(self) -> None:
+        self.bar.setRange(0, 1)
+        self.bar.setValue(1)
 
 
 class OpenDataDialog(QDialog):
@@ -93,6 +131,8 @@ class OpenDataDialog(QDialog):
     #: Emitted from the load worker thread with the loaded DataFrame / error.
     _load_done = Signal(object)
     _load_failed = Signal(str)
+    #: Per-file merge progress from the worker: (phase, done, total, filepath).
+    _progress = Signal(str, int, int, str)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -101,6 +141,8 @@ class OpenDataDialog(QDialog):
         self.dataframe = None      # set on successful Load
         self.source_name = ""
         self._paths: list[str] = []
+        #: filepath -> its progress row, while a multi-file load is running.
+        self._file_rows: dict[str, _FileProgressRow] = {}
 
         layout = QVBoxLayout(self)
 
@@ -139,6 +181,17 @@ class OpenDataDialog(QDialog):
         ft_row.addWidget(self.ft_combo, stretch=1)
         layout.addLayout(ft_row)
 
+        # Multi-file progress list: one row (filename + progress bar) per
+        # selected file, shown only when several files are merged. Hidden for a
+        # single file.
+        self.files_label = QLabel("Files (merged in order):")
+        self.files_list = QListWidget()
+        self.files_list.setSelectionMode(QListWidget.SelectionMode.NoSelection)
+        self.files_label.setVisible(False)
+        self.files_list.setVisible(False)
+        layout.addWidget(self.files_label)
+        layout.addWidget(self.files_list, stretch=1)
+
         layout.addWidget(QLabel("Preview (first rows):"))
         self.preview = QTableWidget()
         self.preview.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -159,6 +212,7 @@ class OpenDataDialog(QDialog):
         # Loading runs on a worker thread; results return via these signals.
         self._load_done.connect(self._on_load_done)
         self._load_failed.connect(self._on_load_failed)
+        self._progress.connect(self._on_progress)
 
     def _set_load_enabled(self, enabled: bool) -> None:
         self.buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(enabled)
@@ -178,9 +232,27 @@ class OpenDataDialog(QDialog):
             self.path_edit.setText(self._paths[0])
         else:
             self.path_edit.setText(f"{len(self._paths)} files selected")
+        self._build_files_list()
         if all(Path(p).suffix.lower() == ".parquet" for p in self._paths):
             self.ft_combo.setCurrentIndex(self.ft_combo.findData(_PARQUET_CHOICE))
         self._preview()
+
+    def _build_files_list(self) -> None:
+        """Populate the per-file progress list; show it only for multiple files."""
+        self.files_list.clear()
+        self._file_rows.clear()
+        multi = len(self._paths) > 1
+        self.files_label.setVisible(multi)
+        self.files_list.setVisible(multi)
+        if not multi:
+            return
+        for fp in self._paths:
+            row = _FileProgressRow(Path(fp).name)
+            item = QListWidgetItem()
+            item.setSizeHint(row.sizeHint())
+            self.files_list.addItem(item)
+            self.files_list.setItemWidget(item, row)
+            self._file_rows[fp] = row
 
     def _preview(self) -> None:
         """Preview the first file's first rows with the current choice.
@@ -231,18 +303,36 @@ class OpenDataDialog(QDialog):
         self._set_load_enabled(False)
         n = len(self._paths)
         self.status.setText(f"Loading {n} file(s)..." if n > 1 else "Loading...")
+        # Reset all bars to pending before a (re-)load.
+        for row in self._file_rows.values():
+            row.bar.setRange(0, 1)
+            row.bar.setValue(0)
         paths = list(self._paths)
         threading.Thread(
             target=self._load_worker, args=(paths, choice), daemon=True,
         ).start()
 
     def _load_worker(self, paths: list[str], choice: str) -> None:
+        # The callback runs on this worker thread; marshal to the GUI thread via
+        # the queued `_progress` signal.
+        def on_progress(phase, done, total, filepath):
+            self._progress.emit(phase, done, total, str(filepath))
+
         try:
-            df = _read_many(paths, choice)
+            df = _read_many(paths, choice, progress_callback=on_progress)
         except Exception as err:
             self._load_failed.emit(str(err))
             return
         self._load_done.emit(df)
+
+    def _on_progress(self, phase: str, done: int, total: int, filepath: str) -> None:
+        row = self._file_rows.get(filepath)
+        if row is not None:
+            if phase == 'reading':
+                row.set_reading()
+            elif phase == 'done':
+                row.set_done()
+        self.status.setText(f"Merging files... {done}/{total}")
 
     def _on_load_done(self, df) -> None:
         self.dataframe = df
