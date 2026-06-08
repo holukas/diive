@@ -119,6 +119,11 @@ class MplCanvas(QWidget):
             return  # the plot manages its own layout (e.g. ridgeline)
         self.fig.set_layout_engine("constrained")
         try:
+            # Two passes: constrained layout solves iteratively, and a single
+            # pass can leave panels collapsed when several axes carry wide tick
+            # labels (e.g. a zoomed datetime range linked across panels). A
+            # second solve lets it converge.
+            self.fig.draw_without_rendering()
             self.fig.draw_without_rendering()
         except Exception:
             pass  # no renderer yet (very early); the next resize/render fixes it
@@ -152,3 +157,13 @@ class MplCanvas(QWidget):
         if self.auto_layout:
             self.fig.set_layout_engine("none")
         self._canvas.flush_events()
+
+    def draw_idle(self) -> None:
+        """Schedule a repaint without touching the (frozen) layout engine.
+
+        For incremental updates (e.g. the Overview's live zoom sync) that repaint
+        a couple of panels but must NOT re-freeze or re-solve the constrained
+        layout the way `draw()` does -- calling `draw()` here would flip the
+        layout engine off and can abort an in-progress resize re-solve.
+        """
+        self._canvas.draw_idle()

@@ -10,6 +10,8 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
+import matplotlib.dates as mdates
+import pandas as pd
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QFrame,
@@ -40,6 +42,12 @@ _PANELS = [
     ((1, 2), "Daily mean"),
     ((slice(0, 2), 3), "Heatmap (date/time)"),
 ]
+
+# Panels whose x-axis is the datetime index: linked via a shared x-axis so
+# zooming/panning one zooms all of them to the same time period. The diel cycle
+# (x = hour of day) and the heatmap (x = time of day, date on the y-axis) live in
+# different domains and are intentionally left unlinked.
+_DATETIME_X_PANELS = {"Time series", "Cumulative", "Daily mean"}
 
 # Short, uniform panel headers (the variable name lives in the figure suptitle).
 _PANEL_TITLES = {
@@ -115,6 +123,12 @@ class OverviewTab(DiiveTab):
 
     def build(self) -> QWidget:
         self._df = None
+        # Live zoom-sync state (set per render; see _render_figure / _on_zoom).
+        self._zoom_series = None
+        self._diel_ax = None
+        self._heatmap_ax = None
+        self._heatmap_ylim = None
+        self._syncing_zoom = False
 
         root = QWidget()
         outer = QVBoxLayout(root)
@@ -194,31 +208,96 @@ class OverviewTab(DiiveTab):
         # so zoom/pan don't reflow the panels).
         self.canvas.reset_layout()
         gs = fig.add_gridspec(2, 4)
+        # Full series for the current range; the diel cycle re-slices it on zoom.
+        self._zoom_series = series
+        panel_axes: dict[str, object] = {}
+        shared_x_ax = None  # first datetime panel; the rest share its x-axis
         for (rows, cols), plot_type in _PANELS:
-            ax = fig.add_subplot(gs[rows, cols])
+            kwargs = {}
+            if plot_type in _DATETIME_X_PANELS and shared_x_ax is not None:
+                kwargs["sharex"] = shared_x_ax
+            ax = fig.add_subplot(gs[rows, cols], **kwargs)
+            if plot_type in _DATETIME_X_PANELS and shared_x_ax is None:
+                shared_x_ax = ax
+            panel_axes[plot_type] = ax
             self._draw_panel(ax, series, plot_type)
-            if plot_type != "Heatmap (date/time)":
-                # The selected variable is known, so the value axis needs no
-                # label (the heatmap's y-axis is Date and keeps its label).
-                ax.set_ylabel("")
-                legend = ax.get_legend()
-                if legend is not None:
-                    legend.remove()
-            # Header tinted to match the panel's line, for quick visual pairing.
-            ax.set_title(_PANEL_TITLES.get(plot_type, plot_type),
-                         fontsize=_TITLE_FONTSIZE, fontweight=500,
-                         color=self._line_color(ax))
+            self._style_panel(ax, plot_type)
         # One uniform font size for every number, axis label, and in-plot text
         # (including the heatmap colourbar), overriding the plot classes' own
         # sizes for a clean, consistent look.
         for ax in fig.axes:
-            ax.tick_params(axis="both", labelsize=_FONT_SIZE)
-            ax.xaxis.label.set_size(_FONT_SIZE)
-            ax.yaxis.label.set_size(_FONT_SIZE)
-            for txt in ax.texts:
-                txt.set_fontsize(_FONT_SIZE)
+            self._panel_fonts(ax)
         fig.suptitle(name)
+
+        # Live zoom sync: the three datetime panels follow each other via sharex;
+        # the diel cycle (recomputed on the visible window) and the heatmap
+        # (clipped to the visible date range) don't share that axis, so update
+        # them on every xlim change.
+        self._diel_ax = panel_axes.get("Diel cycle")
+        self._heatmap_ax = panel_axes.get("Heatmap (date/time)")
+        # Heatmap y-axis data range (Date), so zoom can clamp to it.
+        self._heatmap_ylim = (
+            self._heatmap_ax.get_ylim() if self._heatmap_ax is not None else None)
+        if shared_x_ax is not None:
+            shared_x_ax.callbacks.connect("xlim_changed", self._on_zoom)
         self.canvas.draw()
+
+    def _style_panel(self, ax, plot_type: str) -> None:
+        """Per-panel styling shared by the initial render and zoom re-draws."""
+        if plot_type != "Heatmap (date/time)":
+            # The selected variable is known, so the value axis needs no label
+            # (the heatmap's y-axis is Date and keeps its label).
+            ax.set_ylabel("")
+            legend = ax.get_legend()
+            if legend is not None:
+                legend.remove()
+        # Header tinted to match the panel's line, for quick visual pairing.
+        ax.set_title(_PANEL_TITLES.get(plot_type, plot_type),
+                     fontsize=_TITLE_FONTSIZE, fontweight=500,
+                     color=self._line_color(ax))
+
+    @staticmethod
+    def _panel_fonts(ax) -> None:
+        ax.tick_params(axis="both", labelsize=_FONT_SIZE)
+        ax.xaxis.label.set_size(_FONT_SIZE)
+        ax.yaxis.label.set_size(_FONT_SIZE)
+        for txt in ax.texts:
+            txt.set_fontsize(_FONT_SIZE)
+
+    def _on_zoom(self, shared_ax) -> None:
+        """React to a zoom/pan of the shared datetime x-axis.
+
+        (1) Recompute the diel cycle from only the data in the visible window.
+        (2) Clip the heatmap to the same date range — its date axis is the y-axis
+            (same matplotlib date-number units as the line panels' x-axis), so
+            the hour-of-day x-axis is deliberately left untouched.
+        """
+        if self._zoom_series is None or self._syncing_zoom:
+            return
+        x0, x1 = shared_ax.get_xlim()
+        lo, hi = min(x0, x1), max(x0, x1)
+        self._syncing_zoom = True
+        try:
+            if self._heatmap_ax is not None and self._heatmap_ylim is not None:
+                # Clamp to the heatmap's own date span so zooming past the data
+                # doesn't add empty margins.
+                ylo = max(lo, self._heatmap_ylim[0])
+                yhi = min(hi, self._heatmap_ylim[1])
+                if yhi > ylo:
+                    self._heatmap_ax.set_ylim(ylo, yhi)
+            if self._diel_ax is not None:
+                start = pd.Timestamp(mdates.num2date(lo)).tz_localize(None)
+                end = pd.Timestamp(mdates.num2date(hi)).tz_localize(None)
+                sub = dv.times.keep_daterange(self._zoom_series, start=start, end=end)
+                self._diel_ax.clear()
+                self._draw_panel(self._diel_ax, sub, "Diel cycle")
+                self._style_panel(self._diel_ax, "Diel cycle")
+                self._panel_fonts(self._diel_ax)
+        finally:
+            self._syncing_zoom = False
+        # Repaint without re-freezing the layout (draw() would flip the layout
+        # engine and could abort an in-progress resize re-solve).
+        self.canvas.draw_idle()
 
     @staticmethod
     def _line_color(ax) -> str:
