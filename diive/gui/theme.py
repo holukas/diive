@@ -27,6 +27,7 @@ DARK = "#212121"
 DEFAULT_TOKENS: dict[str, str] = {
     "ACCENT": "#2196F3",              # focus / active-tab underline
     "BORDER": "#B0BEC5",              # control borders
+    "INPUT_BG": "#EAF4FF",           # editable fields (line edits, spin boxes, combos)
     "LIST_BG": "#ECEFF1",            # variable-list sidebar tint
     "HOVER_BG": "#FFCC80",           # hover highlight (menus, list, combo)
     "HOVER_PRESSED": "#FFB74D",      # pressed/active hover
@@ -79,11 +80,16 @@ QMenu {{ background: {WHITE}; border: 1px solid {t['BORDER']}; padding: 4px; }}
 QMenu::item {{ padding: 5px 22px; border-radius: 4px; }}
 QMenu::item:selected {{ background: {t['HOVER_BG']}; }}
 
-QLineEdit {{
-    background: {WHITE}; border: 1px solid {t['BORDER']}; border-radius: 6px;
-    padding: 5px 8px; margin-bottom: 4px;
+/* Editable inputs share a tinted background so it's obvious what can be edited. */
+QLineEdit, QSpinBox, QDoubleSpinBox {{
+    background: {t['INPUT_BG']}; border: 1px solid {t['BORDER']}; border-radius: 6px;
+    padding: 5px 8px;
 }}
-QLineEdit:focus {{ border: 1px solid {t['ACCENT']}; }}
+QLineEdit {{ margin-bottom: 4px; }}
+QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {{ border: 1px solid {t['ACCENT']}; }}
+QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled {{
+    background: #F5F5F5; color: #9E9E9E;
+}}
 
 QPushButton {{
     background: #F5F5F5; border: 1px solid {t['BORDER']};
@@ -94,10 +100,11 @@ QPushButton:pressed {{ background: {t['HOVER_PRESSED']}; }}
 QPushButton:disabled {{ color: #9E9E9E; background: #FAFAFA; }}
 
 QComboBox {{
-    background: {WHITE}; border: 1px solid {t['BORDER']};
+    background: {t['INPUT_BG']}; border: 1px solid {t['BORDER']};
     border-radius: 4px; padding: 3px 6px;
 }}
 QComboBox:hover {{ border: 1px solid {t['HOVER_PRESSED']}; }}
+QComboBox:focus {{ border: 1px solid {t['ACCENT']}; }}
 QComboBox QAbstractItemView {{
     background: {WHITE}; border: 1px solid {t['BORDER']}; outline: 0;
     selection-background-color: {t['HOVER_BG']}; selection-color: {DARK};

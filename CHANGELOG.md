@@ -34,6 +34,9 @@
     across panels (heatmaps side by side, time series stacked; the ridgeline is single-variable).
   - **Drawn menu icons** — every menu entry (File/Data/Plot/Tools/Settings/Help) carries a small `QPainter`-drawn glyph
     (no image assets), keyword-matched to the label.
+  - **Editable fields stand out** (tinted `INPUT_BG` background, app-wide) and **settings show docstring tooltips** —
+    pulled live from the library via `diive.core.utils.docstrings.param_docs` (Google `Args:` + class attribute
+    docstrings), so help text never goes stale.
   - **Feature engineering tab** (`FeatureEngineer`); created columns tagged with a NEW pill.
   - **Flux processing chain tab** (Tools menu; first slice = Input + Level 2) — runs the composable `init_flux_data` /
     `run_level2`, shows the L2 QCF-filtered flux, and **Copy Python** emits the exact reproducible script. The

@@ -142,6 +142,7 @@ class SettingsTab(DiiveTab):
         form = QFormLayout(box)
         for token, label in [
             ("HOVER_BG", "Hover"), ("ACCENT", "Accent"), ("LIST_BG", "List background"),
+            ("INPUT_BG", "Input fields"),
             ("BORDER", "Border"), ("PRIMARY_BG", "Selected (primary)"),
             ("EXTRA_BG", "Selected (extra)"),
         ]:

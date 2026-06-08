@@ -86,6 +86,53 @@ class PlotSettingsPanel(QScrollArea):
 
         self._col.addStretch(1)
         self.setWidget(inner)
+        self._apply_tooltips()
+
+    def _apply_tooltips(self) -> None:
+        """Tooltip each control with its library plot() parameter docstring."""
+        import diive as dv
+        from diive.core.utils.docstrings import param_docs
+        method = {
+            HEATMAP: dv.plotting.HeatmapDateTime.plot,
+            HEATMAP_YEARMONTH: dv.plotting.HeatmapYearMonth.plot,
+            TIMESERIES: dv.plotting.TimeSeries.plot,
+            RIDGELINE: dv.plotting.RidgeLinePlot.plot,
+        }.get(self._plot_type)
+        docs = param_docs(method) if method else {}
+
+        if self._plot_type in (HEATMAP, HEATMAP_YEARMONTH):
+            pairs = [
+                ("cmap", self.cmap), ("vmin", self.vmin), ("vmax", self.vmax),
+                ("color_bad", self.color_bad), ("ax_orientation", self.orientation),
+                ("show_less_xticklabels", self.show_less_xticklabels),
+                ("show_grid", self.show_grid), ("show_colormap", self.show_colormap),
+                ("zlabel", self.zlabel), ("cb_digits_after_comma", self.cb_digits),
+                ("cb_extend", self.cb_extend), ("show_values", self.show_values),
+                ("show_values_n_dec_places", self.show_values_dec),
+                ("show_values_fontsize", self.show_values_fontsize),
+                ("axlabels_fontsize", self.axlabels_fontsize),
+                ("ticks_labelsize", self.ticks_labelsize), ("cb_labelsize", self.cb_labelsize),
+            ]
+            if self._plot_type == HEATMAP:
+                pairs += [("minticks", self.minticks), ("maxticks", self.maxticks)]
+            else:
+                pairs += [("agg", self.agg), ("ranks", self.ranks)]
+        elif self._plot_type == TIMESERIES:
+            pairs = [("linewidth", self.linewidth), ("alpha", self.alpha),
+                     ("marker", self.marker), ("drop_gaps", self.drop_gaps),
+                     ("xlabel", self.xlabel), ("ylabel", self.ylabel),
+                     ("series_units", self.series_units)]
+        elif self._plot_type == RIDGELINE:
+            pairs = [("how", self.how), ("hspace", self.hspace),
+                     ("shade_percentile", self.shade_percentile), ("kd_kwargs", self.bandwidth),
+                     ("show_mean_line", self.show_mean_line), ("ascending", self.ascending),
+                     ("xlabel", self.xlabel)]
+        else:
+            pairs = []
+        for param, widget in pairs:
+            tip = docs.get(param)
+            if tip:
+                widget.setToolTip(tip)
 
     # --- heatmap controls (shared by date/time and year/month) ---
     def _build_heatmap(self, yearmonth: bool = False) -> None:

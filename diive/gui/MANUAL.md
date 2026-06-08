@@ -150,6 +150,8 @@ colour. Use **Save…** to write the log to a file.
 
 ## Tips
 
+- **Editable fields are tinted** (light blue) so you can see at a glance what you
+  can change; **hover over a setting** to see a tooltip describing what it does.
 - **Hover over any plot** to see the value under the cursor in a small box — on
   line plots it snaps to the nearest data point (with a marker); on heatmaps it
   shows the cell's date, time, and value. Untick **Hover values** (bottom-right,

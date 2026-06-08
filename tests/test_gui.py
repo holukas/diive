@@ -137,6 +137,9 @@ def test_plot_settings_live_render(window):
     # Year/month heatmap: distinct settings (aggregation + ranks) and renders.
     window._open_menu_tab("Heatmap year/month")
     ym = window._menu_tab_list[-1]
+    # Controls carry their library plot() docstring as a tooltip.
+    assert "Colormap" in tab.settings.cmap.toolTip()
+
     vals = ym.settings.values()
     assert {"agg", "ranks", "cmap"} <= set(vals)
     assert vals["cmap"] is None  # default "auto"
@@ -298,6 +301,8 @@ def test_flux_chain_tab_level2(app):
     tab.widget()  # build
     tab.on_data_loaded(df)
     assert tab.fluxcol.currentText() == "FC"  # default flux column detected
+    # Params carry their library docstring as a tooltip.
+    assert "latitude" in tab.site_lat.toolTip().lower()
 
     # Copy-Python emits runnable composable code matching what Run does.
     code = tab._code()

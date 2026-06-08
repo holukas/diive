@@ -98,6 +98,7 @@ class FluxChainTab(DiiveTab):
         col.addStretch(1)
         scroll.setWidget(inner)
         row.addWidget(scroll)
+        self._apply_tooltips()
 
         # Right: diagnostics canvas + summary/code text.
         right = QVBoxLayout()
@@ -149,6 +150,29 @@ class FluxChainTab(DiiveTab):
         form.addRow("Signal-strength column", self.signal_strength_col)
         v.addLayout(form)
         return box
+
+    def _apply_tooltips(self) -> None:
+        """Tooltip each control with its library parameter docstring."""
+        from diive.core.utils.docstrings import param_docs
+        from diive.flux.fluxprocessingchain import FluxConfig
+        docs: dict = {}
+        for src in (init_flux_data, FluxConfig, run_level2):
+            docs.update(param_docs(src))
+        for param, widget in (
+            ("fluxcol", self.fluxcol), ("site_lat", self.site_lat),
+            ("site_lon", self.site_lon), ("utc_offset", self.utc_offset),
+            ("nighttime_threshold", self.nighttime_threshold),
+            ("daytime_accept_qcf_below", self.day_qcf),
+            ("nighttime_accept_qcf_below", self.night_qcf),
+            ("signal_strength_col", self.signal_strength_col),
+        ):
+            tip = docs.get(param)
+            if tip:
+                widget.setToolTip(tip)
+        for key, cb in self.l2_checks.items():
+            tip = docs.get(key)
+            if tip:
+                cb.setToolTip(tip)
 
     @staticmethod
     def _dspin(value, lo, hi, decimals) -> QDoubleSpinBox:

@@ -116,6 +116,16 @@ grid (`get_coordinates()` + reshaped `get_array()`, cached per draw). It renders
 so it lives in the GUI. A **"Hover values"** checkbox in the canvas's bottom row (next to the navigation toolbar) toggles it
 (`hover.set_enabled`); the toolbar's own x/y coordinate readout is disabled (`coordinates=False`) since the tooltip replaces it.
 
+**Editable-field styling:** every editable input (`QLineEdit` / `QSpinBox` / `QDoubleSpinBox` / `QComboBox`) gets a tinted
+background (the `INPUT_BG` theme token) in `theme.build_qss`, so it's obvious what can be edited; read-only areas (lists,
+the flux summary box) stay plain. `INPUT_BG` is editable in the Appearance tab like the other tokens.
+
+**Parameter tooltips from docstrings (not hardcoded):** `diive.core.utils.docstrings.param_docs(obj)` (library) extracts
+`{param: description}` from Google-style `Args:` sections and class attribute docstrings (e.g. `FluxConfig` fields). Tabs
+map each control to its library param and `setToolTip` from that — the plot-settings panel (`_apply_tooltips`, over the
+`plot()` method) and the flux-chain tab (over `init_flux_data` / `FluxConfig` / `run_level2`). Help text stays in sync
+with the library automatically; add a control → it gets a tooltip for free if the param is documented.
+
 **Output console:** the **Log** tab (`LogTab` → `ConsolePanel`) mirrors diive's Rich output in colour. It registers a
 Rich mirror console via `add_console_sink` (in `diive.core.utils.console`) — the library tees its output to any
 registered sink; the panel renders the ANSI stream into a `QTextEdit`. The redirect hook lives in the library; the
