@@ -332,6 +332,20 @@ def _spectrogram_icon() -> QIcon:  # Spectrogram
     return QIcon(pm)
 
 
+def _histogram_icon() -> QIcon:  # Histogram
+    pm, p = _canvas()
+    p.setPen(Qt.PenStyle.NoPen)
+    # A bell-ish run of bars; the tallest (peak) highlighted in amber.
+    heights = [3, 6, 10, 13, 9, 5]
+    bw = (_SIZE - 2) / len(heights)
+    peak = heights.index(max(heights))
+    for i, h in enumerate(heights):
+        p.setBrush(_AMBER if i == peak else QColor("#78909C"))
+        p.drawRect(QRectF(1 + i * bw, 14 - h, bw - 0.8, h))
+    p.end()
+    return QIcon(pm)
+
+
 def _info_icon() -> QIcon:  # About
     pm, p = _canvas()
     p.setPen(Qt.PenStyle.NoPen)
@@ -351,6 +365,7 @@ _RULES = [
     ("diel", _dielcycle_icon),
     ("cumulative", _cumulative_icon),
     ("scatter", _scatter_icon),
+    ("histogram", _histogram_icon),
     ("time", _timeseries_icon),
     ("series", _timeseries_icon),
     ("open", _folder_icon),

@@ -30,9 +30,10 @@
   - **Overview tab** (default) — per-variable `dv.sstats` cards + multi-panel figure (time series, cumulative, mean
     diel cycle, heatmap).
   - **Per-method plot tabs** opened from the Plot menu (Heatmap date/time, Heatmap year/month, Time series, Diel cycle,
-    Cumulative year, Ridgeline, Scatter XY, Hexbin), openable multiple times (numbered) and closable, each with a live
-    settings panel. Most compare variables across Ctrl+click panels; Scatter XY and Hexbin pick variables by X/Y/Z role
-    (Scatter needs X+Y with an optional Z colour; the ridgeline is single-variable).
+    Cumulative year, Ridgeline, Scatter XY, Hexbin, Histogram), openable multiple times (numbered) and closable, each
+    with a live settings panel. Most compare variables across Ctrl+click panels; Scatter XY and Hexbin pick variables by
+    X/Y/Z role (Scatter needs X+Y with an optional Z colour; the ridgeline and histogram are single-variable). The
+    **Histogram** tab wraps `HistogramPlot` (bin count, peak highlight, z-score axis, counts/info/title/grid toggles).
   - **Drawn menu icons** — every menu entry (File/Data/Plot/Tools/Settings/Help) carries a small `QPainter`-drawn glyph
     (no image assets), keyword-matched to the label.
   - **Editable fields stand out** (tinted `INPUT_BG` background, app-wide) and **settings show docstring tooltips** —

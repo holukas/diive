@@ -93,11 +93,14 @@ Each plot method opens as its own tab (the menu shows a small icon for each).
   the points); optionally bin the x-axis and show a trend. One panel.
 - **Ridgeline** — one stacked density curve per period (group by month, week, or
   year); set the overlap, shading, and KDE bandwidth. One variable at a time.
+- **Histogram** — the distribution of one variable: bars of counts, with the
+  peak bin highlighted and a z-score scale along the top. Set the number of bins
+  and toggle the counts, info box, z-score axis, title and grid.
 - **Click** a variable to plot it.
 - **Ctrl + click** more variables to compare them in extra panels (up to 5):
   - *Heatmaps* line up **side by side** (shared axes).
   - *Time series* **stack** top-to-bottom (shared time axis), each its own colour.
-  - *(The ridgeline shows a single variable, so Ctrl+click just switches it.)*
+  - *(The ridgeline and histogram show a single variable, so Ctrl+click just switches it.)*
 - **Ctrl + click** a shown variable again to remove its panel.
 - Use the small toolbar (bottom-right of the plot) to **pan, zoom, and save** the
   figure. Zooming one panel zooms them all. Set **Save DPI** (next to the toolbar)

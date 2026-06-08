@@ -49,7 +49,7 @@ closable, unless listed in `SINGLE_INSTANCE_TABS` (e.g. Appearance). The main wi
 each action with it. Add a menu entry → add a keyword rule in `icons._RULES` (unknown labels fall back to a chart glyph).
 
 **Plot menu:** each method is its own closable tab, with a small drawn icon. The **Plot** menu lists methods (Heatmap
-date/time, Heatmap year/month, Time series, Diel cycle, Cumulative year, Ridgeline, Scatter XY, Hexbin); selecting one
+date/time, Heatmap year/month, Time series, Diel cycle, Cumulative year, Ridgeline, Scatter XY, Hexbin, Histogram); selecting one
 opens a new `PlottingTab(plot_type, title)` instance. Add a method via a factory in `registry.MENU_TABS["Plot"]` + a
 branch in `plotting._draw_one` (and matching controls in `plot_settings`). Ctrl+click adds comparison panels: heatmaps
 (both kinds, in `_HEATMAP_TYPES`) go side by side (shared x/y); time series and diel cycle stack top-to-bottom (shared
@@ -57,6 +57,9 @@ x-axis — time, resp. hour-of-day).
 The **ridgeline** is single-variable and whole-figure: `RidgeLinePlot` builds its own stacked-density gridspec, so the
 tab passes `canvas.fig` to the class's `fig=` param and sets `canvas.auto_layout=False` (so the constrained-layout
 freeze/resize machinery doesn't reflow its overlapping ridges) — see `_render_ridgeline`.
+The **histogram** is also single-variable (it's information-dense: bar counts + a z-score twiny axis + peak/info box),
+but a normal per-`ax` plot — `HistogramPlot(series, n_bins=...).plot(ax=...)` with toggles for the peak highlight,
+z-score axis, counts, info box, title and grid.
 
 **Plot settings:** between the variable list and the canvas sits a `PlotSettingsPanel(plot_type)` — a scrollable
 strip of controls, one per `plot()` parameter of the underlying diive plot class (heatmap: colormap, vmin/vmax,

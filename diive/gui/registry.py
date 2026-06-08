@@ -25,6 +25,7 @@ from diive.gui.tabs.plotting import (
     HEATMAP,
     HEATMAP_YEARMONTH,
     HEXBIN,
+    HISTOGRAM,
     RIDGELINE,
     SCATTER,
     TIMESERIES,
@@ -53,6 +54,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Ridgeline": lambda: PlottingTab(RIDGELINE, "Ridgeline"),
         "Scatter XY": lambda: PlottingTab(SCATTER, "Scatter XY"),
         "Hexbin": lambda: PlottingTab(HEXBIN, "Hexbin"),
+        "Histogram": lambda: PlottingTab(HISTOGRAM, "Histogram"),
     },
     "Tools": {
         "Gaps & coverage": GapDashboardTab,

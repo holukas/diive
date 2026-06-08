@@ -43,6 +43,7 @@ DIELCYCLE = "Diel cycle"
 CUMULATIVE_YEAR = "Cumulative year"
 HEXBIN = "Hexbin"
 SCATTER = "Scatter (XY)"
+HISTOGRAM = "Histogram"
 
 #: Period grouping for the ridgeline (one density ridge per group).
 _RIDGELINE_HOW = ["monthly", "weekly", "yearly"]
@@ -98,6 +99,8 @@ class PlotSettingsPanel(QScrollArea):
             self._build_hexbin()
         elif plot_type == SCATTER:
             self._build_scatter()
+        elif plot_type == HISTOGRAM:
+            self._build_histogram()
 
         self._col.addStretch(1)
         # Keep every form within the panel's fixed width: wrap a row's field
@@ -124,6 +127,7 @@ class PlotSettingsPanel(QScrollArea):
             CUMULATIVE_YEAR: dv.plotting.CumulativeYear.__init__,
             HEXBIN: dv.plotting.HexbinPlot.plot,
             SCATTER: dv.plotting.ScatterXY.plot,
+            HISTOGRAM: dv.plotting.HistogramPlot.plot,
         }.get(self._plot_type)
         docs = param_docs(method) if method else {}
 
@@ -200,6 +204,17 @@ class PlotSettingsPanel(QScrollArea):
                 tip = init_docs.get(param)
                 if tip:
                     widget.setToolTip(tip)
+        elif self._plot_type == HISTOGRAM:
+            pairs = [
+                ("highlight_peak", self.hist_peak), ("show_counts", self.hist_counts),
+                ("show_info", self.hist_info), ("show_title", self.hist_title),
+                ("show_grid", self.hist_grid), ("show_zscores", self.hist_zscores),
+                ("show_zscore_values", self.hist_zvalues), ("xlabel", self.hist_xlabel),
+            ]
+            # n_bins is an __init__ param, not in plot().
+            tip = param_docs(dv.plotting.HistogramPlot.__init__).get("n_bins")
+            if tip:
+                self.hist_nbins.setToolTip(tip)
         else:
             pairs = []
         for param, widget in pairs:
@@ -531,6 +546,36 @@ class PlotSettingsPanel(QScrollArea):
 
         self._build_axes_group()
 
+    # --- histogram controls ---
+    def _build_histogram(self) -> None:
+        binning = QGroupBox("Bins")
+        form = QFormLayout(binning)
+        self.hist_nbins = self._spin(20, 2, 200, form, "Number of bins")
+        self._col.addWidget(binning)
+
+        disp = QGroupBox("Display")
+        form = QFormLayout(disp)
+        self.hist_peak = self._check("Highlight peak bin", form, checked=True)
+        self.hist_counts = self._check("Show bar counts", form, checked=True)
+        self.hist_info = self._check("Show info box", form, checked=True)
+        self.hist_title = self._check("Show title", form, checked=True)
+        self.hist_grid = self._check("Show grid", form, checked=True)
+        self._col.addWidget(disp)
+
+        zgrp = QGroupBox("z-scores")
+        form = QFormLayout(zgrp)
+        self.hist_zscores = self._check("Show z-score axis", form, checked=True)
+        self.hist_zvalues = self._check("Show z-score values", form, checked=True)
+        self._col.addWidget(zgrp)
+
+        labels = QGroupBox("Labels")
+        form = QFormLayout(labels)
+        self.hist_xlabel = QLineEdit()
+        self.hist_xlabel.setPlaceholderText("(value)")
+        self.hist_xlabel.editingFinished.connect(self.changed)
+        form.addRow("X label", self.hist_xlabel)
+        self._col.addWidget(labels)
+
     def _lineedit(self, placeholder, form, label) -> QLineEdit:
         edit = QLineEdit()
         edit.setPlaceholderText(placeholder)
@@ -825,6 +870,18 @@ class PlotSettingsPanel(QScrollArea):
                 "xunits": self.sc_xunits.text().strip() or None,
                 "yunits": self.sc_yunits.text().strip() or None,
                 "_axes": self._axes_values(),
+            }
+        if self._plot_type == HISTOGRAM:
+            return {
+                "n_bins": self.hist_nbins.value(),
+                "highlight_peak": self.hist_peak.isChecked(),
+                "show_counts": self.hist_counts.isChecked(),
+                "show_info": self.hist_info.isChecked(),
+                "show_title": self.hist_title.isChecked(),
+                "show_grid": self.hist_grid.isChecked(),
+                "show_zscores": self.hist_zscores.isChecked(),
+                "show_zscore_values": self.hist_zvalues.isChecked(),
+                "xlabel": self.hist_xlabel.text().strip() or None,
             }
         return {
             "linewidth": self.linewidth.value(),

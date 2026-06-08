@@ -44,6 +44,7 @@ from diive.gui.widgets.plot_settings import (
     HEATMAP,
     HEATMAP_YEARMONTH,
     HEXBIN,
+    HISTOGRAM,
     RIDGELINE,
     SCATTER,
     TIMESERIES,
@@ -186,8 +187,9 @@ class PlottingTab(DiiveTab):
                 self._xyz = self._xyz[1:] + [name]
             self.varpanel.run_with_loading(name, self._render)
             return
-        if self._plot_type == RIDGELINE:
-            # The ridgeline uses the whole figure -> single variable only.
+        if self._plot_type in (RIDGELINE, HISTOGRAM):
+            # The ridgeline uses the whole figure; the histogram is information-
+            # dense (counts, z-score axis) -> both are single-variable.
             self._panels = [name]
             self.varpanel.run_with_loading(name, self._render)
             return
@@ -477,6 +479,17 @@ class PlottingTab(DiiveTab):
                     show_reference=opts["show_reference"],
                     highlight_year=opts["highlight_year"],
                 ).plot(ax=ax, showplot=False, digits_after_comma=opts["digits_after_comma"])
+            elif self._plot_type == HISTOGRAM:
+                dv.plotting.HistogramPlot(
+                    series.dropna(), method="n_bins", n_bins=opts["n_bins"],
+                ).plot(
+                    ax=ax, title=name, xlabel=opts["xlabel"],
+                    highlight_peak=opts["highlight_peak"],
+                    show_zscores=opts["show_zscores"],
+                    show_zscore_values=opts["show_zscore_values"],
+                    show_info=opts["show_info"], show_counts=opts["show_counts"],
+                    show_title=opts["show_title"], show_grid=opts["show_grid"],
+                )
             else:
                 raise ValueError(f"Unknown plot type: {self._plot_type}")
         except Exception as err:

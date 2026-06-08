@@ -766,6 +766,39 @@ def test_spectrogram_tab(window):
     assert _tabs(window).count("Spectrogram") == 1
 
 
+def test_histogram_tab(window):
+    from diive.gui.icons import menu_icon
+    assert not menu_icon("Histogram").isNull()
+
+    window._open_menu_tab("Histogram")
+    tab = window._menu_tab_list[-1]
+    for _ in range(40):
+        QApplication.processEvents()
+
+    assert tab._panels  # default variable rendered
+    fig = tab.canvas.fig
+    assert not [t for a in fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+    assert len(fig.axes) >= 2  # histogram + z-score twiny axis
+    vals = tab.settings.values()
+    assert {"n_bins", "highlight_peak", "show_zscores", "show_counts"} <= set(vals)
+
+    # Single-variable (like the ridgeline): Ctrl+click replaces, never stacks.
+    tab._on_selected("Tair_f", True)
+    QApplication.processEvents()
+    assert tab._panels == ["Tair_f"]
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+
+    # Settings apply on the Update button (no z-score axis when disabled).
+    tab.settings.hist_nbins.setValue(30)
+    tab.settings.hist_zscores.setChecked(False)
+    tab.settings.hist_info.setChecked(False)
+    tab.update_btn.click()
+    for _ in range(20):
+        QApplication.processEvents()
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+    assert len(tab.canvas.fig.axes) == 1  # twiny gone with z-scores off
+
+
 def test_appearance_singleton(window):
     window._open_menu_tab("Appearance")
     window._open_menu_tab("Appearance")
