@@ -215,6 +215,18 @@ def _palette_icon() -> QIcon:  # Appearance
     return QIcon(pm)
 
 
+def _cumulative_icon() -> QIcon:  # Cumulative year
+    pm, p = _canvas()
+    # Several rising curves fanning out (one cumulative per year).
+    for col, scale in (("#43A047", 1.0), ("#2196F3", 0.72), ("#FB8C00", 0.46)):
+        pts = [(x, 14 - scale * 12 * (x / _SIZE) ** 0.85) for x in range(0, _SIZE + 1, 2)]
+        p.setPen(QPen(QColor(col), 1.5))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawPolyline(_poly(pts))
+    p.end()
+    return QIcon(pm)
+
+
 def _dielcycle_icon() -> QIcon:  # Diel cycle
     pm, p = _canvas()
     purple = QColor("#7E57C2")
@@ -261,6 +273,7 @@ _RULES = [
     ("heatmap", _heatmap_icon),
     ("ridge", _ridgeline_icon),
     ("diel", _dielcycle_icon),
+    ("cumulative", _cumulative_icon),
     ("time", _timeseries_icon),
     ("series", _timeseries_icon),
     ("open", _folder_icon),

@@ -77,7 +77,7 @@ Click a variable to see, for that variable:
 - a **strip of statistic cards** along the bottom (count, mean, SD, min/max,
   percentiles, …).
 
-### Plot ▸ Heatmap date/time · Heatmap year/month · Time series · Diel cycle · Ridgeline · Hexbin
+### Plot ▸ Heatmap date/time · Heatmap year/month · Time series · Diel cycle · Cumulative year · Ridgeline · Hexbin
 
 Each plot method opens as its own tab (the menu shows a small icon for each).
 
@@ -86,6 +86,8 @@ Each plot method opens as its own tab (the menu shows a small icon for each).
   mean, sum, … — and optionally show *ranks*).
 - **Diel cycle** — the mean daily cycle (value by time of day) with a ±SD band;
   optionally one curve per month.
+- **Cumulative year** — one cumulative-sum curve per year (overlaid by day of
+  year); optionally highlight a year and show a mean reference.
 - **Ridgeline** — one stacked density curve per period (group by month, week, or
   year); set the overlap, shading, and KDE bandwidth. One variable at a time.
 - **Click** a variable to plot it.

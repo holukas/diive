@@ -39,6 +39,7 @@ HEATMAP_YEARMONTH = "Heatmap (year/month)"
 TIMESERIES = "Time series"
 RIDGELINE = "Ridgeline"
 DIELCYCLE = "Diel cycle"
+CUMULATIVE_YEAR = "Cumulative year"
 HEXBIN = "Hexbin"
 
 #: Period grouping for the ridgeline (one density ridge per group).
@@ -88,6 +89,8 @@ class PlotSettingsPanel(QScrollArea):
             self._build_ridgeline()
         elif plot_type == DIELCYCLE:
             self._build_dielcycle()
+        elif plot_type == CUMULATIVE_YEAR:
+            self._build_cumulative_year()
         elif plot_type == HEXBIN:
             self._build_hexbin()
 
@@ -113,6 +116,7 @@ class PlotSettingsPanel(QScrollArea):
             TIMESERIES: dv.plotting.TimeSeries.plot,
             RIDGELINE: dv.plotting.RidgeLinePlot.plot,
             DIELCYCLE: dv.plotting.DielCycle.plot,
+            CUMULATIVE_YEAR: dv.plotting.CumulativeYear.__init__,
             HEXBIN: dv.plotting.HexbinPlot.plot,
         }.get(self._plot_type)
         docs = param_docs(method) if method else {}
@@ -149,6 +153,10 @@ class PlotSettingsPanel(QScrollArea):
                      ("each_month", self.dc_each_month), ("show_legend", self.dc_show_legend),
                      ("showgrid", self.dc_show_grid), ("legend_n_col", self.dc_legend_ncol),
                      ("ylabel", self.dc_ylabel), ("txt_ylabel_units", self.dc_units)]
+        elif self._plot_type == CUMULATIVE_YEAR:
+            pairs = [("show_reference", self.cy_show_reference),
+                     ("highlight_year", self.cy_highlight), ("digits_after_comma", self.cy_digits),
+                     ("series_units", self.cy_units), ("yearly_end_date", self.cy_yearly_end)]
         elif self._plot_type == HEXBIN:
             pairs = [
                 ("cmap", self.cmap), ("vmin", self.vmin), ("vmax", self.vmax),
@@ -432,6 +440,31 @@ class PlotSettingsPanel(QScrollArea):
         form.addRow("Y units", self.dc_units)
         self._col.addWidget(labels)
 
+    # --- yearly-cumulative controls ---
+    def _build_cumulative_year(self) -> None:
+        grp = QGroupBox("Yearly cumulative")
+        form = QFormLayout(grp)
+        self.cy_show_reference = self._check("Show mean reference", form)
+        self.cy_highlight = QSpinBox()
+        self.cy_highlight.setRange(0, 3000)
+        self.cy_highlight.setSpecialValueText("none")  # 0 -> no highlight
+        self.cy_highlight.valueChanged.connect(self.changed)
+        form.addRow("Highlight year", self.cy_highlight)
+        self.cy_digits = self._spin(2, 0, 6, form, "Label decimals")
+        self._col.addWidget(grp)
+
+        labels = QGroupBox("Labels")
+        form = QFormLayout(labels)
+        self.cy_units = QLineEdit()
+        self.cy_units.setPlaceholderText("e.g. gC m-2")
+        self.cy_units.editingFinished.connect(self.changed)
+        form.addRow("Units", self.cy_units)
+        self.cy_yearly_end = QLineEdit()
+        self.cy_yearly_end.setPlaceholderText("MM-DD (optional)")
+        self.cy_yearly_end.editingFinished.connect(self.changed)
+        form.addRow("Yearly end date", self.cy_yearly_end)
+        self._col.addWidget(labels)
+
     # --- control factories (wire each to `changed`) ---
     def _spin(self, value, lo, hi, form, label) -> QSpinBox:
         sp = QSpinBox()
@@ -538,6 +571,15 @@ class PlotSettingsPanel(QScrollArea):
                 "legend_n_col": self.dc_legend_ncol.value(),
                 "ylabel": self.dc_ylabel.text().strip() or None,
                 "txt_ylabel_units": self.dc_units.text().strip() or None,
+            }
+        if self._plot_type == CUMULATIVE_YEAR:
+            hy = self.cy_highlight.value()
+            return {
+                "show_reference": self.cy_show_reference.isChecked(),
+                "highlight_year": hy if hy > 0 else None,
+                "digits_after_comma": self.cy_digits.value(),
+                "series_units": self.cy_units.text().strip() or None,
+                "yearly_end_date": self.cy_yearly_end.text().strip() or None,
             }
         if self._plot_type == HEXBIN:
             def _font(sp):

@@ -31,6 +31,7 @@ from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.plot_settings import (
+    CUMULATIVE_YEAR,
     DIELCYCLE,
     HEATMAP,
     HEATMAP_YEARMONTH,
@@ -365,6 +366,13 @@ class PlottingTab(DiiveTab):
                     legend_n_col=opts["legend_n_col"], ylabel=opts["ylabel"],
                     txt_ylabel_units=opts["txt_ylabel_units"],
                 )
+            elif self._plot_type == CUMULATIVE_YEAR:
+                dv.plotting.CumulativeYear(
+                    series, series_units=opts["series_units"],
+                    yearly_end_date=opts["yearly_end_date"],
+                    show_reference=opts["show_reference"],
+                    highlight_year=opts["highlight_year"],
+                ).plot(ax=ax, showplot=False, digits_after_comma=opts["digits_after_comma"])
             else:
                 raise ValueError(f"Unknown plot type: {self._plot_type}")
         except Exception as err:

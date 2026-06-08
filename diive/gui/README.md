@@ -45,7 +45,7 @@ closable, unless listed in `SINGLE_INSTANCE_TABS` (e.g. Appearance). The main wi
 each action with it. Add a menu entry → add a keyword rule in `icons._RULES` (unknown labels fall back to a chart glyph).
 
 **Plot menu:** each method is its own closable tab, with a small drawn icon. The **Plot** menu lists methods (Heatmap
-date/time, Heatmap year/month, Time series, Diel cycle, Ridgeline, Hexbin); selecting one
+date/time, Heatmap year/month, Time series, Diel cycle, Cumulative year, Ridgeline, Hexbin); selecting one
 opens a new `PlottingTab(plot_type, title)` instance. Add a method via a factory in `registry.MENU_TABS["Plot"]` + a
 branch in `plotting._draw_one` (and matching controls in `plot_settings`). Ctrl+click adds comparison panels: heatmaps
 (both kinds, in `_HEATMAP_TYPES`) go side by side (shared x/y); time series and diel cycle stack top-to-bottom (shared

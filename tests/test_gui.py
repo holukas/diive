@@ -351,6 +351,23 @@ def test_diel_cycle_tab(window):
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
 
 
+def test_cumulative_year_tab(window):
+    from diive.gui.icons import menu_icon
+    assert not menu_icon("Cumulative year").isNull()
+    window._open_menu_tab("Cumulative year")
+    tab = window._menu_tab_list[-1]
+    assert tab._panels
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+    vals = tab.settings.values()
+    assert {"show_reference", "highlight_year", "digits_after_comma"} <= set(vals)
+    assert vals["highlight_year"] is None  # 0 -> no highlight
+    tab.settings.cy_show_reference.setChecked(True)
+    tab.settings.cy_highlight.setValue(2021)
+    QApplication.processEvents()
+    assert tab.settings.values()["highlight_year"] == 2021
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
+
+
 def test_ridgeline_and_plot_icons(window):
     from diive.gui.icons import plot_menu_icon
     # Every Plot-menu method gets a non-empty drawn icon.

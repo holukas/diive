@@ -16,6 +16,7 @@ from diive.gui.tabs.fluxchain import FluxChainTab
 from diive.gui.tabs.log import LogTab
 from diive.gui.tabs.overview import OverviewTab
 from diive.gui.tabs.plotting import (
+    CUMULATIVE_YEAR,
     DIELCYCLE,
     HEATMAP,
     HEATMAP_YEARMONTH,
@@ -43,6 +44,7 @@ MENU_TABS: dict[str, dict[str, callable]] = {
         "Heatmap year/month": lambda: PlottingTab(HEATMAP_YEARMONTH, "Heatmap year/month"),
         "Time series": lambda: PlottingTab(TIMESERIES, "Time series"),
         "Diel cycle": lambda: PlottingTab(DIELCYCLE, "Diel cycle"),
+        "Cumulative year": lambda: PlottingTab(CUMULATIVE_YEAR, "Cumulative year"),
         "Ridgeline": lambda: PlottingTab(RIDGELINE, "Ridgeline"),
         "Hexbin": lambda: PlottingTab(HEXBIN, "Hexbin"),
     },
